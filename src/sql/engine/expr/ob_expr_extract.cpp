@@ -52,7 +52,7 @@ int ObExprExtract::calc_result_type2(ObExprResType &type,
 
 template <bool with_date>
 inline int obj_to_time(ObExecContext &exec_ctx,
-                       const ObDatum &date, ObObjType type, const ObScale scale,
+                       const ObDatum &date, SqlValueType type, const ObScale scale,
                        const ObTimeZoneInfo *tz_info, ObTime &ob_time, const int64_t cur_ts_value,
                        const ObDateSqlMode date_sql_mode, bool has_lob_header)
 {
@@ -66,7 +66,7 @@ inline int obj_to_time(ObExecContext &exec_ctx,
 }
 
 int ObExprExtract::calc(ObExecContext &exec_ctx,
-      ObObjType date_type,
+      SqlValueType date_type,
       const ObDatum &date,
       const ObDateUnitType extract_field,
       const ObScale scale,
@@ -148,7 +148,7 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
   } else {
     ObDateUnitType extract_field = static_cast<ObDateUnitType>(param_datum1->get_int());
-    ObObjType date_type = expr.args_[1]->datum_meta_.type_;
+    SqlValueType date_type = expr.args_[1]->datum_meta_.type_;
     const ObTimeZoneInfo *tz_info = get_timezone_info(session);
     const int64_t cur_ts_value = get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx());
     const ObScale scale = expr.args_[1]->datum_meta_.scale_;
@@ -193,7 +193,7 @@ int ObExprExtract::calc_extract_mysql_batch(
     } else {
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(), session, cast_mode);
-      ObObjType date_type = expr.args_[1]->datum_meta_.type_;
+      SqlValueType date_type = expr.args_[1]->datum_meta_.type_;
       ObDatum *datum_array = expr.args_[1]->locate_batch_datums(ctx);
       const ObTimeZoneInfo *tz_info = get_timezone_info(session);
       const int64_t cur_ts_value = get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx());

@@ -598,8 +598,8 @@ bool ObMultiVersionRowIterator::is_snapshot_gc_scn_row_(const ObMemtableKey *key
   if (OB_ALL_CORE_TABLE_TID == tablet_id_.id()
       && OB_NOT_NULL(key)
       && OB_NOT_NULL(rowkey = key->get_rowkey())
-      && rowkey->get_obj_cnt() >= CORE_TABLE_ROWKEY_COLUMN_COUNT) {
-    const ObObj *objs = rowkey->get_obj_ptr();
+      && rowkey->get_value_count() >= CORE_TABLE_ROWKEY_COLUMN_COUNT) {
+    const DatumValue *objs = rowkey->get_values();
     is_snapshot_gc_scn_row = objs[TABLE_NAME_IDX].is_string_type()
         && objs[COLUMN_NAME_IDX].is_string_type()
         && 0 == objs[TABLE_NAME_IDX].get_string().compare("__all_global_stat")

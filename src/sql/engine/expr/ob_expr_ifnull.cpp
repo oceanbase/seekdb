@@ -82,8 +82,8 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
       if (type1.get_type_class() == type2.get_type_class()) {
         type.set_type(MAX(type1.get_type(), type2.get_type()));
       } else { // unsigned and signed
-        ObObjType signed_type = (type1.get_type_class() == ObIntTC) ? type1.get_type() : type2.get_type();
-        ObObjType unsigned_type = (type1.get_type_class() == ObIntTC) ? type2.get_type() : type1.get_type();
+        SqlValueType signed_type = (type1.get_type_class() == ObIntTC) ? type1.get_type() : type2.get_type();
+        SqlValueType unsigned_type = (type1.get_type_class() == ObIntTC) ? type2.get_type() : type1.get_type();
         int signed_type_diff = static_cast<int>(signed_type) - static_cast<int>(ObTinyIntType);
         int unsigned_type_diff = static_cast<int>(unsigned_type) - static_cast<int>(ObUTinyIntType);
         int res_type_diff = (unsigned_type_diff >= signed_type_diff) ? (unsigned_type_diff + 1) : signed_type_diff;
@@ -92,7 +92,7 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
           type.set_type(ObNumberType);
           type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].get_accuracy());
         } else {
-          type.set_type(static_cast<ObObjType>(res_type_diff + ObTinyIntType));
+          type.set_type(static_cast<SqlValueType>(res_type_diff + ObTinyIntType));
         }
       }
     }
@@ -117,9 +117,9 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
     }
     type.set_length(MAX(type1.get_length(), type2.get_length()));
     if (OB_SUCC(ret)) {
-      type1.set_calc_meta(type.get_obj_meta());
+      type1.set_calc_meta(type.get_sql_type_meta());
       type1.set_calc_accuracy(type.get_accuracy());
-      type2.set_calc_meta(type.get_obj_meta());
+      type2.set_calc_meta(type.get_sql_type_meta());
       type2.set_calc_accuracy(type.get_accuracy());
     }
   }

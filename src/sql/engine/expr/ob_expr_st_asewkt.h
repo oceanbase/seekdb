@@ -37,10 +37,6 @@ public:
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
-  virtual int calc_resultN(common::ObObj &result,
-                           const common::ObObj *objs,
-                           int64_t param_num,
-                           common::ObExprCtx &expr_ctx) const override;
   static int eval_priv_st_asewkt(const ObExpr &expr,
                             ObEvalCtx &ctx,
                             ObDatum &res);

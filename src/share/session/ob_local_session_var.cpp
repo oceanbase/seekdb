@@ -17,6 +17,10 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/session/ob_local_session_var.h"
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "common/datum/datum_parameter_array.h"
+#include <algorithm>
 
 using namespace oceanbase::common;
 
@@ -24,6 +28,31 @@ namespace oceanbase
 {
 namespace share
 {
+
+namespace {
+int64_t owned_native_session_value_size(const DatumValue &value, int depth = 0)
+{
+  // ObDatum's arena clone reserves one byte even for a non-NULL empty string.
+  int64_t bytes = value.is_null() ? 0 : std::max<int64_t>(1, value.datum_.get_deep_copy_size());
+  if (!value.is_null() && value.is_ext_sql_array()) {
+    if (depth > 64) { return INT64_MAX; }
+    const auto *array = reinterpret_cast<const DatumParameterArray *>(value.get_ext());
+    if (array == nullptr || array->count_ < 0 || (array->count_ > 0 && array->data_ == nullptr)
+        || array->count_ > (INT64_MAX - sizeof(DatumParameterArray)) / sizeof(DatumParameter)) {
+      return INT64_MAX;
+    }
+    const int64_t descriptors = sizeof(DatumParameterArray) + sizeof(DatumParameter) * array->count_;
+    if (bytes > INT64_MAX - descriptors) { return INT64_MAX; }
+    bytes += descriptors;
+    for (int64_t i = 0; i < array->count_; ++i) {
+      const int64_t element = owned_native_session_value_size(array->data_[i].value_view(), depth + 1);
+      if (bytes > INT64_MAX - element) { return INT64_MAX; }
+      bytes += element;
+    }
+  }
+  return bytes;
+}
+} // namespace
 
 int ObLocalSessionVar::add_local_var(const ObSessionSysVar *var)
 {
@@ -35,7 +64,7 @@ int ObLocalSessionVar::add_local_var(const ObSessionSysVar *var)
   return ret;
 }
 
-int ObLocalSessionVar::add_local_var(ObSysVarClassType var_type, const ObObj &value)
+int ObLocalSessionVar::add_local_var(ObSysVarClassType var_type, const DatumValue &value)
 {
   int ret = OB_SUCCESS;
   ObSessionSysVar *cur_var = NULL;
@@ -46,10 +75,12 @@ int ObLocalSessionVar::add_local_var(ObSysVarClassType var_type, const ObObj &va
     ObSessionSysVar *new_var = OB_NEWx(ObSessionSysVar, alloc_);
     if (OB_ISNULL(new_var)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(local_session_vars_.push_back(new_var))) {
-    } else if (OB_FAIL(deep_copy_obj(*alloc_, value, new_var->val_))) {
     } else {
       new_var->type_ = var_type;
+      if (OB_FAIL(clone_typed_value(value, new_var->val_, *alloc_))) {
+      } else if (OB_FAIL(local_session_vars_.push_back(new_var))) {
+      }
+      if (OB_FAIL(ret)) { new_var->~ObSessionSysVar(); alloc_->free(new_var); }
     }
   } else if (!cur_var->is_equal(value)) {
     ret = OB_ERR_UNEXPECTED;
@@ -200,13 +231,15 @@ int64_t ObLocalSessionVar::get_deep_copy_size() const
   int64_t sz = sizeof(*this) + local_session_vars_.count() * sizeof(ObSessionSysVar *);
   for (int64_t i = 0; i < local_session_vars_.count(); ++i) {
     if (OB_NOT_NULL(local_session_vars_.at(i))) {
-      sz += local_session_vars_.at(i)->get_deep_copy_size();
+      const int64_t child = local_session_vars_.at(i)->get_deep_copy_size();
+      if (child > INT64_MAX - sz) { return INT64_MAX; }
+      sz += child;
     }
   }
   return sz;
 }
 
-bool ObSessionSysVar::is_equal(const ObObj &other) const
+bool ObSessionSysVar::is_equal(const DatumValue &other) const
 {
   bool bool_ret = false;
   if (val_.get_meta() != other.get_meta()) {
@@ -217,7 +250,7 @@ bool ObSessionSysVar::is_equal(const ObObj &other) const
       // The collation type of string system variables is rewritten by session collation on update.
       bool_ret = common::ObCharset::case_sensitive_equal(val_.get_string(), other.get_string());
     }
-  } else if (val_.is_equal(other, CS_TYPE_BINARY)) {
+  } else if (binary_equal_datum_values(val_, other)) {
     bool_ret = true;
   }
   return bool_ret;
@@ -226,27 +259,52 @@ bool ObSessionSysVar::is_equal(const ObObj &other) const
 OB_DEF_SERIALIZE(ObSessionSysVar)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, type_, val_);
+  OB_UNIS_ENCODE(type_);
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(val_.datum_, val_.meta_, buf, buf_len, pos); }
   return ret;
 }
 
 OB_DEF_SERIALIZE_SIZE(ObSessionSysVar)
 {
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, type_, val_);
+  int64_t len = 0, value_size = 0;
+  if (DatumParameterCodec::value_size(val_.datum_, val_.meta_, value_size) != OB_SUCCESS) { return 0; }
+  OB_UNIS_ADD_LEN(type_);
+  len += value_size;
   return len;
 }
 
-OB_DEF_DESERIALIZE(ObSessionSysVar)
+int ObSessionSysVar::deserialize(const char *buf, int64_t data_len, int64_t &pos,
+                                 ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, type_, val_);
+  int64_t version = 0, len = 0;
+  OB_UNIS_DECODE(version);
+  OB_UNIS_DECODE(len);
+  CHECK_VERSION_LENGTH(ObSessionSysVar, version, len);
+  if (OB_SUCC(ret)) {
+    const int64_t body_start = pos;
+    int64_t body_pos = 0;
+    auto type = type_;
+    DatumValue candidate;
+    if (body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, type); }
+    if (OB_SUCC(ret) && body_pos < len) {
+      ret = DatumParameterCodec::decode_unis_value(buf + body_start, len, body_pos,
+                                                  owner, candidate.datum_, candidate.meta_);
+    } else if (OB_SUCC(ret)) {
+      // A legal omitted final value retains the record's previous value, and
+      // the result still has a caller-owned lifetime after this decode.
+      ret = clone_typed_value(val_, candidate, owner);
+    }
+    if (OB_SUCC(ret)) { type_ = type; val_ = candidate; }
+    pos = body_start + len;
+  }
   return ret;
 }
 
 int64_t ObSessionSysVar::get_deep_copy_size() const
 {
-  int64_t sz = sizeof(*this) + val_.get_deep_copy_size();
+  const int64_t payload = owned_native_session_value_size(val_);
+  int64_t sz = payload > INT64_MAX - sizeof(*this) ? INT64_MAX : sizeof(*this) + payload;
   return sz;
 }
 
@@ -280,6 +338,7 @@ OB_DEF_DESERIALIZE(ObLocalSessionVar)
 {
   int ret = OB_SUCCESS;
   int64_t cnt = 0;
+  ObArenaAllocator decode_owner(ObModIds::OB_TEMP_VARIABLES);
   OB_UNIS_DECODE(cnt);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(local_session_vars_.reserve(cnt))) {
@@ -287,7 +346,10 @@ OB_DEF_DESERIALIZE(ObLocalSessionVar)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; ++i) {
     ObSessionSysVar var;
-    LST_DO_CODE(OB_UNIS_DECODE, var);
+    if (pos < data_len) {
+      ret = var.deserialize(buf, data_len, pos, alloc_ == nullptr
+          ? static_cast<ObIAllocator &>(decode_owner) : *alloc_);
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(add_local_var(&var))) {
       }

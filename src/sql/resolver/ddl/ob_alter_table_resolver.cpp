@@ -3373,7 +3373,7 @@ int ObAlterTableResolver::process_timestamp_column(ObColumnResolveStat &stat,
                                                    AlterColumnSchema &alter_column_schema)
 {
   int ret = OB_SUCCESS;
-  const ObObj &cur_default_value = alter_column_schema.get_cur_default_value();
+  const DatumValue &cur_default_value = alter_column_schema.get_cur_default_value();
   bool explicit_value = false;
   if (NULL == session_info_) {
     ret = OB_ERR_UNEXPECTED;
@@ -3602,7 +3602,7 @@ int ObAlterTableResolver::resolve_alter_column(const ParseNode &node)
         ret = OB_ERR_PARSER_SYNTAX;
         SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
       } else {
-        ObObjParam default_value;
+        DatumParameter default_value;
         ObDefaultValueRes resolve_res(default_value);
         if (T_CONSTR_NULL == default_node->type_) {
           default_value.set_null();
@@ -3630,7 +3630,7 @@ int ObAlterTableResolver::resolve_alter_column(const ParseNode &node)
             if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                                   *allocator_, session_info_->get_dtc_params(), expr_str))) {
             } else {
-              default_value.set_varchar(expr_str);
+              ret = default_value.set_varchar(expr_str, *allocator_);
               default_value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
               default_value.set_param_meta();
             }
@@ -3943,8 +3943,8 @@ int ObAlterTableResolver::check_modify_column_allowed(
                                 const ObColumnResolveStat &stat)
 {
   int ret = OB_SUCCESS;
-  const ObObjType origin_col_type = origin_col_schema.get_data_type();
-  const ObObjType alter_col_type = alter_column_schema.get_data_type();
+  const SqlValueType origin_col_type = origin_col_schema.get_data_type();
+  const SqlValueType alter_col_type = alter_column_schema.get_data_type();
   const ObAccuracy &origin_col_accuracy = origin_col_schema.get_accuracy();
   const ObAccuracy &alter_col_accuracy = alter_column_schema.get_accuracy();
 

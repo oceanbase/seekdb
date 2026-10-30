@@ -122,50 +122,50 @@ int ObVirtualSqlPlanStatistics::fill_cells(const ObOperatorStat &pstat)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
     for (int64_t i =  0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch(col_id) {
       case PLAN_ID: {
-        cells[i].set_int(pstat.plan_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pstat.plan_id_) : ret);
         break;
       }
       case OPERATION_ID: {
-        cells[i].set_int(pstat.operation_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pstat.operation_id_) : ret);
         break;
       }
       case EXECUTIONS: {
-        cells[i].set_int(pstat.execute_times_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pstat.execute_times_) : ret);
         break;
       }
       case OUTPUT_ROWS: {
-        cells[i].set_int(pstat.output_rows_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pstat.output_rows_) : ret);
         break;
       }
 
       case INPUT_ROWS: {
-        cells[i].set_int(pstat.input_rows_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pstat.input_rows_) : ret);
         break;
       }
 
       case RESCAN_TIMES: {
-        cells[i].set_int(pstat.rescan_times_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pstat.rescan_times_) : ret);
         break;
       }
       case BUFFER_GETS: {
-        cells[i].set_int(0);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, 0) : ret);
         break;
       }
       case DISK_READS: {
-        cells[i].set_int(0);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, 0) : ret);
         break;
       }
       case DISK_WRITES: {
-        cells[i].set_int(0);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, 0) : ret);
         break;
       }
       case ELAPSED_TIME: {
-        cells[i].set_int(0);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, 0) : ret);
         break;
       }
       case EXTEND_INFO1: {

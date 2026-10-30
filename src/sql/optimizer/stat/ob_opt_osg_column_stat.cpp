@@ -17,20 +17,56 @@
 #define USING_LOG_PREFIX SQL_OPT
 
 #include "ob_opt_osg_column_stat.h"
+#include "common/lob/lob_types.h"
+#include "share/datum/typed_datum_compare.h"
+#include "share/datum/typed_datum_murmur.h"
+#include "share/datum/ob_datum_funcs.h"
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 namespace oceanbase {
 namespace common {
 using namespace sql;
 
-int ObMinMaxValEval::get_obj(ObObj &obj) const
+namespace {
+int hash_osg_value(const ObDatum &datum, const SqlTypeMeta &meta,
+                   const ObDatumAccessContext *access_ctx, uint64_t &hash)
 {
   int ret = OB_SUCCESS;
-  if (datum_ == NULL) {
-    obj.set_null();
-  } else if (OB_FAIL(datum_->to_obj(obj, meta_))) {
+  DatumValue value(datum, meta);
+  bool outrow_lob = false;
+  if (!datum.is_null() && meta.is_lob_storage() && meta.has_lob_header()) {
+    ObLobLocatorV2 locator(datum.get_string(), true);
+    // Invalid locators are treated as out-row by the old JSON/Geometry hash
+    // path (it leaves the result at the seed); text hashing reports the read
+    // error through Datum's native LOB hash function below.
+    outrow_lob = !locator.is_valid(false) || !locator.has_inrow_data();
+  }
+
+  if (outrow_lob && (meta.is_json() || meta.is_geometry())) {
+    // The legacy v3 JSON and Geometry hash functions return the seed for an
+    // out-row locator instead of reading its external payload.
+    hash = 0;
+  } else if (outrow_lob && meta.get_type_class() == ObTextTC) {
+    // The legacy v3 text hash reads the full LOB before hashing it. The Datum
+    // v2 callback has the same content semantics and accepts the active LOB
+    // read context, avoiding materializing a legacy value object.
+    ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+        meta.get_type(), meta.get_collation_type(), meta.get_scale(), true);
+    if (OB_ISNULL(basic_funcs) || OB_ISNULL(basic_funcs->murmur_hash_v2_)) {
+      ret = OB_NOT_SUPPORTED;
+    } else if (OB_FAIL(basic_funcs->murmur_hash_v2_(datum, 0, hash, access_ctx))) {
+    }
+  } else {
+    ret = hash_datum_value_murmur(value, 0, hash);
   }
   return ret;
+}
+} // namespace
+
+void ObMinMaxValEval::get_value(DatumValue &value) const
+{
+  if (datum_ == nullptr) { value.set_null(); }
+  else { value = DatumValue(*datum_, meta_); }
 }
 
 int ObMinMaxValEval::deep_copy(const ObMinMaxValEval &other, ObIAllocator &alloc)
@@ -100,31 +136,29 @@ int ObOptOSGColumnStat::deep_copy(const ObOptOSGColumnStat &other)
   return ret;
 }
 
-int ObOptOSGColumnStat::set_min_max_datum_to_obj()
+int ObOptOSGColumnStat::publish_min_max_values()
 {
-  int ret = OB_SUCCESS;
-  ObObj *min_obj = NULL;
-  ObObj *max_obj = NULL;
-  if (OB_ISNULL(col_stat_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(min_obj = OB_NEWx(ObObj, (&allocator_))) ||
-             OB_ISNULL(max_obj = OB_NEWx(ObObj, (&allocator_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory");
-  } else if (OB_FAIL(min_val_.get_obj(*min_obj))) {
-  } else if (OB_FAIL(max_val_.get_obj(*max_obj))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
-                 *min_obj, allocator_, datum_access_ctx_))) {
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
-                 *max_obj, allocator_, datum_access_ctx_))) {
-  } else {
-    const ObObj &min_val = col_stat_->get_min_value();
-    const ObObj &max_val = col_stat_->get_max_value();
-    if (min_val.is_null() || (!min_obj->is_null() && *min_obj < min_val)) {
-      col_stat_->set_min_value(*min_obj);
+  int ret = OB_SUCCESS, cmp = 0;
+  DatumValue minimum, maximum;
+  min_val_.get_value(minimum);
+  max_val_.get_value(maximum);
+  if (OB_ISNULL(col_stat_)) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(minimum, allocator_, datum_access_ctx_))) {}
+  else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(maximum, allocator_, datum_access_ctx_))) {}
+  else {
+    const DatumValue &current_minimum = col_stat_->get_min_value();
+    const DatumValue &current_maximum = col_stat_->get_max_value();
+    if (current_minimum.is_null()) { ret = col_stat_->set_min_value(minimum); }
+    else if (!minimum.is_null()) {
+      if (OB_FAIL(compare_datum_values(minimum, current_minimum, cmp))) {}
+      else if (cmp < 0) { ret = col_stat_->set_min_value(minimum); }
     }
-    if (max_val.is_null() || (!max_obj->is_null() && *max_obj > max_val)) {
-      col_stat_->set_max_value(*max_obj);
+    if (OB_SUCC(ret)) {
+      if (current_maximum.is_null()) { ret = col_stat_->set_max_value(maximum); }
+      else if (!maximum.is_null()) {
+        if (OB_FAIL(compare_datum_values(maximum, current_maximum, cmp))) {}
+        else if (cmp > 0) { ret = col_stat_->set_max_value(maximum); }
+      }
     }
   }
   return ret;
@@ -164,7 +198,7 @@ int ObOptOSGColumnStat::merge_column_stat(const ObOptOSGColumnStat &other)
 }
 
 int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
-                                                const ObObjMeta &meta,
+                                                const SqlTypeMeta &meta,
                                                 const ObDatumCmpFuncType cmp_func)
 {
   int ret = OB_SUCCESS;
@@ -179,15 +213,14 @@ int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
   } else {
     col_stat_->add_num_not_null(1);
     uint64_t hash_value = 0;
-    ObObj tmp_obj;
-    if (OB_FAIL(datum->to_obj(tmp_obj, meta))) {
-    } else if (OB_FAIL(tmp_obj.hash_murmur(hash_value, hash_value))) {
-    } else if (OB_UNLIKELY(col_stat_->get_llc_bitmap() == NULL || col_stat_->get_llc_bitmap_size() == 0)) {
+    if (OB_FAIL(hash_osg_value(*datum, meta, datum_access_ctx_, hash_value))) {
+    }
+    if (OB_SUCC(ret) && OB_UNLIKELY(col_stat_->get_llc_bitmap() == NULL
+                                    || col_stat_->get_llc_bitmap_size() == 0)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(ObAggregateProcessor::llc_add_value(hash_value,
-                                                           col_stat_->get_llc_bitmap(),
-                                                           col_stat_->get_llc_bitmap_size()))) {
-    } else if (OB_FAIL(inner_merge_min_max(*datum, meta, cmp_func))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(ObAggregateProcessor::llc_add_value(
+                   hash_value, col_stat_->get_llc_bitmap(), col_stat_->get_llc_bitmap_size()))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(inner_merge_min_max(*datum, meta, cmp_func))) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -196,7 +229,7 @@ int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
   return ret;
 }
 
-int ObOptOSGColumnStat::calc_col_len(const ObDatum &datum, const ObObjMeta &meta, int64_t &col_len)
+int ObOptOSGColumnStat::calc_col_len(const ObDatum &datum, const SqlTypeMeta &meta, int64_t &col_len)
 {
   int ret = OB_SUCCESS;
   if (!is_lob_storage(meta.get_type()) || datum.is_null()) {
@@ -212,7 +245,7 @@ int ObOptOSGColumnStat::calc_col_len(const ObDatum &datum, const ObObjMeta &meta
   return ret;
 }
 
-int ObOptOSGColumnStat::inner_merge_min(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func)
+int ObOptOSGColumnStat::inner_merge_min(const ObDatum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func)
 {
   int ret = OB_SUCCESS;
   if (meta.is_enum_or_set()) {
@@ -244,7 +277,7 @@ int ObOptOSGColumnStat::inner_merge_min(const ObDatum &datum, const ObObjMeta &m
   return ret;
 }
 
-int ObOptOSGColumnStat::inner_merge_max(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func)
+int ObOptOSGColumnStat::inner_merge_max(const ObDatum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func)
 {
   int ret = OB_SUCCESS;
   if (meta.is_enum_or_set()) {
@@ -276,7 +309,7 @@ int ObOptOSGColumnStat::inner_merge_max(const ObDatum &datum, const ObObjMeta &m
   return ret;
 }
 
-int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func)
+int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func)
 {
   int ret = OB_SUCCESS;
   bool cmp_min = true;

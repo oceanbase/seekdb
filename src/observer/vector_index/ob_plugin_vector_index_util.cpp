@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "data_plane/native_key_value_buffer.h"
 #include "share/config/ob_server_config.h"
 #include "query/vector/ob_vector_query_result.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
@@ -117,7 +118,6 @@ int ObVectorQueryRowkeyIterator::get_next_rows(ObIArray<common::ObRowkey>& rowke
   if (!is_init_) {
     ret = OB_NOT_INIT;
   } else if (cur_pos_ < total_) {
-    ObObj *obj = nullptr;
     if (batch_size_ > 0) {
       if (OB_FAIL(rowkeys.reserve(batch_size_))) {
       } else {
@@ -149,9 +149,9 @@ int ObVectorQueryVidIterator::init(int64_t need_count, ObIAllocator *allocator)
   INIT_SUCC(ret);
   if (need_count == 0 || OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(row_ = static_cast<ObNewRow *>(allocator->alloc(sizeof(ObNewRow))))) {
+  } else if (OB_ISNULL(row_ = OB_NEWx(ObVectorResultRow, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(obj_ = static_cast<ObObj *>(allocator->alloc(sizeof(ObObj) * (2 + extra_column_count_ + rel_count_))))) {
+  } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(*allocator, 2 + extra_column_count_ + rel_count_, obj_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(vids_ = static_cast<int64_t *>(allocator->alloc(sizeof(int64_t) * need_count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -201,9 +201,9 @@ int ObVectorQueryVidIterator::init(int64_t total, int64_t *vids, float *distance
     ret = OB_INVALID_ARGUMENT;
   } else if ((OB_ISNULL(vids) && total != 0) || OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(row_ =  OB_NEWx(ObNewRow, allocator))) {
+  } else if (OB_ISNULL(row_ =  OB_NEWx(ObVectorResultRow, allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(obj_ = static_cast<ObObj*>(allocator->alloc(sizeof(ObObj) * (2 + extra_column_count_ + rel_count_))))) {
+  } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(*allocator, 2 + extra_column_count_ + rel_count_, obj_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     for (int i = 0; i < 2 + extra_column_count_ + rel_count_; i++) {
@@ -233,14 +233,18 @@ int ObVectorQueryVidIterator::reset_obj()
   return ret;
 }
 
-int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedArray& res_exprs, const bool no_rel)
+int ObVectorQueryVidIterator::get_next_row(ObVectorResultRow *&row, const sql::ExprFixedArray& res_exprs, const bool no_rel)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(reset_obj())) {
   } else if (cur_pos_ < total_) {
     row_->reset();
-    obj_[0].set_float(distance_[cur_pos_]);
-    obj_[1].set_int(vids_[cur_pos_]);
+    obj_[0].meta_.set_float();
+    obj_[0].datum_.ptr_ = reinterpret_cast<const char *>(distance_ + cur_pos_);
+    obj_[0].datum_.pack_ = sizeof(float);
+    obj_[1].meta_.set_int();
+    obj_[1].datum_.ptr_ = reinterpret_cast<const char *>(vids_ + cur_pos_);
+    obj_[1].datum_.pack_ = sizeof(int64_t);
     // set extra info if need
     if (!extra_info_ptr_.is_null()) {
       if (res_exprs.count() != rel_count_ + extra_column_count_ + 1) {
@@ -250,7 +254,7 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
         for (int i = 0; i < extra_column_count_; i++) {
           obj_[2 + i].set_meta_type(res_exprs.at(i + 1)->obj_meta_);
         }
-        if (OB_FAIL(ObVecExtraInfo::extra_buf_to_obj(extra_info_ptr_[cur_pos_], extra_info_actual_size_,
+        if (OB_FAIL(ObVecExtraInfo::extra_buf_to_values(extra_info_ptr_[cur_pos_], extra_info_actual_size_,
                                                      extra_column_count_, obj_ + 2))) {
         }
       }
@@ -264,15 +268,19 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
       }
       for (int i = 0; i < rel_count_ && OB_SUCC(ret); i++) {
         obj_[2 + extra_column_count_ + i].set_meta_type(res_exprs.at(i + extra_column_count_ + 1)->obj_meta_);
-        obj_[2 + extra_column_count_ + i].set_double_value(rel_ptr[i]);
+        obj_[2 + extra_column_count_ + i].datum_.ptr_ = reinterpret_cast<const char *>(rel_ptr + i);
+        obj_[2 + extra_column_count_ + i].datum_.pack_ = sizeof(double);
       }
     }
 
+    // Preserve value snapshots for fixed fields exactly as the previous inline
+    // row carrier did; long extra-info strings retain their compact-buffer view.
+    for (int64_t i = 0; i < 2 + extra_column_count_ + rel_count_ && OB_SUCC(ret); ++i) {
+      ret = storage::NativeKeyValueBuffer::project_value(obj_[i], obj_, 2 + extra_column_count_ + rel_count_, i);
+    }
     cur_pos_++;
     row_->cells_ = obj_;
     row_->count_ = 2 + extra_column_count_ + rel_count_;
-    row_->projector_ = NULL;
-    row_->projector_size_ = 0;
 
     row = row_;
   } else {
@@ -281,7 +289,7 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
   return ret;
 }
 
-int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const sql::ExprFixedArray& res_exprs)
+int ObVectorQueryVidIterator::get_next_rows(ObVectorResultRow *&row, int64_t &size, const sql::ExprFixedArray& res_exprs)
 {
   INIT_SUCC(ret);
   if (!is_init_) {
@@ -289,20 +297,24 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
   } else if (cur_pos_ < total_) {
     size = 0;
     row = nullptr;
-    ObObj *obj = nullptr;
+    DatumValue *obj = nullptr;
     if (batch_size_ > 0) {
       // row.cells: [dis\vid\extras][dis\vid\extras]...
       // Indicates how many obj are in one row, 2 represents vid and dis
       int64_t one_size_obj_count = 2 + extra_column_count_ + rel_count_;
-      if (OB_ISNULL(row = static_cast<ObNewRow *>(allocator_->alloc(sizeof(ObNewRow))))) {
+      if (OB_ISNULL(row = OB_NEWx(ObVectorResultRow, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_ISNULL(obj = static_cast<ObObj *>(allocator_->alloc(sizeof(ObObj) * one_size_obj_count * batch_size_)))) {
+      } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(*allocator_, one_size_obj_count * batch_size_, obj))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         int64_t index = 0;
         for (; index < batch_size_ && cur_pos_ < total_ && OB_SUCC(ret); ++index) {
-          obj[index * one_size_obj_count].set_float(distance_[cur_pos_]);
-          obj[index * one_size_obj_count + 1].set_int(vids_[cur_pos_]);
+          obj[index * one_size_obj_count].meta_.set_float();
+          obj[index * one_size_obj_count].datum_.ptr_ = reinterpret_cast<const char *>(distance_ + cur_pos_);
+          obj[index * one_size_obj_count].datum_.pack_ = sizeof(float);
+          obj[index * one_size_obj_count + 1].meta_.set_int();
+          obj[index * one_size_obj_count + 1].datum_.ptr_ = reinterpret_cast<const char *>(vids_ + cur_pos_);
+          obj[index * one_size_obj_count + 1].datum_.pack_ = sizeof(int64_t);
           // set extra info if need
           if (!extra_info_ptr_.is_null()) {
             if (res_exprs.count() != extra_column_count_ + 1) {
@@ -312,7 +324,7 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
               for (int i = 0; i < extra_column_count_; i++) {
                 obj[index * one_size_obj_count + 2 + i].set_meta_type(res_exprs.at(i + 1)->obj_meta_);
               }
-              if (OB_FAIL(ObVecExtraInfo::extra_buf_to_obj(extra_info_ptr_[cur_pos_], extra_info_actual_size_,
+              if (OB_FAIL(ObVecExtraInfo::extra_buf_to_values(extra_info_ptr_[cur_pos_], extra_info_actual_size_,
                                                            extra_column_count_,
                                                            obj + index * one_size_obj_count + 2))) {
               }
@@ -327,15 +339,18 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
             }
             for (int i = 0; i < rel_count_ && OB_SUCC(ret); i++) {
               obj[index * one_size_obj_count + 2 + extra_column_count_ + i].set_meta_type(res_exprs.at(i + extra_column_count_ + 1)->obj_meta_);
-              obj[index * one_size_obj_count + 2 + extra_column_count_ + i].set_double_value(rel_ptr[i]);
+              obj[index * one_size_obj_count + 2 + extra_column_count_ + i].datum_.ptr_ = reinterpret_cast<const char *>(rel_ptr + i);
+              obj[index * one_size_obj_count + 2 + extra_column_count_ + i].datum_.pack_ = sizeof(double);
             }
+          }
+          for (int64_t i = 0; i < one_size_obj_count && OB_SUCC(ret); ++i) {
+            const int64_t slot = index * one_size_obj_count + i;
+            ret = storage::NativeKeyValueBuffer::project_value(obj[slot], obj, one_size_obj_count * batch_size_, slot);
           }
           cur_pos_++;
         }
         row->cells_ = obj;
         row->count_ = index * one_size_obj_count;
-        row->projector_ = NULL;
-        row->projector_size_ = 0;
         size = index;
       }
     }

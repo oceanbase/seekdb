@@ -40,13 +40,15 @@ public:
   static int get_different_vars_from_session(const ObLocalSessionVar &local_vars,
                                              const ObBasicSessionInfo *session,
                                              common::ObIArray<const ObSessionSysVar*> &local_diff_vars,
-                                             common::ObIArray<common::ObObj> &session_vals);
+                                             common::ObIArray<common::DatumValue> &session_vals,
+                                             common::ObIAllocator &owner);
   static int check_var_same_with_session(const ObBasicSessionInfo &session,
                                          const ObSessionSysVar *local_var,
                                          bool &is_same,
-                                         common::ObObj *diff_val = NULL);
+                                         common::DatumValue *diff_val = NULL,
+                                         common::ObIAllocator *owner = nullptr);
   static int get_sys_var_val_str(const share::ObSysVarClassType var_type,
-                                 const common::ObObj &var_val,
+                                 const common::DatumValue &var_val,
                                  common::ObIAllocator &allocator,
                                  common::ObString &val_str);
 

@@ -18,6 +18,7 @@
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
+#include "share/datum/typed_datum_compare.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -51,14 +52,17 @@ int ObSelectIntoItem::deep_copy(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   into_type_ = other.into_type_;
-  outfile_name_ = other.outfile_name_;
-  field_str_ = other.field_str_;
-  line_str_ = other.line_str_;
-  closed_cht_ = other.closed_cht_;
+  if (OB_FAIL(clone_typed_value(other.outfile_name_, outfile_name_, allocator))) {
+  } else if (OB_FAIL(clone_typed_value(other.field_str_, field_str_, allocator))) {
+  } else if (OB_FAIL(clone_typed_value(other.line_str_, line_str_, allocator))) {
+  } else if (OB_FAIL(clone_typed_value(other.closed_cht_, closed_cht_, allocator))) {
+  }
   is_optional_ = other.is_optional_;
   is_single_ = other.is_single_;
   max_file_size_ = other.max_file_size_;
-  escaped_cht_ = other.escaped_cht_;
+  if (OB_SUCC(ret)) {
+    ret = clone_typed_value(other.escaped_cht_, escaped_cht_, allocator);
+  }
   cs_type_ = other.cs_type_;
   buffer_size_ = other.buffer_size_;
   user_vars_.assign(other.user_vars_);

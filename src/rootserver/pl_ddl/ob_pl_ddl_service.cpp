@@ -151,14 +151,14 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
     } else if (replace) {
     } else {
       const ObSysVarSchema *sys_var = NULL;
-      ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
-      ObObj val;
+      ObArenaAllocator alloc(ObModIds::OB_TEMP_VARIABLES);
+      DatumValue val;
       if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
       } else if (OB_ISNULL(sys_var)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(sys_var->get_value(&alloc, NULL, val))) {
+      } else if (OB_FAIL(sys_var->get_value(alloc, static_cast<const ObTimeZoneInfo *>(nullptr), val))) {
       } else {
-        bool grant_priv = val.get_bool();
+        bool grant_priv = !val.is_null() && 0 != val.get_int();
         if (grant_priv) {
           int64_t db_id = routine_info.get_database_id();
           const ObDatabaseSchema* database_schema = NULL;
@@ -384,13 +384,13 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
     } else if (OB_FAIL(pl_operator.drop_routine(routine_info, trans, error_info, ddl_stmt_str))) {
     } else {
       const ObSysVarSchema *sys_var = NULL;
-      ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
-      ObObj val;
+      ObArenaAllocator alloc(ObModIds::OB_TEMP_VARIABLES);
+      DatumValue val;
       if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_AUTOMATIC_SP_PRIVILEGES, sys_var))) {
       } else if (OB_ISNULL(sys_var)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(sys_var->get_value(&alloc, NULL, val))) {
-      } else if (val.get_bool()) {
+      } else if (OB_FAIL(sys_var->get_value(alloc, static_cast<const ObTimeZoneInfo *>(nullptr), val))) {
+      } else if (!val.is_null() && 0 != val.get_int()) {
         const int64_t db_id = routine_info.get_database_id();
         const ObDatabaseSchema *database_schema = NULL;
         ObSEArray<const ObUserInfo *, 10> user_infos;

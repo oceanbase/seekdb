@@ -21,6 +21,7 @@
 #include "ob_expr_json_value.h"
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "common/datum/datum_parameter_codec.h"
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -116,7 +117,7 @@ int ObExprJsonQuery::calc_returning_type(ObExprResType& type,
     ObJsonPath j_path(j_path_text, allocator);
 
     if (j_path_text.length() == 0) {
-      dst_type.set_type(ObObjType::ObVarcharType);
+      dst_type.set_type(SqlValueType::ObVarcharType);
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
       dst_type.set_full_length(VARCHAR2_DEFAULT_LEN, 1);
     } else if (OB_FAIL(ObJsonExprHelper::convert_string_collation_type(
@@ -129,10 +130,10 @@ int ObExprJsonQuery::calc_returning_type(ObExprResType& type,
       ret = OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR;
       LOG_USER_ERROR(OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR, j_path_text.length(), j_path_text.ptr());
     } else if (is_json_input && !j_path.is_last_func()) {
-      dst_type.set_type(ObObjType::ObJsonType);
+      dst_type.set_type(SqlValueType::ObJsonType);
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
-      dst_type.set_type(ObObjType::ObVarcharType);
+      dst_type.set_type(SqlValueType::ObVarcharType);
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
       dst_type.set_full_length(VARCHAR2_DEFAULT_LEN, 1);
     }
@@ -198,7 +199,7 @@ int ObExprJsonQuery::eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   INIT_SUCC(ret);
   ObDatum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[JSN_QUE_PATH];
-  ObObjType type = json_arg->datum_meta_.type_;
+  SqlValueType type = json_arg->datum_meta_.type_;
   bool is_cover_by_error = true;
   bool is_null_result = false;
   uint8_t is_type_mismatch = 0;
@@ -356,7 +357,7 @@ int ObExprJsonQuery::eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
 }
 
 
-int ObExprJsonQuery::check_enable_cast_index_array(ObIJsonBase* json_base, bool disable_container, ObObjType dest_type)
+int ObExprJsonQuery::check_enable_cast_index_array(ObIJsonBase* json_base, bool disable_container, SqlValueType dest_type)
 {
   int ret = OB_SUCCESS;
 
@@ -404,7 +405,7 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
 
   ObDatum *opt_type = nullptr;
   int32_t dst_len = 0;
-  ObObjType dest_type;
+  SqlValueType dest_type;
   int32_t precision = -1;
   int32_t scale = -1;
   ObLengthSemantics length_semantics = 0;
@@ -414,8 +415,8 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
   ObAccuracy accuracy = origin_accuracy;
 
   ObIJsonBase* json_base = nullptr;
-  ObObj tmp_obj;
-  ObObj* object_ptr = &tmp_obj;
+  DatumValue tmp_obj;
+  DatumValue* object_ptr = &tmp_obj;
   
   if (OB_FAIL(expr.args_[2]->eval(ctx, opt_type))) {
   } else if (OB_NOT_NULL(origin_result) 
@@ -432,7 +433,7 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
     0 : (json_base->json_type() == ObJsonNodeType::J_ARRAY ? json_base->element_count() : 1);
   
   uint8_t is_cast = false;
-  uint64_t reserve_len = 0;
+  int64_t reserve_len = 0;
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_enable_cast_index_array(json_base, false, dest_type))) {
@@ -447,8 +448,8 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
     */ 
 
     // 1. allocator element container
-    ObObj *obj_array = nullptr;
-    obj_array = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * element_count));
+    DatumValue *obj_array = nullptr;
+    obj_array = static_cast<DatumValue*>(allocator.alloc(sizeof(DatumValue) * element_count));
     if (element_count > 0 && OB_ISNULL(obj_array)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     }
@@ -456,13 +457,13 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
     for (int i = 0; OB_SUCC(ret) && i < element_count; ++i) {
       ObJsonBin tmp;
       ObIJsonBase* iter = &tmp;
-      ObObj *tmp_array_obj = new (obj_array + i) ObObj();
-      ObObj *temp_obj = tmp_array_obj;
+      DatumValue *tmp_array_obj = new (obj_array + i) DatumValue();
+      DatumValue *temp_obj = tmp_array_obj;
       object_ptr = temp_obj;
 
       if (OB_FAIL(json_base->get_array_element(i, iter))) {
       } else if (OB_FAIL(check_enable_cast_index_array(iter, true, dest_type))) {
-      } else if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_obj(&allocator, ctx, iter, dst_collation, 
+      } else if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_value(allocator, ctx, iter, dst_collation,
                                                                  accuracy, dest_type, scale, *temp_obj))) {
         ret = OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX;
         LOG_USER_ERROR(OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX);
@@ -472,14 +473,14 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
     // 2. do sort
     if (OB_SUCC(ret) && is_result_array && OB_NOT_NULL(obj_array)) {
       lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONMultivalue"));
-      ObJsonObjectCompare cmp;
+      ObJsonObjectCompare cmp(ret);
       lib::ob_sort(obj_array, obj_array + element_count, cmp);
     }
 
     uint32_t real_store_count = 0;
-    ObObj *last_obj = nullptr;
+    DatumValue *last_obj = nullptr;
     for (int i = 0; OB_SUCC(ret) && is_result_array && i < element_count; ++i) {
-      ObObj *temp_obj = obj_array + i;
+      DatumValue *temp_obj = obj_array + i;
       int64_t pos = str_buff.length();
       if (ob_is_numeric_type(dest_type) || ob_is_temporal_type(dest_type)) {
         temp_obj->set_collation_level(CS_LEVEL_NUMERIC);
@@ -493,9 +494,7 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
         ++real_store_count;
         last_obj = temp_obj;
       } else {
-        bool is_case_comp = last_obj->is_string_type() && temp_obj->is_string_type();
-        if (is_case_comp && OB_FAIL(last_obj->compare(*temp_obj, CS_TYPE_UTF8MB4_GENERAL_CI, obj_cmp_ret))) {
-        } else if (!is_case_comp && OB_FAIL(last_obj->compare(*temp_obj, obj_cmp_ret))) {
+        if (OB_FAIL(ObJsonObjectCompare::compare(*last_obj, *temp_obj, obj_cmp_ret))) {
         } else if (obj_cmp_ret == 0) { // ObCmpRes::CR_EQ
           continue;
         } else {
@@ -505,9 +504,9 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
       }
 
       if (OB_FAIL(ret)) {
-      } else if (FALSE_IT(reserve_len = temp_obj->get_serialize_size())) {
+      } else if (OB_FAIL(DatumParameterCodec::value_size(temp_obj->datum_, temp_obj->meta_, reserve_len))) {
       } else if (OB_FAIL(str_buff.reserve(reserve_len + 128))) {
-      } else if (OB_FAIL(temp_obj->serialize(str_buff.ptr(), str_buff.capacity(), pos))) {
+      } else if (OB_FAIL(DatumParameterCodec::encode_value(temp_obj->datum_, temp_obj->meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
       } else {
         str_buff.set_length(pos);
       }
@@ -527,20 +526,20 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
     }
 
     if (OB_FAIL(check_enable_cast_index_array(json_base, true, dest_type))) {
-    } else if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_obj(&allocator, ctx, json_base, dst_collation, 
+    } else if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_value(allocator, ctx, json_base, dst_collation,
                                                                accuracy, dest_type, scale, tmp_obj))) {
       ret = OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX;
       LOG_USER_ERROR(OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX);
-    } else if (FALSE_IT(reserve_len = tmp_obj.get_serialize_size())) {
+    } else if (OB_FAIL(DatumParameterCodec::value_size(tmp_obj.datum_, tmp_obj.meta_, reserve_len))) {
     } else if (OB_FAIL(str_buff.reserve(reserve_len + 128))) {
-    } else if (OB_FAIL(tmp_obj.serialize(str_buff.ptr(), str_buff.capacity(), pos))) {
+    } else if (OB_FAIL(DatumParameterCodec::encode_value(tmp_obj.datum_, tmp_obj.meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
     } else {
       str_buff.set_length(pos);
     }
   } else {
     // empty result, set a minimal
     
-    ObObj temp_obj;
+    DatumValue temp_obj;
     temp_obj.set_type(dest_type);
     temp_obj.set_collation_type(dst_collation);
     temp_obj.set_scale(scale);
@@ -552,10 +551,10 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
 
     int64_t pos = str_buff.length();
     
-    uint64_t reserve_len = 0;
-    if (FALSE_IT(reserve_len = temp_obj.get_serialize_size())) {
+    int64_t reserve_len = 0;
+    if (OB_FAIL(DatumParameterCodec::value_size(temp_obj.datum_, temp_obj.meta_, reserve_len))) {
     } else if (OB_FAIL(str_buff.reserve(reserve_len + 128))) {
-    } else if (OB_FAIL(temp_obj.serialize(str_buff.ptr(), str_buff.capacity(), pos))) {
+    } else if (OB_FAIL(DatumParameterCodec::encode_value(temp_obj.datum_, temp_obj.meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
     } else {
       str_buff.set_length(pos);
     }
@@ -563,12 +562,12 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
 
   if (OB_FAIL(ret)) {
   } else if (!is_result_array) {
-    ObObjDatumMapType type = ObDatum::get_obj_datum_map_type(dest_type);
+    SqlValueDatumMapType type = ObDatum::get_sql_value_datum_map_type(dest_type);
     if (element_count == 0) {
       res.set_null();
     } else if (OB_ISNULL(object_ptr)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(res.from_obj(*object_ptr, type))) {
+    } else if (OB_FAIL(res.from_storage_datum(object_ptr->datum_, type))) {
     } else if (OB_FAIL(ObJsonUtil::set_lob_datum(&allocator, expr, ctx, dest_type, cast_param.ascii_type_, res))) {
     }
   } else {
@@ -681,9 +680,9 @@ int ObExprJsonQuery::check_params_valid(const ObExpr &expr,
   INIT_SUCC(ret);
   int8_t JSON_QUERY_EXPR = 1;
   ObExpr* json_arg = expr.args_[JSN_QUE_DOC];
-  ObObjType val_type = json_arg->datum_meta_.type_;
+  SqlValueType val_type = json_arg->datum_meta_.type_;
   ObExpr *json_arg_ret = expr.args_[JSN_QUE_RET];
-  ObObjType ret_type = json_arg_ret->datum_meta_.type_;
+  SqlValueType ret_type = json_arg_ret->datum_meta_.type_;
   // check conflict between item method and returning type.
   if (!(val_type == ObJsonType && ret_type == ObNullType)
       && (OB_NOT_NULL(json_param->json_path_) && json_param->json_path_->is_last_func())
@@ -717,9 +716,9 @@ int ObExprJsonQuery::get_clause_param_value(const ObExpr &expr,
   int8_t val = 0;
   // returning type
   ObExpr* json_arg = expr.args_[JSN_QUE_DOC];
-  ObObjType type = json_arg->datum_meta_.type_;
+  SqlValueType type = json_arg->datum_meta_.type_;
   ObExpr *json_arg_ret = expr.args_[JSN_QUE_RET];
-  ObObjType val_type = json_arg_ret->datum_meta_.type_;
+  SqlValueType val_type = json_arg_ret->datum_meta_.type_;
   if (val_type == ObNullType) {
     if (ob_is_string_type(type) || json_param->json_path_->is_last_func()) {
       json_param->dst_type_ = ObVarcharType;
@@ -904,7 +903,7 @@ int ObExprJsonQueryParamInfo::init_jsn_query_expr_param(ObIAllocator &alloc, ObE
   INIT_SUCC(ret);
   ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
   const ObRawExpr *path = raw_expr->get_param_expr(JSN_QUE_PATH);
-  ObObj const_data;
+  DatumValue const_data;
   ObArray<int8_t> param_vec;
   uint32_t pos = -1;
   // parse clause node

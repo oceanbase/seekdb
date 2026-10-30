@@ -16,6 +16,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "share/object/ob_array_cast.h"
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/datum_string_accuracy.h"
 #include "common/json_type/ob_json_parse.h"
 #include "share/ob_lob_access_utils.h"
 #include <fast_float/fast_float.h>
@@ -39,23 +41,24 @@ int ObVectorDataCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, const
     LOG_USER_ERROR(OB_ERR_INVALID_VECTOR_DIM, dim_cnt_, src->size());
   }
   for (int64_t i = 0; i < src->size() && OB_SUCC(ret); i++) {
-    ObObj src_elem;
+    common::DatumValue src_elem;
+    alignas(8) char src_datum_buffer[64] = {};
     if (src->is_null(i)) {
       if (OB_FAIL(dst->push_null())) {
       }
-    } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem))) {
+    } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem, src_datum_buffer))) {
     } else {
-      ObObjType dst_obj_type = dst_type->basic_meta_.get_obj_type();
-      ObObj res;
+      SqlValueType dst_obj_type = dst_type->basic_meta_.get_obj_type();
+      common::DatumValue res;
       ObCastCtx cast_ctx(&alloc, NULL, mode, ObCharset::get_system_collation());
-      if (OB_FAIL(ObObjCaster::to_type(dst_obj_type, cast_ctx, src_elem, res))) {
+      if (OB_FAIL(DatumValueCaster::to_type(dst_obj_type, cast_ctx, src_elem, alloc, res))) {
       } else if (dst_obj_type == ObFloatType) {
         ObVectorF32Data *dst_arr = static_cast<ObVectorF32Data *>(dst);
         if (OB_FAIL(dst_arr->push_back(res.get_float()))) {
         }
       } else if (dst_obj_type == ObUTinyIntType) {
         ObVectorU8Data *dst_arr = static_cast<ObVectorU8Data *>(dst);
-        if (OB_FAIL(dst_arr->push_back(res.get_utinyint()))) {
+        if (OB_FAIL(dst_arr->push_back(static_cast<uint8_t>(res.get_uint64())))) {
         }
       } else {
         ret = OB_NOT_SUPPORTED;
@@ -75,125 +78,51 @@ int ObArrayFixedSizeCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, c
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
   }
   for (int64_t i = 0; i < src->size() && OB_SUCC(ret); i++) {
-    ObObj src_elem;
+    common::DatumValue src_elem;
+    alignas(8) char src_datum_buffer[64] = {};
     if (src->is_null(i)) {
       if (OB_FAIL(dst->push_null())) {
       }
-    } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem))) {
+    } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem, src_datum_buffer))) {
     } else if (OB_FAIL(ObArrayCastUtils::cast_add_element(alloc, src_elem, dst, dst_type, mode))) {
     }
   }
   return ret;
 }
 
-int ObArrayCastUtils::cast_get_element(ObIArrayType *src, const ObCollectionBasicType *elem_type, uint32_t idx, ObObj &src_elem)
+int ObArrayCastUtils::cast_get_element(ObIArrayType *src, const ObCollectionBasicType *elem_type,
+                                       uint32_t idx, common::DatumValue &src_elem, char *datum_buffer)
 {
   int ret = OB_SUCCESS;
-  ObObjType obj_type = elem_type->basic_meta_.get_obj_type();
-  switch (obj_type) {
-    case ObTinyIntType: {
-      ObArrayFixedSize<int8_t> *arr = static_cast<ObArrayFixedSize<int8_t> *>(src);
-      src_elem.set_tinyint((*arr)[idx]);
-      break;
-    }
-    case ObSmallIntType: {
-      ObArrayFixedSize<int16_t> *arr = static_cast<ObArrayFixedSize<int16_t> *>(src);
-      src_elem.set_smallint((*arr)[idx]);
-      break;
-    }
-    case ObIntType: {
-      ObArrayFixedSize<int64_t> *arr = static_cast<ObArrayFixedSize<int64_t> *>(src);
-      src_elem.set_int((*arr)[idx]);
-      break;
-    }
-    case ObInt32Type: {
-      ObArrayFixedSize<int32_t> *arr = static_cast<ObArrayFixedSize<int32_t> *>(src);
-      src_elem.set_int32((*arr)[idx]);
-      break;
-    }
-    case ObUTinyIntType: {
-      ObArrayFixedSize<uint8_t> *arr = static_cast<ObArrayFixedSize<uint8_t> *>(src);
-      src_elem.set_utinyint((*arr)[idx]);
-      break;
-    }
-    case ObUSmallIntType: {
-      ObArrayFixedSize<uint16_t> *arr = static_cast<ObArrayFixedSize<uint16_t> *>(src);
-      src_elem.set_usmallint((*arr)[idx]);
-      break;
-    }
-    case ObUInt64Type: {
-      ObArrayFixedSize<uint64_t> *arr = static_cast<ObArrayFixedSize<uint64_t> *>(src);
-      src_elem.set_uint64((*arr)[idx]);
-      break;
-    }
-    case ObUInt32Type: {
-      ObArrayFixedSize<uint32_t> *arr = static_cast<ObArrayFixedSize<uint32_t> *>(src);
-      src_elem.set_uint32((*arr)[idx]);
-      break;
-    }
-    case ObDecimalIntType: {
-      ObPrecision prec = elem_type->basic_meta_.get_precision();
-      if (get_decimalint_type(prec) == DECIMAL_INT_32) {
-        ObArrayFixedSize<int32_t> *arr = static_cast<ObArrayFixedSize<int32_t> *>(src);
-        src_elem.set_decimal_int(sizeof(int32_t), arr->get_scale(), arr->get_decimal_int(idx));
-      } else if (get_decimalint_type(prec) == DECIMAL_INT_64) {
-        ObArrayFixedSize<int64_t> *arr = static_cast<ObArrayFixedSize<int64_t> *>(src);
-        src_elem.set_decimal_int(sizeof(int64_t), arr->get_scale(), arr->get_decimal_int(idx));
-      } else if (get_decimalint_type(prec) == DECIMAL_INT_128) {
-        ObArrayFixedSize<int128_t> *arr = static_cast<ObArrayFixedSize<int128_t> *>(src);
-        src_elem.set_decimal_int(sizeof(int128_t), arr->get_scale(), arr->get_decimal_int(idx));
-      } else if (get_decimalint_type(prec) == DECIMAL_INT_256) {
-        ObArrayFixedSize<int256_t> *arr = static_cast<ObArrayFixedSize<int256_t> *>(src);
-        src_elem.set_decimal_int(sizeof(int256_t), arr->get_scale(), arr->get_decimal_int(idx));
-      } else if (get_decimalint_type(prec) == DECIMAL_INT_512) {
-        ObArrayFixedSize<int512_t> *arr = static_cast<ObArrayFixedSize<int512_t> *>(src);
-        src_elem.set_decimal_int(sizeof(int512_t), arr->get_scale(), arr->get_decimal_int(idx));
-      } else {
+  if (OB_ISNULL(src) || OB_ISNULL(elem_type) || OB_ISNULL(datum_buffer)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    // Collection element readers write scalar payloads into the caller's
+    // reserved Datum storage; string readers replace ptr_/len_ with a borrowed
+    // view into the source collection. The value remains a view for this cast.
+    src_elem.meta_ = elem_type->basic_meta_.meta_;
+    src_elem.datum_.ptr_ = datum_buffer;
+    if (OB_FAIL(src->elem_at_datum(idx, src_elem.datum_))) {
+      if (ret == OB_NOT_SUPPORTED) {
         ret = OB_ERR_UNEXPECTED;
-        OB_LOG(WARN, "unexpected precision", K(ret), K(prec));
+        OB_LOG(WARN, "array element has no Datum accessor", K(ret), K(elem_type->basic_meta_.get_obj_type()));
       }
-      break;
-    }
-    case ObVarcharType : {
-      ObArrayBinary *arr = static_cast<ObArrayBinary *>(src);
-      src_elem.set_varchar((*arr)[idx]);
-      break;
-    }
-    case ObUDoubleType:
-    case ObDoubleType: {
-      ObArrayFixedSize<double> *arr = static_cast<ObArrayFixedSize<double> *>(src);
-      src_elem.set_double((*arr)[idx]);
-      break;
-    }
-    case ObUFloatType:
-    case ObFloatType: {
-      ObArrayFixedSize<float> *arr = static_cast<ObArrayFixedSize<float> *>(src);
-      src_elem.set_float((*arr)[idx]);
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "unexpected element type", K(ret), K(elem_type->basic_meta_.get_obj_type()));
     }
   }
   return ret;
 }
 
-int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_elem,
+int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, const common::DatumValue &src_elem,
                                        ObIArrayType *dst, const ObCollectionBasicType *dst_elem_type, ObCastMode mode)
 {
   int ret = OB_SUCCESS;
   ObCastCtx cast_ctx(&alloc, NULL, mode, ObCharset::get_system_collation());
-  ObObjType dst_obj_type = dst_elem_type->basic_meta_.get_obj_type();
-  ObObj res;
+  SqlValueType dst_obj_type = dst_elem_type->basic_meta_.get_obj_type();
+  common::DatumValue res;
   ObAccuracy out_acc = dst_elem_type->basic_meta_.get_accuracy();
   const ObCollationType cs_type = dst_elem_type->basic_meta_.meta_.get_collation_type();
-  ObObj buf_obj;
-  const ObObj *res_obj = &src_elem;
 
-  if (OB_FAIL(ObObjCaster::to_type(dst_obj_type, cast_ctx, src_elem, res))) {
-  } else if (dst_obj_type == ObVarcharType &&
-      OB_FAIL(obj_accuracy_check(cast_ctx, out_acc, cs_type, res, buf_obj, res_obj))) {
+  if (OB_FAIL(DatumValueCaster::to_type(dst_obj_type, cast_ctx, src_elem, alloc, res))) {
   } else {
     switch (dst_obj_type) {
       case ObTinyIntType : {
@@ -204,7 +133,7 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
       }
       case ObSmallIntType : {
         ObArrayFixedSize<int16_t> *dst_arr = static_cast<ObArrayFixedSize<int16_t> *>(dst);
-        if (OB_FAIL(dst_arr->push_back(res.get_smallint()))) {
+        if (OB_FAIL(dst_arr->push_back(static_cast<int16_t>(res.get_int())))) {
         }
         break;
       }
@@ -222,13 +151,13 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
       }
       case ObUTinyIntType : {
         ObArrayFixedSize<uint8_t> *dst_arr = static_cast<ObArrayFixedSize<uint8_t> *>(dst);
-        if (OB_FAIL(dst_arr->push_back(res.get_utinyint()))) {
+        if (OB_FAIL(dst_arr->push_back(static_cast<uint8_t>(res.get_uint64())))) {
         }
         break;
       }
       case ObUSmallIntType : {
         ObArrayFixedSize<uint16_t> *dst_arr = static_cast<ObArrayFixedSize<uint16_t> *>(dst);
-        if (OB_FAIL(dst_arr->push_back(res.get_usmallint()))) {
+        if (OB_FAIL(dst_arr->push_back(static_cast<uint16_t>(res.get_uint64())))) {
         }
         break;
       }
@@ -240,7 +169,7 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
       }
       case ObUInt32Type: {
         ObArrayFixedSize<uint32_t> *dst_arr = static_cast<ObArrayFixedSize<uint32_t> *>(dst);
-        if (OB_FAIL(dst_arr->push_back(res.get_uint32()))) {
+        if (OB_FAIL(dst_arr->push_back(static_cast<uint32_t>(res.get_uint64())))) {
         }
         break;
       }
@@ -265,7 +194,11 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, ObObj &src_e
       }
       case ObVarcharType: {
         ObArrayBinary *dst_arr = static_cast<ObArrayBinary *>(dst);
-        if (OB_FAIL(dst_arr->push_back(res.get_varchar()))) {
+        ObDatum input = res.datum_;
+        ObDatum checked;
+        if (OB_FAIL(datum_varchar_accuracy_check(mode, out_acc.get_length(), cs_type,
+                                                 input, checked, cast_ctx.warning_))) {
+        } else if (OB_FAIL(dst_arr->push_back(ObString(checked.len_, checked.ptr_)))) {
         }
         break;
       }
@@ -332,7 +265,7 @@ int ObArrayCastUtils::add_json_node_to_array(common::ObIAllocator &alloc, ObJson
     if (OB_ISNULL(basic_type)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
     } else {
-      ObObjType dst_obj_type = basic_type->basic_meta_.get_obj_type();
+      SqlValueType dst_obj_type = basic_type->basic_meta_.get_obj_type();
       switch (dst_obj_type) {
         case ObTinyIntType: {
           ADD_SIGNED_FIXED_ARRAY_OBJ(int8_t);
@@ -468,7 +401,7 @@ int ObArrayCastUtils::add_vector_element(const double value, const ObCollectionT
   if (OB_ISNULL(basic_type)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
   } else {
-    ObObjType dst_obj_type = basic_type->basic_meta_.get_obj_type();
+    SqlValueType dst_obj_type = basic_type->basic_meta_.get_obj_type();
     switch (dst_obj_type) {
       case ObTinyIntType: {
         ADD_SIGNED_VECTOR_OBJ(int8_t);
@@ -635,9 +568,11 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
         ret = OB_ERR_NULL_VALUE;
       } else {
         // append key
-        ObObj key_elem;
-        key_elem.set_varchar(key_str);
+        common::DatumValue key_elem;
+        key_elem.meta_.set_varchar();
+        key_elem.datum_.set_string(key_str);
         key_elem.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+        key_elem.set_collation_level(CS_LEVEL_IMPLICIT);
         if (OB_FAIL(cast_add_element(alloc, key_elem, key_arr, key_basic_type, cast_mode))) {
         }
         // append value
@@ -649,7 +584,7 @@ int ObArrayCastUtils::string_cast_map(common::ObIAllocator &alloc,
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(dst_map->init())) {
-    } else if (ob_obj_type_class(static_cast<ObObjType>(key_arr->get_element_type())) != ObStringTC) {
+    } else if (sql_type_class(static_cast<SqlValueType>(key_arr->get_element_type())) != ObStringTC) {
       ObIArrayType *dst_distinct = NULL;
       if (OB_FAIL(dst->distinct(alloc, dst_distinct))) {
       } else {
@@ -904,7 +839,7 @@ int ObArrayCastUtils::string_cast_sparse_vector_fast(
     } else if (ptr < end) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(dst_map->init())) {
-    } else if (ob_obj_type_class(static_cast<ObObjType>(key_arr->get_element_type())) != ObStringTC) {
+    } else if (sql_type_class(static_cast<SqlValueType>(key_arr->get_element_type())) != ObStringTC) {
       ObIArrayType *dst_distinct = NULL;
       if (OB_FAIL(dst->distinct(alloc, dst_distinct))) {
       } else {
@@ -928,7 +863,7 @@ int ObArrayCastUtils::string_cast_array( ObString &arr_text, ObIArrayType *&dst,
     ret = OB_NOT_SUPPORTED;
   } else {
     const ObCollectionBasicType *basic_type = dynamic_cast<const ObCollectionBasicType *>(dst_elem_type);
-    ObObjType elem_type = basic_type->basic_meta_.get_obj_type();
+    SqlValueType elem_type = basic_type->basic_meta_.get_obj_type();
     switch (elem_type) {
       case ObFloatType: {
         if ((len & 0x03) != 0) {
@@ -968,7 +903,7 @@ int ObArrayCastUtils::string_cast_vector(common::ObIAllocator &alloc, ObString &
   if (!arr_text.empty()) {    
     if (is_binary) {
       const ObCollectionBasicType *basic_type = dynamic_cast<const ObCollectionBasicType *>(dst_elem_type);
-      ObObjType elem_type = basic_type->basic_meta_.get_obj_type();
+      SqlValueType elem_type = basic_type->basic_meta_.get_obj_type();
       uint32_t dim_cnt = vector_type->dim_cnt_;
       uint8_t elem_size = 0;
       switch (elem_type) {
@@ -1107,11 +1042,12 @@ int ObArrayBinaryCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, cons
     ObCollationType elem_cs_type = src_type->basic_meta_.get_collation_type();
     ObCollationLevel elem_ncl_type = src_type->basic_meta_.get_collation_level();
     for (int64_t i = 0; i < src->size() && OB_SUCC(ret); i++) {
-      ObObj src_elem;
+      common::DatumValue src_elem;
+      alignas(8) char src_datum_buffer[64] = {};
       if (src->is_null(i)) {
         if (OB_FAIL(dst->push_null())) {
         }
-      } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem))) {
+      } else if (OB_FAIL(ObArrayCastUtils::cast_get_element(src, src_type, i, src_elem, src_datum_buffer))) {
       } else if (FALSE_IT(src_elem.set_collation_type(elem_cs_type))) {
       } else if (FALSE_IT(src_elem.set_collation_level(elem_ncl_type))) {
       } else if (OB_FAIL(ObArrayCastUtils::cast_add_element(alloc, src_elem, dst, dst_type, mode))) {
@@ -1185,9 +1121,9 @@ int ObMapCast::cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObColl
   } else if (OB_FAIL(value_cast->cast(alloc, src_value, src_value_type, 
                                                                dst_value, dst_value_type, mode))) {
   } else if (OB_FAIL(dst->init())) {
-  } else if (ob_obj_type_class(static_cast<ObObjType>(dst_key->get_element_type())) != ObStringTC
-             && ob_obj_type_class(static_cast<ObObjType>(src_key->get_element_type()))
-               != ob_obj_type_class(static_cast<ObObjType>(dst_key->get_element_type()))) {
+  } else if (sql_type_class(static_cast<SqlValueType>(dst_key->get_element_type())) != ObStringTC
+             && sql_type_class(static_cast<SqlValueType>(src_key->get_element_type()))
+               != sql_type_class(static_cast<SqlValueType>(dst_key->get_element_type()))) {
     ObIArrayType *dst_distinct = NULL;
     if (OB_FAIL(dst->distinct(alloc, dst_distinct))) {
     } else {
@@ -1240,24 +1176,5 @@ int ObArrayTypeCastFactory::alloc(ObIAllocator &alloc, const ObCollectionTypeBas
 }
 
 
-int ObArrayCastUtils::set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *params, ObObj *obj)
-{
-  int ret = OB_SUCCESS;
-  const bool has_lob_header = true;
-  int32_t res_size = arr_obj->get_raw_binary_len();
-  char *res_buf = nullptr;
-  int64_t res_buf_len = 0;
-  common::ObTextStringObObjResult text_result(ObCollectionSQLType, params, obj, has_lob_header);
-  if (OB_FAIL(text_result.init(res_size, params->allocator_v2_))) {
-  } else if (OB_FAIL(text_result.get_reserved_buffer(res_buf, res_buf_len))) {
-  } else if (res_buf_len < res_size) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(arr_obj->get_raw_binary(res_buf, res_buf_len))) {
-  } else if (OB_FAIL(text_result.lseek(res_size, 0))) {
-  } else {
-    text_result.set_result();
-  }
-  return ret;
-}
 } // namespace sql
 } // namespace oceanbase

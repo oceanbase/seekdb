@@ -47,7 +47,7 @@ enum XmlUpdateNodeType
 
 struct ObXmlUpdateNodeInfo
 {
-  ObObjType update_type;
+  SqlValueType update_type;
   ObString update_str;
   ObXmlNode *update_node;
 };

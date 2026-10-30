@@ -104,7 +104,9 @@ int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASSc
     param.allocator_ = &rtdef->stmt_allocator_;
     param.tx_lock_timeout_ = rtdef->tx_lock_timeout_;
     param.index_id_ = ctdef->ref_table_id_;
-    param.is_get_ = ctdef->is_get_;
+    // Native lookup keys are point keys even when an auxiliary CtDef keeps
+    // its default scan flag. Preserve the mode chosen while saving the key.
+    param.is_get_ = nullptr != param.datum_lookup_keys_ || ctdef->is_get_;
     param.is_for_foreign_check_ = rtdef->is_for_foreign_check_;
     param.timeout_ = rtdef->timeout_ts_;
     param.scan_flag_ = rtdef->scan_flag_;
@@ -182,7 +184,16 @@ int ObDASLocalLookupIter::add_rowkey()
     group_id = static_cast<ObDASFuncLookupIter *>(data_table_iter_)->get_group_id();
   }
 
-  if (FAILEDx(data_table_iter_->set_scan_rowkey(eval_ctx_, rowkey_exprs_, lookup_ctdef_, &lookup_memctx_->get_arena_allocator(), group_id))) {
+  if (OB_SUCC(ret)) {
+    ObIAllocator *alloc = &lookup_memctx_->get_arena_allocator();
+    if (DAS_ITER_SCAN == data_table_iter_->get_type()
+        && DAS_OP_TABLE_SCAN == index_ctdef_->op_type_) {
+      if (OB_FAIL(static_cast<ObDASScanIter *>(data_table_iter_)->set_scan_datum_rowkey(
+              eval_ctx_, rowkey_exprs_, lookup_ctdef_, alloc, group_id))) {
+      }
+    } else if (OB_FAIL(data_table_iter_->set_scan_rowkey(
+                   eval_ctx_, rowkey_exprs_, lookup_ctdef_, alloc, group_id))) {
+    }
   }
   return ret;
 }
@@ -298,7 +309,9 @@ int ObDASLocalLookupIter::check_index_lookup()
             "trans_desc", data_plane::ObTxDescLogView(trans_desc_),
             KPC_(snapshot));
         const ObTableScanParam &scan_param = scan_iter->get_scan_param();
-        if (trans_info_array_.count() == scan_param.key_ranges_.count()) {
+        if (nullptr != scan_param.datum_lookup_keys_) {
+          LOG_ERROR("dump datum lookup keys of local lookup das task", KPC(scan_param.datum_lookup_keys_));
+        } else if (trans_info_array_.count() == scan_param.key_ranges_.count()) {
           for (int64_t i = 0; i < trans_info_array_.count(); i++) {
             ObDatum *datum = trans_info_array_.at(i);
             LOG_ERROR("dump lookup range and trans info of local lookup das task",

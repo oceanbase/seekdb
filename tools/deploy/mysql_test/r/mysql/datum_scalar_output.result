@@ -1,0 +1,46 @@
+# Remaining scalar result values use Datum with unchanged wire formatting
+DROP TABLE IF EXISTS datum_scalar_output;
+CREATE TABLE datum_scalar_output (
+id INT PRIMARY KEY,
+f FLOAT, uf FLOAT UNSIGNED, zf FLOAT(9,3) UNSIGNED ZEROFILL,
+d DOUBLE, ud DOUBLE UNSIGNED, zd DOUBLE(12,4) UNSIGNED ZEROFILL,
+dt DATE, tm TIME(6), yr YEAR, b8 BIT(8), b64 BIT(64)
+);
+INSERT INTO datum_scalar_output VALUES
+(1,-1.25,1.25,7.125,-1.23456789,1.23456789,7.125,'1000-01-01','-838:59:58.999999',1901,65,4702111234474983745),
+(2,1e-38,1e-38,0,1e-300,1e-300,0,'9999-12-31','838:59:58.999999',2155,66,4774451407313060418),
+(3,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+INSERT INTO datum_scalar_output(id,tm) VALUES(99,'838:59:59.999999');
+ERROR 22007: Incorrect value
+INSERT INTO datum_scalar_output(id,tm) VALUES(99,'-838:59:59.999999');
+ERROR 22007: Incorrect value
+SELECT * FROM datum_scalar_output ORDER BY id;
+id	f	uf	zf	d	ud	zd	dt	tm	yr	b8	b64
+1	-1.25	1.25	00007.125	-1.23456789	1.23456789	0000007.1250	1000-01-01	-838:59:58.999999	1901	A	AAAAAAAA
+2	1e-38	1e-38	00000.000	1e-300	1e-300	0000000.0000	9999-12-31	838:59:58.999999	2155	B	BBBBBBBB
+3	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+PREPARE datum_scalar_ps FROM 'SELECT * FROM datum_scalar_output WHERE id >= ? ORDER BY id';
+SET @datum_scalar_id=1;
+EXECUTE datum_scalar_ps USING @datum_scalar_id;
+id	f	uf	zf	d	ud	zd	dt	tm	yr	b8	b64
+1	-1.25	1.25	00007.125	-1.23456789	1.23456789	0000007.1250	1000-01-01	-838:59:58.999999	1901	A	AAAAAAAA
+2	1e-38	1e-38	00000.000	1e-300	1e-300	0000000.0000	9999-12-31	838:59:58.999999	2155	B	BBBBBBBB
+3	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+SET @datum_scalar_id=3;
+EXECUTE datum_scalar_ps USING @datum_scalar_id;
+id	f	uf	zf	d	ud	zd	dt	tm	yr	b8	b64
+3	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+SET @datum_scalar_id=4;
+EXECUTE datum_scalar_ps USING @datum_scalar_id;
+id	f	uf	zf	d	ud	zd	dt	tm	yr	b8	b64
+DEALLOCATE PREPARE datum_scalar_ps;
+SELECT NULL AS n,CAST(NULL AS DOUBLE) AS d,CAST(NULL AS DATE) AS dt,CAST(NULL AS TIME) AS tm;
+n	d	dt	tm
+NULL	NULL	NULL	NULL
+SELECT HEX(X'000AFF') AS h,HEX(UNHEX('FF00')) AS b;
+h	b
+000AFF	FF00
+SELECT f+f,d+d,ABS(f),ABS(d),ROUND(f,2),ROUND(d,4) FROM datum_scalar_output WHERE id=1;
+f+f	d+d	ABS(f)	ABS(d)	ROUND(f,2)	ROUND(d,4)
+-2.5	-2.46913578	1.25	1.23456789	-1.25	-1.2346
+DROP TABLE datum_scalar_output;

@@ -766,7 +766,7 @@ int ObSqlPlan::get_plan_other_info(PlanText &plan_text,
       OB_ISNULL(stmt=plan->get_stmt()) || OB_ISNULL(query_ctx=stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObjPrintParams print_params(query_ctx->get_timezone_info());
+    ObValuePrintParams print_params(query_ctx->get_timezone_info());
     ObPhyPlanType plan_type = plan->get_optimizer_context().get_phy_plan_type();
     ret = OB_E(EventTable::EN_PRINT_CONSTRAINTS_INFO) OB_SUCCESS;
     bool only_show_constraint = OB_SUCCESS != ret && EXPLAIN_UNINITIALIZED == plan_text.type_;
@@ -797,10 +797,10 @@ int ObSqlPlan::get_plan_other_info(PlanText &plan_text,
         } else if (OB_FAIL(BUF_PRINTF(":%ld => ", i))) {
         } else {
           int64_t save_pos = pos;
-          if (OB_FAIL(params->at(i).print_sql_literal(buf, 
-                                                      buf_len, 
-                                                      pos, 
-                                                      print_params))) {
+          if (OB_FAIL(params->at(i).print_sql_literal(buf,
+                                                       buf_len,
+                                                       pos,
+                                                       print_params))) {
             //ignore size overflow error 
             pos = save_pos;                                                  
           }
@@ -908,9 +908,10 @@ int ObSqlPlan::print_constraint_info(char *buf,
     ret = OB_ERR_UNEXPECTED;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < info.const_idx_.count(); ++i) {
+    const DatumValue &value = info.const_params_.at(i);
     if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
     } else if (OB_FAIL(BUF_PRINTF(":%ld = ", info.const_idx_.at(i)))) {
-    } else if (OB_FAIL(info.const_params_.at(i).print_sql_literal(buf, buf_len, pos))) {
+    } else if (OB_FAIL(value.print_sql_literal(buf, buf_len, pos))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else { /* Do nothing */ }
   }

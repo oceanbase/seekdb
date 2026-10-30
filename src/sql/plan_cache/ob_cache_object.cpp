@@ -159,7 +159,7 @@ int ObPlanCacheObject::check_pre_calc_cons(const bool is_ignore_stmt,
   ObPhysicalPlanCtx *phy_plan_ctx = exec_ctx.get_physical_plan_ctx();
   ObPreCalcExprFrameInfo &pre_calc_frame = pre_calc_con.pre_calc_expr_info_;
   const PreCalcExprExpectResult expect_res = pre_calc_con.expect_result_;
-  ObSEArray<ObDatumObjParam, 4> datum_params;
+  ObSEArray<DatumParameter, 4> datum_params;
   if (OB_ISNULL(phy_plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {
@@ -270,7 +270,7 @@ int ObPlanCacheObject::pre_calculation(const bool is_ignore_stmt,
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = exec_ctx.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx.get_my_session();
-  ObSEArray<ObDatumObjParam, 4> datum_params;
+  ObSEArray<DatumParameter, 4> datum_params;
   if (OB_ISNULL(phy_plan_ctx) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {

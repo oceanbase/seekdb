@@ -54,11 +54,10 @@ public:
   explicit ObFastColumnConvExpr(common::ObIAllocator &alloc);
   virtual ~ObFastColumnConvExpr() {}
   int assign(const ObFastExprOperator &other);
-  virtual int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result) const;
   OB_INLINE void set_column_type(const ObExprResType &column_type) { column_type_ = column_type; }
   OB_INLINE const ObExprResType &get_column_type() const { return column_type_; }
   OB_INLINE void set_column(int64_t column_index) { value_item_.set_column(column_index); }
-  int set_const_value(const common::ObObj &value);
+  int set_const_value(const common::DatumValue &value);
   OB_INLINE void set_value_accuracy(const common::ObAccuracy &accuracy) { value_item_.set_accuracy(accuracy); }
   OB_INLINE int set_column_info(const ObString &column_info)
   { return ob_write_string(alloc_, column_info, column_info_); }
@@ -130,19 +129,13 @@ public:
   virtual int cg_expr(ObExprCGCtx &ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const;
-  static int convert_with_null_check(common::ObObj &result,
-                                     const common::ObObj &obj,
-                                     const ObExprResType &res_type,
-                                     bool is_strict,
-                                     common::ObCastCtx &cast_ctx,
-                                     const common::ObIArray<ObString> *type_infos = NULL);
-  static int convert_skip_null_check(common::ObObj &result,
-                                     const common::ObObj &obj,
-                                     const ObExprResType &res_type,
-                                     bool is_strict,
-                                     common::ObCastCtx &cast_ctx,
-                                     const common::ObIArray<ObString> *type_infos = NULL,
-                                     const ObString *column_info = NULL);
+  static int convert_with_null_check(ObExecContext &context,
+                                     const common::DatumParameter &source,
+                                     const ObExprResType &type,
+                                     common::ObCastMode mode,
+                                     common::ObIAllocator &owner,
+                                     common::DatumParameter &result,
+                                     const common::ObIArray<ObString> *type_infos = nullptr);
   static int column_convert(const ObExpr &expr,
                             ObEvalCtx &ctx,
                             ObDatum &datum);

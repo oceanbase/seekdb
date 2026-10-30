@@ -16,13 +16,14 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "common/datum/datum_parameter_array.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/dml/ob_table_update_op.h"
 #include "sql/ob_spi.h"
 #include "sql/pl/ob_pl_user_type.h"
 #include "sql/pl/ob_pl_stmt.h"
-#include "sql/engine/expr/ob_obj_cast_runtime.h"
 #include "lib/oblog/ob_warning_buffer.h"
 
 namespace oceanbase
@@ -35,21 +36,67 @@ using namespace share::schema;
 using namespace observer;
 namespace sql
 {
+namespace {
+// The descriptor borrows its stack payload only until destruct_obj returns;
+// the record and its allocator retain their existing ownership.
+void destruct_trigger_record(pl::ObPLRecord *record, bool keep_composite_attr)
+{
+  char payload[DATUM_EXTEND_PAYLOAD_SIZE];
+  DatumValue value;
+  value.meta_.set_ext();
+  value.meta_.set_extend_type(record->get_type());
+  value.datum_.ptr_ = payload;
+  value.datum_.set_extend(reinterpret_cast<int64_t>(record), record->get_type(), record->get_init_size());
+  pl::ObUserDefinedType::destruct_obj(value, nullptr, keep_composite_attr);
+}
+
+int copy_trigger_value(const DatumValue &source, DatumValue &destination, ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  DatumParameter input;
+  DatumParameter owned;
+  input.datum_ = source.datum_;
+  input.set_type_meta(source.get_meta());
+  if (input.is_pl_extend()) {
+    ret = pl::ObUserDefinedType::clone_parameter(owner, input, owned);
+  } else {
+    ret = DatumParameterArray::clone_parameter(input, owned, owner);
+  }
+  if (OB_SUCC(ret)) {
+    ret = pl::ObUserDefinedType::destruct_objparam(owner, destination, nullptr);
+    if (OB_SUCCESS == ret) { destination = owned.value_view(); }
+    else { DatumParameterArray::release_owned(owned, owner); }
+  }
+  return ret;
+}
+
+bool is_delta_temp_lob(const DatumValue &value)
+{
+  bool is_delta = false;
+  if (value.is_lob_storage() && !value.is_null() && value.has_lob_header()
+      && value.get_data_length() > 0) {
+    ObLobLocatorV2 locator(value.get_string(), true);
+    is_delta = locator.is_valid(false) && locator.is_delta_temp_lob();
+  }
+  return is_delta;
+}
+}
+
 int TriggerHandle::init_trigger_row(
   ObIAllocator &alloc, int64_t rowtype_col_count, pl::ObPLRecord *&record)
 {
   int ret = OB_SUCCESS;
   int64_t init_size = pl::ObRecordType::get_init_size(rowtype_col_count);
-  init_size += sizeof(ObObj) * rowtype_col_count; //append hidden columns
+  init_size += sizeof(DatumValue) * rowtype_col_count; //append hidden columns
   if (OB_ISNULL(record = reinterpret_cast<pl::ObPLRecord*>(alloc.alloc(init_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     new (record)pl::ObPLRecord(OB_INVALID_ID, rowtype_col_count);
     OZ (record->init_data(alloc, true));
     if (OB_SUCC(ret)) {
-      ObObj *cells = record->get_element();
+      DatumValue *cells = record->get_element();
       for (int64_t i = 0; OB_SUCC(ret) && i < rowtype_col_count; i++) {
-        new (&cells[i]) ObObj();
+        new (&cells[i]) DatumValue();
         cells[i].set_null();
       }
     }
@@ -133,19 +180,19 @@ int TriggerHandle::init_trigger_params(
     }
 
     if (OB_SUCC(ret) && trig_ctdef.all_tm_points_.has_when_condition()) {
-      trig_rtdef.tg_when_point_params_->at(0).set_extend(reinterpret_cast<int64_t>(old_record),
-                                                        pl::PL_RECORD_TYPE, init_size);
+      OZ (trig_rtdef.tg_when_point_params_->at(0).set_extend(reinterpret_cast<int64_t>(old_record),
+                                                        pl::PL_RECORD_TYPE, das_ctx.get_exec_ctx().get_allocator(), init_size));
       trig_rtdef.tg_when_point_params_->at(0).set_param_meta();
-      trig_rtdef.tg_when_point_params_->at(1).set_extend(reinterpret_cast<int64_t>(new_record),
-                                                        pl::PL_RECORD_TYPE, init_size);
+      OZ (trig_rtdef.tg_when_point_params_->at(1).set_extend(reinterpret_cast<int64_t>(new_record),
+                                                        pl::PL_RECORD_TYPE, das_ctx.get_exec_ctx().get_allocator(), init_size));
       trig_rtdef.tg_when_point_params_->at(1).set_param_meta();
     }
     if (OB_SUCC(ret) && trig_ctdef.all_tm_points_.has_row_point()) {
-      trig_rtdef.tg_row_point_params_->at(0).set_extend(reinterpret_cast<int64_t>(old_record),
-                                            pl::PL_RECORD_TYPE, init_size);
+      OZ (trig_rtdef.tg_row_point_params_->at(0).set_extend(reinterpret_cast<int64_t>(old_record),
+                                            pl::PL_RECORD_TYPE, das_ctx.get_exec_ctx().get_allocator(), init_size));
       trig_rtdef.tg_row_point_params_->at(0).set_param_meta();
-      trig_rtdef.tg_row_point_params_->at(1).set_extend(reinterpret_cast<int64_t>(new_record),
-                                            pl::PL_RECORD_TYPE, init_size);
+      OZ (trig_rtdef.tg_row_point_params_->at(1).set_extend(reinterpret_cast<int64_t>(new_record),
+                                            pl::PL_RECORD_TYPE, das_ctx.get_exec_ctx().get_allocator(), init_size));
       trig_rtdef.tg_row_point_params_->at(1).set_param_meta();
     }
     trig_rtdef.old_record_ = old_record;
@@ -159,14 +206,11 @@ int TriggerHandle::free_trigger_param_memory(ObTrigDMLRtDef &trig_rtdef, bool ke
   int ret = OB_SUCCESS;
   pl::ObPLRecord *old_record = trig_rtdef.old_record_;
   pl::ObPLRecord *new_record = trig_rtdef.new_record_;
-  ObObj tmp;
   if (OB_NOT_NULL(old_record)) {
-    tmp.set_extend(reinterpret_cast<int64_t>(old_record), old_record->get_type(), old_record->get_init_size());
-    pl::ObUserDefinedType::destruct_obj(tmp, nullptr, keep_composite_attr);
+    destruct_trigger_record(old_record, keep_composite_attr);
   }
   if (OB_NOT_NULL(new_record)) {
-    tmp.set_extend(reinterpret_cast<int64_t>(new_record), new_record->get_type(), new_record->get_init_size());
-    pl::ObUserDefinedType::destruct_obj(tmp, nullptr, keep_composite_attr);
+    destruct_trigger_record(new_record, keep_composite_attr);
   }
 
   return ret;
@@ -191,51 +235,39 @@ int TriggerHandle::init_param_old_row(
   int ret = OB_SUCCESS;
   if (trig_ctdef.all_tm_points_.has_when_condition() ||
       trig_ctdef.all_tm_points_.has_row_point()) {
-    ObObj *cells = nullptr;
+    DatumValue *cells = nullptr;
     if (OB_ISNULL(trig_rtdef.old_record_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_ISNULL(cells = trig_rtdef.old_record_->get_element())) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj tmp;
-      tmp.set_extend(reinterpret_cast<int64_t>(trig_rtdef.old_record_), trig_rtdef.old_record_->get_type(), trig_rtdef.old_record_->get_init_size());
-      pl::ObUserDefinedType::destruct_obj(tmp, nullptr, true);
+      destruct_trigger_record(trig_rtdef.old_record_, true);
     }
     for (int64_t i = 0; i < trig_ctdef.old_row_exprs_.count() && OB_SUCC(ret); ++i) {
       ObDatum *datum;
-      ObObj result;
-      ObObj dst;
-      bool is_udt = false;
+      ObExpr *expr = trig_ctdef.old_row_exprs_.at(i);
+      const bool is_udt = ob_is_geometry(expr->obj_meta_.get_type());
       if (OB_FAIL(trig_ctdef.old_row_exprs_.at(i)->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(datum->to_obj(result,
-          trig_ctdef.old_row_exprs_.at(i)->obj_meta_))) {
-      } else if ((is_udt = ob_is_geometry(trig_ctdef.old_row_exprs_.at(i)->obj_meta_.get_type()))) {
+      } else if (is_udt) {
+        DatumValue source(*datum, expr->obj_meta_);
+        DatumValue converted;
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(convert_sql_type_to_pl_type(eval_ctx.exec_ctx_.get_my_session(),
-                                                eval_ctx.exec_ctx_,
-                                                eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_,
-                                                eval_ctx.exec_ctx_.get_allocator(),
-                                                result,
-                                                dst,
-                                                trig_ctdef.old_row_exprs_.at(i)->obj_meta_.get_type()))) {
+        } else if (OB_FAIL(convert_sql_type_to_pl_type(
+                       OB_NOT_NULL(eval_ctx.exec_ctx_.get_my_session()),
+                       OB_NOT_NULL(eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_),
+                       source, converted))) {
+        } else if (OB_FAIL(copy_trigger_value(
+                       converted, cells[i], *trig_rtdef.old_record_->get_allocator()))) {
         }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (is_udt) {
-        if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(*trig_rtdef.old_record_->get_allocator(), dst, cells[i]))) {
-        }
-        int tmp_ret = pl::ObUserDefinedType::destruct_obj(dst);
-        if (tmp_ret != OB_SUCCESS) {
-        }
-      } else {
-        if (OB_FAIL(deep_copy_obj(*trig_rtdef.old_record_->get_allocator(), result, cells[i]))) {
-        }
+      } else if (OB_FAIL(copy_trigger_value(
+                     DatumValue(*datum, expr->obj_meta_), cells[i],
+                     *trig_rtdef.old_record_->get_allocator()))) {
       }
       LOG_DEBUG("debug init param old expr", K(ret), K(i),
-        K(ObToStringExpr(eval_ctx, *trig_ctdef.old_row_exprs_.at(i))));
+        K(ObToStringExpr(eval_ctx, *expr)));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(trig_ctdef.rowid_old_expr_)) {
@@ -257,63 +289,60 @@ int TriggerHandle::init_param_new_row(
   int ret = OB_SUCCESS;
   if (trig_ctdef.all_tm_points_.has_when_condition() ||
       trig_ctdef.all_tm_points_.has_row_point()) {
-    ObObj *cells = nullptr;
+    DatumValue *cells = nullptr;
     if (OB_ISNULL(trig_rtdef.new_record_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_ISNULL(cells = trig_rtdef.new_record_->get_element())){
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj tmp;
-      tmp.set_extend(reinterpret_cast<int64_t>(trig_rtdef.new_record_), trig_rtdef.new_record_->get_type(), trig_rtdef.new_record_->get_init_size());
-      pl::ObUserDefinedType::destruct_obj(tmp, nullptr, true);
+      destruct_trigger_record(trig_rtdef.new_record_, true);
     }
     for (int64_t i = 0; i < trig_ctdef.new_row_exprs_.count() && OB_SUCC(ret); ++i) {
       ObDatum *datum;
-      ObObj result;
-      ObObj dst;
-      bool is_udt =false;
+      ObExpr *expr = trig_ctdef.new_row_exprs_.at(i);
+      const bool is_udt = ob_is_geometry(expr->obj_meta_.get_type());
       if (OB_FAIL(trig_ctdef.new_row_exprs_.at(i)->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(datum->to_obj(result,
-          trig_ctdef.new_row_exprs_.at(i)->obj_meta_))) {
-      } else if ((is_udt = ob_is_geometry(trig_ctdef.new_row_exprs_.at(i)->obj_meta_.get_type()))) {
+      } else if (is_udt) {
+        DatumValue source(*datum, expr->obj_meta_);
+        DatumValue converted;
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(convert_sql_type_to_pl_type(eval_ctx.exec_ctx_.get_my_session(),
-                                                eval_ctx.exec_ctx_,
-                                                eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_,
-                                                eval_ctx.exec_ctx_.get_allocator(),
-                                                result,
-                                                dst,
-                                                trig_ctdef.new_row_exprs_.at(i)->obj_meta_.get_type()))) {
+        } else if (OB_FAIL(convert_sql_type_to_pl_type(
+                       OB_NOT_NULL(eval_ctx.exec_ctx_.get_my_session()),
+                       OB_NOT_NULL(eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_),
+                       source, converted))) {
         }
-      }
-
-      if (OB_SUCC(ret) && !trig_ctdef.trig_col_info_.get_flags()[i].is_rowid_
-          && ObCharType == result.get_type()) {
-        // pad space for char type
-        const common::ObObjType &col_type = trig_ctdef.new_row_exprs_.at(i)->obj_meta_.get_type();
+        if (OB_SUCC(ret)) {
+          OZ (copy_trigger_value(converted, cells[i], *trig_rtdef.new_record_->get_allocator()));
+        }
+      } else if (!trig_ctdef.trig_col_info_.get_flags()[i].is_rowid_
+          && expr->obj_meta_.get_type() == ObCharType) {
+        DatumParameter padded;
+        padded.datum_ = *datum;
+        padded.set_type_meta(expr->obj_meta_);
+        // Pad fixed CHAR values according to session SQL mode and the
+        // expression's character/byte length semantics.
+        const common::SqlValueType &col_type = expr->obj_meta_.get_type();
         common::ObAccuracy accuracy;
-        accuracy.length_ =  trig_ctdef.new_row_exprs_.at(i)->max_length_;
-        accuracy.length_semantics_ = trig_ctdef.new_row_exprs_.at(i)->datum_meta_.length_semantics_;
+        accuracy.length_ = expr->max_length_;
+        accuracy.length_semantics_ = expr->datum_meta_.length_semantics_;
         if (OB_FAIL(ObSPIService::spi_pad_char_or_varchar(eval_ctx.exec_ctx_.get_my_session(),
                                                           col_type,
                                                           accuracy,
                                                           &eval_ctx.exec_ctx_.get_allocator(),
-                                                          &result))) {
-        }
-      }
-      if (is_udt) {
-        OZ (pl::ObUserDefinedType::deep_copy_obj(*trig_rtdef.new_record_->get_allocator(), dst, cells[i]));
-        int tmp_ret = pl::ObUserDefinedType::destruct_obj(dst);
-        if (tmp_ret != OB_SUCCESS) {
+                                                          &padded))) {
+        } else {
+          OZ (copy_trigger_value(padded.value_view(), cells[i],
+                                 *trig_rtdef.new_record_->get_allocator()));
         }
       } else {
-        OZ (deep_copy_obj(*trig_rtdef.new_record_->get_allocator(), result, cells[i]));
+        OZ (copy_trigger_value(DatumValue(*datum, expr->obj_meta_), cells[i],
+                               *trig_rtdef.new_record_->get_allocator()));
       }
       LOG_DEBUG("debug init param new expr", K(ret), K(i),
-        K(ObToStringExpr(eval_ctx, *trig_ctdef.new_row_exprs_.at(i))));
+        K(ObToStringExpr(eval_ctx, *expr)));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(trig_ctdef.rowid_new_expr_)) {
@@ -335,7 +364,7 @@ int TriggerHandle::set_rowid_into_row(
   pl::ObPLRecord *record)
 {
   int ret = OB_SUCCESS;
-  ObObj* cells = nullptr;
+  DatumValue* cells = nullptr;
   CK (OB_NOT_NULL(cols.get_flags()));
   CK (OB_NOT_NULL(record));
   CK (OB_NOT_NULL(record->get_element()));
@@ -347,17 +376,11 @@ int TriggerHandle::set_rowid_into_row(
   for (int64_t i = cols.get_count() - 1; OB_SUCC(ret) && i >= 0; ++i) {
     if (cols.get_flags()[i].is_rowid_) {
       ObDatum *datum;
-      ObObj result;
-      void *ptr = cells[i].get_deep_copy_obj_ptr();
-      if (nullptr != ptr) {
-        record->get_allocator()->free(ptr);
-      }
-      cells[i].set_null();
       if (OB_FAIL(src_expr->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(datum->to_obj(result, src_expr->obj_meta_))) {
-      } else if (OB_FAIL(deep_copy_obj(*record->get_allocator(), result, cells[i]))) {
+      } else if (OB_FAIL(copy_trigger_value(DatumValue(*datum, src_expr->obj_meta_),
+                                            cells[i], *record->get_allocator()))) {
       } else {
         LOG_DEBUG("set_rowid_into_row done", K(ret), K(ObToStringExpr(eval_ctx, *src_expr)));
       }
@@ -396,14 +419,74 @@ int TriggerHandle::calc_when_condition(
   bool &need_fire)
 {
   int ret = OB_SUCCESS;
-  ObObj result;
   if (OB_ISNULL(trig_rtdef.tg_when_point_params_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                            trigger_id, ROUTINE_IDX_CALC_WHEN,
-                           *trig_rtdef.tg_when_point_params_, result))) {
+                           *trig_rtdef.tg_when_point_params_, &need_fire))) {
+  }
+  return ret;
+}
+
+// PL copy-out owns its new descriptors in TriggerExec. The DML owns the
+// initial descriptors and OLD/NEW records across all row timing points.
+int TriggerHandle::stabilize_trigger_params(
+  const DatumParameter *initial, int64_t count, ParamStore &params,
+  ObIAllocator &temporary_owner, ObSQLSessionInfo *session)
+{
+  int ret = OB_SUCCESS;
+  if (count != params.count() || count < 0 || count > ROW_POINT_PARAM_COUNT
+      || (count != 0 && initial == nullptr)) {
+    ret = OB_ERR_UNEXPECTED;
   } else {
-    need_fire = result.is_true();
+    for (int64_t i = 0; i < count; ++i) {
+      int copy_ret = OB_SUCCESS;
+      const DatumParameter &saved = initial[i];
+      DatumParameter published = params.at(i);
+      DatumParameter temporary_output = published;
+      pl::ObPLRecord *original = nullptr;
+      pl::ObPLRecord *returned = nullptr;
+      // is_pl_extend() itself reads the Extend payload. Check descriptor
+      // shape and non-null pointers before invoking payload-reading helpers.
+      // Both owners still live here: DML for initial, TriggerExec for OUT.
+      if (!saved.datum_.is_native_extend() || saved.datum_.ptr_ == nullptr
+          || !published.datum_.is_native_extend() || published.datum_.ptr_ == nullptr
+          || saved.get_extend_type() != pl::PL_RECORD_TYPE
+          || published.get_extend_type() != pl::PL_RECORD_TYPE
+          || !saved.is_pl_extend() || !published.is_pl_extend()
+          || (original = reinterpret_cast<pl::ObPLRecord *>(saved.get_ext())) == nullptr
+          || (returned = reinterpret_cast<pl::ObPLRecord *>(published.get_ext())) == nullptr) {
+        copy_ret = OB_ERR_UNEXPECTED;
+      } else if (returned != original) {
+        // Preserve the record identity shared with trig_rtdef.old/new_record_.
+        // assign copies fields into the original record's allocator; merely
+        // copying the replacement pointer would retain a temporary pointee.
+        copy_ret = original->assign(returned, original->get_allocator());
+      }
+      if (copy_ret == OB_SUCCESS) {
+        // Preserve all OUT declaration/accuracy/flags but reuse the initial
+        // DML-owned payload. No allocation is needed for an unchanged record.
+        const int32_t size = published.get_val_len();
+        const uint8_t subtype = published.datum_.get_extend_type();
+        const uint8_t collation_level = published.datum_.get_extend_collation_level();
+        const uint8_t collation = published.datum_.get_extend_collation();
+        published.datum_.ptr_ = saved.datum_.ptr_;
+        published.datum_.set_extend(reinterpret_cast<int64_t>(original),
+            subtype, size, collation_level, collation);
+        params.at(i) = published;
+      } else {
+        // A failed copy cannot leave a dangling temporary descriptor behind.
+        params.at(i) = saved;
+        if (ret == OB_SUCCESS) { ret = copy_ret; }
+      }
+      if (original != nullptr && returned != nullptr && returned != original) {
+        // A replacement was genuinely cloned by PL copy-out. Retire its
+        // internal record allocator before TriggerExec releases its storage.
+        const int cleanup_ret = pl::ObUserDefinedType::destruct_objparam(
+            temporary_owner, temporary_output, session);
+        if (ret == OB_SUCCESS) { ret = cleanup_ret; }
+      }
+    }
   }
   return ret;
 }
@@ -415,8 +498,7 @@ int TriggerHandle::calc_trigger_routine(
   ParamStore &params)
 {
   int ret = OB_SUCCESS;
-  ObObj result;
-  OZ (calc_trigger_routine(exec_ctx, trigger_id, routine_id, params, result));
+  OZ (calc_trigger_routine(exec_ctx, trigger_id, routine_id, params, nullptr));
   return ret;
 }
 
@@ -425,9 +507,14 @@ int TriggerHandle::calc_trigger_routine(
   uint64_t trigger_id,
   uint64_t routine_id,
   ParamStore &params,
-  ObObj &result)
+  bool *condition)
 {
   int ret = OB_SUCCESS;
+  DatumParameter result;
+  DatumParameter initial[ROW_POINT_PARAM_COUNT];
+  if (params.count() > ROW_POINT_PARAM_COUNT) { return OB_ERR_UNEXPECTED; }
+  const int64_t count = params.count();
+  for (int64_t i = 0; i < count; ++i) { initial[i] = params.at(i); }
   ObArray<int64_t> path;
   trigger_id = ObTriggerInfo::get_trigger_spec_package_id(trigger_id);
   bool old_flag = false;
@@ -447,9 +534,23 @@ int TriggerHandle::calc_trigger_routine(
     ObWarningBuffer trigger_diagnostics;
     ObWarningBuffer *outer_diagnostics = ob_get_tsi_warning_buffer();
     ob_setup_tsi_warning_buffer(&trigger_diagnostics);
-    OZ (exec_ctx.get_pl_engine()->execute(
-      exec_ctx, tmp_allocator, trigger_id, routine_id, path, params, result),
-        trigger_id, routine_id, params);
+    try {
+      OZ (exec_ctx.get_pl_engine()->execute(
+        exec_ctx, tmp_allocator, trigger_id, routine_id, path, params, result),
+          trigger_id, routine_id, params);
+    } catch (...) {
+      // The caller retains these parameters even when PL throws. Restore
+      // their descriptors before the temporary result arena is destroyed.
+      stabilize_trigger_params(initial, count, params, tmp_allocator, exec_ctx.get_my_session());
+      ob_setup_tsi_warning_buffer(outer_diagnostics);
+      exec_ctx.get_my_session()->set_for_trigger_package(old_flag);
+      throw;
+    }
+    const int copy_ret = stabilize_trigger_params(initial, count, params, tmp_allocator, exec_ctx.get_my_session());
+    if (OB_SUCC(ret)) { ret = copy_ret; }
+    // WHEN is the only routine result consumed by this interface. Project it
+    // while the temporary native scalar payload is still alive.
+    if (OB_SUCC(ret) && condition != nullptr) { *condition = result.is_true(); }
     ob_setup_tsi_warning_buffer(outer_diagnostics);
     if (OB_FAIL(ret) && OB_ERR_FUNCTION_UNKNOWN != ret
         && OB_NOT_NULL(outer_diagnostics)
@@ -487,39 +588,37 @@ int TriggerHandle::check_and_update_new_row(
   } else {
     bool updated = false;
     int64_t op_row_idx = 0;
-    ObObj *new_cells = new_record->get_element();
+    DatumValue *new_cells = new_record->get_element();
     for (int64_t i = 0; OB_SUCC(ret) && i < columns.get_count(); i++) {
       if (columns.get_flags()[i].is_rowid_) {
       } else if (check) {
         ObDatum *datum;
-        ObObj new_obj;
+        DatumValue new_value;
+        DatumValue current_value = new_cells[i];
         if (OB_FAIL(new_row_exprs.at(i)->eval(eval_ctx, datum))) {
         } else if (OB_ISNULL(datum))  {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(datum->to_obj(new_obj, new_row_exprs.at(i)->obj_meta_))) {
         } else {
+          new_value = DatumValue(*datum, new_row_exprs.at(i)->obj_meta_);
           bool is_strict_equal = false;
-          if (new_obj.is_lob_storage()) {
+          if (new_value.get_type() == current_value.get_type()
+              && new_value.is_lob_storage()) {
             common::ObArenaAllocator lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
             const common::ObLobReadOptions *lob_read_options = nullptr;
-            ObObj cmp_obj;
-            ObObj other_obj;
-            if (new_obj.is_delta_tmp_lob() || new_cells[i].is_delta_tmp_lob()) {
+            DatumValue comparable_new = new_value;
+            DatumValue comparable_current = current_value;
+            if (is_delta_temp_lob(new_value) || is_delta_temp_lob(current_value)) {
               is_strict_equal = false;
             } else if (OB_FAIL(eval_ctx.exec_ctx_.get_lob_read_options(lob_read_options))) {
-            } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(new_obj,
-                                                                              cmp_obj,
-                                                                              lob_read_options,
-                                                                              &lob_allocator))) {
-            } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(new_cells[i],
-                                                                              other_obj,
-                                                                              lob_read_options,
-                                                                              &lob_allocator))) {
+            } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                           new_value, comparable_new, lob_read_options, lob_allocator))) {
+            } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                           current_value, comparable_current, lob_read_options, lob_allocator))) {
             } else {
-              is_strict_equal = cmp_obj.strict_equal(other_obj);
+              is_strict_equal = strict_equal_datum_values(comparable_new, comparable_current);
             }
-          } else {
-            is_strict_equal = new_obj.strict_equal(new_cells[i]);
+          } else if (new_value.get_type() == current_value.get_type()) {
+            is_strict_equal = strict_equal_datum_values(new_value, current_value);
           }
           if (OB_FAIL(ret)) {
           } else if(!is_strict_equal) {
@@ -543,27 +642,29 @@ int TriggerHandle::check_and_update_new_row(
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObObj tmp_obj = new_cells[i];
+          DatumValue current_cell;
           ObDatum &write_datum = expr->locate_datum_for_write(eval_ctx);
           if (ob_is_geometry(expr->obj_meta_.get_type())) {
-            if (OB_FAIL(convert_pl_type_to_sql_type(eval_ctx.exec_ctx_.get_my_session(),
-                                                    eval_ctx.exec_ctx_,
-                                                    eval_ctx.exec_ctx_.get_allocator(),
-                                                    new_cells[i],
-                                                    tmp_obj,
+            DatumValue converted;
+            if (OB_FAIL(convert_pl_type_to_sql_type(new_cells[i], converted,
                                                     expr->obj_meta_.get_type()))) {
+            } else if (OB_FAIL(copy_trigger_value(converted, current_cell,
+                                                  eval_ctx.exec_ctx_.get_allocator()))) {
             }
-          } else if (OB_FAIL(deep_copy_obj(eval_ctx.exec_ctx_.get_allocator(), new_cells[i], tmp_obj))) {
+          } else if (OB_FAIL(copy_trigger_value(new_cells[i], current_cell,
+                                                eval_ctx.exec_ctx_.get_allocator()))) {
           }
           if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(write_datum.from_obj(tmp_obj))) {
-          } else if (is_lob_storage(tmp_obj.get_type()) &&
-                     OB_FAIL(ob_adjust_lob_datum(eval_ctx.exec_ctx_,
-                                                 tmp_obj, expr->obj_meta_,
-                                                 eval_ctx.exec_ctx_.get_allocator(), write_datum))) {
-        } else {
+          } else {
+            write_datum = current_cell.datum_;
+          }
+          if (OB_SUCC(ret) && current_cell.is_lob_storage()
+              && OB_FAIL(ob_adjust_lob_datum(eval_ctx.exec_ctx_, write_datum,
+                      current_cell.get_meta(), expr->obj_meta_,
+                      eval_ctx.exec_ctx_.get_allocator(), write_datum))) {
+          } else if (OB_SUCC(ret)) {
             expr->set_evaluated_flag(eval_ctx);
-            LOG_DEBUG("trigger write new datum", K(tmp_obj), K(i),
+            LOG_DEBUG("trigger write new datum", K(i),
               K(ObToStringExpr(eval_ctx, *new_row_exprs.at(i))));
           }
         }
@@ -735,47 +836,42 @@ int64_t TriggerHandle::get_routine_param_count(const uint64_t routine_id)
   return count;
 }
 
-int TriggerHandle::convert_sql_type_to_pl_type(ObSQLSessionInfo *session,
-                                               ObExecContext &exec_ctx,
-                                               ObSchemaGetterGuard *schema_guard,
-                                               ObIAllocator &alloc,
-                                               ObObj &src,
-                                               ObObj &dst,
-                                               ObObjType obj_type)
+int TriggerHandle::convert_sql_type_to_pl_type(bool has_session,
+                                               bool has_schema_guard,
+                                               const DatumValue &src,
+                                               DatumValue &dst)
 {
   int ret = OB_SUCCESS;
   if (src.is_null()) {
-    if (OB_ISNULL(schema_guard)) {
+    if (!has_schema_guard) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      //do nothing
+      // The old cast path leaves its default NULL destination unchanged.
     }
-  } else if (OB_ISNULL(session)) {
+  } else if (!has_session) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
-    ObCastCtx cast_ctx(&alloc, &dtc_params, CM_NONE, src.get_collation_type());
-    ObSqlObjCastRuntime cast_runtime(&exec_ctx);
-    cast_ctx.runtime_ = &cast_runtime;
-    if (OB_FAIL(ObObjCaster::to_type(ObExtendType, cast_ctx, src, dst))) {
-    }
+    // The current common-value cast table has no geometry -> PL Extend cast;
+    // preserve its OB_NOT_SUPPORTED result without materializing a legacy value.
+    ret = OB_NOT_SUPPORTED;
   }
   return ret;
 }
 
-int TriggerHandle::convert_pl_type_to_sql_type(ObSQLSessionInfo *session,
-                                               ObExecContext &exec_ctx,
-                                               ObIAllocator &alloc,
-                                               ObObj &src,
-                                               ObObj &dst,
-                                               ObObjType obj_type)
+int TriggerHandle::convert_pl_type_to_sql_type(const DatumValue &src,
+                                               DatumValue &dst,
+                                               SqlValueType obj_type)
 {
   int ret = OB_SUCCESS;
   if (ob_is_geometry(obj_type)) {
-    const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
-    ObCastCtx cast_ctx(&alloc, &dtc_params, CM_NONE, src.get_collation_type());
-    if (OB_FAIL(ObObjCaster::to_type(obj_type, cast_ctx, src, dst))) {
+    if (src.is_null()) {
+      dst = src;
+    } else {
+      // The current common-value cast table has no PL Extend -> geometry cast.
+      ret = OB_NOT_SUPPORTED;
     }
+  } else {
+    dst = src;
   }
   return ret;
 }

@@ -3003,7 +3003,7 @@ bool ObTransformGroupByPushdown::can_sum_trans_to_sum_count(const ObRawExpr *exp
       OB_ISNULL(expr->get_param_expr(0))) {
     /* do nothing */
   } else {
-    ObObjType obj_type = expr->get_param_expr(0)->get_result_type().get_type();
+    SqlValueType obj_type = expr->get_param_expr(0)->get_result_type().get_type();
     if (ObFloatType == obj_type || ObUFloatType == obj_type ||
         ObDoubleType == obj_type || ObUDoubleType == obj_type) {
       is_able = false;

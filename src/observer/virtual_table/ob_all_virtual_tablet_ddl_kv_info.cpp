@@ -118,27 +118,27 @@ int ObAllVirtualTabletDDLKVInfo::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID + 0:
           // tablet_id
-          cur_row_.cells_[i].set_int(curr_tablet_id_.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, curr_tablet_id_.id()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
           // freeze_scn
-          cur_row_.cells_[i].set_uint64(cur_kv->get_freeze_scn().get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, cur_kv->get_freeze_scn().get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
           // start_scn
-          cur_row_.cells_[i].set_uint64(cur_kv->get_ddl_start_scn().get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, cur_kv->get_ddl_start_scn().get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 3:
           // min_scn
-          cur_row_.cells_[i].set_uint64(cur_kv->get_min_scn().get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, cur_kv->get_min_scn().get_val_for_inner_table_field()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 4:
           // macro_block_cnt
-          cur_row_.cells_[i].set_int(cur_kv->get_macro_block_cnt());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, cur_kv->get_macro_block_cnt()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
           // ref_cnt
-          cur_row_.cells_[i].set_int(cur_kv->get_ref());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, cur_kv->get_ref()) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+#include "data_plane/native_key_value_buffer.h"
 #include "sql/das/iter/ob_das_ivf_scan_iter.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_das_scan_op.h"
@@ -409,12 +412,14 @@ int ObDASIvfBaseScanIter::build_cid_vec_query_rowkey(const ObString &cid,
 {
   int ret = OB_SUCCESS;
 
-  ObObj *obj_ptr = nullptr;
-  if (OB_ISNULL(obj_ptr = static_cast<ObObj *>(mem_context_->get_arena_allocator().alloc(sizeof(ObObj) * rowkey_cnt)))) {
+  DatumValue *obj_ptr = nullptr;
+  if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(mem_context_->get_arena_allocator(), rowkey_cnt, obj_ptr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     // rowkey: [cid, rowkey]
-    obj_ptr[0].set_varbinary(cid);
+    obj_ptr[0].meta_.set_varbinary();
+    obj_ptr[0].meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    obj_ptr[0].datum_.set_string(cid);
     for (int64_t i = 1; i < rowkey_cnt; ++i) {
       if (is_min) {
         obj_ptr[i].set_min_value();
@@ -518,8 +523,7 @@ int ObDASIvfBaseScanIter::get_next_saved_rowkey()
           ret = OB_ERR_UNEXPECTED;
         } else {
           ObDatum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
-          if (OB_FAIL(datum.from_obj(rowkey.get_obj_ptr()[i]))) {
-          }
+          datum = rowkey.get_values()[i].datum_;
         }
       }
     }
@@ -555,8 +559,7 @@ int ObDASIvfBaseScanIter::get_next_saved_rowkeys(int64_t &count)
         } else {
           for (int64_t idx_key = 0; OB_SUCC(ret) && idx_key < count; ++idx_key) {
             guard.set_batch_idx(idx_key);
-            if (OB_FAIL(datum[idx_key].from_obj(rowkeys[idx_key].get_obj_ptr()[idx_exp]))) {
-            }
+            datum[idx_key] = rowkeys[idx_key].get_values()[idx_exp].datum_;
           }
           if (OB_SUCC(ret)) {
             expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_);
@@ -976,8 +979,7 @@ int ObDASIvfBaseScanIter::get_main_rowkey_from_cid_vec_datum(ObIAllocator& alloc
 {
   int ret = OB_SUCCESS;
 
-  ObObj *obj_ptr = nullptr;
-  void *buf = nullptr;
+  DatumValue *obj_ptr = nullptr;
 
   if (OB_ISNULL(cid_vec_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
@@ -989,22 +991,22 @@ int ObDASIvfBaseScanIter::get_main_rowkey_from_cid_vec_datum(ObIAllocator& alloc
     if (rowkey_cnt > cid_vec_out_exprs.count() - CID_VEC_COM_KEY_CNT - CID_VEC_FIXED_PRI_KEY_CNT) {
       ret = OB_ERR_UNEXPECTED;
     } else if (need_alloc) {
-      if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FALSE_IT(obj_ptr = new (buf) ObObj[rowkey_cnt])) {
+      if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(allocator, rowkey_cnt, obj_ptr))) {
       }
     } else {
-      obj_ptr = main_rowkey.get_obj_ptr();
+      obj_ptr = main_rowkey.get_values();
     }
     if (OB_FAIL(ret)) {
     } else {
       int rowkey_idx = 0;
       for (int64_t i = 2; OB_SUCC(ret) && i < cid_vec_out_exprs.count() && rowkey_idx < rowkey_cnt; ++i) {
-        ObObj tmp_obj;
         ObExpr *expr = cid_vec_out_exprs.at(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_).to_obj(obj_ptr[rowkey_idx++], expr->obj_meta_, expr->obj_datum_map_))) {
+        } else if (OB_FAIL(project_datum_value_view(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_), expr->obj_meta_, expr->obj_datum_map_, obj_ptr[rowkey_idx].meta_, obj_ptr[rowkey_idx]))) {
+        } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(obj_ptr[rowkey_idx], obj_ptr, rowkey_cnt, rowkey_idx))) {
+        } else {
+          ++rowkey_idx;
         }
       }
     }
@@ -1947,11 +1949,11 @@ int ObDASIvfPQScanIter::calc_nearest_limit_rowkeys_in_cids(
       }
     }
   } else { // scan by precompute table cache
-    ObObj *obj_ptr = nullptr;
+    DatumValue *obj_ptr = nullptr;
     sim_table = (float*)mem_context_->get_arena_allocator().alloc(sizeof(float) * (ksub * m_) * 2);
-    obj_ptr = (ObObj*)mem_context_->get_arena_allocator().alloc(sizeof(ObObj) * rowkey_cnt);
-    if (OB_ISNULL(sim_table) || OB_ISNULL(obj_ptr)) {
+    if (OB_ISNULL(sim_table)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(mem_context_->get_arena_allocator(), rowkey_cnt, obj_ptr))) {
     } else {
       filter_main_rowkey.assign(obj_ptr, rowkey_cnt);
       sim_table_2 = sim_table + (ksub * m_);
@@ -2234,8 +2236,7 @@ int ObDASIvfBaseScanIter::get_main_rowkey_brute(
   ObRowkey &main_rowkey)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj_ptr = nullptr;
-  void *buf = nullptr;
+  DatumValue *obj_ptr = nullptr;
 
   if (OB_ISNULL(brute_ctdef)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2245,18 +2246,18 @@ int ObDASIvfBaseScanIter::get_main_rowkey_brute(
     const ExprFixedArray& brute_out_exprs = brute_ctdef->result_output_;
     if (rowkey_cnt > brute_out_exprs.count() - 1) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FALSE_IT(obj_ptr = new (buf) ObObj[rowkey_cnt])) {
+    } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(allocator, rowkey_cnt, obj_ptr))) {
     } else {
       int rowkey_idx = 0;
       for (int64_t i = 1; OB_SUCC(ret) && i < brute_out_exprs.count() && rowkey_idx < rowkey_cnt; ++i) {
-        ObObj tmp_obj;
+        DatumValue tmp_obj;
         ObExpr *expr = brute_out_exprs.at(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_).to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-        } else if (OB_FALSE_IT(obj_ptr[rowkey_idx++] = tmp_obj)) {
+        } else if (OB_FAIL(project_datum_value_view(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+        } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(tmp_obj, obj_ptr, rowkey_cnt, rowkey_idx))) {
+        } else {
+          ++rowkey_idx;
         }
       }
     }
@@ -2777,8 +2778,8 @@ int ObDASIvfPQScanIter::pre_compute_inner_prod_table(
 uint64_t ObDASIvfPQScanIter::hash_val_for_rk(const common::ObRowkey& rk)
 {
   uint64_t hash_val = 0;
-  for (int i = 0; i < rk.get_obj_cnt(); i++) {
-    (void)rk.get_obj_ptr()[i].hash(hash_val, hash_val);
+  for (int i = 0; i < rk.get_value_count(); i++) {
+    (void)hash_datum_value(rk.get_cell(i), hash_val, hash_val);
   }
   return hash_val;
 }
@@ -2812,13 +2813,13 @@ int ObDASIvfPQScanIter::build_rowkey_hash_set(
         } else {
           uint64_t hash_val = 0;
           for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
-            ObObj tmp_obj;
+            DatumValue tmp_obj;
             ObExpr *expr = ctdef->rowkey_exprs_.at(i);
             ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
             if (OB_ISNULL(datum.ptr_)) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-            } else if (OB_FAIL(tmp_obj.hash(hash_val, hash_val))) {
+            } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+            } else if (OB_FAIL(hash_datum_value(tmp_obj, hash_val, hash_val))) {
             }
           }
           if (OB_SUCC(ret)) {
@@ -2850,13 +2851,13 @@ int ObDASIvfPQScanIter::build_rowkey_hash_set(
             // pre_fileter_rowkeys_ need keep rowkey mem, so use vec_op_alloc_
             uint64_t hash_val = 0;
             for (int64_t j = 0; OB_SUCC(ret) && j < rowkey_cnt; ++j) {
-              ObObj tmp_obj;
+              DatumValue tmp_obj;
               ObExpr *expr = ctdef->rowkey_exprs_.at(j);
               ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
               if (OB_ISNULL(datum.ptr_)) {
                 ret = OB_ERR_UNEXPECTED;
-              } else if (OB_FAIL(datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-              } else if (OB_FAIL(tmp_obj.hash(hash_val, hash_val))) {
+              } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+              } else if (OB_FAIL(hash_datum_value(tmp_obj, hash_val, hash_val))) {
               }
             }
             if (OB_SUCC(ret)) {
@@ -3089,8 +3090,8 @@ bool ObIvfPreFilter::test(const ObRowkey& main_rowkey)
   int ret = OB_SUCCESS;
   if (type_ == FilterType::ROARING_BITMAP) {
     uint64_t hash_val = 0;
-    for (int i = 0; i < main_rowkey.get_obj_cnt(); i++) {
-      (void)main_rowkey.get_obj_ptr()[i].hash(hash_val, hash_val);
+    for (int i = 0; i < main_rowkey.get_value_count(); i++) {
+      (void)hash_datum_value(main_rowkey.get_cell(i), hash_val, hash_val);
     }
     bret = roaring::api::roaring64_bitmap_contains(roaring_bitmap_, hash_val);
   } else if (type_ == FilterType::SIMPLE_RANGE) {

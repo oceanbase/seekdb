@@ -161,9 +161,9 @@ int ObLockTable::get_table_schema_(
   const char *const TABLE_NAME = "lock_table";
   const int64_t MAX_ID_LENGTH = 100; // the real length is no more than 64 + 1
   const int64_t MAX_LOCK_INFO_LENGTH = OB_MAX_USER_ROW_LENGTH - MAX_ID_LENGTH;
-  ObObjMeta INC_ID_TYPE;
+  SqlTypeMeta INC_ID_TYPE;
   INC_ID_TYPE.set_int();
-  ObObjMeta DATA_TYPE;
+  SqlTypeMeta DATA_TYPE;
   DATA_TYPE.set_binary();
 
   ObColumnSchemaV2 id_column;

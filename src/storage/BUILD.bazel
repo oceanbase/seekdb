@@ -169,6 +169,7 @@ _STORAGE_RUNTIME_NATIVE_DEPS = [
     "//src/oblib:common_sql_mode",
     "//src/oblib:oblib_foundation",
     "//src/data_plane:ascii_util_interface",
+    "//src/data_plane:column_param",
     "//src/data_plane:data_plane_api_interface",
     "//src/data_plane:datum_row_interface",
     "//src/data_plane:datum_reshape_interface",
@@ -398,6 +399,7 @@ cc_library(
     hdrs = STORAGE_PUBLIC_HEADER_ROOTS,
     textual_hdrs = STORAGE_INTERFACE_CLOSURE_HEADERS,
     deps = [
+        ":column_schema",
         ":_textual_ob_keybtree",
         ":tablet_autoincrement_state",
         "//rust:config_headers",
@@ -595,4 +597,29 @@ cc_library(
     ] + _STORAGE_INTERFACE_NATIVE_DEPS,
     tags = ["manual"],
     visibility = ["//unittest/storage/tx:__pkg__"],
+)
+
+cc_library(
+    name = "column_schema",
+    srcs = ["ob_storage_column_schema.cpp"],
+    hdrs = ["ob_storage_column_schema.h"],
+    deps = ["//src/share:datum", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//src/oblib:oblib_foundation"],
+    visibility = ["//src:__subpackages__", "//unittest/storage:__pkg__"],
+)
+
+# Keep native key consumer test headers within their production module.
+cc_library(
+    name = "storage_rowkey_consumers_test_runtime",
+    testonly = True,
+    # These tests include Storage internal headers, whose production targets
+    # intentionally keep their Share/OBLib closure in implementation_deps.
+    deps = depset([
+        ":storage_runtime_interface",
+        ":storage_runtime_internal_headers",
+        "//src/share:value_cast_constants",
+        "//src/share:system_variable_metadata",
+    ] + _STORAGE_INTERFACE_SHARE_DEPS + _STORAGE_HEADER_SHARE_DEPS
+      + _STORAGE_INTERFACE_OBLIB_DEPS + _STORAGE_HEADER_OBLIB_DEPS).to_list(),
+    tags = ["manual"],
+    visibility = ["//unittest/storage:__pkg__"],
 )

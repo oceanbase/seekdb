@@ -1,0 +1,80 @@
+# Index-back keys must survive expression-frame reuse without legacy value ranges.
+--disable_warnings
+DROP TABLE IF EXISTS dl_typed, dl_batch, dl_digits, dl_part;
+--enable_warnings
+SET NAMES utf8mb4;
+CREATE TABLE dl_typed(
+ i BIGINT, u BIGINT UNSIGNED, s VARCHAR(96) COLLATE utf8mb4_bin,
+ b VARBINARY(32), n DECIMAL(38,8), d DATE, ts DATETIME(6),
+ g INT, payload VARCHAR(64),
+ PRIMARY KEY(i,u,s,b,n,d,ts), KEY k_g(g));
+INSERT INTO dl_typed VALUES
+ (-9223372036854775808,18446744073709551615,REPEAT('长',24),X'0001FF',-123456789012345678901234567890.12345678,'1970-01-01','2026-10-21 12:34:56.123456',7,'negative'),
+ (0,0,'',X'',0,'2020-02-29','2000-01-01 00:00:00',7,'zero'),
+ (1,1,'Aa ',X'610062',1.00000001,'2024-12-31','2038-01-19 03:14:07.999999',8,NULL),
+ (9223372036854775807,9223372036854775808,'Ω中文',X'FF00',999999999999999999999999999999.99999999,'9999-12-31','9999-12-31 23:59:59.999999',7,'positive');
+SELECT /*+ INDEX(dl_typed k_g) */ i,u,HEX(s),HEX(b),n,d,ts,payload FROM dl_typed FORCE INDEX(k_g) WHERE g=7 ORDER BY i;
+SELECT /*+ INDEX(dl_typed k_g) */ payload FROM dl_typed FORCE INDEX(k_g) WHERE g=8;
+SELECT /*+ INDEX(dl_typed k_g) */ payload FROM dl_typed FORCE INDEX(k_g) WHERE g=99;
+PREPARE dl_ps FROM 'SELECT /*+ INDEX(dl_typed k_g) */ i,payload FROM dl_typed FORCE INDEX(k_g) WHERE g=? ORDER BY i';
+SET @g=7;
+EXECUTE dl_ps USING @g;
+SET @g=8;
+EXECUTE dl_ps USING @g;
+SET @g=99;
+EXECUTE dl_ps USING @g;
+SET @g=7;
+EXECUTE dl_ps USING @g;
+DEALLOCATE PREPARE dl_ps;
+BEGIN;
+UPDATE /*+ INDEX(dl_typed k_g) */ dl_typed SET payload='changed' WHERE g=7;
+SELECT /*+ INDEX(dl_typed k_g) */ i,payload FROM dl_typed FORCE INDEX(k_g) WHERE g=7 ORDER BY i;
+ROLLBACK;
+SELECT /*+ INDEX(dl_typed k_g) */ i,payload FROM dl_typed FORCE INDEX(k_g) WHERE g=7 ORDER BY i;
+SELECT /*+ INDEX(dl_typed k_g) */ i,payload FROM dl_typed FORCE INDEX(k_g) WHERE g=7 ORDER BY i FOR UPDATE;
+
+# More than one lookup batch, long variable keys, and unordered secondary keys.
+CREATE TABLE dl_digits(d INT PRIMARY KEY);
+INSERT INTO dl_digits VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE dl_batch(id INT,s VARCHAR(96),g INT,payload VARCHAR(64),PRIMARY KEY(id,s),KEY k_g(g));
+INSERT INTO dl_batch
+ SELECT n,CONCAT(REPEAT('key',16),n),MOD(n,3),CONCAT('payload-',n)
+ FROM (SELECT a.d+10*b.d+100*c.d+1000*e.d AS n FROM dl_digits a,dl_digits b,dl_digits c,dl_digits e) x
+ WHERE n<2305;
+SELECT /*+ INDEX(dl_batch k_g) */ COUNT(*),SUM(id),SUM(LENGTH(payload)) FROM dl_batch FORCE INDEX(k_g) WHERE g IN(0,1,2);
+SELECT /*+ INDEX(dl_batch k_g) */ id,payload FROM dl_batch FORCE INDEX(k_g) WHERE g=1 ORDER BY id LIMIT 5;
+SELECT /*+ INDEX(dl_batch k_g) */ COUNT(*),SUM(id),SUM(LENGTH(payload)) FROM dl_batch FORCE INDEX(k_g) WHERE g=0;
+PREPARE dl_bulk FROM 'SELECT /*+ INDEX(dl_batch k_g) */ COUNT(*),SUM(id),SUM(LENGTH(payload)) FROM dl_batch FORCE INDEX(k_g) WHERE g=?';
+SET @g=2;
+EXECUTE dl_bulk USING @g;
+SET @g=99;
+EXECUTE dl_bulk USING @g;
+SET @g=1;
+EXECUTE dl_bulk USING @g;
+DEALLOCATE PREPARE dl_bulk;
+# A correlated LIMIT subquery must rescan its local lookup for each outer row.
+SELECT d.d,(SELECT b.payload FROM dl_batch b FORCE INDEX(k_g)
+ WHERE b.g=d.d ORDER BY b.id LIMIT 1) AS first_payload
+ FROM dl_digits d WHERE d.d<4 ORDER BY d.d;
+BEGIN;
+UPDATE dl_batch SET payload='updated' WHERE id=2;
+DELETE FROM dl_batch WHERE id=3;
+SELECT /*+ INDEX(dl_batch k_g) */ id,payload FROM dl_batch FORCE INDEX(k_g) WHERE g IN(0,2) AND id<5 ORDER BY id;
+ROLLBACK;
+SELECT /*+ INDEX(dl_batch k_g) */ id,payload FROM dl_batch FORCE INDEX(k_g) WHERE g IN(0,2) AND id<5 ORDER BY id;
+
+# Switch the data-table tablet across partitions and reuse the prepared plan.
+CREATE TABLE dl_part(id INT,g INT,payload VARCHAR(32),PRIMARY KEY(id),KEY k_g(g))
+ PARTITION BY RANGE(id)(PARTITION p0 VALUES LESS THAN(10),PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO dl_part VALUES(1,7,'one'),(11,7,'eleven'),(12,8,'twelve');
+PREPARE dl_partition FROM 'SELECT /*+ INDEX(dl_part k_g) */ id,payload FROM dl_part FORCE INDEX(k_g) WHERE g=? ORDER BY id';
+SET @g=7;
+EXECUTE dl_partition USING @g;
+SET @g=8;
+EXECUTE dl_partition USING @g;
+SET @g=99;
+EXECUTE dl_partition USING @g;
+SET @g=7;
+EXECUTE dl_partition USING @g;
+DEALLOCATE PREPARE dl_partition;
+DROP TABLE dl_part,dl_batch,dl_digits,dl_typed;

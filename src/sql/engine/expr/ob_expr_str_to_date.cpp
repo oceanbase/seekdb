@@ -42,14 +42,14 @@ int ObExprStrToDate::calc_result_type2(ObExprResType &type,
   UNUSED(type_ctx);
   UNUSED(date);
   int ret = OB_SUCCESS;
-  ObObjType res_type = type_ctx.enable_mysql_compatible_dates() ?
+  SqlValueType res_type = type_ctx.enable_mysql_compatible_dates() ?
       ObMySQLDateTimeType : ObDateTimeType;
   if (OB_UNLIKELY(ObNullTC == format.get_type_class())) {
     type.set_type(res_type);
     type.set_scale(MAX_SCALE_FOR_TEMPORAL);
     type.set_precision(DATETIME_MIN_LENGTH + MAX_SCALE_FOR_TEMPORAL);
   } else {
-    ObObj format_obj = format.get_param();
+    DatumValue format_obj = format.get_param();
     if (OB_UNLIKELY(format_obj.is_null())) {
       type.set_type(res_type);
       type.set_scale(MAX_SCALE_FOR_TEMPORAL);

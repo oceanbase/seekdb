@@ -417,7 +417,7 @@ int ObTransformSimplifyWinfunc::get_param_value(const ObDMLStmt *stmt,
 {
   int ret = OB_SUCCESS;
   is_valid = true;
-  ObObj obj_value;
+  DatumValue obj_value;
   bool got_result = false;
   ObPhysicalPlanCtx *plan_ctx = NULL;
   const ParamStore *param_store = NULL;

@@ -18,6 +18,7 @@
 #define _OB_EXPR_RES_TYPE_H 1
 
 #include "common/object/ob_object.h"
+#include "common/datum/datum_parameter.h"
 #include "common/ob_field.h"
 #include "common/mysqlclient/ob_mysql_global.h"
 #include "lib/container/ob_iarray.h"
@@ -35,18 +36,18 @@ namespace oceanbase
 namespace sql
 {
 
-typedef common::ObObjMeta ObExprCalcType;
+typedef common::SqlTypeMeta ObExprCalcType;
 
-/* Explanation: Why inherit from ObObjMeta?
+/* Explanation: Why inherit from SqlTypeMeta?
  *  This is for a special requirement added: during the calc_result_type phase,
  *  the derivation process may be related to constant values.
  *  For a constant, it might not only be necessary to know what its type is,
  *  but also to know its value in order to derive behavior compatible with MySQL.
  */
-class ObRawExprResType : public common::ObObjMeta
+class ObRawExprResType : public common::SqlTypeMeta
 {
 public:
-  ObRawExprResType() : ObObjMeta(),
+  ObRawExprResType() : SqlTypeMeta(),
     res_flags_(0),
     accuracy_()
   {
@@ -56,7 +57,7 @@ public:
     int ret = common::OB_SUCCESS;
     if (OB_LIKELY(this != &other)) {
       // assign func in ObFixedArray is not used for deep copy
-      common::ObObjMeta::operator=(other);//default assignment operator is enough
+      common::SqlTypeMeta::operator=(other);//default assignment operator is enough
       this->res_flags_ = other.res_flags_;
       this->accuracy_ = other.accuracy_;
     }
@@ -65,13 +66,13 @@ public:
 
   OB_INLINE bool operator ==(const ObRawExprResType &other) const
   {
-    return (ObObjMeta::operator==(other) && accuracy_ == other.accuracy_);
+    return (SqlTypeMeta::operator==(other) && accuracy_ == other.accuracy_);
   }
   OB_INLINE bool operator !=(const ObRawExprResType &other) const { return !this->operator ==(other); }
 public:
   OB_INLINE void reset()
   {
-    ObObjMeta::reset();
+    SqlTypeMeta::reset();
     res_flags_ = 0;
     accuracy_.reset();
   }
@@ -251,7 +252,7 @@ public:
   }
   // others.
   INHERIT_TO_STRING_KV(N_META,
-                       ObObjMeta,
+                       SqlTypeMeta,
                        N_ACCURACY,
                        accuracy_,
                        N_FLAG,
@@ -322,7 +323,7 @@ public:
   OB_INLINE const ObExprCalcType &get_calc_meta() const { return calc_type_; }
   OB_INLINE void set_calc_meta(const ObExprCalcType &meta) { calc_type_ = meta; }
   // calc_type: indicates that the expression will be converted to calc_type before calculation
-  OB_INLINE void set_calc_type(const common::ObObjType &type) { calc_type_.set_type(type); }
+  OB_INLINE void set_calc_type(const common::SqlValueType &type) { calc_type_.set_type(type); }
   OB_INLINE void set_calc_subschema_id(const uint16_t subschema_id) { calc_type_.set_subschema_id(subschema_id); }
   OB_INLINE void set_calc_collation_utf8()
   {
@@ -344,8 +345,8 @@ public:
     set_calc_collation_type(
           common::ObCharset::get_default_collation_by_mode(charset_type));
   }
-  OB_INLINE common::ObObjType get_calc_type() const { return calc_type_.get_type(); }
-  OB_INLINE common::ObObjTypeClass get_calc_type_class() const
+  OB_INLINE common::SqlValueType get_calc_type() const { return calc_type_.get_type(); }
+  OB_INLINE common::SqlTypeClass get_calc_type_class() const
   {
     return calc_type_.get_type_class();
   }
@@ -372,8 +373,9 @@ public:
     return calc_type_.get_collation_level();
   }
 
-  OB_INLINE void set_param(const common::ObObj &param) { param_ = param; }
-  OB_INLINE const common::ObObj &get_param() const { return param_; }
+  OB_INLINE void set_param(const common::DatumValue &param) { param_ = param; }
+  OB_INLINE void set_param(const common::DatumParameter &param) { param_ = param.value_view(); }
+  OB_INLINE const common::DatumValue &get_param() const { return param_; }
   OB_INLINE bool is_column() const { return !is_literal(); }
   OB_INLINE bool is_literal() const { return get_param().get_type() == get_type()
                                              && get_param().get_collation_type() == get_collation_type(); }
@@ -393,7 +395,9 @@ public:
 protected:
   ObExprCalcType calc_type_;
   common::ObAccuracy calc_accuracy_; // When it is Extend type, the length field is used to indicate the size of the complex data type
-  common::ObObj param_;
+  // Compile-time literal view; AST/plan owner must outlive type deduction.
+  // Serialization deliberately excludes it, and runtime types use the base metadata.
+  common::DatumValue param_;
   uint64_t cast_mode_; // store cast mode for decimal int single side cast
 };
 

@@ -313,7 +313,7 @@ int ObTransformCountToExists::check_value_zero(ObRawExpr *expr,
                                                bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  ObObj value;
+  DatumValue value;
   bool got_result = false;
   is_valid = false;
   need_add_constraint = false;

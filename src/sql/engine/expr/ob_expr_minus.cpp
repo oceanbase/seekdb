@@ -39,8 +39,7 @@ ObExprMinus::ObExprMinus(ObIAllocator &alloc, ObExprOperatorType type)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_minus_result_type,
-                        ObExprResultTypeUtil::get_minus_calc_type,
-                        minus_funcs_)
+                        ObExprResultTypeUtil::get_minus_calc_type)
 {
   param_lazy_eval_ = false;
 }
@@ -126,7 +125,7 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
       type.set_precision(precision);
     }
     if (is_no_unsigned_subtraction(session->get_sql_mode())) {
-      ObObjType convert_type = type.get_type();
+      SqlValueType convert_type = type.get_type();
       convert_unsigned_type_to_signed(convert_type);
       type.set_type(convert_type);
     }
@@ -160,240 +159,6 @@ int ObExprMinus::calc_result_type2(ObExprResType &type,
 
 
 
-ObArithFunc ObExprMinus::minus_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMinus::minus_int,
-  ObExprMinus::minus_uint,
-  NULL,
-  ObExprMinus::minus_double,
-  ObExprMinus::minus_number,
-  ObExprMinus::minus_datetime,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-};
-
-ObArithFunc ObExprMinus::agg_minus_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMinus::minus_int,
-  ObExprMinus::minus_uint,
-  NULL,
-  ObExprMinus::minus_double_no_overflow,
-  ObExprMinus::minus_number,
-  ObExprMinus::minus_datetime,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-};
-
-int ObExprMinus::minus_int(ObObj &res,
-                           const ObObj &left,
-                           const ObObj &right,
-                           ObIAllocator *allocator,
-                           ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  int64_t left_i = left.get_int();
-  int64_t right_i = right.get_int();
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    res.set_int(left_i - right_i);
-    if (OB_UNLIKELY(is_int_int_out_of_range(left_i, right_i, res.get_int()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld - %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
-    }
-  } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    res.set_uint64(left_i - right_i);
-    if (OB_UNLIKELY(is_int_uint_out_of_range(left_i, right_i, res.get_uint64()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld - %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_uint(ObObj &res,
-                            const ObObj &left,
-                            const ObObj &right,
-                            ObIAllocator *allocator,
-                            ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  uint64_t left_i = left.get_uint64();
-  uint64_t right_i = right.get_uint64();
-  res.set_uint64(left_i - right_i);
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    if (OB_UNLIKELY(is_uint_uint_out_of_range(left_i, right_i, res.get_uint64()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu - %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-  } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_UNLIKELY(is_uint_int_out_of_range(right_i, left_i, res.get_uint64()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu - %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_double(ObObj &res,
-                              const ObObj &left,
-                              const ObObj &right,
-                              ObIAllocator *allocator,
-                              ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d - right_d);
-    if (OB_UNLIKELY(is_double_out_of_range(res.get_double()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%e - %e)'",
-                      left_d,
-                      right_d);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-      LOG_WARN("double out of range", K(res), K(left), K(right), K(res));
-      res.set_null();
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_double_no_overflow(ObObj &res,
-                                          const ObObj &left,
-                                          const ObObj &right,
-                                          ObIAllocator *,
-                                          ObScale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d - right_d);
-  }
-  return ret;
-}
-
-int ObExprMinus::minus_number(ObObj &res,
-                              const ObObj &left,
-                              const ObObj &right,
-                              ObIAllocator *allocator,
-                              ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  number::ObNumber res_nmb;
-  if (OB_UNLIKELY(NULL == allocator)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(left.get_number().sub_v3(right.get_number(), res_nmb, *allocator))) {
-  } else {
-    if (ObUNumberType == res.get_type()) {
-      res.set_unumber(res_nmb);
-    } else {
-      res.set_number(res_nmb);
-    }
-  }
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMinus::minus_datetime(ObObj &res, const ObObj &left, const ObObj &right,
-    ObIAllocator *allocator, ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  const int64_t left_i = left.get_datetime();
-  const int64_t right_i = right.get_datetime();
-  ObTime ob_time;
-  if (OB_LIKELY(left.get_type_class() == right.get_type_class())) {
-    int64_t round_value = left_i - right_i;
-    ObTimeConverter::round_datetime(OB_MAX_DATE_PRECISION, round_value);
-    res.set_datetime(round_value);
-    res.set_scale(OB_MAX_DATE_PRECISION);
-    if (OB_UNLIKELY(res.get_datetime() > DATETIME_MAX_VAL || res.get_datetime() < DATETIME_MIN_VAL)
-        || (OB_FAIL(ObTimeConverter::datetime_to_ob_time(res.get_datetime(), NULL, ob_time)))
-        || (OB_FAIL(ObTimeConverter::validate_datetime_parts(ob_time)))) {
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld - %ld)'", left_i, right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DATE", expr_str);
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
 int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
                          const ObRawExpr &raw_expr,
                          ObExpr &rt_expr) const
@@ -411,11 +176,11 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
     OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = NULL;
     rt_expr.may_not_need_raw_check_ = false;
-    const ObObjType left_type = rt_expr.args_[0]->datum_meta_.type_;
-    const ObObjType right_type = rt_expr.args_[1]->datum_meta_.type_;
-    const ObObjType result_type = rt_expr.datum_meta_.type_;
-    const ObObjTypeClass left_tc = ob_obj_type_class(left_type);
-    const ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+    const SqlValueType left_type = rt_expr.args_[0]->datum_meta_.type_;
+    const SqlValueType right_type = rt_expr.args_[1]->datum_meta_.type_;
+    const SqlValueType result_type = rt_expr.datum_meta_.type_;
+    const SqlTypeClass left_tc = sql_type_class(left_type);
+    const SqlTypeClass right_tc = sql_type_class(right_type);
 
     switch (result_type) {
       case ObIntType:
@@ -496,7 +261,7 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
         case ObCollectionSQLType: {
           ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
           const uint16_t sub_id = rt_expr.obj_meta_.get_subschema_id();
-          ObObjType elem_type;
+          SqlValueType elem_type;
           uint32_t unused;
           bool is_vec = false;
           if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, sub_id, elem_type, unused, is_vec))) {

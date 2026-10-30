@@ -22,6 +22,8 @@
 #include "ob_vector_type.h"
 #include "ob_map_type.h"
 #include "lib/ob_errno.h"
+#include "lib/allocator/page_arena.h"
+#include "common/datum/datum_sql_print.h"
 
 namespace oceanbase {
 namespace common {
@@ -104,7 +106,7 @@ int ObArrayTypeObjFactory::construct(common::ObIAllocator &alloc, const ObCollec
       OB_LOG(WARN, "not supported vector element type", K(ret), K(arr_type->element_type_->type_id_));
     } else {
       ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
-      ObObjType obj_type = elem_type->basic_meta_.get_obj_type();
+      SqlValueType obj_type = elem_type->basic_meta_.get_obj_type();
       if (ObUTinyIntType == obj_type) {
         CONSTRUCT_ARRAY_OBJ(ObVectorU8Data, uint8_t);
         if (OB_SUCC(ret)) {
@@ -241,6 +243,32 @@ int ObArrayTypeObjFactory::construct_basic_elem(common::ObIAllocator &alloc, con
   if (OB_SUCC(ret)) {
     arr_obj->set_element_type(static_cast<int32_t>(array_meta.basic_meta_.get_obj_type()));
     // arr_obj->set_array_type(static_cast<const ObCollectionTypeBase *>(&array_meta));
+  }
+  return ret;
+}
+
+int print_collection_plain_payload(const ObString &payload,
+    const ObSqlCollectionInfo &meta, bool use_memcpy,
+    char *buffer, int64_t length, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(meta.collection_meta_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObArenaAllocator allocator;
+    ObStringBuffer formatted(&allocator);
+    ObIArrayType *array = nullptr;
+    ObString raw = payload;
+    if (OB_FAIL(ObArrayTypeObjFactory::construct(
+        allocator, *meta.collection_meta_, array, true /* read_only */))) {
+    } else if (OB_FAIL(array->init(raw))) {
+    } else if (OB_FAIL(array->print(formatted))) {
+    } else if (use_memcpy) {
+      ret = databuff_memcpy(buffer, length, pos, formatted.length(), formatted.ptr());
+    } else {
+      ret = databuff_printf(buffer, length, pos, "%.*s",
+          static_cast<int>(MIN(formatted.length(), length - pos)), formatted.ptr());
+    }
   }
   return ret;
 }

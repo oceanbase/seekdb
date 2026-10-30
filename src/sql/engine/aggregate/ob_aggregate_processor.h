@@ -31,7 +31,6 @@
 #include "sql/optimizer/stat/ob_topk_hist_estimator.h"
 #include "sql/engine/user_defined_function/ob_pl_user_defined_agg_function.h"
 #include "sql/engine/expr/ob_rt_datum_arith.h"
-#include "share/geo/ob_geo_mvt.h"
 #include "sql/engine/basic/ob_hp_infrastructure_manager.h"
 #include "sql/engine/expand/ob_expand_vec_op.h"
 
@@ -40,6 +39,7 @@ namespace oceanbase
 namespace common
 {
   class ObHybridHistograms;
+  class mvt_agg_result;
 }
 namespace sql
 {
@@ -175,7 +175,7 @@ public:
   {}
   virtual ~ObAggrInfo();
 
-  inline ObObjType get_first_child_type() const;
+  inline SqlValueType get_first_child_type() const;
   inline ObPrecision get_first_child_datum_precision() const;
   inline ObScale get_first_child_datum_scale() const;
   inline bool is_number() const;
@@ -261,7 +261,7 @@ public:
 
 typedef common::ObFixedArray<ObAggrInfo, common::ObIAllocator> AggrInfoFixedArray;
 
-inline ObObjType ObAggrInfo::get_first_child_type() const
+inline SqlValueType ObAggrInfo::get_first_child_type() const
 {
  // OB_ASSERT(param_exprs_.count() == 1);
   return param_exprs_.at(0)->datum_meta_.type_;
@@ -280,7 +280,7 @@ inline ObScale ObAggrInfo::get_first_child_datum_scale() const
 inline bool ObAggrInfo::is_number() const
 {
 //  OB_ASSERT(param_exprs_.count() == 1);
-  const ObObjType tmp_type = param_exprs_.at(0)->datum_meta_.type_;
+  const SqlValueType tmp_type = param_exprs_.at(0)->datum_meta_.type_;
   return (ObNumberType == tmp_type || ObUNumberType == tmp_type);
 }
 
@@ -587,7 +587,7 @@ public:
     bool is_tiny_num_used() const { return is_tiny_num_used_; }
     bool get_is_evaluated() const { return is_evaluated_; }
     void set_is_evaluated(const bool is_evaluated) { is_evaluated_ = is_evaluated; }
-    int collect_result(const ObObjTypeClass tc, ObEvalCtx &eval_ctx, const ObAggrInfo &aggr_info);
+    int collect_result(const SqlTypeClass tc, ObEvalCtx &eval_ctx, const ObAggrInfo &aggr_info);
     ExtraResult *get_extra() { return extra_; }
     const ExtraResult *get_extra() const { return extra_; }
     void set_extra(ExtraResult *extra) { extra_ = extra; }
@@ -1041,15 +1041,15 @@ private:
   int get_pl_agg_udf_result(const ObAggrInfo &aggr_info,
                             GroupConcatExtraResult *&extra,
                             ObDatum &result);
-  int convert_datum_to_obj(const ObAggrInfo &aggr_info,
-                           const ObChunkDatumStore::StoredRow &stored_row,
-                           ObObj *tmp_obj,
-                           int64_t obj_cnt);
+  int convert_datum_to_values(const ObAggrInfo &aggr_info,
+                              const ObChunkDatumStore::StoredRow &stored_row,
+                              DatumValue *values,
+                              int64_t value_cnt);
 
   int init_topk_fre_histogram_item(const ObAggrInfo &aggr_info,
                                     ObTopKFrequencyHistograms *topk_fre_hist);
   int get_top_k_fre_hist_result(ObTopKFrequencyHistograms &top_k_fre_hist,
-                                const ObObjMeta &obj_meta,
+                                const SqlTypeMeta &obj_meta,
                                 bool has_lob_header,
                                 ObDatum &result_datum);
 
@@ -1079,21 +1079,21 @@ private:
                        ObDatum &concat_result);
   int init_asmvt_result(ObIAllocator &allocator,
                         const ObAggrInfo &aggr_info,
-                        const ObObj *tmp_obj,
-                        uint32_t obj_cnt,
+                        const DatumValue *values,
+                        uint32_t value_cnt,
                         mvt_agg_result &mvt_res);
   int get_array_agg_result(const ObAggrInfo &aggr_info,
                            GroupConcatExtraResult *&extra,
                            ObDatum &concat_result);
 
-  int shadow_truncate_string_for_hist(const ObObjMeta obj_meta,
+  int shadow_truncate_string_for_hist(const SqlTypeMeta obj_meta,
                                       ObDatum &datum,
                                       int32_t *origin_str_len = NULL);
 
   int check_rows_prefix_str_equal_for_hybrid_hist(const ObChunkDatumStore::LastStoredRow &prev_row,
                                                   const ObChunkDatumStore::StoredRow &cur_row,
                                                   const ObAggrInfo &aggr_info,
-                                                  const ObObjMeta &obj_meta,
+                                                  const SqlTypeMeta &obj_meta,
                                                   bool &is_equal);
 
   OB_INLINE void clear_op_evaluated_flag()
@@ -1307,7 +1307,7 @@ struct ObAggregateCalcFunc
 {
   const static int64_t STORED_ROW_MAGIC_NUM  = 0xaaaabbbbccccdddd;
   static int add_calc(const ObDatum &left_value, const ObDatum &right_value,
-      ObDatum &result_datum, const ObObjTypeClass type, const ObPrecision precision,
+      ObDatum &result_datum, const SqlTypeClass type, const ObPrecision precision,
       ObIAllocator &allocator);
   static int clone_number_cell(const number::ObNumber &src_cell,
       ObDatum &target_cell, ObIAllocator &allocator);

@@ -1244,16 +1244,16 @@ int ObSchemaGetterGuard::add_role_id_recursively(uint64_t role_id,
 int ObSchemaGetterGuard::check_activate_all_role_var(bool &activate_all_role) {
   int ret = OB_SUCCESS;
   const ObSysVarSchema *session_var = NULL;
-  ObObj session_obj;
+  DatumValue session_value;
   ObArenaAllocator alloc(ObModIds::OB_TEMP_VARIABLES);
   activate_all_role = false;
   if (OB_FAIL(get_system_variable(SYS_VAR_ACTIVATE_ALL_ROLES_ON_LOGIN,
                                          session_var))) {
   } else if (OB_ISNULL(session_var)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(session_var->get_value(&alloc, NULL, session_obj))) {
+  } else if (OB_FAIL(session_var->get_value(alloc, static_cast<const ObTimeZoneInfo *>(nullptr), session_value))) {
   } else {
-    activate_all_role = !!(session_obj.get_int());
+    activate_all_role = !session_value.is_null() && 0 != session_value.get_int();
   }
   return ret;
 }

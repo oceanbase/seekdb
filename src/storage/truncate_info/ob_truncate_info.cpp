@@ -18,6 +18,7 @@
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "storage/multi_data_source/adapter_define/mds_dump_node.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
+#include "share/datum/typed_datum_compare.h"
 #include "storage/multi_data_source/mds_key_serialize_util.h"
 #include "share/compaction/ob_compaction_info_param.h"
 namespace oceanbase
@@ -107,7 +108,7 @@ void ObStorageListRowValues::destroy(ObIAllocator &allocator)
 
 int ObStorageListRowValues::init(
     ObIAllocator &allocator,
-    const common::ObIArray<common::ObNewRow> &row_values)
+    const common::ObIArray<common::PartitionBoundRow> &row_values)
 {
   int ret = OB_SUCCESS;
   void *alloc_buf = nullptr;
@@ -116,15 +117,15 @@ int ObStorageListRowValues::init(
     ret = OB_INVALID_DATA;
   } else if (0 == (cnt_ = row_values.count())) {
   } else {
-    alloc_buf_size += cnt_ * sizeof(ObNewRow);
+    alloc_buf_size += cnt_ * sizeof(PartitionBoundRow);
     for (int64_t i = 0; i < cnt_; i++) {
       alloc_buf_size += row_values.at(i).get_deep_copy_size();
     } // for
     if (OB_ISNULL(alloc_buf = allocator.alloc(alloc_buf_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      values_ = new (alloc_buf) ObNewRow[cnt_];
-      int64_t pos = cnt_ * sizeof(ObNewRow);
+      values_ = new (alloc_buf) PartitionBoundRow[cnt_];
+      int64_t pos = cnt_ * sizeof(PartitionBoundRow);
       for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
         if (OB_FAIL(values_[i].deep_copy(row_values.at(i), (char *)alloc_buf, alloc_buf_size, pos))) {
         }
@@ -151,9 +152,9 @@ int ObStorageListRowValues::assign(ObIAllocator &allocator, const ObStorageListR
   } else if (OB_ISNULL(alloc_buf = allocator.alloc(deep_copy_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    values_ = new (alloc_buf) ObNewRow[cnt_];
-    int64_t pos = cnt_ * sizeof(ObNewRow);
-    const ObNewRow *other_values = other.get_values();
+    values_ = new (alloc_buf) PartitionBoundRow[cnt_];
+    int64_t pos = cnt_ * sizeof(PartitionBoundRow);
+    const PartitionBoundRow *other_values = other.get_values();
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
       if (OB_FAIL(values_[i].deep_copy(other_values[i], (char *)alloc_buf, deep_copy_size, pos))) {
       }
@@ -178,7 +179,7 @@ int ObStorageListRowValues::compare(const ObStorageListRowValues &other, bool &e
       int cmp = 0;
       equal = (values_[i].count_ == other.values_[i].count_);
       for (int64_t j = 0; OB_SUCC(ret) && equal && j < values_[i].count_; ++j) {
-        if (OB_FAIL(values_[i].get_cell(j).compare(other.values_[i].get_cell(j), cmp))) {
+        if (OB_FAIL(compare_datum_values(values_[i].get_cell(j), other.values_[i].get_cell(j), cmp))) {
         } else {
           equal = (0 == cmp);
         }
@@ -196,7 +197,7 @@ int ObStorageListRowValues::serialize(char *buf, const int64_t buf_len, int64_t 
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, cnt_))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i ++) {
-    if (OB_FAIL(values_[i].serialize(buf, buf_len, pos))) {
+    if (OB_FAIL(values_[i].serialize_row(buf, buf_len, pos))) {
     }
   }
   return ret;
@@ -207,7 +208,7 @@ int64_t ObStorageListRowValues::get_serialize_size() const
   int64_t len = 0;
   len += serialization::encoded_length_vi64(cnt_);
   for (int64_t i = 0; i < cnt_; i ++) {
-    len += values_[i].get_serialize_size();
+    len += values_[i].get_row_serialize_size();
   }
   return len;
 }
@@ -215,35 +216,24 @@ int64_t ObStorageListRowValues::get_serialize_size() const
 int ObStorageListRowValues::deserialize(ObIAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator("ListRowVal");
-  ObObj *obj_array = NULL;
-  void *tmp_buf = NULL;
-  const int obj_capacity = 1024;
-  int64_t tmp_cnt = 0;
-  if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &tmp_cnt))) {
-  } else if (0 == tmp_cnt) {
-    cnt_ = 0;
-  } else if (OB_ISNULL(tmp_buf = tmp_allocator.alloc(sizeof(ObObj) * obj_capacity))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    ObSEArray<ObNewRow, 4> deseralize_row_array;
-    obj_array = new (tmp_buf) ObObj[obj_capacity];
-    ObNewRow tmp_row;
-    tmp_row.assign(obj_array, obj_capacity);
-    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_cnt; i++) {
-      ObNewRow dest_row;
-      tmp_row.count_ = obj_capacity;
-      if (OB_FAIL(tmp_row.deserialize(buf, data_len, pos))) {
-      } else if (OB_FAIL(ob_write_row(tmp_allocator, tmp_row, dest_row))) {
-      } else if (OB_FAIL(deseralize_row_array.push_back(dest_row))) {
-      }
-    } // for
-    if (FAILEDx(init(allocator, deseralize_row_array))) {
-    }
+  int64_t count = 0, next = pos;
+  ObArenaAllocator scratch("StorageList");
+  ObSEArray<PartitionBoundRow, 4> rows;
+  ObSEArray<DatumValue, 4> previous;
+  PartitionBoundRow row;
+  if (OB_FAIL(serialization::decode_vi64(buf, data_len, next, &count))) {}
+  else if (count < 0 || count > data_len) { ret = OB_INVALID_DATA; }
+  else if (OB_FAIL(rows.reserve(count))) {}
+  if (OB_SUCC(ret)) { ret = previous.prepare_allocate(1024); }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    row.assign(previous.get_data(), previous.count());
+    if (OB_FAIL(row.deserialize_row(scratch, buf, data_len, next))) {}
+    else { ret = rows.push_back(row); }
+    for (int64_t j = 0; OB_SUCC(ret) && j < row.count(); ++j) { previous.at(j) = row.get_cells()[j]; }
   }
-  if (OB_FAIL(ret)) {
-    destroy(allocator);
-  }
+  if (OB_SUCC(ret)) { ret = init(allocator, rows); }
+  if (OB_SUCC(ret)) { pos = next; }
+  else { destroy(allocator); }
   return ret;
 }
 
@@ -254,7 +244,7 @@ int64_t ObStorageListRowValues::to_string(char *buf, const int64_t buf_len) cons
   if (0 == cnt_) {
     J_KV(K_(cnt));
   } else {
-    J_KV(K_(cnt), "values", ObArrayWrap<ObNewRow>(values_, cnt_));
+    J_KV(K_(cnt), "values", ObArrayWrap<PartitionBoundRow>(values_, cnt_));
   }
   J_OBJ_END();
   return pos;
@@ -264,7 +254,7 @@ int64_t ObStorageListRowValues::get_deep_copy_size() const
 {
   int64_t size = 0;
   if (is_valid()) {
-    size += cnt_ * sizeof(ObNewRow);
+    size += cnt_ * sizeof(PartitionBoundRow);
     for (int64_t idx = 0; idx < cnt_; ++idx) {
       size += values_[idx].get_deep_copy_size();
     }
@@ -284,9 +274,9 @@ int ObStorageListRowValues::deep_copy(
   } else if (OB_UNLIKELY(pos + get_deep_copy_size() > buf_len)) {
     ret = OB_SIZE_OVERFLOW;
   } else {
-    dest.values_ = new (buf + pos) ObNewRow[cnt_];
+    dest.values_ = new (buf + pos) PartitionBoundRow[cnt_];
     dest.cnt_ = cnt_;
-    pos += cnt_ * sizeof(ObNewRow);
+    pos += cnt_ * sizeof(PartitionBoundRow);
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
       if (OB_FAIL(dest.values_[i].deep_copy(values_[i], buf, buf_len, pos))) {
       }
@@ -502,7 +492,7 @@ bool ObTruncatePartition::is_valid() const
   } else if (is_list_part(part_type_)) {
     if (list_row_values_.is_valid()) {
       bret = true;
-      const ObNewRow *values = list_row_values_.get_values();
+      const PartitionBoundRow *values = list_row_values_.get_values();
       for (int64_t idx = 0; idx < list_row_values_.count() && bret; ++idx) {
         bret = part_key_cnt == values[idx].get_count();
       } // for
@@ -521,14 +511,14 @@ bool ObTruncatePartition::is_valid() const
 int ObTruncatePartition::init_range_part(
     ObIAllocator &allocator,
     const TruncatePartType part_type,
-    const ObRowkey &low_bound_val,
-    const ObRowkey &high_bound_val)
+    const PartitionBoundRow &low_bound_val,
+    const PartitionBoundRow &high_bound_val)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_range_part(part_type))) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(low_bound_val.deep_copy(low_bound_val_/*dst*/, allocator))) {
-  } else if (OB_FAIL(high_bound_val.deep_copy(high_bound_val_/*dst*/, allocator))) {
+  } else if (OB_FAIL(low_bound_val.clone(low_bound_val_/*dst*/, allocator))) {
+  } else if (OB_FAIL(high_bound_val.clone(high_bound_val_/*dst*/, allocator))) {
   } else {
     part_type_ = part_type;
     part_op_ = INCLUDE;
@@ -566,8 +556,8 @@ int ObTruncatePartition::assign(ObIAllocator &allocator, const ObTruncatePartiti
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(part_key_idxs_.assign(allocator, other.part_key_idxs_))) {
   } else if (is_range_part(other.part_type_)) {
-    if (OB_FAIL(other.low_bound_val_.deep_copy(low_bound_val_/*dst*/, allocator))) {
-    } else if (OB_FAIL(other.high_bound_val_.deep_copy(high_bound_val_/*dst*/, allocator))) {
+    if (OB_FAIL(other.low_bound_val_.clone(low_bound_val_/*dst*/, allocator))) {
+    } else if (OB_FAIL(other.high_bound_val_.clone(high_bound_val_/*dst*/, allocator))) {
     }
   } else if (is_list_part(other.part_type_)) {
     if (OB_FAIL(list_row_values_.assign(allocator, other.list_row_values_))) {
@@ -702,8 +692,8 @@ int ObTruncatePartition::shallow_copy(ObTruncatePartition &dest)
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
   } else if (is_range_part(part_type_)) {
-    dest.low_bound_val_.assign(low_bound_val_.get_obj_ptr(), low_bound_val_.get_obj_cnt());
-    dest.high_bound_val_.assign(high_bound_val_.get_obj_ptr(), high_bound_val_.get_obj_cnt());
+    dest.low_bound_val_ = low_bound_val_;
+    dest.high_bound_val_ = high_bound_val_;
   } else if (is_list_part(part_type_)) {
     list_row_values_.shallow_copy(dest.list_row_values_);
   } else {
@@ -729,8 +719,8 @@ int ObTruncatePartition::compare(const ObTruncatePartition &other, bool &equal) 
       && (part_op_ == other.part_op_)
       && OB_SUCC(part_key_idxs_.compare(other.part_key_idxs_, equal) && equal)) {
     if (is_range_part(part_type_)) {
-      if (OB_SUCC(low_bound_val_.equal(other.low_bound_val_, equal)) && equal) {
-        ret = high_bound_val_.equal(other.high_bound_val_, equal);
+      if (OB_SUCC(equal_partition_bound_keys(low_bound_val_, other.low_bound_val_, equal)) && equal) {
+        ret = equal_partition_bound_keys(high_bound_val_, other.high_bound_val_, equal);
       }
     } else if (is_list_part(part_type_)) {
       ret = list_row_values_.compare(other.list_row_values_, equal);
@@ -763,10 +753,10 @@ void ObTruncatePartition::gene_info(char* buf, const int64_t buf_len, int64_t &p
     } else if (is_list_part(part_type_) && list_row_values_.is_valid()) {
       J_KV("list_row_values_cnt", list_row_values_.count());
       J_COMMA();
-      const ObNewRow *values = list_row_values_.get_values();
+      const PartitionBoundRow *values = list_row_values_.get_values();
       for (int64_t idx = 0; idx < list_row_values_.count(); ++idx) {
         BUF_PRINTF("[%ld]:", idx);
-        const ObNewRow &row = values[idx];
+        const PartitionBoundRow &row = values[idx];
         (void)databuff_print_obj_array(buf, buf_len, pos, row.cells_, row.count_);
         if (idx + 1 != list_row_values_.count()) {
           BUF_PRINTF(";");

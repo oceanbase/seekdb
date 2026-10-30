@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SRC_OB_STATIC_ENGINE_CG_H_
 #define OCEANBASE_SRC_OB_STATIC_ENGINE_CG_H_
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/code_generator/ob_dml_cg_service.h"
 #include "sql/code_generator/ob_tsc_cg_service.h"
@@ -439,7 +440,7 @@ private:
 
   int generate_popular_values_hash(
       const common::ObHashFunc &hash_func,
-      const ObIArray<common::ObObj> &popular_values_expr,
+      const ObIArray<common::DatumValue> &popular_values_expr,
       common::ObFixedArray<uint64_t, common::ObIAllocator> &popular_values_hash);
   int generate_delete_with_das(ObLogDelete &op, ObTableDeleteSpec &spec);
 

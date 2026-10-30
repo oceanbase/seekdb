@@ -39,7 +39,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
   } else if (stmt::T_CALL_PROCEDURE != stmt.get_prepare_type()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObjParam result;
+    DatumParameter result;
     ParamStore params_array( (ObWrapperAllocator(ctx.get_allocator())) );
     if (OB_FAIL(params_array.reserve(stmt.get_params().count()))) {
     }
@@ -115,7 +115,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                       ObItemType expr_type = call_param_expr->get_expr_items().at(0).get_item_type();
                       if (OB_LIKELY(IS_CONST_TYPE(expr_type))) {
                         if (T_QUESTIONMARK == expr_type) {
-                          const ObObj &value = call_param_expr->get_expr_items().at(0).get_obj();
+                          const DatumValue &value = call_param_expr->get_expr_items().at(0).get_obj();
                           int64_t idx = value.get_unknown();
                           int64_t origin_param_cnt = 0;
                           for (int64_t n = 0; n < idx; ++n) {
@@ -142,8 +142,10 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                               } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_CALL_PROCEDURE, ctx, ctx.get_allocator(), expr_ctx))) {
                               } else {
                                 const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().get_varchar();
-                                if (OB_FAIL(ObVariableSetExecutor::set_user_variable(result_set.get_exec_context().get_physical_plan_ctx()->get_param_store_for_update().at(idx),
-                                                                                      var_name, expr_ctx))) {
+                                const DatumParameter &out = result_set.get_exec_context()
+                                    .get_physical_plan_ctx()->get_param_store().at(idx);
+                                if (OB_FAIL(ObVariableSetExecutor::set_user_variable(out.value_view(),
+                                                                                           var_name, expr_ctx))) {
                                 }
                               }
                             }

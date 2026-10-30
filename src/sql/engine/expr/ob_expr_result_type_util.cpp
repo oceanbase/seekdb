@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "rust/config.h"
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "src/sql/engine/ob_exec_context.h"
@@ -65,9 +66,9 @@ const int64_t MAX_NUMBER_BUFFER_SIZE_IN_TYPE_UTIL = 40;
 
 using ArithOp = ObArithResultTypeMap::OP;
 
-int ObExprResultTypeUtil::get_relational_cmp_type(ObObjType &type,
-                                                  const ObObjType &type1,
-                                                  const ObObjType &type2)
+int ObExprResultTypeUtil::get_relational_cmp_type(SqlValueType &type,
+                                                  const SqlValueType &type1,
+                                                  const SqlValueType &type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -79,9 +80,9 @@ int ObExprResultTypeUtil::get_relational_cmp_type(ObObjType &type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_relational_result_type(ObObjType &type,
-                                                     const ObObjType &type1,
-                                                     const ObObjType &type2)
+int ObExprResultTypeUtil::get_relational_result_type(SqlValueType &type,
+                                                     const SqlValueType &type1,
+                                                     const SqlValueType &type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -94,25 +95,25 @@ int ObExprResultTypeUtil::get_relational_result_type(ObObjType &type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_relational_equal_type(ObObjType &type,
-                                                    const ObObjType &type1,
-                                                    const ObObjType &type2)
+int ObExprResultTypeUtil::get_relational_equal_type(SqlValueType &type,
+                                                    const SqlValueType &type1,
+                                                    const SqlValueType &type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type1 < ObNullType || type2 < ObNullType || type2 >= ObMaxType)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("the wrong type", K(type1), K(type2), K(ret));
   } else {
-    const ObObjType *equal_type_array = RELATIONAL_EQUAL_TYPE;
+    const SqlValueType *equal_type_array = RELATIONAL_EQUAL_TYPE;
     type = equal_type_array[type1] == equal_type_array[type2] ? equal_type_array[type1] : ObMaxType;
   }
   return ret;
 }
 
 
-int ObExprResultTypeUtil::get_merge_result_type(ObObjType &type,
-                                                const ObObjType &type1,
-                                                const ObObjType &type2)
+int ObExprResultTypeUtil::get_merge_result_type(SqlValueType &type,
+                                                const SqlValueType &type1,
+                                                const SqlValueType &type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -125,8 +126,8 @@ int ObExprResultTypeUtil::get_merge_result_type(ObObjType &type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_abs_result_type(ObObjType &type,
-                                              const ObObjType &type1)
+int ObExprResultTypeUtil::get_abs_result_type(SqlValueType &type,
+                                              const SqlValueType &type1)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType)) {
@@ -139,8 +140,8 @@ int ObExprResultTypeUtil::get_abs_result_type(ObObjType &type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_neg_result_type(ObObjType &type,
-                                              const ObObjType &type1)
+int ObExprResultTypeUtil::get_neg_result_type(SqlValueType &type,
+                                              const SqlValueType &type1)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType)) {
@@ -153,8 +154,8 @@ int ObExprResultTypeUtil::get_neg_result_type(ObObjType &type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_round_result_type(ObObjType &type,
-                                                const ObObjType &type1)
+int ObExprResultTypeUtil::get_round_result_type(SqlValueType &type,
+                                                const SqlValueType &type1)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType)) {
@@ -167,11 +168,11 @@ int ObExprResultTypeUtil::get_round_result_type(ObObjType &type,
 }
 
 
-int ObExprResultTypeUtil::get_div_result_type(ObObjType &result_type,
-                                              ObObjType &result_ob1_type,
-                                              ObObjType &result_ob2_type,
-                                              const ObObjType type1,
-                                              const ObObjType type2)
+int ObExprResultTypeUtil::get_div_result_type(SqlValueType &result_type,
+                                              SqlValueType &result_ob1_type,
+                                              SqlValueType &result_ob2_type,
+                                              const SqlValueType type1,
+                                              const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -208,9 +209,9 @@ int ObExprResultTypeUtil::get_div_result_type(ObExprResType &res_type,
                                               const ObExprResType &res_type2)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = ObMaxType;
-  ObObjType result_ob1_type = ObMaxType;
-  ObObjType result_ob2_type = ObMaxType;
+  SqlValueType type = ObMaxType;
+  SqlValueType result_ob1_type = ObMaxType;
+  SqlValueType result_ob2_type = ObMaxType;
   if (OB_FAIL(get_div_result_type(type, result_ob1_type, result_ob2_type, res_type1.get_type(), res_type2.get_type()))) {
   } else {
     res_type.set_type(type);
@@ -218,11 +219,11 @@ int ObExprResultTypeUtil::get_div_result_type(ObExprResType &res_type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_int_div_result_type(ObObjType &result_type,
-                                                  ObObjType &result_ob1_type,
-                                                  ObObjType &result_ob2_type,
-                                                  const ObObjType type1,
-                                                  const ObObjType type2)
+int ObExprResultTypeUtil::get_int_div_result_type(SqlValueType &result_type,
+                                                  SqlValueType &result_ob1_type,
+                                                  SqlValueType &result_ob2_type,
+                                                  const SqlValueType type1,
+                                                  const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -241,9 +242,9 @@ int ObExprResultTypeUtil::get_int_div_result_type(ObExprResType &res_type,
                                                   const ObExprResType &res_type2)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = ObMaxType;
-  ObObjType result_ob1_type = ObMaxType;
-  ObObjType result_ob2_type = ObMaxType;
+  SqlValueType type = ObMaxType;
+  SqlValueType result_ob1_type = ObMaxType;
+  SqlValueType result_ob2_type = ObMaxType;
   if (OB_FAIL(get_int_div_result_type(type, result_ob1_type, result_ob2_type, res_type1.get_type(), res_type2.get_type()))) {
   } else {
     res_type.set_type(type);
@@ -251,15 +252,15 @@ int ObExprResultTypeUtil::get_int_div_result_type(ObExprResType &res_type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_int_div_calc_type(ObObjType &calc_type,
-                                                ObObjType &calc_ob1_type,
-                                                ObObjType &calc_ob2_type,
-                                                const ObObjType type1,
-                                                const ObObjType type2)
+int ObExprResultTypeUtil::get_int_div_calc_type(SqlValueType &calc_type,
+                                                SqlValueType &calc_ob1_type,
+                                                SqlValueType &calc_ob2_type,
+                                                const SqlValueType type1,
+                                                const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
+  SqlTypeClass tc1 = sql_type_class(type1);
+  SqlTypeClass tc2 = sql_type_class(type2);
   if ((ObIntTC != tc1 && ObUIntTC != tc1 && ObEnumSetTC != tc1)
       || (ObIntTC != tc2 && ObUIntTC != tc2 && ObEnumSetTC != tc2)) {
     calc_type = ObNumberType;
@@ -270,11 +271,11 @@ int ObExprResultTypeUtil::get_int_div_calc_type(ObObjType &calc_type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_mod_result_type(ObObjType &result_type,
-                                              ObObjType &result_ob1_type,
-                                              ObObjType &result_ob2_type,
-                                              const ObObjType type1,
-                                              const ObObjType type2)
+int ObExprResultTypeUtil::get_mod_result_type(SqlValueType &result_type,
+                                              SqlValueType &result_ob1_type,
+                                              SqlValueType &result_ob2_type,
+                                              const SqlValueType type1,
+                                              const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -293,9 +294,9 @@ int ObExprResultTypeUtil::get_mod_result_type(ObExprResType &res_type,
                                               const ObExprResType &res_type2)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = ObMaxType;
-  ObObjType result_ob1_type = ObMaxType;
-  ObObjType result_ob2_type = ObMaxType;
+  SqlValueType type = ObMaxType;
+  SqlValueType result_ob1_type = ObMaxType;
+  SqlValueType result_ob2_type = ObMaxType;
   if (OB_FAIL(get_mod_result_type(type, result_ob1_type, result_ob2_type, res_type1.get_type(),
                                   res_type2.get_type()))) {
   } else {
@@ -304,11 +305,11 @@ int ObExprResultTypeUtil::get_mod_result_type(ObExprResType &res_type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_remainder_result_type(ObObjType &result_type,
-                                              ObObjType &result_ob1_type,
-                                              ObObjType &result_ob2_type,
-                                              const ObObjType type1,
-                                              const ObObjType type2)
+int ObExprResultTypeUtil::get_remainder_result_type(SqlValueType &result_type,
+                                              SqlValueType &result_ob1_type,
+                                              SqlValueType &result_ob2_type,
+                                              const SqlValueType type1,
+                                              const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -321,18 +322,18 @@ int ObExprResultTypeUtil::get_remainder_result_type(ObObjType &result_type,
                                                 ObNullType : result_type) : rule.param1_calc_type);
     result_ob2_type = (rule.param2_calc_type == ObMaxType ? (ObNullType == type2 ?
                                                 ObNullType : result_type) : rule.param2_calc_type);
-    if (OB_UNLIKELY(!ob_is_valid_obj_type(result_type))) {
+    if (OB_UNLIKELY(!is_valid_sql_value_type(result_type))) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
     }
   }
   return ret;
 }
 
-int ObExprResultTypeUtil::get_arith_result_type(ObObjType &result_type,
-                                                ObObjType &result_ob1_type,
-                                                ObObjType &result_ob2_type,
-                                                const ObObjType type1,
-                                                const ObObjType type2)
+int ObExprResultTypeUtil::get_arith_result_type(SqlValueType &result_type,
+                                                SqlValueType &result_ob1_type,
+                                                SqlValueType &result_ob2_type,
+                                                const SqlValueType type1,
+                                                const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -347,11 +348,11 @@ int ObExprResultTypeUtil::get_arith_result_type(ObObjType &result_type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_mul_result_type(ObObjType &result_type,
-                                              ObObjType &result_ob1_type,
-                                              ObObjType &result_ob2_type,
-                                              const ObObjType type1,
-                                              const ObObjType type2)
+int ObExprResultTypeUtil::get_mul_result_type(SqlValueType &result_type,
+                                              SqlValueType &result_ob1_type,
+                                              SqlValueType &result_ob2_type,
+                                              const SqlValueType type1,
+                                              const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(type1 >= ObMaxType || type2 >= ObMaxType)) {
@@ -365,11 +366,11 @@ int ObExprResultTypeUtil::get_mul_result_type(ObObjType &result_type,
   return ret;
 }
 
-int ObExprResultTypeUtil::get_add_result_type(ObObjType &result_type,
-                                              ObObjType &result_ob1_type,
-                                              ObObjType &result_ob2_type,
-                                              const ObObjType type1,
-                                              const ObObjType type2)
+int ObExprResultTypeUtil::get_add_result_type(SqlValueType &result_type,
+                                              SqlValueType &result_ob1_type,
+                                              SqlValueType &result_ob2_type,
+                                              const SqlValueType type1,
+                                              const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   ret = get_arith_result_type(result_type, result_ob1_type, result_ob2_type, type1, type2);
@@ -377,11 +378,11 @@ int ObExprResultTypeUtil::get_add_result_type(ObObjType &result_type,
 }
 
 
-int ObExprResultTypeUtil::get_minus_result_type(ObObjType &type,
-                                                ObObjType &result_ob1_type,
-                                                ObObjType &result_ob2_type,
-                                                const ObObjType type1,
-                                                const ObObjType type2)
+int ObExprResultTypeUtil::get_minus_result_type(SqlValueType &type,
+                                                SqlValueType &result_ob1_type,
+                                                SqlValueType &result_ob2_type,
+                                                const SqlValueType type1,
+                                                const SqlValueType type2)
 {
   int ret = OB_SUCCESS;
   ret = get_arith_result_type(type, result_ob1_type, result_ob2_type, type1, type2);
@@ -394,9 +395,9 @@ int ObExprResultTypeUtil::get_mul_result_type(ObExprResType &res_type,
                                               const ObExprResType &res_type2)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = ObMaxType;
-  ObObjType result_ob1_type = ObMaxType;
-  ObObjType result_ob2_type = ObMaxType;
+  SqlValueType type = ObMaxType;
+  SqlValueType result_ob1_type = ObMaxType;
+  SqlValueType result_ob2_type = ObMaxType;
   if(OB_FAIL(get_mul_result_type(type,
                                  result_ob1_type,
                                  result_ob2_type,
@@ -413,9 +414,9 @@ int ObExprResultTypeUtil::get_add_result_type(ObExprResType &res_type,
     const ObExprResType &res_type1, const ObExprResType &res_type2)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = ObMaxType;
-  ObObjType result_ob1_type = ObMaxType;
-  ObObjType result_ob2_type = ObMaxType;
+  SqlValueType type = ObMaxType;
+  SqlValueType result_ob1_type = ObMaxType;
+  SqlValueType result_ob2_type = ObMaxType;
   if(OB_FAIL(get_add_result_type(type,
                                  result_ob1_type,
                                  result_ob2_type,
@@ -431,9 +432,9 @@ int ObExprResultTypeUtil::get_minus_result_type(ObExprResType &res_type,
     const ObExprResType &res_type1, const ObExprResType &res_type2)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = ObMaxType;
-  ObObjType result_ob1_type = ObMaxType;
-  ObObjType result_ob2_type = ObMaxType;
+  SqlValueType type = ObMaxType;
+  SqlValueType result_ob1_type = ObMaxType;
+  SqlValueType result_ob2_type = ObMaxType;
   if(OB_FAIL(get_minus_result_type(type,
                                    result_ob1_type,
                                    result_ob2_type,
@@ -446,11 +447,11 @@ int ObExprResultTypeUtil::get_minus_result_type(ObExprResType &res_type,
 }
 
 
-int ObExprResultTypeUtil::get_arith_calc_type(ObObjType &calc_type,
-                                              ObObjType &calc_ob1_type,
-                                              ObObjType &calc_ob2_type,
-                                              const ObObjType type1,
-                                              const ObObjType type2,
+int ObExprResultTypeUtil::get_arith_calc_type(SqlValueType &calc_type,
+                                              SqlValueType &calc_ob1_type,
+                                              SqlValueType &calc_ob2_type,
+                                              const SqlValueType type1,
+                                              const SqlValueType type2,
                                               const ArithOp oper)
 {
   return get_arith_result_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2);
@@ -509,15 +510,15 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
     if (orig_type.is_literal()) {
       ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
       ObCastMode cast_mode = CM_WARN_ON_FAIL;
-      const ObObj &orig_obj = orig_type.get_param();
+      const DatumValue &orig_obj = orig_type.get_param();
       ObAccuracy res_accuracy;
       ObCastCtx cast_ctx(&oballocator,
                       &dtc_params,
                       cast_mode,
                       target_type.get_collation_type(),
                       &res_accuracy);
-      ObObj out;
-      if (OB_FAIL(ObObjCaster::to_type(target_type.get_type(), cast_ctx, orig_obj, out))) {
+      DatumValue out;
+      if (OB_FAIL(DatumValueCaster::to_type(target_type.get_type(), cast_ctx, orig_obj, oballocator, out))) {
       } else {
         if (LS_BYTE == length_semantics) {
           length = out.get_string_len();
@@ -612,7 +613,7 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
     ObDataType coll_elem2_type;
     bool l_is_vec = false;
     bool r_is_vec = false;
-    ObObjMeta element_meta;
+    SqlTypeMeta element_meta;
     if (OB_FAIL(ObArrayExprUtils::check_array_type_compatibility(exec_ctx, type1.get_subschema_id(),
                                                                   type2.get_subschema_id(), is_compatiable))) {
     } else if (!is_compatiable) {
@@ -642,15 +643,15 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
                                               const ObDataType &coll_elem2_type,
                                               uint32_t depth,
                                               ObExprResType &calc_type,
-                                              ObObjMeta &element_meta)
+                                              SqlTypeMeta &element_meta)
 {
   int ret = OB_SUCCESS;
-  const ObObjType type1 = coll_elem1_type.get_obj_type();
-  const ObObjType type2 = coll_elem2_type.get_obj_type();
+  const SqlValueType type1 = coll_elem1_type.get_obj_type();
+  const SqlValueType type2 = coll_elem2_type.get_obj_type();
   ObDataType elem_data;
-  ObObjType coll_calc_type = ARITH_RESULT_TYPE[type1][type2];
+  SqlValueType coll_calc_type = ARITH_RESULT_TYPE[type1][type2];
   ObCollationType calc_collection_type = CS_TYPE_INVALID;
-  if (ob_is_int_uint(ob_obj_type_class(type1), ob_obj_type_class(type2))) {
+  if (ob_is_int_uint(sql_type_class(type1), sql_type_class(type2))) {
     coll_calc_type = ObIntType;
   } else if (ob_is_float_tc(type1) &&  ob_is_float_tc(type2)) {
     if (type1 == ObFloatType || type2 == ObFloatType) {
@@ -706,10 +707,10 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
 int ObExprResultTypeUtil::get_deduce_element_type(ObExprResType &input_type, ObDataType &elem_type)
 {
   int ret = OB_SUCCESS;
-  ObObjType type1 = input_type.get_type();
-  ObObjType type2 = elem_type.get_obj_type();
-  ObObjType res_type = MERGE_RESULT_TYPE[type1][type2];
-  ObObjMeta meta;
+  SqlValueType type1 = input_type.get_type();
+  SqlValueType type2 = elem_type.get_obj_type();
+  SqlValueType res_type = MERGE_RESULT_TYPE[type1][type2];
+  SqlTypeMeta meta;
   if (res_type == ObDecimalIntType || res_type == ObNumberType || res_type == ObUNumberType) {
     // decimal type isn't supported in array, use double/bigint instead
     if (input_type.get_scale() != 0 || ob_is_float_tc(type2) || ob_is_double_tc(type2)) {
@@ -769,8 +770,8 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
              || l_coll_info->collection_meta_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE 
              || r_coll_info->collection_meta_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE) {
     uint16_t subschema_id;
-    ObObjMeta key_meta;
-    ObObjMeta value_meta;
+    SqlTypeMeta key_meta;
+    SqlTypeMeta value_meta;
     ObExprResType key_calc_type;
     ObExprResType value_calc_type;
     const ObCollectionMapType *l_map_type = dynamic_cast<const ObCollectionMapType*>(l_coll_info->collection_meta_);
@@ -804,7 +805,7 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
     uint32_t depth = 0;
     ObDataType coll_elem1_type = l_coll_info->get_basic_meta(depth);
     ObDataType coll_elem2_type = r_coll_info->get_basic_meta(depth);
-    ObObjMeta element_meta;
+    SqlTypeMeta element_meta;
     if (coll_elem1_type.get_obj_type() == coll_elem2_type.get_obj_type() &&
                coll_elem1_type.get_obj_type() == ObVarcharType) {
       // use subschema_id whose length is greater

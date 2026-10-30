@@ -85,7 +85,7 @@ private:
   typedef common::hash::ObHashSet<storage::ObFTWord> StopWordSet;
 
   StopWordSet stopword_set_;
-  ObObjMeta stopword_type_;
+  SqlTypeMeta stopword_type_;
 
   bool inited_ = false;
 
@@ -98,7 +98,7 @@ class ObAddWord final
 public:
   ObAddWord(
       const ObFTParserProperty &property,
-      const ObObjMeta &meta,
+      const SqlTypeMeta &meta,
       const ObAddWordFlag &flag,
       common::ObIAllocator &allocator,
       ObFTWordMap &word_map);
@@ -124,7 +124,7 @@ private:
   int check_stopword(const ObFTWord &word, bool &is_stopword);
   int groupby_word(const ObFTWord &word, const int64_t word_cnt);
 private:
-  ObObjMeta word_meta_;
+  SqlTypeMeta word_meta_;
   common::ObIAllocator &allocator_;
   ObFTWordMap &word_map_;
   int64_t min_max_word_cnt_;

@@ -296,7 +296,7 @@ int ObExprConcatWs::calc_concat_ws_expr(const ObExpr &expr, ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   ObDatum *sep = NULL;
-  ObObjType res_type = expr.datum_meta_.type_;
+  SqlValueType res_type = expr.datum_meta_.type_;
   if (OB_UNLIKELY(1 >= expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, sep))) {

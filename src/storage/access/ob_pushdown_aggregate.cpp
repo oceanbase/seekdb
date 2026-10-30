@@ -238,9 +238,9 @@ int ObAggCell::prepare_def_datum()
   int ret = OB_SUCCESS;
   if (def_datum_.is_nop()) {
     def_datum_.reuse();
-    const ObObj &def_cell = basic_info_.col_param_->get_orig_default_value();
+    const common::DatumValue &def_cell = basic_info_.col_param_->get_orig_default_value();
     if (!def_cell.is_nop_value()) {
-      if (OB_FAIL(def_datum_.from_obj_enhance(def_cell))) {
+      if (OB_FAIL(def_datum_.from_value(def_cell))) {
       } else if (OB_FAIL(pad_column_if_need(def_datum_, allocator_, false))) {
       } else if (def_cell.is_lob_storage() && !def_cell.is_null()) {
         // lob def value must have no lob header when not null, should add lob header for default value
@@ -267,7 +267,7 @@ int ObAggCell::fill_default_if_need(blocksstable::ObStorageDatum &datum)
     if (OB_FAIL(prepare_def_datum())) {
     } else {
       datum.reuse();
-      const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(basic_info_.col_param_->get_meta_type().get_type());
+      const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(basic_info_.col_param_->get_meta_type().get_type());
       if (OB_FAIL(datum.from_storage_datum(def_datum_, map_type))) {
       }
     }
@@ -1180,7 +1180,7 @@ int ObSumOpSizeAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 int ObSumOpSizeAggCell::set_op_size()
 {
   int ret = OB_SUCCESS;
-  ObObjDatumMapType type = OBJ_DATUM_MAPPING_MAX;
+  SqlValueDatumMapType type = OBJ_DATUM_MAPPING_MAX;
   if (OB_ISNULL(basic_info_.agg_expr_->args_) ||
       OB_ISNULL(basic_info_.agg_expr_->args_[0]) ||
       OB_UNLIKELY(T_REF_COLUMN != basic_info_.agg_expr_->args_[0]->type_)) {
@@ -1210,7 +1210,7 @@ int ObSumOpSizeAggCell::set_op_size()
         op_size_ = sizeof(ObDatum) + 10;
         break;
       }
-      case common::OBJ_DATUM_FULL : {
+      case common::OBJ_DATUM_EXTEND : {
         op_size_ = sizeof(ObDatum) + 16;
         break;
       }
@@ -1431,21 +1431,21 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
   } else {
     exec_ctx_ = &eval_ctx->exec_ctx_;
-    obj_tc_ = ob_obj_type_class(basic_info_.agg_expr_->args_[0]->datum_meta_.type_);
-    const ObObjTypeClass res_tc = ob_obj_type_class(basic_info_.agg_expr_->datum_meta_.type_);
+    obj_tc_ = sql_type_class(basic_info_.agg_expr_->args_[0]->datum_meta_.type_);
+    const SqlTypeClass res_tc = sql_type_class(basic_info_.agg_expr_->datum_meta_.type_);
     const int16_t precision = basic_info_.agg_expr_->datum_meta_.precision_;
     eval_skip_index_func_ = nullptr;
     switch (obj_tc_) {
-      case ObObjTypeClass::ObIntTC: {
+      case SqlTypeClass::ObIntTC: {
         switch (res_tc) {
-          case ObObjTypeClass::ObNumberTC: {
+          case SqlTypeClass::ObNumberTC: {
             eval_func_ = &ObSumAggCell::eval_int<number::ObNumber>;
             eval_batch_func_ = &ObSumAggCell::eval_int_batch<number::ObNumber>;
             copy_datum_func_ = &ObSumAggCell::copy_int_to_number;
             eval_skip_index_func_ = &ObSumAggCell::eval_number;
             break;
           }
-          case ObObjTypeClass::ObDecimalIntTC: {
+          case SqlTypeClass::ObDecimalIntTC: {
             if (OB_UNLIKELY(precision < OB_DECIMAL_LONGLONG_DIGITS ||
                               precision > MAX_PRECISION_DECIMAL_INT_256)) {
               ret = OB_ERR_UNEXPECTED;
@@ -1467,16 +1467,16 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
         }
         break;
       }
-      case ObObjTypeClass::ObUIntTC: {
+      case SqlTypeClass::ObUIntTC: {
         switch (res_tc) {
-          case ObObjTypeClass::ObNumberTC: {
+          case SqlTypeClass::ObNumberTC: {
             eval_func_ = &ObSumAggCell::eval_uint<number::ObNumber>;
             eval_batch_func_ = &ObSumAggCell::eval_uint_batch<number::ObNumber>;
             copy_datum_func_ = &ObSumAggCell::copy_uint_to_number;
             eval_skip_index_func_ = &ObSumAggCell::eval_number;
             break;
           }
-          case ObObjTypeClass::ObDecimalIntTC: {
+          case SqlTypeClass::ObDecimalIntTC: {
             if (OB_UNLIKELY(precision < OB_DECIMAL_LONGLONG_DIGITS ||
                               precision > MAX_PRECISION_DECIMAL_INT_256)) {
               ret = OB_ERR_UNEXPECTED;
@@ -1498,32 +1498,32 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
         }
         break;
       }
-      case ObObjTypeClass::ObFloatTC: {
+      case SqlTypeClass::ObFloatTC: {
         eval_func_ = &ObSumAggCell::eval_float;
         eval_batch_func_ = &ObSumAggCell::eval_float_batch;
         copy_datum_func_ = &ObSumAggCell::copy_float;
         eval_skip_index_func_ = &ObSumAggCell::eval_float;
         break;
       }
-      case ObObjTypeClass::ObDoubleTC: {
+      case SqlTypeClass::ObDoubleTC: {
         eval_func_ = &ObSumAggCell::eval_double;
         eval_batch_func_ = &ObSumAggCell::eval_double_batch;
         copy_datum_func_ = &ObSumAggCell::copy_double;
         eval_skip_index_func_ = &ObSumAggCell::eval_double;
         break;
       }
-      case ObObjTypeClass::ObNumberTC: {
+      case SqlTypeClass::ObNumberTC: {
         eval_func_ = &ObSumAggCell::eval_number;
         eval_batch_func_ = &ObSumAggCell::eval_number_batch;
         copy_datum_func_ = &ObSumAggCell::copy_number;
         eval_skip_index_func_ = &ObSumAggCell::eval_number;
         break;
       }
-      case ObObjTypeClass::ObDecimalIntTC: {
+      case SqlTypeClass::ObDecimalIntTC: {
         ret = ObSumAggCell::init_decimal_int_func();
         break;
       }
-      case ObObjTypeClass::ObCollectionSQLTC: {
+      case SqlTypeClass::ObCollectionSQLTC: {
         eval_func_ = &ObSumAggCell::eval_collection;
         eval_batch_func_ = &ObSumAggCell::eval_collection_batch;
         copy_datum_func_ = &ObSumAggCell::copy_vector;
@@ -1541,7 +1541,7 @@ int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   } else if (is_group_by) {
     const int64_t datum_size = is_sum_use_temp_buf_ ? common::OBJ_DATUM_DECIMALINT_MAX_RES_SIZE : common::OBJ_DATUM_NUMBER_RES_SIZE;
     group_by_result_datum_buf_->set_item_size(datum_size);
-    if (ObObjTypeClass::ObIntTC == obj_tc_ || ObObjTypeClass::ObUIntTC == obj_tc_) {
+    if (SqlTypeClass::ObIntTC == obj_tc_ || SqlTypeClass::ObUIntTC == obj_tc_) {
       if (OB_FAIL(new_group_by_buf((bool*)nullptr, 0, sizeof(bool), allocator_, sum_use_int_flag_buf_))) {
       } else if (OB_FAIL(sum_use_int_flag_buf_->reserve(basic_info_.batch_size_))) {
       } else if (OB_FAIL(new_group_by_buf((int64_t*)(nullptr), 0, sizeof(int64_t), allocator_, num_int_buf_))) {
@@ -1649,7 +1649,7 @@ int ObSumAggCell::init_decimal_int_func()
     }
   };
 
-  const ObObjTypeClass res_tc = ob_obj_type_class(basic_info_.agg_expr_->datum_meta_.type_);
+  const SqlTypeClass res_tc = sql_type_class(basic_info_.agg_expr_->datum_meta_.type_);
   const int16_t arg_prec = basic_info_.agg_expr_->args_[0]->datum_meta_.precision_;
   const int16_t res_prec = basic_info_.agg_expr_->datum_meta_.precision_;
   const int16_t buffer_prec = get_max_decimalint_precision(arg_prec) - arg_prec;
@@ -1658,7 +1658,7 @@ int ObSumAggCell::init_decimal_int_func()
                            get_scale_factor<int64_t>(buffer_prec) < basic_info_.batch_size_;
   if (OB_UNLIKELY(arg_type > 3 || arg_type < 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ObObjTypeClass::ObNumberTC == res_tc) {
+  } else if (SqlTypeClass::ObNumberTC == res_tc) {
     eval_func_ = AGG_FUNCS[arg_type][2];
     eval_batch_func_ = AGG_BATCH_FUNCS[arg_type][2][need_cast];
     copy_datum_func_ = COPY_FUNCS[arg_type][2];
@@ -2067,7 +2067,7 @@ int ObSumAggCell::eval_collection(const common::ObDatum &datum, const int32_t da
 int ObSumAggCell::init_eval_skip_index_func_for_decimal()
 {
   int ret = OB_SUCCESS;
-  const ObObjTypeClass res_tc = ob_obj_type_class(basic_info_.agg_expr_->datum_meta_.type_);
+  const SqlTypeClass res_tc = sql_type_class(basic_info_.agg_expr_->datum_meta_.type_);
   const int16_t res_prec = basic_info_.agg_expr_->datum_meta_.precision_;
   const int res_type = static_cast<int>(get_decimalint_type(res_prec));
   switch (res_type) {
@@ -2297,7 +2297,7 @@ int ObSumAggCell::collect_result_in_group_by(const int64_t datum_offset)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(datum_offset > group_by_result_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ObObjTypeClass::ObIntTC != obj_tc_ && ObObjTypeClass::ObUIntTC != obj_tc_) {
+  } else if (SqlTypeClass::ObIntTC != obj_tc_ && SqlTypeClass::ObUIntTC != obj_tc_) {
   } else if (ob_is_decimal_int(basic_info_.agg_expr_->datum_meta_.type_)) {
     common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
     if (sum_use_int_flag_buf_->at(datum_offset)) {
@@ -2771,7 +2771,7 @@ int ObGroupByCell::init(const ObTableAccessParam &param, const ObTableAccessCont
           } else if (OB_FAIL(new_group_by_buf(group_by_col_datums, batch_size_,
               common::OBJ_DATUM_NUMBER_RES_SIZE, allocator_, group_by_col_datum_buf_))) {
           } else {
-            const common::ObObjMeta &obj_meta = col_param->get_meta_type();
+            const common::SqlTypeMeta &obj_meta = col_param->get_meta_type();
             if (is_pad_char_to_full_length(context.sql_mode_) && obj_meta.is_fixed_len_char_type()) {
               group_by_col_param_ = col_param;
             }

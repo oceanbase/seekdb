@@ -49,9 +49,6 @@ void ObInfoSchemaKvCacheTable::reset()
   ipstr_.reset();
   inst_handles_.reset();
   str_buf_.reset();
-  for (int64_t i = 0; i  < OB_ROW_MAX_COLUMNS_COUNT; i++) {
-    cells_[i].reset();
-  }
 }
 
 int ObInfoSchemaKvCacheTable::inner_get_next_row(ObNewRow *&row)
@@ -126,28 +123,27 @@ int ObInfoSchemaKvCacheTable::process_row(const ObKVCacheInst *inst)
   int ret = OB_SUCCESS;
 
   uint64_t cell_idx = 0;
-  cur_row_.cells_ = cells_;
   cur_row_.count_ = reserved_column_cnt_;
   for (int64_t i = 0 ; OB_SUCC(ret) && i < output_column_ids_.count() ; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch(col_id) {
       case CACHE_NAME: {
         if (NULL != inst->status_.config_) {
-          cells_[cell_idx].set_varchar(inst->status_.config_->cache_name_);
-          cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+          if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, inst->status_.config_->cache_name_); }
+          cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         }
         break;
       }
       case CACHE_ID: {
-        cells_[cell_idx].set_int(inst->cache_id_);
+        if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, inst->cache_id_); }
         break;
       }
       case CACHE_SIZE: {
-        cells_[cell_idx].set_int(inst->status_.store_size_);
+        if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, inst->status_.store_size_); }
         break;
       }
       case KV_CNT: {
-        cells_[cell_idx].set_int(inst->status_.kv_cnt_);
+        if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, inst->status_.kv_cnt_); }
         break;
       }
       case HIT_RATIO: {
@@ -162,20 +158,20 @@ int ObInfoSchemaKvCacheTable::process_row(const ObKVCacheInst *inst)
           SERVER_LOG(WARN, "Fail to snprintf hit ratio", K(ret), K(errno), KERRNOMSG(errno));
         } else if (OB_FAIL(num.from(buf, str_buf_))) {
         } else {
-          cells_[cell_idx].set_number(num);
+          ret = cur_row_.cells_[cell_idx].set_number(num, row_calc_buf_);
         }
         break;
       }
       case TOTAL_PUT_CNT: {
-        cells_[cell_idx].set_int(inst->status_.total_put_cnt_.value());
+        if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, inst->status_.total_put_cnt_.value()); }
         break;
       }
       case TOTAL_HIT_CNT: {
-        cells_[cell_idx].set_int(inst->status_.total_hit_cnt_.value());
+        if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, inst->status_.total_hit_cnt_.value()); }
         break;
       }
       case TOTAL_MISS_CNT: {
-        cells_[cell_idx].set_int(inst->status_.total_miss_cnt_.value());
+        if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, inst->status_.total_miss_cnt_.value()); }
         break;
       }
       default: {

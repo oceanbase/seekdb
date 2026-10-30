@@ -23,6 +23,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/list/ob_dlist.h"
 #include "common/row/ob_row.h"
+#include "common/datum/datum_value_buffer.h"
 #include "common/row/ob_row_iterator.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 #include "sql/engine/basic/ob_sql_mem_callback.h"
@@ -44,30 +45,34 @@ public:
   };
   struct StoredRow
   {
-    StoredRow() : cnt_(0), row_size_(0) {}
+    StoredRow() : cnt_(0), row_size_(0), extra_size_(0), reserved_(0) {}
 
     static inline int64_t row_copy_size(const common::ObNewRow &row)
     {
-      int64_t size = sizeof(common::ObObj) * row.get_count();
+      if (row.get_count() < 0 || row.get_count() > INT64_MAX / sizeof(common::DatumValue)) { return INT64_MAX; }
+      int64_t size = sizeof(common::DatumValue) * row.get_count();
       for (int64_t i = 0; i < row.get_count(); ++i) {
-        size += row.get_cell(i).get_deep_copy_size();
+        if (!common::NativeValueFlat::add_size(size, common::DatumValueBuffer::get_deep_copy_size(row.get_cell(i)))) { break; }
       }
       return size;
     }
-    inline int copy_row(const common::ObNewRow &row, char *buf, const int64_t size,
+    int copy_row(const common::ObNewRow &row, char *buf, const int64_t size,
         const int64_t row_size, const uint32_t row_extend_size);
-    inline common::ObObj *cells() { return reinterpret_cast<common::ObObj *>(payload_); }
-    inline const common::ObObj *cells() const
-        { return reinterpret_cast<const common::ObObj *>(payload_); }
-    inline void *get_extra_payload() const { return static_cast<void*>(const_cast<char*>(payload_ + sizeof(ObObj) * cnt_)); }
+    inline common::DatumValue *cells() { return reinterpret_cast<common::DatumValue *>(payload_); }
+    inline const common::DatumValue *cells() const
+        { return reinterpret_cast<const common::DatumValue *>(payload_); }
+    inline void *get_extra_payload() const { return static_cast<void*>(const_cast<char*>(payload_ + sizeof(common::DatumValue) * cnt_)); }
     int assign(const StoredRow *sr);
-    inline void unswizzling(char *base = NULL);
-    inline void swizzling();
+    int unswizzling(char *base = NULL);
+    int swizzling();
     
     TO_STRING_KV(K_(cnt), K_(row_size), K(cells()[0]));
 
     uint32_t cnt_;
     uint32_t row_size_;
+    // Internal spill layout keeps every native payload eight-byte aligned.
+    uint32_t extra_size_;
+    uint32_t reserved_;
     char payload_[0];
   } __attribute__((packed));
 
@@ -91,7 +96,10 @@ public:
 
     static int64_t inline row_store_size(const common::ObNewRow &row, uint32_t row_extend_size = 0)
     {
-      return ROW_HEAD_SIZE + row_extend_size + StoredRow::row_copy_size(row);
+      int64_t size = StoredRow::row_copy_size(row);
+      common::NativeValueFlat::add_size(size, common::NativeValueFlat::span(row_extend_size));
+      common::NativeValueFlat::add_size(size, ROW_HEAD_SIZE);
+      return size;
     }
     int add_row(const common::ObNewRow &row, const int64_t row_size, uint32_t row_extend_size,
                 StoredRow **stored_row = NULL);

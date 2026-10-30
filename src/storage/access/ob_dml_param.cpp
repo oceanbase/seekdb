@@ -59,7 +59,7 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
         } else {
           const int32_t obj_idx = projector.at(i);
           if (obj_idx >= 0) {
-            common::ObObjDatumMapType map_type = e->obj_datum_map_;
+            common::SqlValueDatumMapType map_type = e->obj_datum_map_;
             if (num_.map_type_ == map_type) {
               num_.start_++;
             } else if (str_.map_type_ == map_type) {
@@ -84,7 +84,7 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
         const int32_t obj_idx = projector.at(i);
         int64_t item_idx = 0;
         if (e->arg_cnt_ == 0 && obj_idx >= 0) {
-          common::ObObjDatumMapType map_type = e->obj_datum_map_;
+          common::SqlValueDatumMapType map_type = e->obj_datum_map_;
           if (num_.map_type_ == map_type) {
             item_idx = num_.end_++;
           } else if (str_.map_type_ == map_type) {
@@ -114,7 +114,7 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
   return ret;
 };
 
-template <common::ObObjDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
+template <common::SqlValueDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
 OB_INLINE void ObRow2ExprsProjector::MapConvert<OBJ_DATUM_MAP_TYPE, NEED_RESET_PTR>::project(
     const ObRow2ExprsProjector::Item *items, const blocksstable::ObStorageDatum *datums,
     int16_t *nop_pos, int64_t &nop_cnt) const
@@ -138,7 +138,7 @@ OB_INLINE void ObRow2ExprsProjector::MapConvert<OBJ_DATUM_MAP_TYPE, NEED_RESET_P
   }
 }
 
-template <common::ObObjDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
+template <common::SqlValueDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
 OB_INLINE void ObRow2ExprsProjector::MapConvert<OBJ_DATUM_MAP_TYPE,
           NEED_RESET_PTR>::project_batch_datum(
               const ObRow2ExprsProjector::Item *items, const blocksstable::ObStorageDatum *datums,
@@ -280,6 +280,7 @@ DEF_TO_STRING(ObTableScanParam)
        N_COLUMN_IDS, column_ids_,
        N_INDEX_ID, index_id_,
        N_KEY_RANGES, key_ranges_,
+       KPC_(datum_lookup_keys),
        K_(range_array_pos),
        N_TIMEOUT, timeout_,
        N_SCAN_FLAG, scan_flag_,
@@ -311,12 +312,12 @@ DEF_TO_STRING(ObTableScanParam)
 int ScanResumePoint::add_range(const ObITableReadInfo& read_info, const blocksstable::ObDatumRange& datum_range)
 {  
   INIT_SUCC(ret);
-  ObObjMeta* obj_metas;
+  SqlTypeMeta* obj_metas;
   ObDatumRange tmp_range;
   ObNewRange new_range;
   int rowkey_cnt = read_info.get_schema_rowkey_count();
 
-  if (OB_ISNULL(obj_metas = (ObObjMeta*)allocator_.alloc(rowkey_cnt * sizeof(ObObjMeta)))) {
+  if (OB_ISNULL(obj_metas = (SqlTypeMeta*)allocator_.alloc(rowkey_cnt * sizeof(SqlTypeMeta)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory for obj_metas", K(rowkey_cnt));
   } else {

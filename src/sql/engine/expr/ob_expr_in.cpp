@@ -536,9 +536,8 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
   ObDatum *curr = nullptr;
   const ObExpr *list = nullptr;
 
-  ObObj lhs;
-  ObObj rhs;
-  ObObj result;
+  ObArenaAllocator alloc;
+  DatumParameter lhs, rhs, result;
 
   pl::ObPLComposite *left = nullptr;
   pl::ObPLComposite *right = nullptr;
@@ -551,25 +550,31 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
   CK (OB_NOT_NULL(expr.args_[0]));
   OZ (expr.args_[0]->eval(ctx, val));
   CK (OB_NOT_NULL(val));
-  OZ (val->to_obj(lhs, expr.args_[0]->obj_meta_));
+  OX (capture_datum_parameter(*expr.args_[0], ctx, lhs));
+  // Snapshot the pointer descriptor before evaluating other reusable frames.
+  OZ (clone_datum_parameter(lhs, lhs, alloc));
+  OZ (result.set_tinyint(0, alloc));
   CK (OB_NOT_NULL(left = reinterpret_cast<pl::ObPLComposite*>(lhs.get_ext())))
   OX (list = expr.args_[1]);
   CK (OB_NOT_NULL(list));
 
   if (OB_SUCC(ret)) {
-    ObArenaAllocator alloc;
     ParamStore params((ObWrapperAllocator(alloc)));
 
     ObBitSet<> out_args;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < list->arg_cnt_; ++i) {
-      result.set_bool(false);
+      result.datum_.set_int(0);
       params.reuse();
 
       if (OB_FAIL(list->args_[i]->eval(ctx, curr))) {
       } else if (OB_ISNULL(curr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(curr->to_obj(rhs, list->args_[i]->obj_meta_))) {
+      } else {
+        capture_datum_parameter(*list->args_[i], ctx, rhs);
+        ret = clone_datum_parameter(rhs, rhs, alloc);
+      }
+      if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(right = reinterpret_cast<pl::ObPLComposite*>(rhs.get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_UNLIKELY(left->get_id() != right->get_id())) {
@@ -675,9 +680,9 @@ int ObExprInOrNotIn::cg_expr_without_row(ObExprCGCtx &expr_cg_ctx,
     if (OB_ISNULL(func_buf = (void **)expr_cg_ctx.allocator_->alloc(func_buf_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      ObObjType left_type = rt_expr.args_[0]->datum_meta_.type_;
+      SqlValueType left_type = rt_expr.args_[0]->datum_meta_.type_;
       ObCollationType left_cs = rt_expr.args_[0]->datum_meta_.cs_type_;
-      ObObjType right_type = rt_expr.args_[1]->args_[0]->datum_meta_.type_;
+      SqlValueType right_type = rt_expr.args_[1]->args_[0]->datum_meta_.type_;
       const bool has_lob_header = rt_expr.args_[0]->obj_meta_.has_lob_header() ||
                                   rt_expr.args_[1]->args_[0]->obj_meta_.has_lob_header();
       ObScale scale1 = rt_expr.args_[0]->datum_meta_.scale_;
@@ -726,9 +731,9 @@ int ObExprInOrNotIn::cg_expr_with_row(ObExprCGCtx &expr_cg_ctx,
       OB_ISNULL(rt_expr.args_[1]->args_[0])) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObSEArray<ObObjType, 8> left_types;
+    ObSEArray<SqlValueType, 8> left_types;
     ObSEArray<ObCollationType, 8> left_cs_arr;
-    ObSEArray<ObObjType, 8> right_types;
+    ObSEArray<SqlValueType, 8> right_types;
     ObSEArray<bool, 8> has_lob_headers;
     ObSEArray<ObScale, 8> left_scales;
     ObSEArray<ObScale, 8> right_scales;
@@ -1678,7 +1683,7 @@ int ObExprInOrNotIn::build_hash_set(
 }
 
 void ObExprInOrNotIn::check_right_can_cmp_mem(const ObDatum &datum, 
-                                              const ObObjMeta &meta, 
+                                              const SqlTypeMeta &meta,
                                               bool &can_cmp_mem, 
                                               bool &cnt_null)
 {

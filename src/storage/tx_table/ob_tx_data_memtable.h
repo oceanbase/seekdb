@@ -74,43 +74,39 @@ private:
   struct TxDataFakeRowKey
   {
   public:
-    // default constructer for ObSEArray
-    TxDataFakeRowKey()
-    {
-      MEMSET(obj_array_, 0, sizeof(obj_array_));
-      rowkey_.reset();
-    }
+    // Default constructor for ObSEArray; assigned keys are bound after the
+    // containing array has reserved its final capacity.
+    TxDataFakeRowKey() : tx_id_(0) { rowkey_.reset(); }
 
-    TxDataFakeRowKey(const int64_t tx_id)
+    TxDataFakeRowKey(const int64_t tx_id) : tx_id_(tx_id)
     {
-      for (int64_t i = 0; i < OBJ_CNT; i++) {
-        obj_array_[i].set_int(tx_id);
-      }
-      rowkey_.assign(obj_array_, OBJ_CNT);
+      assign(tx_id);
       rowkey_.set_min();
     }
     ~TxDataFakeRowKey() {}
 
-    TO_STRING_KV(K_(rowkey), K_(obj_array));
+    TO_STRING_KV(K_(rowkey), K_(values));
 
     void assign(const int64_t tx_id)
     {
-      for (int64_t i = 0; i < OBJ_CNT; i++) {
-        obj_array_[i].set_int(tx_id);
+      tx_id_ = tx_id;
+      for (int64_t i = 0; i < VALUE_CNT; i++) {
+        values_[i].meta_.set_int();
+        values_[i].datum_.set_string(reinterpret_cast<const char *>(&tx_id_), sizeof(tx_id_));
       }
-      rowkey_.assign(obj_array_, OBJ_CNT);
+      rowkey_.assign(values_, VALUE_CNT);
     }
 
     const common::ObStoreRowkey &get_rowkey() const { return rowkey_; }
-
-    const transaction::ObTransID get_tx_id() { return transaction::ObTransID(obj_array_[0].get_int()); }
+    const transaction::ObTransID get_tx_id() { return transaction::ObTransID(tx_id_); }
 
   private:
-    static const int64_t OBJ_CNT = 1;
+    static const int64_t VALUE_CNT = 1;
 
   public:
     common::ObStoreRowkey rowkey_;
-    ObObj obj_array_[OBJ_CNT];
+    common::DatumValue values_[VALUE_CNT];
+    int64_t tx_id_;
   };
 
   struct TxId2Range {

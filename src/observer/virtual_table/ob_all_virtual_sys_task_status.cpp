@@ -73,13 +73,13 @@ int ObAllVirtualSysTaskStatus::inner_get_next_row(ObNewRow *&row)
       switch(col_id) {
         case OB_APP_MIN_COLUMN_ID: {
           // start_time
-          cur_row_.cells_[i].set_timestamp(status.start_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, status.start_time_) : ret);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 1: {
           // task_type
           const char *task_type = sys_task_type_to_str(status.task_type_);
-          cur_row_.cells_[i].set_varchar(task_type);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, task_type) : ret);
           cur_row_.cells_[i].set_collation_type(collcation_type);
           break;
         }
@@ -90,20 +90,20 @@ int ObAllVirtualSysTaskStatus::inner_get_next_row(ObNewRow *&row)
             ret = OB_BUF_NOT_ENOUGH;
             SERVER_LOG(WARN, "buffer not enough", K(ret));
           } else {
-            cur_row_.cells_[i].set_varchar(task_id_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, task_id_) : ret);
             cur_row_.cells_[i].set_collation_type(collcation_type);
           }
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 3: {
           // comment
-          cur_row_.cells_[i].set_varchar(status.comment_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, status.comment_) : ret);
           cur_row_.cells_[i].set_collation_type(collcation_type);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 4: {
           // is_cancel
-          cur_row_.cells_[i].set_int(status.is_cancel_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, status.is_cancel_) : ret);
           break;
         }
         default: {

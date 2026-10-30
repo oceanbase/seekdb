@@ -214,7 +214,7 @@ public:
       obj_size_(0),
       key_offset_start_(0),
       value_offset_start_(0),
-      field_type_(ObObjType::ObNullType),
+      field_type_(SqlValueType::ObNullType),
       str_data_offset_(0)
     {}
 
@@ -230,7 +230,7 @@ public:
     obj_size_ = 0;
     key_offset_start_ = 0;
     value_offset_start_ = 0;
-    field_type_ = ObObjType::ObNullType;
+    field_type_ = SqlValueType::ObNullType;
     str_data_offset_ = 0;
   }
 
@@ -376,7 +376,7 @@ public:
   uint64_t obj_size_;
   uint64_t key_offset_start_;
   uint64_t value_offset_start_;
-  ObObjType field_type_; // field type for opaque
+  SqlValueType field_type_; // field type for opaque
 
   uint64_t str_data_offset_;
 };
@@ -584,7 +584,7 @@ public:
   {
     return static_cast<ObJsonNodeType>(ObJsonVerType::get_json_type(get_vertype()));
   }
-  OB_INLINE ObObjType field_type() const override
+  OB_INLINE SqlValueType field_type() const override
   {
     return meta_.field_type_;
   }

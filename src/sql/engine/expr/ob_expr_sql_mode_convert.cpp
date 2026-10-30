@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_sql_mode_convert.h"
+#include "common/datum/datum_value.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
 
 using namespace oceanbase::common;
@@ -60,12 +61,12 @@ int ObExprSqlModeConvert::sql_mode_convert(const ObExpr &expr,
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else {
-    ObObj int_value;
-    ObObj str_value;
-    int_value.set_uint64(arg->get_uint64());
-    if (OB_FAIL(common::ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
+    DatumValue int_value;
+    DatumValue str_value;
+    if (OB_FAIL(int_value.set_uint(ObUInt64Type, arg->get_uint64(), ctx.get_expr_res_alloc()))) {
+    } else if (OB_FAIL(common::ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
     } else {
-      expr_datum.set_string(str_value.get_string());
+      expr_datum.set_string(str_value.datum_.get_string());
     }
   }
   return ret;

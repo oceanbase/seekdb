@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_substr.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -53,14 +54,14 @@ int ObExprSubstr::calc_result_length(ObExprResType *types_array,
   if (OB_UNLIKELY(2 != param_num && 3 != param_num)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObObj &start_obj = types_array[1].get_param();
+    const DatumValue &start_obj = types_array[1].get_param();
     if (!start_obj.is_null()) {
       if (start_obj.is_int()) {
         start_pos = start_obj.get_int();
       }
     }
     if (OB_SUCC(ret) && 3 == param_num && !types_array[2].get_param().is_null()) {
-      const ObObj &len_obj = types_array[2].get_param();
+      const DatumValue &len_obj = types_array[2].get_param();
       if (len_obj.is_int()) {
         substr_len = len_obj.get_int();
       }
@@ -71,7 +72,7 @@ int ObExprSubstr::calc_result_length(ObExprResType *types_array,
     if (0 >= result_len || 0 >= substr_len || start_pos > result_len) {
       res_len = 0;
     } else {
-      const ObObj &text_obj = types_array[0].get_param();
+      const DatumValue &text_obj = types_array[0].get_param();
       // According to whether parameter 0 is a constant to distinguish the calculation
       if (ob_is_string_type(text_obj.get_type()) && OB_SUCC(text_obj.get_string(str_text))) {
         int64_t mb_len = ObCharset::strlen_char(cs_type, str_text.ptr(), str_text.length());
@@ -138,7 +139,7 @@ int ObExprSubstr::calc_result_typeN(ObExprResType &type,
       && ob_is_text_tc(type.get_type())
       && 3 == param_num
       && !types_array[2].get_param().is_null()) {
-    const ObObj &len_obj = types_array[2].get_param();
+    const DatumValue &len_obj = types_array[2].get_param();
     int64_t substr_len = len_obj.is_int() ? len_obj.get_int() : 0;
     if (substr_len > 0 && substr_len <= OB_MAX_CAST_CHAR_VARCHAR_LENGTH) {
       type.set_varchar();
@@ -162,7 +163,7 @@ int ObExprSubstr::calc_result_typeN(ObExprResType &type,
   }
   if (OB_SUCC(ret) && !ob_is_text_tc(type.get_type())) {
     // Set cast mode for integer parameters, truncate string to integer.
-    // see: ObExprSubstr::cast_param_type_for_mysql
+    // Truncate string arguments to integers for MySQL-compatible semantics.
     OX(type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC));
     OX(len = types_array[0].get_length());
     // deduce max length.
@@ -172,70 +173,6 @@ int ObExprSubstr::calc_result_typeN(ObExprResType &type,
   }
   return ret;
 }
-
-// to make "select substr('abcd', '1.9')" compatible with mysql
-int ObExprSubstr::cast_param_type_for_mysql(const ObObj& in,
-                                         ObExprCtx& expr_ctx,
-                                         ObObj& out) const
-{
-  int ret = OB_SUCCESS;
-  ObCastMode cast_mode = CM_NONE;
-  EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
-  LOG_DEBUG("ObExprSubstr cast_param_type_for_mysql in.get_type(): ", K(in.get_type()));
-  // select substr('abcd', '1.9') where MySQL performs trunc operation on '1.9'
-  // select substr('abcd', 1.9) where MySQL rounds 1.9
-  if (ObVarcharType == in.get_type()) {
-    int64_t tmp = 0;
-    if (OB_FAIL(ObExprUtil::get_trunc_int64(in, expr_ctx, tmp))) {
-    } else if (INT_MAX < tmp) {
-      out.set_int(INT_MAX);
-    } else if (INT_MIN > tmp) {
-      out.set_int(INT_MIN);
-    } else {
-      out.set_int(static_cast<int>(tmp));
-    }
-  } else if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, in, out))) {
-  }
-  return ret;
-}
-
-
-
-int ObExprSubstr::calc_result3_for_mysql(ObObj &result,
-                                          const ObObj &text,
-                                          const ObObj &start_pos,
-                                          const ObObj &length,
-                                          ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  ObObj trunced_start_pos;
-  ObObj trunced_length;
-  ObCollationType cs_type = result_type_.get_collation_type();
-  if (OB_ISNULL(expr_ctx.calc_buf_)) {
-    ret = OB_NOT_INIT;
-  } else if (text.is_null() || start_pos.is_null() || length.is_null()) {
-    result.set_null();
-  } else {
-    if (OB_FAIL(cast_param_type_for_mysql(start_pos, expr_ctx, trunced_start_pos))) {
-    } else if (OB_FAIL(cast_param_type_for_mysql(length, expr_ctx, trunced_length))){
-    } else {
-      // text param can be varchar or any type in text tc
-      TYPE_CHECK(trunced_start_pos, ObIntType);
-      TYPE_CHECK(trunced_length, ObIntType);
-      const ObString &str_val = text.get_varchar();
-      int64_t start_pos_val = trunced_start_pos.get_int();
-      int64_t length_val = trunced_length.get_int();
-      if (OB_FAIL(calc(result, str_val, start_pos_val, length_val, cs_type, false))) {
-      } else {
-        if (!result.is_null()) {
-          result.set_collation(result_type_);
-        }
-      }
-    }
-  }
-  return ret;
-}
-
 
 int ObExprSubstr::substr(common::ObString &varchar,
                          const common::ObString &text,
@@ -289,28 +226,6 @@ int ObExprSubstr::substr(common::ObString &varchar,
     }
   }
 
-  return ret;
-}
-
-int ObExprSubstr::calc(ObObj &result,
-                       const ObString &text,
-                       const int64_t start_pos,
-                       const int64_t length,
-                       ObCollationType cs_type,
-                       const bool is_clob)
-{
-  int ret = OB_SUCCESS;
-  ObString varchar;
-  bool is_result_batch_ascii = false;
-  if (OB_FAIL(substr(varchar, text, start_pos, length, cs_type,
-                     storage::can_do_ascii_optimize(cs_type), false, is_result_batch_ascii))) {
-  } else {
-    if (is_clob) {
-      result.set_lob_value(ObLongTextType, varchar.ptr(), varchar.length());
-    } else {
-      result.set_varchar(varchar);
-    }
-  }
   return ret;
 }
 

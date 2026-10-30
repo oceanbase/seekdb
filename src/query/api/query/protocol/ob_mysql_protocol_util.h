@@ -19,7 +19,8 @@
 
 #include "common/mysqlclient/ob_mysql_global.h"
 #include "common/ob_accuracy.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_param_store.h"
+#include "common/object/ob_type_metadata.h"
 #include "common/timezone/ob_timezone_info.h"
 #include "lib/string/ob_string.h"
 #include "rpc/obmysql/ob_mysql_row.h"
@@ -51,26 +52,34 @@ namespace common
 class ObDataTypeCastParams;
 class ObField;
 class ObIAllocator;
+struct ObDatum;
+struct DatumValue;
 class ObSMUtils {
 public:
-  static int
-  build_cell_value(const ObObj &obj, obmysql::MYSQL_PROTOCOL_TYPE type,
-                   ObIAllocator &scratch_allocator,
-                   obmysql::ObMySQLCellValue &out,
+  // Scalar numeric, temporal, BIT, NULL and CHAR/VARCHAR/hex values.
+  // The caller retains the Datum payload through synchronous encoding and
+  // handles casts; string conversion uses the packet scratch allocator.
+  static int build_datum_cell_value(const ObDatum &datum, const SqlTypeMeta &meta,
+                   obmysql::MYSQL_PROTOCOL_TYPE type, ObIAllocator &scratch_allocator,
+                   obmysql::ObMySQLCellValue &out, const ObField *field,
+                   const ObDataTypeCastParams &dtc_params);
+  static int build_converted_string_cell_value(const ObDatum &datum, const SqlTypeMeta &meta,
+                   ObCharsetType result_charset, ObIAllocator &scratch_allocator,
+                   obmysql::ObMySQLCellValue &out);
+  static int build_cell_value(const DatumValue &value, obmysql::MYSQL_PROTOCOL_TYPE type,
+                   ObIAllocator &scratch_allocator, obmysql::ObMySQLCellValue &out,
                    const ObDataTypeCastParams &dtc_params, const ObField *field,
                    const sql::ObSQLSessionInfo &session,
-                   share::schema::ObSchemaGetterGuard *schema_guard = NULL);
-
-  static bool update_from_bitmap(ObObj &param, const char *bitmap, int64_t field_index);
+                   share::schema::ObSchemaGetterGuard *schema_guard = nullptr);
 
   static bool update_from_bitmap(const char *bitmap, int64_t field_index);
 
-  static int get_type_length(ObObjType ob_type, int64_t &length);
+  static int get_type_length(SqlValueType ob_type, int64_t &length);
 
-  static int get_mysql_type(ObObjType ob_type, obmysql::EMySQLFieldType &mysql_type,
+  static int get_mysql_type(SqlValueType ob_type, obmysql::EMySQLFieldType &mysql_type,
                             uint16_t &flags, ObScale &num_decimals);
 
-  static int get_ob_type(ObObjType &ob_type, obmysql::EMySQLFieldType mysql_type,
+  static int get_ob_type(SqlValueType &ob_type, obmysql::EMySQLFieldType mysql_type,
                          const bool is_unsigned = false);
 };
 
@@ -78,21 +87,6 @@ public:
 
 namespace query
 {
-
-// Decode the scalar subset of a COM_STMT_EXECUTE value. The server protocol
-// adapter supplies the implementation; PL consumes this lower-layer seam
-// without including Observer's request-handler class.
-int decode_mysql_basic_param_value(
-    common::ObIAllocator &allocator,
-    uint32_t type,
-    common::ObCharsetType charset,
-    common::ObCharsetType ncharset,
-    common::ObCollationType collation,
-    const char *&data,
-    const common::ObTimeZoneInfo *time_zone,
-    common::ObObj &value,
-    bool is_complex_element = false,
-    bool is_unsigned = false);
 
 } // end of namespace query
 } // end of namespace oceanbase

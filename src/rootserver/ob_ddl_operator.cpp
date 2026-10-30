@@ -53,9 +53,11 @@ namespace rootserver
 
 
 ObSysStat::Item::Item(ObSysStat::ItemList &list, const char *name, const char *info)
-  : name_(name), info_(info)
+  : name_(name), datum_payload_(0), info_(info)
 {
-  value_.set_int(0);
+  value_.datum_.ptr_ = reinterpret_cast<char *>(&datum_payload_);
+  value_.datum_.set_int(0);
+  value_.meta_.set_int();
   const bool add_success = list.add_last(this);
   if (!add_success) {
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "add last failed");
@@ -77,14 +79,14 @@ int ObSysStat::set_initial_values()
 {
   int ret = OB_SUCCESS;
   {
-    ob_max_used_server_id_.value_.set_int(OB_INIT_SERVER_ID - 1);
-    ob_max_used_ddl_task_id_.value_.set_int(OB_INIT_DDL_TASK_ID);
+    ob_max_used_server_id_.value_.datum_.set_int(OB_INIT_SERVER_ID - 1);
+    ob_max_used_ddl_task_id_.value_.datum_.set_int(OB_INIT_DDL_TASK_ID);
   }
   if (OB_SUCC(ret)) {
-    ob_max_used_normal_rowid_table_tablet_id_.value_.set_int(ObTabletID::MIN_USER_NORMAL_ROWID_TABLE_TABLET_ID);
-    ob_max_used_sys_pl_object_id_.value_.set_int(OB_MIN_SYS_PL_OBJECT_ID);
+    ob_max_used_normal_rowid_table_tablet_id_.value_.datum_.set_int(ObTabletID::MIN_USER_NORMAL_ROWID_TABLE_TABLET_ID);
+    ob_max_used_sys_pl_object_id_.value_.datum_.set_int(OB_MIN_SYS_PL_OBJECT_ID);
     // Reserve identifiers used by the bootstrap database objects.
-    ob_max_used_object_id_.value_.set_int(OB_INITIAL_TEST_DATABASE_ID);
+    ob_max_used_object_id_.value_.datum_.set_int(OB_INITIAL_TEST_DATABASE_ID);
   }
   return ret;
 }
@@ -1082,24 +1084,6 @@ int ObDDLOperator::get_part_array_from_table(const ObTableSchema &new_table_sche
   }
   return ret;
 }
-
-bool ObDDLOperator::is_list_values_equal(const common::ObRowkey &fir_values,
-                                         const common::ObIArray<common::ObNewRow> &sed_values)
-{
-  bool equal = false;
-  int64_t s_count = sed_values.count();
-  common::ObRowkey rowkey;
-  for (int64_t j = 0; j < s_count; ++j) {
-    rowkey.reset();
-    rowkey.assign(sed_values.at(j).cells_, sed_values.at(j).count_);
-    if (fir_values == rowkey) {
-      equal = true;
-      break;
-    }
-  }
-  return equal;
-}
-
 
 int ObDDLOperator::rename_table_partitions(const ObTableSchema &orig_table_schema,
                                          ObTableSchema &inc_table_schema,

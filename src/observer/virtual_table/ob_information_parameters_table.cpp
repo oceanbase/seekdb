@@ -39,7 +39,7 @@ void ObInformationParametersTable::reset()
   ObVirtualTableScannerIterator::reset();
 }
 
-int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_info, const ObRoutineParam* param_info, ObObj*& cells)
+int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_info, const ObRoutineParam* param_info, DatumValue*& cells)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(routine_info) || OB_ISNULL(param_info) || OB_ISNULL(cells) || OB_ISNULL(session_)) {
@@ -59,30 +59,30 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
           } else {
-            cells[col_idx].set_varchar(db_schema->get_database_name());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, db_schema->get_database_name()) : ret);
             cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
         case (PARAMETER_MODE): {
           if (param_info->is_ret_param()) {
-            cells[col_idx].set_varchar("NULL");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "NULL") : ret);
             cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else {
             int64_t flags = param_info->get_mode();
             switch (flags) {
               case ObRoutineParamInOut::SP_PARAM_IN: {
-                cells[col_idx].set_varchar("IN");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "IN") : ret);
                 cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               case ObRoutineParamInOut::SP_PARAM_OUT: {
-                cells[col_idx].set_varchar("OUT");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "OUT") : ret);
                 cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               case ObRoutineParamInOut::SP_PARAM_INOUT: {
-                cells[col_idx].set_varchar("INOUT");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "INOUT") : ret);
                 cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
@@ -106,7 +106,7 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
                                            param_info->get_extended_type_info()))) {
           } else {
             ObString type_val(OB_MAX_SYS_PARAM_NAME_LENGTH, static_cast<int32_t>(strlen(data_type_str)), data_type_str);
-            cells[col_idx].set_varchar(type_val);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, type_val) : ret);
             cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -114,7 +114,7 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
         case (CHARACTER_MAXIMUM_LENGTH): {
           if(common::ObStringTC == param_type.get_type_class()
              || common::ObTextTC == param_type.get_type_class()) {
-            cells[col_idx].set_uint64(static_cast<uint64_t>(param_type.get_length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, col_idx, static_cast<uint64_t>(param_type.get_length())) : ret);
           } else {
             cells[col_idx].set_null();
           }
@@ -127,8 +127,8 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
             int64_t mbmaxlen = 0;
             if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
             } else {
-              cells[col_idx].set_uint64(static_cast<uint64_t>(
-                        mbmaxlen * param_type.get_length()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, col_idx, static_cast<uint64_t>(
+                        mbmaxlen * param_type.get_length())) : ret);
             }
           } else {
             cells[col_idx].set_null();
@@ -138,7 +138,7 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
         case (NUMERIC_PRECISION): {
           if(common::ObNumberTC == param_type.get_type_class()
              || common::ObIntTC == param_type.get_type_class()) {
-            cells[col_idx].set_uint64(static_cast<uint64_t>(param_type.get_precision()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, col_idx, static_cast<uint64_t>(param_type.get_precision())) : ret);
           } else {
             cells[col_idx].set_null();
           }
@@ -146,10 +146,10 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
         }
         case (NUMERIC_SCALE): {
           if(common::ObNumberTC == param_type.get_type_class()) {
-            cells[col_idx].set_uint64(static_cast<uint64_t>(param_type.get_scale()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, col_idx, static_cast<uint64_t>(param_type.get_scale())) : ret);
           } else if(common::ObIntTC == param_type.get_type_class()
                     || common::ObFloatTC == param_type.get_type_class()) {
-            cells[col_idx].set_uint64(0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, col_idx, 0) : ret);
           } else {
             cells[col_idx].set_null();
           }
@@ -159,7 +159,7 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
           if(common::ObDateTimeTC == param_type.get_type_class()
              || ObTimeTC == param_type.get_type_class()
              || common::ObMySQLDateTimeTC == param_type.get_type_class()) {
-            cells[col_idx].set_uint64(static_cast<uint64_t>(param_type.get_scale()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, col_idx, static_cast<uint64_t>(param_type.get_scale())) : ret);
           } else {
             cells[col_idx].set_null();
           }
@@ -182,7 +182,7 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
                                            param_info->get_extended_type_info()))) {
           } else {
             ObString type_val(OB_MAX_SYS_PARAM_NAME_LENGTH, static_cast<int32_t>(strlen(column_type_str)),column_type_str);
-            cells[col_idx].set_varchar(type_val);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, type_val) : ret);
             cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -190,17 +190,17 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
 
 #define COLUMN_SET_WITH_TYPE(COL_NAME, TYPE, VALUE) \
   case (COL_NAME): {    \
-    cells[col_idx].set_##TYPE(VALUE); \
+    if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_##TYPE(cells, cur_row_.count_, col_idx, VALUE); } \
     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset())); \
     break;\
   }
-        COLUMN_SET_WITH_TYPE(SPECIFIC_CATALOG, varchar, "def");
-        COLUMN_SET_WITH_TYPE(SPECIFIC_NAME, varchar, routine_info->get_routine_name());
+        COLUMN_SET_WITH_TYPE(SPECIFIC_CATALOG, varchar_view, "def");
+        COLUMN_SET_WITH_TYPE(SPECIFIC_NAME, varchar_view, routine_info->get_routine_name());
         COLUMN_SET_WITH_TYPE(ORDINAL_POSITION, int, param_info->get_param_position());
-        COLUMN_SET_WITH_TYPE(PARAMETER_NAME, varchar, param_info->get_param_name());
-        COLUMN_SET_WITH_TYPE(CHARACTER_SET_NAME, varchar, common::ObCharset::charset_name(param_type.get_charset_type()));
-        COLUMN_SET_WITH_TYPE(COLLATION_NAME, varchar, common::ObCharset::collation_name(param_type.get_collation_type()));
-        COLUMN_SET_WITH_TYPE(ROUTINE_TYPE, varchar, (ROUTINE_PROCEDURE_TYPE == routine_info->get_routine_type()) ? "PROCEDURE" : "FUNCTION");
+        COLUMN_SET_WITH_TYPE(PARAMETER_NAME, varchar_view, param_info->get_param_name());
+        COLUMN_SET_WITH_TYPE(CHARACTER_SET_NAME, varchar_view, common::ObCharset::charset_name(param_type.get_charset_type()));
+        COLUMN_SET_WITH_TYPE(COLLATION_NAME, varchar_view, common::ObCharset::collation_name(param_type.get_collation_type()));
+        COLUMN_SET_WITH_TYPE(ROUTINE_TYPE, varchar_view, (ROUTINE_PROCEDURE_TYPE == routine_info->get_routine_type()) ? "PROCEDURE" : "FUNCTION");
 
 #undef COLUMN_SET_WITH_TYPE
 
@@ -222,7 +222,7 @@ int ObInformationParametersTable::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "argument is NULL", K(allocator_), K(schema_guard_), K(session_), K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));

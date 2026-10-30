@@ -46,7 +46,7 @@ int ObExprJsonExtract::calc_result_typeN(ObExprResType& type,
     ret = OB_ERR_PARAM_SIZE;
   } else {
     // 1st param is json doc
-    ObObjType in_type = types_stack[0].get_type();
+    SqlValueType in_type = types_stack[0].get_type();
     bool is_null_result = false;
 
     if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, 0, N_JSON_EXTRACT))) {
@@ -99,7 +99,7 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
   int ret = OB_SUCCESS;
   ObDatum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[0];
-  ObObjType val_type = json_arg->datum_meta_.type_;
+  SqlValueType val_type = json_arg->datum_meta_.type_;
   ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
   ObIJsonBase *j_base = NULL;
   bool is_null_result = false;

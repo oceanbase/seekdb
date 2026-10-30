@@ -53,15 +53,6 @@ int ObExprSpatialCellid::calc_result_type1(ObExprResType &type,
 }
 
 // for old sql engine
-int ObExprSpatialCellid::calc_result1(common::ObObj &result,
-                                      const common::ObObj &obj,
-                                      common::ObExprCtx &expr_ctx) const
-{
-  UNUSED(obj);
-  UNUSED(expr_ctx);
-  result.set_null();
-  return OB_SUCCESS;
-}
 
 int ObExprSpatialCellid::eval_spatial_cellid(const ObExpr &expr,
                                              ObEvalCtx &ctx,

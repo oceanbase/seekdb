@@ -1095,13 +1095,11 @@ int ObTransformAggrSubquery::add_constraints_for_limit(TransformParam &param)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(true_expr->set_param_exprs(value_expr, zero_expr))) {
   } else {
-    ObObj obj_zero;
-    obj_zero.set_int(ObIntType, 0);
-    zero_expr->set_value(obj_zero);
-
-    ObObj obj_value;
-    obj_value.set_int(ObIntType, param.limit_value_);
-    value_expr->set_value(obj_value);
+    DatumValue obj_zero, obj_value;
+    OZ (obj_zero.set_int(ObIntType, 0, ctx_->expr_factory_->get_allocator()));
+    OZ (obj_value.set_int(ObIntType, param.limit_value_, ctx_->expr_factory_->get_allocator()));
+    OX (zero_expr->set_value(obj_zero));
+    OX (value_expr->set_value(obj_value));
   }
   if (OB_SUCC(ret) && param.limit_for_exists_) {
     if (OB_FAIL(true_expr->formalize(ctx_->exec_ctx_->get_my_session()))) {
@@ -1407,7 +1405,7 @@ int ObTransformAggrSubquery::check_limit_validity(ObSelectStmt &subquery,
     is_valid = false;
   } else if (T_QUESTIONMARK == limit_expr->get_expr_type()) {
     int64_t const_value = 0;
-    ObObj value;
+    DatumParameter value;
     int64_t idx = static_cast<ObConstRawExpr *>(limit_expr)->get_value().get_unknown();
     const ParamStore &param_store = plan_ctx->get_param_store();
       

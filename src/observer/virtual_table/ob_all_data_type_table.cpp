@@ -41,7 +41,7 @@ int ObAllDataTypeTable::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "allocator is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -54,24 +54,24 @@ int ObAllDataTypeTable::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(WARN, "cells count error", K(ret), K(col_count),
                    K(reserved_column_cnt_));
       } else {
-        for (ObObjType type = ObNullType; OB_SUCC(ret) && type < ObMaxType;
-             type = static_cast<ObObjType>(type + 1)) {
+        for (SqlValueType type = ObNullType; OB_SUCC(ret) && type < ObMaxType;
+             type = static_cast<SqlValueType>(type + 1)) {
           uint64_t cell_idx = 0;
           for (int64_t k = 0; OB_SUCC(ret) && k < col_count; ++k) {
             uint64_t col_id = output_column_ids_.at(k);
             switch (col_id) {
             case DATA_TYPE: {
-                cells[cell_idx].set_int(type);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, type) : ret);
                 break;
               }
             case DATA_TYPE_STR: {
-                  cells[cell_idx].set_varchar(inner_obj_type_str(type));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, inner_sql_value_type_to_string(type)) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                          ObCharset::get_default_charset()));
                 break;
               }
             case DATA_TYPE_CLASS: {
-                  cells[cell_idx].set_int(ob_obj_type_class(type));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_type_class(type)) : ret);
                 break;
               }
             default: {

@@ -70,11 +70,6 @@ private:
                              share::AutoincParam &autoinc_param,
                              bool &is_to_generate,
                              uint64_t &casted_value);
-  static int get_casted_value_by_result_type(common::ObCastCtx &cast_ctx,
-                                             common::ObObjType result_type,
-                                             const common::ObObj &param,
-                                             uint64_t &casted_value,
-                                             bool &try_sync);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprAutoincNextval);
 

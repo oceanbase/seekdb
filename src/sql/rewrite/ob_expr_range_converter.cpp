@@ -366,7 +366,7 @@ int ObExprRangeConverter::gen_column_cmp_node(const ObRawExpr &l_expr,
 int ObExprRangeConverter::gen_row_column_cmp_node(const ObIArray<const ObColumnRefRawExpr*> &l_column_exprs,
                                                   const ObIArray<const ObRawExpr*> &r_const_exprs,
                                                   ObItemType cmp_type,
-                                                  const ObIArray<const ObObjMeta*> &calc_types,
+                                                  const ObIArray<const SqlTypeMeta*> &calc_types,
                                                   int64_t expr_depth,
                                                   int64_t row_dim,
                                                   bool null_safe,
@@ -386,7 +386,7 @@ int ObExprRangeConverter::gen_row_column_cmp_node(const ObIArray<const ObColumnR
     ObSEArray<const ObRangeColumnMeta *, 4> column_metas;
     int64_t min_offset = ctx_.column_cnt_;
     for (int64_t i = 0; OB_SUCC(ret) && i < l_column_exprs.count(); ++i) {
-      const ObObjMeta *calc_type = calc_types.at(i);
+      const SqlTypeMeta *calc_type = calc_types.at(i);
       const ObColumnRefRawExpr* column_expr = l_column_exprs.at(i);
       const ObRawExpr* const_expr = r_const_exprs.at(i);
       bool cur_always_true = true;
@@ -451,7 +451,7 @@ int ObExprRangeConverter::gen_row_column_cmp_node(const ObIArray<const ObColumnR
     bool check_next = true;
     bool is_valid_decimal_int_range_cmp = true;
     for (int64_t i = 0; OB_SUCC(ret) && check_next && i < l_column_exprs.count(); ++i) {
-      const ObObjMeta *calc_type = calc_types.at(i);
+      const SqlTypeMeta *calc_type = calc_types.at(i);
       const ObColumnRefRawExpr* column_expr = l_column_exprs.at(i);
       const ObRawExpr* const_expr = r_const_exprs.at(i);
       bool cur_always_true = true;
@@ -745,7 +745,7 @@ int ObExprRangeConverter::convert_like_expr(const ObRawExpr *expr, int64_t expr_
 int ObExprRangeConverter::check_escape_valid(const ObRawExpr *escape, char &escape_ch, bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  ObObj escape_val;
+  DatumValue escape_val;
   is_valid = false;
   escape_ch = 0x00;
   if (OB_FAIL(get_calculable_expr_val(escape, escape_val, is_valid))) {
@@ -839,14 +839,16 @@ int ObExprRangeConverter::build_decode_like_expr(ObRawExpr *pattern,
   //generate constraint if like range is precise
   if (OB_SUCC(ret) && ctx_.params_ != nullptr &&
       !pattern->has_flag(CNT_DYNAMIC_PARAM)) {
-    ObObj pattern_val;
+    DatumValue pattern_val;
     bool is_valid = false;
     if (OB_FAIL(get_calculable_expr_val(pattern, pattern_val, is_valid))) {
     } else if (!is_valid) {
       ctx_.cur_is_precise_ = false;
     } else if(pattern_val.is_null()) {
       ctx_.cur_is_precise_ = false;
-    } else if(OB_FAIL(ObPreRangeGraph::is_precise_like_range(pattern_val,
+    } else if(OB_FAIL(ObPreRangeGraph::is_precise_like_range(pattern_val.get_type(),
+                                                          pattern_val.get_string(),
+                                                          pattern_val.get_collation_type(),
                                                           escape_ch,
                                                           ctx_.cur_is_precise_))) {
     } else if (OB_FAIL(add_precise_constraint(pattern, ctx_.cur_is_precise_))) {
@@ -1301,7 +1303,7 @@ int ObExprRangeConverter::get_single_not_in_range_node(const ObColumnRefRawExpr 
 }
 
 int ObExprRangeConverter::get_calculable_expr_val(const ObRawExpr *expr,
-                                          ObObj &val,
+                                          DatumValue &val,
                                           bool &is_valid,
                                           const bool ignore_error/*default true*/)
 {
@@ -1324,7 +1326,7 @@ int ObExprRangeConverter::check_calculable_expr_valid(const ObRawExpr *expr,
                                                       const bool ignore_error/*default true*/)
 {
   int ret = OB_SUCCESS;
-  ObObj val;
+  DatumValue val;
   bool can_ignore_check = false;
   if (expr->has_flag(CNT_DYNAMIC_PARAM)) {
     is_valid = true;
@@ -1601,7 +1603,7 @@ int ObExprRangeConverter::fill_range_node_for_like(const int64_t key_idx,
 }
 
 int ObExprRangeConverter::check_expr_precise(const ObRawExpr &const_expr,
-                                             const ObObjMeta &calc_type,
+                                             const SqlTypeMeta &calc_type,
                                              const ObRawExprResType &column_res_type)
 {
   int ret = OB_SUCCESS;
@@ -1989,7 +1991,7 @@ int ObExprRangeConverter::convert_geo_expr(const ObRawExpr *geo_expr,
       
       if (OB_ISNULL(column_item)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (column_item->get_data_type() != ObObjType::ObGeometryType) {
+      } else if (column_item->get_data_type() != SqlValueType::ObGeometryType) {
         // do nothing
       } else if (OB_FAIL(get_domain_extra_item(op_type, expr, extra_item))) {
       } else if (OB_FAIL(get_geo_range_node(column_item,
@@ -2273,7 +2275,7 @@ int ObExprRangeConverter::get_row_cmp_node(const ObRawExpr &l_expr,
   } else {
     ObSEArray<const ObColumnRefRawExpr*, 4> column_exprs;
     ObSEArray<const ObRawExpr*, 4> const_exprs;
-    ObSEArray<const ObObjMeta*, 4> calc_types;
+    ObSEArray<const SqlTypeMeta*, 4> calc_types;
     ObSEArray<int64_t, 4> implicit_cast_idxs;
     bool can_reverse = true;
     bool is_reverse = false;
@@ -2423,7 +2425,7 @@ int ObExprRangeConverter::get_row_cmp_node(const ObRawExpr &l_expr,
 int ObExprRangeConverter::gen_row_implicit_cast_range(const ObIArray<const ObColumnRefRawExpr*> &column_exprs,
                                                       const ObIArray<const ObRawExpr*> &const_exprs,
                                                       ObItemType cmp_type,
-                                                      const ObIArray<const ObObjMeta*> &calc_types,
+                                                      const ObIArray<const SqlTypeMeta*> &calc_types,
                                                       ObIArray<int64_t> &implicit_cast_idxs,
                                                       int64_t expr_depth,
                                                       int64_t row_dim,
@@ -2432,7 +2434,7 @@ int ObExprRangeConverter::gen_row_implicit_cast_range(const ObIArray<const ObCol
   int ret = OB_SUCCESS;
   ObSEArray<const ObColumnRefRawExpr*, 4> ordered_column_exprs;
   ObSEArray<const ObRawExpr*, 4> ordered_const_exprs;
-  ObSEArray<const ObObjMeta*, 4> ordered_calc_types;
+  ObSEArray<const SqlTypeMeta*, 4> ordered_calc_types;
   ObSEArray<ObRangeNode*, 2> range_nodes;
   if (OB_UNLIKELY(column_exprs.count() != const_exprs.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -2650,8 +2652,8 @@ int ObExprRangeConverter::build_implicit_cast_range_expr(const ObColumnRefRawExp
                                                          const ObRawExpr *&out_expr)
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass column_tc = ObNullTC;
-  ObObjTypeClass const_tc = ObNullTC;
+  SqlTypeClass column_tc = ObNullTC;
+  SqlTypeClass const_tc = ObNullTC;
   if (OB_ISNULL(column_expr) ||
       OB_ISNULL(const_expr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2705,8 +2707,8 @@ int ObExprRangeConverter::can_extract_implicit_cast_range(ObItemType cmp_type,
                                                           bool &can_extract)
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass column_tc = column_expr.get_result_type().get_type_class();
-  ObObjTypeClass const_tc = const_expr.get_result_type().get_type_class();
+  SqlTypeClass column_tc = column_expr.get_result_type().get_type_class();
+  SqlTypeClass const_tc = const_expr.get_result_type().get_type_class();
   can_extract = false;
   if (column_expr.get_result_type().get_type() ==
               const_expr.get_result_type().get_type() &&
@@ -2741,9 +2743,9 @@ int ObExprRangeConverter::check_can_use_range_get(const ObRawExpr &const_expr,
                                                   const ObRangeColumnMeta &column_meta)
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass child_tc = column_meta.column_type_.get_type_class();
+  SqlTypeClass child_tc = column_meta.column_type_.get_type_class();
   const ObRawExprResType &dst_type = const_expr.get_result_type();
-  ObObjTypeClass dst_tc = dst_type.get_type_class();
+  SqlTypeClass dst_tc = dst_type.get_type_class();
   ObAccuracy dst_acc = dst_type.get_accuracy();
   if ((ObFloatTC == child_tc || ObDoubleTC == child_tc) &&
       (ObFloatTC == dst_tc || ObDoubleTC == dst_tc)) {
@@ -2762,8 +2764,8 @@ int ObExprRangeConverter::set_extract_implicit_is_precise(const ObColumnRefRawEx
                                                           bool &is_precise)
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass column_tc = column_expr.get_result_type().get_type_class();
-  ObObjTypeClass const_tc = const_expr.get_result_type().get_type_class();
+  SqlTypeClass column_tc = column_expr.get_result_type().get_type_class();
+  SqlTypeClass const_tc = const_expr.get_result_type().get_type_class();
   is_precise = true;
   if (cmp_type == T_OP_EQ || cmp_type == T_OP_NSEQ) {
     if (ObNumberTC == column_tc &&
@@ -2820,7 +2822,7 @@ int ObExprRangeConverter::convert_domain_expr(const ObRawExpr *domain_expr,
       } else if (OB_ISNULL(column_meta = get_column_meta(key_idx))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (!ObPreRangeGraph::can_domain_be_extract_range(op_type, column_meta->column_type_, 
-                                                            column_param->get_result_type().get_obj_meta(),
+                                                            column_param->get_result_type().get_sql_type_meta(),
                                                             const_param->get_result_type().get_type(), 
                                                             always_true)) {
         // do nothing
@@ -2874,7 +2876,7 @@ int ObExprRangeConverter::check_decimal_int_range_cmp_valid(const ObRawExpr *con
   } else if (const_expr->has_flag(CNT_DYNAMIC_PARAM)) {
     // do nothing
   } else if (T_FUN_SYS_INNER_ROW_CMP_VALUE == const_expr->get_expr_type()) {
-    ObObj const_val;
+    DatumValue const_val;
     bool obj_valid = false;
     if (OB_FAIL(get_calculable_expr_val(const_expr, const_val, obj_valid))) {
     } else if (obj_valid && (const_val.is_min_value() || const_val.is_max_value())) {
@@ -2952,7 +2954,7 @@ int ObExprRangeConverter::check_can_extract_implicit_collation_range(
 {
   int ret = OB_SUCCESS;
   const ObRawExpr *collation_expr = nullptr;
-  ObObj collation_val;
+  DatumValue collation_val;
   bool is_valid = false;
   int64_t dest_collation = 0;
   real_expr = nullptr;
@@ -2974,7 +2976,7 @@ int ObExprRangeConverter::check_can_extract_implicit_collation_range(
     } else if (OB_FAIL(collation_val.get_int(dest_collation))) {
     } else if (OB_FAIL(ObOptimizerUtil::is_implicit_collation_range_valid(
                         cmp_type,
-                        real_expr->get_result_type().get_obj_meta().get_collation_type(),
+                        real_expr->get_result_type().get_sql_type_meta().get_collation_type(),
                         static_cast<ObCollationType>(dest_collation),
                         can_extract))) {
     }
@@ -2987,8 +2989,8 @@ int ObExprRangeConverter::check_can_extract_implicit_collation_range(
       // do nothing
     } else if (OB_FAIL(ObOptimizerUtil::is_implicit_collation_range_valid(
                         cmp_type,
-                        real_expr->get_result_type().get_obj_meta().get_collation_type(),
-                        l_expr->get_result_type().get_obj_meta().get_collation_type(),
+                        real_expr->get_result_type().get_sql_type_meta().get_collation_type(),
+                        l_expr->get_result_type().get_sql_type_meta().get_collation_type(),
                         can_extract))) {
     }
   }

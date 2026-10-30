@@ -1,4 +1,4 @@
-static constexpr ObObjType RELATIONAL_RESULT_TYPE[ObMaxType][ObMaxType] =
+static constexpr SqlValueType RELATIONAL_RESULT_TYPE[ObMaxType][ObMaxType] =
 {
   /*NullType*/
   {

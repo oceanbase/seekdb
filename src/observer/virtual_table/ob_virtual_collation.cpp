@@ -47,7 +47,7 @@ int ObVirtualCollation::inner_get_next_row(common::ObNewRow *&row)
 int ObVirtualCollation::fill_scanner()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const ObCollationWrapper *collation_wrap_arr = NULL;
   int64_t collation_wrap_arr_len = 0;
   ObCharset::get_collation_wrap_arr(collation_wrap_arr, collation_wrap_arr_len);
@@ -70,45 +70,41 @@ int ObVirtualCollation::fill_scanner()
         int64_t col_id = output_column_ids_.at(j);
         switch(col_id) {
           case COLLATION_TYPE: {
-            cells[cell_idx].set_int(collation_wrap.collation_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, collation_wrap.collation_) : ret);
             break;
           }
           case COLLATION: {
-            cells[cell_idx].set_varchar(
-                ObString::make_string(ObCharset::collation_name(collation_wrap.collation_)));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ObCharset::collation_name(collation_wrap.collation_))) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case CHARSET: {
-            cells[cell_idx].set_varchar(
-                ObString::make_string(ObCharset::charset_name(collation_wrap.charset_)));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ObCharset::charset_name(collation_wrap.charset_))) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case ID: {
-            cells[cell_idx].set_int(collation_wrap.id_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, collation_wrap.id_) : ret);
             break;
           }
           case IS_DEFAULT: {
             const char* is_default = (true == collation_wrap.default_) ? "Yes" : "";
-            cells[cell_idx].set_varchar(
-                ObString::make_string(is_default));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(is_default)) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case IS_COMPILED: {
             const char* is_compiled = (true == collation_wrap.compiled_) ? "Yes" : "";
-            cells[cell_idx].set_varchar(
-                ObString::make_string(is_compiled));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(is_compiled)) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case SORTLEN: {
-            cells[cell_idx].set_int(collation_wrap.sortlen_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, collation_wrap.sortlen_) : ret);
             break;
           }
           default: {

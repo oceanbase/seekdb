@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "ob_plan_cache_util.h"
+#include "sql/engine/expr/ob_expr.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
@@ -27,8 +28,14 @@ namespace oceanbase
 {
 namespace sql
 {
-
-
+int ObPCConstParamInfo::add_constant(const common::DatumValue &value, common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  common::DatumValue owned;
+  if (OB_FAIL(common::clone_typed_value(value, owned, allocator))) {
+  } else { ret = const_params_.push_back(owned); }
+  return ret;
+}
 
 int ObGetAllCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID, ObILibCacheObject *> &entry)
 {

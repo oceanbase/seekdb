@@ -43,8 +43,8 @@ int ObExprPrivSTPoint::calc_result_typeN(ObExprResType& type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  ObObjType type_x = types_stack[0].get_type();
-  ObObjType type_y = types_stack[1].get_type();
+  SqlValueType type_x = types_stack[0].get_type();
+  SqlValueType type_y = types_stack[1].get_type();
 
   if (!ob_is_numeric_type(type_x)
       && !ob_is_string_type(type_x)
@@ -66,7 +66,7 @@ int ObExprPrivSTPoint::calc_result_typeN(ObExprResType& type,
       types_stack[1].set_calc_type(ObDoubleType);
     }
     if (param_num > 2) {
-      ObObjType type_srid = types_stack[2].get_type();
+      SqlValueType type_srid = types_stack[2].get_type();
       const ObSQLSessionInfo *session =
       dynamic_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
       if (OB_ISNULL(session)) {
@@ -105,8 +105,8 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
   ObDatum *datum_srid = nullptr;
   ObExpr *arg_x = expr.args_[0];
   ObExpr *arg_y = expr.args_[1];
-  ObObjType type_x = arg_x->datum_meta_.type_;
-  ObObjType type_y = arg_y->datum_meta_.type_;
+  SqlValueType type_x = arg_x->datum_meta_.type_;
+  SqlValueType type_y = arg_y->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   ObWkbBuffer res_wkb_buf(tmp_allocator);

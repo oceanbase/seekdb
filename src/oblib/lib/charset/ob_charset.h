@@ -761,6 +761,12 @@ private:
 class ObCharsetUtils
 {
 public:
+  // Convert a borrowed value into allocator-owned bytes when necessary.
+  // Preserve binary, NULL result charset, and replacement-character behavior.
+  static int convert_string_value_charset(ObString &value,
+                                          ObCollationType &value_collation,
+                                          ObCharsetType result_charset,
+                                          ObIAllocator &allocator);
   static int init_const_str(ObCollationType coll_type, int ascii);
   static ObString get_const_str(ObCollationType coll_type, int ascii)
   {

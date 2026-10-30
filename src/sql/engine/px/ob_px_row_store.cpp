@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_px_row_store.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "sql/dtl/ob_dtl.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 
@@ -47,8 +48,8 @@ OB_DEF_SERIALIZE(ObPxNewRow)
   if (OB_FAIL(ret)) {
   } else if (OB_LIKELY(NULL != row_)) {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_->get_count(); ++idx) {
-      const ObObj &cell = row_->get_cell(idx);
-      if (OB_FAIL(serialization::encode(buf, buf_len, pos, cell))) {
+      const DatumValue &cell = row_->get_cell(idx);
+      if (OB_FAIL(DatumParameterCodec::encode_value(cell.datum_, cell.meta_, buf, buf_len, pos))) {
       }
     }
   }
@@ -61,8 +62,10 @@ OB_DEF_SERIALIZE_SIZE(ObPxNewRow)
   OB_UNIS_ADD_LEN(row_cell_count_);
   if (OB_LIKELY(NULL != row_ && row_cell_count_ > 0)) {
     for (int64_t idx = 0; idx < row_->get_count(); ++idx) {
-      const ObObj &cell = row_->get_cell(idx);
-      len += serialization::encoded_length(cell);
+      const DatumValue &cell = row_->get_cell(idx);
+      int64_t bytes = 0;
+      if (DatumParameterCodec::value_size(cell.datum_, cell.meta_, bytes) != OB_SUCCESS) { return 0; }
+      len += bytes;
     }
   }
   return len;

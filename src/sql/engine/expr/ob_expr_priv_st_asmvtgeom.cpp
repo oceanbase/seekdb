@@ -38,8 +38,8 @@ int ObExprPrivSTAsMVTGeom::calc_result_typeN(ObExprResType &type, ObExprResType 
     int64_t param_num, ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType obj_type1 = types_stack[0].get_type();  // geometry
-  ObObjType obj_type2 = types_stack[1].get_type();  // geometry
+  SqlValueType obj_type1 = types_stack[0].get_type();  // geometry
+  SqlValueType obj_type2 = types_stack[1].get_type();  // geometry
   if (ObHexStringType != obj_type1 && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_ASMVTGEOM);
@@ -52,7 +52,7 @@ int ObExprPrivSTAsMVTGeom::calc_result_typeN(ObExprResType &type, ObExprResType 
   }
   // integer extent
   if (OB_SUCC(ret) && param_num >= 3) {
-    ObObjType extent_type = types_stack[2].get_type();
+    SqlValueType extent_type = types_stack[2].get_type();
     if (extent_type == ObTinyIntType
         || (!ob_is_integer_type(extent_type) && extent_type != ObVarcharType && !ob_is_null(extent_type))) {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
@@ -62,7 +62,7 @@ int ObExprPrivSTAsMVTGeom::calc_result_typeN(ObExprResType &type, ObExprResType 
   }
   // integer buffer
   if (OB_SUCC(ret) && param_num >= 4) {
-    ObObjType extent_type = types_stack[3].get_type();
+    SqlValueType extent_type = types_stack[3].get_type();
     if (extent_type == ObTinyIntType
         || (!ob_is_integer_type(extent_type) && extent_type != ObVarcharType && !ob_is_null(extent_type))) {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
@@ -72,7 +72,7 @@ int ObExprPrivSTAsMVTGeom::calc_result_typeN(ObExprResType &type, ObExprResType 
   }
   // boolean clip_geom
   if (OB_SUCC(ret) && param_num >= 5) {
-    ObObjType extent_type = types_stack[4].get_type();
+    SqlValueType extent_type = types_stack[4].get_type();
     if (extent_type != ObTinyIntType && extent_type != ObVarcharType
         && !ob_is_null(extent_type)) {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
@@ -115,8 +115,8 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
   ObDatum *datum2 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   ObExpr *arg2 = expr.args_[1];
-  ObObjType type1 = arg1->datum_meta_.type_;
-  ObObjType type2 = arg2->datum_meta_.type_;
+  SqlValueType type1 = arg1->datum_meta_.type_;
+  SqlValueType type2 = arg2->datum_meta_.type_;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;

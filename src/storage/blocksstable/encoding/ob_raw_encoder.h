@@ -75,7 +75,7 @@ private:
   struct DatumDataSetter;
 
 private:
-  ObObjTypeStoreClass store_class_;
+  SqlValueTypeStoreClass store_class_;
   int64_t type_store_size_;
   int64_t null_cnt_;
   int64_t nope_cnt_;

@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_QUERY_VECTOR_QUERY_RESULT_H_
 #define OCEANBASE_QUERY_VECTOR_QUERY_RESULT_H_
 
+#include "common/datum/datum_value.h"
 #include "common/object/ob_obj_type.h"
 #include "common/row/ob_row_iterator.h"
 #include "lib/vector/ob_vector_util.h"
@@ -73,6 +74,20 @@ private:
   ObIArray<common::ObRowkey> *rowkeys_;
 };
 
+// Typed vector output. Descriptors and fixed payloads belong to the iterator's
+// query allocator. Encoded strings/relevance payloads borrow query-owned buffers.
+// The single-row view is replaced on the next call; batch rows live until query reset.
+struct ObVectorResultRow
+{
+  ObVectorResultRow() : cells_(nullptr), count_(0) {}
+  void reset() { cells_ = nullptr; count_ = 0; }
+  int64_t get_count() const { return count_; }
+  common::DatumValue &get_cell(int64_t index) { return cells_[index]; }
+  const common::DatumValue &get_cell(int64_t index) const { return cells_[index]; }
+  common::DatumValue *cells_;
+  int64_t count_;
+};
+
 class ObVectorQueryVidIterator
 {
 public:
@@ -105,8 +120,8 @@ public:
   bool get_enough() { return total_ >= alloc_size_; }
   int reset_obj();
 
-  virtual int get_next_row(ObNewRow *&row, const sql::ExprFixedArray& res_exprs, const bool no_rel = false);
-  virtual int get_next_rows(ObNewRow *&row, int64_t &size, const sql::ExprFixedArray& res_exprs);
+  virtual int get_next_row(ObVectorResultRow *&row, const sql::ExprFixedArray& res_exprs, const bool no_rel = false);
+  virtual int get_next_rows(ObVectorResultRow *&row, int64_t &size, const sql::ExprFixedArray& res_exprs);
   virtual void reset();
   TO_STRING_EMPTY();
 
@@ -121,8 +136,8 @@ private:
   int64_t extra_column_count_;
   int64_t extra_info_actual_size_;
   ObVecExtraInfoPtr extra_info_ptr_;
-  ObNewRow *row_;
-  ObObj *obj_;
+  ObVectorResultRow *row_;
+  DatumValue *obj_;
   ObIAllocator *allocator_;
   int64_t rel_count_;
   common::hash::ObHashMap<int64_t, double*> *rel_map_ptr_;

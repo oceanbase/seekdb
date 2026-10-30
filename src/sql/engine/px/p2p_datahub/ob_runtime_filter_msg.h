@@ -188,7 +188,7 @@ public:
   common::ObArenaAllocator query_range_allocator_;
   const common::ObDatumAccessContext *datum_access_ctx_; // request-scoped, not serialized
   // ---end---
-  ObFixedArray<ObObjMeta, common::ObIAllocator> build_obj_metas_;
+  ObFixedArray<SqlTypeMeta, common::ObIAllocator> build_obj_metas_;
 };
 
 class ObRFInFilterMsg : public ObP2PDatahubMsgBase
@@ -301,7 +301,7 @@ public:
   common::ObArenaAllocator query_range_allocator_;
   const common::ObDatumAccessContext *datum_access_ctx_; // request-scoped, not serialized
   // ---end---
-  ObFixedArray<ObObjMeta, common::ObIAllocator> build_obj_metas_;
+  ObFixedArray<SqlTypeMeta, common::ObIAllocator> build_obj_metas_;
 };
 
 }

@@ -18,6 +18,7 @@
 
 #include "sql/session/ob_local_session_var.h"
 #include "sql/session/ob_basic_session_info.h"
+#include "share/datum/typed_datum_compare.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -69,7 +70,7 @@ int ObLocalSessionVarHelper::remove_vars_same_with_session(ObLocalSessionVar &lo
 int ObLocalSessionVarHelper::get_different_vars_from_session(const ObLocalSessionVar &local_vars,
                                                              const ObBasicSessionInfo *session,
                                                              ObIArray<const ObSessionSysVar*> &local_diff_vars,
-                                                             ObIArray<ObObj> &session_vals)
+                                                             ObIArray<DatumValue> &session_vals, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   ObSEArray<const ObSessionSysVar *, 8> var_array;
@@ -79,13 +80,13 @@ int ObLocalSessionVarHelper::get_different_vars_from_session(const ObLocalSessio
   } else if (OB_FAIL(local_vars.get_local_vars(var_array))) {
   } else {
     bool is_same = false;
-    ObObj session_val;
+    DatumValue session_val;
     for (int64_t i = 0; OB_SUCC(ret) && i < var_array.count(); ++i) {
       if (OB_ISNULL(var_array.at(i))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (SYS_VAR_SQL_MODE == var_array.at(i)->type_) {
         /* just ignore sql mode now */
-      } else if (OB_FAIL(check_var_same_with_session(*session, var_array.at(i), is_same, &session_val))) {
+      } else if (OB_FAIL(check_var_same_with_session(*session, var_array.at(i), is_same, &session_val, &owner))) {
       } else if (is_same) {
         /* do nothing */
       } else if (OB_FAIL(local_diff_vars.push_back(var_array.at(i)))) {
@@ -99,23 +100,25 @@ int ObLocalSessionVarHelper::get_different_vars_from_session(const ObLocalSessio
 int ObLocalSessionVarHelper::check_var_same_with_session(const ObBasicSessionInfo &session,
                                                          const ObSessionSysVar *local_var,
                                                          bool &is_same,
-                                                         ObObj *diff_val)
+                                                         DatumValue *diff_val, ObIAllocator *owner)
 {
   int ret = OB_SUCCESS;
   is_same = false;
-  ObObj session_val;
+  DatumValue session_val;
   if (OB_ISNULL(local_var)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (diff_val != nullptr && owner == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (SYS_VAR_SQL_MODE == local_var->type_) {
     is_same = local_var->val_.get_uint64() == session.get_sql_mode();
     if (!is_same && NULL != diff_val) {
-      diff_val->set_uint64(session.get_sql_mode());
+      OZ(diff_val->set_uint64(session.get_sql_mode(), *owner));
     }
   } else if (OB_FAIL(session.get_sys_variable(local_var->type_, session_val))) {
   } else {
     is_same = local_var->is_equal(session_val);
     if (!is_same && NULL != diff_val) {
-      *diff_val = session_val;
+      OZ(clone_typed_value(session_val, *diff_val, *owner));
     }
   }
   return ret;
@@ -133,7 +136,7 @@ int ObLocalSessionVarHelper::load_session_vars(const ObBasicSessionInfo *session
   } else if (OB_FAIL(local_vars.set_local_var_capacity(var_num))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < var_num; ++i) {
-      ObObj var;
+      DatumValue var;
       if (OB_FAIL(session->get_sys_variable(ALL_LOCAL_VARS[i], var))) {
       } else if (OB_FAIL(local_vars.add_local_var(ALL_LOCAL_VARS[i], var))) {
       }
@@ -170,7 +173,7 @@ int ObLocalSessionVarHelper::update_session_vars_with_local(const ObLocalSession
 }
 
 int ObLocalSessionVarHelper::get_sys_var_val_str(const ObSysVarClassType var_type,
-                                                 const ObObj &var_val,
+                                                 const DatumValue &var_val,
                                                  ObIAllocator &allocator,
                                                  ObString &val_str)
 {
@@ -180,13 +183,20 @@ int ObLocalSessionVarHelper::get_sys_var_val_str(const ObSysVarClassType var_typ
   int64_t length = 0;
   int64_t pos = 0;
   if (SYS_VAR_SQL_MODE == var_type) {
-    ObObj res_obj;
+    DatumValue res_obj;
     if (OB_FAIL(ob_sql_mode_to_str(var_val, res_obj, &allocator))) {
     } else if (OB_FAIL(res_obj.get_string(val_str))) {
     }
-  } else if (OB_FAIL(var_val.print_sql_literal(buffer, length, pos, allocator))) {
   } else {
-    val_str.assign(buffer, pos);
+    // Reuse the existing dynamic-buffer policy with the native SQL printer.
+    OZ(multiple_extend_buf(buffer, length, allocator));
+    while (OB_SUCC(ret)) {
+      pos = 0;
+      ret = var_val.print_sql_literal(buffer, length, pos);
+      if (ret == OB_SIZE_OVERFLOW) { ret = multiple_extend_buf(buffer, length, allocator); }
+      else { break; }
+    }
+    if (OB_SUCC(ret)) { val_str.assign(buffer, pos); }
   }
   return ret;
 }

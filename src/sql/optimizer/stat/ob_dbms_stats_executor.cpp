@@ -15,7 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
+#include "share/datum/datum_value_cast.h"
+#include "sql/engine/expr/ob_expr.h"
 #include "sql/optimizer/stat/ob_incremental_stat_estimator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
@@ -1007,17 +1011,26 @@ int ObDbmsStatsExecutor::do_set_column_stats(ObIAllocator &allocator,
       column_stat->set_avg_len(param.avgclen_);
     }
     //5.set max/val value
-    if (param.hist_param_.minval_ != NULL || param.hist_param_.maxval_ != NULL) {
+    if (!param.hist_param_.minval_.datum_.is_null() || !param.hist_param_.maxval_.datum_.is_null()) {
       ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, param.col_meta_.get_collation_type());
       ObAccuracy res_acc;
       if (param.col_meta_.is_decimal_int()) {
         res_acc = param.col_accuracy_;
         cast_ctx.res_accuracy_ = &res_acc;
       }
-      if ((param.hist_param_.minval_ != NULL &&
-           OB_FAIL(ObObjCaster::to_type(param.col_meta_.get_type(), cast_ctx, *param.hist_param_.minval_, column_stat->get_min_value()))) ||
-          (param.hist_param_.maxval_ != NULL &&
-           OB_FAIL(ObObjCaster::to_type(param.col_meta_.get_type(), cast_ctx, *param.hist_param_.maxval_, column_stat->get_max_value())))) {
+      const auto cast_endpoint = [&](const DatumValue &input, bool minimum) {
+        DatumValue converted;
+        int result = DatumValueCaster::to_type(param.col_meta_.get_type(), cast_ctx,
+                                                input, allocator, converted);
+        if (result == OB_SUCCESS) {
+          result = minimum ? column_stat->set_min_value(converted) : column_stat->set_max_value(converted);
+        }
+        return result;
+      };
+      if ((!param.hist_param_.minval_.datum_.is_null() &&
+           OB_FAIL(cast_endpoint(param.hist_param_.minval_, true))) ||
+          (!param.hist_param_.maxval_.datum_.is_null() &&
+           OB_FAIL(cast_endpoint(param.hist_param_.maxval_, false)))) {
         ret = OB_ERR_DBMS_STATS_PL;
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"Invalid or inconsistent input values");
       }
@@ -1435,9 +1448,7 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
       session->set_database_id(OB_SYS_DATABASE_ID);
       //2.3 modify session trx lock timeout
       old_trx_lock_timeout = session->get_trx_lock_timeout();
-      ObObj trx_lock_timeout;
-      trx_lock_timeout.set_int(0);
-      if (OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRX_LOCK_TIMEOUT, trx_lock_timeout))) {
+      if (OB_FAIL(session->update_sys_variable(share::SYS_VAR_OB_TRX_LOCK_TIMEOUT, int64_t{0}))) {
       } else {
         need_reset_trx_lock_timeout = true;
         //3.get conn to update stats
@@ -1468,9 +1479,7 @@ int ObDbmsStatsExecutor::restore_session_for_online_stat(sql::ObSQLSessionInfo *
     }
     //2.restore trx lock timeout
     if (need_reset_trx_lock_timeout) {
-      ObObj trx_lock_timeout;
-      trx_lock_timeout.set_int(old_trx_lock_timeout);
-      int tmp_ret = session->update_sys_variable(share::SYS_VAR_OB_TRX_LOCK_TIMEOUT, trx_lock_timeout);
+      int tmp_ret = session->update_sys_variable(share::SYS_VAR_OB_TRX_LOCK_TIMEOUT, old_trx_lock_timeout);
       if (tmp_ret != OB_SUCCESS) {
         ret = COVER_SUCC(tmp_ret);
         LOG_WARN("failed to update sys variable for trx lock timeout", K(tmp_ret));
@@ -1493,10 +1502,10 @@ int ObDbmsStatsExecutor::fetch_gather_table_snapshot_read(common::sqlclient::ObI
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj value;
+      DatumValue value;
       int64_t col_idx = 0;
       if (OB_FAIL(result->next())) {
-      } else if (OB_FAIL(result->get_obj(col_idx, value))) {
+      } else if (OB_FAIL(result->get_value(col_idx, value))) {
       } else if (value.is_number()) {
         number::ObNumber scn_num;
         if (OB_FAIL(value.get_number(scn_num))) {
@@ -1781,14 +1790,14 @@ int ObDbmsStatsExecutor::get_stats_collect_batch_size(ObMySQLProxy *mysql_proxy,
                                                       int64_t &batch_part_size)
 {
   int ret = OB_SUCCESS;
-  ObObj result;
+  DatumValue result;
   ObString opt_name("GATHER_STATS_BATCH_SIZE");
   ObArenaAllocator tmp_alloc("OptStatPrefs", OB_MALLOC_NORMAL_BLOCK_SIZE);
   if (OB_FAIL(ObDbmsStatsPreferences::get_prefs(mysql_proxy, tmp_alloc, table_id, opt_name, result))) {
   } else if (!result.is_null()) {
     ObCastCtx cast_ctx(&tmp_alloc, NULL, CM_NONE, ObCharset::get_system_collation());
-    ObObj dest_obj;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, result, dest_obj))) {
+    DatumValue dest_obj;
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, result, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(batch_part_size))) {
     } else if (batch_part_size < 0) {
       ret = OB_ERR_DBMS_STATS_PL;

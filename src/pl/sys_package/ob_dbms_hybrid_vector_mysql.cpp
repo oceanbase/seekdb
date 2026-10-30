@@ -29,11 +29,11 @@ FUNCTION SEARCH (IN table_name VARCHAR(65535),
                  IN search_params LONGTEXT)
 RETURN JSON;
 */
-int ObDBMSHybridVectorMySql::search(ObPLExecCtx &ctx, ParamStore &params, ObObj &result) 
+int ObDBMSHybridVectorMySql::search(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(params.count() != 2) || !params.at(0).is_varchar() ||
-      !params.at(1).is_text()) {
+      !params.at(1).get_type_meta().is_text()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObString table_name = params.at(0).get_varchar();
@@ -60,11 +60,11 @@ FUNCTION GET_SQL (IN table_name VARCHAR(65535),
                    IN search_params LONGTEXT)
 RETURN LONGTEXT;
 */
-int ObDBMSHybridVectorMySql::get_sql(ObPLExecCtx &ctx, ParamStore &params, ObObj &result) 
+int ObDBMSHybridVectorMySql::get_sql(ObPLExecCtx &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(params.count() != 2) || !params.at(0).is_varchar() ||
-      !params.at(1).is_text()) {
+      !params.at(1).get_type_meta().is_text()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObString table_name = params.at(0).get_varchar();
@@ -87,9 +87,12 @@ int ObDBMSHybridVectorMySql::get_sql(ObPLExecCtx &ctx, ParamStore &params, ObObj
           } else {
             ObString lob_str;
             text_res.get_result_buffer(lob_str);
-            OX(result.set_lob_value(ObLongTextType, lob_str.ptr(),
-                                    lob_str.length()));
-            OX(result.set_has_lob_header());
+            // ObTextStringResult allocated these LOB bytes in ctx.allocator_.
+            result.meta_.set_type(ObLongTextType);
+            result.meta_.set_inrow();
+            result.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+            result.meta_.set_has_lob_header();
+            result.datum_.set_string(lob_str);
           }
         }
       }

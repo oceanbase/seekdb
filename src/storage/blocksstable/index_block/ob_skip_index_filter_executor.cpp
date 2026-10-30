@@ -41,7 +41,7 @@ int ObSkipIndexFilterExecutor::init(const int64_t batch_size, common::ObIAllocat
 int ObSkipIndexFilterExecutor::read_aggregate_data(const uint32_t col_idx,
                   common::ObIAllocator &allocator,
                   const share::schema::ObColumnParam *col_param,
-                  const ObObjMeta &obj_meta,
+                  const SqlTypeMeta &obj_meta,
                   const bool is_padding_mode,
                   ObStorageDatum &null_count,
                   ObStorageDatum &min_datum,
@@ -67,7 +67,7 @@ int ObSkipIndexFilterExecutor::read_aggregate_data(const uint32_t col_idx,
 
 int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
     const uint32_t col_idx,
-    const ObObjMeta &obj_meta,
+    const SqlTypeMeta &obj_meta,
     const ObSkipIndexType index_type,
     const ObMicroIndexInfo &index_info,
     sql::ObPhysicalFilterExecutor &filter,
@@ -122,7 +122,7 @@ int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
 int ObSkipIndexFilterExecutor::filter_on_min_max(
     const uint32_t col_idx,
     const uint64_t row_count,
-    const ObObjMeta &obj_meta,
+    const SqlTypeMeta &obj_meta,
     sql::ObWhiteFilterExecutor &filter,
     common::ObIAllocator &allocator)
 {
@@ -257,7 +257,7 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
   return ret;
 }
 
-inline int ObSkipIndexFilterExecutor::pad_column(const ObObjMeta &obj_meta,
+inline int ObSkipIndexFilterExecutor::pad_column(const SqlTypeMeta &obj_meta,
                                           const share::schema::ObColumnParam *col_param,
                                           const bool is_padding_mode,
                                           common::ObIAllocator &padding_alloc,
@@ -565,7 +565,7 @@ int ObSkipIndexFilterExecutor::bt_operator(const sql::ObWhiteFilterExecutor &fil
 int ObSkipIndexFilterExecutor::black_filter_on_min_max(
   const uint32_t col_idx,
   const uint64_t row_count,
-  const ObObjMeta &obj_meta,
+  const SqlTypeMeta &obj_meta,
   sql::ObBlackFilterExecutor &filter,
   common::ObIAllocator &allocator,
   const bool use_vectorize)

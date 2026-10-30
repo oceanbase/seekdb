@@ -47,8 +47,8 @@ int ObExprPoint::calc_result_type2(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  ObObjType type_x = type1.get_type();
-  ObObjType type_y = type2.get_type();
+  SqlValueType type_x = type1.get_type();
+  SqlValueType type_y = type2.get_type();
 
   if (ob_is_geometry_tc(type_x) || ob_is_geometry_tc(type_y)) {
     ret = OB_INVALID_ARGUMENT;
@@ -68,57 +68,6 @@ int ObExprPoint::calc_result_type2(ObExprResType &type,
 }
 
 // for old sql engine
-int ObExprPoint::calc_result2(common::ObObj &result,
-                              const common::ObObj &obj1,
-                              const common::ObObj &obj2,
-                              common::ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  bool is_null_result = false;
-  ObIAllocator *allocator = expr_ctx.calc_buf_;
-  ObWkbBuffer res_wkb_buf(*allocator);
-
-  if (OB_ISNULL(allocator)) { // check allocator
-    ret = OB_NOT_INIT;
-  } else {
-    ObObjType type_x = obj1.get_type();
-    ObObjType type_y = obj2.get_type();
-    if (ob_is_null(type_x) || ob_is_null(type_y)) {
-      is_null_result = true;
-    } else if (obj1.is_null() || obj2.is_null()) {
-      is_null_result = true;
-    } else {
-      double x = obj1.get_double();
-      double y = obj2.get_double();
-      uint32_t srid = 0;
-      if (OB_FAIL(res_wkb_buf.append(srid))) {
-      } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
-      } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
-      } else if (OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINT)))) {
-      } else if (OB_FAIL(res_wkb_buf.append(x))) {
-      } else if (OB_FAIL(res_wkb_buf.append(y))) {
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (is_null_result) {
-      result.set_null();
-    } else {
-      char *buf = reinterpret_cast<char *>(allocator->alloc(res_wkb_buf.length()));
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        MEMMOVE(buf, res_wkb_buf.ptr(), res_wkb_buf.length());
-        result.set_collation_type(result_type_.get_collation_type());
-        result.set_string(ObGeometryType, buf, res_wkb_buf.length());
-        result.set_collation_level(CS_LEVEL_IMPLICIT);
-      }
-    }
-  }
-
-  return ret;
-}
 
 int ObExprPoint::eval_point(const ObExpr &expr,
                             ObEvalCtx &ctx,
@@ -130,8 +79,8 @@ int ObExprPoint::eval_point(const ObExpr &expr,
   ObDatum *datum_y = NULL;
   ObExpr *arg_x = expr.args_[0];
   ObExpr *arg_y = expr.args_[1];
-  ObObjType type_x = arg_x->datum_meta_.type_;
-  ObObjType type_y = arg_y->datum_meta_.type_;
+  SqlValueType type_x = arg_x->datum_meta_.type_;
+  SqlValueType type_y = arg_y->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   ObWkbBuffer res_wkb_buf(tmp_allocator);

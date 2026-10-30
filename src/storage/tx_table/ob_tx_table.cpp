@@ -190,7 +190,7 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   const int64_t SCHEMA_VERSION = 1;
   const char *const TABLE_NAME = "tx_ctx_table";
 
-  common::ObObjMeta INC_ID_TYPE;
+  common::SqlTypeMeta INC_ID_TYPE;
   INC_ID_TYPE.set_int();
   ObColumnSchemaV2 id_column;
   
@@ -201,7 +201,7 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   id_column.set_order_in_rowkey(ObOrderType::ASC);
   id_column.set_meta_type(INC_ID_TYPE);  // int64_t
 
-  common::ObObjMeta META_TYPE;
+  common::SqlTypeMeta META_TYPE;
   META_TYPE.set_binary();
   ObColumnSchemaV2 meta_column;
   
@@ -211,7 +211,7 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   meta_column.set_data_length(MAX_TX_CTX_TABLE_META_LENGTH);
   meta_column.set_meta_type(META_TYPE);
 
-  common::ObObjMeta DATA_TYPE;
+  common::SqlTypeMeta DATA_TYPE;
   DATA_TYPE.set_binary();
   ObColumnSchemaV2 value_column;
   
@@ -270,15 +270,15 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   const int64_t MAX_TX_ID_LENGTH = 100;  // the real length is no more than 64 + 1
   const int64_t MAX_TX_INFO_LENGTH = common::OB_MAX_VARCHAR_LENGTH;
 
-  common::ObObjMeta TX_ID_TYPE;
+  common::SqlTypeMeta TX_ID_TYPE;
   TX_ID_TYPE.set_int();
-  common::ObObjMeta IDX_TYPE;
+  common::SqlTypeMeta IDX_TYPE;
   IDX_TYPE.set_int();
-  common::ObObjMeta TOTAL_ROW_CNT_TYPE;
+  common::SqlTypeMeta TOTAL_ROW_CNT_TYPE;
   TOTAL_ROW_CNT_TYPE.set_int();
-  common::ObObjMeta END_TS_TYPE;
+  common::SqlTypeMeta END_TS_TYPE;
   END_TS_TYPE.set_int();
-  common::ObObjMeta DATA_TYPE;
+  common::SqlTypeMeta DATA_TYPE;
   DATA_TYPE.set_binary();
 
   ObColumnSchemaV2 tx_id_column;

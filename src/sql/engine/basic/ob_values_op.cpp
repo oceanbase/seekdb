@@ -44,14 +44,9 @@ int ObValuesOp::inner_open()
 {
   int ret = OB_SUCCESS;
   row_store_it_ = MY_SPEC.row_store_.begin();
-  ObObj *cells = static_cast<ObObj *>(ctx_.get_allocator().alloc(
-          sizeof(ObObj) * MY_SPEC.output_.count()));
-  if (OB_ISNULL(cells)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  DatumValue *cells = nullptr;
+  if (OB_FAIL(DatumValueBuffer::allocate(ctx_.get_allocator(), MY_SPEC.output_.count(), cells))) {
   } else {
-    for (int64_t i = 0; i < MY_SPEC.output_.count(); i++) {
-      new (&cells[i]) ObObj();
-    }
     cur_row_.cells_ = cells;
     cur_row_.count_ = MY_SPEC.output_.count();
   }
@@ -73,21 +68,30 @@ int ObValuesOp::inner_get_next_row()
   } else {
     clear_evaluated_flag();
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); i++) {
-      const ObObj &cell = cur_row_.cells_[i];
+      const DatumValue &cell = cur_row_.cells_[i];
       ObDatum &datum = MY_SPEC.output_.at(i)->locate_datum_for_write(eval_ctx_);
       ObExpr *expr = MY_SPEC.output_.at(i);
+      char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+      ObDatum projected;
       if (cell.is_null()) {
         datum.set_null();
       } else if (cell.get_type() != expr->datum_meta_.type_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("type mismatch", K(ret), K(i), K(cell.get_type()), K(*expr));
-      } else if (OB_FAIL(datum.from_obj(cell, expr->obj_datum_map_))) {
-      } else if (is_lob_storage(cell.get_type()) &&
-                 OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), cell, expr->obj_meta_,
-                                             expr->obj_datum_map_,
-                                             get_exec_ctx().get_allocator(), datum))) {
+      } else if (OB_FAIL(cell.to_row_datum(projected, extended_payload))) {
       } else {
-        expr->set_evaluated_projected(eval_ctx_);
+        // Iterator values live until its next advance. Extend normalization
+        // uses stack bytes, so publish those bytes in the expression frame.
+        if (cell.is_ext()) {
+          ret = expr->deep_copy_datum(eval_ctx_, projected);
+        } else {
+          datum = projected;
+        }
+        if (OB_SUCC(ret) && is_lob_storage(cell.get_type())) {
+          ret = ob_adjust_lob_datum(get_exec_ctx(), projected, cell.get_meta(),
+              expr->obj_meta_, get_exec_ctx().get_allocator(), datum);
+        }
+        if (OB_SUCC(ret)) { expr->set_evaluated_projected(eval_ctx_); }
       }
     }
   }

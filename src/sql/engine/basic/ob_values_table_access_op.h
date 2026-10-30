@@ -18,6 +18,8 @@
 #define OCEANBASE_SQL_ENGINE_BASIC_OB_VALUES_TABLE_ACCESS_OP_
 
 #include "sql/engine/ob_operator.h"
+#include "common/datum/datum_parameter_array.h"
+#include "common/datum/datum_value.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 
 namespace oceanbase
@@ -32,14 +34,14 @@ class ObValuesTableAccessSpec : public ObOpSpec
 public:
   ObValuesTableAccessSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
     : ObOpSpec(alloc, type), access_type_(ObValuesTableDef::ACCESS_EXPR), column_exprs_(alloc),
-      value_exprs_(alloc), start_param_idx_(-1), end_param_idx_(-1), obj_params_(alloc) {}
+      value_exprs_(alloc), start_param_idx_(-1), end_param_idx_(-1), datum_values_(alloc) {}
   INHERIT_TO_STRING_KV("op_spec", ObOpSpec, K_(access_type));
   ObValuesTableDef::TableAccessType access_type_;
   common::ObFixedArray<ObExpr *, common::ObIAllocator> column_exprs_;
   common::ObFixedArray<ObExpr *, common::ObIAllocator> value_exprs_;
   int64_t start_param_idx_;
   int64_t end_param_idx_;
-  common::ObFixedArray<ObObj, common::ObIAllocator> obj_params_;
+  common::ObFixedArray<common::DatumValue, common::ObIAllocator> datum_values_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObValuesTableAccessSpec);
 };
@@ -60,14 +62,15 @@ private:
                            const int64_t row_idx,
                            ObExpr *src_expr,
                            ObExpr *dst_expr);
-  int calc_datum_from_param(const ObObj &src_obj, ObExpr *dst_expr);
-  void update_src_meta(const ObObjMeta &src_obj_meta,
+  int calc_datum_from_param(const common::ObDatum &source, const common::SqlTypeMeta &meta,
+                             ObExpr *dst_expr);
+  void update_src_meta(const SqlTypeMeta &src_obj_meta,
                        const ObAccuracy &src_obj_acc,
                        ObDatumMeta &src_meta);
   int get_real_src_obj_type(const int64_t row_idx,
                             ObExpr &src_expr,
                             ObDatumMeta &src_meta,
-                            ObObjMeta &src_obj_meta);
+                            SqlTypeMeta &src_obj_meta);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObValuesTableAccessOp);
 

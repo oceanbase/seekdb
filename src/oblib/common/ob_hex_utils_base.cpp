@@ -17,29 +17,26 @@
 #define USING_LOG_PREFIX LIB
 
 #include "common/ob_hex_utils_base.h"
-#include "common/object/ob_object.h"
+#include "lib/utility/ob_print_utils.h"
+#include <cctype>
 
 namespace oceanbase
 {
 namespace common
 {
 
-int ObHexUtilsBase::unhex(const ObString &text, ObIAllocator &alloc, ObObj &result)
+int ObHexUtilsBase::unhex(const ObString &text, ObIAllocator &alloc, ObString &result, bool &valid)
 {
   int ret = OB_SUCCESS;
-  ObString str_result;
+  // A caller may pass the same ObString as input and output.
+  const ObString input = text;
+  result.reset();
+  valid = false;
   char *buf = NULL;
-  const bool need_fill_zero = (1 == text.length() % 2);
-  const int32_t tmp_length = text.length() / 2 + need_fill_zero;
+  const bool need_fill_zero = (1 == input.length() % 2);
+  const int32_t tmp_length = input.length() / 2 + need_fill_zero;
   int32_t alloc_length = (0 == tmp_length ? 1 : tmp_length);
-/*
-  if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator in cast ctx is NULL", K(ret), K(text));
-  } else
-*/
   if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(alloc_length)))) {
-    result.set_null();
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("alloc memory failed", K(alloc_length), K(ret));
   } else {
@@ -47,35 +44,34 @@ int ObHexUtilsBase::unhex(const ObString &text, ObIAllocator &alloc, ObObj &resu
     int32_t i = 0;
     char c1 = 0;
     char c2 = 0;
-    if (text.length() > 0) {
+    if (input.length() > 0) {
       if (need_fill_zero) {
         c1 = '0';
-        c2 = text[0];
+        c2 = input[0];
         i = 0;
       } else {
-        c1 = text[0];
-        c2 = text[1];
+        c1 = input[0];
+        c2 = input[1];
         i = 1;
       }
     }
-    while (OB_SUCC(ret) && all_valid_char && i < text.length()) {
-      if (isxdigit(c1) && isxdigit(c2)) {
+    while (OB_SUCC(ret) && all_valid_char && i < input.length()) {
+      if (std::isxdigit(static_cast<unsigned char>(c1)) && std::isxdigit(static_cast<unsigned char>(c2))) {
         buf[i / 2] = (char)((get_xdigit(c1) << 4) | get_xdigit(c2));
-        if (i + 2 < text.length()) {
-          c1 = text[++i];
-          c2 = text[++i];
+        if (i + 2 < input.length()) {
+          c1 = input[++i];
+          c2 = input[++i];
         }  else {
           break;
         }
       } else {
         all_valid_char = false;
-        result.set_null();
       }
     }
 
     if (OB_SUCC(ret) && all_valid_char) {
-      str_result.assign_ptr(buf, tmp_length);
-      result.set_varchar(str_result);
+      result.assign_ptr(buf, tmp_length);
+      valid = true;
     }
   }
   return ret;

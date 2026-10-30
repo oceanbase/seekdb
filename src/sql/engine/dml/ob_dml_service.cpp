@@ -34,6 +34,10 @@
 #include "sql/engine/ob_batch_rows.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "query/vector/ob_vector_index_util.h"
+#include "common/datum/datum_value_projection.h"
+#include "common/datum/datum_value_buffer.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -115,7 +119,7 @@ int ObDMLService::check_column_null(
   if (!is_nullable && datum.is_null()) {
     if (is_ignore || (!is_single_value
                       && !is_strict_mode(sql_mode))) {
-      ObObj zero_obj;
+      DatumValue zero_value;
       ObExprStrResAlloc res_alloc(*expr, eval_ctx);
       ObDatum &row_datum = expr->locate_datum_for_write(eval_ctx);
       bool is_decimal_int = ob_is_decimal_int(expr->datum_meta_.type_);
@@ -133,10 +137,11 @@ int ObDMLService::check_column_null(
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("dml with ignore not supported with cascaded column", KPC(expr));
         LOG_USER_ERROR(OB_BAD_NULL_ERROR, column_info.column_name_.length(), column_info.column_name_.ptr());
-      } else if (OB_FAIL(sql::get_obj_zero_value(
+      } else if (OB_FAIL(sql::get_datum_zero_value(
           expr->obj_meta_.get_type(),
           expr->obj_meta_.get_collation_type(),
-          zero_obj))) {
+          res_alloc,
+          zero_value))) {
       } else if (is_decimal_int) {
         ObDecimalIntBuilder dec_val;
         dec_val.set_zero(wide::ObDecimalIntConstValue::get_int_bytes_by_precision(
@@ -146,11 +151,14 @@ int ObDMLService::check_column_null(
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObDASUtils::padding_fixed_string_value(expr->max_length_,
                                                                 res_alloc,
-                                                                zero_obj))) {
-      } else if (!is_decimal_int && OB_FAIL(row_datum.from_obj(zero_obj))) {
-      } else if (zero_obj.is_lob_storage() && zero_obj.has_lob_header() != expr->obj_meta_.has_lob_header()) {
+                                                                zero_value))) {
+      } else if (!is_decimal_int) {
+        row_datum = zero_value.datum_;
+      }
+      if (OB_SUCC(ret) && zero_value.is_lob_storage()
+          && zero_value.has_lob_header() != expr->obj_meta_.has_lob_header()) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
+      } else if (OB_SUCC(ret)) {
         //output warning msg
         const ObString &column_name = column_info.column_name_;
         LOG_USER_WARN(OB_BAD_NULL_ERROR, column_name.length(), column_name.ptr());
@@ -304,12 +312,12 @@ int ObDMLService::check_rowkey_whether_distinct(const ObExprPtrIArray &row,
   if (T_DISTINCT_NONE != distinct_algo) {
     if (T_HASH_DISTINCT == distinct_algo) {
       ObIAllocator &allocator = root_ctx.get_allocator();
-      const int64_t rowkey_cnt = tmp_table_rowkey.get_obj_cnt();
+      const int64_t rowkey_cnt = tmp_table_rowkey.get_value_count();
       if (OB_ISNULL(rowkey_dist_ctx)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        //step1: Init ObObj of ObTableRowkey
-        ObObj *tmp_obj_ptr = tmp_table_rowkey.get_obj_ptr();
+        //step1: Init DatumValue of ObTableRowkey
+        DatumValue *tmp_obj_ptr = tmp_table_rowkey.get_values();
         for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
           ObExpr *expr = row.at(i);
           ObDatum *col_datum = nullptr;
@@ -318,7 +326,7 @@ int ObDMLService::check_rowkey_whether_distinct(const ObExprPtrIArray &row,
           } else if (OB_FAIL(expr->eval(eval_ctx, col_datum))) {
           } else if (OB_ISNULL(col_datum)) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(col_datum->to_obj(tmp_obj_ptr[i], expr->obj_meta_, expr->obj_datum_map_))) {
+          } else if (OB_FAIL(project_datum_value_view(*col_datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj_ptr[i].meta_, tmp_obj_ptr[i]))) {
           }
         }
 
@@ -330,19 +338,19 @@ int ObDMLService::check_rowkey_whether_distinct(const ObExprPtrIArray &row,
             is_dist = false;
           } else if (OB_HASH_NOT_EXIST == ret) {
             //step3: if not exist, deep copy data and add ObRowkey to hash set
-            //step3.1: Init the buffer of ObObj Array
+            //step3.1: Init the buffer of DatumValue Array
             ret = OB_SUCCESS;
-            ObObj *obj_ptr = nullptr;
+            DatumValue *obj_ptr = nullptr;
             void *buf = nullptr;
-            if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
+            if (OB_ISNULL(buf = allocator.alloc(sizeof(DatumValue) * rowkey_cnt))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
             } else {
-              obj_ptr = new(buf) ObObj[rowkey_cnt];
+              obj_ptr = new(buf) DatumValue[rowkey_cnt];
             }
 
-            //step3.2: deep copy data to ObObj
+            //step3.2: deep copy data to DatumValue
             for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
-              if (OB_FAIL(ob_write_obj(allocator, tmp_obj_ptr[i], obj_ptr[i]))) {
+              if (OB_FAIL(clone_typed_value(tmp_obj_ptr[i], obj_ptr[i], allocator))) {
               }
             }
             ObRowkey table_rowkey(obj_ptr, rowkey_cnt);
@@ -1542,12 +1550,12 @@ int ObDMLService::init_upd_rtdef(
 int ObDMLService::init_ob_rowkey( ObIAllocator &allocator, const int64_t rowkey_cnt, ObRowkey &table_rowkey)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * rowkey_cnt))) {
+  if (OB_ISNULL(buf = allocator.alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr = new(buf) ObObj[rowkey_cnt];
+    obj_ptr = new(buf) DatumValue[rowkey_cnt];
   }
   table_rowkey.assign(obj_ptr, rowkey_cnt);
   return ret;
@@ -2087,7 +2095,14 @@ int ObDMLService::convert_exprs_to_row(const ExprFixedArray &exprs,
   for (int i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     ObDatum *datum = nullptr;
     if (OB_FAIL(exprs.at(i)->eval(eval_ctx, datum))) {
-    } else if (OB_FAIL(datum->to_obj(dml_rtdef.check_row_->cells_[i], exprs.at(i)->obj_meta_))) {
+    } else {
+      DatumValue value = dml_rtdef.check_row_->cells_[i];
+      const SqlTypeMeta &meta = exprs.at(i)->obj_meta_;
+      if (OB_FAIL(project_datum_value_view(*datum, meta,
+              ObDatum::get_sql_value_datum_map_type(meta.get_type()), value.meta_, value, true))) {
+      } else if (OB_FAIL(DatumValueBuffer::assign_view(value, dml_rtdef.check_row_->cells_,
+                                                     dml_rtdef.check_row_->count_, i))) {
+      }
     }
   }
   return ret;
@@ -2285,7 +2300,7 @@ int ObDMLService::log_user_error_inner(
     int64_t row_num,
     common::ObString &column_name,
     ObExecContext &ctx,
-    const ObObjType column_type)
+    const SqlValueType column_type)
 {
   if (OB_DATA_OUT_OF_RANGE == ret) {
     ObSQLUtils::copy_and_convert_string_charset(

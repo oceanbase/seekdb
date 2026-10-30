@@ -55,6 +55,7 @@ cc_library(
     name = "data_plane_api_interface",
     hdrs = DATA_PLANE_API_INTERFACE_HEADERS,
     deps = [
+        ":datum_row_interface",
         ":tablet_scan_interface",
         "//src/oblib:oblib_foundation",
         "//src/share:core_types",
@@ -159,6 +160,7 @@ cc_library(
     visibility = [
         "//src/sql:__subpackages__",
         "//src/storage:__subpackages__",
+        "//unittest/data_plane:__pkg__",
     ],
 )
 
@@ -388,7 +390,7 @@ cc_library(
         "//src/observer:__subpackages__",
         "//src/sql:__subpackages__",
         "//src/storage:__subpackages__",
-    ],
+        "//unittest/data_plane:__pkg__",    ],
 )
 
 cc_library(
@@ -401,4 +403,11 @@ cc_library(
         "//src/sql:__subpackages__",
         "//src/storage:__subpackages__",
     ],
+)
+
+cc_library(
+    name = "column_param",
+    srcs = ["ob_column_param.cpp"],
+    deps = [":table_param_interface", "//src/share:schema_entities", "//src/share:datum", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//src/oblib:oblib_foundation"],
+    visibility = ["//src:__subpackages__", "//unittest/data_plane:__pkg__"],
 )

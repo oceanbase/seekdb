@@ -25,11 +25,6 @@ namespace oceanbase
 namespace sql
 {
 
-typedef int (*ob_get_cmp_type_func) (common::ObObjType &type,
-                                     const common::ObObjType &type1,
-                                     const common::ObObjType &type2,
-                                     const common::ObObjType &type3);
-
 class ObExprArgCase : public ObExprOperator
 {
 public:
@@ -44,19 +39,12 @@ public:
                                 ObExprResType *types_stack,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc_with_cast(common::ObObj &result,
-                  const common::ObObj *objs_stack,
-                  int64_t param_num,
-                  common::ObCompareCtx &cmp_ctx,
-                  common::ObCastCtx &cast_ctx,
-                  const ObExprResType &res_type,
-                  const ob_get_cmp_type_func get_cmp_type_func);
   void set_need_cast(bool need_cast) {need_cast_ = need_cast;}
 
-  inline static int get_cmp_type(common::ObObjType &type,
-                                 const common::ObObjType &type1,
-                                 const common::ObObjType &type2,
-                                 const common::ObObjType &type3)
+  inline static int get_cmp_type(common::SqlValueType &type,
+                                 const common::SqlValueType &type1,
+                                 const common::SqlValueType &type2,
+                                 const common::SqlValueType &type3)
   {
     UNUSED(type3);
     return ObExprResultTypeUtil::get_relational_cmp_type(type,type1,type2);

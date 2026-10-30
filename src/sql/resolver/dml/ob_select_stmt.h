@@ -130,16 +130,18 @@ struct ObSelectIntoItem
         buffer_size_(DEFAULT_BUFFER_SIZE),
         external_properties_()
   {
-    field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
-    field_str_.set_collation_type(ObCharset::get_system_collation());
-    line_str_.set_varchar(DEFAULT_LINE_TERM_STR);
-    line_str_.set_collation_type(ObCharset::get_system_collation());
+    field_str_.meta_.set_varchar();
+    field_str_.meta_.set_collation_type(ObCharset::get_system_collation());
+    field_str_.datum_.set_string(ObString::make_string(DEFAULT_FIELD_TERM_STR));
+    line_str_.meta_.set_varchar();
+    line_str_.meta_.set_collation_type(ObCharset::get_system_collation());
+    line_str_.datum_.set_string(ObString::make_string(DEFAULT_LINE_TERM_STR));
     escaped_cht_.meta_.set_char();
-    escaped_cht_.set_char_value(&DEFAULT_FIELD_ESCAPED_CHAR, 1);
-    escaped_cht_.set_collation_type(ObCharset::get_system_collation());
+    escaped_cht_.meta_.set_collation_type(ObCharset::get_system_collation());
+    escaped_cht_.datum_.set_string(&DEFAULT_FIELD_ESCAPED_CHAR, 1);
     closed_cht_.meta_.set_char();
-    closed_cht_.set_char_value(NULL, 0);
-    closed_cht_.set_collation_type(ObCharset::get_system_collation());
+    closed_cht_.meta_.set_collation_type(ObCharset::get_system_collation());
+    closed_cht_.datum_.set_string(NULL, 0);
     cs_type_ = ObCharset::get_system_collation();
   }
   int assign(const ObSelectIntoItem &other) {
@@ -173,16 +175,16 @@ struct ObSelectIntoItem
                K_(buffer_size),
                K_(external_properties));
   ObItemType into_type_;
-  common::ObObj outfile_name_;
-  common::ObObj field_str_; // field terminated str
-  common::ObObj line_str_; // line terminated str
+  common::DatumValue outfile_name_;
+  common::DatumValue field_str_; // field terminated str
+  common::DatumValue line_str_; // line terminated str
   common::ObSEArray<common::ObString, 16> user_vars_; // user variables
   common::ObSEArray<sql::ObRawExpr*, 16> pl_vars_; // pl variables
-  common::ObObj closed_cht_; // all fields, "123","ab"
+  common::DatumValue closed_cht_; // all fields, "123","ab"
   bool is_optional_; //  for string, closed character, such as "aa"
   bool is_single_;
   int64_t max_file_size_;
-  common::ObObj escaped_cht_;
+  common::DatumValue escaped_cht_;
   common::ObCollationType cs_type_;
   int64_t buffer_size_;
   common::ObString external_properties_;

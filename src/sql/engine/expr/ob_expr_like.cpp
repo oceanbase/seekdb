@@ -414,7 +414,7 @@ int ObExprLike::calc_result_type3(ObExprResType &type,
     ret = OB_INVALID_ARGUMENT;
   } else {
     type.set_int();
-    ObObjMeta types[2] = {type1, type2};
+    SqlTypeMeta types[2] = {type1, type2};
     type.set_calc_type(ObVarcharType);
     type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
     type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
@@ -1033,7 +1033,7 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
   ObDatum *res_datums = expr.locate_batch_datums(ctx);
   ObDatum *text_datums = expr.args_[0]->locate_batch_datums(ctx);
   const int64_t step_size = sizeof(uint16_t) * CHAR_BIT;
-  const ObObjType text_type = expr.args_[0]->datum_meta_.type_;
+  const SqlValueType text_type = expr.args_[0]->datum_meta_.type_;
   // calc match result for each text
   for (int64_t i = 0; i < size && OB_SUCC(ret);) {
     const int64_t bit_vec_off = i / (CHAR_BIT * sizeof(uint16_t));

@@ -38,6 +38,7 @@
 #include "sql/monitor/show_trace/ob_show_trace.h"
 #include "sql/optimizer/ob_optimizer.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/sql_udt_support.h"
 
 namespace oceanbase
 {
@@ -276,11 +277,10 @@ int ObSql::fill_result_set(ObResultSet &result_set,
       field.org_tname_ = tname;
       field.cname_ = cname;
       field.org_cname_ = cname;
-      field.type_.set_type(ObVarcharType);
+      field.type_meta_.set_type(ObVarcharType);
       field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI;
-      field.type_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
-      field.type_.set_collation_level(CS_LEVEL_IMPLICIT);
-      field.type_.set_varchar(type_name);
+      field.type_meta_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+      field.type_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       if (OB_FAIL(result_set.reserve_field_columns(1))) {
       } else if (OB_FAIL(result_set.add_field_column(field))) {
       }
@@ -308,7 +308,7 @@ int ObSql::fill_result_set(ObResultSet &result_set,
           }
           ObCollationType charsetnr;
           const ObDataType *type = call_stmt.get_call_proc_info()->get_out_type().at(i).get_data_type();
-          ObObjType out_obj_type = call_stmt.get_call_proc_info()->get_out_type().at(i).get_obj_type();
+          SqlValueType out_obj_type = call_stmt.get_call_proc_info()->get_out_type().at(i).get_obj_type();
           if (ObUnknownType == out_obj_type
             || ObExtendType == out_obj_type) {
             // do nothing ...
@@ -324,14 +324,14 @@ int ObSql::fill_result_set(ObResultSet &result_set,
             OX (field.charsetnr_ = static_cast<uint16_t>(charsetnr));
           }
           if (OB_SUCC(ret)) {
-            field.type_.set_type(out_obj_type);
+            field.type_meta_.set_type(out_obj_type);
             if (OB_NOT_NULL(type)) {
               field.accuracy_ = type->get_accuracy();
               // Setup Collation and Collation levl
               if (ob_is_string_or_lob_type(out_obj_type)
                   || ob_is_enum_or_set_type(out_obj_type)) {
-                field.type_.set_collation_type(type->get_collation_type());
-                field.type_.set_collation_level(type->get_collation_level());
+                field.type_meta_.set_collation_type(type->get_collation_type());
+                field.type_meta_.set_collation_level(type->get_collation_level());
               }
             }
             if (ObExtendType == out_obj_type) {
@@ -346,23 +346,24 @@ int ObSql::fill_result_set(ObResultSet &result_set,
               }
             } else if (ob_is_enum_or_set_type(out_obj_type)) {
               CK (OB_NOT_NULL(type));
-              OZ (common::ObField::get_field_mb_length(field.type_.get_type(),
+              OZ (common::ObField::get_field_mb_length(field.type_meta_.get_type(),
                                                       field.accuracy_,
                                                       type->get_collation_type(),
                                                       field.length_));
-              OX (field.type_.set_type(ObVarcharType));
+              OX (field.type_meta_.set_type(ObVarcharType));
             } else {
-              OZ (common::ObField::get_field_mb_length(field.type_.get_type(),
+              OZ (common::ObField::get_field_mb_length(field.type_meta_.get_type(),
                                                       field.accuracy_,
                                                       common::CS_TYPE_INVALID,
                                                       field.length_));
             }
             // Setup Scale
             if (OB_SUCC(ret)) {
-              if (ObVarcharType == field.type_.get_type()) {
-                field.type_.set_varchar(type_name);
-              } else if (ObNumberType == field.type_.get_type()) {
-                field.type_.set_number(number);
+              if (ObVarcharType == field.type_meta_.get_type()) {
+                field.type_meta_.set_varchar();
+                field.type_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+              } else if (ObNumberType == field.type_meta_.get_type()) {
+                field.type_meta_.set_number();
               }
             }
           }
@@ -387,8 +388,8 @@ int ObSql::fill_result_set(ObResultSet &result_set,
             field.dname_.assign(NULL, 0);
             field.tname_.assign(NULL, 0);
             field.org_tname_.assign(NULL, 0);
-            field.type_.reset();
-            field.type_.set_type(ObExtendType);
+            field.type_meta_.reset();
+            field.type_meta_.set_type(ObExtendType);
             field.type_name_.assign(NULL, 0);
             field.type_owner_.assign(NULL, 0);
           }
@@ -417,7 +418,7 @@ int ObSql::fill_result_set(ObResultSet &result_set,
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < question_marks_count; ++i) {
         ObField param_field;
-        param_field.type_.set_type(ObIntType); // @bug
+        param_field.type_meta_.set_type(ObIntType); // @bug
         param_field.cname_ = ObString::make_string("?");
         if (OB_NOT_NULL(pctx->get_ps_fixed_array_index()) &&
             OB_NOT_NULL(anonymous_stmt) &&
@@ -425,7 +426,7 @@ int ObSql::fill_result_set(ObResultSet &result_set,
           continue;
         } else if (OB_NOT_NULL(anonymous_stmt) && anonymous_stmt->get_out_idx().has_member(i)) {
           ObField column_field;
-          column_field.type_.set_type(ObNullType);
+          column_field.type_meta_.set_type(ObNullType);
           OX (param_field.inout_mode_ = ObRoutineParamInOut::SP_PARAM_INOUT);
           OZ (result_set.add_field_column(column_field),
               K(i), K(question_marks_count), K(column_field));
@@ -474,8 +475,8 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
 
       if (OB_SUCC(ret) && expr->get_result_type().is_ext()) {
         is_ext_field = true;
-        field.type_.set_collation_type(CS_TYPE_BINARY);
-        field.type_.set_collation_level(CS_LEVEL_IMPLICIT);
+        field.type_meta_.set_collation_type(CS_TYPE_BINARY);
+        field.type_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
         field.length_ = OB_MAX_LONGTEXT_LENGTH;
         if (CS_TYPE_BINARY != expr->get_collation_type()
           && ObCharset::is_valid_collation(collation_type)) {
@@ -487,20 +488,21 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
 
       if (OB_SUCC(ret)) {
         // Setup field Type and Accuracy
-        field.type_.set_type(expr->get_data_type());
+        field.type_meta_.set_type(expr->get_data_type());
         field.accuracy_ = expr->get_accuracy();
         field.flags_ = static_cast<uint16_t>(expr->get_result_flag());
         // Setup Collation and Collation level
-        if (ob_is_string_or_lob_type(static_cast<ObObjType>(expr->get_data_type()))
-            || ob_is_enum_or_set_type(static_cast<ObObjType>(expr->get_data_type()))) {
-          field.type_.set_collation_type(expr->get_collation_type());
-          field.type_.set_collation_level(expr->get_collation_level());
+        if (ob_is_string_or_lob_type(static_cast<SqlValueType>(expr->get_data_type()))
+            || ob_is_enum_or_set_type(static_cast<SqlValueType>(expr->get_data_type()))) {
+          field.type_meta_.set_collation_type(expr->get_collation_type());
+          field.type_meta_.set_collation_level(expr->get_collation_level());
         }
         // Setup Scale
-        if (ObVarcharType == field.type_.get_type()) {
-          field.type_.set_varchar(type_name);
-        } else if (ObNumberType == field.type_.get_type()) {
-          field.type_.set_number(number);
+        if (ObVarcharType == field.type_meta_.get_type()) {
+          field.type_meta_.set_varchar();
+          field.type_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        } else if (ObNumberType == field.type_meta_.get_type()) {
+          field.type_meta_.set_number();
         }
         if (context->session_info_->is_varparams_sql_prepare()) {
           // question mark expr has no valid result type in prepare stage
@@ -517,18 +519,18 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
           uint64_t udt_id = expr->get_result_type().get_udt_id();
           ObSqlUDTMeta udt_meta;
           if (expr->get_result_type().is_collection_sql_type()
-              && !ObObjUDTUtil::ob_is_supported_sql_udt(udt_id)) {
+              && !is_supported_sql_udt(udt_id)) {
             // array type
-            field.type_.set_subschema_id(subschema_id);
+            field.type_meta_.set_subschema_id(subschema_id);
             field.charsetnr_ = CS_TYPE_UTF8MB4_BIN;
             field.length_ = OB_MAX_LONGTEXT_LENGTH;
           } else if (OB_FAIL(result_set.get_exec_context().get_subschema_id_by_udt_id(udt_id, tmp_subschema_id))) {
           } else if (OB_FAIL(result_set.get_exec_context().get_sqludt_meta_by_subschema_id(tmp_subschema_id, udt_meta))) {
-          } else if(ObObjUDTUtil::ob_is_supported_sql_udt(udt_meta.udt_id_)) {
+          } else if(is_supported_sql_udt(udt_meta.udt_id_)) {
             if (udt_id != udt_meta.udt_id_) {
               ret = OB_ERR_UNEXPECTED;
             }
-            field.type_.set_subschema_id(tmp_subschema_id);
+            field.type_meta_.set_subschema_id(tmp_subschema_id);
             field.charsetnr_ = CS_TYPE_BINARY;
             field.length_ = OB_MAX_LONGTEXT_LENGTH;
             if (OB_SUCC(ret)) {
@@ -539,7 +541,7 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
             ret = OB_NOT_SUPPORTED;
           }
         } else if (expr->get_result_type().is_ext()) {
-          field.type_.meta_.set_extend_type(expr->get_result_type().get_extend_type());
+          field.type_meta_.set_extend_type(expr->get_result_type().get_extend_type());
           if (OB_INVALID_ID != expr->get_result_type().get_udt_id()
               && (PL_VARRAY_TYPE == expr->get_result_type().get_extend_type()
                   || PL_NESTED_TABLE_TYPE == expr->get_result_type().get_extend_type()
@@ -549,7 +551,9 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
                 && NULL == context->secondary_namespace_
                 && NULL == context->session_info_->get_pl_context()) {
               // Text protocol convert extend type field to varchar
-              field.type_.set_varchar(type_name);
+              // Text protocol exposes this extended type as VARCHAR.
+              field.type_meta_.set_varchar();
+              field.type_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
             }
           }
         } else if (!expr->get_result_type().is_ext()
@@ -682,8 +686,8 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
         field.dname_.assign(NULL, 0);
         field.tname_.assign(NULL, 0);
         field.org_tname_.assign(NULL, 0);
-        field.type_.reset();
-        field.type_.set_type(ObExtendType);
+        field.type_meta_.reset();
+        field.type_meta_.set_type(ObExtendType);
         field.paramed_ctx_ = NULL;
       }
     }
@@ -875,7 +879,7 @@ int ObSql::do_real_prepare(const ObString &sql,
       OZ (result.reserve_param_columns(param_cnt));
       for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
         ObField param_field;
-        param_field.type_.set_type(ObIntType);
+        param_field.type_meta_.set_type(ObIntType);
         param_field.cname_ = ObString::make_string("?");
 
         // Mock prepare does not fully resolve anonymous blocks, so out row info is unknown here.
@@ -1129,7 +1133,7 @@ int ObSql::prepare_pl_sql(const ObString &sql,
               OZ (result.reserve_param_columns(param_cnt));
               for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
                 ObField param_field;
-                param_field.type_.set_type(ObIntType);
+                param_field.type_meta_.set_type(ObIntType);
                 param_field.cname_ = ObString::make_string("?");
                 OZ (result.add_param_column(param_field), K(param_field), K(i), K(param_cnt));
               }
@@ -1468,12 +1472,12 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
   return ret;
 }
 
-int ObSql::add_param_to_param_store(const ObObjParam &param,
+int ObSql::add_param_to_param_store(const DatumParameter &param,
                                     ParamStore &param_store)
 {
   int ret = OB_SUCCESS;
   if (param.is_numeric_type()) {
-    const_cast<ObObjParam &>(param).set_param_meta();
+    const_cast<DatumParameter &>(param).set_param_meta();
   }
   if (OB_FAIL(param_store.push_back(param))) {
   }
@@ -1487,7 +1491,7 @@ int ObSql::construct_param_store_from_parameterized_params(const ObPlanCacheCtx 
   if (OB_FAIL(param_store.reserve(phy_ctx.fp_result_.parameterized_params_.count()))) {
   }
   for (int i = 0; OB_SUCC(ret) && i < phy_ctx.fp_result_.parameterized_params_.count(); ++i) {
-    const common::ObObjParam *param = phy_ctx.fp_result_.parameterized_params_.at(i);
+    const common::DatumParameter *param = phy_ctx.fp_result_.parameterized_params_.at(i);
     if (OB_FAIL(add_param_to_param_store(*param, param_store))) {
     }
   }
@@ -1585,7 +1589,7 @@ int ObSql::clac_fixed_param_store(const stmt::StmtType stmt_type,
   ObCollationType collation_connection = static_cast<ObCollationType>(
                                          session.get_local_collation_connection());
   ObString literal_prefix;
-  ObObjParam value;
+  DatumParameter value;
   const bool is_paramlize = false;
   int64_t server_collation = CS_TYPE_INVALID;
   bool enable_decimal_int = false;
@@ -1648,12 +1652,12 @@ int ObSql::init_execute_params_for_ab(ObIAllocator &allocator,
   } else if (OB_FAIL(ObPlanCacheValue::get_one_group_params(0, params_store, *first_group_params))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < first_group_params->count(); i++) {
-      ObObjParam &obj_param = first_group_params->at(i);
-      const ObObjParam &src_param = params_store.at(i);
-      const ObSqlArrayObj *array_obj = NULL;
+      DatumParameter &obj_param = first_group_params->at(i);
+      const DatumParameter &src_param = params_store.at(i);
+      const DatumParameterArray *array_obj = NULL;
       if (OB_UNLIKELY(!src_param.is_ext_sql_array())) {
         // do not need set accuracy
-      } else if (OB_ISNULL(array_obj = reinterpret_cast<const ObSqlArrayObj*>(src_param.get_ext()))) {
+      } else if (OB_ISNULL(array_obj = reinterpret_cast<const DatumParameterArray*>(src_param.get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
         obj_param.set_accuracy(array_obj->element_.get_accuracy());
@@ -1894,7 +1898,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
           OZ (result.reserve_field_columns(field_column_cnt));
           for (int64_t i = 0; OB_SUCC(ret) && i < field_column_cnt; ++i) {
             ObField field;
-            field.type_.set_type(ObNullType);
+            field.type_meta_.set_type(ObNullType);
             OZ (result.add_field_column(field));
           }
         }
@@ -2484,7 +2488,7 @@ int ObSql::generate_stmt_with_reconstruct_sql(ObDMLStmt* &stmt,
 {
   int ret = OB_SUCCESS;
   ObString sql;
-  ObObjPrintParams print_param;
+  ObValuePrintParams print_param;
   ObSQLSessionInfo *session = sql_ctx.session_info_;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(session) || OB_ISNULL(pc_ctx) ||
@@ -3815,7 +3819,7 @@ int ObSql::check_batched_multi_stmt_after_resolver(ObPlanCacheCtx &pc_ctx,
           pc_ctx.ab_params_ = ab_params;
           ParamStore &param_store = plan_ctx->get_param_store_for_update();
           for (int64_t i = 0; OB_SUCC(ret) && i < param_store.count(); i++) {
-            ObObjParam &obj_param = param_store.at(i);
+            DatumParameter &obj_param = param_store.at(i);
             obj_param.get_param_flag().is_batch_parameter_ = true;
           }
         }
@@ -3825,7 +3829,7 @@ int ObSql::check_batched_multi_stmt_after_resolver(ObPlanCacheCtx &pc_ctx,
           pc_ctx.ab_params_ = ab_params;
           ParamStore &param_store = plan_ctx->get_param_store_for_update();
           for (int64_t i = 0; OB_SUCC(ret) && i < param_store.count(); i++) {
-            ObObjParam &obj_param = param_store.at(i);
+            DatumParameter &obj_param = param_store.at(i);
             obj_param.get_param_flag().is_batch_parameter_ = true;
           }
         }
@@ -4027,7 +4031,7 @@ int ObSql::handle_text_execute(const ObStmt *basic_stmt,
     if (OB_FAIL(param_store.reserve(raw_expr_params.count()))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < raw_expr_params.count(); ++i) {
-      ObObjParam obj_param;
+      DatumParameter obj_param;
       if (OB_ISNULL(raw_expr = raw_expr_params.at(i))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObSQLUtils::calc_const_expr(result.get_exec_context(),

@@ -865,7 +865,7 @@ protected:
                           double row_count,
                           bool is_get,
                           double &cost);
-  int get_qual_cmp_tc(const ObRawExpr *qual, ObObjTypeClass &cmp_tc);
+  int get_qual_cmp_tc(const ObRawExpr *qual, SqlTypeClass &cmp_tc);
 
 protected:
   const ObOptCostModelParameter &cost_params_;

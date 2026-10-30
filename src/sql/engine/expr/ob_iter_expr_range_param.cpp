@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_iter_expr_range_param.h"
 #include "sql/engine/ob_exec_context.h"
+#include "share/datum/typed_datum_compare.h"
 namespace oceanbase
 {
 using namespace common;
@@ -39,7 +40,11 @@ int ObIterExprRangeParam::get_next_row(ObIterExprCtx &expr_ctx, const common::Ob
     } else if (OB_UNLIKELY(cur_cell_idx >= cur_row->get_count())) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      cur_row->get_cell(cur_cell_idx++) = plan_ctx->get_param_store().at(i);
+      const DatumParameter &parameter = plan_ctx->get_param_store().at(i);
+      DatumValue owned;
+      ret = clone_typed_value(parameter.value_view(), owned,
+          expr_ctx.get_exec_context().get_allocator());
+      if (OB_SUCC(ret)) { cur_row->get_cell(cur_cell_idx++) = owned; }
     }
   }
   if (OB_SUCC(ret)) {

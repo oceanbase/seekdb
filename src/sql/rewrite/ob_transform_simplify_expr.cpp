@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
+#include "share/datum/datum_value_cast.h"
 #include "sql/rewrite/ob_transform_simplify_expr.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
@@ -465,7 +466,7 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
   } else if (expr->is_static_scalar_const_expr()) {
-    ObObj result;
+    DatumValue result;
     bool got_result = false;
     bool has_warning = false;
     if (OB_FAIL(ObTransformUtils::calc_const_expr_result(expr,
@@ -622,7 +623,7 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
     } else {
       //check if has wildcard or lob column
       bool got_result = false;
-      ObObj result;
+      DatumValue result;
       if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                           pattern_expr,
                                                           result,
@@ -776,7 +777,7 @@ int ObTransformSimplifyExpr::remove_dummy_filter_exprs(common::ObIArray<ObRawExp
       if (!transed_expr->is_const_raw_expr()) {
         if (OB_FAIL(exprs.push_back(transed_expr))) {
         }
-      } else if (OB_FAIL(ObObjEvaluator::is_true(
+      } else if (OB_FAIL(DatumValueEvaluator::is_true(
                            static_cast<ObConstRawExpr*>(transed_expr)->get_value(), is_true))) {
       } else if (is_true) {
       } else if (OB_FAIL(exprs.push_back(transed_expr))) {
@@ -863,7 +864,7 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
           /* do nothing */
         } else if (!temp->is_const_raw_expr()) {
           /* do nothing */
-        } else if (OB_FAIL(ObObjEvaluator::is_true(
+        } else if (OB_FAIL(DatumValueEvaluator::is_true(
                    static_cast<ObConstRawExpr*>(temp)->get_value(), is_true))) {
         } else if ((T_OP_AND == expr->get_expr_type() && !is_true)
                    || (T_OP_OR == expr->get_expr_type() && is_true)) {
@@ -1343,7 +1344,7 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
             new_expr = child_0;
           }
         } else if (child_0->is_static_const_expr()) {
-          ObObj result;
+          DatumValue result;
           bool got_result = false;
           if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                                 child_0,
@@ -1532,7 +1533,7 @@ int ObTransformSimplifyExpr::do_convert_nvl_predicate(ObDMLStmt *stmt,
                                                               nvl_at_left? exp2 : exp3,
                                                               nvl_at_left? exp3 : exp2))) {
     } else if (exp2_cmp_exp3->is_static_const_expr()){
-      ObObj result;
+      DatumValue result;
       bool got_result = false;
       if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                             exp2_cmp_exp3,
@@ -1862,14 +1863,14 @@ int ObTransformSimplifyExpr::is_filter_exprs_false(common::ObIArray<ObRawExpr*>&
           OB_ISNULL(ctx_->exec_ctx_->get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObObj result;
+        DatumParameter result;
         bool is_cal_true = false;
         if (OB_FAIL(ObSQLUtils::calc_const_expr(
           filter_expr, &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(), result, is_cal_true))) {
         } else if ((!is_cal_true) || (!result.is_integer_type())) {
         // do nothing if plan cache does not check the bool value, or the result is not integer type
           LOG_TRACE("plan cache does not check this bool value, ignore it", K(is_cal_true), K(result.get_type()));
-        } else if (OB_FAIL(ObObjEvaluator::is_true(result, is_cal_true))) {
+        } else if (OB_FAIL(DatumValueEvaluator::is_true(result.value_view(), is_cal_true))) {
         } else if (!is_cal_true) {
           is_false = true;
         } else {
@@ -3231,7 +3232,7 @@ int ObTransformSimplifyExpr::check_convert_then_exprs_validity(ObRawExpr *parent
                                                               is_case_at_left ? sibling_expr : enum_expr))) {
       } else if (cur_then_filter->is_static_const_expr()) {
         bool got_result = false;
-        ObObj result;
+        DatumValue result;
         if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                               cur_then_filter,
                                                               result,

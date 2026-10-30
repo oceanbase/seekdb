@@ -45,7 +45,7 @@ int ObExprDateFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   {
     OB_ASSERT(rt_expr.arg_cnt_ == 2);
     OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
-    if (ObStringTC != ob_obj_type_class(rt_expr.args_[1]->datum_meta_.type_) &&
+    if (ObStringTC != sql_type_class(rt_expr.args_[1]->datum_meta_.type_) &&
         ObNullType != rt_expr.args_[1]->datum_meta_.type_) {
       rt_expr.eval_func_ = ObExprDateFormat::calc_date_format_invalid;
     } else {

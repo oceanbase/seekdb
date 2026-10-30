@@ -28,6 +28,9 @@
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "lib/locale/ob_locale_type.h"
 #include <inttypes.h>
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
 
 #include <string>
 
@@ -42,6 +45,32 @@ using namespace sql;
 using namespace transaction;
 namespace sql
 {
+namespace {
+// NOP is immutable native storage. Preserve the previous scale metadata exactly
+// as set_nop_value() did, while replacing the old payload without an allocation.
+void set_sys_var_nop(DatumValue &value)
+{
+  struct NopPayload {
+    int64_t value;
+    int32_t size;
+    uint8_t subtype;
+    uint8_t level;
+    uint8_t collation;
+  } __attribute__((packed));
+  static_assert(sizeof(NopPayload) == DATUM_EXTEND_PAYLOAD_SIZE, "Native NOP payload");
+  static const NopPayload payload{ObActionFlag::OP_NOP, 0, 0, CS_LEVEL_INVALID, CS_TYPE_INVALID};
+  value.datum_.ptr_ = reinterpret_cast<const char *>(&payload);
+  value.datum_.set_ext();
+  value.meta_.set_ext();
+}
+int cast_system_variable_value(SqlValueType type, ObCastCtx &context,
+                               const DatumValue &input, DatumValue &output)
+{
+  return context.allocator_v2_ == nullptr ? OB_INVALID_ARGUMENT
+      : DatumValueCaster::to_type(type, context, input, *context.allocator_v2_, output);
+}
+} // namespace
+
 char ObSpecialSysVarValues::version_comment_[ObSpecialSysVarValues::VERSION_COMMENT_MAX_LEN];
 char ObSpecialSysVarValues::version_[ObSpecialSysVarValues::VERSION_MAX_LEN];
 char ObSpecialSysVarValues::system_time_zone_str_[ObSpecialSysVarValues::SYSTEM_TIME_ZONE_MAX_LEN];
@@ -151,11 +180,11 @@ const char *ObSqlModeVar::SQL_MODE_NAMES[] = {
 
 const char * ObBasicSysVar::EMPTY_STRING = "";
 
-int ObBasicSysVar::init(const ObObj &value,
-                        const ObObj &min_val,
-                        const ObObj &max_val,
-                        ObObjType type,
-                        int64_t flags)
+int ObBasicSysVar::init(const DatumValue &value,
+                        const DatumValue &min_val,
+                        const DatumValue &max_val,
+                        SqlValueType type,
+                        int64_t flags, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   bool is_nullable = ((flags & share::ObSysVarFlag::NULLABLE) && (value.get_type() == ObNullType));
@@ -165,11 +194,17 @@ int ObBasicSysVar::init(const ObObj &value,
   } else if (!is_base_value_empty()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    base_value_ = value;
-    min_val_ = min_val;
-    max_val_ = max_val;
-    type_ = type;
-    flags_ = flags;
+    DatumValue owned_value, owned_min, owned_max;
+    if (OB_FAIL(clone_typed_value(value, owned_value, owner))) {
+    } else if (OB_FAIL(clone_typed_value(min_val, owned_min, owner))) {
+    } else if (OB_FAIL(clone_typed_value(max_val, owned_max, owner))) {
+    } else {
+      base_value_ = owned_value;
+      min_val_ = owned_min;
+      max_val_ = owned_max;
+      type_ = type;
+      flags_ = flags;
+    }
   }
   return ret;
 }
@@ -198,12 +233,12 @@ void ObBasicSysVar::clean_value()
 void ObBasicSysVar::clean_base_value()
 {
   base_version_ = OB_INVALID_VERSION;
-  base_value_.set_nop_value();
+  set_sys_var_nop(base_value_);
 }
 
 void ObBasicSysVar::clean_inc_value()
 {
-  inc_value_.set_nop_value();
+  set_sys_var_nop(inc_value_);
 }
 
 bool ObBasicSysVar::is_base_value_empty() const
@@ -241,7 +276,7 @@ int ObBasicSysVar::is_need_serialize(bool &need_serialize) const
 }
 */
 
-int ObBasicSysVar::log_err_wrong_value_for_var(int error_no, const ObObj &val) const
+int ObBasicSysVar::log_err_wrong_value_for_var(int error_no, const DatumValue &val) const
 {
   int ret = OB_SUCCESS;
   SMART_VAR(char[OB_MAX_SQL_LENGTH], val_str_buf) {
@@ -259,10 +294,10 @@ int ObBasicSysVar::log_err_wrong_value_for_var(int error_no, const ObObj &val) c
 
 int ObBasicSysVar::check_and_convert(ObExecContext &ctx,
                                      const ObSetVar &set_var,
-                                     const ObObj &in_val, ObObj &out_val)
+                                     const DatumValue &in_val, DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
-  ObObj cur_val = in_val;
+  DatumValue cur_val = in_val;
   if (OB_FAIL(do_check_and_convert(ctx, set_var, cur_val, out_val))) {
   } else if (FALSE_IT(cur_val = out_val)) {
   } else if (NULL != on_check_and_convert_ &&
@@ -271,7 +306,7 @@ int ObBasicSysVar::check_and_convert(ObExecContext &ctx,
   return ret;
 }
 
-int ObBasicSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObBasicSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   UNUSED(set_var);
   UNUSED(val);
@@ -280,7 +315,7 @@ int ObBasicSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
 
 int ObBasicSysVar::do_check_and_convert(ObExecContext &ctx,
                                         const ObSetVar &set_var,
-                                        const ObObj &in_val, ObObj &out_val)
+                                        const DatumValue &in_val, DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -294,14 +329,14 @@ int ObBasicSysVar::do_check_and_convert(ObExecContext &ctx,
 
 int ObBasicSysVar::session_update(ObExecContext &ctx,
                                   const ObSetVar &set_var,
-                                  const ObObj &val)
+                                  const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   ObString extra_var_name;
   ObString extra_val;
   ObCollationType extra_coll_type = CS_TYPE_INVALID;
   bool should_update_extra_var = false;
-  ObObj extra_val_obj;
+  DatumValue extra_val_obj;
   ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
   if (OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
@@ -334,7 +369,7 @@ int ObBasicSysVar::session_update(ObExecContext &ctx,
                 set_var.var_name_, coll_str, extra_var_name, extra_val, extra_coll_type))) {
     } else {
       should_update_extra_var = true;
-      extra_val_obj.set_int(static_cast<int64_t>(extra_coll_type));
+      OZ(extra_val_obj.set_int(static_cast<int64_t>(extra_coll_type), ctx.get_allocator()));
     }
   }
   // Change the charset-related system variables at the same time as the corresponding collation system variables
@@ -369,7 +404,7 @@ int ObBasicSysVar::session_update(ObExecContext &ctx,
                 set_var.var_name_, cs_str, extra_var_name, extra_val, extra_coll_type))) {
     } else {
       should_update_extra_var = true;
-      extra_val_obj.set_int(static_cast<int64_t>(extra_coll_type));
+      OZ(extra_val_obj.set_int(static_cast<int64_t>(extra_coll_type), ctx.get_allocator()));
     }
   } else if (set_var.var_name_ == OB_SV__ENABLE_PARALLEL_QUERY) {
       should_update_extra_var = true;
@@ -380,20 +415,20 @@ int ObBasicSysVar::session_update(ObExecContext &ctx,
     //  alter session force parallel query parallel 1 when enable = false, parallel = 1  =>  follow no parallel rule
     //  alter session force parallel query parallel 7 when enable = true, parallel = 7   => follow force parallel rule
     extra_var_name = ObString::make_string(OB_SV__FORCE_PARALLEL_QUERY_DOP);
-    extra_val_obj.set_uint64(1);
+    OZ(extra_val_obj.set_uint64(1, ctx.get_allocator()));
   } else if (set_var.var_name_ == OB_SV__ENABLE_PARALLEL_DML) {
     should_update_extra_var = true;
     extra_var_name = ObString::make_string(OB_SV__FORCE_PARALLEL_DML_DOP);
-    extra_val_obj.set_uint64(1);
+    OZ(extra_val_obj.set_uint64(1, ctx.get_allocator()));
   } else if (set_var.var_name_ == OB_SV__FORCE_PARALLEL_QUERY_DOP) {
     should_update_extra_var = true;
     uint64_t parallel = 0;
     extra_var_name = ObString::make_string(OB_SV__ENABLE_PARALLEL_QUERY);
     if (OB_FAIL(val.get_uint64(parallel))) {
     } else if (1 == parallel) {
-      extra_val_obj.set_int(0);
+      OZ(extra_val_obj.set_int(0, ctx.get_allocator()));
     } else {
-      extra_val_obj.set_int(1);
+      OZ(extra_val_obj.set_int(1, ctx.get_allocator()));
     }
   } else if (set_var.var_name_ == OB_SV__FORCE_PARALLEL_DDL_DOP) {
     should_update_extra_var = true;
@@ -401,14 +436,14 @@ int ObBasicSysVar::session_update(ObExecContext &ctx,
     extra_var_name = ObString::make_string(OB_SV__ENABLE_PARALLEL_DDL);
     if (OB_FAIL(val.get_uint64(parallel))) {
     } else if (1 == parallel) {
-      extra_val_obj.set_int(0);
+      OZ(extra_val_obj.set_int(0, ctx.get_allocator()));
     } else {
-      extra_val_obj.set_int(1);
+      OZ(extra_val_obj.set_int(1, ctx.get_allocator()));
     }
   } else if (set_var.var_name_ == OB_SV__ENABLE_PARALLEL_DDL) {
     should_update_extra_var = true;
     extra_var_name = ObString::make_string(OB_SV__FORCE_PARALLEL_DDL_DOP);
-    extra_val_obj.set_uint64(1);
+    OZ(extra_val_obj.set_uint64(1, ctx.get_allocator()));
   }
   // Update system variables that require additional updates
   //FIXME Temporarily not considering atomicity
@@ -429,7 +464,7 @@ int ObBasicSysVar::session_update(ObExecContext &ctx,
 
 int ObBasicSysVar::update(ObExecContext &ctx,
                           const ObSetVar &set_var,
-                          const ObObj &val)
+                          const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (NULL != on_update_) {
@@ -439,14 +474,14 @@ int ObBasicSysVar::update(ObExecContext &ctx,
   return ret;
 }
 
-ObObjType ObBasicSysVar::inner_get_meta_type() const
+SqlValueType ObBasicSysVar::inner_get_meta_type() const
 {
   return type_;
 }
 
 int ObBasicSysVar::inner_to_select_obj(ObIAllocator &allocator,
                                        const ObBasicSessionInfo &session,
-                                       ObObj &select_obj) const
+                                       DatumValue &select_obj) const
 {
   UNUSED(allocator);
   UNUSED(session);
@@ -460,11 +495,12 @@ int ObBasicSysVar::inner_to_show_str(ObIAllocator &allocator,
                                      ObString &show_str) const
 {
   int ret = OB_SUCCESS;
-  const ObObj &value = get_value();
-  const ObObj *res_obj = NULL;
+  const DatumValue &value = get_value();
+  DatumValue cast_result;
+  const DatumValue *res_obj = &cast_result;
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(&session);
   ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-  EXPR_CAST_OBJ_V2(ObVarcharType, value, res_obj);
+  OZ(cast_system_variable_value(ObVarcharType, cast_ctx, value, cast_result));
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(res_obj)) {
     ret = OB_ERR_UNEXPECTED;
@@ -476,9 +512,9 @@ int ObBasicSysVar::inner_to_show_str(ObIAllocator &allocator,
 }
 
 
-ObObjType ObBasicSysVar::get_meta_type() const
+SqlValueType ObBasicSysVar::get_meta_type() const
 {
-  ObObjType ret_type = ObMaxType;
+  SqlValueType ret_type = ObMaxType;
   if (NULL == get_meta_type_) {
     ret_type = inner_get_meta_type();
   } else {
@@ -487,7 +523,7 @@ ObObjType ObBasicSysVar::get_meta_type() const
   return ret_type;
 }
 
-const ObObj &ObBasicSysVar::get_value() const
+const DatumValue &ObBasicSysVar::get_value() const
 {
   return is_inc_value_empty() ? base_value_ : inc_value_;
 }
@@ -495,22 +531,25 @@ const ObObj &ObBasicSysVar::get_value() const
 
 
 
-const ObObj &ObBasicSysVar::get_max_val() const
+const DatumValue &ObBasicSysVar::get_max_val() const
 {
   return max_val_;
 }
 
-void ObBasicSysVar::set_value(const ObObj &value)
+int ObBasicSysVar::set_value(const DatumValue &value, ObIAllocator &owner)
 {
-  inc_value_ = value;
+  DatumValue candidate;
+  int ret = clone_typed_value(value, candidate, owner);
+  if (OB_SUCC(ret)) { inc_value_ = candidate; }
+  return ret;
 }
 
-ObObjType ObBasicSysVar::get_data_type() const
+SqlValueType ObBasicSysVar::get_data_type() const
 {
   return type_;
 }
 
-void ObBasicSysVar::set_data_type(ObObjType type)
+void ObBasicSysVar::set_data_type(SqlValueType type)
 {
   type_ = type;
 }
@@ -522,7 +561,7 @@ void ObBasicSysVar::set_flags(int64_t flags)
 
 int ObBasicSysVar::to_select_obj(ObIAllocator &allocator,
                                  const ObBasicSessionInfo &session,
-                                 ObObj &select_obj) const
+                                 DatumValue &select_obj) const
 {
   int ret = OB_SUCCESS;
   if (NULL == to_select_obj_) {
@@ -592,7 +631,7 @@ int ObBasicSysVar::get_collation_var_and_val_by_charset(const ObString &cs_var_n
   return ret;
 }
 
-int ObBasicSysVar::check_and_convert_int_tc_value(const common::ObObj &value,
+int ObBasicSysVar::check_and_convert_int_tc_value(const common::DatumValue &value,
                                                   int64_t invalid_value,
                                                   int64_t &result_value) const
 {
@@ -603,10 +642,10 @@ int ObBasicSysVar::check_and_convert_int_tc_value(const common::ObObj &value,
       int_value = value.get_tinyint();
       break;
     case ObSmallIntType:
-      int_value = value.get_smallint();
+      int_value = value.get_int();
       break;
     case ObMediumIntType:
-      int_value = value.get_mediumint();
+      int_value = value.get_int();
       break;
     case ObInt32Type:
       int_value = value.get_int32();
@@ -627,7 +666,7 @@ int ObBasicSysVar::check_and_convert_int_tc_value(const common::ObObj &value,
   return ret;
 }
 
-int ObBasicSysVar::check_and_convert_uint_tc_value(const common::ObObj &value,
+int ObBasicSysVar::check_and_convert_uint_tc_value(const common::DatumValue &value,
                                                    uint64_t invalid_value,
                                                    uint64_t &result_value) const
 {
@@ -635,16 +674,16 @@ int ObBasicSysVar::check_and_convert_uint_tc_value(const common::ObObj &value,
   uint64_t uint_value = 0;
   switch (value.get_type()) {
     case ObUTinyIntType:
-      uint_value = value.get_utinyint();
+      uint_value = value.get_uint64();
       break;
     case ObUSmallIntType:
-      uint_value = value.get_usmallint();
+      uint_value = value.get_uint64();
       break;
     case ObUMediumIntType:
-      uint_value = value.get_umediumint();
+      uint_value = value.get_uint64();
       break;
     case ObUInt32Type:
-      uint_value = value.get_uint32();
+      uint_value = value.get_uint64();
       break;
     case ObUInt64Type:
       uint_value = value.get_uint64();
@@ -676,22 +715,46 @@ DEF_TO_STRING(ObBasicSysVar)
 
 OB_DEF_SERIALIZE(ObBasicSysVar)
 {
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, get_value(), type_, flags_, is_enum_type_);
+  int ret = DatumParameterCodec::encode_value(get_value().datum_, get_value().meta_, buf, buf_len, pos);
+  LST_DO_CODE(OB_UNIS_ENCODE, type_, flags_, is_enum_type_);
   return ret;
 }
 
-OB_DEF_DESERIALIZE(ObBasicSysVar)
+int ObBasicSysVar::deserialize(const char *buf, int64_t data_len, int64_t &pos,
+                                ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, inc_value_, type_, flags_, is_enum_type_);
+  int64_t version = 0, len = 0;
+  OB_UNIS_DECODE(version);
+  OB_UNIS_DECODE(len);
+  CHECK_VERSION_LENGTH(ObBasicSysVar, version, len);
+  if (OB_SUCC(ret)) {
+    const int64_t body_start = pos;
+    int64_t body_pos = 0;
+    DatumValue candidate = inc_value_;
+    SqlValueType type = type_;
+    int64_t flags = flags_;
+    bool is_enum = is_enum_type_;
+    if (body_pos < len) {
+      ret = DatumParameterCodec::decode_unis_value(buf + body_start, len, body_pos,
+                                                  owner, candidate.datum_, candidate.meta_);
+    }
+    if (OB_SUCC(ret) && body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, type); }
+    if (OB_SUCC(ret) && body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, flags); }
+    if (OB_SUCC(ret) && body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, is_enum); }
+    if (OB_SUCC(ret)) {
+      inc_value_ = candidate; type_ = type; flags_ = flags; is_enum_type_ = is_enum;
+    }
+    pos = body_start + len;
+  }
   return ret;
 }
 
 OB_DEF_SERIALIZE_SIZE(ObBasicSysVar)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, get_value(), type_, flags_, is_enum_type_);
+  if (DatumParameterCodec::value_size(get_value().datum_, get_value().meta_, len) != OB_SUCCESS) { return 0; }
+  LST_DO_CODE(OB_UNIS_ADD_LEN, type_, flags_, is_enum_type_);
   return len;
 }
 
@@ -701,7 +764,7 @@ void ObTypeLibSysVar::reset()
   type_lib_.reset();
 }
 
-int ObTypeLibSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObTypeLibSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   // In order to behave like MySQL, we do not check if flags_ contains share::ObSysVarFlag::NULLABLE here,
@@ -722,15 +785,16 @@ int ObTypeLibSysVar::inner_to_show_str(ObIAllocator &allocator,
                                        ObString &show_str) const
 {
   int ret = OB_SUCCESS;
-  const ObObj &value = get_value();
+  const DatumValue &value = get_value();
   if (OB_UNLIKELY(false == ob_is_integer_type(value.get_type()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid type of type lib", K(*this), K(value.get_type()));
   } else {
-    const ObObj *res_obj = NULL;
+    DatumValue cast_result;
+    const DatumValue *res_obj = &cast_result;
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(&session);
     ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-    EXPR_CAST_OBJ_V2(ObUInt64Type, value, res_obj);
+    OZ(cast_system_variable_value(ObUInt64Type, cast_ctx, value, cast_result));
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(res_obj)) {
       ret = OB_ERR_UNEXPECTED;
@@ -763,7 +827,7 @@ int ObTypeLibSysVar::find_type(const ObString &type, int64_t &type_index) const
 
 int ObTypeLibSysVar::do_check_and_convert(ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const ObObj &in_val, ObObj &out_val)
+                                          const DatumValue &in_val, DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -795,7 +859,7 @@ int ObTypeLibSysVar::do_check_and_convert(ObExecContext &ctx,
     } else if (OB_UNLIKELY(type_idx < 0) || OB_UNLIKELY(type_idx >= type_lib_.count_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      out_val.set_int(type_idx);
+      OZ(out_val.set_int(type_idx, ctx.get_allocator()));
     }
   } else if (true == ob_is_int_tc(in_val.get_type())) {
     int64_t int64_val = 0;
@@ -807,7 +871,7 @@ int ObTypeLibSysVar::do_check_and_convert(ObExecContext &ctx,
       } else {
       }
     } else {
-      out_val.set_int(int64_val);
+      OZ(out_val.set_int(int64_val, ctx.get_allocator()));
     }
   } else if (true == ob_is_uint_tc(in_val.get_type())) {
     uint64_t uint64_val = 0;
@@ -822,7 +886,7 @@ int ObTypeLibSysVar::do_check_and_convert(ObExecContext &ctx,
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("value is lager than INT64_MAX", K(ret), K(uint64_val), K(in_val));
     } else {
-      out_val.set_int(static_cast<int64_t>(uint64_val));
+      OZ(out_val.set_int(static_cast<int64_t>(uint64_val), ctx.get_allocator()));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -832,20 +896,20 @@ int ObTypeLibSysVar::do_check_and_convert(ObExecContext &ctx,
 
 int ObEnumSysVar::inner_to_select_obj(ObIAllocator &allocator,
                                       const ObBasicSessionInfo &session,
-                                      ObObj &select_obj) const
+                                      DatumValue &select_obj) const
 {
   int ret = OB_SUCCESS;
   ObString show_str;
   if (OB_FAIL(inner_to_show_str(allocator, session, show_str))) {
   } else {
     // For the ObEnumSysVar class, inner_to_select_obj and inner_to_show_str display the same content
-    select_obj.set_varchar(show_str);
+    OZ(select_obj.set_varchar(show_str, allocator));
     select_obj.set_collation_type(ObCharset::get_system_collation());
   }
   return ret;
 }
 
-int ObCharsetSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObCharsetSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (true == set_var.is_set_default_
@@ -862,7 +926,7 @@ int ObCharsetSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
 
 int ObCharsetSysVar::do_check_and_convert(ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const ObObj &in_val, ObObj &out_val)
+                                          const DatumValue &in_val, DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -882,9 +946,9 @@ int ObCharsetSysVar::do_check_and_convert(ObExecContext &ctx,
     }
   } else if (true == ob_is_string_type(in_val.get_type())) {
     ObCastCtx cast_ctx(&ctx.get_allocator(), &dtc_params, CM_NONE, ObCharset::get_system_collation());
-    ObObj buf_obj;
-    const ObObj *res_obj_ptr = NULL;
-    if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, in_val, buf_obj, res_obj_ptr))) {
+    DatumValue buf_obj;
+    const DatumValue *res_obj_ptr = &buf_obj;
+    if (OB_FAIL(cast_system_variable_value(ObVarcharType, cast_ctx, in_val, buf_obj))) {
     } else if (OB_ISNULL(res_obj_ptr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("succ to cast obj, but res_obj_ptr is NULL", K(ret));
@@ -893,9 +957,9 @@ int ObCharsetSysVar::do_check_and_convert(ObExecContext &ctx,
     }
   } else if (true == ob_is_integer_type(in_val.get_type())) {
     ObCastCtx cast_ctx(&ctx.get_allocator(), &dtc_params, CM_NONE, ObCharset::get_system_collation());
-    ObObj buf_obj;
-    const ObObj *res_obj_ptr = NULL;
-    if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, in_val, buf_obj, res_obj_ptr))) {
+    DatumValue buf_obj;
+    const DatumValue *res_obj_ptr = &buf_obj;
+    if (OB_FAIL(cast_system_variable_value(ObIntType, cast_ctx, in_val, buf_obj))) {
     } else if (OB_ISNULL(res_obj_ptr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("succ to cast obj, but res_obj_ptr is NULL", K(ret));
@@ -908,7 +972,7 @@ int ObCharsetSysVar::do_check_and_convert(ObExecContext &ctx,
   return ret;
 }
 
-int ObTinyintSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObTinyintSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (true == set_var.is_set_default_
@@ -924,8 +988,8 @@ int ObTinyintSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
 
 int ObTinyintSysVar::do_check_and_convert(ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const ObObj &in_val,
-                                          ObObj &out_val)
+                                          const DatumValue &in_val,
+                                          DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -937,7 +1001,7 @@ int ObTinyintSysVar::do_check_and_convert(ObExecContext &ctx,
   return ret;
 }
 
-int ObIntSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObIntSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (true == set_var.is_set_default_
@@ -953,8 +1017,8 @@ int ObIntSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
 
 int ObIntSysVar::do_check_and_convert(ObExecContext &ctx,
                                       const ObSetVar &set_var,
-                                      const ObObj &in_val,
-                                      ObObj &out_val)
+                                      const DatumValue &in_val,
+                                      DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   bool is_converted = false;
@@ -982,14 +1046,14 @@ int ObIntSysVar::do_check_and_convert(ObExecContext &ctx,
   }
 
 int ObIntSysVar::do_convert(ObExecContext &ctx,
-                            const common::ObObj &in_val,
-                            common::ObObj &out_val,
+                            const common::DatumValue &in_val,
+                            common::DatumValue &out_val,
                             bool &is_converted)
 {
   int ret = OB_SUCCESS;
   is_converted = false;
   ObExprCtx expr_ctx;
-  ObObj tmp_obj;
+  DatumValue tmp_obj;
   if (OB_UNLIKELY(ObIntType != type_ && ObUInt64Type != type_) ||
       OB_ISNULL(expr_ctx.phy_plan_ctx_ = ctx.get_physical_plan_ctx()) ||
       OB_ISNULL(expr_ctx.my_session_ = ctx.get_my_session())) {
@@ -1011,9 +1075,9 @@ int ObIntSysVar::do_convert(ObExecContext &ctx,
       uint64_t uint_val = 0;
       if (OB_FAIL(in_val.get_number(in_number))) {
       } else if (in_number.is_valid_int64(int_val)) {
-        tmp_obj.set_int(int_val);
+        OZ(tmp_obj.set_int(int_val, ctx.get_allocator()));
       } else if (in_number.is_valid_uint64(uint_val)) {
-        tmp_obj.set_uint64(uint_val);
+        OZ(tmp_obj.set_uint64(uint_val, ctx.get_allocator()));
       } else {
         ret = OB_ERR_WRONG_TYPE_FOR_VAR;
       }
@@ -1041,11 +1105,11 @@ int ObIntSysVar::do_convert(ObExecContext &ctx,
           if (OB_FAIL(wide::check_range_valid_int64(div_res_val.get_decimal_int(),
               div_res_val.get_int_bytes(), is_in_val_valid, tmp_int))) {
           } else if (is_in_val_valid) {
-            tmp_obj.set_int(tmp_int);
+            OZ(tmp_obj.set_int(tmp_int, ctx.get_allocator()));
           } else if (OB_FAIL(wide::check_range_valid_uint64(div_res_val.get_decimal_int(),
               div_res_val.get_int_bytes(), is_in_val_valid, tmp_uint))) {
           } else if (is_in_val_valid) {
-            tmp_obj.set_uint64(tmp_uint);
+            OZ(tmp_obj.set_uint64(tmp_uint, ctx.get_allocator()));
           } else {
             ret = OB_ERR_WRONG_TYPE_FOR_VAR;
           }
@@ -1061,8 +1125,9 @@ int ObIntSysVar::do_convert(ObExecContext &ctx,
     if (OB_FAIL(ret)) {
     } else if ((ob_is_int_tc(type_) && ob_is_uint_tc(tmp_obj.get_type())) ||
                (ob_is_uint_tc(type_) && ob_is_int_tc(tmp_obj.get_type()))) {
-      const ObObj *out_val_ptr = NULL;
-      EXPR_CAST_OBJ_V2(type_, tmp_obj, out_val_ptr);
+      DatumValue cast_result;
+      const DatumValue *out_val_ptr = &cast_result;
+      OZ(cast_system_variable_value(type_, cast_ctx, tmp_obj, cast_result));
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(out_val_ptr)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1087,13 +1152,14 @@ int ObIntSysVar::do_convert(ObExecContext &ctx,
 
     // adjust the out_val to meet variable's valid range
     if (OB_SUCC(ret)) {
-      if (!min_val_.is_null() && out_val < min_val_) {
-        out_val = min_val_;
-        is_converted = true;
+      int cmp = 0;
+      if (!min_val_.is_null()) {
+        OZ(compare_datum_values(out_val, min_val_, cmp));
+        if (OB_SUCC(ret) && cmp < 0) { out_val = min_val_; is_converted = true; }
       }
-      if (!max_val_.is_null() && out_val > max_val_) {
-        out_val = max_val_;
-        is_converted = true;
+      if (OB_SUCC(ret) && !max_val_.is_null()) {
+        OZ(compare_datum_values(out_val, max_val_, cmp));
+        if (OB_SUCC(ret) && cmp > 0) { out_val = max_val_; is_converted = true; }
       }
     }
   }
@@ -1103,12 +1169,12 @@ int ObIntSysVar::do_convert(ObExecContext &ctx,
 
 int ObStrictRangeIntSysVar::do_check_and_convert(ObExecContext &ctx,
                                                  const ObSetVar &set_var,
-                                                 const ObObj &in_val,
-                                                 ObObj &out_val)
+                                                 const DatumValue &in_val,
+                                                 DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   ObExprCtx expr_ctx;
-  ObObj tmp_obj;
+  DatumValue tmp_obj;
   if (true == set_var.is_set_default_) {
     // do nothing
   } else if (OB_UNLIKELY(ObIntType != type_ && ObUInt64Type != type_) ||
@@ -1132,9 +1198,9 @@ int ObStrictRangeIntSysVar::do_check_and_convert(ObExecContext &ctx,
       uint64_t uint_val = 0;
       if (OB_FAIL(in_val.get_number(in_number))) {
       } else if (in_number.is_valid_int64(int_val)) {
-        tmp_obj.set_int(int_val);
+        OZ(tmp_obj.set_int(int_val, ctx.get_allocator()));
       } else if (in_number.is_valid_uint64(uint_val)) {
-        tmp_obj.set_uint64(uint_val);
+        OZ(tmp_obj.set_uint64(uint_val, ctx.get_allocator()));
       } else {
         ret = OB_ERR_WRONG_TYPE_FOR_VAR;
       }
@@ -1146,8 +1212,9 @@ int ObStrictRangeIntSysVar::do_check_and_convert(ObExecContext &ctx,
     if (OB_FAIL(ret)) {
     } else if ((ob_is_int_tc(type_) && ob_is_uint_tc(tmp_obj.get_type())) ||
                (ob_is_uint_tc(type_) && ob_is_int_tc(tmp_obj.get_type()))) {
-      const ObObj *out_val_ptr = NULL;
-      EXPR_CAST_OBJ_V2(type_, tmp_obj, out_val_ptr);
+      DatumValue cast_result;
+      const DatumValue *out_val_ptr = &cast_result;
+      OZ(cast_system_variable_value(type_, cast_ctx, tmp_obj, cast_result));
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(out_val_ptr)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1161,12 +1228,17 @@ int ObStrictRangeIntSysVar::do_check_and_convert(ObExecContext &ctx,
 
     // check the out_val's range
     if (OB_SUCC(ret)) {
-      if (!min_val_.is_null() && out_val < min_val_) {
+      int cmp_min = 0, cmp_max = 0;
+      if (!min_val_.is_null()) { OZ(compare_datum_values(out_val, min_val_, cmp_min)); }
+      if (OB_SUCC(ret) && cmp_min >= 0 && !max_val_.is_null()) {
+        OZ(compare_datum_values(out_val, max_val_, cmp_max));
+      }
+      if (OB_SUCC(ret) && !min_val_.is_null() && cmp_min < 0) {
         ret = OB_ERR_WRONG_VALUE_FOR_VAR;
         int log_ret = OB_SUCCESS;
         if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, in_val))) {
         }
-      } else if (!max_val_.is_null() && out_val > max_val_) {
+      } else if (OB_SUCC(ret) && !max_val_.is_null() && cmp_max > 0) {
         ret = OB_ERR_WRONG_VALUE_FOR_VAR;
         int log_ret = OB_SUCCESS;
         if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, in_val))) {
@@ -1177,7 +1249,7 @@ int ObStrictRangeIntSysVar::do_check_and_convert(ObExecContext &ctx,
   return ret;
 }
 
-int ObNumericSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObNumericSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (true == set_var.is_set_default_
@@ -1191,7 +1263,7 @@ int ObNumericSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
 
 int ObNumericSysVar::do_check_and_convert(ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const ObObj &in_val, ObObj &out_val)
+                                          const DatumValue &in_val, DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   bool is_converted = false;
@@ -1208,8 +1280,8 @@ int ObNumericSysVar::do_check_and_convert(ObExecContext &ctx,
 }
 
 int ObNumericSysVar::do_convert(ObExecContext &ctx,
-                                const common::ObObj &in_val,
-                                common::ObObj &out_val,
+                                const common::DatumValue &in_val,
+                                common::DatumValue &out_val,
                                 bool &is_converted)
 {
   int ret = OB_SUCCESS;
@@ -1219,9 +1291,10 @@ int ObNumericSysVar::do_convert(ObExecContext &ctx,
   expr_ctx.my_session_ = ctx.get_my_session();
   expr_ctx.cast_mode_ = CM_NONE;
   expr_ctx.phy_plan_ctx_ = ctx.get_physical_plan_ctx();
-  const ObObj *res_obj = NULL;
+  DatumValue cast_result;
+  const DatumValue *res_obj = &cast_result;
   EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-  EXPR_CAST_OBJ_V2(ObNumberType, in_val, res_obj);
+  OZ(cast_system_variable_value(ObNumberType, cast_ctx, in_val, cast_result));
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(res_obj)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1230,19 +1303,20 @@ int ObNumericSysVar::do_convert(ObExecContext &ctx,
     out_val = *res_obj;
 
     // adjust the out_val to meet variable's valid range
-    if (!min_val_.is_null() && out_val < min_val_) {
-      out_val = min_val_;
-      is_converted = true;
+    int cmp = 0;
+    if (!min_val_.is_null()) {
+      OZ(compare_datum_values(out_val, min_val_, cmp));
+      if (OB_SUCC(ret) && cmp < 0) { out_val = min_val_; is_converted = true; }
     }
-    if (!max_val_.is_null() && out_val > max_val_) {
-      out_val = max_val_;
-      is_converted = true;
+    if (OB_SUCC(ret) && !max_val_.is_null()) {
+      OZ(compare_datum_values(out_val, max_val_, cmp));
+      if (OB_SUCC(ret) && cmp > 0) { out_val = max_val_; is_converted = true; }
     }
   }
   return ret;
 }
 
-int ObVarcharSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObVarcharSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (true == set_var.is_set_default_
@@ -1256,7 +1330,7 @@ int ObVarcharSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val
 
 int ObVarcharSysVar::do_check_and_convert(ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const ObObj &in_val, ObObj &out_val)
+                                          const DatumValue &in_val, DatumValue &out_val)
 {
   // TODO do implicit conversion like mysql
   UNUSED(ctx);
@@ -1268,7 +1342,7 @@ int ObVarcharSysVar::do_check_and_convert(ObExecContext &ctx,
   return OB_SUCCESS;
 }
 
-int ObTimeZoneSysVar::check_update_type(const ObSetVar &set_var, const ObObj &val)
+int ObTimeZoneSysVar::check_update_type(const ObSetVar &set_var, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (true == set_var.is_set_default_
@@ -1308,7 +1382,7 @@ int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str
 
 int ObTimeZoneSysVar::do_check_and_convert(ObExecContext &ctx,
                                            const ObSetVar &set_var,
-                                           const ObObj &in_val, ObObj &out_val)
+                                           const DatumValue &in_val, DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -1349,7 +1423,7 @@ int ObTimeZoneSysVar::do_check_and_convert(ObExecContext &ctx,
 
 int ObSqlModeVar::do_check_and_convert(ObExecContext &ctx,
                                        const ObSetVar &set_var,
-                                       const ObObj &in_val, ObObj &out_val)
+                                       const DatumValue &in_val, DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -1411,7 +1485,7 @@ int ObSqlModeVar::do_check_and_convert(ObExecContext &ctx,
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Value for sql_mode");
       } else {
-        out_val.set_uint64(sql_mode);
+        OZ(out_val.set_uint64(sql_mode, ctx.get_allocator()));
       }
     }
   }
@@ -1422,15 +1496,15 @@ int ObSqlModeVar::do_check_and_convert(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_and_convert_max_allowed_packet(ObExecContext &ctx,
                                                                const ObSetVar &set_var,
                                                                const ObBasicSysVar &sys_var,
-                                                               const ObObj &in_val,
-                                                               ObObj &out_val)
+                                                               const DatumValue &in_val,
+                                                               DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_session_readonly(ctx, set_var, sys_var, in_val, out_val))) {
   } else if (set_var.is_set_default_) {
     // do nothing
   } else {
-    ObObj g_net_buffer_length_obj;
+    DatumValue g_net_buffer_length_obj;
     int64_t g_net_buffer_length = 0;
     int64_t max_allowed_pkt = 0;
     ObIAllocator &allocator = ctx.get_allocator();
@@ -1452,15 +1526,15 @@ int ObSysVarOnCheckFuncs::check_and_convert_max_allowed_packet(ObExecContext &ct
 int ObSysVarOnCheckFuncs::check_and_convert_net_buffer_length(ObExecContext &ctx,
                                                               const ObSetVar &set_var,
                                                               const ObBasicSysVar &sys_var,
-                                                              const ObObj &in_val,
-                                                              ObObj &out_val)
+                                                              const DatumValue &in_val,
+                                                              DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_session_readonly(ctx, set_var, sys_var, in_val, out_val))) {
   } else if (set_var.is_set_default_) {
     // do nothing
   } else {
-    ObObj g_max_allowed_packet_obj;
+    DatumValue g_max_allowed_packet_obj;
     int64_t g_max_allowed_packet = 0;
     int64_t net_buffer_len = 0;
     ObIAllocator &allocator = ctx.get_allocator();
@@ -1482,8 +1556,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_net_buffer_length(ObExecContext &ctx
 int ObSysVarOnCheckFuncs::check_and_convert_charset(ObExecContext &ctx,
                                                     const ObSetVar &set_var,
                                                     const ObBasicSysVar &sys_var,
-                                                    const ObObj &in_val,
-                                                    ObObj &out_val)
+                                                    const DatumValue &in_val,
+                                                    DatumValue &out_val)
 {
   UNUSED(sys_var);
   UNUSED(ctx);
@@ -1511,7 +1585,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_charset(ObExecContext &ctx,
         LOG_ERROR("charset is valid, but it has no default collation", K(ret),
                   K(cs_name), K(cs_type));
       } else {
-        out_val.set_int(static_cast<int64_t>(coll_type));
+        OZ(out_val.set_int(static_cast<int64_t>(coll_type), ctx.get_allocator()));
       }
     } else if (ObIntType == in_val.get_type()) {
       int64_t int64_val = in_val.get_int();
@@ -1558,8 +1632,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_charset(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_and_convert_charset_not_null(ObExecContext &ctx,
                                                              const ObSetVar &set_var,
                                                              const ObBasicSysVar &sys_var,
-                                                             const ObObj &in_val,
-                                                             ObObj &out_val)
+                                                             const DatumValue &in_val,
+                                                             DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -1578,8 +1652,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_charset_not_null(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ctx,
                                                                const ObSetVar &set_var,
                                                                const ObBasicSysVar &sys_var,
-                                                               const ObObj &in_val,
-                                                               ObObj &out_val)
+                                                               const DatumValue &in_val,
+                                                               DatumValue &out_val)
 {
   UNUSED(sys_var);
   UNUSED(ctx);
@@ -1602,7 +1676,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ct
         ret = OB_ERR_UNKNOWN_COLLATION;
         LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, coll_name.length(), coll_name.ptr());
       } else {
-        out_val.set_int(static_cast<int64_t>(coll_type));
+        OZ(out_val.set_int(static_cast<int64_t>(coll_type), ctx.get_allocator()));
       }
     } else if (ObIntType == in_val.get_type()) {
       int64_t int64_val = in_val.get_int();
@@ -1648,8 +1722,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ct
 int ObSysVarOnCheckFuncs::check_default_value_for_utf8mb4(ObExecContext &ctx,
                                                           const ObSetVar &set_var,
                                                           const ObBasicSysVar &sys_var,
-                                                          const ObObj &in_val,
-                                                          ObObj &out_val)
+                                                          const DatumValue &in_val,
+                                                          DatumValue &out_val)
 {
   UNUSED(sys_var);
   UNUSED(ctx);
@@ -1673,7 +1747,7 @@ int ObSysVarOnCheckFuncs::check_default_value_for_utf8mb4(ObExecContext &ctx,
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED,"only utf8mb4_general_ci and utf8mb4_unicode_ci are supported, other collation");
       } else {
-        out_val.set_int(static_cast<int64_t>(coll_type));
+        OZ(out_val.set_int(static_cast<int64_t>(coll_type), ctx.get_allocator()));
       }
     } else if (ObIntType == in_val.get_type()) {
       int64_t int64_val = in_val.get_int();
@@ -1706,8 +1780,8 @@ int ObSysVarOnCheckFuncs::check_default_value_for_utf8mb4(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_and_convert_timeout_too_large(ObExecContext &ctx,
                                                               const ObSetVar &set_var,
                                                               const ObBasicSysVar &sys_var,
-                                                              const common::ObObj &in_val,
-                                                              common::ObObj &out_val)
+                                                              const common::DatumValue &in_val,
+                                                              common::DatumValue &out_val)
 {
   UNUSED(ctx);
   UNUSED(set_var);
@@ -1719,7 +1793,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_timeout_too_large(ObExecContext &ctx
     // do nothing
   } else if (OB_FAIL(in_val.get_int(timeout_val))) {
   } else if (timeout_val > OB_MAX_USER_SPECIFIED_TIMEOUT) {
-    out_val.set_int(OB_MAX_USER_SPECIFIED_TIMEOUT);
+    OZ(out_val.set_int(OB_MAX_USER_SPECIFIED_TIMEOUT, ctx.get_allocator()));
     LOG_USER_WARN(OB_ERR_TIMEOUT_TRUNCATED);
   } else {
     out_val = in_val;
@@ -1730,8 +1804,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_timeout_too_large(ObExecContext &ctx
 int ObSysVarOnCheckFuncs::check_and_convert_tx_isolation(ObExecContext &ctx,
                                                          const ObSetVar &set_var,
                                                          const ObBasicSysVar &sys_var,
-                                                         const common::ObObj &in_val,
-                                                         common::ObObj &out_val)
+                                                         const common::DatumValue &in_val,
+                                                         common::DatumValue &out_val)
 {
   UNUSED(sys_var);
   int ret = OB_SUCCESS;
@@ -1749,7 +1823,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_tx_isolation(ObExecContext &ctx,
   } else if (ObTransIsolation::READ_UNCOMMITTED == isolation) {
     // MySQL mode accepts READ_UNCOMMITTED without conversion
   } else {
-    if (OB_FAIL(ob_write_obj(ctx.get_allocator(), in_val, out_val))) {
+    if (OB_FAIL(clone_typed_value(in_val, out_val, ctx.get_allocator()))) {
     }
     ObString tmp_out_val = out_val.get_string();
     if (OB_FAIL(ret)) {
@@ -1757,7 +1831,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_tx_isolation(ObExecContext &ctx,
                                     in_val.get_string(),
                                     tmp_out_val))) {
     }
-    out_val.set_varchar(tmp_out_val);
+    OZ(out_val.set_varchar(tmp_out_val, ctx.get_allocator()));
   }
   return ret;
 }
@@ -1765,8 +1839,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_tx_isolation(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_and_convert_tx_read_only(ObExecContext &ctx,
                                                          const ObSetVar &set_var,
                                                          const ObBasicSysVar &sys_var,
-                                                         const common::ObObj &in_val,
-                                                         common::ObObj &out_val)
+                                                         const common::DatumValue &in_val,
+                                                         common::DatumValue &out_val)
 {
   UNUSED(sys_var);
   int ret = OB_SUCCESS;
@@ -1786,8 +1860,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_tx_read_only(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_log_row_value_option_is_valid(sql::ObExecContext &ctx,
                                                                  const ObSetVar &set_var,
                                                                  const ObBasicSysVar &sys_var,
-                                                                 const common::ObObj &in_val,
-                                                                 common::ObObj &out_val)
+                                                                 const common::DatumValue &in_val,
+                                                                 common::DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   ObString val = in_val.get_string();
@@ -1813,8 +1887,8 @@ int ObSysVarOnCheckFuncs::check_log_row_value_option_is_valid(sql::ObExecContext
 int ObSysVarOnCheckFuncs::check_default_lob_inrow_threshold(sql::ObExecContext &ctx,
                                                 const ObSetVar &set_var,
                                                 const ObBasicSysVar &sys_var,
-                                                const common::ObObj &in_val,
-                                                common::ObObj &out_val)
+                                                const common::DatumValue &in_val,
+                                                common::DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   int64_t inrow_threshold = 0;
@@ -1848,8 +1922,8 @@ bool ObSysVarOnCheckFuncs::can_set_trans_var(ObSetVar::SetScopeType scope,
 int ObSysVarOnCheckFuncs::check_and_convert_max_user_connections(ObExecContext &ctx,
                                                                  const ObSetVar &set_var,
                                                                  const ObBasicSysVar &sys_var,
-                                                                 const ObObj &in_val,
-                                                                 ObObj &out_val)
+                                                                 const DatumValue &in_val,
+                                                                 DatumValue &out_val)
 {
   return check_session_readonly(ctx, set_var, sys_var, in_val, out_val);
 }
@@ -1858,8 +1932,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_max_user_connections(ObExecContext &
 int ObSysVarOnCheckFuncs::check_and_convert_sql_mode(ObExecContext &ctx,
                                                      const ObSetVar &set_var,
                                                      const ObBasicSysVar &sys_var,
-                                                     const common::ObObj &in_val,
-                                                     common::ObObj &out_val)
+                                                     const common::DatumValue &in_val,
+                                                     common::DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
@@ -1887,13 +1961,13 @@ int ObSysVarOnCheckFuncs::check_and_convert_sql_mode(ObExecContext &ctx,
   end_ptr += strlen(STR_COMBINE_ANSI);
   ObString out_str;
   out_str.assign_ptr(buf, static_cast<int32_t>(end_ptr - buf));
-  out_val.set_varchar(out_str);
+  OZ(out_val.set_varchar(out_str, ctx.get_allocator()));
   } else if (0 == sql_mode_str.case_compare(STR_TRADITIONAL)) {
   snprintf(buf, MAX_MODE_STR_BUF_LEN, "%s", STR_COMBINE_TRADITIONAL);
   end_ptr += strlen(STR_COMBINE_TRADITIONAL);
   ObString out_str;
   out_str.assign_ptr(buf, static_cast<int32_t>(end_ptr - buf));
-  out_val.set_varchar(out_str);
+  OZ(out_val.set_varchar(out_str, ctx.get_allocator()));
   }
   }
   }*/
@@ -1903,8 +1977,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_sql_mode(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_and_convert_time_zone(ObExecContext &ctx,
                                                      const ObSetVar &set_var,
                                                      const ObBasicSysVar &sys_var,
-                                                     const common::ObObj &in_val,
-                                                     common::ObObj &out_val)
+                                                     const common::DatumValue &in_val,
+                                                     common::DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
@@ -1919,8 +1993,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_time_zone(ObExecContext &ctx,
 int ObSysVarOnCheckFuncs::check_and_convert_max_min_timestamp(ObExecContext &ctx,
                                                               const ObSetVar &set_var,
                                                               const ObBasicSysVar &sys_var,
-                                                              const common::ObObj &in_val,
-                                                              common::ObObj &out_val)
+                                                              const common::DatumValue &in_val,
+                                                              common::DatumValue &out_val)
 {
   UNUSED(sys_var);
   int ret = OB_SUCCESS;
@@ -1936,7 +2010,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_max_min_timestamp(ObExecContext &ctx
                     value);
       common::number::ObNumber num;
       num.set_zero();
-      out_val.set_number(num);
+      OZ(out_val.set_number(num, ctx.get_allocator()));
     } else {
       ret = OB_ERR_WRONG_VALUE_FOR_VAR;
       LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, set_var.var_name_.length(), set_var.var_name_.ptr(),
@@ -1951,8 +2025,8 @@ int ObSysVarOnCheckFuncs::check_and_convert_max_min_timestamp(ObExecContext &ctx
 int ObSysVarOnCheckFuncs::check_session_readonly(ObExecContext &ctx,
                                                  const ObSetVar &set_var,
                                                  const ObBasicSysVar &sys_var,
-                                                 const ObObj &in_val,
-                                                 ObObj &out_val)
+                                                 const DatumValue &in_val,
+                                                 DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
@@ -1971,8 +2045,8 @@ int ObSysVarOnCheckFuncs::check_runtime_filter_type_is_valid(
     sql::ObExecContext &ctx,
     const ObSetVar &set_var,
     const ObBasicSysVar &sys_var,
-    const common::ObObj &in_val,
-    common::ObObj &out_val)
+    const common::DatumValue &in_val,
+    common::DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   ObString str_val;
@@ -1994,8 +2068,8 @@ int ObSysVarOnCheckFuncs::check_locale_type_is_valid(
     sql::ObExecContext &ctx,
     const ObSetVar &set_var,
     const ObBasicSysVar &sys_var,
-    const common::ObObj &in_val,
-    common::ObObj &out_val)
+    const common::DatumValue &in_val,
+    common::DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   const ObString &locale_val = in_val.get_string();
@@ -2007,7 +2081,7 @@ int ObSysVarOnCheckFuncs::check_locale_type_is_valid(
     LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, sys_var.get_name().length(), sys_var.get_name().ptr(),
                                                locale_val.length(), locale_val.ptr());
   } else {
-    OX(out_val.set_string(in_val.get_type(), valid_locale));
+    OZ(out_val.set_string(in_val.get_type(), valid_locale, ctx.get_allocator()));
   }
   return ret;
 }
@@ -2015,8 +2089,8 @@ int ObSysVarOnCheckFuncs::check_locale_type_is_valid(
 int ObSysVarOnCheckFuncs::check_and_convert_block_encryption_mode(sql::ObExecContext &ctx,
                                                                   const ObSetVar &set_var,
                                                                   const ObBasicSysVar &sys_var,
-                                                                  const common::ObObj &in_val,
-                                                                  common::ObObj &out_val)
+                                                                  const common::DatumValue &in_val,
+                                                                  common::DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   if (set_var.is_set_default_ || in_val.is_null()) {
@@ -2049,14 +2123,14 @@ int ObSysVarOnCheckFuncs::check_and_convert_default_storage_engine(
     sql::ObExecContext &ctx,
     const ObSetVar &set_var,
     const ObBasicSysVar &sys_var,
-    const common::ObObj &in_val,
-    common::ObObj &out_val)
+    const common::DatumValue &in_val,
+    common::DatumValue &out_val)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
   ObString engine_name;
   if (set_var.is_set_default_) {
-    out_val.set_varchar(ObString::make_string("InnoDB"));
+    OZ(out_val.set_varchar(ObString::make_string("InnoDB"), ctx.get_allocator()));
     out_val.set_collation_type(ObCharset::get_system_collation());
     out_val.set_collation_level(CS_LEVEL_IMPLICIT);
   } else if (OB_UNLIKELY(in_val.is_null()) || OB_FAIL(in_val.get_varchar(engine_name))) {
@@ -2074,7 +2148,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_default_storage_engine(
                    engine_name.length(),
                    engine_name.ptr());
   } else {
-    out_val.set_varchar(ObString::make_string("InnoDB"));
+    OZ(out_val.set_varchar(ObString::make_string("InnoDB"), ctx.get_allocator()));
     out_val.set_collation_type(ObCharset::get_system_collation());
     out_val.set_collation_level(CS_LEVEL_IMPLICIT);
   }
@@ -2084,7 +2158,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_default_storage_engine(
 int ObSysVarOnUpdateFuncs::update_tx_isolation(ObExecContext &ctx,
                                                const ObSetVar &set_var,
                                                const ObBasicSysVar &sys_var,
-                                               const ObObj &val)
+                                               const DatumValue &val)
 {
   UNUSED(sys_var);
   int ret = OB_SUCCESS;
@@ -2115,7 +2189,7 @@ int ObSysVarOnUpdateFuncs::update_tx_isolation(ObExecContext &ctx,
 int ObSysVarOnUpdateFuncs::update_tx_read_only_no_scope(ObExecContext &ctx,
                                                         const ObSetVar &set_var,
                                                         const ObBasicSysVar &sys_var,
-                                                        const ObObj &val)
+                                                        const DatumValue &val)
 {
   UNUSED(sys_var);
   int ret = OB_SUCCESS;
@@ -2181,7 +2255,7 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
 int ObSysVarToObjFuncs::to_obj_charset(ObIAllocator &allocator,
                                        const ObBasicSessionInfo &session,
                                        const ObBasicSysVar &sys_var,
-                                       ObObj &result_obj)
+                                       DatumValue &result_obj)
 {
   int ret = OB_SUCCESS;
   ObString result_str;
@@ -2189,7 +2263,7 @@ int ObSysVarToObjFuncs::to_obj_charset(ObIAllocator &allocator,
     result_obj.set_null();
   } else if (OB_FAIL(ObSysVarToStrFuncs::to_str_charset(allocator, session, sys_var, result_str))) {
   } else {
-    result_obj.set_varchar(result_str);
+    OZ(result_obj.set_varchar(result_str, allocator));
     result_obj.set_collation_type(ObCharset::get_system_collation());
     result_obj.set_collation_level(sys_var.get_value().get_collation_level());
   }
@@ -2199,7 +2273,7 @@ int ObSysVarToObjFuncs::to_obj_charset(ObIAllocator &allocator,
 int ObSysVarToObjFuncs::to_obj_collation(ObIAllocator &allocator,
                                          const ObBasicSessionInfo &session,
                                          const ObBasicSysVar &sys_var,
-                                         ObObj &result_obj)
+                                         DatumValue &result_obj)
 {
   int ret = OB_SUCCESS;
   ObString result_str;
@@ -2208,7 +2282,7 @@ int ObSysVarToObjFuncs::to_obj_collation(ObIAllocator &allocator,
   } else if (OB_FAIL(ObSysVarToStrFuncs::to_str_collation(
               allocator, session, sys_var, result_str))) {
   } else {
-    result_obj.set_varchar(result_str);
+    OZ(result_obj.set_varchar(result_str, allocator));
     result_obj.set_collation_type(ObCharset::get_system_collation());
     result_obj.set_collation_level(sys_var.get_value().get_collation_level());
   }
@@ -2218,7 +2292,7 @@ int ObSysVarToObjFuncs::to_obj_collation(ObIAllocator &allocator,
 int ObSysVarToObjFuncs::to_obj_sql_mode(ObIAllocator &allocator,
                                         const ObBasicSessionInfo &session,
                                         const ObBasicSysVar &sys_var,
-                                        ObObj &result_obj)
+                                        DatumValue &result_obj)
 {
   UNUSED(session);
   int ret = OB_SUCCESS;
@@ -2233,15 +2307,16 @@ int ObSysVarToObjFuncs::to_obj_sql_mode(ObIAllocator &allocator,
 int ObSysVarToObjFuncs::to_obj_default_storage_engine(ObIAllocator &allocator,
                                                        const ObBasicSessionInfo &session,
                                                        const ObBasicSysVar &sys_var,
-                                                       ObObj &result_obj)
+                                                       DatumValue &result_obj)
 {
-  UNUSED(allocator);
   UNUSED(session);
   UNUSED(sys_var);
-  result_obj.set_varchar(ObString::make_string("InnoDB"));
-  result_obj.set_collation_type(ObCharset::get_system_collation());
-  result_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-  return OB_SUCCESS;
+  int ret = result_obj.set_varchar(ObString::make_string("InnoDB"), allocator);
+  if (OB_SUCC(ret)) {
+    result_obj.set_collation_type(ObCharset::get_system_collation());
+    result_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+  }
+  return ret;
 }
 
 int ObSysVarToStrFuncs::to_str_charset(ObIAllocator &allocator,
@@ -2301,7 +2376,7 @@ int ObSysVarToStrFuncs::to_str_sql_mode(ObIAllocator &allocator,
 {
   UNUSED(session);
   int ret = OB_SUCCESS;
-  ObObj str_obj;
+  DatumValue str_obj;
   if (OB_FAIL(ob_sql_mode_to_str(sys_var.get_value(), str_obj, &allocator))) {
   } else if (OB_FAIL(str_obj.get_varchar(result_str))) {
   }
@@ -2322,7 +2397,7 @@ int ObSysVarToStrFuncs::to_str_default_storage_engine(ObIAllocator &allocator,
 
 int ObSysVarSessionSpecialUpdateFuncs::update_identity(ObExecContext &ctx,
                                                        const ObSetVar &set_var,
-                                                       const ObObj &val)
+                                                       const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(set_var.var_name_ != OB_SV_IDENTITY)) {
@@ -2348,7 +2423,7 @@ int ObSysVarSessionSpecialUpdateFuncs::update_identity(ObExecContext &ctx,
 
 int ObSysVarSessionSpecialUpdateFuncs::update_last_insert_id(ObExecContext &ctx,
                                                              const ObSetVar &set_var,
-                                                             const ObObj &val)
+                                                             const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(set_var.var_name_ != OB_SV_LAST_INSERT_ID)) {
@@ -2374,7 +2449,7 @@ int ObSysVarSessionSpecialUpdateFuncs::update_last_insert_id(ObExecContext &ctx,
 
 int ObSysVarSessionSpecialUpdateFuncs::update_tx_isolation(ObExecContext &ctx,
                                                            const ObSetVar &set_var,
-                                                           const ObObj &val)
+                                                           const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if ((OB_UNLIKELY(set_var.var_name_ != OB_SV_TX_ISOLATION))
@@ -2399,7 +2474,7 @@ int ObSysVarSessionSpecialUpdateFuncs::update_tx_isolation(ObExecContext &ctx,
 
 int ObSysVarSessionSpecialUpdateFuncs::update_tx_read_only(sql::ObExecContext &ctx,
                                                                   const ObSetVar &set_var,
-                                                                  const common::ObObj &val)
+                                                                  const common::DatumValue &val)
 {
   int ret = OB_SUCCESS;
   if ((OB_UNLIKELY(set_var.var_name_ != OB_SV_TX_READ_ONLY))
@@ -2634,8 +2709,10 @@ int ObSetSysVar::find_set(const ObString &str)
       ObString part_str(value);
       if (OB_FAIL(ObTypeLibSysVar::find_type(part_str, index))) {
         ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        ObObj err_obj;
-        err_obj.set_varchar(part_str);
+        DatumValue err_obj;
+        err_obj.meta_.set_varchar();
+        err_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+        err_obj.datum_.set_string(part_str);
         int log_ret = OB_SUCCESS;
         if (OB_SUCCESS != (log_ret = log_err_wrong_value_for_var(ret, err_obj))) {
         }
@@ -2645,9 +2722,32 @@ int ObSetSysVar::find_set(const ObString &str)
   return ret;
 }
 
+int ObSysVarUtils::get_schema_value(const share::schema::ObSysVarSchema &schema,
+    const ObDataTypeCastParams &dtc_params, ObIAllocator &owner, DatumValue &output)
+{
+  int ret = OB_SUCCESS;
+  if (ob_is_string_type(schema.get_data_type())) {
+    DatumValue candidate;
+    OZ(candidate.set_string(schema.get_data_type(), schema.get_value(), owner));
+    if (OB_SUCC(ret)) {
+      candidate.set_collation_type(ObCharset::get_system_collation()); output = candidate;
+    }
+  } else if (schema.is_null_value()) {
+    output.set_null();
+  } else {
+    DatumValue source;
+    source.datum_.set_string(schema.get_value());
+    source.meta_.set_varchar();
+    source.set_collation_level(CS_LEVEL_IMPLICIT);
+    ObCastCtx context(&owner, &dtc_params, CM_NONE, ObCharset::get_system_collation());
+    ret = DatumValueCaster::to_type(schema.get_data_type(), context, source, owner, output);
+  }
+  return ret;
+}
+
 int ObSysVarUtils::log_bounds_error_or_warning(ObExecContext &ctx,
                                                const ObSetVar &set_var,
-                                               const ObObj &in_val)
+                                               const DatumValue &in_val)
 {
   int ret = OB_SUCCESS;
   // To be compatible with MySQL, when SQL mode contains STRICT_ALL_TABLES, it reports an error; otherwise, it reports a warning

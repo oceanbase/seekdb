@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "ob_execute_result.h"
+#include "common/datum/datum_value_projection.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
 
@@ -37,47 +38,125 @@ int ObExecuteResult::open(ObExecContext &ctx)
 int ObExecuteResult::get_next_row(ObExecContext &ctx, const common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  row = &row_;
-  const ObOpSpec &spec = static_engine_root_->get_spec();
-  if (spec.output_.count() > 0 && NULL == row_.cells_) {
-    if (OB_ISNULL(row_.cells_ = static_cast<ObObj *>(
-                ctx.get_allocator().alloc(sizeof(ObObj) * spec.output_.count())))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      for (int64_t i = 0; i < spec.output_.count(); i++) {
-        new (&row_.cells_[i]) ObObj();
+  row = nullptr;
+  if (OB_ISNULL(static_engine_root_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    const int64_t count = static_engine_root_->get_spec().output_.count();
+    if (count > 0 && row_.cells_ == nullptr) {
+      if (OB_FAIL(DatumValueBuffer::allocate(ctx.get_allocator(), count, row_.cells_))) {
+      } else {
+        row_.count_ = count;
+        row_.projector_size_ = 0;
+        row_.projector_ = nullptr;
       }
-      row_.count_ = spec.output_.count();
-      row_.projector_size_ = 0;
-      row_.projector_ = NULL;
+    }
+    ResultRowView view;
+    if (OB_FAIL(ret)) {
+    } else if (count != row_.count_) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(get_next_native_result_row(ctx, view))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        DatumValue value;
+        if (OB_FAIL(view.get_value(i, value))) {
+        } else if (OB_FAIL(DatumValueBuffer::assign_view(value, row_.cells_, count, i))) {
+        }
+      }
+      if (OB_SUCC(ret)) { row = &row_; }
     }
   }
-  if (OB_FAIL(ret)) {
-  } else if (!spec.is_vectorized()) {
-    ret = get_next_row();
-    // convert datum to obj
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < spec.output_.count(); i++) {
-        ObDatum *datum = NULL;
-        ObExpr *expr = spec.output_.at(i);
-        if (OB_FAIL(expr->eval(static_engine_root_->get_eval_ctx(), datum))) {
-        } else if (OB_FAIL(datum->to_obj(
-                    row_.cells_[i], expr->obj_meta_, expr->obj_datum_map_))) {
-        }
+  return ret;
+}
+
+int ObExecuteResult::get_next_result_row(ObExecContext &ctx, ResultRowView &view)
+{
+  return get_next_native_result_row(ctx, view);
+}
+
+int ResultRowView::project_value(const ObDatum &datum, const SqlTypeMeta &meta,
+                                 SqlValueDatumMapType mapping, const SqlTypeMeta &previous_meta,
+                                 DatumValue &value, bool keep_null_collation)
+{
+  return common::project_datum_value_view(datum,meta,mapping,previous_meta,value,keep_null_collation);
+}
+
+int ResultRowView::get_value(int64_t i, DatumValue &value) const
+{
+  int ret = OB_SUCCESS;
+  if (!is_datum_row() && legacy_ == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (i < 0 || i >= count()) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (!is_datum_row()) {
+    if (legacy_ == nullptr || legacy_->cells_ == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      const int64_t physical = legacy_->projector_size_ > 0
+          ? (legacy_->projector_ == nullptr ? -1 : legacy_->projector_[i]) : i;
+      if (physical < 0 || physical >= legacy_->count_) { ret = OB_ERR_UNEXPECTED; }
+      else { value = legacy_->cells_[physical]; }
+    }
+  } else if (i >= count_) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (nullptr != cell_metas_) {
+    DatumValue candidate(datum(i), cell_metas_[i]);
+    if (candidate.meta_.is_null()) {
+      candidate.datum_.set_null();
+    } else if (candidate.meta_.is_ext_sql_array()) {
+      candidate.datum_.ptr_ += candidate.datum_.is_native_extend() ? 0 : 8;
+      candidate.datum_.pack_ = sizeof(int64_t);
+    }
+    value = candidate;
+  } else {
+    const ObExpr &e = expr(i);
+    ret = project_value(datum(i), e.obj_meta_, e.obj_datum_map_, SqlTypeMeta(), value);
+  }
+  return ret;
+}
+
+int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowView &view)
+{
+  int ret = OB_SUCCESS;
+  view = ResultRowView();
+  if (OB_ISNULL(static_engine_root_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    const ObOpSpec &spec = static_engine_root_->get_spec();
+    const int64_t count = spec.output_.count();
+    if (count > 0 && nullptr == native_cell_metas_) {
+      if (OB_ISNULL(native_cell_metas_ = static_cast<SqlTypeMeta *>(
+                       ctx.get_allocator().alloc(sizeof(SqlTypeMeta) * count)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        for (int64_t i = 0; i < count; ++i) { new (&native_cell_metas_[i]) SqlTypeMeta(); }
+        native_cell_count_ = count;
       }
     }
-  } else {
-    ret = br_it_.get_next_row();
-    if (OB_SUCC(ret)) {
-      const int64_t idx = br_it_.cur_idx();
-      for (int64_t i = 0; OB_SUCC(ret) && i < spec.output_.count(); i++) {
-        ObExpr *expr = spec.output_.at(i);
-        // expressions are evaluated in get_next_batch(), get datum value directly
-        const ObDatum *datum = expr->locate_batch_datums(
-            static_engine_root_->get_eval_ctx()) + (expr->is_batch_result() ? idx : 0);
-        if (OB_FAIL(datum->to_obj(
-                    row_.cells_[i], expr->obj_meta_, expr->obj_datum_map_))) {
+    if (OB_FAIL(ret)) {
+    } else if (count != native_cell_count_) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(spec.is_vectorized() ? br_it_.get_next_row() : get_next_row())) {
+    } else {
+      ObEvalCtx &eval_ctx = static_engine_root_->get_eval_ctx();
+      const int64_t idx = spec.is_vectorized() ? br_it_.cur_idx() : 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        ObExpr &expr = *spec.output_.at(i);
+        ObDatum *datum = nullptr;
+        if (!spec.is_vectorized()) {
+          ret = expr.eval(eval_ctx, datum);
+        } else {
+          datum = expr.locate_batch_datums(eval_ctx) + (expr.is_batch_result() ? idx : 0);
         }
+        DatumValue cell;
+        if (OB_SUCC(ret) && OB_FAIL(ResultRowView::project_value(
+               *datum, expr.obj_meta_, expr.obj_datum_map_, native_cell_metas_[i], cell))) {
+        } else if (OB_SUCC(ret)) {
+          native_cell_metas_[i] = cell.meta_;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        view.set_datums(spec.output_, eval_ctx, idx, spec.is_vectorized(), native_cell_metas_);
       }
     }
   }

@@ -50,7 +50,7 @@ int ObExprPrivSTMakePoint::calc_result_typeN(
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   for (int i = 0; OB_SUCC(ret) && i < param_num; i++) {
-    ObObjType type = types_stack[i].get_type();
+    SqlValueType type = types_stack[i].get_type();
     if (ob_is_null(type) || ob_is_double_type(type) || type == ObTinyIntType || ob_is_string_type(type)) {
       // do nothing
     } else if (ob_is_numeric_type(type)) {

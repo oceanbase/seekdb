@@ -58,7 +58,7 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
     type.set_utinyint(); // default type
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), arr_meta))) {
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
@@ -82,11 +82,11 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool is_max)
+int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, uint32_t &res_idx, bool is_max)
 {
   int ret = OB_SUCCESS;
   ObCollectionBasicType *elem_type = NULL;
-  res_obj.set_null();
+  res_idx = UINT32_MAX;
 
   if (OB_ISNULL(elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_))) {
     ret = OB_ERR_UNEXPECTED;
@@ -96,25 +96,14 @@ int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_max with nested array");
   } else {
     for (uint32_t i = 0; i < src_arr->size() && OB_SUCC(ret); ++i) {
-      ObObj elem_obj;
       int cmp = 0;
       if (src_arr->is_null(i)) {
         // do nothing
-      } else if (OB_FAIL(src_arr->elem_at(i, elem_obj))) {
-      } else if (res_obj.is_null()) {
-        res_obj = elem_obj;
-      } else if (elem_obj.is_varchar()) {
-        if (is_max && elem_obj.get_string() > res_obj.get_string()) {
-          res_obj = elem_obj;
-        } else if (!is_max && elem_obj.get_string() < res_obj.get_string()) {
-          res_obj = elem_obj;
-        }
-      } else {
-        if (is_max && elem_obj > res_obj) {
-          res_obj = elem_obj;
-        } else if (!is_max && elem_obj < res_obj) {
-          res_obj = elem_obj;
-        }
+      } else if (UINT32_MAX == res_idx) {
+        res_idx = i;
+      } else if (OB_FAIL(src_arr->compare_at(res_idx, 1, i, 1, *src_arr, cmp))) {
+      } else if ((is_max && cmp < 0) || (!is_max && cmp > 0)) {
+        res_idx = i;
       }
     } // end for
   }
@@ -130,16 +119,18 @@ int ObExprArrayExtreme::eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, O
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObDatum *arr_datum = NULL;
   ObIArrayType *src_arr = NULL;
-  ObObj res_obj;
+  uint32_t res_idx = UINT32_MAX;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
   } else if (arr_datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) {
-  } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
+  } else if (OB_FAIL(calc_extreme(src_arr, res_idx, is_max))) {
+  } else if (UINT32_MAX == res_idx) {
+    res.set_null();
+  } else if (OB_FAIL(src_arr->elem_at_datum(res_idx, res))) {
   } else {
-    res.from_obj(res_obj);
-    if (res_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
+    if (expr.obj_meta_.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
     }
   }
   return ret;
@@ -157,7 +148,7 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
   ObExprStrResAlloc res_alloc(expr, ctx);
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
-  ObObj res_obj;
+  uint32_t res_idx = UINT32_MAX;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
@@ -171,10 +162,12 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) {
-      } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
+      } else if (OB_FAIL(calc_extreme(src_arr, res_idx, is_max))) {
+      } else if (UINT32_MAX == res_idx) {
+        res_datum.at(j)->set_null();
+      } else if (OB_FAIL(src_arr->elem_at_datum(res_idx, *res_datum.at(j)))) {
       } else {
-        res_datum.at(j)->from_obj(res_obj);
-        if (res_obj.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
+        if (expr.obj_meta_.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
         }
       }
     } // end for

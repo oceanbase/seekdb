@@ -84,7 +84,7 @@ public:
   common::ObSEArray<int8_t, 1, common::ModulePageAllocator, true> on_mismatch_;
   common::ObSEArray<int8_t, 1, common::ModulePageAllocator, true> on_mismatch_type_;
   ObAccuracy accuracy_;
-  ObObjType dst_type_;
+  SqlValueType dst_type_;
   int8_t pretty_type_;
   int8_t ascii_type_;
   int8_t scalars_type_;
@@ -265,7 +265,7 @@ public:
                           common::ObIAllocator *allocator, uint16_t index,
                           ObIJsonBase*& j_base, bool to_bin = false, bool format_json = false, 
                           uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG);
-  static int get_const_json_schema(const common::ObObj &data,
+  static int get_const_json_schema(const common::DatumValue &data,
                                    const char *func_name,
                                    ObExecContext &exec_ctx,
                                    common::ObIAllocator *allocator,
@@ -282,17 +282,17 @@ public:
   @return Returns OB_SUCCESS on success, error code otherwise.
   */
   static int refine_range_json_value_const(
-                          const common::ObObj &data, ObExecContext &ctx,
+                          const common::DatumValue &data, ObExecContext &ctx,
                           bool is_bool, common::ObIAllocator *allocator,
                           ObIJsonBase*& j_base, bool to_bin = false);
   static int get_json_val(const common::ObDatum &data, 
                           ObExecContext &ctx,
                           ObExpr* expr,
                           common::ObIAllocator *allocator,
-                          ObObjType val_type,
+                          SqlValueType val_type,
                           ObCollationType &cs_type,
                           ObIJsonBase*& j_base, bool to_bin = false);
-  static int datum_to_json_val(const ObDatum *json_datum,  ObObjMeta& data_meta, common::ObIAllocator *allocator,
+  static int datum_to_json_val(const ObDatum *json_datum,  SqlTypeMeta& data_meta, common::ObIAllocator *allocator,
                                ObBasicSessionInfo *session, ObIJsonBase*& j_base, bool is_bool_data_type,
                                bool format_json, bool is_strict, bool is_bin,
                                const common::ObLobReadOptions *lob_options);
@@ -322,7 +322,7 @@ public:
 
   static int get_sql_scalar_type(ObEvalCtx& ctx,
                                  int64_t origin, 
-                                 ObObjType& scalar_type, 
+                                 SqlValueType& scalar_type,
                                  int32_t& scalar_len,
                                  int32_t& precision,
                                  int32_t& scale,
@@ -342,7 +342,7 @@ public:
   */
   template <typename T>
   static int transform_scalar_2jsonBase(const T &datum,
-                                        ObObjType type,
+                                        SqlValueType type,
                                         common::ObIAllocator *allocator,
                                         ObScale scale,
                                         const ObTimeZoneInfo *tz_info,
@@ -363,7 +363,7 @@ public:
   */
   template <typename T>
   static int transform_convertible_2jsonBase(const T &datum,
-                                             ObObjType type,
+                                             SqlValueType type,
                                              common::ObIAllocator *allocator,
                                              ObCollationType cs_type,
                                              ObIJsonBase*& j_base,
@@ -371,13 +371,13 @@ public:
                                              const common::ObLobReadOptions *lob_options);
 
 
-  static bool is_convertible_to_json(ObObjType &type);
+  static bool is_convertible_to_json(SqlValueType &type);
   static int is_valid_for_json(ObExprResType* types_stack, uint32_t index, const char* func_name);
   static int is_valid_for_json(ObExprResType& type, uint32_t index, const char* func_name);
   static int is_valid_for_path(ObExprResType* types_stack, uint32_t index);
   static void set_type_for_value(ObExprResType* types_stack, uint32_t index);
-  static int ensure_collation(ObObjType type, ObCollationType cs_type);
-  static ObJsonInType get_json_internal_type(ObObjType type);
+  static int ensure_collation(SqlValueType type, ObCollationType cs_type);
+  static ObJsonInType get_json_internal_type(SqlValueType type);
   static int convert_string_collation_type(ObCollationType in, 
                                            ObCollationType dst,
                                            ObIAllocator* allocator,
@@ -418,7 +418,7 @@ public:
   */
   static int get_cast_type(const ObExprResType param_type2, ObExprResType &dst_type, ObExprTypeCtx &type_ctx);
   // check item function and returning type
-  static int check_item_func_with_return(ObJsonPathNodeType path_type, ObObjType dst_type, common::ObCollationType dst_coll_type, int8_t JSON_EXPR_FLAG);
+  static int check_item_func_with_return(ObJsonPathNodeType path_type, SqlValueType dst_type, common::ObCollationType dst_coll_type, int8_t JSON_EXPR_FLAG);
   static int set_dest_type(ObExprResType &type1, ObExprResType &type, 
                            ObExprResType &dst_type, ObExprTypeCtx &type_ctx);
   static int get_expr_option_value(const ObExprResType param_type2, int8_t &dst_type);
@@ -439,7 +439,7 @@ public:
                                  int32_t &res_len,
                                  int16_t &length_semantics,
                                  common::ObCollationType conn);
-  static int eval_and_check_res_type(int64_t value, ObObjType& type, int32_t& dst_len);
+  static int eval_and_check_res_type(int64_t value, SqlValueType& type, int32_t& dst_len);
   static int parse_res_type(ObExprResType& type1,
                             ObExprResType& json_res_type,
                             ObExprResType& result_type,
@@ -448,7 +448,7 @@ public:
                               ObExprResType& type1,
                               ObExprResType& res_type,
                               ObExprTypeCtx& type_ctx);
-  static int pre_default_value_check(ObObjType dst_type, ObString val_str, ObObjType val_type, size_t length);
+  static int pre_default_value_check(SqlValueType dst_type, ObString val_str, SqlValueType val_type, size_t length);
 
   static int character2_ascii_string(common::ObIAllocator *allocator, 
                                      const ObExpr &expr,

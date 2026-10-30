@@ -148,31 +148,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int mul_int(common::ObObj &res,
-                     const common::ObObj &left,
-                     const common::ObObj &right,
-                     common::ObIAllocator *allocator,
-                     common::ObScale scale);
-  static int mul_uint(common::ObObj &res,
-                      const common::ObObj &left,
-                      const common::ObObj &right,
-                      common::ObIAllocator *allocator,
-                      common::ObScale scale);
-  static int mul_double(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
-  static int mul_double_no_overflow(common::ObObj &res,
-                                    const common::ObObj &left,
-                                    const common::ObObj &right,
-                                    common::ObIAllocator *allocator,
-                                    common::ObScale scale);
-  static int mul_number(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprMul);
 public:
@@ -202,8 +178,6 @@ public:
   }
   static int set_decimal_int_eval_func(ObExpr &rt_expr, const bool use_number_result);
 private:
-  static ObArithFunc mul_funcs_[common::ObMaxTC];
-  static ObArithFunc agg_mul_funcs_[common::ObMaxTC];
   static const int64_t SHIFT_OFFSET = 32;
 };
 

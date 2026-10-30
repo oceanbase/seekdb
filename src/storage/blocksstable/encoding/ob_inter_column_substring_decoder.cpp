@@ -62,8 +62,7 @@ int ObInterColSubStrDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDat
       } else if (ref_datum.is_null()) {
         datum.set_null();
       } else if (ref_datum.is_nop()) {
-        datum.set_ext();
-        datum.no_cv(datum.extend_obj_)->set_ext(common::ObActionFlag::OP_NOP);
+        datum.set_ext_value(common::ObActionFlag::OP_NOP);
       } else {
         const char *cell_data =
             reinterpret_cast<const char *>(meta_header_) + ctx.col_header_->length_

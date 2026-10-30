@@ -123,26 +123,10 @@ public:
                                     const ObCollationType cs_type,
                                     const char *& data,
                                     const common::ObTimeZoneInfo *tz_info,
-                                    ObObj &param,
+                                    DatumParameter &param,
                                     bool is_complex_element = false,
                                     ObPSAnalysisChecker *checker = nullptr,
                                     bool is_unsigned = false);
-  static int parse_mysql_timestamp_value(const obmysql::EMySQLFieldType field_type,
-                                    const char *&data,
-                                    ObObj &param,
-                                    const common::ObTimeZoneInfo *tz_info,
-                                    ObPSAnalysisChecker *checker = nullptr);
-  static int parse_integer_value(const uint32_t type,
-                                 const char *&data,
-                                 ObObj &param,
-                                 ObIAllocator &allocator,
-                                 bool is_complex_element = false,
-                                 ObPSAnalysisChecker *checker = nullptr,
-                                 bool is_unsigned = false);
-  static int parse_ob_timestamp_value(const obmysql::EMySQLFieldType field_type, const char *&data,
-                                    const ObTimeConvertCtx &cvrt_ctx, ObObj &param,
-                                    ObPSAnalysisChecker *checker = nullptr);
-  static int parse_mysql_time_value(const char *&data, ObObj &param, ObPSAnalysisChecker *checker = nullptr);
   int64_t get_single_process_timestamp() const { return single_process_timestamp_; }
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return exec_end_timestamp_; }
@@ -211,28 +195,28 @@ protected:
                               sql::ObPsSessionInfo &ps_session_info,
                               const char *tail, ObIAllocator &alloc,
                               bool &handled);
-  static int set_standard_timestamp_param(obmysql::EMySQLFieldType field_type,
+  static int set_standard_timestamp_param(ObIAllocator &allocator, obmysql::EMySQLFieldType field_type,
                                           uint16_t year, uint8_t month,
                                           uint8_t day, uint8_t hour,
                                           uint8_t minute, uint8_t second,
                                           uint32_t microseconds, bool is_zero,
                                           const common::ObTimeZoneInfo *tz_info,
-                                          ObObj &param);
-  static int set_standard_time_param(uint32_t days, uint8_t hour,
+                                          DatumParameter &param);
+  static int set_standard_time_param(ObIAllocator &allocator, uint32_t days, uint8_t hour,
                                      uint8_t minute, uint8_t second,
                                      uint32_t microseconds, bool negative,
-                                     bool is_zero, ObObj &param);
+                                     bool is_zero, DatumParameter &param);
   static int set_standard_bytes_param(ObIAllocator &allocator, uint32_t type,
                                       ObCharsetType charset,
                                       ObCollationType cs_type,
-                                      const common::ObString &str, ObObj &param,
+                                      const common::ObString &str, DatumParameter &param,
                                       bool is_complex_element = false);
   int materialize_standard_long_data(ObIAllocator &allocator,
                                      sql::ObSQLSessionInfo &session,
                                      obmysql::EMySQLFieldType type,
                                      ObCharsetType charset,
                                      ObCollationType cs_type, int64_t param_id,
-                                     ObObjParam &param);
+                                     DatumParameter &param);
   int parse_request_type(const char *&pos, int64_t num_of_params,
                          int8_t new_param_bound_flag, ObCollationType cs_type,
                          sql::ParamTypeArray &param_types,
@@ -245,7 +229,7 @@ protected:
                                 int64_t idx,
                                 obmysql::EMySQLFieldType &param_type,
                                 sql::TypeInfo &param_type_info,
-                                ObObjParam &param,
+                                DatumParameter &param,
                                 const char *bitmap);
   int execute_response(sql::ObSQLSessionInfo &session,
                         ObMySQLResultSet &result,
@@ -266,15 +250,18 @@ protected:
   int64_t get_curr_sql_idx() { return curr_sql_idx_; }
 
 private:
+  friend struct NativeArrayBindingTestAccess;
   // for arraybinding
   int init_arraybinding_field(int64_t column_field_cnt, const ColumnsFieldIArray *column_fields);
 
   int init_row_for_arraybinding(ObIAllocator &alloc, int64_t array_binding_row_num);
   int check_precondition_for_arraybinding(const sql::ObSQLSessionInfo &session_info);
   int check_param_type_for_arraybinding(sql::ParamTypeInfoArray &param_type_infos);
-  int check_param_value_for_arraybinding(ObObjParam &param);
-  int construct_execute_param_for_arraybinding(int64_t pos);
-  int param_assign_after_convert_int2number(ObObj& dst, const ObObj& src);
+  int check_param_value_for_arraybinding(DatumParameter &param);
+  int construct_execute_param_for_arraybinding(int64_t pos, ObIAllocator &owner);
+  int release_arraybinding_row(ObIAllocator &owner, sql::ObSQLSessionInfo &session);
+  int param_assign_after_convert_int2number(DatumParameter &dst,
+                                             const DatumValue &src, ObIAllocator &owner);
   void reset_complex_param_memory(ParamStore *params, sql::ObSQLSessionInfo *session_info = nullptr);
   int save_exception_for_arraybinding(
     int64_t pos, int error_code, ObIArray<ObSavedException> &exception_array);
@@ -319,7 +306,7 @@ private:
                         const char *&data,
                         const common::ObTimeZoneInfo *tz_info,
                         sql::TypeInfo *type_info,
-                        ObObjParam &param,
+                        DatumParameter &param,
                         const char *bitmap,
                         int64_t param_id);
   int parse_complex_param_value(ObIAllocator &allocator,
@@ -328,7 +315,7 @@ private:
                         const char *&data,
                         const common::ObTimeZoneInfo *tz_info,
                         sql::TypeInfo *type_info,
-                        ObObjParam &param);
+                        DatumParameter &param);
   int decode_type_info(const char*& buf, sql::TypeInfo &type_info);
   int get_pl_type_by_type_info(ObIAllocator &allocator,
                         const sql::TypeInfo *type_info,

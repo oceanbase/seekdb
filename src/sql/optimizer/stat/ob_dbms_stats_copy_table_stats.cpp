@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/partition_bound_row.h"
 #include "sql/optimizer/stat/ob_dbms_stats_copy_table_stats.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 
@@ -133,8 +135,10 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
             dst_col_stat->get_histogram().set_sample_size(src_part_stat_->get_row_count() - src_col_stat->get_num_null());
           }
         }
-        if (0 != dst_col_stat->get_max_value().compare(dst_col_stat->get_min_value())
-            && dst_col_stat->get_num_distinct() <= 1) {
+        int min_max_cmp = 0;
+        if (OB_SUCC(ret) && OB_FAIL(compare_datum_values(dst_col_stat->get_max_value(),
+                                                        dst_col_stat->get_min_value(), min_max_cmp))) {
+        } else if (OB_SUCC(ret) && min_max_cmp != 0 && dst_col_stat->get_num_distinct() <= 1) {
           dst_col_stat->set_num_distinct(2);
         }
         if (OB_SUCC(ret) && OB_FAIL(column_stats.push_back(dst_col_stat))) {
@@ -165,18 +169,21 @@ int CopyTableStatHelper::check_range_part(bool is_subpart,
       if (OB_FAIL(dst_part_map_.get_refactored(src_col_stat->get_column_id(), dst_part_info))) {
       } else if (OB_ISNULL(dst_part_info)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (0 != src_col_stat->get_min_value().compare(dst_part_info->src_part_lower_bound_) ||
-                 0 != src_col_stat->get_max_value().compare(dst_part_info->src_part_lower_bound_) ||
-                 1 != src_col_stat->get_num_distinct()) {
-        flag = false;
+      } else {
+        int min_cmp = 0, max_cmp = 0;
+        if (OB_FAIL(compare_datum_values(src_col_stat->get_min_value(), dst_part_info->src_part_lower_bound_, min_cmp)) ||
+            OB_FAIL(compare_datum_values(src_col_stat->get_max_value(), dst_part_info->src_part_lower_bound_, max_cmp))) {
+        } else if (min_cmp != 0 || max_cmp != 0 || src_col_stat->get_num_distinct() != 1) {
+          flag = false;
+        }
       }
     }
   }
   return ret;
 }
 
-int CopyTableStatHelper::copy_min_val(const common::ObObj &src_min_val,
-                                      common::ObObj &dst_min_val,
+int CopyTableStatHelper::copy_min_val(const common::DatumValue &src_min_val,
+                                      common::DatumValue &dst_min_val,
                                       ObCopyPartInfo *dst_part_info)
 {
   int ret = OB_SUCCESS;
@@ -185,22 +192,22 @@ int CopyTableStatHelper::copy_min_val(const common::ObObj &src_min_val,
   } else {
     switch (dst_part_info->min_res_type_) {
       case CopyDstPartLowerBound: {
-        if (OB_FAIL(ob_write_obj(*allocator_, dst_part_info->part_lower_bound_, dst_min_val))) {
+        if (OB_FAIL(clone_typed_value(dst_part_info->part_lower_bound_, dst_min_val, *allocator_))) {
         }
         break;
       }
       case CopyDstPartUpperBound: {
-        if (OB_FAIL(ob_write_obj(*allocator_, dst_part_info->part_upper_bound_, dst_min_val))) {
+        if (OB_FAIL(clone_typed_value(dst_part_info->part_upper_bound_, dst_min_val, *allocator_))) {
         }
         break;
       }
       case CopyPrePartUpperBound: {
-        if (OB_FAIL(ob_write_obj(*allocator_, dst_part_info->pre_part_upper_bound_, dst_min_val))) {
+        if (OB_FAIL(clone_typed_value(dst_part_info->pre_part_upper_bound_, dst_min_val, *allocator_))) {
         }
         break;
       }
       case CopySrcPartMinVal: {
-        if (OB_FAIL(ob_write_obj(*allocator_, src_min_val, dst_min_val))) {
+        if (OB_FAIL(clone_typed_value(src_min_val, dst_min_val, *allocator_))) {
         }
         break;
       }
@@ -214,8 +221,8 @@ int CopyTableStatHelper::copy_min_val(const common::ObObj &src_min_val,
   return ret;
 }
 
-int CopyTableStatHelper::copy_max_val(const common::ObObj &src_max_val,
-                                      common::ObObj &dst_max_val,
+int CopyTableStatHelper::copy_max_val(const common::DatumValue &src_max_val,
+                                      common::DatumValue &dst_max_val,
                                       ObCopyPartInfo *dst_part_info)
 {
   int ret = OB_SUCCESS;
@@ -224,31 +231,33 @@ int CopyTableStatHelper::copy_max_val(const common::ObObj &src_max_val,
   } else {
     switch (dst_part_info->max_res_type_) {
       case CopyDstPartLowerBound: {
-        if (OB_FAIL(ob_write_obj(*allocator_, dst_part_info->part_lower_bound_, dst_max_val))) {
+        if (OB_FAIL(clone_typed_value(dst_part_info->part_lower_bound_, dst_max_val, *allocator_))) {
         }
         break;
       }
       case CopyDstPartUpperBound: {
-        if (OB_FAIL(ob_write_obj(*allocator_, dst_part_info->part_upper_bound_, dst_max_val))) {
+        if (OB_FAIL(clone_typed_value(dst_part_info->part_upper_bound_, dst_max_val, *allocator_))) {
         }
         break;
       }
       case CopyPrePartUpperBound: {
-        if (OB_FAIL(ob_write_obj(*allocator_, dst_part_info->pre_part_upper_bound_, dst_max_val))) {
+        if (OB_FAIL(clone_typed_value(dst_part_info->pre_part_upper_bound_, dst_max_val, *allocator_))) {
         }
         break;
       }
       case CopySrcPartMaxVal: {
-        if (OB_FAIL(ob_write_obj(*allocator_, src_max_val, dst_max_val))) {
+        if (OB_FAIL(clone_typed_value(src_max_val, dst_max_val, *allocator_))) {
         }
         break;
       }
       case CopyMaxSrcValDstBound: {
-        if (src_max_val.compare(dst_part_info->part_upper_bound_)  > 0) {
-          if (OB_FAIL(ob_write_obj(*allocator_, src_max_val, dst_max_val))) {
+        int cmp = 0;
+        if (OB_FAIL(compare_datum_values(src_max_val, dst_part_info->part_upper_bound_, cmp))) {
+        } else if (cmp > 0) {
+          if (OB_FAIL(clone_typed_value(src_max_val, dst_max_val, *allocator_))) {
           }
         } else {
-          if (OB_FAIL(ob_write_obj(*allocator_, dst_part_info->part_upper_bound_, dst_max_val))) {
+          if (OB_FAIL(clone_typed_value(dst_part_info->part_upper_bound_, dst_max_val, *allocator_))) {
           }
         }
         break;
@@ -543,8 +552,8 @@ int ObDbmsStatsCopyTableStats::get_dst_part_info(const ObTableSchema *table_sche
     }
   } else if ((copy_level == CopyOnePartLevel && table_schema->is_range_part())
              || (copy_level == CopyTwoPartLevel && table_schema->is_range_subpart())) {
-    const ObRowkey &high_bound_val = part->get_high_bound_val();
-    int64_t rowkey_cnt = high_bound_val.get_obj_cnt();
+    const PartitionBoundRow &high_bound_val = part->get_high_bound_val();
+    int64_t rowkey_cnt = high_bound_val.count();
     if (OB_UNLIKELY(rowkey_cnt == 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("get invalid rowkey cnt");
@@ -599,19 +608,15 @@ int ObDbmsStatsCopyTableStats::get_normal_list_part_info(const ObTableSchema *ta
   if (OB_ISNULL(table_schema) || OB_ISNULL(part)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const common::ObNewRow &low_row = part->get_list_row_values().at(0);
-    const common::ObNewRow &high_row = part->get_list_row_values().at(list_val_cnt - 1);
+    const PartitionBoundRow &low_row = part->get_list_row_values().at(0);
+    const PartitionBoundRow &high_row = part->get_list_row_values().at(list_val_cnt - 1);
     for (int64_t i = 0; OB_SUCC(ret) && i < low_row.get_count(); ++i) {
       ObCopyPartInfo *dst_part_info = NULL;
       if (OB_FAIL(get_copy_part_info(table_schema, copy_level, i, helper, dst_part_info))) {
       } else if (OB_ISNULL(dst_part_info)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ob_write_obj(*helper.allocator_,
-                                      low_row.get_cell(i),
-                                      dst_part_info->part_lower_bound_))) {
-      } else if (OB_FAIL(ob_write_obj(*helper.allocator_,
-                                      high_row.get_cell(i),
-                                      dst_part_info->part_upper_bound_))) {
+      } else if (OB_FAIL(clone_typed_value(low_row.get_cell(i), dst_part_info->part_lower_bound_, *helper.allocator_))) {
+      } else if (OB_FAIL(clone_typed_value(high_row.get_cell(i), dst_part_info->part_upper_bound_, *helper.allocator_))) {
       } else {
         dst_part_info->min_res_type_ = CopyDstPartLowerBound;
         dst_part_info->max_res_type_ = CopyDstPartUpperBound;
@@ -634,8 +639,8 @@ int ObDbmsStatsCopyTableStats::get_range_part_info(const ObTableSchema *table_sc
   if (OB_ISNULL(table_schema) || OB_ISNULL(part)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObRowkey &high_bound_val = part->get_high_bound_val();
-    const ObRowkey &low_bound_val = part->get_low_bound_val();
+    const PartitionBoundRow &high_bound_val = part->get_high_bound_val();
+    const PartitionBoundRow &low_bound_val = part->get_low_bound_val();
     
     ObCopyPartInfo *dst_part_info = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
@@ -645,20 +650,14 @@ int ObDbmsStatsCopyTableStats::get_range_part_info(const ObTableSchema *table_sc
                                       dst_part_info))) {
       } else if (OB_ISNULL(dst_part_info)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (NULL != high_bound_val.get_obj_ptr()
-                  && OB_FAIL(ob_write_obj(*helper.allocator_,
-                                      high_bound_val.get_obj_ptr()[i],
-                                      dst_part_info->part_upper_bound_))) {
-      } else if (NULL != low_bound_val.get_obj_ptr()
-                  && OB_FAIL(ob_write_obj(*helper.allocator_,
-                                      low_bound_val.get_obj_ptr()[i],
-                                      dst_part_info->part_lower_bound_))) {
+      } else if (NULL != high_bound_val.get_cells()
+                  && OB_FAIL(clone_typed_value(high_bound_val.get_cells()[i], dst_part_info->part_upper_bound_, *helper.allocator_))) {
+      } else if (NULL != low_bound_val.get_cells()
+                  && OB_FAIL(clone_typed_value(low_bound_val.get_cells()[i], dst_part_info->part_lower_bound_, *helper.allocator_))) {
       } else if (NULL != pre_part) {
-        const ObRowkey &pre_high_bound_val = pre_part->get_high_bound_val();
-        if (NULL != pre_high_bound_val.get_obj_ptr()
-                  && OB_FAIL(ob_write_obj(*helper.allocator_,
-                                      pre_high_bound_val.get_obj_ptr()[i],
-                                      dst_part_info->pre_part_upper_bound_))) {
+        const PartitionBoundRow &pre_high_bound_val = pre_part->get_high_bound_val();
+        if (NULL != pre_high_bound_val.get_cells()
+                  && OB_FAIL(clone_typed_value(pre_high_bound_val.get_cells()[i], dst_part_info->pre_part_upper_bound_, *helper.allocator_))) {
         }
       }
       if (OB_SUCC(ret)) {
@@ -669,16 +668,19 @@ int ObDbmsStatsCopyTableStats::get_range_part_info(const ObTableSchema *table_sc
           dst_part_info->min_res_type_ = CopyPrePartUpperBound;
           dst_part_info->is_normal_range_part_ = true;
         }
-        if (high_bound_val.get_obj_ptr()[i].is_max_value()) {
+        if (high_bound_val.get_cells()[i].is_max_value()) {
           dst_part_info->max_res_type_ = CopyPrePartUpperBound;
         } else {
           dst_part_info->max_res_type_ = CopyDstPartUpperBound;
           if (i != 0) {
             dst_part_info->max_res_type_ = CopyMaxSrcValDstBound;
-            if (pre_part != NULL
-                && high_bound_val.get_obj_ptr()[i - 1] ==
-                pre_part->get_high_bound_val().get_obj_ptr()[i - 1]) {
-              dst_part_info->max_res_type_ = CopyDstPartUpperBound;
+            if (pre_part != NULL) {
+              bool equal = false;
+              if (OB_FAIL(datum_values_equal(high_bound_val.get_cells()[i - 1],
+                      pre_part->get_high_bound_val().get_cells()[i - 1], equal))) {
+              } else if (equal) {
+                dst_part_info->max_res_type_ = CopyDstPartUpperBound;
+              }
             }
           }
         }
@@ -730,10 +732,10 @@ int ObDbmsStatsCopyTableStats::get_src_part_info(const ObTableSchema *table_sche
             || (CopyTwoPartLevel == copy_level && !table_schema->is_range_subpart()))) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObRowkey &high_bound_val = part->get_high_bound_val();
-    const ObRowkey &low_bound_val = NULL != pre_part ? pre_part->get_high_bound_val()
+    const PartitionBoundRow &high_bound_val = part->get_high_bound_val();
+    const PartitionBoundRow &low_bound_val = NULL != pre_part ? pre_part->get_high_bound_val()
                                                        : part->get_low_bound_val();
-    int64_t rowkey_cnt = high_bound_val.get_obj_cnt();
+    int64_t rowkey_cnt = high_bound_val.count();
     if (OB_UNLIKELY(rowkey_cnt == 0)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
@@ -745,10 +747,8 @@ int ObDbmsStatsCopyTableStats::get_src_part_info(const ObTableSchema *table_sche
                                        dst_part_info))) {
         } else if (OB_ISNULL(dst_part_info)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (NULL != low_bound_val.get_obj_ptr()
-                   && OB_FAIL(ob_write_obj(*helper.allocator_,
-                                        low_bound_val.get_obj_ptr()[i],
-                                        dst_part_info->src_part_lower_bound_))) {
+        } else if (NULL != low_bound_val.get_cells()
+                   && OB_FAIL(clone_typed_value(low_bound_val.get_cells()[i], dst_part_info->src_part_lower_bound_, *helper.allocator_))) {
         }
       }
     }

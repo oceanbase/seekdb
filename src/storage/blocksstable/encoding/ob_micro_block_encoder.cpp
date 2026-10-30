@@ -979,7 +979,7 @@ int ObMicroBlockEncoder::copy_cell(
 {
   // For IntSC and UIntSC, normalize to 8 byte
   int ret = OB_SUCCESS;
-  ObObjTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
+  SqlValueTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
   const bool is_int_sc = store_class == ObIntSC || store_class == ObUIntSC;
   int64_t datum_size = 0;
   is_buffer_not_enough = false;
@@ -1047,7 +1047,7 @@ int ObMicroBlockEncoder::process_large_row(
 
     for (int64_t col_idx = 0; col_idx < src.get_column_count(); ++col_idx) {
       const ObColDesc &col_desc = ctx_.col_descs_->at(col_idx);
-      ObObjTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
+      SqlValueTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
       const bool is_int_sc = (store_class == ObIntSC || store_class == ObUIntSC);
       ObStorageDatum &src_datum = src.storage_datums_[col_idx];
       ObDatum &dest_datum = datum_arr[col_idx];
@@ -1077,7 +1077,7 @@ int64_t ObMicroBlockEncoder::calc_datum_row_size(const ObDatumRow &src, int64_t 
 
   for (int64_t col_idx = 0; col_idx < src.get_column_count(); ++col_idx) {
     const ObColDesc &col_desc = ctx_.col_descs_->at(col_idx);
-    ObObjTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
+    SqlValueTypeStoreClass store_class = get_store_class_map()[col_desc.col_type_.get_type_class()];
     ObStorageDatum &datum = src.storage_datums_[col_idx];
     if (!datum.is_null()) {
       if (store_class == ObIntSC || store_class == ObUIntSC) {
@@ -1102,9 +1102,9 @@ int ObMicroBlockEncoder::prescan(const int64_t column_index)
     ret = OB_NOT_INIT;
   } else {
     const ObColDesc &col_desc = ctx_.col_descs_->at(column_index);
-    const ObObjMeta column_type = col_desc.col_type_;
-    const ObObjTypeStoreClass store_class =
-        get_store_class_map()[ob_obj_type_class(column_type.get_type())];
+    const SqlTypeMeta column_type = col_desc.col_type_;
+    const SqlValueTypeStoreClass store_class =
+        get_store_class_map()[sql_type_class(column_type.get_type())];
     int64_t type_store_size = get_type_size_map()[column_type.get_type()];
     ObColumnEncodingCtx &col_ctx = col_ctxs_.at(column_index);
     col_ctx.col_datums_ = all_col_datums_.at(column_index);
@@ -1507,8 +1507,8 @@ int ObMicroBlockEncoder::choose_encoder(const int64_t column_idx,
     }
 
     // try inter column substring
-    const ObObjTypeClass tc = ob_obj_type_class(ctx_.col_descs_->at(column_idx).col_type_.get_type());
-    const ObObjTypeStoreClass sc = get_store_class_map()[tc];
+    const SqlTypeClass tc = sql_type_class(ctx_.col_descs_->at(column_idx).col_type_.get_type());
+    const SqlValueTypeStoreClass sc = get_store_class_map()[tc];
     if (OB_SUCC(ret) && try_more && !cc.is_refed_ /* not refed by other*/) {
       if (is_string_encoding_valid(sc)) {
         if (cc.detected_encoders_[ObInterColSubStrEncoder::type_]) {

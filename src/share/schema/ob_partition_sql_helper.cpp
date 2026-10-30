@@ -62,7 +62,7 @@ int ObPartDMLGenerator::gen_dml(ObDMLSqlSplicer &dml)
 }
 
 int ObPartDMLGenerator::gen_high_bound_val_str(
-    const ObRowkey &high_bound_val,
+    const PartitionBoundRow &high_bound_val,
     ObString &high_bound_val_str,
     ObString &b_high_bound_val_str)
 {
@@ -92,7 +92,7 @@ int ObPartDMLGenerator::gen_high_bound_val_str(
   return ret;
 }
 int ObPartDMLGenerator::gen_list_val_str(
-    const common::ObIArray<common::ObNewRow>& list_value,
+    const common::ObIArray<common::PartitionBoundRow>& list_value,
     common::ObString &list_val_str,
     common::ObString &b_list_val_str)
 {

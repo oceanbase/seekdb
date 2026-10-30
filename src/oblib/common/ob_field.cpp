@@ -73,9 +73,9 @@ int ObField::full_deep_copy(const ObField &other, ObIAllocator *allocator)
     } else if (OB_FAIL(ob_write_string(*allocator, other.org_cname_, org_cname_))) {
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_name_, type_name_))) {
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_owner_, type_owner_))) {
-    } else if (OB_FAIL(deep_copy_obj(*allocator, other.type_, type_))) {
-    } else if (OB_FAIL(deep_copy_obj(*allocator, other.default_value_, default_value_))) {
     } else {
+      type_meta_ = other.type_meta_;
+      field_list_default_type_ = other.field_list_default_type_;
       accuracy_ = other.accuracy_;
       charsetnr_ = other.charsetnr_;
       flags_ = other.flags_;
@@ -112,9 +112,8 @@ int ObField::deep_copy(const ObField &other, ObIAllocator *allocator)
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_name_, type_name_))) {
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_owner_, type_owner_))) {
     } else {
-      // Attention: These two members are not deep copied.
-      type_ = other.type_;
-      default_value_ = other.default_value_;
+      type_meta_ = other.type_meta_;
+      field_list_default_type_ = other.field_list_default_type_;
 
       accuracy_ = other.accuracy_;
       charsetnr_ = other.charsetnr_;
@@ -139,7 +138,7 @@ int ObField::deep_copy(const ObField &other, ObIAllocator *allocator)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObField, type_.meta_, type_owner_, type_name_, accuracy_, flags_, length_,
+OB_SERIALIZE_MEMBER(ObField, type_meta_, type_owner_, type_name_, accuracy_, flags_, length_,
                     cname_);
 
 //deep copy size
@@ -154,10 +153,8 @@ int64_t ObField::get_convert_size() const
   if (is_paramed_select_item_ && NULL != paramed_ctx_) {
     convert_size += paramed_ctx_->get_convert_size();
   }
-  convert_size += type_.get_deep_copy_size();
   convert_size += type_name_.length();
   convert_size += type_owner_.length();
-  convert_size += default_value_.get_deep_copy_size();
   return convert_size;
 }
 
@@ -172,7 +169,7 @@ int64_t ObField::to_string(char *buffer, int64_t len) const
                   org_tname_.length(), org_tname_.ptr(),
                   cname_.length(), cname_.ptr(),
                   org_cname_.length(), org_cname_.ptr());
-  databuff_printf(buffer, len, pos, type_);
+  databuff_printf(buffer, len, pos, type_meta_);
   databuff_printf(buffer, len, pos,
                   ", type_owner: %.*s, type_name: %.*s,"
                   "charset: %hu, "
@@ -202,13 +199,13 @@ int64_t ObField::to_string(char *buffer, int64_t len) const
 // To ensure safety, all accuracy-related length derivations (except character types) are replaced by the maximum value of the relevant type
 // If it is a column, then you need to use the type to overturn the length
 
-int ObField::get_field_mb_length(const ObObjType type,
+int ObField::get_field_mb_length(const SqlValueType type,
                                  const ObAccuracy &accuracy,
                                  const ObCollationType charsetnr,
                                  int32_t &length)
 {
   int ret = OB_SUCCESS;
-  const ObObjTypeClass &tc = ob_obj_type_class(type);
+  const SqlTypeClass &tc = sql_type_class(type);
   switch(tc) {
     case ObIntTC:
     case ObUIntTC:

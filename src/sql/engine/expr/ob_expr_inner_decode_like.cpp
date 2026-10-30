@@ -203,14 +203,14 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
   if (param_num != 6) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObObj &dest_type = types_stack[3].get_param();
-    const ObObj &dest_collation = types_stack[4].get_param();
-    const ObObj &dest_length = types_stack[5].get_param();
+    const DatumValue &dest_type = types_stack[3].get_param();
+    const DatumValue &dest_collation = types_stack[4].get_param();
+    const DatumValue &dest_length = types_stack[5].get_param();
     if (!types_stack[2].is_int() || !types_stack[3].is_int() || !types_stack[4].is_int() || !types_stack[5].is_int()
         || !types_stack[1].is_string_type() || !types_stack[0].is_string_type()) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ObObjType expected_type = static_cast<ObObjType>(dest_type.get_int());
+      SqlValueType expected_type = static_cast<SqlValueType>(dest_type.get_int());
       ObCollationType cs_type = static_cast<ObCollationType>(dest_collation.get_int());
       int64_t length = dest_length.get_int();
       type.set_type(expected_type);
@@ -218,11 +218,11 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
       type.set_collation_level(CS_LEVEL_COERCIBLE);
       type.set_collation_type(cs_type);
       //pattern
-      types_stack[0].set_calc_meta(types_stack[0].get_obj_meta());
+      types_stack[0].set_calc_meta(types_stack[0].get_sql_type_meta());
       types_stack[0].set_calc_collation_type(types_stack[0].get_collation_type());
       types_stack[0].set_calc_collation_level(CS_LEVEL_COERCIBLE);
       //escape
-      types_stack[1].set_calc_meta(types_stack[1].get_obj_meta());
+      types_stack[1].set_calc_meta(types_stack[1].get_sql_type_meta());
       types_stack[1].set_calc_collation_type(types_stack[1].get_collation_type());
       types_stack[1].set_calc_collation_level(CS_LEVEL_COERCIBLE);
       //is_start

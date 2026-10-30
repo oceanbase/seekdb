@@ -38,8 +38,8 @@ int ObConstDecoder::decode_without_dict(
     int64_t ref = meta_header_->const_ref_;
     if (0 == ref) {
       const int64_t len = ctx.col_header_->length_ - sizeof(*meta_header_);
-      const ObObjType obj_type = ctx.col_header_->get_store_obj_type();
-      const ObObjTypeClass tc = ob_obj_type_class(obj_type);
+      const SqlValueType obj_type = ctx.col_header_->get_store_obj_type();
+      const SqlTypeClass tc = sql_type_class(obj_type);
       uint64_t integer_mask;
       if (ObIntTC == tc) {
         int64_t type_store_size = get_type_size_map()[obj_type];
@@ -61,8 +61,7 @@ int ObConstDecoder::decode_without_dict(
     } else if (1 == ref) { // null
       datum.set_null();
     } else if (2 == ref) { // nope
-      datum.set_ext();
-      datum.no_cv(datum.extend_obj_)->set_ext(common::ObActionFlag::OP_NOP);
+      datum.set_ext_value(common::ObActionFlag::OP_NOP);
 
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -167,7 +166,7 @@ int ObConstDecoder::batch_decode_without_dict(
     if (0 == ref) {
       if (OB_FAIL(decode_without_dict(ctx, datums[0]))) {
       } else {
-        switch (get_store_class_map()[ob_obj_type_class(ctx.obj_meta_.get_type())]) {
+        switch (get_store_class_map()[sql_type_class(ctx.obj_meta_.get_type())]) {
         case ObIntSC:
         case ObUIntSC:
         case ObOTimestampSC:

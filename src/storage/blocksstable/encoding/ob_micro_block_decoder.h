@@ -107,7 +107,7 @@ protected:
   int prepare(const int64_t column_cnt);
   int do_init(const ObMicroBlockData &block_data, const int64_t request_cnt);
   int init_decoders();
-  int add_decoder(const int64_t store_idx, const common::ObObjMeta &obj_meta,
+  int add_decoder(const int64_t store_idx, const common::SqlTypeMeta &obj_meta,
                   int64_t &decoders_buf_pos, ObColumnDecoder &dest);
   int acquire(const int64_t store_idx, int64_t &decoders_buf_pos, const ObIColumnDecoder *&decoder);
   int setup_row(const uint64_t row_id, int64_t &row_len, const char *&row_data);
@@ -135,9 +135,9 @@ protected:
   char *allocated_decoders_buf_;
   int64_t allocated_decoders_buf_size_;
   int64_t *store_id_array_;
-  common::ObObjMeta *column_type_array_;
+  common::SqlTypeMeta *column_type_array_;
   int64_t default_store_ids_[DEFAULT_DECODER_CNT];
-  common::ObObjMeta default_column_types_[DEFAULT_DECODER_CNT];
+  common::SqlTypeMeta default_column_types_[DEFAULT_DECODER_CNT];
   bool need_cast_;
   static ObNoneExistColumnDecoder none_exist_column_decoder_;
   static ObColumnDecoderCtx none_exist_column_decoder_ctx_;
@@ -349,7 +349,7 @@ private:
   int do_init(const ObMicroBlockData &block_data);
   int init_decoders();
   int add_decoder(const int64_t store_idx,
-                  const common::ObObjMeta &obj_meta,
+                  const common::SqlTypeMeta &obj_meta,
                   const ObColumnParam *col_param, 
                   int64_t &decoders_buf_pos,
                   ObColumnDecoder &dest);

@@ -24,6 +24,7 @@
 #include "ob_expr_json_utils.h"
 #include "ob_expr_json_func_helper.h"
 
+#include "share/datum/typed_datum_compare.h"
 
 using namespace oceanbase::common;
 
@@ -49,6 +50,7 @@ public:
     virtual common::ObCastMode get_cast_mode() const { return CM_ERROR_ON_SCALE_OVER;}
   virtual bool need_rt_ctx() const override { return true; }
 private:
+  friend class JsonQueryMultivalueAccess;
   static int calc_returning_type(ObExprResType& type,
                                   ObExprResType* types_stack,
                                   ObExprTypeCtx& type_ctx,
@@ -67,7 +69,7 @@ private:
   static int get_dest_type(const ObExpr &expr,
                           int32_t &dst_len,
                           ObEvalCtx& ctx,
-                          ObObjType &dest_type,
+                          SqlValueType &dest_type,
                           bool &is_cover_by_error);
   static int set_multivalue_result(bool is_array, 
                                    ObEvalCtx& ctx, 
@@ -118,13 +120,13 @@ private:
   static int get_ora_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                           common::ObArenaAllocator &allocator,
                           uint16_t index, ObIJsonBase*& j_base,
-                           ObObjType dst_type,
+                           SqlValueType dst_type,
                           bool &is_null, bool &is_cover_by_error);
 
   static int get_clause_pre_asc_sca_opt(const ObExpr &expr, ObEvalCtx &ctx, 
                                         bool &is_cover_by_error, uint8_t &pretty_type,
                                         uint8_t &ascii_type, uint8_t &scalars_type);
-  static int check_enable_cast_index_array(ObIJsonBase* json_base, bool disable_container, ObObjType dest_type);
+  static int check_enable_cast_index_array(ObIJsonBase* json_base, bool disable_container, SqlValueType dest_type);
 
 public:
   static int get_empty_option(bool &is_cover_by_error, 
@@ -168,16 +170,29 @@ public:
 };
 
 struct ObJsonObjectCompare {
-  int operator()(const ObObj &left, const ObObj &right)
+  explicit ObJsonObjectCompare(int &error) : error_(error) {}
+  static int compare(const common::DatumValue &left,
+                      const common::DatumValue &right, int &result)
+  {
+    common::DatumValue l = left;
+    common::DatumValue r = right;
+    if (left.is_string_type() && right.is_string_type()) {
+      // The persisted MVI order/dedup contract uses this collation even when
+      // the declared destination collation differs.
+      l.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+      r.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+    }
+    return common::compare_datum_values(l, r, result);
+  }
+  bool operator()(const common::DatumValue &left, const common::DatumValue &right)
   {
     int result = 0;
-    if (left.is_string_type() && right.is_string_type()) {
-      left.compare(right, CS_TYPE_UTF8MB4_GENERAL_CI, result);
-    } else {
-      left.compare(right, result);
-    }
-    return result <= 0 ? 0 : 1;
+    if (error_ == OB_SUCCESS) { error_ = compare(left, right, result); }
+    // Preserve the existing descending order; do not silently switch to less.
+    return error_ == OB_SUCCESS && result > 0;
   }
+private:
+  int &error_;
 };
 
 } // sql

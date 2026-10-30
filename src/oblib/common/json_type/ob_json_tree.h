@@ -75,7 +75,7 @@ public:
   OB_INLINE uint64_t element_count() const override { return 1; }
   virtual uint64_t member_count() const override { return element_count(); }
   OB_INLINE int get_parent(ObIJsonBase *&parent) const override { parent = parent_; return OB_SUCCESS; }
-  OB_INLINE ObObjType field_type() const override
+  OB_INLINE SqlValueType field_type() const override
   {
     return ObMaxType; // ObJsonOpaque override
   }
@@ -650,7 +650,7 @@ private:
 class ObJsonDatetime : public ObJsonScalar
 {
 public:
-  explicit ObJsonDatetime(const ObTime &time, ObObjType field_type);
+  explicit ObJsonDatetime(const ObTime &time, SqlValueType field_type);
   explicit ObJsonDatetime(ObJsonNodeType type, const ObTime &time);
   virtual ~ObJsonDatetime() {}
   int64_t to_string(char *buf, const int64_t buf_len) const
@@ -662,8 +662,8 @@ public:
     return pos;
   }
   ObJsonNodeType json_type() const { return json_type_; };
-  OB_INLINE ObObjType field_type() const { return field_type_; }
-  OB_INLINE void set_field_type(ObObjType field_type) { field_type_ = field_type; }
+  OB_INLINE SqlValueType field_type() const { return field_type_; }
+  OB_INLINE void set_field_type(SqlValueType field_type) { field_type_ = field_type; }
   OB_INLINE void set_json_type(ObJsonNodeType json_type);
   OB_INLINE ObTime value() const { return value_; }
   OB_INLINE void set_value(ObTime value) { value_ = value; }
@@ -681,7 +681,7 @@ public:
   ObJsonNode *clone(ObIAllocator* allocator, bool is_deep_copy = false) const;
 private:
   ObTime value_;
-  ObObjType field_type_;
+  SqlValueType field_type_;
   ObJsonNodeType json_type_;
   DISALLOW_COPY_AND_ASSIGN(ObJsonDatetime);
 };
@@ -689,7 +689,7 @@ private:
 class ObJsonOpaque : public ObJsonScalar
 {
 public:
-  explicit ObJsonOpaque(common::ObString value, ObObjType field_type)
+  explicit ObJsonOpaque(common::ObString value, SqlValueType field_type)
       : ObJsonScalar(),
         field_type_(field_type),
         value_(value)
@@ -707,8 +707,8 @@ public:
   OB_INLINE ObJsonNodeType json_type() const override { return ObJsonNodeType::J_OPAQUE; }
   OB_INLINE const char *value() const { return value_.ptr(); }
   OB_INLINE void set_value(common::ObString value) { value_ = value; }
-  OB_INLINE ObObjType field_type() const override { return field_type_; }
-  OB_INLINE void set_field_type(ObObjType field_type) { field_type_ = field_type; }
+  OB_INLINE SqlValueType field_type() const override { return field_type_; }
+  OB_INLINE void set_field_type(SqlValueType field_type) { field_type_ = field_type; }
   OB_INLINE uint64_t size() const { return value_.length(); }
   OB_INLINE uint64_t get_serialize_size()
   {
@@ -716,7 +716,7 @@ public:
   }
   ObJsonNode *clone(ObIAllocator* allocator, bool is_deep_copy = false) const;
 private:
-  ObObjType field_type_;
+  SqlValueType field_type_;
   common::ObString value_;
   DISALLOW_COPY_AND_ASSIGN(ObJsonOpaque);
 };
@@ -856,7 +856,7 @@ public:
 private:
   ObString str_val_;
   ObJsonNodeType json_type_;
-  ObObjType field_type_;
+  SqlValueType field_type_;
 };
 
 // Object element comparison function.

@@ -41,7 +41,7 @@ public :
   int64_t buf_len_;
   int64_t *pos_;
   const ObReqFromJson *req_;
-  ObObjPrintParams print_params_;
+  ObValuePrintParams print_params_;
 };
 
 

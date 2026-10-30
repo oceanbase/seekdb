@@ -291,8 +291,8 @@ static int parse_redo_record(ObCSRedoRecord &redo,
     cs_row.tablet_id_      = row_header.tablet_id_;
     cs_row.commit_version_ = tx_info.commit_version_;
     cs_row.dml_flag_       = mut_row.dml_flag_;
-    if (mut_row.rowkey_.get_obj_cnt() > 0 && OB_NOT_NULL(mut_row.rowkey_.get_obj_ptr())) {
-      cs_row.heap_pk_ = mut_row.rowkey_.get_obj_ptr()[0].get_int();
+    if (mut_row.rowkey_.get_value_count() > 0 && OB_NOT_NULL(mut_row.rowkey_.get_values())) {
+      cs_row.heap_pk_ = mut_row.rowkey_.get_values()[0].get_int();
     }
     cs_row.new_row_        = mut_row.new_row_;
     cs_row.old_row_        = mut_row.old_row_;

@@ -34,7 +34,7 @@ public:
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx)
                                 const override;
-  static uint32_t opaque_index(ObObjType field_type);
+  static uint32_t opaque_index(SqlValueType field_type);
   static int eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

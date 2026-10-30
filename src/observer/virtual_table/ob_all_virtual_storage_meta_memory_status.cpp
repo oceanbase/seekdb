@@ -77,23 +77,23 @@ int ObAllVirtualStorageMetaMemoryStatus::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
         case NAME:
-          cur_row_.cells_[i].set_varchar(status_arr_[pool_idx_].name_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, status_arr_[pool_idx_].name_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case USED_SIZE:
-          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].used_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, status_arr_[pool_idx_].used_size_) : ret);
           break;
         case TOTAL_SIZE:
-          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].total_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, status_arr_[pool_idx_].total_size_) : ret);
           break;
         case USED_OBJ_CNT:
-          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].used_obj_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, status_arr_[pool_idx_].used_obj_cnt_) : ret);
           break;
         case FREE_OBJ_CNT:
-          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].free_obj_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, status_arr_[pool_idx_].free_obj_cnt_) : ret);
           break;
         case EACH_OBJ_SIZE:
-          cur_row_.cells_[i].set_int(status_arr_[pool_idx_].each_obj_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, status_arr_[pool_idx_].each_obj_size_) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

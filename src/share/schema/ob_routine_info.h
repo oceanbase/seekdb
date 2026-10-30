@@ -199,7 +199,7 @@ public:
   OB_INLINE int set_param_name(const common::ObString &param_name) { return deep_copy_str(param_name, param_name_); }
   OB_INLINE void set_schema_version(int64_t schema_version) { schema_version_ = schema_version; }
   OB_INLINE void set_param_type(const common::ObDataType &param_type) { param_type_ = param_type; }
-  OB_INLINE void set_param_type(const common::ObObjType &type) { param_type_.set_obj_type(type); }
+  OB_INLINE void set_param_type(const common::SqlValueType &type) { param_type_.set_obj_type(type); }
   OB_INLINE void set_param_length(common::ObLength length) { param_type_.set_length(length); }
   OB_INLINE void set_param_precision(common::ObPrecision precision) { param_type_.set_precision(precision); }
   OB_INLINE void set_param_scale(common::ObScale scale) { param_type_.set_scale(scale); }

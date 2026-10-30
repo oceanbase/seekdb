@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "common/datum/datum_value_buffer.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_routine_executor.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/command/ob_root_command_service.h"
@@ -85,7 +87,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
     ObArray<bool> null_params;
 
     if (!call_proc_info->can_direct_use_param()) {
-      ObObjParam param;
+      DatumParameter param;
       const ParamStore &origin_params = ctx.get_physical_plan_ctx()->get_param_store_for_update();
       pl::ExecCtxBak exec_ctx_bak;
       sql::ObPhysicalPlanCtx phy_plan_ctx(ctx.get_allocator());
@@ -107,7 +109,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
           ret = OB_ERR_UNEXPECTED;
         } else {
           param.reset();
-          param.ObObj::reset();
           if (OB_FAIL(ObSQLUtils::calc_sql_expression_without_row(ctx, *expr, param))) {
           } else {
             if (expr->get_is_pl_mock_default_expr()) {
@@ -146,7 +147,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
         LOG_DEBUG("params", "param", ctx.get_physical_plan_ctx()->get_param_store().at(i), K(i));
-        ObObjParam param = ctx.get_physical_plan_ctx()->get_param_store().at(i);
+        DatumParameter param = ctx.get_physical_plan_ctx()->get_param_store().at(i);
         if (OB_FAIL(params.push_back(param))) {
         } else if (call_proc_info->get_output_count() > 0) {
           if (OB_FAIL(null_params.push_back(param.is_null()))) {
@@ -160,7 +161,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
     }
     if (OB_SUCC(ret)) {
       ObArray<int64_t> path;
-      ObObj result;
+      DatumParameter result;
       int64_t pkg_id = package_id;
       if (OB_FAIL(ctx.get_pl_engine()->execute(ctx,
                                               ctx.get_allocator(),
@@ -174,15 +175,13 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       } else if (call_proc_info->get_output_count() > 0) {
         int64_t client_output_cnt = call_proc_info->get_client_output_count();
         ctx.get_output_row()->count_ = client_output_cnt;
-        if (client_output_cnt > 0
-            && OB_ISNULL(ctx.get_output_row()->cells_ = static_cast<ObObj *>(
-                             ctx.get_allocator().alloc(sizeof(ObObj) * client_output_cnt)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
+        if (OB_FAIL(DatumValueBuffer::allocate(ctx.get_allocator(), client_output_cnt,
+                            ctx.get_output_row()->cells_))) {
         } else {
           int64_t out_idx = -1;    // index for out params
           int64_t c_out_idx = -1;  // index for out params which would be returned to client
           for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
-            ObObj out_value;
+            DatumParameter out_value;
             if (call_proc_info->is_out_param(i)) {
               OX (out_idx++);
               if (ob_is_enum_or_set_type(params.at(i).get_type())) {
@@ -195,7 +194,9 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
               }
 
               if (call_proc_info->is_client_out_param_by_param_id(i)) {
-                OX (ctx.get_output_row()->cells_[++c_out_idx] = out_value);
+                DatumValue owned;
+                OZ (clone_typed_value(out_value.value_view(), owned, ctx.get_allocator()));
+                OX (ctx.get_output_row()->cells_[++c_out_idx] = owned);
               }
 
               if (OB_FAIL(ret)) {
@@ -203,7 +204,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                 const ObSqlExpression *expr = call_proc_info->get_expressions().at(i);
                 ObItemType expr_type = expr->get_expr_items().at(0).get_item_type();
                 if (OB_LIKELY(IS_CONST_TYPE(expr_type))) {
-                  const ObObj &value = expr->get_expr_items().at(0).get_obj();
+                  const DatumValue &value = expr->get_expr_items().at(0).get_obj();
                   if (T_QUESTIONMARK == expr_type) {
                     int64_t param_idx = value.get_unknown();
                     ctx.get_physical_plan_ctx()->get_param_store_for_update().at(param_idx) = out_value;
@@ -217,7 +218,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                   } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt.get_stmt_type(), ctx, ctx.get_allocator(), expr_ctx))) {
                   } else {
                     const ObString var_name = expr->get_expr_items().at(1).get_obj().get_string();
-                    if (FAILEDx(ObVariableSetExecutor::set_user_variable(out_value, var_name, expr_ctx))) {
+                    if (FAILEDx(ObVariableSetExecutor::set_user_variable(out_value.value_view(), var_name, expr_ctx))) {
                     }
                   }
                 } else {
@@ -350,10 +351,8 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
         && !out_args.is_empty()) {
       bool need_push = false;
       ctx.get_output_row()->count_ = out_args.num_members();
-      if (OB_ISNULL(ctx.get_output_row()->cells_ =
-        static_cast<ObObj *>(ctx.get_allocator().alloc(sizeof(ObObj) * out_args.num_members())))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
+      OZ (DatumValueBuffer::allocate(ctx.get_allocator(), out_args.num_members(),
+                                    ctx.get_output_row()->cells_));
       CK (OB_NOT_NULL(ctx.get_field_columns()));
 
       // prepare of prexecue protocol fill "field_columns" with question mark count.
@@ -370,10 +369,13 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
       for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_params()->count(); ++i) {
         if (out_args.has_member(i)) {
           ObField field;
-          ObObjParam &value = stmt.get_params()->at(i);
-          ctx.get_output_row()->cells_[out_idx] = stmt.get_params()->at(i);
+          DatumParameter &value = stmt.get_params()->at(i);
+          const DatumParameter &parameter = stmt.get_params()->at(i);
+          DatumValue owned;
+          OZ (clone_typed_value(parameter.value_view(), owned, ctx.get_allocator()));
+          OX (ctx.get_output_row()->cells_[out_idx] = owned);
           field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI;
-          field.type_.set_type(value.get_type());
+          field.type_meta_.set_type(value.get_type());
           field.accuracy_ = value.get_accuracy();
           if (value.get_type() != ObExtendType) { // basic data type
             if (ObVarcharType == value.get_type()
@@ -386,7 +388,7 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
               }
             } else {
               OZ (common::ObField::get_field_mb_length(
-                field.type_.get_type(), field.accuracy_, common::CS_TYPE_INVALID, field.length_));
+                field.type_meta_.get_type(), field.accuracy_, common::CS_TYPE_INVALID, field.length_));
             }
             ObCollationType collation = CS_TYPE_INVALID;
             OZ (ObCharset::get_default_collation(value.get_collation_type(), collation));

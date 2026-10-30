@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #define OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #include "common/timezone/ob_time_convert.h"
+#include "common/datum/datum_value.h"
 #include "share/system_variable/ob_system_variable_init.h"
 
 namespace oceanbase
@@ -25,6 +26,7 @@ namespace common
 {
 class ObMySQLProxy;
 }
+namespace share { namespace schema { class ObSysVarSchema; } }
 namespace sql
 {
 class ObExecContext;
@@ -141,18 +143,26 @@ private:
 
 class ObBasicSysVar
 {
-  OB_UNIS_VERSION_V(1);
+public:
+  virtual int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int serialize_(char *buf, int64_t buf_len, int64_t &pos) const;
+  virtual int64_t get_serialize_size() const;
+  int64_t get_serialize_size_() const;
+  int deserialize(const char *buf, int64_t data_len, int64_t &pos,
+                  common::ObIAllocator &owner);
+private:
+  static const int64_t UNIS_VERSION = 1;
 public:
   static const char * EMPTY_STRING;
   typedef int (*OnCheckAndConvertFunc)(sql::ObExecContext &ctx,
                                        const ObSetVar &set_var,
                                        const ObBasicSysVar &sys_var,
-                                       const common::ObObj &in_val,
-                                       common::ObObj &out_val);
+                                       const common::DatumValue &in_val,
+                                       common::DatumValue &out_val);
   typedef int (*OnUpdateFunc)(sql::ObExecContext &ctx,
                               const ObSetVar &set_var,
                               const ObBasicSysVar &sys_var,
-                              const common::ObObj &val);
+                              const common::DatumValue &val);
   typedef int (*ToStrFunc)(common::ObIAllocator &allocator,
                            const sql::ObBasicSessionInfo &session,
                            const ObBasicSysVar &sys_var,
@@ -160,8 +170,8 @@ public:
   typedef int (*ToObjFunc)(common::ObIAllocator &allocator,
                            const sql::ObBasicSessionInfo &session,
                            const ObBasicSysVar &sys_var,
-                           common::ObObj &result_obj);
-  typedef common::ObObjType (*GetMetaTypeFunc)();
+                           common::DatumValue &result_obj);
+  typedef common::SqlValueType (*GetMetaTypeFunc)();
   //sys variable of non-varchar type may be NULL
   static inline bool is_null_value(const common::ObString & value, int64_t flag)
   {
@@ -194,13 +204,13 @@ public:
   virtual ~ObBasicSysVar() {}
 
   virtual share::ObSysVarClassType get_type() const = 0;
-  virtual const common::ObObj &get_global_default_value() const = 0;
+  virtual const common::DatumValue &get_global_default_value() const = 0;
 
-  virtual int init(const common::ObObj &value,
-                   const common::ObObj &min_val,
-                   const common::ObObj &max_val,
-                   common::ObObjType type,
-                   int64_t flags);
+  virtual int init(const common::DatumValue &value,
+                   const common::DatumValue &min_val,
+                   const common::DatumValue &max_val,
+                   common::SqlValueType type,
+                   int64_t flags, common::ObIAllocator &owner);
   virtual void reset();
   virtual void clean_value();
   virtual void clean_base_value();
@@ -209,30 +219,30 @@ public:
   virtual bool is_inc_value_empty() const;
   virtual int check_and_convert(sql::ObExecContext &ctx,
                                 const ObSetVar &set_var,
-                                const common::ObObj &in_val,
-                                common::ObObj &out_val);
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
-  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::ObObj &val);
-  virtual int update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::ObObj &val);
+                                const common::DatumValue &in_val,
+                                common::DatumValue &out_val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
+  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::DatumValue &val);
+  virtual int update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::DatumValue &val);
 
-  virtual common::ObObjType inner_get_meta_type() const; // select @@XXX when the type in meta data
+  virtual common::SqlValueType inner_get_meta_type() const; // select @@XXX when the type in meta data
   virtual int inner_to_select_obj(common::ObIAllocator &allocator,
                                   const sql::ObBasicSessionInfo &session,
-                                  common::ObObj &select_obj) const;
+                                  common::DatumValue &select_obj) const;
   virtual int inner_to_show_str(common::ObIAllocator &allocator,
                                 const sql::ObBasicSessionInfo &session,
                                 common::ObString &show_str) const;
 
-  common::ObObjType get_meta_type() const;
-  const common::ObObj &get_value() const;
-  const common::ObObj &get_max_val() const;
-  void set_value(const common::ObObj &value);
-  common::ObObjType get_data_type() const;
-  void set_data_type(common::ObObjType type);
+  common::SqlValueType get_meta_type() const;
+  const common::DatumValue &get_value() const;
+  const common::DatumValue &get_max_val() const;
+  int set_value(const common::DatumValue &value, common::ObIAllocator &owner);
+  common::SqlValueType get_data_type() const;
+  void set_data_type(common::SqlValueType type);
   void set_flags(int64_t flags);
   int to_select_obj(common::ObIAllocator &allocator,
                     const sql::ObBasicSessionInfo &session,
-                    common::ObObj &select_obj) const;
+                    common::DatumValue &select_obj) const;
   int to_show_str(common::ObIAllocator &allocator,
                   const sql::ObBasicSessionInfo &session,
                   common::ObString &show_str) const;
@@ -267,25 +277,25 @@ protected:
   // 2. Only inc_value will be set individually, and inc_value may be validated based on min_value/max_value.
   //    Currently only the set_value interface.
   int64_t base_version_;
-  common::ObObj base_value_;
-  common::ObObj inc_value_;
-  common::ObObj min_val_;
-  common::ObObj max_val_;
-  common::ObObjType type_;
+  common::DatumValue base_value_;
+  common::DatumValue inc_value_;
+  common::DatumValue min_val_;
+  common::DatumValue max_val_;
+  common::SqlValueType type_;
   int64_t flags_;
 protected:
-  int log_err_wrong_value_for_var(int error_no, const common::ObObj &val) const;
-  int check_and_convert_int_tc_value(const common::ObObj &value,
+  int log_err_wrong_value_for_var(int error_no, const common::DatumValue &val) const;
+  int check_and_convert_int_tc_value(const common::DatumValue &value,
                                      int64_t invalid_value,
                                      int64_t &result_value) const;
-  int check_and_convert_uint_tc_value(const common::ObObj &value,
+  int check_and_convert_uint_tc_value(const common::DatumValue &value,
                                       uint64_t invalid_value,
                                       uint64_t &result_value) const;
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
   OnCheckAndConvertFunc on_check_and_convert_;
   OnUpdateFunc on_update_;
   ToObjFunc to_select_obj_;
@@ -293,6 +303,9 @@ private:
   GetMetaTypeFunc get_meta_type_;
   bool is_enum_type_;
 private:
+  // Session owns the double-buffer transaction: it clones every pending/live
+  // native payload before atomically committing views into its next arena.
+  friend class ObBasicSessionInfo;
   DISALLOW_COPY_AND_ASSIGN(ObBasicSysVar);
 };
 
@@ -318,7 +331,7 @@ public:
   virtual ~ObTypeLibSysVar() {}
 
   virtual void reset();
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
   virtual int inner_to_show_str(common::ObIAllocator &allocator,
                                 const sql::ObBasicSessionInfo &session,
                                 common::ObString &show_str) const;
@@ -328,8 +341,8 @@ protected:
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTypeLibSysVar);
 };
@@ -356,7 +369,7 @@ public:
 
   virtual int inner_to_select_obj(common::ObIAllocator &allocator,
                                   const sql::ObBasicSessionInfo &session,
-                                  common::ObObj &select_obj) const;
+                                  common::DatumValue &select_obj) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObEnumSysVar);
 };
@@ -432,8 +445,8 @@ public:
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlModeVar);
 };
@@ -477,12 +490,12 @@ public:
   {
   }
   virtual ~ObCharsetSysVar() {}
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCharsetSysVar);
 };
@@ -504,12 +517,12 @@ public:
   {
   }
   virtual ~ObTinyintSysVar() {}
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTinyintSysVar);
 };
@@ -530,16 +543,16 @@ public:
   {
   }
   virtual ~ObIntSysVar() {}
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
 
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
   virtual int do_convert(sql::ObExecContext &ctx,
-                         const common::ObObj &in_val,
-                         common::ObObj &out_val,
+                         const common::DatumValue &in_val,
+                         common::DatumValue &out_val,
                          bool &is_converted);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObIntSysVar);
@@ -564,8 +577,8 @@ public:
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObStrictRangeIntSysVar);
 };
@@ -586,15 +599,15 @@ public:
   {
   }
   virtual ~ObNumericSysVar() {}
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
   virtual int do_convert(sql::ObExecContext &ctx,
-                         const common::ObObj &in_val,
-                         common::ObObj &out_val,
+                         const common::DatumValue &in_val,
+                         common::DatumValue &out_val,
                          bool &is_converted);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObNumericSysVar);
@@ -616,12 +629,12 @@ public:
   {
   }
   virtual ~ObVarcharSysVar() {}
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObVarcharSysVar);
 };
@@ -642,12 +655,12 @@ public:
   {
   }
   virtual ~ObTimeZoneSysVar() {}
-  virtual int check_update_type(const ObSetVar &set_var, const common::ObObj &val);
+  virtual int check_update_type(const ObSetVar &set_var, const common::DatumValue &val);
 private:
   virtual int do_check_and_convert(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &in_val,
-                                   common::ObObj &out_val);
+                                   const common::DatumValue &in_val,
+                                   common::DatumValue &out_val);
   int find_pos_time_zone(sql::ObExecContext &ctx, const common::ObString &str_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTimeZoneSysVar);
@@ -658,7 +671,7 @@ class ObSessionSpecialIntSysVar : public ObIntSysVar
 public:
   typedef int (*SessionSpecialUpdateFunc)(sql::ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const common::ObObj &val);
+                                          const common::DatumValue &val);
 public:
   ObSessionSpecialIntSysVar(OnCheckAndConvertFunc on_check_and_convert = NULL,
                          SessionSpecialUpdateFunc session_special_update = NULL,
@@ -675,7 +688,7 @@ public:
   }
   virtual ~ObSessionSpecialIntSysVar() {}
 
-  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::ObObj &val)
+  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::DatumValue &val)
   {
     int ret = common::OB_SUCCESS;
     if (OB_ISNULL(session_special_update_)) {
@@ -697,7 +710,7 @@ class ObSessionSpecialVarcharSysVar : public ObVarcharSysVar
 public:
   typedef int (*SessionSpecialUpdateFunc)(sql::ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const common::ObObj &val);
+                                          const common::DatumValue &val);
 public:
   ObSessionSpecialVarcharSysVar(OnCheckAndConvertFunc on_check_and_convert = NULL,
                          OnUpdateFunc on_update = NULL,
@@ -715,7 +728,7 @@ public:
   }
   virtual ~ObSessionSpecialVarcharSysVar() {}
 
-  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::ObObj &val)
+  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::DatumValue &val)
   {
     int ret = common::OB_SUCCESS;
     if (OB_ISNULL(session_special_update_)) {
@@ -737,7 +750,7 @@ class ObSessionSpecialBoolSysVar : public ObBoolSysVar
 public:
   typedef int (*SessionSpecialUpdateFunc)(sql::ObExecContext &ctx,
                                           const ObSetVar &set_var,
-                                          const common::ObObj &val);
+                                          const common::DatumValue &val);
 public:
   ObSessionSpecialBoolSysVar(OnCheckAndConvertFunc on_check_and_convert = NULL,
                          OnUpdateFunc on_update = NULL,
@@ -755,7 +768,7 @@ public:
   }
   virtual ~ObSessionSpecialBoolSysVar() {}
 
-  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::ObObj &val)
+  virtual int session_update(sql::ObExecContext &ctx, const ObSetVar &set_var, const common::DatumValue &val)
   {
     int ret = common::OB_SUCCESS;
     if (OB_ISNULL(session_special_update_)) {
@@ -782,106 +795,106 @@ public:
   static int check_and_convert_max_allowed_packet(sql::ObExecContext &ctx,
                                                   const ObSetVar &set_var,
                                                   const ObBasicSysVar &sys_var,
-                                                  const common::ObObj &in_val,
-                                                  common::ObObj &out_val);
+                                                  const common::DatumValue &in_val,
+                                                  common::DatumValue &out_val);
   static int check_and_convert_net_buffer_length(sql::ObExecContext &ctx,
                                                  const ObSetVar &set_var,
                                                  const ObBasicSysVar &sys_var,
-                                                 const common::ObObj &in_val,
-                                                 common::ObObj &out_val);
+                                                 const common::DatumValue &in_val,
+                                                 common::DatumValue &out_val);
   static int check_and_convert_charset(sql::ObExecContext &ctx,
                                        const ObSetVar &set_var,
                                        const ObBasicSysVar &sys_var,
-                                       const common::ObObj &in_val,
-                                       common::ObObj &out_val);
+                                       const common::DatumValue &in_val,
+                                       common::DatumValue &out_val);
   static int check_and_convert_charset_not_null(sql::ObExecContext &ctx,
                                                 const ObSetVar &set_var,
                                                 const ObBasicSysVar &sys_var,
-                                                const common::ObObj &in_val,
-                                                common::ObObj &out_val);
+                                                const common::DatumValue &in_val,
+                                                common::DatumValue &out_val);
   static int check_and_convert_collation_not_null(sql::ObExecContext &ctx,
                                                   const ObSetVar &set_var,
                                                   const ObBasicSysVar &sys_var,
-                                                  const common::ObObj &in_val,
-                                                  common::ObObj &out_val);
+                                                  const common::DatumValue &in_val,
+                                                  common::DatumValue &out_val);
   static int check_default_value_for_utf8mb4(sql::ObExecContext &ctx,
                                             const ObSetVar &set_var,
                                             const ObBasicSysVar &sys_var,
-                                            const ObObj &in_val,
-                                            ObObj &out_val);
+                                            const DatumValue &in_val,
+                                            DatumValue &out_val);
   static int check_and_convert_tx_isolation(sql::ObExecContext &ctx,
                                             const ObSetVar &set_var,
                                             const ObBasicSysVar &sys_var,
-                                            const common::ObObj &in_val,
-                                            common::ObObj &out_val);
+                                            const common::DatumValue &in_val,
+                                            common::DatumValue &out_val);
   static int check_and_convert_tx_read_only(sql::ObExecContext &ctx,
                                             const ObSetVar &set_var,
                                             const ObBasicSysVar &sys_var,
-                                            const common::ObObj &in_val,
-                                            common::ObObj &out_val);
+                                            const common::DatumValue &in_val,
+                                            common::DatumValue &out_val);
   static int check_and_convert_timeout_too_large(sql::ObExecContext &ctx,
                                                  const ObSetVar &set_var,
                                                  const ObBasicSysVar &sys_var,
-                                                 const common::ObObj &in_val,
-                                                 common::ObObj &out_val);
+                                                 const common::DatumValue &in_val,
+                                                 common::DatumValue &out_val);
   static int check_and_convert_max_user_connections(sql::ObExecContext &ctx,
                                                     const ObSetVar &set_var,
                                                     const ObBasicSysVar &sys_var,
-                                                    const common::ObObj &in_val,
-                                                    common::ObObj &out_val);
+                                                    const common::DatumValue &in_val,
+                                                    common::DatumValue &out_val);
   static int check_and_convert_sql_mode(sql::ObExecContext &ctx,
                                         const ObSetVar &set_var,
                                         const ObBasicSysVar &sys_var,
-                                        const common::ObObj &in_val,
-                                        common::ObObj &out_val);
+                                        const common::DatumValue &in_val,
+                                        common::DatumValue &out_val);
   static int check_and_convert_time_zone(sql::ObExecContext &ctx,
                                         const ObSetVar &set_var,
                                         const ObBasicSysVar &sys_var,
-                                        const common::ObObj &in_val,
-                                        common::ObObj &out_val);
+                                        const common::DatumValue &in_val,
+                                        common::DatumValue &out_val);
   static int check_and_convert_max_min_timestamp(sql::ObExecContext &ctx,
                                                  const ObSetVar &set_var,
                                                  const ObBasicSysVar &sys_var,
-                                                 const common::ObObj &in_val,
-                                                 common::ObObj &out_val);
+                                                 const common::DatumValue &in_val,
+                                                 common::DatumValue &out_val);
   static int check_log_row_value_option_is_valid(sql::ObExecContext &ctx,
                                                   const ObSetVar &set_var,
                                                   const ObBasicSysVar &sys_var,
-                                                  const common::ObObj &in_val,
-                                                  common::ObObj &out_val);
+                                                  const common::DatumValue &in_val,
+                                                  common::DatumValue &out_val);
 
   static int check_default_lob_inrow_threshold(sql::ObExecContext &ctx,
                                                   const ObSetVar &set_var,
                                                   const ObBasicSysVar &sys_var,
-                                                  const common::ObObj &in_val,
-                                                  common::ObObj &out_val);
+                                                  const common::DatumValue &in_val,
+                                                  common::DatumValue &out_val);
 
   static int check_runtime_filter_type_is_valid(sql::ObExecContext &ctx,
                                                 const ObSetVar &set_var,
                                                 const ObBasicSysVar &sys_var,
-                                                const common::ObObj &in_val,
-                                                common::ObObj &out_val);
+                                                const common::DatumValue &in_val,
+                                                common::DatumValue &out_val);
   static int check_locale_type_is_valid(sql::ObExecContext &ctx,
                                         const ObSetVar &set_var,
                                         const ObBasicSysVar &sys_var,
-                                        const common::ObObj &in_val,
-                                        common::ObObj &out_val);
+                                        const common::DatumValue &in_val,
+                                        common::DatumValue &out_val);
   static int check_and_convert_block_encryption_mode(sql::ObExecContext &ctx,
                                                      const ObSetVar &set_var,
                                                      const ObBasicSysVar &sys_var,
-                                                     const common::ObObj &in_val,
-                                                     common::ObObj &out_val);
+                                                     const common::DatumValue &in_val,
+                                                     common::DatumValue &out_val);
   static int check_and_convert_default_storage_engine(sql::ObExecContext &ctx,
                                                       const ObSetVar &set_var,
                                                       const ObBasicSysVar &sys_var,
-                                                      const common::ObObj &in_val,
-                                                      common::ObObj &out_val);
+                                                      const common::DatumValue &in_val,
+                                                      common::DatumValue &out_val);
 private:
   static int check_session_readonly(sql::ObExecContext &ctx,
                                     const ObSetVar &set_var,
                                     const ObBasicSysVar &sys_var,
-                                    const common::ObObj &in_val,
-                                    common::ObObj &out_val);
+                                    const common::DatumValue &in_val,
+                                    common::DatumValue &out_val);
   static bool can_set_trans_var(ObSetVar::SetScopeType scope, sql::ObBasicSessionInfo &session);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarOnCheckFuncs);
@@ -897,11 +910,11 @@ public:
   static int update_tx_isolation(sql::ObExecContext &ctx,
                                  const ObSetVar &set_var,
                                  const ObBasicSysVar &sys_var,
-                                 const common::ObObj &val);
+                                 const common::DatumValue &val);
   static int update_tx_read_only_no_scope(sql::ObExecContext &ctx,
                                           const ObSetVar &set_var,
                                           const ObBasicSysVar &sys_var,
-                                          const common::ObObj &val);
+                                          const common::DatumValue &val);
 private:
   // start trans helper use by set transaction charactors
   static int start_trans_by_set_trans_char_(
@@ -916,15 +929,15 @@ public:
   virtual ~ObSysVarToObjFuncs() {}
 public:
   static int to_obj_charset(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
-                            const ObBasicSysVar &sys_var, common::ObObj &result_obj);
+                            const ObBasicSysVar &sys_var, common::DatumValue &result_obj);
   static int to_obj_collation(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
-                              const ObBasicSysVar &sys_var, common::ObObj &result_obj);
+                              const ObBasicSysVar &sys_var, common::DatumValue &result_obj);
   static int to_obj_sql_mode(common::ObIAllocator &allocator, const sql::ObBasicSessionInfo &session,
-                             const ObBasicSysVar &sys_var, common::ObObj &result_obj);
+                             const ObBasicSysVar &sys_var, common::DatumValue &result_obj);
   static int to_obj_default_storage_engine(common::ObIAllocator &allocator,
                                            const sql::ObBasicSessionInfo &session,
                                            const ObBasicSysVar &sys_var,
-                                           common::ObObj &result_obj);
+                                           common::DatumValue &result_obj);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarToObjFuncs);
 };
@@ -955,7 +968,7 @@ public:
   ObSysVarGetMetaTypeFuncs() {}
   virtual ~ObSysVarGetMetaTypeFuncs() {}
 public:
-  static common::ObObjType get_meta_type_varchar() { return common::ObVarcharType; }
+  static common::SqlValueType get_meta_type_varchar() { return common::ObVarcharType; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarGetMetaTypeFuncs);
 };
@@ -969,18 +982,18 @@ public:
   // @@identiy alias to @@last_insert_id
   static int update_identity(sql::ObExecContext &ctx,
                              const ObSetVar &set_var,
-                             const common::ObObj &val);
+                             const common::DatumValue &val);
   static int update_last_insert_id(sql::ObExecContext &ctx,
                                    const ObSetVar &set_var,
-                                   const common::ObObj &val);
+                                   const common::DatumValue &val);
   // @@tx_isolation alias to @@transaction_isolation
   static int update_tx_isolation(sql::ObExecContext &ctx,
                                  const ObSetVar &set_var,
-                                 const common::ObObj &val);
+                                 const common::DatumValue &val);
   // @@tx_read_only alias to @@transaction_read_only
   static int update_tx_read_only(sql::ObExecContext &ctx,
                                  const ObSetVar &set_var,
-                                 const common::ObObj &val);
+                                 const common::DatumValue &val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarSessionSpecialUpdateFuncs);
 };
@@ -1048,9 +1061,12 @@ private:
 class ObSysVarUtils
 {
 public:
+  static int get_schema_value(const share::schema::ObSysVarSchema &schema,
+      const common::ObDataTypeCastParams &dtc_params,
+      common::ObIAllocator &owner, common::DatumValue &output);
   static int log_bounds_error_or_warning(sql::ObExecContext &ctx,
                                          const ObSetVar &set_var,
-                                         const common::ObObj &in_val);
+                                         const common::DatumValue &in_val);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSysVarUtils);
 };

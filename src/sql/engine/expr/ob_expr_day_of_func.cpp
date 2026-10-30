@@ -296,7 +296,7 @@ int ObExprSubAddtime::calc_result_type2(ObExprResType &type,
     type.set_precision(static_cast<ObPrecision>(TIME_MIN_LENGTH + type.get_scale()));
   } else if (ObDateTimeType == date_arg.get_type() || ObTimestampType == date_arg.get_type()
              || ObMySQLDateTimeType == date_arg.get_type()) {
-    ObObjType res_type = date_arg.get_type();
+    SqlValueType res_type = date_arg.get_type();
     if (ObTimestampType == res_type) {
       res_type = type_ctx.enable_mysql_compatible_dates() ? ObMySQLDateTimeType : ObDateTimeType;
     }
@@ -329,108 +329,6 @@ int ObExprSubAddtime::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprSubAddtime::calc_result2(common::ObObj &result,
-                                const common::ObObj &date_arg,
-                                const common::ObObj &time_arg,
-                                common::ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  int64_t t_val1 = 0;
-  int64_t t_val2 = 0;
-  ObTime ot1(DT_TYPE_TIME);
-  bool param_with_date = true;
-  ObObjType result_type = get_result_type().get_type();
-  const ObSQLSessionInfo *session = NULL;
-  EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-  if (OB_UNLIKELY(date_arg.is_null() || time_arg.is_null())) {
-    result.set_null();
-  } else if (OB_ISNULL(expr_ctx.calc_buf_) || OB_ISNULL(session = expr_ctx.my_session_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    if (ObVarcharType == result_type) {
-      if (OB_FAIL(ob_obj_to_ob_time_without_date(date_arg,
-            get_timezone_info(session), ot1))) {
-      } else {
-        if (0 == ot1.parts_[DT_YEAR] && 0 == ot1.parts_[DT_MON] && 0 == ot1.parts_[DT_MDAY]) {
-          param_with_date = false;
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (ObTimeType == time_arg.get_type()) {
-        t_val2 = time_arg.get_time();
-      } else {
-        ObTime ot2(DT_TYPE_TIME);
-        if (OB_FAIL(ob_obj_to_ob_time_without_date(time_arg, get_timezone_info(session), ot2))) {
-        } else {
-          t_val2 = ObTimeConverter::ob_time_to_time(ot2);
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (ObTimeType == result_type || !param_with_date) { // a#, subaddtime(time1, time2)
-        if (ObVarcharType == result_type) {
-          t_val1 = ObTimeConverter::ob_time_to_time(ot1);
-          if (IS_NEG_TIME(ot1.mode_)) {
-            t_val1 = -t_val1;
-          }
-        } else {
-          TYPE_CHECK(date_arg, ObTimeType);
-          t_val1 = date_arg.get_time();
-        }
-        if (OB_SUCC(ret)) {
-          int64_t int_usec = (get_type() == T_FUN_SYS_SUBTIME) ? t_val1 - t_val2 : t_val1 + t_val2;
-          if (OB_FAIL(ObTimeConverter::time_overflow_trunc(int_usec))) {
-            if (CM_IS_WARN_ON_FAIL(cast_ctx.cast_mode_)) {
-              ret = OB_SUCCESS;
-              result.set_time(int_usec);
-            } else {
-            }
-          } else {
-            result.set_time(int_usec);
-          }
-        }
-      } else { // b#, subaddtime(datetime1, time2)
-        const ObTimeZoneInfo *tz_info = NULL;
-        if (OB_ISNULL(tz_info = get_timezone_info(expr_ctx.my_session_))) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (ObVarcharType == result_type) {
-          ObTimeConvertCtx cvrt_ctx(tz_info, false);
-          if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot1, cvrt_ctx, t_val1))) {
-          }
-        } else {
-          if (ObDateTimeType != date_arg.get_type() && ObTimestampType != date_arg.get_type()) {
-            ret = OB_INVALID_ARGUMENT;
-          } else {
-            int64_t offset = ObTimestampType == date_arg.get_type() ? tz_info->get_offset() : 0;
-            t_val1 = date_arg.get_datetime() + offset * USECS_PER_SEC;
-          }
-        }
-        if (OB_SUCC(ret)) {
-          int64_t int_usec = (get_type() == T_FUN_SYS_SUBTIME) ? t_val1 - t_val2 : t_val1 + t_val2;
-          if (ObTimeConverter::is_valid_datetime(int_usec)) {
-            result.set_datetime(int_usec);
-          } else {
-            result.set_null();
-          }
-        }
-      }
-      if (OB_SUCC(ret) && ObVarcharType == result_type) {
-        if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, result, result))) {
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-      uint64_t cast_mode = 0;
-      ObSQLUtils::get_default_cast_mode(session->get_stmt_type(), session, cast_mode);
-      if (CM_IS_WARN_ON_FAIL(cast_mode) && OB_ALLOCATE_MEMORY_FAILED != ret) {
-        ret = OB_SUCCESS;
-        result.set_null();
-      }
-    }
-  }
-  return ret;
-}
 
 int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
@@ -443,9 +341,9 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
     ret = OB_INVALID_ARGUMENT;
   } else {
     OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
-    const ObObjType result_type = rt_expr.datum_meta_.type_;
-    const ObObjType param1_type = rt_expr.args_[0]->datum_meta_.type_;
-    const ObObjType param2_type = rt_expr.args_[1]->datum_meta_.type_;
+    const SqlValueType result_type = rt_expr.datum_meta_.type_;
+    const SqlValueType param1_type = rt_expr.args_[0]->datum_meta_.type_;
+    const SqlValueType param2_type = rt_expr.args_[1]->datum_meta_.type_;
     if (ObTimeType != param2_type && ObVarcharType != param2_type) {
       ret = OB_INVALID_ARGUMENT;
     } else {
@@ -672,7 +570,7 @@ int ObExprDayName::calc_result_type1(ObExprResType &type,
   type.set_full_length(DAYNAME_MAX_LENGTH, type1.get_length_semantics());
   type.set_collation_type(cs_type);
   type.set_collation_level(CS_LEVEL_IMPLICIT);
-  common::ObObjTypeClass tc1 = ob_obj_type_class(type1.get_type());
+  common::SqlTypeClass tc1 = sql_type_class(type1.get_type());
   if (ob_is_enumset_tc(type1.get_type())) {
     type1.set_calc_type(common::ObVarcharType);
     type1.set_collation_type(cs_type);

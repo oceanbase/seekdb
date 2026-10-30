@@ -290,10 +290,9 @@ int ObTabletColumnChecksumMeta::set_with_serialize_str(const common::ObString &s
   return ret;
 }
 
-int ObTabletColumnChecksumMeta::get_str_obj(
+int ObTabletColumnChecksumMeta::get_str(
     const ObDataChecksumType type,
     common::ObIAllocator &allocator,
-    ObObj &obj,
     common::ObString &str) const
 {
   int ret = OB_SUCCESS;
@@ -301,12 +300,8 @@ int ObTabletColumnChecksumMeta::get_str_obj(
     ret = OB_INVALID_ARGUMENT;
   } else if (is_normal_column_checksum_type(type)) {
     if (OB_FAIL(get_serialize_str(allocator, str))) {
-    } else {
-      obj.set_varbinary(str);
     }
   } else if (OB_FAIL(get_hex_str(allocator, str))) {
-  } else {
-    obj.set_varchar(str);
   }
   return ret;
 }
@@ -469,8 +464,7 @@ int ObTabletLocalChecksumOperator::batch_update_with_trans(
       } else {
         if (OB_FAIL(get_visible_column_meta(item.column_meta_, allocator, column_checksums_str))) {
         } else {
-          common::ObObj obj;
-          if (OB_FAIL(item.column_meta_.get_str_obj(item.data_checksum_type_, allocator, obj, b_column_checksums_str))) {
+          if (OB_FAIL(item.column_meta_.get_str(item.data_checksum_type_, allocator, b_column_checksums_str))) {
           }
         }
       }

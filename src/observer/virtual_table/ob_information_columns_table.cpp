@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SERVER
+#include "observer/virtual_table/rowkey_filter_value.h"
+#include "share/datum/datum_value_cast.h"
 
 #include "observer/ob_server_runtime_access.h"
 #include "observer/virtual_table/ob_information_columns_table.h"
@@ -365,20 +367,20 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
   for (int64_t i = 0; OB_SUCC(ret) && i < key_ranges_.count() && is_filter_db_; ++i) {
     const ObRowkey &start_key = key_ranges_.at(i).start_key_;
     const ObRowkey &end_key = key_ranges_.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-    if (2 != start_key.get_obj_cnt()
-        || 2 != end_key.get_obj_cnt()) {
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
+    if (2 != start_key.get_value_count()
+        || 2 != end_key.get_value_count()) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "unexpected # of rowkey columns", K(ret),
-        "size of start key", start_key.get_obj_cnt(),
-        "size of end key", end_key.get_obj_cnt());
+        "size of start key", start_key.get_value_count(),
+        "size of end key", end_key.get_value_count());
     } else if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
     } else if (start_key_obj_ptr[0].is_varchar_or_char()
                && end_key_obj_ptr[0].is_varchar_or_char()
-               && start_key_obj_ptr[0] == end_key_obj_ptr[0]) {
+               && key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])) {
       // Indicates that at least db_name is specified
       // Include filter condition as db_name + table_name
       // then there is no need to obtain all database schemas
@@ -392,7 +394,7 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
       } else if (NULL == filter_database_schema) {
       } else if (start_key_obj_ptr[1].is_varchar_or_char()
            && end_key_obj_ptr[1].is_varchar_or_char()
-           && start_key_obj_ptr[1] == end_key_obj_ptr[1]) {
+           && key_filter_equal(start_key_obj_ptr[1], end_key_obj_ptr[1])) {
         // Specify db_name, simultaneously specifying tbl_name
         const ObTableSchema *filter_table_schema = NULL;
         ObString table_name = CS_TYPE_BINARY == start_key_obj_ptr[1].get_collation_type()
@@ -418,7 +420,7 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
 }
 
 int ObInfoSchemaColumnsTable::get_type_str(
-    const ObObjMeta &obj_meta,
+    const SqlTypeMeta &obj_meta,
     const ObAccuracy &accuracy,
     const common::ObIArray<ObString> &type_info,
     const int16_t default_length_semantics, int64_t &pos,
@@ -473,7 +475,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "table_schema or column_schema is NULL", K(ret));
   } else {
-    ObObj *cells = NULL;
+    DatumValue *cells = NULL;
     const int64_t col_count = output_column_ids_.count();
     if (OB_ISNULL(cells = cur_row_.cells_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -487,7 +489,6 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
     } else {
       const ObDataTypeCastParams dtc_params = sql::ObBasicSessionInfo::create_dtc_params(session_);
       ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-      ObObj casted_cell;
       uint64_t cell_idx = 0;
       const int64_t col_count = output_column_ids_.count();
       bool has_primary_key = false;
@@ -507,39 +508,37 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
         uint64_t col_id = output_column_ids_.at(k);
         switch (col_id) {
         case TABLE_CATALOG: {
-            cells[cell_idx].set_varchar(ObString::make_string("def"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string("def")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::
               get_default_collation(ObCharset::get_default_charset()));
             break;
           }
         case TABLE_SCHEMA: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case TABLE_NAME: {
-            cells[cell_idx].set_varchar(table_schema->get_table_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema->get_table_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case COLUMN_NAME: {
-            cells[cell_idx].set_varchar(column_schema->get_column_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_schema->get_column_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case ORDINAL_POSITION: {
-            cells[cell_idx].set_uint64(ordinal_position);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, ordinal_position) : ret);
             break;
           }
         case COLUMN_DEFAULT: {
-            casted_cell.reset();
             cells[cell_idx].reset();
-            const ObObj *res_cell = NULL;
-            ObObj def_obj = column_schema->get_cur_default_value();
-            ObObjType column_type = ObMaxType;
+            const DatumValue &def_obj = column_schema->get_cur_default_value();
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             if (OB_ISNULL(table_schema_) ||
                 OB_ISNULL(tmp_column_schema = table_schema_->get_column_schema(col_id)) ||
@@ -548,43 +547,42 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               SERVER_LOG(WARN, "table or column schema or or allocator is null", KR(ret), KP(table_schema_), KP(tmp_column_schema), KP(allocator_));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else if (IS_DEFAULT_NOW_OBJ(def_obj)) {
-              ObObj def_now_obj;
-              def_now_obj.set_string(column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(def_now_obj, *allocator_))) {
-              } else {
-                cells[cell_idx] = def_now_obj;
+              if (OB_FAIL(DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx,
+                      column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP)))) {
+              } else if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
-            } else if (def_obj.is_bit() || ob_is_enum_or_set_type(def_obj.get_type())) {
+            } else if (def_obj.get_type() == ObBitType || ob_is_enum_or_set_type(def_obj.get_type())) {
               char *buf = NULL;
               int64_t buf_len = number::ObNumber::MAX_PRINTABLE_SIZE;
               int64_t pos = 0;
               if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(allocator_->alloc(buf_len))))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
                 SERVER_LOG(WARN, "fail to allocate memory", K(ret));
-              } else if (def_obj.is_bit()) {
+              } else if (def_obj.get_type() == ObBitType) {
                 if (OB_FAIL(def_obj.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
                 } else {
-                  cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString(static_cast<int32_t>(pos), buf)) : ret);
                 }
               } else {
                 if (OB_FAIL(def_obj.print_plain_str_literal(column_schema->get_extended_type_info(), buf, buf_len, pos))) {
                 } else {
-                  cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString(static_cast<int32_t>(pos), buf)) : ret);
                 }
               }
               if (OB_FAIL(ret)) {
-              } else if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              } else if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             } else {
-              if (OB_FAIL(ObObjCaster::to_type(column_type, cast_ctx,
-                                               def_obj,
-                                               casted_cell, res_cell))) {
-              } else if (OB_ISNULL(res_cell)) {
-                ret = OB_ERR_UNEXPECTED;
-                SERVER_LOG(WARN, "succ to cast to object, but res_cell is NULL",
-                           K(ret), K(def_obj));
+              DatumValue casted_value;
+              if (OB_FAIL(DatumValueCaster::to_type(column_type, cast_ctx,
+                                                    def_obj, *allocator_, casted_value))) {
+              } else if (casted_value.is_null()) {
+                cells[cell_idx].set_null();
               } else {
-                cells[cell_idx] = *res_cell;
+                // COLUMN_DEFAULT is textual. Keep the native cast payload in
+                // this virtual table's arena through row consumption.
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, casted_value.get_string()) : ret);
+                if (casted_value.has_lob_header()) { cells[cell_idx].meta_.set_has_lob_header(); }
               }
             }
 
@@ -596,13 +594,13 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
         case IS_NULLABLE: {
             ObString nullable_val = ObString::make_string(
                 column_schema->is_nullable() ? "YES" : "NO");
-            cells[cell_idx].set_varchar(nullable_val);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, nullable_val) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case DATA_TYPE: {
-            ObObjType column_type = ObMaxType;
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             cells[cell_idx].reset();
             if (OB_ISNULL(table_schema_) ||
@@ -620,9 +618,9 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
             } else {
               ObString type_val(column_type_str_len_,
                                 static_cast<int32_t>(strlen(data_type_str_)),data_type_str_);
-              cells[cell_idx].set_string(column_type, type_val);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, type_val) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             }
             break;
@@ -630,7 +628,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
         case CHARACTER_MAXIMUM_LENGTH: {
             if(ob_is_string_type(column_schema->get_data_type()) ||
                ob_is_json(column_schema->get_data_type()) || ob_is_geometry(column_schema->get_data_type())) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(column_schema->get_data_length()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(column_schema->get_data_length())) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -642,12 +640,12 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               int64_t mbmaxlen = 0;
               if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
               } else {
-                cells[cell_idx].set_uint64(static_cast<uint64_t>(
-                        mbmaxlen * column_schema->get_data_length()));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(
+                        mbmaxlen * column_schema->get_data_length())) : ret);
               }
             } else if(ob_is_text_tc(column_schema->get_data_type()) ||
                 ob_is_json(column_schema->get_data_type()) || ob_is_geometry(column_schema->get_data_type())) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(column_schema->get_data_length()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(column_schema->get_data_length())) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -667,7 +665,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               }
             }
             if(ob_is_numeric_type(column_schema->get_data_type()) && precision >= 0) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(precision));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(precision)) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -676,7 +674,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
         case NUMERIC_SCALE: {
             ObScale scale = column_schema->get_data_scale();
             if(ob_is_numeric_type(column_schema->get_data_type()) && scale >= 0) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(column_schema->get_data_scale()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(column_schema->get_data_scale())) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -686,8 +684,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
             if(ob_is_datetime_tc(column_schema->get_data_type())
                 || ob_is_time_tc(column_schema->get_data_type())
                 || ob_is_mysql_datetime_tc(column_schema->get_data_type())) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(
-                      column_schema->get_data_scale()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(
+                      column_schema->get_data_scale())) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -697,8 +695,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               if(ob_is_varchar_char_type(column_schema->get_data_type(),column_schema->get_collation_type()) 
                 || ob_is_enum_or_set_type(column_schema->get_data_type())
                 || ob_is_text(column_schema->get_data_type(),column_schema->get_collation_type())){
-                  cells[cell_idx].set_varchar(common::ObCharset::charset_name(
-                    column_schema->get_charset_type()));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, common::ObCharset::charset_name(
+                    column_schema->get_charset_type())) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
               } else {
@@ -710,8 +708,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               if(ob_is_varchar_char_type(column_schema->get_data_type(),column_schema->get_collation_type()) 
                 || ob_is_enum_or_set_type(column_schema->get_data_type())
                 || ob_is_text(column_schema->get_data_type(),column_schema->get_collation_type())){
-                cells[cell_idx].set_varchar(common::ObCharset::collation_name(
-                    column_schema->get_collation_type()));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, common::ObCharset::collation_name(
+                    column_schema->get_collation_type())) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                       ObCharset::get_default_charset()));
               } else {
@@ -724,7 +722,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
             const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
             const uint64_t sub_type = column_schema->is_extend() ?
                                       column_schema->get_sub_data_type() : static_cast<uint64_t>(column_schema->get_geo_type());
-            ObObjType column_type = ObMaxType;
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             cells[cell_idx].reset();
             if (OB_ISNULL(table_schema_) ||
@@ -745,16 +743,16 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
             }
             if (OB_SUCC(ret)) {
               ObString type_val(column_type_str_len_, static_cast<int32_t>(strlen(column_type_str_)),column_type_str_);
-              cells[cell_idx].set_string(column_type, type_val);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, type_val) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             }
             break;
           }
         case COLUMN_KEY: {
             if (column_schema->is_original_rowkey_column() || column_schema->is_heap_table_primary_key_column()) {
-              cells[cell_idx].set_varchar("PRI");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "PRI") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                     ObCharset::get_default_charset()));
             } else {
@@ -767,21 +765,21 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                         is_unique, is_first_not_null_unique))) {
               } else if (is_unique) {
                 if (column_schema->is_nullable() || has_primary_key || !is_first_not_null_unique) {
-                  cells[cell_idx].set_varchar("UNI");
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "UNI") : ret);
                 } else {
                   // is mysql mode && is unique key && no_primary_key && is_first_not_null_unique, set as PRI
-                  cells[cell_idx].set_varchar("PRI");
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "PRI") : ret);
                 }
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                 ObCharset::get_default_charset()));
               } else if (OB_FAIL(table_schema->
                   is_multiple_key_column(*schema_guard_, column_schema->get_column_id(), is_multiple))) {
               } else if (is_multiple) {
-                cells[cell_idx].set_varchar("MUL");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "MUL") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                     ObCharset::get_default_charset()));
               } else {
-                cells[cell_idx].set_varchar("");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                     ObCharset::get_default_charset()));
               }
@@ -839,7 +837,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               }
             }
 
-            cells[cell_idx].set_varchar(extra);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, extra) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
@@ -871,9 +869,9 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
                                                 "reference,", buf, buf_len, pos))) {
               } else {
                 if (pos > 0) {
-                  cells[cell_idx].set_varchar(ObString(0, pos - 1, buf));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(0, pos - 1, buf)) : ret);
                 } else {
-                  cells[cell_idx].set_varchar(ObString(""));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
                 }
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
@@ -883,7 +881,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
           }
         case COLUMN_COMMENT: {
             cells[cell_idx].reset();
-            ObObjType column_type = ObMaxType;
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             if (OB_ISNULL(table_schema_) ||
                 OB_ISNULL(tmp_column_schema = table_schema_->get_column_schema(col_id))) {
@@ -891,16 +889,16 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               SERVER_LOG(WARN, "table or column schema is null", KR(ret), KP(table_schema_), KP(tmp_column_schema));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else {
-              cells[cell_idx].set_string(column_type, column_schema->get_comment_str());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, column_schema->get_comment_str()) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                     ObCharset::get_default_charset()));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             }
             break;
           }
         case GENERATION_EXPRESSION: {
-            ObObjType column_type = ObMaxType;
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             cells[cell_idx].reset();
             if (OB_ISNULL(table_schema_) ||
@@ -909,20 +907,20 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               SERVER_LOG(WARN, "table or column schema is null", KR(ret), KP(table_schema_), KP(tmp_column_schema));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else if (column_schema->is_generated_column()) {
-              cells[cell_idx].set_string(column_type, column_schema->get_orig_default_value().get_string());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, column_schema->get_orig_default_value().get_string()) : ret);
             } else {
-              cells[cell_idx].set_string(column_type, ObString(""));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString("")) : ret);
             }
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
             if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+            } else if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
             }
             break;
           }
         case SRS_ID: {
             if (!column_schema->is_default_srid()) {
-              cells[cell_idx].set_uint32(column_schema->get_srid());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint32(cells, cur_row_.count_, cell_idx, column_schema->get_srid()) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -977,7 +975,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
 {
   int ret = OB_SUCCESS;
   ObTableColumns::ColumnAttributes column_attributes;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const int64_t col_count = output_column_ids_.count();
   if (OB_ISNULL(allocator_) || OB_ISNULL(session_)) {
     ret = OB_NOT_INIT;
@@ -1006,46 +1004,43 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
   } else {
     const ObDataTypeCastParams dtc_params = sql::ObBasicSessionInfo::create_dtc_params(session_);
     ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-    ObObj casted_cell;
     uint64_t cell_idx = 0;
 
     for (int64_t j = 0; OB_SUCC(ret) && j < col_count; ++j) {
       uint64_t col_id = output_column_ids_.at(j);
       switch(col_id) {
       case TABLE_CATALOG: {
-            cells[cell_idx].set_varchar(ObString::make_string("def"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string("def")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::
               get_default_collation(ObCharset::get_default_charset()));
             break;
           }
       case TABLE_SCHEMA: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
       case TABLE_NAME: {
-            cells[cell_idx].set_varchar(table_schema->get_table_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema->get_table_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
       case COLUMN_NAME: {
-            cells[cell_idx].set_varchar(column_attributes.field_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_attributes.field_) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case ORDINAL_POSITION: {
-            cells[cell_idx].set_uint64(ordinal_position);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, ordinal_position) : ret);
             break;
           }
         case COLUMN_DEFAULT: {
-            casted_cell.reset();
             cells[cell_idx].reset();
-            const ObObj *res_cell = NULL;
             ColumnItem column_item;
-            ObObjType column_type = ObMaxType;
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             if (OB_ISNULL(table_schema_) ||
                 OB_ISNULL(tmp_column_schema = table_schema_->get_column_schema(col_id)) ||
@@ -1055,23 +1050,21 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else if (OB_FAIL(ObResolverUtils::resolve_default_value_and_expr_from_select_item(select_item, column_item, select_stmt))) {
             } else if (IS_DEFAULT_NOW_OBJ(column_item.default_value_)) {
-              ObObj def_now_obj;
-              def_now_obj.set_string(column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(def_now_obj, *allocator_))) {
-              } else {
-                cells[cell_idx] = def_now_obj;
+              if (OB_FAIL(DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx,
+                      column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP)))) {
+              } else if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
-            } else if (column_item.default_value_.is_bit() || ob_is_enum_or_set_type(column_item.default_value_.get_type())) {
+            } else if (column_item.default_value_.get_type() == ObBitType || ob_is_enum_or_set_type(column_item.default_value_.get_type())) {
               char *buf = NULL;
               int64_t buf_len = number::ObNumber::MAX_PRINTABLE_SIZE;
               int64_t pos = 0;
               if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(allocator_->alloc(buf_len))))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
                 SERVER_LOG(WARN, "fail to allocate memory", K(ret));
-              } else if (column_item.default_value_.is_bit()) {
+              } else if (column_item.default_value_.get_type() == ObBitType) {
                 if (OB_FAIL(column_item.default_value_.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
                 } else {
-                  cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString(static_cast<int32_t>(pos), buf)) : ret);
                 }
               } else {
                 ObArray<common::ObString> extended_type_info;
@@ -1081,22 +1074,23 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                                                                        extended_type_info))) {
                 } else if (OB_FAIL(column_item.default_value_.print_plain_str_literal(extended_type_info, buf, buf_len, pos))) {
                 } else {
-                  cells[cell_idx].set_string(column_type, ObString(static_cast<int32_t>(pos), buf));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString(static_cast<int32_t>(pos), buf)) : ret);
                 }
               }
               if (OB_FAIL(ret)) {
-              } else if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              } else if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             } else {
-              if (OB_FAIL(ObObjCaster::to_type(column_type, cast_ctx,
-                                               column_item.default_value_,
-                                               casted_cell, res_cell))) {
-              } else if (OB_ISNULL(res_cell)) {
-                ret = OB_ERR_UNEXPECTED;
-                SERVER_LOG(WARN, "succ to cast to object, but res_cell is NULL",
-                           K(ret), K(column_item.default_value_));
+              DatumValue casted_value;
+              if (OB_FAIL(DatumValueCaster::to_type(column_type, cast_ctx,
+                                                    column_item.default_value_, *allocator_, casted_value))) {
+              } else if (casted_value.is_null()) {
+                cells[cell_idx].set_null();
               } else {
-                cells[cell_idx] = *res_cell;
+                // COLUMN_DEFAULT is textual. Keep the native cast payload in
+                // this virtual table's arena through row consumption.
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, casted_value.get_string()) : ret);
+                if (casted_value.has_lob_header()) { cells[cell_idx].meta_.set_has_lob_header(); }
               }
             }
 
@@ -1106,7 +1100,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             break;
           }
         case IS_NULLABLE: {
-            cells[cell_idx].set_varchar(column_attributes.null_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_attributes.null_) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
@@ -1123,7 +1117,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               if (OB_FAIL(extend_type_info.push_back(type_str))) {
               }
             }
-            ObObjType column_type = ObMaxType;
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             cells[cell_idx].reset();
             if (OB_FAIL(ret)) {
@@ -1142,16 +1136,16 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             } else {
               ObString type_val(column_type_str_len_,
                                 static_cast<int32_t>(strlen(data_type_str_)),data_type_str_);
-              cells[cell_idx].set_string(column_type, type_val);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, type_val) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             }
             break;
           }
         case CHARACTER_MAXIMUM_LENGTH: {
             if(ob_is_string_type(column_attributes.result_type_.get_type())) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(column_attributes.get_data_length()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(column_attributes.get_data_length())) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -1163,11 +1157,11 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               int64_t mbmaxlen = 0;
               if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
               } else {
-                cells[cell_idx].set_uint64(static_cast<uint64_t>(
-                        mbmaxlen * column_attributes.get_data_length()));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(
+                        mbmaxlen * column_attributes.get_data_length())) : ret);
               }
             } else if(ob_is_text_tc(column_attributes.result_type_.get_type())) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(column_attributes.get_data_length()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(column_attributes.get_data_length())) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -1187,7 +1181,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               }
             }
             if(ob_is_numeric_type(column_attributes.result_type_.get_type()) && precision >= 0) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(precision));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(precision)) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -1196,7 +1190,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
         case NUMERIC_SCALE: {
             ObScale scale = column_attributes.result_type_.get_scale();
             if(ob_is_numeric_type(column_attributes.result_type_.get_type()) && scale >= 0) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(scale));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(scale)) : ret);
             } else {
               cells[cell_idx].reset();
             }
@@ -1206,29 +1200,29 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             if(ob_is_datetime_tc(column_attributes.result_type_.get_type())
                 || ob_is_time_tc(column_attributes.result_type_.get_type())
                 || ob_is_mysql_datetime_tc(column_attributes.result_type_.get_type())) {
-              cells[cell_idx].set_uint64(static_cast<uint64_t>(
-                      column_attributes.result_type_.get_scale()));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, static_cast<uint64_t>(
+                      column_attributes.result_type_.get_scale())) : ret);
             } else {
               cells[cell_idx].reset();
             }
             break;
           }
         case CHARACTER_SET_NAME: {
-            cells[cell_idx].set_varchar(common::ObCharset::charset_name(
-                ObCharset::charset_type_by_coll(column_attributes.result_type_.get_collation_type())));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, common::ObCharset::charset_name(
+                ObCharset::charset_type_by_coll(column_attributes.result_type_.get_collation_type()))) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case COLLATION_NAME: {
-            cells[cell_idx].set_varchar(common::ObCharset::collation_name(
-                column_attributes.result_type_.get_collation_type()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, common::ObCharset::collation_name(
+                column_attributes.result_type_.get_collation_type())) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case COLUMN_TYPE: {
-            ObObjType column_type = ObMaxType;
+            SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             cells[cell_idx].reset();
             if (OB_ISNULL(table_schema_) ||
@@ -1238,21 +1232,21 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else {
               ObString type_val(column_type_str_len_, static_cast<int32_t>(strlen(column_type_str_)),column_type_str_);
-              cells[cell_idx].set_string(column_type, type_val);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, type_val) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(cells[cell_idx], *allocator_))) {
+              if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             }
             break;
           }
         case COLUMN_KEY: {
-            cells[cell_idx].set_varchar(column_attributes.key_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_attributes.key_) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
           }
         case EXTRA: {
-            cells[cell_idx].set_varchar(column_attributes.extra_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_attributes.extra_) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));
             break;
@@ -1284,9 +1278,9 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                                                 "reference,", buf, buf_len, pos))) {
               } else {
                 if (pos > 0) {
-                  cells[cell_idx].set_varchar(ObString(0, pos - 1, buf));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(0, pos - 1, buf)) : ret);
                 } else {
-                  cells[cell_idx].set_varchar(ObString(""));
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
                 }
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                    ObCharset::get_default_charset()));

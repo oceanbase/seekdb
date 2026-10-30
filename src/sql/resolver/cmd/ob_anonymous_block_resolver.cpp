@@ -126,8 +126,8 @@ int ObAnonymousBlockResolver::resolve_anonymous_block(
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < params_.query_ctx_->question_marks_count_; ++i) {
-      ObObjParam param = ObObjParam(ObObj(ObNullType));
-      const_cast<ObObjMeta&>(param.get_param_meta()).reset();
+      DatumParameter param;
+      const_cast<SqlTypeMeta&>(param.get_param_meta()).reset();
       OZ (param_list.push_back(param));
     }
     OZ (package_guard.init());
@@ -183,7 +183,7 @@ int ObAnonymousBlockResolver::add_param()
     }
   } else if (params_.query_ctx_->question_marks_count_ > 0) {
     for (int64_t i =0; OB_SUCC(ret) && i < params_.query_ctx_->question_marks_count_; ++i) {
-      if (OB_FAIL(anonymous_stmt->add_param(ObObjParam(ObObj(ObNullType))))) {
+      if (OB_FAIL(anonymous_stmt->add_param(DatumParameter()))) {
       }
     }
   }

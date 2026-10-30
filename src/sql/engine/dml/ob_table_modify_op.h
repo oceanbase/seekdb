@@ -78,21 +78,21 @@ private:
   static int gen_set(ObEvalCtx &eval_ctx, char *&buf, int64_t &len, int64_t &pos,
                      const common::ObIArray<ObForeignKeyColumn> &columns,
                      const ObExprPtrIArray &row, common::ObIAllocator &alloc,
-                     const common::ObObjPrintParams &print_params);
+                     const common::ObValuePrintParams &print_params);
   static int gen_where(ObEvalCtx &eval_ctx, char *&buf, int64_t &len, int64_t &pos,
                        const common::ObIArray<ObForeignKeyColumn> &columns,
                        const ObExprPtrIArray &row, common::ObIAllocator &alloc,
-                       const common::ObObjPrintParams &print_params);
+                       const common::ObValuePrintParams &print_params);
   static int gen_column_value(ObEvalCtx &ctx, char *&buf, int64_t &len, int64_t &pos,
                               const common::ObIArray<ObForeignKeyColumn> &columns,
                               const ObExprPtrIArray &row, const char *delimiter,
                               common::ObIAllocator &alloc,
-                              const common::ObObjPrintParams &print_params, bool forbid_null);
+                              const common::ObValuePrintParams &print_params, bool forbid_null);
   
   static int gen_column_null_value(ObEvalCtx &ctx, char *&buf, int64_t &len, int64_t &pos,
                               const common::ObIArray<ObForeignKeyColumn> &columns,
                               common::ObIAllocator &alloc,
-                              const common::ObObjPrintParams &print_params);
+                              const common::ObValuePrintParams &print_params);
   
   static int is_self_ref_row(ObEvalCtx &ctx, const ObExprPtrIArray &row,
                              const ObForeignKeyArg &fk_arg, bool &is_self_ref);
@@ -243,7 +243,7 @@ public:
   void unset_execute_single_row() { execute_single_row_ = false; }
   bool get_execute_single_row() const { return execute_single_row_; }
   bool is_fk_root_session();
-  const ObObjPrintParams &get_obj_print_params() { return obj_print_params_; }
+  const ObValuePrintParams &get_obj_print_params() { return obj_print_params_; }
   int init_foreign_key_operation();
   void clear_dml_evaluated_flag();
   void clear_dml_evaluated_flag(int64_t parent_cnt, ObExpr **parent_exprs);
@@ -305,7 +305,7 @@ public:
   bool need_foreign_key_check_;
   bool need_close_conn_;
 
-  ObObjPrintParams obj_print_params_;
+  ObValuePrintParams obj_print_params_;
   bool iter_end_;
   ObDMLRtCtx dml_rtctx_;
   bool execute_single_row_;

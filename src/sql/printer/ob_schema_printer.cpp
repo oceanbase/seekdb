@@ -252,7 +252,7 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
               } else {
                 if (OB_FAIL(databuff_printf(buf, buf_len, pos, " DEFAULT "))) {
                 } else {
-                  ObObj default_value = col->get_cur_default_value();
+                  DatumValue default_value = col->get_cur_default_value();
                   default_value.set_scale(col->get_data_scale());
                   if (ob_is_enum_or_set_type(default_value.get_type())) {
                     if (OB_FAIL(default_value.print_varchar_literal(col->get_extended_type_info(), buf, buf_len, pos))) {
@@ -746,7 +746,7 @@ int ObSchemaPrinter::print_spatial_index_column(const ObTableSchema &table_schem
                                                 int64_t &pos) const
 {
   int ret = OB_SUCCESS;
-  ObObjType type = column.get_meta_type().get_type();
+  SqlValueType type = column.get_meta_type().get_type();
 
   if (ObVarcharType != type && ObUInt64Type != type) {
     STORAGE_LOG(WARN, "Invalid type for spatial index column", K(ret), K(type));

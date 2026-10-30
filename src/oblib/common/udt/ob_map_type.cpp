@@ -251,14 +251,18 @@ int ObMapType::clone_empty(ObIAllocator &alloc, ObIArrayType *&output, bool read
     LOG_WARN("key array is null", K(ret));                                                        \
   }                                                                                               \
   for (uint32_t i = 0; i < keys_->size() && OB_SUCC(ret); i++) {                                  \
-    ObObj elem_obj;                                                                               \
     if (keys_->is_null(i)) {                                                                      \
       idx_arr[0] = i;                                                                             \
       idx_count = 1;                                                                              \
-    } else if (OB_FAIL(keys_->elem_at(i, elem_obj))) {                                            \
-      LOG_WARN("failed to get element", K(ret), K(i));                                            \
     } else {                                                                                      \
-      idx_map[elem_obj.Get_Func()] = i;                                                           \
+      ObDatum elem_datum;                                                                         \
+      alignas(uint64_t) char elem_buffer[sizeof(uint64_t)];                                       \
+      elem_datum.ptr_ = elem_buffer;                                                              \
+      if (OB_FAIL(keys_->elem_at_datum(i, elem_datum))) {                                         \
+        LOG_WARN("failed to get element", K(ret), K(i));                                          \
+      } else {                                                                                    \
+        idx_map[elem_datum.Get_Func()] = i;                                                       \
+      }                                                                                           \
     }                                                                                             \
   }                                                                                               \
   std::map<Element_Type, uint32_t>::iterator it = idx_map.begin();                                \

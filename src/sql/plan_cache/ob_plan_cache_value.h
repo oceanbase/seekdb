@@ -157,7 +157,7 @@ public:
   int match(ObPlanCacheCtx &pc_ctx,
             const common::ObIArray<PCVSchemaObj> &schema_array,
             bool &is_same);
-  // Convert parameterized parameters of fast parser to ObObjParam
+  // Convert parameterized parameters of fast parser to DatumParameter
   static int resolver_params(ObPlanCacheCtx &pc_ctx,
                              stmt::StmtType stmt_type,
                              const ObIArray<ObCharsetType> &param_charset_type,

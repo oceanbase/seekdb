@@ -22,7 +22,7 @@ namespace oceanbase
 {
 namespace common
 {
-const char *ob_obj_type_str(ObObjType type)
+const char *sql_value_type_to_string(SqlValueType type)
 {
   if (type == ObDecimalIntType) {
     return ob_sql_type_str(ObNumberType);
@@ -31,17 +31,17 @@ const char *ob_obj_type_str(ObObjType type)
   }
 }
 
-const char *inner_obj_type_str(ObObjType type)
+const char *inner_sql_value_type_to_string(SqlValueType type)
 {
   return ob_sql_type_str(type);
 }
 
-const char *ob_obj_tc_str(ObObjTypeClass tc)
+const char *sql_type_class_to_string(SqlTypeClass tc)
 {
   return ob_sql_tc_str(tc);
 }
 
-const char *ob_sql_type_str(ObObjType type)
+const char *ob_sql_type_str(SqlValueType type)
 {
   static const char *sql_type_name[OB_MAX_MODE_CNT][ObMaxType+1] = {
     {
@@ -471,7 +471,7 @@ int ob_geometry_sub_type_str(char *buff, int64_t buff_length, int64_t &pos, cons
   return ret;
 }
 
-int ob_collection_str(const ObObjType &type, const common::ObIArray<ObString> &type_info, char *buff, int64_t buff_length, int64_t &pos)
+int ob_collection_str(const SqlValueType &type, const common::ObIArray<ObString> &type_info, char *buff, int64_t buff_length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!ob_is_collection_sql_type(type)) || type_info.count() < 1) {
@@ -484,7 +484,7 @@ int ob_collection_str(const ObObjType &type, const common::ObIArray<ObString> &t
   return ret;
 }
 
-int ob_enum_or_set_str(const ObObjMeta &obj_meta, const common::ObIArray<ObString> &type_info, char *buff, int64_t buff_length, int64_t &pos)
+int ob_enum_or_set_str(const SqlTypeMeta &obj_meta, const common::ObIArray<ObString> &type_info, char *buff, int64_t buff_length, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator tmp_alloc;
@@ -516,8 +516,8 @@ int ob_enum_or_set_str(const ObObjMeta &obj_meta, const common::ObIArray<ObStrin
 
 
 
-bool is_match_alter_integer_column_online_ddl_rules(const common::ObObjMeta& src_meta,
-                                                    const common::ObObjMeta& dst_meta)
+bool is_match_alter_integer_column_online_ddl_rules(const common::SqlTypeMeta& src_meta,
+                                                    const common::SqlTypeMeta& dst_meta)
 {
   bool is_online_ddl  = false;
   if ((((src_meta.is_signed_integer() && dst_meta.is_signed_integer())
@@ -528,8 +528,8 @@ bool is_match_alter_integer_column_online_ddl_rules(const common::ObObjMeta& src
   return is_online_ddl;
 }
 
-bool is_match_alter_string_column_online_ddl_rules(const common::ObObjMeta& src_meta,
-                                                   const common::ObObjMeta& dst_meta,
+bool is_match_alter_string_column_online_ddl_rules(const common::SqlTypeMeta& src_meta,
+                                                   const common::SqlTypeMeta& dst_meta,
                                                    const int32_t src_len,
                                                    const int32_t dst_len)
 {
@@ -557,7 +557,7 @@ bool is_match_alter_string_column_online_ddl_rules(const common::ObObjMeta& src_
 int ob_sql_type_str_with_coll(char *buff,
     int64_t buff_length,
     int64_t &pos,
-    ObObjType type,
+    SqlValueType type,
     int64_t length,
     int64_t precision,
     int64_t scale,
@@ -583,7 +583,7 @@ int ob_sql_type_str_with_coll(char *buff,
 int ob_sql_type_str(char *buff,
     int64_t buff_length,
     int64_t &pos,
-    ObObjType type,
+    SqlValueType type,
     int64_t length,
     int64_t precision,
     int64_t scale,
@@ -660,7 +660,7 @@ int ob_sql_type_str(char *buff,
     if (OB_FAIL(databuff_printf(buff, buff_length, pos, "string"))) {
     }
   } else if (ob_is_enumset_tc(type)) {
-     ObObjMeta obj_meta;
+     SqlTypeMeta obj_meta;
      obj_meta.set_type(type);
      obj_meta.set_collation_type(coll_type);
     if (OB_FAIL(ob_enum_or_set_str(obj_meta, type_info, buff, buff_length, pos))) {
@@ -673,7 +673,7 @@ int ob_sql_type_str(char *buff,
 
 int ob_sql_type_str(char *buff,
     int64_t buff_length,
-    ObObjType type,
+    SqlValueType type,
     ObCollationType coll_type,
     const common::ObIArray<ObString> &type_info,
     const common::ObGeoType geo_type/* common::ObGeoType::GEOTYPEMAX */,
@@ -758,7 +758,7 @@ int ob_sql_type_str(char *buff,
   return ret;
 }
 
-int ob_sql_type_str(const ObObjMeta &obj_meta,
+int ob_sql_type_str(const SqlTypeMeta &obj_meta,
     const ObAccuracy &accuracy,
     const common::ObIArray<ObString> &type_info,
     const int16_t default_length_semantics,
@@ -782,7 +782,7 @@ int ob_sql_type_str(const ObObjMeta &obj_meta,
     if (OB_FAIL(ob_collection_str(obj_meta.get_type(), type_info, buff, buff_length, pos))) {
     }
   } else {
-    ObObjType datatype = obj_meta.get_type();
+    SqlValueType datatype = obj_meta.get_type();
     ObCollationType coll_type = obj_meta.get_collation_type();
     ObLength length = accuracy.get_length();
     if (OB_FAIL(ob_sql_type_str(buff, buff_length, pos,
@@ -795,7 +795,7 @@ int ob_sql_type_str(const ObObjMeta &obj_meta,
 }
 
 //DEF_TYPE_STR_FUNCS(number, "decimal", "");
-const char *ob_sql_tc_str(ObObjTypeClass tc)
+const char *ob_sql_tc_str(SqlTypeClass tc)
 {
   static const char *sql_tc_name[] =
   {
@@ -834,7 +834,7 @@ const char *ob_sql_tc_str(ObObjTypeClass tc)
   return sql_tc_name[OB_LIKELY(tc < ObMaxTC) ? tc : ObMaxTC];
 }
 
-int32_t ob_obj_type_size(ObObjType type)
+int32_t sql_value_type_size(SqlValueType type)
 {
   int32_t size = 0;
   UNUSED(type);

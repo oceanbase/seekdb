@@ -46,7 +46,7 @@ int ObAllVirtualMemstoreUsage::inner_get_next_row(ObNewRow *&row)
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (!start_to_read_) {
-    ObObj *cells = NULL;
+    DatumValue *cells = NULL;
     // allocator_ is allocator of PageArena type, no need to free
     if (NULL == (cells = cur_row_.cells_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -71,19 +71,19 @@ int ObAllVirtualMemstoreUsage::inner_get_next_row(ObNewRow *&row)
             uint64_t col_id = output_column_ids_.at(i);
             switch (col_id) {
               case ACTIVE_SPAN:
-                cells[i].set_int(active_span);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, active_span) : ret);
                 break;
               case FREEZE_TRIGGER:
-                cells[i].set_int(freeze_trigger);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, freeze_trigger) : ret);
                 break;
               case FREEZE_CNT:
-                cells[i].set_int(freeze_cnt);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, freeze_cnt) : ret);
                 break;
               case MEMSTORE_USED:
-                cells[i].set_int(memstore_used);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, memstore_used) : ret);
                 break;
               case MEMSTORE_LIMIT:
-                cells[i].set_int(memstore_limit);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, memstore_limit) : ret);
                 break;
               default:
                 // abnormal column id

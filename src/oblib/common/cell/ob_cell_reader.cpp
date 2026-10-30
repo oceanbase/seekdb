@@ -32,7 +32,7 @@ namespace common
     if (OB_FAIL(read<medium_type>(value))) { \
       COMMON_LOG(WARN, "cell reader fail to read value.", K(ret)); \
     } else { \
-      object.obj_set_fun(static_cast<obj_set_type>(*value)); \
+      set_scalar(object, static_cast<obj_set_type>(*value), &SqlTypeMeta::obj_set_fun); \
     } \
   }
 #define READ_INT(obj_set_fun, obj_set_type, object) \
@@ -57,11 +57,12 @@ namespace common
   }
 #define READ_NUMBER(obj_set_fun, obj_set_type, object) \
   { \
-    number::ObNumber value; \
+    number::ObNumber value;     const int64_t number_start = pos_; \
     if (OB_FAIL(value.decode(buf_, buf_size_, pos_))) { \
       COMMON_LOG(WARN, "decode number failed", K(ret)); \
     } else { \
-      object.obj_set_fun(value); \
+      (object.meta_.*(&SqlTypeMeta::obj_set_fun))(); \
+      object.datum_.set_string(buf_ + number_start, pos_ - number_start); \
     } \
   }
 
@@ -88,12 +89,12 @@ namespace common
       } else { \
         value.assign_ptr((char*)(buf_ + pos_), *len); \
         pos_ += *len; \
-        object.obj_set_fun(value); \
+        set_string_view(object, value, &SqlTypeMeta::obj_set_fun); \
       } \
     } \
   }
 
-int ObCellReader::read_decimal_int(ObObj &obj)
+int ObCellReader::read_decimal_int(DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   const uint32_t *len = NULL;
@@ -104,7 +105,8 @@ int ObCellReader::read_decimal_int(ObObj &obj)
     ret = OB_BUF_NOT_ENOUGH;
     COMMON_LOG(WARN, "buffer not enough", K(ret), K(pos_), K(*len), K(buf_size_));
   } else {
-    obj.set_decimal_int(*len, *scale, (ObDecimalInt *)(buf_ + pos_));
+    obj.meta_.set_decimal_int(*scale);
+    obj.datum_.set_string(buf_ + pos_, *len);
     pos_ += *len;
   }
   return ret;
@@ -153,9 +155,11 @@ int ObCellReader::read_decimal_int(ObObj &obj)
         ret = OB_BUF_NOT_ENOUGH; \
         COMMON_LOG(WARN, "buffer not enough, ", K(ret), K_(pos), K_(buf_size), "length", *len); \
       } else { \
-        object.set_lob_value(obj_type, (char*)(buf_ + pos_), *len);\
+        object.meta_.set_type(obj_type); object.meta_.set_inrow(); \
+        if (obj_type != ObCollectionSQLType) { object.meta_.set_collation_level(CS_LEVEL_IMPLICIT); } \
+        object.datum_.set_string(buf_ + pos_, *len);\
         if (has_header) { \
-          object.set_has_lob_header(); \
+          object.meta_.set_has_lob_header(); \
         } \
         pos_ += *len; \
       } \
@@ -174,13 +178,13 @@ int ObCellReader::read_decimal_int(ObObj &obj)
     } else { \
       value.assign_ptr((char*)(buf_ + pos_), *len); \
       pos_ += *len; \
-      object.obj_set_fun(value); \
+      set_string_view(object, value, &SqlTypeMeta::obj_set_fun); \
     } \
   }
 #define READ_EXTEND(object) \
   { \
     if (ObCellWriter::EA_END_FLAG == meta->attr_) { \
-      object.set_ext(ObActionFlag::OP_END_FLAG); \
+      set_extend_value(object, ObActionFlag::OP_END_FLAG); \
     } else if (ObCellWriter::EA_OTHER == meta->attr_) { \
       const int8_t *value = NULL; \
       if (OB_FAIL(read<int8_t>(value))) { \
@@ -188,16 +192,16 @@ int ObCellReader::read_decimal_int(ObObj &obj)
       } else { \
         switch (*value) { \
           case ObCellWriter::EV_NOP_ROW: \
-            object.set_ext(ObActionFlag::OP_NOP); \
+            set_extend_value(object, ObActionFlag::OP_NOP); \
             break; \
           case ObCellWriter::EV_DEL_ROW: \
-            object.set_ext(ObActionFlag::OP_DEL_ROW); \
+            set_extend_value(object, ObActionFlag::OP_DEL_ROW); \
             break; \
           case ObCellWriter::EV_LOCK_ROW: \
-            obj_.set_ext(ObActionFlag::OP_LOCK_ROW); \
+            set_extend_value(obj_, ObActionFlag::OP_LOCK_ROW); \
             break; \
           case ObCellWriter::EV_NOT_EXIST_ROW: \
-            object.set_ext(ObActionFlag::OP_ROW_DOES_NOT_EXIST); \
+            set_extend_value(object, ObActionFlag::OP_ROW_DOES_NOT_EXIST); \
             break; \
           case ObCellWriter::EV_MIN_CELL: \
             object.set_min_value(); \
@@ -274,10 +278,10 @@ int ObCellReader::next_cell()
   }
   return ret;
 }
-int ObCellReader::get_cell(uint64_t &column_id, ObObj &obj, bool *is_row_finished, ObString *row)
+int ObCellReader::get_cell(uint64_t &column_id, DatumValue &obj, bool *is_row_finished, ObString *row)
 {
   int ret = OB_SUCCESS;
-  const ObObj *cell = NULL;
+  const DatumValue *cell = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
      COMMON_LOG(WARN, "ObCellReader should be inited first, ", K(ret));
@@ -287,7 +291,7 @@ int ObCellReader::get_cell(uint64_t &column_id, ObObj &obj, bool *is_row_finishe
   }
   return ret;
 }
-int ObCellReader::get_cell(const ObObj *&obj, bool *is_row_finished, ObString *row)
+int ObCellReader::get_cell(const DatumValue *&obj, bool *is_row_finished, ObString *row)
 {
   int ret = OB_SUCCESS;
   bool is_end_obj = false;
@@ -310,7 +314,7 @@ int ObCellReader::get_cell(const ObObj *&obj, bool *is_row_finished, ObString *r
   return ret;
 }
 int ObCellReader::get_cell(uint64_t &column_id,
-                           const ObObj *&obj,
+                           const DatumValue *&obj,
                            bool *is_row_finished,
                            ObString *row)
 {
@@ -431,7 +435,7 @@ int ObCellReader::parse(uint64_t *column_id)
       case ObJsonType:
       case ObGeometryType:
       case ObCollectionSQLType:
-        READ_TEXT(static_cast<ObObjType>(meta->type_), obj_);
+        READ_TEXT(static_cast<SqlValueType>(meta->type_), obj_);
         break;
       case ObBitType:
         READ_INT(set_bit, uint64_t, obj_);
@@ -488,14 +492,14 @@ int ObCellReader::read(const T *&ptr)
   return ret;
 }
 
-inline int ObCellReader::is_es_end_object(const common::ObObj &obj, bool &is_end_obj)
+inline int ObCellReader::is_es_end_object(const common::DatumValue &obj, bool &is_end_obj)
 {
   int ret = OB_SUCCESS;
   is_end_obj = false;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObCellReader should be inited first, ", K(ret));
-  } else if (!obj.is_valid_type()) {
+  } else if (obj.is_invalid_type()) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument, ", K(ret), "type", obj.get_type());
   } else if (common::ObExtendType == obj.get_type()

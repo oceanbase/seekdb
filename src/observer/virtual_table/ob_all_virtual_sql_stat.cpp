@@ -298,27 +298,27 @@ int ObAllVirtualSqlStat::fill_row(
   common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
 
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case SQL_ID: {
-        cells[cell_idx].set_varchar(ObString::make_string(sql_stat_record->get_key().sql_id_));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(sql_stat_record->get_key().sql_id_)) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case PLAN_ID: {
-        cells[cell_idx].set_int(sql_stat_record->get_sql_stat_info().get_plan_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_sql_stat_info().get_plan_id()) : ret);
         break;
       }
       case PLAN_HASH: {
-        cells[cell_idx].set_uint64(sql_stat_record->get_key().plan_hash_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, sql_stat_record->get_key().plan_hash_) : ret);
         break;
       }
       case PLAN_TYPE: {
-        cells[cell_idx].set_int(sql_stat_record->get_sql_stat_info().get_plan_type());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_sql_stat_info().get_plan_type()) : ret);
         break;
       }
       case QUERY_SQL: {
@@ -333,15 +333,14 @@ int ObAllVirtualSqlStat::fill_row(
                                                       dst_string,
                                                       ObCharset::REPLACE_UNKNOWN_CHARACTER))) {
         } else {
-          cells[cell_idx].set_lob_value(ObLongTextType, dst_string.ptr(),
-                                        min(dst_string.length(), 1024));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(min(dst_string.length(), 1024), dst_string.ptr())) : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                               ObCharset::get_default_charset()));
         }
         break;
       }
       case SQL_TYPE: {
-        cells[cell_idx].set_int(sql_stat_record->get_sql_stat_info().get_sql_type());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_sql_stat_info().get_sql_type()) : ret);
         break;
       }
       case MODULE: {
@@ -353,178 +352,177 @@ int ObAllVirtualSqlStat::fill_row(
         break;
       }
       case PARSING_DB_ID: {
-        cells[cell_idx].set_int(sql_stat_record->get_sql_stat_info().get_parsing_db_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_sql_stat_info().get_parsing_db_id()) : ret);
         break;
       }
       case PARSING_DB_NAME: {
-        cells[cell_idx].set_varchar(sql_stat_record->get_sql_stat_info().get_parsing_db_name(), 
-               static_cast<ObString::obstr_size_t>(STRLEN(sql_stat_record->get_sql_stat_info().get_parsing_db_name())));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(static_cast<ObString::obstr_size_t>(STRLEN(sql_stat_record->get_sql_stat_info().get_parsing_db_name())), sql_stat_record->get_sql_stat_info().get_parsing_db_name())) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case PARSING_USER_ID: {
-        cells[cell_idx].set_int(sql_stat_record->get_sql_stat_info().get_parsing_user_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_sql_stat_info().get_parsing_user_id()) : ret);
         break;
       }
       case EXECUTIONS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_executions_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_executions_total()) : ret);
         break;
       }
       case EXECUTIONS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_executions_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_executions_delta()) : ret);
         break;
       }
       case DISK_READS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_disk_reads_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_disk_reads_total()) : ret);
         break;
       }
       case DISK_READS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_disk_reads_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_disk_reads_delta()) : ret);
         break;
       }
       case BUFFER_GETS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_buffer_gets_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_buffer_gets_total()) : ret);
         break;
       }
       case BUFFER_GETS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_buffer_gets_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_buffer_gets_delta()) : ret);
         break;
       }
       case ELAPSED_TIME_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_elapsed_time_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_elapsed_time_total()) : ret);
         break;
       }
       case ELAPSED_TIME_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_elapsed_time_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_elapsed_time_delta()) : ret);
         break;
       }
       case CPU_TIME_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_cpu_time_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_cpu_time_total()) : ret);
         break;
       }
       case CPU_TIME_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_cpu_time_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_cpu_time_delta()) : ret);
         break;
       }
       case CCWAIT_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_ccwait_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_ccwait_total()) : ret);
         break;
       }
       case CCWAIT_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_ccwait_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_ccwait_delta()) : ret);
         break;
       }
       case USERIO_WAIT_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_userio_wait_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_userio_wait_total()) : ret);
         break;
       }
       case USERIO_WAIT_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_userio_wait_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_userio_wait_delta()) : ret);
         break;
       }
       case APWAIT_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_apwait_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_apwait_total()) : ret);
         break;
       }
       case APWAIT_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_apwait_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_apwait_delta()) : ret);
         break;
       }
       case PHYSICAL_READ_REQUESTS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_physical_read_requests_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_physical_read_requests_total()) : ret);
         break;
       }
       case PHYSICAL_READ_REQUESTS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_physical_read_requests_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_physical_read_requests_delta()) : ret);
         break;
       }
       case PHYSICAL_READ_BYTES_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_physical_read_bytes_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_physical_read_bytes_total()) : ret);
         break;
       }
       case PHYSICAL_READ_BYTES_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_physical_read_bytes_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_physical_read_bytes_delta()) : ret);
         break;
       }
       case WRITE_THROTTLE_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_write_throttle_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_write_throttle_total()) : ret);
         break;
       }
       case WRITE_THROTTLE_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_write_throttle_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_write_throttle_delta()) : ret);
         break;
       }
       case ROWS_PROCESSED_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_rows_processed_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_rows_processed_total()) : ret);
         break;
       }
       case ROWS_PROCESSED_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_rows_processed_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_rows_processed_delta()) : ret);
         break;
       }
       case MEMSTORE_READ_ROWS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_memstore_read_rows_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_memstore_read_rows_total()) : ret);
         break;
       }
       case MEMSTORE_READ_ROWS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_memstore_read_rows_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_memstore_read_rows_delta()) : ret);
         break;
       }
       case MINOR_SSSTORE_READ_ROWS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_minor_ssstore_read_rows_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_minor_ssstore_read_rows_total()) : ret);
         break;
       }
       case MINOR_SSSTORE_READ_ROWS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_minor_ssstore_read_rows_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_minor_ssstore_read_rows_delta()) : ret);
         break;
       }
       case MAJOR_SSSTORE_READ_ROWS_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_major_ssstore_read_rows_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_major_ssstore_read_rows_total()) : ret);
         break;
       }
       case MAJOR_SSSTORE_READ_ROWS_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_major_ssstore_read_rows_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_major_ssstore_read_rows_delta()) : ret);
         break;
       }
       case RPC_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_rpc_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_rpc_total()) : ret);
         break;
       }
       case RPC_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_rpc_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_rpc_delta()) : ret);
         break;
       }
       case FETCHES_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_fetches_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_fetches_total()) : ret);
         break;
       }
       case FETCHES_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_fetches_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_fetches_delta()) : ret);
         break;
       }
       case RETRY_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_retry_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_retry_total()) : ret);
         break;
       }
       case RETRY_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_retry_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_retry_delta()) : ret);
         break;
       }
       case PARTITION_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_partition_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_partition_total()) : ret);
         break;
       }
       case PARTITION_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_partition_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_partition_delta()) : ret);
         break;
       }
       case NESTED_SQL_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_nested_sql_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_nested_sql_total()) : ret);
         break;
       }
       case NESTED_SQL_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_nested_sql_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_nested_sql_delta()) : ret);
         break;
       }
       case SOURCE_IP: {
@@ -539,13 +537,13 @@ int ObAllVirtualSqlStat::fill_row(
             source_ip_str = ObString::make_string(ipbuf);
             if (OB_FAIL(ob_write_string(*allocator_, source_ip_str, source_ip_str))) {
             } else {
-              cells[cell_idx].set_varchar(source_ip_str);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, source_ip_str) : ret);
               cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
           }
         } else {
-          cells[cell_idx].set_varchar(ipstr_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ipstr_) : ret);
           cells[cell_idx].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
         }
@@ -554,9 +552,9 @@ int ObAllVirtualSqlStat::fill_row(
       }
       case SOURCE_PORT: {
         if (sql_stat_record->get_key().source_addr_.is_valid()) {
-          cells[cell_idx].set_int(sql_stat_record->get_key().source_addr_.get_port());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_key().source_addr_.get_port()) : ret);
         } else {
-          cells[cell_idx].set_int(port_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, port_) : ret);
         }
         break;
       }
@@ -565,16 +563,16 @@ int ObAllVirtualSqlStat::fill_row(
         if (first_load_timestamp == 0) {
           cells[cell_idx].set_null();
         } else {
-          cells[cell_idx].set_timestamp(first_load_timestamp);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, first_load_timestamp) : ret);
         }
         break;
       }
       case PLAN_CACHE_HIT_TOTAL: {
-        cells[cell_idx].set_int(sql_stat_record->get_plan_cache_hit_total());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_plan_cache_hit_total()) : ret);
         break;
       }
       case PLAN_CACHE_HIT_DELTA: {
-        cells[cell_idx].set_int(sql_stat_record->get_plan_cache_hit_delta());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sql_stat_record->get_plan_cache_hit_delta()) : ret);
         break;
       }
       default: {

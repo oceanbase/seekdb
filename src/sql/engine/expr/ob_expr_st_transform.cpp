@@ -39,8 +39,8 @@ int ObExprSTTransform::calc_result_type2(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  ObObjType type_g = type1.get_type();
-  ObObjType type_srid = type2.get_type();
+  SqlValueType type_g = type1.get_type();
+  SqlValueType type_srid = type2.get_type();
 
   if (ob_is_null(type_g)) {
     // do nothing

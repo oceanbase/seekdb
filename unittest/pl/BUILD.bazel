@@ -1,0 +1,38 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "datum_record_null_cases",
+    srcs = ["test_datum_record_null.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/pl:pl_internal_headers",
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_datum_record_null",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":datum_record_null_cases", "//src/observer:liboceanbase"],
+)
+
+# unittest/pl/BUILD.bazel; root owns actual BUILD and module integration.
+cc_library(
+    name = "native_builtin_results_cases",
+    srcs = ["test_native_builtin_results.cpp"],
+    alwayslink = True,
+    deps = ["//src/pl:pl_interface", "//src/pl:pl_internal_headers", "//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_builtin_results",
+    linkstatic = True,
+    data = ["data/native_builtin_results.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_builtin_results_cases", "//src/observer:liboceanbase"],
+)

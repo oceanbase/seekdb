@@ -605,10 +605,10 @@ int ObOptParamHint::merge_opt_param_hint(const ObOptParamHint &other)
   return ret;
 }
 
-int ObOptParamHint::add_opt_param_hint(const OptParamType param_type, const ObObj &val)
+int ObOptParamHint::add_opt_param_hint(const OptParamType param_type, const DatumValue &val)
 {
   int ret = OB_SUCCESS;
-  ObObj cur_value;
+  DatumValue cur_value;
   if (!is_param_val_valid(param_type, val)) {
     /* do nothing */
   } else if (OB_FAIL(get_opt_param(param_type, cur_value))) {
@@ -620,7 +620,7 @@ int ObOptParamHint::add_opt_param_hint(const OptParamType param_type, const ObOb
   return ret;
 }
 
-bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObObj &val)
+bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const DatumValue &val)
 {
   bool is_valid = false;
   switch (param_type) {
@@ -785,11 +785,16 @@ bool ObOptParamHint::is_param_val_valid(const OptParamType param_type, const ObO
   return is_valid;
 }
 
-int ObOptParamHint::get_opt_param(const OptParamType param_type, ObObj &val) const
+int ObOptParamHint::get_opt_param(const OptParamType param_type, DatumValue &val) const
 {
   int ret = OB_SUCCESS;
   int64_t idx = OB_INVALID_INDEX;
-  val.set_nop_value();
+  val.meta_.set_ext();
+  // ObDatum::set_extend writes the complete payload through ptr_. The NOP
+  // sentinel only needs to remain valid for the caller's immediate check.
+  thread_local char nop_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+  val.datum_.ptr_ = nop_payload;
+  val.datum_.set_extend(ObActionFlag::OP_NOP, 0);
   for (int64_t i = 0; OB_INVALID_INDEX == idx && i < param_types_.count(); ++i) {
     if (param_type == param_types_.at(i)) {
       idx = i;
@@ -809,7 +814,7 @@ int ObOptParamHint::get_opt_param(const OptParamType param_type, ObObj &val) con
 int ObOptParamHint::has_enable_opt_param(const OptParamType param_type, bool &enabled) const
 {
   int ret = OB_SUCCESS;
-  ObObj val;
+  DatumValue val;
   enabled = false;
   if (OB_FAIL(get_opt_param(param_type, val))) {
   } else if (val.is_varchar() && 0 == val.get_varchar().case_compare("true")) {
@@ -822,7 +827,7 @@ int ObOptParamHint::get_bool_opt_param(const OptParamType param_type, bool &val,
 {
   int ret = OB_SUCCESS;
   is_exists = false;
-  ObObj obj;
+  DatumValue obj;
   if (OB_FAIL(get_opt_param(param_type, obj))) {
   } else if (obj.is_nop_value()) {
     // do nothing
@@ -845,7 +850,7 @@ int ObOptParamHint::get_integer_opt_param(const OptParamType param_type, int64_t
 {
   int ret = OB_SUCCESS;
   is_exists = false;
-  ObObj obj;
+  DatumValue obj;
   if (OB_FAIL(get_opt_param(param_type, obj))) {
   } else if (obj.is_nop_value()) {
     // do nothing
@@ -867,7 +872,7 @@ int ObOptParamHint::get_integer_opt_param(const OptParamType param_type, int64_t
 int ObOptParamHint::get_opt_param_runtime_filter_type(int64_t &rf_type) const
 {
   int ret = OB_SUCCESS;
-  ObObj obj;
+  DatumValue obj;
   if (OB_FAIL(get_opt_param(OptParamType::RUNTIME_FILTER_TYPE, obj))) {
   } else if (obj.is_nop_value()) {
     // do nothing
@@ -881,7 +886,7 @@ int ObOptParamHint::get_opt_param_runtime_filter_type(int64_t &rf_type) const
   return ret;
 }
 
-int ObOptParamHint::get_hash_rollup_param(ObObj &val, bool &has_param) const
+int ObOptParamHint::get_hash_rollup_param(DatumValue &val, bool &has_param) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(has_opt_param(USE_HASH_ROLLUP, has_param))) {
@@ -897,7 +902,7 @@ int ObOptParamHint::get_hash_rollup_param(ObObj &val, bool &has_param) const
 int ObOptParamHint::get_enum_opt_param(const OptParamType param_type, int64_t &val) const
 {
   int ret = OB_SUCCESS;
-  ObObj obj;
+  DatumValue obj;
   if (OB_FAIL(get_opt_param(param_type, obj))) {
   } else if (obj.is_nop_value()) {
     // do nothing
@@ -930,7 +935,7 @@ int ObOptParamHint::has_opt_param(const OptParamType param_type, bool &has_hint)
 {
   int ret = OB_SUCCESS;
   has_hint = false;
-  ObObj obj;
+  DatumValue obj;
   if (OB_FAIL(get_opt_param(param_type, obj))) {
   } else {
     has_hint = !obj.is_nop_value();

@@ -51,7 +51,7 @@ void ObIndexBuilderUtil::del_column_flags_and_default_value(ObColumnSchemaV2 &co
     } else if (column.is_stored_generated_column()) {
       column.del_column_flag(STORED_GENERATED_COLUMN_FLAG);
     }
-    ObObj obj;
+    DatumValue obj;
     obj.set_null();
     column.set_cur_default_value(obj, column.is_default_expr_v2_column());
     column.set_orig_default_value(obj);
@@ -133,7 +133,8 @@ int ObIndexBuilderUtil::add_column(
         column.set_geo_col_id(data_column->get_geo_col_id());
       }
       if (table_schema.is_fts_index() || (table_schema.is_multivalue_index()) || (table_schema.is_vec_spiv_index())) {
-        ObObj default_value;
+        DatumValue default_value;
+        default_value.set_null();
         column.del_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
         if (column.is_word_segment_column()) {
           const int64_t data_length = MIN(column.get_data_length(), MIN(OB_MAX_ROW_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH));
@@ -145,7 +146,8 @@ int ObIndexBuilderUtil::add_column(
         }
       }
       if (column.is_vec_index_column()) {
-        ObObj default_value;
+        DatumValue default_value;
+        default_value.set_null();
         column.del_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
         column.set_is_hidden(false);
         if (FAILEDx(column.set_orig_default_value(default_value))) {
@@ -168,7 +170,7 @@ int ObIndexBuilderUtil::set_shadow_column_info(
   //the shadow pk is an independent column
   //so it should not inherit the column flags of the original pk
   shadow_column_schema.set_column_flags(0);
-  ObObj default_obj;
+  DatumValue default_obj;
   default_obj.set_null();
   shadow_column_schema.set_cur_default_value(
       default_obj, shadow_column_schema.is_default_expr_v2_column());
@@ -590,12 +592,13 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
           ObSchemaChecker schema_checker;
           ObRawExpr *expr = NULL;
           LinkExecCtxGuard link_guard(session, exec_ctx);
-          ObObj sql_mode_obj;
+          DatumValue sql_mode_obj;
           exec_ctx.set_my_session(&session);
           exec_ctx.set_is_ps_prepare_stage(false);
           exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
-          sql_mode_obj.set_uint64(arg.sql_mode_);
-          if (OB_FAIL(session.init(0 /*default session id*/, &allocator))) {
+          OZ(sql_mode_obj.set_uint64(arg.sql_mode_, allocator));
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(session.init(0 /*default session id*/, &allocator))) {
           } else if (OB_FAIL(session.set_default_database(arg.database_name_))) {
           } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
           } else if (OB_FAIL(schema_checker.init(guard))) {
@@ -717,10 +720,12 @@ int ObIndexBuilderUtil::generate_ordinary_generated_column(
         gen_col = old_gen_col;
       } else {
         //need to add new generated column
-        ObObj default_value;
+        DatumValue default_value;
         char col_name_buf[OB_MAX_COLUMN_NAMES_LENGTH] = {'\0'};
         pos = 0;
-        default_value.set_varchar(expr_def);
+        default_value.datum_.set_string(expr_def);
+        default_value.meta_.set_varchar();
+        default_value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
         tmp_gen_col.set_rowkey_position(0); //non-primary key column
         tmp_gen_col.set_index_position(0); //non-index column
         tmp_gen_col.set_tbl_part_key_pos(0); //not partition key
@@ -830,8 +835,10 @@ int ObIndexBuilderUtil::generate_prefix_column(
     } else if (OB_FAIL(databuff_printf(expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, "SUBSTR(`%s`, 1, %d)",
                                        old_column->get_column_name(), sort_item.prefix_len_))) {
     } else {
-      ObObj default_value;
-      default_value.set_varchar(expr_def, static_cast<int32_t>(def_pos));
+      DatumValue default_value;
+      default_value.datum_.set_string(expr_def, static_cast<int32_t>(def_pos));
+      default_value.meta_.set_varchar();
+      default_value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       if (OB_FAIL(prefix_column.assign(*old_column))) {
       } else if (FALSE_IT(prefix_column.del_column_flag(HEAP_ALTER_ROWKEY_FLAG))) { // clear flag
       } else if (!prefix_column.is_valid()) {
@@ -966,8 +973,10 @@ int ObIndexBuilderUtil::generate_spatial_cellid_column(
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
     } else {
       col_schema.add_column_flag(GENERATED_DEPS_CASCADE_FLAG);
-      ObObj default_value;
-      default_value.set_varchar(cellid_expr_def, static_cast<int32_t>(def_pos));
+      DatumValue default_value;
+      default_value.datum_.set_string(cellid_expr_def, static_cast<int32_t>(def_pos));
+      default_value.meta_.set_varchar();
+      default_value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       column_schema.set_rowkey_position(0); //non-primary key column
       column_schema.set_index_position(0); // non-index column
       column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -1020,8 +1029,10 @@ int ObIndexBuilderUtil::generate_spatial_mbr_column(
     } else if (OB_FAIL(column_schema.add_cascaded_column_id(geo_col_id))) {
     } else {
       col_schema.add_column_flag(GENERATED_DEPS_CASCADE_FLAG);
-      ObObj default_value;
-      default_value.set_varchar(mbr_expr_def, static_cast<int32_t>(def_pos));
+      DatumValue default_value;
+      default_value.datum_.set_string(mbr_expr_def, static_cast<int32_t>(def_pos));
+      default_value.meta_.set_varchar();
+      default_value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       column_schema.set_rowkey_position(0); //non-primary key column
       column_schema.set_index_position(0); // non-index column
       column_schema.set_tbl_part_key_pos(0); // not partition key

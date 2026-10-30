@@ -58,7 +58,7 @@ public:
   int execute(const ObString &query_str, ObIAllocator &allocator,
               ObString &result);
 
-  int execute_search(ObObj &query_res);
+  int execute_search(DatumValue &query_res);
 
   int execute_get_sql(ObString &sql_result);
 

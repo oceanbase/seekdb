@@ -49,8 +49,8 @@ int ObExprSTDistanceSphere::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   type.set_type(ObDoubleType);
-  ObObjType type0 = types_stack[0].get_type();
-  ObObjType type1 = types_stack[1].get_type();
+  SqlValueType type0 = types_stack[0].get_type();
+  SqlValueType type1 = types_stack[1].get_type();
 
   if (ob_is_null(type0) || ob_is_null(type1)) {
     // do nothing
@@ -68,7 +68,7 @@ int ObExprSTDistanceSphere::calc_result_typeN(ObExprResType& type,
   }
 
   if (3 == param_num) {
-    ObObjType radius_type = types_stack[2].get_type();
+    SqlValueType radius_type = types_stack[2].get_type();
     if (ob_is_null(radius_type)) {
       // do nothing
     } else if (!ob_is_double_tc(radius_type)) {

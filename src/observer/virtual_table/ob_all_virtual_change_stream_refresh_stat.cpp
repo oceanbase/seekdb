@@ -61,7 +61,7 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
   } else {
     const int64_t col_count = output_column_ids_.count();
-    ObObj *cells = cur_row_.cells_;
+    DatumValue *cells = cur_row_.cells_;
     int64_t refresh_scn_val = 0;
     int64_t min_dep_lsn_val = 0;
     int64_t pending_tx_count = 0;
@@ -107,27 +107,27 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
           case CHANGE_STREAM_REFRESH_SCN: {
-            cells[i].set_int(refresh_scn_val);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, refresh_scn_val) : ret);
             break;
           }
           case CHANGE_STREAM_MIN_DEP_LSN: {
-            cells[i].set_int(min_dep_lsn_val);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, min_dep_lsn_val) : ret);
             break;
           }
           case CHANGE_STREAM_PENDING_TX_COUNT: {
-            cells[i].set_int(pending_tx_count);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, pending_tx_count) : ret);
             break;
           }
           case CHANGE_STREAM_FETCH_TX: {
-            cells[i].set_int(fetch_tx);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, fetch_tx) : ret);
             break;
           }
           case CHANGE_STREAM_FETCH_LSN: {
-            cells[i].set_int(fetch_lsn);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, fetch_lsn) : ret);
             break;
           }
           case CHANGE_STREAM_FETCH_SCN: {
-            cells[i].set_int(fetch_scn);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, fetch_scn) : ret);
             break;
           }
           default: {

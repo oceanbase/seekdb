@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+#include "data_plane/native_key_value_buffer.h"
 #include "rust/config.h"
 #include "sql/das/iter/ob_das_hnsw_scan_iter.h"
 #include "share/rc/ob_server_runtime.h"
@@ -461,11 +464,11 @@ uint64_t ObDASHNSWScanIter::adjust_batch_count(bool is_vectored, uint64_t batch_
   return ret_count;
 }
 
-int ObDASHNSWScanIter::calc_dis_by_vid(const ObObj& vid_obj, double &dis_value)
+int ObDASHNSWScanIter::calc_dis_by_vid(const DatumValue& vid_obj, double &dis_value)
 {
   int ret = OB_SUCCESS;
   
-  ObRowkey vid_rowkey(&const_cast<ObObj&>(vid_obj), 1);
+  ObRowkey vid_rowkey(&const_cast<DatumValue&>(vid_obj), 1);
   
   ObRowkey *rowkey = nullptr;
   ObString embedded_vector;
@@ -497,7 +500,7 @@ int ObDASHNSWScanIter::calc_dis_by_vid(const ObObj& vid_obj, double &dis_value)
   return ret;
 }
 
-int ObDASHNSWScanIter::save_distance_expr_result(ObNewRow *row)
+int ObDASHNSWScanIter::save_distance_expr_result(ObVectorResultRow *row)
 {
   int ret = OB_SUCCESS;
   if (need_save_distance_result()) {
@@ -536,7 +539,7 @@ int ObDASHNSWScanIter::inner_get_next_row()
     }
   }
 
-  ObNewRow *row = nullptr;
+  ObVectorResultRow *row = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(adaptor_vid_iter_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -567,8 +570,7 @@ int ObDASHNSWScanIter::inner_get_next_row()
             ret = OB_ERR_UNEXPECTED;
           } else {
             ObDatum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
-            if (OB_FAIL(datum.from_obj(row->get_cell(row_cell_idx++)))) {
-            }
+            datum = row->get_cell(row_cell_idx++).datum_;
           }
         }
       }
@@ -589,7 +591,7 @@ int ObDASHNSWScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     }
   }
 
-  ObNewRow *row = nullptr;
+  ObVectorResultRow *row = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(adaptor_vid_iter_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -619,8 +621,7 @@ int ObDASHNSWScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           // row.cell(a_batch_obj_cnt): dis, row.cell(a_batch_obj_cnt + 1): vid
           for (int64_t num = 0; OB_SUCC(ret) && num < count; ++num) {
             guard.set_batch_idx(num);
-            if (OB_FAIL(datum[num].from_obj(row->get_cell(num * a_batch_obj_cnt + 1 + idx_exp)))) {
-            }
+            datum[num] = row->get_cell(num * a_batch_obj_cnt + 1 + idx_exp).datum_;
           }
           if (OB_SUCC(ret)) {
             expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_);
@@ -637,7 +638,7 @@ int ObDASHNSWScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   return ret;
 }
 
-int ObDASHNSWScanIter::save_distance_expr_result(ObNewRow *row, int64_t size)
+int ObDASHNSWScanIter::save_distance_expr_result(ObVectorResultRow *row, int64_t size)
 {
   int ret = OB_SUCCESS;
 
@@ -651,7 +652,7 @@ int ObDASHNSWScanIter::save_distance_expr_result(ObNewRow *row, int64_t size)
 
       double dis_value = 0;
       if (is_hybrid_ && is_hnsw_bq()) {
-        ObObj& vid_obj = row->get_cell(i * a_batch_obj_cnt + 1);
+        DatumValue& vid_obj = row->get_cell(i * a_batch_obj_cnt + 1);
         if (OB_FAIL(calc_dis_by_vid(vid_obj, dis_value))) {
           if (ret == OB_ITER_END) {
             // failed to find rowkey or vector by vid
@@ -659,7 +660,7 @@ int ObDASHNSWScanIter::save_distance_expr_result(ObNewRow *row, int64_t size)
           }
         }
       } else {
-        ObObj& dist_obj = row->get_cell(i * a_batch_obj_cnt);
+        DatumValue& dist_obj = row->get_cell(i * a_batch_obj_cnt);
         dis_value = dist_obj.get_float();
       }
 
@@ -1405,9 +1406,9 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter(
 int ObDASHNSWScanIter::build_extra_info_rowkey(const ObRowkey &rowkey, ObRowkey &extra_rowkey)
 {
   int ret = OB_SUCCESS;
-  ObObj *extra_info_objs = nullptr;
+  DatumValue *extra_info_objs = nullptr;
   if (OB_FALSE_IT(extra_rowkey.reset())) {
-  } else if (OB_FAIL(build_extra_info_obj_from_rowkey(rowkey.get_obj_ptr(), extra_info_objs))) {
+  } else if (OB_FAIL(build_extra_info_obj_from_rowkey(rowkey.get_values(), extra_info_objs))) {
   } else {
     extra_rowkey.assign(extra_info_objs, extra_column_count_);
   }
@@ -1432,7 +1433,7 @@ int ObDASHNSWScanIter::build_extra_info_range(const ObNewRange &range, const ObN
     const_extra_range = extra_range;
   }
   LOG_TRACE("build extra info range", K(range.start_key_), K(range.end_key_),
-  KPC(range.start_key_.get_obj_ptr()), KPC(range.end_key_.get_obj_ptr()));
+  KPC(range.start_key_.get_values()), KPC(range.end_key_.get_values()));
 
   return ret;
 }
@@ -1600,7 +1601,7 @@ int ObDASHNSWScanIter::get_from_vid_rowkey(ObIAllocator &allocator, ObRowkey *&r
   int ret = OB_SUCCESS;
 
   int64_t output_cnt = 0;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
   const ObDASScanCtDef *com_aux_vec_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(vec_aux_ctdef_->get_com_aux_tbl_idx(), ObTSCIRScanType::OB_VEC_COM_AUX_SCAN);
   int64_t main_rowkey_cnt = 0;
@@ -1613,15 +1614,15 @@ int ObDASHNSWScanIter::get_from_vid_rowkey(ObIAllocator &allocator, ObRowkey *&r
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(output_cnt <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * main_rowkey_cnt))) {
+  } else if (OB_ISNULL(buf = allocator.alloc(sizeof(DatumValue) * main_rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FALSE_IT(obj_ptr = new (buf) ObObj[main_rowkey_cnt])) {
-  } else if (OB_ISNULL(rowkey = static_cast<ObRowkey *>(allocator.alloc(sizeof(ObRowkey))))) {
+  } else if (OB_FALSE_IT(obj_ptr = new (buf) DatumValue[main_rowkey_cnt])) {
+  } else if (OB_ISNULL(rowkey = OB_NEWx(ObRowkey, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     int add_rowkey_cnt = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < output_cnt; ++i) {
-      ObObj tmp_obj;
+      DatumValue tmp_obj;
       ObExpr *expr = vid_rowkey_ctdef_->result_output_.at(i);
       ObDatum &datum = expr->locate_expr_datum(*vid_rowkey_rtdef_->eval_ctx_);
       if (OB_ISNULL(expr)) {
@@ -1632,8 +1633,8 @@ int ObDASHNSWScanIter::get_from_vid_rowkey(ObIAllocator &allocator, ObRowkey *&r
         ObDatum &datum = expr->locate_expr_datum(*vid_rowkey_rtdef_->eval_ctx_);
         if (i >= main_rowkey_cnt) {
           ret = ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-        } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, obj_ptr[i]))) {
+        } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+        } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], allocator))) {
         } else {
           ++add_rowkey_cnt;
         }
@@ -1707,27 +1708,27 @@ int ObDASHNSWScanIter::build_embedded_table_rowkey(ObIAllocator &allocator, cons
   if (OB_ISNULL(main_rowkey) || OB_ISNULL(vid)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t main_rowkey_cnt = main_rowkey->get_obj_cnt();
-    int64_t vid_cnt = vid->get_obj_cnt();
+    int64_t main_rowkey_cnt = main_rowkey->get_value_count();
+    int64_t vid_cnt = vid->get_value_count();
     int64_t total_cnt = main_rowkey_cnt + vid_cnt;
 
     if (OB_UNLIKELY(total_cnt <= 0)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       void *buf = nullptr;
-      ObObj *obj_ptr = nullptr;
+      DatumValue *obj_ptr = nullptr;
 
-      if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * total_cnt))) {
+      if (OB_ISNULL(buf = allocator.alloc(sizeof(DatumValue) * total_cnt))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FALSE_IT(obj_ptr = new (buf) ObObj[total_cnt])) {
+      } else if (OB_FALSE_IT(obj_ptr = new (buf) DatumValue[total_cnt])) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < main_rowkey_cnt; ++i) {
-          if (OB_FAIL(ob_write_obj(allocator, main_rowkey->get_obj_ptr()[i], obj_ptr[i]))) {
+          if (OB_FAIL(clone_typed_value(main_rowkey->get_values()[i], obj_ptr[i], allocator))) {
           }
         }
 
         for (int64_t i = 0; OB_SUCC(ret) && i < vid_cnt; ++i) {
-          if (OB_FAIL(ob_write_obj(allocator, vid->get_obj_ptr()[i], obj_ptr[main_rowkey_cnt + i]))) {
+          if (OB_FAIL(clone_typed_value(vid->get_values()[i], obj_ptr[main_rowkey_cnt + i], allocator))) {
           }
         }
 
@@ -2189,7 +2190,8 @@ int ObDASHNSWScanIter::check_is_simple_cmp_filter()
           } else if (OB_UNLIKELY(OB_ISNULL(data_filter_rtdef_->eval_ctx_))) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_UNLIKELY(OB_FAIL(arg_num->eval(*(data_filter_rtdef_->eval_ctx_), filter_datum_)))) {
-          } else if (OB_FAIL(filter_datum_->to_obj(simple_cmp_info_.filter_arg_, arg_num->obj_meta_))) {
+          } else if (OB_FAIL(project_datum_value_view(*filter_datum_, arg_num->obj_meta_, arg_num->obj_datum_map_, simple_cmp_info_.filter_arg_.meta_, simple_cmp_info_.filter_arg_, true))) {
+          } else if (OB_FAIL(clone_typed_value(simple_cmp_info_.filter_arg_, simple_cmp_info_.filter_arg_, vec_op_alloc_))) {
           } else {
             simple_cmp_info_.inited_ = OB_NOT_NULL(arg_col);
           }
@@ -2241,7 +2243,7 @@ int ObDASHNSWScanIter::process_adaptor_state_post_filter(
   return ret;
 }
 
-int ObDASHNSWScanIter::set_rowkey_by_vid(ObNewRow *row)
+int ObDASHNSWScanIter::set_rowkey_by_vid(ObVectorResultRow *row)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tmp_adaptor_vid_iter_)) {
@@ -2266,7 +2268,7 @@ int ObDASHNSWScanIter::set_rowkey_by_vid(ObNewRow *row)
           }
         }
       } else {
-        vid_row.get_obj_ptr()->meta_.set_uint64();
+        vid_row.get_values()->meta_.set_uint64();
         rowkey = &vid_row;
       }
 
@@ -2276,7 +2278,7 @@ int ObDASHNSWScanIter::set_rowkey_by_vid(ObNewRow *row)
     } else {
       // if there is extra info, set rowkey directly
       ObRowkey rowkey;
-      ObObj *rowkey_objs = nullptr;
+      DatumValue *rowkey_objs = nullptr;
       if (OB_FAIL(build_rowkey_obj_from_extra_info(&row->get_cell(ObAdaptorIterRowIdx::ROWKEY_START_IDX),
                                                    rowkey_objs))) {
       } else if (OB_FALSE_IT(rowkey.assign(rowkey_objs, extra_column_count_))) {
@@ -2290,7 +2292,7 @@ int ObDASHNSWScanIter::set_rowkey_by_vid(ObNewRow *row)
   return ret;
 }
 
-int ObDASHNSWScanIter::get_simple_cmp_filter_res(ObNewRow *row, bool& res)
+int ObDASHNSWScanIter::get_simple_cmp_filter_res(ObVectorResultRow *row, bool& res)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(tmp_adaptor_vid_iter_)) {
@@ -2312,14 +2314,17 @@ int ObDASHNSWScanIter::get_simple_cmp_filter_res(ObNewRow *row, bool& res)
       ObExpr *arg2 = filter_expr->args_[1];
       bool is_first_col = arg1->type_ == T_REF_COLUMN;
       ObExprOperatorType filter_type = filter_expr->type_;
-      ObObj* obj1 = is_first_col? &row->get_cell(ObAdaptorIterRowIdx::ROWKEY_START_IDX) : &simple_cmp_info_.filter_arg_;
-      ObObj* obj2 = is_first_col? &simple_cmp_info_.filter_arg_ : &row->get_cell(ObAdaptorIterRowIdx::ROWKEY_START_IDX);
-      if (obj1->is_string_type() && obj2->is_string_type()) {
-        obj1->compare(*obj2, is_first_col? obj1->get_collation_type() : obj2->get_collation_type(), result);
-      } else {
-        obj1->compare(*obj2, result);
+      DatumValue* obj1 = is_first_col? &row->get_cell(ObAdaptorIterRowIdx::ROWKEY_START_IDX) : &simple_cmp_info_.filter_arg_;
+      DatumValue* obj2 = is_first_col? &simple_cmp_info_.filter_arg_ : &row->get_cell(ObAdaptorIterRowIdx::ROWKEY_START_IDX);
+      DatumValue left = *obj1;
+      DatumValue right = *obj2;
+      if (left.is_string_type() && right.is_string_type()) {
+        const auto collation = is_first_col ? left.get_collation_type() : right.get_collation_type();
+        left.set_collation_type(collation);
+        right.set_collation_type(collation);
       }
-      if (result == 0) {
+      if (OB_FAIL(compare_datum_values(left, right, result))) {
+      } else if (result == 0) {
         res = (filter_type == T_OP_EQ || filter_type == T_OP_GE || filter_type == T_OP_LE);
       } else if (result == 1) {
         res = (filter_type == T_OP_NE || filter_type == T_OP_GT || filter_type == T_OP_GE);
@@ -2347,12 +2352,15 @@ int ObDASHNSWScanIter::set_func_lookup_rowkey(ObRowkey &rowkey)
   } else if (func_lookup_iter_->get_type() == ObDASIterType::DAS_ITER_FUNC_DATA) {
     ObDASFuncDataIter* func_data_iter = static_cast<ObDASFuncDataIter*>(func_lookup_iter_);
     ObDocIdExt doc_id;
-    if (rowkey.get_obj_cnt() != 1) {
+    ObDatum doc_datum;
+    char extended[DATUM_EXTEND_PAYLOAD_SIZE];
+    if (rowkey.get_value_count() != 1) {
       ret = OB_ERR_UNEXPECTED;
     } else if (func_data_iter->has_main_lookup_iter()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (!func_lookup_first_scan_ && OB_FAIL(func_data_iter->reuse())) {
-    } else if (OB_FAIL(doc_id.from_obj(*rowkey.ptr()))){
+    } else if (OB_FAIL(rowkey.get_cell(0).to_row_datum(doc_datum, extended))) {
+    } else if (OB_FAIL(doc_id.from_datum(doc_datum))) {
     } else if (OB_FAIL(func_data_iter->add_doc_id(doc_id))) {
     }
   } else {
@@ -2451,12 +2459,12 @@ int ObDASHNSWScanIter::get_one_relevance(ObIAllocator &allocator, double* &rel_a
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     for (int64_t i = extra_column_count_ + 1, idx = 0; OB_SUCC(ret) && i < out_exprs.count(); ++i, ++idx) {
-      ObObj tmp_obj;
+      DatumValue tmp_obj;
       ObExpr *expr = out_exprs.at(i);
       ObDatum &datum = expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
       if (OB_ISNULL(datum.ptr_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
+      } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
       } else if (tmp_obj.is_double()) {
         rel_ptr[idx] = tmp_obj.get_double();
       } else {
@@ -2472,7 +2480,7 @@ int ObDASHNSWScanIter::get_one_relevance(ObIAllocator &allocator, double* &rel_a
 }
 
 int ObDASHNSWScanIter::filter_by_index_back(int64_t vid,
-                                            ObNewRow *row,
+                                            ObVectorResultRow *row,
                                             bool is_vectorized,
                                             bool& filter_res)
 {
@@ -2564,7 +2572,7 @@ int ObDASHNSWScanIter::post_query_vid_with_filter(
       int64_t extra_column_cnt = tmp_adaptor_vid_iter_->get_extra_column_count();
       iter_scan_total_num += unfiltered_vid_cnt;
       for (int i = 0; OB_SUCC(ret) && i < unfiltered_vid_cnt && !adaptor_vid_iter_->get_enough(); ++i) {
-        ObNewRow *row = nullptr;
+        ObVectorResultRow *row = nullptr;
         bool filter_res = false;
         if (OB_FAIL(tmp_adaptor_vid_iter_->get_next_row(row, vec_aux_ctdef_->result_output_, true))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -3020,23 +3028,20 @@ int ObDASHNSWScanIter::get_extra_idx_in_outexprs(ObIArray<int64_t> &extra_in_row
 }
 
 
-int ObDASHNSWScanIter::prepare_extra_objs(ObIAllocator &allocator, ObObj *&objs)
+int ObDASHNSWScanIter::prepare_extra_objs(ObIAllocator &allocator, DatumValue *&objs)
 {
   int ret = OB_SUCCESS;
-  void *buf = nullptr;
   if (extra_column_count_ <= 0) {
     ret = OB_ERR_UNEXPECTED;
   } else if (extra_in_rowkey_idxs_.count() != extra_column_count_) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * extra_column_count_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FALSE_IT(objs = new (buf) ObObj[extra_column_count_])) {
+  } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(allocator, extra_column_count_, objs))) {
   }
 
   return ret;
 }
 
-int ObDASHNSWScanIter::build_extra_info_obj_from_rowkey(const ObObj *rowkey_objs, ObObj *&extra_info_objs)
+int ObDASHNSWScanIter::build_extra_info_obj_from_rowkey(const DatumValue *rowkey_objs, DatumValue *&extra_info_objs)
 {
   int ret = OB_SUCCESS;
 
@@ -3047,10 +3052,9 @@ int ObDASHNSWScanIter::build_extra_info_obj_from_rowkey(const ObObj *rowkey_objs
     int64_t rowkey_idx = 0;
     for (int64_t i = 0; i < extra_column_count_ && OB_SUCC(ret); ++i) {
       rowkey_idx = extra_in_rowkey_idxs_.at(i);
-      if (OB_UNLIKELY(OB_ISNULL(rowkey_objs + rowkey_idx) || rowkey_idx >= extra_column_count_)) {
+      if (OB_UNLIKELY(rowkey_idx < 0 || rowkey_idx >= extra_column_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
-        extra_info_objs[i] = rowkey_objs[rowkey_idx];
+      } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(rowkey_objs[rowkey_idx], extra_info_objs, extra_column_count_, i))) {
       }
     }
   }
@@ -3058,11 +3062,10 @@ int ObDASHNSWScanIter::build_extra_info_obj_from_rowkey(const ObObj *rowkey_objs
   return ret;
 }
 
-int ObDASHNSWScanIter::build_rowkey_obj_from_extra_info(ObObj *extra_info_objs, ObObj *&rowkey_objs)
+int ObDASHNSWScanIter::build_rowkey_obj_from_extra_info(DatumValue *extra_info_objs, DatumValue *&rowkey_objs)
 {
   int ret = OB_SUCCESS;
 
-  void *buf = nullptr;
   if (OB_ISNULL(extra_info_objs)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (extra_column_count_ == 1) {
@@ -3072,10 +3075,9 @@ int ObDASHNSWScanIter::build_rowkey_obj_from_extra_info(ObObj *extra_info_objs, 
     int64_t rowkey_idx = 0;
     for (int64_t i = 0; i < extra_column_count_ && OB_SUCC(ret); ++i) {
       rowkey_idx = extra_in_rowkey_idxs_.at(i);
-      if (OB_UNLIKELY(OB_ISNULL(extra_info_objs + i) || rowkey_idx >= extra_column_count_)) {
+      if (OB_UNLIKELY(rowkey_idx < 0 || rowkey_idx >= extra_column_count_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
-        rowkey_objs[rowkey_idx] = extra_info_objs[i];
+      } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(extra_info_objs[i], rowkey_objs, extra_column_count_, rowkey_idx))) {
       }
     }
   }
@@ -3103,7 +3105,7 @@ int ObDASHNSWScanIter::prepare_complete_vector_data(ObVectorQueryAdaptorResultCo
 {
   int ret = OB_SUCCESS;
 
-  ObObj *vids = nullptr;
+  DatumValue *vids = nullptr;
   ObSEArray<int64_t, 4> extra_in_rowkey_idxs;
   int64_t vec_cnt = ada_ctx.get_vec_cnt();
 
@@ -3123,7 +3125,7 @@ int ObDASHNSWScanIter::prepare_complete_vector_data(ObVectorQueryAdaptorResultCo
         }
       }
     } else {
-      vid.get_obj_ptr()->meta_.set_uint64();
+      vid.get_values()->meta_.set_uint64();
       rowkey = &vid;
     }
     
@@ -3215,7 +3217,7 @@ int ObDASHNSWScanIter::get_vector_from_embedded_table(ObIAllocator &allocator, O
   const ObDASScanCtDef *embedded_table_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(vec_aux_ctdef_->get_embedded_tbl_idx(), ObTSCIRScanType::OB_VEC_EMBEDDED_SCAN);
   if (!use_vid_) {
     // pk is uint64
-    vid->get_obj_ptr()->meta_.set_uint64();
+    vid->get_values()->meta_.set_uint64();
   }
   // Build embedded table rowkey: main_table_rowkey + vid when use vid
   ObRowkey embedded_tab_rowkey;

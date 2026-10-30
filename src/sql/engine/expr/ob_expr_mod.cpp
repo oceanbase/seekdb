@@ -33,8 +33,7 @@ ObExprMod::ObExprMod(ObIAllocator &alloc)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_mod_result_type,
-                        ObExprResultTypeUtil::get_mod_calc_type,
-                        mod_funcs_)
+                        ObExprResultTypeUtil::get_mod_calc_type)
 {
   param_lazy_eval_ = true;
 }
@@ -73,127 +72,6 @@ int ObExprMod::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-
-ObArithFunc ObExprMod::mod_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMod::mod_int,
-  ObExprMod::mod_uint,
-  NULL,
-  ObExprMod::mod_double,
-  ObExprMod::mod_number,
-  NULL,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//varchar
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-};
-
-int ObExprMod::mod_int(ObObj &res,
-                       const ObObj &left,
-                       const ObObj &right,
-                       ObIAllocator *allocator,
-                       ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  int64_t left_i = left.get_int();
-  int64_t right_i = right.get_int();
-  if (OB_UNLIKELY(0 == right_i)) {
-    res.set_null();
-  } else if (OB_LIKELY(left.get_type_class() == right.get_type_class())) {
-    if (INT64_MIN == left_i && -1 == right_i) {
-      res.set_int(0); //INT64_MIN % -1 --> FPE
-    } else {
-      res.set_int(left_i % right_i);
-    }
-  } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (left_i < 0) {
-      res.set_int(-static_cast<int64_t>(-left_i % static_cast<uint64_t>(right_i)));
-    } else {
-      res.set_int(static_cast<int64_t>(left_i % static_cast<uint64_t>(right_i)));
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMod::mod_uint(ObObj &res,
-                        const ObObj &left,
-                        const ObObj &right,
-                        ObIAllocator *allocator,
-                        ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  uint64_t left_ui = left.get_uint64();
-  uint64_t right_ui = right.get_uint64();
-  if (OB_UNLIKELY(0 == right_ui)) {
-    res.set_null();
-  } else if (OB_LIKELY(left.get_type_class() == right.get_type_class())) {
-    res.set_uint64(left_ui % right_ui);
-  } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (static_cast<int64_t>(right_ui) < 0) {
-      res.set_uint64(left_ui % -static_cast<int64_t>(right_ui));
-    } else {
-      res.set_uint64(left_ui % right_ui);
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMod::mod_double(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-
-  int ret = OB_SUCCESS;
-  const double EPSILON = 1e-14;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (fabs(right.get_double()) < EPSILON) {
-    res.set_null();
-  } else {
-    res.set_double(fmod(left.get_double(), right.get_double()));
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMod::mod_number(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  number::ObNumber res_nmb;
-  if (OB_UNLIKELY(NULL == allocator)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("allocator is null", K(ret));
-  } else if (OB_UNLIKELY(right.is_zero())) {
-    res.set_null();
-  } else if (OB_FAIL(left.get_number().rem_v3(right.get_number(), res_nmb, *allocator))) {
-  } else {
-    res.set_number(res_nmb);
-  }
-  UNUSED(scale);
-  return ret;
-}
 
 int ObExprMod::mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
 {
@@ -434,9 +312,9 @@ int ObExprMod::cg_expr(ObExprCGCtx &op_cg_ctx,
   OB_ASSERT(NULL != rt_expr.args_);
   OB_ASSERT(NULL != rt_expr.args_[0]);
   OB_ASSERT(NULL != rt_expr.args_[1]);
-  const common::ObObjType left = rt_expr.args_[0]->datum_meta_.type_;
-  const common::ObObjType right = rt_expr.args_[1]->datum_meta_.type_;
-  const ObObjTypeClass right_tc = ob_obj_type_class(right);
+  const common::SqlValueType left = rt_expr.args_[0]->datum_meta_.type_;
+  const common::SqlValueType right = rt_expr.args_[1]->datum_meta_.type_;
+  const SqlTypeClass right_tc = sql_type_class(right);
 
   rt_expr.inner_functions_ = NULL;
   switch (rt_expr.datum_meta_.type_) {

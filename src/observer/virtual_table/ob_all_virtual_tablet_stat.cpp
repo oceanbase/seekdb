@@ -69,45 +69,45 @@ int ObAllVirtualTabletStat::inner_get_next_row(ObNewRow *&row)
   }
   if (OB_SUCC(ret)) {
     const int64_t col_cnt = output_column_ids_.count();
-    ObObj *cells = cur_row_.cells_;
+    DatumValue *cells = cur_row_.cells_;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
       case TABLET_ID:
-        cells[i].set_int(cur_stat_.tablet_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.tablet_id_) : ret);
         break;
       case QUERY_CNT:
-        cells[i].set_int(cur_stat_.query_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.query_cnt_) : ret);
         break;
       case MINI_MERGE_CNT:
-        cells[i].set_int(cur_stat_.merge_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.merge_cnt_) : ret);
         break;
       case SCAN_OUTPUT_ROW_CNT:
-        cells[i].set_int(cur_stat_.scan_logical_row_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.scan_logical_row_cnt_) : ret);
         break;
       case SCAN_TOTAL_ROW_CNT:
-        cells[i].set_int(cur_stat_.scan_physical_row_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.scan_physical_row_cnt_) : ret);
         break;
       case PUSHDOWN_MICRO_BLOCK_CNT:
-        cells[i].set_int(cur_stat_.scan_micro_block_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.scan_micro_block_cnt_) : ret);
         break;
       case TOTAL_MICRO_BLOCK_CNT:
-        cells[i].set_int(cur_stat_.pushdown_micro_block_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.pushdown_micro_block_cnt_) : ret);
         break;
       case EXIST_ITER_TABLE_CNT:
-        cells[i].set_int(cur_stat_.exist_row_total_table_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.exist_row_total_table_cnt_) : ret);
         break;
       case EXIST_TOTAL_TABLE_CNT:
-        cells[i].set_int(cur_stat_.exist_row_read_table_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.exist_row_read_table_cnt_) : ret);
         break;
       case INSERT_ROW_CNT:
-        cells[i].set_int(cur_stat_.insert_row_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.insert_row_cnt_) : ret);
         break;
       case UPDATE_ROW_CNT:
-        cells[i].set_int(cur_stat_.update_row_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.update_row_cnt_) : ret);
         break;
       case DELETE_ROW_CNT:
-        cells[i].set_int(cur_stat_.delete_row_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, cur_stat_.delete_row_cnt_) : ret);
         break;
       default:
         ret = OB_ERR_UNEXPECTED;

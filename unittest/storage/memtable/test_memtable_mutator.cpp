@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include "lib/allocator/page_arena.h"
 #include "lib/checksum/ob_crc64.h"
 
 namespace oceanbase
@@ -62,8 +63,11 @@ public:
     const int64_t body_start = start + meta.get_serialize_size();
     int64_t body_pos = body_start;
     int64_t meta_pos = start;
-    ObObj key_cell;
-    key_cell.set_int(key_value);
+    ObArenaAllocator key_allocator;
+    DatumValue key_cell;
+    if (OB_FAIL(key_cell.set_int(key_value, key_allocator))) {
+      return ret;
+    }
     ObStoreRowkey key;
     ObRowData new_row;
     ObRowData old_row;
@@ -133,8 +137,8 @@ public:
     const ObMemtableMutatorRow &row = iterator.get_mutator_row();
     EXPECT_EQ(5001, row.table_id_);
     EXPECT_EQ(123, row.table_version_);
-    ASSERT_EQ(1, row.rowkey_.get_obj_cnt());
-    EXPECT_EQ(key_value, row.rowkey_.get_obj_ptr()[0].get_int());
+    ASSERT_EQ(1, row.rowkey_.get_value_count());
+    EXPECT_EQ(key_value, row.rowkey_.get_values()[0].get_int());
     EXPECT_EQ(blocksstable::ObDmlFlag::DF_UPDATE, row.dml_flag_);
     EXPECT_EQ(2, row.update_seq_);
     ASSERT_EQ(STRLEN(new_payload), row.new_row_.size_);

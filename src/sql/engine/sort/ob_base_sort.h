@@ -41,11 +41,11 @@ public:
   static const uint8_t SORT_COL_ASC_BIT = 0x01;
   ObSortColumnExtra()
     : obj_type_(common::ObMaxType), order_type_(default_asc_direction()) {}
-  ObSortColumnExtra(common::ObObjType obj_type, ObOrderDirection order_type)
+  ObSortColumnExtra(common::SqlValueType obj_type, ObOrderDirection order_type)
     : obj_type_(obj_type), order_type_(order_type) {}
 
   TO_STRING_KV(K_(obj_type), K_(order_type));
-  common::ObObjType obj_type_;
+  common::SqlValueType obj_type_;
   ObOrderDirection order_type_;
 };
 
@@ -82,7 +82,7 @@ public:
   ObSortColumn(int64_t index,
                common::ObCollationType cs_type,
                bool is_asc,
-               common::ObObjType obj_type,
+               common::SqlValueType obj_type,
                ObOrderDirection order_type)
     : ObSortColumnExtra(obj_type, order_type)
   {
@@ -111,7 +111,7 @@ public:
   inline ObOrderDirection get_order_type() const {
     return order_type_;
   }
-  inline common::ObObjType get_obj_type() const {
+  inline common::SqlValueType get_obj_type() const {
     return obj_type_;
   }
   inline common::ObCmpNullPos get_cmp_null_pos() const {

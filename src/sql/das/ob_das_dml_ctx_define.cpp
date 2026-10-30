@@ -288,14 +288,14 @@ int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
 }
 
 int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
-                                         const ObIArray<ObObjMeta> &col_types,
+                                         const ObIArray<SqlTypeMeta> &col_types,
                                          bool strip_lob_locator)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(allocator, col_types.count(), strip_lob_locator))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < col_types.count(); ++i) {
-    ObObjDatumMapType obj_datum_map = ObDatum::get_obj_datum_map_type(
+    SqlValueDatumMapType obj_datum_map = ObDatum::get_sql_value_datum_map_type(
         col_types.at(i).get_type());
     if (OB_LIKELY(OBJ_DATUM_NULL != obj_datum_map)) {
       total_reserved_size_ += ObDatum::get_reserved_size(obj_datum_map);
@@ -344,9 +344,9 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const blocksstable::ObDatumRow &
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObDatum *cells = store_row_->cells();
-    ObObjDatumMapType map_type = OBJ_DATUM_MAPPING_MAX;
+    SqlValueDatumMapType map_type = OBJ_DATUM_MAPPING_MAX;
     for (int64_t i = 0; OB_SUCC(ret) && i < row.get_column_count(); ++i) {
-      if (FALSE_IT(map_type = ObDatum::get_obj_datum_map_type(column_types_->at(i).get_type()))) {
+      if (FALSE_IT(map_type = ObDatum::get_sql_value_datum_map_type(column_types_->at(i).get_type()))) {
       } else if (OB_FAIL(cells[i].from_storage_datum(row.storage_datums_[i], map_type))) {
       }
       if (OB_SUCC(ret)) {
@@ -630,7 +630,7 @@ int ObDASWriteBuffer::begin(Iterator &it)
   return ret;
 }
 
-int ObDASWriteBuffer::begin(NewRowIterator &it, const ObIArray<ObObjMeta> &col_types)
+int ObDASWriteBuffer::begin(NewRowIterator &it, const ObIArray<SqlTypeMeta> &col_types)
 {
   int ret = OB_SUCCESS;
   it.cur_row_ = buffer_list_.header_.next_;

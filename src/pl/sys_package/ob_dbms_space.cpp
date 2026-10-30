@@ -59,7 +59,7 @@ namespace pl
  */
 int ObDbmsSpace::create_index_cost(sql::ObExecContext &ctx,
                                    sql::ParamStore &params,
-                                   common::ObObj &result)
+                                   common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObCreateIndexStmt *stmt = nullptr;
@@ -83,6 +83,7 @@ int ObDbmsSpace::create_index_cost(sql::ObExecContext &ctx,
                                          opt_stats))) {
   } else if (OB_FAIL(calc_index_size(opt_stats,
                                      info,
+                                     ctx.get_allocator(),
                                      params.at(1),
                                      params.at(2)))) {
   }
@@ -326,16 +327,18 @@ int ObDbmsSpace::extract_total_compression_ratio(const sqlclient::ObMySQLResult 
 
 int ObDbmsSpace::calc_index_size(OptStats &opt_stats,
                                  IndexCostInfo &info,
-                                 ObObjParam &actual_size,
-                                 ObObjParam &alloc_size)
+                                 ObIAllocator &allocator,
+                                 DatumParameter &actual_size,
+                                 DatumParameter &alloc_size)
 {
   int ret = OB_SUCCESS;
-  actual_size.set_uint64(0);
-  alloc_size.set_uint64(0);
+  OZ(actual_size.set_uint64(0, allocator));
+  OZ(alloc_size.set_uint64(0, allocator));
   uint64_t dummy_actual_size = 0;
   uint64_t dummy_alloc_size = 0;
 
-  if (info.part_ids_.count() != 1) {
+  if (OB_FAIL(ret)) {
+  } else if (info.part_ids_.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get table stats", K(ret));
   } else if (OB_FAIL(inner_calc_index_size(opt_stats.table_stats_.at(0),
@@ -344,8 +347,9 @@ int ObDbmsSpace::calc_index_size(OptStats &opt_stats,
                                            dummy_actual_size,
                                            dummy_alloc_size))) {
   } else {
-    actual_size.set_uint64(dummy_actual_size);
-    alloc_size.set_uint64(dummy_alloc_size);
+    // The initial writes above allocated these two 8-byte payloads here.
+    actual_size.datum_.set_uint(dummy_actual_size);
+    alloc_size.datum_.set_uint(dummy_alloc_size);
   }
 
   return ret;

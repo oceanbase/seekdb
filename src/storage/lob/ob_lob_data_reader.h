@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_LOB_DATA_READER_H_
 
 #include "common/ob_tablet_id.h"
+#include "common/datum/datum_value.h"
 #include "storage/access/ob_table_access_context.h"
 #include "lib/allocator/page_arena.h"
 #include "storage/access/ob_table_access_param.h"
@@ -39,7 +40,7 @@ public:
   void reuse();
   void reset();
   bool is_init() const { return is_inited_; }
-  int fuse_disk_lob_header(common::ObObj &obj);
+  int fuse_disk_lob_header(common::DatumValue &value);
   ObIAllocator &get_allocator() { return allocator_; }
 private:
   int read_lob_data_impl(blocksstable::ObStorageDatum &datum, ObCollationType coll_type);

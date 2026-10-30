@@ -1,0 +1,30 @@
+# DEFAULT and NULL remain distinct during partial row updates
+DROP TABLE IF EXISTS datum_extend_storage;
+CREATE TABLE datum_extend_storage(id INT PRIMARY KEY,a INT DEFAULT 7,s VARCHAR(64),KEY ka(a));
+INSERT INTO datum_extend_storage VALUES(1,7,'one'),(2,NULL,'two'),(3,9,NULL);
+ALTER TABLE datum_extend_storage ADD added INT DEFAULT 73;
+SELECT * FROM datum_extend_storage ORDER BY id;
+id	a	s	added
+1	7	one	73
+2	NULL	two	73
+3	9	NULL	73
+START TRANSACTION;
+UPDATE datum_extend_storage SET a=42 WHERE id=1;
+UPDATE datum_extend_storage SET s=NULL,added=NULL WHERE id=2;
+DELETE FROM datum_extend_storage WHERE id=3;
+SELECT * FROM datum_extend_storage ORDER BY id;
+id	a	s	added
+1	42	one	73
+2	NULL	NULL	NULL
+ROLLBACK;
+SELECT * FROM datum_extend_storage ORDER BY id;
+id	a	s	added
+1	7	one	73
+2	NULL	two	73
+3	9	NULL	73
+UPDATE datum_extend_storage SET a=NULL WHERE id=1;
+SELECT id,a,added FROM datum_extend_storage FORCE INDEX(ka) WHERE a IS NULL ORDER BY id;
+id	a	added
+1	NULL	73
+2	NULL	73
+DROP TABLE datum_extend_storage;

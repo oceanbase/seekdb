@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "share/ob_share_util.h"
 #include "share/ob_ex_rpc.h"
@@ -88,7 +90,7 @@ static int check_stats_table_priv(ObExecContext &ctx,
  * @param result
  * @return
  */
-int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -182,7 +184,7 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
  * @param result
  * @return
  */
-int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -313,18 +315,18 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
  * @param result
  * @return
  */
-int ObDbmsStats::gather_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::gather_index_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
   ObTableStatParam ind_stat_param;
   ind_stat_param.is_index_stat_ = true;
   ind_stat_param.allocator_ = &ctx.get_allocator();
-  ObObjParam empty_sample;
+  DatumParameter empty_sample;
   empty_sample.set_null();
-  ObObjParam empty_method_opt;
+  DatumParameter empty_method_opt;
   empty_method_opt.set_null();
-  ObObjParam empty_cascade;
+  DatumParameter empty_cascade;
   empty_cascade.set_null();
   ObSEArray<uint64_t, 1> dummy_column_ids;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
@@ -515,7 +517,7 @@ int ObDbmsStats::fast_gather_index_stats(ObExecContext &ctx,
  * @param result
  * @return
  */
-int ObDbmsStats::set_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::set_table_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -586,7 +588,7 @@ int ObDbmsStats::set_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &
  */
 int ObDbmsStats::set_column_stats(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -668,7 +670,7 @@ int ObDbmsStats::set_column_stats(sql::ObExecContext &ctx,
  * @param result
  * @return
  */
-int ObDbmsStats::set_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::set_index_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -735,7 +737,7 @@ int ObDbmsStats::set_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &
  * @param result
  * @return
  */
-int ObDbmsStats::delete_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::delete_table_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -803,7 +805,7 @@ int ObDbmsStats::delete_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
  * @param result
  * @return
  */
-int ObDbmsStats::delete_column_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::delete_column_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -867,7 +869,7 @@ int ObDbmsStats::delete_column_stats(ObExecContext &ctx, ParamStore &params, ObO
  * @param result
  * @return
  */
-int ObDbmsStats::delete_schema_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::delete_schema_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -940,7 +942,7 @@ int ObDbmsStats::delete_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
  * @param result
  * @return
  */
-int ObDbmsStats::delete_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::delete_index_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1018,7 +1020,7 @@ int ObDbmsStats::delete_table_index_stats(sql::ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_degree_option(ObExecContext &ctx,
-                                     const ObObjParam &degree,
+                                     const DatumParameter &degree,
                                      ObTableStatParam &stat_param)
 {
   int ret = OB_SUCCESS;
@@ -1050,7 +1052,7 @@ int ObDbmsStats::parse_degree_option(ObExecContext &ctx,
  * @param result
  * @return
  */
-int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1105,7 +1107,7 @@ int ObDbmsStats::create_stat_table(ObExecContext &ctx, ParamStore &params, ObObj
  * @param result
  * @return
  */
-int ObDbmsStats::drop_stat_table(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::drop_stat_table(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1160,7 +1162,7 @@ int ObDbmsStats::drop_stat_table(ObExecContext &ctx, ParamStore &params, ObObj &
  * @param result
  * @return
  */
-int ObDbmsStats::export_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::export_table_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1227,7 +1229,7 @@ int ObDbmsStats::export_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
  */
 int ObDbmsStats::export_column_stats(sql::ObExecContext &ctx,
                                      sql::ParamStore &params,
-                                     common::ObObj &result)
+                                     common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1279,7 +1281,7 @@ int ObDbmsStats::export_column_stats(sql::ObExecContext &ctx,
  * @param result
  * @return
  */
-int ObDbmsStats::export_schema_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::export_schema_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1350,7 +1352,7 @@ int ObDbmsStats::export_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
  * @param result
  * @return
  */
-int ObDbmsStats::export_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::export_index_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1445,7 +1447,7 @@ int ObDbmsStats::export_table_index_stats(sql::ObExecContext &ctx,
  * @param result
  * @return
  */
-int ObDbmsStats::import_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::import_table_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1526,7 +1528,7 @@ int ObDbmsStats::import_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
  */
 int ObDbmsStats::import_column_stats(sql::ObExecContext &ctx,
                                      sql::ParamStore &params,
-                                     common::ObObj &result)
+                                     common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1586,7 +1588,7 @@ int ObDbmsStats::import_column_stats(sql::ObExecContext &ctx,
  * @param result
  * @return
  */
-int ObDbmsStats::import_schema_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::import_schema_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1673,7 +1675,7 @@ int ObDbmsStats::import_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
  * @param result
  * @return
  */
-int ObDbmsStats::import_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &result)
+int ObDbmsStats::import_index_stats(ObExecContext &ctx, ParamStore &params, DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1775,13 +1777,13 @@ int ObDbmsStats::import_table_index_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::lock_table_stats(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
   ObTableStatParam stat_param;
   stat_param.allocator_ = &ctx.get_allocator();
-  ObObjParam part_name;
+  DatumParameter part_name;
   part_name.set_null();
   ObString stat_type_str;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
@@ -1821,7 +1823,7 @@ int ObDbmsStats::lock_table_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::lock_partition_stats(sql::ObExecContext &ctx,
                                       sql::ParamStore &params,
-                                      common::ObObj &result)
+                                      common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1863,7 +1865,7 @@ int ObDbmsStats::lock_partition_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::lock_schema_stats(sql::ObExecContext &ctx,
                                    sql::ParamStore &params,
-                                   common::ObObj &result)
+                                   common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -1958,12 +1960,12 @@ int ObDbmsStats::lock_or_unlock_index_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::unlock_table_stats(sql::ObExecContext &ctx,
                                     sql::ParamStore &params,
-                                    common::ObObj &result)
+                                    common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
   ObTableStatParam stat_param;
-  ObObjParam part_name;
+  DatumParameter part_name;
   part_name.set_null();
   ObString stat_type_str;
   stat_param.allocator_ = &ctx.get_allocator();
@@ -2006,7 +2008,7 @@ int ObDbmsStats::unlock_table_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::unlock_partition_stats(sql::ObExecContext &ctx,
                                         sql::ParamStore &params,
-                                        common::ObObj &result)
+                                        common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2048,7 +2050,7 @@ int ObDbmsStats::unlock_partition_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::unlock_schema_stats(sql::ObExecContext &ctx,
                                      sql::ParamStore &params,
-                                     common::ObObj &result)
+                                     common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2111,13 +2113,13 @@ int ObDbmsStats::unlock_schema_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
                                      sql::ParamStore &params,
-                                     common::ObObj &result)
+                                     common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
   ObTableStatParam stat_param;
   stat_param.allocator_ = &ctx.get_allocator();
-  ObObjParam part_name;
+  DatumParameter part_name;
   part_name.set_null();
   ObString stat_type_str;
   bool restore_cluster_index = false;
@@ -2150,13 +2152,15 @@ int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
   }
   //check timestamp;
   if (OB_SUCC(ret)) {
-    ObObj tmp_timestamp;
+    DatumValue tmp_timestamp;
     const int64_t current_time = ObTimeUtility::current_time();
     int64_t min_savetime = 0;
     if (OB_FAIL(ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ctx, false, tmp_timestamp))) {
     } else if (tmp_timestamp.is_null()) {
       //do nothing
-    } else if (OB_FAIL(tmp_timestamp.get_timestamp(min_savetime))) {
+    } else if (OB_FAIL(tmp_timestamp.is_timestamp() && !tmp_timestamp.is_null()
+                           ? (min_savetime = tmp_timestamp.get_timestamp(), OB_SUCCESS)
+                           : OB_OBJ_TYPE_ERROR)) {
     } else if (specify_time < min_savetime) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_ERROR("Unable to restore statistics, statistics history not available", K(ret));
@@ -2200,7 +2204,7 @@ int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::restore_schema_stats(sql::ObExecContext &ctx,
                                       sql::ParamStore &params,
-                                      common::ObObj &result)
+                                      common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2274,7 +2278,7 @@ int ObDbmsStats::restore_schema_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::purge_stats(sql::ObExecContext &ctx,
                              sql::ParamStore &params,
-                             common::ObObj &result)
+                             common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2326,7 +2330,7 @@ int ObDbmsStats::purge_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::alter_stats_history_retention(sql::ObExecContext &ctx,
                                                sql::ParamStore &params,
-                                               common::ObObj &result)
+                                               common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2362,7 +2366,7 @@ int ObDbmsStats::alter_stats_history_retention(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::get_stats_history_availability(sql::ObExecContext &ctx,
                                                 sql::ParamStore &params,
-                                                common::ObObj &result)
+                                                common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(params);
@@ -2373,10 +2377,10 @@ int ObDbmsStats::get_stats_history_availability(sql::ObExecContext &ctx,
   } else if (result.is_null()) {
     //do nothing
   } else if (!result.is_datetime()) {
-    ObObj dest_obj;
+    DatumValue dest_obj;
     ObCastCtx cast_ctx(&ctx.get_allocator(), NULL, CM_NONE, ObCharset::get_system_collation());
     cast_ctx.dtc_params_ = ctx.get_my_session()->get_dtc_params();
-    if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, result, dest_obj))) {
+    if (OB_FAIL(DatumValueCaster::to_type(ObDateTimeType, cast_ctx, result, *cast_ctx.allocator_v2_, dest_obj))) {
     } else {
       result = dest_obj;
     }
@@ -2395,11 +2399,11 @@ int ObDbmsStats::get_stats_history_availability(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::get_stats_history_retention(sql::ObExecContext &ctx,
                                              sql::ParamStore &params,
-                                             common::ObObj &result)
+                                             common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(params);
-  ObObj retention;
+  DatumValue retention;
   number::ObNumber num_retention;
   int64_t retention_val = 0;
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
@@ -2410,7 +2414,7 @@ int ObDbmsStats::get_stats_history_retention(sql::ObExecContext &ctx,
     retention_val = -1;
     if (OB_FAIL(num_retention.from(retention_val, ctx.get_allocator()))) {
     } else {
-      result.set_number(num_retention);
+      ret = result.set_number(num_retention, ctx.get_allocator());
     }
   } else {
     result = retention;
@@ -2428,7 +2432,7 @@ int ObDbmsStats::get_stats_history_retention(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::reset_global_pref_defaults(sql::ObExecContext &ctx,
                                             sql::ParamStore &params,
-                                            common::ObObj &result)
+                                            common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(params);
@@ -2455,7 +2459,7 @@ int ObDbmsStats::reset_global_pref_defaults(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::get_prefs(sql::ObExecContext &ctx,
                            sql::ParamStore &params,
-                           common::ObObj &result)
+                           common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString opt_name;
@@ -2495,7 +2499,7 @@ int ObDbmsStats::get_prefs(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::set_global_prefs(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2540,7 +2544,7 @@ int ObDbmsStats::set_global_prefs(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::set_schema_prefs(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2590,13 +2594,13 @@ int ObDbmsStats::set_schema_prefs(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::set_table_prefs(sql::ObExecContext &ctx,
                                  sql::ParamStore &params,
-                                 common::ObObj &result)
+                                 common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
   ObString opt_name;
   ObString opt_value;
-  ObObjParam dummy_param;
+  DatumParameter dummy_param;
   dummy_param.set_null();
   ObTableStatParam param;
   param.allocator_ = &ctx.get_allocator();
@@ -2641,7 +2645,7 @@ int ObDbmsStats::set_table_prefs(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::delete_schema_prefs(sql::ObExecContext &ctx,
                                      sql::ParamStore &params,
-                                     common::ObObj &result)
+                                     common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2684,13 +2688,13 @@ int ObDbmsStats::delete_schema_prefs(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::delete_table_prefs(sql::ObExecContext &ctx,
                                     sql::ParamStore &params,
-                                    common::ObObj &result)
+                                    common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
   ObString opt_name;
   ObString dummy_name;
-  ObObjParam dummy_param;
+  DatumParameter dummy_param;
   dummy_param.set_null();
   ObTableStatParam param;
   param.allocator_ = &ctx.get_allocator();
@@ -2725,7 +2729,7 @@ int ObDbmsStats::delete_table_prefs(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::cancel_gather_stats(sql::ObExecContext &ctx,
                                      sql::ParamStore &params,
-                                     common::ObObj &result)
+                                     common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2751,7 +2755,7 @@ int ObDbmsStats::cancel_gather_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
                                              sql::ParamStore &params,
-                                             common::ObObj &result)
+                                             common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -2875,9 +2879,9 @@ int ObDbmsStats::update_stat_cache(obcall::ObUpdateStatCacheArg &stat_arg,
 }
 
 int ObDbmsStats::parse_table_part_info(ObExecContext &ctx,
-                                       const ObObjParam &owner,
-                                       const ObObjParam &tab_name,
-                                       const ObObjParam &part_name,
+                                       const DatumParameter &owner,
+                                       const DatumParameter &tab_name,
+                                       const DatumParameter &part_name,
                                        ObTableStatParam &param,
                                        bool need_parse_col_group /*default false*/)
 {
@@ -2887,9 +2891,9 @@ int ObDbmsStats::parse_table_part_info(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_table_part_info(ObExecContext &ctx,
-                                       const ObObjParam &owner,
-                                       const ObObjParam &tab_name,
-                                       const ObObjParam &part_name,
+                                       const DatumParameter &owner,
+                                       const DatumParameter &tab_name,
+                                       const DatumParameter &part_name,
                                        ObTableStatParam &param,
                                        const share::schema::ObTableSchema *&table_schema,
                                        bool need_parse_col_group/*default false*/)
@@ -2971,10 +2975,10 @@ int ObDbmsStats::parse_table_part_info(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_index_part_info(ObExecContext &ctx,
-                                       const ObObjParam &owner,
-                                       const ObObjParam &index_name,
-                                       const ObObjParam &part_name,
-                                       const ObObjParam &table_name,
+                                       const DatumParameter &owner,
+                                       const DatumParameter &index_name,
+                                       const DatumParameter &part_name,
+                                       const DatumParameter &table_name,
                                        ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -3175,9 +3179,9 @@ int ObDbmsStats::set_default_column_params(ObIArray<ObColumnStatParam> &column_p
 }
 
 int ObDbmsStats::parse_set_table_info(ObExecContext &ctx,
-                                      const ObObjParam &owner,
-                                      const ObObjParam &tab_name,
-                                      const ObObjParam &part_name,
+                                      const DatumParameter &owner,
+                                      const DatumParameter &tab_name,
+                                      const DatumParameter &part_name,
                                       ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -3205,11 +3209,11 @@ int ObDbmsStats::parse_set_table_info(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_set_column_stats(ObExecContext &ctx,
-                                        const ObObjParam &owner,
-                                        const ObObjParam &tab_name,
-                                        const ObObjParam &colname,
-                                        const ObObjParam &part_name,
-                                        ObObjMeta &col_meta,
+                                        const DatumParameter &owner,
+                                        const DatumParameter &tab_name,
+                                        const DatumParameter &colname,
+                                        const DatumParameter &part_name,
+                                        SqlTypeMeta &col_meta,
                                         ObAccuracy &col_accuracy,
                                         ObTableStatParam &param)
 {
@@ -3287,7 +3291,7 @@ int ObDbmsStats::parse_set_column_stats(ObExecContext &ctx,
 
 int ObDbmsStats::parse_set_partition_name(ObExecContext &ctx,
                                           const share::schema::ObTableSchema *&table_schema,
-                                          const ObObjParam &part_name,
+                                          const DatumParameter &part_name,
                                           ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -3325,7 +3329,7 @@ int ObDbmsStats::parse_set_partition_name(ObExecContext &ctx,
 
 int ObDbmsStats::parse_partition_name(ObExecContext &ctx,
                                       const share::schema::ObTableSchema *&table_schema,
-                                      const ObObjParam &part_name,
+                                      const DatumParameter &part_name,
                                       ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -3354,8 +3358,8 @@ int ObDbmsStats::parse_partition_name(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_table_info(ObExecContext &ctx,
-                                  const ObObjParam &owner,
-                                  const ObObjParam &tab_name,
+                                  const DatumParameter &owner,
+                                  const DatumParameter &tab_name,
                                   const bool is_index,
                                   const share::schema::ObTableSchema *&table_schema,
                                   ObTableStatParam &param,
@@ -3471,9 +3475,9 @@ int ObDbmsStats::parse_table_info(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_index_table_info(ObExecContext &ctx,
-                                        const ObObjParam &owner,
-                                        const ObObjParam &tab_name,
-                                        const ObObjParam &idx_name,
+                                        const DatumParameter &owner,
+                                        const DatumParameter &tab_name,
+                                        const DatumParameter &idx_name,
                                         const share::schema::ObTableSchema *&index_schema,
                                         ObTableStatParam &param)
 {
@@ -3524,16 +3528,16 @@ int ObDbmsStats::parse_index_table_info(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_gather_stat_options(ObExecContext &ctx,
-                                           const ObObjParam &est_percent,
-                                           const ObObjParam &block_sample,
-                                           const ObObjParam &method_opt,
-                                           const ObObjParam &degree,
-                                           const ObObjParam &granularity,
-                                           const ObObjParam &cascade,
-                                           const ObObjParam &no_invalidate,
-                                           const ObObjParam &force,
-                                           const ObObjParam *hist_est_percent,
-                                           const ObObjParam *hist_block_sample,
+                                           const DatumParameter &est_percent,
+                                           const DatumParameter &block_sample,
+                                           const DatumParameter &method_opt,
+                                           const DatumParameter &degree,
+                                           const DatumParameter &granularity,
+                                           const DatumParameter &cascade,
+                                           const DatumParameter &no_invalidate,
+                                           const DatumParameter &force,
+                                           const DatumParameter *hist_est_percent,
+                                           const DatumParameter *hist_block_sample,
                                            ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -3834,19 +3838,19 @@ int ObDbmsStats::parse_granularity_and_method_opt(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_set_table_stat_options(ObExecContext &ctx,
-                                              const ObObjParam &stattab,
-                                              const ObObjParam &statid,
-                                              const ObObjParam &numrows,
-                                              const ObObjParam &numblks,
-                                              const ObObjParam &avgrlen,
-                                              const ObObjParam &flags,
-                                              const ObObjParam &statown,
-                                              const ObObjParam &no_invalidate,
-                                              const ObObjParam &cachedblk,
-                                              const ObObjParam &cachehit,
-                                              const ObObjParam &force,
-                                              const ObObjParam &nummacroblks,
-                                              const ObObjParam &nummicroblks,
+                                              const DatumParameter &stattab,
+                                              const DatumParameter &statid,
+                                              const DatumParameter &numrows,
+                                              const DatumParameter &numblks,
+                                              const DatumParameter &avgrlen,
+                                              const DatumParameter &flags,
+                                              const DatumParameter &statown,
+                                              const DatumParameter &no_invalidate,
+                                              const DatumParameter &cachedblk,
+                                              const DatumParameter &cachehit,
+                                              const DatumParameter &force,
+                                              const DatumParameter &nummacroblks,
+                                              const DatumParameter &nummicroblks,
                                               ObSetTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -3885,16 +3889,16 @@ int ObDbmsStats::parse_set_table_stat_options(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parse_set_column_stats_options(ObExecContext &ctx,
-                                                const ObObjParam &stattab,
-                                                const ObObjParam &statid,
-                                                const ObObjParam &distcnt,
-                                                const ObObjParam &density,
-                                                const ObObjParam &nullcnt,
-                                                const ObObjParam &avgclen,
-                                                const ObObjParam &flags,
-                                                const ObObjParam &statown,
-                                                const ObObjParam &no_invalidate,
-                                                const ObObjParam &force,
+                                                const DatumParameter &stattab,
+                                                const DatumParameter &statid,
+                                                const DatumParameter &distcnt,
+                                                const DatumParameter &density,
+                                                const DatumParameter &nullcnt,
+                                                const DatumParameter &avgclen,
+                                                const DatumParameter &flags,
+                                                const DatumParameter &statown,
+                                                const DatumParameter &no_invalidate,
+                                                const DatumParameter &force,
                                                 ObSetColumnStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -4300,15 +4304,15 @@ int ObDbmsStats::get_part_ids_from_schema(const ObTableSchema *table_schema,
 *
 */
 int ObDbmsStats::parse_set_hist_stats_options(ObExecContext &ctx,
-                                              const ObObjParam &epc,
-                                              const ObObjParam &minval,
-                                              const ObObjParam &maxval,
-                                              const ObObjParam &bkvals,
-                                              const ObObjParam &novals,
-                                              const ObObjParam &chvals,
-                                              const ObObjParam &eavals,
-                                              const ObObjParam &rpcnts,
-                                              const ObObjParam &eavs,
+                                              const DatumParameter &epc,
+                                              const DatumParameter &minval,
+                                              const DatumParameter &maxval,
+                                              const DatumParameter &bkvals,
+                                              const DatumParameter &novals,
+                                              const DatumParameter &chvals,
+                                              const DatumParameter &eavals,
+                                              const DatumParameter &rpcnts,
+                                              const DatumParameter &eavs,
                                               ObHistogramParam &hist_param)
 {
   int ret = OB_SUCCESS;
@@ -4317,8 +4321,8 @@ int ObDbmsStats::parse_set_hist_stats_options(ObExecContext &ctx,
   number::ObNumber num_epc;
   number::ObNumber num_eavs;
   if (!epc.is_null() && OB_FAIL(epc.get_number(num_epc))) {
-  } else if (!minval.is_null() && FALSE_IT(hist_param.minval_ = &minval)) {
-  } else if (!maxval.is_null() && FALSE_IT(hist_param.maxval_ = &maxval)) {
+  } else if (!minval.is_null() && FALSE_IT(hist_param.minval_ = minval.value_view())) {
+  } else if (!maxval.is_null() && FALSE_IT(hist_param.maxval_ = maxval.value_view())) {
   } else if (OB_FAIL(parser_pl_numarray(func_name, bkvals, hist_param.bkvals_))) {
   } else if (OB_FAIL(parser_pl_numarray(func_name, novals, hist_param.novals_))) {
   } else if (OB_FAIL(parser_pl_chararray(func_name, chvals, hist_param.chvals_))) {
@@ -4332,11 +4336,11 @@ int ObDbmsStats::parse_set_hist_stats_options(ObExecContext &ctx,
 }
 
 int ObDbmsStats::parser_pl_numarray(const ObString &func_name,
-                                    const ObObjParam &numarray_param,
+                                    const DatumParameter &numarray_param,
                                     ObIArray<int64_t> &num_array)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj = NULL;
+  const DatumValue *obj = nullptr;
   if (!numarray_param.is_null()) {
     if (OB_LIKELY(numarray_param.is_ext())) {
       pl::ObPLCollection *numarray_ext = reinterpret_cast<pl::ObPLCollection *>(numarray_param.get_ext());
@@ -4348,7 +4352,7 @@ int ObDbmsStats::parser_pl_numarray(const ObString &func_name,
         ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
         LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
       } else if ((numarray_ext->get_count() != 0 &&
-                  OB_ISNULL(obj = reinterpret_cast<ObObj *>(numarray_ext->get_data()))) ||
+                  OB_ISNULL(obj = static_cast<const DatumValue *>(numarray_ext->get_data()))) ||
                  OB_UNLIKELY(!(numarray_ext->is_inited()))) {
         ret = OB_INVALID_ARGUMENT;
       } else {
@@ -4370,11 +4374,11 @@ int ObDbmsStats::parser_pl_numarray(const ObString &func_name,
 }
 
 int ObDbmsStats::parser_pl_chararray(const ObString &func_name,
-                                     const ObObjParam &chararray_param,
+                                     const DatumParameter &chararray_param,
                                      ObIArray<ObString> &char_array)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj = NULL;
+  const DatumValue *obj = nullptr;
   if (!chararray_param.is_null()) {
     if (OB_LIKELY(chararray_param.is_ext())) {
       pl::ObPLCollection *chararray_ext = reinterpret_cast<pl::ObPLCollection *>(chararray_param.get_ext());
@@ -4386,7 +4390,7 @@ int ObDbmsStats::parser_pl_chararray(const ObString &func_name,
         ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
         LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
       } else if ((chararray_ext->get_count() != 0 &&
-                  OB_ISNULL(obj = reinterpret_cast<ObObj *>(chararray_ext->get_data()))) ||
+                  OB_ISNULL(obj = static_cast<const DatumValue *>(chararray_ext->get_data()))) ||
                 OB_UNLIKELY(!(chararray_ext->is_inited()))) {
         ret = OB_INVALID_ARGUMENT;
       } else {
@@ -4406,11 +4410,11 @@ int ObDbmsStats::parser_pl_chararray(const ObString &func_name,
 }
 
 int ObDbmsStats::parser_pl_rawarray(const ObString &func_name,
-                                    const ObObjParam &rawarray_param,
+                                    const DatumParameter &rawarray_param,
                                     ObIArray<ObString> &raw_array)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj = NULL;
+  const DatumValue *obj = nullptr;
   if (!rawarray_param.is_null()) {
     if (OB_LIKELY(rawarray_param.is_ext())) {
       pl::ObPLCollection *rawarray_ext = reinterpret_cast<pl::ObPLCollection *>(rawarray_param.get_ext());
@@ -4422,7 +4426,7 @@ int ObDbmsStats::parser_pl_rawarray(const ObString &func_name,
         ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
         LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
       } else if ((rawarray_ext->get_count() != 0 &&
-                  OB_ISNULL(obj = reinterpret_cast<ObObj *>(rawarray_ext->get_data()))) ||
+                  OB_ISNULL(obj = static_cast<const DatumValue *>(rawarray_ext->get_data()))) ||
                  OB_UNLIKELY(!(rawarray_ext->is_inited()))) {
         ret = OB_INVALID_ARGUMENT;
       } else {
@@ -4560,7 +4564,7 @@ int ObDbmsStats::process_not_size_manual_column(sql::ObExecContext &ctx,
 
 int ObDbmsStats::flush_database_monitoring_info(sql::ObExecContext &ctx,
                                                 sql::ParamStore &params,
-                                                common::ObObj &result)
+                                                common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(params);
@@ -4627,7 +4631,7 @@ int ObDbmsStats::check_statistic_table_writeable(sql::ObExecContext &ctx)
 // }
 
 int ObDbmsStats::parse_column_info(sql::ObExecContext &ctx,
-                                   const ObObjParam &column_name,
+                                   const DatumParameter &column_name,
                                    ObTableStatParam &param)
 {
   int ret = OB_SUCCESS;
@@ -4746,7 +4750,7 @@ int ObDbmsStats::parse_stat_type(const ObString &stat_type_str,
 }
 
 int ObDbmsStats::get_all_table_ids_in_database(ObExecContext &ctx,
-                                               const ObObjParam &owner,
+                                               const DatumParameter &owner,
                                                ObTableStatParam &stat_param,
                                                ObIArray<uint64_t> &table_ids)
 {
@@ -4801,7 +4805,7 @@ int ObDbmsStats::get_all_table_ids_in_database(ObExecContext &ctx,
 
 int ObDbmsStats::gather_database_stats_job_proc(sql::ObExecContext &ctx,
                                                 sql::ParamStore &params,
-                                                common::ObObj &result)
+                                                common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -5380,7 +5384,7 @@ int ObDbmsStats::get_table_stale_percent_threshold(ObMySQLProxy *mysql_proxy,
                                                    double &stale_percent_threshold)
 {
   int ret = OB_SUCCESS;
-  ObObj result;
+  DatumValue result;
   ObTableStatParam param;
   ObString opt_name("STALE_PERCENT");
   ObArenaAllocator tmp_alloc("OptStatPrefs", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -5388,8 +5392,8 @@ int ObDbmsStats::get_table_stale_percent_threshold(ObMySQLProxy *mysql_proxy,
                                                 opt_name, result))) {
   } else if (!result.is_null()) {
     ObCastCtx cast_ctx(&tmp_alloc, NULL, CM_NONE, ObCharset::get_system_collation());
-    ObObj dest_obj;
-    if (OB_FAIL(ObObjCaster::to_type(ObDoubleType, cast_ctx, result, dest_obj))) {
+    DatumValue dest_obj;
+    if (OB_FAIL(DatumValueCaster::to_type(ObDoubleType, cast_ctx, result, *cast_ctx.allocator_v2_, dest_obj))) {
     } else if (OB_FAIL(dest_obj.get_double(stale_percent_threshold))) {
     } else {
       stale_percent_threshold = stale_percent_threshold / 100.0;
@@ -5728,7 +5732,7 @@ int ObDbmsStats::refresh_runtime_schema_guard(ObExecContext &ctx)
  */
 int ObDbmsStats::gather_system_stats(sql::ObExecContext &ctx,
                                     sql::ParamStore &params,
-                                    common::ObObj &result)
+                                    common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -5753,7 +5757,7 @@ int ObDbmsStats::gather_system_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::delete_system_stats(sql::ObExecContext &ctx,
                                     sql::ParamStore &params,
-                                    common::ObObj &result)
+                                    common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -5780,7 +5784,7 @@ int ObDbmsStats::delete_system_stats(sql::ObExecContext &ctx,
  */
 int ObDbmsStats::set_system_stats(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -5882,7 +5886,7 @@ int ObDbmsStats::check_modify_system_stats_pri(const ObSQLSessionInfo& session)
 
 int ObDbmsStats::copy_table_stats(sql::ObExecContext &ctx,
                                  sql::ParamStore &params,
-                                 common::ObObj &result)
+                                 common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   UNUSED(result);
@@ -5892,7 +5896,7 @@ int ObDbmsStats::copy_table_stats(sql::ObExecContext &ctx,
   table_stat_param.allocator_ = &ctx.get_allocator();
   ObCopyLevel copy_level;
   bool is_found = false;
-  ObObjParam dummy_part_name;
+  DatumParameter dummy_part_name;
   dummy_part_name.set_null();
   if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {

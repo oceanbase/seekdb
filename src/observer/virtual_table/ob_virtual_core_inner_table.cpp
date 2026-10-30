@@ -210,7 +210,7 @@ int ObVritualCoreInnerTable::get_full_row(const ObTableSchema *table,
           if (OB_SUCCESS == (inner_ret = core_table.get_varchar(
               column_name, str_column))) {
             if (ObVarcharType == column_schema->get_data_type()) {
-              ADD_COLUMN(set_varchar, table, column_name, str_column, columns);
+              ADD_COLUMN(set_varchar_view, table, column_name, str_column, columns);
             } else if (ObLongTextType == column_schema->get_data_type()) {
               ADD_TEXT_COLUMN(ObLongTextType, table, column_name, str_column, columns);
             }

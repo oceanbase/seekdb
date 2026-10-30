@@ -70,32 +70,32 @@ int ObAllVirtualServerCompactionEventHistory::fill_cells()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t compression_ratio = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case MERGE_TYPE:
-      cells[i].set_varchar(merge_type_to_str(event_.merge_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, merge_type_to_str(event_.merge_type_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case COMPACTION_SCN:
-      cells[i].set_uint64(event_.compaction_scn_ < 0 ? 0 : event_.compaction_scn_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, i, event_.compaction_scn_ < 0 ? 0 : event_.compaction_scn_) : ret);
       break;
     case EVENT_TIMESTAMP:
-      cells[i].set_timestamp(event_.timestamp_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, event_.timestamp_) : ret);
       break;
     case EVENT:
       if (OB_TMP_FAIL(event_.generate_event_str(event_buf_, sizeof(event_buf_)))) {
         SERVER_LOG(WARN, "failed to generate event str", K(tmp_ret), K(event_));
-        cells[i].set_varchar("");
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "") : ret);
       } else {
-        cells[i].set_varchar(event_buf_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, event_buf_) : ret);
       }
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case ROLE:
-      cells[i].set_varchar(compaction::ObServerCompactionEvent::get_comp_role_str(event_.role_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, compaction::ObServerCompactionEvent::get_comp_role_str(event_.role_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     default:

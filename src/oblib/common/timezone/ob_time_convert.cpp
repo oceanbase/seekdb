@@ -537,7 +537,7 @@ int ObTimeConverter::validate_literal_date(const ObString &str, const ObTimeConv
  * @param out:    value     ObOTimestampData result value
  */
 int ObTimeConverter::validate_literal_timestamp(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
-                                                       ObObjType &obj_type, ObOTimestampData &value)
+                                                       SqlValueType &obj_type, ObOTimestampData &value)
 {
   int ret = OB_SUCCESS;
   value.reset();
@@ -573,7 +573,7 @@ int ObTimeConverter::validate_literal_timestamp(const ObString &str, const ObTim
  * @return
  */
 int ObTimeConverter::str_to_otimestamp(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
-    const ObObjType target_type, ObOTimestampData &value, ObScale &scale)
+    const SqlValueType target_type, ObOTimestampData &value, ObScale &scale)
 {
   int ret = OB_SUCCESS;
   value.reset();
@@ -666,7 +666,7 @@ int ObTimeConverter::scn_to_str(const uint64_t scn_val,
       ot_data.time_us_ = dt_value;
       ot_data.time_ctx_.tail_nsec_ = value_ns;
       const int16_t MAX_NS_SCALE = 9;
-      const ObObjType type = ObTimestampNanoType;
+      const SqlValueType type = ObTimestampNanoType;
       const ObDataTypeCastParams dtc_params(sys_tz_info);
       if (OB_FAIL(otimestamp_to_str(ot_data, dtc_params, MAX_NS_SCALE, type, buf, buf_len, pos))) {
       }
@@ -744,7 +744,7 @@ int ObTimeConverter::get_datetime_part_conflict_error(int64_t part_idx)
 }
 
 
-int ObTimeConverter::ob_time_to_utc(const ObObjType obj_type, const ObTimeConvertCtx &cvrt_ctx, ObTime &ob_time)
+int ObTimeConverter::ob_time_to_utc(const SqlValueType obj_type, const ObTimeConvertCtx &cvrt_ctx, ObTime &ob_time)
 {
   int ret = OB_SUCCESS;
   if (HAS_TYPE_STORE_UTC(ob_time.mode_)) {
@@ -980,7 +980,7 @@ int ObTimeConverter::mdatetime_to_str(ObMySQLDateTime value, const ObTimeZoneInf
 }
 
 int ObTimeConverter::otimestamp_to_str(const ObOTimestampData &ot_data, const ObDataTypeCastParams &dtc_params,
-                                       const int16_t scale, const ObObjType type, char *buf,
+                                       const int16_t scale, const SqlValueType type, char *buf,
                                        int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
@@ -1074,7 +1074,7 @@ int ObTimeConverter::time_to_double(int64_t value, double &dbl)
   return ret;
 }
 int ObTimeConverter::time_to_datetime(int64_t t_value, int64_t cur_dt_value,
-                              const ObTimeZoneInfo *tz_info, int64_t &dt_value, const ObObjType expect_type)
+                              const ObTimeZoneInfo *tz_info, int64_t &dt_value, const SqlValueType expect_type)
 {
   int ret = OB_SUCCESS;
   if (ObTimestampType == expect_type) {
@@ -1255,7 +1255,7 @@ int ObTimeConverter::datetime_to_mdatetime(int64_t dt_value, ObMySQLDateTime &md
 //                timestamp ltz(utc)
 //                timestamp (local)
 int ObTimeConverter::odate_to_otimestamp(int64_t in_value_us, const ObTimeZoneInfo *tz_info,
-    const ObObjType out_type, ObOTimestampData &out_value)
+    const SqlValueType out_type, ObOTimestampData &out_value)
 {
   int ret = OB_SUCCESS;
   if (ZERO_DATETIME == in_value_us) {
@@ -1275,7 +1275,7 @@ int ObTimeConverter::odate_to_otimestamp(int64_t in_value_us, const ObTimeZoneIn
 //timestamp tz(utc, offset) --> date(local)
 //timestamp ltz(utc)        --> date(local)
 //timestamp (local)         --> date(local)
-int ObTimeConverter::otimestamp_to_odate(const ObObjType in_type, const ObOTimestampData &in_value,
+int ObTimeConverter::otimestamp_to_odate(const SqlValueType in_type, const ObOTimestampData &in_value,
     const ObTimeZoneInfo *tz_info, int64_t &out_usec)
 {
   int ret = OB_SUCCESS;
@@ -1289,8 +1289,8 @@ int ObTimeConverter::otimestamp_to_odate(const ObObjType in_type, const ObOTimes
   return ret;
 }
 
-int ObTimeConverter::otimestamp_to_otimestamp(const ObObjType in_type,
-    const ObOTimestampData &in_value, const ObTimeZoneInfo *tz_info, const ObObjType out_type,
+int ObTimeConverter::otimestamp_to_otimestamp(const SqlValueType in_type,
+    const ObOTimestampData &in_value, const ObTimeZoneInfo *tz_info, const SqlValueType out_type,
     ObOTimestampData &out_value)
 {
   int ret = OB_SUCCESS;
@@ -2747,7 +2747,7 @@ int ObTimeConverter::datetime_to_ob_time(int64_t value, const ObTimeZoneInfo *tz
   return ret;
 }
 
-int ObTimeConverter::otimestamp_to_ob_time(const ObObjType type, const ObOTimestampData &ot_data,
+int ObTimeConverter::otimestamp_to_ob_time(const SqlValueType type, const ObOTimestampData &ot_data,
     const ObTimeZoneInfo *tz_info, ObTime &ob_time, const bool store_utc_time /*true*/)
 {
   int ret = OB_SUCCESS;
@@ -4588,7 +4588,7 @@ int ObTimeConverter::date_add_nsecond(const int64_t ori_date_value, const int64_
 
 int ObTimeConverter::calc_last_date_of_the_month(const int64_t ori_datetime_value,
                                                 int64_t &result_date_value,
-                                                const ObObjType dest_type,
+                                                const SqlValueType dest_type,
                                                 const ObDateSqlMode date_sql_mode)
 {
   int ret = OB_SUCCESS;
@@ -4646,7 +4646,7 @@ int ObTimeConverter::calc_last_mdate_of_the_month(const ObMySQLDateTime mdatetim
 
 
 
-int ObTimeConverter::decode_otimestamp(const ObObjType obj_type,
+int ObTimeConverter::decode_otimestamp(const SqlValueType obj_type,
     const char *data, const int64_t total_len, const ObTimeConvertCtx &cvrt_ctx,
     ObOTimestampData &otimestamp_val, int8_t &scale)
 {
@@ -4703,7 +4703,7 @@ int ObTimeConverter::decode_otimestamp(const ObObjType obj_type,
   return ret;
 }
 
-int ObTimeConverter::encode_otimestamp(const ObObjType obj_type,
+int ObTimeConverter::encode_otimestamp(const SqlValueType obj_type,
     char *buf, const int64_t len, int64_t &pos, const ObTimeZoneInfo *tz_info,
     const ObOTimestampData &ot_data, const int8_t &scale)
 {

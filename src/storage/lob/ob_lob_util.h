@@ -41,7 +41,7 @@ namespace storage
 class ObLobCharsetUtil
 {
 public:
-  static ObCollationType get_collation_type(ObObjType type, ObCollationType ori_coll_type);
+  static ObCollationType get_collation_type(SqlValueType type, ObCollationType ori_coll_type);
   static void transform_query_result_charset(
       const common::ObCollationType& coll_type,
       const char* data,
@@ -156,7 +156,7 @@ public:
 
   static int insert_lob_column(ObIAllocator &allocator,
                                const common::ObTabletID tablet_id,
-                               const ObObjType &obj_type,
+                               const SqlValueType &obj_type,
                                const ObCollationType &cs_type,
                                const ObLobStorageParam &lob_storage_param,
                                blocksstable::ObStorageDatum &datum,
@@ -179,7 +179,7 @@ public:
                                share::ObTabletCacheInterval &lob_id_geneator,
                                const common::ObTabletID tablet_id,
                                const common::ObTabletID lob_meta_tablet_id,
-                               const ObObjType &obj_type,
+                               const SqlValueType &obj_type,
                                const ObCollationType collation_type,
                                const ObLobStorageParam &lob_storage_param,
                                blocksstable::ObStorageDatum &datum,

@@ -50,7 +50,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 private:
-  static int calc(common::ObObj &result,
+  static int calc(common::DatumParameter &result,
                   uint64_t package_id,
                   int64_t spec_version,
                   int64_t body_version,

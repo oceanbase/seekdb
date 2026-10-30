@@ -124,48 +124,48 @@ int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case TABLET_ID:
-          cur_row_.cells_[i].set_int(tablet_id.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tablet_id.id()) : ret);
           break;
         case ADDRESS:
           tablet_pointer->get_addr().to_string(address_, ADDR_STR_LEN);
-          cur_row_.cells_[i].set_varchar(address_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, address_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case POINTER_REF:
-          cur_row_.cells_[i].set_int(ptr_hdl.get_ref_cnt());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, ptr_hdl.get_ref_cnt()) : ret);
           break;
         case IN_MEMORY:
-          cur_row_.cells_[i].set_bool(tablet_pointer->is_in_memory());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, tablet_pointer->is_in_memory()) : ret);
           break;
         case TABLET_REF:
-          cur_row_.cells_[i].set_int(nullptr == tablet ? 0 : tablet->get_ref());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, nullptr == tablet ? 0 : tablet->get_ref()) : ret);
           break;
         case WASH_SCORE:
-          cur_row_.cells_[i].set_int(nullptr == tablet ? 0 : tablet->get_wash_score());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, nullptr == tablet ? 0 : tablet->get_wash_score()) : ret);
           break;
         case TABLET_PTR:
           MEMSET(pointer_, 0, STR_LEN);
           pos = 0;
           databuff_print_obj(pointer_, STR_LEN, pos, static_cast<void *>(tablet));
-          cur_row_.cells_[i].set_varchar(pointer_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, pointer_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case INITIAL_STATE:
-          cur_row_.cells_[i].set_bool(tablet_pointer->get_initial_state());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, tablet_pointer->get_initial_state()) : ret);
           break;
         case OLD_CHAIN:
           MEMSET(old_chain_, 0, STR_LEN);
           if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
           } else {
-            cur_row_.cells_[i].set_varchar(old_chain_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, old_chain_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         case DATA_OCCUPIED:
-          cur_row_.cells_[i].set_int(tablet_info.get_occupy_size());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tablet_info.get_occupy_size()) : ret);
           break;
         case DATA_REQUIRED:
-          cur_row_.cells_[i].set_int(tablet_info.get_required_size());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tablet_info.get_required_size()) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

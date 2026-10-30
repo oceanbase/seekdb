@@ -19,6 +19,7 @@
 #include "query/engine/expr/ob_expr_bm25.h"
 #include "query/engine/expr/ob_expr_util.h"
 #include "query/das/ob_das_iter_access.h"
+#include "share/datum/datum_value_cast.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_block_stat_iter.h"
 #include "ob_inv_idx_param_estimator.h"
@@ -100,13 +101,13 @@ int ObTextAvgDocLenEstimator::cast_number_to_double(const number::ObNumber &num,
 {
   int ret = OB_SUCCESS;
   result = 0.0;
-  ObObj src_obj, dest_obj;
-  src_obj.set_number(num);
-  
   ObArenaAllocator alloc("TxtNum2Dbl", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCastCtx cast_ctx(&alloc, nullptr, CM_NONE, ObCharset::get_system_collation());
-  if (OB_FAIL(ObObjCaster::to_type(ObDoubleType, cast_ctx, src_obj, dest_obj))) {
-  } else if (OB_FAIL(dest_obj.get_double(result))) {
+  DatumValue src_value;
+  DatumValue dest_value;
+  if (OB_FAIL(src_value.set_number(num, alloc))) {
+  } else if (OB_FAIL(DatumValueCaster::to_type(ObDoubleType, cast_ctx, src_value, alloc, dest_value))) {
+  } else if (OB_FAIL(dest_value.get_double(result))) {
   }
   return ret;
 }

@@ -36,9 +36,9 @@ bool ObRawExprTypeDemotion::type_can_demote(const ObExprResType &from, const ObE
     // No cast expr will added for comparison, no need to demote type.
   } else if (query_ctx_->enable_constant_type_demotion_) {
     {
-      const ObObjType from_type = from.get_type();
-      const ObObjType to_type = to.get_type();
-      switch (ob_obj_type_class(to_type)) {
+      const SqlValueType from_type = from.get_type();
+      const SqlValueType to_type = to.get_type();
+      switch (sql_type_class(to_type)) {
         case ObIntTC:
         case ObUIntTC: {
           can_demote = ob_is_string_tc(from_type)
@@ -88,7 +88,7 @@ bool ObRawExprTypeDemotion::type_can_demote(const ObExprResType &from, const ObE
           break;
         }
         case ObTimeTC: {
-          ObObjType cmp_type = ObMaxType;
+          SqlValueType cmp_type = ObMaxType;
           ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, from_type, to_type);
           if (ObTimeType != cmp_type) {
             can_demote = ob_is_datetime_tc(from_type)
@@ -154,7 +154,7 @@ bool ObRawExprTypeDemotion::expr_can_demote(const ObConstRawExpr &from,
 // For certain types of conversions, such as from datetime to time in mysql mode, the conversion
 // will always succeed. The result of range_placement is always in-place. In these cases, we simply
 // replace the comparison type without needing to add constraints.
-bool ObRawExprTypeDemotion::need_constraint(const ObObjType from_type, const ObObjType &to_type)
+bool ObRawExprTypeDemotion::need_constraint(const SqlValueType from_type, const SqlValueType &to_type)
 {
   bool need_constraint = true;
   // Ensure that the type can be demoted before calling this function, it means that function
@@ -216,7 +216,7 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     } else if (is_exists) {
       query_ctx_->enable_constant_type_demotion_ = enable_constant_type_demotion;
     }
-    ObObj non_std_cmp_level;
+    DatumValue non_std_cmp_level;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(query_ctx_->get_global_hint().opt_params_.get_opt_param(
         ObOptParamHint::NON_STANDARD_COMPARISON_LEVEL, non_std_cmp_level))) {
@@ -368,7 +368,7 @@ int ObRawExprTypeDemotion::try_demote_constant_type(const ObColumnRefRawExpr &co
   } else if (need_constraint(const_value.get_result_type().get_type(),
                              column_ref.get_result_type().get_type())) {
     ObPhysicalPlanCtx *plan_ctx = NULL;
-    ObObj val;
+    DatumValue val;
     bool got_result = false;
     RangePlacement range_placement_value;
     if (OB_ISNULL(plan_ctx = exec_ctx->get_physical_plan_ctx()) ||

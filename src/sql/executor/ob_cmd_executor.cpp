@@ -135,13 +135,11 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
     } else {
       my_session->get_query_timeout(ori_query_timeout);
       my_session->get_tx_timeout(ori_trx_timeout);
-      ObObj val;
-      val.set_int(config::_ob_ddl_timeout());
       is_ddl_or_dcl_stmt = true;
       if (OB_FAIL(my_session->update_sys_variable(
-                         share::SYS_VAR_OB_QUERY_TIMEOUT, val))) {
+                         share::SYS_VAR_OB_QUERY_TIMEOUT, config::_ob_ddl_timeout()))) {
       } else if (OB_FAIL(my_session->update_sys_variable(
-                         share::SYS_VAR_OB_TRX_TIMEOUT, val))) {
+                         share::SYS_VAR_OB_TRX_TIMEOUT, config::_ob_ddl_timeout()))) {
       } else {
         ctx.get_physical_plan_ctx()->set_timeout_timestamp(
             my_session->get_query_start_time() + config::_ob_ddl_timeout());
@@ -550,20 +548,16 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
   if (is_ddl_or_dcl_stmt) {
     // ddl/dcl execution process modified the session's query_timeout and trx_timeout, need to restore after execution
     int tmp_ret = ret;
-    ObObj ori_query_timeout_obj;
-    ObObj ori_trx_timeout_obj;
-    ori_query_timeout_obj.set_int(ori_query_timeout);
-    ori_trx_timeout_obj.set_int(ori_trx_timeout);
     if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_ISNULL(ctx.get_sql_exec_ctx().schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(my_session->update_sys_variable(
                        share::SYS_VAR_OB_QUERY_TIMEOUT,
-                       ori_query_timeout_obj))) {
+                       ori_query_timeout))) {
     } else if (OB_FAIL(my_session->update_sys_variable(
                        share::SYS_VAR_OB_TRX_TIMEOUT,
-                       ori_trx_timeout_obj))) {
+                       ori_trx_timeout))) {
     } else if (OB_FAIL(ctx.get_sql_exec_ctx().schema_service_->get_runtime_schema_guard(
                        *(ctx.get_sql_ctx()->schema_guard_)))) {
     }

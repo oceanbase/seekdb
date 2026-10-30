@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_COMMON_OB_CELL_WRITER_H_
 #define OCEANBASE_COMMON_OB_CELL_WRITER_H_
-#include "common/object/ob_obj_type.h"
+#include "common/datum/datum_value.h"
 #include "common/number/ob_number_v2.h"
 #include "lib/ob_define.h"
 
@@ -24,7 +24,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+
 
 /**
  * Used to distinguish four types of storage formats
@@ -87,8 +87,8 @@ public:
   ObCellWriter();
   virtual ~ObCellWriter() {}
   int init(char *buf, int64_t size, const ObCompactStoreType store_type);
-  int append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj = NULL);
-  int append(const ObObj &obj);
+  int append(uint64_t column_id, const DatumValue &obj, DatumValue *clone_obj = NULL, char *clone_scalar = NULL);
+  int append(const DatumValue &obj);
   int extend_buf(char *buf, int64_t size);
   int revert_buf(char *buf, int64_t size);
   void reuse() { pos_ = 0; last_append_pos_ = 0; cell_cnt_ = 0; }
@@ -101,13 +101,13 @@ public:
 private:
   template<class T>
   int append(const T &value);
-  inline int write_int(const ObObj &obj, const enum common::ObObjType meta_type, const int64_t value);
-  inline int write_number(const enum common::ObObjType meta_type, const common::number::ObNumber &number, ObObj *clone_obj);
-  inline int write_char(const ObObj &obj, const enum common::ObObjType meta_type, const ObString &str, ObObj *clone_obj);
-  inline int write_text(const ObObj &obj, const enum common::ObObjType meta_type, const ObString &str, ObObj *clone_obj);
-  inline int write_binary(const enum common::ObObjType meta_type, const ObString &str, ObObj *clone_obj);
+  inline int write_int(const DatumValue &obj, const enum common::SqlValueType meta_type, const int64_t value);
+  inline int write_number(const enum common::SqlValueType meta_type, const common::number::ObNumber &number, DatumValue *clone_obj);
+  inline int write_char(const DatumValue &obj, const enum common::SqlValueType meta_type, const ObString &str, DatumValue *clone_obj);
+  inline int write_text(const DatumValue &obj, const enum common::SqlValueType meta_type, const ObString &str, DatumValue *clone_obj);
+  inline int write_binary(const enum common::SqlValueType meta_type, const ObString &str, DatumValue *clone_obj);
   inline int write_ext(const int64_t ext_value);
-  inline int write_decimal_int(const ObObj &obj, ObObj *clone_obj);
+  inline int write_decimal_int(const DatumValue &obj, DatumValue *clone_obj);
   inline int get_int_byte(int64_t int_value);
 private:
   char *buf_;

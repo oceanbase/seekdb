@@ -54,7 +54,7 @@ struct ObTopkItem : public ObTopkBaseItem
                K_(obj_hash),
                K_(col_obj));
   uint64_t obj_hash_;
-  common::ObObj col_obj_;
+  common::DatumValue col_obj_;
 };
 
 struct ObTopkDatumItem : public ObTopkBaseItem
@@ -106,14 +106,14 @@ class ObTopKFrequencyHistograms
       free_list_.set_attr(lib::ObMemAttr("ObTopkfreelist"));
     }
 
-    int read_result(const ObObj &result_obj);
-    int create_topk_fre_items(const ObObjMeta *obj_meta = NULL);
+    int read_result(const DatumValue &result_value);
+    int create_topk_fre_items(const SqlTypeMeta *obj_meta = NULL);
     int sort_topk_fre_items(ObIArray<ObTopkItem> &items);
     int shrink_topk_items();
-    int add_top_k_frequency_item(const ObObj &obj, int64_t repeat_cnt);
+    int add_top_k_frequency_item(const DatumValue &obj, int64_t repeat_cnt);
     int add_top_k_frequency_item(uint64_t datum_hash, const ObDatum &datum);
     int add_batch_items(const char **payloads, int32_t *lens, uint64_t *hash_val, int64_t batch_cnt);
-    int merge_distribute_top_k_fre_items(const ObObj &obj);
+    int merge_distribute_top_k_fre_items(const DatumValue &obj);
     void set_window_size(int64_t window_size) { window_size_ = window_size; }
     void set_item_size(int64_t item_size) { item_size_ = item_size; }
     void set_is_topk_hist_need_des_row(bool is_true) { is_topk_hist_need_des_row_ = is_true; }
@@ -123,7 +123,7 @@ class ObTopKFrequencyHistograms
     int64_t get_total_fre_item() const { return N_; }
     ObTopkBaseItem *get_entry(const uint64_t hash_val);
     int add_entry(const uint64_t &datum_hash, const ObDatum &datum, const int64_t fre_time, const int64_t delta);
-    int add_entry(const uint64_t &obj_hash, const ObObj &obj, const int64_t fre_time, const int64_t delta);
+    int add_entry(const uint64_t &obj_hash, const DatumValue &obj, const int64_t fre_time, const int64_t delta);
     int remove_entry(ObTopkBaseItem *item);
     int shrink_memory_usage();
     void reset_memory_usage();

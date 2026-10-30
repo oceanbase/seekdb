@@ -23,13 +23,13 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObjMeta;
+class SqlTypeMeta;
 class ObAccuracy;
 template <class T>
 class ObIArray;
 // @note Obj type can only be added, not deleted, and the order cannot change, see ob_obj_cast.h
-// @note When adding a type, you need to synchronize the modification of ObObjTypeClass and ob_obj_type_class().
-enum ObObjType
+// @note When adding a type, you need to synchronize the modification of SqlTypeClass and sql_type_class().
+enum SqlValueType
 {
   ObNullType        = 0,  // null type
 
@@ -92,7 +92,7 @@ enum ObObjType
 };
 
 // Extended object type
-enum ObObjOType
+enum ExtendedSqlValueType
 {
   ObONotSupport       = 0,
   ObONullType         = 1,   // null type
@@ -122,7 +122,7 @@ enum ObObjOType
   ObOGeometryType     = 25,
   ObOUDTSqlType       = 26,
   ObOCollectionSqlType  = 27,
-  ObOMaxType          //invalid type, or count of ObObjOType
+  ObOMaxType          //invalid type, or count of ExtendedSqlValueType
 };
 
 enum class ObGeoType
@@ -149,7 +149,7 @@ enum class ObGeoType
 };
 
 //for cast/cmp map
-static ObObjOType OBJ_TYPE_TO_O_TYPE[ObMaxType+1] = {
+static ExtendedSqlValueType OBJ_TYPE_TO_O_TYPE[ObMaxType+1] = {
   ObONullType,               // null type
   ObOSmallIntType,           // int8, aka mysql boolean type
   ObOSmallIntType,           // int16
@@ -204,7 +204,7 @@ static ObObjOType OBJ_TYPE_TO_O_TYPE[ObMaxType+1] = {
 };
 
 
-enum ObObjTypeClass
+enum SqlTypeClass
 {
   ObNullTC      = 0,    // null
   ObIntTC       = 1,    // int8, int16, int24, int32, int64.
@@ -293,7 +293,7 @@ enum ObObjTypeClass
 #define SELECT_SECOND(x, y) y
 #define SELECT_TC(arg) SELECT_SECOND arg
 
-const ObObjTypeClass OBJ_TYPE_TO_CLASS[ObMaxType] =
+const SqlTypeClass OBJ_TYPE_TO_CLASS[ObMaxType] =
 {
 	LST_DO(SELECT_TC, (,), OBJ_TYPE_TC_PAIRS)
 };
@@ -301,7 +301,7 @@ const ObObjTypeClass OBJ_TYPE_TO_CLASS[ObMaxType] =
 #undef SELECT_TC
 #undef SELECT_SECOND
 
-const ObObjType OBJ_DEFAULT_TYPE[ObActualMaxTC] =
+const SqlValueType OBJ_DEFAULT_TYPE[ObActualMaxTC] =
 {
   ObNullType,       // null
   ObIntType,        // int
@@ -339,7 +339,7 @@ const ObObjType OBJ_DEFAULT_TYPE[ObActualMaxTC] =
 };
 
 // Keep the implicit cast direction table below consistent with this type-class mapping.
-static ObObjTypeClass OBJ_O_TYPE_TO_CLASS[ObOMaxType + 1] =
+static SqlTypeClass OBJ_O_TYPE_TO_CLASS[ObOMaxType + 1] =
 {
   ObMaxTC,        //ObONotSupport = 1
   ObNullTC,       // ObONullType = 2,   // null type
@@ -385,7 +385,7 @@ enum ImplicitCastDirection {
 /*
  * Datetime > double > float > number > int/smallint > char/varchar > others
  */
-static ImplicitCastDirection OB_OBJ_IMPLICIT_CAST_DIRECTION_EXTENDED[ObObjOType::ObOMaxType][ObObjOType::ObOMaxType] =
+static ImplicitCastDirection SQL_VALUE_TYPE_IMPLICIT_CAST_DIRECTION_EXTENDED[ExtendedSqlValueType::ObOMaxType][ExtendedSqlValueType::ObOMaxType] =
 {   /*A->B*/
   {/*ObONotSupport->XXX*/
     IC_NOT_SUPPORT,  /*ObONotSupport*/
@@ -1086,47 +1086,47 @@ enum ObSystemUDTSqlType
   ObInvalidSqlType = 17 // only used when subschema id not set, like the creation of col ref rawexpr
 };
 
-OB_INLINE bool is_valid_obj_type(const ObObjType type)
+OB_INLINE bool is_valid_sql_value_type(const SqlValueType type)
 {
   return ObNullType <= type && type < ObMaxType;
 }
 
-OB_INLINE bool is_valid_extended_type(const ObObjOType otype)
+OB_INLINE bool is_valid_extended_type(const ExtendedSqlValueType otype)
 {
   //not include ObONotSupport
   return ObONotSupport < otype && otype < ObOMaxType;
 }
 
-OB_INLINE ObObjOType ob_obj_type_to_extended_type(const ObObjType type)
+OB_INLINE ExtendedSqlValueType sql_value_type_to_extended_type(const SqlValueType type)
 {
   return type < ObMaxType ? OBJ_TYPE_TO_O_TYPE[type] : ObOMaxType;
 }
 
-OB_INLINE ObObjTypeClass ob_extended_type_class(const ObObjType type)
+OB_INLINE SqlTypeClass extended_sql_type_class(const SqlValueType type)
 {
   return type < ObMaxType ? OBJ_O_TYPE_TO_CLASS[OBJ_TYPE_TO_O_TYPE[type]] : ObMaxTC;
 }
 
-OB_INLINE ObObjTypeClass ob_extended_type_class(const ObObjOType oType)
+OB_INLINE SqlTypeClass extended_sql_type_class(const ExtendedSqlValueType oType)
 {
   return oType < ObOMaxType ? OBJ_O_TYPE_TO_CLASS[oType] : ObMaxTC;
 }
 
-OB_INLINE ImplicitCastDirection ob_extended_implict_cast_direction(const ObObjOType aType, const ObObjOType bType)
+OB_INLINE ImplicitCastDirection ob_extended_implict_cast_direction(const ExtendedSqlValueType aType, const ExtendedSqlValueType bType)
 {
   if (aType < ObOMaxType && bType < ObOMaxType) {
-    return OB_OBJ_IMPLICIT_CAST_DIRECTION_EXTENDED[aType][bType];
+    return SQL_VALUE_TYPE_IMPLICIT_CAST_DIRECTION_EXTENDED[aType][bType];
   } else {
     return ImplicitCastDirection::IC_NOT_SUPPORT;
   }
 }
 
-OB_INLINE ObObjTypeClass ob_obj_type_class(const ObObjType type)
+OB_INLINE SqlTypeClass sql_type_class(const SqlValueType type)
 {
   return OB_LIKELY(type < ObMaxType) ? OBJ_TYPE_TO_CLASS[type] : ObMaxTC;
 }
 
-OB_INLINE ObObjType ob_obj_default_type(const ObObjTypeClass tc)
+OB_INLINE SqlValueType default_sql_type_for_class(const SqlTypeClass tc)
 {
   return OB_LIKELY(tc < ObActualMaxTC) ? OBJ_DEFAULT_TYPE[tc] : ObMaxType;
 }
@@ -1171,10 +1171,10 @@ enum VecValueTypeClass: uint16_t {
   MAX_VEC_TC
 };
 
-inline bool ob_is_double_type(ObObjType);
-inline bool ob_is_decimal_int(ObObjType);
+inline bool ob_is_double_type(SqlValueType);
+inline bool ob_is_decimal_int(SqlValueType);
 
-OB_INLINE VecValueTypeClass get_vec_value_tc(const ObObjType type, const int16_t scale,
+OB_INLINE VecValueTypeClass get_vec_value_tc(const SqlValueType type, const int16_t scale,
                                              const int16_t precision)
 {
   UNUSED(precision);
@@ -1256,7 +1256,7 @@ extern const double REAL_MIN_VAL[ObMaxType];
 extern const double REAL_MAX_VAL[ObMaxType];
 
 
-OB_INLINE bool ob_is_castable_type_class(ObObjTypeClass tc)
+OB_INLINE bool ob_is_castable_type_class(SqlTypeClass tc)
 {
   return (ObIntTC <= tc && tc <= ObStringTC) || ObLeftTypeTC == tc || ObRightTypeTC == tc
       || ObBitTC == tc || ObEnumSetTC == tc || ObEnumSetInnerTC == tc || ObTextTC == tc
@@ -1266,28 +1266,28 @@ OB_INLINE bool ob_is_castable_type_class(ObObjTypeClass tc)
 }
 
 //used for arithmetic
-OB_INLINE bool ob_is_int_uint(ObObjTypeClass left_tc, ObObjTypeClass right_tc)
+OB_INLINE bool ob_is_int_uint(SqlTypeClass left_tc, SqlTypeClass right_tc)
 {
   return (ObIntTC == left_tc && ObUIntTC == right_tc) || (ObIntTC == right_tc && ObUIntTC == left_tc);
 }
 
-OB_INLINE bool ob_is_int_less_than_64(ObObjType type)
+OB_INLINE bool ob_is_int_less_than_64(SqlValueType type)
 {
   return (ObTinyIntType <= type && type <= ObInt32Type)
          || (ObUTinyIntType <= type && type <= ObUInt32Type);
 }
 
 // print obj type string
-const char *ob_obj_type_str(ObObjType type);
+const char *sql_value_type_to_string(SqlValueType type);
 
-const char *inner_obj_type_str(ObObjType type);
-const char *ob_sql_type_str(ObObjType type);
+const char *inner_sql_value_type_to_string(SqlValueType type);
+const char *ob_sql_type_str(SqlValueType type);
 
 //such as “char(20) CHARSET utf8mb4" or "char(20) CHARSET utf8mb4 COLLATE utf8mb4_bin". with charset and collate
 int ob_sql_type_str_with_coll(char *buff,
     int64_t buff_length,
     int64_t &pos,
-    ObObjType type,
+    SqlValueType type,
     int64_t length,
     int64_t precision,
     int64_t scale,
@@ -1300,7 +1300,7 @@ int ob_sql_type_str_with_coll(char *buff,
 int ob_sql_type_str(char *buff,
                     int64_t buff_length,
                     int64_t &pos,
-                    ObObjType type,
+                    SqlValueType type,
                     int64_t length,
                     int64_t precision,
                     int64_t scale,
@@ -1309,7 +1309,7 @@ int ob_sql_type_str(char *buff,
                     const uint64_t sub_type = static_cast<uint64_t>(common::ObGeoType::GEOTYPEMAX),
                     const bool is_string_lob = false);
 
-int ob_sql_type_str(const common::ObObjMeta &obj_meta,
+int ob_sql_type_str(const common::SqlTypeMeta &obj_meta,
                     const common::ObAccuracy &accuracy,
                     const common::ObIArray<ObString> &type_info,
                     const int16_t default_length_semantics,
@@ -1321,72 +1321,71 @@ int ob_sql_type_str(const common::ObObjMeta &obj_meta,
 //such as "double". without any accuracy.
 int ob_sql_type_str(char *buff,
                     int64_t buff_length,
-                    ObObjType type,
+                    SqlValueType type,
                     ObCollationType coll_type,
                     const common::ObIArray<ObString> &type_info,
                     const common::ObGeoType geo_type = common::ObGeoType::GEOTYPEMAX,
                     const bool is_string_lob = false);
 
 // print obj type class string
-const char *ob_obj_tc_str(ObObjTypeClass tc);
-const char *ob_sql_tc_str(ObObjTypeClass tc);
+const char *sql_type_class_to_string(SqlTypeClass tc);
+const char *ob_sql_tc_str(SqlTypeClass tc);
 
 // get obj type size for fixed length type
-int32_t ob_obj_type_size(ObObjType type);
+int32_t sql_value_type_size(SqlValueType type);
 
-inline bool ob_is_valid_obj_type(ObObjType type) { return ObNullType <= type && type < ObMaxType; }
-inline bool ob_is_invalid_obj_type(ObObjType type) { return !ob_is_valid_obj_type(type); }
-inline bool ob_is_valid_obj_tc(ObObjTypeClass tc) { return ObNullTC <= tc && tc < ObMaxTC; }
-inline bool ob_is_invalid_obj_tc(ObObjTypeClass tc) { return !ob_is_valid_obj_tc(tc); }
+inline bool is_invalid_sql_value_type(SqlValueType type) { return !is_valid_sql_value_type(type); }
+inline bool is_valid_sql_type_class(SqlTypeClass tc) { return ObNullTC <= tc && tc < ObMaxTC; }
+inline bool is_invalid_sql_type_class(SqlTypeClass tc) { return !is_valid_sql_type_class(tc); }
 
-inline bool ob_is_valid_obj_o_type(ObObjType type) { return ObNullType <= type && type < ObMaxType ? (OBJ_TYPE_TO_O_TYPE[type] != ObONotSupport) : false; }
-inline bool ob_is_invalid_obj_o_type(ObObjType type) { return !ob_is_valid_obj_o_type(type); }
-inline bool ob_is_valid_obj_o_tc(ObObjTypeClass tc) { return ObNullTC <= tc && tc < ObMaxTC; }
-inline bool ob_is_invalid_obj_o_tc(ObObjTypeClass tc) { return !ob_is_valid_obj_tc(tc); }
-inline bool ob_is_numeric_tc(ObObjTypeClass tc)
+inline bool is_valid_extended_sql_value_type(SqlValueType type) { return ObNullType <= type && type < ObMaxType ? (OBJ_TYPE_TO_O_TYPE[type] != ObONotSupport) : false; }
+inline bool is_invalid_extended_sql_value_type(SqlValueType type) { return !is_valid_extended_sql_value_type(type); }
+inline bool is_valid_extended_sql_type_class(SqlTypeClass tc) { return ObNullTC <= tc && tc < ObMaxTC; }
+inline bool is_invalid_extended_sql_type_class(SqlTypeClass tc) { return !is_valid_sql_type_class(tc); }
+inline bool ob_is_numeric_tc(SqlTypeClass tc)
 {
   return (tc >= ObIntTC && tc <= ObNumberTC) || tc == ObBitTC || ObDecimalIntTC == tc;
 }
 
-inline bool ob_is_int_tc(ObObjType type) { return ObIntTC == ob_obj_type_class(type); }
-inline bool ob_is_uint_tc(ObObjType type) { return ObUIntTC == ob_obj_type_class(type); }
-inline bool ob_is_int_uint_tc(ObObjType type) { return ob_is_int_tc(type) || ob_is_uint_tc(type); }
-inline bool ob_is_float_tc(ObObjType type) { return ObFloatTC == ob_obj_type_class(type); }
-inline bool ob_is_double_tc(ObObjType type) { return ObDoubleTC == ob_obj_type_class(type); }
-inline bool ob_is_number_tc(ObObjType type) { return ObNumberTC == ob_obj_type_class(type); }
-inline bool ob_is_datetime_tc(ObObjType type) { return ObDateTimeTC == ob_obj_type_class(type); }
-inline bool ob_is_mysql_datetime_tc(ObObjType type) { return ObMySQLDateTimeTC == ob_obj_type_class(type); }
-inline bool ob_is_date_tc(ObObjType type) { return ObDateTC == ob_obj_type_class(type); }
-inline bool ob_is_mysql_date_tc(ObObjType type) { return ObMySQLDateTC == ob_obj_type_class(type); }
-inline bool ob_is_otimestampe_tc(ObObjType type) { return ObOTimestampTC == ob_obj_type_class(type); }
-inline bool ob_is_time_tc(ObObjType type) { return ObTimeTC == ob_obj_type_class(type); }
-inline bool ob_is_year_tc(ObObjType type) { return ObYearTC == ob_obj_type_class(type); }
-inline bool ob_is_string_tc(ObObjType type) { return ObStringTC == ob_obj_type_class(type); }
-inline bool ob_is_text_tc(ObObjType type) { return ObTextTC == ob_obj_type_class(type); }
-inline bool ob_is_bit_tc(ObObjType type) { return ObBitTC == ob_obj_type_class(type); }
-inline bool ob_is_raw_tc(ObObjType type) { return ObRawTC == ob_obj_type_class(type); }
-inline bool ob_is_interval_tc(ObObjType type) { return ObIntervalTC == ob_obj_type_class(type); }
-inline bool ob_is_json_tc(ObObjType type) { return ObJsonTC == ob_obj_type_class(type); }
-inline bool ob_is_geometry_tc(ObObjType type) { return ObGeometryTC == ob_obj_type_class(type); }
-inline bool ob_is_decimal_int_tc(ObObjType type) { return ObDecimalIntTC == ob_obj_type_class(type); }
-inline bool is_lob(ObObjType type) { return ob_is_text_tc(type); }
+inline bool ob_is_int_tc(SqlValueType type) { return ObIntTC == sql_type_class(type); }
+inline bool ob_is_uint_tc(SqlValueType type) { return ObUIntTC == sql_type_class(type); }
+inline bool ob_is_int_uint_tc(SqlValueType type) { return ob_is_int_tc(type) || ob_is_uint_tc(type); }
+inline bool ob_is_float_tc(SqlValueType type) { return ObFloatTC == sql_type_class(type); }
+inline bool ob_is_double_tc(SqlValueType type) { return ObDoubleTC == sql_type_class(type); }
+inline bool ob_is_number_tc(SqlValueType type) { return ObNumberTC == sql_type_class(type); }
+inline bool ob_is_datetime_tc(SqlValueType type) { return ObDateTimeTC == sql_type_class(type); }
+inline bool ob_is_mysql_datetime_tc(SqlValueType type) { return ObMySQLDateTimeTC == sql_type_class(type); }
+inline bool ob_is_date_tc(SqlValueType type) { return ObDateTC == sql_type_class(type); }
+inline bool ob_is_mysql_date_tc(SqlValueType type) { return ObMySQLDateTC == sql_type_class(type); }
+inline bool ob_is_otimestampe_tc(SqlValueType type) { return ObOTimestampTC == sql_type_class(type); }
+inline bool ob_is_time_tc(SqlValueType type) { return ObTimeTC == sql_type_class(type); }
+inline bool ob_is_year_tc(SqlValueType type) { return ObYearTC == sql_type_class(type); }
+inline bool ob_is_string_tc(SqlValueType type) { return ObStringTC == sql_type_class(type); }
+inline bool ob_is_text_tc(SqlValueType type) { return ObTextTC == sql_type_class(type); }
+inline bool ob_is_bit_tc(SqlValueType type) { return ObBitTC == sql_type_class(type); }
+inline bool ob_is_raw_tc(SqlValueType type) { return ObRawTC == sql_type_class(type); }
+inline bool ob_is_interval_tc(SqlValueType type) { return ObIntervalTC == sql_type_class(type); }
+inline bool ob_is_json_tc(SqlValueType type) { return ObJsonTC == sql_type_class(type); }
+inline bool ob_is_geometry_tc(SqlValueType type) { return ObGeometryTC == sql_type_class(type); }
+inline bool ob_is_decimal_int_tc(SqlValueType type) { return ObDecimalIntTC == sql_type_class(type); }
+inline bool is_lob(SqlValueType type) { return ob_is_text_tc(type); }
 
 // test type catalog
-inline bool ob_is_integer_type(ObObjType type) { return ObTinyIntType <= type && type <= ObUInt64Type; }
-inline bool ob_is_numeric_type(ObObjType type)
+inline bool ob_is_integer_type(SqlValueType type) { return ObTinyIntType <= type && type <= ObUInt64Type; }
+inline bool ob_is_numeric_type(SqlValueType type)
 {
   return (ObTinyIntType <= type && type <= ObUNumberType) || type == ObBitType
          || type == ObDecimalIntType;
 }
-inline bool ob_is_real_type(ObObjType type) { return ObFloatType <= type && type <= ObUDoubleType; }
-inline bool ob_is_float_type(ObObjType type) { return ObFloatType == type || ObUFloatType == type; }
-inline bool ob_is_double_type(ObObjType type) { return ObDoubleType == type || ObUDoubleType == type; }
-inline bool ob_is_accurate_numeric_type(ObObjType type)
+inline bool ob_is_real_type(SqlValueType type) { return ObFloatType <= type && type <= ObUDoubleType; }
+inline bool ob_is_float_type(SqlValueType type) { return ObFloatType == type || ObUFloatType == type; }
+inline bool ob_is_double_type(SqlValueType type) { return ObDoubleType == type || ObUDoubleType == type; }
+inline bool ob_is_accurate_numeric_type(SqlValueType type)
 {
   return (ObTinyIntType <= type && type <= ObUInt64Type)
          || (ob_is_number_tc(type)) || ObDecimalIntType == type;
 }
-inline bool ob_is_unsigned_type(ObObjType type)
+inline bool ob_is_unsigned_type(SqlValueType type)
 {
   return (ObUTinyIntType <= type && type <= ObUInt64Type)
           || ObYearType == type
@@ -1395,13 +1394,13 @@ inline bool ob_is_unsigned_type(ObObjType type)
           || ObUNumberType == type
           || ObBitType == type;
 }
-bool is_match_alter_integer_column_online_ddl_rules(const common::ObObjMeta& src_meta,
-                                                    const common::ObObjMeta& dst_meta);
-bool is_match_alter_string_column_online_ddl_rules(const common::ObObjMeta& src_meta,
-                                                   const common::ObObjMeta& dst_meta,
+bool is_match_alter_integer_column_online_ddl_rules(const common::SqlTypeMeta& src_meta,
+                                                    const common::SqlTypeMeta& dst_meta);
+bool is_match_alter_string_column_online_ddl_rules(const common::SqlTypeMeta& src_meta,
+                                                   const common::SqlTypeMeta& dst_meta,
                                                    const int32_t src_len,
                                                    const int32_t dst_len);
-inline void convert_unsigned_type_to_signed(ObObjType &type)
+inline void convert_unsigned_type_to_signed(SqlValueType &type)
 {
   switch(type) {
     case(ObUTinyIntType):
@@ -1433,133 +1432,133 @@ inline void convert_unsigned_type_to_signed(ObObjType &type)
   }
 }
 
-inline bool ob_is_number_or_decimal_int_tc(ObObjType type)
+inline bool ob_is_number_or_decimal_int_tc(SqlValueType type)
 {
   return ob_is_number_tc(type) || ob_is_decimal_int_tc(type);
 }
-inline bool ob_is_extended_temporal_type(ObObjType type)
+inline bool ob_is_extended_temporal_type(SqlValueType type)
 {
   return ObDateTimeType == type || ob_is_otimestampe_tc(type);
 }
 
 //this func means when eumset cast to this type, use numberic value
-inline bool ob_is_enumset_numeric_type(ObObjType type) { return (ob_is_numeric_type(type) || ObYearType == type); }
+inline bool ob_is_enumset_numeric_type(SqlValueType type) { return (ob_is_numeric_type(type) || ObYearType == type); }
 
-inline bool ob_is_enum_or_set_type(ObObjType type) { return ObEnumType == type || ObSetType == type; }
-inline bool ob_is_enum_or_set_inner_type(ObObjType type) { return ObEnumInnerType == type || ObSetInnerType == type; }
-inline bool ob_is_temporal_type(ObObjType type)
+inline bool ob_is_enum_or_set_type(SqlValueType type) { return ObEnumType == type || ObSetType == type; }
+inline bool ob_is_enum_or_set_inner_type(SqlValueType type) { return ObEnumInnerType == type || ObSetInnerType == type; }
+inline bool ob_is_temporal_type(SqlValueType type)
 { return (type >= ObDateTimeType && type <= ObYearType) || (type == ObMySQLDateType || type == ObMySQLDateTimeType); }
-inline bool ob_is_string_or_enumset_type(ObObjType type)
+inline bool ob_is_string_or_enumset_type(SqlValueType type)
 { return (type >= ObVarcharType && type <= ObHexStringType)
       || ObEnumType == type || ObSetType == type; }
-inline bool ob_is_otimestamp_type(const ObObjType type) { return false; }
-inline bool ob_is_varbinary_type(const ObObjType type, const ObCollationType cs_type)
+inline bool ob_is_otimestamp_type(const SqlValueType type) { return false; }
+inline bool ob_is_varbinary_type(const SqlValueType type, const ObCollationType cs_type)
 { return (ObVarcharType == type &&  CS_TYPE_BINARY == cs_type); }
-inline bool ob_is_varchar_char_type(const ObObjType type, const ObCollationType cs_type)
+inline bool ob_is_varchar_char_type(const SqlValueType type, const ObCollationType cs_type)
 { return (ObVarcharType == type || ObCharType == type) &&  CS_TYPE_BINARY != cs_type; }
-inline bool ob_is_varchar_type(const ObObjType type, const ObCollationType cs_type)
+inline bool ob_is_varchar_type(const SqlValueType type, const ObCollationType cs_type)
 { return ObVarcharType == type && CS_TYPE_BINARY != cs_type; }
 
 
-inline bool ob_is_binary(ObObjType type, ObCollationType cs_type)
+inline bool ob_is_binary(SqlValueType type, ObCollationType cs_type)
 {
   return (ObCharType == type && CS_TYPE_BINARY == cs_type);
 }
-inline bool ob_is_varbinary_or_binary(ObObjType type, ObCollationType cs_type)
+inline bool ob_is_varbinary_or_binary(SqlValueType type, ObCollationType cs_type)
 {
   return ob_is_varbinary_type(type, cs_type) || ob_is_binary(type, cs_type);
 }
-inline bool ob_is_varchar(ObObjType type, ObCollationType cs_type)
+inline bool ob_is_varchar(SqlValueType type, ObCollationType cs_type)
 {
   return ((type == static_cast<uint8_t>(ObVarcharType)) && (CS_TYPE_BINARY != cs_type));
 }
-inline bool ob_is_char(ObObjType type, ObCollationType cs_type)
+inline bool ob_is_char(SqlValueType type, ObCollationType cs_type)
 {
   return ((type == static_cast<uint8_t>(ObCharType)) && (CS_TYPE_BINARY != cs_type));
 }
-inline bool ob_is_varchar_or_char(ObObjType type, ObCollationType cs_type)
+inline bool ob_is_varchar_or_char(SqlValueType type, ObCollationType cs_type)
 {
   return ob_is_varchar(type, cs_type) || ob_is_char(type, cs_type);
 }
-inline bool ob_is_character_type(ObObjType type, ObCollationType cs_type)
+inline bool ob_is_character_type(SqlValueType type, ObCollationType cs_type)
 {
   return ob_is_varchar_or_char(type, cs_type);
 }
-inline bool ob_is_string_type(ObObjType type) { return ob_is_string_tc(type) || ob_is_text_tc(type); }
-inline bool ob_is_support_cmp_mem_str_type(ObObjType type, ObCollationType cs_type)
+inline bool ob_is_string_type(SqlValueType type) { return ob_is_string_tc(type) || ob_is_text_tc(type); }
+inline bool ob_is_support_cmp_mem_str_type(SqlValueType type, ObCollationType cs_type)
 {
   return (ob_is_string_tc(type) || type == ObTinyTextType) && cs_type == CS_TYPE_UTF8MB4_BIN;
 }
-inline bool ob_is_json(const ObObjType type) { return ObJsonType == type; }
-inline bool ob_is_string_or_lob_type(ObObjType type) {
+inline bool ob_is_json(const SqlValueType type) { return ObJsonType == type; }
+inline bool ob_is_string_or_lob_type(SqlValueType type) {
   return ob_is_string_tc(type) || ob_is_text_tc(type);
 }
-inline bool ob_is_clob(const ObObjType type, const ObCollationType cs_type) { return ObLongTextType == type && CS_TYPE_BINARY != cs_type; }
-inline bool ob_is_blob(const ObObjType type, const ObCollationType cs_type) { return ObTextTC == ob_obj_type_class(type) && CS_TYPE_BINARY == cs_type; }
-inline bool ob_is_text(const ObObjType type, const ObCollationType cs_type) { return ObTextTC == ob_obj_type_class(type) && CS_TYPE_BINARY != cs_type; }
-inline bool ob_is_null(const ObObjType type) { return ObNullType == type; }
-inline bool ob_is_extended_datetime_tc(ObObjType type) { return ob_is_otimestampe_tc(type) || ob_is_datetime_tc(type); }
-inline bool ob_is_enumset_tc(ObObjType type) { return ObEnumSetTC == ob_obj_type_class(type); }
-inline bool ob_is_enumset_inner_tc(ObObjType type) { return ObEnumSetInnerTC == ob_obj_type_class(type); }
-inline bool ob_is_extend(const ObObjType type) { return ObExtendType == type; }
-inline bool ob_is_accuracy_length_valid_tc(ObObjType type) { return ob_is_string_type(type) ||
+inline bool ob_is_clob(const SqlValueType type, const ObCollationType cs_type) { return ObLongTextType == type && CS_TYPE_BINARY != cs_type; }
+inline bool ob_is_blob(const SqlValueType type, const ObCollationType cs_type) { return ObTextTC == sql_type_class(type) && CS_TYPE_BINARY == cs_type; }
+inline bool ob_is_text(const SqlValueType type, const ObCollationType cs_type) { return ObTextTC == sql_type_class(type) && CS_TYPE_BINARY != cs_type; }
+inline bool ob_is_null(const SqlValueType type) { return ObNullType == type; }
+inline bool ob_is_extended_datetime_tc(SqlValueType type) { return ob_is_otimestampe_tc(type) || ob_is_datetime_tc(type); }
+inline bool ob_is_enumset_tc(SqlValueType type) { return ObEnumSetTC == sql_type_class(type); }
+inline bool ob_is_enumset_inner_tc(SqlValueType type) { return ObEnumSetInnerTC == sql_type_class(type); }
+inline bool ob_is_extend(const SqlValueType type) { return ObExtendType == type; }
+inline bool ob_is_accuracy_length_valid_tc(SqlValueType type) { return ob_is_string_type(type) ||
                                                              ob_is_enumset_tc(type) ||
                                                              ob_is_json_tc(type) ||
                                                              ob_is_geometry_tc(type); }
-inline bool ob_is_string_or_enumset_tc(ObObjType type) { return ObStringTC == ob_obj_type_class(type) || ob_is_enumset_tc(type); }
-inline bool ob_is_large_text(ObObjType type) { return ObTextType <= type && ObLongTextType >= type; }
-inline bool ob_is_datetime(const ObObjType type) { return ObDateTimeType == type; }
-inline bool ob_is_mysql_datetime(const ObObjType type) { return ObMySQLDateTimeType == type; }
-inline bool ob_is_var_len_type(const ObObjType type) {
+inline bool ob_is_string_or_enumset_tc(SqlValueType type) { return ObStringTC == sql_type_class(type) || ob_is_enumset_tc(type); }
+inline bool ob_is_large_text(SqlValueType type) { return ObTextType <= type && ObLongTextType >= type; }
+inline bool ob_is_datetime(const SqlValueType type) { return ObDateTimeType == type; }
+inline bool ob_is_mysql_datetime(const SqlValueType type) { return ObMySQLDateTimeType == type; }
+inline bool ob_is_var_len_type(const SqlValueType type) {
   return ob_is_string_type(type);
 }
-inline bool ob_is_collection_sql_type(const ObObjType type) { return ObCollectionSQLType == type; }
-inline bool is_lob_storage(const ObObjType type) { return ob_is_large_text(type)
+inline bool ob_is_collection_sql_type(const SqlValueType type) { return ObCollectionSQLType == type; }
+inline bool is_lob_storage(const SqlValueType type) { return ob_is_large_text(type)
                                                           || ob_is_json_tc(type)
                                                           || ob_is_geometry_tc(type)
                                                           || ob_is_collection_sql_type(type); }
-inline bool ob_is_geometry(const ObObjType type) { return ObGeometryType == type; }
+inline bool ob_is_geometry(const SqlValueType type) { return ObGeometryType == type; }
 
-inline bool ob_is_decimal_int(const ObObjType type) { return ObDecimalIntType == type; }
+inline bool ob_is_decimal_int(const SqlValueType type) { return ObDecimalIntType == type; }
 inline bool is_decimal_int_accuracy_valid(const int16_t precision, const int16_t scale)
 {
   return scale >= 0 && precision >= scale;
 }
-inline bool ob_is_user_defined_pl_type(const ObObjType type) { return ObExtendType == type; }
-inline bool ob_is_user_defined_type(const ObObjType type) {
+inline bool ob_is_user_defined_pl_type(const SqlValueType type) { return ObExtendType == type; }
+inline bool ob_is_user_defined_type(const SqlValueType type) {
   return ob_is_user_defined_pl_type(type);
 }
-inline bool ob_is_datetime_or_mysql_datetime(const ObObjType type)
+inline bool ob_is_datetime_or_mysql_datetime(const SqlValueType type)
 {
   return ObMySQLDateTimeType == type || ObDateTimeType == type;
 }
-inline bool ob_is_date_or_mysql_date(const ObObjType type)
+inline bool ob_is_date_or_mysql_date(const SqlValueType type)
 {
   return ObMySQLDateType == type || ObDateType == type;
 }
-inline bool ob_is_datetime_or_mysql_datetime_tc(ObObjType type)
+inline bool ob_is_datetime_or_mysql_datetime_tc(SqlValueType type)
 {
-  return ObDateTimeTC == ob_obj_type_class(type) || ObMySQLDateTimeTC == ob_obj_type_class(type);
+  return ObDateTimeTC == sql_type_class(type) || ObMySQLDateTimeTC == sql_type_class(type);
 }
-inline bool ob_is_mysql_compact_dates_type(const ObObjType type)
+inline bool ob_is_mysql_compact_dates_type(const SqlValueType type)
 {
   return ObMySQLDateType == type || ObMySQLDateTimeType == type;
 }
 
 // to_string adapter
 template<>
-inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const ObObjType &t)
+inline int databuff_print_obj(char *buf, const int64_t buf_len, int64_t &pos, const SqlValueType &t)
 {
-  return databuff_printf(buf, buf_len, pos, "\"%s\"", inner_obj_type_str(t));
+  return databuff_printf(buf, buf_len, pos, "\"%s\"", inner_sql_value_type_to_string(t));
 }
 template<>
 inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
-                                  const bool with_comma, const ObObjType &t)
+                                  const bool with_comma, const SqlValueType &t)
 {
-  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:\"%s\""), key, inner_obj_type_str(t));
+  return databuff_printf(buf, buf_len, pos, WITH_COMMA("%s:\"%s\""), key, inner_sql_value_type_to_string(t));
 }
 
-bool ob_can_static_cast(const ObObjType src, const ObObjType dst);
+bool ob_can_static_cast(const SqlValueType src, const SqlValueType dst);
 int find_type(const common::ObIArray<common::ObString> &type_infos, common::ObCollationType cs_type, const common::ObString &val, int32_t &pos);
 
 enum ObOTimestampMetaAttrType

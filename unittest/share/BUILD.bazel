@@ -1,0 +1,124 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "typed_datum_compare_cases",
+    srcs = ["test_typed_datum_compare.cpp"],
+    alwayslink = True,
+    deps = ["//src/share:datum", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_typed_datum_compare",
+    data = ["data/typed_values_compare.golden", "data/typed_values_specials.golden"],
+    linkstatic = True,
+    deps = [":typed_datum_compare_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_cast_support_cases",
+    srcs = ["test_datum_cast_support.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/share:object_cast",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_base",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_datum_cast_support",
+    linkstatic = True,
+    deps = [":datum_cast_support_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "enumset_datum_cases",
+    srcs = ["test_enumset_datum.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/share:object_cast",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_base",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_enumset_datum",
+    linkstatic = True,
+    linkopts = select({
+        "@platforms//os:linux": ["-Wl,--gc-sections"],
+        "//conditions:default": [],
+    }),
+    deps = [":enumset_datum_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "native_value_cast_cases",
+    srcs = ["test_native_value_cast.cpp"],
+    alwayslink = True,
+    deps = ["//src/share:object_cast", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_value_cast",
+    data = ["data/typed_values_compare.golden", "data/literal_value_cast.golden", "data/literal_value_cast_extra.golden", "data/literal_lob_temporal_inputs.golden", "data/literal_lob_temporal_cast.golden", "data/literal_lob_temporal_cast_extra.golden", "data/relational_value_compare.golden"],
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":native_value_cast_cases", "//src/share:share_runtime", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_string_accuracy_cases",
+    srcs = ["test_datum_string_accuracy.cpp"],
+    alwayslink = True,
+    deps = ["//src/share:object_cast", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_datum_string_accuracy",
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":datum_string_accuracy_cases", "//src/share:share_runtime", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_value_set_cases",
+    srcs = ["test_datum_value_set.cpp"],
+    alwayslink = True,
+    deps = ["//src/share:datum", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_datum_value_set",
+    data = ["data/typed_values_compare.golden"],
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":datum_value_set_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "native_column_schema_cases",
+    srcs = ["test_native_column_schema.cpp"],
+    alwayslink = True,
+    deps = ["//src/share:schema_default_test_runtime", "//src/share:schema_entities", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_column_schema",
+    data = ["data/typed_values_compare.golden", "data/column_schema.golden", "data/literal_lob_temporal_inputs.golden", "data/column_schema_lob_temporal.golden"],
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":native_column_schema_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "partition_schema_bounds_cases",
+    srcs = ["test_partition_schema_bounds.cpp"],
+    alwayslink = True,
+    deps = ["//src/share:schema_default_test_runtime", "//src/share:schema_entities", "//src/share:datum", "//src/share:value_cast_constants", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_partition_schema_bounds",
+    data = ["data/partition_bounds.golden"],
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":partition_schema_bounds_cases", "//src/oblib:oblib_test_runtime"],
+)

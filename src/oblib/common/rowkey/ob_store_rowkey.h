@@ -48,11 +48,13 @@ public:
   const ObRowkey &get_rowkey() const { return key_; }
 
   inline bool is_valid() const { return key_.is_valid(); }
-  inline int64_t get_obj_cnt() const { return key_.get_obj_cnt(); }
-  inline const ObObj *get_obj_ptr() const { return key_.get_obj_ptr(); }
-  inline ObObj *get_obj_ptr() { return key_.get_obj_ptr(); }
+  inline int64_t get_value_count() const { return key_.get_value_count(); }
+  inline const DatumValue *get_values() const { return key_.get_values(); }
+  const DatumValue &get_cell(int64_t index) const { return key_.get_cell(index); }
+  DatumValue &get_cell(int64_t index) { return key_.get_cell(index); }
+  inline DatumValue *get_values() { return key_.get_values(); }
 
-  inline int assign(ObObj *ptr, const int64_t cnt)
+  inline int assign(DatumValue *ptr, const int64_t cnt)
   {
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(nullptr == ptr || cnt <= 0)) {
@@ -88,6 +90,11 @@ public:
   inline int deserialize(ObIAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos)
   {
     return key_.deserialize(allocator, buf, data_len, pos);
+  }
+  inline int deserialize(ObIAllocator &owner, const char *buf, const int64_t data_len,
+                         int64_t &pos, bool check_zero)
+  {
+    return key_.deserialize(owner,buf,data_len,pos,check_zero);
   }
   inline int serialize(char *buf, int64_t buf_len, int64_t &pos) const
   {
@@ -211,12 +218,12 @@ public:
   inline bool is_min() const { return key_.is_min_row(); }
   inline void set_max() { *this = MAX_STORE_ROWKEY; }
   inline void set_min() { *this = MIN_STORE_ROWKEY; }
-  static ObObj MIN_OBJECT;
-  static ObObj MAX_OBJECT;
+  static DatumValue MIN_VALUE;
+  static DatumValue MAX_VALUE;
   static ObStoreRowkey MIN_STORE_ROWKEY;
   static ObStoreRowkey MAX_STORE_ROWKEY;
 private:
-  ObStoreRowkey(ObObj *ptr, const int64_t cnt)
+  ObStoreRowkey(DatumValue *ptr, const int64_t cnt)
   {
     key_.assign(ptr, cnt);
     hash_ = 0;
@@ -230,7 +237,7 @@ private:
   };
 
 private:
-  ObRowkey key_; // only used as a container for ObObjs
+  ObRowkey key_; // borrowed native typed-key container
   mutable uint64_t hash_;
   int64_t group_idx_;
 };

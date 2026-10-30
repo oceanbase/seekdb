@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_to_type.h"
 #include "src/sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
@@ -90,7 +91,7 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
-    const ObObj &in = type1.get_param();
+    const DatumValue &in = type1.get_param();
     ObCollationType cast_coll_type = CS_TYPE_INVALID;
     bool nonstring_to_string = false;
     ObCastMode cast_mode = CM_NONE;
@@ -119,8 +120,8 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
                        cast_mode,
                        cast_coll_type,
                        &res_accuracy);
-    ObObj out;
-    if (OB_FAIL(ObObjCaster::to_type(expect_type_, cast_ctx, in, out))) {
+    DatumValue out;
+    if (OB_FAIL(DatumValueCaster::to_type(expect_type_, cast_ctx, in, oballocator, out))) {
     } else {
       type.set_type(expect_type_);
       type.set_accuracy(res_accuracy);
@@ -167,7 +168,7 @@ int ObExprToType::calc_result_type_for_column(ObExprResType &type,
 
     if (ob_is_enumset_tc(type1.get_type())) {
       // There is no need to check whether it is enumset with subschema
-      ObObjType calc_type = get_enumset_calc_type(expect_type_, OB_INVALID_INDEX);
+      SqlValueType calc_type = get_enumset_calc_type(expect_type_, OB_INVALID_INDEX);
       if (OB_UNLIKELY(ObMaxType == calc_type)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "invalid type of parameter ", K(expect_type_), K(ret));

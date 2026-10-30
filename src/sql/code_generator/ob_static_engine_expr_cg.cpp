@@ -241,7 +241,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_exprs.count(); i++) {
     ObRawExpr *raw_expr = raw_exprs.at(i);
     ObExpr *rt_expr = get_rt_expr(*raw_expr);
-    const ObObjMeta &result_meta = raw_expr->get_result_meta();
+    const SqlTypeMeta &result_meta = raw_expr->get_result_meta();
     // init type_
     rt_expr->type_ = raw_expr->get_expr_type();
     rt_expr->batch_result_ = batch_size_ > 0 && raw_expr->is_vectorize_result();
@@ -278,7 +278,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         rt_expr->obj_meta_.set_scale(rt_expr->datum_meta_.length_semantics_);
       }
       if (OB_SUCC(ret) && ob_is_enumset_tc(result_meta.get_type())) {
-        ObObjMeta org_obj_meta;
+        SqlTypeMeta org_obj_meta;
         if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(raw_expr->get_result_type(),
                                                                op_cg_ctx_.session_,
                                                                org_obj_meta))) {
@@ -289,7 +289,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
       // init max_length_
       rt_expr->max_length_ = raw_expr->get_result_type().get_length();
       // init obj_datum_map_
-      rt_expr->obj_datum_map_ = ObDatum::get_obj_datum_map_type(result_meta.get_type());
+      rt_expr->obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(result_meta.get_type());
       if (ob_is_decimal_int(rt_expr->datum_meta_.type_)) {
         const int16_t precision = rt_expr->datum_meta_.precision_;
         const int16_t scale = rt_expr->datum_meta_.scale_;
@@ -1078,25 +1078,28 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
     for (int64_t j = 0; OB_SUCC(ret) && j < const_frames.at(i).expr_cnt_; j++) {
       ObRawExpr *raw_expr = exprs.at(expr_idx++);
       ObExpr *rt_expr = get_rt_expr(*raw_expr);
-      ObObj tmp_obj;
       if (!IS_CONST_LITERAL(raw_expr->get_expr_type())) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(ob_write_obj(allocator_,
-                                      static_cast<ObConstRawExpr *>(raw_expr)->get_value(),
-                                      tmp_obj))) {
       } else {
+        const DatumValue &source = static_cast<ObConstRawExpr *>(raw_expr)->get_value();
         const int64_t item_size = DATUM_EVAL_INFO_SIZE;
         ObDatum *datum = reinterpret_cast<ObDatum *>(frame_mem + j * item_size);
-        datum->ptr_ = frame_mem + rt_expr->res_buf_off_;
-        datum->from_obj(tmp_obj);
-        if (0 == datum->len_) {
-          datum->ptr_ = NULL;
+        // Fixed-width literals already have reserved frame storage. Keep them
+        // in that storage instead of adding an allocation per scalar.
+        if (!source.is_ext_sql_array() && source.datum_.len_ <= rt_expr->res_buf_len_) {
+          int64_t pos = 0;
+          OZ (datum->deep_copy(source.datum_, frame_mem + rt_expr->res_buf_off_, rt_expr->res_buf_len_, pos));
+          if (OB_SUCC(ret) && datum->len_ == 0) { datum->ptr_ = nullptr; }
         } else {
-          if (is_lob_storage(tmp_obj.get_type())) {
-            if (OB_FAIL(ob_adjust_in_memory_lob_datum(
-                    tmp_obj, rt_expr->obj_meta_, allocator_, datum))) {
-            }
-          }
+          DatumValue owned;
+          OZ (clone_typed_value(source, owned, allocator_));
+          OX (*datum = owned.datum_);
+        }
+        if (OB_SUCC(ret) && is_lob_storage(source.get_type())) {
+          // Header removal returns a slice, so it must inspect the plan-owned
+          // payload, never the AST's shorter-lived copy.
+          const DatumValue owned_view(*datum, source.meta_);
+          OZ (ob_adjust_in_memory_lob_datum(owned_view, rt_expr->obj_meta_, allocator_, datum));
         }
       }
     }

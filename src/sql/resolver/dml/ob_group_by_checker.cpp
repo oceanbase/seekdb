@@ -148,7 +148,7 @@ int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx
       if (OB_FAIL(const_param_info.const_idx_.push_back(param_pair.param_idx_))) {
       } else if (param_pair.param_idx_ < 0 || param_pair.param_idx_ >= param_store_->count()) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(const_param_info.const_params_.push_back(param_store_->at(param_pair.param_idx_)))) {
+      } else if (OB_FAIL(const_param_info.const_params_.push_back(param_store_->at(param_pair.param_idx_).value_view()))) {
       }
     }
     if (OB_FAIL(ret)) {

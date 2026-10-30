@@ -45,13 +45,6 @@ int ObExprVecChunk::calc_result_typeN(ObExprResType &type,
   return ret;
 }
  
-int ObExprVecChunk::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-   return OB_NOT_SUPPORTED;
-}
  
 int ObExprVecChunk::cg_expr(
     ObExprCGCtx &expr_cg_ctx,

@@ -72,7 +72,7 @@ int ObInfoSchemaDiskStatTable::set_ip(common::ObAddr *addr)
 int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_ISNULL(allocator_) || OB_ISNULL(cells)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator is NULL", KP(allocator_), KP(cells), K(ret));
@@ -99,28 +99,28 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
             int64_t reserved_size = 0;
             if (OB_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
             } else {
-              cells[cell_idx].set_int(OB_STORAGE_OBJECT_MGR.get_max_macro_block_count(reserved_size) *OB_STORAGE_OBJECT_MGR.get_macro_block_size());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, OB_STORAGE_OBJECT_MGR.get_max_macro_block_count(reserved_size) *OB_STORAGE_OBJECT_MGR.get_macro_block_size()) : ret);
             }
             break;
           }
           case ALLOCATED_SIZE: {
-            cells[cell_idx].set_int(OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() *OB_STORAGE_OBJECT_MGR.get_macro_block_size());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() *OB_STORAGE_OBJECT_MGR.get_macro_block_size()) : ret);
             break;
           }
           case USED_SIZE: {
-            cells[cell_idx].set_int(OB_STORAGE_OBJECT_MGR.get_used_macro_block_count() *OB_STORAGE_OBJECT_MGR.get_macro_block_size());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, OB_STORAGE_OBJECT_MGR.get_used_macro_block_count() *OB_STORAGE_OBJECT_MGR.get_macro_block_size()) : ret);
             break;
           }
           case FREE_SIZE: {
-            cells[cell_idx].set_int(OB_STORAGE_OBJECT_MGR.get_free_macro_block_count() *OB_STORAGE_OBJECT_MGR.get_macro_block_size());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, OB_STORAGE_OBJECT_MGR.get_free_macro_block_count() *OB_STORAGE_OBJECT_MGR.get_macro_block_size()) : ret);
             break;
           }
           case IS_DISK_VALID: {
-            cells[cell_idx].set_int(DEVICE_HEALTH_NORMAL != dhs ? 0 : 1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, DEVICE_HEALTH_NORMAL != dhs ? 0 : 1) : ret);
             break;
           }
           case DISK_ERROR_BEGIN_TS: {
-            cells[cell_idx].set_int(DEVICE_HEALTH_NORMAL != dhs ? data_disk_abnormal_time : 0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, DEVICE_HEALTH_NORMAL != dhs ? data_disk_abnormal_time : 0) : ret);
             break;
           }
           default: {

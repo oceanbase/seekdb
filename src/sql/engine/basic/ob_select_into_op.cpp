@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "ob_select_into_op.h"
+#include "sql/executor/ob_execute_result.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -35,9 +36,11 @@ namespace sql
 {
 
 OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
-OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
-    field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
-    escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
+OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_,
+    outfile_name_.datum_, outfile_name_.meta_,
+    field_str_.datum_, field_str_.meta_, line_str_.datum_, line_str_.meta_,
+    closed_cht_.datum_, closed_cht_.meta_, is_optional_, select_exprs_, is_single_, max_file_size_,
+    escaped_cht_.datum_, escaped_cht_.meta_, cs_type_, parallel_, buffer_size_, is_overwrite_,
     external_properties_);
 
 
@@ -119,21 +122,19 @@ int ObSelectIntoOp::init_csv_env()
 void ObSelectIntoOp::set_csv_format_options()
 {
   if (MY_SPEC.external_properties_.str_.empty()) {
-    field_str_ = MY_SPEC.field_str_;
-    line_str_ = MY_SPEC.line_str_;
+    field_str_ = MY_SPEC.field_str_.get_varchar();
+    line_str_ = MY_SPEC.line_str_.get_varchar();
     has_enclose_ = MY_SPEC.closed_cht_.get_val_len() > 0;
-    char_enclose_ = has_enclose_ ? MY_SPEC.closed_cht_.get_char().ptr()[0] : 0;
+    char_enclose_ = has_enclose_ ? MY_SPEC.closed_cht_.get_varchar().ptr()[0] : 0;
     is_optional_ = MY_SPEC.is_optional_;
     has_escape_ = MY_SPEC.escaped_cht_.get_val_len() > 0;
-    char_escape_ = has_escape_ ? MY_SPEC.escaped_cht_.get_char().ptr()[0] : 0;
+    char_escape_ = has_escape_ ? MY_SPEC.escaped_cht_.get_varchar().ptr()[0] : 0;
     cs_type_ = MY_SPEC.cs_type_;
   } else {
     is_optional_ = external_properties_.csv_format_.is_optional_;
     cs_type_ = ObCharset::get_default_collation(external_properties_.csv_format_.cs_type_);
-    field_str_.set_varchar(external_properties_.csv_format_.field_term_str_);
-    field_str_.set_collation_type(cs_type_);
-    line_str_.set_varchar(external_properties_.csv_format_.line_term_str_);
-    line_str_.set_collation_type(cs_type_);
+    field_str_ = external_properties_.csv_format_.field_term_str_;
+    line_str_ = external_properties_.csv_format_.line_term_str_;
     if (external_properties_.csv_format_.field_enclosed_char_ == INT64_MAX) { // null
       has_enclose_ = false;
       char_enclose_ = 0;
@@ -156,7 +157,7 @@ int ObSelectIntoOp::init_env_common()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   bool need_check = false;
-  file_name_ = MY_SPEC.outfile_name_;
+  file_name_.assign_value(MY_SPEC.outfile_name_);
   if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObSQLUtils::get_param_value(MY_SPEC.outfile_name_,
@@ -177,7 +178,7 @@ int ObSelectIntoOp::calc_outfile_path()
 {
   int ret = OB_SUCCESS;
   const ObItemType into_type = MY_SPEC.into_type_;
-  ObString path = file_name_.get_varchar().trim();
+  ObString path = file_name_.value_view().get_varchar().trim();
   if (T_INTO_OUTFILE == into_type && !MY_SPEC.is_single_ && OB_FAIL(calc_first_file_path(path))) {
   } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), path, basic_url_, true))) {
   }
@@ -336,12 +337,10 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
                                 int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  const ObObj &field_str = field_str_;
   char closed_cht = char_enclose_;
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
-  if (!is_first_row && line_str_.is_varying_len_char_type()) { // lines terminated by "a"
-    ret = databuff_printf(buf, buf_len, pos, "%.*s", line_str_.get_varchar().length(),
-                         line_str_.get_varchar().ptr());
+  if (!is_first_row && !line_str_.empty()) { // lines terminated by "a"
+    ret = databuff_printf(buf, buf_len, pos, "%.*s", line_str_.length(), line_str_.ptr());
   }
 
   for (int i = 0 ; OB_SUCC(ret) && i < select_exprs.count() ; i++) {
@@ -352,18 +351,17 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
       }
     }
     if (OB_SUCC(ret)) {
-      ObObj cell;
       ObDatum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(datum->to_obj(cell, expr->obj_meta_))) {
-      } else if (OB_FAIL(cell.print_plain_str_literal(buf, buf_len, pos))) {
+      } else if (OB_FAIL(DatumValue(*datum, expr->obj_meta_).print_plain_str_literal(
+                             buf, buf_len, pos))) {
       } else if (0 != closed_cht && (!is_optional_ || ob_is_string_type(expr->datum_meta_.type_))) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%c", closed_cht))) {
         }
       }
       // field terminated by "a"
-      if (OB_SUCC(ret) && i != select_exprs.count() - 1 && field_str.is_varying_len_char_type()) {
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s", field_str.get_varchar().length(), field_str.get_varchar().ptr()))) {
+      if (OB_SUCC(ret) && i != select_exprs.count() - 1 && !field_str_.empty()) {
+        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s", field_str_.length(), field_str_.ptr()))) {
         }
       }
     }
@@ -593,129 +591,220 @@ int ObSelectIntoOp::check_buf_sufficient(ObCsvFileWriter &data_writer,
   return ret;
 }
 
-int ObSelectIntoOp::write_obj_to_file(const ObObj &obj, ObCsvFileWriter &data_writer, bool need_escape)
+int ObSelectIntoOp::write_value_to_file(const DatumValue &value,
+                                        ObCsvFileWriter &data_writer,
+                                        bool need_escape)
 {
   int ret = OB_SUCCESS;
-  // binary collation do not require to escape when encode with base64/hex
-  if (obj.get_collation_type() == CS_TYPE_BINARY &&
+  // Binary hex/base64 formats are emitted by the native value printer. Do
+  // not run those bytes through the CSV escape scanner a second time.
+  if (value.get_collation_type() == CS_TYPE_BINARY &&
       (print_params_.binary_string_print_hex_ || print_params_.binary_string_print_base64_)) {
     need_escape = false;
   }
-
-  if ((obj.is_string_type() || obj.is_json() || obj.is_collection_sql_type()) && need_escape) {
-    if (OB_FAIL(print_str_or_json_with_escape(obj, data_writer))) {
+  // JSON and SQL collections need schema-aware rendering and inrow LOB data,
+  // both of which are available through DatumValue's native printer.
+  if (value.is_json() || value.is_collection_sql_type()) {
+    ret = print_complex_value_with_escape(value, data_writer, need_escape);
+  } else {
+    if (value.is_string_type() && need_escape) {
+      ret = print_value_with_escape(value, data_writer);
+    } else {
+      ret = print_normal_value_without_escape(value, data_writer);
     }
-  } else if (OB_FAIL(print_normal_obj_without_escape(obj, data_writer))) {
   }
   return ret;
 }
 
-int ObSelectIntoOp::print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWriter &data_writer)
+int ObSelectIntoOp::write_raw_string_to_file(const ObString &value,
+                                             ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
-  char* buf = NULL;
+  int64_t written = 0;
+  char *buf = NULL;
   int64_t buf_len = 0;
   int64_t pos = 0;
-  ObCharsetType src_type = ObCharset::charset_type_by_coll(obj.get_collation_type());
-  ObCharsetType dst_type = ObCharset::charset_type_by_coll(cs_type_);
+  while (OB_SUCC(ret) && written < value.length()) {
+    if (OB_FAIL(get_buf(buf, buf_len, pos, data_writer))) {
+    } else if (pos >= buf_len && !use_shared_buf_) {
+      if (OB_FAIL(data_writer.flush_buf())) {
+      } else {
+        pos = data_writer.get_curr_pos();
+      }
+    } else if (pos >= buf_len) {
+      if (OB_FAIL(resize_or_flush_shared_buf(data_writer, buf, buf_len, pos))) {
+      }
+    } else {
+      const int64_t copy_len = MIN(value.length() - written, buf_len - pos);
+      MEMCPY(buf + pos, value.ptr() + written, copy_len);
+      written += copy_len;
+      pos += copy_len;
+      data_writer.set_curr_pos(pos);
+    }
+  }
+  return ret;
+}
+
+int ObSelectIntoOp::print_complex_value_with_escape(const DatumValue &value,
+                                                     ObCsvFileWriter &data_writer,
+                                                     bool need_escape)
+{
+  int ret = OB_SUCCESS;
+  const ObCharsetType src_type = ObCharset::charset_type_by_coll(value.get_collation_type());
+  const ObCharsetType dst_type = ObCharset::charset_type_by_coll(cs_type_);
   escape_printer_.do_encode_ = !(src_type == CHARSET_BINARY || src_type == dst_type
                                  || src_type == CHARSET_INVALID);
-  escape_printer_.need_enclose_ = has_enclose_ && !obj.is_null();
-  escape_printer_.do_escape_ = true;
-  escape_printer_.print_hex_ = obj.get_collation_type() == CS_TYPE_BINARY
+  escape_printer_.need_enclose_ = need_escape && has_enclose_ && !value.is_null();
+  escape_printer_.do_escape_ = need_escape;
+  escape_printer_.print_hex_ = need_escape && value.get_collation_type() == CS_TYPE_BINARY
                                && print_params_.binary_string_print_hex_;
-  ObString str_to_escape;
+
+  char *json_buf = NULL;
+  int64_t json_buf_len = 0;
+  int64_t json_pos = 0;
+  if (need_escape) {
+    OZ(get_buf(escape_printer_.buf_, escape_printer_.buf_len_,
+               escape_printer_.pos_, data_writer));
+  }
+
+  DatumValue printable_value = value;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx_);
   common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
   const common::ObLobReadOptions *lob_read_options = nullptr;
-  if (OB_FAIL(get_buf(escape_printer_.buf_, escape_printer_.buf_len_, escape_printer_.pos_, data_writer))) {
-  } else if (obj.is_json() || obj.is_collection_sql_type()) {
-    ObObj inrow_obj = obj;
-    if (obj.is_lob_storage()
-        && OB_FAIL(get_exec_ctx().get_lob_read_options(lob_read_options))) {
-    } else if (obj.is_lob_storage()
-        && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
-                       obj, inrow_obj, lob_read_options, &temp_allocator))) {
-    } else if (obj.is_collection_sql_type()) {
-      ObSubSchemaValue sub_meta;
-      if (OB_FAIL((get_exec_ctx().get_sqludt_meta_by_subschema_id(obj.get_meta().get_subschema_id(), sub_meta)))) {
-      } else {
-        print_params_.coll_meta_ = reinterpret_cast<ObSqlCollectionInfo *>(sub_meta.value_);
-      }
+  if (OB_SUCC(ret) && value.is_lob_storage()) {
+    if (OB_FAIL(get_exec_ctx().get_lob_read_options(lob_read_options))) {
+    } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                           value, printable_value, lob_read_options, temp_allocator))) {
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(print_json_to_json_buf(inrow_obj, buf, buf_len, pos, data_writer))) {
+  }
+  if (OB_SUCC(ret) && value.is_collection_sql_type()) {
+    ObSubSchemaValue sub_meta;
+    if (OB_FAIL(get_exec_ctx().get_sqludt_meta_by_subschema_id(value.get_subschema_id(), sub_meta))) {
     } else {
-      str_to_escape.assign_ptr(buf, pos);
-      escape_printer_.do_encode_ = false;
+      print_params_.coll_meta_ = reinterpret_cast<ObSqlCollectionInfo *>(sub_meta.value_);
     }
   } else {
-    str_to_escape = obj.get_varchar();
+    print_params_.coll_meta_ = nullptr;
   }
-  if (OB_SUCC(ret) && !use_shared_buf_ && OB_FAIL(check_buf_sufficient(data_writer,
-                                                                       escape_printer_.buf_,
-                                                                       escape_printer_.buf_len_,
-                                                                       escape_printer_.pos_,
-                                                                       str_to_escape.length()))) {
+
+  if (OB_SUCC(ret)) {
+    OZ(print_json_to_json_buf(printable_value, json_buf, json_buf_len,
+                              json_pos, data_writer));
+  }
+  if (OB_SUCC(ret)) {
+    ObString rendered_value(json_pos, json_buf);
+    if (!need_escape) {
+      // The native printer already emitted the configured raw representation.
+      OZ(write_raw_string_to_file(rendered_value, data_writer));
+    } else {
+      // JSON/collection formatting produces the final SQL text itself. The
+      // escaping pass must retain the legacy behavior and skip charset encoding.
+      escape_printer_.do_encode_ = false;
+      if (!use_shared_buf_ && OB_FAIL(check_buf_sufficient(data_writer, escape_printer_.buf_,
+                                                           escape_printer_.buf_len_, escape_printer_.pos_,
+                                                           rendered_value.length()))) {
+      }
+      if (OB_SUCC(ret) && !use_shared_buf_) {
+        if (OB_FAIL(ObFastStringScanner::foreach_char(rendered_value, src_type,
+                                                      escape_printer_, false,
+                                                      escape_printer_.ignore_convert_failed_))) {
+          if (OB_SIZE_OVERFLOW != ret) {
+          } else if (OB_FAIL(data_writer.flush_buf())) {
+          } else if (OB_FALSE_IT(escape_printer_.pos_ = data_writer.get_curr_pos())) {
+          } else if (OB_FAIL(ObFastStringScanner::foreach_char(rendered_value, src_type,
+                                                               escape_printer_, false,
+                                                               escape_printer_.ignore_convert_failed_))) {
+            if (OB_SIZE_OVERFLOW != ret) {
+            } else if (OB_FAIL(use_shared_buf(data_writer, escape_printer_.buf_,
+                                              escape_printer_.buf_len_, escape_printer_.pos_))) {
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret) && use_shared_buf_) {
+        do {
+          if (OB_FAIL(ObFastStringScanner::foreach_char(rendered_value, src_type,
+                                                        escape_printer_, false,
+                                                        escape_printer_.ignore_convert_failed_))) {
+          }
+        } while (OB_SIZE_OVERFLOW == ret && OB_SUCC(resize_or_flush_shared_buf(
+            data_writer, escape_printer_.buf_, escape_printer_.buf_len_, escape_printer_.pos_)));
+      }
+      if (OB_SUCC(ret)) {
+        data_writer.set_curr_pos(escape_printer_.pos_);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSelectIntoOp::print_value_with_escape(const DatumValue &value,
+                                           ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  ObCharsetType src_type = ObCharset::charset_type_by_coll(value.get_collation_type());
+  ObCharsetType dst_type = ObCharset::charset_type_by_coll(cs_type_);
+  escape_printer_.do_encode_ = !(src_type == CHARSET_BINARY || src_type == dst_type
+                                 || src_type == CHARSET_INVALID);
+  escape_printer_.need_enclose_ = has_enclose_ && !value.is_null();
+  escape_printer_.do_escape_ = true;
+  escape_printer_.print_hex_ = value.get_collation_type() == CS_TYPE_BINARY
+                               && print_params_.binary_string_print_hex_;
+  const ObString source = value.get_varchar();
+  if (OB_FAIL(get_buf(escape_printer_.buf_, escape_printer_.buf_len_,
+                      escape_printer_.pos_, data_writer))) {
+  } else if (!use_shared_buf_ && OB_FAIL(check_buf_sufficient(data_writer,
+                                                              escape_printer_.buf_,
+                                                              escape_printer_.buf_len_,
+                                                              escape_printer_.pos_,
+                                                              source.length()))) {
   }
   if (OB_SUCC(ret) && !use_shared_buf_) {
-    if (OB_FAIL(ObFastStringScanner::foreach_char(str_to_escape,
-                                                  src_type,
-                                                  escape_printer_,
+    if (OB_FAIL(ObFastStringScanner::foreach_char(source, src_type, escape_printer_,
                                                   escape_printer_.do_encode_,
                                                   escape_printer_.ignore_convert_failed_))) {
       if (OB_SIZE_OVERFLOW != ret) {
       } else if (OB_FAIL(data_writer.flush_buf())) {
       } else if (OB_FALSE_IT(escape_printer_.pos_ = data_writer.get_curr_pos())) {
-      } else if (OB_FAIL(ObFastStringScanner::foreach_char(str_to_escape,
-                                                           src_type,
-                                                           escape_printer_,
+      } else if (OB_FAIL(ObFastStringScanner::foreach_char(source, src_type, escape_printer_,
                                                            escape_printer_.do_encode_,
                                                            escape_printer_.ignore_convert_failed_))) {
         if (OB_SIZE_OVERFLOW != ret) {
-        } else if (OB_FAIL(use_shared_buf(data_writer,
-                                          escape_printer_.buf_,
-                                          escape_printer_.buf_len_,
-                                          escape_printer_.pos_))) {
+        } else if (OB_FAIL(use_shared_buf(data_writer, escape_printer_.buf_,
+                                          escape_printer_.buf_len_, escape_printer_.pos_))) {
         }
       }
     }
   }
   if (OB_SUCC(ret) && use_shared_buf_) {
     do {
-      if (OB_FAIL(ObFastStringScanner::foreach_char(str_to_escape,
-                                                    src_type,
-                                                    escape_printer_,
+      if (OB_FAIL(ObFastStringScanner::foreach_char(source, src_type, escape_printer_,
                                                     escape_printer_.do_encode_,
                                                     escape_printer_.ignore_convert_failed_))) {
       }
-    } while (OB_SIZE_OVERFLOW == ret && OB_SUCC(resize_or_flush_shared_buf(data_writer,
-                                                                           escape_printer_.buf_,
-                                                                           escape_printer_.buf_len_,
-                                                                           escape_printer_.pos_)));
-    if (OB_FAIL(ret)) {
-    }
+    } while (OB_SIZE_OVERFLOW == ret && OB_SUCC(resize_or_flush_shared_buf(
+        data_writer, escape_printer_.buf_, escape_printer_.buf_len_, escape_printer_.pos_)));
   }
   if (OB_SUCC(ret)) {
     data_writer.set_curr_pos(escape_printer_.pos_);
   }
-
   return ret;
 }
 
-int ObSelectIntoOp::print_normal_obj_without_escape(const ObObj &obj, ObCsvFileWriter &data_writer)
+int ObSelectIntoOp::print_normal_value_without_escape(const DatumValue &value,
+                                                      ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
-  char* buf = NULL;
+  char *buf = NULL;
   int64_t buf_len = 0;
   int64_t pos = 0;
   OZ(get_buf(buf, buf_len, pos, data_writer));
   if (OB_SUCC(ret) && !use_shared_buf_) {
-    if (OB_FAIL(obj.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
+    if (OB_FAIL(value.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
       if (OB_SIZE_OVERFLOW != ret) {
       } else if (OB_FAIL(data_writer.flush_buf())) {
       } else if (OB_FALSE_IT(pos = data_writer.get_curr_pos())) {
-      } else if (OB_FAIL(obj.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
+      } else if (OB_FAIL(value.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
         if (OB_SIZE_OVERFLOW != ret) {
         } else if (OB_FAIL(use_shared_buf(data_writer, buf, buf_len, pos))) {
         }
@@ -724,12 +813,10 @@ int ObSelectIntoOp::print_normal_obj_without_escape(const ObObj &obj, ObCsvFileW
   }
   if (OB_SUCC(ret) && use_shared_buf_) {
     do {
-      if (OB_FAIL(obj.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
+      if (OB_FAIL(value.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
       }
     } while (OB_SIZE_OVERFLOW == ret
              && OB_SUCC(resize_or_flush_shared_buf(data_writer, buf, buf_len, pos)));
-    if (OB_FAIL(ret)) {
-    }
   }
   if (OB_SUCC(ret)) {
     data_writer.set_curr_pos(pos);
@@ -737,7 +824,7 @@ int ObSelectIntoOp::print_normal_obj_without_escape(const ObObj &obj, ObCsvFileW
   return ret;
 }
 
-int ObSelectIntoOp::print_json_to_json_buf(const ObObj &obj,
+int ObSelectIntoOp::print_json_to_json_buf(const DatumValue &value,
                                            char* &buf,
                                            int64_t &buf_len,
                                            int64_t &pos,
@@ -748,7 +835,7 @@ int ObSelectIntoOp::print_json_to_json_buf(const ObObj &obj,
   buf_len = get_json_buf_len();
   pos = 0;
   do {
-    if (OB_FAIL(obj.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
+    if (OB_FAIL(value.print_plain_str_literal(buf, buf_len, pos, print_params_))) {
     }
   } while (OB_SIZE_OVERFLOW == ret
            && OB_SUCC(resize_buf(buf, buf_len, pos, data_writer.get_curr_pos(), true)));
@@ -757,19 +844,19 @@ int ObSelectIntoOp::print_json_to_json_buf(const ObObj &obj,
   return ret;
 }
 
-int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
+int ObSelectIntoOp::write_lob_to_file(const DatumValue &value,
                                       const ObExpr &expr,
                                       const ObDatum &datum,
                                       ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
-  ObCharsetType src_type = ObCharset::charset_type_by_coll(obj.get_collation_type());
+  ObCharsetType src_type = ObCharset::charset_type_by_coll(value.get_collation_type());
   ObCharsetType dst_type = ObCharset::charset_type_by_coll(cs_type_);
   escape_printer_.need_enclose_ = has_enclose_;
   escape_printer_.do_encode_ = !(src_type == CHARSET_BINARY || src_type == dst_type
                                  || src_type == CHARSET_INVALID);
   escape_printer_.do_escape_ = has_escape_;
-  escape_printer_.print_hex_ = obj.get_collation_type() == CS_TYPE_BINARY
+  escape_printer_.print_hex_ = value.get_collation_type() == CS_TYPE_BINARY
                                && print_params_.binary_string_print_hex_;
   ObDatumMeta input_meta = expr.datum_meta_;
   ObTextStringIterState state;
@@ -901,7 +988,7 @@ int ObSelectIntoOp::write_single_char_to_file(const char *wchar, ObCsvFileWriter
   return ret;
 }
 
-int ObSelectIntoOp::print_lob_field(const ObObj &obj,
+int ObSelectIntoOp::print_lob_field(const DatumValue &value,
                                     const ObExpr &expr,
                                     const ObDatum &datum,
                                     ObCsvFileWriter &data_writer)
@@ -910,32 +997,32 @@ int ObSelectIntoOp::print_lob_field(const ObObj &obj,
   if (has_enclose_) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
   }
-  OZ(write_lob_to_file(obj, expr, datum, data_writer));
+  OZ(write_lob_to_file(value, expr, datum, data_writer));
   if (has_enclose_) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
   }
   return ret;
 }
 
-int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
+int ObSelectIntoOp::print_field(const DatumValue &value, ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
   char char_n = 'N';
-  const bool need_enclose = has_enclose_ && !obj.is_null()
-                            && (!is_optional_ || obj.is_string_type() || obj.is_collection_sql_type()
-                                || obj.is_json() || obj.is_geometry() || obj.is_date()
-                                || obj.is_time() || obj.is_timestamp() || obj.is_datetime()
-                                || obj.is_mysql_date() || obj.is_mysql_datetime());
+  const bool need_enclose = has_enclose_ && !value.is_null()
+                            && (!is_optional_ || value.is_string_type() || value.is_collection_sql_type()
+                                || value.is_json() || value.is_geometry() || value.is_date()
+                                || value.is_time() || value.is_timestamp() || value.is_datetime()
+                                || value.is_mysql_date() || value.is_mysql_datetime());
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
   }
   if (!has_escape_) {
-    OZ(write_obj_to_file(obj, data_writer, false));
-  } else if (obj.is_null()) {
+    OZ(write_value_to_file(value, data_writer, false));
+  } else if (value.is_null()) {
     OZ(write_single_char_to_file(&char_escape_, data_writer));
     OZ(write_single_char_to_file(&char_n, data_writer));
   } else {
-    OZ(write_obj_to_file(obj, data_writer, true));
+    OZ(write_value_to_file(value, data_writer, true));
   }
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
@@ -948,7 +1035,6 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
   int ret = OB_SUCCESS;
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
   ObDatum *datum = NULL;
-  ObObj obj;
   ObCsvFileWriter *csv_data_writer = NULL;
   if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
     ret = OB_ERR_UNEXPECTED;
@@ -959,21 +1045,20 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
     } else if (OB_FAIL(select_exprs.at(i)->eval(eval_ctx_, datum))) {
     } else if (OB_ISNULL(datum)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(datum->to_obj(obj,
-                                     select_exprs.at(i)->obj_meta_,
-                                     select_exprs.at(i)->obj_datum_map_))) {
-    } else if (!ob_is_text_tc(select_exprs.at(i)->obj_meta_.get_type()) || obj.is_null()) {
-      OZ(print_field(obj, *csv_data_writer));
+    } else if (!ob_is_text_tc(select_exprs.at(i)->obj_meta_.get_type()) || datum->is_null()) {
+      DatumValue value(*datum, select_exprs.at(i)->obj_meta_);
+      OZ(print_field(value, *csv_data_writer));
     } else { // text tc
-      OZ(print_lob_field(obj, *select_exprs.at(i), *datum, *csv_data_writer));
+      DatumValue value(*datum, select_exprs.at(i)->obj_meta_);
+      OZ(print_lob_field(value, *select_exprs.at(i), *datum, *csv_data_writer));
     }
     // print field terminator
     if (OB_SUCC(ret) && i != select_exprs.count() - 1) {
-      OZ(write_obj_to_file(field_str_, *csv_data_writer));
+      OZ(write_raw_string_to_file(field_str_, *csv_data_writer));
     }
   }
   // print line terminator
-  OZ(write_obj_to_file(line_str_, *csv_data_writer));
+  OZ(write_raw_string_to_file(line_str_, *csv_data_writer));
   // check if need split file
   OZ(check_csv_file_size(*csv_data_writer));
   // clear shared buffer
@@ -990,7 +1075,6 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
   ObArray<ObDatumVector> datum_vectors;
   ObDatum *datum = NULL;
-  ObObj obj;
   ObCsvFileWriter *csv_data_writer = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_FAIL(select_exprs.at(i)->eval_batch(eval_ctx_, *brs.skip_, brs.size_))) {
@@ -1010,21 +1094,20 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
       for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < select_exprs.count(); ++col_idx) {
         if (OB_ISNULL(datum = datum_vectors.at(col_idx).at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(datum->to_obj(obj,
-                                         select_exprs.at(col_idx)->obj_meta_,
-                                         select_exprs.at(col_idx)->obj_datum_map_))) {
-        } else if (!ob_is_text_tc(select_exprs.at(col_idx)->obj_meta_.get_type()) || obj.is_null()) {
-          OZ(print_field(obj, *csv_data_writer));
+        } else if (!ob_is_text_tc(select_exprs.at(col_idx)->obj_meta_.get_type()) || datum->is_null()) {
+          DatumValue value(*datum, select_exprs.at(col_idx)->obj_meta_);
+          OZ(print_field(value, *csv_data_writer));
         } else { // text tc
-          OZ(print_lob_field(obj, *select_exprs.at(col_idx), *datum, *csv_data_writer));
+          DatumValue value(*datum, select_exprs.at(col_idx)->obj_meta_);
+          OZ(print_lob_field(value, *select_exprs.at(col_idx), *datum, *csv_data_writer));
         }
         // print field terminator
         if (OB_SUCC(ret) && col_idx != select_exprs.count() - 1) {
-          OZ(write_obj_to_file(field_str_, *csv_data_writer));
+          OZ(write_raw_string_to_file(field_str_, *csv_data_writer));
         }
       }
       // print line terminator
-      OZ(write_obj_to_file(line_str_, *csv_data_writer));
+      OZ(write_raw_string_to_file(line_str_, *csv_data_writer));
       // check if need split file
       OZ(check_csv_file_size(*csv_data_writer));
       // clear shared buffer
@@ -1053,7 +1136,7 @@ int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_row_str(buf_len, is_first_, buf, pos))) {
   } else if (is_first_) { // create file
-    if (OB_FAIL(data_writer->file_appender_.create(file_name_.get_varchar(), true))) {
+    if (OB_FAIL(data_writer->file_appender_.create(file_name_.value_view().get_varchar(), true))) {
     } else {
       is_first_ = false;
     }
@@ -1079,19 +1162,22 @@ int ObSelectIntoOp::into_varlist()
   } else {
     for (int i = 0 ; i < user_vars.count(); ++i) {
       const ObString &var_name = user_vars.at(i);
-      ObObj obj;
+      DatumValue value;
       ObDatum *datum = NULL;
       if (OB_FAIL(select_exprs.at(i)->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(datum->to_obj(obj, select_exprs.at(i)->obj_meta_))) {
-      } else if (obj.is_lob_storage()
+      } else if (OB_FAIL(ResultRowView::project_value(*datum,
+                     select_exprs.at(i)->obj_meta_,
+                     ObDatum::get_sql_value_datum_map_type(select_exprs.at(i)->obj_meta_.get_type()),
+                     SqlTypeMeta(), value, true /*keep_null_collation*/))) {
+      } else if (value.is_lob_storage()
           && OB_FAIL(ctx_.get_lob_read_options(lob_read_options))) {
-      } else if (obj.is_lob_storage()
+      } else if (value.is_lob_storage()
           // outrow lob can not be assigned to user var, so convert outrow to inrow lob
           // user var has independent memory, so using temporary memory here is fine
           && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
-                         obj, obj, lob_read_options, &lob_tmp_allocator,
+                         value, value, lob_read_options, lob_tmp_allocator,
                          true/*allow_persist_inrow*/))) {
-      } else if (OB_FAIL(ObVariableSetExecutor::set_user_variable(obj, var_name,
+      } else if (OB_FAIL(ObVariableSetExecutor::set_user_variable(value, var_name,
                   ctx_.get_my_session()))) {
       }
     }
@@ -1099,15 +1185,14 @@ int ObSelectIntoOp::into_varlist()
   return ret;
 }
 
-int ObSelectIntoOp::extract_fisrt_wchar_from_varhcar(const ObObj &obj, int32_t &wchar)
+int ObSelectIntoOp::extract_fisrt_wchar_from_varhcar(const ObString &str,
+                                                     ObCollationType coll_type,
+                                                     int32_t &wchar)
 {
   int ret = OB_SUCCESS;
   int32_t length = 0;
-  if (obj.is_varying_len_char_type()) {
-    ObString str = obj.get_varchar();
-    if (str.length() > 0) {
-      ret = ObCharset::mb_wc(obj.get_collation_type(), str.ptr(), str.length(), length, wchar);
-    }
+  if (str.length() > 0) {
+    ret = ObCharset::mb_wc(coll_type, str.ptr(), str.length(), length, wchar);
   }
   return ret;
 }
@@ -1142,8 +1227,8 @@ int ObSelectIntoOp::prepare_escape_printer()
   int32_t wchar_line = 0;
   int32_t wchar_zero = '\0';
   int32_t wchar_replace = 0;
-  OZ(extract_fisrt_wchar_from_varhcar(field_str_, wchar_field));
-  OZ(extract_fisrt_wchar_from_varhcar(line_str_, wchar_line));
+  OZ(extract_fisrt_wchar_from_varhcar(field_str_, cs_type_, wchar_field));
+  OZ(extract_fisrt_wchar_from_varhcar(line_str_, cs_type_, wchar_line));
   OZ(ObCharset::get_replace_character(cs_type_, wchar_replace));
   // wc->mb
   if (OB_ISNULL(buf = static_cast<char*>(ctx_.get_allocator().alloc(buf_len)))) {
@@ -1215,7 +1300,7 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 #endif
     ret = OB_FILE_NOT_EXIST;
   } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
-                                                                SYS_VAR_SECURE_FILE_PRIV,
+                                                                share::SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure_file_priv, actual_path))) {

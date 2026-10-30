@@ -54,7 +54,7 @@ public:
   /* code for cast accuracy check */
   template<typename Obj>
   static int check_default_val_accuracy(const ObAccuracy &accuracy,
-                                        const ObObjType &type,
+                                        const SqlValueType &type,
                                         const Obj *obj);
 
   DECLARE_SET_LOCAL_SESSION_VARS;
@@ -62,8 +62,8 @@ public:
 private:
   /* cast wrapper to dst type with accuracy check*/
   static int get_cast_ret(int ret);
-  static int cast_to_int(ObIJsonBase *j_base, ObObjType dst_type, int64_t &val);
-  static int cast_to_uint(ObIJsonBase *j_base, ObObjType dst_type, uint64_t &val);
+  static int cast_to_int(ObIJsonBase *j_base, SqlValueType dst_type, int64_t &val);
+  static int cast_to_uint(ObIJsonBase *j_base, SqlValueType dst_type, uint64_t &val);
   static int cast_to_datetime(ObIJsonBase *j_base,
                               common::ObIAllocator *allocator,
                               const ObBasicSessionInfo *session,
@@ -81,7 +81,7 @@ private:
                                ObEvalCtx &ctx,
                                const ObExpr *expr,
                                common::ObAccuracy &accuracy,
-                               ObObjType dst_type,
+                               SqlValueType dst_type,
                                ObOTimestampData &out_val,
                                uint8_t &is_type_cast);
   static int cast_to_date(ObIJsonBase *j_base, int32_t &val, uint8_t &is_type_cast);
@@ -89,12 +89,12 @@ private:
                           common::ObAccuracy &accuracy,
                           int64_t &val);
   static int cast_to_year(ObIJsonBase *j_base, uint8_t &val);
-  static int cast_to_float(ObIJsonBase *j_base, ObObjType dst_type, float &val);
-  static int cast_to_double(ObIJsonBase *j_base, ObObjType dst_type, double &val);
+  static int cast_to_float(ObIJsonBase *j_base, SqlValueType dst_type, float &val);
+  static int cast_to_double(ObIJsonBase *j_base, SqlValueType dst_type, double &val);
   static int cast_to_number(common::ObIAllocator *allocator,
                             ObIJsonBase *j_base,
                             common::ObAccuracy &accuracy,
-                            ObObjType dst_type,
+                            SqlValueType dst_type,
                             number::ObNumber &val,
                             uint8_t &is_type_cast);
   static int cast_to_string(common::ObIAllocator *allocator,
@@ -102,7 +102,7 @@ private:
                             ObCollationType in_cs_type,
                             ObCollationType dst_cs_type,
                             common::ObAccuracy &accuracy,
-                            ObObjType dst_type,
+                            SqlValueType dst_type,
                             ObString &val,
                             uint8_t &is_type_cast,
                             uint8_t is_truncate);
@@ -116,7 +116,7 @@ private:
                                       bool &is_cover_by_error,
                                       const ObAccuracy &accuracy,
                                       uint8_t &type,
-                                      ObObjType dst_type);
+                                      SqlValueType dst_type);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }
@@ -138,9 +138,6 @@ private:
   static inline void set_val(ObDatum &res, ObDatum *val)
   { res.set_datum(*val); }
 
-  // old sql engine
-  static inline void set_val(ObObj &res, ObObj *val)
-  { res = *val; }                     
   static int get_default_value(ObExpr *expr,
                                   ObEvalCtx &ctx,
                                   const ObAccuracy &accuracy,

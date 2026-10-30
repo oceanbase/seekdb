@@ -86,7 +86,7 @@ private:
       common::ObDatum *datums) const;
 
   template <typename T>
-  inline int get_delta(const ObObjType &obj_type, const common::ObDatum &datum, uint64_t &delta) const
+  inline int get_delta(const SqlValueType &obj_type, const common::ObDatum &datum, uint64_t &delta) const
   {
     UNUSEDx(datum, delta);
     int ret = common::OB_ERR_UNEXPECTED;
@@ -147,7 +147,7 @@ OB_INLINE int ObIntegerBaseDiffDecoder::init(
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else {
     const int64_t store_size = get_type_size_map()[column_header.get_store_obj_type()];
-    ObObjTypeStoreClass sc = get_store_class_map()[ob_obj_type_class(column_header.get_store_obj_type())];
+    SqlValueTypeStoreClass sc = get_store_class_map()[sql_type_class(column_header.get_store_obj_type())];
     if (ObIntSC != sc && ObUIntSC != sc) {
       ret = common::OB_INNER_STAT_ERROR;
       STORAGE_LOG(WARN, "not supported store class", K(ret), K(column_header), K(sc));

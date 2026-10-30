@@ -59,7 +59,7 @@ public:
   bool skip_child();
 private:
   int wrap_type_to_str_if_necessary(ObRawExpr *expr,
-                                    common::ObObjType calc_type,
+                                    common::SqlValueType calc_type,
                                     bool is_same_need,
                                     ObSysFunRawExpr *&wrapped_expr);
   int wrap_target_list(ObSelectStmt &stmt);
@@ -67,7 +67,7 @@ private:
   int wrap_value_vector(ObInsertStmt &stmt);
   int wrap_nullif_expr(ObSysFunRawExpr &expr);
   bool can_wrap_type_to_str(const ObRawExpr &expr) const;
-  int wrap_param_expr(ObIArray<ObRawExpr*> &param_exprs, ObObjType dest_typ);
+  int wrap_param_expr(ObIArray<ObRawExpr*> &param_exprs, SqlValueType dest_typ);
   static bool has_enumset_expr_need_wrap(const ObRawExpr &expr);
 private:
   ObDMLStmt *cur_stmt_;

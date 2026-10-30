@@ -19,6 +19,7 @@
 #include "lib/list/ob_obj_store.h"
 #include "lib/allocator/ob_allocator.h"
 #include "common/object/ob_object.h"
+#include "common/datum/datum_core.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
 #include "share/geo/ob_geo_common.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
@@ -217,6 +218,7 @@ public:
   struct ExprFinalInfo {
     ExprFinalInfo()
     : flags_(0),
+      const_meta_(),
       param_idx_(OB_INVALID_ID),
       related_raw_expr_(nullptr)
     {}
@@ -232,9 +234,11 @@ public:
         uint32_t reserved_:      18;
       };
     };
+    // Uses the existing four-byte padding between flags and the value slot.
+    common::SqlTypeMeta const_meta_;
     union {
       int64_t param_idx_;
-      common::ObObj* const_val_;
+      common::ObDatum* const_val_;
       ObTempExpr *temp_expr_;
     };
     ObRawExpr *related_raw_expr_;
@@ -422,7 +426,7 @@ public:
   virtual int get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                          common::ObIAllocator &allocator,
                                          ObExecContext &exec_ctx,
-                                         const ParamStore &param_store,
+                                         const common::DatumParamStore &param_store,
                                          int64_t range_buffer_idx,
                                          void *range_buffer,
                                          ObQueryRangeArray &ranges,
@@ -530,18 +534,19 @@ public:
                      ObRawExpr *extra_value_expr = nullptr);
   int set_general_nlj_range_extraction(const ObIArray<ObFastFinalPos> &pos_arr);
   const ObIArray<ObFastFinalPos>& get_general_nlj_range_extraction() const { return fast_final_pos_arr_; }
-  static int is_precise_like_range(const ObObjParam &pattern, char escape, bool &is_precise);
+  static int is_precise_like_range(SqlValueType type, const ObString &pattern, ObCollationType collation,
+                                   char escape, bool &is_precise);
   static bool check_like_range_precise(const ObString &pattern_str,
                                        const char *max_str_buf,
                                        const size_t max_str_len,
                                        const char escape);
   static bool can_be_extract_range(ObItemType cmp_type,
                                    const ObRawExprResType &col_type,
-                                   const ObObjMeta &calc_meta,
-                                   ObObjType data_type,
+                                   const SqlTypeMeta &calc_meta,
+                                   SqlValueType data_type,
                                    bool &always_true);
   static bool can_domain_be_extract_range(const ObDomainOpType &op_type, const ObRawExprResType &col_type,
-                                          const ObObjMeta &res_type, common::ObObjType data_type,
+                                          const SqlTypeMeta &res_type, common::SqlValueType data_type,
                                           bool &always_true);
   static common::ObDomainOpType get_geo_relation(ObItemType type);
   static common::ObDomainOpType get_domain_op_type(ObItemType type);

@@ -88,39 +88,44 @@ int ObDASMVILookupIter::inner_get_next_row()
 int ObDASMVILookupIter::save_rowkey()
 {
   int ret = OB_SUCCESS;
-
   const ObDASScanCtDef *index_table_ctdef = static_cast<const ObDASScanCtDef*>(index_ctdef_);
-  const ObDASScanCtDef *data_table_ctdef = static_cast<const ObDASScanCtDef*>(lookup_ctdef_);
-  
-  ObDASScanIter *scan_iter = static_cast<ObDASScanIter *>(data_table_iter_);
-  ObTableScanParam &scan_param = scan_iter->get_scan_param(); 
-  
-  int64_t rowkey_cnt = index_table_ctdef->rowkey_exprs_.count();
-  ObExpr *doc_id_expr = index_table_ctdef->result_output_.at(rowkey_cnt);
-  ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
-  if (OB_UNLIKELY(doc_id_datum.is_null())) {
+  if (OB_ISNULL(index_table_ctdef) || OB_ISNULL(lookup_ctdef_) || OB_ISNULL(lookup_rtdef_)
+      || OB_ISNULL(lookup_rtdef_->eval_ctx_) || OB_ISNULL(data_table_iter_)
+      || data_table_iter_->get_type() != DAS_ITER_SCAN) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj *obj_ptr = nullptr;
-    ObArenaAllocator &allocator = get_arena_allocator();
-    if (OB_ISNULL(obj_ptr = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+    const int64_t rowkey_cnt = index_table_ctdef->rowkey_exprs_.count();
+    ObExpr *doc_id_expr = nullptr;
+    if (OB_UNLIKELY(rowkey_cnt >= index_table_ctdef->result_output_.count())
+        || OB_ISNULL(doc_id_expr = index_table_ctdef->result_output_.at(rowkey_cnt))) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      obj_ptr = new(obj_ptr) ObObj;
-
-      if (OB_FAIL(doc_id_datum.to_obj(*obj_ptr, doc_id_expr->obj_meta_, doc_id_expr->obj_datum_map_))) {
+      const ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
+      // DOC_ID() and its hidden column are binary VARCHAR(16). This lookup
+      // always targets the real doc-id auxiliary table. Keep that invariant
+      // explicit so the generic scan helper cannot select its old-value path.
+      if (OB_UNLIKELY(doc_id_datum.is_null()
+          || doc_id_expr->obj_meta_.get_type() != ObVarcharType
+          || doc_id_expr->obj_meta_.get_cs_type() != CS_TYPE_BINARY
+          || doc_id_expr->obj_datum_map_ != OBJ_DATUM_STRING
+          || doc_id_datum.len_ != OB_DOC_ID_COLUMN_BYTE_LENGTH
+          || is_virtual_table(lookup_ctdef_->ref_table_id_))) {
+        ret = OB_ERR_UNEXPECTED;
       } else {
-        ObRowkey aux_table_rowkey(obj_ptr, 1);
-        ObNewRange lookup_range;
-        if (OB_FAIL(lookup_range.build_range(lookup_ctdef_->ref_table_id_, aux_table_rowkey))) {
-        } else if (OB_FAIL(scan_param.key_ranges_.push_back(lookup_range))) {
+        ObArenaAllocator &allocator = get_arena_allocator();
+        ObSEArray<ObExpr *, 1> doc_id_exprs;
+        if (OB_FAIL(doc_id_exprs.push_back(doc_id_expr))) {
         } else {
-          scan_param.is_get_ = true;
+          ObDASScanIter *scan_iter = static_cast<ObDASScanIter *>(data_table_iter_);
+          // The lookup arena survives until the data scan consumes its keys.
+          // The helper owns each published payload there, independently of
+          // the index expression frame, with the same default group 0.
+          ret = scan_iter->set_scan_datum_rowkey(lookup_rtdef_->eval_ctx_, doc_id_exprs,
+                                                lookup_ctdef_, &allocator, 0);
         }
       }
     }
   }
-
   return ret;
 }
 

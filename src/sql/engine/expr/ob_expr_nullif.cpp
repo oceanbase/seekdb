@@ -73,7 +73,7 @@ int ObExprNullif::se_deduce_type(ObExprResType &type,
                                  ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  type.set_meta(type1.get_obj_meta());
+  type.set_meta(type1.get_sql_type_meta());
   type.set_accuracy(type1.get_accuracy());
   if (ob_is_real_type(type.get_type()) && SCALE_UNKNOWN_YET != type1.get_scale()) {
     type.set_precision(static_cast<ObPrecision>(obmysql::ObMySQLUtil::float_length(type1.get_scale())));
@@ -88,7 +88,7 @@ int ObExprNullif::se_deduce_type(ObExprResType &type,
   OZ(calc_cmp_type2(cmp_type, type1, type2, type_ctx));
   if (OB_SUCC(ret)) {
     if (ob_is_enumset_tc(type1.get_type()) || ob_is_enumset_tc(type2.get_type())) {
-      ObObjType calc_type = get_enumset_calc_type(cmp_type.get_calc_type(), -1);
+      SqlValueType calc_type = get_enumset_calc_type(cmp_type.get_calc_type(), -1);
       CK(ObMaxType != calc_type);
       if (OB_SUCC(ret)) {
         cmp_type.set_calc_type(calc_type);
@@ -144,7 +144,7 @@ int ObExprNullif::set_extra_info(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   } else if (OB_ISNULL(expr_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
+    const SqlTypeMeta &cmp_meta = raw_expr.get_extra_calc_meta();
     ObSQLUtils::get_default_cast_mode(is_explicit_cast, result_flag,
                                       expr_cg_ctx.session_->get_stmt_type(),
                                       expr_cg_ctx.session_->is_ignore_stmt(),
@@ -166,7 +166,7 @@ int ObExprNullif::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   int ret = OB_SUCCESS;
   CK(2 == rt_expr.arg_cnt_);
   const uint32_t param_num = rt_expr.arg_cnt_;
-  const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
+  const SqlTypeMeta &cmp_meta = raw_expr.get_extra_calc_meta();
   ObSQLMode sql_mode = expr_cg_ctx.session_->get_sql_mode();
   const ObLocalSessionVar *local_vars = NULL;
   if (ObNullType == rt_expr.args_[0]->datum_meta_.type_) {

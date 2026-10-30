@@ -31,7 +31,7 @@ public:
   virtual ~ObDBMSHybridVectorMySql() {}
 
 #define DECLARE_FUNC(func) \
-  static int func(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int func(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result);
   DECLARE_FUNC(search);
   DECLARE_FUNC(get_sql);
 #undef DECLARE_FUNC

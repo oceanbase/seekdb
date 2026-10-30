@@ -495,6 +495,7 @@ SHARE_STANDALONE_SOURCES = [
 ]
 
 SHARE_DATUM_STANDALONE_SOURCES = [
+    "src/share/datum/typed_datum_compare.cpp",
     "src/share/datum/ob_datum_funcs.cpp",
     "src/share/datum/ob_datum_funcs_compilation/ob_datum_funcs_all.cpp",
     "src/share/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_0.cpp",

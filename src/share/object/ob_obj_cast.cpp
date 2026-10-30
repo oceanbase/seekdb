@@ -21,6 +21,11 @@
 #define memmem ob_memmem
 #endif
 #include "ob_obj_cast.h"
+#include <type_traits>
+#include "common/object/ob_cmp_op.h" // ObCmpOp and CO_* operators are shared metadata.
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include "share/object/datum_cast_frame.h"
 #include "common/enumset/ob_enum_set_meta.h"
 #include "common/json_type/ob_json_bin.h"
 #include "common/json_type/ob_json_parse.h"  // ObJsonParser, previously hidden behind the exec_ctx include chain(free within lib)
@@ -45,7 +50,7 @@
 #define DO_SCALE_DECIMAL_INT(in_obj, in_scale, out_obj)                                            \
   do {                                                                                             \
     ObDecimalIntBuilder tmp_dec;                                                                   \
-    ObObj tmp_obj;                                                                                 \
+    std::remove_reference_t<decltype(out_obj)> tmp_obj;                                                                                 \
     ObAccuracy res_acc = *params.res_accuracy_;                                                    \
     char *buf = nullptr;                                                                           \
     int64_t pos = 0;                                                                               \
@@ -72,7 +77,7 @@ namespace common
 using namespace number;
 
 static int init_lob_text_iter(ObTextStringIter &iter,
-                              ObObjCastParams &params)
+                              DatumCastParams &params)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params.lob_read_service_)) {
@@ -84,28 +89,36 @@ static int init_lob_text_iter(ObTextStringIter &iter,
   return ret;
 }
 
-static int read_real_lob_data(ObObjCastParams &params,
-                              const ObObj &obj,
-                              ObString &data)
+template <typename Value>
+static int read_real_lob_data(DatumCastParams &params, const Value &value, ObString &data)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(params.lob_read_service_)) {
-    ret = lob_helper::read_real_string_data(
-        params.allocator_v2_, obj, data, nullptr);
+  data = value.get_string();
+  const ObLobCommon *lob = reinterpret_cast<const ObLobCommon *>(data.ptr());
+  if (value.get_meta().is_null()) {
+    data.reset();
+  } else if (!value.is_lob_storage()) {
+  } else if (value.has_lob_header() && data.length() >= sizeof(ObLobCommon)
+             && !lob->is_mem_loc_ && lob->in_row_) {
+    data.assign_ptr(lob->get_inrow_data_ptr(),
+        static_cast<int32_t>(lob->get_byte_size(data.length())));
+  } else if (params.lob_read_service_ == nullptr) {
+    ret = lob_helper::read_real_string_data(params.allocator_v2_, value.get_type(),
+        value.get_collation_type(), value.has_lob_header(), data, nullptr);
   } else {
     const ObLobReadOptions options(*params.lob_read_service_);
-    ret = lob_helper::read_real_string_data(
-        params.allocator_v2_, obj, data, &options);
+    ret = lob_helper::read_real_string_data(params.allocator_v2_, value.get_type(),
+        value.get_collation_type(), value.has_lob_header(), data, &options);
   }
   return ret;
 }
 
 static const int64_t MAX_DOUBLE_STRICT_PRINT_SIZE = 512;
 
-// ObObjType values intentionally match the parser's literal type tags.  Keep
+// SqlValueType values intentionally match the parser's literal type tags.  Keep
 // the historical user-error text here without introducing a Share -> Query
 // dependency on sql/parser/type_name.c.
-static const char *legacy_cast_error_type_name(const ObObjType type)
+static const char *legacy_cast_error_type_name(const SqlValueType type)
 {
   static const char *TYPE_NAMES[] = {
     "T_NULL", "T_TINYINT", "T_SMALLINT", "T_MEDIUMINT", "T_INT32", "T_INT",
@@ -141,159 +154,27 @@ static ObDateSqlMode get_date_sql_mode(const ObCastMode cast_mode) {
         CM_IS_EXPLICIT_CAST(cast_mode) ? false : CM_IS_NO_ZERO_IN_DATE(cast_mode);
   return date_sql_mode;
 }
-static int cast_identity(const ObObjType expect_type,
-                         ObObjCastParams &params,
-                         const ObObj &in,
-                         ObObj &out,
-                         const ObCastMode cast_mode)
-{
-  UNUSED(expect_type);
-  UNUSED(params);
-  UNUSED(cast_mode);
-  if (&in != &out) {
-    out = in;
-  }
-  return OB_SUCCESS;
-}
 
-static int cast_not_support(const ObObjType expect_type,
-                            ObObjCastParams &params,
-                            const ObObj &in,
-                            ObObj &out,
-                            const ObCastMode cast_mode)
-{
-  UNUSED(params);
-  char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE] = {0};
-  (void)snprintf(err_msg, sizeof(err_msg), "%s cast to %s",
-                 legacy_cast_error_type_name(in.get_type()),
-                 legacy_cast_error_type_name(expect_type));
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg);
-  LOG_WARN_RET(OB_NOT_SUPPORTED, "not supported obj type convert",
-            K(expect_type), K(in), K(out), K(cast_mode));
-  return OB_NOT_SUPPORTED;
-}
 
-static int cast_not_expected(const ObObjType expect_type,
-                             ObObjCastParams &params,
-                             const ObObj &in,
-                             ObObj &out,
-                             const ObCastMode cast_mode)
-{
-  UNUSED(params);
-  LOG_WARN_RET(OB_ERR_UNEXPECTED, "not expected obj type convert",
-            K(expect_type), K(in), K(out), K(cast_mode));
-  return OB_ERR_UNEXPECTED;
-}
 
-static int cast_inconsistent_types(const ObObjType expect_type,
-                                   ObObjCastParams &params,
-                                   const ObObj &in,
-                                   ObObj &out,
-                                   const ObCastMode cast_mode)
-{
-  UNUSED(params);
-  UNUSED(out);
-  UNUSED(cast_mode);
-  LOG_ERROR_RET(OB_ERR_INVALID_TYPE_FOR_OP, "inconsistent datatypes", "expected", expect_type, "got", in.get_type());
-  return OB_ERR_INVALID_TYPE_FOR_OP;
-}
 
-static int cast_extend_types_not_support(const ObObjType expect_type,
-                                         ObObjCastParams &params,
-                                         const ObObj &in,
-                                         ObObj &out,
-                                         const ObCastMode cast_mode)
-{
-  UNUSED(params);
-  UNUSED(out);
-  UNUSED(cast_mode);
-  int ret = OB_SUCCESS;
-  ret = OB_ERR_UNEXPECTED;
-  return ret;
-}
 
-static int cast_inconsistent_types_json(const ObObjType expect_type,
-                                            ObObjCastParams &params,
-                                            const ObObj &in,
-                                            ObObj &out,
-                                            const ObCastMode cast_mode)
-{
-  UNUSED(params);
-  UNUSED(out);
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ret = OB_ERR_INVALID_INPUT;
-  } else {
-    LOG_ERROR("inconsistent datatypes", "expected", expect_type, "got", in.get_type());
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  }
-  return ret;
-}
 
-static int cast_inconsistent_type_json_explicit(const ObObjType expect_type,
-                                            ObObjCastParams &params,
-                                            const ObObj &in,
-                                            ObObj &out,
-                                            const ObCastMode cast_mode)
-{
-  UNUSED(params);
-  UNUSED(out);
-  int ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  LOG_ERROR("inconsistent datatypes", "expected", expect_type, "got", in.get_type());
-  return ret;
-}
 
-static int cast_not_support_enum_set(const ObExpectType &expect_type,
-                                     ObObjCastParams &params,
-                                     const ObObj &in,
-                                     ObObj &out)
-{
-  UNUSED(params);
-  LOG_WARN_RET(OB_NOT_SUPPORTED, "not supported obj type convert", K(expect_type), K(in), K(out));
-  return OB_NOT_SUPPORTED;
-}
 
-static int cast_identity_enum_set(const ObExpectType &expect_type,
-                                  ObObjCastParams &params,
-                                  const ObObj &in,
-                                  ObObj &out)
-{
-  UNUSED(expect_type);
-  UNUSED(params);
-  if (&in != &out) {
-    out = in;
-  }
-  return OB_SUCCESS;
-}
 
-static int cast_not_expected_enum_set(const ObExpectType &expect_type,
-                                      ObObjCastParams &params,
-                                      const ObObj &in,
-                                      ObObj &out)
-{
-  UNUSED(params);
-  LOG_WARN_RET(common::OB_ERR_UNEXPECTED, "not expected obj type convert", K(expect_type), K(in), K(out));
-  return OB_ERR_UNEXPECTED;
-}
 
-static int unknown_other(const ObObjType expect_type,
-                         ObObjCastParams &params,
-                         const ObObj &in,
-                         ObObj &out,
-                         const ObCastMode cast_mode)
-{
-  return cast_not_support(expect_type, params, in, out, cast_mode);
-}
 
 ////////////////////////////////////////////////////////////////
 // Utility func
 
 // %align_offset is used in mysql mode to align blob to other charset.
-static int copy_string(const ObObjCastParams &params,
-                       const ObObjType type,
+template <typename Value>
+static int copy_string(const DatumCastParams &params,
+                       const SqlValueType type,
                        const char *str,
                        int64_t len,
-                       ObObj &obj,
+                       Value &obj,
                        int64_t align_offset = 0)
 {
   int ret = OB_SUCCESS;
@@ -334,10 +215,11 @@ static int copy_string(const ObObjCastParams &params,
   return ret;
 }
 
-static int copy_string(const ObObjCastParams &params,
-                       const ObObjType type,
+template <typename Value>
+static int copy_string(const DatumCastParams &params,
+                       const SqlValueType type,
                        const ObString &str,
-                       ObObj &obj,
+                       Value &obj,
                        int64_t align_offset = 0)
 {
   return copy_string(params, type, str.ptr(), str.length(), obj, align_offset);
@@ -385,7 +267,7 @@ static int convert_string_collation(const ObString &in,
                                     const ObCollationType in_collation,
                                     ObString &out,
                                     const ObCollationType out_collation,
-                                    ObObjCastParams &params)
+                                    DatumCastParams &params)
 {
   int ret = OB_SUCCESS;
   if (!ObCharset::is_valid_collation(in_collation)
@@ -481,7 +363,7 @@ OB_INLINE int get_cast_ret(const ObCastMode cast_mode,
 #define SET_RES_ENUM(res)         SET_RES_OBJ(res, enum, , , value, 0)
 #define SET_RES_SET(res)          SET_RES_OBJ(res, set, , , value, 0)
 #define SET_RES_OTIMESTAMP(res)   SET_RES_OBJ(res, otimestamp_value, expect_type, COMMA, value, ObOTimestampData())
-//Here the macro corresponding to SET_RES_XXXTYPE has been added and needs to be included in the ObObjCaster::get_zero_value() interface to obtain the zero value for the corresponding type
+// Add matching SET_RES_XXXTYPE handling when introducing a new cast target.
 
 
 #define SET_RES_ACCURACY(res_precision, res_scale, res_length) \
@@ -639,361 +521,59 @@ ObPrecision get_precision_for_integer(T value)
   return static_cast<ObPrecision>((iter - (bound_info + BOUND_INFO_START_POS)) * flag + 1);
 }
 
-int ObHexUtils::unhex(const ObString &text, ObCastCtx &cast_ctx, ObObj &result)
-{
-  int ret = OB_SUCCESS;
-  ObString str_result;
-  char *buf = NULL;
-  const bool need_fill_zero = (1 == text.length() % 2);
-  const int32_t tmp_length = text.length() / 2 + need_fill_zero;
-  int32_t alloc_length = (0 == tmp_length ? 1 : tmp_length);
-  if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(cast_ctx.allocator_v2_->alloc(alloc_length)))) {
-    result.set_null();
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc memory failed", K(alloc_length), K(ret));
-  } else {
-    int32_t i = 0;
-    char c1 = 0;
-    char c2 = 0;
-    if (text.length() > 0) {
-      if (need_fill_zero) {
-        c1 = '0';
-        c2 = text[0];
-        i = 0;
-      } else {
-        c1 = text[0];
-        c2 = text[1];
-        i = 1;
-      }
-    }
-    while (OB_SUCC(ret) && i < text.length()) {
-      if (isxdigit(c1) && isxdigit(c2)) {
-        buf[i / 2] = (char)((get_xdigit(c1) << 4) | get_xdigit(c2));
-        if (i + 2 < text.length()) {
-          c1 = text[++i];
-          c2 = text[++i];
-        } else {
-          break;
-        }
-      } else {
-        ret = OB_ERR_INVALID_HEX_NUMBER;
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      str_result.assign_ptr(buf, tmp_length);
-      result.set_varchar(str_result);
-    }
-  }
-  return ret;
-}
-
-int ObHexUtils::hex(const ObString &text, ObCastCtx &cast_ctx, ObObj &result)
-{
-  int ret = OB_SUCCESS;
-  ObString str_result;
-  char *buf = NULL;
-  const int32_t alloc_length = text.empty() ? 1 : text.length() * 2;
-  if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(
-              cast_ctx.allocator_v2_->alloc(alloc_length)))) {
-    result.set_null();
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc memory failed", K(ret), K(alloc_length));
-  } else {
-    static const char *HEXCHARS = "0123456789ABCDEF";
-    int32_t pos = 0;
-    for (int32_t i = 0; i < text.length(); ++i) {
-      buf[pos++] = HEXCHARS[text[i] >> 4 & 0xF];
-      buf[pos++] = HEXCHARS[text[i] & 0xF];
-    }
-    str_result.assign_ptr(buf, pos);
-    result.set_varchar(str_result);
-    LOG_DEBUG("succ to hex", K(text), "length", text.length(), K(str_result));
-  }
-  return ret;
-}
-
-int ObHexUtils::hex_for_mysql(const uint64_t uint_val, common::ObCastCtx &cast_ctx, common::ObObj &result)
-{
-
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-  const int32_t MAX_INT64_LEN = 20;
-  if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(buf = static_cast<char *>(
-              cast_ctx.allocator_v2_->alloc(MAX_INT64_LEN)))) {
-    result.set_null();
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc memory failed", K(ret));
-  } else {
-    int pos = snprintf(buf, MAX_INT64_LEN, "%lX", uint_val);
-    if (OB_UNLIKELY(pos <= 0) || OB_UNLIKELY(pos >= MAX_INT64_LEN)) {
-      ret = OB_SIZE_OVERFLOW;
-      LOG_ERROR("size is overflow", K(ret), K(uint_val));
-    } else {
-      ObString str_result(pos, buf);
-      result.set_varchar(str_result);
-    }
-  }
-  return ret;
-}
-
-
-// RAWTOHEX converts supported scalar values to their raw byte representation
-// and returns the hexadecimal text form without modifying the underlying data bytes.
-int ObHexUtils::rawtohex(const ObObj &text, ObCastCtx &cast_ctx, ObObj &result)
-{
-  int ret = OB_SUCCESS;
-
-  if (text.is_null()) {
-    result.set_null();
-  } else {
-    ObString str;
-    ObObj num_obj;
-    char *splice_num_str = NULL; // Used for splicing number type metadata Desc and digits_ pointing to the actual stored data
-    ObOTimestampData time_value;
-    switch (text.get_type()) {
-      // TODO: keep this consistent with raw byte dumps and support dump func @yanhua
-      case ObTinyIntType:
-      case ObSmallIntType:
-      case ObInt32Type:
-      case ObIntType: {
-        int64_t int_value = text.get_int();
-        number::ObNumber nmb;
-        if (OB_FAIL(nmb.from(int_value, cast_ctx))) {
-        } else {
-          num_obj.set_number(ObNumberType, nmb);
-          int32_t alloc_len = static_cast<int32_t>(sizeof(num_obj.get_number_desc()) + num_obj.get_number_byte_length());
-          if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-            ret = OB_INVALID_ARGUMENT;
-          } else if (OB_ISNULL(splice_num_str = static_cast<char *>(cast_ctx.allocator_v2_->alloc(alloc_len)))) {
-            result.set_null();
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_ERROR("alloc memory failed", K(ret), K(alloc_len));
-          } else {
-            MEMCPY(splice_num_str, &(num_obj.get_number_desc()), sizeof(num_obj.get_number_desc()));
-            MEMCPY(splice_num_str + sizeof(num_obj.get_number_desc()), num_obj.get_data_ptr(), num_obj.get_number_byte_length());
-            str.assign_ptr(static_cast<const char *>(splice_num_str), alloc_len);
-          }
-          LOG_DEBUG("succ to int_number", K(ret), K(int_value), "type", num_obj.get_type(), K(nmb), K(str));
-        }
-        break;
-      }
-      case ObFloatType: {
-        float float_value = text.get_float();
-        number::ObNumber nmb;
-        ObPrecision res_precision = -1;
-        ObScale res_scale = -1;
-        char buf[MAX_DOUBLE_STRICT_PRINT_SIZE];
-        MEMSET(buf, 0, MAX_DOUBLE_STRICT_PRINT_SIZE);
-        int64_t length = ob_gcvt_opt(float_value, OB_GCVT_ARG_FLOAT, static_cast<int32_t>(sizeof(buf) - 1),
-                                     buf, NULL, TRUE);
-        ObString float_str(sizeof(buf), static_cast<int32_t>(length), buf);
-        if (OB_FAIL(nmb.from_sci_opt(float_str.ptr(), float_str.length(),
-                                     *cast_ctx.allocator_v2_, &res_precision, &res_scale))) {
-        } else {
-          num_obj.set_number(ObNumberType, nmb);
-          int32_t alloc_len = static_cast<int32_t>(sizeof(num_obj.get_number_desc()) + num_obj.get_number_byte_length());
-          if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-            ret = OB_INVALID_ARGUMENT;
-          } else if (OB_ISNULL(splice_num_str = static_cast<char *>(cast_ctx.allocator_v2_->alloc(alloc_len)))) {
-            result.set_null();
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_ERROR("alloc memory failed", K(ret), K(alloc_len));
-          } else {
-            MEMCPY(splice_num_str, &(num_obj.get_number_desc()), sizeof(num_obj.get_number_desc()));
-            MEMCPY(splice_num_str + sizeof(num_obj.get_number_desc()), num_obj.get_data_ptr(), num_obj.get_number_byte_length());
-            str.assign_ptr(static_cast<const char *>(splice_num_str), alloc_len);
-          }
-        }
-        break;
-      }
-      case ObDoubleType: {
-        double double_value = text.get_double();
-        number::ObNumber nmb;
-        ObPrecision res_precision = -1;
-        ObScale res_scale = -1;
-        char buf[MAX_DOUBLE_STRICT_PRINT_SIZE];
-        MEMSET(buf, 0, MAX_DOUBLE_STRICT_PRINT_SIZE);
-        int64_t length = ob_gcvt_opt(double_value, OB_GCVT_ARG_DOUBLE, static_cast<int32_t>(sizeof(buf) - 1),
-                                     buf, NULL, TRUE);
-        ObString double_str(sizeof(buf), static_cast<int32_t>(length), buf);
-        if (OB_FAIL(nmb.from_sci_opt(double_str.ptr(), double_str.length(),
-                                     *cast_ctx.allocator_v2_, &res_precision, &res_scale))) {
-        } else {
-          num_obj.set_number(ObNumberType, nmb);
-          int32_t alloc_len = static_cast<int32_t>(sizeof(num_obj.get_number_desc()) + num_obj.get_number_byte_length());
-          if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-            ret = OB_INVALID_ARGUMENT;
-          } else if (OB_ISNULL(splice_num_str = static_cast<char *>(cast_ctx.allocator_v2_->alloc(alloc_len)))) {
-            result.set_null();
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_ERROR("alloc memory failed", K(ret), K(alloc_len));
-          } else {
-            MEMCPY(splice_num_str, &(num_obj.get_number_desc()), sizeof(num_obj.get_number_desc()));
-            MEMCPY(splice_num_str + sizeof(num_obj.get_number_desc()), num_obj.get_data_ptr(), num_obj.get_number_byte_length());
-            str.assign_ptr(static_cast<const char *>(splice_num_str), alloc_len);
-          }
-        }
-        break;
-      }
-      case ObNumberType: {
-        int32_t alloc_len = static_cast<int32_t>(sizeof(text.get_number_desc()) + text.get_number_byte_length());
-        if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (OB_ISNULL(splice_num_str = static_cast<char *>(cast_ctx.allocator_v2_->alloc(alloc_len)))) {
-          result.set_null();
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_ERROR("alloc memory failed", K(ret), K(alloc_len));
-        } else {
-          MEMCPY(splice_num_str, &(text.get_number_desc()), sizeof(text.get_number_desc()));
-          MEMCPY(splice_num_str + sizeof(text.get_number_desc()), text.get_data_ptr(), text.get_number_byte_length());
-          str.assign_ptr(static_cast<const char *>(splice_num_str), alloc_len);
-        }
-        break;
-      }
-      case ObDateTimeType: {
-        str.assign_ptr(static_cast<const char *>(text.get_data_ptr()), static_cast<int32_t>(sizeof(int64_t)));
-        break;
-      }
-      case ObVarcharType:
-      case ObCharType:
-      case ObLongTextType:
-      case ObJsonType:
-      case ObGeometryType: {
-        // Use the varbinary bytes directly for string-like values.
-        str = text.get_varbinary();
-        break;
-      }
-      default: {
-        ret = OB_ERR_INVALID_HEX_NUMBER;
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(hex(str, cast_ctx, result))) {
-      } else {
-        result.set_default_collation_type();
-      }
-    }
-  }
-  LOG_DEBUG("succ to rawtohex", "type", text.get_type(), K(text), K(result), K(lbt()));
-  return ret;
-}
-
-int ObHexUtils::hextoraw(const ObObj &text, ObCastCtx &cast_ctx, ObObj &result)
-{
-  int ret = OB_SUCCESS;
-  if (text.is_null()) {
-    result.set_null();
-  } else if (text.is_numeric_type()) {
-    number::ObNumber nmb_val;
-    if (OB_FAIL(get_uint(text, cast_ctx, nmb_val))) {
-    } else if (OB_FAIL(uint_to_raw(nmb_val, cast_ctx, result))) {
-    }
-  } else if (text.is_blob()) {
-    //fast path
-    if (OB_FAIL(copy_raw(text, cast_ctx, result))) {
-    }
-  } else if (text.is_character_type() || text.is_varbinary_or_binary()) {
-    ObString utf8_string;
-    if (OB_FAIL(convert_string_collation(text.get_string(),
-                                         text.get_collation_type(),
-                                         utf8_string,
-                                         ObCharset::get_system_collation(),
-                                         cast_ctx))) {
-    } else if (OB_FAIL(unhex(utf8_string, cast_ctx, result))) {
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  } else {
-    ret = OB_ERR_INVALID_HEX_NUMBER;
-  }
-  LOG_DEBUG("succ to hextoraw", "type", text.get_type(), K(text), K(result), K(lbt()));
-  return ret;
-}
-
-int ObHexUtils::get_uint(const ObObj &obj, ObCastCtx &cast_ctx, number::ObNumber &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ob_is_accurate_numeric_type(obj.get_type()))) {
-    ret = OB_ERR_INVALID_HEX_NUMBER;
-  } else if (obj.is_number() || obj.is_unumber()) {
-    const number::ObNumber &value = obj.get_number();
-    if (OB_FAIL(out.from(value, cast_ctx))) {
-    } else if (OB_UNLIKELY(!out.is_integer()) || OB_UNLIKELY(out.is_negative())) {
-      ret = OB_ERR_INVALID_HEX_NUMBER;
-    } else if (OB_FAIL(out.round(0))) {
-    }
-  } else {
-    if (OB_UNLIKELY(obj.get_int() < 0)) {
-      ret = OB_ERR_INVALID_HEX_NUMBER;
-    } else if (OB_FAIL(out.from(obj.get_int(), cast_ctx))) {
-    }
-  }
-  return ret;
-}
-
-int ObHexUtils::uint_to_raw(const number::ObNumber &uint_num, ObCastCtx &cast_ctx, ObObj &result)
-{
-  int ret = OB_SUCCESS;
-  const int64_t max_raw_hex_len = 40;
-  char uint_buf[number::ObNumber::MAX_TOTAL_SCALE] = {0};
-  int64_t uint_pos = 0;
-  ObString uint_str;
-  if (OB_FAIL(uint_num.format(uint_buf, number::ObNumber::MAX_TOTAL_SCALE, uint_pos, 0))) {
-  } else if (uint_pos > max_raw_hex_len) {
-    ret = OB_ERR_INVALID_HEX_NUMBER;
-  } else {
-    uint_str.assign_ptr(uint_buf, static_cast<int32_t>(uint_pos));
-    if (OB_FAIL(unhex(uint_str, cast_ctx, result))) {
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  }
-  return ret;
-}
-
-int ObHexUtils::copy_raw(const common::ObObj &obj, common::ObCastCtx &cast_ctx,
-    common::ObObj &result)
-{
-  int ret = OB_ERR_UNEXPECTED;
-  return ret;
-}
-
-static int check_convert_string(const ObObjType expect_type, ObObjCastParams &params,
-    const ObObj &in, ObObj &out)
+template <typename Value>
+static int check_convert_string(const SqlValueType expect_type, DatumCastParams &params,
+    const Value &in, Value &out)
 {
   int ret = OB_SUCCESS;
   out = in;
   return ret;
 }
 
-static int check_convert_string(const ObObjType expect_type, ObObjCastParams &params,
-    const ObString &in_string, ObObj &out)
+template <typename Value>
+static int check_convert_string(const SqlValueType expect_type, DatumCastParams &params,
+    const ObString &in_string, Value &out)
 {
-  ObObj tmp_obj;
+  Value tmp_obj;
   tmp_obj.set_varchar(in_string);
   return check_convert_string(expect_type, params, tmp_obj, out);
 }
 
-static int check_convert_string(const ObObjType expect_type, ObObjCastParams &params,
-    const char *in_str, const int64_t len, ObObj &out)
+template <typename Value>
+static int check_convert_string(const SqlValueType expect_type, DatumCastParams &params,
+    const char *in_str, const int64_t len, Value &out)
 {
-  ObObj tmp_obj;
+  Value tmp_obj;
   tmp_obj.set_varchar(in_str, static_cast<ObString::obstr_size_t>(len));
   return check_convert_string(expect_type, params, tmp_obj, out);
 }
 
-static int set_json_bin_res(ObObjCastParams *params, ObObj *obj, const ObString &raw_bin)
+template <typename Value>
+class CastTextResult : public ObTextStringResult
+{
+public:
+  CastTextResult(SqlValueType type, DatumCastParams *params, Value *result, bool header)
+      : ObTextStringResult(type, header, nullptr), params_(params), result_(result) {}
+  int init(int64_t length, ObIAllocator *allocator = nullptr) override {
+    if (is_init_) { return OB_SUCCESS; }
+    if (result_ == nullptr) { return OB_INVALID_ARGUMENT; }
+    return init_cast_buffer(length, params_, allocator);
+  }
+  void set_result() {
+    result_->set_lob_value(type_, buffer_, pos_);
+    if (is_lob_storage(type_) && has_lob_header_) { result_->set_has_lob_header(); }
+  }
+private:
+  DatumCastParams *params_;
+  Value *result_;
+};
+
+template <typename Value>
+static int set_json_bin_res(DatumCastParams *params, Value *obj, const ObString &raw_bin)
 {
   int ret = OB_SUCCESS;
   bool has_lob_header = true;
-  common::ObTextStringObObjResult text_result(ObJsonType, params, obj, has_lob_header);
+  CastTextResult<Value> text_result(ObJsonType, params, obj, has_lob_header);
   if (OB_FAIL(text_result.init(raw_bin.length(), params->allocator_v2_))) {
   } else if (OB_FAIL(text_result.append(raw_bin.ptr(), raw_bin.length()))) {
   } else {
@@ -1002,29 +582,18 @@ static int set_json_bin_res(ObObjCastParams *params, ObObj *obj, const ObString 
   return ret;
 }
 
-static int set_geo_res(ObObjCastParams *params, ObObj *obj, const ObString &wkb)
-{
-  int ret = OB_SUCCESS;
-  bool has_lob_header = true;
-  common::ObTextStringObObjResult text_result(ObGeometryType, params, obj, has_lob_header);
-  if (OB_FAIL(text_result.init(wkb.length(), params->allocator_v2_))) {
-  } else if (OB_FAIL(text_result.append(wkb.ptr(), wkb.length()))) {
-  } else {
-    text_result.set_result();
-  }
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////////
 // Int -> XXX
 
-static int int_int(const ObObjType expect_type, ObObjCastParams &params, const ObObj &in,
-                   ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_int(const SqlValueType expect_type, DatumCastParams &params, const Value &in,
+                   Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1040,13 +609,14 @@ static int int_int(const ObObjType expect_type, ObObjCastParams &params, const O
   return ret;
 }
 
-static int int_uint(const ObObjType expect_type, ObObjCastParams &params, const ObObj &in,
-                    ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_uint(const SqlValueType expect_type, DatumCastParams &params, const Value &in,
+                    Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1066,12 +636,13 @@ static int int_uint(const ObObjType expect_type, ObObjCastParams &params, const 
   return ret;
 }
 
-static int int_float(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_float(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1086,12 +657,13 @@ static int int_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_double(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_double(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1106,13 +678,14 @@ static int int_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_number(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_number(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1130,12 +703,13 @@ static int int_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1161,12 +735,13 @@ static int int_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  ||  ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  ||  ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1188,29 +763,13 @@ static int int_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_datetime_interval(const ObObjType expect_type, ObObjCastParams &params,
-    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObIntTC != in.get_type_class())
-      || OB_UNLIKELY(ObDateTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else {
-
-    // Treat integer input as day interval.
-    int64_t value = in.get_int() * USECS_PER_DAY;
-    SET_RES_DATETIME(out);
-  }
-  SET_RES_ACCURACY(DEFAULT_PRECISION_FOR_TEMPORAL, MIN_SCALE_FOR_TEMPORAL, DEFAULT_LENGTH_FOR_TEMPORAL);
-  return ret;
-}
-static int int_date(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_date(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1230,12 +789,13 @@ static int int_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1251,12 +811,13 @@ static int int_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_time(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_time(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1271,12 +832,13 @@ static int int_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_year(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_year(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1291,22 +853,23 @@ static int int_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_string(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_string(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
-    ObObj tmp_out;
+    Value tmp_out;
     ObFastFormatInt ffi(in.get_int());
     ObString tmp_str;
-    // Perform character set conversion, use ObObjCastParams.alloc to allocate space for the result.
+    // Perform character set conversion, use DatumCastParams.alloc to allocate space for the result.
     if (OB_FAIL(convert_string_collation(ObString(ffi.length(), ffi.ptr()),
                                          ObCharset::get_system_collation(),
                                          tmp_str,
@@ -1325,15 +888,16 @@ static int int_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int int_bit(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_bit(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
   uint64_t value = static_cast<uint64_t>(in.get_int());
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObIntTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (CM_NEED_RANGE_CHECK(cast_mode)
@@ -1346,51 +910,18 @@ static int int_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out);
-static int int_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObIntTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    uint64_t value = static_cast<uint64_t>(in.get_int());
-    ObObj uint_val;
-    uint_val.set_uint64(value);
-    if (OB_FAIL(uint_enum(expect_type, params, uint_val, out))) {
-    }
-  }
-  return ret;
-}
 
 
-static int uint_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out);
-static int int_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                   const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObIntTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    uint64_t value = static_cast<uint64_t>(in.get_int());
-    ObObj uint_val;
-    uint_val.set_uint64(value);
-    if (OB_FAIL(uint_set(expect_type, params, uint_val, out))) {
-    }
-  }
-  return ret;
-}
 
 #define CAST_TO_TEXT_METHOD(TYPE, TYPE_CLASS)                                                 \
-  static int TYPE##_text(const ObObjType expect_type, ObObjCastParams &params,                \
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)             \
+  template <typename Value>                                                               \
+  static int TYPE##_text(const SqlValueType expect_type, DatumCastParams &params,                \
+                         const Value &in, Value &out, const ObCastMode cast_mode)             \
   {                                                                                           \
     int ret = OB_SUCCESS;                                                                     \
-    ObObj tmp_val;                                                                            \
+    Value tmp_val;                                                                            \
     if (OB_UNLIKELY(TYPE_CLASS != in.get_type_class()                                         \
-                    || ObTextTC != ob_obj_type_class(expect_type))) {                         \
+                    || ObTextTC != sql_type_class(expect_type))) {                         \
       ret = OB_ERR_UNEXPECTED;                                                                \
       LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));                    \
     } else if (OB_FAIL(TYPE##_string(ObVarcharType, params, in, tmp_val, cast_mode))) {       \
@@ -1401,19 +932,22 @@ static int int_set(const ObExpectType &expect_type, ObObjCastParams &params,
     return ret;                                                                               \
   }
 
-static int string_text(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode,
+template <typename Value>
+static int string_text(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode,
                        const ObLobLocatorV2 *lob_locator);
-static int string_text(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_text(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   return string_text(expect_type, params, in, out, cast_mode, NULL);
 }
 
 CAST_TO_TEXT_METHOD(int, ObIntTC);
 
-static int int_json(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_json(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -1441,7 +975,7 @@ static int int_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int common_get_srs_item(ObObjCastParams &params,
+static int common_get_srs_item(DatumCastParams &params,
                                ObSrsCacheGuard &srs_guard,
                                const ObString &wkb,
                                const ObSrsItem *&srs,
@@ -1495,53 +1029,18 @@ static int common_build_geometry(ObIAllocator &allocator,
   return ret;
 }
 
-static int int_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    int64_t in_val = in.get_int();
-    ObFastFormatInt ffi(in_val);
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    ObString str(ffi.length(), ffi.ptr());
-    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////////
 // UInt -> XXX
 
-static int uint_int(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_int(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1561,13 +1060,14 @@ static int uint_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_uint(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_uint(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1583,12 +1083,13 @@ static int uint_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1602,12 +1103,13 @@ static int uint_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_double(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_double(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1619,14 +1121,15 @@ static int uint_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_number(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_number(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   number::ObNumber nmb;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1640,13 +1143,14 @@ static int uint_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1657,13 +1161,14 @@ static int uint_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1674,13 +1179,14 @@ static int uint_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_date(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_date(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1691,13 +1197,14 @@ static int uint_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1708,13 +1215,14 @@ static int uint_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_time(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_time(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1725,13 +1233,14 @@ static int uint_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_year(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_year(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1742,19 +1251,20 @@ static int uint_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
-    ObObj tmp_out;
+    Value tmp_out;
     ObFastFormatInt ffi(in.get_uint64());
     ObString tmp_str;
     if (OB_FAIL(convert_string_collation(ObString(ffi.length(), ffi.ptr()),
@@ -1773,15 +1283,16 @@ static int uint_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_bit(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_bit(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
   uint64_t value = in.get_uint64();
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObUIntTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(get_bit_len(value, bit_len))) {
@@ -1792,67 +1303,13 @@ static int uint_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
- int ret = OB_SUCCESS;
-  ObCastMode cast_mode = params.cast_mode_;
-  const ObIArray<ObString> * type_infos = NULL;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObUIntTC != in.get_type_class())
-      || OB_ISNULL(type_infos = expect_type.get_type_infos())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    uint64_t value = in.get_uint64();
-    if (OB_UNLIKELY(0 == value || value > type_infos->count())) {
-      value = 0;
-      ret = OB_ERR_DATA_TRUNCATED;
-    }
 
-    if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
-      params.warning_ = OB_ERR_DATA_TRUNCATED;
-      ret = OB_SUCCESS;
-    }
-    LOG_DEBUG("finish uint_enum", K(ret), K(expect_type), K(in), K(out), KPC(type_infos), K(lbt()));
-    SET_RES_ENUM(out);
-  }
-  return ret;
-}
-
-static int uint_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObCastMode cast_mode = params.cast_mode_;
-  const ObIArray<ObString> * type_infos = NULL;
-  int64_t val_cnt = 0;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObUIntTC != in.get_type_class())
-      || OB_ISNULL(type_infos = expect_type.get_type_infos())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    uint64_t value = in.get_uint64();
-    val_cnt = type_infos->count();
-    if (OB_UNLIKELY(val_cnt <= 0)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (val_cnt >= 64) {//do nothing
-    } else if (val_cnt < 64 && value > ((1ULL << val_cnt) - 1)) {
-      value = value & ((1ULL << val_cnt) - 1);
-      ret = OB_ERR_DATA_TRUNCATED;
-    }
-
-    if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
-      params.warning_ = OB_ERR_DATA_TRUNCATED;
-      ret = OB_SUCCESS;
-    }
-    LOG_DEBUG("finish uint_set", K(ret), K(expect_type), K(in), K(out), KPC(type_infos), K(lbt()));
-    SET_RES_SET(out);
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(uint, ObUIntTC);
 
-static int uint_json(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_json(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -1880,42 +1337,6 @@ static int uint_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int uint_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    uint64_t in_val = in.get_uint64();
-    ObFastFormatInt ffi(in_val);
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    ObString str(ffi.length(), ffi.ptr());
-    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////////
 // Float -> XXX
@@ -1955,14 +1376,15 @@ int common_double_int(const double in, int64_t &out,
   return ret;
 }
 
-static int float_int(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_int(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -1982,8 +1404,9 @@ static int float_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_uint(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_uint(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t value = 0;
@@ -1991,7 +1414,7 @@ static int float_uint(const ObObjType expect_type, ObObjCastParams &params,
   double in_value = static_cast<double>(in.get_float());
   bool is_column_convert = CM_IS_COLUMN_CONVERT(cast_mode);
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2016,13 +1439,14 @@ static int float_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_float(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_float(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   float value = in.get_float();
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2034,13 +1458,14 @@ static int float_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_double(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_double(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   double value = static_cast<double>(in.get_float());
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2052,15 +1477,16 @@ static int float_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_number(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_number(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   float value = in.get_float();
   ObPrecision res_precision = -1;
   ObScale res_scale = -1;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2082,15 +1508,17 @@ static int float_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int float_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int float_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                          const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj dbl;
+  Value dbl;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2101,15 +1529,17 @@ static int float_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int float_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int float_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                          const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj dbl;
+  Value dbl;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2120,33 +1550,18 @@ static int float_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_datetime_interval(const ObObjType expect_type, ObObjCastParams &params,
-                                    const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int float_datetime_interval(const ObObjType expect_type, ObObjCastParams &params,
-                                   const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObObj dbl;
-  if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type",
-        K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(float_double(ObDoubleType, params, in, dbl, cast_mode))) {
-  } else if (OB_FAIL(double_datetime_interval(expect_type, params, dbl, out, cast_mode))) {
-  }
-  return ret;
-}
 
-static int double_date(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int float_date(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_date(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int float_date(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj dbl;
+  Value dbl;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2157,15 +1572,17 @@ static int float_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int float_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int float_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj dbl;
+  Value dbl;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2176,15 +1593,17 @@ static int float_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_time(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int float_time(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_time(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int float_time(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj dbl;
+  Value dbl;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2195,8 +1614,9 @@ static int float_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_string(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_string(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
@@ -2204,8 +1624,8 @@ static int float_string(const ObObjType expect_type, ObObjCastParams &params,
   int64_t length = 0;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2228,7 +1648,7 @@ static int float_string(const ObObjType expect_type, ObObjCastParams &params,
       }
     }
     ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
-    ObObj tmp_out;
+    Value tmp_out;
     ObString tmp_str;
     if (OB_FAIL(convert_string_collation(str, ObCharset::get_system_collation(),
                                          tmp_str, params.dest_collation_, params))) {
@@ -2245,8 +1665,9 @@ static int float_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
@@ -2254,7 +1675,7 @@ static int float_bit(const ObObjType expect_type, ObObjCastParams &params,
       truncate_floating_to_int64_clamped(in.get_float()));
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObFloatTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(get_bit_len(value, bit_len))) {
@@ -2266,40 +1687,13 @@ static int float_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObFloatTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t value = truncate_floating_to_int64_clamped(in.get_float());
-    ObObj int_val(value);
-    if (OB_FAIL(int_enum(expect_type, params, int_val, out))) {
-    }
-  }
-  return ret;
-}
 
-static int float_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObFloatTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t value = truncate_floating_to_int64_clamped(in.get_float());
-    ObObj int_val(value);
-    if (OB_FAIL(int_set(expect_type, params, int_val, out))) {
-    }
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(float, ObFloatTC);
 
-static int float_json(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_json(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -2327,72 +1721,19 @@ static int float_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int float_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    int64_t length = 0;
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    ObScale scale = in.get_scale();
-    if (in.get_float() == -INFINITY) {
-      length = strlen("-Inf");
-      strncpy(buf, "-Inf", length);
-    } else if (in.get_float() == INFINITY) {
-      length = strlen("Inf");
-      strncpy(buf, "Inf", length);
-    } else if (isnan(in.get_float())) {
-      length = strlen("Nan");
-      strncpy(buf, "Nan", length);
-    } else {
-      if (0 <= scale) {
-        length = ob_fcvt(in.get_float(), scale, sizeof(buf) - 1, buf, NULL);
-      } else {
-        length = ob_gcvt_opt(in.get_float(), OB_GCVT_ARG_FLOAT, sizeof(buf) - 1,
-                             buf, NULL, TRUE);
-      }
-    }
-    ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
-    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////////
 // Double -> XXX
 
-static int double_int(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_int(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2410,8 +1751,9 @@ static int double_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_uint(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_uint(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t value = 0;
@@ -2419,7 +1761,7 @@ static int double_uint(const ObObjType expect_type, ObObjCastParams &params,
   double in_value = in.get_double();
   bool is_column_convert = CM_IS_COLUMN_CONVERT(cast_mode);
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2442,13 +1784,14 @@ static int double_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_float(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_float(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   float value = static_cast<float>(in.get_double());
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2460,13 +1803,14 @@ static int double_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_double(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_double(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   double value = in.get_double();
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2478,15 +1822,16 @@ static int double_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_number(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_number(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   double value = in.get_double();
   ObPrecision res_precision = -1;
   ObScale res_scale = -1;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2507,10 +1852,12 @@ static int double_number(const ObObjType expect_type, ObObjCastParams &params,
   SET_RES_ACCURACY(res_precision, res_scale, DEFAULT_LENGTH_FOR_NUMERIC);
   return ret;
 }
-static int number_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int double_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int double_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   // double to datetime must cast to number first, then cast string to datetime.
   // because double 20151016153421.8 may actually 20151016153421.801 in memory,
@@ -2518,9 +1865,9 @@ static int double_datetime(const ObObjType expect_type, ObObjCastParams &params,
   // this problem can be resolved by cast double to number.
   int ret = OB_SUCCESS;
   ObTimeConvertCtx cvrt_ctx(params.dtc_params_.tz_info_, ObTimestampType == expect_type);
-  ObObj tmp_num_obj;
+  Value tmp_num_obj;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2540,19 +1887,21 @@ static int double_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int double_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int double_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   // double to datetime must cast to number first, then cast string to datetime.
   // because double 20151016153421.8 may actually 20151016153421.801 in memory,
   // so we will get '2015-10-16 15:34:21.801' instead of '2015-10-16 15:34:21.8'.
   // this problem can be resolved by cast double to number.
   int ret = OB_SUCCESS;
-  ObObj tmp_num_obj;
+  Value tmp_num_obj;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2572,32 +1921,17 @@ static int double_mdatetime(const ObObjType expect_type, ObObjCastParams &params
   return ret;
 }
 
-static int double_datetime_interval(const ObObjType expect_type, ObObjCastParams &params,
-                                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObScale res_scale = -1;
-  if (OB_UNLIKELY(ObDoubleTC != in.get_type_class())
-      || OB_UNLIKELY(ObDateTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else {
-    const int64_t value = static_cast<int64_t>(in.get_double() * static_cast<double>(USECS_PER_DAY));
-    SET_RES_DATETIME(out);
-  }
-  SET_RES_ACCURACY(DEFAULT_PRECISION_FOR_TEMPORAL, res_scale, DEFAULT_LENGTH_FOR_TEMPORAL);
-  return ret;
-}
 
-static int double_date(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_date(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   //TODO<xiaoni> In datediff,mysql does truncate NOT round
   //So,we have to revise double 2 int which act as round (right now) to truncation
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2608,13 +1942,14 @@ static int double_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2625,15 +1960,16 @@ static int double_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_time(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_time(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   // double to time must cast to string first, then cast string to time.
   // see comment in double_datetime.
   int ret = OB_SUCCESS;
   ObScale res_scale = -1;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2652,12 +1988,13 @@ static int double_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_year(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_year(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2675,14 +2012,15 @@ static int double_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_string(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_string(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                      && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                      && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2717,7 +2055,7 @@ static int double_string(const ObObjType expect_type, ObObjCastParams &params,
       }
     }
     ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
-    ObObj tmp_out;
+    Value tmp_out;
     ObString tmp_str;
     if (OB_FAIL(convert_string_collation(str, ObCharset::get_system_collation(),
                                          tmp_str, params.dest_collation_, params))) {
@@ -2733,8 +2071,9 @@ static int double_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
@@ -2742,7 +2081,7 @@ static int double_bit(const ObObjType expect_type, ObObjCastParams &params,
       truncate_floating_to_int64_clamped(in.get_double()));
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObDoubleTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(get_bit_len(value, bit_len))) {
@@ -2753,40 +2092,13 @@ static int double_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObDoubleTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t value = truncate_floating_to_int64_clamped(in.get_double());
-    ObObj int_val(value);
-    if (OB_FAIL(int_enum(expect_type, params, int_val, out))) {
-    }
-  }
-  return ret;
-}
 
-static int double_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObDoubleTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t value = truncate_floating_to_int64_clamped(in.get_double());
-    ObObj int_val(value);
-    if (OB_FAIL(int_set(expect_type, params, int_val, out))) {
-    }
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(double, ObDoubleTC);
 
-static int double_json(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_json(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -2814,73 +2126,21 @@ static int double_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int double_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    int64_t length = 0;
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    ObScale scale = in.get_scale();
-    if (in.get_double() == -INFINITY) {
-      length = strlen("-Inf");
-      strncpy(buf, "-Inf", length);
-    } else if (in.get_double() == INFINITY) {
-      length = strlen("Inf");
-      strncpy(buf, "Inf", length);
-    } else if (isnan(in.get_double())) {
-      length = strlen("Nan");
-      strncpy(buf, "Nan", length);
-    } else {
-      if (0 <= scale) {
-        length = ob_fcvt(in.get_double(), scale, sizeof(buf) - 1, buf, NULL);
-      } else {
-        length = ob_gcvt_opt(in.get_double(), OB_GCVT_ARG_DOUBLE,
-                              sizeof(buf) - 1, buf, NULL, TRUE);
-      }
-    }
-    ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
-    if (OB_FAIL(common_get_srs_item(params, srs_guard, str, srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, str, geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////////
 // Number -> XXX
 
-static int string_int(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int number_int(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_int(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int number_int(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2890,7 +2150,7 @@ static int number_int(const ObObjType expect_type, ObObjCastParams &params,
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(value, static_cast<ObString::obstr_size_t>(strlen(value)));
       ret = string_int(expect_type, params, from, out,
                        CM_UNSET_STRING_INTEGER_TRUNC(cast_mode));
@@ -2903,15 +2163,17 @@ static int number_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_uint(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int number_uint(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_uint(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int number_uint(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2921,7 +2183,7 @@ static int number_uint(const ObObjType expect_type, ObObjCastParams &params,
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(value, static_cast<ObString::obstr_size_t>(strlen(value)));
       ret = string_uint(expect_type, params, from, out, CM_UNSET_STRING_INTEGER_TRUNC(cast_mode));
     }
@@ -2933,14 +2195,16 @@ static int number_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_float(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int number_float(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_float(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int number_float(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2949,7 +2213,7 @@ static int number_float(const ObObjType expect_type, ObObjCastParams &params,
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(value, static_cast<ObString::obstr_size_t>(strlen(value)));
       ret = string_float(expect_type, params, from, out, cast_mode);
     }
@@ -2958,14 +2222,16 @@ static int number_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_double(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int number_double(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_double(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int number_double(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -2974,7 +2240,7 @@ static int number_double(const ObObjType expect_type, ObObjCastParams &params,
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(value, static_cast<ObString::obstr_size_t>(strlen(value)));
       ret = string_double(expect_type, params, from, out, cast_mode);
     }
@@ -2983,12 +2249,13 @@ static int number_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_number(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_number(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3007,15 +2274,16 @@ static int number_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   const int64_t three_digit_min = 100;
   const int64_t eight_digit_max = 99999999;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || (ObDateTimeTC != ob_obj_type_class(expect_type)
-                      && ObMySQLDateTimeTC != ob_obj_type_class(expect_type)))) {
+                  || (ObDateTimeTC != sql_type_class(expect_type)
+                      && ObMySQLDateTimeTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3056,8 +2324,9 @@ static int number_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(number_datetime(expect_type, params, in, out, cast_mode))) {
@@ -3065,41 +2334,21 @@ static int number_mdatetime(const ObObjType expect_type, ObObjCastParams &params
   return ret;
 }
 
-static int number_datetime_interval(const ObObjType expect_type, ObObjCastParams &params,
-                                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObNumberTC != in.get_type_class())
-      || OB_UNLIKELY(ObDateTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else {
-    int64_t int_part = 0;
-    int64_t dec_part = 0;
-    if (!in.get_number().is_int_parts_valid_int64(int_part,dec_part)) {
-      ret = OB_INVALID_DATE_FORMAT;
-    } else {
-      const int64_t value = static_cast<int64_t>(int_part * USECS_PER_DAY)
-                            + (in.is_negative_number() ? -1  : 1 ) * static_cast<int64_t>(static_cast<double>(dec_part) / NSECS_PER_SEC * static_cast<double>(USECS_PER_DAY));
-      SET_RES_DATETIME(out);
-    }
-  }
-  SET_RES_ACCURACY(DEFAULT_PRECISION_FOR_TEMPORAL, MIN_SCALE_FOR_TEMPORAL, DEFAULT_LENGTH_FOR_TEMPORAL);
-  return ret;
-}
 
-static int string_date(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int number_date(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_date(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int number_date(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   int32_t value = 0;
   ObMySQLDate md_value = 0;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || (ObDateTC != ob_obj_type_class(expect_type)
-                      && ObMySQLDateTC != ob_obj_type_class(expect_type)))) {
+                  || (ObDateTC != sql_type_class(expect_type)
+                      && ObMySQLDateTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3132,8 +2381,9 @@ static int number_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(number_date(expect_type, params, in, out, cast_mode))) {
@@ -3141,14 +2391,16 @@ static int number_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_time(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int number_time(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_time(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int number_time(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3157,7 +2409,7 @@ static int number_time(const ObObjType expect_type, ObObjCastParams &params,
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(value, static_cast<ObString::obstr_size_t>(strlen(value)));
       ret = string_time(expect_type, params, from, out, cast_mode);
     }
@@ -3166,14 +2418,16 @@ static int number_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_year(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int number_year(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_year(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int number_year(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3188,7 +2442,7 @@ static int number_year(const ObObjType expect_type, ObObjCastParams &params,
         SET_RES_YEAR(out);
       }
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(value, static_cast<ObString::obstr_size_t>(strlen(value)));
       ret = string_year(expect_type, params, from, out, cast_mode);
     }
@@ -3197,16 +2451,17 @@ static int number_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_string(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_string(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t len = 0;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3216,7 +2471,7 @@ static int number_string(const ObObjType expect_type, ObObjCastParams &params,
 
     if (OB_SUCC(ret)) {
       ObString tmp_str;
-      ObObj tmp_out;
+      Value tmp_out;
       if (OB_FAIL(convert_string_collation(ObString(len, buf), ObCharset::get_system_collation(),
                                            tmp_str, params.dest_collation_, params))) {
       } else if (OB_FAIL(check_convert_string(expect_type, params, tmp_str, tmp_out))) {
@@ -3232,13 +2487,14 @@ static int number_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_bit(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_bit(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(number_uint(ObUInt64Type, params, in, tmp_val, cast_mode))) {
@@ -3247,86 +2503,19 @@ static int number_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_enum(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj double_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObNumberTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(number_double(ObDoubleType, params, in, double_val, cast_mode))) {
-  } else if (OB_FAIL(double_enum(expect_type, params, double_val, out))) {
-  }
-  return ret;
-}
 
-static int number_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj double_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObNumberTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(number_double(ObDoubleType, params, in, double_val, cast_mode))) {
-  } else if (OB_FAIL(double_set(expect_type, params, double_val, out))) {
-  }
-  return ret;
-}
 
-static int decimalint_enum(const ObExpectType &expected_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj double_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-  int64_t length = 0;
-  if (OB_UNLIKELY(ObEnumType != expected_type.get_type() || ObDecimalIntType != in.get_type())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buf,
-                                     sizeof(buf), length))) {
-  } else {
-    ObObj from;
-    from.set_varchar(buf, static_cast<ObString::obstr_size_t>(length));
-    if (OB_FAIL(string_double(ObDoubleType, params, from, double_val, cast_mode))) {
-    } else if (OB_FAIL(double_enum(expected_type, params, double_val, out))) {
-    }
-  }
-  return ret;
-}
 
-static int decimalint_set(const ObExpectType &expected_type, ObObjCastParams &params, const ObObj &in,
-                          ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj double_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-  int64_t length = 0;
-  if (OB_UNLIKELY(ObSetType != expected_type.get_type() || ObDecimalIntType != in.get_type())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buf, sizeof(buf), length))) {
-  } else {
-    ObObj from;
-    from.set_varchar(buf, static_cast<ObString::obstr_size_t>(length));
-    if (OB_FAIL(string_double(ObDoubleType, params, from, double_val, cast_mode))) {
-    } else if (OB_FAIL(double_set(expected_type, params, double_val, out))) {
-    }
-  }
-  return ret;
-}
 
-static int decimalint_string(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode);
+template <typename Value>
+static int decimalint_string(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode);
 CAST_TO_TEXT_METHOD(number, ObNumberTC);
 CAST_TO_TEXT_METHOD(decimalint, ObDecimalIntTC);
 
-static int number_json(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_json(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -3355,54 +2544,18 @@ static int number_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int number_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    int64_t len = 0;
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    ObScale scale = in.get_scale();
-    if (OB_FAIL(in.get_number().format(buf, sizeof(buf), len, in.get_scale()))) {
-    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // Datetime -> XXX
 
-static int datetime_int(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_int(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3420,13 +2573,14 @@ static int datetime_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_int(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_int(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3443,13 +2597,14 @@ static int mdatetime_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int datetime_uint(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_uint(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3470,13 +2625,14 @@ static int datetime_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_uint(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_uint(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3496,12 +2652,13 @@ static int mdatetime_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int datetime_float(const ObObjType expect_type, ObObjCastParams &params,
-                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_float(const SqlValueType expect_type, DatumCastParams &params,
+                          const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3520,12 +2677,13 @@ static int datetime_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_float(const ObObjType expect_type, ObObjCastParams &params,
-                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_float(const SqlValueType expect_type, DatumCastParams &params,
+                          const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3543,12 +2701,13 @@ static int mdatetime_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int datetime_double(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_double(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3565,12 +2724,13 @@ static int datetime_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_double(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_double(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3586,14 +2746,15 @@ static int mdatetime_double(const ObObjType expect_type, ObObjCastParams &params
   return ret;
 }
 
-static int datetime_number(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_number(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   ObScale res_scale = -1;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3613,14 +2774,15 @@ static int datetime_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_number(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_number(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   ObScale res_scale = -1;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3641,12 +2803,13 @@ static int mdatetime_number(const ObObjType expect_type, ObObjCastParams &params
 
 // timestamp -> datetime
 // datetime -> timestamp
-static int datetime_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3670,12 +2833,13 @@ static int datetime_datetime(const ObObjType expect_type, ObObjCastParams &param
 }
 
 // mdatetime -> datetime/timestamp
-static int mdatetime_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3701,12 +2865,13 @@ static int mdatetime_datetime(const ObObjType expect_type, ObObjCastParams &para
 }
 
 // datetime/timestamp -> mdatetime
-static int datetime_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                                   const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                                   const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3731,12 +2896,13 @@ static int datetime_mdatetime(const ObObjType expect_type, ObObjCastParams &para
 }
 
 
-static int datetime_date(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_date(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3753,12 +2919,13 @@ static int datetime_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int datetime_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3775,12 +2942,13 @@ static int datetime_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_date(const ObObjType expect_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_date(const SqlValueType expect_type, DatumCastParams &params,
+                               const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3799,12 +2967,13 @@ static int mdatetime_date(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 
-static int mdatetime_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                               const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3821,12 +2990,13 @@ static int mdatetime_mdate(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 // datetime/mdatetime -> time
-static int datetime_time(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_time(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3843,12 +3013,13 @@ static int datetime_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_time(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_time(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3864,12 +3035,13 @@ static int mdatetime_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int datetime_year(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_year(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3886,12 +3058,13 @@ static int datetime_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_year(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_year(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3909,14 +3082,15 @@ static int mdatetime_year(const ObObjType expect_type, ObObjCastParams &params,
 
 
 // datetime/mdatetime/timestamp -> string
-static int datetime_string(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_string(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
   if (OB_UNLIKELY((ObDateTimeTC != in.get_type_class() && ObMySQLDateTimeTC != in.get_type_class())
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -3933,7 +3107,7 @@ static int datetime_string(const ObObjType expect_type, ObObjCastParams &params,
     } else {
       out.set_type(expect_type);
       ObString tmp_str;
-      ObObj tmp_out;
+      Value tmp_out;
       if (OB_FAIL(convert_string_collation(ObString(len, buf), ObCharset::get_system_collation(), tmp_str, params.dest_collation_, params))) {
       } else if (OB_FAIL(check_convert_string(expect_type, params, tmp_str, tmp_out))) {
       } else if (OB_FAIL(copy_string(params, expect_type, tmp_out.get_string(), out))) {
@@ -3948,8 +3122,9 @@ static int datetime_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_string(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_string(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(datetime_string(expect_type, params, in, out, cast_mode))) {
@@ -3957,15 +3132,17 @@ static int mdatetime_string(const ObObjType expect_type, ObObjCastParams &params
   return ret;
 }
 
-static int string_bit(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int datetime_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_bit(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int datetime_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObDateTimeTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(datetime_string(ObVarcharType, params, in, tmp_val, cast_mode))) {
@@ -3974,15 +3151,17 @@ static int datetime_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_bit(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int mdatetime_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_bit(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int mdatetime_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObMySQLDateTimeTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(mdatetime_string(ObVarcharType, params, in, tmp_val, cast_mode))) {
@@ -3991,42 +3170,13 @@ static int mdatetime_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out);
-static int datetime_enum(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj str_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObDateTimeTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(datetime_string(ObVarcharType, params, in, str_val, cast_mode))) {
-  } else if (OB_FAIL(string_enum(expect_type, params, str_val, out))) {
-  }
-  return ret;
-}
-static int string_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out);
-static int datetime_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj str_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObDateTimeTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(datetime_string(ObVarcharType, params, in, str_val, cast_mode))) {
-  } else if (OB_FAIL(string_set(expect_type, params, str_val, out))) {
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(datetime, ObDateTimeTC);
 CAST_TO_TEXT_METHOD(mdatetime, ObMySQLDateTimeTC);
 
-static int datetime_json(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_json(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -4064,8 +3214,9 @@ static int datetime_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdatetime_json(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_json(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -4098,69 +3249,20 @@ static int mdatetime_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int datetime_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    const ObTimeZoneInfo *tz_info = (ObTimestampType == in.get_type()) ? params.dtc_params_.tz_info_ : NULL;
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    int64_t len = 0;
-    ret = in.is_mysql_datetime() ?
-                ObTimeConverter::mdatetime_to_str(in.get_mysql_datetime(), tz_info,
-                                                 in.get_scale(), buf, sizeof(buf), len) :
-                ObTimeConverter::datetime_to_str(in.get_datetime(), tz_info,
-                                                 in.get_scale(), buf, sizeof(buf), len);
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
 
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
-
-static int mdatetime_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(datetime_geometry(expect_type, params, in, out, cast_mode))) {
-  }
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // Date -> XXX
 
-static int date_int(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_int(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4174,14 +3276,15 @@ static int date_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_int(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_int(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4195,15 +3298,16 @@ static int mdate_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_uint(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_uint(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   int64_t int64 = 0;
   uint64_t value = 0;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4220,15 +3324,16 @@ static int date_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_uint(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_uint(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   int64_t int64 = 0;
   uint64_t value = 0;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4246,13 +3351,14 @@ static int mdate_uint(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 
-static int date_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4265,13 +3371,14 @@ static int date_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4284,13 +3391,14 @@ static int mdate_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_double(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_double(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4303,13 +3411,14 @@ static int date_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_double(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_double(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4322,13 +3431,14 @@ static int mdate_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_number(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_number(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_int;
+  Value obj_int;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4339,13 +3449,14 @@ static int date_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_number(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_number(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_int;
+  Value obj_int;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4356,12 +3467,13 @@ static int mdate_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4378,12 +3490,13 @@ static int date_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY((ObMySQLDateTC != in.get_type_class())
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4402,12 +3515,13 @@ static int mdate_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4424,12 +3538,13 @@ static int date_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 
-static int mdate_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4445,12 +3560,13 @@ static int mdate_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_time(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_time(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4462,12 +3578,13 @@ static int date_time(const ObObjType expect_type, ObObjCastParams &params,
   return OB_SUCCESS;
 }
 
-static int mdate_time(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_time(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY((ObMySQLDateTC != in.get_type_class())
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4479,12 +3596,13 @@ static int mdate_time(const ObObjType expect_type, ObObjCastParams &params,
   return OB_SUCCESS;
 }
 
-static int date_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4500,12 +3618,13 @@ static int date_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_date(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_date(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4522,13 +3641,14 @@ static int mdate_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_year(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_year(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint8_t value = 0;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4541,13 +3661,14 @@ static int date_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_year(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_year(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint8_t value = 0;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4560,16 +3681,17 @@ static int mdate_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t len = 0;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4587,16 +3709,17 @@ static int date_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t len = 0;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4614,13 +3737,14 @@ static int mdate_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObDateTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(date_string(ObVarcharType, params, in, tmp_val, cast_mode))) {
@@ -4629,13 +3753,14 @@ static int date_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObMySQLDateTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(mdate_string(ObVarcharType, params, in, tmp_val, cast_mode))) {
@@ -4644,41 +3769,14 @@ static int mdate_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_enum(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj str_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObDateTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(date_string(ObVarcharType, params, in, str_val, cast_mode))) {
-  } else if (OB_FAIL(string_enum(expect_type, params, str_val, out))) {
-  }
-  return ret;
-}
 
-static int date_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj str_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObDateTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(date_string(ObVarcharType, params, in, str_val, cast_mode))) {
-  } else if (OB_FAIL(string_set(expect_type, params, str_val, out))) {
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(date, ObDateTC);
 CAST_TO_TEXT_METHOD(mdate, ObMySQLDateTC);
 
-static int date_json(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_json(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -4711,8 +3809,9 @@ static int date_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int mdate_json(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_json(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -4745,66 +3844,20 @@ static int mdate_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int date_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    int64_t len = 0;
-    ret = in.is_mysql_date() ?
-            ObTimeConverter::mdate_to_str(in.get_mysql_date(), buf, sizeof(buf), len) :
-            ObTimeConverter::date_to_str(in.get_date(), buf, sizeof(buf), len);
-    if ((OB_FAIL(ret))) {
-    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
 
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
-
-static int mdate_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(date_geometry(expect_type, params, in, out, cast_mode))) {
-  }
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // Time -> XXX
 
-static int time_int(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_int(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4818,15 +3871,16 @@ static int time_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_uint(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_uint(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t int64 = 0;
   uint64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4843,13 +3897,14 @@ static int time_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   double value = 0.0;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4864,13 +3919,14 @@ static int time_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_double(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_double(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   double value = 0.0;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4884,8 +3940,9 @@ static int time_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_number(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_number(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
@@ -4894,7 +3951,7 @@ static int time_number(const ObObjType expect_type, ObObjCastParams &params,
   ObPrecision res_precision = -1;
   ObScale res_scale = -1;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4908,14 +3965,15 @@ static int time_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   const ObTimeZoneInfo *tz_info = params.dtc_params_.tz_info_;
   int64_t value = 0;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4928,14 +3986,15 @@ static int time_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   const ObTimeZoneInfo *tz_info = params.dtc_params_.tz_info_;
   ObMySQLDateTime value = 0;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4948,15 +4007,16 @@ static int time_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_date(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_date(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   const ObTimeZoneInfo *tz_info = params.dtc_params_.tz_info_;
   int32_t value = 0;
   int64_t datetime_value = 0;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -4974,15 +4034,16 @@ static int time_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   const ObTimeZoneInfo *tz_info = params.dtc_params_.tz_info_;
   ObMySQLDate value = 0;
   int64_t datetime_value = 0;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5000,14 +4061,15 @@ static int time_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_year(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_year(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t int_value = 0;
   uint8_t value = 0;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5020,16 +4082,17 @@ static int time_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t len = 0;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5047,13 +4110,14 @@ static int time_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObTimeTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(time_string(ObVarcharType, params, in, tmp_val, cast_mode))) {
@@ -5062,40 +4126,13 @@ static int time_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_enum(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj str_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObTimeTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(time_string(ObVarcharType, params, in, str_val, cast_mode))) {
-  } else if (OB_FAIL(string_enum(expect_type, params, str_val, out))) {
-  }
-  return ret;
-}
 
-static int time_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj str_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObTimeTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(time_string(ObVarcharType, params, in, str_val, cast_mode))) {
-  } else if (OB_FAIL(string_set(expect_type, params, str_val, out))) {
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(time, ObTimeTC);
 
-static int time_json(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_json(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -5128,54 +4165,19 @@ static int time_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int time_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    int64_t len = 0;
-    if (OB_FAIL(ObTimeConverter::time_to_str(in.get_time(), in.get_scale(), buf, sizeof(buf), len))) {
-    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // Year -> XXX
 
-static int year_int(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_int(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5189,15 +4191,16 @@ static int year_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_uint(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_uint(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t int64 = 0;
   uint64_t value = 0;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5214,13 +4217,14 @@ static int year_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5233,13 +4237,14 @@ static int year_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_double(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_double(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5252,13 +4257,14 @@ static int year_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_number(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_number(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_int;
+  Value obj_int;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5269,14 +4275,15 @@ static int year_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t int_value = 0;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5287,14 +4294,15 @@ static int year_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t int_value = 0;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5306,13 +4314,14 @@ static int year_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 
-static int year_date(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_date(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t in_value = 0;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5328,13 +4337,14 @@ static int year_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t in_value = 0;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5350,12 +4360,13 @@ static int year_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_time(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_time(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5372,16 +4383,17 @@ static int year_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t len = 0;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || (ObStringTC != ob_obj_type_class(expect_type)
-                  && ObTextTC != ob_obj_type_class(expect_type)))) {
+                  || (ObStringTC != sql_type_class(expect_type)
+                  && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5399,13 +4411,14 @@ static int year_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_bit(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObYearTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(year_int(ObIntType, params, in, tmp_val, cast_mode))) {
@@ -5414,40 +4427,13 @@ static int year_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_enum(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj uint_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObYearTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(year_uint(ObUInt64Type, params, in, uint_val, cast_mode))) {
-  } else if (OB_FAIL(uint_enum(expect_type, params, uint_val, out))) {
-  }
-  return ret;
-}
 
-static int year_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObObj uint_val;
-  ObCastMode cast_mode = params.cast_mode_;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObYearTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(year_uint(ObUInt64Type, params, in, uint_val, cast_mode))) {
-  } else if (OB_FAIL(uint_set(expect_type, params, uint_val, out))) {
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(year, ObYearTC);
 
-static int year_json(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_json(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
@@ -5477,48 +4463,12 @@ static int year_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int year_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-    int64_t len = 0;
-    if (OB_FAIL(ObTimeConverter::year_to_str(in.get_year(), buf, sizeof(buf), len))) {
-    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(len, buf), srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(len, buf), geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // String -> XXX
 
 int common_string_unsigned_integer(const ObCastMode &cast_mode,
-                                   const ObObjType &in_type,
+                                   const SqlValueType &in_type,
                                    const ObCollationType &in_cs_type,
                                    const ObString &in_str,
                                    const bool is_str_integer_cast,
@@ -5555,7 +4505,7 @@ int common_string_unsigned_integer(const ObCastMode &cast_mode,
 }
 // Incompatible behavior with MySQL:
 int common_string_integer(const ObCastMode &cast_mode,
-                                 const ObObjType &in_type,
+                                 const SqlValueType &in_type,
                                  const ObCollationType &in_cs_type,
                                  const ObString &in_str,
                                  const bool is_str_integer_cast,
@@ -5563,17 +4513,17 @@ int common_string_integer(const ObCastMode &cast_mode,
 {
   int ret = OB_SUCCESS;
   if (ObHexStringType == in_type) {
-    ObObj uint64_in;
-    ObObj out;
-    ObObjCastParams dummy;
-    ObCastMode uint_int_cm = cast_mode;
-    uint64_in.set_uint64(hex_to_uint64(in_str));
+    const uint64_t uint_value = hex_to_uint64(in_str);
+    const bool skip_cast = CM_IS_EXTERNAL_CALL(cast_mode) && CM_SKIP_CAST_INT_UINT(cast_mode);
+    ObCastMode uint_int_cast_mode = cast_mode;
     if (CM_IS_EXPLICIT_CAST(cast_mode)) {
-      uint_int_cm |= CM_NO_RANGE_CHECK;
+      uint_int_cast_mode |= CM_NO_RANGE_CHECK;
     }
-    if (OB_FAIL(uint_int(ObIntType, dummy, uint64_in, out, uint_int_cm))) {
+    int64_t int_value = static_cast<int64_t>(uint_value);
+    if (!skip_cast && CM_NEED_RANGE_CHECK(uint_int_cast_mode)
+        && OB_FAIL(int_upper_check(ObIntType, uint_value, int_value))) {
     } else {
-      out_val = out.get_int();
+      out_val = int_value;
     }
   } else {
     int err = 0;
@@ -5603,8 +4553,9 @@ int common_string_integer(const ObCastMode &cast_mode,
   return ret;
 }
 
-static int string_int(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_int(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObString utf8_string;
@@ -5613,7 +4564,7 @@ static int string_int(const ObObjType expect_type, ObObjCastParams &params,
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5636,15 +4587,16 @@ static int string_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_uint(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_uint(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5667,15 +4619,16 @@ static int string_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_float(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_float(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj dbl;
+  Value dbl;
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -5686,14 +4639,15 @@ static int string_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_double(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_double(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -5746,8 +4700,9 @@ static int string_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_number(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_number(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = PRECISION_UNKNOWN_YET;
@@ -5759,7 +4714,7 @@ static int string_number(const ObObjType expect_type, ObObjCastParams &params,
   } else if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                           && ObTextTC != in.get_type_class()
                           && ObGeometryTC != in.get_type_class())
-                          || ObNumberTC != ob_obj_type_class(expect_type))) {
+                          || ObNumberTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -5819,8 +4774,9 @@ static int string_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int common_string_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, int64_t &value, const ObCastMode cast_mode)
+template <typename Value>
+static int common_string_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, int64_t &value, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObScale res_scale = -1;
@@ -5853,8 +4809,9 @@ static int common_string_datetime(const ObObjType expect_type, ObObjCastParams &
   return ret;
 }
 
-static int string_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObScale res_scale = -1;
@@ -5863,7 +4820,7 @@ static int string_datetime(const ObObjType expect_type, ObObjCastParams &params,
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -5885,8 +4842,9 @@ static int string_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                           const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObScale res_scale = -1;
@@ -5895,7 +4853,7 @@ static int string_mdatetime(const ObObjType expect_type, ObObjCastParams &params
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -5917,8 +4875,9 @@ static int string_mdatetime(const ObObjType expect_type, ObObjCastParams &params
   return ret;
 }
 
-static int string_date(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_date(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int32_t value = 0;
@@ -5929,7 +4888,7 @@ static int string_date(const ObObjType expect_type, ObObjCastParams &params,
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -5945,8 +4904,9 @@ static int string_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObMySQLDate md_value = 0;
@@ -5959,7 +4919,7 @@ static int string_mdate(const ObObjType expect_type, ObObjCastParams &params,
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -5975,8 +4935,9 @@ static int string_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_time(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_time(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
@@ -5985,7 +4946,7 @@ static int string_time(const ObObjType expect_type, ObObjCastParams &params,
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -5997,15 +4958,16 @@ static int string_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_year(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_year(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type",
          K(ret), K(in), K(expect_type));
@@ -6022,16 +4984,17 @@ static int string_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_string(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_string(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                    && ObTextTC != in.get_type_class()
                    && ObGeometryTC != in.get_type_class())
-      || OB_UNLIKELY(ObStringTC != ob_obj_type_class(expect_type)
-                     && ObTextTC != ob_obj_type_class(expect_type)))) {
+      || OB_UNLIKELY(ObStringTC != sql_type_class(expect_type)
+                     && ObTextTC != sql_type_class(expect_type)))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (ObTextTC == in.get_type_class() && in.is_outrow()) {
@@ -6092,7 +5055,7 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
       LOG_DEBUG("convert result", K(str), "result", ObHexEscapeSqlStr(ObString(result_len, buf)));
 
       if (OB_SUCC(ret)) {
-        if (ObTextTC == ob_obj_type_class(expect_type)) {
+        if (ObTextTC == sql_type_class(expect_type)) {
           out.set_lob_value(expect_type, buf, static_cast<int32_t>(result_len));
         } else {
           out.set_string(expect_type, buf, static_cast<int32_t>(result_len));
@@ -6112,7 +5075,7 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
           align_offset = cs->mbminlen - in.get_string_len() % cs->mbminlen;
         }
       }
-      ObObj tmp_out;
+      Value tmp_out;
       ObString str;
       if (OB_FAIL(check_convert_string(expect_type, params, in, tmp_out))) {
       } else if (tmp_out.is_string_or_lob_locator_type()) { // may has locator header if it is text types
@@ -6127,7 +5090,7 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
         if (CS_TYPE_INVALID != tmp_out.get_collation_type()) {
           out.set_collation_type(tmp_out.get_collation_type());
         }
-        if (ObTextTC == ob_obj_type_class(expect_type)) {
+        if (ObTextTC == sql_type_class(expect_type)) {
           out.set_inrow();
         }
       }
@@ -6141,15 +5104,16 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_bit(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_bit(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t value = 0;
   if (OB_UNLIKELY((ObStringTC != in.get_type_class()
                   && ObTextTC != in.get_type_class()
                   && ObGeometryTC != in.get_type_class())
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
@@ -6182,203 +5146,15 @@ static int string_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObCastMode cast_mode = params.cast_mode_;
-  const ObIArray<ObString> * type_infos = NULL;
-  const ObCollationType in_cs_type = ObCharset::is_valid_collation(in.get_collation_type())
-      ? in.get_collation_type()
-      : ObCharset::get_system_collation();
-  ObCollationType cs_type = expect_type.get_collation_type();
-  int32_t pos = 0;
-  uint64_t value = 0;
-  int32_t no_sp_len = 0;
-  ObString no_sp_val;
-  ObString in_str;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObStringTC != in.get_type_class() && ObTextTC != in.get_type_class())
-      || OB_ISNULL(type_infos = expect_type.get_type_infos())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObCharset::charset_convert(*params.allocator_v2_,
-                                                in.get_string(), in_cs_type,
-                                                cs_type, in_str))) {
-  } else {
-    no_sp_len = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, in_str.ptr(), in_str.length()));
-    no_sp_val.assign_ptr(in_str.ptr(), static_cast<ObString::obstr_size_t>(no_sp_len));
-    if (OB_FAIL(find_type(*type_infos, cs_type, no_sp_val, pos))) {
-    } else if (OB_UNLIKELY(pos < 0)) {
-      if (!in_str.is_numeric()) {
-        ret = OB_ERR_DATA_TRUNCATED;
-      } else {
-        int err = 0;
-        int64_t val_cnt = type_infos->count();
-        value = ObCharset::strntoull(in_str.ptr(), in_str.length(), 10, &err);
-        if (err != 0 || value > val_cnt) {
-          value = 0;
-          ret = OB_ERR_DATA_TRUNCATED;
-        }
-      }
-      if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
-        params.warning_ = OB_ERR_DATA_TRUNCATED;
-        ret = OB_SUCCESS;
-      }
-    } else {
-      value = pos + 1;//enum start from 1
-    }
-    LOG_DEBUG("finish string_enum", K(ret), K(expect_type), K(in), K(out), KPC(type_infos), K(lbt()));
-    SET_RES_ENUM(out);
-  }
-  return ret;
-}
 
-static int string_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObCastMode cast_mode = params.cast_mode_;
-  const ObIArray<ObString> * type_infos = NULL;
-  const ObCollationType in_cs_type = ObCharset::is_valid_collation(in.get_collation_type())
-      ? in.get_collation_type()
-      : ObCharset::get_system_collation();
-  ObCollationType cs_type = expect_type.get_collation_type();
-  const ObString &sep = ObCharsetUtils::get_const_str(cs_type, ',');
-  int32_t pos = 0;
-  uint64_t value = 0;
-  ObString in_str;
-  ObString val_str;
-  bool is_last_value = false;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObStringTC != in.get_type_class() && ObTextTC != in.get_type_class())
-      || OB_ISNULL(type_infos = expect_type.get_type_infos())
-      || !ObCharset::is_valid_collation(cs_type)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (in.get_string().empty()) {
-     value = 0;
-  } else if (OB_FAIL(ObCharset::charset_convert(*params.allocator_v2_,
-                                                in.get_string(), in_cs_type,
-                                                cs_type, in_str))) {
-  } else {
-    const char *remain = in_str.ptr();
-    int64_t remain_len = ObCharset::strlen_byte_no_sp(cs_type, in_str.ptr(), in_str.length());
-    do {
-      pos = 0;
-      const char *sep_loc = NULL;
-      if (NULL == (sep_loc = static_cast<const char *>(memmem(
-                      remain, remain_len, sep.ptr(), sep.length())))) {
-        is_last_value = true;
-        val_str.assign_ptr(remain, remain_len);
-        if (OB_FAIL(find_type(*type_infos, cs_type, val_str, pos))) {
-        }
-      } else {
-        val_str.assign_ptr(remain, static_cast<ObString::obstr_size_t>(sep_loc - remain));
-        remain_len = remain_len - (sep_loc - remain + sep.length());
-        remain = sep_loc + sep.length();
-        if (OB_FAIL(find_type(*type_infos, cs_type, val_str, pos))) {
-        }
-      }
-      if (OB_FAIL(ret)) {
-      } else if (pos < 0) {//not found
-        if (CM_IS_WARN_ON_FAIL(cast_mode)) {
-          params.warning_ = OB_ERR_DATA_TRUNCATED;
-          LOG_INFO("input value out of range, and set out value zero",
-                   K(pos), K(in), K(val_str), K(in_str), K(expect_type));
-        } else {
-          ret = OB_ERR_DATA_TRUNCATED;
-        }
-      } else {
-        pos %= 64;//In MySQL, if value exists duplicate, then value_count can be greater than 64
-        value |= (1ULL << pos);
-      }
-    } while (OB_SUCC(ret) && !is_last_value);
 
-    // Bug30666903: check implicit cast logic to handle number cases
-    if (in_str.is_numeric() &&
-        (OB_ERR_DATA_TRUNCATED == ret
-        || (params.warning_ == OB_ERR_DATA_TRUNCATED && CM_IS_WARN_ON_FAIL(cast_mode)))) {
-      int err = 0;
-      value = ObCharset::strntoull(in_str.ptr(), in_str.length(), 10, &err);
-      if(err == 0) {
-        ret = OB_SUCCESS;
-        uint32_t val_cnt = static_cast<uint32_t>(type_infos->count());
-        if (OB_UNLIKELY(val_cnt <= 0)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (val_cnt >= 64) {//do nothing
-        } else if (val_cnt < 64 && value > ((1ULL << val_cnt) - 1)) {
-          value = 0;
-          ret = OB_ERR_DATA_TRUNCATED;
-        }
-        if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
-          params.warning_ = OB_ERR_DATA_TRUNCATED;
-          ret = OB_SUCCESS;
-        }
-      } else {
-        value = 0;
-      }
-    }
-  }
-  LOG_DEBUG("finish string_set", K(ret), K(expect_type), K(in), K(out), KPC(type_infos), K(lbt()));
-  SET_RES_SET(out);
-  return ret;
-}
-
-#define CAST_TEXT_TO_ENUMSET(TYPE, OBJ_TYPE)                                        \
-static int text_##TYPE(const ObExpectType &expect_type, ObObjCastParams &params,    \
-                       const ObObj &in, ObObj &out)                                 \
-{                                                                                   \
-  int ret = OB_SUCCESS;                                                             \
-  if (OB_UNLIKELY(OBJ_TYPE != expect_type.get_type())                               \
-    || OB_UNLIKELY(ObTextTC != in.get_type_class())                                 \
-    || OB_ISNULL(expect_type.get_type_infos())) {                                   \
-    ret = OB_ERR_UNEXPECTED;                                                        \
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));                 \
-  } else {                                                                          \
-    ObString in_str;                                                                \
-    ObTextStringIter instr_iter(in);                                                \
-    if (OB_FAIL(init_lob_text_iter(instr_iter, params))) {                         \
-      LOG_WARN("init lob str iter failed ", K(ret), K(in));                         \
-    } else if (OB_FAIL(instr_iter.get_inrow_or_outrow_prefix_data(in_str))) {       \
-      LOG_WARN("get full data from lob str iter failed ", K(ret), K(in));           \
-    } else {                                                                        \
-        ObObj tmp_obj;                                                              \
-        tmp_obj.set_varchar(in_str);                                                \
-        tmp_obj.set_collation_type(in.get_collation_type());                        \
-        if (OB_FAIL(string_##TYPE(expect_type, params, tmp_obj, out))) {            \
-          LOG_WARN("Text to " #TYPE "failed", K(ret), K(tmp_obj));                  \
-        }                                                                           \
-      }                                                                             \
-    }                                                                               \
-  return ret;                                                                       \
-}
-
-CAST_TEXT_TO_ENUMSET(enum, ObEnumType);
-CAST_TEXT_TO_ENUMSET(set, ObSetType);
-
-static int string_raw(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  UNUSED(cast_mode);
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-
-  if (OB_UNLIKELY(ObStringTC != in.get_type_class() && ObTextTC != in.get_type_class())
-      || OB_UNLIKELY(ObRawTC != ob_obj_type_class(expect_type))) {
-     ret = OB_ERR_UNEXPECTED;
-     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(ObHexUtils::hextoraw(in, params, out))) {
-  } else {
-    res_length = static_cast<ObLength>(out.get_string_len());
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-
-  return ret;
-}
-
-static int string_text(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode,
+template <typename Value>
+static int string_text(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode,
                        const ObLobLocatorV2 *lob_locator)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_out;
+  Value tmp_out;
   ObString res_str;
   bool is_null_result = false;
   bool is_different_charset_type = (ObCharset::charset_type_by_coll(in.get_collation_type())
@@ -6403,7 +5179,7 @@ static int string_text(const ObObjType expect_type, ObObjCastParams &params,
     if (OB_FAIL(common::lob_helper::pack_to_disk_inrow_lob(params, res_str, expect_type, out))) {
     }
   } else {
-    common::ObTextStringObObjResult str_result(expect_type, &params, &out, has_lob_header);
+    CastTextResult<Value> str_result(expect_type, &params, &out, has_lob_header);
     if (lob_locator == NULL) {
       if (OB_FAIL(str_result.init(res_str.length()))) {
         } else if (OB_FAIL(str_result.append(res_str.ptr(), res_str.length()))) {
@@ -6419,11 +5195,12 @@ static int string_text(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int string_json(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_json(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   int32_t res_length = -1;
   bool need_charset_convert = ((CS_TYPE_BINARY != in.get_collation_type()) &&
                                (ObCharset::charset_type_by_coll(in.get_collation_type()) !=
@@ -6448,7 +5225,7 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
     ObJsonNull j_null;
     ObJsonNode *j_tree = NULL;
     uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
-    ObObjType in_type = in.get_type();
+    SqlValueType in_type = in.get_type();
     bool is_convert_jstr_type = (in_type == ObTinyTextType
                                  || in_type == ObTextType
                                  || in_type == ObMediumTextType
@@ -6504,20 +5281,21 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 // Notice: used in PL
-static int text_text(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int text_text(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObjType in_type = in.get_type();
-  ObObjType out_type = expect_type;
+  SqlValueType in_type = in.get_type();
+  SqlValueType out_type = expect_type;
   ObCollationType in_cs_type = in.get_collation_type();
   ObCollationType out_cs_type = params.dest_collation_;
   ObString in_str;
   ObString res_str;
-  ObObj tmp_out;
-  ObObj tmp_in = in;
+  Value tmp_out;
+  Value tmp_in = in;
   ObString row_str = in.get_string();
-  ObTextStringIter instr_iter(in);
+  ObTextStringIter instr_iter(in.get_type(), in.get_collation_type(), in.get_string(), in.has_lob_header());
 
   ObLobLocatorV2 in_lob_locator;
   in_lob_locator.assign_buffer(row_str.ptr(), row_str.length(), in.has_lob_header());
@@ -6530,7 +5308,7 @@ static int text_text(const ObObjType expect_type, ObObjCastParams &params,
   const bool is_tiny_to_others = ((in_type == ObTinyTextType && out_type != ObTinyTextType)
                                   || (in_type != ObTinyTextType && out_type == ObTinyTextType));
   if (OB_UNLIKELY(ObTextTC != in.get_type_class()
-      || OB_UNLIKELY(ObTextTC != ob_obj_type_class(expect_type)))) {
+      || OB_UNLIKELY(ObTextTC != sql_type_class(expect_type)))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if ((is_different_charset_type && !is_delta && !(is_persist && is_any_cs) && !is_freed)
@@ -6549,7 +5327,7 @@ static int text_text(const ObObjType expect_type, ObObjCastParams &params,
     } else if (OB_FAIL(tmp_out.get_string(res_str))) {
     } else {
       bool has_lob_header = (expect_type != ObTinyTextType);
-      common::ObTextStringObObjResult str_result(expect_type, &params, &out, has_lob_header);
+      CastTextResult<Value> str_result(expect_type, &params, &out, has_lob_header);
       if (OB_FAIL(str_result.init(res_str.length()))) {
       } else if (OB_FAIL(str_result.append(res_str.ptr(), res_str.length()))) {
       } else {
@@ -6565,20 +5343,21 @@ static int text_text(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int text_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int text_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObString in_str;
-  ObTextStringIter instr_iter(in);
+  ObTextStringIter instr_iter(in.get_type(), in.get_collation_type(), in.get_string(), in.has_lob_header());
   if (OB_UNLIKELY(ObTextTC != in.get_type_class()
-      || OB_UNLIKELY(ObStringTC != ob_obj_type_class(expect_type)))) {
+      || OB_UNLIKELY(ObStringTC != sql_type_class(expect_type)))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(init_lob_text_iter(instr_iter, params))) {
   } else if (OB_FAIL(instr_iter.get_full_data(in_str))) {
   } else {
-    ObObj tmp_in = in;
+    Value tmp_in = in;
     tmp_in.set_string(ObVarcharType, in_str);
     if (OB_FAIL(string_string(expect_type, params, tmp_in, out, cast_mode))) {
     }
@@ -6586,15 +5365,16 @@ static int text_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int text_json(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int text_json(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_in = in;
+  Value tmp_in = in;
   ObString in_str;
-  ObTextStringIter instr_iter(in);
+  ObTextStringIter instr_iter(in.get_type(), in.get_collation_type(), in.get_string(), in.has_lob_header());
   if (OB_UNLIKELY(ObTextTC != in.get_type_class()
-      || OB_UNLIKELY(ObJsonTC != ob_obj_type_class(expect_type)))) {
+      || OB_UNLIKELY(ObJsonTC != sql_type_class(expect_type)))) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(init_lob_text_iter(instr_iter, params))) {
@@ -6608,53 +5388,18 @@ static int text_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int geometry_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int string_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    ObString in_str;
-    if (OB_FAIL(in.get_string(in_str))) {
-    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, in_str, srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, in_str, geo, srs, cast_name))) {
-    } else if (ObGeoType::GEOMETRY == dst_geo_type) {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::add_geo_version(temp_allocator, in_str, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, static_cast<ObLength>(out.get_string_len()));
-      }
-    } else if (OB_FAIL(geometry_geometry(expect_type, params, in, out, cast_mode))) {
-    }
-
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // bit -> XXX
-static int bit_int(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_int(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   int64_t value = 0;
   if (OB_UNLIKELY(ObBitTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     value =static_cast<int64_t>(in.get_bit());
@@ -6670,14 +5415,15 @@ static int bit_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_uint(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_uint(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   uint64_t value = 0;
   if (OB_UNLIKELY(ObBitTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     value = static_cast<uint64_t>(in.get_bit());
@@ -6693,15 +5439,17 @@ static int bit_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_double(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int bit_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_double(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int bit_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj dbl;
+  Value dbl;
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-                   || ObFloatTC != ob_obj_type_class(expect_type)))) {
+                   || ObFloatTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -6713,14 +5461,15 @@ static int bit_float(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 
-static int bit_double(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_double(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
   double value = 0.0;
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-                   || ObDoubleTC != ob_obj_type_class(expect_type)))) {
+                   || ObDoubleTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
@@ -6731,15 +5480,16 @@ static int bit_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_number(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_number(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
   number::ObNumber nmb;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObBitTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(nmb.from(in.get_bit(), params))) {
@@ -6751,8 +5501,9 @@ static int bit_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t bit_value = in.get_bit();
@@ -6764,8 +5515,8 @@ static int bit_datetime(const ObObjType expect_type, ObObjCastParams &params,
   date_sql_mode.no_zero_date_ = CM_IS_NO_ZERO_DATE(cast_mode);
   date_sql_mode.no_zero_in_date_ = CM_IS_NO_ZERO_IN_DATE(cast_mode);
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-                   || (ObDateTimeTC != ob_obj_type_class(expect_type)
-                       && ObMySQLDateTimeTC != ob_obj_type_class(expect_type))))) {
+                   || (ObDateTimeTC != sql_type_class(expect_type)
+                       && ObMySQLDateTimeTC != sql_type_class(expect_type))))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (CM_IS_COLUMN_CONVERT(cast_mode)) {
@@ -6805,8 +5556,9 @@ static int bit_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(bit_datetime(expect_type, params, in, out, cast_mode))) {
@@ -6814,8 +5566,9 @@ static int bit_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_date(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_date(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t bit_value = in.get_bit();
@@ -6827,8 +5580,8 @@ static int bit_date(const ObObjType expect_type, ObObjCastParams &params,
   date_sql_mode.no_zero_in_date_ = CM_IS_NO_ZERO_IN_DATE(cast_mode);
   ObMySQLDate md_value = 0;
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-                   || (ObDateTC != ob_obj_type_class(expect_type)
-                       && ObMySQLDateTC != ob_obj_type_class(expect_type))))) {
+                   || (ObDateTC != sql_type_class(expect_type)
+                       && ObMySQLDateTC != sql_type_class(expect_type))))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (CM_IS_COLUMN_CONVERT(cast_mode)) {
@@ -6866,8 +5619,9 @@ static int bit_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(bit_date(expect_type, params, in, out, cast_mode))) {
@@ -6875,15 +5629,16 @@ static int bit_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_time(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_time(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t bit_value = in.get_bit();
   int64_t value = 0;
   ObScale res_scale = -1;
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-                   || ObTimeTC != ob_obj_type_class(expect_type)))) {
+                   || ObTimeTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (CM_IS_COLUMN_CONVERT(cast_mode)) {
@@ -6911,15 +5666,16 @@ static int bit_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_year(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_year(const SqlValueType expect_type, DatumCastParams &params,
+                        const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t bit_value = in.get_bit();
   uint8_t value = 0;
   ObScale res_scale = -1;
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-                   || ObYearTC != ob_obj_type_class(expect_type)))) {
+                   || ObYearTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (CAST_FAIL(ObTimeConverter::int_to_year(bit_value, value))) {
@@ -6930,15 +5686,16 @@ static int bit_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_string(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_string(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t value = in.get_bit();
   ObLength res_length = -1;
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-                   || (ObStringTC != ob_obj_type_class(expect_type)
-                       && ObTextTC != ob_obj_type_class(expect_type))))) {
+                   || (ObStringTC != sql_type_class(expect_type)
+                       && ObTextTC != sql_type_class(expect_type))))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (CM_IS_COLUMN_CONVERT(cast_mode)) {
@@ -6971,15 +5728,16 @@ static int bit_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_bit(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_bit(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
   uint64_t value = in.get_bit();
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObBitTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(get_bit_len(value, bit_len))) {
@@ -6992,50 +5750,19 @@ static int bit_bit(const ObObjType expect_type, ObObjCastParams &params,
 }
 
 
-static int bit_enum(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObBitTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    uint64_t value = in.get_bit();
-    ObObj uint_val;
-    uint_val.set_uint64(value);
-    if (OB_FAIL(uint_enum(expect_type, params, uint_val, out))) {
-    }
-  }
-  return ret;
-}
 
-static int bit_set(const ObExpectType &expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObBitTC != in.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    uint64_t value = in.get_bit();
-    ObObj uint_val;
-    uint_val.set_uint64(value);
-    if (OB_FAIL(uint_set(expect_type, params, uint_val, out))) {
-    }
-  }
-  return ret;
-}
 
 CAST_TO_TEXT_METHOD(bit, ObBitTC);
 
-static int bit_json(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_json(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   UNUSED(cast_mode);
 
   if (OB_UNLIKELY((ObBitTC != in.get_type_class()
-      || (ObJsonTC != ob_obj_type_class(expect_type))))) {
+      || (ObJsonTC != sql_type_class(expect_type))))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
@@ -7067,54 +5794,21 @@ static int bit_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int bit_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    ObFastFormatInt ffi(in.get_bit());
-    if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(ffi.length(), ffi.ptr()), srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(ffi.length(), ffi.ptr()),
-        geo, srs, cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
 
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode) && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
-
-bool ob_objcast_is_enum_set_with_subschema(const ObObj &in)
+template <typename Value>
+static bool enum_set_has_subschema_value(const Value &in)
 {
   return in.get_scale() == ObEnumSetMeta::MetaState::SQL;
 }
 
-int ob_objcast_common_enumset_string(
-    const ObObj &in,
-    ObObjCastParams &params,
+template <typename Value>
+static int enumset_string_value(
+    const Value &in,
+    DatumCastParams &params,
     ObTextStringResult &text_result)
 {
   int ret = OB_SUCCESS;
-  const ObObjType input_type = in.get_type();
+  const SqlValueType input_type = in.get_type();
   if (0 == in.get_uint64()) {
     // Empty enum/set values are represented by an empty string.
   } else if (OB_ISNULL(params.runtime_)) {
@@ -7139,309 +5833,54 @@ int ob_objcast_common_enumset_string(
   return ret;
 }
 
-static int enumset_enumset(const ObExpectType &expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObEnumSetTC != ob_obj_type_class(expect_type.get_type()))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else {
-    ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
-    ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
-    } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
-    } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
-    } else if (expect_type.get_type() == ObEnumType &&
-        OB_FAIL(string_enum(expect_type, params, temp_obj, out))) {
-    } else if (expect_type.get_type() == ObSetType &&
-        OB_FAIL(string_set(expect_type, params, temp_obj, out))) {
-    }
-  }
-  return ret;
-}
+// Temporary legacy entry points; both backends share native field access
+// algorithms. These wrappers do not construct or materialize any value.
+
 
 ////////////////////////////////////////////////////////////////
 // enum -> XXX
 /*//Conversion of obj from the same enum column should use this interface, conversion from different enum columns should use enumsetinner_enum
-static int enumset_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  uint64_t value = static_cast<uint64_t>(in.get_enum());
-  ObCastMode cast_mode = params.cast_mode_;
-  const ObIArray<ObString> * type_infos = NULL;
-  if (OB_UNLIKELY(ObEnumType != expect_type.get_type())
-      || OB_UNLIKELY(ObEnumType != in.get_type())
-      || OB_ISNULL(type_infos = expect_type.get_type_infos())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(expect_type), K(in), K(ret));
-  } else if (OB_UNLIKELY(value > type_infos->count())){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected value", K(in), K(out), K(expect_type), K(ret));
-  } else {
-    SET_RES_ENUM(out);
-  }
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////////
 // set -> XXX
 //Conversion of obj from the same set column should use this interface, conversion from different set columns should use enumsetinner_set
-static int enumset_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  uint64_t value = static_cast<uint64_t>(in.get_set());
-  ObCastMode cast_mode = params.cast_mode_;
-  const ObIArray<ObString> * type_infos = NULL;
-  if (OB_UNLIKELY(ObSetType != expect_type.get_type())
-      || OB_UNLIKELY(ObSetType != in.get_type())
-      || OB_ISNULL(type_infos = expect_type.get_type_infos())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(expect_type), K(in), K(ret));
-  } else {
-    int64_t val_cnt = type_infos->count();
-    if (OB_UNLIKELY(val_cnt > 64 || val_cnt <= 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect val_cnt", K(in), K(out), K(expect_type), K(ret));
-    } else if (OB_UNLIKELY(val_cnt < 64 && value > ((1ULL << val_cnt) - 1))){
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected value", K(in), K(out), K(expect_type), K(ret));
-    } else {
-      SET_RES_SET(out);
-    }
-  }
-  return ret;
-}
-
-static int enumsetinner_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class())
-      || OB_UNLIKELY(ObEnumType != expect_type.get_type())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type", K(expect_type), K(in), K(ret));
-  } else {
-    ObString inner_str = in.get_string();
-    ObEnumSetInnerValue inner_val;
-    int64_t pos = 0;
-    if (OB_FAIL(inner_val.deserialize(inner_str.ptr(), inner_str.length(), pos))) {
-      LOG_WARN("fail to deserialize", K(inner_str), K(pos), K(in), K(ret));
-    } else {
-      ObObj str_val;
-      str_val.set_varchar(inner_val.string_value_);
-      if (OB_FAIL(string_enum(expect_type, params, str_val, out))) {
-        LOG_WARN("fail to cast string to varchar", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-static int enumsetinner_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class())
-      || OB_UNLIKELY(ObSetType != expect_type.get_type())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type", K(expect_type), K(in), K(ret));
-  } else {
-    ObString inner_str = in.get_string();
-    ObEnumSetInnerValue inner_val;
-    int64_t pos = 0;
-    if (OB_FAIL(inner_val.deserialize(inner_str.ptr(), inner_str.length(), pos))) {
-      LOG_WARN("fail to deserialize", K(inner_str), K(pos), K(in), K(ret));
-    } else {
-      ObObj str_val;
-      str_val.set_varchar(inner_val.string_value_);
-      if (OB_FAIL(string_set(expect_type, params, str_val, out))) {
-        LOG_WARN("fail to cast string to varchar", K(ret));
-      }
-    }
-  }
-  return ret;
-  }*/
 
 
-ObCastEnumOrSetFunc OB_CAST_ENUM_OR_SET[ObMaxTC][2] =
-{
-  {
-    /*null -> enum_or_set*/
-    cast_identity_enum_set,/*enum*/
-    cast_identity_enum_set,/*set*/
-  },
-  {
-    /*int -> enum_or_set*/
-    int_enum,/*enum*/
-    int_set,/*set*/
-  },
-  {
-    /*uint -> enum_or_set*/
-    uint_enum,/*enum*/
-    uint_set,/*set*/
-  },
-  {
-    /*float -> enum_or_set*/
-    float_enum,/*enum*/
-    float_set,/*set*/
-  },
-  {
-    /*double -> enum_or_set*/
-    double_enum,/*enum*/
-    double_set,/*set*/
-  },
-  {
-    /*number -> enum_or_set*/
-    number_enum,/*enum*/
-    number_set,/*set*/
-  },
-  {
-    /*datetime -> enum_or_set*/
-    datetime_enum,/*enum*/
-    datetime_set,/*set*/
-  },
-  {
-    /*date -> enum_or_set*/
-    date_enum,/*enum*/
-    date_set,/*set*/
-  },
-  {
-    /*time -> enum_or_set*/
-    time_enum, /*enum*/
-    time_set, /*set*/
-  },
-  {
-    /*year -> enum_or_set*/
-    year_enum,/*enum*/
-    year_set,/*set*/
-  },
-  {
-    /*string -> enum_or_set*/
-    string_enum,/*enum*/
-    string_set,/*set*/
-  },
-  {
-    /*extend -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*unknow -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*text -> enum_or_set*/
-    text_enum,/*enum*/
-    text_set,/*set*/
-  },
-  {
-    /*bit -> enum_or_set*/
-    bit_enum,/*enum*/
-    bit_set,/*set*/
-  },
-  {
-    /*enumset tc -> enum_or_set*/
-    enumset_enumset,/*enum*/
-    enumset_enumset,/*set*/
-  },
-  {
-    /*enumset_inner tc -> enum_or_set*/
-    cast_not_expected_enum_set,/*enum*/
-    cast_not_expected_enum_set,/*set*/
-  },
-  {
-    /*OTimestamp -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*Raw -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*Interval -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*RowID -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*Lob -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*Json -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*Geometry -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {/*ObUserDefinedSQLTC -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*Decimalint -> enum_or_set*/
-    decimalint_enum,/*enum*/
-    decimalint_set,/*set*/
-  },
-  {
-    /*ObCollectionSQLTC -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*ObMySQLDateTC -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-  {
-    /*ObMySQLDateTimeTC -> enum_or_set*/
-    cast_not_support_enum_set,/*enum*/
-    cast_not_support_enum_set,/*set*/
-  },
-};
+*/
+
+
+
 
 ////////////////////////////////////////////////////////////
 // enum -> XXX
 
-static int enumset_int(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_int(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   //we regard enum as uint64 when int_value is needed
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
+                  || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
-    ObObj uint64_in;
+    Value uint64_in;
     uint64_in.set_uint64(in.get_uint64());
     ret = uint_int(expect_type, params, uint64_in, out, cast_mode);
   }
   return ret;
 }
 
-static int enumset_uint(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_uint(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
+                  || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -7457,12 +5896,13 @@ static int enumset_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
+                  || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -7474,12 +5914,13 @@ static int enumset_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_double(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_double(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
+                  || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -7491,14 +5932,15 @@ static int enumset_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_number(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_number(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   number::ObNumber nmb;
   ObPrecision res_precision = -1;
   if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
+                  || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -7512,21 +5954,22 @@ static int enumset_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                            const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                            const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
     ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    Value temp_obj;
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
     } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
     } else if (OB_FAIL(string_datetime(expect_type, params, temp_obj, out, cast_mode))) {
@@ -7535,21 +5978,22 @@ static int enumset_datetime(const ObObjType expect_type, ObObjCastParams &params
   return ret;
 }
 
-static int enumset_date(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_date(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
+                  || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
     ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    Value temp_obj;
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
     } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
     } else if (OB_FAIL(string_date(expect_type, params, temp_obj, out, cast_mode))) {
@@ -7558,21 +6002,22 @@ static int enumset_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_time(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_time(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
     ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    Value temp_obj;
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
     } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
     } else if (OB_FAIL(string_time(expect_type, params, temp_obj, out, cast_mode))) {
@@ -7581,13 +6026,14 @@ static int enumset_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_year(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_year(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj int64;
+  Value int64;
   if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
+                  || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
@@ -7598,20 +6044,21 @@ static int enumset_year(const ObObjType expect_type, ObObjCastParams &params,
     return ret;
   }
 
-static int enumset_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObStringTC != ob_obj_type_class(expect_type))) {
+                  || ObStringTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(expect_type, false, params.allocator_v2_);
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else {
       ObString es_str;
       text_result.get_result_buffer(es_str);
@@ -7627,21 +6074,22 @@ static int enumset_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_text(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_text(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObTextTC != ob_obj_type_class(expect_type))) {
+                  || ObTextTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
     ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    Value temp_obj;
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
     } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
     } else if (FALSE_IT(temp_obj.set_collation_type(params.dest_collation_))) {
@@ -7651,15 +6099,16 @@ static int enumset_text(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_bit(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_bit(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   UNUSED(cast_mode);
   int ret = OB_SUCCESS;
   uint64_t value = in.get_uint64();
   int32_t bit_len = 0;
   if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
+                  || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (OB_FAIL(get_bit_len(value, bit_len))) {
@@ -7670,21 +6119,22 @@ static int enumset_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_json(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_json(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObJsonTC != ob_obj_type_class(expect_type))) {
+                  || ObJsonTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
     ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    Value temp_obj;
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
     } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
     } else if (OB_FAIL(string_json(expect_type, params, temp_obj, out, cast_mode))) {
@@ -7693,21 +6143,22 @@ static int enumset_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
     ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    Value temp_obj;
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
     } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
     } else if (OB_FAIL(string_mdate(expect_type, params, temp_obj, out, cast_mode))) {
@@ -7716,21 +6167,22 @@ static int enumset_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int enumset_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (!ob_objcast_is_enum_set_with_subschema(in)) {
+  if (!enum_set_has_subschema_value(in)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ObEnumSetTC != in.get_type_class()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
     ObTextStringResult text_result(ObVarcharType, false, params.allocator_v2_);
     ObString es_str;
-    ObObj temp_obj;
-    if (OB_FAIL(ob_objcast_common_enumset_string(in, params, text_result))) {
+    Value temp_obj;
+    if (OB_FAIL(enumset_string_value(in, params, text_result))) {
     } else if (FALSE_IT(text_result.get_result_buffer(es_str))) {
     } else if (FALSE_IT(temp_obj.set_varchar(es_str))) {
     } else if (OB_FAIL(string_mdatetime(expect_type, params, temp_obj, out, cast_mode))) {
@@ -7739,329 +6191,6 @@ static int enumset_mdatetime(const ObObjType expect_type, ObObjCastParams &param
   return ret;
 }
 
-static int get_uint64_from_enumset_inner(const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObEnumSetInnerValue inner_value;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class())) {
-    LOG_ERROR("invalid input type", K(ret), K(in));
-  } else if (OB_FAIL(in.get_enumset_inner_value(inner_value))) {
-  } else {
-    out.set_uint64(inner_value.numberic_value_);
-  }
-  return ret;
-}
-
-static int get_string_from_enumset_inner(const ObObj &in, ObObj &out)
-{
-  int ret = OB_SUCCESS;
-  ObEnumSetInnerValue inner_value;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class())) {
-    LOG_ERROR("invalid input type", K(ret), K(in));
-  } else if (OB_FAIL(in.get_enumset_inner_value(inner_value))) {
-  } else {
-    out.set_varchar(inner_value.string_value_);
-    out.set_collation_type(in.get_collation_type());
-    out.set_collation_level(in.get_collation_level());
-  }
-  return ret;
-}
-  /* used for case when or in , comment temporary */
-
-  //static int enumset_inner_int(const ObObjType expect_type, ObObjCastParams &params,
-  //                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-  //{
-  //  //we regard enum as uint16 when int_value is needed
-  //  int ret = OB_SUCCESS;
-  //  ObObj uint64;
-  //  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-  //                  || ObIntTC != ob_obj_type_class(expect_type))) {
-  //    ret = OB_ERR_UNEXPECTED;
-  //    LOG_ERROR("invalid input type",
-  //        K(ret), K(in), K(expect_type));
-  //  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-//    LOG_WARN("failed to get_uint64_from_enumset_inner", K(in), K(ret));
-//  } else if (OB_FAIL(uint_int(expect_type, params, uint64, out, cast_mode))) {
-//    LOG_WARN("failed to cast uint to int", K(in), K(uint64), K(ret));
-//  } else {/*do nothing*/}
-//  return ret;
-//}
-//
-//static int enumset_inner_uint(const ObObjType expect_type, ObObjCastParams &params,
-//                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-//{
-//  //we regard enum as uint16 when int_value is needed
-//  int ret = OB_SUCCESS;
-//  ObObj uint64;
-//  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-//                  || ObUIntTC != ob_obj_type_class(expect_type))) {
-//    ret = OB_ERR_UNEXPECTED;
-//    LOG_ERROR("invalid input type",
-//        K(ret), K(in), K(expect_type));
-//  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-//    LOG_WARN("failed to get_uint64_from_enumset_inner", K(in), K(ret));
-//  } else if (OB_FAIL(uint_uint(expect_type, params, uint64, out, cast_mode))) {
-//    LOG_WARN("failed to cast uint to uint", K(in), K(uint64), K(ret));
-//  } else {/*do nothing*/}
-//  return ret;
-//}
-//
-//static int enumset_inner_float(const ObObjType expect_type, ObObjCastParams &params,
-//                            const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-//{
-//  //we regard enum as uint16 when int_value is needed
-//  int ret = OB_SUCCESS;
-//  ObObj uint64;
-//  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-//                  || ObFloatTC != ob_obj_type_class(expect_type))) {
-//    ret = OB_ERR_UNEXPECTED;
-//    LOG_ERROR("invalid input type",
-//        K(ret), K(in), K(expect_type));
-//  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-//    LOG_WARN("failed to get_uint64_from_enumset_inner", K(in), K(ret));
-//  } else if (OB_FAIL(uint_float(expect_type, params, uint64, out, cast_mode))) {
-//    LOG_WARN("failed to cast uint to float", K(in), K(uint64), K(ret));
-//  } else {/*do nothing*/}
-//  return ret;
-//}
-//
-//static int enumset_inner_double(const ObObjType expect_type, ObObjCastParams &params,
-//                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-//{
-//  //we regard enum as uint16 when int_value is needed
-//  int ret = OB_SUCCESS;
-//  ObObj uint64;
-//  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-//                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
-//    ret = OB_ERR_UNEXPECTED;
-//    LOG_ERROR("invalid input type",
-//        K(ret), K(in), K(expect_type));
-//  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-//    LOG_WARN("failed to get_uint64_from_enumset_inner", K(in), K(ret));
-//  } else if (OB_FAIL(uint_double(expect_type, params, uint64, out, cast_mode))) {
-//    LOG_WARN("failed to cast uint to double", K(in), K(uint64), K(ret));
-//  } else {/*do nothing*/}
-//  return ret;
-//}
-//
-//static int enumset_inner_number(const ObObjType expect_type, ObObjCastParams &params,
-//                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-//{
-//  //we regard enum as uint16 when int_value is needed
-//  int ret = OB_SUCCESS;
-//  ObObj uint64;
-//  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-//                  || ObNumberTC != ob_obj_type_class(expect_type))) {
-//    ret = OB_ERR_UNEXPECTED;
-//    LOG_ERROR("invalid input type", K(in), K(expect_type), K(ret));
-//  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-//    LOG_WARN("failed to get_uint64_from_enumset_inner", K(in), K(ret));
-//  } else if (OB_FAIL(uint_number(expect_type, params, uint64, out, cast_mode))) {
-//    LOG_WARN("failed to cast uint to number", K(in), K(uint64), K(ret));
-//  } else {/*do nothing*/}
-//  return ret;
-//}
-
-static int enumset_inner_int(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObIntTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type",
-        K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-  } else if (OB_FAIL(uint_int(expect_type, params, uint64, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_uint(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObUIntTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type",
-        K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-  } else if (OB_FAIL(uint_uint(expect_type, params, uint64, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_float(const ObObjType expect_type, ObObjCastParams &params,
-                            const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObFloatTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type",
-        K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-  } else if (OB_FAIL(uint_float(expect_type, params, uint64, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_double(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObDoubleTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type",
-        K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-  } else if (OB_FAIL(uint_double(expect_type, params, uint64, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_number(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObNumberTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(in), K(expect_type), K(ret));
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-  } else if (OB_FAIL(uint_number(expect_type, params, uint64, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-
-static int enumset_inner_year(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint64 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObYearTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type",
-        K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-  } else if (OB_FAIL(uint_year(expect_type, params, uint64, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_bit(const ObObjType expect_type, ObObjCastParams &params,
-                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObBitTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type",
-        K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, uint64))) {
-  } else if (OB_FAIL(uint_bit(expect_type, params, uint64, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj str_value;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObDateTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_string_from_enumset_inner(in, str_value))) {
-  } else if (OB_FAIL(string_datetime(expect_type, params, str_value, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-
-static int enumset_inner_date(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj str_value;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObDateTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_string_from_enumset_inner(in, str_value))) {
-  } else if (OB_FAIL(string_date(expect_type, params, str_value, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-
-static int enumset_inner_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj str_value;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_string_from_enumset_inner(in, str_value))) {
-  } else if (OB_FAIL(string_mdate(expect_type, params, str_value, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_time(const ObObjType expect_type, ObObjCastParams &params,
-                              const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj str_value;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObTimeTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_string_from_enumset_inner(in, str_value))) {
-  } else if (OB_FAIL(string_time(expect_type, params, str_value, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
-
-static int enumset_inner_string(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  //we regard enum as uint16 when int_value is needed
-  int ret = OB_SUCCESS;
-  ObObj str_value;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class()
-                  || ObStringTC != ob_obj_type_class(expect_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
-  } else if (OB_FAIL(get_string_from_enumset_inner(in, str_value))) {
-  } else if (OB_FAIL(string_string(expect_type, params, str_value, out, cast_mode))) {
-  } else {/*do nothing*/}
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // Raw -> XXX
@@ -8073,23 +6202,24 @@ static int enumset_inner_string(const ObObjType expect_type, ObObjCastParams &pa
 
 // Text -> XXX
 #define CAST_TEXT_TO_OTHER_TYPE(TYPE, TYPE_CLASS)                                   \
-static int text_##TYPE(const ObObjType expect_type, ObObjCastParams &params,        \
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)     \
+template <typename Value>                                                           \
+static int text_##TYPE(const SqlValueType expect_type, DatumCastParams &params,        \
+                       const Value &in, Value &out, const ObCastMode cast_mode)     \
 {                                                                                   \
   int ret = OB_SUCCESS;                                                             \
   if (OB_UNLIKELY(ObTextTC != in.get_type_class()                                   \
-                  || TYPE_CLASS != ob_obj_type_class(expect_type))) {               \
+                  || TYPE_CLASS != sql_type_class(expect_type))) {               \
     ret = OB_ERR_UNEXPECTED;                                                        \
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));       \
   } else {                                                                          \
     ObString in_str;                                                                \
-    ObTextStringIter instr_iter(in);                                                \
+    ObTextStringIter instr_iter(in.get_type(), in.get_collation_type(), in.get_string(), in.has_lob_header());                                                \
     if (OB_FAIL(init_lob_text_iter(instr_iter, params))) {                         \
       LOG_WARN("init lob str iter failed ", K(ret), K(in));               \
     } else if (OB_FAIL(instr_iter.get_inrow_or_outrow_prefix_data(in_str))) {       \
       LOG_WARN("get full data from lob str iter failed ", K(ret), K(in)); \
     } else {                                                                        \
-        ObObj tmp_obj;                                                              \
+        Value tmp_obj;                                                              \
         tmp_obj.set_varchar(in_str);                                                \
         tmp_obj.set_collation_type(in.get_collation_type());                        \
         if (OB_FAIL(string_##TYPE(expect_type, params, tmp_obj, out, cast_mode))) { \
@@ -8100,8 +6230,9 @@ static int text_##TYPE(const ObObjType expect_type, ObObjCastParams &params,    
   return ret;                                                                       \
 }
 
-static int string_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode);
+template <typename Value>
+static int string_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode);
 
 CAST_TEXT_TO_OTHER_TYPE(int, ObIntTC);
 CAST_TEXT_TO_OTHER_TYPE(uint, ObUIntTC);
@@ -8124,13 +6255,14 @@ CAST_TEXT_TO_OTHER_TYPE(decimalint, ObDecimalIntTC);
 ////////////////////////////////////////////////////////////
 // json -> XXX
 
-static int json_int(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_int(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObIntTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8157,13 +6289,14 @@ static int json_int(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_uint(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_uint(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObUIntTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObUIntTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8190,17 +6323,19 @@ static int json_uint(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_double(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode);
-static int json_float(const ObObjType expect_type, ObObjCastParams &params,
-                      const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_double(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode);
+template <typename Value>
+static int json_float(const SqlValueType expect_type, DatumCastParams &params,
+                      const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObFloatTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObFloatTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
-    ObObj obj_double;
+    Value obj_double;
     if (OB_FAIL(json_double(ObDoubleType, params, in, obj_double, cast_mode))) {
     } else if (OB_FAIL(double_float(expect_type, params, obj_double, out, cast_mode))) {
     }
@@ -8209,13 +6344,14 @@ static int json_float(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_double(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_double(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObDoubleTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObDoubleTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8242,12 +6378,13 @@ static int json_double(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_number(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_number(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObNumberTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObNumberTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8273,12 +6410,13 @@ static int json_number(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_datetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObDateTimeTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8304,12 +6442,13 @@ static int json_datetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_mdatetime(const SqlValueType expect_type, DatumCastParams &params,
+                         const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObMySQLDateTimeTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObMySQLDateTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8341,12 +6480,13 @@ static int json_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_date(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_date(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObDateTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8371,12 +6511,13 @@ static int json_date(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_mdate(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObMySQLDateTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObMySQLDateTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8408,12 +6549,13 @@ static int json_mdate(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_time(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_time(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObTimeTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObTimeTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8438,12 +6580,13 @@ static int json_time(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_year(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_year(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
-  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObYearTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type() || ObYearTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if(OB_UNLIKELY(params.allocator_v2_ == NULL)) {
@@ -8479,13 +6622,14 @@ static int json_year(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_string(const ObObjType expect_type, ObObjCastParams &params,
-                       const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_string(const SqlValueType expect_type, DatumCastParams &params,
+                       const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   // ToDo convert json to other none string type is also not allowed.
   if (OB_UNLIKELY(ObJsonType != in.get_type() ||
-      OB_UNLIKELY(ObStringTC != ob_obj_type_class(expect_type) && ObTextTC != ob_obj_type_class(expect_type)))) {
+      OB_UNLIKELY(ObStringTC != sql_type_class(expect_type) && ObTextTC != sql_type_class(expect_type)))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (in.is_json_outrow()) {
@@ -8523,7 +6667,7 @@ static int json_string(const ObObjType expect_type, ObObjCastParams &params,
           ret = copy_string(params, expect_type, temp_str_val, out);
           out.set_collation_type(params.dest_collation_);
         } else {
-          ObObj tmp_obj;
+          Value tmp_obj;
           tmp_obj.set_collation_type(in.get_collation_type());
           tmp_obj.set_collation_level(in.get_collation_level());
           tmp_obj.set_string(ObLongTextType, temp_str_val);
@@ -8533,7 +6677,7 @@ static int json_string(const ObObjType expect_type, ObObjCastParams &params,
             ObString tmp_str = out.get_string();
             out.set_string(expect_type, tmp_str.ptr(), static_cast<ObString::obstr_size_t>(accuracy_max_len));
           }
-          if (ObTextTC == ob_obj_type_class(expect_type)) {
+          if (ObTextTC == sql_type_class(expect_type)) {
             out.set_inrow();
           }
         }
@@ -8543,10 +6687,11 @@ static int json_string(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int common_json_string(const ObObjType expect_type,
-                              ObObjCastParams &params,
+template <typename Value>
+static int common_json_string(const SqlValueType expect_type,
+                              DatumCastParams &params,
                               const ObCastMode cast_mode,
-                              const ObObj &in,
+                              const Value &in,
                               ObString& res_str)
 {
   int ret = OB_SUCCESS;
@@ -8586,8 +6731,8 @@ static int common_json_string(const ObObjType expect_type,
         if (!need_charset_convert) {
           res_str = j_str;
         } else {
-          ObObj tmp_in;
-          ObObj tmp_out;
+          Value tmp_in;
+          Value tmp_out;
           tmp_in.set_collation_type(in.get_collation_type());
           tmp_in.set_collation_level(in.get_collation_level());
           tmp_in.set_string(ObLongTextType, j_str);
@@ -8606,29 +6751,31 @@ static int common_json_string(const ObObjType expect_type,
   return ret;
 }
 
-static int json_text(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_text(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObString res_str;
   if(OB_FAIL(common_json_string(expect_type, params, cast_mode, in, res_str))) {
   } else {
     out.set_string(expect_type, res_str);
-    if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(out, *params.allocator_v2_))) {
+    if (OB_FAIL(ObTextStringResult::convert_temporary_lob(out, *params.allocator_v2_))) {
     }
   }
   return ret;
 }
 
-static int json_bit(const ObObjType expect_type, ObObjCastParams &params,
-                    const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_bit(const SqlValueType expect_type, DatumCastParams &params,
+                    const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   uint64_t value;
   int32_t bit_len = 0;
 
   if (OB_UNLIKELY(ObJsonType != in.get_type()
-      || ObBitTC != ob_obj_type_class(expect_type))) {
+      || ObBitTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
@@ -8654,11 +6801,12 @@ static int json_bit(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_json(const ObObjType expect_type, ObObjCastParams &params,
-                     const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_json(const SqlValueType expect_type, DatumCastParams &params,
+                     const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObJsonType != in.get_type()) || OB_UNLIKELY(ObJsonTC != ob_obj_type_class(expect_type))) {
+  if (OB_UNLIKELY(ObJsonType != in.get_type()) || OB_UNLIKELY(ObJsonTC != sql_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else {
@@ -8674,375 +6822,98 @@ static int json_json(const ObObjType expect_type, ObObjCastParams &params,
   return ret;
 }
 
-static int json_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  UNUSEDx(expect_type, params, in, out);
-  int ret = OB_NOT_SUPPORTED;
-  if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode)) { // adapt mysql
-    ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-    LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-  } else {
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "json, geometry");
-  }
-  return ret;
-}
 
 ////////////////////////////////////////////////////////////
 // geometry -> XXX
-static int geometry_int(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_int(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "cast_as_signed");
-  }
-  return ret;
-}
 
-static int geometry_uint(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_uint(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "cast_as_unsigned");
-  }
-  return ret;
-}
 
-static int geometry_double(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode) && !CM_IS_WARN_ON_FAIL(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_double(expect_type, params, temp_obj, out, cast_mode))) {
-      ret = OB_ERR_WARN_DATA_OUT_OF_RANGE; // adapt mysql
-    }
-  } else {
-    out.set_double(0);
-  }
-  return ret;
-}
 
-static int geometry_float(const ObObjType expect_type, ObObjCastParams &params,
-                          const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_float(expect_type, params, temp_obj, out, cast_mode))) {
-      ret = OB_ERR_WARN_DATA_OUT_OF_RANGE; // adapt mysql
-    }
-  } else {
-    out.set_float(0);
-  }
-  return ret;
-}
 
-static int geometry_number(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_number(expect_type, params, temp_obj, out, cast_mode))) {
-      ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD; // adapt mysql
-    }
-  } else {
-    number::ObNumber nmb;
-    nmb.set_zero();
-    out.set_number(nmb);
-  }
-  return ret;
-}
 
-static int geometry_datetime(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_datetime(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    out.set_null();
-  }
-  return ret;
-}
 
-static int geometry_mdatetime(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_mdatetime(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    out.set_null();
-  }
-  return ret;
-}
 
-static int geometry_date(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_date(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    out.set_null();
-  }
-  return ret;
-}
 
-static int geometry_mdate(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_mdate(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    out.set_null();
-  }
-  return ret;
-}
 
-static int geometry_time(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_NULL_ON_WARN(cast_mode)) {
-    // issue/42826593
-    out.set_null();
-  } else if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_time(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    out.set_null();
-  }
-  return ret;
-}
 
-static int geometry_year(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_year(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_USER_ERROR(OB_INVALID_ARGUMENT, "cast_as_year");
-  }
-  return ret;
-}
 
-static int geometry_bit(const ObObjType expect_type, ObObjCastParams &params,
-                        const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    ObString str = in.get_string();
-    ObObj temp_obj;
-    if (OB_FAIL(read_real_lob_data(params, in, str))) {
-    } else if (FALSE_IT(temp_obj.set_string(in.get_type(), str))) {
-    } else if (OB_FAIL(string_bit(expect_type, params, temp_obj, out, cast_mode))) {
-    }
-  } else {
-    ret = OB_ERR_PARSE_SQL;
-    const char *err_msg = "bit";
-    int32_t str_len = static_cast<int32_t>(strlen(err_msg));
-    int32_t line_no = 1;
-    LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
-        str_len, err_msg, line_no);
-  }
-  return ret;
-}
 
-static int geom_copy_string(ObObjCastParams &params,
-                            const ObObjType expect_type,
-                            const ObString &src,
-                            ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int64_t len = src.length();
-  uint8_t offset = WKB_GEO_SRID_SIZE;
-  if (OB_LIKELY(len > WKB_OFFSET)) {
-    uint8_t version = (*(src.ptr() + WKB_GEO_SRID_SIZE));
-    if (IS_GEO_VERSION(version)) {
-      // version exist
-      len -= WKB_VERSION_SIZE;
-      offset += WKB_VERSION_SIZE;
-    }
-    if (is_lob_storage(expect_type)) {
-      bool has_lob_header = (expect_type != ObTinyTextType);
-      common::ObTextStringObObjResult str_result(expect_type, &params, &obj, has_lob_header);
-      if (OB_FAIL(str_result.init(len))) {
-      } else if (OB_FAIL(str_result.append(src.ptr(), WKB_GEO_SRID_SIZE))) {
-      } else if (OB_FAIL(str_result.append(src.ptr() + offset, len - WKB_GEO_SRID_SIZE))) {
-      } else {
-        str_result.set_result();
-      }
-    } else {
-      if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(params.alloc(len))))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        MEMMOVE(buf, src.ptr(), WKB_GEO_SRID_SIZE);
-        MEMMOVE(buf + WKB_GEO_SRID_SIZE, src.ptr() + offset, len - WKB_GEO_SRID_SIZE);
-        obj.set_string(expect_type, buf, static_cast<int32_t>(len));
-      }
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  return ret;
-}
 
-static int geometry_string(const ObObjType expect_type, ObObjCastParams &params,
-                           const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  ObString wkb = in.get_string();
-  if (OB_FAIL(read_real_lob_data(params, in, wkb))) {
-  } else if (OB_FAIL(geom_copy_string(params, expect_type, wkb, out))){
-  } else {
-    res_length = static_cast<ObLength>(out.get_string_len());
-  }
-  SET_RES_ACCURACY_STRING(expect_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
-static int geometry_json(const ObObjType expect_type, ObObjCastParams &params,
-                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  UNUSEDx(expect_type, params, in, out, cast_mode);
-  int ret = OB_NOT_SUPPORTED;
-  LOG_USER_ERROR(OB_NOT_SUPPORTED, "geomerty, json");
-  return ret;
-}
 
-static int geometry_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+
+static int geometry_geometry_datum(const SqlValueType expect_type, DatumCastParams &params,
+                                   const DatumValue &in, const ObString &instr,
+                                   detail::DatumCastFrame &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObLength res_length = -1;
   if (OB_ISNULL(params.allocator_v2_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObGeometry *src_tree = NULL;
-    ObGeometry *dst_tree = NULL;
-    ObString wkb;
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
     ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
     const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeometryTypeCast *geo_cast = NULL;
-    ObGeoErrLogInfo log_info;
-    ObString instr = in.get_string();
-    if (OB_FAIL(read_real_lob_data(params, in, instr))) {
-    } else if (ObGeoType::GEOMETRY == dst_geo_type) {
-      out = in;
-    } else if (OB_FAIL(common_get_srs_item(params, srs_guard, instr, srs, cast_name))) {
-    } else if (OB_FAIL(ObGeometryTypeCastUtil::get_tree(temp_allocator, instr, src_tree,
-        srs, log_info, cast_name))) {
-      if (OB_ERR_GIS_INVALID_DATA == ret) {
-        LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, cast_name);
-      } else if (OB_ERR_GEOMETRY_PARAM_LONGITUDE_OUT_OF_RANGE == ret) {
-        LOG_USER_ERROR(OB_ERR_GEOMETRY_PARAM_LONGITUDE_OUT_OF_RANGE,
-                      cast_name,
-                      log_info.value_out_of_range_,
-                      log_info.min_long_val_,
-                      log_info.max_long_val_);
-      } else if (OB_ERR_GEOMETRY_PARAM_LATITUDE_OUT_OF_RANGE == ret) {
-        LOG_USER_ERROR(OB_ERR_GEOMETRY_PARAM_LATITUDE_OUT_OF_RANGE,
-                      cast_name,
-                      log_info.value_out_of_range_,
-                      log_info.min_lat_val_,
-                      log_info.max_lat_val_);
-      }
+    if (ObGeoType::GEOMETRY == dst_geo_type) {
+      out = detail::DatumCastFrame(in);
     } else {
-      ObSrsType srs_type = src_tree->get_srid() == 0 ?
-                           ObSrsType::PROJECTED_SRS :
-                           srs->srs_type();
-      if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(temp_allocator, dst_geo_type,
-          ObSrsType::GEOGRAPHIC_SRS == srs_type, false, dst_tree, src_tree->get_srid()))) {
-      } else if (OB_FAIL(ObGeometryTypeCastFactory::alloc(temp_allocator,
-          dst_geo_type, geo_cast))) {
-      } else {
-        ObGeoErrLogInfo log_info;
-        if (ObSrsType::PROJECTED_SRS == srs_type) {
-          if (OB_FAIL(geo_cast->cast_geom(*src_tree, *dst_tree, srs, log_info, &temp_allocator))) {
-            ObGeoCastUtils::geo_cast_error_handle(ret, src_tree->type(), dst_geo_type, log_info);
-          }
-        } else if (ObSrsType::GEOGRAPHIC_SRS == srs_type) {
-          if (OB_FAIL(geo_cast->cast_geog(*src_tree, *dst_tree, srs, log_info, &temp_allocator))) {
-            ObGeoCastUtils::geo_cast_error_handle(ret, src_tree->type(), dst_geo_type, log_info);
-          }
-        } else {
-          ret = OB_ERR_UNEXPECTED;
+      ObIAllocator &temp_allocator = *params.allocator_v2_;
+      ObGeometry *src_tree = nullptr;
+      ObGeometry *dst_tree = nullptr;
+      ObSrsCacheGuard srs_guard;
+      const ObSrsItem *srs = nullptr;
+      ObGeometryTypeCast *geo_cast = nullptr;
+      ObGeoErrLogInfo log_info;
+      if (OB_FAIL(common_get_srs_item(params, srs_guard, instr, srs, cast_name))) {
+      } else if (OB_FAIL(ObGeometryTypeCastUtil::get_tree(temp_allocator, instr, src_tree,
+          srs, log_info, cast_name))) {
+        if (OB_ERR_GIS_INVALID_DATA == ret) {
+          LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, cast_name);
+        } else if (OB_ERR_GEOMETRY_PARAM_LONGITUDE_OUT_OF_RANGE == ret) {
+          LOG_USER_ERROR(OB_ERR_GEOMETRY_PARAM_LONGITUDE_OUT_OF_RANGE, cast_name,
+              log_info.value_out_of_range_, log_info.min_long_val_, log_info.max_long_val_);
+        } else if (OB_ERR_GEOMETRY_PARAM_LATITUDE_OUT_OF_RANGE == ret) {
+          LOG_USER_ERROR(OB_ERR_GEOMETRY_PARAM_LATITUDE_OUT_OF_RANGE, cast_name,
+              log_info.value_out_of_range_, log_info.min_lat_val_, log_info.max_lat_val_);
         }
-      }
-
-      if (OB_SUCC(ret)) {
-        ObString res_wkb;
-        if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *dst_tree, srs, res_wkb))) {
-        } else if (OB_FAIL(set_geo_res(&params, &out, res_wkb))) {
+      } else {
+        const ObSrsType srs_type = src_tree->get_srid() == 0
+            ? ObSrsType::PROJECTED_SRS : srs->srs_type();
+        if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(temp_allocator, dst_geo_type,
+            ObSrsType::GEOGRAPHIC_SRS == srs_type, false, dst_tree, src_tree->get_srid()))) {
+        } else if (OB_FAIL(ObGeometryTypeCastFactory::alloc(temp_allocator,
+            dst_geo_type, geo_cast))) {
         } else {
-          res_length = static_cast<ObLength>(out.get_string_len());
+          ObGeoErrLogInfo cast_log_info;
+          if (ObSrsType::PROJECTED_SRS == srs_type) {
+            if (OB_FAIL(geo_cast->cast_geom(*src_tree, *dst_tree, srs,
+                cast_log_info, &temp_allocator))) {
+              ObGeoCastUtils::geo_cast_error_handle(ret, src_tree->type(),
+                  dst_geo_type, cast_log_info);
+            }
+          } else if (ObSrsType::GEOGRAPHIC_SRS == srs_type) {
+            if (OB_FAIL(geo_cast->cast_geog(*src_tree, *dst_tree, srs,
+                cast_log_info, &temp_allocator))) {
+              ObGeoCastUtils::geo_cast_error_handle(ret, src_tree->type(),
+                  dst_geo_type, cast_log_info);
+            }
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ObString result_wkb;
+          if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *dst_tree, srs, result_wkb))) {
+          } else {
+            common::ObTextStringDatumValueResult text_result(
+                ObGeometryType, &params, &out, true);
+            if (OB_FAIL(text_result.init(result_wkb.length(), params.allocator_v2_))) {
+            } else if (OB_FAIL(text_result.append(result_wkb))) {
+            } else {
+              text_result.set_result();
+              out.meta_.set_geometry();
+              out.meta_.set_has_lob_header();
+              res_length = static_cast<ObLength>(out.get_string().length());
+            }
+          }
         }
       }
     }
@@ -9053,95 +6924,27 @@ static int geometry_geometry(const ObObjType expect_type, ObObjCastParams &param
 
 ////////////////////////////////////////////////////////////
 // XXX -> UDT
-static int cast_to_udt_not_support(const ObObjType expect_type, ObObjCastParams &params,
-                                   const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_ERR_UNEXPECTED;
-  LOG_WARN_RET(ret, "not expected obj type convert", K(expect_type), K(in), K(out), K(cast_mode));
-  return ret;
-}
 
 
-static int sql_udt_pl_extend(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_SUPPORTED;
-  return ret;
-}
 
-static int pl_extend_sql_udt(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_SUPPORTED;
-  return ret;
-}
 
-int ob_objcast_string_collection(
-    const ObObjType expect_type,
-    ObObjCastParams &params,
-    const ObObj &in,
-    ObObj &out,
-    const ObCastMode cast_mode)
-{
-  UNUSED(expect_type);
-  int ret = OB_SUCCESS;
-  if (in.is_null()) {
-    out.set_null();
-  } else if (OB_ISNULL(params.runtime_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(params.runtime_->cast_collection(
-                 params, in, out, cast_mode))) {
-  }
-  return ret;
-}
 
-static int pl_extend_geometry(const ObObjType expect_type, ObObjCastParams &params,
-                              const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_SUPPORTED;
-  return ret;
-}
 
-static int geometry_pl_extend(const ObObjType expect_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_SUPPORTED;
-  return ret;
-}
 
-static int pl_extend_string(const ObObjType expect_type, ObObjCastParams &params,
-                            const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_NOT_SUPPORTED;
-  return ret;
-}
 ////////////////////////////////////////////////////////////
 // UDT -> XXX
-static int cast_udt_to_other_not_support(const ObObjType expect_type, ObObjCastParams &params,
-                                         const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ret = OB_ERR_UNEXPECTED;
-  LOG_WARN_RET(ret, "not expected obj type convert", K(expect_type), K(in), K(out), K(cast_mode));
-  return ret;
-}
 
 // ================
 // decimalint -> xxx
 //
 // decimalint -> double
-static int decimalint_double(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_double(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type())
-      || OB_UNLIKELY(ObDoubleTC != ob_obj_type_class(expected_type))) {
+      || OB_UNLIKELY(ObDoubleTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expected_type));
   } else {
@@ -9150,7 +6953,7 @@ static int decimalint_double(const ObObjType expected_type, ObObjCastParams &par
     if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buffer,
                                 sizeof(buffer), pos))) {
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(buffer, static_cast<ObString::obstr_size_t>(pos));
       ret = string_double(expected_type, params, from, out, cast_mode);
     }
@@ -9161,12 +6964,13 @@ static int decimalint_double(const ObObjType expected_type, ObObjCastParams &par
   return ret;
 }
 
-static int decimalint_float(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                            ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_float(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                            Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type())
-      || OB_UNLIKELY(ObFloatTC != ob_obj_type_class(expected_type))) {
+      || OB_UNLIKELY(ObFloatTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expected_type));
   } else {
@@ -9175,7 +6979,7 @@ static int decimalint_float(const ObObjType expected_type, ObObjCastParams &para
     if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buffer,
                                 sizeof(buffer), pos))) {
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(buffer, static_cast<ObString::obstr_size_t>(pos));
       ret = string_float(expected_type, params, from, out, cast_mode);
     }
@@ -9186,11 +6990,12 @@ static int decimalint_float(const ObObjType expected_type, ObObjCastParams &para
   return ret;
 }
 
-static int decimalint_number(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_number(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()) || OB_UNLIKELY(ObNumberTC != ob_obj_type_class(expected_type))) {
+  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()) || OB_UNLIKELY(ObNumberTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expected_type));
   } else {
@@ -9209,12 +7014,13 @@ static int decimalint_number(const ObObjType expected_type, ObObjCastParams &par
   return ret;
 }
 
-static int decimalint_int(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                          ObObj &out, ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_int(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                          Value &out, ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
-  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()) || OB_UNLIKELY(ObIntTC != ob_obj_type_class(expected_type))) {
+  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()) || OB_UNLIKELY(ObIntTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expected_type));
   } else {
@@ -9223,7 +7029,7 @@ static int decimalint_int(const ObObjType expected_type, ObObjCastParams &params
     if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buffer,
                                 sizeof(buffer), pos))) {
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(buffer, static_cast<ObString::obstr_size_t>(pos));
       ret = string_int(expected_type, params, from, out, cast_mode);
     }
@@ -9235,12 +7041,13 @@ static int decimalint_int(const ObObjType expected_type, ObObjCastParams &params
   return ret;
 }
 
-static int decimalint_uint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_uint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
-  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()) || OB_UNLIKELY(ObUIntTC != ob_obj_type_class(expected_type))) {
+  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()) || OB_UNLIKELY(ObUIntTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expected_type));
   } else {
@@ -9249,7 +7056,7 @@ static int decimalint_uint(const ObObjType expected_type, ObObjCastParams &param
     if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buffer,
                                 sizeof(buffer), pos))) {
     } else {
-      ObObj from;
+      Value from;
       from.set_varchar(buffer, static_cast<ObString::obstr_size_t>(pos));
       ret = string_uint(expected_type, params, from, out, cast_mode);
     }
@@ -9261,8 +7068,9 @@ static int decimalint_uint(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int decimalint_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                                 const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                                 const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char *buf = nullptr;
@@ -9282,16 +7090,17 @@ static int decimalint_decimalint(const ObObjType expected_type, ObObjCastParams 
   return ret;
 }
 
-static int decimalint_string(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_string(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t length = 0;
   ObLength res_length = -1;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || (ObStringTC != ob_obj_type_class(expected_type)
-                      && ObTextTC != ob_obj_type_class(expected_type)))) {
+                  || (ObStringTC != sql_type_class(expected_type)
+                      && ObTextTC != sql_type_class(expected_type)))) {
     ret = OB_ERR_UNDEFINED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else {
@@ -9302,7 +7111,7 @@ static int decimalint_string(const ObObjType expected_type, ObObjCastParams &par
   }
   if (OB_SUCC(ret)) {
     ObString tmp_str;
-    ObObj tmp_out;
+    Value tmp_out;
     if (OB_FAIL(convert_string_collation(ObString(length, buf), ObCharset::get_system_collation(),
                                          tmp_str, params.dest_collation_, params))) {
     } else if (OB_FAIL(check_convert_string(expected_type, params, tmp_str, tmp_out))) {
@@ -9316,13 +7125,14 @@ static int decimalint_string(const ObObjType expected_type, ObObjCastParams &par
   return ret;
 }
 
-static int decimalint_bit(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                          ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_bit(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                          Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObBitTC != ob_obj_type_class(expected_type))) {
+                  || ObBitTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (OB_FAIL(decimalint_uint(ObUInt64Type, params, in, tmp_val, cast_mode))) {
@@ -9331,14 +7141,15 @@ static int decimalint_bit(const ObObjType expected_type, ObObjCastParams &params
   return ret;
 }
 
-static int decimalint_datetime(const ObObjType expected_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_datetime(const SqlValueType expected_type, DatumCastParams &params,
+                               const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObNumber tmp_nmb;
-  ObObj tmp_obj;
+  Value tmp_obj;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObDateTimeTC != ob_obj_type_class(expected_type))) {
+                  || ObDateTimeTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (OB_FAIL(wide::to_number(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(),
@@ -9350,14 +7161,15 @@ static int decimalint_datetime(const ObObjType expected_type, ObObjCastParams &p
   return ret;
 }
 
-static int decimalint_mdatetime(const ObObjType expected_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_mdatetime(const SqlValueType expected_type, DatumCastParams &params,
+                               const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObNumber tmp_nmb;
-  ObObj tmp_obj;
+  Value tmp_obj;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObMySQLDateTimeTC != ob_obj_type_class(expected_type))) {
+                  || ObMySQLDateTimeTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (OB_FAIL(wide::to_number(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(),
@@ -9369,14 +7181,15 @@ static int decimalint_mdatetime(const ObObjType expected_type, ObObjCastParams &
   return ret;
 }
 
-static int decimalint_date(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_date(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObNumber tmp_nmb;
-  ObObj tmp_obj;
+  Value tmp_obj;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObDateTC != ob_obj_type_class(expected_type))) {
+                  || ObDateTC != sql_type_class(expected_type))) {
     ret = OB_ERROR;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (OB_FAIL(wide::to_number(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(),
@@ -9388,14 +7201,15 @@ static int decimalint_date(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int decimalint_mdate(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_mdate(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObNumber tmp_nmb;
-  ObObj tmp_obj;
+  Value tmp_obj;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObMySQLDateTC != ob_obj_type_class(expected_type))) {
+                  || ObMySQLDateTC != sql_type_class(expected_type))) {
     ret = OB_ERROR;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (OB_FAIL(wide::to_number(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(),
@@ -9407,34 +7221,36 @@ static int decimalint_mdate(const ObObjType expected_type, ObObjCastParams &para
   return ret;
 }
 
-static int decimalint_time(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_time(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t length = 0;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObTimeTC != ob_obj_type_class(expected_type))) {
+                  || ObTimeTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buf,
                                      sizeof(buf), length))) {
   } else {
-    ObObj from;
+    Value from;
     from.set_varchar(buf, static_cast<ObString::obstr_size_t>(length));
     ret = string_time(expected_type, params, from, out, cast_mode);
   }
   return ret;
 }
 
-static int decimalint_year(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_year(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
   int64_t length = 0;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObYearTC != ob_obj_type_class(expected_type))) {
+                  || ObYearTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (wide::is_negative(in.get_decimal_int(), in.get_int_bytes())) {
@@ -9446,7 +7262,7 @@ static int decimalint_year(const ObObjType expected_type, ObObjCastParams &param
   } else if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buf,
                                      sizeof(buf), length))) {
   } else {
-    ObObj from;
+    Value from;
     from.set_varchar(buf, static_cast<ObString::obstr_size_t>(length));
     ret = string_year(expected_type, params, from, out, cast_mode);
   }
@@ -9455,14 +7271,15 @@ static int decimalint_year(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int decimalint_json(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int decimalint_json(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObNumber tmp_nmb;
-  ObObj tmp_obj;
+  Value tmp_obj;
   if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObJsonTC != ob_obj_type_class(expected_type))) {
+                  || ObJsonTC != sql_type_class(expected_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (CM_IS_COLUMN_CONVERT(cast_mode)
@@ -9478,49 +7295,10 @@ static int decimalint_json(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int decimalint_geometry(const ObObjType expected_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObLength res_length = -1;
-  char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
-  int64_t length = 0;
-  if (OB_UNLIKELY(ObDecimalIntType != in.get_type()
-                  || ObGeometryTC != ob_obj_type_class(expected_type))) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
-  } else if (OB_FAIL(wide::to_string(in.get_decimal_int(), in.get_int_bytes(), in.get_scale(), buf,
-                                     sizeof(buf), length))) {
-  } else {
-    ObIAllocator &temp_allocator = *params.allocator_v2_;
-    ObGeometry *geo = NULL;
-    ObSrsCacheGuard srs_guard;
-    const ObSrsItem *srs = NULL;
-    ObGeoType dst_geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
-    const char *cast_name = ObGeometryTypeCastUtil::get_cast_name(dst_geo_type);
-    if (OB_FAIL(common_get_srs_item(params, srs_guard, ObString(length, buf), srs, cast_name))) {
-    } else if (OB_FAIL(common_build_geometry(temp_allocator, ObString(length, buf), geo, srs,
-                                             cast_name))) {
-    } else {
-      ObString res_wkb;
-      if (OB_FAIL(ObGeoTypeUtil::to_wkb(temp_allocator, *geo, srs, res_wkb))) {
-      } else if (OB_FAIL(copy_string(params, expected_type, res_wkb, out))) {
-      } else {
-        res_length = static_cast<ObLength>(out.get_string_len());
-      }
-    }
-    if (OB_FAIL(ret) && CM_IS_COLUMN_CONVERT(cast_mode)
-        && ObGeoType::GEOMETRY == dst_geo_type) { // adapt mysql
-      ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
-      LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
-    }
-  }
-  SET_RES_ACCURACY_STRING(expected_type, DEFAULT_PRECISION_FOR_STRING, res_length);
-  return ret;
-}
 
-static int int_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                          ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int int_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                          Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
@@ -9528,7 +7306,7 @@ static int int_decimalint(const ObObjType expected_type, ObObjCastParams &params
   ObDecimalInt *decint = nullptr;
   int32_t int_bytes = 0;
   ObPrecision in_prec = ob_fast_digits10(value < 0 ? -value : value);
-  if (OB_UNLIKELY(ObIntTC != ob_obj_type_class(in.get_type())
+  if (OB_UNLIKELY(ObIntTC != sql_type_class(in.get_type())
                   || ObDecimalIntType != expected_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
@@ -9536,7 +7314,7 @@ static int int_decimalint(const ObObjType expected_type, ObObjCastParams &params
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(wide::from_integer(value, params, decint, int_bytes, in_prec))) {
   } else {
-    ObObj tmp_val;
+    Value tmp_val;
     tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
     if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
       DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
@@ -9547,8 +7325,9 @@ static int int_decimalint(const ObObjType expected_type, ObObjCastParams &params
   return ret;
 }
 
-static int uint_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int uint_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObPrecision res_precision = -1;
@@ -9556,7 +7335,7 @@ static int uint_decimalint(const ObObjType expected_type, ObObjCastParams &param
   int32_t int_bytes = 0;
   uint64_t value = in.get_uint64();
   ObPrecision in_prec = ob_fast_digits10(value);
-  if (OB_UNLIKELY(ObUIntTC != ob_obj_type_class(in.get_type())
+  if (OB_UNLIKELY(ObUIntTC != sql_type_class(in.get_type())
                   || ObDecimalIntType != expected_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
@@ -9564,7 +7343,7 @@ static int uint_decimalint(const ObObjType expected_type, ObObjCastParams &param
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(wide::from_integer(value, params, decint, int_bytes, in_prec))) {
   } else {
-    ObObj tmp_val;
+    Value tmp_val;
     tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
     if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
       DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
@@ -9575,8 +7354,9 @@ static int uint_decimalint(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int float_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                            ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int float_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                            Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[MAX_DOUBLE_STRICT_PRINT_SIZE] = {0};
@@ -9585,7 +7365,7 @@ static int float_decimalint(const ObObjType expected_type, ObObjCastParams &para
   int32_t int_bytes = 0;
   ObScale scale = 0;
   ObPrecision precision = 0;
-  if (OB_UNLIKELY(ObFloatTC != ob_obj_type_class(in.get_type())
+  if (OB_UNLIKELY(ObFloatTC != sql_type_class(in.get_type())
                   || ObDecimalIntType != expected_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
@@ -9600,7 +7380,7 @@ static int float_decimalint(const ObObjType expected_type, ObObjCastParams &para
     } else if (OB_FAIL(wide::from_string(buf, length, *params.allocator_v2_, scale, precision,
                                          int_bytes, decint))) {
     } else {
-      ObObj tmp_val;
+      Value tmp_val;
       tmp_val.set_decimal_int(int_bytes, scale, decint);
       if (NEED_SCALE_DECIMAL_INT(tmp_val, scale, *params.res_accuracy_)) {
         DO_SCALE_DECIMAL_INT(tmp_val, scale, out);
@@ -9612,8 +7392,9 @@ static int float_decimalint(const ObObjType expected_type, ObObjCastParams &para
   return ret;
 }
 
-static int double_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int double_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[MAX_DOUBLE_STRICT_PRINT_SIZE] = {0};
@@ -9622,7 +7403,7 @@ static int double_decimalint(const ObObjType expected_type, ObObjCastParams &par
   int32_t int_bytes = 0;
   ObScale scale = 0;
   ObPrecision precision = 0;
-  if (OB_UNLIKELY(ObDoubleTC != ob_obj_type_class(in.get_type())
+  if (OB_UNLIKELY(ObDoubleTC != sql_type_class(in.get_type())
                   || ObDecimalIntType != expected_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
@@ -9636,7 +7417,7 @@ static int double_decimalint(const ObObjType expected_type, ObObjCastParams &par
     if (OB_FAIL(wide::from_string(buf, length, *params.allocator_v2_, scale, precision, int_bytes,
                                   decint))) {
     } else {
-      ObObj tmp_val;
+      Value tmp_val;
       tmp_val.set_decimal_int(int_bytes, scale, decint);
       if (NEED_SCALE_DECIMAL_INT(tmp_val, scale, *params.res_accuracy_)) {
         DO_SCALE_DECIMAL_INT(tmp_val, scale, out);
@@ -9648,34 +7429,40 @@ static int double_decimalint(const ObObjType expected_type, ObObjCastParams &par
   return ret;
 }
 
-static int number_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int number_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObDecimalInt *decint = nullptr;
   int32_t int_bytes = 0;
-  ObNumber nmb = in.get_number();
-  ObScale in_scale = nmb.get_scale();
   if (OB_UNLIKELY(ObNumberTC != in.get_type_class() || ObDecimalIntType != expected_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
   } else if (OB_ISNULL(params.res_accuracy_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(wide::from_number(nmb, params, in_scale, decint, int_bytes))) {
   } else {
-    ObObj tmp_val;
-    tmp_val.set_decimal_int(int_bytes, in_scale, decint);
-    if (NEED_SCALE_DECIMAL_INT(tmp_val, in_scale, *params.res_accuracy_)) {
-      DO_SCALE_DECIMAL_INT(tmp_val, in_scale, out);
+    // A previous JSON cast may have returned a NULL warning result. Validate
+    // its type before dereferencing the native NUMBER descriptor.
+    ObNumber nmb = in.get_number();
+    ObScale in_scale = nmb.get_scale();
+    if (OB_FAIL(wide::from_number(nmb, params, in_scale, decint, int_bytes))) {
     } else {
-      out = tmp_val;
+      Value tmp_val;
+      tmp_val.set_decimal_int(int_bytes, in_scale, decint);
+      if (NEED_SCALE_DECIMAL_INT(tmp_val, in_scale, *params.res_accuracy_)) {
+        DO_SCALE_DECIMAL_INT(tmp_val, in_scale, out);
+      } else {
+        out = tmp_val;
+      }
     }
   }
   return ret;
 }
 
-static int datetime_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int datetime_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                               const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObScale scale = 0;
@@ -9697,7 +7484,7 @@ static int datetime_decimalint(const ObObjType expected_type, ObObjCastParams &p
     } else if (CAST_FAIL(wide::from_string(buf, len, *params.allocator_v2_, scale, precision,
                                            int_bytes, decint))) {
     } else {
-      ObObj tmp_val;
+      Value tmp_val;
       tmp_val.set_decimal_int(int_bytes, scale, decint);
       if (NEED_SCALE_DECIMAL_INT(tmp_val, scale, *params.res_accuracy_)) {
         DO_SCALE_DECIMAL_INT(tmp_val, scale, out);
@@ -9709,8 +7496,9 @@ static int datetime_decimalint(const ObObjType expected_type, ObObjCastParams &p
   return ret;
 }
 
-static int mdatetime_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdatetime_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                               const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObScale scale = 0;
@@ -9730,7 +7518,7 @@ static int mdatetime_decimalint(const ObObjType expected_type, ObObjCastParams &
     } else if (CAST_FAIL(wide::from_string(buf, len, *params.allocator_v2_, scale, precision,
                                            int_bytes, decint))) {
     } else {
-      ObObj tmp_val;
+      Value tmp_val;
       tmp_val.set_decimal_int(int_bytes, scale, decint);
       if (NEED_SCALE_DECIMAL_INT(tmp_val, scale, *params.res_accuracy_)) {
         DO_SCALE_DECIMAL_INT(tmp_val, scale, out);
@@ -9742,11 +7530,12 @@ static int mdatetime_decimalint(const ObObjType expected_type, ObObjCastParams &
   return ret;
 }
 
-static int date_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int date_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_int;
+  Value obj_int;
   ObDecimalInt *decint = nullptr;
   int32_t int_bytes = 0;
   ObPrecision res_precision = -1;
@@ -9761,7 +7550,7 @@ static int date_decimalint(const ObObjType expected_type, ObObjCastParams &param
   } else if (FALSE_IT(params.res_accuracy_ = acc)) { // reset accuracy for decimal int dest cast
   } else if (OB_FAIL(wide::from_integer(obj_int.get_int(), params, decint, int_bytes))) {
   } else {
-    ObObj tmp_val;
+    Value tmp_val;
     tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
     if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
       DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
@@ -9772,11 +7561,12 @@ static int date_decimalint(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int mdate_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int mdate_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_int;
+  Value obj_int;
   ObDecimalInt *decint = nullptr;
   int32_t int_bytes = 0;
   ObPrecision res_precision = -1;
@@ -9791,7 +7581,7 @@ static int mdate_decimalint(const ObObjType expected_type, ObObjCastParams &para
   } else if (FALSE_IT(params.res_accuracy_ = acc)) { // reset accuracy for decimal int dest cast
   } else if (OB_FAIL(wide::from_integer(obj_int.get_int(), params, decint, int_bytes))) {
   } else {
-    ObObj tmp_val;
+    Value tmp_val;
     tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
     if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
       DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
@@ -9802,8 +7592,9 @@ static int mdate_decimalint(const ObObjType expected_type, ObObjCastParams &para
   return ret;
 }
 
-static int time_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int time_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   char buf[OB_CAST_TO_VARCHAR_MAX_LENGTH] = {0};
@@ -9822,7 +7613,7 @@ static int time_decimalint(const ObObjType expected_type, ObObjCastParams &param
   } else if (OB_FAIL(wide::from_string(buf, len, *params.allocator_v2_, res_scale, res_precision,
                                        int_bytes, decint))) {
   } else {
-    ObObj tmp_val;
+    Value tmp_val;
     tmp_val.set_decimal_int(int_bytes, res_scale, decint);
     if (NEED_SCALE_DECIMAL_INT(tmp_val, res_scale, *params.res_accuracy_)) {
       DO_SCALE_DECIMAL_INT(tmp_val, res_scale, out);
@@ -9833,11 +7624,12 @@ static int time_decimalint(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int year_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int year_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_int;
+  Value obj_int;
   ObDecimalInt *decint = nullptr;
   int32_t int_bytes = 0;
   ObPrecision res_precision = -1;
@@ -9849,7 +7641,7 @@ static int year_decimalint(const ObObjType expected_type, ObObjCastParams &param
   } else if (OB_FAIL(year_int(ObIntType, params, in, obj_int, cast_mode))) {
   } else if (OB_FAIL(wide::from_integer(obj_int.get_int(), params, decint, int_bytes))) {
   } else {
-    ObObj tmp_val;
+    Value tmp_val;
     tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
     if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
       DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
@@ -9860,8 +7652,9 @@ static int year_decimalint(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int string_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                             const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int string_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                             const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObDecimalInt *decint = nullptr;
@@ -9871,7 +7664,7 @@ static int string_decimalint(const ObObjType expected_type, ObObjCastParams &par
   ObString utf8_string;
   ObPrecision out_prec = params.res_accuracy_->get_precision();
   ObScale out_scale = params.res_accuracy_->get_scale();
-  ObObj tmp_val;
+  Value tmp_val;
   if (OB_UNLIKELY((ObStringTC != in.get_type_class() && ObTextTC != in.get_type_class()
                    && ObGeometryTC != in.get_type_class())
                   || ObDecimalIntType != expected_type)) {
@@ -9977,8 +7770,9 @@ static int string_decimalint(const ObObjType expected_type, ObObjCastParams &par
   return ret;
 }
 
-static int bit_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                          ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int bit_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                          Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObDecimalInt *decint = nullptr;
@@ -9992,7 +7786,7 @@ static int bit_decimalint(const ObObjType expected_type, ObObjCastParams &params
     uint64_t val = in.get_bit();
     if (OB_FAIL(wide::from_integer(val, params, decint, int_bytes))) {
     } else {
-      ObObj tmp_val;
+      Value tmp_val;
       tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
       if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
         DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
@@ -10005,8 +7799,9 @@ static int bit_decimalint(const ObObjType expected_type, ObObjCastParams &params
   return ret;
 }
 
-static int enumset_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                              const ObObj &in, ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int enumset_decimalint(const SqlValueType expected_type, DatumCastParams &params,
+                              const Value &in, Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
   ObDecimalInt *decint = nullptr;
@@ -10018,7 +7813,7 @@ static int enumset_decimalint(const ObObjType expected_type, ObObjCastParams &pa
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(wide::from_integer(in.get_uint64(), params, decint, int_bytes))) {
   } else {
-    ObObj tmp_val;
+    Value tmp_val;
     tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
     if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
       DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
@@ -10029,37 +7824,13 @@ static int enumset_decimalint(const ObObjType expected_type, ObObjCastParams &pa
   return ret;
 }
 
-static int enumset_inner_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                                    const ObObj &in, ObObj &out, ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  ObDecimalInt *decint = nullptr;
-  int32_t int_bytes = 0;
-  ObObj obj_uint64;
-  if (OB_UNLIKELY(ObEnumSetInnerTC != in.get_type_class() || ObDecimalIntType != expected_type)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
-  } else if (OB_ISNULL(params.res_accuracy_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_uint64_from_enumset_inner(in, obj_uint64))) {
-  } else if (OB_FAIL(wide::from_integer(obj_uint64.get_uint64(), params, decint, int_bytes))) {
-  } else {
-    ObObj tmp_val;
-    tmp_val.set_decimal_int(int_bytes, DEFAULT_SCALE_FOR_INTEGER, decint);
-    if (NEED_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), *params.res_accuracy_)) {
-      DO_SCALE_DECIMAL_INT(tmp_val, tmp_val.get_scale(), out);
-    } else {
-      out = tmp_val;
-    }
-  }
-  return ret;
-}
 
-static int json_decimalint(const ObObjType expected_type, ObObjCastParams &params, const ObObj &in,
-                           ObObj &out, const ObCastMode cast_mode)
+template <typename Value>
+static int json_decimalint(const SqlValueType expected_type, DatumCastParams &params, const Value &in,
+                           Value &out, const ObCastMode cast_mode)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_nmb;
+  Value obj_nmb;
   if (OB_UNLIKELY(ObJsonTC != in.get_type_class() || ObDecimalIntType != expected_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid types", K(ret), K(in.get_type()), K(expected_type));
@@ -10069,1351 +7840,10 @@ static int json_decimalint(const ObObjType expected_type, ObObjCastParams &param
   return ret;
 }
 
-static int geometry_decimalint(const ObObjType expected_type, ObObjCastParams &params,
-                               const ObObj &in, ObObj &out, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  if (CM_IS_IMPLICIT_CAST(cast_mode)) {
-    if (OB_FAIL(string_decimalint(expected_type, params, in, out, cast_mode))) {
-      ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-    }
-  } else {
-    out.set_decimal_int(0, 0, nullptr); // zero value
-  }
-  return ret;
-}
 
-ObObjCastFunc OB_OBJ_CAST[ObMaxTC][ObMaxTC] =
-{
-  {
-    /*null -> XXX*/
-    cast_identity,/*null*/
-    cast_identity,/*int*/
-    cast_identity,/*uint*/
-    cast_identity,/*float*/
-    cast_identity,/*double*/
-    cast_identity,/*number*/
-    cast_identity,/*datetime*/
-    cast_identity,/*date*/
-    cast_identity,/*time*/
-    cast_identity,/*year*/
-    cast_identity,/*string*/
-    cast_identity,/*extend*/
-    cast_identity,/*unknown*/
-    cast_identity,/*text*/
-    cast_identity,/*bit*/
-    cast_identity,/*enumset*/
-    cast_identity,/*enumsetInner*/
-    cast_identity,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_identity,/*lob*/
-    cast_identity,/*json*/
-    cast_identity,/*geometry*/
-    cast_not_expected,/*udt, mysql mode does not have udt*/
-    cast_identity,/*decimalint*/
-    cast_identity,/*collection*/
-    cast_identity,/*mysql date*/
-    cast_identity,/*mysql datetime*/
-  },
-  {
-    /*int -> XXX*/
-    cast_not_support,/*null*/
-    int_int,/*int*/
-    int_uint,/*uint*/
-    int_float,/*float*/
-    int_double,/*double*/
-    int_number,/*number*/
-    int_datetime,/*datetime*/
-    int_date,/*date*/
-    int_time,/*time*/
-    int_year,/*year*/
-    int_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    int_text,/*text*/
-    int_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    int_json,/*json*/
-    int_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    int_decimalint,/*decimal int*/
-    cast_not_support,/*collection*/
-    int_mdate,/*mysql date*/
-    int_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*uint -> XXX*/
-    cast_not_support,/*null*/
-    uint_int,/*int*/
-    uint_uint,/*uint*/
-    uint_float,/*float*/
-    uint_double,/*double*/
-    uint_number,/*number*/
-    uint_datetime,/*datetime*/
-    uint_date,/*date*/
-    uint_time,/*time*/
-    uint_year,/*year*/
-    uint_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    uint_text,/*text*/
-    uint_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    uint_json,/*json*/
-    uint_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    uint_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    uint_mdate,/*mysql date*/
-    uint_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*float -> XXX*/
-    cast_not_support,/*null*/
-    float_int,/*int*/
-    float_uint,/*uint*/
-    float_float,/*float*/
-    float_double,/*double*/
-    float_number,/*number*/
-    float_datetime,/*datetime*/
-    float_date,/*date*/
-    float_time,/*time*/
-    cast_not_support,/*year*/
-    float_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    float_text,/*text*/
-    float_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    float_json,/*json*/
-    float_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    float_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    float_mdate,/*mysql date*/
-    float_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*double -> XXX*/
-    cast_not_support,/*null*/
-    double_int,/*int*/
-    double_uint,/*uint*/
-    double_float,/*float*/
-    double_double,/*double*/
-    double_number,/*number*/
-    double_datetime,/*datetime*/
-    double_date,/*date*/
-    double_time,/*time*/
-    double_year,/*year*/
-    double_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    double_text,/*text*/
-    double_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    double_json,/*json*/
-    double_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    double_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    double_mdate,/*mysql date*/
-    double_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*number -> XXX*/
-    cast_not_support,/*null*/
-    number_int,/*int*/
-    number_uint,/*uint*/
-    number_float,/*float*/
-    number_double,/*double*/
-    number_number,/*number*/
-    number_datetime,/*datetime*/
-    number_date,/*date*/
-    number_time,/*time*/
-    number_year,/*year*/
-    number_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    number_text,/*text*/
-    number_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    number_json,/*lob*/
-    number_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    number_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    number_mdate,/*mysql date*/
-    number_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*datetime -> XXX*/
-    cast_not_support,/*null*/
-    datetime_int,/*int*/
-    datetime_uint,/*uint*/
-    datetime_float,/*float*/
-    datetime_double,/*double*/
-    datetime_number,/*number*/
-    datetime_datetime,/*datetime*/
-    datetime_date,/*date*/
-    datetime_time,/*time*/
-    datetime_year,/*year*/
-    datetime_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    datetime_text,/*text*/
-    datetime_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    datetime_json,/*json*/
-    datetime_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    datetime_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    datetime_mdate,/*mysql date*/
-    datetime_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*date -> XXX*/
-    cast_not_support,/*null*/
-    date_int,/*int*/
-    date_uint,/*uint*/
-    date_float,/*float*/
-    date_double,/*double*/
-    date_number,/*number*/
-    date_datetime,/*datetime*/
-    cast_identity,/*date*/
-    date_time,/*time*/
-    date_year,/*year*/
-    date_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    date_text,/*text*/
-    date_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    date_json,/*json*/
-    date_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    date_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    date_mdate,/*mysql date*/
-    date_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*time -> XXX*/
-    cast_not_support,/*null*/
-    time_int,/*int*/
-    time_uint,/*uint*/
-    time_float,/*float*/
-    time_double,/*double*/
-    time_number,/*number*/
-    time_datetime,/*datetime*/
-    time_date,/*date*/
-    cast_identity,/*time*/
-    time_year,/*year*/
-    time_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    time_text,/*text*/
-    time_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    time_json,/*json*/
-    time_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    time_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    time_mdate,/*mysql date*/
-    time_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*year -> XXX*/
-    cast_not_support,/*null*/
-    year_int,/*int*/
-    year_uint,/*uint*/
-    year_float,/*float*/
-    year_double,/*double*/
-    year_number,/*number*/
-    year_datetime,/*datetime*/
-    year_date,/*date*/
-    year_time,/*time*/
-    cast_identity,/*year*/
-    year_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    year_text,/*text*/
-    year_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    year_json,/*json*/
-    year_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    year_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    year_mdate,/*mysql date*/
-    year_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*string -> XXX*/
-    cast_not_support,/*null*/
-    string_int,/*int*/
-    string_uint,/*uint*/
-    string_float,/*float*/
-    string_double,/*double*/
-    string_number,/*number*/
-    string_datetime,/*datetime*/
-    string_date,/*date*/
-    string_time,/*time*/
-    string_year,/*year*/
-    string_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    string_text,/*text*/
-    string_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    string_json,/*json*/
-    string_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    string_decimalint,/*decimalint*/
-    ob_objcast_string_collection,/*collection*/
-    string_mdate,/*mysql date*/
-    string_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*extend -> XXX*/
-    cast_not_support,/*null*/
-    cast_not_support,/*int*/
-    cast_not_support,/*uint*/
-    cast_not_support,/*float*/
-    cast_not_support,/*double*/
-    cast_not_support,/*number*/
-    cast_not_support,/*datetime*/
-    cast_not_support,/*date*/
-    cast_not_support,/*time*/
-    cast_not_support,/*year*/
-    cast_not_support,/*string*/
-    cast_identity,/*extend*/
-    cast_not_support,/*unknown*/
-    cast_not_support,/*text*/
-    cast_not_support,/*bit*/
-    cast_not_support,/*enumset*/
-    cast_not_support,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_support,/*lob*/
-    cast_not_support,/*json*/
-    cast_not_support,/*geometry*/
-    pl_extend_sql_udt,/*udt*/
-    cast_not_support,/*decimalint*/
-    cast_not_support,/*collection*/
-    cast_not_support,/*mysql date*/
-    cast_not_support,/*mysql datetime*/
-  },
-  {
-    /*unknown -> XXX*/
-    unknown_other,/*null*/
-    unknown_other,/*int*/
-    unknown_other,/*uint*/
-    unknown_other,/*float*/
-    unknown_other,/*double*/
-    unknown_other,/*number*/
-    unknown_other,/*datetime*/
-    unknown_other,/*date*/
-    unknown_other,/*time*/
-    unknown_other,/*year*/
-    unknown_other,/*string*/
-    unknown_other,/*extend*/
-    cast_identity,/*unknown*/
-    cast_not_support,/*text*/
-    unknown_other,/*bit*/
-    unknown_other,/*enumset*/
-    unknown_other,/*enumsetInner*/
-    unknown_other,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_support,/*lob*/
-    cast_not_support,/*json*/
-    cast_not_support,/*geometry*/
-    cast_not_expected,/*udt*/
-    unknown_other,/*decimalint*/
-    cast_not_support,/*collection*/
-    unknown_other,/*mysql date*/
-    unknown_other,/*mysql datetime*/
-  },
-  {
-    /*text -> XXX*/
-    cast_not_support,/*null*/
-    text_int,/*int*/
-    text_uint,/*uint*/
-    text_float,/*float*/
-    text_double,/*double*/
-    text_number,/*number*/
-    text_datetime,/*datetime*/
-    text_date,/*date*/
-    text_time,/*time*/
-    text_year,/*year*/
-    text_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    text_text,/*text*/
-    text_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    text_json,/*json*/
-    string_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    text_decimalint,/*decimalint*/
-    ob_objcast_string_collection,/*collection*/
-    text_mdate,/*mysql date*/
-    text_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*bit -> XXX*/
-    cast_not_support,/*null*/
-    bit_int,/*int*/
-    bit_uint,/*uint*/
-    bit_float,/*float*/
-    bit_double,/*double*/
-    bit_number,/*number*/
-    bit_datetime,/*datetime*/
-    bit_date,/*date*/
-    bit_time,/*time*/
-    bit_year,/*year*/
-    bit_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    bit_text,/*text*/
-    bit_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    bit_json,/*lob*/
-    bit_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    bit_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    bit_mdate,/*mysql date*/
-    bit_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*enum -> XXX*/
-    cast_not_support,/*null*/
-    enumset_int,/*int*/
-    enumset_uint,/*uint*/
-    enumset_float,/*float*/
-    enumset_double,/*double*/
-    enumset_number,/*number*/
-    enumset_datetime,/*datetime*/
-    enumset_date,/*date*/
-    enumset_time,/*time*/
-    enumset_year,/*year*/
-    enumset_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    enumset_text,/*text*/
-    enumset_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    enumset_json,/*json*/
-    cast_not_support,/*geometry*/
-    cast_not_expected,/*udt*/
-    enumset_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    enumset_mdate,/*mysql date*/
-    enumset_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*enumset_inner -> XXX*/
-    cast_not_support,/*null*/
-    enumset_inner_int,/*int*/
-    enumset_inner_uint,/*uint*/
-    enumset_inner_float,/*float*/
-    enumset_inner_double,/*double*/
-    enumset_inner_number,/*number*/
-    enumset_inner_datetime,/*datetime*/
-    enumset_inner_date,/*date*/
-    enumset_inner_time,/*time*/
-    enumset_inner_year,/*year*/
-    enumset_inner_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    cast_not_support,/*text*/
-    enumset_inner_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_support,/*lob*/
-    cast_not_support,/*json*/
-    cast_not_support,/*geometry*/
-    cast_not_expected,/*udt*/
-    enumset_inner_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    enumset_inner_mdate,/*mysql date*/
-    enumset_inner_datetime,/*mysql datetime*/
-  },
-  {
-    /*otimestamp -> XXX*/
-    cast_not_expected,/*null*/
-    cast_not_expected,/*int*/
-    cast_not_expected,/*uint*/
-    cast_not_expected,/*float*/
-    cast_not_expected,/*double*/
-    cast_not_expected,/*number*/
-    cast_not_expected,/*datetime*/
-    cast_not_expected,/*date*/
-    cast_not_expected,/*time*/
-    cast_not_expected,/*year*/
-    cast_not_expected,/*string*/
-    cast_not_expected,/*extend*/
-    cast_not_expected,/*unknown*/
-    cast_not_expected,/*text*/
-    cast_not_expected,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    cast_not_expected,/*json*/
-    cast_not_expected,/*geometry*/
-    cast_not_expected,/*udt*/
-    cast_not_expected,/*decimalint*/
-    cast_not_expected,/*collection*/
-    cast_not_expected,/*mysql date*/
-    cast_not_expected,/*mysql datetime*/
-  },
-  {
-    /*raw -> XXX*/
-    cast_not_expected,/*null*/
-    cast_not_expected,/*int*/
-    cast_not_expected,/*uint*/
-    cast_not_expected,/*float*/
-    cast_not_expected,/*double*/
-    cast_not_expected,/*number*/
-    cast_not_expected,/*datetime*/
-    cast_not_expected,/*date*/
-    cast_not_expected,/*time*/
-    cast_not_expected,/*year*/
-    cast_not_expected,/*string*/
-    cast_not_expected,/*extend*/
-    cast_not_expected,/*unknown*/
-    cast_not_expected,/*text*/
-    cast_not_expected,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_not_expected,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    cast_not_expected,/*json*/
-    cast_not_expected,/*geometry*/
-    cast_not_expected,/*udt*/
-    cast_not_expected,/*decimalint*/
-    cast_not_expected,/*collection*/
-    cast_not_expected,/*mysql date*/
-    cast_not_expected,/*mysql datetime*/
-  },
-  {
-    /*interval -> XXX*/
-    cast_not_expected,/*null*/
-    cast_not_expected,/*int*/
-    cast_not_expected,/*uint*/
-    cast_not_expected,/*float*/
-    cast_not_expected,/*double*/
-    cast_not_expected,/*number*/
-    cast_not_expected,/*datetime*/
-    cast_not_expected,/*date*/
-    cast_not_expected,/*time*/
-    cast_not_expected,/*year*/
-    cast_not_expected,/*string*/
-    cast_not_expected,/*extend*/
-    cast_not_expected,/*unknown*/
-    cast_not_expected,/*text*/
-    cast_not_expected,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_not_expected,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    cast_not_expected,/*json*/
-    cast_not_expected,/*geometry*/
-    cast_not_expected,/*udt*/
-    cast_not_expected,/*decimalint*/
-    cast_not_expected,/*collection*/
-    cast_not_expected,/*mysql date*/
-    cast_not_expected,/*mysql datetime*/
-  },
-  {
-    /*rowid -> XXX*/
-    cast_not_expected,/*null*/
-    cast_not_expected,/*int*/
-    cast_not_expected,/*uint*/
-    cast_not_expected,/*float*/
-    cast_not_expected,/*double*/
-    cast_not_expected,/*number*/
-    cast_not_expected,/*datetime*/
-    cast_not_expected,/*date*/
-    cast_not_expected,/*time*/
-    cast_not_expected,/*year*/
-    cast_not_expected,/*string*/
-    cast_not_expected,/*extend*/
-    cast_not_expected,/*unknown*/
-    cast_not_expected,/*text*/
-    cast_not_expected,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_not_expected,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    cast_not_expected,/*json*/
-    cast_not_expected,/*geometry*/
-    cast_not_expected,/*udt*/
-    cast_not_expected,/*decimalint*/
-    cast_not_expected,/*collection*/
-    cast_not_expected,/*mysql date*/
-    cast_not_expected,/*mysql datetime*/
-  },
-  {
-    /*lob -> XXX*/
-    cast_not_support,/*null*/
-    cast_not_support,/*int*/
-    cast_not_support,/*uint*/
-    cast_not_support,/*float*/
-    cast_not_support,/*double*/
-    cast_not_support,/*number*/
-    cast_not_support,/*datetime*/
-    cast_not_support,/*date*/
-    cast_not_support,/*time*/
-    cast_not_support,/*year*/
-    cast_not_support,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    cast_not_support,/*text*/
-    cast_not_support,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    cast_not_expected,/*json*/
-    cast_not_support,/*geometry*/
-    cast_not_expected,/*udt*/
-    cast_not_support,/*decimalint*/
-    cast_not_support,/*collection*/
-    cast_not_support,/*mysql date*/
-    cast_not_support,/*mysql datetime*/
-  },
-  {
-    /*json -> XXX*/
-    cast_not_support,/*null*/
-    json_int,/*int*/
-    json_uint,/*uint*/
-    json_float,/*float*/
-    json_double,/*double*/
-    json_number,/*number*/
-    json_datetime,/*datetime*/
-    json_date,/*date*/
-    json_time,/*time*/
-    json_year,/*year*/
-    json_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    json_string,/*text*/
-    json_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    json_json,/*json*/
-    json_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    json_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    json_mdate,/*mysql date*/
-    json_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*geometry -> XXX*/
-    cast_not_support,/*null*/
-    geometry_int,/*int*/
-    geometry_uint,/*uint*/
-    geometry_float,/*float*/
-    geometry_double,/*double*/
-    geometry_number,/*number*/
-    geometry_datetime,/*datetime*/
-    geometry_date,/*date*/
-    geometry_time,/*time*/
-    geometry_year,/*year*/
-    geometry_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    geometry_string,/*text*/
-    geometry_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    geometry_json,/*json*/
-    geometry_geometry,/*geometry*/
-    cast_not_expected,/*udt*/
-    geometry_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    geometry_mdate,/*mysql date*/
-    geometry_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*udt -> XXX*/
-    cast_not_expected,/*null*/
-    cast_not_expected,/*int*/
-    cast_not_expected,/*uint*/
-    cast_not_expected,/*float*/
-    cast_not_expected,/*double*/
-    cast_not_expected,/*number*/
-    cast_not_expected,/*datetime*/
-    cast_not_expected,/*date*/
-    cast_not_expected,/*time*/
-    cast_not_expected,/*year*/
-    cast_not_expected,/*string*/
-    cast_not_expected,/*extend*/
-    cast_not_expected,/*unknown*/
-    cast_not_expected,/*text*/
-    cast_not_expected,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_not_expected,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    cast_not_expected,/*json*/
-    cast_not_expected,/*geometry*/
-    cast_not_expected,/*udt*/
-    cast_not_expected,/*decimalint*/
-    cast_not_expected,/*collection*/
-    cast_not_expected,/*mysql date*/
-    cast_not_expected,/*mysql datetime*/
-  },
-  {
-    /*decimalint-> XXX*/
-    cast_not_support,/*null*/
-    decimalint_int,/*int*/
-    decimalint_uint,/*uint*/
-    decimalint_float,/*float*/
-    decimalint_double,/*double*/
-    decimalint_number,/*number*/
-    decimalint_datetime,/*datetime*/
-    decimalint_date,/*date*/
-    decimalint_time,/*time*/
-    decimalint_year,/*year*/
-    decimalint_string,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    decimalint_text,/*text*/
-    decimalint_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    decimalint_json,/*json*/
-    decimalint_geometry,/*geometry*/
-    cast_not_expected, /*udt*/
-    decimalint_decimalint,/*decimalint*/
-    cast_not_support,/*collection*/
-    decimalint_mdate,/*mysql date*/
-    decimalint_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*collection-> xxx*/
-    cast_not_support,/*null*/
-    cast_not_support,/*int*/
-    cast_not_support,/*uint*/
-    cast_not_support,/*float*/
-    cast_not_support,/*double*/
-    cast_not_support,/*number*/
-    cast_not_support,/*datetime*/
-    cast_not_support,/*date*/
-    cast_not_support,/*time*/
-    cast_not_support,/*year*/
-    cast_not_support,/*string*/
-    cast_not_support,/*extend*/
-    cast_not_support,/*unknown*/
-    cast_not_support,/*text*/
-    cast_not_support,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_support,/*otimestamp*/
-    cast_not_support,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    cast_not_support,/*json*/
-    cast_not_support,/*geometry*/
-    cast_not_expected, /*udt*/
-    cast_not_support,/*decimalint*/
-    cast_not_expected,/*collection*/
-    cast_not_support,/*mysql date*/
-    cast_not_support,/*mysql datetime*/
-  },
-  {
-    /*mysql date-> xxx*/
-    cast_not_expected,/*null*/
-    mdate_int,/*int*/
-    mdate_uint,/*uint*/
-    mdate_float,/*float*/
-    mdate_double,/*double*/
-    mdate_number,/*number*/
-    mdate_datetime,/*datetime*/
-    mdate_date,/*date*/
-    mdate_time,/*time*/
-    mdate_year,/*year*/
-    mdate_string,/*string*/
-    cast_not_expected,/*extend*/
-    cast_not_expected,/*unknown*/
-    mdate_text,/*text*/
-    mdate_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    mdate_json,/*json*/
-    mdate_geometry,/*geometry*/
-    cast_not_expected, /*udt*/
-    mdate_decimalint,/*decimalint*/
-    cast_not_expected,/*collection*/
-    cast_identity,/*mysql date*/
-    mdate_mdatetime,/*mysql datetime*/
-  },
-  {
-    /*mysql datetime-> xxx*/
-    cast_not_expected,/*null*/
-    mdatetime_int,/*int*/
-    mdatetime_uint,/*uint*/
-    mdatetime_float,/*float*/
-    mdatetime_double,/*double*/
-    mdatetime_number,/*number*/
-    mdatetime_datetime,/*datetime*/
-    mdatetime_date,/*date*/
-    mdatetime_time,/*time*/
-    mdatetime_year,/*year*/
-    mdatetime_string,/*string*/
-    cast_not_expected,/*extend*/
-    cast_not_expected,/*unknown*/
-    mdatetime_text,/*text*/
-    mdatetime_bit,/*bit*/
-    cast_not_expected,/*enumset*/
-    cast_not_expected,/*enumset_inner*/
-    cast_not_expected,/*otimestamp*/
-    cast_inconsistent_types,/*raw*/
-    cast_not_expected,/*interval*/
-    cast_not_expected,/*rowid*/
-    cast_not_expected,/*lob*/
-    mdatetime_json,/*json*/
-    mdatetime_geometry,/*geometry*/
-    cast_not_expected, /*udt*/
-    mdatetime_decimalint,/*decimalint*/
-    cast_not_expected,/*collection*/
-    mdatetime_mdate,/*mysql date*/
-    cast_identity,/*mysql datetime*/
-  },
 
-};
 
 ////////////////////////////////////////////////////////////////
-bool cast_supported(const ObObjType orig_type, const ObCollationType orig_cs_type,
-                    const ObObjType expect_type, const ObCollationType expect_cs_type)
-{
-  bool bret = false;
-  if (OB_UNLIKELY(ob_is_invalid_obj_type(orig_type) ||
-                  ob_is_invalid_obj_type(expect_type))) {
-    LOG_WARN_RET(OB_INVALID_ARGUMENT, "invalid cast type", K(orig_type), K(expect_type));
-  } else {
-    ObObjTypeClass orig_tc = ob_obj_type_class(orig_type);
-    ObObjTypeClass expect_tc = ob_obj_type_class(expect_type);
-    ObObjCastFunc cast_func = OB_OBJ_CAST[orig_tc][expect_tc];
-    bret = (cast_func != cast_not_support && cast_func != cast_inconsistent_types);
-  }
-  return bret;
-}
-
-int float_range_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-                      const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  float value = obj.get_float();
-  res_obj = &obj;
-  if (obj.is_ufloat() && 0.0 > value) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    // float/double comparison using "==" or "!=" matches MySQL
-    if (CAST_FAIL(real_range_check(accuracy, value))) {
-    } else if (obj.get_float() != value) {
-      buf_obj.set_float(obj.get_type(), value);
-      res_obj = &buf_obj;
-    }
-  }
-  return ret;
-}
-
-int double_check_precision(ObObjCastParams &params, const ObAccuracy &accuracy,
-                           const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  double value = obj.get_double();
-  res_obj = &obj;
-  if (obj.is_udouble() && 0.0 > value) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (CAST_FAIL(real_range_check(accuracy, value))) {
-    // float/double comparison using "==" or "!=" matches MySQL
-  } else if (obj.get_double() != value) {
-    buf_obj.set_double(obj.get_type(), value);
-    res_obj = &buf_obj;
-  }
-  return ret;
-}
-
-int number_range_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-                       const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  static const int64_t BUFFER_SIZE = 2 * (number::ObNumber::MAX_SCALE +
-                                          number::ObNumber::MAX_PRECISION);
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    int &cast_ret = CM_IS_ERROR_ON_FAIL(cast_mode) ? ret : params.warning_;
-    ObPrecision precision = accuracy.get_precision();
-    ObScale scale = accuracy.get_scale();
-    ObIAllocator &allocator = *params.allocator_v2_;
-    res_obj = &obj;
-    if (OB_UNLIKELY(precision < scale)) {
-      ret = OB_ERR_M_BIGGER_THAN_D;
-    } else if (number::ObNumber::MAX_PRECISION >= precision &&
-               number::ObNumber::MAX_SCALE >= scale &&
-               precision >= 0 &&
-               scale >= 0) {
-      // prepare string like "99.999".
-      char buf[BUFFER_SIZE] = {0};
-      int pos = 0;
-      buf[pos++] = '-';
-      if (precision == scale) {
-        buf[pos++] = '0';
-      }
-      MEMSET(buf + pos, '9', precision + 1);
-      buf[pos + precision - scale] = '.';
-      // make min and max numbers.
-      number::ObNumber min_num;
-      number::ObNumber max_num;
-      number::ObNumber in_val = obj.get_number();
-      number::ObNumber out_val;
-      if (OB_FAIL(min_num.from(buf, allocator))) {
-      } else if (OB_FAIL(max_num.from(buf + 1, allocator))) {
-      } else if (in_val < min_num) {
-        cast_ret = OB_DATA_OUT_OF_RANGE;
-        buf_obj.set_number(obj.get_type(), min_num);
-      } else if (in_val > max_num) {
-        cast_ret = OB_DATA_OUT_OF_RANGE;
-        buf_obj.set_number(obj.get_type(), max_num);
-      } else if (OB_FAIL(out_val.from(in_val, allocator))) {
-      } else if (OB_FAIL(out_val.round(scale))) {
-      } else {
-        buf_obj.set_number(obj.get_type(), out_val);
-      }
-      res_obj = &buf_obj;
-    } else {
-      ret = OB_INVALID_ARGUMENT;
-    }
-  }
-  return ret;
-}
-
-
-int number_range_check_v2(ObObjCastParams &params, const ObAccuracy &accuracy,
-                          const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj,
-                          const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  if (OB_ISNULL(params.allocator_v2_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    int &cast_ret = CM_IS_ERROR_ON_FAIL(cast_mode) ? ret : params.warning_;
-    ObPrecision precision = accuracy.get_precision();
-    ObScale scale = accuracy.get_scale();
-    ObIAllocator &allocator = *params.allocator_v2_;
-    res_obj = &obj;
-    const number::ObNumber &in_val = obj.get_number();
-    const number::ObNumber *min_check_num = NULL;
-    const number::ObNumber *max_check_num = NULL;
-    const number::ObNumber *min_num_mysql = NULL;
-    const number::ObNumber *max_num_mysql = NULL;
-    number::ObNumber out_val;
-    bool is_finish = false;
-    if (obj.is_unumber() && in_val.is_negative()) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      if (OB_UNLIKELY(precision < scale)) {
-        ret = OB_ERR_M_BIGGER_THAN_D;
-      } else if (number::ObNumber::MAX_PRECISION >= precision
-                && precision >= OB_MIN_DECIMAL_PRECISION
-                && number::ObNumber::MAX_SCALE >= scale
-                && scale >= 0) {
-        min_check_num = &(ObNumberConstValue::MYSQL_CHECK_MIN[precision][scale]);
-        max_check_num = &(ObNumberConstValue::MYSQL_CHECK_MAX[precision][scale]);
-        min_num_mysql = &(ObNumberConstValue::MYSQL_MIN[precision][scale]);
-        max_num_mysql = &(ObNumberConstValue::MYSQL_MAX[precision][scale]);
-      } else {
-        ret = OB_INVALID_ARGUMENT;
-      }
-    }
-
-    if (OB_SUCC(ret) && !is_finish) {
-      if (OB_ISNULL(min_check_num) || OB_ISNULL(max_check_num)
-          || OB_ISNULL(min_num_mysql) || OB_ISNULL(max_num_mysql)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (in_val <= *min_check_num) {
-        cast_ret = OB_DATA_OUT_OF_RANGE;
-        buf_obj.set_number(obj.get_type(), *min_num_mysql);
-      } else if (in_val >= *max_check_num) {
-        cast_ret = OB_DATA_OUT_OF_RANGE;
-        buf_obj.set_number(obj.get_type(), *max_num_mysql);
-        //need round
-      } else {
-        if (OB_FAIL(out_val.from(in_val, allocator))) {
-        } else if (OB_FAIL(out_val.round(scale))) {
-        } else if (!in_val.is_equal(out_val)) {
-          if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode)) {
-            ret = OB_OPERATE_OVERFLOW;
-          } else {
-            // MySQL emits warnings for decimal column truncation, regardless of sql_mode settings.
-            params.warning_ = OB_ERR_DATA_TOO_LONG;
-          }
-        }
-        if (OB_SUCC(ret)) {
-          buf_obj.set_number(obj.get_type(), out_val);
-        }
-      }
-    }
-    res_obj = &buf_obj;
-  }
-  return ret;
-}
-
-int number_range_check_only(const ObAccuracy &accuracy, const ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(obj);
-  ObPrecision precision = accuracy.get_precision();
-  ObScale scale = accuracy.get_scale();
-  if (OB_UNLIKELY(precision < scale)) {
-    ret = OB_ERR_M_BIGGER_THAN_D;
-  } else if (number::ObNumber::MAX_PRECISION >= precision &&
-             number::ObNumber::MAX_SCALE >= scale &&
-             precision >= 0 &&
-             scale >= 0) {
-    ret = OB_NOT_SUPPORTED;
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  return ret;
-}
-
-// check usec scale for ObTimeType, ObDateTimeType
-int time_usec_scale_check(const ObCastMode &cast_mode,
-                          const ObAccuracy &accuracy,
-                          const int64_t value)
-{
-  INIT_SUCC(ret);
-  bool need_check_zero_scale = CM_IS_ERROR_ON_SCALE_OVER(cast_mode);
-  // check usec scale for time part
-  if (need_check_zero_scale) {
-    ObScale scale = accuracy.get_scale();
-    if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
-      // get usec part for value
-      int64_t temp_value = value;
-      ObTimeConverter::round_datetime(scale, temp_value);
-      if (temp_value != value) { // round success
-        ret = OB_OPERATE_OVERFLOW;
-        LOG_WARN("Invalid input value.", K(value), K(scale));
-      }
-    }
-  }
-  return ret;
-}
-
-// check usec scale for ObMySQLDateTimeType
-int time_usec_scale_check(const ObCastMode &cast_mode,
-                          const ObAccuracy &accuracy,
-                          const ObMySQLDateTime value)
-{
-  INIT_SUCC(ret);
-  bool need_check_zero_scale = CM_IS_ERROR_ON_SCALE_OVER(cast_mode);
-  // check usec scale for time part
-  if (need_check_zero_scale) {
-    ObScale scale = accuracy.get_scale();
-    if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
-      // get usec part for value
-      ObMySQLDateTime temp_value = value;
-      ObTimeConverter::round_mdatetime(scale, temp_value);
-      if (temp_value != value) { // round success
-        ret = OB_OPERATE_OVERFLOW;
-        LOG_WARN("Invalid input value.", K(value), K(scale));
-      }
-    }
-  }
-  return ret;
-}
-
-int datetime_scale_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-                         const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  ObScale scale = accuracy.get_scale();
-  if (OB_UNLIKELY(scale > MAX_SCALE_FOR_TEMPORAL)) {
-    ret = OB_ERR_TOO_BIG_PRECISION;
-    LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", static_cast<int64_t>(MAX_SCALE_FOR_TEMPORAL));
-  } else {
-    int64_t value = obj.get_datetime();
-    if (OB_FAIL(time_usec_scale_check(cast_mode, accuracy, value))) {
-    } else if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
-      ObTimeConverter::round_datetime(scale, value);
-      if (ObTimeConverter::is_valid_datetime(value)) {
-        buf_obj.set_datetime(obj.get_type(), value);
-      } else {
-        buf_obj.set_null();
-      }
-      res_obj = &buf_obj;
-    } else {
-      res_obj = &obj;
-    }
-  }
-  UNUSED(params);
-  return ret;
-}
-
-int mdatetime_scale_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-                          const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  ObScale scale = accuracy.get_scale();
-  if (OB_UNLIKELY(scale > MAX_SCALE_FOR_TEMPORAL)) {
-    ret = OB_ERR_TOO_BIG_PRECISION;
-    LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", static_cast<int64_t>(MAX_SCALE_FOR_TEMPORAL));
-  } else {
-    ObMySQLDateTime value = obj.get_mysql_datetime();
-    if (OB_FAIL(time_usec_scale_check(cast_mode, accuracy, value))) {
-    } else if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
-      ObTimeConverter::round_mdatetime(scale, value);
-      if (ObTimeConverter::is_valid_mdatetime(value)) {
-        buf_obj.set_mysql_datetime(value);
-      } else {
-        buf_obj.set_null();
-      }
-      res_obj = &buf_obj;
-    } else {
-      res_obj = &obj;
-    }
-  }
-  UNUSED(params);
-  return ret;
-}
-
-
-int otimestamp_scale_check(ObObjCastParams &params, const ObAccuracy &accuracy, const ObObj &obj,
-                             ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  ObScale scale = accuracy.get_scale();
-  if (OB_UNLIKELY(scale > MAX_SCALE_FOR_EXTENDED_TEMPORAL)) {
-    ret = OB_ERR_TOO_BIG_PRECISION;
-    LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", static_cast<int64_t>(MAX_SCALE_FOR_EXTENDED_TEMPORAL));
-  } else if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_EXTENDED_TEMPORAL)) {
-    ObOTimestampData ot_data = ObTimeConverter::round_otimestamp(scale, obj.get_otimestamp_value());
-    if (ObTimeConverter::is_valid_otimestamp(ot_data.time_us_, static_cast<int32_t>(ot_data.time_ctx_.tail_nsec_))) {
-      buf_obj.set_otimestamp_value(obj.get_type(), ot_data);
-      buf_obj.set_scale(scale);
-    } else {
-      OB_LOG(DEBUG, "invalid otimestamp, set it null ", K(ot_data), K(scale), "orig_date", obj.get_otimestamp_value());
-      buf_obj.set_null();
-    }
-    res_obj = &buf_obj;
-  } else {
-    res_obj = &obj;
-  }
-  UNUSED(params);
-  return ret;
-}
-
-int datetime_scale_check_only(const ObAccuracy &accuracy, const ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  ObScale scale = accuracy.get_scale();
-  if (OB_UNLIKELY(scale > MAX_SCALE_FOR_TEMPORAL)) {
-    ret = OB_ERR_TOO_BIG_PRECISION;
-    LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", static_cast<int64_t>(MAX_SCALE_FOR_TEMPORAL));
-  } else {
-    int64_t value = obj.get_datetime();
-    ObCastMode cast_mode = CM_ERROR_ON_SCALE_OVER;
-    if (OB_FAIL(time_usec_scale_check(cast_mode, accuracy, value))) {
-    } else if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
-      if (!ObTimeConverter::is_valid_datetime(value)) {
-        ret = OB_INVALID_DATA;
-      }
-    }
-  }
-  return ret;
-}
-
-int mdatetime_scale_check_only(const ObAccuracy &accuracy, const ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  ObScale scale = accuracy.get_scale();
-  if (OB_UNLIKELY(scale > MAX_SCALE_FOR_TEMPORAL)) {
-    ret = OB_ERR_TOO_BIG_PRECISION;
-    LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, "CAST", static_cast<int64_t>(MAX_SCALE_FOR_TEMPORAL));
-  } else {
-    ObMySQLDateTime value = obj.get_mysql_datetime();
-    ObCastMode cast_mode = CM_ERROR_ON_SCALE_OVER;
-    if (OB_FAIL(time_usec_scale_check(cast_mode, accuracy, value))) {
-    } else if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
-      if (!ObTimeConverter::is_valid_mdatetime(value)) {
-        ret = OB_INVALID_DATA;
-      }
-    }
-  }
-  return ret;
-}
-
-int time_scale_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-                     const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  ObScale scale = accuracy.get_scale();
-  int64_t value = obj.get_time();
-  if (OB_FAIL(time_usec_scale_check(cast_mode, accuracy, value))) {
-  } else if (OB_LIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
-    ObTimeConverter::round_datetime(scale, value);
-    buf_obj.set_time(value);
-    res_obj = &buf_obj;
-  } else {
-    res_obj = &obj;
-  }
-  UNUSED(params);
-  UNUSED(cast_mode);
-  return ret;
-}
-
-int time_scale_check_only(const ObAccuracy &accuracy, const ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(accuracy);
-  UNUSED(obj);
-  return ret;
-}
-//empty string when, bit_len is 0
-//The length of the binary value corresponding to char without leading 0s in the case of a non-empty string, for example, the length of '3b' is 15
 int get_bit_len(const ObString &str, int32_t &bit_len)
 {
   int ret = OB_SUCCESS;
@@ -11454,654 +7884,12 @@ int get_bit_len(uint64_t value, int32_t &bit_len)
   return ret;
 }
 
-int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-    const ObCollationType cs_type, const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj,
-    const ObCastMode cast_mode)
+int ObTypeCastRules::is_cast_monotonic(SqlValueType t1, SqlValueType t2, bool &is_monotonic)
 {
   int ret = OB_SUCCESS;
-  const ObLength max_accuracy_len = accuracy.get_length();
-  const int32_t str_len_byte = obj.get_string_len();
-  // Handle abnormal cases, but str_len_byte greater than max_len_char is not necessarily a problem, further judgment is required
-  if (max_accuracy_len <= 0 || str_len_byte > max_accuracy_len) {
-    int &cast_ret = CM_IS_ERROR_ON_FAIL(cast_mode)
-                    ? ret
-                    : params.warning_;
-    const char *str = obj.get_string_ptr();
-    int32_t str_len_char = -1;
-    if (max_accuracy_len == DEFAULT_STR_LENGTH) {
-      res_obj = &obj;
-    } else if (OB_UNLIKELY(max_accuracy_len <= 0)) {
-      buf_obj.set_string(obj.get_type(), NULL, 0);
-      buf_obj.set_collation_level(obj.get_collation_level());
-      buf_obj.set_collation_type(obj.get_collation_type());
-      res_obj = &buf_obj;
-      if (OB_UNLIKELY(0 == max_accuracy_len && str_len_byte > 0)) {
-        cast_ret = OB_ERR_DATA_TOO_LONG;
-        str_len_char = obj.is_lob() ? str_len_byte : static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
-        OB_LOG(WARN, "char type length is too long", K(obj), K(max_accuracy_len), K(str_len_char));
-      }
-    } else {
-      int32_t trunc_len_byte = -1;
-      int32_t trunc_len_char = -1;
-      if (obj.is_varbinary() || obj.is_binary() || obj.is_blob()) {
-        str_len_char = obj.is_lob() ? str_len_byte : static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
-        if (OB_UNLIKELY(str_len_char > max_accuracy_len)) {
-          cast_ret = OB_ERR_DATA_TOO_LONG;
-          LOG_WARN("binary type length is too long", K(max_accuracy_len), K(str_len_char), K(obj));
-        }
-      } else {//mysql varchar(char)
-        // trunc_len_char > max_accuracy_len means an error or warning, without tail ' ', otherwise
-        // str_len_char > max_accuracy_len means only warning, even in strict mode.
-        // lengthsp()  - returns the length of the given string without trailing spaces. So strlen_byte_no_sp returns the result that is less than or equal to the length of str.
-        trunc_len_byte = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, str_len_byte));
-        trunc_len_char = obj.is_lob() ? trunc_len_byte : static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, trunc_len_byte));
-
-        if (OB_UNLIKELY(trunc_len_char > max_accuracy_len)) {
-          cast_ret = OB_ERR_DATA_TOO_LONG;
-          LOG_WARN("char type length is too long", K(max_accuracy_len), K(trunc_len_char), K(obj), K(trunc_len_byte), K(obj.is_lob()));
-        } else {
-          str_len_char = obj.is_lob() ? str_len_byte : static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
-          if (OB_UNLIKELY(str_len_char > max_accuracy_len)) {
-            params.warning_ = OB_ERR_DATA_TOO_LONG;
-            LOG_WARN("char type length is too long", K(max_accuracy_len), K(str_len_char), K(obj));
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_UNLIKELY(OB_ERR_DATA_TOO_LONG == params.warning_)) {
-          // when warning, always trunc to max_accuracy_len first.
-          // besides, if char (not binary), trunc to trunc_len_char again, trim tail ' ' after first trunc.
-          // the reason of two-trunc for char (not binary):
-          // insert 'ab  ! ' to char(3), we get an 'ab' in column, not 'ab ':
-          // first trunc: 'ab  ! ' to 'ab ',
-          // second trunc: 'ab ' to 'ab'.
-          if (obj.is_text() || obj.is_json()) {
-            int64_t char_len = 0;
-            trunc_len_byte = static_cast<int32_t>(ObCharset::max_bytes_charpos(cs_type, str, str_len_byte, max_accuracy_len, char_len));
-          } else {
-            trunc_len_byte = static_cast<int32_t>(ObCharset::charpos(cs_type, str, str_len_byte, max_accuracy_len));
-          }
-          if (obj.is_fixed_len_char_type() && !obj.is_binary()) {
-            trunc_len_byte = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, trunc_len_byte));
-          }
-          if (OB_FAIL(copy_string(params, obj.get_type(), str, trunc_len_byte, buf_obj))) {
-          } else {
-            buf_obj.set_collation_level(obj.get_collation_level());
-            buf_obj.set_collation_type(obj.get_collation_type());
-            res_obj = &buf_obj;
-          }
-        } else {
-          res_obj = &obj;
-        }
-      }
-    }
-  } else {
-    // Normal branch, direct assignment is sufficient
-    res_obj = &obj;
-  }
-
-  return ret;
-}
-
-// no truncate
-int string_length_check_only(const ObAccuracy &accuracy, const ObCollationType cs_type, const ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  const ObLength max_len_char = accuracy.get_length();
-  const char *str = obj.get_string_ptr();
-  const int32_t str_len_byte = obj.get_string_len();
-  if (OB_UNLIKELY(max_len_char <= 0)) {
-    if (OB_UNLIKELY(0 == max_len_char && str_len_byte > 0)) {
-      const int32_t str_len_char = static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
-      ret = OB_ERR_DATA_TOO_LONG;
-      OB_LOG(WARN, "char type length is too long", K(obj), K(max_len_char), K(str_len_char));
-    }
-  } else {
-    if (str_len_byte <= max_len_char) {
-      // do nonthing
-    } else {
-      const int32_t str_len_char = static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, str_len_byte));
-      if (OB_UNLIKELY(str_len_char > max_len_char)) {
-        ret = OB_ERR_DATA_TOO_LONG;
-        LOG_WARN("string length is too long", K(max_len_char), K(str_len_char), K(obj));
-      }
-    }
-  }
-  return ret;
-}
-
-int raw_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-    const ObCollationType cs_type, const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj,
-    const ObCastMode cast_mode)
-{
-  UNUSED(params);
-  UNUSED(cs_type);
-  UNUSED(buf_obj);
-  UNUSED(cast_mode);
-  int ret = OB_SUCCESS;
-  const ObLength max_accuracy_len = accuracy.get_length();
-  const int32_t str_len_byte = obj.get_string_len();
-
-  if (OB_UNLIKELY(max_accuracy_len >= 0 && str_len_byte > max_accuracy_len)) {
-    ret = OB_OPERATE_OVERFLOW;
-  } else {
-    res_obj = &obj;
-  }
-
-  return ret;
-}
-
-int bit_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
-                           const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj, const ObCastMode cast_mode)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  uint64_t value = obj.get_bit();
-  int32_t bit_len = 0;
-  int32_t dst_bit_len = accuracy.get_precision();
-  if (OB_FAIL(get_bit_len(value, bit_len))) {
-  } else if(OB_UNLIKELY(bit_len <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    if (OB_UNLIKELY(bit_len > dst_bit_len)) {
-      ret = OB_ERR_DATA_TOO_LONG;
-    } else {
-      buf_obj.set_bit(value);
-    }
-    if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
-      params.warning_ = OB_DATA_OUT_OF_RANGE;
-      ret = OB_SUCCESS;
-      uint64_t max_value = (1ULL<<dst_bit_len) - 1;
-      buf_obj.set_bit(max_value);
-    }
-    if (OB_SUCC(ret)) {
-      res_obj = &buf_obj;
-    }
-  }
-  return ret;
-}
-
-int bit_length_check_only(const ObAccuracy &accuracy, const ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  uint64_t value = obj.get_bit();
-  int32_t bit_len = 0;
-  int32_t dst_bit_len = accuracy.get_precision();
-  if (OB_FAIL(get_bit_len(value, bit_len))) {
-  } else if(OB_UNLIKELY(bit_len <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    if (OB_UNLIKELY(bit_len > dst_bit_len)) {
-      ret = OB_ERR_DATA_TOO_LONG;
-    }
-  }
-  return ret;
-}
-
-int obj_collation_check(ObCastCtx &cast_ctx,
-                        const bool is_strict_mode,
-                        const ObCollationType cs_type,
-                        ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  if (!ob_is_string_type(obj.get_type())) {
-    //nothing to do
-  } else if (cs_type == CS_TYPE_BINARY) {
-    //Any type can be directly converted to binary
-    obj.set_collation_type(cs_type);
-  } else {
-    ObString str;
-    int64_t well_formed_len = 0;
-
-    if (!obj.has_lob_header()) {
-      if (OB_FAIL(obj.get_string(str))) {
-      }
-    } else if (OB_FAIL(read_real_lob_data(cast_ctx, obj, str))) {
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObCharset::well_formed_len(cs_type,
-                                           str.ptr(),
-                                           str.length(),
-                                           well_formed_len))) {
-      if (is_strict_mode) {
-        ret = OB_ERR_INCORRECT_STRING_VALUE;
-        // LOG_USER_ERROR(ret, str.length(), str.ptr());
-      } else {
-        if (!obj.has_lob_header()) {
-          ret = OB_SUCCESS;
-          obj.set_collation_type(cs_type);
-          str.assign_ptr(str.ptr(), static_cast<ObString::obstr_size_t>(well_formed_len));
-          obj.set_string(obj.get_type(), str.ptr(), str.length()); // must not have lob header
-        }
-      }
-    } else {
-      obj.set_collation_type(cs_type);
-    }
-  }
-  return ret;
-}
-
-int obj_accuracy_check(ObCastCtx &cast_ctx, const ObAccuracy &accuracy, const ObCollationType cs_type,
-                       const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj)
-{
-  int ret = OB_SUCCESS;
-  switch (obj.get_type_class()) {
-    case ObFloatTC: {
-      ret = float_range_check(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObDoubleTC: {
-      ret = double_check_precision(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObNumberTC: {
-      ret = number_range_check_v2(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObDateTimeTC: {
-      ret = datetime_scale_check(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObOTimestampTC: {
-      ret = otimestamp_scale_check(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObTimeTC: {
-      ret = time_scale_check(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObStringTC: {
-      ret = string_length_check(cast_ctx, accuracy, cs_type, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObRawTC: {
-      ret = raw_length_check(cast_ctx, accuracy, cs_type, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObTextTC: {
-      // TODO@hanhui texttc share with stringtc temporarily
-      ret = string_length_check(cast_ctx, accuracy, cs_type, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObBitTC: {
-      ret = bit_length_check(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObMySQLDateTimeTC: {
-      ret = mdatetime_scale_check(cast_ctx, accuracy, obj, buf_obj, res_obj, cast_ctx.cast_mode_);
-      break;
-    }
-    case ObJsonTC: {
-      // ToDo: json length check
-      break;
-    }
-    case ObLobTC: {
-      // TODO:shanting lob length check
-      break;
-    }
-    case ObDecimalIntTC: {
-      ObDecimalIntBuilder res_val;
-      ret = common::decint_scale::check_decimalint_accuracy(cast_ctx.cast_mode_, obj.get_decimal_int(),
-                                           obj.get_int_bytes(), accuracy.get_precision(),
-                                           accuracy.get_scale(), res_val, cast_ctx.warning_);
-      if (OB_SUCC(ret)) {
-        ObObj tmp;
-        int64_t len = 0;
-        tmp.set_decimal_int(res_val.get_int_bytes(), accuracy.get_scale(),
-                            const_cast<ObDecimalInt *>(res_val.get_decimal_int()));
-        buf_obj.deep_copy(tmp, (char *)buf_obj.v_.ptr_, tmp.get_deep_copy_size(), len);
-        res_obj = &buf_obj;
-      }
-      break;
-    }
-    default: {
-      //LOG_WARN("unexpected type class to check", K(obj));
-      break;
-    }
-  }
-  return ret;
-}
-
-int ob_obj_accuracy_check_only(const ObAccuracy &accuracy, const ObCollationType cs_type, const ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  switch(obj.get_type_class()) {
-    case ObFloatTC:
-      {
-        switch(obj.get_type()) {
-          case ObFloatType:
-            ret = real_range_check_only(accuracy, obj.get_float());
-            break;
-          case ObUFloatType:
-            {
-              double value = obj.get_ufloat();
-              ret = numeric_negative_check(value);
-              if (OB_SUCC(ret)) {
-                ret = real_range_check_only(accuracy, obj.get_ufloat());
-              }
-              break;
-            }
-          default:
-            break;
-        }
-        break;
-      }
-    case ObDoubleTC:
-      {
-        switch(obj.get_type()) {
-          case ObDoubleType:
-            ret = real_range_check_only(accuracy, obj.get_double());
-            break;
-          case ObUDoubleType:
-            {
-              double value = obj.get_udouble();
-              ret = numeric_negative_check(value);
-              if (OB_SUCC(ret)) {
-                ret = real_range_check_only(accuracy, obj.get_udouble());
-              }
-              break;
-            }
-          default:
-            break;
-        }
-        break;
-      }
-    case ObNumberTC:
-      ret = number_range_check_only(accuracy, obj);
-      break;
-    case ObDateTimeTC:
-      ret = datetime_scale_check_only(accuracy, obj);
-      break;
-    case ObTimeTC:
-      ret = time_scale_check_only(accuracy, obj);
-      break;
-    case ObStringTC:
-      ret = string_length_check_only(accuracy, cs_type, obj);
-      break;
-    case ObTextTC:
-      ret = string_length_check_only(accuracy, cs_type, obj);
-      break;
-    case ObBitTC:
-      ret = bit_length_check_only(accuracy, obj);
-      break;
-    case ObIntTC:
-      {
-        int64_t value = obj.get_int();
-        ret = int_range_check(obj.get_type(), value, value);
-      }
-      break;
-    case ObUIntTC:
-      {
-        uint64_t value = obj.get_uint64();
-        ret = uint_upper_check(obj.get_type(), value);
-      }
-      break;
-    case ObMySQLDateTimeTC:
-      ret = mdatetime_scale_check_only(accuracy, obj);
-      break;
-    default:
-      break;
-  }
-  return ret;
-}
-
-
-int ObObjCaster::to_type(const ObObjType expect_type, ObCastCtx &cast_ctx,
-                         const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  cast_ctx.warning_ = OB_SUCCESS;
-  ObObjType in_type = in_obj.get_type();
-  bool is_string = ob_is_string_type(in_type);
-  bool is_decimalint = ob_is_decimal_int(in_type);
-  bool is_geometry = ob_is_geometry(in_type);
-  if (OB_UNLIKELY((expect_type == in_type && (!is_string) && (!is_geometry) && (!is_decimalint))
-      ||  ObNullType == in_type)) {
-    buf_obj = in_obj;
-    res_obj = &buf_obj;
-  } else if (in_obj.get_collation_type() == cast_ctx.dest_collation_
-      && (ObVarcharType == in_type || ObCharType == in_type)
-      && (ObVarcharType == expect_type
-          || ObCharType == expect_type)
-      && NULL == cast_ctx.zf_info_ && NULL == cast_ctx.res_accuracy_) {
-    // fast path for char/varchar string_string cast.
-    buf_obj = in_obj;
-    const_cast<ObObjMeta &>(buf_obj.get_meta()).set_type_simple(expect_type);
-    res_obj = &buf_obj;
-  } else if (OB_FAIL(to_type(expect_type,
-                             (is_string
-                                        && CS_TYPE_INVALID == cast_ctx.dest_collation_) ?
-                                in_obj.get_collation_type()
-                              : cast_ctx.dest_collation_,
-                             cast_ctx,
-                             in_obj,
-                             buf_obj))) {
-  } else {
-    res_obj = &buf_obj;
-  }
-  return ret;
-}
-
-int ObObjCaster::to_datetime(const ObObjType expect_type, ObCastCtx &cast_ctx,
-    const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)
-{
-  int ret = OB_SUCCESS;
-  if (ObDateTimeType == in_obj.get_type()) {
-    res_obj = &in_obj;
-  } else {
-    cast_ctx.warning_ = OB_SUCCESS;
-    switch (in_obj.get_type_class()) {
-      case ObIntTC: {
-        ret = int_datetime_interval(expect_type, cast_ctx, in_obj, buf_obj, cast_ctx.cast_mode_);
-        break;
-      }
-      case ObFloatTC: {
-        ret = float_datetime_interval(expect_type, cast_ctx, in_obj, buf_obj, cast_ctx.cast_mode_);
-        break;
-      }
-      case ObDoubleTC: {
-        ret = double_datetime_interval(expect_type, cast_ctx, in_obj, buf_obj, cast_ctx.cast_mode_);
-        break;
-      }
-      case ObNumberTC: {
-        ret = number_datetime_interval(expect_type, cast_ctx, in_obj, buf_obj, cast_ctx.cast_mode_);
-        break;
-      }
-      default: {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else {
-      res_obj = &buf_obj;
-    }
-  }
-  return ret;
-}
-//Support xxx conversion to all types (including ObEnumType/ObSetType, excluding ObInnerEnumType/ObInnerSetType)
-int ObObjCaster::to_type(const ObExpectType &expect_type, ObCastCtx &cast_ctx,
-                         const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  cast_ctx.warning_ = OB_SUCCESS;
-  ObObjType dest_type = expect_type.get_type();
-  cast_ctx.expect_obj_collation_ = expect_type.get_collation_type();
-  bool is_decimal_int = ob_is_decimal_int(expect_type.get_type());
-  if (OB_UNLIKELY((dest_type == in_obj.get_type() && !is_decimal_int
-                   && cast_ctx.dest_collation_ == in_obj.get_collation_type())
-                  || ObNullType == in_obj.get_type())) {
-    res_obj = &in_obj;
-  } else if (ObEnumType == dest_type || ObSetType == dest_type) {
-    if (OB_FAIL(to_type(expect_type, cast_ctx, in_obj, buf_obj))) {
-    } else {
-      res_obj = &buf_obj;
-    }
-  } else if (OB_FAIL(to_type(dest_type, expect_type.get_collation_type(), cast_ctx, in_obj, buf_obj))) {
-  } else {
-    res_obj = &buf_obj;
-  }
-  return ret;
-}
-
-
-int ObObjCaster::to_type(const ObObjType expect_type,
-                         ObCastCtx &cast_ctx,
-                         const ObObj &in_obj,
-                         ObObj &out_obj)
-{
-  int ret = OB_SUCCESS;
-  ObObjType in_type = in_obj.get_type();
-  bool is_string = ob_is_string_type(in_type);
-  bool is_geometry = ob_is_geometry(in_type);
-  bool is_decimal_int = ob_is_decimal_int(in_type);
-  if (OB_UNLIKELY((expect_type == in_type && (!is_string) && (!is_geometry) && !(is_decimal_int))
-      || ObNullType == in_type)) {
-    out_obj = in_obj;
-  } else if (in_obj.get_collation_type() == cast_ctx.dest_collation_
-      && (ObVarcharType == in_type || ObCharType == in_type)
-      && (ObVarcharType == expect_type
-          || ObCharType == expect_type)
-      && NULL == cast_ctx.zf_info_ && NULL == cast_ctx.res_accuracy_) {
-    // fast path for char/varchar string_string cast.
-    out_obj = in_obj;
-    const_cast<ObObjMeta &>(out_obj.get_meta()).set_type_simple(expect_type);
-  } else {
-    ret = to_type(expect_type,
-                  (is_string && CS_TYPE_INVALID == cast_ctx.dest_collation_) ?
-                     in_obj.get_collation_type() : cast_ctx.dest_collation_,
-                  cast_ctx,
-                  in_obj,
-                  out_obj);
-  }
-  return ret;
-}
-
-int ObObjCaster::bool_to_json(const ObObjType expect_type,
-                              ObCastCtx &cast_ctx,
-                              const ObObj &in_obj,
-                              ObObj &buf_obj,
-                              const ObObj *&res_obj)
-{
-  int ret = OB_SUCCESS;
-  res_obj = NULL;
-  cast_ctx.warning_ = OB_SUCCESS;
-  ObLength res_length = -1;
-
-  if (CM_IS_COLUMN_CONVERT(cast_ctx.cast_mode_)) {
-    ret = OB_ERR_INVALID_JSON_TEXT;
-    LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
-  } else if (OB_UNLIKELY(cast_ctx.allocator_v2_ == NULL)) {
-    ret= OB_ERR_UNEXPECTED;
-    LOG_ERROR("NULL allocator in json cast function", K(ret), K(in_obj), K(expect_type));
-  } else {
-    int64_t in_val = in_obj.get_int();
-    bool bool_val = (in_obj.get_int() == 1) ? true : false;
-    ObJsonBoolean j_bool(bool_val);
-    ObIJsonBase *j_base = &j_bool;
-    ObString raw_bin;
-    if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, cast_ctx.allocator_v2_))) {
-    } else if (OB_FAIL(set_json_bin_res(&cast_ctx, &buf_obj, raw_bin))) {
-    } else {
-      res_length = static_cast<ObLength>(buf_obj.get_string().length());
-      res_obj = &buf_obj;
-    }
-  }
-
-  ObObjCastParams &params = cast_ctx;
-  SET_RES_ACCURACY(DEFAULT_PRECISION_FOR_STRING, DEFAULT_SCALE_FOR_TEXT, res_length);
-  return ret;
-}
-
-
-int ObObjCaster::to_type(const ObObjType expect_type,
-                         ObCollationType expect_cs_type,
-                         ObCastCtx &cast_ctx,
-                         const ObObj &in_obj,
-                         ObObj &out_obj)
-{
-  int ret = OB_SUCCESS;
-  const ObObjTypeClass in_tc = in_obj.get_type_class();
-  const ObObjTypeClass out_tc = ob_obj_type_class(expect_type);
-  cast_ctx.warning_ = OB_SUCCESS;
-  /* expect_cs_type has higer priority than cast_ctx.dest_collation_
-      */
-  if (CS_TYPE_INVALID != expect_cs_type) {
-    cast_ctx.dest_collation_ = expect_cs_type;
-  } else {
-    expect_cs_type = cast_ctx.dest_collation_;
-  }
-  /*if (CS_TYPE_INVALID != cast_ctx.dest_collation_) {
-    expect_cs_type = cast_ctx.dest_collation_;
-  } else {
-    cast_ctx.dest_collation_ = expect_cs_type;
-  }*/
-  if (OB_UNLIKELY(ob_is_invalid_obj_tc(in_tc) || ob_is_invalid_obj_tc(out_tc))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    if (OB_FAIL(OB_OBJ_CAST[in_tc][out_tc](expect_type, cast_ctx, in_obj, out_obj, cast_ctx.cast_mode_))) {
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (ObStringTC == out_tc || ObTextTC == out_tc || ObLobTC == out_tc) {
-      if (ObStringTC == in_tc || ObTextTC == in_tc || ObLobTC == out_tc) {
-        out_obj.set_collation_level(in_obj.get_collation_level());
-      } else {
-        out_obj.set_collation_level(CS_LEVEL_COERCIBLE);
-      }
-      if (OB_LIKELY(expect_cs_type != CS_TYPE_INVALID)) {
-        out_obj.set_collation_type(expect_cs_type);
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-  }
-
-  LOG_DEBUG("succ to to_type", K(ret), "in_type", in_obj.get_type(), K(in_obj),
-            K(expect_type), K(out_obj), K(lbt()));
-  return ret;
-}
-
-//use for cast to enum or set type
-int ObObjCaster::to_type(const ObExpectType &expect_type,
-                         ObCastCtx &cast_ctx,
-                         const ObObj &in_obj,
-                         ObObj &out_obj)
-{
-  int ret = OB_SUCCESS;
-  const ObObjTypeClass in_tc = in_obj.get_type_class();
-  const ObObjType out_type = expect_type.get_type();
-  if (OB_UNLIKELY(!ob_is_enumset_tc(expect_type.get_type()))
-      || OB_UNLIKELY(ob_is_invalid_obj_tc(in_tc))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(OB_CAST_ENUM_OR_SET[in_tc][ObSetType == out_type](expect_type, cast_ctx, in_obj, out_obj))) {
-  } else {
-  }
-  return ret;
-}
-
-const ObJsonZeroVal OB_JSON_ZERO = ObJsonZeroVal(); // binary json null
-
-
-
-/**
- * Monotonic means that:
- * For two objects of type A: a1 and a2, converted to type B as: b1 and b2.
- * If for any a1, a2, the size relationship between a1 and a2 is the same as the size relationship between b1 and b2,
- * then the conversion operation from type A to type B is monotonic.
- * @param tc1 source type
- * @param tc2 target type
- * @return
- */
-int ObObjCaster::is_cast_monotonic(ObObjType t1, ObObjType t2, bool &is_monotonic)
-{
-  int ret = OB_SUCCESS;
-  ObObjTypeClass tc1 = ob_obj_type_class(t1);
-  ObObjTypeClass tc2 = ob_obj_type_class(t2);
-  if (OB_UNLIKELY(ob_is_invalid_obj_tc(tc1) || ob_is_invalid_obj_tc(tc2))) {
+  SqlTypeClass tc1 = sql_type_class(t1);
+  SqlTypeClass tc2 = sql_type_class(t2);
+  if (OB_UNLIKELY(is_invalid_sql_type_class(tc1) || is_invalid_sql_type_class(tc2))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     is_monotonic = CAST_MONOTONIC[tc1][tc2];
@@ -12109,17 +7897,17 @@ int ObObjCaster::is_cast_monotonic(ObObjType t1, ObObjType t2, bool &is_monotoni
   return ret;
 }
 
-int ObObjCaster::is_order_consistent(
-    const ObObjMeta &from,
-    const ObObjMeta &to,
+int ObTypeCastRules::is_order_consistent(
+    const SqlTypeMeta &from,
+    const SqlTypeMeta &to,
     bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  const ObObjTypeClass from_class = from.get_type_class();
-  const ObObjTypeClass to_class = to.get_type_class();
-  if (OB_UNLIKELY(ob_is_invalid_obj_tc(from_class)
-                  || ob_is_invalid_obj_tc(to_class))) {
+  const SqlTypeClass from_class = from.get_type_class();
+  const SqlTypeClass to_class = to.get_type_class();
+  if (OB_UNLIKELY(is_invalid_sql_type_class(from_class)
+                  || is_invalid_sql_type_class(to_class))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (from.is_string_or_lob_locator_type()
              && to.is_string_or_lob_locator_type()) {
@@ -12169,17 +7957,17 @@ int ObObjCaster::is_order_consistent(
 /*
  *  c1 = 'A' check if c1 can be ordering
  */
-int ObObjCaster::is_const_consistent(const ObObjMeta &const_mt,
-                                     const ObObjMeta &column_mt,
-                                     const ObObjType calc_type,
+int ObTypeCastRules::is_const_consistent(const SqlTypeMeta &const_mt,
+                                     const SqlTypeMeta &column_mt,
+                                     const SqlValueType calc_type,
                                      const ObCollationType calc_collation,
                                      bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  ObObjTypeClass tc1 = const_mt.get_type_class();
-  ObObjTypeClass tc2 = column_mt.get_type_class();
-  if (OB_UNLIKELY(ob_is_invalid_obj_tc(tc1) || ob_is_invalid_obj_tc(tc2))) {
+  SqlTypeClass tc1 = const_mt.get_type_class();
+  SqlTypeClass tc2 = column_mt.get_type_class();
+  if (OB_UNLIKELY(is_invalid_sql_type_class(tc1) || is_invalid_sql_type_class(tc2))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (const_mt.is_string_or_lob_locator_type()
               && column_mt.is_string_or_lob_locator_type()) {
@@ -12189,12 +7977,12 @@ int ObObjCaster::is_const_consistent(const ObObjMeta &const_mt,
       // false
     }
   } else {
-    if (OB_FAIL(ObObjCaster::is_cast_monotonic(column_mt.get_type(),
+    if (OB_FAIL(ObTypeCastRules::is_cast_monotonic(column_mt.get_type(),
                                                calc_type,
                                                result))) {
     } else if (!result) {
       // false
-    } else if (OB_FAIL(ObObjCaster::is_cast_monotonic(calc_type,
+    } else if (OB_FAIL(ObTypeCastRules::is_cast_monotonic(calc_type,
                                                       column_mt.get_type(),
                                                       result))) {
     } else {
@@ -12204,46 +7992,7 @@ int ObObjCaster::is_const_consistent(const ObObjMeta &const_mt,
   return ret;
 }
 
-/* make sure that you have read the doc before you call these functions !
- *
- * doc:  
- */
-
-
-
-/**
- * @brief ObObjCaster::get_obj_param_text
- * Convert number type to bounded string text
- * Will be converted to scientific notation and output as a 40-byte string if greater than 40 bytes
- * Output as is if less than 40 bytes
- */
-
-int ObObjCaster::get_obj_param_text(const ObObjParam &obj_param,
-                                    const ObString raw_text, ObIAllocator &allocator,
-                                    ObCollationType cs_type, ObString &res)
-{
-  int ret = OB_SUCCESS;
-  if (obj_param.is_string_type()) {
-    res = obj_param.get_string();
-  } else if (obj_param.is_numeric_type()) {
-    if (obj_param.get_raw_text_pos() >= 0 && obj_param.get_raw_text_len() >= 0
-        && obj_param.get_raw_text_pos() + obj_param.get_raw_text_len() <= raw_text.length()) {
-      res.assign_ptr(raw_text.ptr() + obj_param.get_raw_text_pos(), obj_param.get_raw_text_len());
-    } else {
-      // raw_text_pos_ and raw_text_len_ are not set in ps mode.
-      ObCastMode cast_mode = CM_NONE;
-      ObObj result;
-      ObCastCtx cast_ctx(&allocator, NULL, cast_mode, cs_type);
-      if (OB_FAIL(to_type(ObVarcharType, cast_ctx, obj_param, result))) {
-      } else {
-        res = result.get_string();
-      }
-    }
-  }
-  return ret;
-}
-
-const bool ObObjCaster::CAST_MONOTONIC[ObMaxTC][ObMaxTC] =
+const bool ObTypeCastRules::CAST_MONOTONIC[ObMaxTC][ObMaxTC] =
 {
   // null
   {
@@ -13175,7 +8924,7 @@ const bool ObObjCaster::CAST_MONOTONIC[ObMaxTC][ObMaxTC] =
   },
 };
 
-const bool ObObjCaster::ORDER_CONSISTENT[ObMaxTC][ObMaxTC] =
+const bool ObTypeCastRules::ORDER_CONSISTENT[ObMaxTC][ObMaxTC] =
 {
   // null
   {
@@ -14107,7 +9856,7 @@ const bool ObObjCaster::ORDER_CONSISTENT[ObMaxTC][ObMaxTC] =
   },
 };
 
-const bool ObObjCaster::ORDER_CONSISTENT_WITH_BOTH_STRING[ObObjCaster::VALID_OC_COLLATION_TYPES][ObObjCaster::VALID_OC_COLLATION_TYPES][ObObjCaster::VALID_OC_COLLATION_TYPES] =
+const bool ObTypeCastRules::ORDER_CONSISTENT_WITH_BOTH_STRING[ObTypeCastRules::VALID_OC_COLLATION_TYPES][ObTypeCastRules::VALID_OC_COLLATION_TYPES][ObTypeCastRules::VALID_OC_COLLATION_TYPES] =
 {
   //CS_TYPE_UTF8MB4_GENERAL_CI
   {
@@ -14132,48 +9881,821 @@ const bool ObObjCaster::ORDER_CONSISTENT_WITH_BOTH_STRING[ObObjCaster::VALID_OC_
   },
 };
 
-int ObObjEvaluator::is_true(const ObObj &obj, ObCastMode cast_mode, bool &result)
+int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
+    const DatumValue &input, ObIAllocator &result_owner, DatumValue &output)
+{
+  int ret = OB_SUCCESS;
+  if (is_invalid_sql_value_type(target) || input.is_invalid_type()) { return OB_ERR_UNEXPECTED; }
+  const ObAccuracy original_accuracy = context.res_accuracy_ != nullptr
+      ? *context.res_accuracy_ : ObAccuracy();
+  detail::DatumCastFrame source(input), result;
+  // A zero-width DECIMAL has no coefficient. The wire decoder may reserve
+  // one backing byte even for an empty Datum; that byte is not a coefficient
+  // and must not change the scaler's missing-coefficient validation.
+  if (!input.is_null() && input.is_decimal_int() && input.datum_.len_ == 0) {
+    source.datum_.set_decimal_int_shallow(nullptr, 0);
+  }
+  if (input.is_null()) {
+    result = source;
+  } else if (input.get_type_class() != ObIntTC && input.get_type_class() != ObUIntTC
+             && input.get_type_class() != ObFloatTC && input.get_type_class() != ObDoubleTC
+             && input.get_type_class() != ObNumberTC && input.get_type_class() != ObStringTC
+             && input.get_type_class() != ObDateTimeTC && input.get_type_class() != ObDateTC
+             && input.get_type_class() != ObTimeTC && input.get_type_class() != ObYearTC
+             && input.get_type_class() != ObBitTC && input.get_type_class() != ObDecimalIntTC
+             && input.get_type_class() != ObEnumSetTC && input.get_type_class() != ObMySQLDateTC
+             && input.get_type_class() != ObMySQLDateTimeTC && input.get_type_class() != ObTextTC
+             && input.get_type_class() != ObJsonTC
+             && input.get_type_class() != ObGeometryTC) {
+    return OB_NOT_SUPPORTED;
+  } else if (input.datum_.ptr_ == nullptr && input.datum_.len_ != 0) {
+    return OB_INVALID_ARGUMENT;
+  } else if (input.get_type_class() == ObNumberTC &&
+             (input.datum_.len_ < sizeof(number::ObNumber::Desc)
+              || input.datum_.len_ > number::ObNumber::MAX_BYTE_LEN
+              || input.datum_.len_ != sizeof(number::ObNumber::Desc)
+                  + sizeof(uint32_t) * input.datum_.get_number_desc().len_)) {
+    return OB_INVALID_ARGUMENT;
+  } else if (input.is_decimal_int() && input.datum_.len_ != 0 && input.datum_.len_ != 4
+             && input.datum_.len_ != 8 && input.datum_.len_ != 16
+             && input.datum_.len_ != 32 && input.datum_.len_ != 64) {
+    return OB_INVALID_ARGUMENT;
+  } else if (input.get_type_class() != ObNumberTC && input.get_type_class() != ObStringTC
+             && input.get_type_class() != ObDecimalIntTC && input.get_type_class() != ObTextTC
+             && input.get_type_class() != ObJsonTC && input.get_type_class() != ObGeometryTC &&
+             (input.datum_.ptr_ == nullptr || input.datum_.len_ !=
+              (input.get_type_class() == ObYearTC ? sizeof(uint8_t)
+               : input.get_type_class() == ObDateTC || input.get_type_class() == ObMySQLDateTC
+                   || input.get_type_class() == ObFloatTC
+                   ? sizeof(int32_t) : sizeof(int64_t)))) {
+    return OB_INVALID_ARGUMENT;
+  } else if (target == input.get_type() && input.is_lob_storage()
+             && context.res_accuracy_ == nullptr && context.zf_info_ == nullptr
+             && context.dest_max_length_ < 0
+             && context.dest_collation_ == input.get_collation_type()) {
+    // Keep same-type LOB storage as a locator/value view. The common final
+    // clone owns the payload while preserving the header and type metadata.
+    result = source;
+  } else if (target == input.get_type() && !input.is_string_type()
+             && input.get_type_class() != ObGeometryTC
+             && input.get_type_class() != ObDecimalIntTC) {
+    result = source;
+  } else if (input.is_varchar_or_char() && ob_is_string_tc(target)
+             && (target == ObVarcharType || target == ObCharType)
+             && input.get_collation_type() == context.dest_collation_
+             && context.zf_info_ == nullptr && context.res_accuracy_ == nullptr) {
+    result = source;
+    result.meta_.set_type_simple(target);
+  } else if (target == ObDecimalIntType && context.res_accuracy_ == nullptr) {
+    return OB_ERR_UNEXPECTED;
+  } else {
+    context.warning_ = OB_SUCCESS;
+    // Match the common-value API: string input supplies an unspecified
+    // destination collation, including numeric destinations.
+    if (input.is_string_type() && context.dest_collation_ == CS_TYPE_INVALID) {
+      context.dest_collation_ = input.get_collation_type();
+    }
+    using Frame = detail::DatumCastFrame;
+    using Function = int (*)(SqlValueType, DatumCastParams &, const Frame &, Frame &, ObCastMode);
+    Function function = nullptr;
+    if (input.get_type_class() == ObGeometryTC) {
+      ObString wkb = input.get_string();
+      if (target == ObVarcharType || target == ObCharType || ob_is_text_tc(target)) {
+        ObLength res_length = -1;
+        if (OB_FAIL(read_real_lob_data(context, input, wkb))) {
+        } else if (wkb.length() <= WKB_OFFSET) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          int32_t length = wkb.length();
+          int32_t offset = WKB_GEO_SRID_SIZE;
+          const uint8_t version = static_cast<uint8_t>(wkb.ptr()[WKB_GEO_SRID_SIZE]);
+          if (IS_GEO_VERSION(version)) {
+            length -= WKB_VERSION_SIZE;
+            offset += WKB_VERSION_SIZE;
+          }
+          if (is_lob_storage(target)) {
+            const bool has_lob_header = target != ObTinyTextType;
+            CastTextResult<Frame> text_result(
+                target, &context, &result, has_lob_header);
+            if (OB_FAIL(text_result.init(length, context.allocator_v2_))) {
+            } else if (OB_FAIL(text_result.append(wkb.ptr(), WKB_GEO_SRID_SIZE))) {
+            } else if (OB_FAIL(text_result.append(wkb.ptr() + offset,
+                length - WKB_GEO_SRID_SIZE))) {
+            } else {
+              text_result.set_result();
+              res_length = static_cast<ObLength>(result.get_string().length());
+            }
+          } else {
+            char *bytes = static_cast<char *>(context.alloc(length));
+            if (bytes == nullptr) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else {
+              MEMCPY(bytes, wkb.ptr(), WKB_GEO_SRID_SIZE);
+              MEMCPY(bytes + WKB_GEO_SRID_SIZE, wkb.ptr() + offset,
+                  length - WKB_GEO_SRID_SIZE);
+              result.set_string(target, bytes, length);
+              res_length = length;
+            }
+          }
+        }
+        if (OB_SUCC(ret) && context.res_accuracy_ != nullptr) {
+          context.res_accuracy_->set_precision(DEFAULT_PRECISION_FOR_STRING);
+          context.res_accuracy_->set_scale(ob_is_text_tc(target)
+              ? DEFAULT_SCALE_FOR_TEXT : DEFAULT_SCALE_FOR_STRING);
+          context.res_accuracy_->set_length(res_length);
+        }
+      } else if (sql_type_class(target) == ObGeometryTC) {
+        if (OB_FAIL(read_real_lob_data(context, input, wkb))) {
+        } else {
+          ret = geometry_geometry_datum(target, context, input, wkb,
+              result, context.cast_mode_);
+        }
+      } else if (target == ObJsonType) {
+        // The legacy cast deliberately rejects geometry-to-JSON.
+        ret = OB_NOT_SUPPORTED;
+      } else {
+        Frame real_geometry;
+        real_geometry.meta_.set_geometry();
+        real_geometry.datum_.set_string(wkb);
+        const SqlTypeClass target_class = sql_type_class(target);
+        if (target_class == ObIntTC || target_class == ObUIntTC) {
+          if (!CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT,
+                target_class == ObIntTC ? "cast_as_signed" : "cast_as_unsigned");
+          } else if (target_class == ObIntTC) {
+            function = string_int<Frame>;
+          } else {
+            function = string_uint<Frame>;
+          }
+        } else if (target_class == ObFloatTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_float<Frame>;
+          } else {
+            result.set_float(target, 0.0f);
+          }
+        } else if (target_class == ObDoubleTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_) && !CM_IS_WARN_ON_FAIL(context.cast_mode_)) {
+            function = string_double<Frame>;
+          } else {
+            result.set_double(target, 0.0);
+          }
+        } else if (target_class == ObNumberTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_number<Frame>;
+          } else {
+            number::ObNumber zero;
+            zero.set_zero();
+            result.set_number(target, zero);
+          }
+        } else if (target_class == ObDateTimeTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_datetime<Frame>;
+          } else {
+            result.set_null();
+          }
+        } else if (target_class == ObDateTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_date<Frame>;
+          } else {
+            result.set_null();
+          }
+        } else if (target_class == ObTimeTC) {
+          if (CM_IS_NULL_ON_WARN(context.cast_mode_)) {
+            result.set_null();
+          } else if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_time<Frame>;
+          } else {
+            result.set_null();
+          }
+        } else if (target_class == ObYearTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_year<Frame>;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "cast_as_year");
+          }
+        } else if (target_class == ObBitTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_bit<Frame>;
+          } else {
+            ret = OB_ERR_PARSE_SQL;
+            const char *err_msg = "bit";
+            int32_t str_len = static_cast<int32_t>(strlen(err_msg));
+            int32_t line_no = 1;
+            LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
+                str_len, err_msg, line_no);
+          }
+        } else if (target_class == ObDecimalIntTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_decimalint<Frame>;
+          } else {
+            result.set_decimal_int(0, 0, nullptr);
+          }
+        } else if (target_class == ObMySQLDateTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_mdate<Frame>;
+          } else {
+            result.set_null();
+          }
+        } else if (target_class == ObMySQLDateTimeTC) {
+          if (CM_IS_IMPLICIT_CAST(context.cast_mode_)) {
+            function = string_mdatetime<Frame>;
+          } else {
+            result.set_null();
+          }
+        } else {
+          switch (target_class) {
+            case ObEnumSetTC:
+            case ObIntervalTC:
+            case ObRowIDTC:
+            case ObLobTC:
+            case ObUserDefinedSQLTC:
+              ret = OB_ERR_UNEXPECTED;
+              break;
+            case ObRawTC:
+              ret = OB_ERR_INVALID_TYPE_FOR_OP;
+              break;
+            default:
+              ret = OB_NOT_SUPPORTED;
+              break;
+          }
+        }
+        if (function != nullptr && OB_SUCC(ret)) {
+          if (OB_FAIL(read_real_lob_data(context, input, wkb))) {
+          } else {
+            real_geometry.datum_.set_string(wkb);
+            ret = function(target, context, real_geometry, result, context.cast_mode_);
+          }
+          if (ret != OB_SUCCESS && target_class == ObFloatTC) {
+            ret = OB_ERR_WARN_DATA_OUT_OF_RANGE;
+          } else if (ret != OB_SUCCESS && target_class == ObDoubleTC) {
+            ret = OB_ERR_WARN_DATA_OUT_OF_RANGE;
+          } else if (ret != OB_SUCCESS && target_class == ObNumberTC) {
+            ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
+          } else if (ret != OB_SUCCESS && target_class == ObDecimalIntTC) {
+            ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
+          }
+        }
+      }
+    } else switch (input.get_type_class()) {
+      case ObIntTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = int_int<Frame>; break;
+          case ObUIntTC: function = int_uint<Frame>; break;
+          case ObFloatTC: function = int_float<Frame>; break;
+          case ObDoubleTC: function = int_double<Frame>; break;
+          case ObNumberTC: function = int_number<Frame>; break;
+          case ObDateTimeTC: function = int_datetime<Frame>; break;
+          case ObDateTC: function = int_date<Frame>; break;
+          case ObTimeTC: function = int_time<Frame>; break;
+          case ObYearTC: function = int_year<Frame>; break;
+          case ObStringTC: function = int_string<Frame>; break;
+          case ObDecimalIntTC: function = int_decimalint<Frame>; break;
+          case ObTextTC: function = int_text<Frame>; break;
+          case ObJsonTC: function = int_json<Frame>; break;
+          case ObMySQLDateTC: function = int_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = int_mdatetime<Frame>; break;
+          case ObBitTC: function = int_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObUIntTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = uint_int<Frame>; break;
+          case ObUIntTC: function = uint_uint<Frame>; break;
+          case ObFloatTC: function = uint_float<Frame>; break;
+          case ObDoubleTC: function = uint_double<Frame>; break;
+          case ObNumberTC: function = uint_number<Frame>; break;
+          case ObDateTimeTC: function = uint_datetime<Frame>; break;
+          case ObDateTC: function = uint_date<Frame>; break;
+          case ObTimeTC: function = uint_time<Frame>; break;
+          case ObYearTC: function = uint_year<Frame>; break;
+          case ObStringTC: function = uint_string<Frame>; break;
+          case ObDecimalIntTC: function = uint_decimalint<Frame>; break;
+          case ObTextTC: function = uint_text<Frame>; break;
+          case ObJsonTC: function = uint_json<Frame>; break;
+          case ObMySQLDateTC: function = uint_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = uint_mdatetime<Frame>; break;
+          case ObBitTC: function = uint_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObFloatTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = float_int<Frame>; break;
+          case ObUIntTC: function = float_uint<Frame>; break;
+          case ObFloatTC: function = float_float<Frame>; break;
+          case ObDoubleTC: function = float_double<Frame>; break;
+          case ObNumberTC: function = float_number<Frame>; break;
+          case ObDateTimeTC: function = float_datetime<Frame>; break;
+          case ObDateTC: function = float_date<Frame>; break;
+          case ObTimeTC: function = float_time<Frame>; break;
+          case ObStringTC: function = float_string<Frame>; break;
+          case ObDecimalIntTC: function = float_decimalint<Frame>; break;
+          case ObTextTC: function = float_text<Frame>; break;
+          case ObJsonTC: function = float_json<Frame>; break;
+          case ObMySQLDateTC: function = float_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = float_mdatetime<Frame>; break;
+          case ObBitTC: function = float_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObDoubleTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = double_int<Frame>; break;
+          case ObUIntTC: function = double_uint<Frame>; break;
+          case ObFloatTC: function = double_float<Frame>; break;
+          case ObDoubleTC: function = double_double<Frame>; break;
+          case ObNumberTC: function = double_number<Frame>; break;
+          case ObDateTimeTC: function = double_datetime<Frame>; break;
+          case ObDateTC: function = double_date<Frame>; break;
+          case ObTimeTC: function = double_time<Frame>; break;
+          case ObYearTC: function = double_year<Frame>; break;
+          case ObStringTC: function = double_string<Frame>; break;
+          case ObDecimalIntTC: function = double_decimalint<Frame>; break;
+          case ObTextTC: function = double_text<Frame>; break;
+          case ObJsonTC: function = double_json<Frame>; break;
+          case ObMySQLDateTC: function = double_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = double_mdatetime<Frame>; break;
+          case ObBitTC: function = double_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObNumberTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = number_int<Frame>; break;
+          case ObUIntTC: function = number_uint<Frame>; break;
+          case ObFloatTC: function = number_float<Frame>; break;
+          case ObDoubleTC: function = number_double<Frame>; break;
+          case ObNumberTC: function = number_number<Frame>; break;
+          case ObDateTimeTC: function = number_datetime<Frame>; break;
+          case ObDateTC: function = number_date<Frame>; break;
+          case ObTimeTC: function = number_time<Frame>; break;
+          case ObYearTC: function = number_year<Frame>; break;
+          case ObStringTC: function = number_string<Frame>; break;
+          case ObDecimalIntTC: function = number_decimalint<Frame>; break;
+          case ObTextTC: function = number_text<Frame>; break;
+          case ObJsonTC: function = number_json<Frame>; break;
+          case ObMySQLDateTC: function = number_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = number_mdatetime<Frame>; break;
+          case ObBitTC: function = number_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObStringTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = string_int<Frame>; break;
+          case ObUIntTC: function = string_uint<Frame>; break;
+          case ObFloatTC: function = string_float<Frame>; break;
+          case ObDoubleTC: function = string_double<Frame>; break;
+          case ObNumberTC: function = string_number<Frame>; break;
+          case ObDateTimeTC: function = string_datetime<Frame>; break;
+          case ObDateTC: function = string_date<Frame>; break;
+          case ObTimeTC: function = string_time<Frame>; break;
+          case ObYearTC: function = string_year<Frame>; break;
+          case ObStringTC: function = string_string<Frame>; break;
+          case ObDecimalIntTC: function = string_decimalint<Frame>; break;
+          case ObTextTC: function = string_text<Frame>; break;
+          case ObJsonTC: function = string_json<Frame>; break;
+          case ObMySQLDateTC: function = string_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = string_mdatetime<Frame>; break;
+          case ObBitTC: function = string_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObDateTimeTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = datetime_int<Frame>; break;
+          case ObUIntTC: function = datetime_uint<Frame>; break;
+          case ObFloatTC: function = datetime_float<Frame>; break;
+          case ObDoubleTC: function = datetime_double<Frame>; break;
+          case ObNumberTC: function = datetime_number<Frame>; break;
+          case ObDateTimeTC: function = datetime_datetime<Frame>; break;
+          case ObDateTC: function = datetime_date<Frame>; break;
+          case ObTimeTC: function = datetime_time<Frame>; break;
+          case ObYearTC: function = datetime_year<Frame>; break;
+          case ObStringTC: function = datetime_string<Frame>; break;
+          case ObDecimalIntTC: function = datetime_decimalint<Frame>; break;
+          case ObTextTC: function = datetime_text<Frame>; break;
+          case ObJsonTC: function = datetime_json<Frame>; break;
+          case ObMySQLDateTC: function = datetime_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = datetime_mdatetime<Frame>; break;
+          case ObBitTC: function = datetime_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObDateTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = date_int<Frame>; break;
+          case ObUIntTC: function = date_uint<Frame>; break;
+          case ObFloatTC: function = date_float<Frame>; break;
+          case ObDoubleTC: function = date_double<Frame>; break;
+          case ObNumberTC: function = date_number<Frame>; break;
+          case ObDateTimeTC: function = date_datetime<Frame>; break;
+          case ObTimeTC: function = date_time<Frame>; break;
+          case ObYearTC: function = date_year<Frame>; break;
+          case ObStringTC: function = date_string<Frame>; break;
+          case ObDecimalIntTC: function = date_decimalint<Frame>; break;
+          case ObTextTC: function = date_text<Frame>; break;
+          case ObJsonTC: function = date_json<Frame>; break;
+          case ObMySQLDateTC: function = date_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = date_mdatetime<Frame>; break;
+          case ObBitTC: function = date_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObTimeTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = time_int<Frame>; break;
+          case ObUIntTC: function = time_uint<Frame>; break;
+          case ObFloatTC: function = time_float<Frame>; break;
+          case ObDoubleTC: function = time_double<Frame>; break;
+          case ObNumberTC: function = time_number<Frame>; break;
+          case ObDateTimeTC: function = time_datetime<Frame>; break;
+          case ObDateTC: function = time_date<Frame>; break;
+          case ObYearTC: function = time_year<Frame>; break;
+          case ObStringTC: function = time_string<Frame>; break;
+          case ObDecimalIntTC: function = time_decimalint<Frame>; break;
+          case ObTextTC: function = time_text<Frame>; break;
+          case ObJsonTC: function = time_json<Frame>; break;
+          case ObMySQLDateTC: function = time_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = time_mdatetime<Frame>; break;
+          case ObBitTC: function = time_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObYearTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = year_int<Frame>; break;
+          case ObUIntTC: function = year_uint<Frame>; break;
+          case ObFloatTC: function = year_float<Frame>; break;
+          case ObDoubleTC: function = year_double<Frame>; break;
+          case ObNumberTC: function = year_number<Frame>; break;
+          case ObDateTimeTC: function = year_datetime<Frame>; break;
+          case ObDateTC: function = year_date<Frame>; break;
+          case ObTimeTC: function = year_time<Frame>; break;
+          case ObStringTC: function = year_string<Frame>; break;
+          case ObDecimalIntTC: function = year_decimalint<Frame>; break;
+          case ObTextTC: function = year_text<Frame>; break;
+          case ObJsonTC: function = year_json<Frame>; break;
+          case ObMySQLDateTC: function = year_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = year_mdatetime<Frame>; break;
+          case ObBitTC: function = year_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObBitTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = bit_int<Frame>; break;
+          case ObUIntTC: function = bit_uint<Frame>; break;
+          case ObFloatTC: function = bit_float<Frame>; break;
+          case ObDoubleTC: function = bit_double<Frame>; break;
+          case ObNumberTC: function = bit_number<Frame>; break;
+          case ObDateTimeTC: function = bit_datetime<Frame>; break;
+          case ObDateTC: function = bit_date<Frame>; break;
+          case ObTimeTC: function = bit_time<Frame>; break;
+          case ObYearTC: function = bit_year<Frame>; break;
+          case ObStringTC: function = bit_string<Frame>; break;
+          case ObDecimalIntTC: function = bit_decimalint<Frame>; break;
+          case ObTextTC: function = bit_text<Frame>; break;
+          case ObJsonTC: function = bit_json<Frame>; break;
+          case ObMySQLDateTC: function = bit_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = bit_mdatetime<Frame>; break;
+          case ObBitTC: function = bit_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObDecimalIntTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = decimalint_int<Frame>; break;
+          case ObUIntTC: function = decimalint_uint<Frame>; break;
+          case ObFloatTC: function = decimalint_float<Frame>; break;
+          case ObDoubleTC: function = decimalint_double<Frame>; break;
+          case ObNumberTC: function = decimalint_number<Frame>; break;
+          case ObDateTimeTC: function = decimalint_datetime<Frame>; break;
+          case ObDateTC: function = decimalint_date<Frame>; break;
+          case ObTimeTC: function = decimalint_time<Frame>; break;
+          case ObYearTC: function = decimalint_year<Frame>; break;
+          case ObStringTC: function = decimalint_string<Frame>; break;
+          case ObDecimalIntTC: function = decimalint_decimalint<Frame>; break;
+          case ObTextTC: function = decimalint_text<Frame>; break;
+          case ObJsonTC: function = decimalint_json<Frame>; break;
+          case ObMySQLDateTC: function = decimalint_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = decimalint_mdatetime<Frame>; break;
+          case ObBitTC: function = decimalint_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObEnumSetTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = enumset_int<Frame>; break;
+          case ObUIntTC: function = enumset_uint<Frame>; break;
+          case ObFloatTC: function = enumset_float<Frame>; break;
+          case ObDoubleTC: function = enumset_double<Frame>; break;
+          case ObNumberTC: function = enumset_number<Frame>; break;
+          case ObDateTimeTC: function = enumset_datetime<Frame>; break;
+          case ObDateTC: function = enumset_date<Frame>; break;
+          case ObTimeTC: function = enumset_time<Frame>; break;
+          case ObYearTC: function = enumset_year<Frame>; break;
+          case ObStringTC: function = enumset_string<Frame>; break;
+          case ObDecimalIntTC: function = enumset_decimalint<Frame>; break;
+          case ObTextTC: function = enumset_text<Frame>; break;
+          case ObJsonTC: function = enumset_json<Frame>; break;
+          case ObMySQLDateTC: function = enumset_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = enumset_mdatetime<Frame>; break;
+          case ObBitTC: function = enumset_bit<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObMySQLDateTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = mdate_int<Frame>; break;
+          case ObUIntTC: function = mdate_uint<Frame>; break;
+          case ObFloatTC: function = mdate_float<Frame>; break;
+          case ObDoubleTC: function = mdate_double<Frame>; break;
+          case ObNumberTC: function = mdate_number<Frame>; break;
+          case ObDateTimeTC: function = mdate_datetime<Frame>; break;
+          case ObDateTC: function = mdate_date<Frame>; break;
+          case ObTimeTC: function = mdate_time<Frame>; break;
+          case ObYearTC: function = mdate_year<Frame>; break;
+          case ObStringTC: function = mdate_string<Frame>; break;
+          case ObMySQLDateTimeTC: function = mdate_mdatetime<Frame>; break;
+          case ObBitTC: function = mdate_bit<Frame>; break;
+          case ObTextTC: function = mdate_text<Frame>; break;
+          case ObJsonTC: function = mdate_json<Frame>; break;
+          case ObDecimalIntTC: function = mdate_decimalint<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObMySQLDateTimeTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = mdatetime_int<Frame>; break;
+          case ObUIntTC: function = mdatetime_uint<Frame>; break;
+          case ObFloatTC: function = mdatetime_float<Frame>; break;
+          case ObDoubleTC: function = mdatetime_double<Frame>; break;
+          case ObNumberTC: function = mdatetime_number<Frame>; break;
+          case ObDateTimeTC: function = mdatetime_datetime<Frame>; break;
+          case ObDateTC: function = mdatetime_date<Frame>; break;
+          case ObTimeTC: function = mdatetime_time<Frame>; break;
+          case ObYearTC: function = mdatetime_year<Frame>; break;
+          case ObStringTC: function = mdatetime_string<Frame>; break;
+          case ObMySQLDateTC: function = mdatetime_mdate<Frame>; break;
+          case ObBitTC: function = mdatetime_bit<Frame>; break;
+          case ObTextTC: function = mdatetime_text<Frame>; break;
+          case ObJsonTC: function = mdatetime_json<Frame>; break;
+          case ObDecimalIntTC: function = mdatetime_decimalint<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObJsonTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = json_int<Frame>; break;
+          case ObUIntTC: function = json_uint<Frame>; break;
+          case ObFloatTC: function = json_float<Frame>; break;
+          case ObDoubleTC: function = json_double<Frame>; break;
+          case ObNumberTC: function = json_number<Frame>; break;
+          case ObDateTimeTC: function = json_datetime<Frame>; break;
+          case ObDateTC: function = json_date<Frame>; break;
+          case ObTimeTC: function = json_time<Frame>; break;
+          case ObYearTC: function = json_year<Frame>; break;
+          case ObStringTC: function = json_string<Frame>; break;
+          case ObMySQLDateTC: function = json_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = json_mdatetime<Frame>; break;
+          case ObBitTC: function = json_bit<Frame>; break;
+          case ObTextTC: function = json_string<Frame>; break;
+          case ObJsonTC: function = json_json<Frame>; break;
+          case ObDecimalIntTC: function = json_decimalint<Frame>; break;
+          default: break;
+        }
+        break;
+      case ObTextTC:
+        switch (sql_type_class(target)) {
+          case ObIntTC: function = text_int<Frame>; break;
+          case ObUIntTC: function = text_uint<Frame>; break;
+          case ObFloatTC: function = text_float<Frame>; break;
+          case ObDoubleTC: function = text_double<Frame>; break;
+          case ObNumberTC: function = text_number<Frame>; break;
+          case ObDateTimeTC: function = text_datetime<Frame>; break;
+          case ObDateTC: function = text_date<Frame>; break;
+          case ObTimeTC: function = text_time<Frame>; break;
+          case ObYearTC: function = text_year<Frame>; break;
+          case ObStringTC: function = text_string<Frame>; break;
+          case ObMySQLDateTC: function = text_mdate<Frame>; break;
+          case ObMySQLDateTimeTC: function = text_mdatetime<Frame>; break;
+          case ObBitTC: function = text_bit<Frame>; break;
+          case ObTextTC: function = text_text<Frame>; break;
+          case ObJsonTC: function = text_json<Frame>; break;
+          case ObDecimalIntTC: function = text_decimalint<Frame>; break;
+          default: break;
+        }
+        break;
+      default: break;
+    }
+    if (input.get_type_class() != ObGeometryTC) {
+      if (function == nullptr) { ret = OB_NOT_SUPPORTED; }
+      if (OB_SUCC(ret)) { ret = function(target, context, source, result, context.cast_mode_); }
+    }
+    if (OB_SUCC(ret) && (ob_is_string_type(target) || ob_is_text_tc(target))) {
+      result.set_collation_level(input.get_type_class() == ObStringTC || input.get_type_class() == ObTextTC
+          ? input.get_collation_level() : CS_LEVEL_COERCIBLE);
+      if (context.dest_collation_ == CS_TYPE_INVALID) { ret = OB_ERR_UNEXPECTED; }
+      else { result.set_collation_type(context.dest_collation_); }
+    }
+  }
+  // Publish only a complete, independently owned native value. This also
+  // makes aliased input/output safe and prevents a scratch-pointer escape.
+  if (OB_SUCC(ret)) {
+    ret = clone_typed_value(result, output, result_owner);
+    if (ret != OB_SUCCESS && context.res_accuracy_ != nullptr) {
+      *context.res_accuracy_ = original_accuracy;
+    }
+  }
+  return ret;
+}
+
+int DatumValueCaster::to_datetime_interval(SqlValueType target,
+    DatumCastParams &context, const DatumValue &input, DatumValue &output)
+{
+  int ret = OB_SUCCESS;
+  // Match the legacy pointer API's identity fast path, including its lack of
+  // result-accuracy mutation for an already-DATETIME value.
+  if (input.get_type() == ObDateTimeType) {
+    output = input;
+    return ret;
+  }
+  context.warning_ = OB_SUCCESS;
+  if (sql_type_class(target) != ObDateTimeTC || input.is_null()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    int64_t value = 0;
+    ObScale result_scale = MIN_SCALE_FOR_TEMPORAL;
+    switch (input.get_type_class()) {
+      case ObIntTC:
+        // Preserve the legacy interval interpretation: an integer is a
+        // number of days, unlike to_type(..., datetime), which parses a date.
+        value = input.get_int() * USECS_PER_DAY;
+        break;
+      case ObFloatTC:
+        value = static_cast<int64_t>(static_cast<double>(input.get_float())
+            * static_cast<double>(USECS_PER_DAY));
+        result_scale = -1;
+        break;
+      case ObDoubleTC:
+        value = static_cast<int64_t>(input.get_double()
+            * static_cast<double>(USECS_PER_DAY));
+        result_scale = -1;
+        break;
+      case ObNumberTC: {
+        int64_t int_part = 0;
+        int64_t dec_part = 0;
+        const number::ObNumber number = input.get_number();
+        if (!number.is_int_parts_valid_int64(int_part, dec_part)) {
+          ret = OB_INVALID_DATE_FORMAT;
+        } else {
+          value = static_cast<int64_t>(int_part * USECS_PER_DAY)
+              + (number.is_negative() ? -1 : 1)
+                  * static_cast<int64_t>(static_cast<double>(dec_part) / NSECS_PER_SEC
+                      * static_cast<double>(USECS_PER_DAY));
+        }
+        break;
+      }
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        break;
+    }
+    if (OB_SUCC(ret)) {
+      DatumValue result;
+      if (OB_ISNULL(context.allocator_v2_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(result.set_datetime(value, *context.allocator_v2_))) {
+      } else {
+        result.set_type(target);
+        output = result;
+        if (context.res_accuracy_ != nullptr) {
+          context.res_accuracy_->set_scale(result_scale);
+          context.res_accuracy_->set_precision(DEFAULT_PRECISION_FOR_TEMPORAL);
+          context.res_accuracy_->set_length(DEFAULT_LENGTH_FOR_TEMPORAL);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+namespace {
+int compare_native_sql_values(const DatumValue &left, const DatumValue &right,
+    DatumCastParams &context, SqlValueType comparison_type,
+    ObCollationType comparison_collation, ObCmpOp op, int &result)
+{
+  int ret = OB_SUCCESS;
+  // The comparison type matters only when the input pair requires a cast.
+  // In particular, comparing integer/NUMBER directly must not round through
+  // the inferred DOUBLE type before checking whether a cast is lossless.
+  const bool direct = can_compare_types_without_cast(left.get_meta(), right.get_meta());
+  DatumValue l = left, r = right;
+  ObArenaAllocator scratch("DatumSqlCmp");
+  if (!direct) {
+    if (context.allocator_v2_ == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      context.dest_collation_ = comparison_collation;
+      // Without a target accuracy, DECIMAL comparison uses NUMBER as in the
+      // SQL comparison operator. This is not a column-assignment conversion.
+      if (comparison_type == ObDecimalIntType) { comparison_type = ObNumberType; }
+      // The old pointer-returning cast entry clears warning even on a no-op.
+      context.warning_ = OB_SUCCESS;
+      if (OB_FAIL(DatumValueCaster::to_type(comparison_type, context, left, scratch, l))) {
+      } else {
+        context.warning_ = OB_SUCCESS;
+        if (OB_FAIL(DatumValueCaster::to_type(comparison_type, context, right, scratch, r))) {
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    // The explicit comparison collation governs comparison of values that
+    // already share a type/collation, too. These views do not alter inputs.
+    if (comparison_collation != CS_TYPE_INVALID) {
+      if (l.is_string_type()) { l.set_collation_type(comparison_collation); }
+      if (r.is_string_type()) { r.set_collation_type(comparison_collation); }
+    }
+    int cmp = 0;
+    if (op == CO_EQ) {
+      bool equal = false;
+      ret = datum_values_equal(l, r, equal);
+      cmp = equal ? 1 : 0;
+    } else {
+      ret = compare_datum_values(l, r, cmp);
+    }
+    if (ret == OB_NOT_SUPPORTED) { ret = OB_ERR_UNEXPECTED; }
+    if (OB_SUCC(ret)) { result = cmp; }
+  }
+  return ret;
+}
+} // namespace
+int DatumValueComparator::compare(const DatumValue &left, const DatumValue &right,
+    DatumCastParams &context, SqlValueType comparison_type,
+    ObCollationType comparison_collation, int &result)
+{
+  return compare_native_sql_values(left, right, context, comparison_type,
+      comparison_collation, CO_CMP, result);
+}
+int DatumValueComparator::equal(const DatumValue &left, const DatumValue &right,
+    DatumCastParams &context, SqlValueType comparison_type,
+    ObCollationType comparison_collation, bool &result)
+{
+  int comparison = 0;
+  const int ret = compare_native_sql_values(left, right, context, comparison_type,
+      comparison_collation, CO_EQ, comparison);
+  if (ret == OB_SUCCESS) { result = comparison != 0; }
+  return ret;
+}
+
+int DatumValueEvaluator::is_true(const DatumValue &value, ObCastMode cast_mode, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  if (obj.is_null()) {
-    // result is unkown
-    // do nothing
-  } else if (obj.is_numeric_type()) {
-    result = !obj.is_zero();
+  if (value.is_null()) {
+  } else if (value.is_numeric_type()) {
+    switch (value.get_type_class()) {
+      case ObIntTC: result = value.get_int() != 0; break;
+      case ObUIntTC: result = value.get_uint64() != 0; break;
+      case ObFloatTC: result = value.get_float() != 0; break;
+      case ObDoubleTC: result = value.get_double() != 0; break;
+      case ObNumberTC: result = !value.get_number().is_zero(); break;
+      case ObBitTC: result = value.get_bit() != 0; break;
+      case ObDecimalIntTC: result = value.get_int_bytes() != 0; break;
+      default: ret = OB_ERR_UNEXPECTED; break;
+    }
   } else {
     ObArenaAllocator allocator(ObModIds::BLOCK_ALLOC);
-    ObCastCtx cast_ctx(&allocator, NULL, cast_mode, CS_TYPE_INVALID);
-    ObObj buf_obj;
-    const ObObj *res_obj = NULL;
-    if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, obj, buf_obj, res_obj))) {
-    } else if (NULL == res_obj || (!(res_obj->is_number()))) {
+    ObCastCtx context(&allocator, nullptr, cast_mode, CS_TYPE_INVALID);
+    DatumValue number;
+    if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, context, value, allocator, number))) {
+    } else if (number.is_null() || !number.is_number()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      result = !(res_obj->is_zero_number());
+      result = !number.get_number().is_zero();
     }
   }
   return ret;
 }
 
-int ObObjEvaluator::is_false(const ObObj &obj, ObCastMode cast_mode, bool &b_result)
+int DatumValueEvaluator::is_false(const DatumValue &value, ObCastMode mode, bool &result)
 {
-  int ret = OB_SUCCESS;
-  b_result = true;
-
-  if (OB_FAIL(is_true(obj, cast_mode, b_result))) {
-  } else {
-    b_result = !b_result;
-  }
-  if (OB_SUCC(ret)) {
-    if (obj.is_null()) {
-      // result is unkown, unkown != false
-      b_result = false;
-    }
-  }
-
+  result = false;
+  bool truth = false;
+  const int ret = is_true(value, mode, truth);
+  if (ret == OB_SUCCESS && !value.is_null()) { result = !truth; }
   return ret;
 }
+
+int DatumBoolEvaluator::is_true(const DatumParameter &value, ObCastMode mode, bool &result)
+{
+  return DatumValueEvaluator::is_true(value.value_view(), mode, result);
+}
+
 
 ObGeoType ObGeoCastUtils::get_geo_type_from_cast_mode(uint64_t cast_mode)
 {

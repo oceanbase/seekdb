@@ -66,10 +66,10 @@ private:
                      int64_t param_num,
                      common::ObExprTypeCtx &type_ctx) const;
   static int set_res_scale_prec(common::ObExprTypeCtx &type_ctx, ObExprResType *params,
-                                int64_t param_num, const common::ObObjType &res_type,
+                                int64_t param_num, const common::SqlValueType &res_type,
                                 ObExprResType &type);
   static int set_res_and_calc_type(ObExprResType *params, int64_t param_num,
-                                   common::ObObjType &res_type);
+                                   common::SqlValueType &res_type);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprFuncRound);
 };

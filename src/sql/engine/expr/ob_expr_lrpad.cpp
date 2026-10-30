@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_lrpad.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -42,9 +43,9 @@ ObExprBaseLRpad::~ObExprBaseLRpad()
 }
 // Reference ObExprBaseLRpad::calc_mysql
 int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
-                                            const ObObj &text,
-                                            const ObObj &pad_text,
-                                            const ObObj &len,
+                                            const DatumValue &text,
+                                            const DatumValue &pad_text,
+                                            const DatumValue &len,
                                             const ObExprTypeCtx &type_ctx,
                                             int64_t &result_size)
 {
@@ -98,7 +99,7 @@ int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
 }
 // Reference ObExprBaseLRpad padding calculation.
 
-int ObExprBaseLRpad::get_origin_len_obj(ObObj &len_obj) const
+int ObExprBaseLRpad::get_origin_len_obj(DatumValue &len_obj) const
 {
   int ret = OB_SUCCESS;
   ObRawExpr *expr = NULL;
@@ -130,8 +131,8 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
                                ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType text_type = ObNullType;
-  ObObjType len_type = ObNullType;
+  SqlValueType text_type = ObNullType;
+  SqlValueType len_type = ObNullType;
   int64_t max_len = OB_MAX_VARCHAR_LENGTH;
   int64_t text_len = text.get_length();
   {
@@ -144,9 +145,9 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
   CK(OB_NOT_NULL(session));
 
   if (OB_SUCC(ret)) {
-    ObObj length_obj = len.get_param();
-    ObObj text_obj = text.get_param();
-    ObObj pad_obj;
+    DatumValue length_obj = len.get_param();
+    DatumValue text_obj = text.get_param();
+    DatumValue pad_obj;
     ObString default_pad_str = ObString(" "); // default is ' '
     type.set_length(static_cast<ObLength>(max_len));
     len.set_calc_type(len_type);
@@ -262,7 +263,7 @@ int ObExprBaseLRpad::padding(LRpadType type,
                              ObIAllocator *allocator,
                              char* &result,
                              int64_t &size,
-                             ObObjType res_type,
+                             SqlValueType res_type,
                              bool has_lob_header)
 {
   int ret = OB_SUCCESS;
@@ -384,7 +385,7 @@ int ObExprBaseLRpad::calc_mysql_inner(const LRpadType pad_type,
   char *result_ptr = NULL;
   int64_t result_size = 0;
   const ObCollationType cs_type = expr.datum_meta_.cs_type_;
-  const ObObjType type = expr.datum_meta_.type_;
+  const SqlValueType type = expr.datum_meta_.type_;
   bool has_lob_header = expr.obj_meta_.has_lob_header();
   bool has_set_to_lob_locator = false;
   int64_t int_len = len.get_int();

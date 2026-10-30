@@ -33,7 +33,7 @@ int ObExprSTCoordinate::calc_result_typeN(ObExprResType& type,
 {
   UNUSED(type_ctx); 
   int ret = OB_SUCCESS;
-  ObObjType geo_type = types_stack[0].get_type();
+  SqlValueType geo_type = types_stack[0].get_type();
   if (ob_is_null(geo_type)) {
     // do nothing
   } else if (ob_is_numeric_type(geo_type)) {
@@ -84,7 +84,7 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
   bool is_lat_long = false;
   bool is_null_result = false;
   bool is_long_res = is_first_d; // get or change long value ?
-  ObObjType datum_type = ObMaxType;
+  SqlValueType datum_type = ObMaxType;
 
   // get wkb
   if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, datum))) {

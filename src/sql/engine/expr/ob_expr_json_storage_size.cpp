@@ -55,7 +55,7 @@ int ObExprJsonStorageSize::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta
                                 bool has_lob_header, MultimodeAlloctor *allocator, ObDatum &res)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
 
   if (type == ObNullType || data.is_null()) {

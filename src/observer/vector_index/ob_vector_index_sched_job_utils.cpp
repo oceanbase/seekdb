@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/vector_index/ob_vector_index_sched_job_utils.h"
+#include "common/datum/datum_value.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "share/schema/ob_schema_getter_guard.h"
 
@@ -32,7 +33,7 @@ namespace observer {
 int ObVectorIndexSchedJobUtils::add_scheduler_job(
     common::ObISQLClient &sql_client,
     const int64_t job_id, const common::ObString &job_name,
-    const common::ObString &job_action, const common::ObObj &start_date,
+    const common::ObString &job_action, const common::DatumValue &start_date,
     const int64_t repeat_interval_ts, const common::ObString &exec_env) {
   int ret = OB_SUCCESS;
   ObSqlString interval_str;
@@ -76,7 +77,7 @@ int ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
   LOG_INFO("################## [add_vector_index_refresh_job]", K(vidx_table_id), K(exec_env));
   int ret = OB_SUCCESS;
   int64_t job_id = OB_INVALID_ID;
-  common::ObObj start_date;
+  common::DatumValue start_date;
   start_date.set_null();
   if (OB_FAIL(ObDBMSSchedJobUtils::generate_job_id(job_id))) {
   } else {
@@ -120,7 +121,7 @@ int ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(common::ObISQLClien
   LOG_INFO("################## [add_vector_index_rebuild_job]", K(vidx_table_id), K(exec_env));
   int ret = OB_SUCCESS;
   int64_t job_id = OB_INVALID_ID;
-  common::ObObj start_date;
+  common::DatumValue start_date;
   start_date.set_null();
   if (OB_FAIL(ObDBMSSchedJobUtils::generate_job_id(job_id))) {
   } else {

@@ -97,7 +97,7 @@ int64_t ObMacroBlockSchemaInfo::get_deep_copy_size() const
   }
   if (column_number_ > 0) {
     const int64_t column_id_size = column_number_ * sizeof(uint16_t);
-    const int64_t column_type_size = column_number_ * sizeof(ObObjMeta);
+    const int64_t column_type_size = column_number_ * sizeof(SqlTypeMeta);
     const int64_t column_order_size = column_number_ * sizeof(ObOrderType);
     const int64_t total_array_size = column_id_size + column_type_size + column_order_size;
     deep_copy_size += total_array_size;
@@ -121,7 +121,7 @@ int64_t ObMacroBlockSchemaInfo::to_string(char *buf, const int64_t buf_len) cons
     J_KV("column_id_array", ObArrayWrap<uint16_t>(column_id_array_, column_number_));
   }
   if (NULL != column_type_array_ && column_number_ > 0) {
-    J_KV("column_type_array", ObArrayWrap<ObObjMeta>(column_type_array_, column_number_));
+    J_KV("column_type_array", ObArrayWrap<SqlTypeMeta>(column_type_array_, column_number_));
   }
   if (NULL != column_order_array_ && column_number_ > 0) {
     J_KV("column_order_array", ObArrayWrap<ObOrderType>(column_order_array_, column_number_));

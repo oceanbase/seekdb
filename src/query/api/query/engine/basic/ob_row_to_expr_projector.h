@@ -68,12 +68,12 @@ private:
     DECLARE_TO_STRING;
   };
 
-  template <common::ObObjDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
+  template <common::SqlValueDatumMapType OBJ_DATUM_MAP_TYPE, bool NEED_RESET_PTR>
   struct MapConvert
   {
     int32_t start_;
     int32_t end_;
-    static const common::ObObjDatumMapType map_type_ = OBJ_DATUM_MAP_TYPE;
+    static const common::SqlValueDatumMapType map_type_ = OBJ_DATUM_MAP_TYPE;
 
     MapConvert() : start_(0), end_(0) {}
     OB_INLINE void project(const Item *items,

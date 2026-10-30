@@ -687,8 +687,8 @@ int ObMicroBlockReader::filter_pushdown_filter(
         for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
           ObStorageDatum &datum = datum_buf[i];
           const int64_t col_idx = cols_index.at(col_offsets.at(i));
-          const ObObjType obj_type = cols_desc.at(col_offsets.at(i)).col_type_.get_type();
-          const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
+          const SqlValueType obj_type = cols_desc.at(col_offsets.at(i)).col_type_.get_type();
+          const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(obj_type);
           ObStorageDatum *tmp_datum = ob_is_decimal_int(obj_type) || (trans_col_idx == col_idx) ? tmp_datum_buf + i : datum_buf + i;
           datum.reuse();
           tmp_datum_buf[i].reuse();
@@ -801,8 +801,8 @@ int ObMicroBlockReader::filter_truncate_evaluator(
           } else if (OB_UNLIKELY(header_->is_trans_version_column_idx(column_index))) {
             datum.set_int(-tmp_datum.get_int());
           } else {
-            const ObObjType obj_type = cols_desc.at(column_index).col_type_.get_type();
-            const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
+            const SqlValueType obj_type = cols_desc.at(column_index).col_type_.get_type();
+            const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(obj_type);
             if (OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
             }
           }
@@ -973,8 +973,8 @@ int ObMicroBlockReader::get_aggregate_result(
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
     const ObColDescIArray &cols_desc = read_info_->get_columns_desc();
     int64_t col_idx = cols_index.at(col_offset);
-    const ObObjType obj_type = cols_desc.at(col_offset).col_type_.get_type();
-    const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
+    const SqlValueType obj_type = cols_desc.at(col_offset).col_type_.get_type();
+    const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(obj_type);
     ObStorageDatum datum;
     ObStorageDatum tmp_datum; // used for deep copy decimalint
     const bool has_lob_out_row = col_param.get_meta_type().is_lob_storage() && header_->has_lob_out_row();
@@ -1049,8 +1049,8 @@ int ObMicroBlockReader::get_aggregate_result(
           const int32_t col_offset = agg_cells.at(i)->get_col_offset();
           tmp_datum.set_nop();
           if (OB_COUNT_AGG_PD_COLUMN_ID != col_offset) {
-            const ObObjMeta &obj_meta = cols_desc.at(col_offset).col_type_;
-            const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_meta.get_type());
+            const SqlTypeMeta &obj_meta = cols_desc.at(col_offset).col_type_;
+            const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(obj_meta.get_type());
             if (row_buf.storage_datums_[col_offset].is_nop()) {
             } else if (row_buf.storage_datums_[col_offset].is_null()) {
               tmp_datum.set_null();
@@ -1102,8 +1102,8 @@ int ObMicroBlockReader::get_column_datum(
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
     int64_t col_idx = cols_index.at(col_offset);
     const ObColDescIArray &cols_desc = read_info_->get_columns_desc();
-    const ObObjType obj_type = cols_desc.at(col_offset).col_type_.get_type();
-    const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
+    const SqlValueType obj_type = cols_desc.at(col_offset).col_type_.get_type();
+    const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(obj_type);
     ObStorageDatum tmp_datum; // used for deep copy decimalint
     if (OB_UNLIKELY(col_idx >= header_->column_count_)) {
       ret = OB_ERR_UNEXPECTED;

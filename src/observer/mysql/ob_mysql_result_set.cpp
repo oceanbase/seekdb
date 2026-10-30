@@ -24,7 +24,8 @@ using namespace oceanbase::common;
 using namespace oceanbase::observer;
 using namespace oceanbase::obmysql;
 
-int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
+int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield,
+                                    bool is_field_list)
 {
   int ret = OB_SUCCESS;
   mfield.dname_ = field.dname_;
@@ -36,7 +37,6 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
   if (OB_SUCC(ret)) {
     mfield.accuracy_ = field.accuracy_;
     // mfield.type_ = oceanbase::obmysql::MYSQL_TYPE_LONG;
-    // mfield.default_value_ = field.default_value_;
     // To distinguish between binary and nonbinary data for string data types,
     // check whether the charsetnr value is 63. Also, flag must be set to binary accordingly
     mfield.charsetnr_ = field.charsetnr_;
@@ -45,7 +45,7 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
     ObScale decimals = mfield.accuracy_.get_scale();
     ObPrecision pre = mfield.accuracy_.get_precision();
     // TIMESTAMP, UNSIGNED are directly mapped through map
-    ret = ObSMUtils::get_mysql_type(field.type_.get_type(), mfield.type_, mfield.flags_, decimals);
+    ret = ObSMUtils::get_mysql_type(field.type_meta_.get_type(), mfield.type_, mfield.flags_, decimals);
 
     mfield.type_owner_ = field.type_owner_;
     mfield.type_name_ = field.type_name_;
@@ -56,12 +56,15 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
     mfield.accuracy_.set_scale(decimals);
     mfield.inout_mode_ = field.inout_mode_;
     if (OB_SUCC(ret)
-        && ObExtendType == field.type_.get_type() && mfield.type_name_.empty()) {
+        && ObExtendType == field.type_meta_.get_type() && mfield.type_name_.empty()) {
       // anonymous collection
       uint16_t flags;
       ObScale num_decimals;
       ret = ObSMUtils::get_mysql_type(
-        field.default_value_.get_type(), mfield.default_value_, flags, num_decimals);
+        field.type_meta_.get_type(), mfield.default_value_, flags, num_decimals);
+    }
+    if (OB_SUCC(ret) && is_field_list) {
+      mfield.default_value_ = static_cast<EMySQLFieldType>(field.field_list_default_type_);
     }
   }
   return ret;

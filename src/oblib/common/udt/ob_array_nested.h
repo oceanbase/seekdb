@@ -61,7 +61,6 @@ public :
   inline ObIArrayType *get_child_array() const { return static_cast<ObIArrayType *>(data_);}
   int insert_from(const ObIArrayType &src, uint32_t begin, uint32_t len);
   int push_back(const ObIArrayType &src, bool is_null = false);
-  int elem_at(uint32_t idx, ObObj &elem_obj) const { return OB_NOT_SUPPORTED; }
   int at(uint32_t idx, ObIArrayType &dest) const;
   void clear();
   int flatten(ObArrayAttr *attrs, uint32_t attr_count, uint32_t &attr_idx);

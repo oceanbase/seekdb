@@ -103,11 +103,6 @@ public:
    *
    * @return error code
    */
-  virtual int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row,
-                   common::ObObj &result) const;
-  virtual int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row1,
-                   const common::ObNewRow &row2,
-                   common::ObObj &result) const;
   TO_STRING_KV(K_(infix_expr), KP(expr_));
 
   // check expression type
@@ -168,7 +163,6 @@ public:
   inline common::ObCollationType get_collation_type() const { return cs_type_; }
   inline void set_accuracy(const common::ObAccuracy &accuracy) { accuracy_.set_accuracy(accuracy); }
   inline const common::ObAccuracy &get_accuracy() const { return accuracy_; }
-  int calc_and_project(common::ObExprCtx &expr_ctx, common::ObNewRow &row) const;
   virtual void reset();
   virtual int32_t get_type() const { return ObSqlExpression::EXPR_TYPE_COLUMN; }
   int64_t to_string(char *buf, const int64_t buf_len) const;
@@ -196,12 +190,6 @@ public:
 
   virtual void reset();
   virtual int32_t get_type() const { return ObSqlExpression::EXPR_TYPE_AGGREGATE; }
-  virtual int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row,
-                   common::ObObj &result) const;
-  virtual int calc(common::ObExprCtx &expr_ctx,
-                   const common::ObNewRow &row1,
-                   const common::ObNewRow &row2,
-                   common::ObObj &result) const;
 
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
@@ -359,9 +347,6 @@ public:
 class ObSqlExpressionUtil
 {
 public:
-  static int expand_array_params(common::ObExprCtx &expr_ctx,
-                                 const common::ObObj &src_param,
-                                 const common::ObObj *&result);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSqlExpressionUtil);
   ObSqlExpressionUtil();

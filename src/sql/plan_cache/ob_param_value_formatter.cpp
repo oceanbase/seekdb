@@ -42,14 +42,14 @@ int store_params_value_to_str(common::ObIAllocator &allocator,
   CK(OB_ISNULL(params_value));
   CK(OB_NOT_NULL(params_value = static_cast<char *>(allocator.alloc(length))));
   for (int64_t i = 0; OB_SUCC(ret) && i < params->count(); ++i) {
-    const common::ObObjParam &param = params->at(i);
-    if (param.is_ext()) {
+    const common::DatumParameter &parameter = params->at(i);
+    if (parameter.is_ext()) {
       pos = 0;
       params_value = nullptr;
       params_value_len = 0;
       break;
     } else {
-      OZ(param.print_sql_literal(params_value, length, pos, allocator, TZ_INFO(&session)));
+      OZ(parameter.print_sql_literal(params_value, length, pos, TZ_INFO(&session)));
       if (i != params->count() - 1) {
         OZ(databuff_printf(params_value, length, pos, allocator, ","));
       }

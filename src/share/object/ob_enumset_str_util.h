@@ -23,7 +23,13 @@
 namespace oceanbase {
 namespace common {
 class ObTextStringResult;
+class DatumParameter;
+class ObIAllocator;
 namespace enumset_str {
+// Convert native PL enum/set values without building and evaluating a constant
+// SQL expression. Output bytes belong to allocator; source and output may alias.
+int to_varchar(const DatumParameter &source, const ObIArray<ObString> &str_values,
+               ObIAllocator &allocator, DatumParameter &result);
 int enum_to_str(const uint64_t enum_val, const ObIArray<ObString> &str_values,
                 ObTextStringResult &text_result);
 int set_to_str(const ObCollationType cs_type, const uint64_t set_val,

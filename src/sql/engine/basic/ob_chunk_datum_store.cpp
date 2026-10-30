@@ -1276,8 +1276,8 @@ int ObChunkDatumStore::inner_add_batch(const ObDatum **datums,
         }
         continue;
       }
-      ObObjType meta_type = exprs.at(col_idx)->datum_meta_.type_;
-      const ObObjDatumMapType datum_map_type = ObDatum::get_obj_datum_map_type(meta_type);
+      SqlValueType meta_type = exprs.at(col_idx)->datum_meta_.type_;
+      const SqlValueDatumMapType datum_map_type = ObDatum::get_sql_value_datum_map_type(meta_type);
       switch (datum_map_type) {
       case OBJ_DATUM_NUMBER:
         assign_datums<AssignNumberDatumValue>(datums, selector, size, stored_rows, col_idx);

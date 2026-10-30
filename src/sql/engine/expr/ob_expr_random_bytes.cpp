@@ -51,31 +51,6 @@ int ObExprRandomBytes::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprRandomBytes::calc_result1(ObObj &result, const ObObj &len,
-                                    ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  if (len.is_null()) {
-    result.set_null();
-  } else if (len.is_int32()) {
-    ObString::obstr_size_t length = len.get_int32(); 
-    if (length >= 1 && length <= 1024) {
-      char *buf = (char *)expr_ctx.calc_buf_->alloc(length);
-      if (OB_ISNULL(buf)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        RAND_bytes((unsigned char*)buf, length);
-        ObString rand_str(length, length, buf);
-        result.set_binary(rand_str);
-      }
-    } else {
-      ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
-    }
-  } else {
-    ret = OB_OBJ_TYPE_ERROR;
-  }
-  return ret;
-}
 
 int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx, 
                                              ObDatum &expr_datum)

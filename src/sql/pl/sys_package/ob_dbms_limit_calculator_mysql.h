@@ -34,7 +34,7 @@ public:
   static int phy_res_calculate_by_logic_res(
       sql::ObExecContext &ctx,
       sql::ParamStore &params,
-      common::ObObj &result);
+      common::DatumValue &result);
 private:
   static int parse_dict_like_args_(
       const char* ptr,

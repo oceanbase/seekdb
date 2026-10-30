@@ -64,7 +64,7 @@ int ObExprInterval::calc_result_typeN(ObExprResType &type,
     type.set_precision(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].precision_);
     type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].scale_);
     //set calc type
-    common::ObObjType calc_type = types[0].get_type();
+    common::SqlValueType calc_type = types[0].get_type();
 
     if (calc_type != ObNumberType && calc_type != ObUNumberType && calc_type !=  ObDecimalIntType) {
       calc_type = ObDoubleType;
@@ -155,7 +155,7 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   } else {
     // make sure all arg type is same
     for (int64_t i = 0; OB_SUCC(ret) && i < rt_expr.arg_cnt_; ++i) {
-      const ObObjType &arg_type = rt_expr.args_[i]->datum_meta_.type_;
+      const SqlValueType &arg_type = rt_expr.args_[i]->datum_meta_.type_;
       if (!(ObNumberType == arg_type
             || ObUNumberType == arg_type
             || ObDecimalIntType == arg_type
@@ -189,7 +189,7 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
     }
 
     if (OB_SUCC(ret)) {
-      const ObObjType &arg_type = rt_expr.args_[0]->datum_meta_.type_;
+      const SqlValueType &arg_type = rt_expr.args_[0]->datum_meta_.type_;
       // Number comparison does not consider collation,
       // do not care NULL_FIRST or NULL_LAST, will ignore null in calc_interval_expr()
       rt_expr.inner_functions_[0] = reinterpret_cast<void*>(

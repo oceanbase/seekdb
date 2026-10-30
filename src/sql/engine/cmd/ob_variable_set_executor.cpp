@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
+#include "sql/ob_spi.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/command/ob_root_command_service.h"
@@ -27,6 +28,7 @@
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/engine/cmd/ob_set_names_executor.h"
 #include "sql/session/ob_inner_sql_connection.h"
+#include "share/datum/datum_value_cast.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
@@ -114,7 +116,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
           if (OB_FAIL(do_set_names(ctx, *node.set_names_stmt_))) {
           }
         } else {
-          ObObj value_obj;
           ObBasicSysVar *sys_var = NULL;
           bool transformed = false;
           ObRawExprFactory *expr_factory = ctx.get_expr_factory();
@@ -129,36 +130,45 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                                                       *session,
                                                       node.value_expr_,
                                                       transformed))) {
-          } else if (node.value_expr_->has_flag(CNT_SUB_QUERY)) {
-            if (OB_FAIL(calc_subquery_expr_value(ctx, session, node.value_expr_, value_obj))) {
-            }
-          } else {
-            if (OB_FAIL(calc_var_value_static_engine(node, stmt, ctx, value_obj))) {
-            }
           }
           if (OB_FAIL(ret)) {
           } else if (false == node.is_system_variable_) {
-            if (ob_is_enum_or_set_type(value_obj.get_type())) {
-              ObObjParam obj_param = value_obj;
-              const ObEnumSetMeta *meta = NULL;
-              if (OB_FAIL(ObRawExprUtils::extract_enum_set_meta(node.value_expr_->get_result_type(), session, meta))) {
-              } else if (OB_ISNULL(meta) || OB_ISNULL(meta->get_str_values())) {
+            DatumParameter value;
+            if (node.value_expr_->has_flag(CNT_SUB_QUERY)) {
+              DatumValue subquery_value;
+              OZ(calc_subquery_expr_value(ctx, session, node.value_expr_, subquery_value));
+              OX(value.assign_value(subquery_value));
+            } else {
+              OZ(calc_var_value_static_engine(node, stmt, ctx, value));
+            }
+            if (OB_SUCC(ret) && ob_is_enum_or_set_type(value.get_type())) {
+              DatumParameter text;
+              const ObEnumSetMeta *meta = nullptr;
+              OZ(ObRawExprUtils::extract_enum_set_meta(node.value_expr_->get_result_type(), session, meta));
+              if (OB_SUCC(ret) && (nullptr == meta || nullptr == meta->get_str_values())) {
                 ret = OB_ERR_UNEXPECTED;
-              } else if (OB_FAIL(ObSPIService::cast_enum_set_to_string(ctx,
-                                                                       *meta->get_str_values(),
-                                                                       obj_param,
-                                                                       value_obj))) {
+              }
+              OZ(ObSPIService::cast_enum_set_to_string(ctx, *meta->get_str_values(), value, text));
+              OX(value = text);
+            }
+            OZ(set_user_variable(value.value_view(), node.variable_name_, expr_ctx));
+          } else {
+            DatumParameter parameter;
+            DatumValue value_obj;
+            if (!node.is_set_default_) {
+              if (node.value_expr_->has_flag(CNT_SUB_QUERY)) {
+                OZ(calc_subquery_expr_value(ctx, session, node.value_expr_, value_obj));
+              } else {
+                OZ(calc_var_value_static_engine(node, stmt, ctx, parameter));
+                OX(value_obj = parameter.value_view());
               }
             }
-            if (OB_FAIL(ret)) {
-            } else if (OB_FAIL(set_user_variable(value_obj, node.variable_name_, expr_ctx))) {
-            }
-          } else {
             ObSetVar set_var(node.variable_name_, node.set_scope_, node.is_set_default_,
                              *expr_ctx.calc_buf_, *sql_proxy);
-            ObObj out_obj;
+            DatumValue out_obj;
             const bool is_set_stmt = true;
-            if (OB_FAIL(session->get_sys_variable_by_name(node.variable_name_, sys_var))) {
+            if (OB_FAIL(ret)) {
+            } else if (OB_FAIL(session->get_sys_variable_by_name(node.variable_name_, sys_var))) {
               if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
                 LOG_USER_ERROR(OB_ERR_SYS_VARIABLE_UNKNOWN,
                                node.variable_name_.length(),
@@ -178,13 +188,13 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                          || node.variable_name_ == OB_SV_AUTO_INCREMENT_OFFSET) {
                 if (OB_FAIL(process_auto_increment_hook(session->get_sql_mode(), //FIXME Refer to MySQL source code and move to the function in ObBasicSysVar
                                                         node.variable_name_,
-                                                        value_obj))) {
+                                                        value_obj, *expr_ctx.calc_buf_))) {
                 } else {}
               } else if (node.variable_name_ == OB_SV_LAST_INSERT_ID) {
                 if (OB_FAIL(process_last_insert_id_hook(plan_ctx,
                                                         session->get_sql_mode(), //FIXME refer to mysql source code and move to the function in ObBasicSysVar
                                                         node.variable_name_,
-                                                        value_obj))) {
+                                                        value_obj, *expr_ctx.calc_buf_))) {
                 } else {}
               } else if (node.variable_name_ == OB_SV_VALIDATE_PASSWORD_LENGTH
                          || node.variable_name_ == OB_SV_VALIDATE_PASSWORD_MIXED_CASE_COUNT
@@ -281,32 +291,31 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
   return ret;
 }
 
+
+
 int ObVariableSetExecutor::calc_var_value_static_engine(
-      ObVariableSetStmt::VariableSetNode &node,
-      ObVariableSetStmt &stmt,
-      ObExecContext &exec_ctx,
-      ObObj &value_obj)
+    ObVariableSetStmt::VariableSetNode &node, ObVariableSetStmt &stmt,
+    ObExecContext &exec_ctx, DatumParameter &value)
 {
+  UNUSED(stmt);
   int ret = OB_SUCCESS;
-  const ParamStore &param_store = exec_ctx.get_physical_plan_ctx()->get_param_store();
-  if (OB_ISNULL(node.value_expr_)) {
+  if (OB_ISNULL(node.value_expr_) || OB_ISNULL(exec_ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ObSQLUtils::calc_const_expr(
-                                exec_ctx.get_my_session(),
-                                *node.value_expr_,
-                                value_obj,
-                                exec_ctx.get_allocator(),
-                                param_store,
-                                &exec_ctx))) {
+  } else {
+    const ParamStore &params = exec_ctx.get_physical_plan_ctx()->get_param_store();
+    OZ(ObSQLUtils::calc_const_expr(exec_ctx.get_my_session(), *node.value_expr_, value,
+                                   exec_ctx.get_allocator(), params, &exec_ctx));
   }
   return ret;
 }
 
 // for subquery expr, we calculate expr value by executing an inner sql
-int ObVariableSetExecutor::calc_subquery_expr_value(ObExecContext &ctx,
+namespace {
+template <typename Value>
+int calc_subquery_value(ObExecContext &ctx,
                                                     ObSQLSessionInfo *session_info,
                                                     ObRawExpr *expr,
-                                                    common::ObObj &value_obj)
+                                                    Value &value_obj)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr) || OB_ISNULL(session_info) || OB_ISNULL(ctx.get_sql_ctx())) {
@@ -321,7 +330,7 @@ int ObVariableSetExecutor::calc_subquery_expr_value(ObExecContext &ctx,
       ObCharsetType client_cs_type = CHARSET_INVALID;
       ObSqlString tmp_expr_subquery;
       ObSqlString expr_subquery;
-      ObObjPrintParams print_params(session_info->get_timezone_info());
+      ObValuePrintParams print_params(session_info->get_timezone_info());
       ObRawExprPrinter expr_printer(expr_str_buf, OB_MAX_DEFAULT_VALUE_LENGTH,
                                     &pos, ctx.get_sql_ctx()->schema_guard_, print_params);
       if (OB_FAIL(expr_printer.do_print(expr, T_NONE_SCOPE, true, true))) {
@@ -335,55 +344,56 @@ int ObVariableSetExecutor::calc_subquery_expr_value(ObExecContext &ctx,
                                                     ObCharset::get_default_collation(client_cs_type),
                                                     expr_query_str))) {
       } else if (OB_FAIL(expr_subquery.append(expr_query_str))) {
-      } else if (OB_FAIL(execute_subquery_expr(ctx, session_info, expr_subquery, value_obj))) {
+      } else if (OB_FAIL(ObVariableSetExecutor::execute_subquery_expr(ctx, session_info, expr_subquery, value_obj))) {
       }
     }
   }
   return ret;
 }
+} // namespace
+
+
+
+int ObVariableSetExecutor::calc_subquery_expr_value(ObExecContext &ctx,
+    ObSQLSessionInfo *session_info, ObRawExpr *expr, DatumValue &value)
+{ return calc_subquery_value(ctx, session_info, expr, value); }
+
+
 
 int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
-                                                 ObSQLSessionInfo *session_info,
-                                                 const ObSqlString &subquery_expr,
-                                                 common::ObObj &value_obj)
+    ObSQLSessionInfo *session_info, const ObSqlString &sql, DatumValue &value)
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  sqlclient::ObISQLConnection *conn = NULL;
-  sqlclient::ObISQLConnectionGuard conn_guard;
-  
-  if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
+  sqlclient::ObISQLConnectionGuard connection;
+  if (OB_ISNULL(session_info) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(
-                 query::ObInnerSQLConnectionAccess::
-                     create_connection_with_external_session(
-                         session_info, conn_guard))) {
-  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+  } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::
+                         create_connection_with_external_session(session_info, connection))) {
+  } else if (OB_ISNULL(connection.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    int64_t idx = 0;
-    ObObj tmp_value;
-    SMART_VAR(ObISQLClient::ReadResult, res) {
-      common::sqlclient::ObMySQLResult *result = NULL;
-      conn->set_check_priv(true);
-      if (OB_FAIL(conn->execute_read(subquery_expr.ptr(), res))) {
-      } else if (OB_ISNULL(result = res.get_result())) {
+    DatumValue result_value;
+    SMART_VAR(ObISQLClient::ReadResult, result) {
+      connection.get_ptr()->set_check_priv(true);
+      sqlclient::ObMySQLResult *rows = nullptr;
+      if (OB_FAIL(query::ObInnerSQLConnectionAccess::execute_read_native(
+              connection.get_ptr(), ObString::make_string(sql.ptr()), result))) {
+      } else if (OB_ISNULL(rows = result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(result->next())) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        } else {
-        }
-      } else if (OB_FAIL(result->get_obj(idx, tmp_value))) {
+      } else if (OB_FAIL(rows->next())) {
+        if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+      } else {
+        // Explicit owner: bytes survive closing ReadResult and releasing its frames.
+        OZ(query::ObInnerSQLConnectionAccess::get_native_value(
+               rows, 0, ctx.get_allocator(), result_value));
       }
     }
-    if (OB_SUCC(ret) && (OB_FAIL(ob_write_obj(ctx.get_allocator(), tmp_value, value_obj)))) {
-    }
+    OX(value = result_value);
   }
   return ret;
 }
 
-int ObVariableSetExecutor::set_user_variable(const ObObj &val,
+int ObVariableSetExecutor::set_user_variable(const DatumValue &val,
                                              const ObString &variable_name,
                                              const ObExprCtx &expr_ctx)
 {
@@ -401,7 +411,7 @@ int ObVariableSetExecutor::set_user_variable(const ObObj &val,
   return ret;
 }
 
-int ObVariableSetExecutor::set_user_variable(const ObObj &val,
+int ObVariableSetExecutor::set_user_variable(const DatumValue &val,
                                              const ObString &variable_name,
                                              ObSQLSessionInfo *session)
 {
@@ -420,7 +430,7 @@ int ObVariableSetExecutor::set_user_variable(const ObObj &val,
 int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
                                                    ObDDLStmt &stmt,
                                                    const ObSetVar &set_var,
-                                                   const ObObj &val)
+                                                   const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
@@ -544,7 +554,9 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     expr_ctx.calc_buf_ = &set_var.calc_buf_;
     expr_ctx.my_session_ = ctx.get_my_session();
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    EXPR_GET_VARCHAR_V2(val, val_str);
+    DatumValue rendered;
+    OZ(DatumValueCaster::to_type(ObVarcharType, cast_ctx, val, set_var.calc_buf_, rendered));
+    OX(val_str = rendered.get_string());
     ObSysVarSchema sysvar_schema;
 
     int64_t sys_var_val_length = OB_MAX_SYS_VAR_VAL_LENGTH;
@@ -573,7 +585,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
 }
 
 // formalize : '+8:00' ---> '+08:00'
-int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx, ObObj &in_val) {
+int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx, DatumValue &in_val) {
   int ret = OB_SUCCESS;
 
   int32_t sec_val = 0;
@@ -600,7 +612,9 @@ int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx
         const char *fmt_str = (offset_min < 0 ? "-%02d:%02d" : "+%02d:%02d");
         if (OB_FAIL(databuff_printf(tmp_buf, buf_len, pos, fmt_str, abs(offset_min) / 60, abs(offset_min) % 60))) {
         } else {
-          in_val.set_varchar(tmp_buf, pos);
+          in_val.datum_.set_string(tmp_buf, pos);
+          in_val.meta_.set_varchar();
+          in_val.set_collation_level(CS_LEVEL_IMPLICIT);
         }
       }
     }
@@ -612,8 +626,8 @@ int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx
 int ObVariableSetExecutor::check_and_convert_sys_var(ObExecContext &ctx,
                                                      const ObSetVar &set_var,
                                                      ObBasicSysVar &sys_var,
-                                                     const ObObj &in_val,
-                                                     ObObj &out_val,
+                                                     const DatumValue &in_val,
+                                                     DatumValue &out_val,
                                                      bool is_set_stmt)
 {
   int ret = OB_SUCCESS;
@@ -659,8 +673,8 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
                                       const ObVariableSetStmt::VariableSetNode &var_node,
                                       ObIAllocator &calc_buf,
                                       const ObBasicSysVar &sys_var,
-                                      const ObObj &in_val,
-                                      ObObj &out_val)
+                                      const DatumValue &in_val,
+                                      DatumValue &out_val)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -669,9 +683,9 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (var_node.is_set_default_
              && var_node.variable_name_ == OB_SV_DEFAULT_STORAGE_ENGINE) {
-    const ObObj &def_val = sys_var.get_global_default_value();
+    const DatumValue &def_val = sys_var.get_global_default_value();
     DEFINE_CAST_CTX();
-    if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, out_val))) {
+    if (OB_FAIL(DatumValueCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, calc_buf, out_val))) {
     }
   } else if (var_node.is_set_default_) {
     
@@ -683,12 +697,12 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                   schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_system_variable(var_node.variable_name_, var_schema))) {
-      } else if (OB_FAIL(var_schema->get_value(&calc_buf, dtc_params, out_val))) {
+      } else if (OB_FAIL(ObSysVarUtils::get_schema_value(*var_schema, dtc_params, calc_buf, out_val))) {
       }
     } else if (ObSetVar::SET_SCOPE_GLOBAL == var_node.set_scope_) {
-      const ObObj &def_val = sys_var.get_global_default_value();
+      const DatumValue &def_val = sys_var.get_global_default_value();
       DEFINE_CAST_CTX();
-      if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, out_val))) {
+      if (OB_FAIL(DatumValueCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, calc_buf, out_val))) {
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -698,7 +712,7 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
     out_val = in_val;
   } else {
     DEFINE_CAST_CTX();
-    if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, in_val, out_val))) {
+    if (OB_FAIL(DatumValueCaster::to_type(sys_var.get_data_type(), cast_ctx, in_val, calc_buf, out_val))) {
     } else {}
   }
   return ret;
@@ -708,7 +722,7 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
 // AC=0 when it triggers implicit commit,
 // This guarantees that transactions will not be nested.
 int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_ctx,
-                                                           const ObObj &val)
+                                                           const DatumValue &val)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *my_session = GET_MY_SESSION(exec_ctx);
@@ -745,7 +759,7 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
 
 int ObVariableSetExecutor::process_auto_increment_hook(const ObSQLMode sql_mode,
                                                        const ObString var_name,
-                                                       ObObj &val)
+                                                       DatumValue &val, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   uint64_t auto_increment = 0;
@@ -773,7 +787,7 @@ int ObVariableSetExecutor::process_auto_increment_hook(const ObSQLMode sql_mode,
         // should generate warning message
         //SQL_ENG_LOG(WARN, "Truncated incorrect value");
       }
-      val.set_uint64(auto_increment);
+      OZ(val.set_uint64(auto_increment, owner));
     }
   }
   return ret;
@@ -782,7 +796,7 @@ int ObVariableSetExecutor::process_auto_increment_hook(const ObSQLMode sql_mode,
 int ObVariableSetExecutor::process_last_insert_id_hook(ObPhysicalPlanCtx *plan_ctx,
                                                        const ObSQLMode sql_mode,
                                                        const ObString var_name,
-                                                       ObObj &val)
+                                                       DatumValue &val, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   int64_t value = 0;
@@ -811,7 +825,7 @@ int ObVariableSetExecutor::process_last_insert_id_hook(ObPhysicalPlanCtx *plan_c
         // should generate warning message
         //SQL_ENG_LOG(WARN, "Truncated incorrect value");
       }
-      val.set_int(value);
+      OZ(val.set_int(value, owner));
     }
   }
   if (OB_SUCC(ret)) {
@@ -825,29 +839,35 @@ int ObVariableSetExecutor::process_last_insert_id_hook(ObPhysicalPlanCtx *plan_c
 }
 
 int ObVariableSetExecutor::switch_to_session_variable(const ObExprCtx &expr_ctx,
-                                                      const ObObj &value,
+                                                      const DatumValue &value,
                                                       ObSessionVariable &sess_var)
 {
   int ret = OB_SUCCESS;
-  if (ob_is_temporal_type(value.get_type())) {//switch the meta type and value type
-    EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    ObObj obj_tmp;
-    const ObObj *res_obj_ptr = NULL;
-    if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, value, obj_tmp, res_obj_ptr))) {
-    } else if (OB_ISNULL(res_obj_ptr)) {
+  if (ob_is_temporal_type(value.get_type()) && !value.is_null()) {
+    if (OB_ISNULL(expr_ctx.calc_buf_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      sess_var.value_.set_varchar(res_obj_ptr->get_varchar());
-      sess_var.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
-      sess_var.meta_.set_collation_type(ObCharset::get_default_collation(
-              ObCharset::get_default_charset()));
-      sess_var.meta_.set_varchar();
+      EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
+      DatumValue converted;
+      if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType, cast_ctx, value,
+                                            *expr_ctx.calc_buf_, converted))) {
+      } else {
+        // The old setter deliberately used a fresh VARCHAR value's metadata;
+        // declaration collation is independent of the cast result metadata.
+        sess_var.value_.meta_.set_varchar();
+        sess_var.value_.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        sess_var.value_.datum_.set_string(converted.get_string());
+        sess_var.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        sess_var.meta_.set_collation_type(ObCharset::get_default_collation(
+            ObCharset::get_default_charset()));
+        sess_var.meta_.set_varchar();
+      }
     }
-  } else if (ObNullType == value.get_type()) {// switch the meta type only
+  } else if (value.is_null()) {
     sess_var.value_.set_null();
     sess_var.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     sess_var.meta_.set_collation_type(CS_TYPE_BINARY);
-  } else { // won't switch
+  } else {
     sess_var.value_ = value;
     sess_var.meta_.set_type(value.get_type());
     sess_var.meta_.set_scale(value.get_scale());
@@ -857,17 +877,17 @@ int ObVariableSetExecutor::switch_to_session_variable(const ObExprCtx &expr_ctx,
   return ret;
 }
 
-int ObVariableSetExecutor::switch_to_session_variable(const ObObj &value,
+int ObVariableSetExecutor::switch_to_session_variable(const DatumValue &value,
                                                       ObSessionVariable &sess_var)
 {
   int ret = OB_SUCCESS;
-  if (ob_is_temporal_type(value.get_type())) {
-   ret = OB_ERR_UNEXPECTED;
-  } else if (ObNullType == value.get_type()) {// switch the meta type only
+  if (ob_is_temporal_type(value.get_type()) && !value.is_null()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (value.is_null()) {
     sess_var.value_.set_null();
     sess_var.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
     sess_var.meta_.set_collation_type(CS_TYPE_BINARY);
-  } else { // won't switch
+  } else {
     sess_var.value_ = value;
     sess_var.meta_.set_type(value.get_type());
     sess_var.meta_.set_scale(value.get_scale());
@@ -911,11 +931,13 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::get_current_val(
 {
   int ret = OB_SUCCESS;
   const schema::ObSysVarSchema *var_schema = NULL;
-  ObObj val_obj;
+  DatumValue val_obj;
+  ObArenaAllocator owner;
+  const ObDataTypeCastParams dtc_params;
   if (OB_FAIL(schema_guard.get_system_variable(var_id, var_schema))) {
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(var_schema->get_value(NULL, NULL, val_obj))) {
+  } else if (OB_FAIL(ObSysVarUtils::get_schema_value(*var_schema, dtc_params, owner, val_obj))) {
   } else if (OB_FAIL(val_obj.get_uint64(val))) {
   }
   return ret;
@@ -931,7 +953,7 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::update_expect_length()
 
 int ObVariableSetExecutor::process_validate_password_hook(ObValidatePasswordCtx &ctx,
                                                           const common::ObString var_name,
-                                                          const common::ObObj &val)
+                                                          const common::DatumValue &val)
 {
   int ret = OB_SUCCESS;
   uint64_t new_val = 0;
@@ -963,11 +985,12 @@ int ObVariableSetExecutor::cascade_set_validate_password(ObExecContext &ctx,
   if (password_ctx.expect_length_ == password_ctx.cur_length_) {
     // do nothing
   } else {
-    ObObj value_obj;
+    DatumValue value_obj;
     ObSetVar set_var(OB_SV_VALIDATE_PASSWORD_LENGTH, ObSetVar::SET_SCOPE_GLOBAL, false,
                              calc_buf, sql_proxy);
-    value_obj.set_uint64(password_ctx.expect_length_);
-    if (OB_FAIL(update_global_variables(ctx, stmt, set_var, value_obj))) {
+    OZ(value_obj.set_uint64(password_ctx.expect_length_, calc_buf));
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(update_global_variables(ctx, stmt, set_var, value_obj))) {
     }
   }
   return ret;

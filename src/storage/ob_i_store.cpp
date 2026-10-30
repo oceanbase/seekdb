@@ -262,12 +262,31 @@ OB_DEF_SERIALIZE(ObStoreRow)
   return ret;
 }
 
-OB_DEF_DESERIALIZE(ObStoreRow)
+int ObStoreRow::deserialize(common::ObIAllocator &owner, const char *buf,
+                            int64_t data_len, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  int64_t version = 0, len = 0;
+  OB_UNIS_DECODE(version);
+  OB_UNIS_DECODE(len);
+  CHECK_VERSION_LENGTH(ObStoreRow, version, len);
+  if (OB_SUCC(ret)) {
+    const int64_t payload_start = pos;
+    pos = 0;
+    ret = deserialize_(owner, buf + payload_start, len, pos);
+    // Preserve the enclosing UNIS frame's historical cursor contract.
+    pos = payload_start + len;
+  }
+  return ret;
+}
+
+int ObStoreRow::deserialize_(common::ObIAllocator &owner, const char *buf,
+                             int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   int col_id_count = 0;
+  if (pos < data_len) { ret = row_val_.deserialize(owner, buf, data_len, pos); }
   LST_DO_CODE(OB_UNIS_DECODE,
-              row_val_,
               flag_,
               is_get_,
               scan_index_,
@@ -444,7 +463,7 @@ int get_orig_default_row(const share::schema::ObTableSchema &table_schema,
         if (NULL == column) {
           ret = OB_ERR_UNEXPECTED;
         } else if (column->get_column_id() == column_ids.at(i).col_id_) {
-          if (OB_FAIL(default_row.storage_datums_[i].from_obj_enhance(column->get_orig_default_value()))) {
+          if (OB_FAIL(default_row.storage_datums_[i].from_value(column->get_orig_default_value()))) {
           } else {
             found = true;
           }

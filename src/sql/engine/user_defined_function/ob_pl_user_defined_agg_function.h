@@ -47,29 +47,29 @@ class ObPlAggUdfFunction
            uint64_t type_id,
            const common::ObIArray<ObExprResType> &params_type,
            const ObExprResType result_type,
-           ObObjParam &pl_obj);
+           DatumParameter &pl_obj);
 
   int call_pl_engine_exectue_udf(ParamStore& udf_params,
                                  const share::schema::ObRoutineInfo *routine_info,
-                                 ObObj &result);
+                                 DatumParameter &result);
 
-  int build_in_params_store(ObObjParam &pl_obj,
+  int build_in_params_store(DatumParameter &pl_obj,
                             bool is_out_param,
-                            const ObObj *obj_params,
+                            const DatumParameter *datum_params,
                             int64_t param_num,
                             ObIArray<ObUDFParamDesc> &params_desc,
                             ObIArray<ObExprResType> &params_type,
                             ParamStore *&udf_params);
 
-  int process_init_pl_agg_udf(ObObjParam &pl_obj);
+  int process_init_pl_agg_udf(DatumParameter &pl_obj);
 
-  int process_calc_pl_agg_udf(ObObjParam &pl_obj,
-                              const ObObj *objs_stack,
+  int process_calc_pl_agg_udf(DatumParameter &pl_obj,
+                              const DatumParameter *datum_params,
                               int64_t param_num);
 
 
-  int process_get_pl_agg_udf_result(ObObjParam &pl_obj,
-                                    ObObj &result);
+  int process_get_pl_agg_udf_result(DatumParameter &pl_obj,
+                                    DatumParameter &result);
 
   int get_package_udf_id(const ObString &routine_name,
                          const share::schema::ObRoutineInfo *&routine_info);
@@ -82,14 +82,11 @@ class ObPlAggUdfFunction
                                const share::schema::ObRoutineInfo *&routine_info,
                                ObIArray<ObExprResType> &param_type);
 
-  int check_types(const ObObj *obj_params,
+  int check_types(const DatumParameter *datum_params,
                   int64_t param_num,
                   common::ObIArray<ObExprResType> &params_type);
 
-  int process_obj_params(ObObj *obj_params,
-                         int64_t param_num);
-
-  int check_params_validty(const ObObj *obj_params,
+  int check_params_validty(const DatumParameter *datum_params,
                            int64_t param_num,
                            bool &is_null_params);
 

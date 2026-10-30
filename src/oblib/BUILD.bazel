@@ -28,6 +28,7 @@ _OBLIB_INTERFACE_VISIBILITY = [
     "//src/oblib:__subpackages__",
     "//src:__subpackages__",
     "//unittest/oblib:__pkg__",
+    "//unittest/share:__pkg__",
 ]
 
 cc_library(
@@ -312,6 +313,24 @@ cc_library(
     hdrs = [
         "common/cell/ob_cell_writer.h",
         "common/datum/ob_datum.h",
+        "common/datum/datum_core.h",
+        "common/datum/datum_value.h",
+        "common/datum/datum_value_buffer.h",
+        "common/datum/datum_value_flat.h",
+        "common/datum/partition_bound_row.h",
+        "common/datum/datum_key_ops.h",
+        "common/datum/datum_value_projection.h",
+        "common/datum/datum_sql_print.h",
+        "common/object/ob_value_print_params.h",
+        "common/datum/datum_param_store.h",
+        "common/datum/parameter_flags.h",
+        "common/object/ob_type_metadata.h",
+        "common/object/ob_cmp_op.h",
+        "common/enumset/enumset_value.h",
+        "common/lob/lob_types.h",
+        "common/datum/datum_parameter.h",
+        "common/datum/datum_parameter_codec.h",
+        "common/datum/datum_parameter_array.h",
         "common/enumset/ob_enum_set_meta.h",
         "common/json_type/ob_json_base.h",
         "common/json_type/ob_json_bin.h",
@@ -349,8 +368,6 @@ cc_library(
         "common/ob_timeout_ctx.h",
         "common/ob_version_def.h",
         "common/ob_zerofill_info.h",
-        "common/object/ob_obj_compare.h",
-        "common/object/ob_obj_funcs.h",
         "common/object/ob_obj_type.h",
         "common/object/ob_object.h",
         "common/row/ob_row.h",
@@ -1222,7 +1239,7 @@ cc_library(
         ":common_sql_mode",
         ":oblib_foundation",
     ],
-    visibility = ["//unittest/oblib:__pkg__"],
+    visibility = ["//unittest/oblib:__pkg__", "//unittest/data_plane:__pkg__", "//unittest/pl:__pkg__", "//unittest/storage:__pkg__"],
 )
 
 # Unit tests compile against public OBLib interfaces, but may link this
@@ -1257,5 +1274,11 @@ cc_library(
         "//conditions:default": [],
     }),
     linkopts = sanity_linkopts(),
-    visibility = ["//unittest/oblib:__pkg__"],
+    visibility = [
+        "//unittest/oblib:__pkg__",
+        "//unittest/data_plane:__pkg__",
+        "//unittest/share:__pkg__",
+        "//unittest/sql:__pkg__",
+        "//unittest/storage:__pkg__",
+    ],
 )

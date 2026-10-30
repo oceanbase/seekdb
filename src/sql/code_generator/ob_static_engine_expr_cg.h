@@ -288,12 +288,12 @@ private:
   }
 
   // called after res_buf_len_ assigned to get the buffer size with dynamic reserved buffer.
-  int64_t reserve_data_consume(const common::ObObjType &type, const int16_t prec)
+  int64_t reserve_data_consume(const common::SqlValueType &type, const int16_t prec)
   {
     const bool need_dyn_buf = ObDynReserveBuf::supported(type);
-    // ObObjDatumMapType datum_map_type = ObDatum::get_obj_datum_map_type(type);
+    // SqlValueDatumMapType datum_map_type = ObDatum::get_sql_value_datum_map_type(type);
     auto res_buf_len =
-        ObDatum::get_reserved_size(ObDatum::get_obj_datum_map_type(type), prec);
+        ObDatum::get_reserved_size(ObDatum::get_sql_value_datum_map_type(type), prec);
     return res_buf_len +
            +(need_dyn_buf && res_buf_len > 0 ? sizeof(ObDynReserveBuf) : 0);
   }
@@ -422,7 +422,7 @@ private:
   // routine
   ObExprBatchSize
   get_expr_execute_size(const common::ObIArray<ObRawExpr *> &raw_exprs, int64_t lob_rowsets_max_rows);
-  inline bool is_large_data(ObObjType type) {
+  inline bool is_large_data(SqlValueType type) {
     bool b_large_data = false;
     if (type == ObLongTextType
         || type == ObMediumTextType

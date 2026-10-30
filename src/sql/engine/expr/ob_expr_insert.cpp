@@ -39,8 +39,8 @@ int ObExprInsert::calc_result_typeN(ObExprResType &type,
                                     ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObSEArray<ObObjMeta, 16> coll_types;
-  ObObjMeta coll0, coll3; // insert's first and fourth parameters need to participate in the calculation of charset
+  ObSEArray<SqlTypeMeta, 16> coll_types;
+  SqlTypeMeta coll0, coll3; // insert's first and fourth parameters need to participate in the calculation of charset
   if (4 != param_num) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -60,63 +60,6 @@ int ObExprInsert::calc_result_typeN(ObExprResType &type,
       types_array[3].set_calc_type(ObVarcharType);
       types_array[0].set_calc_collation_type(type.get_collation_type());
       types_array[3].set_calc_collation_type(type.get_collation_type());
-    }
-  }
-  return ret;
-}
-
-int ObExprInsert::calc_result(ObObj &result,
-                               const ObObj &text,
-                               const ObObj &start_pos,
-                               const ObObj &length,
-                               const ObObj &replace_text,
-                               ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(calc(result,
-                   text,
-                   start_pos,
-                   length,
-                   replace_text,
-                   expr_ctx,
-                   result_type_.get_collation_type()))) {
-  }
-  if (OB_SUCC(ret) && OB_LIKELY(!result.is_null())) {
-    result.set_collation(result_type_);
-  }
-  return ret;
-}
-
-int ObExprInsert::calc(ObObj &result,
-                       const ObObj &text,
-                       const ObObj &start_pos,
-                       const ObObj &length,
-                       const ObObj &replace_text,
-                       common::ObExprCtx &expr_ctx,
-                       ObCollationType cs_type)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr_ctx.calc_buf_)) {
-    ret = OB_NOT_INIT;
-  } else if (text.is_null() || start_pos.is_null() || length.is_null() || replace_text.is_null()) {
-    result.set_null();
-  } else  if (!is_type_valid(text.get_type()) || !is_type_valid(start_pos.get_type())
-              || !is_type_valid(length.get_type()) || !is_type_valid(replace_text.get_type())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    TYPE_CHECK(start_pos, ObIntType);
-    TYPE_CHECK(replace_text, ObVarcharType);
-    TYPE_CHECK(text, ObVarcharType);
-    TYPE_CHECK(length, ObIntType);
-    ObString str_val = text.get_string();
-    int64_t start_pos_val = start_pos.get_int();
-    int64_t length_val = length.get_int();
-    ObString str_rep_val = replace_text.get_string();
-    ObString str_res;
-    if (OB_FAIL(calc(str_res, str_val, start_pos_val, length_val,
-               str_rep_val, *expr_ctx.calc_buf_, cs_type))) {
-    } else {
-      result.set_varchar(str_res);
     }
   }
   return ret;

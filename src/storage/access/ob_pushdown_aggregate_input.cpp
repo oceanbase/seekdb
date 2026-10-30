@@ -163,7 +163,7 @@ int ObPushdownAggregateInput::get_null_count(
       if (!datum.is_nop()) {
         null_count = datum.is_null() ? 1 : 0;
       } else {
-        const common::ObObj &default_value = col_param.get_orig_default_value();
+        const common::DatumValue &default_value = col_param.get_orig_default_value();
         if (default_value.is_nop_value()) {
           ret = OB_NOT_SUPPORTED;
         } else {
@@ -421,10 +421,10 @@ int ObPushdownAggregateInput::normalize_value(
   int ret = OB_SUCCESS;
   blocksstable::ObStorageDatum storage_datum;
   if (datum.is_nop()) {
-    const common::ObObj &default_value = col_param.get_orig_default_value();
+    const common::DatumValue &default_value = col_param.get_orig_default_value();
     if (default_value.is_nop_value()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(storage_datum.from_obj_enhance(default_value))) {
+    } else if (OB_FAIL(storage_datum.from_value(default_value))) {
     }
   } else {
     storage_datum.shallow_copy_from_datum(datum);

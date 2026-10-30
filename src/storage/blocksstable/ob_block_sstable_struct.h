@@ -168,7 +168,7 @@ struct ObColumnHeader
   uint32_t offset_;
   uint32_t length_;
 
-  static_assert(UINT8_MAX >= ObObjType::ObMaxType, "ObObjType is stored in ObColumnHeader with 1 byte");
+  static_assert(UINT8_MAX >= SqlValueType::ObMaxType, "SqlValueType is stored in ObColumnHeader with 1 byte");
   ObColumnHeader() { reuse(); }
   void reuse() { memset(this, 0, sizeof(*this)); }
   bool is_valid() const
@@ -176,7 +176,7 @@ struct ObColumnHeader
     return version_ == OB_COLUMN_HEADER_V1 
         && type_ >= 0
         && type_ < MAX_TYPE
-        && obj_type_ < ObObjType::ObMaxType;
+        && obj_type_ < SqlValueType::ObMaxType;
   }
 
   inline bool is_fix_length() const { return attr_ & FIX_LENGTH; }
@@ -191,7 +191,7 @@ struct ObColumnHeader
   {
     return COLUMN_EQUAL == type || COLUMN_SUBSTR == type;
   }
-  inline ObObjType get_store_obj_type() const { return static_cast<ObObjType>(obj_type_); }
+  inline SqlValueType get_store_obj_type() const { return static_cast<SqlValueType>(obj_type_); }
 
   inline void set_fix_lenght_attr() { attr_ |= FIX_LENGTH; }
   inline void set_has_extend_value_attr() { attr_ |= HAS_EXTEND_VALUE; }
@@ -443,8 +443,8 @@ struct ObColumnEncodingCtx
   void reset() { memset(this, 0, sizeof(*this)); }
   void try_set_need_sort(const ObColumnHeader::Type type, const int64_t column_index)
   {
-    ObObjTypeClass col_tc = encoding_ctx_->col_descs_->at(column_index).col_type_.get_type_class();
-    ObObjTypeStoreClass col_sc = get_store_class_map()[col_tc];
+    SqlTypeClass col_tc = encoding_ctx_->col_descs_->at(column_index).col_type_.get_type_class();
+    SqlValueTypeStoreClass col_sc = get_store_class_map()[col_tc];
     const bool encoding_type_need_sort = type == ObColumnHeader::DICT;
     need_sort_ = encoding_type_need_sort && !store_class_might_contain_lob_locator(col_sc);
   }
@@ -476,7 +476,7 @@ public:
   int16_t schema_rowkey_col_cnt_;
   char *compressor_;
   uint16_t *column_id_array_;
-  common::ObObjMeta *column_type_array_;
+  common::SqlTypeMeta *column_type_array_;
   common::ObOrderType *column_order_array_;
 };
 

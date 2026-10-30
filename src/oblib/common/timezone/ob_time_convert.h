@@ -36,7 +36,6 @@ class ObTimeZoneInfo;
 class ObOTimestampData;
 struct ObTimeConstStr;
 class ObDataTypeCastParams;
-class ObObj;
 
 #define DT_TYPE_DATE        (1UL << 0)
 #define DT_TYPE_TIME        (1UL << 1)
@@ -373,7 +372,7 @@ public:
   static int int_to_year(int64_t int64, uint8_t &value);
   static int validate_literal_date(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, ObDateTime &value);
   static int validate_literal_timestamp(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
-                                        ObObjType &obj_type, ObOTimestampData &value);
+                                        SqlValueType &obj_type, ObOTimestampData &value);
   static int str_to_datetime(const ObString &str, const ObTimeConvertCtx &cvrt_ctx, int64_t &value,
                              int16_t *scale = NULL, const ObDateSqlMode date_sql_mode = 0);
   static int str_to_mdatetime(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
@@ -386,7 +385,7 @@ public:
                                     const ObTimeConvertCtx &cvrt_ctx, ObMySQLDateTime &value,
                                     int16_t *scale, const ObDateSqlMode date_sql_mode);
   static int str_to_otimestamp(const ObString &str, const ObTimeConvertCtx &cvrt_ctx,
-                               const ObObjType target_type, ObOTimestampData &value,
+                               const SqlValueType target_type, ObOTimestampData &value,
                                ObScale &scale);
   /*
    * sys_tz_info: timezone info of sysvariable SYS_VAR_SYSTEM_TIME_ZONE
@@ -412,7 +411,7 @@ public:
   //ob_time store local time
   //ob_time store local time
   static int calc_tz_offset_by_tz_name(const ObTimeConvertCtx &cvrt_ctx, ObTime &ob_time);
-  static int ob_time_to_utc(const ObObjType obj_type, const ObTimeConvertCtx &cvrt_ctx, ObTime &ob_time);
+  static int ob_time_to_utc(const SqlValueType obj_type, const ObTimeConvertCtx &cvrt_ctx, ObTime &ob_time);
 
   static int str_is_date_format(const ObString &str, bool &date_flag);
   static int str_to_date(const ObString &str, int32_t &value, const ObDateSqlMode date_sql_mode = 0);
@@ -431,7 +430,7 @@ public:
                               int16_t scale, char *buf, int64_t buf_len,
                               int64_t &pos, bool with_delim = true);
   static int otimestamp_to_str(const ObOTimestampData &value, const ObDataTypeCastParams &dtc_params,
-                               const int16_t scale, const ObObjType type, char *buf,
+                               const int16_t scale, const SqlValueType type, char *buf,
                                int64_t buf_len, int64_t &pos);
   static int date_to_int(int32_t value, int64_t &int64);
   static int mdate_to_int(ObMySQLDate value, int64_t &int64);
@@ -442,7 +441,7 @@ public:
   static int time_to_str(int64_t value, int16_t scale,
                          char *buf, int64_t buf_len, int64_t &pos, bool with_delim = true);
   static int time_to_datetime(int64_t t_value, int64_t cur_dt_value,
-                              const ObTimeZoneInfo *tz_info, int64_t &dt_value, const ObObjType expect_type);
+                              const ObTimeZoneInfo *tz_info, int64_t &dt_value, const SqlValueType expect_type);
   static int time_to_mdatetime(int64_t t_value, int64_t cur_dt_value,
                                const ObTimeZoneInfo *tz_info, ObMySQLDateTime &mdt_value);
   static int year_to_int(uint8_t value, int64_t &int64);
@@ -456,12 +455,12 @@ public:
   static int mdatetime_to_datetime_without_check(ObMySQLDateTime mdt_value, int64_t &dt_value);
   static int datetime_to_mdatetime(int64_t dt_value, ObMySQLDateTime &mdt_value);
   static inline void datetime_to_odate(int64_t dt_value, int64_t &odate_value) { odate_value = dt_value; }
-  static int odate_to_otimestamp(int64_t in_value_us, const ObTimeZoneInfo *tz_info, const ObObjType out_type,
+  static int odate_to_otimestamp(int64_t in_value_us, const ObTimeZoneInfo *tz_info, const SqlValueType out_type,
                                  ObOTimestampData &out_value);
-  static int otimestamp_to_odate(const ObObjType in_type, const ObOTimestampData &in_value,
+  static int otimestamp_to_odate(const SqlValueType in_type, const ObOTimestampData &in_value,
                                        const ObTimeZoneInfo *tz_info, int64_t &out_value_us);
-  static int otimestamp_to_otimestamp(const ObObjType in_type, const ObOTimestampData &in_value,
-                                      const ObTimeZoneInfo *tz_info, const ObObjType out_type,
+  static int otimestamp_to_otimestamp(const SqlValueType in_type, const ObOTimestampData &in_value,
+                                      const ObTimeZoneInfo *tz_info, const SqlValueType out_type,
                                       ObOTimestampData &out_value);
   static int datetime_to_date(int64_t dt_value, const ObTimeZoneInfo *tz_info, int32_t &d_value);
   static int datetime_to_mdate(int64_t dt_value, const ObTimeZoneInfo *tz_info, ObMySQLDate &md_value);
@@ -500,7 +499,7 @@ public:
   static int date_add_nsecond(const int64_t ori_date_value, const int64_t nsecond,
                               const int32_t fractional_second, int64_t &result_date_value);
   static int calc_last_date_of_the_month(const int64_t ori_date_value, int64_t &result_date_value,
-                                         const ObObjType dest_type,
+                                         const SqlValueType dest_type,
                                          const ObDateSqlMode date_sql_mode);
   static int calc_last_mdate_of_the_month(const ObMySQLDateTime mdatetime, ObMySQLDate &mdate,
                                           const ObDateSqlMode date_sql_mode);
@@ -524,7 +523,7 @@ public:
   static int datetime_to_ob_time(int64_t value, const ObTimeZoneInfo *tz_info, ObTime &ob_time);
   template <bool calc_date = false>
   static int mdatetime_to_ob_time(const ObMySQLDateTime &value, ObTime &ob_time);
-  static int otimestamp_to_ob_time(const ObObjType type, const ObOTimestampData &ot_data,
+  static int otimestamp_to_ob_time(const SqlValueType type, const ObOTimestampData &ot_data,
                                    const ObTimeZoneInfo *tz_info, ObTime &ob_time,
                                    const bool store_utc_time = true);
   static int date_to_ob_time(int32_t value, ObTime &ob_time);
@@ -564,10 +563,10 @@ public:
   static int32_t ob_time_to_week(const ObTime &ob_time, ObDTMode mode);
   static int32_t ob_time_to_week(const ObTime &ob_time, ObDTMode mode, int32_t &delta);
   //mysql binary value encoder/decoder
-  static int decode_otimestamp(const ObObjType obj_type, const char *data,
+  static int decode_otimestamp(const SqlValueType obj_type, const char *data,
                                const int64_t total_len, const ObTimeConvertCtx &cvrt_ctx,
                                ObOTimestampData &otimestamp_val, int8_t &scale);
-  static int encode_otimestamp(const ObObjType obj_type, char *buf,
+  static int encode_otimestamp(const SqlValueType obj_type, char *buf,
                                const int64_t len, int64_t &pos,
                                const ObTimeZoneInfo *tz_info,
                                const ObOTimestampData &ot_data,

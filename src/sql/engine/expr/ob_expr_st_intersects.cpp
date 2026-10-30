@@ -67,8 +67,8 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
   int num_args = expr.arg_cnt_;
-  ObObjType input_type1 = gis_arg1->datum_meta_.type_;
-  ObObjType input_type2 = gis_arg2->datum_meta_.type_;
+  SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
+  SqlValueType input_type2 = gis_arg2->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

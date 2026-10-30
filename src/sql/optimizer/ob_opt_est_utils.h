@@ -86,7 +86,7 @@ public:
                             ObExecContext *exec_ctx,
                             common::ObIAllocator &allocator,
                             bool &get_value,
-                            common::ObObj &value);
+                            common::DatumValue &value);
 
   //whether the value of calculable expr is null.
   static int if_expr_value_null(const ParamStore *params,
@@ -121,7 +121,7 @@ public:
 class ObOptEstObjToScalar
 {
 public:
-  // Functionality: convert objs to scalars(double).
+  // Functionality: convert datum values to scalars(double).
   // One Optimization : Limited precision of double type cannot distinguish long strs using
   // a static base of 256 (max distinguishable length is 6). We need to firstly truncate the
   // common headers, then use a dynamic base to convert strings.
@@ -129,35 +129,36 @@ public:
   // Choice of dynamic base : find min and max of all chars of all given strs beyond the already
   // found common prefix length, use (max - min) as base
   //
-  // When to use this optimization : all given objs (2 to 4, min and max may be NULL) are string
+  // When to use this optimization : all given values (2 to 4, min and max may be NULL) are string
   // or min or max.
   //
   // Non-string inputs use the general scalar conversion path.
   // dongyun.zdy
-  static int convert_objs_to_scalars(const common::ObObj *min,
-                                     const common::ObObj *max,
-                                     const common::ObObj *start,
-                                     const common::ObObj *end,
-                                     common::ObObj *min_out,
-                                     common::ObObj *max_out,
-                                     common::ObObj *start_out,
-                                     common::ObObj *end_out,
-                                     bool convert2sortkey = true);
-  /////////////Start convert obj to scalar related function//////
+  static int convert_values_to_scalars(const common::DatumValue *minimum,
+      const common::DatumValue *maximum, const common::DatumValue *start,
+      const common::DatumValue *end, common::DatumValue *minimum_out,
+      common::DatumValue *maximum_out, common::DatumValue *start_out,
+      common::DatumValue *end_out, common::ObIAllocator &owner,
+      bool convert_to_sort_key = true);
+  static int convert_value_to_scalar(const common::DatumValue *value,
+      common::DatumValue *output, common::ObIAllocator &owner);
+  /////////////Start convert value to scalar related function//////
   // @param obj
   // @return
-  static int convert_obj_to_scalar(const common::ObObj* obj, double &scalar_value);
+  static int convert_obj_to_scalar(const common::DatumValue *value, double &scalar_value);
 
 
-  // double type cannot represent min (max can be represented using Double.INF).
-  // wrap conversion result as obj, so it can represent min, max, etc.
-  static int convert_obj_to_scalar_obj(const common::ObObj* obj, common::ObObj* out);
-
-  static int convert_obj_to_double(const common::ObObj *obj, double &num);
+  static int convert_obj_to_double(const common::DatumValue *value, double &num);
 
   static int convert_string_to_scalar_for_number(const common::ObString &str, double &scala);
 private:
-  static int add_to_string_conversion_array(const common::ObObj &strobj,
+  static int convert_values_to_scalars_impl(const common::DatumValue *minimum,
+      const common::DatumValue *maximum, const common::DatumValue *start,
+      const common::DatumValue *end,
+      common::DatumValue *minimum_out, common::DatumValue *maximum_out,
+      common::DatumValue *start_out, common::DatumValue *end_out,
+      common::ObIAllocator &owner, bool convert_to_sort_key);
+  static int add_to_string_conversion_array(const common::DatumValue &value,
                                             common::ObIArray<ObCollationType> &cs_type,
                                             common::ObIArray<common::ObString> &arr,
                                             uint64_t &convertable_map,

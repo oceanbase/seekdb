@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/virtual_table/ob_show_create_procedure.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -84,13 +85,13 @@ int ObShowCreateProcedure::calc_show_procedure_id(uint64_t &show_procedure_id)
        OB_SUCCESS == ret && OB_INVALID_ID == show_procedure_id && i < key_ranges_.count(); ++i) {
     const ObRowkey &start_key = key_ranges_.at(i).start_key_;
     const ObRowkey &end_key = key_ranges_.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-    if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
+    if (start_key.get_value_count() > 0 && start_key.get_value_count() == end_key.get_value_count()) {
       if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
-      } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
+      } else if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])
                  && ObIntType == start_key_obj_ptr[0].get_type()) {
         show_procedure_id = start_key_obj_ptr[0].get_int();
       } else {/*do nothing*/}
@@ -135,12 +136,12 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
       switch(col_id) {
         case OB_APP_MIN_COLUMN_ID: {
           // routine_id
-          cur_row_.cells_[cell_idx].set_int(show_procedure_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, show_procedure_id) : ret);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 1: {
           // routine_name
-          cur_row_.cells_[cell_idx].set_varchar(proc_info.get_routine_name());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, proc_info.get_routine_name()) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
@@ -169,8 +170,7 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
             if (OB_FAIL(ret)) {
               // do nothing
             } else {
-              cur_row_.cells_[cell_idx].set_lob_value(ObLongTextType,
-                                                      routine_def_buf, static_cast<int32_t>(pos));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(pos), routine_def_buf)) : ret);
             }
             OX (cur_row_.cells_[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset())));
@@ -179,31 +179,33 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
         }
         case OB_APP_MIN_COLUMN_ID + 3: {
           // routine_type
-          cur_row_.cells_[cell_idx].set_int(proc_info.get_routine_type());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, proc_info.get_routine_type()) : ret);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 4: {
           // charset_client
-          cur_row_.cells_[cell_idx].set_varchar(ObCharset::charset_name(exec_env.get_charset_client()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObCharset::charset_name(exec_env.get_charset_client())) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 5: {
           // collation_connection
-          cur_row_.cells_[cell_idx].set_varchar(ObCharset::collation_name(exec_env.get_collation_connection()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObCharset::collation_name(exec_env.get_collation_connection())) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 6: {
           // collation_db : valid for mysql mode
-          cur_row_.cells_[cell_idx].set_varchar(ObCharset::collation_name(exec_env.get_collation_database()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObCharset::collation_name(exec_env.get_collation_database())) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 7: {
           // sql_mode
-          ObObj int_value;
-          int_value.set_int(exec_env.get_sql_mode());
+          const int64_t sql_mode_value = exec_env.get_sql_mode();
+          DatumValue int_value;
+          int_value.meta_.set_int();
+          int_value.datum_.set_string(reinterpret_cast<const char *>(&sql_mode_value), sizeof(sql_mode_value));
           if (OB_FAIL(ob_sql_mode_to_str(int_value, cur_row_.cells_[cell_idx], allocator_))) {
           } else {
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

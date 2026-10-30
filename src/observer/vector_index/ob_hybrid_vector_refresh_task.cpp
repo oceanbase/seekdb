@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "share/datum/typed_datum_compare.h"
+#include "data_plane/native_key_value_buffer.h"
 #include "rust/config.h"
 #include "ob_hybrid_vector_refresh_task.h"
 #include "share/rc/ob_server_runtime.h"
@@ -841,29 +843,28 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
       }
       // col order of 6th table is rowkey vid vector or pk(vid) part_key vector
       const int64_t embedded_rowkey_count = task_ctx->embedded_table_column_ids_.count() - task_ctx->part_key_num_ - 1;
-      void *buf = nullptr;
-      ObObj *obj_ptr =  nullptr;
+      DatumValue *obj_ptr =  nullptr;
       if (OB_FAIL(ret)) {
       } else if (embedded_rowkey_count <= 0) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObObj) * (embedded_rowkey_count)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          obj_ptr = new (buf) ObObj[embedded_rowkey_count];
-        }
+        ret = storage::NativeKeyValueBuffer::allocate_values(allocator_, embedded_rowkey_count, obj_ptr);
       }
       for (int64_t row_id = 0; row_id < task_ctx->embedding_vids_.count() && OB_SUCC(ret); row_id++) {
         for (int64_t i = 0; i < dim; i++) {
           vector_buf[i] = output_vector.at(row_id)[i];
         }
-        obj_ptr[embedded_rowkey_count - 1].set_uint64(task_ctx->embedding_vids_.at(row_id));
-        if (adaptor.get_is_need_vid()) {
-          ObObj vid_obj;
-          vid_obj.set_int(task_ctx->embedding_vids_.at(row_id));
+        const int64_t vid = task_ctx->embedding_vids_.at(row_id);
+        DatumValue vid_obj;
+        vid_obj.meta_.set_uint64();
+        vid_obj.datum_.ptr_ = reinterpret_cast<const char *>(&vid);
+        vid_obj.datum_.pack_ = sizeof(vid);
+        if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(vid_obj, obj_ptr, embedded_rowkey_count, embedded_rowkey_count - 1))) {
+        } else if (adaptor.get_is_need_vid()) {
+          vid_obj.meta_.set_int();
           ObRowkey rowkey(&vid_obj, 1);
           blocksstable::ObDatumRow *vid_rowkey_datum = nullptr;
-          obj_ptr[embedded_rowkey_count - 1].set_int(task_ctx->embedding_vids_.at(row_id));
+          obj_ptr[embedded_rowkey_count - 1].meta_.set_int();
           if (OB_FAIL(ObPluginVectorIndexUtils::add_key_ranges(adaptor.get_vid_rowkey_table_id(), rowkey, vid_rowkey_scan_param))) {
           } else if (OB_FAIL(ObPluginVectorIndexUtils::iter_table_rescan(vid_rowkey_scan_param, vid_rowkey_iter))) {
           } else if (OB_ISNULL(table_scan_iter = dynamic_cast<storage::ObTableScanIterator *>(vid_rowkey_iter))) {
@@ -880,10 +881,10 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
           } else {
             const ObIArray<share::schema::ObColumnParam *> *out_col_param  = vid_rowkey_scan_param.table_param_->get_read_info().get_columns();
             for (int64_t i = 0; OB_SUCC(ret) && i < task_ctx->embedded_table_column_ids_.count() - 2; i++) {
-              ObObj tmp_obj;
-              ObObjMeta meta_type = out_col_param->at(i + 1)->get_meta_type();
-              if (OB_FAIL(vid_rowkey_datum->storage_datums_[i + 1].to_obj(tmp_obj, meta_type))) {
-              } else if (OB_FAIL(ob_write_obj(allocator_, tmp_obj, obj_ptr[i]))) {
+              DatumValue tmp_obj;
+              SqlTypeMeta meta_type = out_col_param->at(i + 1)->get_meta_type();
+              if (OB_FAIL(vid_rowkey_datum->storage_datums_[i + 1].to_value_view(meta_type, tmp_obj))) {
+              } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], allocator_))) {
               }
             }
           }

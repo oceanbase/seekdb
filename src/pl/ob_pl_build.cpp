@@ -158,7 +158,7 @@ int ObPLBuilder::init_anonymous_ast(
   func_ast.set_ret_type(pl_type);
 
   for (int64_t i = 0; OB_SUCC(ret) && OB_NOT_NULL(params) && i < params->count(); ++i) {
-    ObObjParam& param = const_cast<ObObjParam&>(params->at(i));
+    DatumParameter& param = const_cast<DatumParameter&>(params->at(i));
     if (param.is_pl_extend()) {
       if (!is_mocked_anonymous_array_id(param.get_udt_id())) {
         const ObUserDefinedType *user_type = nullptr;

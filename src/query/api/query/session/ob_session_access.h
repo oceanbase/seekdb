@@ -18,7 +18,7 @@
 #define OCEANBASE_QUERY_API_SESSION_OB_SESSION_ACCESS_H_
 
 #include <stdint.h>
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/ob_define.h"
 #include "lib/string/ob_string.h"
@@ -56,9 +56,9 @@ public:
       sql::ObSQLSessionInfo *session, const common::ObString &name);
 
   static int get_collation_connection(
-      const sql::ObSQLSessionInfo *session, common::ObObj &value);
+      const sql::ObSQLSessionInfo *session, common::DatumValue &value);
   static int set_collation_connection(
-      sql::ObSQLSessionInfo *session, const common::ObObj &value);
+      sql::ObSQLSessionInfo *session, const common::DatumValue &value);
 
   static void set_dummy_ddl_visibility(
       sql::ObSQLSessionInfo *session, bool enabled);

@@ -69,7 +69,7 @@ void ObAllVirtualOptStatGatherMonitor::reset()
 int ObAllVirtualOptStatGatherMonitor::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_ISNULL(allocator_) || OB_ISNULL(addr_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ or addr_ is null", K_(allocator), K_(addr), K(ret));
@@ -92,55 +92,55 @@ int ObAllVirtualOptStatGatherMonitor::inner_get_next_row(ObNewRow *&row)
       const uint64_t column_id = output_column_ids_.at(cell_idx);
       switch(column_id) {
         case SESSION_ID: {
-          cells[cell_idx].set_int(stat_array_.at(index_).get_session_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_session_id()) : ret);
           break;
         }
         case TRACE_ID: {
-          cells[cell_idx].set_varchar(stat_array_.at(index_).get_trace_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_trace_id()) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case TASK_ID: {
-          cells[cell_idx].set_varchar(stat_array_.at(index_).get_task_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_task_id()) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case TYPE: {
-          cells[cell_idx].set_int(stat_array_.at(index_).get_type());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_type()) : ret);
           break;
         }
         case TASK_START_TIME: {
-          cells[cell_idx].set_timestamp(stat_array_.at(index_).get_task_start_time());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_task_start_time()) : ret);
           break;
         }
         case TASK_TABLE_COUNT: {
-          cells[cell_idx].set_int(stat_array_.at(index_).get_task_table_count());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_task_table_count()) : ret);
           break;
         }
         case TASK_DURATION_TIME: {
-          cells[cell_idx].set_int(stat_array_.at(index_).get_task_duration_time());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_task_duration_time()) : ret);
           break;
         }
         case COMPLETED_TABLE_COUNT: {
-          cells[cell_idx].set_int(stat_array_.at(index_).get_completed_table_count());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_completed_table_count()) : ret);
           break;
         }
         case RUNNING_TABLE_OWNER: {
-          cells[cell_idx].set_varchar(stat_array_.at(index_).get_database_name());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_database_name()) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case RUNNING_TABLE_NAME: {
-          cells[cell_idx].set_varchar(stat_array_.at(index_).get_table_name());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_table_name()) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case RUNNING_TABLE_DURATION_TIME: {
-          cells[cell_idx].set_int(stat_array_.at(index_).get_running_table_duration_time());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_running_table_duration_time()) : ret);
           break;
         }
         case SPARE1: {
@@ -148,7 +148,7 @@ int ObAllVirtualOptStatGatherMonitor::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case SPARE2: {//running table progress
-          cells[cell_idx].set_varchar(stat_array_.at(index_).get_table_gather_progress());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, stat_array_.at(index_).get_table_gather_progress()) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;

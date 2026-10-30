@@ -293,8 +293,8 @@ int ObTransformPreProcess::add_all_rowkey_columns_to_stmt(const ObTableSchema &t
       column_item.base_tid_ = table_item.ref_id_;
       column_item.base_cid_ = rowkey->get_column_id();
       column_item.column_name_ = rowkey->get_column_name();
-      column_item.set_default_value(column_schema->get_cur_default_value());
-      if (OB_FAIL(stmt.add_column_item(column_item))) {
+      if (OB_FAIL(column_item.set_default_value(column_schema->get_cur_default_value()))) {
+      } else if (OB_FAIL(stmt.add_column_item(column_item))) {
       } else if (OB_FAIL(column_items.push_back(column_item))) {
       } else if (FALSE_IT(rowkey->clear_explicited_referece())) {
       } else if (OB_ISNULL(ctx_)) {
@@ -1060,12 +1060,12 @@ int ObTransformPreProcess::transform_in_or_notin_expr_without_row(ObRawExprFacto
     if (OB_ISNULL(param_expr)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ObObjType obj_type = param_expr->get_result_type().get_type();
+      SqlValueType obj_type = param_expr->get_result_type().get_type();
       ObCollationType coll_type = param_expr->get_result_type().get_collation_type();
       ObCollationLevel coll_level = param_expr->get_result_type().get_collation_level();
       ObScale scale = param_expr->get_result_type().get_scale();
       if (param_expr->is_enum_set_with_subschema()) {
-        ObObjMeta obj_meta;
+        SqlTypeMeta obj_meta;
         if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(param_expr->get_result_type(),
                                                                &session,
                                                                obj_meta))) {
@@ -1103,12 +1103,12 @@ int ObTransformPreProcess::transform_in_or_notin_expr_without_row(ObRawExprFacto
       DistinctObjMeta obj_meta = distinct_types.at(i);
       for (int j = 0; OB_SUCC(ret) && j < right_expr->get_param_count(); j++) {
         ObRawExpr *param_expr = right_expr->get_param_expr(j);
-        ObObjType obj_type = param_expr->get_result_type().get_type();
+        SqlValueType obj_type = param_expr->get_result_type().get_type();
         ObCollationType coll_type = param_expr->get_result_type().get_collation_type();
         ObCollationLevel coll_level = param_expr->get_result_type().get_collation_level();
         ObScale scale = param_expr->get_result_type().get_scale();
         if (param_expr->is_enum_set_with_subschema()) {
-          ObObjMeta enum_set_obj_meta;
+          SqlTypeMeta enum_set_obj_meta;
           if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(param_expr->get_result_type(),
                                                                 &session,
                                                                 enum_set_obj_meta))) {
@@ -1169,7 +1169,7 @@ int ObTransformPreProcess::transform_in_or_notin_expr_with_row(ObRawExprFactory 
           ret = OB_INVALID_ARGUMENT;
         } else {
           const ObRawExpr *param_expr = right_expr->get_param_expr(i)->get_param_expr(j);
-          const ObObjType obj_type = param_expr->get_result_type().get_type();
+          const SqlValueType obj_type = param_expr->get_result_type().get_type();
           const ObCollationType coll_type = param_expr->get_result_type().get_collation_type();
           const ObCollationLevel coll_level = param_expr->get_result_type().get_collation_level();
           const ObScale scale = param_expr->get_result_type().get_scale();
@@ -1357,7 +1357,7 @@ int ObTransformPreProcess::create_equal_expr_for_case_expr(ObRawExprFactory &exp
                                                            ObOpRawExpr *&equal_expr)
 {
   int ret = OB_SUCCESS;
-  ObObjType obj_type = ObMaxType;
+  SqlValueType obj_type = ObMaxType;
   const ObRawExprResType &arg_type = arg_expr->get_result_type();
   const ObRawExprResType &when_type = when_expr->get_result_type();
   ObRawExpr *new_when_expr = NULL; // cast expr may added
@@ -1596,7 +1596,7 @@ int ObTransformPreProcess::replace_cast_expr_align_date4cmp(ObRawExprFactory &ex
               // create third param_expr (a ObConstRawExpr used to represent res_type)
               // and add it to align_date4cmp_expr.
               ObConstRawExpr *res_type_expr = NULL;
-              ObObjType cast_res_type = expr->get_result_type().get_type();
+              SqlValueType cast_res_type = expr->get_result_type().get_type();
               int64_t cast_res_type_int = cast_res_type;
               if (OB_FAIL(ObRawExprUtils::build_const_int_expr(expr_factory,
                                                   ObIntType, cast_res_type_int, res_type_expr))) {
@@ -2157,11 +2157,10 @@ int ObTransformPreProcess::create_distance_type_const_expr(
     } else if (OB_ISNULL(const_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj obj;
-      obj.set_int(static_cast<int64_t>(vec_dis_type));
-      const_expr->set_value(obj);
-
-      dis_type = const_expr;
+      DatumValue obj;
+      OZ (obj.set_int(static_cast<int64_t>(vec_dis_type), ctx_->expr_factory_->get_allocator()));
+      OX (const_expr->set_value(obj));
+      OX (dis_type = const_expr);
     }
   }
   return ret;

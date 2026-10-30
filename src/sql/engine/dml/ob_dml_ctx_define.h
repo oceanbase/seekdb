@@ -224,7 +224,6 @@ struct ObTrigDMLRtDef
       tg_when_point_params_(nullptr),
       tg_row_point_params_(),
       tg_all_params_(nullptr),
-      update_columns_(nullptr),
       tg_update_columns_(pl::PL_NESTED_TABLE_TYPE, OB_INVALID_ID)
   { }
   TO_STRING_KV(K_(old_record),
@@ -236,8 +235,7 @@ struct ObTrigDMLRtDef
   pl::ObPLRecord *new_record_;
   ParamStore *tg_when_point_params_;
   ParamStore *tg_row_point_params_;
-  common::ObObjParam *tg_all_params_;
-  ObObj *update_columns_;
+  common::DatumParameter *tg_all_params_;
   pl::ObPLCollection tg_update_columns_;
 };
 
@@ -259,7 +257,7 @@ public:
   common::ObString name_;
   int32_t idx_;  // index of the column id in column_ids_ of ObTableModify. value column idx
   int32_t name_idx_;
-  ObObjMeta obj_meta_; // This is used to cast fk type to parent key type
+  SqlTypeMeta obj_meta_; // This is used to cast fk type to parent key type
 };
 
 struct ObForeignKeyCheckerCtdef

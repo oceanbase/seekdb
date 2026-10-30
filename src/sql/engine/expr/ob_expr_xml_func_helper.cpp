@@ -45,7 +45,7 @@ int ObXMLExprHelper::get_str_from_expr(const ObExpr *expr,
 {
   int ret = OB_SUCCESS;
   ObDatum *datum = NULL;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   MultimodeAlloctor &alloc = static_cast<MultimodeAlloctor&>(allocator);
   if (OB_FAIL(alloc.eval_arg(expr, ctx, datum))) {
   } else if (!ob_is_string_type(val_type)) {

@@ -63,8 +63,8 @@ int ObExprArrayPosition::calc_result_type2(ObExprResType &type,
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_WARN(OB_ERR_INVALID_TYPE_FOR_OP, 
-        ob_obj_type_str(type1.get_type()),
-        ob_obj_type_str(type2.get_type()));
+        sql_value_type_to_string(type1.get_type()),
+        sql_value_type_to_string(type2.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, type1, type2, subschema_id))) {
   } 
   
@@ -186,8 +186,8 @@ int ObExprArrayPosition::array_position(const ObExpr &expr,
                             int &idx)
 {
   int ret = OB_SUCCESS;
-  const ObObjType &right_type = expr.args_[1]->datum_meta_.type_;
-  ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+  const SqlValueType &right_type = expr.args_[1]->datum_meta_.type_;
+  SqlTypeClass right_tc = sql_type_class(right_type);
 
   switch (right_tc) {
   case ObUIntTC:

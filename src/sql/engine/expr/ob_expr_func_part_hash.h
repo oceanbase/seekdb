@@ -30,8 +30,8 @@ public:
   ObExprFuncPartHashBase(common::ObIAllocator &alloc, ObExprOperatorType type,
           const char *name, int32_t param_num, int32_t dimension,
           bool is_internal_for_mysql = false);
-  template<typename T>
-  static int calc_value_for_mysql(const T &input, T &output, const common::ObObjType input_type);
+  static int calc_value_for_mysql(const common::ObDatum &input, common::ObDatum &output,
+                                 const common::SqlValueType input_type);
 };
 
 class ObSqlExecutorCtx;
@@ -44,13 +44,6 @@ public:
                                 ObExprResType *types_stack,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc_value(common::ObExprCtx &expr_ctx,
-                        const common::ObObj *objs_stack,
-                        int64_t param_num,
-                        common::ObObj &result);
-  static int calc_hash_value_with_seed(const common::ObObj &obj,
-                                        int64_t seed,
-                                        uint64_t &res);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

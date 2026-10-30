@@ -64,7 +64,7 @@ int ObAllVirtualLoadDataStat::inner_get_next_row(ObNewRow *&row)
       SERVER_LOG(WARN, "fail to get next job status", KR(ret));
     }
   } else {
-    ObObj *cells = cur_row_.cells_;
+    DatumValue *cells = cur_row_.cells_;
     const int64_t col_count = output_column_ids_.count();
 
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
@@ -72,83 +72,83 @@ int ObAllVirtualLoadDataStat::inner_get_next_row(ObNewRow *&row)
 
       switch (col_id) {
         case JOB_ID: {
-          cells[i].set_int(job_status->job_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->job_id_) : ret);
           break;
         }
         case TABLE_NAME: {
-          cells[i].set_varchar(job_status->table_name_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, job_status->table_name_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case FILE_PATH: {
-          cells[i].set_varchar(job_status->file_path_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, job_status->file_path_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case TABLE_COLUMN: {
-          cells[i].set_int(job_status->table_column_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->table_column_) : ret);
           break;
         }
         case FILE_COLUMN: {
-          cells[i].set_int(job_status->file_column_); 
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->file_column_) : ret);
           break;
         }
         case BATCH_SIZE: {
-          cells[i].set_int(job_status->batch_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->batch_size_) : ret);
           break;
         }
         case PARALLEL: {
-          cells[i].set_int(job_status->parallel_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->parallel_) : ret);
           break;
         }
         case LOAD_MODE: {
-          cells[i].set_int(job_status->load_mode_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->load_mode_) : ret);
           break;
         }
         case LOAD_TIME: {//The number of seconds already spent importing data
           int64_t current_time = common::ObTimeUtility::current_time();
-          cells[i].set_int((current_time - job_status->start_time_) / 1000000L);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, (current_time - job_status->start_time_) / 1000000L) : ret);
           break;
         }
         case ESTIMATED_REMAINING_TIME: {
           int64_t estimated_remaining_time = calc_remaining_time(*job_status);
-          cells[i].set_int(estimated_remaining_time);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, estimated_remaining_time) : ret);
           break;
         }
         case TOTAL_BYTES: {
-          cells[i].set_int(job_status->total_bytes_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->total_bytes_) : ret);
           break;
         }
         case READ_BYTES: {
-          cells[i].set_int(job_status->read_bytes_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->read_bytes_) : ret);
           break;
         }
         case PARSED_BYTES: {
-          cells[i].set_int(job_status->parsed_bytes_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->parsed_bytes_) : ret);
           break;
         }
         case PARSED_ROWS: {
-          cells[i].set_int(job_status->parsed_rows_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->parsed_rows_) : ret);
           break;
         }
         case TOTAL_SHUFFLE_TASK: {
-          cells[i].set_int(job_status->total_shuffle_task_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->total_shuffle_task_) : ret);
           break;
         }
         case TOTAL_INSERT_TASK: {
-          cells[i].set_int(job_status->total_insert_task_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->total_insert_task_) : ret);
           break;
         }
         case SHUFFLE_RT_SUM: {
-          cells[i].set_int(job_status->shuffle_rt_sum_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->shuffle_rt_sum_) : ret);
           break;
         }
         case INSERT_RT_SUM: {
-          cells[i].set_int(job_status->insert_rt_sum_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->insert_rt_sum_) : ret);
           break;
         }
         case TOTAL_WAIT_SECS: {
-          cells[i].set_int(job_status->total_wait_secs_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, job_status->total_wait_secs_) : ret);
           break;
         }
         default: {

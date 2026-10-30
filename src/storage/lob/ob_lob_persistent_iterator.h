@@ -39,7 +39,7 @@ protected:
     main_tablet_id_(),
     lob_meta_tablet_id_(),
     lob_piece_tablet_id_(),
-    rowkey_objs_(),
+    rowkey_values_(),
     seq_id_local_buf_(0),
     scan_param_(),
     row_iter_(nullptr),
@@ -51,10 +51,10 @@ protected:
 
 protected:
   int build_rowkey_range(ObLobAccessParam &param, ObRowkey &min_row_key, ObRowkey &max_row_key, ObNewRange &range);
-  int build_rowkey_range(ObLobAccessParam &param, ObObj key_objs[4], ObNewRange &range);
-  int build_rowkey(ObLobAccessParam &param, ObObj key_objs[4], ObString &seq_id, ObNewRange &range);
-  int build_rowkey(ObLobAccessParam &param, ObObj key_objs[4], ObNewRange &range);
-  int build_range(ObLobAccessParam &param, ObObj key_objs[4], ObNewRange &range);
+  int build_rowkey_range(ObLobAccessParam &param, common::DatumValue key_values[4], ObNewRange &range);
+  int build_rowkey(ObLobAccessParam &param, common::DatumValue key_values[4], ObString &seq_id, ObNewRange &range);
+  int build_rowkey(ObLobAccessParam &param, common::DatumValue key_values[4], ObNewRange &range);
+  int build_range(ObLobAccessParam &param, common::DatumValue key_values[4], ObNewRange &range);
 
 
   int scan(ObLobAccessParam &param, const bool is_get, ObIAllocator *stmt_allocator, ObIAllocator *scan_allocator);
@@ -66,7 +66,7 @@ public:
       K_(main_tablet_id),
       K_(lob_meta_tablet_id),
       K_(lob_piece_tablet_id),
-      K(rowkey_objs_[0]), K(rowkey_objs_[1]), K(rowkey_objs_[3]), K(rowkey_objs_[3]),
+      K(rowkey_values_[0]), K(rowkey_values_[1]), K(rowkey_values_[3]), K(rowkey_values_[3]),
       K_(seq_id_local_buf),
       K_(scan_param),
       KP_(row_iter),
@@ -82,7 +82,7 @@ protected:
   ObTabletID lob_piece_tablet_id_;
 
   // rowkey for scan range
-  ObObj rowkey_objs_[4];
+  common::DatumValue rowkey_values_[4];
 
   // used for single get
   uint32_t seq_id_local_buf_;

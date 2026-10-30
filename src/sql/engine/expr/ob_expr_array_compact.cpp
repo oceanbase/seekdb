@@ -61,7 +61,7 @@ int ObExprArrayCompact::calc_result_type1(ObExprResType &type,
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -192,13 +192,9 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
     } // end for
   } else {
     const ObCollectionBasicType *src_type = dynamic_cast<const ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_);
-    ObObj last_elem;
-    ObObj this_elem;
     bool is_last_null = false;
     if (OB_UNLIKELY(!src_type)) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
-    } else {
-      this_elem.set_meta_type(src_type->basic_meta_.get_meta_type());
     }
     for (int64_t i = 0; i < src_arr->size() && OB_SUCC(ret); i++) {
       if (src_arr->is_null(i)) {
@@ -208,13 +204,15 @@ int ObExprArrayCompact::eval_compact(ObIAllocator &tmp_allocator, ObEvalCtx &ctx
         } else {
           is_last_null = true;
         }
-      } else if (OB_FAIL(src_arr->elem_at(i, this_elem))) {
-      } else if (i > 0 && !is_last_null && this_elem == last_elem) {
-        // do nothing
-      } else if (OB_FAIL(res_arr->insert_from(*src_arr, i))) {
       } else {
-        is_last_null = false;
-        last_elem = this_elem;
+        int cmp_ret = 0;
+        if (i > 0 && !is_last_null && OB_FAIL(src_arr->compare_at(i - 1, 1, i, 1, *src_arr, cmp_ret))) {
+        } else if (i > 0 && !is_last_null && cmp_ret == 0) {
+          // do nothing
+        } else if (OB_FAIL(res_arr->insert_from(*src_arr, i))) {
+        } else {
+          is_last_null = false;
+        }
       }
     } // end for
   }

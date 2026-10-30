@@ -69,26 +69,26 @@ int ObAllVirtualCompactionDiagnoseInfo::fill_cells()
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
     case MERGE_TYPE:
-      cells[i].set_varchar(merge_type_to_str(diagnose_info_.merge_type_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, merge_type_to_str(diagnose_info_.merge_type_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case TABLET_ID:
-      cells[i].set_int(diagnose_info_.tablet_id_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, diagnose_info_.tablet_id_) : ret);
       break;
     case STATUS:
-      cells[i].set_varchar(diagnose_info_.get_diagnose_status_str(diagnose_info_.status_));
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, diagnose_info_.get_diagnose_status_str(diagnose_info_.status_)) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case CREATE_TIME:
-      cells[i].set_timestamp(diagnose_info_.timestamp_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, diagnose_info_.timestamp_) : ret);
       break;
     case DIAGNOSE_INFO: {
-      cells[i].set_varchar(diagnose_info_.diagnose_info_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, diagnose_info_.diagnose_info_) : ret);
       cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     }

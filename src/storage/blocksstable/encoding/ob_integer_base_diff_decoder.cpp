@@ -54,7 +54,7 @@ int ObIntegerBaseDiffDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDa
     uint32_t datum_len = 0;
     uint64_t v = 0;
     if (OB_FAIL(get_uint_data_datum_len(
-        ObDatum::get_obj_datum_map_type(ctx.obj_meta_.get_type()),
+        ObDatum::get_sql_value_datum_map_type(ctx.obj_meta_.get_type()),
         datum_len))){
     } else if (ctx.is_bit_packing()) {
       if (OB_FAIL(ObBitStream::get(col_data, data_offset + row_id * header_->length_,
@@ -180,7 +180,7 @@ int ObIntegerBaseDiffDecoder::batch_decode(
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(get_uint_data_datum_len(
-        ObDatum::get_obj_datum_map_type(ctx.obj_meta_.get_type()),
+        ObDatum::get_sql_value_datum_map_type(ctx.obj_meta_.get_type()),
         datum_len))) {
     } else if (ctx.is_bit_packing()) {
       if (OB_FAIL(batch_get_bitpacked_values(
@@ -279,11 +279,11 @@ int ObIntegerBaseDiffDecoder::pushdown_operator(
 // T should be int64_t or uint64_t
 template <>
 inline int ObIntegerBaseDiffDecoder::get_delta<uint64_t>(
-    const ObObjType &obj_type, const common::ObDatum &datum, uint64_t &delta) const
+    const SqlValueType &obj_type, const common::ObDatum &datum, uint64_t &delta) const
 {
   int ret = OB_SUCCESS;
   int64_t type_store_size = get_type_size_map()[obj_type];
-  const ObObjDatumMapType datum_type = common::ObDatum::get_obj_datum_map_type(obj_type);
+  const SqlValueDatumMapType datum_type = common::ObDatum::get_sql_value_datum_map_type(obj_type);
   const uint32_t datum_size = common::ObDatum::get_reserved_size(datum_type);
   if (OB_UNLIKELY(type_store_size < 0 || datum_size > 8)) {
     ret = OB_ERR_UNEXPECTED;
@@ -299,11 +299,11 @@ inline int ObIntegerBaseDiffDecoder::get_delta<uint64_t>(
 
 template <>
 inline int ObIntegerBaseDiffDecoder::get_delta<int64_t>(
-    const ObObjType &obj_type, const common::ObDatum &datum, uint64_t &delta) const
+    const SqlValueType &obj_type, const common::ObDatum &datum, uint64_t &delta) const
 {
   int ret = OB_SUCCESS;
   int64_t type_store_size = get_type_size_map()[obj_type];
-  const ObObjDatumMapType datum_type = common::ObDatum::get_obj_datum_map_type(obj_type);
+  const SqlValueDatumMapType datum_type = common::ObDatum::get_sql_value_datum_map_type(obj_type);
   const uint32_t datum_size = common::ObDatum::get_reserved_size(datum_type);
   if (OB_UNLIKELY(type_store_size < 0 || datum_size > 8)) {
     ret = OB_ERR_UNEXPECTED;
@@ -333,7 +333,7 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
   int ret = OB_SUCCESS;
   uint64_t delta_value = 0;
   uint64_t param_delta_value = 0;
-  common::ObObjMeta filter_val_meta;
+  common::SqlTypeMeta filter_val_meta;
   if (OB_UNLIKELY(pd_filter_info.count_ != result_bitmap.size()
                           || NULL == col_data
                           || filter.get_datums().count() != 1)) {
@@ -348,13 +348,13 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
     ObStorageDatum base_datum;
     uint32_t base_datum_len = 0;
     if (OB_FAIL(get_uint_data_datum_len(
-        ObDatum::get_obj_datum_map_type(col_ctx.obj_meta_.get_type()),
+        ObDatum::get_sql_value_datum_map_type(col_ctx.obj_meta_.get_type()),
         base_datum_len))){
     }
     base_datum.ptr_ = (const char *)(&base_);
     base_datum.pack_ = base_datum_len;
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
-    ObObjTypeStoreClass column_sc = get_store_class_map()[col_ctx.obj_meta_.get_type_class()];
+    SqlValueTypeStoreClass column_sc = get_store_class_map()[col_ctx.obj_meta_.get_type_class()];
     bool  filter_obj_smaller_than_base = false;
 
     const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
@@ -378,7 +378,7 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
       int64_t data_offset = 0;
       bool null_value_contained = result_bitmap.popcnt() > 0;
       bool exist_parent_filter = nullptr != parent;
-      const ObObjType &ref_obj_type = filter_val_meta.get_type();
+      const SqlValueType &ref_obj_type = filter_val_meta.get_type();
       if (col_ctx.has_extend_value()) {
         data_offset = col_ctx.micro_block_header_->row_count_
             * col_ctx.micro_block_header_->extend_value_bit_;
@@ -549,7 +549,7 @@ int ObIntegerBaseDiffDecoder::traverse_all_data(
         ObDatum cur_datum;
         uint32_t cur_datum_len = 0;
         if (OB_FAIL(get_uint_data_datum_len(
-            ObDatum::get_obj_datum_map_type(col_ctx.obj_meta_.get_type()),
+            ObDatum::get_sql_value_datum_map_type(col_ctx.obj_meta_.get_type()),
             cur_datum_len))){
         }
         cur_datum.pack_ = cur_datum_len;

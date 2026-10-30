@@ -43,8 +43,8 @@ int ObExprPad::calc_result_type3(ObExprResType &type,
                                  common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType text_type = ObNullType;
-  ObObjType len_type = ObNullType;
+  SqlValueType text_type = ObNullType;
+  SqlValueType len_type = ObNullType;
   int64_t max_len = -1;
 
   len_type = ObIntType;

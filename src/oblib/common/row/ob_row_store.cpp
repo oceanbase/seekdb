@@ -94,7 +94,9 @@ int ObRowStore::BlockInfo::append_row(const ObIArray<int64_t> &reserved_columns,
     stored_row->reserved_cells_count_ = static_cast<int32_t>(reserved_columns_count);
     stored_row->payload_ = payload;
     // store row data
-    ObObj cell_clone;
+    DatumValue *reserved_values = nullptr;
+    DatumValueBuffer::initialize(stored_row->reserved_cells_, reserved_columns_count, reserved_values);
+    DatumValue cell_clone; char cell_clone_payload[16];
     ObCellWriter cell_writer;
     if (OB_FAIL(cell_writer.init(get_buffer(), get_remain_size(), DENSE))) {
     } else {
@@ -102,11 +104,11 @@ int ObRowStore::BlockInfo::append_row(const ObIArray<int64_t> &reserved_columns,
       int64_t count = row.get_count();
       for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
         // honor the projector
-        const ObObj &cell = row.get_cell(i);
+        const DatumValue &cell = row.get_cell(i);
         if (cell.is_ext() && ObActionFlag::OP_END_FLAG == cell.get_ext()) {
           ret = OB_ERR_UNEXPECTED;
           OB_LOG(WARN, "append row is invalid", K(row));
-        } else if (OB_FAIL(cell_writer.append(OB_INVALID_ID, cell, &cell_clone))) {
+        } else if (OB_FAIL(cell_writer.append(OB_INVALID_ID, cell, &cell_clone, cell_clone_payload))) {
           if (OB_BUF_NOT_ENOUGH != ret) {
             OB_LOG(WARN, "failed to append cell", K(ret));
           }
@@ -115,8 +117,8 @@ int ObRowStore::BlockInfo::append_row(const ObIArray<int64_t> &reserved_columns,
         for (int64_t j = 0; OB_SUCC(ret) && j < reserved_columns_count; ++j) {
           const int64_t index = reserved_columns.at(j);
           if (index == i) {
-            stored_row->reserved_cells_[j] = cell_clone;
-            ++reserved_count;
+            ret = DatumValueBuffer::assign_view(cell_clone, reserved_values, reserved_columns_count, j);
+            if (OB_SUCC(ret)) { ++reserved_count; }
             // should not break when ORDER BY c1, c1 DESC, ...
             // If the break goes out here, reserved_count will be less than reserved_columns_count
             // break;
@@ -280,17 +282,52 @@ ObRowStore::BlockInfo *ObRowStore::BlockList::pop_last()
 ObRowStore::Iterator::Iterator()
   :row_store_(NULL),
    cur_iter_block_(NULL),
-   cur_iter_pos_(0)
+   cur_iter_pos_(0),
+   decode_owner_(nullptr), decode_values_(nullptr), decode_capacity_(0)
 {
 }
 
 ObRowStore::Iterator::Iterator(const ObRowStore *row_store)
     : row_store_(row_store),
       cur_iter_block_(NULL),
-      cur_iter_pos_(0)
+      cur_iter_pos_(0),
+      decode_owner_(row_store == nullptr ? nullptr : &row_store->alloc_),
+      decode_values_(nullptr), decode_capacity_(0)
 {
 }
 
+
+ObRowStore::Iterator::Iterator(const Iterator &other)
+    : row_store_(other.row_store_), cur_iter_block_(other.cur_iter_block_),
+      cur_iter_pos_(other.cur_iter_pos_), decode_owner_(other.decode_owner_),
+      decode_values_(nullptr), decode_capacity_(0)
+{}
+ObRowStore::Iterator &ObRowStore::Iterator::operator=(const Iterator &other)
+{
+  if (this != &other) {
+    release_decode_slots(); row_store_ = other.row_store_;
+    cur_iter_block_ = other.cur_iter_block_; cur_iter_pos_ = other.cur_iter_pos_;
+    decode_owner_ = other.decode_owner_;
+  }
+  return *this;
+}
+ObRowStore::Iterator::~Iterator() { release_decode_slots(); }
+void ObRowStore::Iterator::release_decode_slots()
+{
+  if (decode_values_ != nullptr) { decode_owner_->free(decode_values_); }
+  decode_values_ = nullptr; decode_capacity_ = 0;
+}
+int ObRowStore::Iterator::reserve_decode_slots(int64_t count)
+{
+  int ret = OB_SUCCESS;
+  if (decode_owner_ == nullptr) { ret = OB_NOT_INIT; }
+  else if (count > decode_capacity_) {
+    DatumValue *candidate = nullptr;
+    if (OB_FAIL(DatumValueBuffer::allocate(*decode_owner_, count, candidate))) {}
+    else { release_decode_slots(); decode_values_ = candidate; decode_capacity_ = count; }
+  }
+  return ret;
+}
 
 //Why not reset row_store_, which does not satisfy the semantics of reset, and renamed to reuse?
 void ObRowStore::Iterator::reset()
@@ -350,12 +387,13 @@ int ObRowStore::Iterator::get_next_row(ObNewRow &row,
     ret = OB_BUF_NOT_ENOUGH;
     OB_LOG(WARN, "column buffer count is not enough", K_(row.count),
                K(row_store_->get_col_count()));
+  } else if (OB_FAIL(reserve_decode_slots(row_store_->get_col_count()))) {
   } else if (OB_FAIL(get_next_stored_row(stored_row))) {
     // do nothing
   } else if (OB_ISNULL(stored_row)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "stored_row should not be NULL", K(ret));
-  } else if (OB_FAIL(ObRowUtil::convert(stored_row->get_compact_row(), row))) {
+  } else if (OB_FAIL(ObRowUtil::convert(stored_row->get_compact_row(), row, decode_values_, decode_capacity_))) {
   } else {
     if (NULL != r_stored_row) {
       *r_stored_row = stored_row;
@@ -579,6 +617,14 @@ int ObRowStore::add_row_by_projector(const ObNewRow &row,
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "all rows should have the same columns", K(col_count_), K(row.get_count()));
   } else {
+    if (!use_compact_row_) {
+      const int64_t flat_size = row.get_projected_deep_copy_size();
+      const int64_t header_size = get_reserved_cells_size(reserved_columns_.count());
+      if (flat_size == INT64_MAX || header_size > INT64_MAX - sizeof(ObNewRow)
+          || flat_size > INT64_MAX - sizeof(ObNewRow) - header_size) {
+        return OB_SIZE_OVERFLOW;
+      }
+    }
     stored_row = NULL;
     const int32_t reserved_columns_count = static_cast<int32_t>(reserved_columns_.count());
     int64_t min_need_size = get_compact_row_min_size(row.get_count()) +
@@ -687,13 +733,13 @@ int ObRowStore::init_pre_project_row(int64_t count)
       OB_LOG(WARN, "invalid count", K(count), K(ret));
     } else {
       ObMemAttr attr(label_, ctx_id_);
-      pre_project_buf_ = static_cast<ObObj *>(
-          alloc_.alloc(count * sizeof(ObObj), attr));
+      pre_project_buf_ = static_cast<DatumValue *>(
+          alloc_.alloc(count * sizeof(DatumValue), attr));
       if (OB_UNLIKELY(NULL == pre_project_buf_)) {
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "invalid count", K(count), K(ret));
       } else {
-        memset(pre_project_buf_, 0, count * sizeof(ObObj));
+        new (pre_project_buf_) DatumValue[count];
         pre_project_row_.assign(pre_project_buf_, count);
       }
     }
@@ -762,17 +808,17 @@ void ObRowStore::dump() const
   StoredRow *stored_row = NULL;
   ObNewRow row;
   static const int64_t INLINE_OBJS_SIZE = 16;
-  ObObj inline_objs[INLINE_OBJS_SIZE];
+  DatumValue inline_objs[INLINE_OBJS_SIZE];
   row.cells_ = inline_objs;
   char *buf = NULL;
   if (INLINE_OBJS_SIZE < col_count_) {
     ObMemAttr attr(label_);
-    buf = static_cast<char *>(ob_malloc(sizeof(ObObj) * col_count_, attr));
+    buf = static_cast<char *>(ob_malloc(sizeof(DatumValue) * col_count_, attr));
     if (OB_ISNULL(buf)) {
       OB_LOG(WARN, "failed to alloc memory for objs");
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      row.cells_ = new(buf) ObObj[col_count_];
+      row.cells_ = new(buf) DatumValue[col_count_];
     }
   }
   if (OB_SUCC(ret)) {
@@ -796,17 +842,17 @@ int ObRowStore::assign(const ObRowStore &other_store)
   ObRowStore::Iterator row_store_it = other_store.begin();
   ObNewRow cur_row;
   int64_t col_count = other_store.get_col_count();
-  ObObj *cell = NULL;
+  DatumValue *cell = NULL;
   clear_rows();
   
   use_compact_row_ = other_store.use_compact_row_;
 
   if (OB_FAIL(set_col_count(col_count))) {
-  } else if (OB_ISNULL(cell = static_cast<ObObj *>(alloca(sizeof(ObObj) * col_count)))) {
+  } else if (OB_ISNULL(cell = static_cast<DatumValue *>(alloca(sizeof(DatumValue) * col_count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "fail to alloc obj array", K(ret));
   } else {
-    cur_row.cells_ = cell;
+    cur_row.cells_ = new (cell) DatumValue[col_count];
     cur_row.count_ = col_count;
     while (true) {
       if (OB_FAIL(row_store_it.get_next_row(cur_row))) {
@@ -825,33 +871,76 @@ int ObRowStore::assign(const ObRowStore &other_store)
   return ret;
 }
 
+namespace {
+// This is the native same-build memory image, not ordinary row value wire.
+// Pointers are rewritten only in the serialization copy; source rows stay live.
+int transform_native_block(char *block, int64_t length, bool compact, bool to_offsets,
+                             const char *source_block = nullptr)
+{
+  int ret = OB_SUCCESS; int64_t cursor = 0;
+  while (OB_SUCC(ret) && cursor < length) {
+    if (length - cursor < sizeof(ObRowStore::StoredRow)) { return OB_INVALID_DATA; }
+    auto *stored = reinterpret_cast<ObRowStore::StoredRow *>(block + cursor);
+    const int64_t count = stored->reserved_cells_count_;
+    if (count < 0 || stored->compact_row_size_ < 0) { return OB_INVALID_DATA; }
+    const int64_t values_size = DatumValueBuffer::allocation_size(count);
+    if (values_size == INT64_MAX || values_size > length - cursor - sizeof(*stored)) { return OB_SIZE_OVERFLOW; }
+    const int64_t header_size = sizeof(*stored) + values_size;
+    if (stored->compact_row_size_ > length - cursor - header_size) { return OB_SIZE_OVERFLOW; }
+    char *row_bytes = block + cursor + header_size;
+    const int64_t row_length = stored->compact_row_size_;
+    if (!compact) {
+      if (row_length < sizeof(ObNewRow)) { return OB_INVALID_DATA; }
+      if (to_offsets) {
+        auto *row = reinterpret_cast<ObNewRow *>(row_bytes);
+        if (row->count_ < 0 || row->count_ > INT64_MAX / sizeof(DatumValue)
+            || row->projector_size_ < 0 || row->projector_size_ > INT64_MAX / sizeof(int32_t)) { return OB_INVALID_DATA; }
+        const int64_t descriptor_size = sizeof(DatumValue) * row->count_;
+        int64_t pos = cursor + header_size + sizeof(ObNewRow); char *memory = nullptr;
+        if (OB_FAIL(NativeValueFlat::take_span(block, length, pos, descriptor_size, memory))) { return ret; }
+        auto *values = reinterpret_cast<DatumValue *>(memory);
+        row->cells_ = reinterpret_cast<DatumValue *>(memory - block);
+        for (int64_t i = 0; OB_SUCC(ret) && i < row->count_; ++i) {
+          ret = DatumValueBuffer::make_offsets(values[i], block, length, pos);
+        }
+        if (OB_SUCC(ret) && row->projector_size_ > 0) {
+          ret = NativeValueFlat::take_span(block, length, pos, sizeof(int32_t) * row->projector_size_, memory);
+          if (OB_SUCC(ret)) { row->projector_ = reinterpret_cast<int32_t *>(memory - block); }
+        } else { row->projector_ = nullptr; }
+        if (OB_SUCC(ret) && pos != cursor + header_size + row_length) { ret = OB_INVALID_DATA; }
+      } else {
+        ObNewRow *row = nullptr; int64_t pos = 0;
+        if (OB_FAIL(ObNewRow::construct(row_bytes, row_length, pos, row))) {}
+        else if (pos != row_length) { ret = OB_INVALID_DATA; }
+      }
+    }
+    // Reserved values borrow either their fixed inline scalar slot or native
+    // compact/row bytes in this same block. Nested arrays are fixed above once.
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      DatumValue &value = stored->reserved_cells_[i];
+      if (value.is_null()) { value.datum_.ptr_ = nullptr; }
+      else if (to_offsets) {
+        const uintptr_t address = reinterpret_cast<uintptr_t>(value.datum_.ptr_);
+        const uintptr_t source = reinterpret_cast<uintptr_t>(source_block);
+        if (address < source || address - source >= static_cast<uint64_t>(length)
+            || value.datum_.len_ > length - static_cast<int64_t>(address - source)) { ret = OB_INVALID_DATA; }
+        else { value.datum_.ptr_ = reinterpret_cast<char *>(address - source); }
+      } else {
+        const uintptr_t offset = reinterpret_cast<uintptr_t>(value.datum_.ptr_);
+        if (offset >= static_cast<uint64_t>(length) || value.datum_.len_ > length - static_cast<int64_t>(offset)) { ret = OB_INVALID_DATA; }
+        else { value.datum_.ptr_ = block + offset; }
+      }
+    }
+    cursor += header_size + row_length;
+  }
+  return ret;
+}
+} // namespace
 int ObRowStore::adjust_row_cells_reference()
 {
   int ret = OB_SUCCESS;
-  //If row compact is not used, the complete data structure of ObNewRow is stored in the data block.
-  //The serialization of row_store is the complete serialization of the records on the data block
-  //And there is a pointer in ObNewRow, so the value of the pointer becomes illegal after deserialization
-  //So if row compact is used, the cells_ pointer in ObNewRow needs to be adjusted after deserialization
-  //The adjustment rule is that the memory of ObNewRow and obj cells_ are arranged adjacently, so you only need to move the row ptr forward by sizeof(ObNewRow).
-  //Is the value of obj cells_
-  if (OB_UNLIKELY(!use_compact_row_)) {
-    ObNewRow *cur_row = NULL;
-    StoredRow *stored_row = NULL;
-    ObRowStore::Iterator row_store_it = begin();
-    while (OB_SUCC(ret)) {
-      if (OB_FAIL(row_store_it.get_next_stored_row(stored_row))) {
-        if (OB_ITER_END != ret) {
-        }
-      } else {
-        int64_t pos = 0;
-        char *compact_row = reinterpret_cast<char*>(stored_row->get_compact_row_ptr());
-        if (OB_FAIL(ObNewRow::construct(compact_row, stored_row->compact_row_size_, pos, cur_row))) {
-        }
-      }
-    }
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-    }
+  for (BlockInfo *block = blocks_.get_first(); OB_SUCC(ret) && block != nullptr; block = block->get_next_block()) {
+    ret = transform_native_block(const_cast<char *>(block->get_buffer_head()), block->get_curr_data_pos(), use_compact_row_, false);
   }
   return ret;
 }
@@ -873,7 +962,9 @@ DEFINE_SERIALIZE(ObRowStore)
           ret = OB_SIZE_OVERFLOW;
         } else {
           MEMCPY(buf + pos, block->get_buffer_head(), block->get_curr_data_pos());
-          pos += block->get_curr_data_pos();
+          ret = transform_native_block(buf + pos, block->get_curr_data_pos(), use_compact_row_, true,
+                                         block->get_buffer_head());
+          if (OB_SUCC(ret)) { pos += block->get_curr_data_pos(); }
           // serialize next block
           block = block->get_next_block();
         }

@@ -201,15 +201,15 @@ int get_runtime_tc_cmp_func(const ObExpr &expr, ObDatumCmpFuncType &cmp_func)
       || OB_ISNULL(expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObObjType left_type = expr.args_[0]->datum_meta_.type_;
-    const ObObjType right_type = expr.args_[1]->datum_meta_.type_;
+    const SqlValueType left_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType right_type = expr.args_[1]->datum_meta_.type_;
     if (OB_UNLIKELY(left_type < ObNullType || left_type >= ObMaxType
                     || right_type < ObNullType || right_type >= ObMaxType)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      const ObObjTypeClass left_tc = ob_obj_type_class(left_type);
-      const ObObjTypeClass right_tc = ob_obj_type_class(right_type);
-      if (OB_UNLIKELY(ob_is_invalid_obj_tc(left_tc) || ob_is_invalid_obj_tc(right_tc))) {
+      const SqlTypeClass left_tc = sql_type_class(left_type);
+      const SqlTypeClass right_tc = sql_type_class(right_type);
+      if (OB_UNLIKELY(is_invalid_sql_type_class(left_tc) || is_invalid_sql_type_class(right_tc))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_ISNULL(cmp_func = DATUM_TC_CMP_FUNCS[left_tc][right_tc])) {
         ret = OB_ERR_UNEXPECTED;
@@ -377,9 +377,9 @@ static int64_t fill_type_with_tc_eval_func(void)
 {
   int64_t cnt = 0;
   for (int64_t i = 0; i < ObMaxType; i++) {
-    ObObjTypeClass i_tc = ob_obj_type_class((ObObjType)i);
+    SqlTypeClass i_tc = sql_type_class((SqlValueType)i);
     for (int64_t j = 0; j < ObMaxType; j++) {
-      ObObjTypeClass j_tc = ob_obj_type_class((ObObjType)j);
+      SqlTypeClass j_tc = sql_type_class((SqlValueType)j);
       if (NULL == EVAL_TYPE_CMP_FUNCS[i][j][0]) {
         const int64_t size = sizeof(void *) * CO_MAX;
         memcpy(&EVAL_TYPE_CMP_FUNCS[i][j][0],
@@ -435,8 +435,8 @@ ObCmpOp ObExprCmpFuncsHelper::get_cmp_op(const ObExprOperatorType type)
   return cmp_op;
 }
 
-ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType type1,
-                                                              const ObObjType type2,
+ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const SqlValueType type1,
+                                                              const SqlValueType type2,
                                                               const ObScale scale1,
                                                               const ObScale scale2,
                                                               const ObPrecision prec1,
@@ -449,12 +449,12 @@ ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType ty
   OB_ASSERT(type2 >= ObNullType && type2 < ObMaxType);
   OB_ASSERT(cmp_op >= CO_EQ && cmp_op <= CO_MAX);
 
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
+  SqlTypeClass tc1 = sql_type_class(type1);
+  SqlTypeClass tc2 = sql_type_class(type2);
   ObExpr::EvalFunc func_ptr = NULL;
   if (OB_UNLIKELY(ob_is_invalid_cmp_op(cmp_op)) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc1) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc2)))) {
+      OB_UNLIKELY(is_invalid_sql_type_class(tc1) ||
+      OB_UNLIKELY(is_invalid_sql_type_class(tc2)))) {
     func_ptr = NULL;
   } else if (tc1 == ObJsonTC && tc2 == ObJsonTC) {
     func_ptr = EVAL_JSON_CMP_FUNCS[cmp_op][has_lob_header];
@@ -494,8 +494,8 @@ ObExpr::EvalFunc ObExprCmpFuncsHelper::get_eval_expr_cmp_func(const ObObjType ty
 }
 
 ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
-    const ObObjType type1,
-    const ObObjType type2,
+    const SqlValueType type1,
+    const SqlValueType type2,
     const ObScale scale1,
     const ObScale scale2,
     const ObPrecision prec1,
@@ -508,12 +508,12 @@ ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
   OB_ASSERT(type2 >= ObNullType && type2 < ObMaxType);
   OB_ASSERT(cmp_op >= CO_EQ && cmp_op <= CO_MAX);
 
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
+  SqlTypeClass tc1 = sql_type_class(type1);
+  SqlTypeClass tc2 = sql_type_class(type2);
   ObExpr::EvalBatchFunc func_ptr = NULL;
   if (OB_UNLIKELY(ob_is_invalid_cmp_op(cmp_op)) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc1) ||
-      OB_UNLIKELY(ob_is_invalid_obj_tc(tc2)))) {
+      OB_UNLIKELY(is_invalid_sql_type_class(tc1) ||
+      OB_UNLIKELY(is_invalid_sql_type_class(tc2)))) {
     func_ptr = NULL;
   } else if (type1 == ObJsonType && type2 == ObJsonType) {
     if (NULL != EVAL_JSON_CMP_FUNCS[cmp_op][has_lob_header]) {
@@ -562,8 +562,8 @@ ObExpr::EvalBatchFunc ObExprCmpFuncsHelper::get_eval_batch_expr_cmp_func(
   return func_ptr;
 }
 
-DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const ObObjType type1,
-                                           const ObObjType type2,
+DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const SqlValueType type1,
+                                           const SqlValueType type2,
                                            const ObScale scale1,
                                            const ObScale scale2,
                                            const ObPrecision prec1,
@@ -574,8 +574,8 @@ DatumCmpFunc ObExprCmpFuncsHelper::get_datum_expr_cmp_func(const ObObjType type1
   OB_ASSERT(type1 >= ObNullType && type1 < ObMaxType);
   OB_ASSERT(type2 >= ObNullType && type2 < ObMaxType);
 
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
+  SqlTypeClass tc1 = sql_type_class(type1);
+  SqlTypeClass tc2 = sql_type_class(type2);
   ObDatumCmpFuncType func_ptr = NULL;
   if (type1 == ObJsonType && type2 == ObJsonType) {
     func_ptr = DATUM_JSON_CMP_FUNCS[has_lob_header];

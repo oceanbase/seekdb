@@ -65,8 +65,8 @@ int ObHexStringEncoder::init(
     column_header_.type_ = type_;
     min_string_size_ = INT64_MAX;
     max_string_size_ = ctx.max_string_size_;
-    const ObObjTypeStoreClass sc = get_store_class_map()[
-        ob_obj_type_class(column_type_.get_type())];
+    const SqlValueTypeStoreClass sc = get_store_class_map()[
+        sql_type_class(column_type_.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(sc))) {
       ret = OB_NOT_SUPPORTED;
     }

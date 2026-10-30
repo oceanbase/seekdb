@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_expr_get_user_var.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/ob_sql_utils.h"
 namespace oceanbase
 {
 using namespace common;
@@ -41,7 +42,7 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
 {
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
-  const ObObj &obj = type1.get_param();
+  const DatumValue &obj = type1.get_param();
   ObString key = obj.get_varchar();//should NOT use const reference here !
   ObSessionVariable session_var;
   CK( OB_NOT_NULL(type_ctx.get_session()) );
@@ -108,43 +109,60 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       ObSessionVariable osv;
       ret = my_session->get_user_variable(key_str, osv);
       if (OB_SUCC(ret)) {
-        ObObj sess_obj = osv.value_;
-        sess_obj.set_meta_type(osv.meta_);
-        if (expr.datum_meta_.type_ != sess_obj.get_type() ||
-            (sess_obj.is_string_type() &&
-             expr.datum_meta_.cs_type_ != sess_obj.get_collation_type())) {
-          // eg: set @a = 10, @b = 1;
-          //     select @a := '10', @b := '1', @a < @b;
-          // expr.datum_meta_ is type of the origin var(int),
-          // osv.value_ may be updated(string)
-          ObObj res_obj;
+        DatumValue value = osv.value_;
+        value.meta_ = osv.meta_;
+        auto publish = [&](const DatumValue &source, bool widen_decimal) -> int {
+          int ret = OB_SUCCESS;
+          ObDecimalIntBuilder decimal_builder;
+          char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+          ObDatum result;
+          if (widen_decimal && !source.is_null() && source.is_decimal_int()
+              && source.get_int_bytes() != sizeof(int512_t)) {
+            decimal_builder.from(source.get_decimal_int(), source.get_int_bytes());
+            decimal_builder.extend(sizeof(int512_t));
+            result.set_decimal_int_shallow(decimal_builder.get_decimal_int(),
+                                            decimal_builder.get_int_bytes());
+          } else {
+            OZ(source.to_row_datum(result, extended_payload));
+          }
+          if (OB_SUCC(ret) && is_lob_storage(source.get_type())) {
+            OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, source.meta_, expr.obj_meta_,
+                                   ctx.exec_ctx_.get_allocator()));
+          }
+          // Copy before stack normalization bytes or a temporary cast result
+          // leave scope. Publish the frame-owned descriptor, not the input view.
+          OZ(expr.deep_copy_datum(ctx, result));
+          OX(res.set_datum(expr.locate_expr_datum(ctx)));
+          return ret;
+        };
+        if (expr.datum_meta_.type_ != value.get_type() ||
+            (value.is_string_type() &&
+             expr.datum_meta_.cs_type_ != value.get_collation_type())) {
+          // Another assignment in this SQL can change the variable's value type
+          // after this expression's result type was fixed during resolution.
           ObEvalCtx::TempAllocGuard alloc_guard(ctx);
           ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-          //TODO @peihan.dph
-          //incompatible with mysql, return errcode controled by cast_mode
-          //pl.sp-vars_mysql
-          ObAccuracy res_acc(expr.datum_meta_.precision_, expr.datum_meta_.scale_);
-          OZ(ObDatumCast::cast_obj(ctx, calc_alloc, expr.datum_meta_.type_, res_acc,
-                                   expr.datum_meta_.cs_type_, sess_obj, res_obj));
-          OZ(res.from_obj(res_obj));
-          if (is_lob_storage(res_obj.get_type())) {
-            OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res_obj, expr.obj_meta_,
-                                   ctx.exec_ctx_.get_allocator(), res));
+          DatumParameter source;
+          source.assign_value(value);
+          source.set_scale(value.get_scale());
+          if (value.is_decimal_int()) {
+            source.set_precision(wide::ObDecimalIntConstValue::get_max_precision_by_int_bytes(
+                value.get_int_bytes()));
           }
-        } else if (sess_obj.is_decimal_int() && sess_obj.get_int_bytes() != sizeof(int512_t)) {
-          ObDecimalIntBuilder res_builder;
-          res_builder.from(sess_obj.get_decimal_int(), sess_obj.get_int_bytes());
-          res_builder.extend(sizeof(int512_t));
-          res.set_decimal_int(res_builder.get_decimal_int(), res_builder.get_int_bytes());
+          ObExprResType target;
+          target.set_type(expr.datum_meta_.type_);
+          target.set_accuracy(ObAccuracy(expr.datum_meta_.precision_, expr.datum_meta_.scale_));
+          target.set_collation_type(expr.datum_meta_.cs_type_);
+          ObCastMode mode = CM_NONE;
+          ObDatumCaster *caster = nullptr;
+          DatumParameter converted;
+          OZ(ObSQLUtils::get_default_cast_mode(my_session->get_stmt_type(), my_session, mode));
+          OZ(ctx.exec_ctx_.get_native_datum_caster(caster));
+          OZ(caster->to_value(source, target, mode, calc_alloc, converted));
+          OZ(publish(converted.value_view(), false));
         } else {
-          OZ(res.from_obj(sess_obj));
-          if (is_lob_storage(sess_obj.get_type())) {
-            OZ(ob_adjust_lob_datum(ctx.exec_ctx_, sess_obj, expr.obj_meta_,
-                                   ctx.exec_ctx_.get_allocator(), res));
-          }
+          OZ(publish(value, true));
         }
-        // res.ptr_ may allocated by temporary allocator, need deep copy.
-        OZ(expr.deep_copy_datum(ctx, res));
       } else if (OB_ERR_USER_VARIABLE_UNKNOWN == ret) {
         res.set_null();
         ret = OB_SUCCESS;//always return success no matter found or not
@@ -162,7 +180,7 @@ int ObExprGetUserVar::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   CK(1 == expr.arg_cnt_);
-  CK(ObStringTC == ob_obj_type_class(expr.args_[0]->datum_meta_.type_));
+  CK(ObStringTC == sql_type_class(expr.args_[0]->datum_meta_.type_));
   OX(expr.eval_func_ = eval_get_user_var);
   return ret;
 }

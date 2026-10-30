@@ -1,0 +1,26 @@
+--echo # Datum result bytes preserve supported charset and rejection behavior
+--disable_warnings
+DROP TABLE IF EXISTS datum_charset_output;
+--enable_warnings
+CREATE TABLE datum_charset_output (id INT PRIMARY KEY,s VARCHAR(64) COLLATE utf8mb4_general_ci,b VARBINARY(64));
+INSERT INTO datum_charset_output VALUES(1,'ascii','binary'),(2,'',''),(3,NULL,NULL);
+--error 1115
+SET character_set_results=latin1;
+SET character_set_results=utf8mb4;
+SELECT * FROM datum_charset_output ORDER BY id;
+PREPARE datum_cs FROM 'SELECT s,b FROM datum_charset_output WHERE id>=? ORDER BY id';
+SET @datum_cs_id=1;
+EXECUTE datum_cs USING @datum_cs_id;
+--error 1115
+SET character_set_results=gbk;
+SET character_set_results=utf8mb4;
+EXECUTE datum_cs USING @datum_cs_id;
+SET character_set_results=binary;
+EXECUTE datum_cs USING @datum_cs_id;
+SET character_set_results=NULL;
+EXECUTE datum_cs USING @datum_cs_id;
+SET character_set_results=utf8mb4;
+DEALLOCATE PREPARE datum_cs;
+UPDATE datum_charset_output SET s='中文é' WHERE id=1;
+SELECT s,b FROM datum_charset_output ORDER BY id;
+DROP TABLE datum_charset_output;

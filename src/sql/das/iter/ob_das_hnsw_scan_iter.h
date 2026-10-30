@@ -17,12 +17,14 @@
 #ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_HNSW_SCAN_ITER_H_
 #define OBDEV_SRC_SQL_DAS_ITER_OB_DAS_HNSW_SCAN_ITER_H_
 
+#include "common/datum/datum_value.h"
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "query/vector/ob_vector_index_service.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "query/vector/ob_vector_index_util.h"
+#include "query/vector/ob_vector_query_result.h"
 
 namespace oceanbase
 {
@@ -171,7 +173,7 @@ class ObHnswSimpleCmpInfo
   }
   
   bool inited_;
-  ObObj filter_arg_;
+  DatumValue filter_arg_;
   ObExpr* filter_expr_;
 };
 
@@ -339,9 +341,9 @@ public:
   bool enable_using_simplified_scan() { return need_save_distance_result(); }
   inline bool has_func_lookup() {return OB_NOT_NULL(func_lookup_iter_) && OB_NOT_NULL(func_lookup_ctdef_) && OB_NOT_NULL(func_lookup_rtdef_);}
 protected:
-  int save_distance_expr_result(ObNewRow *row);
-  int save_distance_expr_result(ObNewRow *row, int64_t size);
-  int calc_dis_by_vid(const ObObj& vid_obj, double &dis_value);
+  int save_distance_expr_result(ObVectorResultRow *row);
+  int save_distance_expr_result(ObVectorResultRow *row, int64_t size);
+  int calc_dis_by_vid(const DatumValue& vid_obj, double &dis_value);
   
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;
@@ -376,10 +378,10 @@ private:
   int process_adaptor_state_pre_filter_brute_force_bq(ObVectorQueryAdaptorResultContext *ada_ctx, ObPluginVectorIndexAdaptor* adaptor,
                                                     int64_t *&brute_vids, int& brute_cnt, bool& need_complete_data, 
                                                     bool check_need_complete_data = true);                                                  
-  int set_rowkey_by_vid(ObNewRow *row);
+  int set_rowkey_by_vid(ObVectorResultRow *row);
   int set_func_lookup_rowkey(ObRowkey &rowkey);
   int filter_func_lookup_iter(bool is_vectorized, bool& filter_res);
-  int filter_by_index_back(int64_t vid, ObNewRow *row, bool is_vectorized, bool& filter_res);
+  int filter_by_index_back(int64_t vid, ObVectorResultRow *row, bool is_vectorized, bool& filter_res);
   int post_query_vid_with_filter(ObVectorQueryAdaptorResultContext *ada_ctx, 
                                 ObPluginVectorIndexAdaptor* adaptor, 
                                 int64_t hnsw_max_iter_scan_nums,
@@ -448,10 +450,10 @@ private:
   bool can_be_last_search(int64_t old_ef, int64_t need_cnt_next, float select_ratio);
   int init_pre_filter(ObPluginVectorIndexAdaptor *adaptor, ObVectorQueryAdaptorResultContext *ada_ctx);
   int check_is_simple_cmp_filter();
-  int get_simple_cmp_filter_res(ObNewRow *row, bool& res);
-  int build_rowkey_obj_from_extra_info(ObObj *extra_info_objs, ObObj *&rowkey_objs);
-  int build_extra_info_obj_from_rowkey(const ObObj *rowkey_objs, ObObj *&extra_info_objs);
-  int prepare_extra_objs(ObIAllocator &allocator, ObObj *&objs);
+  int get_simple_cmp_filter_res(ObVectorResultRow *row, bool& res);
+  int build_rowkey_obj_from_extra_info(DatumValue *extra_info_objs, DatumValue *&rowkey_objs);
+  int build_extra_info_obj_from_rowkey(const DatumValue *rowkey_objs, DatumValue *&extra_info_objs);
+  int prepare_extra_objs(ObIAllocator &allocator, DatumValue *&objs);
   int build_extra_info_rowkey(const ObRowkey &rowkey, ObRowkey &extra_rowkey);
   int64_t get_reorder_count(const int64_t ef_search, const int64_t topK, const ObVectorIndexParam& param);
   int64_t get_reorder_count_for_brute_force(const int64_t ef_search, const int64_t topK, const ObVectorIndexParam& param);

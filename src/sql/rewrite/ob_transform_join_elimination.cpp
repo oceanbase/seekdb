@@ -1059,7 +1059,7 @@ int ObTransformJoinElimination::left_join_can_be_eliminated(ObDMLStmt *stmt,
         ret = OB_ERR_UNEXPECTED;
         // todo 
       } else if (condition->is_static_scalar_const_expr()) {
-        ObObj value;
+        DatumValue value;
         bool got_result = false;
         if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                               condition,

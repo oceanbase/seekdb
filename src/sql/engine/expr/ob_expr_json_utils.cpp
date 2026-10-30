@@ -18,6 +18,7 @@
 #include "sql/pl/ob_pl.h"
 #include "ob_expr_json_utils.h"
 #include "share/object/ob_obj_cast_util.h"
+#include "share/datum/typed_datum_compare.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -180,7 +181,7 @@ int ObJsonUtil::init_json_path(ObIAllocator &alloc, ObExprCGCtx &op_cg_ctx,
                                ObExprJsonQueryParamInfo& res)
 {
   INIT_SUCC(ret);
-  ObObj const_data;
+  DatumValue const_data;
   bool got_data = false;
   ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
   if (OB_NOT_NULL(path) 
@@ -283,7 +284,7 @@ int ObJsonUtil::mdatetime_scale_check(const ObAccuracy &accuracy,
 int ObJsonUtil::get_accuracy(const ObExpr &expr,
                              ObEvalCtx &ctx,
                              ObAccuracy &accuracy,
-                             ObObjType &dest_type,
+                             SqlValueType &dest_type,
                              bool &is_cover_by_error)
 {
   INIT_SUCC(ret);
@@ -307,14 +308,14 @@ int ObJsonUtil::get_accuracy(const ObExpr &expr,
 /*json cast to sql scalar*/
 int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
                                       ObEvalCtx& ctx,
-                                      ObObjType &dest_type,
+                                      SqlValueType &dest_type,
                                       const int64_t value,
                                       const ObLengthSemantics &length_semantics)
 {
   INIT_SUCC(ret);
   ParseNode node;
   node.value_ = value;
-  dest_type = static_cast<ObObjType>(node.int16_values_[0]);
+  dest_type = static_cast<SqlValueType>(node.int16_values_[0]);
 
   if (ObFloatType == dest_type) {
     // boundaries already checked in calc result type
@@ -322,7 +323,7 @@ int ObJsonUtil::get_accuracy_internal(ObAccuracy &accuracy,
       dest_type = ObDoubleType;
     }
   }
-  ObObjTypeClass dest_tc = ob_obj_type_class(dest_type);
+  SqlTypeClass dest_tc = sql_type_class(dest_type);
   if (ObStringTC == dest_tc) {
     // parser will abort all negative number
     // if length < 0 means DEFAULT_STR_LENGTH or OUT_OF_STR_LEN.
@@ -459,7 +460,7 @@ int ObJsonUtil::number_range_check(const ObAccuracy &accuracy,
 int ObJsonUtil::set_lob_datum(common::ObIAllocator *allocator,
                               const ObExpr &expr,
                               ObEvalCtx &ctx,
-                              ObObjType dst_type,
+                              SqlValueType dst_type,
                               uint8_t ascii_type,
                               ObDatum &res)
 {
@@ -629,13 +630,7 @@ int cast_to_int(common::ObIAllocator *allocator,
 }
 
 template<>
-void ObJsonUtil::wrapper_set_uint(ObObjType type, uint64_t val, ObObj& obj)
-{
-  obj.set_uint(type, val);
-}
-
-template<>
-void ObJsonUtil::wrapper_set_uint(ObObjType type, uint64_t val, ObDatum& obj)
+void ObJsonUtil::wrapper_set_uint(SqlValueType type, uint64_t val, ObDatum& obj)
 {
   obj.set_uint(val);
 }
@@ -647,19 +642,7 @@ void ObJsonUtil::wrapper_set_decimal_int(const common::ObDecimalInt *decint, ObS
 }
 
 template<>
-void ObJsonUtil::wrapper_set_decimal_int(const common::ObDecimalInt *decint, ObScale scale, int32_t int_bytes, ObObj& res)
-{
-  res.set_decimal_int(int_bytes, scale, const_cast<common::ObDecimalInt *>(decint));
-}
-
-template<>
-void ObJsonUtil::wrapper_set_string(ObObjType type, ObString& val, ObObj& obj)
-{
-  obj.set_string(type, val);
-}
-
-template<>
-void ObJsonUtil::wrapper_set_string(ObObjType type, ObString& val, ObDatum& obj)
+void ObJsonUtil::wrapper_set_string(SqlValueType type, ObString& val, ObDatum& obj)
 {
   obj.set_string(val);
 }
@@ -718,7 +701,7 @@ int cast_to_string(common::ObIAllocator *allocator,
     if (CAST_FAIL(j_base->print(j_buf, cast_param.is_quote_, 0, cast_param.is_pretty_))) {
       is_type_mismatch = 1;
     } else {
-      ObObjType in_type = ObLongTextType;
+      SqlValueType in_type = ObLongTextType;
       ObString temp_str_val(j_buf.length(), j_buf.ptr());
       bool is_need_string_string_convert = ((CS_TYPE_BINARY == cast_param.dst_coll_type_) 
                           || (ObCharset::charset_type_by_coll(cast_param.in_coll_type_) != 
@@ -774,7 +757,7 @@ int cast_to_string(common::ObIAllocator *allocator,
       const int32_t str_len_char = static_cast<int32_t>(ObCharset::strlen_char(
         senmactics == LS_BYTE ? CS_TYPE_BINARY : cast_param.dst_coll_type_, val.ptr(), val.length()));
       ObLength max_accuracy_len;
-      max_accuracy_len = (ob_obj_type_class(cast_param.dst_type_) == ObTextTC) 
+      max_accuracy_len = (sql_type_class(cast_param.dst_type_) == ObTextTC)
                               ? ObAccuracy::DDL_DEFAULT_ACCURACY[cast_param.dst_type_].get_length() 
                                   : accuracy.get_length();
 
@@ -1373,69 +1356,39 @@ int ObJsonUtil::cast_to_res(common::ObIAllocator *allocator,
   return ret;
 }
 
-int ObJsonUtil::cast_json_scalar_to_sql_obj(common::ObIAllocator *allocator,
-                                            ObEvalCtx& ctx,
-                                            ObIJsonBase *j_base,
-                                            ObCollationType collation,
-                                            ObAccuracy &accuracy,
-                                            ObObjType obj_type,
-                                            ObScale scale,
-                                            ObObj &res_obj)
+int ObJsonUtil::cast_json_scalar_to_sql_value(ObIAllocator &owner,
+    ObEvalCtx &ctx, ObIJsonBase *j_base, ObCollationType collation,
+    ObAccuracy &accuracy, SqlValueType type, ObScale scale, DatumValue &result)
 {
-  INIT_SUCC(ret);
-  if (OB_ISNULL(allocator) || OB_ISNULL(j_base)) {
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(j_base)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    bool is_use_dynamic_buffer = (ob_is_number_or_decimal_int_tc(obj_type));
-    ObDatum res_datum;
-    char datum_buffer[OBJ_DATUM_STRING_RES_SIZE] = {0};
-    res_datum.ptr_ = datum_buffer;
-    
-    if (is_use_dynamic_buffer) {
-      void* buffer = allocator->alloc(OBJ_DATUM_STRING_RES_SIZE);
-      if (OB_ISNULL(buffer)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        res_datum.ptr_ = static_cast<char*>(buffer);
-      }
-    }
-
-    ObJsonCastParam cast_param(obj_type, ObCollationType::CS_TYPE_UTF8MB4_BIN, collation, false);
+    // The real JSON converters write into a caller-provided Datum buffer.
+    // Snapshot that result into the explicit owner before this buffer expires.
+    alignas(uint64_t) char buffer[OBJ_DATUM_STRING_RES_SIZE] = {0};
+    ObDatum converted;
+    converted.ptr_ = buffer;
+    ObJsonCastParam cast_param(type, CS_TYPE_UTF8MB4_BIN, collation, false);
     cast_param.relaxed_time_convert_ = true;
     uint8_t is_type_mismatch = false;
-    
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(cast_to_res(allocator, ctx, j_base, accuracy, cast_param, res_datum, is_type_mismatch))) {
+    if (OB_FAIL(cast_to_res(&owner, ctx, j_base, accuracy, cast_param,
+                            converted, is_type_mismatch))) {
     } else {
-      res_obj.set_type(obj_type);
-      res_obj.set_collation_type(collation);
-      res_obj.set_scale(scale);
-      
-      if (OB_FAIL(res_datum.to_obj(res_obj, res_obj.meta_))) {
+      DatumValue candidate;
+      candidate.meta_ = result.meta_;
+      candidate.meta_.set_type(type);
+      candidate.set_collation_type(collation);
+      candidate.set_scale(scale);
+      candidate.datum_ = converted;
+      if (converted.is_null()) {
+        candidate.set_null();
+      } else if (candidate.is_decimal_int() && candidate.get_scale() < 0) {
+        // Retain the old typed conversion's defensive scale validation.
+        ret = OB_ERR_UNEXPECTED;
       }
+      if (OB_SUCC(ret)) { ret = clone_typed_value(candidate, result, owner); }
     }
-  }
-  return ret;
-}
-
-int ObJsonUtil::cast_json_scalar_to_sql_obj(common::ObIAllocator *allocator,
-                                            ObExecContext* exec_ctx,
-                                            ObIJsonBase *j_base,
-                                            ObExprResType col_res_type,
-                                            ObObj &res_obj) {
-  // ToDo: refine
-  INIT_SUCC(ret);
-  if (OB_ISNULL(allocator) || OB_ISNULL(j_base)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    ObEvalCtx ctx(*exec_ctx);
-    ObAccuracy temp_accuracy = col_res_type.get_accuracy();
-    ret =  cast_json_scalar_to_sql_obj(allocator, ctx, j_base,
-                                      col_res_type.get_collation_type(), 
-                                      temp_accuracy,
-                                      col_res_type.get_type(),
-                                      col_res_type.get_scale(),
-                                      res_obj);
   }
   return ret;
 }
@@ -1514,7 +1467,7 @@ int ObJsonUtil::get_json_path(ObExpr* expr,
 {
   INIT_SUCC(ret);
   ObDatum *json_datum = NULL;
-  ObObjType type = expr->datum_meta_.type_;
+  SqlValueType type = expr->datum_meta_.type_;
   ObJsonPathCache ctx_cache(&temp_allocator);
   ObJsonPath* j_path = nullptr;
   ObString j_path_text;
@@ -1568,7 +1521,7 @@ int ObJsonUtil::get_json_doc(ObExpr *expr,
 {
   INIT_SUCC(ret);
   ObDatum *json_datum = NULL;
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   ObCollationType cs_type = expr->datum_meta_.cs_type_;
 
   if (OB_FAIL(allocator.eval_arg(expr, ctx, json_datum))) {
@@ -2899,19 +2852,7 @@ ObJsonUtil::ObItemMethodValid ObJsonUtil::get_item_method_cast_res_func(ObJsonPa
   return OB_JSON_VALUE_ITEM_METHOD_CAST_FUNC[item_method - ObJsonPathNodeType::JPN_ABS][json_type];
 }
 
-/*
-ObJsonUtil::ObJsonCastSqlObj ObJsonUtil::get_json_obj_cast_func(ObObjType dst_type)
-{
-  return OB_JSON_CAST_OBJ_EXPLICIT[OBJ_TYPE_TO_CLASS[dst_type]];
-}
-
-ObJsonUtil::ObJsonCastSqlDatum ObJsonUtil::get_json_datum_cast_func(ObObjType dst_type)
-{
-  return OB_JSON_CAST_DATUM_EXPLICIT[OBJ_TYPE_TO_CLASS[dst_type]];
-}
-*/
-
-ObJsonUtil::ObJsonCastSqlScalar ObJsonUtil::get_json_cast_func(ObObjType dst_type)
+ObJsonUtil::ObJsonCastSqlScalar ObJsonUtil::get_json_cast_func(SqlValueType dst_type)
 {
   return OB_JSON_CAST_SQL_EXPLICIT[OBJ_TYPE_TO_CLASS[dst_type]];
 }

@@ -23,6 +23,7 @@
 #include "common/udt/ob_array_nested.h"
 #include "common/udt/ob_vector_type.h"
 #include "common/udt/ob_map_type.h"
+#include "common/datum/datum_value.h"
 #include "share/object/ob_obj_cast.h"
 #include "common/json_type/ob_json_tree.h"
 
@@ -89,8 +90,6 @@ int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeB
 class ObArrayCastUtils
 {
 public:
-  // Encode a collection value into an object-cast result.
-  static int set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *params, ObObj *obj);
   static int string_cast_map(
       common::ObIAllocator &alloc, 
       ObString &arr_text, 
@@ -106,8 +105,9 @@ public:
       const ObCollectionMapType *dst_map_type);
   static int string_cast_vector(common::ObIAllocator &alloc, ObString &arr_text, ObIArrayType *&dst, const ObCollectionTypeBase *dst_type, bool is_binary);
   static int string_cast(common::ObIAllocator &alloc, ObString &arr_text, ObIArrayType *&dst, const ObCollectionTypeBase *dst_elem_type);
-  static int cast_get_element(ObIArrayType *src, const ObCollectionBasicType *elem_type, uint32_t idx, ObObj &src_elem);
-  static int cast_add_element(common::ObIAllocator &alloc, ObObj &src_elem,  ObIArrayType *dst, const ObCollectionBasicType *dst_elem_type, ObCastMode mode);
+  static int cast_get_element(ObIArrayType *src, const ObCollectionBasicType *elem_type, uint32_t idx,
+                              common::DatumValue &src_elem, char *datum_buffer);
+  static int cast_add_element(common::ObIAllocator &alloc, const common::DatumValue &src_elem,  ObIArrayType *dst, const ObCollectionBasicType *dst_elem_type, ObCastMode mode);
   static int add_json_node_to_array(common::ObIAllocator &alloc, ObJsonNode &j_node, const ObCollectionTypeBase *elem_type, ObIArrayType *dst);
   static int add_vector_element(const double value, const ObCollectionTypeBase *elem_type, ObIArrayType *dst);
 public:

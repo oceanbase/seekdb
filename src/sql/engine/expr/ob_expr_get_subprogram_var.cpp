@@ -76,7 +76,7 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
 {
   int64_t ret = OB_SUCCESS;
   ObPLContext *pl_context = NULL;
-  ObObjParam res_var;
+  DatumParameter res_var;
   ObSQLSessionInfo *session_info = ctx.exec_ctx_.get_my_session();
   ObDatum *pkg_id_datum = NULL;
   ObDatum *subprogram_id_datum = NULL;
@@ -94,9 +94,9 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
     int64_t var_idx = var_idx_datum->get_int();
     OZ (pl_context->get_subprogram_var_from_local(
     *session_info, package_id, subprogram_id, var_idx, res_var));
-    OZ (expr_datum.from_obj(res_var));
+    OX (expr_datum = res_var.datum_);
     if (is_lob_storage(res_var.get_type())) {
-      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, res_var, expr.obj_meta_,
+      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, res_var.datum_, res_var.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), expr_datum));
     }
   }

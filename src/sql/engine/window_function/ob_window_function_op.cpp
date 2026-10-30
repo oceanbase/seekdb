@@ -2523,7 +2523,7 @@ int ObWindowFunctionOp::merge_aggregated_result(ObDatum &res,
     case T_FUN_COUNT:
     case T_WIN_FUN_RANK:
     case T_WIN_FUN_DENSE_RANK: {
-      ObObjTypeClass tc = ob_obj_type_class(wf_info.expr_->datum_meta_.type_);
+      SqlTypeClass tc = sql_type_class(wf_info.expr_->datum_meta_.type_);
       if (src0.is_null() && !src1.is_null()) {
         res = src1;
       } else if (OB_FAIL(ObAggregateCalcFunc::add_calc(

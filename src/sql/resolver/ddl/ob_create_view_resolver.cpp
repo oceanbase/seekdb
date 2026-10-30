@@ -596,7 +596,7 @@ int ObCreateViewResolver::print_rebuilt_view_stmt(const ObSelectStmt *stmt,
   } else {
     do {
       pos = 0;
-      ObObjPrintParams obj_print_params(params_.query_ctx_->get_timezone_info());
+      ObValuePrintParams obj_print_params(params_.query_ctx_->get_timezone_info());
       obj_print_params.print_origin_stmt_ = true;
       ObSelectStmtPrinter stmt_printer(buf, buf_len, &pos, stmt,
                                       params_.schema_checker_->get_schema_guard(),
@@ -911,7 +911,7 @@ int ObCreateViewResolver::fill_column_meta_infos(const ObRawExpr &expr,
                                                  ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
-  ObObjMeta column_meta = expr.get_result_type().get_obj_meta();
+  SqlTypeMeta column_meta = expr.get_result_type().get_sql_type_meta();
   column.set_meta_type(column_meta);
   column.set_charset_type(charset_type);
   column.set_collation_type(expr.get_collation_type());
@@ -935,16 +935,13 @@ int ObCreateViewResolver::resolve_column_default_value(const sql::ObSelectStmt *
                                                        ObSQLSessionInfo &session_info)
 {
   int ret = OB_SUCCESS;
-  ObObj casted_cell;
-  ObObj &res_obj = column_schema.get_cur_default_value();
-  res_obj.reset();
-  UNUSED(session_info);
-  const ObObj *res_cell = NULL;
+  UNUSED(alloc);
   ColumnItem column_item;
-  if (OB_ISNULL(select_stmt)) {
+  if (OB_FAIL(column_schema.set_cur_default_value_v2(DatumValue()))) {
+  } else if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObResolverUtils::resolve_default_value_and_expr_from_select_item(select_item, column_item, select_stmt))) {
-  } else if (OB_FAIL(ob_write_obj(alloc, column_item.default_value_, res_obj))) {
+  } else if (OB_FAIL(column_schema.set_cur_default_value_v2(column_item.default_value_))) {
   } else if (OB_ISNULL(select_item.expr_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (ob_is_enum_or_set_type(column_item.default_value_.get_type())

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_cast.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "share/geo/ob_geometry_cast.h"
@@ -24,6 +25,8 @@
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
+
+#include "share/datum/datum_cast_support.h"
 
 namespace oceanbase
 {
@@ -58,7 +61,7 @@ int ObExprCast::get_cast_inttc_len(ObExprResType &type1,
     }
   } else {
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
-    ObObjTypeClass tc1 = type1.get_type_class();
+    SqlTypeClass tc1 = type1.get_type_class();
     int16_t scale = type1.get_accuracy().get_scale();
     if (ObDoubleTC == tc1) {
       res_len -= 1;
@@ -85,7 +88,7 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
                                     ObCastMode cast_mode) const
 {
   int ret = OB_SUCCESS;
-  const ObObj &val = type1.get_param();
+  const DatumValue &val = type1.get_param();
   if (!type1.is_literal()) { // column
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
     int16_t prec = type1.get_accuracy().get_precision();
@@ -182,7 +185,13 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
                         cast_mode,
                         cast_coll_type);
       ObString val_str;
-      EXPR_GET_VARCHAR_V2(val, val_str);
+      {
+        DatumValue converted_literal;
+        if (OB_SUCC(ret)) {
+          ret = DatumValueCaster::to_type(ObVarcharType, cast_ctx, val, oballocator, converted_literal);
+        }
+        if (OB_SUCC(ret)) { ret = converted_literal.get_varchar(val_str); }
+      }
       // Here the len is set to the number of characters
       if (OB_SUCC(ret) && NULL != val_str.ptr()) {
         int32_t len_byte = val_str.length();
@@ -215,8 +224,8 @@ int ObExprCast::get_explicit_cast_cm(const ObExprResType &src_type,
   cast_mode = CM_NONE;
   const bool is_explicit_cast = CM_IS_EXPLICIT_CAST(cast_raw_expr.get_cast_mode());
   const int32_t result_flag = src_type.get_result_flag();
-  const ObObjTypeClass dst_tc = ob_obj_type_class(dst_type.get_type());
-  const ObObjTypeClass src_tc = ob_obj_type_class(src_type.get_type());
+  const SqlTypeClass dst_tc = sql_type_class(dst_type.get_type());
+  const SqlTypeClass src_tc = sql_type_class(src_type.get_type());
   ObSQLUtils::get_default_cast_mode(is_explicit_cast, result_flag,
                                     session.get_stmt_type(),
                                     session.is_ignore_stmt(),
@@ -255,16 +264,16 @@ int ObExprCast::get_explicit_cast_cm(const ObExprResType &src_type,
   return ret;
 }
 
-bool ObExprCast::check_cast_allowed(const ObObjType orig_type,
+bool ObExprCast::check_cast_allowed(const SqlValueType orig_type,
                                     const ObCollationType orig_cs_type,
-                                    const ObObjType expect_type,
+                                    const SqlValueType expect_type,
                                     const ObCollationType expect_cs_type,
                                     const bool is_explicit_cast) const
 {
   UNUSED(expect_cs_type);
   bool res = true;
-  ObObjTypeClass ori_tc = ob_obj_type_class(orig_type);
-  ObObjTypeClass expect_tc = ob_obj_type_class(expect_type);
+  SqlTypeClass ori_tc = sql_type_class(orig_type);
+  SqlTypeClass expect_tc = sql_type_class(expect_type);
   bool is_expect_lob_tc = (ObLobTC == expect_tc || ObTextTC == expect_tc);
   bool is_ori_lob_tc = (ObLobTC == ori_tc || ObTextTC == ori_tc);
   return res;
@@ -296,14 +305,14 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
                                                              type1.get_collation_level(),
                                                              cs_level))) {
   } else if (!dst_type.is_collection_sql_type() && FALSE_IT(dst_type.set_collation_level(cs_level))) {
-  } else if (OB_UNLIKELY(!cast_supported(type1.get_type(), type1.get_collation_type(),
-                                        dst_type.get_type(), dst_type.get_collation_type()))) {
+  } else if (OB_UNLIKELY(!datum_cast_supported(sql_type_class(type1.get_type()),
+                                              sql_type_class(dst_type.get_type())))) {
     if (session->is_varparams_sql_prepare()) {
       type.set_null();
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("transition does not support", "src", ob_obj_type_str(type1.get_type()),
-                "dst", ob_obj_type_str(dst_type.get_type()));
+      LOG_WARN("transition does not support", "src", sql_value_type_to_string(type1.get_type()),
+                "dst", sql_value_type_to_string(dst_type.get_type()));
     }
   } else if (FALSE_IT(is_explicit_cast = CM_IS_EXPLICIT_CAST(cast_raw_expr->get_cast_mode()))) {
   // check cast supported in cast_map but not support here.
@@ -461,11 +470,11 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
       if (need_extra_cast_for_src_type) {
         ObExprResType src_type_utf8;
         OZ(ObRawExprUtils::setup_extra_cast_utf8_type(type1, src_type_utf8));
-        OX(type1.set_calc_meta(src_type_utf8.get_obj_meta()));
+        OX(type1.set_calc_meta(src_type_utf8.get_sql_type_meta()));
       } else if (need_extra_cast_for_dst_type) {
         ObExprResType dst_type_utf8;
         OZ(ObRawExprUtils::setup_extra_cast_utf8_type(dst_type, dst_type_utf8));
-        OX(type1.set_calc_meta(dst_type_utf8.get_obj_meta()));
+        OX(type1.set_calc_meta(dst_type_utf8.get_sql_type_meta()));
       } else {
         bool need_wrap = false;
         if (ob_is_enumset_tc(type1.get_type())) {
@@ -474,7 +483,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
                                           false, need_wrap, true))) {
           } else if (!need_wrap) {
             // need_wrap is false, set calc_type to type1 itself.
-            type1.set_calc_meta(type1.get_obj_meta());
+            type1.set_calc_meta(type1.get_sql_type_meta());
             type1.set_calc_accuracy(type1.get_calc_accuracy());
           }
         } else if (OB_LIKELY(need_wrap)) {
@@ -483,7 +492,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         } else {
           if (ob_is_geometry_tc(dst_type.get_type())) {
             ObCastMode cast_mode = cast_raw_expr->get_cast_mode();
-            const ObObj &param = type2.get_param();
+            const DatumValue &param = type2.get_param();
             ParseNode parse_node;
             parse_node.value_ = param.get_int();
             ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
@@ -494,7 +503,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           }
           if (OB_SUCC(ret)) {
             // need_wrap is false, set calc_type to type1 itself.
-            type1.set_calc_meta(type1.get_obj_meta());
+            type1.set_calc_meta(type1.get_sql_type_meta());
           }
         }
       }
@@ -536,10 +545,10 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
-    const ObObj &param = param_type2.get_param();
+    const DatumValue &param = param_type2.get_param();
     ParseNode parse_node;
     parse_node.value_ = param.get_int();
-    ObObjType obj_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+    SqlValueType obj_type = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
     bool is_explicit_cast = CM_IS_EXPLICIT_CAST(cast_mode);
     dst_type.set_collation_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
     dst_type.set_type(obj_type);
@@ -604,9 +613,9 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
   OB_ASSERT(NULL != rt_expr.args_);
   OB_ASSERT(NULL != rt_expr.args_[0]);
   OB_ASSERT(NULL != rt_expr.args_[1]);
-  ObObjType in_type = rt_expr.args_[0]->datum_meta_.type_;
+  SqlValueType in_type = rt_expr.args_[0]->datum_meta_.type_;
   ObCollationType in_cs_type = rt_expr.args_[0]->datum_meta_.cs_type_;
-  ObObjType out_type = rt_expr.datum_meta_.type_;
+  SqlValueType out_type = rt_expr.datum_meta_.type_;
   ObCollationType out_cs_type = rt_expr.datum_meta_.cs_type_;
 
   bool fast_cast_decint = false;
@@ -663,11 +672,11 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
         ret = OB_ERR_UNEXPECTED;
       } else if (fast_cast_decint) {
         if (CM_IS_EXPLICIT_CAST(cast_mode)) {
-          ObDatumCast::get_decint_cast(ob_obj_type_class(in_type), in_prec, in_scale, out_prec,
+          ObDatumCast::get_decint_cast(sql_type_class(in_type), in_prec, in_scale, out_prec,
                                        out_scale, true, rt_expr.eval_batch_func_,
                                        rt_expr.eval_func_);
         } else {
-          ObDatumCast::get_decint_cast(ob_obj_type_class(in_type), in_prec, in_scale, out_prec,
+          ObDatumCast::get_decint_cast(sql_type_class(in_type), in_prec, in_scale, out_prec,
                                        out_scale, false, rt_expr.eval_batch_func_,
                                        rt_expr.eval_func_);
         }
@@ -693,8 +702,8 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprCast, raw_expr) {
   if (OB_ISNULL(raw_expr) || OB_ISNULL(raw_expr->get_param_expr(0))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObjType src = raw_expr->get_param_expr(0)->get_result_type().get_type();
-    ObObjType dst = raw_expr->get_result_type().get_type();
+    SqlValueType src = raw_expr->get_param_expr(0)->get_result_type().get_type();
+    SqlValueType dst = raw_expr->get_result_type().get_type();
     SET_LOCAL_SYSVAR_CAPACITY(3);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
     EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);

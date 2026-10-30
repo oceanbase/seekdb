@@ -100,14 +100,14 @@ private:
   int get_next_left_iter();
   int add_row_to_store();
   int build_above_group_params(const common::ObIArray<ObDynamicParamSetter> &above_rescan_params,
-                               common::ObIArray<ObSqlArrayObj *> &above_group_params,
+                               common::ObIArray<DatumParameterArray *> &above_group_params,
                                int64_t &group_size);
   int set_above_group_size();
   void reset_buffer_state();
-  int backup_above_params(common::ObIArray<ObObjParam> &left_params_backup,
-                          common::ObIArray<ObObjParam> &right_params_backup);
-  int restore_above_params(common::ObIArray<ObObjParam> &left_params_backup,
-                           common::ObIArray<ObObjParam> &right_params_backup);
+  int backup_above_params(common::ObIArray<DatumParameter> &left_params_backup,
+                          common::ObIArray<DatumParameter> &right_params_backup);
+  int restore_above_params(common::ObIArray<DatumParameter> &left_params_backup,
+                           common::ObIArray<DatumParameter> &right_params_backup);
 
 private:
   ObOperator *op_;
@@ -136,14 +136,14 @@ private:
   // store batch index corresponding to NLJ above this op
   common::ObSEArray<int64_t, 2> left_store_group_idx_;
   // for NLJ 2, above_left_batch_params_ stores batch rescan params used by TSC 2 and supplied by NLJ 1
-  common::ObSEArray<ObSqlArrayObj *, 2> above_left_group_params_;
+  common::ObSEArray<DatumParameterArray *, 2> above_left_group_params_;
   // for NLJ 2, above_right_batch_params_ stores batch rescan params used by TSC 3 and supplied by NLJ 1
-  common::ObSEArray<ObSqlArrayObj *, 2> above_right_group_params_;
+  common::ObSEArray<DatumParameterArray *, 2> above_right_group_params_;
   // batch rescan params supplied by this op
-  common::ObArrayWrap<ObSqlArrayObj> group_params_;
+  common::ObArrayWrap<DatumParameterArray> group_params_;
   // for NLJ 2, we need to rewrite params in above_right_batch_params_ and align them with our rescan pace,
   // above_bnlj_params_ stores batch params supplied by NLJ 1 and overwritten by NLJ 2
-  common::ObArrayWrap<ObSqlArrayObj> above_group_params_;
+  common::ObArrayWrap<DatumParameterArray> above_group_params_;
   ObChunkDatumStore::ShadowStoredRow last_row_;
   ObBatchRowDatums last_batch_;
   int64_t right_cnt_;

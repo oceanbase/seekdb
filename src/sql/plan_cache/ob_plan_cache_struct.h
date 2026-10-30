@@ -199,7 +199,7 @@ typedef common::ObSEArray<NotParamInfoList, 4> TplSqlConstCons;
 struct PsNotParamInfo
 {
   int64_t idx_;
-  common::ObObjParam ps_param_;
+  common::DatumParameter ps_param_;
   TO_STRING_KV(K_(idx), K_(ps_param));
 };
 
@@ -230,7 +230,7 @@ public:
   }
   ObPlanCacheKey pc_key_; //plan cache key, parameterized by fast parser
   common::ObSEArray<ObPCParam *, 16> raw_params_;
-  common::ObFixedArray<const common::ObObjParam *, common::ObIAllocator> parameterized_params_;
+  common::ObFixedArray<const common::DatumParameter *, common::ObIAllocator> parameterized_params_;
   ParamStore *cache_params_;
   ObQuestionMarkCtx question_mark_ctx_;
   int64_t values_token_pos_; // for insert values

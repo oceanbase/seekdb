@@ -167,10 +167,10 @@ int ObExprPrefixPattern::calc_result_type3(ObExprResType &type,
       || (!ob_is_string_type(type3.get_type()) && !type3.is_null())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    type1.set_calc_meta(type1.get_obj_meta());
-    type2.set_calc_meta(type2.get_obj_meta());
-    type3.set_calc_meta(type3.get_obj_meta());
-    type.set_meta(type1.get_obj_meta());
+    type1.set_calc_meta(type1.get_sql_type_meta());
+    type2.set_calc_meta(type2.get_sql_type_meta());
+    type3.set_calc_meta(type3.get_sql_type_meta());
+    type.set_meta(type1.get_sql_type_meta());
     type.set_accuracy(type1.get_accuracy());
     type2.set_calc_type(ObIntType);
   }

@@ -67,60 +67,71 @@ void point2pointer(T *&dst_pointer, B *dst_base, T *src_pointer, const B *src_ba
 
 }
 
-inline int ObChunkRowStore::StoredRow::copy_row(const ObNewRow &r, char *buf,
+int ObChunkRowStore::StoredRow::copy_row(const ObNewRow &r, char *buf,
     const int64_t size, const int64_t row_size, const uint32_t row_extend_size)
 {
   int ret = OB_SUCCESS;
-  if (payload_ != buf || size < 0) {
+  const int64_t extra = NativeValueFlat::span(row_extend_size);
+  const int64_t count = r.get_count();
+  if (payload_ != buf || size < 0 || count < 0 || count > UINT32_MAX
+      || row_size < sizeof(*this) || row_size > UINT32_MAX
+      || extra > UINT32_MAX || count > size / sizeof(DatumValue)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    cnt_ = static_cast<uint32_t>(r.get_count());
-    //LOG_DEBUG("Molly copy row", K(r.get_count()), K(r.count_), K(r.projector_size_), K(cnt_));
-    int64_t pos = sizeof(ObObj) * cnt_ + row_extend_size;
-    row_size_ = static_cast<int32_t>(row_size);
-    for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
-      ObObj *obj = new (&cells()[i])ObObj();
-      if (OB_FAIL(obj->deep_copy(r.get_cell(i), buf, size, pos))) {
+    int64_t pos = sizeof(DatumValue) * count + extra;
+    if (pos > size) { ret = OB_BUF_NOT_ENOUGH; }
+    else {
+      cnt_ = static_cast<uint32_t>(count);
+      row_size_ = static_cast<uint32_t>(row_size);
+      extra_size_ = static_cast<uint32_t>(extra);
+      for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
+        new (&cells()[i]) DatumValue();
+        ret = DatumValueBuffer::deep_copy(r.get_cell(i), cells()[i], buf, size, pos);
       }
     }
   }
-
   return ret;
 }
 
 int ObChunkRowStore::StoredRow::assign(const StoredRow *sr)
 {
+  if (sr == nullptr || sr->row_size_ < sizeof(*sr)) { return OB_INVALID_ARGUMENT; }
+  MEMMOVE(this, sr, sr->row_size_);
+  return swizzling();
+}
+
+int ObChunkRowStore::StoredRow::unswizzling(char *base)
+{
   int ret = OB_SUCCESS;
-  MEMCPY(this, static_cast<const void*>(sr), sr->row_size_);
-  ObObj* src_cells = const_cast<ObObj*>(sr->cells());
-  for (int64_t i = 0; i < cnt_; ++i) {
-    if (cells()[i].need_deep_copy()) {
-      chunk_row_store::point2pointer(cells()[i].v_.string_, this, src_cells[i].v_.string_, sr);
+  UNUSED(base);
+  const int64_t length = int64_t(row_size_) - sizeof(*this);
+  const int64_t start = int64_t(cnt_) * sizeof(DatumValue) + extra_size_;
+  if (length < 0 || start > length) { return OB_INVALID_DATA; }
+  // Both passes walk this copied flat payload. No stale source address is
+  // followed, including the address bytes inside nested SQL arrays.
+  for (int pass = 0; OB_SUCC(ret) && pass < 2; ++pass) {
+    int64_t pos = start;
+    for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
+      ret = DatumValueBuffer::make_offsets(cells()[i], payload_, length, pos,
+          reinterpret_cast<char *>(this), pass == 1);
     }
   }
-
   return ret;
 }
 
-void ObChunkRowStore::StoredRow::unswizzling(char *base/*= NULL*/)
+int ObChunkRowStore::StoredRow::swizzling()
 {
-  if (NULL == base) {
-    base = (char *)this;
-  }
-  for (int64_t i = 0; i < cnt_; ++i) {
-    if (cells()[i].need_deep_copy()) {
-      chunk_row_store::pointer2off(cells()[i].v_.string_, base);
+  int ret = OB_SUCCESS;
+  const int64_t length = int64_t(row_size_) - sizeof(*this);
+  const int64_t start = int64_t(cnt_) * sizeof(DatumValue) + extra_size_;
+  if (length < 0 || start > length) { return OB_INVALID_DATA; }
+  for (int pass = 0; OB_SUCC(ret) && pass < 2; ++pass) {
+    int64_t pos = start;
+    for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
+      ret = DatumValueBuffer::relocate(cells()[i], payload_, length, pos, pass == 1);
     }
   }
-}
-
-void ObChunkRowStore::StoredRow::swizzling()
-{
-  for (int64_t i = 0; i < cnt_; ++i) {
-    if (cells()[i].need_deep_copy()) {
-      chunk_row_store::off2pointer(cells()[i].v_.string_, this);
-    }
-  }
+  return ret;
 }
 
 int ObChunkRowStore::Block::add_row(const ObNewRow &row, const int64_t row_size,
@@ -162,8 +173,8 @@ int ObChunkRowStore::Block::copy_row(const StoredRow *stored_row)
     ret = OB_INVALID_ARGUMENT;
   } else {
     StoredRow *sr = new (buf->head())StoredRow;
-    sr->assign(stored_row);
-    if (OB_FAIL(buf->advance(row_size))) {
+    if (OB_FAIL(sr->assign(stored_row))) {
+    } else if (OB_FAIL(buf->advance(row_size))) {
     } else {
       rows_++;
     }
@@ -192,7 +203,7 @@ int ObChunkRowStore::Block::unswizzling()
   uint32_t i = 0;
   while (OB_SUCC(ret) && cur_pos < blk_size_ && i < rows_) {
     StoredRow *sr = reinterpret_cast<StoredRow *>(payload_ + cur_pos);
-    sr->unswizzling();
+    ret = sr->unswizzling();
     cur_pos += sr->row_size_;
     i++;
   }
@@ -207,7 +218,7 @@ int ObChunkRowStore::Block::swizzling(int64_t *col_cnt)
   StoredRow *sr = NULL;
   while (OB_SUCC(ret) && cur_pos < blk_size_ && i < rows_) {
     sr = reinterpret_cast<StoredRow *>(&payload_[cur_pos]);
-    sr->swizzling();
+    ret = sr->swizzling();
     cur_pos += sr->row_size_;
     i++;
   }
@@ -612,7 +623,13 @@ int ObChunkRowStore::add_row(const common::ObNewRow &row, StoredRow **stored_row
       }
     }
     const int64_t row_size = Block::row_store_size(row, row_extend_size_);
-    const int64_t min_buf_size = Block::min_buf_size(row_size);
+    int64_t min_buf_size = 0;
+    if (OB_SUCC(ret)) {
+      const int64_t overhead = BlockBuffer::HEAD_SIZE + sizeof(BlockBuffer);
+      if (row_size == INT64_MAX || row_size > INT64_MAX - overhead) {
+        ret = OB_SIZE_OVERFLOW;
+      } else { min_buf_size = Block::min_buf_size(row_size); }
+    }
     if (OB_SUCC(ret)) {
       if (NULL == cur_blk_) {
         Block *new_blk = nullptr;
@@ -1277,7 +1294,7 @@ int ObChunkRowStore::RowIterator::store_row2new_row(common::ObNewRow &row, const
   } else {
     //do not overwite row.count_
     //row.count_ = sr.cnt_;
-    MEMCPY(row.cells_, sr.cells(), sizeof(ObObj) * sr.cnt_);
+    MEMCPY(row.cells_, sr.cells(), sizeof(DatumValue) * sr.cnt_);
   }
   return ret;
 }
@@ -1294,7 +1311,7 @@ int ObChunkRowStore::RowIterator::convert_to_row_full(common::ObNewRow &row, con
   } else {
     //do not overwite row.count_
     //row.count_ = sr->cnt_;
-    MEMCPY(row.cells_, sr->cells(), sizeof(ObObj) * sr->cnt_);
+    MEMCPY(row.cells_, sr->cells(), sizeof(DatumValue) * sr->cnt_);
     MEMCPY(row.projector_, store_->projector_, sizeof(*store_->projector_) * sr->cnt_);
     row.projector_size_ = store_->projector_size_;
   }
@@ -1313,7 +1330,7 @@ int ObChunkRowStore::RowIterator::convert_to_row(common::ObNewRow *&row, const S
     row_.projector_ = NULL;
     row_.projector_size_ = 0;
     row_.count_ = sr->cnt_;
-    row_.cells_ = const_cast<ObObj *>(sr->cells());
+    row_.cells_ = const_cast<DatumValue *>(sr->cells());
     row = &row_;
   }
   return ret;
@@ -1329,7 +1346,7 @@ int ObChunkRowStore::RowIterator::convert_to_row_full(common::ObNewRow *&row, co
     row_.projector_ = store_->projector_;
     row_.projector_size_ = store_->projector_size_;
     row_.count_ = sr->cnt_;
-    row_.cells_ = const_cast<ObObj *>(sr->cells());
+    row_.cells_ = const_cast<DatumValue *>(sr->cells());
     row = &row_;
   }
   return ret;
@@ -1459,7 +1476,7 @@ int ObChunkRowStore::Block::gen_unswizzling_payload(char *unswizzling_payload, u
   }
   while (OB_SUCC(ret) && cur_pos < blk_size_ && i < rows_) {
     StoredRow *sr = reinterpret_cast<StoredRow *>(unswizzling_payload + cur_pos);
-    sr->unswizzling(payload_ + cur_pos);
+    ret = sr->unswizzling(payload_ + cur_pos);
     cur_pos += sr->row_size_;
     i++;
   }

@@ -165,7 +165,7 @@ private:
   ObSSTableMacroBlockHeader macro_header_;
   ObLinkedMacroBlockHeader linked_header_;
   // parsed objects
-  const common::ObObjMeta *column_types_;
+  const common::SqlTypeMeta *column_types_;
   const common::ObOrderType *column_orders_;
   const int64_t *column_checksum_;
   common::ObSEArray<share::schema::ObColDesc, common::OB_DEFAULT_SE_ARRAY_COUNT> columns_;

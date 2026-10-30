@@ -28,23 +28,10 @@ class ObExprInsert : public ObStringExprOperator
 public:
   explicit  ObExprInsert(common::ObIAllocator &alloc);
   virtual ~ObExprInsert();
-  virtual int calc_result(common::ObObj &result,
-                          const common::ObObj &text,
-                          const common::ObObj &start_pos,
-                          const common::ObObj &length,
-                          const common::ObObj &replace_text,
-                          common::ObExprCtx &expr_ctx) const;
   virtual int calc_result_typeN(ObExprResType &type,
                                 ObExprResType *types_stack,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc(common::ObObj &result,
-                  const common::ObObj &text,
-                  const common::ObObj &start_pos,
-                  const common::ObObj &length,
-                  const common::ObObj &replace_text,
-                  common::ObExprCtx &expr_ctx,
-                  common::ObCollationType cs_type);
   static int calc(common::ObString &result,
                   const common::ObString &text,
                   const int64_t start_pos,

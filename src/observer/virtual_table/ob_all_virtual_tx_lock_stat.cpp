@@ -131,11 +131,11 @@ int ObGVTxLockStat::inner_get_next_row(ObNewRow *&row)
 
       case OB_APP_MIN_COLUMN_ID + 0:
         // trans_id
-        cur_row_.cells_[i].set_int(tx_lock_stat.get_tx_id().get_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_lock_stat.get_tx_id().get_id()) : ret);
         break;
       case OB_APP_MIN_COLUMN_ID + 1:
         // tablet_id
-        cur_row_.cells_[i].set_int(tx_lock_stat.get_memtable_key_info().get_tablet_id().id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_lock_stat.get_memtable_key_info().get_tablet_id().id()) : ret);
         break;
       case OB_APP_MIN_COLUMN_ID + 2:
         // rowkey
@@ -144,29 +144,29 @@ int ObGVTxLockStat::inner_get_next_row(ObNewRow *&row)
           // if rowkey is empty, we should set it as NULL
           cur_row_.cells_[i].reset();
         } else {
-          cur_row_.cells_[i].set_varchar(memtable_key_buffer_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, memtable_key_buffer_) : ret);
         }
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       case OB_APP_MIN_COLUMN_ID + 3:
         // session_id
-        cur_row_.cells_[i].set_int(tx_lock_stat.get_session_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_lock_stat.get_session_id()) : ret);
         break;
       case OB_APP_MIN_COLUMN_ID + 4:
         // tx_ctx_create_time
-        cur_row_.cells_[i].set_timestamp(tx_lock_stat.get_tx_ctx_create_time());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tx_lock_stat.get_tx_ctx_create_time()) : ret);
         break;
       case OB_APP_MIN_COLUMN_ID + 5:
         // expired_time
-        cur_row_.cells_[i].set_timestamp(tx_lock_stat.get_tx_expired_time());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, tx_lock_stat.get_tx_expired_time()) : ret);
         break;
       case OB_APP_MIN_COLUMN_ID + 6:
         // time_after_recv
-        cur_row_.cells_[i].set_int(ObTimeUtility::current_time() - tx_lock_stat.get_tx_ctx_create_time());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, ObTimeUtility::current_time() - tx_lock_stat.get_tx_ctx_create_time()) : ret);
         break;
       case OB_APP_MIN_COLUMN_ID + 7:
         // row_lock_addr
-        cur_row_.cells_[i].set_uint64(uint64_t(tx_lock_stat.get_memtable_key_info().get_row_lock()));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, uint64_t(tx_lock_stat.get_memtable_key_info().get_row_lock())) : ret);
         break;
       }
     }

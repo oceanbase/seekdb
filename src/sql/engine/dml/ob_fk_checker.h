@@ -101,8 +101,8 @@ private:
                                 bool &has_null);
   int get_scan_result_count(int64_t &get_row_count);
   int init_clear_exprs(ObForeignKeyCheckerCtdef &fk_ctdef, const ObExprPtrIArray &row);
-  int check_fk_column_type(const ObObjMeta &col_obj_meta,
-                           const ObObjMeta &dst_obj_meta,
+  int check_fk_column_type(const SqlTypeMeta &col_obj_meta,
+                           const SqlTypeMeta &dst_obj_meta,
                            const ObPrecision col_precision,
                            const ObPrecision dst_precision,
                            bool &need_extra_cast);

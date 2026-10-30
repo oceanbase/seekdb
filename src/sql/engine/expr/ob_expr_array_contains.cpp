@@ -75,7 +75,7 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
     // do nothing
   } else if (!ob_is_collection_sql_type(type1_ptr->get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(type1_ptr->get_type()), ob_obj_type_str(type2_ptr->get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, sql_value_type_to_string(type1_ptr->get_type()), sql_value_type_to_string(type2_ptr->get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, *type1_ptr, *type2_ptr, subschema_id))) {
   } 
   
@@ -264,20 +264,20 @@ int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
     rt_expr.extra_ = raw_expr.get_reverse_param_order();
     uint32_t p1 = rt_expr.extra_ == 1 ? 0 : 1;
     uint32_t p0 = rt_expr.extra_ == 1 ? 1 : 0;
-    const ObObjType right_type = rt_expr.args_[p1]->datum_meta_.type_;  
-    ObObjTypeClass right_tc = ob_obj_type_class(right_type);
+    const SqlValueType right_type = rt_expr.args_[p1]->datum_meta_.type_;
+    SqlTypeClass right_tc = sql_type_class(right_type);
     if (right_tc == ObNullTC) {
       // use array element type
       ObExecContext *exec_ctx = expr_cg_ctx.session_->get_cur_exec_ctx();
       const uint16_t sub_id = rt_expr.args_[p0]->obj_meta_.get_subschema_id();
-      ObObjType elem_type;
+      SqlValueType elem_type;
       uint32_t unused;
       bool is_vec = false;
       if (ob_is_null(rt_expr.args_[p0]->datum_meta_.type_)) {
         // do nothing
       } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, sub_id, elem_type, unused, is_vec))) {
       } else {
-        right_tc = ob_obj_type_class(elem_type);
+        right_tc = sql_type_class(elem_type);
       }
     }
     if OB_SUCC(ret) {

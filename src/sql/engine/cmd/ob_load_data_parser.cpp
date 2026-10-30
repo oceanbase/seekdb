@@ -229,19 +229,21 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret) && OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::LINE_DELIMITER)])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ(ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      line_term_str_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ(ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      line_term_str_ = decoded;
     }
     node = node->get_next();
   }
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::FIELD_DELIMITER)])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ(ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      field_term_str_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ(ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      field_term_str_ = decoded;
     }
     node = node->get_next();
   }
@@ -294,10 +296,11 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
       if (OB_UNLIKELY(json::JT_STRING != it_tmp->get_type())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObObj obj;
-        OZ(ObHexUtilsBase::unhex(it_tmp->get_string(), allocator, obj));
-        if (OB_SUCC(ret) && !obj.is_null()) {
-          null_if_.at(idx++) = obj.get_string();
+        ObString decoded;
+        bool valid = false;
+        OZ(ObHexUtilsBase::unhex(it_tmp->get_string(), allocator, decoded, valid));
+        if (OB_SUCC(ret) && valid) {
+          null_if_.at(idx++) = decoded;
         }
       }
     }
@@ -328,10 +331,11 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
   }
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::FILE_EXTENSION)])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      file_extension_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      file_extension_ = decoded;
     }
     node = node->get_next();
   }
@@ -389,50 +393,55 @@ int ObOriginFileFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
   if (OB_SUCC(ret) && OB_NOT_NULL(node)
       && 0 == node->name_.case_compare(ORIGIN_FORMAT_STRING[idx++])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      origin_line_term_str_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      origin_line_term_str_ = decoded;
     }
     node = node->get_next();
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(node)
       && 0 == node->name_.case_compare(ORIGIN_FORMAT_STRING[idx++])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      origin_field_term_str_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      origin_field_term_str_ = decoded;
     }
     node = node->get_next();
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(node)
       && 0 == node->name_.case_compare(ORIGIN_FORMAT_STRING[idx++])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      origin_field_escaped_str_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      origin_field_escaped_str_ = decoded;
     }
     node = node->get_next();
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(node)
       && 0 == node->name_.case_compare(ORIGIN_FORMAT_STRING[idx++])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      origin_field_enclosed_str_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      origin_field_enclosed_str_ = decoded;
     }
     node = node->get_next();
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(node)
       && 0 == node->name_.case_compare(ORIGIN_FORMAT_STRING[idx++])
       && json::JT_STRING == node->value_->get_type()) {
-    ObObj obj;
-    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
-    if (OB_SUCC(ret) && !obj.is_null()) {
-      origin_null_if_str_ = obj.get_string();
+    ObString decoded;
+    bool valid = false;
+    OZ (ObHexUtilsBase::unhex(node->value_->get_string(), allocator, decoded, valid));
+    if (OB_SUCC(ret) && valid) {
+      origin_null_if_str_ = decoded;
     }
     node = node->get_next();
   }

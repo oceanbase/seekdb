@@ -74,16 +74,29 @@ int ObNopPos::get_nop_pos(const int64_t idx, int64_t &pos) const
 
 
 
-ObObjShallowCopy ObRowFuse::shallow_copy_;
+// Shallow fusion results use the descriptor/scalar block provided by
+// malloc_store_row. Large variable values remain borrowed until the source
+// row is advanced; retaining callers supply their explicit owning allocator.
+static int copy_native_fuse_cell(const DatumValue &source, ObStoreRow &result,
+                                 int64_t index, ObIAllocator *owner)
+{
+  if (owner == nullptr || source.is_null()
+      || (!source.is_ext_sql_array() && source.datum_.len_ <= 16)) {
+    return DatumValueBuffer::assign_view(source, result.row_val_.cells_, result.capacity_, index);
+  }
+  DatumParameter input, owned;
+  input.assign_value(source);
+  const int ret = DatumParameterArray::clone_parameter(input, owned, *owner);
+  if (ret == OB_SUCCESS) { result.row_val_.cells_[index] = owned.value_view(); }
+  return ret;
+}
 
-
-template<typename T>
 OB_INLINE static int simple_fuse_row(
     const ObStoreRow &former,
     ObStoreRow &result,
     ObNopPos &nop_pos,
     bool &final_result,
-    T &obj_copy)
+    ObIAllocator *owner)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!former.is_valid()) || OB_ISNULL(result.row_val_.cells_) || !nop_pos.is_valid()) {
@@ -110,7 +123,7 @@ OB_INLINE static int simple_fuse_row(
       if (first_val) { // copy rowkey
         result.row_val_.count_ = former.row_val_.count_;
         for (int i = 0; OB_SUCC(ret) && i < former.row_val_.count_; ++i) {
-          if (OB_FAIL(obj_copy(former.row_val_.cells_[i], result.row_val_.cells_[i]))) {
+          if (OB_FAIL(copy_native_fuse_cell(former.row_val_.cells_[i], result, i, owner))) {
           }
         }
       }
@@ -135,7 +148,7 @@ OB_INLINE static int simple_fuse_row(
           }
           if (is_former_nop && !first_val) {
             // do nothing
-          } else if (OB_FAIL(obj_copy(former.row_val_.cells_[idx], result.row_val_.cells_[idx]))) {
+          } else if (OB_FAIL(copy_native_fuse_cell(former.row_val_.cells_[idx], result, idx, owner))) {
           }
         }
         final_result = (0 == left_cnt);
@@ -154,17 +167,9 @@ int ObRowFuse::fuse_row(const ObStoreRow &former,
                           ObStoreRow &result,
                           ObNopPos &nop_pos,
                           bool &final_result,
-                          ObObjDeepCopy *obj_copy)
+                          ObIAllocator *owner)
 {
-  int ret = OB_SUCCESS;
-  if (nullptr == obj_copy) {
-    if (OB_FAIL(simple_fuse_row(former, result, nop_pos, final_result, shallow_copy_))) {
-    }
-  } else {
-    if (OB_FAIL(simple_fuse_row(former, result, nop_pos, final_result, *obj_copy))) {
-    }
-  }
-  return ret;
+  return simple_fuse_row(former, result, nop_pos, final_result, owner);
 }
 
 int ObRowFuse::fuse_row(const blocksstable::ObDatumRow &former,

@@ -36,7 +36,7 @@ int ObAllTracepointInfo::get_rows_from_tracepoint_info_list()
 {
   int ret = OB_SUCCESS;
   ObString addr_ip;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, addr_ip))) {
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -48,35 +48,35 @@ int ObAllTracepointInfo::get_rows_from_tracepoint_info_list()
         const uint64_t column_id = output_column_ids_.at(cell_idx);
         switch (column_id) {
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_NO: {
-            cells[cell_idx].set_int(cur_tp_event->item_.no_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, cur_tp_event->item_.no_) : ret);
             break;
           }
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_NAME: {
-            cells[cell_idx].set_varchar(cur_tp_event->item_.name_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, cur_tp_event->item_.name_) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_DESCRIBE: {
-            cells[cell_idx].set_varchar(cur_tp_event->item_.describe_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, cur_tp_event->item_.describe_) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_FREQUENCY: {
-            cells[cell_idx].set_int(cur_tp_event->item_.trigger_freq_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, cur_tp_event->item_.trigger_freq_) : ret);
             break;
           }
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_ERROR_CODE: {
-            cells[cell_idx].set_int(cur_tp_event->item_.error_code_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, cur_tp_event->item_.error_code_) : ret);
             break;
           }
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_OCCUR: {
-            cells[cell_idx].set_int(cur_tp_event->item_.occur_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, cur_tp_event->item_.occur_) : ret);
             break;
           }
           case ObAllTracepointInfo::INSPECT_COLUMN::TP_MATCH: {
-            cells[cell_idx].set_int(cur_tp_event->item_.cond_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, cur_tp_event->item_.cond_) : ret);
             break;
           }
           default: {
@@ -98,7 +98,7 @@ int ObAllTracepointInfo::get_rows_from_tracepoint_info_list()
 int ObAllTracepointInfo::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
     } else {

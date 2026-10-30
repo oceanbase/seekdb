@@ -83,7 +83,7 @@ private:
   int store_value(const common::ObDatum &datum, char *buf);
 
 private:
-  ObObjTypeStoreClass sc_;
+  SqlValueTypeStoreClass sc_;
   int64_t count_;
   int64_t row_id_byte_;
   ObConstMetaHeader *const_meta_header_;

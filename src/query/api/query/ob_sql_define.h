@@ -19,6 +19,7 @@
 
 #include "lib/container/ob_fixed_array.h"
 #include "common/datum/ob_datum.h"
+#include "common/datum/datum_parameter_array.h"
 #include "common/object/ob_object.h"
 #include "share/ob_define.h"
 #include "lib/container/ob_array.h"
@@ -562,39 +563,6 @@ enum ObIDPAbortType
   IDP_NO_ABORT = 4
 };
 
-struct ObSqlDatumArray
-{
-  ObSqlDatumArray()
-    : data_(nullptr),
-      count_(0),
-      element_()
-  {
-  }
-  typedef common::ObArrayWrap<common::ObDatum> DatumArray;
-  static ObSqlDatumArray *alloc(common::ObIAllocator &allocator, int64_t count);
-  TO_STRING_KV("data", DatumArray(data_, count_),
-               K_(count),
-               K_(element));
-  common::ObDatum *data_;
-  int64_t count_;
-  common::ObDataType element_;
-};
-
-OB_INLINE ObSqlDatumArray *ObSqlDatumArray::alloc(common::ObIAllocator &allocator, int64_t count)
-{
-  ObSqlDatumArray *array_obj = nullptr;
-  void *array_buf = nullptr;
-  void *data_buf = nullptr;
-  int64_t array_size = sizeof(ObSqlDatumArray) + sizeof(common::ObDatum) * count;
-  if (OB_NOT_NULL(array_buf = allocator.alloc(array_size))) {
-    array_obj = new (array_buf) ObSqlDatumArray();
-    data_buf = static_cast<char*>(array_buf) + sizeof(ObSqlDatumArray);
-    array_obj->data_ = new (data_buf) common::ObDatum[count];
-    array_obj->count_ = count;
-  }
-  return array_obj;
-}
-
 // Window function optimization settings. (_windowfunc_optimization_settings sys variable)
 struct ObWinfuncOptimizationOpt
 {
@@ -674,9 +642,9 @@ inline const ObString &ob_match_against_mode_str(const ObMatchAgainstMode mode)
   }
 }
 
-static bool is_fixed_length_storage(ObObjType type) {
+static bool is_fixed_length_storage(SqlValueType type) {
   bool is_fixed = true;
-  ObObjTypeClass tc = ob_obj_type_class(type);
+  SqlTypeClass tc = sql_type_class(type);
   OB_ASSERT(tc >= ObNullTC && tc < ObMaxTC);
   if (ObNumberTC == tc
       || ObExtendTC == tc
@@ -694,9 +662,9 @@ static bool is_fixed_length_storage(ObObjType type) {
   return is_fixed;
 }
 
-static bool is_fixed_length(ObObjType type) {
+static bool is_fixed_length(SqlValueType type) {
   bool is_fixed = true;
-  ObObjTypeClass tc = ob_obj_type_class(type);
+  SqlTypeClass tc = sql_type_class(type);
   OB_ASSERT(tc >= ObNullTC && tc < ObMaxTC);
   if (ObNumberTC == tc
       || ObExtendTC == tc
@@ -716,9 +684,9 @@ static bool is_fixed_length(ObObjType type) {
   return is_fixed;
 }
 
-static int16_t get_type_fixed_length(ObObjType type) {
+static int16_t get_type_fixed_length(SqlValueType type) {
   int16_t len = 0;
-  ObObjTypeClass tc = ob_obj_type_class(type);
+  SqlTypeClass tc = sql_type_class(type);
   OB_ASSERT(tc >= ObNullTC && tc < ObMaxTC);
   switch (tc)
   {

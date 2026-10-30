@@ -37,13 +37,13 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   if (ob_is_numeric_type(type1.get_type()) || ob_is_json(type1.get_type())) {
-    type1.set_calc_meta(type1.get_obj_meta());
+    type1.set_calc_meta(type1.get_sql_type_meta());
     type1.set_calc_accuracy(type1.get_accuracy());
     if (ob_is_json(type1.get_type())) {
       type1.set_calc_type(type1.get_type());      
     }
   } else {
-    const ObObjType &calc_type = ObDoubleType;
+    const SqlValueType &calc_type = ObDoubleType;
     type1.set_calc_type(calc_type);
     const ObAccuracy &calc_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[calc_type];
     type1.set_calc_accuracy(calc_acc);
@@ -59,7 +59,7 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
 #define CHECK_IS_TRUE_FUNC_NAME(type)                               \
   int calc_bool_expr_for_##type(const ObExpr &expr, ObEvalCtx &ctx, \
       ObDatum &res_datum)
-// ObObjEvaluator::is_true() inside, if input obj is null, result is false
+// DatumBoolEvaluator::is_true() inside, if the input value is null, result is false
 // But we need to set it to null here
 // eg: expr1 and null -> null
 // If bool expr is set to false, the above result will become false
@@ -86,7 +86,7 @@ CHECK_IS_TRUE_FUNC_NAME(float_type)
 {
   EVAL_ARG()
   {
-    // Do not consider the problem of comparing floating-point numbers with 0, see ObObj::is_zero()
+    // Keep the existing exact comparison semantics for floating-point zero.
     int32_t res = (0 == child_datum->get_float()) ? 0 : 1;
     res_datum.set_int32(res);
   }
@@ -97,7 +97,7 @@ CHECK_IS_TRUE_FUNC_NAME(double_type)
 {
   EVAL_ARG()
   {
-    // Do not consider the problem of comparing floating-point numbers with 0, see ObObj::is_zero()
+    // Keep the existing exact comparison semantics for floating-point zero.
     int32_t res = (0 == child_datum->get_double()) ? 0 : 1;
     res_datum.set_int32(res);
   }
@@ -168,7 +168,7 @@ inline int get_bool(const T &val, const uint32_t len, const ObExpr &expr, bool &
 {
   UNUSED(len);
   UNUSED(expr);
-  res = (0 != val); // No need consider the problem of 'float == 0', see ObObj::is_zero()
+  res = (0 != val); // Keep the existing exact comparison semantics for floating-point zero.
   return OB_SUCCESS;
 }
 template <>

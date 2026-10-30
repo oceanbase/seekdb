@@ -62,42 +62,42 @@ void off2pointer(T *&pointer, B *base)
 
 int64_t ObRARowStore::StoreRow::row_copy_size(const ObNewRow &row)
 {
-  int64_t size = sizeof(common::ObObj) * row.get_count();
-  for (int64_t i = 0; i < row.get_count(); ++i) {
-    size += row.get_cell(i).get_deep_copy_size();
-  }
-  return size;
+  return row.get_projected_deep_copy_size();
 }
 
 int ObRARowStore::StoreRow::copy_row(const ObNewRow &r, char *buf, const int64_t size)
 {
   int ret = OB_SUCCESS;
-  if (payload_ != buf || size < 0) {
+  if (payload_ != buf || size < 0 || size > UINT32_MAX || r.get_count() < 0
+      || r.get_count() > INT32_MAX) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    readable_ = true;
-    cnt_ = ~(1U << 31) & static_cast<int32>(r.get_count());
-    int64_t pos = sizeof(ObObj) * cnt_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
-      new (&cells()[i])ObObj();
-      if (OB_FAIL(cells()[i].deep_copy(r.get_cell(i), buf, size, pos))) {
-      }
+    ObNewRow copy;
+    int64_t pos = 0;
+    if (OB_FAIL(copy.deep_copy_projected(r, buf, size, pos))) {}
+    else {
+      readable_ = true;
+      cnt_ = static_cast<uint32_t>(copy.count_);
+      size_ = static_cast<uint32_t>(pos);
     }
   }
-
   return ret;
 }
 
 int ObRARowStore::StoreRow::to_copyable()
 {
   int ret = OB_SUCCESS;
-  if (0 != readable_) {
-    for (int64_t i = 0; i < cnt_; ++i) {
-      if (cells()[i].need_deep_copy()) {
-        ra_row_store::pointer2off(cells()[i].v_.string_, this);
+  if (readable_ != 0) {
+    const int64_t start = int64_t(cnt_) * sizeof(DatumValue);
+    if (start > size_) { return OB_INVALID_DATA; }
+    for (int pass = 0; OB_SUCC(ret) && pass < 2; ++pass) {
+      int64_t pos = start;
+      for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
+        ret = DatumValueBuffer::make_offsets(cells()[i], payload_, size_, pos,
+            reinterpret_cast<char *>(this), pass == 1);
       }
     }
-    readable_ = false;
+    if (OB_SUCC(ret)) { readable_ = false; }
   }
   return ret;
 }
@@ -105,13 +105,16 @@ int ObRARowStore::StoreRow::to_copyable()
 int ObRARowStore::StoreRow::to_readable()
 {
   int ret = OB_SUCCESS;
-  if (0 == readable_) {
-    for (int64_t i = 0; i < cnt_; ++i) {
-      if (cells()[i].need_deep_copy()) {
-        ra_row_store::off2pointer(cells()[i].v_.string_, this);
+  if (readable_ == 0) {
+    const int64_t start = int64_t(cnt_) * sizeof(DatumValue);
+    if (start > size_) { return OB_INVALID_DATA; }
+    for (int pass = 0; OB_SUCC(ret) && pass < 2; ++pass) {
+      int64_t pos = start;
+      for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
+        ret = DatumValueBuffer::relocate(cells()[i], payload_, size_, pos, pass == 1);
       }
     }
-    readable_ = true;
+    if (OB_SUCC(ret)) { readable_ = true; }
   }
   return ret;
 }
@@ -555,6 +558,13 @@ int ObRARowStore::add_row(const common::ObNewRow &row)
       }
     }
 
+    if (OB_SUCC(ret)) {
+      const int64_t flat_size = StoreRow::row_copy_size(row);
+      const int64_t overhead = sizeof(Block) + sizeof(StoreRow) + Block::ROW_INDEX_SIZE;
+      if (flat_size == INT64_MAX || flat_size > INT64_MAX - overhead) {
+        ret = OB_SIZE_OVERFLOW;
+      }
+    }
     if (OB_SUCC(ret) && NULL == blkbuf_.blk_) {
       if (OB_FAIL(alloc_block(blkbuf_, Block::min_buf_size(row)))) {
       }
@@ -776,7 +786,7 @@ int ObRARowStore::Reader::get_row(const int64_t row_id, const ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
   } else {
     row_.count_ = sr->cnt_;
-    row_.cells_ = const_cast<ObObj *>(sr->cells());
+    row_.cells_ = const_cast<DatumValue *>(sr->cells());
     if (OB_ISNULL(store_.projector_)) {
       row_.projector_ = NULL;
       row_.projector_size_ = 0;
@@ -802,7 +812,7 @@ int ObRARowStore::Reader::get_row(const int64_t row_id, const common::ObNewRow &
   } else if (row.count_ < sr->cnt_) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    MEMCPY(row.cells_, sr->cells(), sr->cnt_ * sizeof(ObObj));
+    MEMCPY(row.cells_, sr->cells(), sr->cnt_ * sizeof(DatumValue));
   }
   return ret;
 }

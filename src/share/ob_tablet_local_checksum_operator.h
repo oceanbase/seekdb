@@ -65,10 +65,9 @@ public:
 
   int set_with_str(const ObString &str);
   int set_with_str(const ObDataChecksumType type, const ObString &str);
-  int get_str_obj(
+  int get_str(
       const ObDataChecksumType type,
       common::ObIAllocator &allocator,
-      ObObj &obj,
       common::ObString &str) const;
   int get_hex_str(
       common::ObIAllocator &allocator,

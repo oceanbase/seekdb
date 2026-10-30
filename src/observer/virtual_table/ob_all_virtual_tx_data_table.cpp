@@ -78,27 +78,27 @@ int ObAllVirtualTxDataTable::inner_get_next_row(common::ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case STATE_COL:
-          cur_row_.cells_[i].set_varchar(row_data.state_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, row_data.state_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case START_SCN_COL: {
           uint64_t v = tx_data_table->get_key().scn_range_.start_scn_.get_val_for_inner_table_field();
-          cur_row_.cells_[i].set_uint64(v);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
           break;
         }
         case END_SCN_COL: {
           uint64_t v = tx_data_table->get_key().scn_range_.end_scn_.get_val_for_inner_table_field();
-          cur_row_.cells_[i].set_uint64(v);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
           break;
         }
         case TX_DATA_COUNT_COL:
-          cur_row_.cells_[i].set_int(row_data.tx_data_count_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, row_data.tx_data_count_) : ret);
           break;
         case MIN_TX_SCN_COL:
-          cur_row_.cells_[i].set_uint64(row_data.min_tx_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, row_data.min_tx_scn_.get_val_for_inner_table_field()) : ret);
           break;
         case MAX_TX_SCN_COL:
-          cur_row_.cells_[i].set_uint64(row_data.max_tx_scn_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, row_data.max_tx_scn_.get_val_for_inner_table_field()) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

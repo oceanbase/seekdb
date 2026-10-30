@@ -16,6 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_range_generator.h"
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include "sql/engine/expr/ob_datum_cast.h"
+
 #include "common/timezone/ob_time_convert.h"
 #include "lib/container/ob_array_serialization.h"
 #include "share/geo/ob_geo_utils.h"
@@ -37,6 +42,58 @@ using namespace common;
 using namespace share::schema;
 namespace sql
 {
+namespace {
+bool can_compare_native_range_values(const DatumValue &left, const DatumValue &right)
+{
+  return left.is_min_value() || left.is_max_value() || right.is_min_value()
+      || right.is_max_value() || can_compare_types_without_cast(left.meta_, right.meta_);
+}
+bool native_range_integer_overflows(const DatumValue &value, SqlValueType target)
+{
+  int64_t minimum = 0;
+  uint64_t maximum = 0;
+  switch (target) {
+    case ObTinyIntType: minimum = INT8_MIN; maximum = INT8_MAX; break;
+    case ObSmallIntType: minimum = INT16_MIN; maximum = INT16_MAX; break;
+    case ObMediumIntType: minimum = -8388608; maximum = 8388607; break;
+    case ObInt32Type: minimum = INT32_MIN; maximum = INT32_MAX; break;
+    case ObIntType: minimum = INT64_MIN; maximum = INT64_MAX; break;
+    case ObUTinyIntType: maximum = UINT8_MAX; break;
+    case ObUSmallIntType: maximum = UINT16_MAX; break;
+    case ObUMediumIntType: maximum = 16777215; break;
+    case ObUInt32Type: maximum = UINT32_MAX; break;
+    case ObUInt64Type: maximum = UINT64_MAX; break;
+    default: return true;
+  }
+  if (ob_is_int_tc(value.get_type())) {
+    const int64_t number = value.get_int();
+    return !(number >= minimum && (number < 0 || static_cast<uint64_t>(number) <= maximum));
+  } else if (ob_is_uint_tc(value.get_type())) {
+    return value.get_uint64() > maximum;
+  }
+  return true;
+}
+int compare_native_range_values(const DatumValue &left,const DatumValue &right,ObCastCtx &context,
+    SqlValueType type,ObCollationType collation,int64_t &result) {
+  int comparison=0;const int ret=DatumValueComparator::compare(left,right,context,type,collation,comparison);
+  if(ret==OB_SUCCESS)result=comparison;return ret;
+}
+int copy_native_range_value(const DatumValue &source,DatumValue &output,char *buffer,int64_t size,int64_t &pos) {
+  DatumValue candidate=source;ObDatum datum;int64_t next=pos;
+  const int ret=datum.deep_copy(source.datum_,buffer,size,next);
+  if(ret==OB_SUCCESS){candidate.datum_=datum;output=candidate;pos=next;}return ret;
+}
+int cast_native_range_json(ObIAllocator &owner,ObExecContext &context,ObIJsonBase *json,
+    const ObExprResType &type,DatumValue &result) {
+  ObEvalCtx eval(context);ObAccuracy accuracy=type.get_accuracy();
+  return ObJsonUtil::cast_json_scalar_to_sql_value(owner,eval,json,type.get_collation_type(),accuracy,type.get_type(),type.get_scale(),result);
+}
+void set_native_range_nop(DatumValue &value) {
+  struct Payload { int64_t action;int32_t size;uint8_t subtype,level,collation; } __attribute__((packed));
+  static const Payload nop{ObActionFlag::OP_NOP,0,0,CS_LEVEL_INVALID,CS_TYPE_INVALID};
+  value.meta_.set_ext();value.datum_.ptr_=reinterpret_cast<const char *>(&nop);value.datum_.set_ext();
+}
+}
 #define GET_RANGE_NODE_DOMAIN_TYPE(n) (static_cast<ObDomainOpType>((n)->domain_extra_.domain_releation_type_))
 
 int ObTmpRange::copy(ObTmpRange &other)
@@ -101,13 +158,13 @@ int ObTmpRange::init_tmp_range(int64_t column_count)
   if (OB_UNLIKELY(column_count <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected column count", K(column_count));
-  } else if (OB_ISNULL(start_ptr = allocator_.alloc(sizeof(ObObj) * column_count)) ||
-             OB_ISNULL(end_ptr = allocator_.alloc(sizeof(ObObj) * column_count))) {
+  } else if (OB_ISNULL(start_ptr = allocator_.alloc(sizeof(DatumValue) * column_count)) ||
+             OB_ISNULL(end_ptr = allocator_.alloc(sizeof(DatumValue) * column_count))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memeory failed", K(start_ptr), K(end_ptr));
   } else {
-    start_ = new(start_ptr) ObObj[column_count];
-    end_ = new(end_ptr) ObObj[column_count];
+    start_ = new(start_ptr) DatumValue[column_count];
+    end_ = new(end_ptr) DatumValue[column_count];
     column_cnt_ = column_count;
   }
   return ret;
@@ -162,7 +219,8 @@ int ObTmpRange::intersect(ObTmpRange &other, bool &not_consistent)
       bool merge_end = false;
       max_offset_ = std::max(max_offset_, other.max_offset_);
       for (int64_t i = other.min_offset_; i < column_cnt_; ++i) {
-        int cmp = start_[i].compare(other.start_[i]);
+        int cmp = 0;
+        if (OB_FAIL(compare_key_value(start_[i],other.start_[i],cmp))) { break; }
         if (cmp > 0) {
           break;
         } else if (cmp < 0) {
@@ -179,7 +237,8 @@ int ObTmpRange::intersect(ObTmpRange &other, bool &not_consistent)
         }
       }
       for (int64_t i = other.min_offset_; i < column_cnt_; ++i) {
-        int cmp = end_[i].compare(other.end_[i]);
+        int cmp = 0;
+        if (OB_FAIL(compare_key_value(end_[i],other.end_[i],cmp))) { break; }
         if (cmp > 0) {
           merge_end = true;
           for (; i < column_cnt_; ++i) {
@@ -200,7 +259,8 @@ int ObTmpRange::intersect(ObTmpRange &other, bool &not_consistent)
         bool always_false = false;
         bool all_equal = true;
         for (int64_t i = min_offset_; !always_false && i < column_cnt_; ++i) {
-          int cmp = start_[i].compare(end_[i]);
+          int cmp = 0;
+        if (OB_FAIL(compare_key_value(start_[i],end_[i],cmp))) { break; }
           if (cmp > 0) {
             always_false = true;
           } else if (cmp < 0) {
@@ -231,12 +291,13 @@ int ObTmpRange::formalize()
     for (int64_t i = min_offset_; OB_SUCC(ret) && i < column_cnt_; ++i) {
       if (start_[i].is_min_value() && end_[i].is_max_value()) {
         // do nothing
-      } else if (OB_UNLIKELY(!start_[i].can_compare(end_[i]))) {
+      } else if (OB_UNLIKELY(!can_compare_native_range_values(start_[i], end_[i]))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("start obj can not compare with end obj", K(start_[i]), K(end_[i]));
       } else {
         always_true = false;
-        int cmp = start_[i].compare(end_[i]);
+        int cmp = 0;
+        if (OB_FAIL(compare_key_value(start_[i],end_[i],cmp))) { break; }
         if (cmp < 0) {
           // find first start[i] < end[i], ignore following value
           // e.g. (c1,c2) between (1,5) and (3,1) => (1, 5, max; 3, 1, min)
@@ -328,13 +389,13 @@ int ObRangeGenerator::generate_one_range(ObTmpRange &tmp_range)
   if (OB_FAIL(create_new_range(range, tmp_range.column_cnt_))) {
   } else if (OB_FAIL(tmp_range.refine_final_range())) {
   } else {
-    ObObj *starts = range->start_key_.get_obj_ptr();
-    ObObj *ends = range->end_key_.get_obj_ptr();
+    DatumValue *starts = range->start_key_.get_values();
+    DatumValue *ends = range->end_key_.get_values();
     for (int i = 0; OB_SUCC(ret) && i < tmp_range.column_cnt_; ++i) {
-      new(starts + i) ObObj();
-      new(ends + i) ObObj();
-      if (OB_FAIL(ob_write_obj(allocator_, *(tmp_range.start_ + i), *(starts + i)))) {
-      } else if (OB_FAIL(ob_write_obj(allocator_, *(tmp_range.end_ + i), *(ends + i)))) {
+      new(starts + i) DatumValue();
+      new(ends + i) DatumValue();
+      if (OB_FAIL(clone_typed_value(*(tmp_range.start_ + i), *(starts + i), allocator_))) {
+      } else if (OB_FAIL(clone_typed_value(*(tmp_range.end_ + i), *(ends + i), allocator_))) {
       }
     }
     if (OB_SUCC(ret)) {
@@ -396,8 +457,8 @@ OB_INLINE int ObRangeGenerator::generate_precise_get_range(const ObRangeNode &no
   } else if (OB_FAIL(create_new_range(range, node.column_cnt_))) {
   } else {
     bool always_false = false;
-    ObObj *starts = range->start_key_.get_obj_ptr();
-    ObObj *ends = range->end_key_.get_obj_ptr();
+    DatumValue *starts = range->start_key_.get_values();
+    DatumValue *ends = range->end_key_.get_values();
     for (int64_t i = 0; i < node.column_cnt_; ++i) {
       starts[i].set_min_value();
       ends[i].set_max_value();
@@ -422,10 +483,10 @@ OB_INLINE int ObRangeGenerator::generate_precise_get_range(const ObRangeNode &no
       } else if (!is_valid) {
         always_false = true;
       } else if (OB_LIKELY(ObSQLUtils::is_same_type_for_compare(starts[i].get_meta(),
-                                                                meta->column_type_.get_obj_meta()) &&
+                                                                meta->column_type_.get_sql_type_meta()) &&
                            !starts[i].is_decimal_int())) {
         starts[i].set_collation_type(meta->column_type_.get_collation_type());
-      } else if (OB_LIKELY(!starts[i].is_overflow_integer(meta->column_type_.get_type()))) {
+      } else if (OB_LIKELY(!native_range_integer_overflows(starts[i], meta->column_type_.get_type()))) {
         //fast cast with integer value
         starts[i].set_meta_type(meta->column_type_);
       } else if (OB_FAIL(try_cast_value(*meta, starts[i], cmp, CO_EQ))) {
@@ -776,8 +837,8 @@ int ObRangeGenerator::final_range_node(const ObRangeNode *node, ObTmpRange *&ran
       bool is_valid = true;
       if (start == OB_RANGE_EMPTY_VALUE && end == OB_RANGE_EMPTY_VALUE) {
         range->min_offset_++;
-        range->start_[i].set_nop_value();
-        range->end_[i].set_nop_value();
+        set_native_range_nop(range->start_[i]);
+        set_native_range_nop(range->end_[i]);
       } else if (OB_UNLIKELY(start == OB_RANGE_EMPTY_VALUE || end == OB_RANGE_EMPTY_VALUE)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected range node", KPC(node));
@@ -862,8 +923,8 @@ int ObRangeGenerator::final_in_range_node(const ObRangeNode *node,
       bool is_valid = true;
       if (start == OB_RANGE_EMPTY_VALUE && end == OB_RANGE_EMPTY_VALUE) {
         range->min_offset_++;
-        range->start_[i].set_nop_value();
-        range->end_[i].set_nop_value();
+        set_native_range_nop(range->start_[i]);
+        set_native_range_nop(range->end_[i]);
       } else if (OB_UNLIKELY(start == OB_RANGE_EMPTY_VALUE || end == OB_RANGE_EMPTY_VALUE)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected range node", KPC(node));
@@ -941,7 +1002,7 @@ int ObRangeGenerator::final_in_range_node(const ObRangeNode *node,
 }
 
 int ObRangeGenerator::get_result_value(const int64_t val_idx,
-                                       ObObj &value,
+                                       DatumValue &value,
                                        bool &is_valid,
                                        ObExecContext &exec_ctx) const
 {
@@ -953,73 +1014,38 @@ int ObRangeGenerator::get_result_value(const int64_t val_idx,
 int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
                                         const ObRangeMap &range_map,
                                         const int64_t val_idx,
-                                        ObObj &value,
+                                        DatumValue &value,
                                         bool &is_valid,
                                         ObExecContext &exec_ctx)
 {
-  int ret = OB_SUCCESS;
-  ObPhysicalPlanCtx *phy_ctx = NULL;
-  const common::ObLobReadOptions *lob_read_options = nullptr;
-  is_valid = true;
-  if (OB_ISNULL(phy_ctx = exec_ctx.get_physical_plan_ctx())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(val_idx < 0 || val_idx >= range_map.expr_final_infos_.count())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid param idx", K(val_idx));
-  } else {
-    const ObRangeMap::ExprFinalInfo& expr_info = range_map.expr_final_infos_.at(val_idx);
-    if (expr_info.is_param_) {
-      int64_t idx = expr_info.param_idx_;
-      if (OB_UNLIKELY(idx < 0 || idx >= phy_ctx->get_param_store().count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid param idx", K(idx));
-      } else {
-        value = phy_ctx->get_param_store().at(idx);
-        if (OB_UNLIKELY(value.is_nop_value())) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (value.is_lob_storage() && !value.is_inrow()) {
-          if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
-          } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
-                         value, value, lob_read_options, &allocator, true))) {
-          }
-        }
+  int ret=OB_SUCCESS;is_valid=true;ObPhysicalPlanCtx *plan=exec_ctx.get_physical_plan_ctx();
+  if(plan==nullptr||val_idx<0||val_idx>=range_map.expr_final_infos_.count())ret=OB_ERR_UNEXPECTED;
+  else {
+    const auto &info=range_map.expr_final_infos_.at(val_idx);const ObDatum *datum=nullptr;const SqlTypeMeta *meta=nullptr;
+    ObDatum evaluated;SqlValueDatumMapType mapping=OBJ_DATUM_MAPPING_MAX;bool keep_null_collation=true;
+    if(info.is_param_){
+      if(info.param_idx_<0||info.param_idx_>=plan->get_param_store().count())ret=OB_ERR_UNEXPECTED;
+      else {const auto &parameter=plan->get_param_store().at(info.param_idx_);datum=&parameter.datum_;meta=&parameter.get_meta();}
+    }else if(info.is_const_){datum=info.const_val_;meta=&info.const_meta_;}
+    else if(info.is_expr_){
+      if(info.temp_expr_==nullptr)ret=OB_ERR_UNEXPECTED;
+      else if((ret=info.temp_expr_->eval_datum(exec_ctx,allocator,evaluated))==OB_SUCCESS){
+        const ObExpr &expr=info.temp_expr_->rt_exprs_.at(info.temp_expr_->expr_idx_);
+        datum=&evaluated;meta=&expr.obj_meta_;mapping=expr.obj_datum_map_;keep_null_collation=false;
       }
-    } else if (expr_info.is_const_) {
-      ObObj *const_obj = expr_info.const_val_;
-      if (OB_ISNULL(const_obj)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FALSE_IT(value = *const_obj)) {
-      } else if (OB_UNLIKELY(value.is_nop_value())) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (value.is_lob_storage() && !value.is_inrow()) {
-        if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
-        } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
-                       value, value, lob_read_options, &allocator, true))) {
-        }
+    }else ret=OB_ERR_UNEXPECTED;
+    if(ret==OB_SUCCESS&&(datum==nullptr||meta==nullptr))ret=OB_ERR_UNEXPECTED;
+    else if(ret==OB_SUCCESS){
+      if(keep_null_collation)mapping=ObDatum::get_sql_value_datum_map_type(meta->get_type());
+      ret=project_datum_value_view(*datum,*meta,mapping,value.meta_,value,keep_null_collation);
+      if(ret==OB_SUCCESS&&value.is_nop_value())ret=OB_ERR_UNEXPECTED;
+      else if(ret==OB_SUCCESS&&value.is_lob_storage()&&!value.meta_.is_inrow()){
+        const ObLobReadOptions *options=nullptr;
+        if((ret=exec_ctx.get_lob_read_options(options))==OB_SUCCESS)
+          ret=ObTextStringIter::convert_outrow_lob_to_inrow_templob(value,value,options,allocator,true);
       }
-    } else if (expr_info.is_expr_) {
-      ObTempExpr *temp_expr = expr_info.temp_expr_;
-      ObNewRow tmp_row;
-      ObObj result;
-      if (OB_ISNULL(temp_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(temp_expr->eval(exec_ctx, tmp_row, result))) {
-      } else if (OB_UNLIKELY(result.is_nop_value())) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (result.is_lob_storage() && !result.is_inrow()) {
-        if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
-        } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
-                       result, value, lob_read_options, &allocator, true, true))) {
-        }
-      } else if (OB_FAIL(ob_write_obj(allocator, result, value))) {
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected temp expr", K(expr_info));
     }
-    if (OB_SUCC(ret) && value.is_null() && !expr_info.null_safe_) {
-      is_valid = false;
-    }
+    if(ret==OB_SUCCESS&&value.is_null()&&!info.null_safe_)is_valid=false;
   }
   return ret;
 }
@@ -1117,20 +1143,20 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const ObRangeColumnMeta &meta,
                                      int64_t cur_datetime,
-                                     ObObj &value,
+                                     DatumValue &value,
                                      int64_t &cmp,
                                      common::ObCmpOp cmp_op)
 {
   int ret = OB_SUCCESS;
   if (!value.is_min_value() && !value.is_max_value() && !value.is_unknown() &&
-      (!ObSQLUtils::is_same_type_for_compare(value.get_meta(), meta.column_type_.get_obj_meta()) ||
+      (!ObSQLUtils::is_same_type_for_compare(value.get_meta(), meta.column_type_.get_sql_type_meta()) ||
        value.is_decimal_int() ||
-       (meta.column_type_.get_obj_meta().get_type_class() == ObDoubleTC &&
+       (meta.column_type_.get_sql_type_meta().get_type_class() == ObDoubleTC &&
         meta.column_type_.get_accuracy().get_scale() != value.get_meta().get_scale()))) {
-    const ObObj *dest_val = NULL;
+    const DatumValue *dest_val = NULL;
     ObCollationType collation_type = meta.column_type_.get_collation_type();
     ObCastCtx cast_ctx(&allocator, &dtc_params, cur_datetime, CM_WARN_ON_FAIL, collation_type);
-    ObSqlObjCastRuntime cast_runtime(&exec_ctx);
+    ObSqlDatumCastRuntime cast_runtime(&exec_ctx);
     cast_ctx.runtime_ = &cast_runtime;
     ObExpectType expect_type;
     if (meta.column_type_.is_enum_set_with_subschema()) {
@@ -1144,9 +1170,9 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
     expect_type.set_type(meta.column_type_.get_type());
     expect_type.set_collation_type(collation_type);
     ObAccuracy res_acc;
-    ObObj tmp_dest_obj;
+    DatumValue tmp_dest_obj;
     if (        value.get_meta().get_type_class() == ObDoubleTC &&
-        meta.column_type_.get_obj_meta().get_type_class() == ObDoubleTC &&
+        meta.column_type_.get_sql_type_meta().get_type_class() == ObDoubleTC &&
         meta.column_type_.get_accuracy().get_scale() != SCALE_UNKNOWN_YET) {
       /*
         The code here is primarily designed to fix the issue with double(-1,-1) -> double(20, 10), for example,
@@ -1156,7 +1182,7 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
 
         select * from t1 where c2 = 1.175494351e-38;
       */
-      if (OB_FAIL(cast_double_to_fixed_double(meta, value, tmp_dest_obj))) {
+      if (OB_FAIL(cast_double_to_fixed_double(meta, value, tmp_dest_obj, allocator))) {
       } else {
         dest_val = &tmp_dest_obj;
       }
@@ -1164,7 +1190,7 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
       if (meta.column_type_.is_decimal_int()) {
         res_acc = meta.column_type_.get_accuracy();
         ObScale in_scale = value.get_scale();
-        int32_t in_bytes = value.get_int_bytes();
+        int32_t in_bytes = (value.is_decimal_int() ? value.get_int_bytes() : value.get_val_len());
         ObScale out_scale = res_acc.get_scale();
         int32_t out_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(res_acc.get_precision());
         if (ObDatumCast::need_scale_decimalint(in_scale, in_bytes, out_scale, out_bytes)) {
@@ -1174,27 +1200,39 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
         cast_ctx.res_accuracy_ = &res_acc;
       }
       cast_ctx.gen_query_range_ = true;
-      if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, value, tmp_dest_obj, dest_val))) {
-      }
+      if (ob_is_enumset_tc(expect_type.get_type())) {
+        DatumParameter input,output;input.assign_value(value);input.set_param_meta();
+        ObDatumCaster *caster=nullptr;ObDatumCaster nested;
+        if (OB_FAIL(exec_ctx.get_native_datum_caster(caster))) {
+        } else if (caster->native_cast_active() && OB_FAIL(nested.init(exec_ctx,false))) {
+        } else {
+          if (caster->native_cast_active()) caster=&nested;
+          if (OB_FAIL(caster->to_value(input,meta.column_type_,cast_ctx.cast_mode_,allocator,output,expect_type.get_type_infos()))) {
+          } else {
+            tmp_dest_obj=output.value_view();
+            if(expect_type.get_type()==ObEnumType)tmp_dest_obj.meta_.set_enum();else tmp_dest_obj.meta_.set_set();
+            dest_val=&tmp_dest_obj;
+          }
+        }
+      } else if (OB_FAIL(DatumValueCaster::to_type(expect_type.get_type(),cast_ctx,value,allocator,tmp_dest_obj))) {
+      } else { dest_val=&tmp_dest_obj; }
     }
 
     // to check if EXPR CAST losses number precise
-    ObObjType cmp_type = ObMaxType;
+    SqlValueType cmp_type = ObMaxType;
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(dest_val)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (ob_is_double_tc(expect_type.get_type()) || ob_is_enumset_tc(expect_type.get_type())) {
-        const_cast<ObObj *>(dest_val)->set_scale(meta.column_type_.get_accuracy().get_scale());
-        const_cast<ObObj *>(dest_val)->set_subschema_id(meta.column_type_.get_subschema_id());
+        const_cast<DatumValue *>(dest_val)->set_scale(meta.column_type_.get_accuracy().get_scale());
+        const_cast<DatumValue *>(dest_val)->meta_.set_subschema_id(meta.column_type_.get_subschema_id());
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
                                                                 value.get_type(),
                                                                 dest_val->get_type()))) {
-      } else if (OB_FAIL(ObRelationalExprOperator::compare_nullsafe(cmp, value, *dest_val,
-                                                                    cast_ctx, cmp_type,
-                                                                    collation_type))) {
+      } else if (OB_FAIL(compare_native_range_values(value,*dest_val,cast_ctx,cmp_type,collation_type,cmp))) {
       } else {
         value = *dest_val;
       }
@@ -1204,7 +1242,7 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
 }
 
 int ObRangeGenerator::try_cast_value(const ObRangeColumnMeta &meta,
-                                     ObObj &value,
+                                     DatumValue &value,
                                      int64_t &cmp,
                                      common::ObCmpOp cmp_op)
 {
@@ -1221,8 +1259,8 @@ int ObRangeGenerator::generate_contain_exec_param_range()
   int64_t column_cnt = pre_range_graph_->get_column_count();
   if (OB_FAIL(create_new_range(range, column_cnt))) {
   } else {
-    ObObj *starts = range->start_key_.get_obj_ptr();
-    ObObj *ends = range->end_key_.get_obj_ptr();
+    DatumValue *starts = range->start_key_.get_values();
+    DatumValue *ends = range->end_key_.get_values();
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
       starts[i].set_min_value();
       ends[i].set_max_value();
@@ -1305,7 +1343,7 @@ int ObRangeGenerator::merge_and_remove_ranges()
             l_range = r_range;
           }
         } else if (cmp == 0) {
-          l_range->end_key_.assign(r_range->end_key_.get_obj_ptr(), r_range->end_key_.get_obj_cnt());
+          l_range->end_key_.assign(r_range->end_key_.get_values(), r_range->end_key_.get_value_count());
           if (r_range->border_flag_.inclusive_end()) {
             l_range->border_flag_.set_inclusive_end();
           } else {
@@ -1314,7 +1352,7 @@ int ObRangeGenerator::merge_and_remove_ranges()
         } else {
           int cmp2 = l_range->compare_with_endkey2(*r_range);
           if (cmp2 < 0) {
-            l_range->end_key_.assign(r_range->end_key_.get_obj_ptr(), r_range->end_key_.get_obj_cnt());
+            l_range->end_key_.assign(r_range->end_key_.get_values(), r_range->end_key_.get_value_count());
             if (r_range->border_flag_.inclusive_end()) {
               l_range->border_flag_.set_inclusive_end();
             } else {
@@ -1341,9 +1379,9 @@ int ObRangeGenerator::create_new_range(ObNewRange *&range, int64_t column_cnt)
 {
   int ret = OB_SUCCESS;
   range = nullptr;
-  ObObj *starts = nullptr;
-  ObObj *ends = nullptr;
-  size_t rowkey_size = sizeof(ObObj) * column_cnt * 2;
+  DatumValue *starts = nullptr;
+  DatumValue *ends = nullptr;
+  size_t rowkey_size = sizeof(DatumValue) * column_cnt * 2;
   size_t range_size = sizeof(ObNewRange) + rowkey_size;
   void *range_buffer = nullptr;
   if (OB_ISNULL(range_buffer = allocator_.alloc(range_size))) {
@@ -1351,8 +1389,9 @@ int ObRangeGenerator::create_new_range(ObNewRange *&range, int64_t column_cnt)
     LOG_ERROR("alloc memory for range failed", K(range_size));
   } else {
     range = new(range_buffer) ObNewRange();
-    starts = reinterpret_cast<ObObj*>(static_cast<char*>(range_buffer) + sizeof(ObNewRange));
+    starts = reinterpret_cast<DatumValue*>(static_cast<char*>(range_buffer) + sizeof(ObNewRange));
     ends = starts + column_cnt;
+    new(starts) DatumValue[column_cnt];new(ends) DatumValue[column_cnt];
     range->table_id_ = pre_range_graph_->get_table_id();
     range->start_key_.assign(starts, column_cnt);
     range->end_key_.assign(ends, column_cnt);
@@ -1362,11 +1401,15 @@ int ObRangeGenerator::create_new_range(ObNewRange *&range, int64_t column_cnt)
 
 struct InParamObjCmp
 {
-  inline bool operator()(const ObObj *left, const ObObj *right)
+  explicit InParamObjCmp(int &ret) : ret_(ret) {}
+  int &ret_;
+  inline bool operator()(const DatumValue *left, const DatumValue *right)
   {
     bool bret = false;
     if (left != nullptr && right != nullptr) {
-      bret = (left->compare(*right) < 0);
+      int cmp=0;
+      if(ret_==OB_SUCCESS)ret_=compare_key_value(*left,*right,cmp);
+      bret=ret_==OB_SUCCESS&&cmp<0;
     }
     return bret;
   }
@@ -1377,7 +1420,7 @@ int ObRangeGenerator::generate_tmp_not_in_param(const ObRangeNode &node,
 {
   int ret = OB_SUCCESS;
   InParam *in_param = nullptr;
-  ObObj* objs_ptr = nullptr;
+  DatumValue* objs_ptr = nullptr;
   const ObRangeColumnMeta *meta = nullptr;
   if (OB_UNLIKELY(!node.is_not_in_node_ ||
                   node.node_id_ < 0 ||
@@ -1399,13 +1442,13 @@ int ObRangeGenerator::generate_tmp_not_in_param(const ObRangeNode &node,
   } else if (OB_ISNULL(tmp_in_param = (ObTmpInParam*)allocator_.alloc(sizeof(ObTmpInParam)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memeory failed", K(tmp_in_param));
-  } else if (OB_ISNULL(objs_ptr = (ObObj*)allocator_.alloc(sizeof(ObObj) * in_param->count()))) {
+  } else if (OB_ISNULL(objs_ptr = (DatumValue*)allocator_.alloc(sizeof(DatumValue) * in_param->count()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memeory failed", K(objs_ptr));
   } else if (OB_FALSE_IT(tmp_in_param = new(tmp_in_param) ObTmpInParam(allocator_))) {
   } else if (OB_FAIL(tmp_in_param->in_param_.init(in_param->count()))) {
   } else {
-    objs_ptr = new(objs_ptr) ObObj[in_param->count()];
+    objs_ptr = new(objs_ptr) DatumValue[in_param->count()];
     bool always_false = false;
     for (int64_t i = 0; OB_SUCC(ret) && !always_false && i < in_param->count(); ++i) {
       bool is_valid = false;
@@ -1416,7 +1459,7 @@ int ObRangeGenerator::generate_tmp_not_in_param(const ObRangeNode &node,
         always_false = true;
         need_add = false;
       } else if (OB_LIKELY(ObSQLUtils::is_same_type_for_compare(objs_ptr[i].get_meta(),
-                                                                meta->column_type_.get_obj_meta()) &&
+                                                                meta->column_type_.get_sql_type_meta()) &&
                            !objs_ptr[i].is_decimal_int())) {
         objs_ptr[i].set_collation_type(meta->column_type_.get_collation_type());
       } else if (OB_FAIL(try_cast_value(*meta, objs_ptr[i], cmp, CO_EQ))) {
@@ -1439,7 +1482,7 @@ int ObRangeGenerator::generate_tmp_not_in_param(const ObRangeNode &node,
     } else {
       lib::ob_sort(&tmp_in_param->in_param_.at(0),
                    &tmp_in_param->in_param_.at(0) + tmp_in_param->in_param_.count(),
-                   InParamObjCmp());
+                   InParamObjCmp(ret));
     }
   }
   return ret;
@@ -1467,8 +1510,8 @@ int ObRangeGenerator::final_not_in_range_node(const ObRangeNode &node,
       ret = OB_ERR_UNEXPECTED;
     } else {
       for (int64_t i = 0; i < node.min_offset_; ++i) {
-        range->start_[i].set_nop_value();
-        range->end_[i].set_nop_value();
+        set_native_range_nop(range->start_[i]);
+        set_native_range_nop(range->end_[i]);
       }
       range->min_offset_ = node.min_offset_;
       range->max_offset_ = node.max_offset_;
@@ -1485,24 +1528,20 @@ int ObRangeGenerator::final_not_in_range_node(const ObRangeNode &node,
     } else if (0 == not_in_idx) {
       range->start_[range->min_offset_].set_null();
       start_padding = OB_RANGE_MAX_VALUE;
-      if (OB_FAIL(ob_write_obj(allocator_, *tmp_in_param->in_param_.at(not_in_idx),
-                                      range->end_[range->min_offset_]))) {
+      if (OB_FAIL(clone_typed_value(*tmp_in_param->in_param_.at(not_in_idx),range->end_[range->min_offset_],allocator_))) {
       } else {
         end_padding = OB_RANGE_MIN_VALUE;
       }
     } else if (tmp_in_param->in_param_.count() <= not_in_idx) {
-      if (OB_FAIL(ob_write_obj(allocator_, *tmp_in_param->in_param_.at(not_in_idx - 1),
-                               range->start_[range->min_offset_]))) {
+      if (OB_FAIL(clone_typed_value(*tmp_in_param->in_param_.at(not_in_idx - 1),range->start_[range->min_offset_],allocator_))) {
       } else {
         range->end_[range->min_offset_].set_max_value();
         end_padding = OB_RANGE_MAX_VALUE;
         start_padding = OB_RANGE_MAX_VALUE;
       }
     } else {
-      if (OB_FAIL(ob_write_obj(allocator_, *tmp_in_param->in_param_.at(not_in_idx - 1),
-                               range->start_[range->min_offset_]))) {
-      } else if (OB_FAIL(ob_write_obj(allocator_, *tmp_in_param->in_param_.at(not_in_idx),
-                                      range->end_[range->min_offset_]))) {
+      if (OB_FAIL(clone_typed_value(*tmp_in_param->in_param_.at(not_in_idx - 1),range->start_[range->min_offset_],allocator_))) {
+      } else if (OB_FAIL(clone_typed_value(*tmp_in_param->in_param_.at(not_in_idx),range->end_[range->min_offset_],allocator_))) {
       } else {
         start_padding = OB_RANGE_MAX_VALUE;
         end_padding = OB_RANGE_MIN_VALUE;
@@ -1535,7 +1574,7 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
 {
   int ret = OB_SUCCESS;
   uint32_t input_srid;
-  ObObj objs_ptr[2];
+  DatumValue objs_ptr[2];
   ObString wkb_str;
   double distance = NAN;
   bool is_valid = false;
@@ -1568,8 +1607,10 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
              OB_FAIL(get_spatial_relationship_by_mask(objs_ptr[1], op_type))) {
   } else if (!is_geo_type(op_type)) {
     tmp_geo_param->always_true_ = true;
+  } else if (OB_FALSE_IT(wkb_str=objs_ptr[0].get_string())) {
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                 exec_ctx_, &tmp_allocator, objs_ptr[0], wkb_str))) {
+                 exec_ctx_, &tmp_allocator, objs_ptr[0].get_type(),objs_ptr[0].get_collation_type(),
+                 objs_ptr[0].has_lob_header(),wkb_str))) {
   } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, input_srid))) {
   } else if (OB_ISNULL(exec_ctx_.get_srs_provider())) {
     ret = OB_NOT_INIT;
@@ -1830,11 +1871,11 @@ int ObRangeGenerator::final_geo_range_node(const ObRangeNode &node,
     }
   }
   if (OB_SUCC(ret)) {
-    ObObj start_val;
-    ObObj end_val;
-    start_val.set_uint64(start);
-    end_val.set_uint64(end);
-    if (OB_FAIL(fill_domain_range_node(node, start_val, end_val, range))) {
+    DatumValue start_val;
+    DatumValue end_val;
+    if (OB_FAIL(start_val.set_uint64(start,allocator_))) {
+    } else if (OB_FAIL(end_val.set_uint64(end,allocator_))) {
+    } else if (OB_FAIL(fill_domain_range_node(node, start_val, end_val, range))) {
     }
   }
   return ret;
@@ -1853,7 +1894,7 @@ int ObRangeGenerator::check_need_merge_range_nodes(const ObRangeNode *node,
   return ret;
 }
 int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_graph,
-                                              const ParamStore &param_store,
+                                              const common::DatumParamStore &param_store,
                                               ObIAllocator &allocator,
                                               void *range_buffer)
 {
@@ -1862,8 +1903,8 @@ int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_g
   const ObRangeNode *node = pre_range_graph.get_range_head();
   const ObRangeMap &range_map = pre_range_graph.get_range_map();
   ObNewRange *range = static_cast<ObNewRange*>(range_buffer);
-  ObObj *starts = reinterpret_cast<ObObj*>(static_cast<char*>(range_buffer) + sizeof(ObNewRange));
-  ObObj *ends = starts + node->column_cnt_;
+  DatumValue *starts = reinterpret_cast<DatumValue*>(static_cast<char*>(range_buffer) + sizeof(ObNewRange));
+  DatumValue *ends = starts + node->column_cnt_;
   for (int i = 0; OB_SUCC(ret) && !always_false && i < node->column_cnt_; ++i) {
     int64_t start_idx = node->start_keys_[i];
     int64_t end_idx = node->end_keys_[i];
@@ -1876,17 +1917,35 @@ int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_g
       ends[i].set_null();
     } else {
       const ObRangeMap::ExprFinalInfo& expr_info = range_map.expr_final_infos_.at(start_idx);
-      const ObObj* src_obj = nullptr;
+      const ObDatum *source = nullptr;
+      const SqlTypeMeta *source_meta = nullptr;
       if (expr_info.is_param_) {
-        src_obj = &param_store.at(expr_info.param_idx_);
+        const int64_t index = expr_info.param_idx_;
+        if (index < 0 || index >= param_store.count()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          const DatumParameter &parameter = param_store.at(index);
+          source = &parameter.datum_;
+          source_meta = &parameter.get_type_meta();
+        }
       } else if (expr_info.is_const_) {
-        src_obj = expr_info.const_val_;
+        source = expr_info.const_val_;
+        source_meta = &expr_info.const_meta_;
       }
-      if (src_obj->is_null() && !expr_info.null_safe_) {
+      if (OB_FAIL(ret)) {
+      } else if (source == nullptr || source_meta == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (source->is_null() && !expr_info.null_safe_) {
         always_false = true;
-      } else if (OB_FAIL(ob_write_obj(allocator, *src_obj, *(starts + i)))) {
       } else {
-        *(ends + i) = *(starts + i);
+        // ObNewRange still owns legacy rowkeys. The runtime parameter reader
+        // stays native; adapt and own payloads only at this remaining boundary.
+        ObDatum bound = *source;
+        const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(source_meta->get_type());
+        DatumValue projected;
+        if (OB_FAIL(project_datum_value_view(bound,*source_meta,mapping,starts[i].meta_,projected,true))) {
+        } else if (OB_FAIL(clone_typed_value(projected,starts[i],allocator))) {
+        } else { ends[i]=starts[i]; }
       }
     }
   }
@@ -1918,7 +1977,7 @@ int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_g
 }
 
 int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_range_graph,
-                                                     const ParamStore &param_store,
+                                                     const common::DatumParamStore &param_store,
                                                      bool &is_valid)
 {
   int ret = OB_SUCCESS;
@@ -1930,7 +1989,7 @@ int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_
     int64_t end_idx = node->end_keys_[i];
     const ObRangeColumnMeta *meta = pre_range_graph.get_column_meta(i);
     int64_t cmp = 0;
-    const ObObj* src_obj = nullptr;
+    const SqlTypeMeta *source_meta = nullptr;
     if (OB_ISNULL(meta)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (start_idx == OB_RANGE_MIN_VALUE &&
@@ -1945,19 +2004,28 @@ int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_
     } else if (start_idx == OB_RANGE_NULL_VALUE) {
       // do nothing
     } else if (range_map.expr_final_infos_.at(start_idx).is_param_) {
-      src_obj = &param_store.at(range_map.expr_final_infos_.at(start_idx).param_idx_);
+      const int64_t index = range_map.expr_final_infos_.at(start_idx).param_idx_;
+      if (index < 0 || index >= param_store.count()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        source_meta = &param_store.at(index).get_type_meta();
+      }
     } else if (range_map.expr_final_infos_.at(start_idx).is_const_) {
-      src_obj = range_map.expr_final_infos_.at(start_idx).const_val_;
+      if (range_map.expr_final_infos_.at(start_idx).const_val_ == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        source_meta = &range_map.expr_final_infos_.at(start_idx).const_meta_;
+      }
     } else {
       ret = OB_ERR_UNEXPECTED;
     }
 
     if (OB_FAIL(ret)) {
-    } else if (src_obj == nullptr) {
+    } else if (source_meta == nullptr) {
       // do nothing
-    } else if (OB_LIKELY(ObSQLUtils::is_same_type_for_compare(src_obj->get_meta(),
-                                                              meta->column_type_.get_obj_meta()) &&
-                         !src_obj->is_decimal_int())) {
+    } else if (OB_LIKELY(ObSQLUtils::is_same_type_for_compare(*source_meta,
+                                                              meta->column_type_.get_sql_type_meta()) &&
+                         !source_meta->is_decimal_int())) {
       // do nothing
     } else {
       is_valid = false;
@@ -1967,16 +2035,16 @@ int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_
 }
 
 int ObRangeGenerator::cast_double_to_fixed_double(const ObRangeColumnMeta &meta,
-                                                  const ObObj& in_value,
-                                                  ObObj &out_value)
+                                                  const DatumValue& in_value,
+                                                  DatumValue &out_value, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   double value = in_value.get_double();
   if (ObUDoubleType == meta.column_type_.get_type() && value < 0.) {
-    out_value.set_double(meta.column_type_.get_type(), 0.);
+    ret = out_value.set_double(meta.column_type_.get_type(), 0., owner);
   } else if (OB_FAIL(refine_real_range(meta.column_type_.get_accuracy(), value))) {
   } else {
-    out_value.set_double(meta.column_type_.get_type(), value);
+    ret = out_value.set_double(meta.column_type_.get_type(), value, owner);
   }
   return ret;
 }
@@ -2006,7 +2074,7 @@ int ObRangeGenerator::refine_real_range(const ObAccuracy &accuracy, double &valu
   return ret;
 }
 
-int ObRangeGenerator::get_spatial_relationship_by_mask(const ObObj& extra, ObDomainOpType& op_type)
+int ObRangeGenerator::get_spatial_relationship_by_mask(const DatumValue& extra, ObDomainOpType& op_type)
 {
   int ret = OB_SUCCESS;
   if (!ob_is_string_type(extra.get_type())) {
@@ -2053,10 +2121,10 @@ int ObRangeGenerator::final_json_member_of_range_node(const ObRangeNode *node,
                                                       bool need_cache)
 {
   int ret = OB_SUCCESS;
-  ObObj obj;
+  DatumValue obj;
   const ObRangeColumnMeta *meta = NULL;
   ObIJsonBase* j_base = nullptr;
-  ObObj cast_obj;
+  DatumValue cast_obj;
   range = need_cache ? all_tmp_ranges_.at(node->node_id_) : nullptr;
   bool is_valid = false;
   int64_t cmp = 0;
@@ -2083,11 +2151,7 @@ int ObRangeGenerator::final_json_member_of_range_node(const ObRangeNode *node,
                                                                   false,
                                                                   &allocator_,
                                                                   j_base))) {
-      } else if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_obj(&allocator_,
-                                                                 &exec_ctx_,
-                                                                 j_base,
-                                                                 meta->column_type_,
-                                                                 cast_obj))) {
+      } else if (OB_FAIL(cast_native_range_json(allocator_,exec_ctx_,j_base,meta->column_type_,cast_obj))) {
       }
     }
 
@@ -2104,8 +2168,8 @@ int ObRangeGenerator::final_json_member_of_range_node(const ObRangeNode *node,
 }
 
 int ObRangeGenerator::fill_domain_range_node(const ObRangeNode &node,
-                                             const ObObj& start_val,
-                                             const ObObj& end_val,
+                                             const DatumValue& start_val,
+                                             const DatumValue& end_val,
                                              ObTmpRange *range)
 {
   int ret = OB_SUCCESS;
@@ -2133,7 +2197,7 @@ int ObRangeGenerator::fill_domain_range_node(const ObRangeNode &node,
         } else if (start == OB_RANGE_NULL_VALUE) {
           range->start_[i].set_null();
         } else if (start == OB_RANGE_EMPTY_VALUE) {
-          range->start_[i].set_nop_value();
+          set_native_range_nop(range->start_[i]);
         } else {
           ret = OB_ERR_UNEXPECTED;
         }
@@ -2145,7 +2209,7 @@ int ObRangeGenerator::fill_domain_range_node(const ObRangeNode &node,
         } else if (end == OB_RANGE_NULL_VALUE) {
           range->end_[i].set_null();
         } else if (end == OB_RANGE_EMPTY_VALUE) {
-          range->end_[i].set_nop_value();
+          set_native_range_nop(range->end_[i]);
         } else {
           ret = OB_ERR_UNEXPECTED;
         }
@@ -2160,9 +2224,9 @@ int ObRangeGenerator::generate_tmp_json_array_param(const ObRangeNode &node,
 {
   int ret = OB_SUCCESS;
   InParam *in_param = nullptr;
-  ObObj* objs_ptr = nullptr;
+  DatumValue* objs_ptr = nullptr;
   const ObRangeColumnMeta *meta = nullptr;
-  ObObj const_param;
+  DatumValue const_param;
   bool is_valid = false;
   ObIJsonBase* j_base = nullptr;
   if (OB_UNLIKELY(!node.is_domain_node_ ||
@@ -2190,24 +2254,21 @@ int ObRangeGenerator::generate_tmp_json_array_param(const ObRangeNode &node,
   } else if (OB_ISNULL(j_base)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (j_base->is_json_scalar(j_base->json_type())) {
-    ObObj cast_obj = const_param;
+    DatumValue cast_obj = const_param;
     int64_t cmp = 0;
-    if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_obj(&allocator_,
-                                                        &exec_ctx_,
-                                                        j_base,
-                                                        meta->column_type_,
-                                                        cast_obj))) {
+    if (OB_FAIL(cast_native_range_json(allocator_,exec_ctx_,j_base,meta->column_type_,cast_obj))) {
       ret = OB_SUCCESS;
       tmp_in_param->always_true_ = true;
     } else if (OB_FAIL(try_cast_value(*meta, cast_obj, cmp, CO_EQ))) {
     } else if (cmp != 0) {
       tmp_in_param->always_true_ = true;
-    } else if (OB_ISNULL(objs_ptr = (ObObj*)allocator_.alloc(sizeof(ObObj)))) {
+    } else if (OB_ISNULL(objs_ptr = (DatumValue*)allocator_.alloc(sizeof(DatumValue)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memeory failed", K(objs_ptr));
     } else if (OB_FAIL(tmp_in_param->in_param_.init(1))) {
     } else if (OB_FAIL(tmp_in_param->in_param_.push_back(objs_ptr))) {
     } else {
+      new (objs_ptr) DatumValue();
       *objs_ptr = cast_obj;
     }
   } else if (j_base->json_type() == common::ObJsonNodeType::J_ARRAY) {
@@ -2215,21 +2276,18 @@ int ObRangeGenerator::generate_tmp_json_array_param(const ObRangeNode &node,
     int64_t cmp = 0;
     if (size == 0) {
       tmp_in_param->always_true_ = true;
-    } else if (OB_ISNULL(objs_ptr = (ObObj*)allocator_.alloc(sizeof(ObObj) * size))) {
+    } else if (OB_ISNULL(objs_ptr = (DatumValue*)allocator_.alloc(sizeof(DatumValue) * size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memeory failed", K(objs_ptr));
     } else if (OB_FAIL(tmp_in_param->in_param_.init(size))) {
     } else {
+      new (objs_ptr) DatumValue[size];
       for (int64_t i = 0; OB_SUCC(ret) && !tmp_in_param->always_true_ && i < size; ++i) {
         ObIJsonBase* tmp_j_base = nullptr;
         if (OB_FAIL(j_base->get_array_element(i, tmp_j_base))) {
         } else if (OB_ISNULL(tmp_j_base)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_obj(&allocator_,
-                                                                   &exec_ctx_,
-                                                                   tmp_j_base,
-                                                                   meta->column_type_,
-                                                                   objs_ptr[i]))) {
+        } else if (OB_FAIL(cast_native_range_json(allocator_,exec_ctx_,tmp_j_base,meta->column_type_,objs_ptr[i]))) {
           ret = OB_SUCCESS;
           tmp_in_param->always_true_ = true;
         } else if (OB_FAIL(try_cast_value(*meta, objs_ptr[i], cmp, CO_EQ))) {
@@ -2299,7 +2357,7 @@ int ObRangeGenerator::false_range(const ObNewRange &range, bool &is_false)
 
 int ObRangeGenerator::fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
                                              const ObPreRangeGraph &pre_range_graph,
-                                             ObIArray<ObObj> &params,
+                                             ObIArray<DatumValue> &params,
                                              ObIAllocator &allocator,
                                              ObExecContext &exec_ctx,
                                              const common::ObDataTypeCastParams &dtc_params,
@@ -2309,7 +2367,7 @@ int ObRangeGenerator::fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
 {
   int ret = OB_SUCCESS;
   const ObIArray<ObFastFinalPos> &pos_arr = pre_range_graph.get_general_nlj_range_extraction();
-  ObSEArray<ObObj, 4> values;
+  ObSEArray<DatumValue, 4> values;
   int64_t cur_datetime = 0;
   always_false = false;
   if (OB_NOT_NULL(exec_ctx.get_physical_plan_ctx())) {
@@ -2359,9 +2417,9 @@ int ObRangeGenerator::fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
       for (int64_t j = 0; OB_SUCC(ret) && j < pos_arr.count(); ++j) {
         int64_t offset = pos_arr.at(j).offset_;
         if (pos_arr.at(j).is_upper_bound_) {
-          range->start_key_.get_obj_ptr()[offset] = values.at(j);
+          range->start_key_.get_values()[offset] = values.at(j);
         } else {
-          range->end_key_.get_obj_ptr()[offset] = values.at(j);
+          range->end_key_.get_values()[offset] = values.at(j);
         }
       }
       if (OB_SUCC(ret) && i == 0) {
@@ -2377,7 +2435,7 @@ int ObRangeGenerator::check_can_fast_extract_nlj_range(ObIAllocator &allocator,
                                                        ObExecContext &exec_ctx,
                                                        const common::ObDataTypeCastParams &dtc_params,
                                                        const ObPreRangeGraph &pre_range_graph,
-                                                       ObIArray<ObObj> &objs,
+                                                       ObIArray<DatumValue> &objs,
                                                        bool &is_always_false,
                                                        bool &can_fast_extract)
 {
@@ -2392,7 +2450,7 @@ int ObRangeGenerator::check_can_fast_extract_nlj_range(ObIAllocator &allocator,
   for (int64_t i = 0; OB_SUCC(ret) && can_fast_extract && i < pos_arr.count(); ++i) {
     bool is_valid = false;
     const ObRangeColumnMeta *meta = pre_range_graph.get_column_meta(pos_arr.at(i).offset_);
-    ObObj cast_obj;
+    DatumValue cast_obj;
     int64_t cmp = 0;
     if (OB_ISNULL(meta)) {
       ret = OB_ERR_UNEXPECTED;
@@ -2431,7 +2489,7 @@ int ObRangeGenerator::calc_copy_ranges_buffer_size(const ObIArray<ObNewRange*> &
                                                    int64_t &extra_buffer_size)
 {
   int ret = OB_SUCCESS;
-  size_t rowkey_size = sizeof(ObObj) * column_cnt * 2;
+  size_t rowkey_size = sizeof(DatumValue) * column_cnt * 2;
   size_t range_size = sizeof(ObNewRange) + rowkey_size;
   one_range_size = range_size;
   range_buffer_size = range_size * ranges.count();
@@ -2440,13 +2498,13 @@ int ObRangeGenerator::calc_copy_ranges_buffer_size(const ObIArray<ObNewRange*> &
     const ObNewRange *range = ranges.at(i);
     if (OB_ISNULL(range)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(range->get_start_key().get_obj_cnt() != column_cnt ||
-                           range->get_end_key().get_obj_cnt() != column_cnt)) {
+    } else if (OB_UNLIKELY(range->get_start_key().get_value_count() != column_cnt ||
+                           range->get_end_key().get_value_count() != column_cnt)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       for (int64_t j = 0; j < column_cnt; ++j) {
-        extra_buffer_size += range->get_start_key().get_obj_ptr()[j].get_deep_copy_size();
-        extra_buffer_size += range->get_end_key().get_obj_ptr()[j].get_deep_copy_size();
+        extra_buffer_size += range->get_start_key().get_values()[j].datum_.get_deep_copy_size();
+        extra_buffer_size += range->get_end_key().get_values()[j].datum_.get_deep_copy_size();
       }
     }
   }
@@ -2466,9 +2524,11 @@ int ObRangeGenerator::copy_ranges(const ObIArray<ObNewRange*> &ranges,
   for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
     const ObNewRange *src_range = ranges.at(i);
     char *cur_range_buffer = range_buffer + one_range_size * i;
-    ObObj* starts = reinterpret_cast<ObObj*>(static_cast<char*>(cur_range_buffer) + sizeof(ObNewRange));
-    ObObj* ends = starts + column_cnt;
+    DatumValue* starts = reinterpret_cast<DatumValue*>(static_cast<char*>(cur_range_buffer) + sizeof(ObNewRange));
+    DatumValue* ends = starts + column_cnt;
     ObNewRange *dst_range = new(cur_range_buffer) ObNewRange();
+    new (starts) DatumValue[column_cnt];
+    new (ends) DatumValue[column_cnt];
     dst_range->start_key_.assign(starts, column_cnt);
     dst_range->end_key_.assign(ends, column_cnt);
     dst_range->table_id_ = src_range->table_id_;
@@ -2476,16 +2536,16 @@ int ObRangeGenerator::copy_ranges(const ObIArray<ObNewRange*> &ranges,
     dst_range->flag_= src_range->flag_;
     if (OB_ISNULL(extra_buffer)) {
       for (int64_t j = 0; j < column_cnt; ++j) {
-        starts[j] = src_range->get_start_key().get_obj_ptr()[j];
-        ends[j] = src_range->get_end_key().get_obj_ptr()[j];
+        starts[j] = src_range->get_start_key().get_values()[j];
+        ends[j] = src_range->get_end_key().get_values()[j];
       }
     } else {
       for (int64_t j = 0; j < column_cnt; ++j) {
-        if (OB_FAIL(starts[j].deep_copy(src_range->get_start_key().get_obj_ptr()[j],
+        if (OB_FAIL(copy_native_range_value(src_range->get_start_key().get_values()[j],starts[j],
                                         extra_buffer,
                                         extra_buffer_size,
                                         extra_obj_pos))) {
-        } else if (OB_FAIL(ends[j].deep_copy(src_range->get_end_key().get_obj_ptr()[j],
+        } else if (OB_FAIL(copy_native_range_value(src_range->get_end_key().get_values()[j],ends[j],
                                              extra_buffer,
                                              extra_buffer_size,
                                              extra_obj_pos))) {

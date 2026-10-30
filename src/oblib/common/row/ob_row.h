@@ -21,7 +21,7 @@
 #include "lib/utility/ob_hang_fatal_error.h"
 #include "lib/json/ob_yson.h"
 #include "common/row/ob_row_desc.h"
-#include "common/rowkey/ob_rowkey.h"
+#include "common/datum/datum_value_buffer.h"
 
 namespace commontest
 {
@@ -46,7 +46,7 @@ public:
 };
 
 /**
- * @brief: wrap row pointer(an ObObj array) and row size
+ * @brief: Borrow a row of typed native DatumValue descriptors and its physical size
  */
 class ObNewRow final
 {
@@ -57,7 +57,7 @@ public:
        projector_size_(0),
        projector_(NULL)
   {}
-  ObNewRow(ObObj *cells, int64_t count)
+  ObNewRow(DatumValue *cells, int64_t count)
       :cells_(cells),
        count_(count),
        projector_size_(0),
@@ -75,7 +75,7 @@ public:
     return !is_invalid();
   }
 
-  OB_INLINE void assign(ObObj *ptr, const int64_t count)
+  OB_INLINE void assign(DatumValue *ptr, const int64_t count)
   {
     cells_ = ptr;
     count_ = count;
@@ -85,11 +85,19 @@ public:
   //According to the existing buffer to construct an ObNewRow, the memory format is:
   //The memory structure allocated by sizeof(ObNewRow) + ObNewRow.deep_copy()
   static int construct(char *buf, int64_t len, int64_t &pos, ObNewRow *&row);
-  NEED_SERIALIZE_AND_DESERIALIZE;
+  int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int64_t get_serialize_size() const;
+  // count_ and projector_size_ are the caller-reserved capacities on entry.
+  // Payload ownership is explicit; successful decode retains both pointers.
+  int deserialize(ObIAllocator &owner, const char *buf, int64_t data_len, int64_t &pos);
+  int clone(ObIAllocator &owner, ObNewRow &output) const;
+  int64_t get_projected_deep_copy_size() const;
+  int deep_copy_projected(const ObNewRow &source, char *buf, int64_t len, int64_t &pos);
+
 
   bool operator==(const ObNewRow &other) const;
   OB_INLINE int64_t get_count() const { return projector_size_ > 0 ? projector_size_ : count_; }
-  const ObObj &get_cell(int64_t index) const
+  const DatumValue &get_cell(int64_t index) const
   {
     int64_t real_idx = index;
     if (projector_size_ > 0) {
@@ -105,7 +113,7 @@ public:
     return cells_[real_idx];
   }
 
-  ObObj &get_cell(int64_t index)
+  DatumValue &get_cell(int64_t index)
   {
     int64_t real_idx = index;
     if (projector_size_ > 0) {
@@ -162,7 +170,7 @@ public:
     return pos;
   }
 public:
-  ObObj *cells_;
+  DatumValue *cells_;
   int64_t count_;  // cells count
   int64_t projector_size_;
   int32_t *projector_;  // if projector is not NULL, the caller should use this projector to access cells_
@@ -172,47 +180,17 @@ template<typename AllocatorT>
 int ob_write_row(AllocatorT &allocator, const ObNewRow &src, ObNewRow &dst)
 {
   int ret = OB_SUCCESS;
-  void *ptr1 = NULL;
-  void *ptr2 = NULL;
   if (src.count_ <= 0) {
-    dst.count_ = src.count_;
-    dst.cells_ = NULL;
-    dst.projector_size_ = 0;
-    dst.projector_ = NULL;
-  } else if (OB_ISNULL(ptr1 = allocator.alloc(sizeof(ObObj) * src.count_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    _OB_LOG(ERROR, "out of memory");
-  } else if (NULL != src.projector_
-      && OB_ISNULL(ptr2 = allocator.alloc(sizeof(int32_t) * src.projector_size_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    _OB_LOG(ERROR, "out of memory");
+    dst.count_ = src.count_; dst.cells_ = nullptr; dst.projector_size_ = 0; dst.projector_ = nullptr;
   } else {
-    if (NULL != src.projector_) {
-      MEMCPY(ptr2, src.projector_, sizeof(int32_t) * src.projector_size_);
-    }
-    ObObj *objs = new(ptr1) ObObj[src.count_]();
-    for (int64_t i = 0; OB_SUCC(ret) && i < src.count_; ++i) {
-      if (OB_FAIL(ob_write_obj(allocator, src.cells_[i], objs[i]))) {
-        ObCStringHelper helper;
-        _OB_LOG(WARN, "copy ObObj error, row=%s, i=%ld, ret=%d",
-            helper.convert(src.cells_[i]), i, ret);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      dst.count_ = src.count_;
-      dst.cells_ = objs;
-      dst.projector_size_ = src.projector_size_;
-      dst.projector_ = (NULL != src.projector_) ? static_cast<int32_t *>(ptr2) : NULL;
-    }
-  }
-  if (OB_FAIL(ret)) {
-    if (NULL != ptr1) {
-      allocator.free(ptr1);
-      ptr1 = NULL;
-    }
-    if (NULL != ptr2) {
-      allocator.free(ptr2);
-      ptr2 = NULL;
+    const int64_t bytes = src.get_deep_copy_size();
+    char *memory = nullptr;
+    if (bytes == INT64_MAX) { ret = OB_SIZE_OVERFLOW; }
+    else if ((memory = static_cast<char *>(allocator.alloc(bytes))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      ObNewRow candidate; int64_t pos = 0;
+      if (OB_FAIL(candidate.deep_copy(src, memory, bytes, pos))) { allocator.free(memory); }
+      else { dst = candidate; }
     }
   }
   return ret;
@@ -222,21 +200,16 @@ template<typename AllocatorT>
 int ob_write_row_by_projector(AllocatorT &allocator, const ObNewRow &src, ObNewRow &dst)
 {
   int ret = OB_SUCCESS;
-  void *ptr = NULL;
-  int64_t len = sizeof(ObObj) * src.get_count();
-  if (src.count_ <= 0) {
-    dst.reset();
-  } else if (OB_ISNULL(ptr = allocator.alloc(len))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    OB_LOG(WARN, "no memory to create row cells", K(ret), K(len));
-  } else {
-    dst.cells_ = new(ptr) ObObj[src.get_count()];
-    dst.count_ = src.get_count();
-    dst.projector_ = NULL;
-    dst.projector_size_ = 0;
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < src.get_count(); ++i) {
-    if (OB_FAIL(ob_write_obj(allocator, src.get_cell(i), dst.cells_[i]))) {
+  if (src.count_ <= 0) { dst.reset(); }
+  else {
+    const int64_t bytes = src.get_projected_deep_copy_size();
+    char *memory = nullptr;
+    if (bytes == INT64_MAX) { ret = OB_SIZE_OVERFLOW; }
+    else if ((memory = static_cast<char *>(allocator.alloc(bytes))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      ObNewRow candidate; int64_t pos = 0;
+      if (OB_FAIL(candidate.deep_copy_projected(src, memory, bytes, pos))) { allocator.free(memory); }
+      else { dst = candidate; }
     }
   }
   return ret;
@@ -246,23 +219,16 @@ template<typename AllocatorT>
 int ob_create_row(AllocatorT &allocator, int64_t col_count, ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(col_count <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "row_count is invalid", K(ret), K(col_count));
-  } else {
-    void *row_buf = NULL;
-    size_t row_size = sizeof(ObNewRow);
-    int64_t row_buf_len = row_size + col_count * sizeof(ObObj);
-    if (OB_ISNULL(row_buf = allocator.alloc(row_buf_len))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(WARN, "allocate row buffer failed", K(ret), K(row_buf_len));
-    } else {
-      void *cells_buf = static_cast<char*>(row_buf) + row_size;
-      row = new(row_buf) ObNewRow();
-      row->cells_ = new(cells_buf) ObObj[col_count];
-      row->count_ = col_count;
-      row->projector_ = NULL;
-      row->projector_size_ = 0;
+  const int64_t cells_size = DatumValueBuffer::allocation_size(col_count);
+  if (col_count <= 0) { ret = OB_INVALID_ARGUMENT; }
+  else if (cells_size > INT64_MAX - sizeof(ObNewRow)) { ret = OB_SIZE_OVERFLOW; }
+  else {
+    char *memory = static_cast<char *>(allocator.alloc(sizeof(ObNewRow) + cells_size));
+    if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      ObNewRow *candidate = new (memory) ObNewRow();
+      DatumValueBuffer::initialize(memory + sizeof(ObNewRow), col_count, candidate->cells_);
+      candidate->count_ = col_count; row = candidate;
     }
   }
   return ret;
@@ -273,21 +239,13 @@ int ob_create_row(AllocatorT &allocator, int64_t col_count, ObNewRow &row)
 {
   int ret = OB_SUCCESS;
   row.reset();
-  if (OB_UNLIKELY(col_count <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "row_count is invalid", K(ret), K(col_count));
-  } else {
-    void *cell_buf = NULL;
-    int64_t cell_buf_len = col_count * sizeof(ObObj);
-    if (OB_ISNULL(cell_buf = allocator.alloc(cell_buf_len))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(WARN, "allocate row buffer failed", K(ret), K(cell_buf_len));
-    } else {
-      row.cells_ = new(cell_buf) ObObj[col_count];
-      row.count_ = col_count;
-      row.projector_ = NULL;
-      row.projector_size_ = 0;
-    }
+  const int64_t bytes = DatumValueBuffer::allocation_size(col_count);
+  if (col_count <= 0) { ret = OB_INVALID_ARGUMENT; }
+  else if (bytes == INT64_MAX) { ret = OB_SIZE_OVERFLOW; }
+  else {
+    void *memory = allocator.alloc(bytes);
+    if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else { DatumValueBuffer::initialize(memory, col_count, row.cells_); row.count_ = col_count; }
   }
   return ret;
 }
@@ -296,36 +254,28 @@ template<typename AllocatorT>
 int ob_create_rows(AllocatorT &allocator, int64_t row_count, int64_t col_count, ObNewRow *&rows)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(col_count <= 0 || row_count <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "col count or row count is invalid", K(ret), K(col_count), K(row_count));
-  } else {
-    void *rows_buf = nullptr;
-    const size_t row_size = sizeof(ObNewRow);
-    const size_t col_size = col_count * sizeof(ObObj);
-    const int64_t rows_buf_len = (row_size + col_size) * row_count;
-    if (OB_ISNULL(rows_buf = allocator.alloc(rows_buf_len))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(WARN, "Failed to allocate row buffer", K(ret), K(rows_buf_len));
-    } else {
-      char *row_buf = static_cast<char*>(rows_buf);
-      char *col_buf = row_buf + row_size * row_count;
+  const int64_t cells_size = DatumValueBuffer::allocation_size(col_count);
+  if (col_count <= 0 || row_count <= 0) { ret = OB_INVALID_ARGUMENT; }
+  else if (cells_size > INT64_MAX - sizeof(ObNewRow)
+      || row_count > INT64_MAX / (sizeof(ObNewRow) + cells_size)) { ret = OB_SIZE_OVERFLOW; }
+  else {
+    const int64_t total = (sizeof(ObNewRow) + cells_size) * row_count;
+    char *memory = static_cast<char *>(allocator.alloc(total));
+    if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      char *cells = memory + sizeof(ObNewRow) * row_count;
       for (int64_t i = 0; i < row_count; ++i) {
-        ObNewRow *row = new(row_buf) ObNewRow();
-        row->cells_ = new(col_buf) ObObj[col_count];
-        row->count_ = col_count;
-        row->projector_ = nullptr;
-        row->projector_size_ = 0;
-        row_buf = row_buf + row_size;
-        col_buf = col_buf + col_size;
+        ObNewRow *candidate = new (memory + sizeof(ObNewRow) * i) ObNewRow();
+        DatumValueBuffer::initialize(cells, col_count, candidate->cells_);
+        candidate->count_ = col_count; cells += cells_size;
       }
-      rows = reinterpret_cast<ObNewRow *>(rows_buf);
+      rows = reinterpret_cast<ObNewRow *>(memory);
     }
   }
   return ret;
 }
 
+static_assert(sizeof(ObNewRow) == 32, "Native row views retain their established layout");
 } // end namespace common
 } // end namespace oceanbase
-
 #endif /* OCEANBASE_COMMON_OB_ROW_ */

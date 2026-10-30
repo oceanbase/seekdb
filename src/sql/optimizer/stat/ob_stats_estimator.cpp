@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_stats_estimator.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
@@ -399,10 +401,10 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           for (int64_t i = 0; OB_SUCC(ret) && i < get_item_size(); ++i) {
-            ObObj tmp;
-            ObObj val;
-            if (OB_FAIL(client_result->get_obj(i, tmp))) {
-            } else if (OB_FAIL(ob_write_obj(allocator_, tmp, val))) {
+            DatumValue tmp;
+            DatumValue val;
+            if (OB_FAIL(client_result->get_value(i, tmp))) {
+            } else if (OB_FAIL(clone_typed_value(tmp, val, allocator_))) {
             } else if (OB_FAIL(add_result(val))) {
             }
           }
@@ -506,8 +508,9 @@ int ObStatsEstimator::copy_basic_col_stats(const int64_t cur_row_cnt,
           num_not_null = static_cast<int64_t>(num_not_null * 100 / sample_value_);
           num_null = static_cast<int64_t>(num_null * 100 / sample_value_);
         }
-        dst_col_stats.at(i)->set_max_value(src_col_stats.at(i)->get_max_value());
-        dst_col_stats.at(i)->set_min_value(src_col_stats.at(i)->get_min_value());
+        if (OB_FAIL(dst_col_stats.at(i)->set_max_value(src_col_stats.at(i)->get_max_value()))) {
+        } else if (OB_FAIL(dst_col_stats.at(i)->set_min_value(src_col_stats.at(i)->get_min_value()))) {
+        }
         dst_col_stats.at(i)->set_num_not_null(num_not_null);
         dst_col_stats.at(i)->get_histogram().set_sample_size(src_col_stats.at(i)->get_num_not_null());
         dst_col_stats.at(i)->set_num_null(num_null);

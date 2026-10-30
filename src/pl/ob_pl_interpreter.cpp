@@ -460,10 +460,10 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
       }
     }
     if (OB_INVALID_INDEX != result_idx) {
-      ObObjParam result;
+      DatumParameter result;
       OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_value_index(i), result_idx, &result));
     } else if (OB_NOT_NULL(into) && into->is_sys_func_expr()) {
-      ObObjParam result;
+      DatumParameter result;
       const ObRawExpr *value_expr = s->get_value_expr(i);
       const bool is_default = OB_NOT_NULL(value_expr) && T_DEFAULT == value_expr->get_expr_type();
       OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_value_index(i), OB_INVALID_INDEX, &result));
@@ -475,13 +475,13 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
       // reachable in MySQL-only parsing here.
       //
       // Evaluating the for-write obj-access expr yields an objparam whose extend points to a
-      // ObPlCompiteWrite { allocator_, value_addr_ }: value_addr_ is the destination ObObj*,
+      // ObPlCompiteWrite { allocator_, value_addr_ }: value_addr_ is the destination DatumValue*,
       // allocator_ the allocator for deep-copying string/number payloads. spi_copy_datum then
       // converts + copies the computed RHS into that destination, exactly the runtime call
-      // codegen emits via ObObjType::generate_copy (a NULL allocator falls back to the ctx
+      // codegen emits via SqlValueType::generate_copy (a NULL allocator falls back to the ctx
       // statement allocator inside spi_copy_datum).
-      ObObjParam rhs;
-      ObObjParam into_addr;
+      DatumParameter rhs;
+      DatumParameter into_addr;
       ObPLDataType final_type;
       OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_value_index(i), OB_INVALID_INDEX, &rhs));
       OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_into_index(i), OB_INVALID_INDEX, &into_addr));
@@ -500,7 +500,7 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
         ret = OB_ERR_UNEXPECTED;
       } else {
         ObPlCompiteWrite *cw = reinterpret_cast<ObPlCompiteWrite *>(into_addr.get_ext());
-        ObObj *dest = OB_NOT_NULL(cw) ? reinterpret_cast<ObObj *>(cw->value_addr_) : NULL;
+        DatumValue *dest = OB_NOT_NULL(cw) ? reinterpret_cast<DatumValue *>(cw->value_addr_) : NULL;
         ObIAllocator *alloc = OB_NOT_NULL(cw) ? reinterpret_cast<ObIAllocator *>(cw->allocator_) : NULL;
         common::ObDataType *dest_type = final_type.get_data_type();
         CK (OB_NOT_NULL(cw), OB_NOT_NULL(dest), OB_NOT_NULL(dest_type));
@@ -523,7 +523,7 @@ static int exec_declare(ObPLExecCtx *ctx, const ObPLDeclareVarStmt *s)
   CK (OB_NOT_NULL(s));
   if (OB_SUCC(ret) && OB_INVALID_INDEX != s->get_default()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < s->get_index().count(); ++i) {
-      ObObjParam result;
+      DatumParameter result;
       OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_default(), s->get_index(i), &result));
     }
   }
@@ -535,7 +535,7 @@ static int exec_if(ObPLExecCtx *ctx, const ObPLIfStmt *s, CtrlState &ctrl)
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(s));
   if (OB_SUCC(ret)) {
-    ObObjParam cond;
+    DatumParameter cond;
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_cond(), OB_INVALID_INDEX, &cond));
     if (OB_FAIL(ret)) {
     } else if (cond.is_true()) {
@@ -555,13 +555,13 @@ static int exec_case(ObPLExecCtx *ctx, const ObPLCaseStmt *s, CtrlState &ctrl)
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(s));
   if (OB_SUCC(ret) && OB_INVALID_INDEX != s->get_case_expr() && OB_INVALID_INDEX != s->get_case_var()) {
-    ObObjParam tmp;
+    DatumParameter tmp;
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_case_expr(), s->get_case_var(), &tmp));
   }
   bool matched = false;
   const ObPLCaseStmt::WhenClauses &whens = s->get_when_clauses();
   for (int64_t i = 0; OB_SUCC(ret) && !matched && i < whens.count(); ++i) {
-    ObObjParam cond;
+    DatumParameter cond;
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, whens.at(i).expr_, OB_INVALID_INDEX, &cond));
     if (OB_SUCC(ret) && cond.is_true()) {
       matched = true;
@@ -598,7 +598,7 @@ static int exec_while(ObPLExecCtx *ctx, const ObPLCondLoop *s, CtrlState &ctrl)
   int64_t check_count = 0;
   CK (OB_NOT_NULL(s));
   while (OB_SUCC(ret)) {
-    ObObjParam cond;
+    DatumParameter cond;
     OZ (loop_check_early_exit(ctx, check_count));
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_cond(), OB_INVALID_INDEX, &cond));
     if (OB_FAIL(ret) || !cond.is_true()) {
@@ -640,7 +640,7 @@ static int exec_repeat(ObPLExecCtx *ctx, const ObPLRepeatStmt *s, CtrlState &ctr
     if (OB_FAIL(ret) || loop_should_stop(ctrl, s)) {
       break;
     }
-    ObObjParam cond;
+    DatumParameter cond;
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_cond(), OB_INVALID_INDEX, &cond));
     if (OB_FAIL(ret) || cond.is_true()) {
       break;
@@ -657,7 +657,7 @@ static int exec_loop_control(ObPLExecCtx *ctx, const ObPLLoopControl *s, CtrlSta
   CK (OB_NOT_NULL(s));
   bool fire = true;
   if (OB_SUCC(ret) && OB_INVALID_INDEX != s->get_cond()) {
-    ObObjParam cond;
+    DatumParameter cond;
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_cond(), OB_INVALID_INDEX, &cond));
     OX (fire = cond.is_true());
   }
@@ -674,14 +674,18 @@ static int exec_return(ObPLExecCtx *ctx, const ObPLReturnStmt *s, CtrlState &ctr
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(s), OB_NOT_NULL(ctx));
   if (OB_SUCC(ret) && OB_INVALID_INDEX != s->get_ret()) {
-    ObObjParam value;
+    DatumParameter value;
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_ret(), OB_INVALID_INDEX, &value));
     if (OB_SUCC(ret) && OB_NOT_NULL(ctx->result_) && OB_NOT_NULL(ctx->allocator_)) {
       // Deep-copy onto the function's exec allocator: a NUMBER/DECIMAL/string
       // value carries data on the transient per-expr allocator, so a shallow
-      // assign would dangle once that allocator is reset (INT is inline, hence
-      // it worked). exec allocator outlives statement evaluation.
-      OZ (ob_write_obj(*ctx->allocator_, value, *ctx->result_));
+      // assign would dangle once that allocator is reset (fixed-width values also carry
+      // arena-backed bytes). exec allocator outlives statement evaluation.
+      DatumParameter owned;
+      // A returned record must not alias a local variable that final()
+      // will destroy. Scalar payloads and PL pointees both need a snapshot.
+      OZ (ObUserDefinedType::clone_parameter(*ctx->allocator_, value, owned));
+      OX (ctx->result_->assign_value(owned));
     }
   }
   OX (ctrl.flow = Ctrl::RETURNING);
@@ -720,7 +724,7 @@ static int exec_sql(ObPLExecCtx *ctx, const ObPLSqlStmt *s)
   return ret;
 }
 
-// CALL proc(args): build the ObObjParam* argv, then ObPL::execute_proc loads and
+// CALL proc(args): build the DatumParameter* argv, then ObPL::execute_proc loads and
 // runs the callee (recursing back into this interpreter for an interpreted callee).
 //
 // Every actual -- IN, OUT and INOUT alike -- is passed through an independent temp
@@ -749,18 +753,18 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
   CK (OB_NOT_NULL(s), OB_NOT_NULL(ctx), OB_NOT_NULL(ctx->allocator_), OB_NOT_NULL(ctx->params_));
   const int64_t argc = OB_SUCC(ret) ? s->get_params().count() : 0;
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
-  ObObjParam **argv = NULL;
-  ObObjParam *storage = NULL;  // independent temps backing every actual
+  DatumParameter **argv = NULL;
+  DatumParameter *storage = NULL;  // independent temps backing every actual
   if (OB_SUCC(ret) && argc > 0) {
-    argv = static_cast<ObObjParam **>(tmp_alloc.alloc(sizeof(ObObjParam *) * argc));
-    storage = static_cast<ObObjParam *>(tmp_alloc.alloc(sizeof(ObObjParam) * argc));
+    argv = static_cast<DatumParameter **>(tmp_alloc.alloc(sizeof(DatumParameter *) * argc));
+    storage = static_cast<DatumParameter *>(tmp_alloc.alloc(sizeof(DatumParameter) * argc));
     if (OB_ISNULL(argv) || OB_ISNULL(storage)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < argc; ++i) {
     const InOutParam &p = s->get_params().at(i);
-    new (&storage[i]) ObObjParam();
+    new (&storage[i]) DatumParameter();
     const bool local_out = p.is_out() && OB_INVALID_INDEX != p.out_idx_;
     const sql::ObRawExpr *act_expr = s->get_param_expr(i);
     const bool obj_access_out = p.is_out() && OB_INVALID_INDEX == p.out_idx_
@@ -770,11 +774,11 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
       // yields a for-write address (ObPlCompiteWrite*), not a value, so seed the callee from the
       // destination's current value (INOUT) and write the result back after the call.
       if (!p.is_pure_out()) {
-        ObObjParam addr;
+        DatumParameter addr;
         OZ (ObSPIService::spi_calc_expr_at_idx(ctx, p.param_, OB_INVALID_INDEX, &addr));
         if (OB_SUCC(ret) && addr.is_ext() && 0 != addr.get_ext()) {
           ObPlCompiteWrite *cw = reinterpret_cast<ObPlCompiteWrite *>(addr.get_ext());
-          ObObj *src = OB_NOT_NULL(cw) ? reinterpret_cast<ObObj *>(cw->value_addr_) : NULL;
+          DatumValue *src = OB_NOT_NULL(cw) ? reinterpret_cast<DatumValue *>(cw->value_addr_) : NULL;
           ObIArray<common::ObString> *src_ti = NULL;
           if (OB_NOT_NULL(src) && ObEnumType == src->get_type()) {
             // The actual column ENUM and the callee param ENUM may be *differently valued*
@@ -789,17 +793,18 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
           }
           if (OB_FAIL(ret)) {
           } else if (OB_NOT_NULL(src_ti)) {
-            const uint64_t idx = src->get_uint64();  // 1-based ENUM index; 0 == '' (no value)
+            const uint64_t idx = src->datum_.get_uint();  // 1-based ENUM index; 0 == '' (no value)
             common::ObString s;
             if (OB_SUCC(ret) && idx >= 1 && idx <= static_cast<uint64_t>(src_ti->count())) {
               OZ (ob_write_string(tmp_alloc, src_ti->at(idx - 1), s));
             }
-            OX (storage[i].set_varchar(s));
+            OZ (storage[i].set_varchar(s, tmp_alloc));
             OX (storage[i].set_collation_type(src->get_collation_type()));
             OX (storage[i].set_collation_level(common::CS_LEVEL_IMPLICIT));
             OX (storage[i].set_param_meta());
           } else if (OB_NOT_NULL(src)) {
-            OZ (ob_write_obj(tmp_alloc, *src, storage[i]));
+            DatumParameter view; view.assign_value(*src);
+            OZ (clone_datum_parameter(view, storage[i], tmp_alloc));
             OX (storage[i].set_param_meta());
           }
         }
@@ -830,12 +835,12 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
       // Write the callee's OUT result back through the obj-access address (trigger NEW.col),
       // converting to the target column type -- mirrors exec_assign's obj-access write.
       ObPLDataType final_type;
-      ObObjParam addr;
+      DatumParameter addr;
       OZ (static_cast<const sql::ObObjAccessRawExpr *>(act_expr)->get_final_type(final_type));
       OZ (ObSPIService::spi_calc_expr_at_idx(ctx, p.param_, OB_INVALID_INDEX, &addr));
       if (OB_SUCC(ret) && final_type.is_obj_type() && addr.is_ext() && 0 != addr.get_ext()) {
         ObPlCompiteWrite *cw = reinterpret_cast<ObPlCompiteWrite *>(addr.get_ext());
-        ObObj *dest = OB_NOT_NULL(cw) ? reinterpret_cast<ObObj *>(cw->value_addr_) : NULL;
+        DatumValue *dest = OB_NOT_NULL(cw) ? reinterpret_cast<DatumValue *>(cw->value_addr_) : NULL;
         ObIAllocator *alloc = OB_NOT_NULL(cw) ? reinterpret_cast<ObIAllocator *>(cw->allocator_) : NULL;
         common::ObDataType *dest_type = final_type.get_data_type();
         if (OB_NOT_NULL(dest) && OB_NOT_NULL(dest_type)) {
@@ -1011,7 +1016,7 @@ static int exec_signal(ObPLExecCtx *ctx, const ObPLSignalStmt *s)
 
 // EXECUTE IMMEDIATE / dynamic SQL. The resolver also lowers session-variable
 // assignments such as `SET @uservar = expr` (and `SET @@sysvar = ...`) to this.
-// Mirrors codegen visit(ObPLExecuteStmt): evaluate USING actuals into ObObjParams,
+// Mirrors codegen visit(ObPLExecuteStmt): evaluate USING actuals into DatumParameter values,
 // then call spi_execute_immediate, which computes the SQL-text expr and runs it.
 static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)
 {
@@ -1025,18 +1030,18 @@ static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)
   const bool *not_null = s->get_not_null_flags().count() > 0 ? &s->get_not_null_flags().at(0) : NULL;
   const int64_t *ranges = s->get_pl_integer_ranges().count() > 0 ? &s->get_pl_integer_ranges().at(0) : NULL;
   ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
-  ObObjParam **params = NULL;
-  ObObjParam *storage = NULL;  // independent temps backing every USING actual
+  DatumParameter **params = NULL;
+  DatumParameter *storage = NULL;  // independent temps backing every USING actual
   if (OB_SUCC(ret) && param_count > 0) {
-    params = static_cast<ObObjParam **>(tmp_alloc.alloc(sizeof(ObObjParam *) * param_count));
-    storage = static_cast<ObObjParam *>(tmp_alloc.alloc(sizeof(ObObjParam) * param_count));
+    params = static_cast<DatumParameter **>(tmp_alloc.alloc(sizeof(DatumParameter *) * param_count));
+    storage = static_cast<DatumParameter *>(tmp_alloc.alloc(sizeof(DatumParameter) * param_count));
     if (OB_ISNULL(params) || OB_ISNULL(storage)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
     const InOutParam &u = s->get_using().at(i);
-    new (&storage[i]) ObObjParam();
+    new (&storage[i]) DatumParameter();
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, u.param_, OB_INVALID_INDEX, &storage[i]));
     OX (params[i] = &storage[i]);
   }
@@ -1076,7 +1081,7 @@ static int exec_do(ObPLExecCtx *ctx, const ObPLDoStmt *s)
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(s));
   for (int64_t i = 0; OB_SUCC(ret) && i < s->get_value().count(); ++i) {
-    ObObjParam result;
+    DatumParameter result;
     OZ (ObSPIService::spi_calc_expr_at_idx(ctx, s->get_value_index(i), OB_INVALID_INDEX, &result));
   }
   return ret;
@@ -1181,7 +1186,7 @@ int ObPLInterpreter::execute()
     // seed, so an invalid type means no RETURN value was produced. RETURN NULL
     // stores ObNullType (a valid type), so it does not trip this.
     if (OB_SUCC(ret) && func.is_function()
-        && OB_NOT_NULL(ctx.result_) && !ctx.result_->is_valid_type()) {
+        && OB_NOT_NULL(ctx.result_) && ctx.result_->is_invalid_type()) {
       // Just set the error code; do NOT LOG_USER_ERROR the formatted message.
       // The canonical .result reports the bare static text "FUNCTION ended
       // without RETURN" (the %s in the *user* message is not substituted in the

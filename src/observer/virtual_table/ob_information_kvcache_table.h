@@ -25,7 +25,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+struct DatumValue;
 }
 
 namespace observer
@@ -64,7 +64,6 @@ private:
   common::ObSEArray<common::ObKVCacheInstHandle, 100 > inst_handles_;
   int16_t cache_iter_;
   common::ObStringBuf str_buf_;
-  common::ObObj cells_[common::OB_ROW_MAX_COLUMNS_COUNT];
   DISALLOW_COPY_AND_ASSIGN(ObInfoSchemaKvCacheTable);
 };
 

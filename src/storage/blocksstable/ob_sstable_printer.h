@@ -42,6 +42,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+struct DatumValue;
+}
 namespace blocksstable
 {
 
@@ -67,11 +71,11 @@ public:
   void print_line(const char *name, const uint32_t value, const int64_t level = 1);
   void print_line(const char *name, const uint64_t value, const int64_t level = 1);
   void print_row_title(const blocksstable::ObDatumRow *row, const int64_t row_index);
-  void print_cell(const common::ObObj &cell);
   void print_cell(const blocksstable::ObStorageDatum &datum);
+  void print_cell(const common::DatumValue &value);
   void print_end_line(const int64_t level = 1);
   void print_cols_info_start(const char *n1, const char *n2, const char *n3, const char *n4, const char *n5);
-  void print_cols_info_line(const int32_t &v1, const common::ObObjType v2, const common::ObOrderType v3, const int64_t &v4, const int64_t & v5);
+  void print_cols_info_line(const int32_t &v1, const common::SqlValueType v2, const common::ObOrderType v3, const int64_t &v4, const int64_t & v5);
 
   void print_hex_micro_block_header(const ObMicroBlockData &block_data);
   void print_hex_micro_block(const ObMicroBlockData &block_data, char *hex_print_buf, const int64_t buf_size);
@@ -84,11 +88,11 @@ public:
   void print_macro_meta(const ObDataMacroBlockMeta *macro_meta);
   void print_store_row(
       const blocksstable::ObDatumRow *row,
-      const ObObjMeta *obj_metas,
+      const SqlTypeMeta *obj_metas,
       const int64_t type_array_column_cnt,
       const bool is_index_block,
       const bool is_trans_sstable);
-  void print_store_row_hex(const blocksstable::ObDatumRow *row, const ObObjMeta *obj_metas, const int64_t buf_size, char *hex_print_buf);
+  void print_store_row_hex(const blocksstable::ObDatumRow *row, const SqlTypeMeta *obj_metas, const int64_t buf_size, char *hex_print_buf);
   void print_micro_header(const ObMicroBlockHeader *micro_block_header);
   void print_encoding_column_header(const ObColumnHeader *col_header, const int64_t col_id);
 

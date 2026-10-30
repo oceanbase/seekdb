@@ -18,6 +18,7 @@
 
 #include "ob_expr_pl_integer_checker.h"
 #include "sql/engine/ob_exec_context.h"
+#include <type_traits>
 
 namespace oceanbase
 {
@@ -92,8 +93,15 @@ int ObExprPLIntegerChecker::calc_result_type1(ObExprResType &type,
 }
 
 template<typename T>
-int ObExprPLIntegerChecker::check_range(const T &obj, const ObObjType type, int64_t range)
+int ObExprPLIntegerChecker::check_range(const T &obj, const SqlValueType type, int64_t range)
 {
+  if constexpr (std::is_same<T, DatumValue>::value) {
+    // A native runtime NULL may retain its declared type. It is the same
+    // logical NULL that the legacy value dispatch skipped as ObNullType.
+    // ObDatum already supplies the width-specific numeric/NUMBER getters used
+    // by this range algorithm; do not reconstruct a general value object.
+    return obj.is_null() ? OB_SUCCESS : check_range(obj.datum_, type, range);
+  } else {
   int ret = OB_SUCCESS;
 #define GET_VALUE_AND_CHECK(type, v_type, func, min, max)       \
   case type: {                                                  \
@@ -135,60 +143,37 @@ int ObExprPLIntegerChecker::check_range(const T &obj, const ObObjType type, int6
 #undef GET_VALUE_AND_CHECK
 #undef CHECK_OVERFLOW
   return ret;
+  }
 }
 
-int ObExprPLIntegerChecker::calc(ObObj &result,
-                                 const ObObj &obj,
-                                 const pl::ObPLIntegerType &pls_type,
-                                 const pl::ObPLIntegerRange &pls_range,
-                                 ObIAllocator &calc_buf)
+template int ObExprPLIntegerChecker::check_range<DatumValue>(
+    const DatumValue &obj, const SqlValueType type, int64_t range);
+
+int ObExprPLIntegerChecker::calc(DatumParameter &result,
+    const DatumParameter &source, const pl::ObPLIntegerType &pls_type,
+    const pl::ObPLIntegerRange &pls_range, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
-  switch (pls_type) {
-    // SimpleInteger's overflow behavior differs, if it overflows, it needs to be rounded, otherwise, just validate
-    case PL_SIMPLE_INTEGER: {
-      int64_t v = 0;
-      if (obj.is_integer_type()) {
-        v = obj.get_int();
-      } else if (obj.is_number()) {
-        OZ (obj.get_number().extract_valid_int64_with_trunc(v));
-      }
-      if (OB_SUCC(ret)) {
-        if (v < pls_range.lower_ || v > pls_range.upper_) {
-          v = static_cast<int32_t>(v);
-          if (obj.is_integer_type()) {
-            result.set_int(obj.get_type(), v);
-          } else if (obj.is_number()) {
-            number::ObNumber n;
-            OZ (n.from(v, calc_buf));
-            OX (result.set_number(obj.get_type(), n));
-          }
-        } else {
-          OZ (deep_copy_obj(calc_buf, obj, result));
-        }
-      }
-      break;
-    }
-    case PL_PLS_INTEGER:
-    case PL_BINARY_INTEGER:
-    case PL_NATURAL:
-    case PL_NATURALN:
-    case PL_POSITIVE:
-    case PL_POSITIVEN:
-    case PL_SIGNTYPE: {
-      OZ (check_range(obj, obj.get_type(), pls_range.range_));
-      OZ (deep_copy_obj(calc_buf, obj, result));
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
+  if (source.is_null()) {
+    ret = clone_datum_parameter(source, result, owner);
+  } else {
+    // Only SIMPLE_INTEGER wrapping writes this scratch buffer (an int32 or
+    // its small NUMBER representation); unchanged values borrow source until
+    // the final owned copy. This also handles result == source safely.
+    alignas(8) char scratch[64];
+    ObDatum checked; checked.ptr_ = scratch;
+    OZ (calc(checked, source.get_type(), source.datum_, pls_type, pls_range, owner));
+    if (OB_SUCC(ret)) {
+      DatumParameter output = source; output.datum_ = checked;
+      ret = clone_datum_parameter(output, result, owner);
     }
   }
   return ret;
 }
 
+
 int ObExprPLIntegerChecker::calc(ObDatum &res_datum,
-                                 const ObObjType type,
+                                 const SqlValueType type,
                                  const ObDatum &param,
                                  const pl::ObPLIntegerType &pls_type,
                                  const pl::ObPLIntegerRange &pls_range,
@@ -265,7 +250,7 @@ int ObExprPLIntegerChecker::calc_pl_integer_checker(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   ObDatum *param = NULL;
-  const ObObjType type = expr.args_[0]->datum_meta_.type_;
+  const SqlValueType type = expr.args_[0]->datum_meta_.type_;
   ExtraInfo *info = static_cast<ExtraInfo *>(expr.extra_info_);
   CK(OB_NOT_NULL(info));
   if (OB_FAIL(ret)) {

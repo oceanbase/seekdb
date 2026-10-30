@@ -21,6 +21,7 @@
 #include "sql/rewrite/ob_transform_const_propagate.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
+#include "share/datum/datum_value_cast.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -700,10 +701,10 @@ int ObTransformConstPropagate::collect_equal_pair_from_pullup(ObDMLStmt *stmt,
                                               equal_info,
                                               is_valid))) {
         } else if (!is_valid) {
-          ObObjType col_type = equal_info.column_expr_->get_result_type().get_type();
+          SqlValueType col_type = equal_info.column_expr_->get_result_type().get_type();
           if (!(ob_is_text_tc(col_type) || ob_is_json_tc(col_type)) &&
               equal_info.const_expr_->is_static_scalar_const_expr()) {
-            ObObj result;
+            DatumValue result;
             bool got_result = false;
             if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                                   equal_info.const_expr_,
@@ -1323,7 +1324,7 @@ int ObTransformConstPropagate::check_cast_const_expr(ExprConstInfo &const_info,
   int ret = OB_SUCCESS;
   bool need_cast = false;
   bool is_scale_adjust_cast = false;
-  ObObj value;
+  DatumValue value;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_) || OB_ISNULL(ctx_->session_info_) ||
       OB_ISNULL(const_info.column_expr_) || OB_ISNULL(const_info.const_expr_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1351,16 +1352,17 @@ int ObTransformConstPropagate::check_cast_const_expr(ExprConstInfo &const_info,
   } else if (!is_valid) {
     // do nothing
   } else {
-    const ObObj *dest_val = NULL;
+    DatumValue dest_val;
     const ObRawExprResType &dst_type = const_info.column_expr_->get_result_type();
     ObDataTypeCastParams dtc_params = ctx_->session_info_->get_dtc_params();
     ObCastCtx cast_ctx(ctx_->allocator_,
                        &dtc_params,
                        CM_WARN_ON_FAIL,
                        dst_type.get_collation_type());
-    EXPR_CAST_OBJ_V2(dst_type.get_type(), value, dest_val);
-    ObObjType cmp_type = ObMaxType;
-    int64_t eq_cmp = 0;
+    ret = DatumValueCaster::to_type(dst_type.get_type(), cast_ctx, value,
+        *ctx_->allocator_, dest_val);
+    SqlValueType cmp_type = ObMaxType;
+    int eq_cmp = 0;
     if (OB_FAIL(ret)) {
       if (OB_ERR_INVALID_DATATYPE == ret) {  // rewrite should not happened instead of failed a error
         ret = OB_SUCCESS;
@@ -1369,13 +1371,9 @@ int ObTransformConstPropagate::check_cast_const_expr(ExprConstInfo &const_info,
       }
     } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
                                                                       value.get_type(),
-                                                                      dest_val->get_type()))) {
-    } else if (OB_FAIL(ObRelationalExprOperator::compare_nullsafe(eq_cmp,
-                                                                  value,
-                                                                  *dest_val,
-                                                                  cast_ctx,
-                                                                  cmp_type,
-                                                                  dst_type.get_collation_type()))) {
+                                                                      dest_val.get_type()))) {
+    } else if (OB_FAIL(DatumValueComparator::compare(value, dest_val, cast_ctx,
+                                      cmp_type, dst_type.get_collation_type(), eq_cmp))) {
     } else if (eq_cmp != 0) {
       is_valid = false;
     } else {
@@ -1951,7 +1949,7 @@ int ObTransformConstPropagate::check_constraint_value_validity(ObRawExpr *value_
 {
   int ret = OB_SUCCESS;
   reject = false;
-  ObObj result;
+  DatumValue result;
   bool got_result = false;
   if (OB_ISNULL(value_expr)) {
     ret = OB_ERR_UNEXPECTED;

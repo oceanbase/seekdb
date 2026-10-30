@@ -35,8 +35,8 @@ template <typename U, U func>
 struct interface_checker {
   // These are the two supported PL C interface signatures. Any other
   // signature yields a compile-time error.
-  using T3 = int(&)(ObExecContext &, ParamStore &, ObObj &);
-  using T_INTERFACE = int(&)(ObPLExecCtx &, ParamStore &, ObObj&);
+  using T3 = int(&)(ObExecContext &, ParamStore &, DatumValue &);
+  using T_INTERFACE = int(&)(ObPLExecCtx &, ParamStore &, DatumValue&);
 
   static_assert(std::is_same<U, T3>::value || std::is_same<U, T_INTERFACE>::value
                 || std::is_same<U, std::nullptr_t>::value,
@@ -44,7 +44,7 @@ struct interface_checker {
   static_assert(std::is_same<PL_C_INTERFACE_t, std::remove_reference_t<T_INTERFACE> *>::value,
                 "T_INTERFACE and PL_C_INTERFACE_t do not match");
 
-  static int invoke(ObPLExecCtx &pl_exec_ctx, ParamStore &param, ObObj &obj)
+  static int invoke(ObPLExecCtx &pl_exec_ctx, ParamStore &param, DatumValue &obj)
   {
     if constexpr (std::is_same<U, T3>::value) {
       return func(*pl_exec_ctx.exec_ctx_, param, obj);
@@ -109,14 +109,13 @@ ObPLInterfaceType ObPLInterfaceService::get_type(ObString &name) const
   return type;
 }
 
-int ObPLInterfaceImpl::call(sql::ObExecContext &ctx, sql::ParamStore &params, ObObj &result)
+int ObPLInterfaceImpl::call(sql::ObExecContext &ctx, sql::ParamStore &params, DatumValue &result)
 {
-  UNUSED(ctx);
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     LOG_DEBUG("========>>>>>>>>ryan.ly interface test", K(params.at(i)), K(ret));
   }
-  OX (result.set_int32(42));
+  OZ (result.set_int(ObInt32Type, 42, ctx.get_allocator()));
   return ret;
 }
 

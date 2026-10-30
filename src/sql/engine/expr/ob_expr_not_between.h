@@ -30,14 +30,6 @@ public:
   ObExprNotBetween();
   explicit  ObExprNotBetween(common::ObIAllocator &alloc);
   virtual ~ObExprNotBetween() {};
-  static int calc(common::ObObj &result,
-                  const common::ObObj &obj1,
-                  const common::ObObj &beg,
-                  const common::ObObj &end,
-                  common::ObObjType cmp_type,
-                  common::ObExprCtx &expr_ctx,
-                  common::ObCollationType cs_type);
-
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                             const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const override;

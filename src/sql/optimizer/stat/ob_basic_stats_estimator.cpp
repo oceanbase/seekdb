@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_basic_stats_estimator.h"
 #include <inttypes.h>
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -307,7 +309,7 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObSqlString select_sql;
   const int64_t obj_pos = 0;
-  ObObj result_obj;
+  DatumValue result_obj;
   bool is_valid = true;
   if (OB_FAIL(ObDbmsStatsUtils::check_table_read_write_valid( is_valid))) {
   } else if (!is_valid) {
@@ -334,7 +336,7 @@ int ObBasicStatsEstimator::estimate_modified_count(ObExecContext &ctx,
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(client_result->next())) {
-      } else if (OB_FAIL(client_result->get_obj(obj_pos, result_obj))) {
+      } else if (OB_FAIL(client_result->get_value(obj_pos, result_obj))) {
       } else if (result_obj.is_null()) {
         result = 0;
       } else if (OB_UNLIKELY(!result_obj.is_integer_type())) {
@@ -394,15 +396,15 @@ int ObBasicStatsEstimator::estimate_stale_partition(ObExecContext &ctx,
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx1 = 0;
           int64_t idx2 = 1;
-          ObObj tablet_id_obj;
-          ObObj inc_mod_count_obj;
+          DatumValue tablet_id_obj;
+          DatumValue inc_mod_count_obj;
           int64_t dst_tablet_id = 0;
           int64_t dst_partition = -1;
           int64_t inc_mod_count = 0;
           int64_t dst_part_id = -1;
-          if (OB_FAIL(client_result->get_obj(idx1, tablet_id_obj))) {
+          if (OB_FAIL(client_result->get_value(idx1, tablet_id_obj))) {
           } else if (OB_FAIL(tablet_id_obj.get_int(dst_tablet_id))) {
-          } else if (OB_FAIL(client_result->get_obj(idx2, inc_mod_count_obj))) {
+          } else if (OB_FAIL(client_result->get_value(idx2, inc_mod_count_obj))) {
           } else if (!inc_mod_count_obj.is_null() &&
                      OB_FAIL(inc_mod_count_obj.get_int(inc_mod_count))) {
           } else if (OB_FAIL(ObDbmsStatsUtils::get_dst_partition_by_tablet_id(ctx,
@@ -572,7 +574,7 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
         ret = OB_ERR_UNEXPECTED;
       } else {
         while (OB_SUCC(ret) && !is_locked && OB_SUCC(client_result->next())) {
-          ObObj tmp;
+          DatumValue tmp;
           int64_t part_val = -1;
           int64_t lock_val = -1;
           int64_t row_cnt = 0;
@@ -581,13 +583,13 @@ int ObBasicStatsEstimator::check_table_statistics_state(ObExecContext &ctx,
           int64_t idx2 = 1;
           int64_t idx3 = 2;
           int64_t idx4 = 3;
-          if (OB_FAIL(client_result->get_obj(idx1, tmp))) {
+          if (OB_FAIL(client_result->get_value(idx1, tmp))) {
           } else if (OB_FAIL(tmp.get_int(part_val))) {
-          } else if (OB_FAIL(client_result->get_obj(idx2, tmp))) {
+          } else if (OB_FAIL(client_result->get_value(idx2, tmp))) {
           } else if (OB_FAIL(tmp.get_int(lock_val))) {
-          } else if (OB_FAIL(client_result->get_obj(idx3, tmp))) {
+          } else if (OB_FAIL(client_result->get_value(idx3, tmp))) {
           } else if (!tmp.is_null() && OB_FAIL(tmp.get_int(row_cnt))) {
-          } else if (OB_FAIL(client_result->get_obj(idx4, tmp))) {
+          } else if (OB_FAIL(client_result->get_value(idx4, tmp))) {
           } else if (!tmp.is_null() && OB_FAIL(tmp.get_int(consecutive_failed_count))) {
           } else if (global_part_id == part_val && lock_val > 0) {
             is_locked = true;
@@ -751,9 +753,9 @@ int ObBasicStatsEstimator::get_need_stats_tables(ObExecContext &ctx,
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx = 0;
-          ObObj obj;
+          DatumValue obj;
           int64_t table_id = -1;
-          if (OB_FAIL(client_result->get_obj(idx, obj))) {
+          if (OB_FAIL(client_result->get_value(idx, obj))) {
           } else if (OB_FAIL(obj.get_int(table_id))) {
           } else if (OB_FAIL(table_ids.push_back(table_id))) {
           }
@@ -860,10 +862,8 @@ int ObBasicStatsEstimator::check_stat_need_re_estimate(const ObOptStatGatherPara
         if (OB_ISNULL(opt_stat.column_stats_.at(i))) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObObj null_val;
-          null_val.set_null();
-          opt_stat.column_stats_.at(i)->set_max_value(null_val);
-          opt_stat.column_stats_.at(i)->set_min_value(null_val);
+          opt_stat.column_stats_.at(i)->get_max_value().set_null();
+          opt_stat.column_stats_.at(i)->get_min_value().set_null();
           opt_stat.column_stats_.at(i)->set_num_not_null(0);
           opt_stat.column_stats_.at(i)->set_num_null(0);
           opt_stat.column_stats_.at(i)->set_num_distinct(0);
@@ -965,12 +965,12 @@ int ObBasicStatsEstimator::get_async_gather_stats_tables(ObExecContext &ctx,
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx_col1 = 0;
           int64_t idx_col2 = 1;
-          ObObj obj;
+          DatumValue obj;
           int64_t table_id = 0;
           int64_t tablet_id = 0;
-          if (OB_FAIL(client_result->get_obj(idx_col1, obj))) {
+          if (OB_FAIL(client_result->get_value(idx_col1, obj))) {
           } else if (OB_FAIL(obj.get_int(table_id))) {
-          } else if (OB_FAIL(client_result->get_obj(idx_col2, obj))) {
+          } else if (OB_FAIL(client_result->get_value(idx_col2, obj))) {
           } else if (OB_FAIL(obj.get_int(tablet_id))) {
           } else if ((stat_tables.empty() || table_id != (stat_tables.at(stat_tables.count() - 1).table_id_)) &&
                      OB_FAIL(stat_tables.push_back(AsyncStatTable(table_id)))) {

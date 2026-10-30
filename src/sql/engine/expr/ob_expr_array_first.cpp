@@ -62,7 +62,7 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
   const ObSqlCollectionInfo *coll_info = NULL;
   ObCollectionArrayType *arr_type = NULL;
   bool is_null_res = false;
-  ObObjType lambda_type = types_stack[0].get_type();
+  SqlValueType lambda_type = types_stack[0].get_type();
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -154,12 +154,10 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
             res.set_string(child_arr_str);
           }
         } else {
-          ObObj elem_obj;
-          if (OB_FAIL(src_arrs[0]->elem_at(i, elem_obj))) {
+          if (OB_FAIL(src_arrs[0]->elem_at_datum(i, res))) {
           } else {
-            res.from_obj(elem_obj);
             ObExprStrResAlloc res_alloc(expr, ctx);
-            if (elem_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
+            if (expr.obj_meta_.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
             }
           }
         }

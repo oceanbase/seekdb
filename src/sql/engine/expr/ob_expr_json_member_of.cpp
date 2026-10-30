@@ -97,7 +97,7 @@ int ObExprJsonMemberOf::eval_json_member_of(const ObExpr &expr, ObEvalCtx &ctx, 
   if (!is_null_result) {
     ObDatum *json_datum = NULL;
     ObExpr *json_arg = expr.args_[0];
-    ObObjType type2 = expr.args_[1]->datum_meta_.type_;
+    SqlValueType type2 = expr.args_[1]->datum_meta_.type_;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (json_datum->is_null()) {
       is_null_result = true; 

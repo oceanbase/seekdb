@@ -19,6 +19,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "rust/config.h"
 #include <algorithm>
+#include <utility>
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "share/ob_sys_time_zone_util.h"
 
@@ -85,6 +86,32 @@ using namespace palf;
 using namespace transaction::tablelock;
 namespace rootserver
 {
+namespace
+{
+// A schema owns its default payload. DDL expressions and casts return native
+// views backed by the DDL allocator; publish them only through the owning setter.
+template <typename... Args>
+int check_column_default_value(ObColumnSchemaV2 &column, Args &&...args)
+{
+  DatumValue value = column.get_cur_default_value();
+  int ret = sql::ObDDLResolver::check_default_value(value, std::forward<Args>(args)...);
+  if (OB_SUCCESS == ret) {
+    ret = column.set_cur_default_value_v2(value);
+  }
+  return ret;
+}
+
+template <typename... Args>
+int reformat_column_default_expr(ObColumnSchemaV2 &column, Args &&...args)
+{
+  DatumValue value = column.get_cur_default_value();
+  int ret = sql::ObDDLResolver::reformat_generated_column_expr(value, std::forward<Args>(args)...);
+  if (OB_SUCCESS == ret) {
+    ret = column.set_cur_default_value_v2(value);
+  }
+  return ret;
+}
+} // namespace
 
 #define GRANT_SYS_ROLE_NUM 2       /* len of role array is 2 */
 #define GRANT_ROLE_MIN_ROLE_NUM 3  /* min len of role array is 3 */
@@ -2505,8 +2532,8 @@ int is_list_part_val_changed(const ObBasePartition &orig_part, const ObBaseParti
   if (!orig_part.is_valid() || !new_part.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObIArray<common::ObNewRow>* orig_list_values = &(orig_part.get_list_row_values());
-    const ObIArray<common::ObNewRow>* new_list_values   = &(new_part.get_list_row_values());
+    const ObIArray<common::PartitionBoundRow>* orig_list_values = &(orig_part.get_list_row_values());
+    const ObIArray<common::PartitionBoundRow>* new_list_values   = &(new_part.get_list_row_values());
     if (OB_ISNULL(orig_list_values) && OB_ISNULL(new_list_values)) {
       /* both empty, skip */
     } else if ((OB_ISNULL(orig_list_values) ^ OB_ISNULL(new_list_values))
@@ -2514,7 +2541,7 @@ int is_list_part_val_changed(const ObBasePartition &orig_part, const ObBaseParti
       ret = OB_ERR_UNEXPECTED;
     } else {
       for (int64_t i = 0; i < orig_list_values->count() && OB_SUCC(ret); i++) {
-        if (orig_list_values->at(i) == new_list_values->at(i)) {
+        if (equal_partition_bound_rows(orig_list_values->at(i), new_list_values->at(i))) {
         } else {
           ret = OB_ERR_PARTITION_CONST_DOMAIN_ERROR;
         }
@@ -6245,7 +6272,7 @@ int ObDDLService::fill_column_collation(
     ObColumnSchemaV2 &column_schema)
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass col_tc = column_schema.get_data_type_class();
+  SqlTypeClass col_tc = column_schema.get_data_type_class();
   ObCollationType collation_type = table_schema.get_collation_type();
   ObCharsetType charset_type = table_schema.get_charset_type();
   const ObCollationType cur_extended_type_info_collation = ObCharset::get_system_collation();
@@ -6286,38 +6313,29 @@ int ObDDLService::resolve_orig_default_value(ObColumnSchemaV2 &alter_column_sche
     const ObTimeZoneInfoWrap &tz_info_wrap, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  const ObObj &cur_default_value = alter_column_schema.get_cur_default_value();
-  if (!cur_default_value.is_null()) {
-    if (OB_FAIL(alter_column_schema.set_orig_default_value(cur_default_value))) {
-    }
-  } else if (alter_column_schema.is_nullable()) {
-    ObObj null_obj;
-    null_obj.set_null();
-    if (OB_FAIL(alter_column_schema.set_orig_default_value(null_obj))) {
-    }
-  } else {
-    ObObj default_value;
-    default_value.set_type(alter_column_schema.get_data_type());
-    if (OB_FAIL(default_value.build_not_strict_default_value(alter_column_schema.get_accuracy().get_precision(), alter_column_schema.get_collation_type()))) {
-    } else if (OB_FAIL(alter_column_schema.set_orig_default_value(default_value))) {
+  DatumValue orig_default_value = alter_column_schema.get_cur_default_value();
+  if (orig_default_value.is_null() && !alter_column_schema.is_nullable()) {
+    orig_default_value.set_type(alter_column_schema.get_data_type());
+    if (OB_FAIL(orig_default_value.build_not_strict_default_value(
+          alter_column_schema.get_accuracy().get_precision(),
+          alter_column_schema.get_collation_type(), allocator))) {
     }
   }
-  if (OB_SUCC(ret)) {
-    ObObj orig_default_value = alter_column_schema.get_orig_default_value();
-    if (IS_DEFAULT_NOW_OBJ(orig_default_value) || alter_column_schema.is_default_expr_v2_column()) {
-      if (OB_FAIL(ObDDLResolver::calc_default_value(alter_column_schema,
-                                                    orig_default_value,
-                                                    tz_info_wrap,
-                                                    allocator))) {
-      } else if (!alter_column_schema.is_nullable() && orig_default_value.is_null()) {
-        ObObj default_value;
-        default_value.set_type(alter_column_schema.get_data_type());
-        if (OB_FAIL(default_value.build_not_strict_default_value(alter_column_schema.get_accuracy().get_precision(), alter_column_schema.get_collation_type()))) {
-        } else if (OB_FAIL(alter_column_schema.set_orig_default_value(default_value))) {
-        }
-      } else if (OB_FAIL(alter_column_schema.set_orig_default_value(orig_default_value))) {
+  if (OB_SUCC(ret)
+      && (IS_DEFAULT_NOW_OBJ(orig_default_value) || alter_column_schema.is_default_expr_v2_column())) {
+    if (OB_FAIL(ObDDLResolver::calc_default_value(alter_column_schema,
+                                                orig_default_value,
+                                                tz_info_wrap,
+                                                allocator))) {
+    } else if (!alter_column_schema.is_nullable() && orig_default_value.is_null()) {
+      orig_default_value.set_type(alter_column_schema.get_data_type());
+      if (OB_FAIL(orig_default_value.build_not_strict_default_value(
+            alter_column_schema.get_accuracy().get_precision(),
+            alter_column_schema.get_collation_type(), allocator))) {
       }
     }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(alter_column_schema.set_orig_default_value(orig_default_value))) {
   }
   return ret;
 }
@@ -6393,9 +6411,12 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
             && !is_set_default
             && !new_column_schema.is_on_update_current_timestamp()) {
           new_column_schema.set_nullable(false);
-          new_column_schema.get_cur_default_value().set_ext(
-              ObActionFlag::OP_DEFAULT_NOW_FLAG);
-          new_column_schema.set_on_update_current_timestamp(true);
+          DatumValue default_value;
+          if (OB_FAIL(default_value.set_extend(ObActionFlag::OP_DEFAULT_NOW_FLAG, 0, allocator))) {
+          } else if (OB_FAIL(new_column_schema.set_cur_default_value_v2(default_value))) {
+          } else {
+            new_column_schema.set_on_update_current_timestamp(true);
+          }
         } else if (!is_set_null) {
           new_column_schema.set_nullable(false);
           if (!is_set_default) {
@@ -6406,7 +6427,10 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
             } else {
               int64_t zero_date = ObTimeConverter::ZERO_DATETIME;
               ObTimeConverter::round_datetime(alter_column_schema->get_data_scale(), zero_date);
-              new_column_schema.get_cur_default_value().set_timestamp(zero_date);
+              DatumValue default_value;
+              if (OB_FAIL(default_value.set_timestamp(zero_date, allocator))) {
+              } else if (OB_FAIL(new_column_schema.set_cur_default_value_v2(default_value))) {
+              }
             }
           } else if (new_column_schema.get_cur_default_value().is_null()) {
             ret = OB_INVALID_DEFAULT;
@@ -6416,12 +6440,14 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
         } else {
           new_column_schema.set_nullable(true);
           if (!is_set_default) {
-            new_column_schema.get_cur_default_value().set_null();
+            const DatumValue null_default;
+            if (OB_FAIL(new_column_schema.set_cur_default_value_v2(null_default))) {
+            }
           }
         }
         if(OB_SUCC(ret)
            && OB_DDL_ADD_COLUMN == alter_column_schema->alter_type_) {
-          ObObj cur_default_value = new_column_schema.get_cur_default_value();
+          DatumValue cur_default_value = new_column_schema.get_cur_default_value();
           if (IS_DEFAULT_NOW_OBJ(cur_default_value) || alter_column_schema->is_default_expr_v2_column()) {
             if (OB_FAIL(ObDDLResolver::calc_default_value(*alter_column_schema,
                                                           cur_default_value,
@@ -6464,9 +6490,10 @@ int ObDDLService::deal_default_value_padding(ObColumnSchemaV2 &column_schema, Ob
         MEMCPY(ptr, str.ptr(), str.length());
         memset(ptr + str.length(), OB_PADDING_BINARY, column_schema.get_data_length() - strlen);
         ObString new_string(real_size, ptr);
-        ObObj new_default_value;
-        new_default_value.set_binary(new_string);
-        if (OB_FAIL(column_schema.set_orig_default_value(new_default_value))) {
+        DatumValue new_default_value;
+        if (OB_FAIL(new_default_value.set_string(ObCharType, new_string, allocator))) {
+        } else if (FALSE_IT(new_default_value.meta_.set_binary())) {
+        } else if (OB_FAIL(column_schema.set_orig_default_value(new_default_value))) {
         }
       }
     }
@@ -6627,11 +6654,11 @@ int ObDDLService::modify_generated_column_default_value(ObColumnSchemaV2 &genera
             MEMSET(expr_str_buf, 0, sizeof(expr_str_buf));
             ObString expr_def;
             int64_t pos = 0;
-            ObObj default_value;
+            DatumValue default_value;
             ObRawExprPrinter expr_printer(expr_str_buf, OB_MAX_DEFAULT_VALUE_LENGTH, &pos, &schema_guard, &tz_info);
             if (OB_FAIL(expr_printer.do_print(expr, T_NONE_SCOPE, true))) {
             } else if (FALSE_IT(expr_def.assign_ptr(expr_str_buf, static_cast<int32_t>(pos)))) {
-            } else if (FALSE_IT(default_value.set_varchar(expr_def))) {
+            } else if (OB_FAIL(default_value.set_varchar(expr_def, allocator))) {
             } else if (OB_FAIL(generated_column.set_cur_default_value(
                            default_value,
                            generated_column.is_default_expr_v2_column()))) {
@@ -6648,7 +6675,7 @@ int ObDDLService::modify_generated_column_default_value(ObColumnSchemaV2 &genera
 
 int ObDDLService::modify_generated_column_local_vars(ObColumnSchemaV2 &generated_column,
                                                     const common::ObString &column_name,
-                                                    const ObObjType origin_type,
+                                                    const SqlValueType origin_type,
                                                     const AlterColumnSchema &new_column_schema,
                                                     const ObTableSchema &table_schema,
                                                     const share::ObLocalSessionVar *local_session_var) {
@@ -6741,7 +6768,7 @@ int ObDDLService::modify_depend_column_type(sql::ObRawExpr *expr,
       if (OB_SUCC(ret)) {
         column_expr->set_accuracy(column_schema.get_accuracy());
         if (column_schema.is_decimal_int()) {
-          ObObjMeta data_meta = column_schema.get_meta_type();
+          SqlTypeMeta data_meta = column_schema.get_meta_type();
           data_meta.set_scale(column_schema.get_accuracy().get_scale());
           column_expr->set_meta_type(data_meta);
         }
@@ -7333,8 +7360,8 @@ int ObDDLService::check_can_alter_column_type(
     if (OB_FAIL(check_column_in_index(src_column.get_column_id(), table_schema, is_in_index))) {
     } else if (is_in_index || has_generated_depend) {
       // is_in_index==true means : src_column is 'the index column' or 'index create by user'.
-      const common::ObObjMeta &src_meta = src_column.get_meta_type();
-      const common::ObObjMeta &dst_meta = dst_column.get_meta_type();
+      const common::SqlTypeMeta &src_meta = src_column.get_meta_type();
+      const common::SqlTypeMeta &dst_meta = dst_column.get_meta_type();
       // in mysql mode
       if (common::is_match_alter_integer_column_online_ddl_rules(src_meta, dst_meta)) {
           // support online ddl with index, generated column depended:
@@ -7438,9 +7465,10 @@ int ObDDLService::fill_new_column_attributes(
     new_column_schema.set_data_precision(alter_column_schema.get_data_precision());
     new_column_schema.set_data_scale(alter_column_schema.get_data_scale());
     {
-      new_column_schema.set_cur_default_value(
-          alter_column_schema.get_cur_default_value(),
-          alter_column_schema.is_default_expr_v2_column());
+      if (OB_FAIL(new_column_schema.set_cur_default_value(
+              alter_column_schema.get_cur_default_value(),
+              alter_column_schema.is_default_expr_v2_column()))) {
+      }
     }
     new_column_schema.set_zero_fill(alter_column_schema.is_zero_fill());
     new_column_schema.set_is_hidden(alter_column_schema.is_hidden());
@@ -7455,7 +7483,8 @@ int ObDDLService::fill_new_column_attributes(
     new_column_schema.set_srs_id(alter_column_schema.get_srs_id());
     new_column_schema.set_skip_index_attr(alter_column_schema.get_skip_index_attr().get_packed_value());
     new_column_schema.set_lob_chunk_size(alter_column_schema.get_lob_chunk_size());
-    if (OB_FAIL(new_column_schema.get_local_session_var().deep_copy(alter_column_schema.get_local_session_var()))) {
+    if (OB_SUCC(ret)
+        && OB_FAIL(new_column_schema.get_local_session_var().deep_copy(alter_column_schema.get_local_session_var()))) {
     }
   }
   return ret;
@@ -7787,8 +7816,7 @@ int ObDDLService::add_new_column_to_table_schema(
   if (OB_SUCC(ret)) {
     ObSchemaChecker schema_checker;
     if (OB_FAIL(schema_checker.init(schema_guard))) {
-    } else if (OB_FAIL(ObDDLResolver::check_default_value(
-                alter_column_schema.get_cur_default_value(),
+    } else if (OB_FAIL(check_column_default_value(alter_column_schema,
                 tz_info_wrap, &local_session_var, allocator,
                 new_table_schema,
                 alter_column_schema,
@@ -7902,8 +7930,8 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid column schema", K(column));
       } else if (column->is_generated_column()) {
-        const common::ObObj* ObObjtmp = &column->get_cur_default_value();
-        if (OB_FAIL(gen_col_expr_arr.push_back(ObObjtmp->get_string()))) {
+        const DatumValue &default_value = column->get_cur_default_value();
+        if (OB_FAIL(gen_col_expr_arr.push_back(default_value.get_string()))) {
         }
       }
     }
@@ -8038,7 +8066,7 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
                          ObTableSchema::CHECK_MODE_OFFLINE,
                          for_view))) {
               } else {
-                ObObj default_value;
+                DatumValue default_value;
                 if (alter_column_schema->is_drop_default_) {
                   default_value.set_null();
                   if (OB_FAIL(new_column_schema.set_cur_default_value(default_value, false))) {
@@ -8069,7 +8097,7 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
                     RS_LOG(WARN, "not null column with default value null!", K(ret));
                   } else if (OB_FAIL(new_column_schema.set_cur_default_value(default_value,
                                                                              is_default_expr_v2))) {
-                  } else if (OB_FAIL(ObDDLResolver::check_default_value(new_column_schema.get_cur_default_value(),
+                  } else if (OB_FAIL(check_column_default_value(new_column_schema,
                                                                         tz_info_wrap,
                                                                         &alter_table_arg.local_session_var_,
                                                                         allocator,
@@ -8283,8 +8311,8 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
         } else if (OB_ISNULL(column)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (column->is_generated_column()) {
-          const common::ObObj* ObObjtmp = &column->get_cur_default_value();
-          if (OB_FAIL(gen_col_expr_arr.push_back(ObObjtmp->get_string()))) {
+          const DatumValue &default_value = column->get_cur_default_value();
+          if (OB_FAIL(gen_col_expr_arr.push_back(default_value.get_string()))) {
           }
         }
         if (OB_SUCC(ret) && is_lob_storage(column->get_data_type())) {
@@ -8404,8 +8432,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
             orig_column_schema = new_table_schema.get_column_schema(orig_column_name);
             ObColumnNameHashWrapper orig_column_key(orig_column_name);
             if (alter_column_schema->is_generated_column()
-                && OB_FAIL(ObDDLResolver::reformat_generated_column_expr(
-                                                alter_column_schema->get_cur_default_value(),
+                && OB_FAIL(reformat_column_default_expr(*alter_column_schema,
                                                 tz_info_wrap,
                                                 orig_column_schema->get_local_session_var(),
                                                 allocator,
@@ -8417,9 +8444,9 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                                                             origin_table_schema,
                                                             update_column_name_set))) {
             } else if (!alter_column_schema->is_generated_column()   /* Not support modify to generate columns, so there is no need to check again here */
-                      && OB_FAIL(ObDDLResolver::check_default_value(alter_column_schema->get_cur_default_value(),
+                      && OB_FAIL(check_column_default_value(*alter_column_schema,
                                                                     tz_info_wrap,
-                                                                    NULL,
+                                                                    nullptr,
                                                                     allocator,
                                                                     new_table_schema,
                                                                     *alter_column_schema,
@@ -8506,7 +8533,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                                                    tz_info_wrap,
                                                    allocator))) {
               } else {
-                ObObj default_value;
+                DatumValue default_value;
                 if (alter_column_schema->is_drop_default_) {
                   default_value.set_null();
                   if (OB_FAIL(new_column_schema.set_cur_default_value(default_value, false))) {
@@ -8537,7 +8564,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                     RS_LOG(WARN, "not null column with default value null!", K(ret));
                   } else if (OB_FAIL(new_column_schema.set_cur_default_value(default_value,
                                                                              is_default_expr_v2))) {
-                  } else if (OB_FAIL(ObDDLResolver::check_default_value(new_column_schema.get_cur_default_value(),
+                  } else if (OB_FAIL(check_column_default_value(new_column_schema,
                                                                         tz_info_wrap,
                                                                         &alter_table_arg.local_session_var_,
                                                                         allocator,
@@ -8835,7 +8862,7 @@ int ObDDLService::alter_table_auto_increment(
         session_param.ddl_info_.set_is_ddl(true);
         // if data_table_id != dest_table_id, meaning this is happening in ddl double write
         session_param.ddl_info_.set_source_table_hidden(orig_table_schema.is_user_hidden_table());
-        ObObj obj;
+        DatumValue obj;
         const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
         const bool is_unsigned_type = ob_is_unsigned_type(column_schema->get_data_type());
         if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
@@ -8854,7 +8881,9 @@ int ObDDLService::alter_table_auto_increment(
             ret = OB_SUCCESS;
           } else {
           }
-        } else if (OB_FAIL(result->get_obj("MAX_VALUE", obj))) {
+        } else if (OB_FAIL(result->get_value("MAX_VALUE", obj))) {
+        } else if (obj.is_null()) {
+          current_max_value = 0;
         } else if (is_unsigned_type) {
           current_max_value = obj.get_uint64();
         } else {
@@ -11619,8 +11648,8 @@ int ObDDLService::add_not_null_column_to_table_schema(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid column schema", K(column));
     } else if (column->is_generated_column()) {
-      const common::ObObj* ObObjtmp = &column->get_cur_default_value();
-      if (OB_FAIL(gen_col_expr_arr.push_back(ObObjtmp->get_string()))) {
+      const DatumValue &default_value = column->get_cur_default_value();
+      if (OB_FAIL(gen_col_expr_arr.push_back(default_value.get_string()))) {
       }
     }
   }
@@ -12148,7 +12177,7 @@ int ObDDLService::check_alter_add_partitions(const share::schema::ObTableSchema 
   // check the part of inc part is increased
   if (OB_FAIL(ret)) {
   } else if (orig_table_schema.is_range_part()) {
-    const ObRowkey *rowkey_last = NULL;
+    const PartitionBoundRow *rowkey_last = NULL;
     if (OB_ISNULL(orig_part_array[orig_part_num - 1])) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -12159,9 +12188,9 @@ int ObDDLService::check_alter_add_partitions(const share::schema::ObTableSchema 
       OB_ASSERT(rowkey_last != nullptr);
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inc_part_num; ++i) {
-      const ObRowkey *rowkey_cur = &inc_part_array[i]->get_high_bound_val();
+      const PartitionBoundRow *rowkey_cur = &inc_part_array[i]->get_high_bound_val();
 
-      if (*rowkey_cur <= *rowkey_last) {
+      if (partition_bound_key_compare(*rowkey_cur, *rowkey_last) <= 0) {
         ret = OB_ERR_ADD_PART_BOUN_NOT_INC;
         LOG_USER_ERROR(OB_ERR_ADD_PART_BOUN_NOT_INC);
       } else {
@@ -12272,12 +12301,12 @@ int ObDDLService::check_alter_add_subpartitions(const share::schema::ObTableSche
       if (OB_ISNULL(orig_subpart_array) || OB_ISNULL(orig_subpart_array[orig_subpart_num - 1])) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        const ObRowkey *rowkey_last =
+        const PartitionBoundRow *rowkey_last =
           &(orig_subpart_array[orig_subpart_num - 1]->get_high_bound_val());
         for (int64_t j = 0; OB_SUCC(ret) && j < inc_subpart_num; ++j) {
-          const ObRowkey *rowkey_cur =
+          const PartitionBoundRow *rowkey_cur =
             &inc_subpart_array[j]->get_high_bound_val();
-          if (*rowkey_cur <= *rowkey_last) {
+          if (partition_bound_key_compare(*rowkey_cur, *rowkey_last) <= 0) {
             ret = OB_ERR_ADD_PART_BOUN_NOT_INC;
           } else {
             rowkey_last = rowkey_cur;
@@ -12302,11 +12331,11 @@ int ObDDLService::check_add_list_partition(const share::schema::ObPartitionSchem
   ObPartition **part_array = new_part.get_part_array();
   int64_t orig_part_num = orig_part.get_partition_num();
   ObPartition **orig_part_array = orig_part.get_part_array();
-  common::ObRowkey row_key;
+  common::PartitionBoundRow row_key;
   if (OB_ISNULL(part_array) || OB_ISNULL(orig_part_array)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    common::hash::ObHashSet<common::ObRowkey> list_row_map;
+    PartitionBoundRowSet list_row_map;
     if (OB_FAIL(list_row_map.create(hash::cal_next_prime(part_num),
                                     ObModIds::OB_SCHEMA,
                                     ObModIds::OB_SCHEMA))) {
@@ -12315,10 +12344,10 @@ int ObDDLService::check_add_list_partition(const share::schema::ObPartitionSchem
         if (OB_ISNULL(orig_part_array[i])) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const ObIArray<common::ObNewRow>* orig_list_value = &(orig_part_array[i]->get_list_row_values());
+          const ObIArray<common::PartitionBoundRow>* orig_list_value = &(orig_part_array[i]->get_list_row_values());
           OB_ASSERT(orig_list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < orig_list_value->count(); ++j) {
-            const common::ObNewRow *new_row = &(orig_list_value->at(j));
+            const common::PartitionBoundRow *new_row = &(orig_list_value->at(j));
             if (1 <= new_row->get_count() && new_row->get_cell(0).is_max_value()) {
               ret = OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST;
               LOG_USER_ERROR(OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST);
@@ -12335,12 +12364,14 @@ int ObDDLService::check_add_list_partition(const share::schema::ObPartitionSchem
         if (OB_ISNULL(part_array[i])) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const ObIArray<common::ObNewRow>* list_value = &(part_array[i]->get_list_row_values());
+          const ObIArray<common::PartitionBoundRow>* list_value = &(part_array[i]->get_list_row_values());
           OB_ASSERT(list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < list_value->count(); ++j) {
             row_key.reset();
             row_key.assign(list_value->at(j).cells_, list_value->at(j).get_count());
-            if (OB_HASH_NOT_EXIST != list_row_map.exist_refactored(row_key)) {
+            ret = list_row_map.exist_refactored(row_key);
+            if (ret == OB_HASH_NOT_EXIST) { ret = OB_SUCCESS; }
+            else if (ret == OB_HASH_EXIST) {
               ret = OB_ERR_MULTIPLE_DEF_CONST_IN_LIST_PART;
               LOG_USER_ERROR(OB_ERR_MULTIPLE_DEF_CONST_IN_LIST_PART);
             }
@@ -12360,11 +12391,11 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
   ObSubPartition **subpart_array = new_part.get_subpart_array();
   int64_t orig_subpart_num = orig_part.get_subpartition_num();
   ObSubPartition **orig_subpart_array = orig_part.get_subpart_array();
-  common::ObRowkey row_key;
+  common::PartitionBoundRow row_key;
   if (OB_ISNULL(subpart_array) || OB_ISNULL(orig_subpart_array)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    common::hash::ObHashSet<common::ObRowkey> list_row_map;
+    PartitionBoundRowSet list_row_map;
     if (OB_FAIL(list_row_map.create(hash::cal_next_prime(subpart_num),
                                     "ChkAddLstSPar",
                                     "ChkAddLstSPar"))) {
@@ -12373,10 +12404,10 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
         if (OB_ISNULL(orig_subpart_array[i])) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const ObIArray<common::ObNewRow>* orig_list_value = &(orig_subpart_array[i]->get_list_row_values());
+          const ObIArray<common::PartitionBoundRow>* orig_list_value = &(orig_subpart_array[i]->get_list_row_values());
           OB_ASSERT(orig_list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < orig_list_value->count(); ++j) {
-            const common::ObNewRow *new_row = &(orig_list_value->at(j));
+            const common::PartitionBoundRow *new_row = &(orig_list_value->at(j));
             if (1 == new_row->get_count() && new_row->get_cell(0).is_max_value()) {
               ret = OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST;
               LOG_USER_ERROR(OB_ERR_ADD_PARTITION_TO_DEFAULT_LIST);
@@ -12393,12 +12424,14 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
         if (OB_ISNULL(subpart_array[i])) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const ObIArray<common::ObNewRow>* list_value = &(subpart_array[i]->get_list_row_values());
+          const ObIArray<common::PartitionBoundRow>* list_value = &(subpart_array[i]->get_list_row_values());
           OB_ASSERT(list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < list_value->count(); ++j) {
             row_key.reset();
             row_key.assign(list_value->at(j).cells_, list_value->at(j).get_count());
-            if (OB_HASH_NOT_EXIST != list_row_map.exist_refactored(row_key)) {
+            ret = list_row_map.exist_refactored(row_key);
+            if (ret == OB_HASH_NOT_EXIST) { ret = OB_SUCCESS; }
+            else if (ret == OB_HASH_EXIST) {
               ret = OB_ERR_MULTIPLE_DEF_CONST_IN_LIST_PART;
               LOG_USER_ERROR(OB_ERR_MULTIPLE_DEF_CONST_IN_LIST_PART);
             }
@@ -18887,15 +18920,16 @@ int ObDDLService::create_database(const bool if_not_exist,
 
       if (OB_SUCC(ret)) {
         const ObSysVarSchema *collation_var = NULL;
-        ObObj collation_obj;
-        ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
+        DatumValue collation_value;
+        ObArenaAllocator alloc(ObModIds::OB_TEMP_VARIABLES);
         if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_COLLATION_SERVER,
                                                                    collation_var))) {
         } else if (OB_ISNULL(collation_var)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(collation_var->get_value(&alloc, NULL, collation_obj))) {
+        } else if (OB_FAIL(collation_var->get_value(alloc, static_cast<const ObTimeZoneInfo *>(nullptr), collation_value))) {
         } else {
-          runtime_collation_type = static_cast<ObCollationType>(collation_obj.get_int());
+          runtime_collation_type = static_cast<ObCollationType>(
+              collation_value.is_null() ? 0 : collation_value.get_int());
           runtime_charset_type = ObCharset::charset_type_by_coll(runtime_collation_type);
         }
       }
@@ -22408,9 +22442,8 @@ int ObDDLService::prepare_change_modify_column_online(AlterColumnSchema &alter_c
     LOG_USER_ERROR(OB_ERR_BAD_FIELD_ERROR, orig_column_name.length(), orig_column_name.ptr(),
                     origin_table_schema.get_table_name_str().length(),
                     origin_table_schema.get_table_name_str().ptr());
-  } else if (OB_FAIL(ObDDLResolver::check_default_value(
-        alter_column_schema.get_cur_default_value(), tz_info_wrap,
-        orig_column_schema->is_generated_column() ? &orig_column_schema->get_local_session_var() : NULL, allocator,
+  } else if (OB_FAIL(check_column_default_value(alter_column_schema, tz_info_wrap,
+        orig_column_schema->is_generated_column() ? &orig_column_schema->get_local_session_var() : nullptr, allocator,
         new_table_schema, alter_column_schema, empty_expr_arr, alter_table_schema.get_sql_mode(),
         &schema_checker, nullptr, nullptr))) {
   } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, origin_table_schema,
@@ -22511,13 +22544,18 @@ int ObDDLService::drop_column_online(
                 origin_table_schema, new_table_schema, *orig_column_schema, trans))) {
   } else {
     char new_col_name[OB_MAX_COLUMN_NAME_BUF_LENGTH] = {0};
-    ObObj default_value;
+    DatumValue default_value;
     if (new_column_schema->is_virtual_generated_column()
         || new_column_schema->is_stored_generated_column()
         || new_column_schema->is_default_expr_v2_column()) {
       // generated column expression, generated alway as (null), generated column retrieve needed.
-      default_value.set_varchar("NULL");
-      default_value.set_collation_type(ObCharset::get_system_collation());
+      ObDatum expr_datum;
+      expr_datum.set_string(ObString::make_string("NULL"));
+      SqlTypeMeta expr_meta;
+      expr_meta.set_varchar();
+      expr_meta.set_collation_level(CS_LEVEL_IMPLICIT);
+      expr_meta.set_collation_type(ObCharset::get_system_collation());
+      default_value = DatumValue(expr_datum, expr_meta);
     } else {
       default_value.set_null();
     }
@@ -22609,8 +22647,7 @@ int ObDDLService::prepare_change_modify_column_offline(AlterColumnSchema &alter_
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (alter_column_schema.is_generated_column()
-             && OB_FAIL(ObDDLResolver::reformat_generated_column_expr(
-               alter_column_schema.get_cur_default_value(), tz_info_wrap, alter_table_arg.local_session_var_,
+             && OB_FAIL(reformat_column_default_expr(alter_column_schema, tz_info_wrap, alter_table_arg.local_session_var_,
                allocator, new_table_schema, alter_column_schema, alter_table_schema.get_sql_mode(),
                &schema_checker))) {
   } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, origin_table_schema,
@@ -22628,8 +22665,7 @@ int ObDDLService::prepare_change_modify_column_offline(AlterColumnSchema &alter_
   if (OB_SUCC(ret)) {
     /* rename column, no need to check gen col dup */
     ObSEArray<ObString, 4> empty_expr_arr;
-    if (OB_FAIL(ObDDLResolver::check_default_value(
-          alter_column_schema.get_cur_default_value(), tz_info_wrap, &alter_table_arg.local_session_var_,
+    if (OB_FAIL(check_column_default_value(alter_column_schema, tz_info_wrap, &alter_table_arg.local_session_var_,
           allocator, new_table_schema, alter_column_schema, empty_expr_arr, alter_table_schema.get_sql_mode(),
           &schema_checker, nullptr, nullptr))) {
     }
@@ -23112,8 +23148,8 @@ int ObDDLService::check_same_partition(const ObPartition &l, const ObPartition &
   int ret = OB_SUCCESS;
   is_matched = false;
   if (l.get_sub_part_num() == r.get_sub_part_num()
-      && l.get_sub_interval_start() == r.get_sub_interval_start()
-      && l.get_sub_part_interval() == r.get_sub_part_interval()) {
+      && partition_bound_values_equal(l.get_sub_interval_start(), r.get_sub_interval_start())
+      && partition_bound_values_equal(l.get_sub_part_interval(), r.get_sub_part_interval())) {
     if (is_hash_like_part(part_type)) {
       if(l.get_part_idx() == r.get_part_idx()) {
         is_matched = true;

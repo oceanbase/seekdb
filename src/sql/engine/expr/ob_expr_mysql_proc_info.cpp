@@ -399,8 +399,8 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
   ObSEArray<common::ObString, 4> extended_type_info;
   uint64_t sub_type = static_cast<uint64_t>(common::ObGeoType::GEOTYPEMAX);
-  if (ob_is_geometry_tc(static_cast<ObObjType>(param_type)) ||
-      ob_is_enumset_tc(static_cast<ObObjType>(param_type))) {
+  if (ob_is_geometry_tc(static_cast<SqlValueType>(param_type)) ||
+      ob_is_enumset_tc(static_cast<SqlValueType>(param_type))) {
     sql::ObExecEnv exec_env;
     ParseNode *create_node = nullptr;
     if OB_FAIL(exec_env.init(exec_env_str)) {
@@ -410,7 +410,7 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
     if (OB_SUCC(ret)) {
       if(!OB_ISNULL(create_node) && !OB_ISNULL(create_node->children_[3])) {
         ParseNode *return_node = create_node->children_[3];
-        if (ob_is_geometry_tc(static_cast<ObObjType>(param_type))) {
+        if (ob_is_geometry_tc(static_cast<SqlValueType>(param_type))) {
           sub_type = return_node->int32_values_[1];
         } else {
           CK(OB_NOT_NULL(return_node->children_[3]));
@@ -431,7 +431,7 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
     if (OB_FAIL(ob_sql_type_str_with_coll(returns_buf,
                                           OB_MAX_VARCHAR_LENGTH,
                                           pos,
-                                          static_cast<ObObjType>(param_type),
+                                          static_cast<SqlValueType>(param_type),
                                           param_length,
                                           param_precision,
                                           param_scale,
@@ -572,12 +572,12 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
     ObString value_str;
     switch (field_id) {
       case SQL_MODE: {
-        ObObj int_value;
-        ObObj str_value;
-        int_value.set_int(exec_env.get_sql_mode());
-        if (OB_FAIL(ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
+        DatumValue int_value;
+        DatumValue str_value;
+        if (OB_FAIL(int_value.set_int(ObIntType, exec_env.get_sql_mode(), ctx.get_expr_res_alloc()))) {
+        } else if (OB_FAIL(ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
         } else {
-          value_str = str_value.get_string();
+          value_str = str_value.datum_.get_string();
           OZ (set_return_result(expr, ctx, expr_datum, value_str));
         }
         break;
@@ -648,12 +648,12 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
     ObString value_str;
     switch (field_id) {
       case SQL_MODE: {
-        ObObj int_value;
-        ObObj str_value;
-        int_value.set_int(exec_env.get_sql_mode());
-        if (OB_FAIL(ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
+        DatumValue int_value;
+        DatumValue str_value;
+        if (OB_FAIL(int_value.set_int(ObIntType, exec_env.get_sql_mode(), ctx.get_expr_res_alloc()))) {
+        } else if (OB_FAIL(ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
         } else {
-          value_str = str_value.get_string();
+          value_str = str_value.datum_.get_string();
           OZ (set_return_result(expr, ctx, expr_datum, value_str));
         }
         break;
@@ -762,7 +762,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
   int64_t param_precision;
   int64_t param_scale;
   int64_t param_coll_type;
-  ObObj   obj_routine_body;
   
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg0))) {
   } else if (arg0->is_null()) {
@@ -776,8 +775,7 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
   } else if (arg1->is_null()) {
     expr_datum.set_null();
   } else {
-    OZ (arg1->to_obj(obj_routine_body, expr.args_[1]->obj_meta_));
-    OX (obj_routine_body.get_string(routine_body));
+    routine_body = arg1->get_string();
   }
 
   if (OB_FAIL(ret)) {

@@ -360,7 +360,7 @@ int ObLobTabletDmlHelper::process_delta_lob(
       // update datum with new disk locator
       datum.set_lob_data(*lob_param.lob_common_, lob_param.handle_size_);
       if (! lob_param.ext_info_log_.is_null()
-        && OB_FAIL(register_ext_info_commit_cb(run_ctx, column, datum, lob_param.ext_info_log_))) {
+        && OB_FAIL(register_ext_info_commit_cb(run_ctx, column, datum, ObVarcharType, lob_param.ext_info_log_))) {
         LOG_WARN("register_ext_info_commit_cb fail", K(ret), K(lob_param));
       }
     }
@@ -419,7 +419,8 @@ int ObLobTabletDmlHelper::register_ext_info_commit_cb(
     ObDMLRunningCtx &run_ctx,
     const ObColDesc &column,
     ObDatum &col_data,
-    ObObj &ext_info_data)
+    const SqlValueType ext_info_data_type,
+    const ObDatum &ext_info_data)
 {
   int ret = OB_SUCCESS;
   ObLobDiskLocatorWrapper lob_disk_locator;
@@ -427,7 +428,7 @@ int ObLobTabletDmlHelper::register_ext_info_commit_cb(
   transaction::ObTxSEQ seq_no_st;
   int64_t seq_no_cnt = 0;
   ObExtInfoLogHeader header(OB_JSON_DIFF_EXT_INFO_LOG);
-  const int64_t data_size = ext_info_data.get_string_len() + header.get_serialize_size();
+  const int64_t data_size = ext_info_data.get_string().length() + header.get_serialize_size();
   memtable::ObMvccWriteGuard guard(false);
   if (ext_info_data.is_null()) {
     ret = OB_ERR_UNEXPECTED;
@@ -440,7 +441,7 @@ int ObLobTabletDmlHelper::register_ext_info_commit_cb(
   } else if (OB_FAIL(guard.write_auth(run_ctx.store_ctx_))) {
   } else if (OB_FAIL(run_ctx.store_ctx_.mvcc_acc_ctx_.mem_ctx_->register_ext_info_commit_cb(
       run_ctx.dml_param_.timeout_, run_ctx.dml_flag_,
-      seq_no_st, seq_no_cnt, col_data.get_string(), column.col_type_.get_type(), header, ext_info_data))) {
+      seq_no_st, seq_no_cnt, col_data.get_string(), column.col_type_.get_type(), header, ext_info_data_type, ext_info_data))) {
   } else {
     lob_data_outrow_ctx->seq_no_st_ = seq_no_st.cast_to_int();
     lob_data_outrow_ctx->seq_no_cnt_ = seq_no_cnt;
@@ -458,8 +459,8 @@ int ObLobTabletDmlHelper::register_ext_info_commit_cb(
   int ret = OB_SUCCESS;
   ObDatum index_datum;
   index_datum.set_string(index_data);
-  ObObj ext_info_data;
-  ext_info_data.set_varchar(data);
+  ObDatum ext_info_data;
+  ext_info_data.set_string(data);
   ObLobDiskLocatorWrapper index_lob_disk_locator;
   ObLobDiskLocatorWrapper data_lob_disk_locator;
   transaction::ObTxSEQ seq_no_st;
@@ -481,6 +482,7 @@ int ObLobTabletDmlHelper::register_ext_info_commit_cb(
       index_data,
       column.col_type_.get_type(),
       header,
+      ObVarcharType,
       ext_info_data))) {
   }
   return ret;

@@ -76,15 +76,13 @@ int ObDBMSSchedJobExecutor::init_session(
   const bool print_info_log = true;
   const bool use_server_defaults = true;
   ObPCMemPctConf pc_mem_conf;
-  ObObj sql_mode;
-  {
-    sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
-  }
+  DatumValue sql_mode;
   OX (session.set_inner_session());
   OZ (session.load_default_sys_variable(print_info_log, use_server_defaults));
   OZ (session.update_max_packet_size());
   OZ (session.init_runtime(OB_SERVER_RUNTIME_NAME));
   OZ (session.load_all_sys_vars(schema_guard));
+  OZ (sql_mode.set_uint64(DEFAULT_MYSQL_MODE, session.get_allocator()));
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
   OZ (session.set_default_database(database_name));
   OZ (session.get_pc_mem_conf(pc_mem_conf));

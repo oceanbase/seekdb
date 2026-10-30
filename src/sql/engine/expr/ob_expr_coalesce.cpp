@@ -62,7 +62,7 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
                              ob_is_uint_tc(type.get_type()));
       for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
         if (ob_is_enumset_tc(types[i].get_type())) {
-          ObObjType calc_type = get_enumset_calc_type(type.get_type(), i);
+          SqlValueType calc_type = get_enumset_calc_type(type.get_type(), i);
           if (OB_UNLIKELY(ObMaxType == calc_type)) {
             ret = OB_ERR_UNEXPECTED;
             SQL_ENG_LOG(WARN, "invalid type of parameter ", K(i), K(ret));
@@ -81,10 +81,10 @@ int ObExprCoalesce::calc_result_typeN(ObExprResType &type,
             // Parameter is int/uint tc when cannot set calc type to the result's type
             // eg: select coalesce(null, col_tinyint, col_mediumint) from t1;
             // Due to the merge type's handling of null, the result type may change when multiple type inferences occur
-            types[i].set_calc_meta(types[i].get_obj_meta());
+            types[i].set_calc_meta(types[i].get_sql_type_meta());
             types[i].set_calc_accuracy(types[i].get_accuracy());
           } else {
-            types[i].set_calc_meta(type.get_obj_meta());
+            types[i].set_calc_meta(type.get_sql_type_meta());
             types[i].set_calc_accuracy(type.get_accuracy());
           }
         }

@@ -145,9 +145,6 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
   int ret = OB_SUCCESS;
   ObDatum *datum = NULL;
   ObDatumMeta datum_meta;
-  ObObj obj;
-  ObObjMeta obj_meta;
-  obj_meta.set_ext();
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   ExtraInfo *info = static_cast<ExtraInfo *>(expr.extra_info_);
   CK(OB_NOT_NULL(info));
@@ -187,16 +184,18 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
   if (OB_SUCC(ret)) {
     if (info->pl_cursor_info_.is_explicit_cursor()) {
       CK (ObExtendType == datum_meta.type_);
-      OX (datum->to_obj(obj, obj_meta));
-      if (OB_SUCC(ret)) {
-        if (obj.is_null()) {
-          // do nothing, null cursor is legal...
-        } else if (!obj.is_ext()
-                    || obj.get_meta().get_extend_type() != pl::PL_CURSOR_TYPE) {
-          ret = OB_ERR_CURSOR_ATTR_APPLY;
-        }
+      if (datum->is_null() || datum->is_extended_null()) {
+        // A null cursor is legal. This also handles the legacy 16-byte Datum
+        // encoding whose embedded metadata marks it as NULL.
+        cursor = NULL;
+      } else if (!datum->is_ext() || !datum->has_ext_value()
+                 || datum->get_extend_type() != pl::PL_CURSOR_TYPE) {
+        // has_ext_value() validates either the 15-byte native payload or the
+        // 16-byte legacy payload before reading its subtype/value fields.
+        ret = OB_ERR_CURSOR_ATTR_APPLY;
+      } else {
+        cursor = reinterpret_cast<const pl::ObPLCursorInfo*>(datum->get_ext());
       }
-      OX (cursor = reinterpret_cast<const pl::ObPLCursorInfo*>(obj.get_ext()));
     } else {
       if (OB_ISNULL(cursor = session->get_pl_implicit_cursor())) {
         cursor = &implicit_cursor;

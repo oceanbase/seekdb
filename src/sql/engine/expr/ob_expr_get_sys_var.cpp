@@ -51,7 +51,7 @@ int ObExprGetSysVar::calc_result_type2(ObExprResType &type,
   } else {
     ObString var_name = type1.get_param().get_varchar();
     bool is_exist = false;
-    ObObjType data_type = ObMaxType;
+    SqlValueType data_type = ObMaxType;
     if (OB_FAIL(session->sys_variable_exists(var_name, is_exist))) {
     } else {
       if (is_exist) {
@@ -99,7 +99,7 @@ int ObExprGetSysVar::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprGetSysVar::calc_(ObObj &result, const ObString &var_name, const int64_t var_scope,
+int ObExprGetSysVar::calc_(DatumValue &result, const ObString &var_name, const int64_t var_scope,
                            ObSQLSessionInfo *session, ObExecContext *exec_ctx, ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
@@ -153,7 +153,7 @@ int ObExprGetSysVar::calc_(ObObj &result, const ObString &var_name, const int64_
   return ret;
 }
 
-int ObExprGetSysVar::get_session_var(ObObj &result,
+int ObExprGetSysVar::get_session_var(DatumValue &result,
                                      const ObString &var_name,
                                      ObIAllocator &alloc,
                                      ObSQLSessionInfo *session,
@@ -181,7 +181,7 @@ int ObExprGetSysVar::get_session_var(ObObj &result,
           number::ObNumber value;
           if (OB_FAIL(nmb.div(nmb_unit, value, alloc))) {
           } else {
-            result.set_number(value);
+            OZ(result.set_number(value, alloc));
           }
         }
       }
@@ -200,11 +200,11 @@ int ObExprGetSysVar::get_session_var(ObObj &result,
 int ObExprGetSysVar::get_sys_var_disp_obj(common::ObIAllocator &allocator,
                                           const ObSQLSessionInfo &session,
                                           const ObString &var_name,
-                                          ObObj &disp_obj)
+                                          DatumValue &disp_obj)
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *sys_var = NULL;
-  ObObj value;
+  DatumValue value;
   ObSysVarClassType sys_var_id = SYS_VAR_INVALID;
   SMART_VAR(ObSysVarFactory, sysvar_fac) {
     if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(&session, allocator, var_name, value))) {
@@ -215,8 +215,8 @@ int ObExprGetSysVar::get_sys_var_disp_obj(common::ObIAllocator &allocator,
     } else if (OB_ISNULL(sys_var)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      sys_var->set_value(value);
-      if (OB_FAIL(sys_var->to_select_obj(allocator, session, disp_obj))) {
+      if (OB_FAIL(sys_var->set_value(value, allocator))) {
+      } else if (OB_FAIL(sys_var->to_select_obj(allocator, session, disp_obj))) {
       }
     }
   }
@@ -238,8 +238,8 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
   } else {
     const ObString &var_name = name->get_string();
     int64_t var_scope = OB_INVALID_COUNT;
-    ObObjType scope_type = expr.args_[1]->datum_meta_.get_type();
-    ObObj result;
+    SqlValueType scope_type = expr.args_[1]->datum_meta_.get_type();
+    DatumValue result;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
 
@@ -282,22 +282,18 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
     } else if (OB_FAIL(calc_(result, var_name, var_scope, ctx.exec_ctx_.get_my_session(),
                              &ctx.exec_ctx_, calc_alloc))) {
     } else {
-      const ObObjType &obj_type = result.get_type();
-      const ObObjType &res_type = expr.datum_meta_.type_;
+      const SqlValueType &obj_type = result.get_type();
+      const SqlValueType &res_type = expr.datum_meta_.type_;
       if (!result.is_null() && OB_UNLIKELY(obj_type != res_type)) {
         // Ensure that the compile-time result type is consistent with the actual result type, otherwise the memory space of datum may be corrupted due to type
         // Inconsistency causes issues
         ret = OB_ERR_UNEXPECTED;
-      } else if (ob_is_string_type(obj_type)) {
-        ObString res_str;
-        ObExprStrResAlloc str_alloc(expr, ctx);
-        if (OB_FAIL(deep_copy_ob_string(str_alloc, result.get_string(), res_str))) {
-        } else {
-          res_datum.set_string(res_str);
-        }
       } else {
-        if (OB_FAIL(res_datum.from_obj(result))) {
-        }
+        char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+        ObDatum row_value;
+        OZ(result.to_row_datum(row_value, extended_payload));
+        OZ(expr.deep_copy_datum(ctx, row_value));
+        OX(res_datum.set_datum(expr.locate_expr_datum(ctx)));
       }
     }
   }

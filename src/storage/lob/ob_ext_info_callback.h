@@ -98,7 +98,8 @@ public:
       seq_no_cur_(),
       lob_id_(),
       dml_flag_(blocksstable::ObDmlFlag::DF_MAX),
-      key_obj_(),
+      key_value_(),
+      key_seq_(0),
       key_(),
       rowkey_(),
       mutator_row_buf_(nullptr),
@@ -129,7 +130,8 @@ private:
   transaction::ObTxSEQ seq_no_cur_;
   ObLobId lob_id_;
   blocksstable::ObDmlFlag dml_flag_;
-  ObObj key_obj_;
+  common::DatumValue key_value_;
+  uint64_t key_seq_;
   memtable::ObMemtableKey key_;
   common::ObStoreRowkey rowkey_;
   char *mutator_row_buf_;
@@ -174,16 +176,17 @@ public:
     const transaction::ObTxSEQ &seq_no_st,
     const int64_t seq_no_cnt,
     const ObString &index_data,
-    const ObObjType index_data_type,
+    const SqlValueType index_data_type,
     const ObExtInfoLogHeader &header,
-    ObObj &ext_info_data);
+    const SqlValueType ext_info_data_type,
+    const ObDatum &ext_info_data);
 
 private:
 
-  int build_data_iter(ObObj &ext_info_data);
+  int build_data_iter(const ObDatum &ext_info_data, const SqlValueType ext_info_data_type);
 
   int get_data(ObString &data);
-  int get_lob_id(const ObString &index_data, const ObObjType index_data_type, ObLobId &lob_id);
+  int get_lob_id(const ObString &index_data, const SqlValueType index_data_type, ObLobId &lob_id);
 
 public:
   TO_STRING_KV(K(timeout_), K(data_size_), K(seq_no_st_), K(seq_no_cnt_), K(header_writed_));
@@ -192,7 +195,7 @@ private:
   ObArenaAllocator tmp_allocator_;
   memtable::ObIMvccCtx *mvcc_ctx_;
   ObExtInfoLogHeader header_;
-  ObObj ext_info_data_;
+  ObDatum ext_info_data_;
   ObLobAccessParam *lob_param_;
   ObLobQueryIter *data_iter_;
   ObString data_buffer_;

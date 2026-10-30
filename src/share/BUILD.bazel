@@ -744,6 +744,7 @@ grouped_unity_cc_library(
     name = "schema_list_row_values",
     unity_groups = [_SCHEMA_LIST_ROW_VALUES_UNITY_GROUP],
     implementation_deps = [
+        ":datum",
         ":schema_model_interface",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_base",
@@ -1177,6 +1178,26 @@ grouped_unity_cc_library(
     ],
 )
 
+cc_library(
+    name = "value_cast_context",
+    hdrs = ["datum/datum_cast_context.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_common",
+    ],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__", "//unittest:__subpackages__"],
+)
+
+cc_library(
+    name = "value_cast_constants",
+    hdrs = ["datum/number_cast_constants.h"],
+    deps = ["//src/oblib:oblib_foundation", "//src/oblib:oblib_base", "//src/oblib:oblib_common"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__", "//unittest:__subpackages__"],
+)
+
 _OBJECT_CAST_UNITY_GROUP = select_unity_sources(
     SHARE_UNITY_GROUPS,
     "object_cast",
@@ -1205,7 +1226,12 @@ cc_library(
 grouped_unity_cc_library(
     name = "object_cast",
     unity_groups = [_OBJECT_CAST_UNITY_GROUP],
+    private_hdrs = ["object/datum_cast_frame.h"],
     public_hdrs = [
+        "datum/datum_cast_support.h",
+        "datum/datum_value_cast.h",
+        "datum/datum_string_accuracy.h",
+        "sql_udt_support.h",
         "object/ob_array_cast.h",
         "object/ob_decint_scale_util.h",
         "object/ob_enumset_str_util.h",
@@ -1213,6 +1239,8 @@ grouped_unity_cc_library(
         "object/ob_obj_cast_util.h",
     ],
     deps = [
+        ":value_cast_context",
+        ":value_cast_constants",
         ":datum",
         ":error_codes",
         ":geo_types",
@@ -1351,6 +1379,8 @@ grouped_unity_cc_library(
         "//src/oblib:oblib_foundation",
     ],
     implementation_deps = [
+        ":value_cast_context",
+        ":value_cast_constants",
         ":lob_diff_interface",
         ":lob_read_context",
         ":lob_read_service",
@@ -1373,6 +1403,7 @@ _DATUM_DEPS = [
     ":error_codes",
     ":vector",
     "//src/oblib:oblib_foundation",
+    "//src/oblib:oblib_collections_primitives",
 ]
 
 grouped_unity_cc_library(
@@ -1400,7 +1431,12 @@ grouped_unity_cc_library(
     public_hdrs = [
         "datum/ob_datum_cmp_func_def.h",
         "datum/ob_datum_compare.h",
+        "datum/typed_datum_compare.h",
+        "datum/typed_datum_murmur.h",
+        "datum/datum_value_set.h",
+        "datum/datum_ndv_hash.h",
         "datum/ob_datum_funcs.h",
+        "datum/datum_hash_value_calculator.h",
         "datum/ob_datum_util.h",
         "datum/ob_defined_collations.h",
     ],
@@ -1813,7 +1849,7 @@ grouped_unity_cc_library(
     ],
     features = ["layering_check"],
     tags = ["manual"],
-    visibility = ["//src/share:__pkg__"],
+    visibility = ["//src/share:__pkg__", "//unittest/share:__pkg__", "//src/sql/optimizer:__pkg__"],
 )
 
 grouped_unity_cc_library(
@@ -1840,4 +1876,19 @@ cc_library(
     ] + _SHARE_RUNTIME_SEMANTIC_DEPS,
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
+)
+
+cc_library(
+    name = "schema_default_test_runtime",
+    testonly = True,
+    srcs = ["schema/ob_column_schema.cpp", "schema/ob_schema_struct.cpp", "schema/ob_schema_macro_define.cpp", "schema/ob_list_row_values.cpp", "session/ob_local_session_var.cpp", "ob_errno.cpp"],
+    deps = _SHARE_RUNTIME_DEPS + [
+        ":_share_implementation_headers",
+        ":schema_entities",
+        ":schema_registry",
+        ":schema_transaction_control",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_base",
+    ],
+    visibility = ["//unittest/share:__pkg__"],
 )

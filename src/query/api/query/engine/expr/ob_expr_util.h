@@ -58,8 +58,8 @@ using ObTextStringDatumResult = ObTextStringVectorResult<common::ObIVector>;
 class ObExprUtil
 {
 public:
-  static int get_trunc_int64(const common::ObObj &obj, common::ObExprCtx &expr_ctx, int64_t &out);
-  static int get_round_int64(const common::ObObj &obj, common::ObExprCtx &expr_ctx, int64_t &out);
+  static int get_trunc_int64(const common::DatumValue &value, common::ObExprCtx &expr_ctx, int64_t &out);
+  static int get_round_int64(const common::DatumValue &value, common::ObExprCtx &expr_ctx, int64_t &out);
 
 
   // This function relies on `kmp_next` to do the calculation of next array
@@ -176,10 +176,10 @@ private:
                                 common::ObExprCtx &expr_ctx,
                                 const bool is_trunc, //true: trunc; false: round
                                 int64_t &out);
-  static int get_int64_from_obj(const common::ObObj &obj,
-                                common::ObExprCtx &expr_ctx,
-                                const bool is_trunc, //true: trunc; false: round
-                                int64_t &out);
+  static int get_int64_from_value(const common::DatumValue &value,
+                                  common::ObExprCtx &expr_ctx,
+                                  bool is_trunc,
+                                  int64_t &out);
   DISALLOW_COPY_AND_ASSIGN(ObExprUtil);
 };
 

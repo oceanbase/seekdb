@@ -570,3 +570,21 @@ cc_import(
     testonly = True,
     visibility = ["//unittest:__subpackages__"],
 )
+
+# Keep the original library path in test runfiles as well as cc_import's solib
+# path. Tests can load it without depending on a generated solib directory name.
+filegroup(
+    name = "liboceanbase_test_runtime",
+    srcs = [":_liboceanbase_link"],
+    testonly = True,
+    visibility = ["//unittest:__subpackages__"],
+)
+
+# Keep native key consumer test headers within their production module.
+cc_library(
+    name = "observer_rowkey_filter_test_runtime",
+    testonly = True,
+    deps = [":observer_internal_interface", "//src/share:value_cast_constants", "//src/share:system_variable_metadata"],
+    tags = ["manual"],
+    visibility = ["//unittest/observer:__pkg__"],
+)

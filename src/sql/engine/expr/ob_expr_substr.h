@@ -43,12 +43,6 @@ public:
                     const bool is_arg_batch_ascii,
                     bool &is_result_batch_ascii);
 
-  static int calc(common::ObObj &result,
-                  const common::ObString &text,
-                  const int64_t start_pos,
-                  const int64_t length,
-                  common::ObCollationType cs_type,
-                  const bool is_clob);
 
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
@@ -63,14 +57,6 @@ private:
                          int64_t param_num,
                          common::ObCollationType cs_type,
                          int64_t &res_len) const;
-  int calc_result3_for_mysql(common::ObObj &result,
-                             const common::ObObj &text,
-                             const common::ObObj &start_pos,
-                             const common::ObObj &length,
-                             common::ObExprCtx &expr_ctx) const;
-  int cast_param_type_for_mysql(const common::ObObj& in,
-                                common::ObExprCtx& expr_ctx,
-                                common::ObObj& out) const;
 
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprSubstr);

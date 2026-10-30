@@ -1,0 +1,86 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+package(default_testonly = True, default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "native_rowkey_filters_cases",
+    srcs = ["test_native_observer_rowkey_filters.cpp", "test_native_values_main.cpp"],
+    alwayslink = True,
+    deps = ["//src/observer:observer_rowkey_filter_test_runtime", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_rowkey_filters",
+    linkstatic = True,
+    data = ["data/observer_rowkey_filters.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_rowkey_filters_cases", "//src/observer:liboceanbase"],
+)
+
+# Review-only snippet for unittest/observer/BUILD.bazel. Root owns actual BUILD edits.
+# Reuse the existing Observer test adapter that already exports the production
+# Observer/Share/SQL header closure for test_native_rowkey_filters. Do not add
+# direct peer Share/SQL/Storage test dependencies.
+cc_library(
+    name = "native_virtual_table_rows_cases",
+    srcs = ["test_native_virtual_table_rows.cpp", "test_native_values_main.cpp"],
+    alwayslink = True,
+    deps = ["//src/observer:observer_rowkey_filter_test_runtime", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_virtual_table_rows",
+    linkstatic = True,
+    data = ["data/native_virtual_table_rows.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_virtual_table_rows_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_mysql_protocol_values_cases",
+    srcs = ["test_native_mysql_protocol_values.cpp", "test_native_values_main.cpp"],
+    alwayslink = True,
+    deps = ["//src/observer:observer_rowkey_filter_test_runtime", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_mysql_protocol_values",
+    linkstatic = True,
+    data = ["data/mysql_protocol_values.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_mysql_protocol_values_cases", "//src/observer:liboceanbase"],
+)
+
+# Merge into unittest/observer/BUILD.bazel; parent owns actual BUILD.
+cc_library(
+    name = "native_inner_result_cases",
+    srcs = ["test_native_inner_result.cpp", "test_native_values_main.cpp"],
+    alwayslink = True,
+    deps = ["//src/observer:observer_rowkey_filter_test_runtime", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_inner_result",
+    linkstatic = True,
+    data = ["data/native_inner_result.golden", "//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_inner_result_cases", "//src/observer:liboceanbase"],
+)
+
+# Parent owns actual BUILD integration. Reuse the existing Observer-owned
+# runtime/header adapter; no direct test deps on peer SQL/Share modules.
+# test_native_values_main.cpp is already present and initializes Charset,
+# NumberConstValue, DecimalInt and genuine native system defaults.
+cc_library(
+    name = "native_array_binding_cases",
+    srcs = ["test_native_array_binding.cpp", "test_native_values_main.cpp"],
+    alwayslink = True,
+    deps = ["//src/observer:observer_rowkey_filter_test_runtime", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_array_binding",
+    linkstatic = True,
+    data = [
+        "data/native_array_binding.golden",
+        "data/native_array_binding_closed.golden",
+        "//src/observer:liboceanbase_test_runtime",
+    ],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":native_array_binding_cases", "//src/observer:liboceanbase"],
+)

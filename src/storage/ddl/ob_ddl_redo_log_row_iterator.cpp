@@ -30,7 +30,6 @@ using namespace share::schema;
 ObDDLRedoLogRowIterator::ObDDLRedoLogRowIterator(ObIAllocator &allocator)
   : allocator_(allocator),
     iter_(allocator), 
-    rowkey_obobj_(nullptr),
     schema_rowkey_column_count_(0),
     is_inited_(false)
 { 
@@ -46,10 +45,6 @@ void ObDDLRedoLogRowIterator::reset()
 {
   iter_.reset();
   rowkey_.reset();
-  if (rowkey_obobj_ != nullptr) {
-    allocator_.free(rowkey_obobj_);
-    rowkey_obobj_ = nullptr;
-  }
   schema_rowkey_column_count_ = 0;
   is_inited_ = false;
 }

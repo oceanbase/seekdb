@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "observer/virtual_table/ob_table_index.h"
 
@@ -55,13 +56,13 @@ int ObTableIndex::inner_open()
        OB_SUCC(ret) && OB_INVALID_ID == show_table_id_ && i < key_ranges_.count(); ++i) {
     const ObRowkey &start_key = key_ranges_.at(i).start_key_;
     const ObRowkey &end_key = key_ranges_.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-    if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
+    if (start_key.get_value_count() > 0 && start_key.get_value_count() == end_key.get_value_count()) {
       if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
-      } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
+      } else if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])
                  && ObIntType == start_key_obj_ptr[0].get_type()) {
         show_table_id_ = start_key_obj_ptr[0].get_int();
       } else {/*do nothing*/}
@@ -100,7 +101,7 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(
         WARN, "data member is not init", K(ret), K(allocator_), K(schema_guard_), K(cur_row_.cells_));
   } else {
-    ObObj *cells = cur_row_.cells_;
+    DatumValue *cells = cur_row_.cells_;
     const int64_t col_count = output_column_ids_.count();
     bool is_end = false;
     if (OB_INVALID_ID == show_table_id_) {
@@ -176,7 +177,7 @@ int ObTableIndex::inner_get_next_row(common::ObNewRow *&row)
 }
 
 int ObTableIndex::add_database_indexes(const ObDatabaseSchema &database_schema,
-                                       ObObj *cells,
+                                       DatumValue *cells,
                                        int64_t col_count,
                                        bool &is_end)
 {
@@ -230,7 +231,7 @@ int ObTableIndex::add_database_indexes(const ObDatabaseSchema &database_schema,
 
 int ObTableIndex::add_table_indexes(const ObTableSchema &table_schema,
                                     const ObString &database_name,
-                                    ObObj *cells,
+                                    DatumValue *cells,
                                     int64_t col_count,
                                     bool &is_end)
 {
@@ -302,7 +303,7 @@ int ObTableIndex::get_rowkey_index_column(const ObTableSchema &table_schema,
 
 int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
                                      const ObString &database_name,
-                                     ObObj *cells,
+                                     DatumValue *cells,
                                      int64_t col_count,
                                      bool &is_end)
 {
@@ -340,52 +341,52 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
           switch(col_id) {
           // table_id
           case OB_APP_MIN_COLUMN_ID: {
-            cells[cell_idx].set_int(table_schema.get_table_id());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, table_schema.get_table_id()) : ret);
             break;
           }
           // key_name
           case OB_APP_MIN_COLUMN_ID + 1: {
-            cells[cell_idx].set_varchar(ObString("PRIMARY"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("PRIMARY")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // seq_in_index
           case OB_APP_MIN_COLUMN_ID + 2: {
-            cells[cell_idx].set_int(rowkey_info_idx_ + 1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, rowkey_info_idx_ + 1) : ret);
             break;
           }
           //table_schema
           case OB_APP_MIN_COLUMN_ID + 3: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // table
           case OB_APP_MIN_COLUMN_ID + 4: {
-            cells[cell_idx].set_varchar(table_schema.get_table_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_table_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // non_unique
           case OB_APP_MIN_COLUMN_ID + 5: {
-            cells[cell_idx].set_int(0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 0) : ret);
             break;
           }
           //index_schema
           case OB_APP_MIN_COLUMN_ID + 6: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // column_name
           case OB_APP_MIN_COLUMN_ID + 7: {
-            cells[cell_idx].set_varchar(column_schema->get_column_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_schema->get_column_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME Are all in ascending order?
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("A")) : ret); //FIXME Are all in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -411,33 +412,33 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
           }
           // null
           case OB_APP_MIN_COLUMN_ID + 12: {
-            cells[cell_idx].set_varchar(ObString("")); // Primary key must not be NULL
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret); // Primary key must not be NULL
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // index_type
           case OB_APP_MIN_COLUMN_ID + 13: {
-            cells[cell_idx].set_varchar(ObString("BTREE")); //FIXME Is it definitely BTREE?
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("BTREE")) : ret); //FIXME Is it definitely BTREE?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // comment
           case OB_APP_MIN_COLUMN_ID + 14: {
             //TODO
-            cells[cell_idx].set_varchar(ObString("available"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("available")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // index_comment
           case OB_APP_MIN_COLUMN_ID + 15: {
             //TODO
-            cells[cell_idx].set_varchar(ObString(""));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             //is_visible
           case OB_APP_MIN_COLUMN_ID + 16: {
-            cells[cell_idx].set_varchar(ObString("YES"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("YES")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -449,9 +450,9 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
           // is_column_visible
           case OB_APP_MIN_COLUMN_ID + 18: {
             if (is_column_visible) {
-              cells[cell_idx].set_int(1);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 1) : ret);
             } else {
-              cells[cell_idx].set_int(0);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 0) : ret);
             }
             break;
           }
@@ -475,7 +476,7 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
 
 int ObTableIndex::add_normal_indexes(const ObTableSchema &table_schema,
                                      const ObString &database_name,
-                                     ObObj *cells,
+                                     DatumValue *cells,
                                      int64_t col_count,
                                      bool &is_end)
 {
@@ -685,7 +686,7 @@ int ObTableIndex::get_normal_index_column(const ObTableSchema &table_schema,
 int ObTableIndex::add_normal_index_column(const ObString &database_name,
                                           const ObTableSchema &table_schema,
                                           const ObTableSchema *index_schema,
-                                          ObObj *cells,
+                                          DatumValue *cells,
                                           int64_t col_count,
                                           bool &is_end)
 {
@@ -727,7 +728,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
           switch (col_id) {
           // table_id
           case OB_APP_MIN_COLUMN_ID: {
-            cells[cell_idx].set_int(table_schema.get_table_id());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, table_schema.get_table_id()) : ret);
             break;
           }
             // key_name
@@ -735,31 +736,31 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             index_name.reset();
             //  get the original short index name
             if (ObIndexType::INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_schema->get_index_type()) {
-              cells[cell_idx].set_varchar(ObString("PRIMARY"));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("PRIMARY")) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             } else if (OB_FAIL(ObTableSchema::get_index_name(*allocator_,
                 table_schema.get_table_id(), index_schema->get_table_name_str(),
                 index_name))) {
             } else {
-              cells[cell_idx].set_varchar(index_name);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, index_name) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
             break;
           }
             // seq_in_index
           case OB_APP_MIN_COLUMN_ID + 2: {
-            cells[cell_idx].set_int(index_column_idx_ + 1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, index_column_idx_ + 1) : ret);
             break;
           }
             //table_schema
           case OB_APP_MIN_COLUMN_ID + 3: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // table
           case OB_APP_MIN_COLUMN_ID + 4: {
-            cells[cell_idx].set_varchar(table_schema.get_table_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_table_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -771,12 +772,12 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             } else {
               non_unique = 1;
             }
-            cells[cell_idx].set_int(non_unique);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, non_unique) : ret);
             break;
           }
             //index_schema
           case OB_APP_MIN_COLUMN_ID + 6: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -785,14 +786,14 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             ObString column_name;
             if (OB_FAIL(get_show_column_name(table_schema, *column_schema, column_name))) {
             } else {
-              cells[cell_idx].set_varchar(column_name);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_name) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
             break;
           }
             // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME Is everything in ascending order?
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("A")) : ret); //FIXME Is everything in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -813,7 +814,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
               } else {
-                cells[cell_idx].set_varchar(ObString(pos, buf));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(pos, buf)) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               }
             }
@@ -828,9 +829,9 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             // null
           case OB_APP_MIN_COLUMN_ID + 12: {
             if (column_schema->is_nullable()) {
-              cells[cell_idx].set_varchar(ObString("YES"));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("YES")) : ret);
             } else {
-              cells[cell_idx].set_varchar(ObString(""));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
             }
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
@@ -838,9 +839,9 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             // index_type
           case OB_APP_MIN_COLUMN_ID + 13: {
             if (index_schema->is_spatial_index()) {
-              cells[cell_idx].set_varchar(ObString("SPATIAL"));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("SPATIAL")) : ret);
             } else {
-              cells[cell_idx].set_varchar(ObString("BTREE")); //FIXME Is it definitely BTREE?
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("BTREE")) : ret); //FIXME Is it definitely BTREE?
             }
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
@@ -848,19 +849,19 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             // comment
           case OB_APP_MIN_COLUMN_ID + 14: {
             //TODO
-            cells[cell_idx].set_varchar(ObString(ob_index_status_str(index_schema->get_index_status())));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(ob_index_status_str(index_schema->get_index_status()))) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // index_comment
           case OB_APP_MIN_COLUMN_ID + 15: {
-            cells[cell_idx].set_varchar(index_schema->get_comment_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, index_schema->get_comment_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case OB_APP_MIN_COLUMN_ID + 16: {
             const ObString &is_visible = index_schema->is_index_visible() ? "YES" : "NO";
-            cells[cell_idx].set_varchar(is_visible);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, is_visible) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -870,7 +871,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
               ObString col_def;
               if (OB_FAIL(column_schema->get_cur_default_value().get_string(col_def))) {
               } else {
-                cells[cell_idx].set_varchar(col_def);
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, col_def) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               }
             } else {
@@ -881,9 +882,9 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
           // is_column_visible
           case OB_APP_MIN_COLUMN_ID + 18: {
             if (is_column_visible) {
-              cells[cell_idx].set_int(1);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 1) : ret);
             } else {
-              cells[cell_idx].set_int(0);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 0) : ret);
             }
             break;
           }
@@ -908,7 +909,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
 int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
                                             const ObTableSchema &table_schema,
                                             const ObTableSchema *index_schema,
-                                            ObObj *cells,
+                                            DatumValue *cells,
                                             int64_t col_count,
                                             const uint64_t column_id)
 {
@@ -940,7 +941,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
         switch(col_id) {
           // table_id
           case OB_APP_MIN_COLUMN_ID: {
-            cells[cell_idx].set_int(table_schema.get_table_id());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, table_schema.get_table_id()) : ret);
             break;
           }
             // key_name
@@ -951,48 +952,48 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
                 table_schema.get_table_id(), index_schema->get_table_name_str(),
                 index_name))) {
             } else {
-              cells[cell_idx].set_varchar(index_name);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, index_name) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
             break;
           }
             // seq_in_index
           case OB_APP_MIN_COLUMN_ID + 2: {
-            cells[cell_idx].set_int(ft_dep_col_idx_ + 1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, ft_dep_col_idx_ + 1) : ret);
             break;
           }
             //table_schema
           case OB_APP_MIN_COLUMN_ID + 3: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // table
           case OB_APP_MIN_COLUMN_ID + 4: {
-            cells[cell_idx].set_varchar(table_schema.get_table_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_table_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // non_unique
           case OB_APP_MIN_COLUMN_ID + 5: {
-            cells[cell_idx].set_int(1/*non_unique*/);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 1/*non_unique*/) : ret);
             break;
           }
             //index_schema
           case OB_APP_MIN_COLUMN_ID + 6: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // column_name
           case OB_APP_MIN_COLUMN_ID + 7: {
-            cells[cell_idx].set_varchar(column_schema->get_column_name());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_schema->get_column_name()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME Are all in ascending order?
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("A")) : ret); //FIXME Are all in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -1013,7 +1014,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
               } else {
-                cells[cell_idx].set_varchar(ObString(pos, buf));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(pos, buf)) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               }
             }
@@ -1028,37 +1029,37 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
             // null
           case OB_APP_MIN_COLUMN_ID + 12: {
             if (column_schema->is_rowkey_column()) {
-              cells[cell_idx].set_varchar(ObString(""));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
             } else if (column_schema->is_nullable()) {
-              cells[cell_idx].set_varchar(ObString("YES"));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("YES")) : ret);
             } else {
-              cells[cell_idx].set_varchar(ObString(""));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
             }
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // index_type
           case OB_APP_MIN_COLUMN_ID + 13: {
-            cells[cell_idx].set_varchar(ObString("FULLTEXT"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("FULLTEXT")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // comment
           case OB_APP_MIN_COLUMN_ID + 14: {
             //TODO
-            cells[cell_idx].set_varchar(ObString(ob_index_status_str(index_schema->get_index_status())));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(ob_index_status_str(index_schema->get_index_status()))) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // index_comment
           case OB_APP_MIN_COLUMN_ID + 15: {
-            cells[cell_idx].set_varchar(index_schema->get_comment_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, index_schema->get_comment_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case OB_APP_MIN_COLUMN_ID + 16: {
             const ObString &is_visible = index_schema->is_index_visible() ? "YES" : "NO";
-            cells[cell_idx].set_varchar(is_visible);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, is_visible) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -1069,7 +1070,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
           }
           // is_column_visible
           case OB_APP_MIN_COLUMN_ID + 18: {
-            cells[cell_idx].set_int(1); // TODO this value is set for SHOW EXTENDED INDEX 
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 1) : ret); // TODO this value is set for SHOW EXTENDED INDEX
             break;
           }
           default: {
@@ -1092,7 +1093,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
 int ObTableIndex::add_vec_index_column(const ObString &database_name,
                                        const ObTableSchema &table_schema,
                                        const ObTableSchema *index_schema,
-                                       ObObj *cells,
+                                       DatumValue *cells,
                                        int64_t col_count,
                                        const uint64_t column_id)
 {
@@ -1124,7 +1125,7 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
         switch(col_id) {
           // table_id
           case OB_APP_MIN_COLUMN_ID: {
-            cells[cell_idx].set_int(table_schema.get_table_id());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, table_schema.get_table_id()) : ret);
             break;
           }
           // key_name
@@ -1135,48 +1136,48 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
                 table_schema.get_table_id(), index_schema->get_table_name_str(),
                 index_name))) {
             } else {
-              cells[cell_idx].set_varchar(index_name);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, index_name) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
             break;
           }
           // seq_in_index
           case OB_APP_MIN_COLUMN_ID + 2: {
-            cells[cell_idx].set_int(vec_dep_col_idx_ + 1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, vec_dep_col_idx_ + 1) : ret);
             break;
           }
           // table_schema
           case OB_APP_MIN_COLUMN_ID + 3: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // table
           case OB_APP_MIN_COLUMN_ID + 4: {
-            cells[cell_idx].set_varchar(table_schema.get_table_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_table_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // non_unique
           case OB_APP_MIN_COLUMN_ID + 5: {
-            cells[cell_idx].set_int(1/*non_unique*/);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 1/*non_unique*/) : ret);
             break;
           }
           //index_schema
           case OB_APP_MIN_COLUMN_ID + 6: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // column_name
           case OB_APP_MIN_COLUMN_ID + 7: {
-            cells[cell_idx].set_varchar(column_schema->get_column_name());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, column_schema->get_column_name()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME Is everything in ascending order?
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("A")) : ret); //FIXME Is everything in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -1197,7 +1198,7 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
               } else {
-                cells[cell_idx].set_varchar(ObString(pos, buf));
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(pos, buf)) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               }
             }
@@ -1212,37 +1213,37 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
           // null
           case OB_APP_MIN_COLUMN_ID + 12: {
             if (column_schema->is_rowkey_column()) {
-              cells[cell_idx].set_varchar(ObString(""));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
             } else if (column_schema->is_nullable()) {
-              cells[cell_idx].set_varchar(ObString("YES"));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("YES")) : ret);
             } else {
-              cells[cell_idx].set_varchar(ObString(""));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("")) : ret);
             }
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // index_type
           case OB_APP_MIN_COLUMN_ID + 13: {
-            cells[cell_idx].set_varchar(ObString("VECTOR"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("VECTOR")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // comment
           case OB_APP_MIN_COLUMN_ID + 14: {
             //TODO
-            cells[cell_idx].set_varchar(ObString(ob_index_status_str(index_schema->get_index_status())));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(ob_index_status_str(index_schema->get_index_status()))) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // index_comment
           case OB_APP_MIN_COLUMN_ID + 15: {
-            cells[cell_idx].set_varchar(index_schema->get_comment_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, index_schema->get_comment_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case OB_APP_MIN_COLUMN_ID + 16: {
             const ObString &is_visible = index_schema->is_index_visible() ? "YES" : "NO";
-            cells[cell_idx].set_varchar(is_visible);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, is_visible) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -1253,7 +1254,7 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
           }
           // is_column_visible
           case OB_APP_MIN_COLUMN_ID + 18: {
-            cells[cell_idx].set_int(1); // TODO this value is set for SHOW EXTENDED INDEX 
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, 1) : ret); // TODO this value is set for SHOW EXTENDED INDEX
             break;
           }
           default: {

@@ -43,7 +43,7 @@ struct ObPLTableColumnInfo
 {
   common::ObIAllocator *inner_alloc_;
   uint64_t column_id_;
-  common::ObObjMeta meta_type_;
+  common::SqlTypeMeta meta_type_;
   common::ObAccuracy accuracy_;
   common::ObCharsetType charset_type_;
   common::ObString column_name_;
@@ -290,11 +290,11 @@ public:
                                 ObWrapperAllocator, false> &infos);
 
   int match_complex_type_info(const ObPlParamInfo &param_info,
-                              const ObObjParam &param,
+                              const DatumParameter &param,
                               bool &is_same) const;
 
   int match_param_info(const ObPlParamInfo &param_info,
-                              const ObObjParam &param,
+                              const DatumParameter &param,
                               bool &is_same) const;
 
   int match_params_info(const ParamStore *params,

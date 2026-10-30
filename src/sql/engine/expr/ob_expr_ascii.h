@@ -29,9 +29,6 @@ public:
 
   explicit  ObExprAscii(common::ObIAllocator &alloc);
   virtual ~ObExprAscii() {};
-  static int calc(common::ObObj &obj,
-                  const common::ObObj &obj1,
-                  common::ObExprCtx &expr_ctx);
 
   virtual int calc_result_type1(ObExprResType &type,
                                 ObExprResType &type1,

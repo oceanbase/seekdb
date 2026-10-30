@@ -39,7 +39,7 @@ public:
 
   int cg_expr_internal(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr, const ObConstRawExpr *&const_param2) const;
-  int cg_result_type_class(common::ObObjType type, ObExpr::EvalFunc &eval_func,
+  int cg_result_type_class(common::SqlValueType type, ObExpr::EvalFunc &eval_func,
                           bool is_not, bool is_true) const;
   int calc_result_type2(ObExprResType &type,
                         ObExprResType &type1,
@@ -48,7 +48,7 @@ public:
 
   template <typename T>
   static int is_zero(T number, const uint32_t len);
-  static int is_infinite_nan(const common::ObObjType, common::ObDatum *, bool &, Ieee754);
+  static int is_infinite_nan(const common::SqlValueType, common::ObDatum *, bool &, Ieee754);
   private:
   // types and constants
 private:

@@ -55,7 +55,7 @@ int ObExprFromUnixTime::calc_result_typeN(ObExprResType &type,
     }
     ret = set_scale_for_single_param(type, params[0]);
 
-    ObObjType param_calc_type = calc_one_param_type(params);
+    SqlValueType param_calc_type = calc_one_param_type(params);
     params[0].set_calc_type(param_calc_type);
   } else { //params_count == 2
     type.set_varchar();
@@ -116,9 +116,9 @@ int ObExprFromUnixTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-ObObjType ObExprFromUnixTime::calc_one_param_type(ObExprResType *params) const
+SqlValueType ObExprFromUnixTime::calc_one_param_type(ObExprResType *params) const
 {
-  ObObjType calc_param_type = params[0].get_type();
+  SqlValueType calc_param_type = params[0].get_type();
   if ((calc_param_type >= ObDateTimeType && calc_param_type <= ObYearType) ||
         ob_is_mysql_compact_dates_type(calc_param_type)) {
     // do nothing

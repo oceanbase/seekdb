@@ -27,7 +27,7 @@ using namespace common;
 int ObBitMapMetaBaseWriter::init(
     const common::ObIArray<int64_t> *exc_row_ids,
     const ObColDatums *col_datums,
-    const common::ObObjMeta type)
+    const common::SqlTypeMeta type)
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {

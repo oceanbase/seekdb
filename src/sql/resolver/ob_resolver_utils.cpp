@@ -23,6 +23,10 @@
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "common/datum/datum_parameter.h"
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include "sql/engine/expr/ob_expr.h"
 #include "sql/code_generator/ob_column_index_provider.h"
 #include "query/resolver/ob_partition_type_policy.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
@@ -41,6 +45,8 @@
 #include "sql/engine/expr/ob_expr_cast.h"
 #include "sql/pl/ob_pl_dependency_util.h"
 #include "data_plane/transaction/ob_xa_id.h"
+
+#include "share/datum/datum_cast_support.h"
 
 namespace oceanbase
 {
@@ -317,7 +323,7 @@ int ObResolverUtils::collect_schema_version(share::schema::ObSchemaGetterGuard &
   return ret;
 }
 
-inline bool ObResolverUtils::is_collection_support_type(const ObObjType type)
+inline bool ObResolverUtils::is_collection_support_type(const SqlValueType type)
 {
   return (type == ObTinyIntType || type == ObSmallIntType ||
           type == ObInt32Type || type == ObIntType ||
@@ -368,9 +374,9 @@ int ObResolverUtils::resolve_basic_type_info(const ParseNode &type_node, ObStrin
   int ret = OB_SUCCESS;
   const int MAX_LEN = 128;
   char tmp[MAX_LEN] = {0};
-  if (!is_collection_support_type(static_cast<ObObjType>(type_node.type_))) {
+  if (!is_collection_support_type(static_cast<SqlValueType>(type_node.type_))) {
     ret = OB_NOT_SUPPORTED;
-  } else if (OB_FAIL(buf.append(ob_sql_type_str(static_cast<ObObjType>(type_node.type_))))) {
+  } else if (OB_FAIL(buf.append(ob_sql_type_str(static_cast<SqlValueType>(type_node.type_))))) {
   } else if (type_node.type_ == T_CHAR || type_node.type_ == T_VARCHAR
             || type_node.type_ == T_DATETIME || type_node.type_ == T_TIMESTAMP
             || type_node.type_ == T_TIME || type_node.type_ == T_BIT) {
@@ -519,7 +525,7 @@ int ObResolverUtils::check_extended_type_info(common::ObIAllocator &alloc,
                                               ObIArray<ObString> &type_infos,
                                               ObCollationType ori_cs_type,
                                               const ObString &col_name,
-                                              ObObjType col_type,
+                                              SqlValueType col_type,
                                               ObCollationType cs_type,
                                               ObSQLMode sql_mode)
 {
@@ -560,7 +566,7 @@ int ObResolverUtils::check_extended_type_info(common::ObIAllocator &alloc,
 
 int ObResolverUtils::check_duplicates_in_type_infos(const ObIArray<common::ObString> &type_infos,
                                                     const ObString &col_name,
-                                                    ObObjType col_type,
+                                                    SqlValueType col_type,
                                                     ObCollationType cs_type,
                                                     ObSQLMode sql_mode,
                                                     int32_t &dup_cnt)
@@ -586,7 +592,7 @@ int ObResolverUtils::check_duplicates_in_type_infos(const ObIArray<common::ObStr
   return ret;
 }
 
-int ObResolverUtils::check_max_val_count(ObObjType type, const ObString &col_name, int64_t val_cnt, int32_t dup_cnt)
+int ObResolverUtils::check_max_val_count(SqlValueType type, const ObString &col_name, int64_t val_cnt, int32_t dup_cnt)
 {
   int ret = OB_SUCCESS;
   if (ObEnumType == type) {
@@ -774,7 +780,7 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
 int ObResolverUtils::check_type_match(ObResolverParams &params,
                                       ObRoutineMatchInfo::MatchInfo &match_info,
                                       ObRawExpr *expr,
-                                      ObObjType src_type,
+                                      SqlValueType src_type,
                                       uint64_t src_type_id,
                                       ObPLDataType &dst_pl_type)
 {
@@ -800,7 +806,7 @@ int ObResolverUtils::check_type_match(ObResolverParams &params,
 int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                                       ObRoutineMatchInfo::MatchInfo &match_info,
                                       ObRawExpr *expr,
-                                      ObObjType src_type,
+                                      SqlValueType src_type,
                                       uint64_t src_type_id,
                                       ObPLDataType &dst_pl_type,
                                       bool is_sys_package)
@@ -821,7 +827,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                                      ObUnknownType,
                                      dst_pl_type.get_obj_type())));
   } else if (T_NULL == expr->get_expr_type()
-            || ObNullTC == ob_obj_type_class(src_type)) {
+            || ObNullTC == sql_type_class(src_type)) {
     // NULL can match any type
     OX (match_info =
       (ObRoutineMatchInfo::MatchInfo(false,
@@ -872,7 +878,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
 int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                                       ObRoutineMatchInfo::MatchInfo &match_info,
                                       ObRawExpr *expr,
-                                      ObObjType src_type,
+                                      SqlValueType src_type,
                                       ObCollationType src_coll_type,
                                       uint64_t src_type_id,
                                       ObPLDataType &dst_pl_type,
@@ -881,12 +887,12 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
   int ret = OB_SUCCESS;
 
 #define OBJ_TO_TYPE_CLASS(type) \
-  (ObRawTC == ob_obj_type_class(type) ? ObStringTC : ob_obj_type_class(type))
+  (ObRawTC == sql_type_class(type) ? ObStringTC : sql_type_class(type))
 
-  ObObjType dst_type = dst_pl_type.get_obj_type();
+  SqlValueType dst_type = dst_pl_type.get_obj_type();
   // Case1: processing the same TypeClass scenario
   if (OBJ_TO_TYPE_CLASS(src_type) == OBJ_TO_TYPE_CLASS(dst_type)) {
-    if (ob_obj_type_class(src_type) != ObExtendTC // Normal type TypeClass is the same
+    if (sql_type_class(src_type) != ObExtendTC // Normal type TypeClass is the same
         || src_type_id == dst_pl_type.get_user_type_id()) { // Complex type TypeID is the same
       OX (match_info =
         (ObRoutineMatchInfo::MatchInfo(
@@ -905,7 +911,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
       CK (OB_NOT_NULL(resolve_ctx.params_.param_list_));
       CK (idx < resolve_ctx.params_.param_list_->count());
       if (OB_SUCC(ret)) {
-        const ObObjParam &param = resolve_ctx.params_.param_list_->at(idx);
+        const DatumParameter &param = resolve_ctx.params_.param_list_->at(idx);
         const pl::ObPLComposite *src_composite = NULL;
         CK (OB_NOT_NULL(src_composite = reinterpret_cast<const ObPLComposite *>(param.get_ext())));
         if (OB_FAIL(ret)) {
@@ -938,10 +944,8 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
             const ObDataType *dst_data_type = coll_type->get_element_type().get_data_type();
             if (dst_data_type->get_obj_type() == src_data_type->get_obj_type()) {
               // do nothing
-            } else if (cast_supported(src_data_type->get_obj_type(),
-                                      src_data_type->get_collation_type(),
-                                      dst_data_type->get_obj_type(),
-                                      dst_data_type->get_collation_type())) {
+            } else if (datum_cast_supported(sql_type_class(src_data_type->get_obj_type()),
+                                            sql_type_class(dst_data_type->get_obj_type()))) {
               // do nothing
             } else {
               ret = OB_INVALID_ARGUMENT;
@@ -985,31 +989,30 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
   // Case2: Handle the scenario where TypeClass is different
   } else {
     // xmltype can not cast with varchar,
-    if ((ObExtendTC == ob_obj_type_class(src_type)
-          && !(ObUserDefinedSQLTC == ob_obj_type_class(dst_type)
-                || ObExtendTC == ob_obj_type_class(dst_type)))
-        || (ObUserDefinedSQLTC == ob_obj_type_class(src_type)
-          && !(ObUserDefinedSQLTC == ob_obj_type_class(dst_type)
-                || ObExtendTC == ob_obj_type_class(dst_type)))
-        || ((ObUserDefinedSQLTC == ob_obj_type_class(dst_type)
-            || ObExtendTC == ob_obj_type_class(dst_type))
-          && !(ObUserDefinedSQLTC == ob_obj_type_class(src_type)
-                || ObExtendTC == ob_obj_type_class(src_type)
-                || ObGeometryTC == ob_obj_type_class(src_type)))) {
+    if ((ObExtendTC == sql_type_class(src_type)
+          && !(ObUserDefinedSQLTC == sql_type_class(dst_type)
+                || ObExtendTC == sql_type_class(dst_type)))
+        || (ObUserDefinedSQLTC == sql_type_class(src_type)
+          && !(ObUserDefinedSQLTC == sql_type_class(dst_type)
+                || ObExtendTC == sql_type_class(dst_type)))
+        || ((ObUserDefinedSQLTC == sql_type_class(dst_type)
+            || ObExtendTC == sql_type_class(dst_type))
+          && !(ObUserDefinedSQLTC == sql_type_class(src_type)
+                || ObExtendTC == sql_type_class(src_type)
+                || ObGeometryTC == sql_type_class(src_type)))) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    } else if (ObExtendTC == ob_obj_type_class(src_type) // Ordinary type cannot be converted to complex type and vice versa
-        || ObExtendTC == ob_obj_type_class(dst_type)) {
-      if (ObUserDefinedSQLTC == ob_obj_type_class(src_type)
-          || ObUserDefinedSQLTC == ob_obj_type_class(dst_type)
-          || ObGeometryTC == ob_obj_type_class(dst_type)
-          || ObGeometryTC == ob_obj_type_class(src_type)) {
+    } else if (ObExtendTC == sql_type_class(src_type) // Ordinary type cannot be converted to complex type and vice versa
+        || ObExtendTC == sql_type_class(dst_type)) {
+      if (ObUserDefinedSQLTC == sql_type_class(src_type)
+          || ObUserDefinedSQLTC == sql_type_class(dst_type)
+          || ObGeometryTC == sql_type_class(dst_type)
+          || ObGeometryTC == sql_type_class(src_type)) {
       // check can cast
       } else {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
       }
     } else { // Check if normal types can be mutually converted
-      if (!cast_supported(
-        src_type, src_coll_type, dst_type, dst_pl_type.get_meta_type()->get_collation_type())) {
+      if (!datum_cast_supported(sql_type_class(src_type), sql_type_class(dst_type))) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         LOG_ERROR("inconsistent datatypes",
           K(ret), K(src_type), K(src_coll_type),
@@ -1023,8 +1026,8 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
              K(ret),
              K(src_type),
              K(dst_type),
-             K(ob_obj_type_class(src_type)),
-             K(ob_obj_type_class(dst_type)));
+             K(sql_type_class(src_type)),
+             K(sql_type_class(dst_type)));
   }
 
 #undef OBJ_TO_TYPE_CLASS
@@ -1032,7 +1035,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
 }
 
 int ObResolverUtils::get_type_and_type_id(
-  ObRawExpr *expr, ObObjType &type, uint64_t &type_id)
+  ObRawExpr *expr, SqlValueType &type, uint64_t &type_id)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -1048,7 +1051,7 @@ int ObResolverUtils::get_type_and_type_id(
   } else {
     type = expr->get_result_type().get_type();
   }
-  CK (is_valid_obj_type(type));
+  CK (is_valid_sql_value_type(type));
   return ret;
 }
 // Check if the current parameters match the current routine
@@ -1080,7 +1083,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
   int arg_cnt = routine_info->get_param_count();
   for (int64_t i = 0; OB_SUCC(ret) && offset < arg_cnt && i < expr_params.count(); ++i) {
     int64_t position = OB_INVALID_ID;
-    ObObjType src_type;
+    SqlValueType src_type;
     uint64_t src_type_id;
     ObPLDataType dst_pl_type;
     pl::ObPLEnumSetCtx enum_set_ctx(resolve_ctx.allocator_);
@@ -1248,8 +1251,8 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
     // Determine if only Numric is different, if not then report an error directly, otherwise record the position of the Numric different parameters
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_match_infos.at(0).match_info_.count(); ++i) {
       for (int64_t j = 1; OB_SUCC(ret) && j < tmp_match_infos.count(); ++j) {
-        if (ob_obj_type_class(tmp_match_infos.at(0).get_type(i))
-              == ob_obj_type_class(tmp_match_infos.at(j).get_type(i))) {
+        if (sql_type_class(tmp_match_infos.at(0).get_type(i))
+              == sql_type_class(tmp_match_infos.at(j).get_type(i))) {
           // do nothing ...
         } else if (!(IS_NUMRIC_TYPE(tmp_match_infos.at(0).get_type(i)))
                   || !(IS_NUMRIC_TYPE(tmp_match_infos.at(j).get_type(i)))) {
@@ -1871,55 +1874,184 @@ int ObResolverUtils::resolve_stmt_type(const ParseResult &result, stmt::StmtType
   return ret;
 }
 
-int ObResolverUtils::set_string_val_charset(ObIAllocator &allocator,
-                                            ObObjParam &val, ObString &charset, ObObj &result_val,
-                                            bool is_strict_mode,
-                                            bool return_ret)
+
+namespace
+{
+// Literal setters write into native storage. Small scalar scratch bytes are
+// copied into the statement arena before publication; parsed decimal/NUMBER
+// payloads already belong to that arena. This writer is never a stored value.
+class LiteralDatumWriter
+{
+public:
+  explicit LiteralDatumWriter(ObIAllocator &allocator)
+    : allocator_(allocator), value_(), status_(OB_SUCCESS), owned_(false) {}
+  const SqlTypeMeta &get_meta() const { return value_.get_type_meta(); }
+  SqlValueType get_type() const { return value_.get_type(); }
+  ObCollationType get_collation_type() const { return value_.get_collation_type(); }
+  const char *get_string_ptr() const { return value_.datum_.ptr_; }
+  int32_t get_string_len() const { return value_.datum_.len_; }
+  void set_collation_type(ObCollationType cs)
+  { SqlTypeMeta meta = get_meta(); meta.set_collation_type(cs); value_.set_type_meta(meta); }
+  void set_collation_level(ObCollationLevel level)
+  { SqlTypeMeta meta = get_meta(); meta.set_collation_level(level); value_.set_type_meta(meta); }
+  void set_length(ObLength length) { value_.set_length(length); }
+  void set_length_semantics(ObLengthSemantics semantics) { value_.set_length_semantics(semantics); }
+  void set_precision(ObPrecision precision) { value_.set_precision(precision); }
+  void set_scale(ObScale scale) { value_.set_scale(scale); }
+  void set_result_flag(uint32_t flag) { value_.set_result_flag(flag); }
+  void unset_result_flag(uint32_t flag) { value_.unset_result_flag(flag); }
+  void set_is_boolean(bool flag) { value_.get_param_flag().is_boolean_ = flag; }
+  void set_param_meta(const SqlTypeMeta &meta) { value_.set_param_meta(meta); }
+
+  void set_int(int64_t v) { scalar_meta(&SqlTypeMeta::set_int); value_.datum_.set_int(v); }
+  void set_uint64(uint64_t v) { scalar_meta(&SqlTypeMeta::set_uint64); value_.datum_.set_uint(v); }
+  void set_float(float v) { scalar_meta(&SqlTypeMeta::set_float); value_.datum_.set_float(v); }
+  void set_double(double v) { scalar_meta(&SqlTypeMeta::set_double); value_.datum_.set_double(v); }
+  void set_bool(bool v) { scalar_meta(&SqlTypeMeta::set_tinyint); value_.datum_.set_bool(v); }
+  void set_unknown(int64_t v) { scalar_meta(&SqlTypeMeta::set_unknown); value_.datum_.set_int(v); }
+  void set_date(int32_t v) { scalar_meta(&SqlTypeMeta::set_date); value_.datum_.set_date(v); }
+  void set_datetime(int64_t v) { scalar_meta(&SqlTypeMeta::set_datetime); value_.datum_.set_datetime(v); }
+  void set_time(int64_t v) { scalar_meta(&SqlTypeMeta::set_time); value_.datum_.set_time(v); }
+  void set_year(uint8_t v) { scalar_meta(&SqlTypeMeta::set_year); value_.datum_.set_year(static_cast<int8_t>(v)); }
+  void set_mysql_date(ObMySQLDate v)
+  { scalar_meta(&SqlTypeMeta::set_mysql_date); value_.datum_.set_mysql_date(v); }
+  void set_mysql_datetime(ObMySQLDateTime v)
+  { scalar_meta(&SqlTypeMeta::set_mysql_datetime); value_.datum_.set_mysql_datetime(v); }
+  void set_null() { value_.set_null(); owned_ = true; }
+  void set_string(SqlValueType type, const ObString &str)
+  { set_string(type, str.ptr(), str.length()); }
+  void set_string(SqlValueType type, const char *data, int32_t length)
+  {
+    SqlTypeMeta meta = get_meta();
+    meta.set_type(type);
+    meta.set_collation_level(CS_LEVEL_IMPLICIT);
+    value_.set_type_meta(meta);
+    value_.datum_.set_string(data, length);
+    owned_ = false;
+  }
+  void set_hex_string(const ObString &str)
+  {
+    SqlTypeMeta meta = get_meta();
+    meta.set_hex_string();
+    value_.set_type_meta(meta);
+    value_.datum_.set_string(str);
+    owned_ = false;
+  }
+  void set_decimal_int(int16_t length, ObScale scale, const ObDecimalInt *data)
+  {
+    SqlTypeMeta meta = get_meta();
+    meta.set_decimal_int(scale);
+    value_.set_type_meta(meta);
+    value_.datum_.set_decimal_int_shallow(data, length);
+    owned_ = true; // wide::from_string allocated these bytes in allocator_.
+  }
+  void set_number(const number::ObNumber &num)
+  {
+    SqlTypeMeta meta = get_meta();
+    meta.set_number();
+    value_.set_type_meta(meta);
+    const int64_t size = sizeof(number::ObCompactNumber) + num.d_.len_ * sizeof(uint32_t);
+    char *data = static_cast<char *>(allocator_.alloc(size));
+    if (OB_ISNULL(data)) {
+      status_ = OB_ALLOCATE_MEMORY_FAILED;
+      value_.datum_.set_null();
+    } else {
+      value_.datum_.ptr_ = data;
+      value_.datum_.set_number(num);
+      owned_ = true;
+    }
+  }
+  void set_otimestamp_value(SqlValueType type, const ObOTimestampData &v)
+  {
+    SqlTypeMeta meta = get_meta();
+    meta.set_otimestamp_type(type);
+    value_.set_type_meta(meta);
+    // The current literal timestamp parser leaves its output type NULL.
+    // Preserve that behavior and the ordinary 8-byte timestamp bridge.
+    if (type == ObNullType) {
+      value_.datum_.set_null();
+      owned_ = true;
+    } else if (type == ObTimestampType || type == ObDateTimeType) {
+      scalar_storage();
+      value_.datum_.set_int(v.time_us_);
+    } else {
+      status_ = OB_ERR_UNEXPECTED;
+      value_.datum_.set_null();
+    }
+  }
+  int finish(DatumParameter &result)
+  {
+    int ret = status_;
+    DatumParameter candidate = value_;
+    if (OB_SUCC(ret) && !owned_) {
+      ret = clone_datum_value(value_.datum_, get_meta(), candidate.datum_, allocator_);
+    }
+    if (OB_SUCC(ret)) { result = candidate; }
+    return ret;
+  }
+  TO_STRING_KV(K_(value));
+private:
+  void scalar_storage() { value_.datum_.ptr_ = scalar_; owned_ = false; }
+  void scalar_meta(void (SqlTypeMeta::*setter)())
+  {
+    scalar_storage();
+    SqlTypeMeta meta = get_meta();
+    (meta.*setter)();
+    value_.set_type_meta(meta);
+  }
+  ObIAllocator &allocator_;
+  DatumParameter value_;
+  int status_;
+  bool owned_;
+  alignas(16) char scalar_[sizeof(ObOTimestampData)];
+};
+
+int set_literal_charset(ObIAllocator &allocator, LiteralDatumWriter &value, ObString &charset,
+                        bool is_strict_mode, bool ret_error)
 {
   int ret = OB_SUCCESS;
-  ObCharsetType charset_type = CHARSET_INVALID;
-  if (CHARSET_INVALID == (charset_type = ObCharset::charset_type(charset.trim()))) {
+  const ObCharsetType type = ObCharset::charset_type(charset.trim());
+  if (type == CHARSET_INVALID) {
     ret = OB_ERR_UNKNOWN_CHARSET;
     LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset.length(), charset.ptr());
   } else {
-    // use the default collation of the specified charset
-    ObCollationType collation_type = ObCharset::get_default_collation(charset_type);
-    val.set_collation_type(collation_type);
-    ObLength length = static_cast<ObLength>(ObCharset::strlen_char(val.get_collation_type(),
-          val.get_string_ptr(),
-          val.get_string_len()));
-    val.set_length(length);
-
-    //pad 0 front.
-    const ObCharsetInfo *cs = ObCharset::get_charset(collation_type);
+    const ObCollationType collation = ObCharset::get_default_collation(type);
+    value.set_collation_type(collation);
+    value.set_length(static_cast<ObLength>(ObCharset::strlen_char(
+        collation, value.get_string_ptr(), value.get_string_len())));
+    const ObCharsetInfo *cs = ObCharset::get_charset(collation);
     if (OB_ISNULL(cs)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (cs->mbminlen > 0 && val.get_string_len() % cs->mbminlen != 0) {
-      int64_t align_offset = cs->mbminlen - val.get_string_len() % cs->mbminlen;
-      char *buf = NULL;
-      if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(allocator.alloc(val.get_string_len() + align_offset))))) {
+    } else if (cs->mbminlen > 0 && value.get_string_len() % cs->mbminlen != 0) {
+      const int64_t pad = cs->mbminlen - value.get_string_len() % cs->mbminlen;
+      char *data = static_cast<char *>(allocator.alloc(value.get_string_len() + pad));
+      if (OB_ISNULL(data)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        MEMSET(buf, 0, align_offset);
-        MEMCPY(buf + align_offset, val.get_string_ptr(), val.get_string_len());
-        val.set_string(val.get_type(), buf, static_cast<int32_t>(val.get_string_len() + align_offset));
+        MEMSET(data, 0, pad);
+        MEMCPY(data + pad, value.get_string_ptr(), value.get_string_len());
+        value.set_string(value.get_type(), data, value.get_string_len() + pad);
       }
     }
-    // To be consistent with MySQL error reporting, we check if the string is valid here, just a check, if invalid then report an error, no other operations are performed
-    // check_well_formed_str's ret_error parameter is true, the is_strict_mode parameter is invalid, therefore is_strict_mode is directly passed as true here
-    if (OB_SUCC(ret) && OB_FAIL(ObSQLUtils::check_well_formed_str(val, result_val, is_strict_mode, return_ret))) {
+    ObString checked;
+    bool is_null = false;
+    if (OB_SUCC(ret)) {
+      ret = ObSQLUtils::check_well_formed_str(
+          ObString(value.get_string_len(), value.get_string_ptr()), collation,
+          checked, is_null, is_strict_mode, ret_error);
     }
   }
   return ret;
 }
 
-int ObResolverUtils::resolve_const(const ParseNode *node,
+template <typename Value, auto ParseReal>
+int resolve_literal_value(const ParseNode *node,
                                    const stmt::StmtType stmt_type,
                                    ObIAllocator &allocator,
                                    const ObCollationType connection_collation,
                                    const ObCollationType nchar_collation,
                                    const ObTimeZoneInfo *tz_info,
-                                   ObObjParam &val,
+                                   Value &val,
                                    const bool is_paramlize,
                                    common::ObString &literal_prefix,
                                    const ObLengthSemantics default_length_semantics,
@@ -1962,11 +2094,10 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
     case T_NCHAR:
     case T_CHAR: {
       ObString str_val;
-      ObObj result_val;
       bool is_nchar = T_NVARCHAR2 == node->type_ || T_NCHAR == node->type_;
       str_val.assign_ptr(const_cast<char *>(node->str_value_), static_cast<int32_t>(node->str_len_));
       val.set_string(is_nchar ?
-                          ObVarcharType : static_cast<ObObjType>(node->type_), str_val);
+                          ObVarcharType : static_cast<SqlValueType>(node->type_), str_val);
       // decide collation
       /*
         MySQL determines a literal's character set and collation in the following manner:
@@ -1985,7 +2116,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
         // for STRING without collation, e.g. show tables like STRING;
         if (is_nchar) {
           ObString charset(strlen("utf8mb4"), "utf8mb4");
-          if (OB_FAIL(set_string_val_charset(allocator, val, charset, result_val, false, false))) {
+          if (OB_FAIL(set_literal_charset(allocator, val, charset, false, false))) {
           }
         } else {
           val.set_collation_type(connection_collation);
@@ -2005,7 +2136,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
           bool is_hex_string = node->num_child_ == 1 ? true : false;
           if (charset_node != NULL) {
             ObString charset(charset_node->str_len_, charset_node->str_value_);
-            if (OB_FAIL(set_string_val_charset(allocator, val, charset, result_val, false, is_hex_string))) {
+            if (OB_FAIL(set_literal_charset(allocator, val, charset, false, is_hex_string))) {
             }
           }
         }
@@ -2049,7 +2180,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       int err = 0;
       double value = 0;
       char *endptr = NULL;
-      value = strntod(node->str_value_, static_cast<int32_t>(node->str_len_),
+      value = ParseReal(node->str_value_, static_cast<int32_t>(node->str_len_),
                       node->type_, &endptr, &err);
       if (EOVERFLOW == err) {
         literal_prefix.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));
@@ -2285,7 +2416,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       break;
     }
     case T_TIMESTAMP_TZ: {
-      ObObjType value_type = ObNullType;
+      SqlValueType value_type = ObNullType;
       ObOTimestampData tz_value;
       ObTimeConvertCtx cvrt_ctx(tz_info, true);
       ObString time_str(static_cast<int32_t>(node->str_len_), node->str_value_);
@@ -2321,6 +2452,39 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
   return ret;
 }
 
+} // namespace
+
+int ObResolverUtils::resolve_const(const ParseNode *node,
+                                   const stmt::StmtType stmt_type,
+                                   ObIAllocator &allocator,
+                                   const ObCollationType connection_collation,
+                                   const ObCollationType nchar_collation,
+                                   const ObTimeZoneInfo *tz_info,
+                                   DatumParameter &result,
+                                   const bool is_paramlize,
+                                   common::ObString &literal_prefix,
+                                   const ObLengthSemantics default_length_semantics,
+                                   const ObCollationType server_collation,
+                                   ObExprInfo *parents_expr_info,
+                                   const ObSQLMode sql_mode,
+                                   bool enable_decimal_int_type,
+                                   const share::ObCompatType compat_type,
+                                   const bool enable_mysql_compatible_dates,
+                                   int8_t min_const_integer_precision,
+                                   bool is_from_pl /* false */,
+                                   bool fmt_int_or_ch_decint /* false */)
+{
+  LiteralDatumWriter val(allocator);
+  int ret = resolve_literal_value<LiteralDatumWriter, &ObResolverUtils::strntod>(node, stmt_type, allocator, connection_collation,
+                               nchar_collation, tz_info, val, is_paramlize, literal_prefix,
+                               default_length_semantics, server_collation, parents_expr_info,
+                               sql_mode, enable_decimal_int_type, compat_type,
+                               enable_mysql_compatible_dates, min_const_integer_precision,
+                               is_from_pl, fmt_int_or_ch_decint);
+  if (OB_SUCC(ret)) { ret = val.finish(result); }
+  return ret;
+}
+
 int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
                                             const bool is_set_default,
                                             const bool is_first_timestamp_column,
@@ -2338,8 +2502,14 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
     // The system will automatically add Default current_timestamp, on update current_timestamp attributes to this column;
     if (is_first_timestamp_column && !is_set_null && !is_set_default && !column.is_on_update_current_timestamp()) {
       column.set_nullable(false);
-      const_cast<ObObj*>(&column.get_cur_default_value())->set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
-      column.set_on_update_current_timestamp(true);
+      ObIAllocator *owner = column.get_allocator();
+      if (owner == nullptr) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(column.get_cur_default_value().set_extend(
+                     ObActionFlag::OP_DEFAULT_NOW_FLAG, 0, *owner))) {
+      } else {
+        column.set_on_update_current_timestamp(true);
+      }
     } else if (!is_set_null) {
       //（2）timestamp column default is not null
       column.set_nullable(false);
@@ -2349,7 +2519,9 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
           ret = OB_INVALID_DEFAULT;
           LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(), column.get_column_name_str().ptr());
         } else {
-          const_cast<ObObj*>(&column.get_cur_default_value())->set_timestamp(ObTimeConverter::ZERO_DATETIME);
+          ObIAllocator *owner = column.get_allocator();
+          ret = owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED
+              : column.get_cur_default_value().set_timestamp(ObTimeConverter::ZERO_DATETIME, *owner);
         }
       } else if (column.get_cur_default_value().is_null()) {
         //(4) timestamp type columns are default NOT NULL, so it is not allowed to set column default NULL
@@ -2360,7 +2532,7 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
       // If actively set can be NULL
       column.set_nullable(true);
       if (!is_set_default) {
-        const_cast<ObObj*>(&column.get_cur_default_value())->set_null();
+        column.get_cur_default_value().set_null();
       }
     }
   }
@@ -2558,12 +2730,12 @@ int ObResolverUtils::name_case_cmp(const ObSQLSessionInfo *session_info,
 }
 
 
-bool ObResolverUtils::is_partition_range_column_type(const ObObjType type)
+bool ObResolverUtils::is_partition_range_column_type(const SqlValueType type)
 {
   return query::ObPartitionTypePolicy::requires_range_columns(type);
 }
 
-bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
+bool ObResolverUtils::is_valid_partition_column_type(const SqlValueType type,
                                                      const ObPartitionFuncType part_type,
                                                      const bool is_check_value,
                                                      const bool is_string_lob)
@@ -2593,7 +2765,7 @@ bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
       * The following Text types: TEXT, BLOB and LONGTEXT columns are not supported as partitioning columns, except STRING.
       */
     //https://dev.mysql.com/doc/refman/5.7/en/partitioning-columns.html
-    ObObjTypeClass type_class = ob_obj_type_class(type);
+    SqlTypeClass type_class = sql_type_class(type);
     if (is_string_lob) {
       bret = true;
     } else if (ObIntTC == type_class || ObUIntTC == type_class ||
@@ -2627,10 +2799,10 @@ int ObResolverUtils::check_partition_range_value_result_type(const ObPartitionFu
 {
   int ret = OB_SUCCESS;
 
-  ObObjTypeClass expect_value_tc = ObMaxTC;
-  ObObjType part_column_expr_type = part_column_expr.get_data_type();
-  const ObObjMeta& part_col_meta_type = static_cast<const ObObjMeta&>(part_value_expr.get_result_type());
-  ObObj& result = static_cast<sql::ObConstRawExpr*>(&part_value_expr)->get_value();
+  SqlTypeClass expect_value_tc = ObMaxTC;
+  SqlValueType part_column_expr_type = part_column_expr.get_data_type();
+  const SqlTypeMeta& part_col_meta_type = static_cast<const SqlTypeMeta&>(part_value_expr.get_result_type());
+  DatumValue &result = static_cast<sql::ObConstRawExpr*>(&part_value_expr)->get_value();
   if (OB_FAIL(deduce_expect_value_tc(part_column_expr_type,
                                      part_func_type,
                                      part_column_expr.get_collation_type(),
@@ -2641,7 +2813,8 @@ int ObResolverUtils::check_partition_range_value_result_type(const ObPartitionFu
                                                   part_col_meta_type,
                                                   expect_value_tc,
                                                   part_value_expr.is_const_raw_expr(),
-                                                  result))) {
+                                                  result,
+                                                  part_value_expr.get_value_allocator()))) {
   }
   return ret;
 }
@@ -2662,13 +2835,13 @@ bool ObResolverUtils::is_expr_can_be_used_in_table_function(const ObRawExpr &exp
 int ObResolverUtils::check_partition_range_value_result_type(const ObPartitionFuncType part_func_type,
                                                              const ObRawExprResType &column_type,
                                                              const ObString &column_name,
-                                                             ObObj &part_value)
+                                                             DatumValue &part_value, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
 
-  ObObjTypeClass expect_value_tc = ObMaxTC;
-  ObObjType part_column_expr_type = column_type.get_type();
-  const ObObjMeta& part_col_meta_type = part_value.get_meta();
+  SqlTypeClass expect_value_tc = ObMaxTC;
+  SqlValueType part_column_expr_type = column_type.get_type();
+  const SqlTypeMeta& part_col_meta_type = part_value.get_meta();
   if (OB_FAIL(deduce_expect_value_tc(part_column_expr_type,
                                      part_func_type,
                                      column_type.get_collation_type(),
@@ -2679,21 +2852,23 @@ int ObResolverUtils::check_partition_range_value_result_type(const ObPartitionFu
                                                   part_col_meta_type,
                                                   expect_value_tc,
                                                   true,
-                                                  part_value))) {
+                                                  part_value, &owner))) {
   }
   return ret;
 }
 
-int ObResolverUtils::check_part_value_result_type(const ObPartitionFuncType part_func_type,
-                                                  const ObObjType part_column_expr_type,
-                                                  const ObObjMeta part_col_meta_type,
-                                                  const ObObjTypeClass expect_value_tc,
+namespace {
+template <typename Value, typename Cast>
+int check_part_value_result_type_impl(const ObPartitionFuncType part_func_type,
+                                                  const SqlValueType part_column_expr_type,
+                                                  const SqlTypeMeta part_col_meta_type,
+                                                  const SqlTypeClass expect_value_tc,
                                                   bool is_const_expr,
-                                                  ObObj &part_value)
+                                                  Value &part_value, Cast cast)
 {
   int ret = OB_SUCCESS;
-  const ObObjType part_value_expr_type = part_col_meta_type.get_type();
-  const ObObjTypeClass part_value_expr_tc = part_col_meta_type.get_type_class();
+  const SqlValueType part_value_expr_type = part_col_meta_type.get_type();
+  const SqlTypeClass part_value_expr_tc = part_col_meta_type.get_type_class();
   if (part_value_expr_tc != expect_value_tc) {
     bool is_allow = false;
     if (ObNullTC == part_value_expr_tc && PARTITION_FUNC_TYPE_LIST_COLUMNS == part_func_type) {
@@ -2729,8 +2904,7 @@ int ObResolverUtils::check_part_value_result_type(const ObPartitionFuncType part
           && (part_value_expr_tc == ObIntTC || part_value_expr_tc == ObNumberTC)
           && expect_value_tc == ObUIntTC) {
 
-        ObCastCtx cast_ctx;
-        if (OB_FAIL(ObObjCaster::to_type(part_column_expr_type, cast_ctx, part_value, part_value))) {
+        if (OB_FAIL(cast(part_column_expr_type, part_value))) {
           if (ret == OB_DATA_OUT_OF_RANGE) {
               ret = OB_SUCCESS;
           } else {
@@ -2757,11 +2931,28 @@ int ObResolverUtils::check_part_value_result_type(const ObPartitionFuncType part
   return ret;
 }
 
-int ObResolverUtils::deduce_expect_value_tc(const ObObjType part_column_expr_type,
+} // namespace
+
+int ObResolverUtils::check_part_value_result_type(const ObPartitionFuncType part_func_type,
+    const SqlValueType column_type, const SqlTypeMeta value_meta,
+    const SqlTypeClass expected_class, bool is_const_expr, DatumValue &value,
+    ObIAllocator *owner)
+{
+  return check_part_value_result_type_impl(part_func_type, column_type, value_meta,
+      expected_class, is_const_expr, value, [owner](SqlValueType type, DatumValue &input) {
+        // Allocate only when unsigned normalization is actually required; the
+        // value must outlive this check and remain valid in the expression.
+        ObCastCtx context;
+        return owner == nullptr ? OB_ERR_UNEXPECTED
+            : DatumValueCaster::to_type(type, context, input, *owner, input);
+      });
+}
+
+int ObResolverUtils::deduce_expect_value_tc(const SqlValueType part_column_expr_type,
                                             const ObPartitionFuncType part_func_type,
                                             const ObCollationType coll_type,
                                             const ObString &column_name,
-                                            ObObjTypeClass &expect_value_tc)
+                                            SqlTypeClass &expect_value_tc)
 {
   int ret = OB_SUCCESS;
   bool need_cs_check = false; // indicates whether character set check is needed, not used now
@@ -2885,7 +3076,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
 
   if (OB_SUCC(ret)) {
     if (PARTITION_FUNC_TYPE_RANGE == part_type || PARTITION_FUNC_TYPE_LIST == part_type) {
-      ObObjType value_type = part_value_expr.get_data_type();
+      SqlValueType value_type = part_value_expr.get_data_type();
       if (ob_is_integer_type(value_type)) {
         // partition by range(xx) partition p0 values less than (expr) expr only allows integer type
       } else if (ObNullTC == part_value_expr.get_type_class() && PARTITION_FUNC_TYPE_LIST == part_type) {
@@ -2934,7 +3125,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
       }
     } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type
                || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type) {
-      const ObObjType value_type = part_value_expr.get_data_type();
+      const SqlValueType value_type = part_value_expr.get_data_type();
       if (!is_valid_partition_column_type(value_type, part_type, true)) {
         ret = OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR;
         LOG_USER_ERROR(OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR);
@@ -3626,9 +3817,9 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
 
   if (OB_SUCC(ret)) {
     OZ (expr->formalize(session_info));
-    const ObObjType expr_datatype = expr->get_result_type().get_type();
+    const SqlValueType expr_datatype = expr->get_result_type().get_type();
     const ObCollationType expr_cs_type = expr->get_result_type().get_collation_type();
-    const ObObjType dst_datatype = generated_column.get_data_type();
+    const SqlValueType dst_datatype = generated_column.get_data_type();
     const ObCollationType dst_cs_type = generated_column.get_collation_type();
     if (OB_SUCC(ret) && generated_column.is_generated_column()) {
       //set local session info for generate columns
@@ -4212,12 +4403,12 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
                                        const bool convert_real_type_to_decimal /*false*/)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!ob_is_valid_obj_type(static_cast<ObObjType>(type_node.type_)))) {
+  if (OB_UNLIKELY(!is_valid_sql_value_type(static_cast<SqlValueType>(type_node.type_)))) {
     ret = OB_ERR_ILLEGAL_TYPE;
     SQL_RESV_LOG(WARN, "Unsupport data type of column definiton",
                         K(ident_name), K((type_node.type_)), K(ret));
   } else {
-  data_type.set_obj_type(static_cast<ObObjType>(type_node.type_));
+  data_type.set_obj_type(static_cast<SqlValueType>(type_node.type_));
   int32_t length = type_node.int32_values_[0];
   int16_t precision = type_node.int16_values_[0];
   int16_t scale = type_node.int16_values_[1];
@@ -4227,11 +4418,11 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
 
   if (convert_real_type_to_decimal &&
       (precision >= 0 && scale >= 0)) {
-      if (static_cast<ObObjType>(type_node.type_) == ObFloatType ||
-          static_cast<ObObjType>(type_node.type_) == ObDoubleType) {
+      if (static_cast<SqlValueType>(type_node.type_) == ObFloatType ||
+          static_cast<SqlValueType>(type_node.type_) == ObDoubleType) {
         data_type.set_obj_type(ObNumberType);
-      } else if (static_cast<ObObjType>(type_node.type_) == ObUFloatType ||
-                  static_cast<ObObjType>(type_node.type_) == ObUDoubleType) {
+      } else if (static_cast<SqlValueType>(type_node.type_) == ObUFloatType ||
+                  static_cast<SqlValueType>(type_node.type_) == ObUDoubleType) {
         data_type.set_obj_type(ObUNumberType);
       }
   }
@@ -4292,7 +4483,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
           if (T_FLOAT == type_node.type_
               && precision > OB_MAX_FLOAT_PRECISION
               && -1 == scale) {
-            data_type.set_obj_type(static_cast<ObObjType>(T_DOUBLE));
+            data_type.set_obj_type(static_cast<SqlValueType>(T_DOUBLE));
           }
           data_type.set_precision(precision);
           data_type.set_scale(scale);
@@ -5442,7 +5633,7 @@ int ObResolverUtils::revert_external_param_info(ExternalParams &param_infos, ObR
             ObConstRawExpr *null_expr = nullptr;
             if (OB_FAIL(expr_factory.create_raw_expr(T_NULL, null_expr))) {
             } else {
-              ObObjParam null_val;
+              DatumParameter null_val;
               null_val.set_null();
               null_val.set_param_meta();
               null_expr->set_value(null_val);
@@ -5963,34 +6154,6 @@ int ObResolverUtils::get_select_into_node(const ParseNode &node, ParseNode* &int
 
 
 
-int ObResolverUtils::get_user_var_value(const ParseNode *node,
-                                        ObSQLSessionInfo *session_info,
-                                        ObObj &value)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(node) || OB_ISNULL(session_info)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(1 != node->num_child_) || OB_ISNULL(node->children_) ||
-             OB_ISNULL(node->children_[0])) {
-    ret = OB_ERR_PARSER_SYNTAX;
-  } else {
-    ObString str = ObString(static_cast<int32_t>(node->children_[0]->str_len_),
-                            node->children_[0]->str_value_);
-    ObSessionVariable osv;
-    ret = session_info->get_user_variable(str, osv);
-    if (OB_SUCC(ret)) {
-      value = osv.value_;
-      value.set_meta_type(osv.meta_);
-    } else if (OB_ERR_USER_VARIABLE_UNKNOWN == ret) {
-      value.set_null();
-      value.set_collation_level(CS_LEVEL_IMPLICIT);
-      ret = OB_SUCCESS;//always return success no matter found or not
-    } else {
-    }
-  }
-  return ret;
-}
-
 int ObResolverUtils::check_duplicated_column(ObSelectStmt &select_stmt,
                                              bool can_skip/*default false*/)
 {
@@ -6202,7 +6365,7 @@ double ObResolverUtils::strntod(const char *str, size_t str_len,
 }
 
 
-bool ObResolverUtils::is_synonymous_type(ObObjType type1, ObObjType type2)
+bool ObResolverUtils::is_synonymous_type(SqlValueType type1, SqlValueType type2)
 {
   bool ret = false;
   if (ob_is_float_tc(type1) && ob_is_float_tc(type2)) {
@@ -6233,22 +6396,29 @@ int ObResolverUtils::resolve_default_value_and_expr_from_select_item(const Selec
     } else if (NULL == (tmp_column_item = stmt->get_column_item_by_id(column_expr->get_table_id(), column_expr->get_column_id()))) {
       ret = OB_ERR_BAD_FIELD_ERROR;
     } else {
-      column_item.set_default_value(tmp_column_item->default_value_);
-      column_item.set_default_value_expr(tmp_column_item->default_value_expr_);
+      ret = column_item.set_default_value(tmp_column_item->default_value_,
+                                          select_item.expr_->get_value_allocator());
+      if (OB_SUCC(ret)) {
+        column_item.set_default_value_expr(tmp_column_item->default_value_expr_);
+      }
     }
   } else if (select_item.expr_->is_win_func_expr()) {
     const ObWinFunRawExpr *win_expr = reinterpret_cast<const ObWinFunRawExpr*>(select_item.expr_);
     if (T_WIN_FUN_RANK == win_expr->get_func_type() ||
         T_WIN_FUN_DENSE_RANK == win_expr->get_func_type() ||
         T_WIN_FUN_ROW_NUMBER == win_expr->get_func_type()) {
-      ObObj temp_default;
-      temp_default.set_uint64(0);
-      column_item.set_default_value(temp_default);
+      static const uint64_t zero = 0;
+      ObDatum datum; datum.set_string(reinterpret_cast<const char *>(&zero), sizeof(zero));
+      SqlTypeMeta meta; meta.set_uint64();
+      ret = column_item.set_default_value(DatumValue(datum, meta),
+                                          select_item.expr_->get_value_allocator());
     } else if (T_WIN_FUN_CUME_DIST == win_expr->get_func_type() ||
                T_WIN_FUN_PERCENT_RANK == win_expr->get_func_type()) {
-      ObObj temp_default;
-      temp_default.set_double(0);
-      column_item.set_default_value(temp_default);
+      static const double zero = 0.0;
+      ObDatum datum; datum.set_string(reinterpret_cast<const char *>(&zero), sizeof(zero));
+      SqlTypeMeta meta; meta.set_double();
+      ret = column_item.set_default_value(DatumValue(datum, meta),
+                                          select_item.expr_->get_value_allocator());
     } else {
       //do nothing
     }
@@ -6663,8 +6833,7 @@ int ObResolverUtils::resolve_file_format_string_value(const ParseNode *node,
   char *buf = nullptr;
   int64_t buf_size = 0;
   RowDesc row_desc;
-  ObNewRow tmp_row;
-  ObObj value_obj;
+  ObDatum value;
   ObTempExpr *temp_expr = NULL;
   ObExecContext *exec_ctx = NULL;
   if (OB_ISNULL(node) || OB_ISNULL(expr_factory) || OB_ISNULL(session_info)
@@ -6720,11 +6889,11 @@ int ObResolverUtils::resolve_file_format_string_value(const ParseNode *node,
                                                             temp_expr))) {
     } else if (OB_ISNULL(temp_expr)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(temp_expr->eval(*exec_ctx, tmp_row, value_obj))) {
-    } else if (value_obj.is_null()) {
+    } else if (OB_FAIL(temp_expr->eval_datum(*exec_ctx, exec_ctx->get_allocator(), value))) {
+    } else if (value.is_null()) {
       result_value = ObString();
     } else {
-      result_value = value_obj.get_string();
+      result_value = value.get_string();
     }
     if (result_value.length() > 0
         && format_charset != expr->get_result_type().get_charset_type()
@@ -6824,7 +6993,7 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                                     const ObPCParam *pc_param,
                                     const int64_t param_idx,
                                     const bool enable_mysql_compatible_dates,
-                                    ObObjParam &obj_param,
+                                    DatumParameter &obj_param,
                                     bool &is_param,
                                     const bool enable_decimal_int)
 {
@@ -6904,7 +7073,7 @@ int ObResolverUtils::fast_get_param_type(const ParseNode &node,
                                          const ObCollationType server_collation,
                                          const bool enable_decimal_int,
                                          ObIAllocator &alloc,
-                                         ObObjType &obj_type,
+                                         SqlValueType &obj_type,
                                          ObCollationType &coll_type,
                                          ObCollationLevel &coll_level)
 {
@@ -6922,7 +7091,7 @@ int ObResolverUtils::fast_get_param_type(const ParseNode &node,
     if (T_VARCHAR == node.type_ || T_CHAR == node.type_ ||  T_NCHAR == node.type_) {
       bool is_nchar = T_NCHAR == node.type_;
       obj_type = is_nchar ? ObVarcharType :
-                            static_cast<ObObjType>(node.type_);
+                            static_cast<SqlValueType>(node.type_);
       coll_level = CS_LEVEL_COERCIBLE;
       if (OB_UNLIKELY(node.str_len_ > OB_MAX_LONGTEXT_LENGTH)) {
         ret = OB_ERR_INVALID_INPUT_ARGUMENT;
@@ -6972,7 +7141,7 @@ int ObResolverUtils::fast_get_param_type(const ParseNode &node,
       coll_type = CS_TYPE_BINARY;
       coll_level = CS_LEVEL_NUMERIC;
     } else {
-      obj_type = static_cast<ObObjType>(node.type_);
+      obj_type = static_cast<SqlValueType>(node.type_);
       coll_type = CS_TYPE_BINARY;
       coll_level = CS_LEVEL_NUMERIC;
     }
@@ -7283,8 +7452,8 @@ int ObResolverUtils::check_same_column_definition(const ObColumnSchemaV2 &lhs,
              || lhs.is_on_update_current_timestamp() != rhs.is_on_update_current_timestamp()) {
   } else if (OB_FAIL(ObTableSchema::check_is_exactly_same_type(lhs, rhs, is_same_type))) {
   } else if (!is_same_type) {
-  } else if (!lhs.get_orig_default_value().strict_equal(rhs.get_orig_default_value())
-             || !lhs.get_cur_default_value().strict_equal(rhs.get_cur_default_value())) {
+  } else if (!strict_equal_datum_values(lhs.get_orig_default_value(), rhs.get_orig_default_value())
+             || !strict_equal_datum_values(lhs.get_cur_default_value(), rhs.get_cur_default_value())) {
   } else {
     is_same = true;
   }

@@ -76,13 +76,13 @@ public:
   virtual void destroy() override { ObOperator::destroy(); }
 private:
   int calc_next_row();
-  void update_src_meta(ObDatumMeta &src_meta, const ObObjMeta &src_obj_meta, const ObAccuracy &src_obj_acc);
+  void update_src_meta(ObDatumMeta &src_meta, const SqlTypeMeta &src_obj_meta, const ObAccuracy &src_obj_acc);
   int get_real_batch_obj_type(ObDatumMeta &src_meta,
-                              ObObjMeta &src_obj_meta,
+                              SqlTypeMeta &src_obj_meta,
                               ObExpr *src_expr,
                               int64_t group_idx);
   int eval_values_op_dynamic_cast_to_lob(ObExpr &real_src_expr,
-                                         ObObjMeta &src_obj_meta,
+                                         SqlTypeMeta &src_obj_meta,
                                          ObExpr *dst_expr);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprValuesOp);

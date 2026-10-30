@@ -279,7 +279,6 @@ public:
         old_adapter_(nullptr),
         mem_attr_(mem_attr),
         allocator_(ObMemAttr("VecIdxASyTask")),
-        vid_obj_(),
         all_finished_(false)
   {}
   virtual ~ObVecIndexIAsyncTask() {}
@@ -302,7 +301,6 @@ protected:
   ObPluginVectorIndexAdaptor* old_adapter_;
   ObMemAttr mem_attr_;
   common::ObArenaAllocator allocator_;
-  ObObj vid_obj_;
   bool all_finished_;
   DISALLOW_COPY_AND_ASSIGN(ObVecIndexIAsyncTask);
 };

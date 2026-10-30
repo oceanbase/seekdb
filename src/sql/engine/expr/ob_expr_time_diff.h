@@ -18,7 +18,6 @@
 #define _OCEANBASE_SQL_OB_EXPR_TIME_DIFF_H_
 #include "common/timezone/ob_time_convert.h"
 #include "lib/ob_name_def.h"
-#include "share/object/ob_obj_cast.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
 namespace oceanbase
@@ -41,10 +40,6 @@ public:
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
-  static int get_diff_value(const common::ObObj &obj1,
-                            const common::ObObj &obj2,
-                            const common::ObTimeZoneInfo *tz_info,
-                            int64_t &diff);
   static int get_diff_value_with_ob_time(common::ObTime &ot1,
                                          common::ObTime &ot2,
                                          const common::ObTimeZoneInfo *tz_info,

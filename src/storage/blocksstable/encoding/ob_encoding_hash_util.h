@@ -320,7 +320,7 @@ private:
 };
 
 extern int build_column_encoding_ctx(
-    ObEncodingHashTable *ht, const ObObjTypeStoreClass store_class,
+    ObEncodingHashTable *ht, const SqlValueTypeStoreClass store_class,
     const int64_t type_store_size, ObColumnEncodingCtx &ctx);
 
 } // end namespace blocksstable

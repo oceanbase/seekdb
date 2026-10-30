@@ -689,20 +689,24 @@ int ObDASSPIVMergeIter::build_inv_scan_range(ObNewRange &range, uint64_t table_i
   int ret = OB_SUCCESS;
 
   ObArenaAllocator &allocator = mem_context_->get_arena_allocator();
-  ObObj *start_key_ptr = nullptr;
-  ObObj *end_key_ptr = nullptr;
+  DatumValue *start_key_ptr = nullptr;
+  DatumValue *end_key_ptr = nullptr;
   ObRowkey start_key;
   ObRowkey end_key;
-  if (OB_ISNULL(start_key_ptr = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * INV_IDX_ROWKEY_COL_CNT)))) {
+  if (OB_ISNULL(start_key_ptr = static_cast<DatumValue *>(allocator.alloc(sizeof(DatumValue) * INV_IDX_ROWKEY_COL_CNT)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(end_key_ptr = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * INV_IDX_ROWKEY_COL_CNT)))) {
+  } else if (OB_ISNULL(end_key_ptr = static_cast<DatumValue *>(allocator.alloc(sizeof(DatumValue) * INV_IDX_ROWKEY_COL_CNT)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    start_key_ptr[0].set_uint32(dim);
+    new (start_key_ptr) DatumValue[INV_IDX_ROWKEY_COL_CNT];
+    new (end_key_ptr) DatumValue[INV_IDX_ROWKEY_COL_CNT];
+    if (OB_FAIL(start_key_ptr[0].set_uint64(dim, allocator))) { return ret; }
+    start_key_ptr[0].meta_.set_uint32();
     start_key_ptr[1].set_min_value();
     start_key.assign(start_key_ptr, INV_IDX_ROWKEY_COL_CNT);
 
-    end_key_ptr[0].set_uint32(dim);
+    if (OB_FAIL(end_key_ptr[0].set_uint64(dim, allocator))) { return ret; }
+    end_key_ptr[0].meta_.set_uint32();
     end_key_ptr[1].set_max_value();
     end_key.assign(end_key_ptr, INV_IDX_ROWKEY_COL_CNT);
 
@@ -1322,7 +1326,10 @@ int ObDASSPIVMergeIter::rowkey2docid(ObRowkey &rowkey, ObDocIdExt &docid)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(!rowkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(docid.from_obj(*rowkey.ptr()))){
+  } else {
+    ObDatum value;char extended[DATUM_EXTEND_PAYLOAD_SIZE];
+    if (OB_FAIL(rowkey.get_cell(0).to_row_datum(value, extended))) {}
+    else if (OB_FAIL(docid.from_datum(value))) {}
   }
 
   return ret;

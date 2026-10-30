@@ -17,6 +17,7 @@
 #ifndef OB_DBMS_STATS_PREFERENCES_H
 #define OB_DBMS_STATS_PREFERENCES_H
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
@@ -42,8 +43,8 @@ class ObStatPrefs
     virtual const char* get_stat_pref_name() const { return nullptr; }
     virtual const char* get_stat_pref_default_value() const { return nullptr; }
     int decode_pref_result(ObIAllocator *allocator,
-                           const ObObj &name_obj,
-                           const ObObj &val_obj,
+                           const DatumValue &name_obj,
+                           const DatumValue &val_obj,
                            ObTableStatParam &param);
     int dump_pref_name_and_value(ObString &pref_name, ObString &pvalue);
     bool is_decoded() const { return is_decoded_; }
@@ -375,7 +376,7 @@ public:
                        ObIAllocator &allocator,
                        const uint64_t table_id,
                        const ObString &opt_name,
-                       ObObj &result);
+                       DatumValue &result);
 
   static int set_prefs(ObExecContext &ctx,
                        const ObIArray<uint64_t> &table_ids,
@@ -399,7 +400,7 @@ private:
                           ObIAllocator &allocator,
                           const ObSqlString &raw_sql,
                           bool &get_result,
-                          ObObj &result);
+                          DatumValue &result);
 
   static int get_user_prefs_sql(const uint64_t table_id,
                                 const ObString &opt_name,

@@ -76,7 +76,7 @@ void ObFunctionTableOp::destroy()
 }
 
 
-int ObFunctionTableOp::get_current_result(ObObj &result)
+int ObFunctionTableOp::get_current_result(DatumValue &result)
 {
   int ret = OB_SUCCESS;
   void *data = NULL;
@@ -94,7 +94,7 @@ int ObFunctionTableOp::get_current_result(ObObj &result)
     CK (OB_NOT_NULL(value_table_));
     OX (data = value_table_->get_data());
     CK (OB_NOT_NULL(data));
-    OX (result = (static_cast<ObObj*>(data))[node_idx_++]);
+    OX (result = (static_cast<DatumValue*>(data))[node_idx_++]);
   } while (OB_SUCC(ret) && result.get_meta().get_type() == ObMaxType);
   return ret;
 }
@@ -136,13 +136,13 @@ int ObFunctionTableOp::inner_get_next_row_udf()
       ret = OB_ITER_END;
     }
     CK (MY_SPEC.column_exprs_.count() >= col_count_);
-    ObObj obj_stack[col_count_];
+    DatumValue obj_stack[col_count_];
     if (OB_SUCC(ret)) {
       if (nullptr != value_table_ 
           && ObExtendType == value_table_->get_element_type().get_obj_type()) {
         pl::ObPLComposite *composite = NULL;
         pl::ObPLRecord *record = NULL;
-        ObObj record_obj;
+        DatumValue record_obj;
         OZ (get_current_result(record_obj));
         if (OB_FAIL(ret)) {
         } else if (ObUserDefinedSQLType == record_obj.get_type()) {
@@ -178,14 +178,14 @@ int ObFunctionTableOp::inner_get_next_row_udf()
         if (obj_stack[i].is_null()) {
           MY_SPEC.column_exprs_.at(i)->locate_datum_for_write(eval_ctx_).set_null();
         } else {
-          const ObObjDatumMapType &datum_map = MY_SPEC.column_exprs_.at(i)->obj_datum_map_;
           ObExpr * const &expr = MY_SPEC.column_exprs_.at(i);
           ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
-          if (OB_FAIL(datum.from_obj(obj_stack[i], datum_map))) {
-          } else if (is_lob_storage(obj_stack[i].get_type()) &&
-                     OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), obj_stack[i],
-                                                 expr->obj_meta_, datum_map,
-                                                 get_exec_ctx().get_allocator(), datum))) {
+          // Collection/record members already carry native payloads; the
+          // owning collection remains live while this row is projected.
+          datum = obj_stack[i].datum_;
+          if (is_lob_storage(obj_stack[i].get_type())) {
+            OZ (ob_adjust_lob_datum(get_exec_ctx(), obj_stack[i].datum_, obj_stack[i].meta_,
+                                   expr->obj_meta_, get_exec_ctx().get_allocator(), datum));
           }
         }
         if (OB_SUCC(ret)) {

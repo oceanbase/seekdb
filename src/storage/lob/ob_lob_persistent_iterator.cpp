@@ -24,6 +24,18 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace {
+// Views borrow param.lob_data_->id_, the caller's seq_id, or this iterator's
+// seq_id_local_buf_. All remain live until the range is consumed or rebuilt.
+void set_lob_key_string(DatumValue &value, const ObString &bytes)
+{
+  value.meta_.set_varchar();
+  value.set_collation_level(CS_LEVEL_IMPLICIT);
+  value.set_collation_type(CS_TYPE_BINARY);
+  value.datum_.set_string(bytes);
+}
+} // namespace
+
 
 int ObLobMetaBaseIterator::build_rowkey_range(ObLobAccessParam &param, ObRowkey &min_row_key, ObRowkey &max_row_key, ObNewRange &range)
 {
@@ -36,61 +48,61 @@ int ObLobMetaBaseIterator::build_rowkey_range(ObLobAccessParam &param, ObRowkey 
   return ret;
 }
 
-int ObLobMetaBaseIterator::build_rowkey_range(ObLobAccessParam &param, ObObj key_objs[4], ObNewRange &range)
+int ObLobMetaBaseIterator::build_rowkey_range(ObLobAccessParam &param, DatumValue key_values[4], ObNewRange &range)
 {
   const char *lob_id_ptr = reinterpret_cast<char*>(&param.lob_data_->id_);
-  key_objs[0].reset();
-  key_objs[0].set_varchar(lob_id_ptr, sizeof(ObLobId)); // lob_id
-  key_objs[0].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
-  key_objs[1] = ObObj::make_min_obj(); // seq_id set min
-  ObRowkey min_row_key(key_objs, 2);
+  key_values[0].reset();
+  set_lob_key_string(key_values[0], ObString(sizeof(ObLobId), lob_id_ptr)); // lob_id
+  key_values[0].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
+  key_values[1].set_min_value(); // seq_id set min
+  ObRowkey min_row_key(key_values, 2);
 
-  key_objs[2].reset();
-  key_objs[2].set_varchar(lob_id_ptr, sizeof(ObLobId)); // lob_id
-  key_objs[2].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
-  key_objs[3] = ObObj::make_max_obj(); // seq_id set max
-  ObRowkey max_row_key(key_objs + 2, 2);
+  key_values[2].reset();
+  set_lob_key_string(key_values[2], ObString(sizeof(ObLobId), lob_id_ptr)); // lob_id
+  key_values[2].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
+  key_values[3].set_max_value(); // seq_id set max
+  ObRowkey max_row_key(key_values + 2, 2);
   return build_rowkey_range(param, min_row_key, max_row_key, range);
 }
 
-int ObLobMetaBaseIterator::build_rowkey(ObLobAccessParam &param, ObObj key_objs[4], ObString &seq_id, ObNewRange &range)
+int ObLobMetaBaseIterator::build_rowkey(ObLobAccessParam &param, DatumValue key_values[4], ObString &seq_id, ObNewRange &range)
 {
   int ret = OB_SUCCESS;
   const char *lob_id_ptr = reinterpret_cast<char*>(&param.lob_data_->id_);
-  key_objs[0].reset();
-  key_objs[0].set_varchar(lob_id_ptr, sizeof(ObLobId)); // lob_id
-  key_objs[0].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
-  key_objs[1].set_varchar(seq_id); // seq_id set min
-  key_objs[1].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
-  ObRowkey min_row_key(key_objs, 2);
+  key_values[0].reset();
+  set_lob_key_string(key_values[0], ObString(sizeof(ObLobId), lob_id_ptr)); // lob_id
+  key_values[0].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
+  set_lob_key_string(key_values[1], seq_id); // seq_id set min
+  key_values[1].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
+  ObRowkey min_row_key(key_values, 2);
 
-  key_objs[2].reset();
-  key_objs[2].set_varchar(lob_id_ptr, sizeof(ObLobId)); // lob_id
-  key_objs[2].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
-  key_objs[3].set_varchar(seq_id); // seq_id set max
-  key_objs[3].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
-  ObRowkey max_row_key(key_objs + 2, 2);
+  key_values[2].reset();
+  set_lob_key_string(key_values[2], ObString(sizeof(ObLobId), lob_id_ptr)); // lob_id
+  key_values[2].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
+  set_lob_key_string(key_values[3], seq_id); // seq_id set max
+  key_values[3].set_collation_type(common::ObCollationType::CS_TYPE_BINARY);
+  ObRowkey max_row_key(key_values + 2, 2);
 
   return build_rowkey_range(param, min_row_key, max_row_key, range);
 }
 
-int ObLobMetaBaseIterator::build_rowkey(ObLobAccessParam &param, ObObj key_objs[4], ObNewRange &range)
+int ObLobMetaBaseIterator::build_rowkey(ObLobAccessParam &param, DatumValue key_values[4], ObNewRange &range)
 {
   int ret = OB_SUCCESS;
   ObString seq_id(sizeof(seq_id_local_buf_), (char*)(&seq_id_local_buf_));
   if (OB_FAIL(ObLobSeqId::get_seq_id(0, seq_id))) {
-  } else if (OB_FAIL(build_rowkey(param, key_objs, seq_id, range))) {
+  } else if (OB_FAIL(build_rowkey(param, key_values, seq_id, range))) {
   }
   return ret;
 }
 
-int ObLobMetaBaseIterator::build_range(ObLobAccessParam &param, ObObj key_objs[4], ObNewRange &range)
+int ObLobMetaBaseIterator::build_range(ObLobAccessParam &param, DatumValue key_values[4], ObNewRange &range)
 {
   int ret = OB_SUCCESS;
   if (param.has_single_chunk()) {
-    if (OB_FAIL(build_rowkey(param, key_objs, range))) {
+    if (OB_FAIL(build_rowkey(param, key_values, range))) {
     }
-  } else if (OB_FAIL(build_rowkey_range(param, key_objs, range))) {
+  } else if (OB_FAIL(build_rowkey_range(param, key_values, range))) {
   }
   return ret;
 }
@@ -155,7 +167,7 @@ int ObLobMetaIterator::open(ObLobAccessParam &param, ObPersistentLobApator* adap
   adaptor_ = adaptor;
   if (! param.tablet_id_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(build_range(param, rowkey_objs_, range))) {
+  } else if (OB_FAIL(build_range(param, rowkey_values_, range))) {
   } else if (OB_FAIL(scan_param_.key_ranges_.push_back(range))) {
   } else if (OB_FAIL(scan(param, param.has_single_chunk(), stmt_allocator, &scan_allocator_))) {
   }
@@ -176,7 +188,7 @@ int ObLobMetaIterator::rescan(ObLobAccessParam &param)
   scan_param_.timeout_ = param.timeout_;
   scan_param_.for_update_wait_timeout_ = scan_param_.timeout_;
   scan_allocator_.reuse();
-  if (OB_FAIL(build_range(param, rowkey_objs_, range))) {
+  if (OB_FAIL(build_range(param, rowkey_values_, range))) {
   } else if (OB_FAIL(scan_param_.key_ranges_.push_back(range))) {
   } else if (OB_FAIL(ObLobMetaBaseIterator::rescan(param))) {
   }
@@ -235,7 +247,7 @@ int ObLobMetaSingleGetter::get_next_row(ObString &seq_id, ObLobMetaInfo &info)
   scan_param_.key_ranges_.reuse();
   if (OB_ISNULL(param_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(build_rowkey(*param_, rowkey_objs_, seq_id, range))) {
+  } else if (OB_FAIL(build_rowkey(*param_, rowkey_values_, seq_id, range))) {
   } else if (OB_FAIL(scan_param_.key_ranges_.push_back(range))) {
   } else if (OB_NOT_NULL(row_iter_)) {
     if (OB_FAIL(rescan(*param_))) {

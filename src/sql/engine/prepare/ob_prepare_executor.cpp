@@ -51,7 +51,7 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
       || OB_ISNULL(ctx.get_prepared_statement_runtime())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj result;
+    DatumParameter result;
     ParamStore params_array( (ObWrapperAllocator(ctx.get_allocator())) );
     if (OB_FAIL(ObSQLUtils::calc_const_expr(ctx, stmt.get_prepare_sql(), result, ctx.get_allocator(), params_array))) {
     } else if (!result.is_string_type()) {

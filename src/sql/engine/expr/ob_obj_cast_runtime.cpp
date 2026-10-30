@@ -26,20 +26,20 @@ namespace oceanbase
 namespace sql
 {
 
-ObSqlObjCastRuntime::ObSqlObjCastRuntime(ObExecContext *exec_ctx)
+ObSqlDatumCastRuntime::ObSqlDatumCastRuntime(ObExecContext *exec_ctx)
   : exec_ctx_(exec_ctx),
     user_logging_ctx_(
         nullptr == exec_ctx ? nullptr : exec_ctx->get_user_logging_ctx())
 {
 }
 
-ObSqlObjCastRuntime::ObSqlObjCastRuntime(const ObUserLoggingCtx *user_logging_ctx)
+ObSqlDatumCastRuntime::ObSqlDatumCastRuntime(const ObUserLoggingCtx *user_logging_ctx)
   : exec_ctx_(nullptr),
     user_logging_ctx_(user_logging_ctx)
 {
 }
 
-int ObSqlObjCastRuntime::get_enum_set_values(
+int ObSqlDatumCastRuntime::get_enum_set_values(
     const uint16_t subschema_id,
     const common::ObIArray<common::ObString> *&values,
     common::ObCollationType &collation_type) const
@@ -61,10 +61,10 @@ int ObSqlObjCastRuntime::get_enum_set_values(
   return ret;
 }
 
-int ObSqlObjCastRuntime::cast_collection(
-    common::ObObjCastParams &params,
-    const common::ObObj &input,
-    common::ObObj &output,
+int ObSqlDatumCastRuntime::cast_collection(
+    common::DatumCastParams &params,
+    const common::DatumValue &input,
+    common::DatumValue &output,
     const uint64_t cast_mode) const
 {
   int ret = OB_SUCCESS;
@@ -137,8 +137,26 @@ int ObSqlObjCastRuntime::cast_collection(
                 static_cast<uint32_t>(array_type->dim_cnt_),
                 array->size());
           }
-        } else if (OB_FAIL(ObArrayCastUtils::set_array_obj_res(
-                       array, &params, &output))) {
+        } else {
+          const int64_t result_size = array->get_raw_binary_len();
+          char *result_buffer = nullptr;
+          int64_t result_buffer_len = 0;
+          common::ObTextStringResult text_result(
+              common::ObCollectionSQLType, true, nullptr);
+          if (OB_FAIL(text_result.init(result_size, &allocator))) {
+          } else if (OB_FAIL(text_result.get_reserved_buffer(
+                         result_buffer, result_buffer_len))) {
+          } else if (result_buffer_len < result_size) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(array->get_raw_binary(result_buffer, result_buffer_len))) {
+          } else if (OB_FAIL(text_result.lseek(result_size, 0))) {
+          } else {
+            common::ObString result_string;
+            text_result.get_result_buffer(result_string);
+            output.datum_.set_string(result_string);
+            output.meta_.set_type(common::ObCollectionSQLType);
+            output.meta_.set_has_lob_header();
+          }
         }
       }
     }
@@ -146,7 +164,7 @@ int ObSqlObjCastRuntime::cast_collection(
   return ret;
 }
 
-void ObSqlObjCastRuntime::report_warning(
+void ObSqlDatumCastRuntime::report_warning(
     const int64_t code,
     const common::ObString &type_name,
     const common::ObString &input,

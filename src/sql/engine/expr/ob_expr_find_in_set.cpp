@@ -48,9 +48,9 @@ int ObExprFindInSet::calc_result_type2(ObExprResType &type,
 		type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObUInt64Type].scale_);
     type.set_calc_type(ObVarcharType);
 		ObExprOperator::calc_result_flag2(type, type1, type2);
-    ObObjMeta coll_types[2];
-    coll_types[0] = type1.get_obj_meta();
-    coll_types[1] = type2.get_obj_meta();
+    SqlTypeMeta coll_types[2];
+    coll_types[0] = type1.get_sql_type_meta();
+    coll_types[1] = type2.get_sql_type_meta();
     if (OB_FAIL(aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 2, type_ctx))) {
     } else {
       type1.set_calc_type(ObVarcharType);

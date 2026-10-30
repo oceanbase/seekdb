@@ -69,7 +69,7 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
       const common::ObLengthSemantics default_length_semantics = (OB_NOT_NULL(type_ctx.get_session())
               ? type_ctx.get_session()->get_actual_length_semantics()
               : common::LS_BYTE);
-      ObObjMeta real_types[2] = {text, pattern};
+      SqlTypeMeta real_types[2] = {text, pattern};
       if (text.is_blob()) {
         type.set_blob();
       } else if (pattern.is_blob()) {

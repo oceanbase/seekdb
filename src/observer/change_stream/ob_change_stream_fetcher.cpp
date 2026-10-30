@@ -520,9 +520,9 @@ int ObCSFetcher::extract_ddl_schema_version_(ObCSTxInfo *tx, int64_t &schema_ver
         if (OB_FAIL(mut_row.deserialize(buf, buf_len, pos))) {
           break;
         }
-        if (mut_row.rowkey_.get_obj_cnt() >= 1) {
+        if (mut_row.rowkey_.get_value_count() >= 1) {
           int64_t sv = 0;
-          if (OB_FAIL(mut_row.rowkey_.get_obj_ptr()[0].get_int(sv))) {
+          if (OB_FAIL(mut_row.rowkey_.get_values()[0].get_int(sv))) {
           } else if (sv > schema_version) {
             schema_version = sv;
           }

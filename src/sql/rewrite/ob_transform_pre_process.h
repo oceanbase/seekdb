@@ -34,12 +34,12 @@ typedef std::pair<uint64_t, uint64_t> JoinTableIdPair;
 
 struct DistinctObjMeta
 {
-  ObObjType obj_type_;
+  SqlValueType obj_type_;
   ObCollationType coll_type_;
   ObCollationLevel coll_level_;
   ObScale scale_;
 
-  DistinctObjMeta(ObObjType obj_type, ObCollationType coll_type,
+  DistinctObjMeta(SqlValueType obj_type, ObCollationType coll_type,
                   ObCollationLevel coll_level, ObScale scale)
     : obj_type_(obj_type), coll_type_(coll_type),
       coll_level_(coll_level), scale_(scale)

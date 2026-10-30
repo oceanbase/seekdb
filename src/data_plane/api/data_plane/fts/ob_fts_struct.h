@@ -31,7 +31,7 @@ class ObFTWord final
 {
 public:
   ObFTWord() : word_(), meta_() {}
-  ObFTWord(const int64_t length, const char *ptr, const ObObjMeta &meta) : meta_(meta)
+  ObFTWord(const int64_t length, const char *ptr, const SqlTypeMeta &meta) : meta_(meta)
   {
     word_.set_string(ptr, length);
   }
@@ -48,7 +48,7 @@ public:
 
 private:
   ObDatum word_;
-  ObObjMeta meta_;
+  SqlTypeMeta meta_;
 };
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;

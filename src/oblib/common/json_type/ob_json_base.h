@@ -77,9 +77,9 @@ enum class ObJsonNodeType
   J_ERROR = 200 // 14
 };
 
-OB_INLINE ObObjType json_type_to_obj_type(const  ObJsonNodeType json_type)
+OB_INLINE SqlValueType json_type_to_obj_type(const  ObJsonNodeType json_type)
 {
-  const static ObObjType JSON_TYPE_TO_OBJ_TYPE[static_cast<int64_t>(ObJsonNodeType::J_MAX_TYPE) + 1] = {
+  const static SqlValueType JSON_TYPE_TO_OBJ_TYPE[static_cast<int64_t>(ObJsonNodeType::J_MAX_TYPE) + 1] = {
     ObNullType,                          // ObJsonNodeType::J_NULL null type
     ObNumberType,                        // ObJsonNodeType::J_DECIMAL aka decimal/numeric
     ObIntType,                           // ObJsonNodeType::J_INT int64
@@ -256,8 +256,8 @@ public:
 
   // Get field type of ObJsonOpaque or ObJsonDatetime.
   //
-  // @return see ObObjType.
-  virtual ObObjType field_type() const = 0;
+  // @return see SqlValueType.
+  virtual SqlValueType field_type() const = 0;
 
   // Gey key by index from json node array.
   //
@@ -1143,7 +1143,7 @@ public:
   //
   // @param [in] jtype The json node type.
   // @return Returns true on time type, false otherwise.
-  static ObObjType get_time_type(ObJsonNodeType json_type);
+  static SqlValueType get_time_type(ObJsonNodeType json_type);
 
   // get is valid json datetime type.
   //
@@ -1395,10 +1395,10 @@ private:
   hash_algo calc_;
 };
 
-inline bool is_mysql_unsupported_json_column_conversion(ObObjType type)
+inline bool is_mysql_unsupported_json_column_conversion(SqlValueType type)
 {
   bool bool_res = false;
-  ObObjTypeClass tc = ob_obj_type_class(type);
+  SqlTypeClass tc = sql_type_class(type);
   if (tc != ObStringTC && tc != ObTextTC && tc != ObJsonTC) {
     bool_res = true;
   }

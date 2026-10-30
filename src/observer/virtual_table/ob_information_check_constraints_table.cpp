@@ -52,7 +52,7 @@ int ObInfoSchemaCheckConstraintsTable::inner_get_next_row(common::ObNewRow *&row
     ObSArray<const ObDatabaseSchema*> database_schemas;
     if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
     } else {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
       if (0 > col_count || col_count > CHECK_CONSTRAINTS_COLUMN_COUNT) {
         ret = OB_ERR_UNEXPECTED;
@@ -97,7 +97,7 @@ int ObInfoSchemaCheckConstraintsTable::inner_get_next_row(common::ObNewRow *&row
 }
 
 int ObInfoSchemaCheckConstraintsTable::add_check_constraints(
-    const ObDatabaseSchema &database_schema, ObObj *cells, const int64_t col_count)
+    const ObDatabaseSchema &database_schema, DatumValue *cells, const int64_t col_count)
 {
   int ret = OB_SUCCESS;
   ObSArray<const ObTableSchema*> table_schemas;
@@ -124,7 +124,7 @@ int ObInfoSchemaCheckConstraintsTable::add_check_constraints(
 }
 
 int ObInfoSchemaCheckConstraintsTable::add_check_constraints(
-    const ObTableSchema &table_schema, const ObString &database_name, ObObj *cells, const int64_t col_count)
+    const ObTableSchema &table_schema, const ObString &database_name, DatumValue *cells, const int64_t col_count)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_guard_) || OB_ISNULL(cells)) {
@@ -150,22 +150,22 @@ int ObInfoSchemaCheckConstraintsTable::add_check_constraints(
         uint64_t col_id = output_column_ids_.at(cell_idx);
         switch (col_id) {
           case CONSTRAINT_CATALOG: {
-            cells[cell_idx].set_varchar(ObString("def"));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("def")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case CONSTRAINT_SCHEMA: {
-            cells[cell_idx].set_varchar(database_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case CONSTRAINT_NAME: {
-            cells[cell_idx].set_varchar(constraint->get_constraint_name_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, constraint->get_constraint_name_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           case CHECK_CLAUSE: {
-            cells[cell_idx].set_varchar(constraint->get_check_expr());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, constraint->get_check_expr()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }

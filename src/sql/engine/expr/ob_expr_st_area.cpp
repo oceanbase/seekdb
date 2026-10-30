@@ -66,7 +66,7 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  ObObjType input_type = gis_arg->datum_meta_.type_;
+  SqlValueType input_type = gis_arg->datum_meta_.type_;
 
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg, ctx, gis_datum))) {
   } else if (gis_datum->is_null()) {

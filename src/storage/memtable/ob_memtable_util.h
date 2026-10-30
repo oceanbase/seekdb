@@ -73,9 +73,12 @@ public:
   ObFakeStoreRowKey(const char *str, const int64_t size)
   {
     for(int64_t i = 0; i < OBJ_CNT; i++) {
-      obj_array_[i].set_char_value(str, (ObString::obstr_size_t)size);
+      // The historical fake key keeps its NULL type and only supplies the
+      // raw char address/length and implicit collation level.
+      values_[i].datum_.set_string(str, static_cast<ObString::obstr_size_t>(size));
+      values_[i].set_collation_level(common::CS_LEVEL_IMPLICIT);
     }
-    rowkey_.assign(obj_array_, OBJ_CNT);
+    rowkey_.assign(values_, OBJ_CNT);
   }
   ~ObFakeStoreRowKey() {}
   const common::ObStoreRowkey &get_rowkey() const { return rowkey_; }
@@ -83,7 +86,7 @@ private:
   static const int64_t OBJ_CNT = 1;
 private:
   common::ObStoreRowkey rowkey_;
-  ObObj obj_array_[OBJ_CNT];
+  common::DatumValue values_[OBJ_CNT];
 };
 
 }

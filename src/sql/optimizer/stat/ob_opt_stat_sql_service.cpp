@@ -15,6 +15,11 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "share/datum/datum_value_cast.h"
+#include "lib/compress/ob_compressor_pool.h"
 #include "ob_opt_stat_sql_service.h"
 #include <inttypes.h>
 #include "common/mysqlclient/ob_isql_connection.h"
@@ -470,7 +475,7 @@ int ObOptStatSqlService::update_column_stat(share::schema::ObSchemaGetterGuard *
                                             const ObIArray<ObOptColumnStat*> &column_stats,
                                             const int64_t current_time,
                                             bool only_update_col_stat /*default false*/,
-                                            const ObObjPrintParams &print_params)
+                                            const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
@@ -513,12 +518,12 @@ int ObOptStatSqlService::construct_column_stat_sql(share::schema::ObSchemaGetter
                                                    const ObIArray<ObOptColumnStat*> &column_stats,
                                                    const int64_t current_time,
                                                    ObSqlString &column_stats_sql,
-                                                   const ObObjPrintParams &print_params)
+                                                   const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   ObSqlString tmp;
-  ObObjMeta min_meta;
-  ObObjMeta max_meta;
+  SqlTypeMeta min_meta;
+  SqlTypeMeta max_meta;
   if (OB_FAIL(get_column_stat_min_max_meta(schema_guard,
                                            share::OB_ALL_COLUMN_STAT_TID,
                                            min_meta,
@@ -576,12 +581,12 @@ int ObOptStatSqlService::construct_histogram_insert_sql(share::schema::ObSchemaG
                                                         const int64_t current_time,
                                                         ObSqlString &insert_histogram_sql,
                                                         bool &need_histogram,
-                                                        const ObObjPrintParams &print_params)
+                                                        const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   ObSqlString tmp;
   need_histogram = false;
-  ObObjMeta endpoint_meta;
+  SqlTypeMeta endpoint_meta;
   if (OB_FAIL(get_histogram_endpoint_meta(schema_guard,
                                           share::OB_ALL_HISTOGRAM_STAT_TID,
                                           endpoint_meta))) {
@@ -796,10 +801,10 @@ int ObOptStatSqlService::get_table_stat_sql(const ObOptTableStat &stat,
 int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
                                              const ObOptColumnStat &stat,
                                              const int64_t current_time,
-                                             ObObjMeta min_meta,
-                                             ObObjMeta max_meta,
+                                             SqlTypeMeta min_meta,
+                                             SqlTypeMeta max_meta,
                                              ObSqlString &sql_string,
-                                             const ObObjPrintParams &print_params)
+                                             const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   share::ObDMLSqlSplicer dml_splicer;
@@ -816,11 +821,11 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
                           stat.get_histogram().get_bucket_cnt() == 0) ||
                          stat.get_num_distinct() < 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_valid_obj_str(stat.get_min_value(), min_meta, allocator, min_str, print_params)) ||
-             OB_FAIL(get_valid_obj_str(stat.get_max_value(), max_meta, allocator, max_str, print_params))) {
+  } else if (OB_FAIL(get_valid_value_str(stat.get_min_value(), min_meta, allocator, min_str, print_params)) ||
+             OB_FAIL(get_valid_value_str(stat.get_max_value(), max_meta, allocator, max_str, print_params))) {
     LOG_WARN("failed to get valid obj str", K(stat.get_min_value()), K(stat.get_max_value()));
-  } else if (OB_FAIL(get_obj_binary_hex_str(stat.get_min_value(), allocator, b_min_str)) ||
-             OB_FAIL(get_obj_binary_hex_str(stat.get_max_value(), allocator, b_max_str))) {
+  } else if (OB_FAIL(get_value_binary_hex_str(stat.get_min_value(), allocator, b_min_str)) ||
+             OB_FAIL(get_value_binary_hex_str(stat.get_max_value(), allocator, b_max_str))) {
   } else if (stat.get_llc_bitmap_size() <= 0) {
     // do nothing
   } else if (OB_FAIL(get_compressed_llc_bitmap(allocator,
@@ -869,9 +874,9 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
 int ObOptStatSqlService::get_histogram_stat_sql(const ObOptColumnStat &stat,
                                                 ObIAllocator &allocator,
                                                 ObHistBucket &bucket,
-                                                ObObjMeta endpoint_meta,
+                                                SqlTypeMeta endpoint_meta,
                                                 ObSqlString &sql_string,
-                                                const ObObjPrintParams &print_params)
+                                                const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   ObString endpoint_value;
@@ -880,12 +885,12 @@ int ObOptStatSqlService::get_histogram_stat_sql(const ObOptColumnStat &stat,
   uint64_t table_id = stat.get_table_id();
   
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
-  if (OB_FAIL(get_valid_obj_str(bucket.endpoint_value_,
+  if (OB_FAIL(get_valid_value_str(bucket.endpoint_value_,
                                 endpoint_meta,
                                 allocator,
                                 endpoint_value,
                                 print_params))) {
-  } else if (OB_FAIL(get_obj_binary_hex_str(bucket.endpoint_value_, allocator, b_endpoint_value))) {
+  } else if (OB_FAIL(get_value_binary_hex_str(bucket.endpoint_value_, allocator, b_endpoint_value))) {
   } else if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
              OB_FAIL(dml_splicer.add_pk_column("partition_id", stat.get_partition_id())) ||
              OB_FAIL(dml_splicer.add_pk_column("column_id", stat.get_column_id())) ||
@@ -900,83 +905,77 @@ int ObOptStatSqlService::get_histogram_stat_sql(const ObOptColumnStat &stat,
   return ret;
 }
 
-int ObOptStatSqlService::hex_str_to_obj(const char *buf,
-                                        int64_t buf_len,
-                                        ObIAllocator &allocator,
-                                        ObObj &obj)
+int ObOptStatSqlService::hex_str_to_value(const char *buf, int64_t length,
+                                           ObIAllocator &owner, DatumValue &value)
 {
   int ret = OB_SUCCESS;
-
-  int64_t pos = 0;
-  int64_t ret_len = 0;
-  char *resbuf = NULL;
-  if (NULL == buf || buf_len < 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (NULL == (resbuf = static_cast<char *>(allocator.alloc(buf_len)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("cannot allocate memory for deserializing obj.", K(buf_len), K(ret));
-  } else if (buf_len != (ret_len = common::str_to_hex(buf,
-                                                      static_cast<int32_t>(buf_len),
-                                                      resbuf,
-                                                      static_cast<int32_t>(buf_len)))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(obj.deserialize(resbuf, ret_len, pos))) {
-  }
+  int64_t pos = 0, decoded_length = 0;
+  char *binary = nullptr;
+  if (buf == nullptr || length < 0) { ret = OB_INVALID_ARGUMENT; }
+  else if ((binary = static_cast<char *>(owner.alloc(length))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  else if (length != (decoded_length = common::str_to_hex(buf, static_cast<int32_t>(length), binary,
+                                                         static_cast<int32_t>(length)))) { ret = OB_ERR_UNEXPECTED; }
+  else { ret = DatumParameterCodec::decode_unis_value(binary, decoded_length, pos, owner, value.datum_, value.meta_); }
   return ret;
 }
 
-int ObOptStatSqlService::get_obj_str(const ObObj &obj,
-                                     ObIAllocator &allocator,
-                                     ObString &out_str,
-                                     const ObObjPrintParams &print_params)
+int ObOptStatSqlService::get_value_str(const DatumValue &value, ObIAllocator &owner,
+                                       ObString &out_str, const ObValuePrintParams &params)
 {
   int ret = OB_SUCCESS;
-  char *buf = NULL;
-  const int64_t buf_len = OB_MAX_PARTITION_EXPR_LENGTH;
+  const int64_t length = OB_MAX_PARTITION_EXPR_LENGTH;
   int64_t pos = 0;
-  if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(buf_len)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (obj.is_string_type()) {
-    ObObjPrintParams copy_print_params = print_params;
-    copy_print_params.cs_type_ = obj.get_collation_type();
-    if (OB_FAIL(obj.print_varchar_literal(buf, buf_len, pos, copy_print_params))) {
-    } else { /*do nothing*/ }
-  } else if (obj.is_valid_type()) {
-    if (OB_FAIL(obj.print_sql_literal(buf, buf_len, pos, print_params))) {
-    } else { /*do nothing*/ }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-  }
+  char *buffer = static_cast<char *>(owner.alloc(length));
+  if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  else if (value.is_string_type()) {
+    ObValuePrintParams copy_params = params;
+    copy_params.cs_type_ = value.get_collation_type();
+    ret = value.print_varchar_literal(buffer, length, pos, copy_params);
+  } else if (value.get_meta().is_valid()) { ret = value.print_sql_literal(buffer, length, pos, params); }
+  else { ret = OB_ERR_UNEXPECTED; }
   if (OB_SUCC(ret)) {
-    if (OB_UNLIKELY(pos >= buf_len) || pos < 0) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      out_str.assign_ptr(buf, static_cast<int32_t>(pos));
-    }
+    if (pos >= length || pos < 0) { ret = OB_ERR_UNEXPECTED; }
+    else { out_str.assign_ptr(buffer, static_cast<int32_t>(pos)); }
   }
   return ret;
 }
 
-int ObOptStatSqlService::get_obj_binary_hex_str(const ObObj &obj,
-                                                ObIAllocator &allocator,
-                                                ObString &out_str)
+int ObOptStatSqlService::get_value_binary_hex_str(const DatumValue &value, ObIAllocator &owner,
+                                                  ObString &out_str)
 {
   int ret = OB_SUCCESS;
-  char *buf = NULL;
-  char *hex_buf = NULL;
-  const int64_t buf_len = obj.get_serialize_size();
-  int64_t pos = 0;
-  int64_t hex_pos = 0;
-  if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(buf_len)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(hex_buf = static_cast<char*>(allocator.alloc(OB_MAX_PARTITION_EXPR_LENGTH)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(obj.serialize(buf, buf_len, pos))) {
-  } else if (OB_UNLIKELY(pos > buf_len) || pos < 0) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(hex_print(buf, pos, hex_buf, OB_MAX_PARTITION_EXPR_LENGTH, hex_pos))) {
-  } else {
-    out_str.assign_ptr(hex_buf, static_cast<int32_t>(hex_pos));
+  int64_t length = 0, pos = 0, hex_pos = 0;
+  char *binary = nullptr, *hex = nullptr;
+  if (OB_FAIL(DatumParameterCodec::value_size(value.datum_, value.meta_, length))) {}
+  else if ((binary = static_cast<char *>(owner.alloc(length))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  else if ((hex = static_cast<char *>(owner.alloc(OB_MAX_PARTITION_EXPR_LENGTH))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  else if (OB_FAIL(DatumParameterCodec::encode_value(value.datum_, value.meta_, binary, length, pos))) {}
+  else if (pos > length || pos < 0) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(hex_print(binary, pos, hex, OB_MAX_PARTITION_EXPR_LENGTH, hex_pos))) {}
+  else { out_str.assign_ptr(hex, static_cast<int32_t>(hex_pos)); }
+  return ret;
+}
+
+int ObOptStatSqlService::get_valid_value_str(const DatumValue &source, SqlTypeMeta destination_meta,
+                                             ObIAllocator &owner, ObString &out_str,
+                                             const ObValuePrintParams &params)
+{
+  int ret = OB_SUCCESS;
+  if (!source.is_string_type()) { ret = get_value_str(source, owner, out_str, params); }
+  else {
+    DatumValue converted;
+    ObCastCtx context(&owner, nullptr, CM_NONE, destination_meta.get_collation_type());
+    int64_t well_formed_length = 0;
+    if (OB_FAIL(DatumValueCaster::to_type(destination_meta.get_type(), context, source, owner, converted)) ||
+        OB_FAIL(ObCharset::well_formed_len(destination_meta.get_collation_type(), converted.get_string().ptr(),
+                                           converted.get_string().length(), well_formed_length))) {
+      if (ret == OB_ERR_INCORRECT_STRING_VALUE) {
+        const ObString invalid("-4258: Incorrect string value, can't show.");
+        ret = converted.set_string(destination_meta.get_type(), invalid, owner);
+        if (OB_SUCC(ret)) { converted.set_meta_type(destination_meta); }
+      }
+    }
+    if (OB_SUCC(ret)) { ret = get_value_str(converted, owner, out_str, params); }
   }
   return ret;
 }
@@ -988,7 +987,7 @@ int ObOptStatSqlService::fill_table_stat(common::sqlclient::ObMySQLResult &resul
     ret = OB_NOT_INIT;
   } else {
     int64_t int_value = 0;
-    ObObjMeta obj_type;
+    SqlTypeMeta obj_type;
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, partition_id, stat, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, object_type, stat, int64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, row_count, stat, int64_t);
@@ -1108,9 +1107,9 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
             EXTRACT_INT_FIELD_MYSQL(result, "endpoint_repeat_cnt", bkt.endpoint_repeat_count_, int64_t);
             EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
             if (OB_SUCC(ret)) {
-              if (OB_FAIL(hex_str_to_obj(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
+              if (OB_FAIL(hex_str_to_value(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
               } else if (dst_key_col_stat.stat_->get_histogram().is_valid() &&
-                         OB_FAIL(dst_key_col_stat.stat_->get_histogram().add_bucket(bkt))) {
+                         OB_FAIL(dst_key_col_stat.stat_->get_histogram().add_bucket(bkt, allocator))) {
                 dst_key_col_stat.stat_->get_histogram().reset();
                 ret = OB_SUCCESS;
               } else { /*do nothing*/
@@ -1121,7 +1120,7 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           int64_t llc_bitmap_size = 0;
           int64_t bucket_cnt = 0;
           ObHistType histogram_type = ObHistType::INVALID_TYPE;
-          ObObjMeta obj_type;
+          SqlTypeMeta obj_type;
           ObOptColumnStat *stat = dst_key_col_stat.stat_;
           ObHistogram &hist = stat->get_histogram();
           stat->set_table_id(dst_key_col_stat.key_->table_id_);
@@ -1156,7 +1155,7 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
             }
           }
           ObString hex_str;
-          common::ObObj obj;
+          DatumValue obj;
           if (OB_SUCC(ret)) {
             int64_t int_value = 0;
             if (OB_FAIL(result.get_timestamp("last_analyzed", NULL, int_value))) {
@@ -1166,16 +1165,16 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
           }
           EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_min_value", hex_str);
           if (OB_SUCC(ret)) {
-            if (OB_FAIL(hex_str_to_obj(hex_str.ptr(), hex_str.length(), allocator, obj))) {
+            if (OB_FAIL(hex_str_to_value(hex_str.ptr(), hex_str.length(), allocator, obj))) {
             } else {
-              stat->set_min_value(obj);
+              ret = stat->set_min_value(obj);
             }
           }
           EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_max_value", hex_str);
           if (OB_SUCC(ret)) {
-            if (OB_FAIL(hex_str_to_obj(hex_str.ptr(), hex_str.length(), allocator, obj))) {
+            if (OB_FAIL(hex_str_to_value(hex_str.ptr(), hex_str.length(), allocator, obj))) {
             } else {
-              stat->set_max_value(obj);
+              ret = stat->set_max_value(obj);
             }
           }
           EXTRACT_VARCHAR_FIELD_MYSQL(result, "distinct_cnt_synopsis", hex_str);
@@ -1214,8 +1213,8 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
               EXTRACT_INT_FIELD_MYSQL(result, "endpoint_repeat_cnt", bkt.endpoint_repeat_count_, int64_t);
               EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
               if (OB_SUCC(ret)) {
-                if (OB_FAIL(hex_str_to_obj(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
-                } else if (hist.is_valid() && OB_FAIL(hist.add_bucket(bkt))) {
+                if (OB_FAIL(hex_str_to_value(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
+                } else if (hist.is_valid() && OB_FAIL(hist.add_bucket(bkt, allocator))) {
                   hist.reset();
                   ret = OB_SUCCESS;
                 } else {
@@ -1328,38 +1327,6 @@ int ObOptStatSqlService::generate_in_list(const ObIArray<uint64_t> &list, ObSqlS
   return ret;
 }
 
-int ObOptStatSqlService::get_valid_obj_str(const ObObj &src_obj,
-                                           common::ObObjMeta dst_column_meta,
-                                           ObIAllocator &allocator,
-                                           ObString &dest_str,
-                                           const ObObjPrintParams &print_params)
-{
-  int ret = OB_SUCCESS;
-  if (src_obj.is_string_type()) {
-    ObObj dst_obj;
-    ObCastCtx cast_ctx(&allocator, NULL, CM_NONE, dst_column_meta.get_collation_type());
-    const char *incorrect_string = "-4258: Incorrect string value, can't show.";
-    int64_t well_formed_len = 0;
-    if (OB_FAIL(ObObjCaster::to_type(dst_column_meta.get_type(), cast_ctx, src_obj, dst_obj)) ||
-        OB_FAIL(ObCharset::well_formed_len(dst_column_meta.get_collation_type(), dst_obj.get_string().ptr(),
-                                           dst_obj.get_string().length(), well_formed_len))) {
-      //for column which have invalid char ==> save obj binary to use, and obj value to
-      //  save "-4258: Incorrect string value" to show this obj have invalid.
-      if (OB_ERR_INCORRECT_STRING_VALUE == ret) {
-        ret = OB_SUCCESS;
-        dst_obj.set_string(dst_column_meta.get_type(), incorrect_string, static_cast<int32_t>(strlen(incorrect_string)));
-        dst_obj.set_meta_type(dst_column_meta);
-      } else {
-      }
-    }
-    if (OB_SUCC(ret) && OB_FAIL(get_obj_str(dst_obj, allocator, dest_str, print_params))) {
-    } else {
-    }
-  } else if (OB_FAIL(get_obj_str(src_obj, allocator, dest_str, print_params))) {
-  }
-  return ret;
-}
-
 int ObOptStatSqlService::generate_specified_keys_list_str_for_column(ObIArray<ObOptKeyColumnStat> &key_col_stats,
                                                                      ObSqlString &keys_list_str)
 {
@@ -1450,8 +1417,8 @@ int ObOptStatSqlService::generate_key_index_map(ObIArray<ObOptKeyColumnStat> &ke
 
 int ObOptStatSqlService::get_column_stat_min_max_meta(share::schema::ObSchemaGetterGuard *schema_guard,
                                                       const uint64_t table_id,
-                                                      ObObjMeta &min_meta,
-                                                      ObObjMeta &max_meta)
+                                                      SqlTypeMeta &min_meta,
+                                                      SqlTypeMeta &max_meta)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
@@ -1486,7 +1453,7 @@ int ObOptStatSqlService::get_column_stat_min_max_meta(share::schema::ObSchemaGet
 
 int ObOptStatSqlService::get_histogram_endpoint_meta(share::schema::ObSchemaGetterGuard *schema_guard,
                                                      const uint64_t table_id,
-                                                     ObObjMeta &endpoint_meta)
+                                                     SqlTypeMeta &endpoint_meta)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = NULL;
@@ -1610,8 +1577,8 @@ int ObOptStatSqlService::batch_update_online_col_state(const uint64_t table_id,
   // generate column stat sql;
   if (OB_FAIL(ret)) {
   } else {
-    ObObjMeta min_meta;
-    ObObjMeta max_meta;
+    SqlTypeMeta min_meta;
+    SqlTypeMeta max_meta;
     int64_t current_time = ObTimeUtility::current_time();
     if (OB_FAIL(get_column_stat_min_max_meta(schema_guard,
                                             share::OB_ALL_COLUMN_STAT_TID,
@@ -1705,8 +1672,8 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
         while (OB_SUCC(ret)) {
           int64_t tablet_idx = 0;
           int64_t row_cnt_idx = 1;
-          ObObj tablet_obj;
-          ObObj row_cnt_obj;
+          DatumValue tablet_obj;
+          DatumValue row_cnt_obj;
           uint64_t tablet_id = ObTabletID::INVALID_TABLET_ID;
           int64_t row_cnt = 0;
           if (OB_FAIL(client_result->next())) {
@@ -1715,8 +1682,8 @@ int ObOptStatSqlService::fetch_table_rowcnt(const uint64_t table_id,
               ret = OB_SUCCESS;
               break;
             }
-          } else if (OB_FAIL(client_result->get_obj(tablet_idx, tablet_obj)) ||
-                     OB_FAIL(client_result->get_obj(row_cnt_idx, row_cnt_obj))) {
+          } else if (OB_FAIL(client_result->get_value(tablet_idx, tablet_obj)) ||
+                     OB_FAIL(client_result->get_value(row_cnt_idx, row_cnt_obj))) {
           } else if (OB_FAIL(tablet_obj.get_uint64(tablet_id)) ||
                      OB_FAIL(row_cnt_obj.get_int(row_cnt))) {
           } else {

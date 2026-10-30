@@ -16,9 +16,9 @@
 
 #ifdef MULTI_VERSION_EXTRA_ROWKEY_DEF
 MULTI_VERSION_EXTRA_ROWKEY_DEF(TRANS_VERSION_COL, common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID, \
-    &common::ObObjMeta::set_int, &common::ObObjMeta::is_int)
+    &common::SqlTypeMeta::set_int, &common::SqlTypeMeta::is_int)
 MULTI_VERSION_EXTRA_ROWKEY_DEF(SQL_SEQUENCE_COL, common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID,
-    &common::ObObjMeta::set_int, &common::ObObjMeta::is_int)
+    &common::SqlTypeMeta::set_int, &common::SqlTypeMeta::is_int)
 MULTI_VERSION_EXTRA_ROWKEY_DEF(MAX_EXTRA_ROWKEY, 0, NULL, NULL)
 #endif
 
@@ -27,6 +27,7 @@ MULTI_VERSION_EXTRA_ROWKEY_DEF(MAX_EXTRA_ROWKEY, 0, NULL, NULL)
 #include "common/ob_store_format.h"
 #include "common/ob_tablet_id.h"
 #include "common/row/ob_row.h"
+#include "common/datum/datum_value_buffer.h"
 #include "data_plane/access/ob_lock_flag.h"
 #include "data_plane/access/ob_tablet_scan.h"
 #include "storage/access/ob_table_param.h"
@@ -106,8 +107,8 @@ struct ObMultiVersionExtraRowkeyIds
   };
 };
 
-typedef void(common::ObObjMeta::*SET_META_TYPE_FUNC)();
-typedef bool(common::ObObjMeta::*IS_META_TYPE_FUNC)() const;
+typedef void(common::SqlTypeMeta::*SET_META_TYPE_FUNC)();
+typedef bool(common::SqlTypeMeta::*IS_META_TYPE_FUNC)() const;
 
 struct ObMultiVersionExtraRowkey
 {
@@ -297,7 +298,15 @@ struct ObSSTableRowState {
 
 struct ObStoreRow
 {
-  OB_UNIS_VERSION(1);
+public:
+  int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int serialize_(char *buf, int64_t buf_len, int64_t &pos) const;
+  int64_t get_serialize_size() const;
+  int64_t get_serialize_size_() const;
+  int deserialize(common::ObIAllocator &owner, const char *buf, int64_t data_len, int64_t &pos);
+  int deserialize_(common::ObIAllocator &owner, const char *buf, int64_t data_len, int64_t &pos);
+private:
+  static const int64_t UNIS_VERSION = 1;
 public:
   ObStoreRow()
       : flag_(), capacity_(0), scan_index_(0), row_type_flag_(),
@@ -382,14 +391,16 @@ int malloc_store_row(
     STORAGE_LOG(WARN, "invalid args", K(cell_count));
   } else {
     void *ptr = NULL;
-    int64_t size = sizeof(ObStoreRow) + sizeof(common::ObObj) * cell_count;
+    int64_t cell_size = common::DatumValueBuffer::allocation_size(cell_count);
+    int64_t size = cell_size;
+    if (!common::NativeValueFlat::add_size(size, sizeof(ObStoreRow))) { return common::OB_SIZE_OVERFLOW; }
     if (NULL == (ptr = allocator.alloc(size))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(ERROR, "fail to alloc ObStoreRow", K(size), K(cell_count));
     } else {
       void *cell_ptr = static_cast<char *>(ptr) + sizeof(ObStoreRow);
       row = new (ptr) ObStoreRow;
-      row->row_val_.cells_ = new (cell_ptr) common::ObObj[cell_count]();
+      common::DatumValueBuffer::initialize(cell_ptr, cell_count, row->row_val_.cells_);
       row->flag_.set_flag(blocksstable::ObDmlFlag::DF_NOT_EXIST);
       row->row_val_.count_ = cell_count;
       row->capacity_ = cell_count;
@@ -421,8 +432,15 @@ int deep_copy_row(
       dest.trans_id_ = src.trans_id_;
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < src.row_val_.count_; ++i) {
-      if (OB_FAIL(deep_copy_obj(allocator, src.row_val_.cells_[i], dest.row_val_.cells_[i]))) {
-        STORAGE_LOG(WARN, "failed to deep copy cell", K(ret), K(i));
+      const common::DatumValue &value = src.row_val_.cells_[i];
+      if (value.is_null() || (!value.is_ext_sql_array() && value.datum_.len_ <= 16)) {
+        ret = common::DatumValueBuffer::assign_view(value, dest.row_val_.cells_, dest.capacity_, i);
+      } else {
+        common::DatumParameter input, owned;
+        input.assign_value(value);
+        if (OB_FAIL(common::DatumParameterArray::clone_parameter(input, owned, allocator))) {
+          STORAGE_LOG(WARN, "failed to deep copy cell", K(ret), K(i));
+        } else { dest.row_val_.cells_[i] = owned.value_view(); }
       }
     }
   }

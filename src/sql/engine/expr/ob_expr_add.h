@@ -38,13 +38,6 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc(common::ObObj &res,
-                  const common::ObObj &ojb1,
-                  const common::ObObj &obj2,
-                  common::ObIAllocator *allocator,
-                  common::ObScale scale);
-  // add for aggregate function.
-
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -92,37 +85,9 @@ public:
     // 1 + 1     : overflow.
     return (val1 >> SHIFT_OFFSET) + (val2 >> SHIFT_OFFSET) > (res >> SHIFT_OFFSET);
   }
-  static int add_datetime(common::ObObj &res,
-                          const common::ObObj &left,
-                          const common::ObObj &right,
-                          common::ObIAllocator *allocator,
-                          common::ObScale scale);
+
 private:
-  static int add_int(common::ObObj &res,
-                     const common::ObObj &left,
-                     const common::ObObj &right,
-                     common::ObIAllocator *allocator,
-                     common::ObScale scale);
-  static int add_uint(common::ObObj &res,
-                      const common::ObObj &left,
-                      const common::ObObj &right,
-                      common::ObIAllocator *allocator,
-                      common::ObScale scale);
-  static int add_double(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
-  static int add_double_no_overflow(common::ObObj &res,
-                                    const common::ObObj &left,
-                                    const common::ObObj &right,
-                                    common::ObIAllocator *allocator,
-                                    common::ObScale scale);
-  static int add_number(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
+
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprAdd);
 
@@ -200,8 +165,6 @@ public:
   static int add_collection_collection_uint64_t_batch(BATCH_EVAL_FUNC_ARG_DECL);
 
 private:
-  static ObArithFunc add_funcs_[common::ObMaxTC];
-  static ObArithFunc agg_add_funcs_[common::ObMaxTC];
   static const int64_t SHIFT_OFFSET = 63;
 };
 

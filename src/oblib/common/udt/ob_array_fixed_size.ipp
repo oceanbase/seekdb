@@ -127,7 +127,7 @@ int ObArrayFixedSize<T>::print_element_at(ObStringBuffer &format_str, uint32_t i
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid argument", K(ret), K(idx), K(this->length_));
   } else {
-    ObObjType obj_type = basic_type->basic_meta_.get_obj_type();
+    SqlValueType obj_type = basic_type->basic_meta_.get_obj_type();
     switch (obj_type) {
       case ObTinyIntType:
       case ObSmallIntType:
@@ -393,61 +393,72 @@ int ObArrayFixedSize<T>::insert_from(const ObIArrayType &src, uint32_t begin, ui
 }
 
 template<typename T>
-int ObArrayFixedSize<T>::elem_at(uint32_t idx, ObObj &elem_obj) const
+int ObArrayFixedSize<T>::elem_at_datum(uint32_t idx, ObDatum &value) const
 {
   int ret = OB_SUCCESS;
-  ObCollectionBasicType *elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(this->get_array_type())->element_type_);
   if (OB_UNLIKELY(idx >= this->length_)) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "idx >= this->length_", K(ret), K(idx), K(this->length_));
+  } else if (this->is_null(idx)) {
+    value.set_null();
+  } else if (OB_ISNULL(value.ptr_)) {
+    ret = OB_ERR_UNEXPECTED;
+    OB_LOG(WARN, "output datum buffer is null", K(ret));
   } else {
-    switch (elem_type->basic_meta_.get_obj_type()) {
-    case ObTinyIntType: {
-      elem_obj.set_tinyint(data_[idx]);
-      break;
-    }
-    case ObSmallIntType: {
-      elem_obj.set_smallint(data_[idx]);
-      break;
-    }
-    case ObInt32Type: {
-      elem_obj.set_int32(data_[idx]);
-      break;
-    }    case ObIntType: {
-      elem_obj.set_int(data_[idx]);
-      break;
-    }
-    case ObUTinyIntType: {
-      elem_obj.set_utinyint(data_[idx]);
-      break;
-    }
-    case ObUSmallIntType: {
-      elem_obj.set_usmallint(data_[idx]);
-      break;
-    }
-    case ObUInt64Type: {
-      elem_obj.set_uint64(data_[idx]);
-      break;
-    }
-    case ObUInt32Type: {
-      elem_obj.set_uint32(data_[idx]);
-      break;
-    }
-    case ObUDoubleType:
-    case ObDoubleType: {
-      elem_obj.set_double(data_[idx]);
-      break;
-    }
-    case ObUFloatType:
-    case ObFloatType: {
-      elem_obj.set_float(data_[idx]);
-      break;
-    }
-    default: {
+    const ObCollectionArrayType *array_type =
+        dynamic_cast<const ObCollectionArrayType *>(this->get_array_type());
+    const ObCollectionBasicType *elem_type = nullptr;
+    if (OB_ISNULL(array_type) || OB_ISNULL(elem_type =
+          dynamic_cast<const ObCollectionBasicType *>(array_type->element_type_))) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "unexpected element type", K(ret), K(elem_type->basic_meta_.get_obj_type()));
+      OB_LOG(WARN, "invalid basic array element metadata", K(ret));
+    } else {
+      const ObDataType &data_type = elem_type->basic_meta_;
+      const SqlValueType type = data_type.get_obj_type();
+      switch (type) {
+      case ObTinyIntType:
+        value.set_int(static_cast<int8_t>(data_[idx]));
+        break;
+      case ObSmallIntType:
+        value.set_int(static_cast<int16_t>(data_[idx]));
+        break;
+      case ObInt32Type:
+        value.set_int(static_cast<int32_t>(data_[idx]));
+        break;
+      case ObIntType:
+        value.set_int(static_cast<int64_t>(data_[idx]));
+        break;
+      case ObUTinyIntType:
+        value.set_uint(static_cast<uint8_t>(data_[idx]));
+        break;
+      case ObUSmallIntType:
+        value.set_uint(static_cast<uint16_t>(data_[idx]));
+        break;
+      case ObUInt32Type:
+        value.set_uint(static_cast<uint32_t>(data_[idx]));
+        break;
+      case ObUInt64Type:
+        value.set_uint(static_cast<uint64_t>(data_[idx]));
+        break;
+      case ObDoubleType:
+      case ObUDoubleType:
+        value.set_double(static_cast<double>(data_[idx]));
+        break;
+      case ObFloatType:
+      case ObUFloatType:
+        value.set_float(static_cast<float>(data_[idx]));
+        break;
+      case ObDecimalIntType:
+        // The backing array's template type determines the encoded DecimalInt
+        // width; the result expression metadata retains the declared scale.
+        value.set_decimal_int(data_[idx]);
+        break;
+      default:
+        // Keep legacy behavior available for NULL, string, and any future
+        // fixed-size element encoding not explicitly handled here.
+        ret = OB_NOT_SUPPORTED;
+      }
     }
-    } // end switch
   }
   return ret;
 }

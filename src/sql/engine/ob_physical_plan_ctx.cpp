@@ -19,6 +19,7 @@
 #include "share/ob_autoincrement_service.h"
 #include "src/sql/engine/ob_des_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "share/sql_udt_support.h"
 
 namespace oceanbase
 {
@@ -33,7 +34,6 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       ts_timeout_us_(0),
       consistency_level_(INVALID_CONSISTENCY),
       param_store_( (ObWrapperAllocator(&allocator_)) ),
-      datum_param_store_(ObWrapperAllocator(&allocator_)),
       original_param_cnt_(0),
       param_frame_capacity_(0),
       sql_mode_(SMO_DEFAULT),
@@ -92,42 +92,48 @@ ObPhysicalPlanCtx::~ObPhysicalPlanCtx()
 int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
 {
   int ret = OB_SUCCESS;
-  ObObjParam null_obj;
-  if (OB_FAIL(param_store_.reserve(param_count))) {
+  const int64_t old_count = param_store_.count();
+  if (param_count < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(param_store_.reserve(param_count))) {
   }
-  int64_t N = param_count - param_store_.count();
-  for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
-    if (OB_SUCCESS != (ret = param_store_.push_back(null_obj))) {
-    }
+  for (int64_t i = old_count; OB_SUCC(ret) && i < param_count; ++i) {
+    ret = param_store_.push_back(DatumParameter());
+  }
+  if (OB_FAIL(ret)) {
+    while (param_store_.count() > old_count) { param_store_.pop_back(); }
   }
   return ret;
 }
-// 1. Generate datum_param_store_
-// 2. Generate param frame
+
 int ObPhysicalPlanCtx::init_datum_param_store()
 {
   int ret = OB_SUCCESS;
-  datum_param_store_.reuse();
   param_frame_ptrs_.reuse();
   param_frame_capacity_ = 0;
-  if (OB_FAIL(datum_param_store_.prepare_allocate(param_store_.count()))) {
-  }
-  // Through param_store, generate datum_param_store
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); i++) {
-    ObDatumObjParam &datum_param = datum_param_store_.at(i);
-    if (OB_FAIL(datum_param.alloc_datum_reserved_buff(param_store_.at(i).meta_,
-                                                      param_store_.at(i).get_precision(),
-                                                      allocator_))) {
-    } else if (OB_FAIL(datum_param.from_objparam(param_store_.at(i), &allocator_))) {
+  // Input producers may use a shorter-lived request arena. Keep execution
+  // payloads in this context without maintaining a second descriptor store.
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
+    DatumParameter owned;
+    if (OB_FAIL(DatumParameterArray::clone_parameter(param_store_.at(i), owned, allocator_))) {
+    } else {
+      param_store_.at(i) = owned;
     }
   }
-  // Allocate param frame memory, and set param datum
-  if (OB_SUCC(ret)) {
-    const int64_t old_size = 0;
-    if (OB_FAIL(extend_param_frame(old_size))) {
-    }
-  }
+  if (OB_SUCC(ret)) { ret = extend_param_frame(0); }
+  return ret;
+}
 
+int ObPhysicalPlanCtx::set_runtime_parameter(int64_t index, const DatumParameter &parameter)
+{
+  int ret = OB_SUCCESS;
+  if (index < 0 || index >= param_store_.count()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (parameter.get_type_meta().is_invalid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    param_store_.at(index) = parameter;
+  }
   return ret;
 }
 
@@ -382,13 +388,13 @@ int ObPhysicalPlanCtx::extend_param_frame(const int64_t old_size)
   int ret = OB_SUCCESS;
   if (old_size < 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(reserve_param_frame(datum_param_store_.count()))) {
+  } else if (OB_FAIL(reserve_param_frame(param_store_.count()))) {
   } else {
-    for (int64_t i = old_size; i < datum_param_store_.count(); i++) {
+    for (int64_t i = old_size; i < param_store_.count(); i++) {
       ObDatum *datum = nullptr;
       ObEvalInfo *eval_info = nullptr;
       get_param_frame_info(i, datum, eval_info);
-      *datum = datum_param_store_.at(i).datum_;
+      *datum = param_store_.at(i).datum_;
       eval_info->evaluated_ = false;
     }
   }
@@ -418,22 +424,23 @@ int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,
                                                  const int64_t param_cnt)
 {
   int ret = OB_SUCCESS;
-  const int64_t datum_cnt = datum_param_store_.count();
+  const int64_t datum_cnt = param_store_.count();
   if (OB_UNLIKELY(start_param < 0 || start_param + param_cnt > datum_cnt)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = start_param; OB_SUCC(ret) && i < start_param + param_cnt; i++) {
-      if (datum_param_store_.at(i).meta_.is_ext_sql_array()) {
+      if (param_store_.at(i).is_ext_sql_array()) {
         //need to expand the real param to param frame
         ObDatum *datum = nullptr;
         ObEvalInfo *eval_info = nullptr;
         get_param_frame_info(i, datum, eval_info);
-        const ObSqlDatumArray *datum_array = datum_param_store_.at(i).get_sql_datum_array();;
-        if (OB_UNLIKELY(cur_group_id < 0) || OB_UNLIKELY(cur_group_id >= datum_array->count_)) {
+        const DatumParameterArray *datum_array = param_store_.at(i).get_array<DatumParameterArray>();
+        if (OB_ISNULL(datum_array) || OB_UNLIKELY(cur_group_id < 0) ||
+            OB_UNLIKELY(cur_group_id >= datum_array->count_)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
           //assign datum ptr to the real param datum
-          *datum = datum_array->data_[cur_group_id];
+          *datum = datum_array->data_[cur_group_id].datum_;
           eval_info->evaluated_ = true;
         }
       }
@@ -477,7 +484,7 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
   const ObRowIdListArray *row_id_list_array = NULL;
   int64_t cursor_count = implicit_cursor_infos_.count();
   // used for function sys_view_bigint_param(idx), @note unused anymore
-  ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
+  int64_t obsolete_sys_view_param_count = 0;
   char message_[1] = {'\0'}; //error msg buffer, unused anymore
   if (exec_ctx_ != NULL) {
     row_id_list_array = &exec_ctx_->get_row_id_list_array();
@@ -494,7 +501,7 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
   OB_UNIS_ENCODE(ts_timeout_us_);
   OB_UNIS_ENCODE(consistency_level_);
   OB_UNIS_ENCODE(*param_store);
-  OB_UNIS_ENCODE(sys_view_bigint_params_);
+  OB_UNIS_ENCODE(obsolete_sys_view_param_count);
   OB_UNIS_ENCODE(sql_mode_);
   OB_UNIS_ENCODE(autoinc_params_);
   OB_UNIS_ENCODE(tablet_autoinc_param_);
@@ -599,7 +606,7 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
   const ObRowIdListArray *row_id_list_array = NULL;
   int64_t cursor_count = implicit_cursor_infos_.count();
   // used for function sys_view_bigint_param(idx), @note unused anymore
-  ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
+  int64_t obsolete_sys_view_param_count = 0;
   char message_[1] = {'\0'}; //error msg buffer, unused anymore
   if (exec_ctx_ != NULL) {
     row_id_list_array = &exec_ctx_->get_row_id_list_array();
@@ -616,7 +623,7 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
   OB_UNIS_ADD_LEN(ts_timeout_us_);
   OB_UNIS_ADD_LEN(consistency_level_);
   OB_UNIS_ADD_LEN(*param_store);
-  OB_UNIS_ADD_LEN(sys_view_bigint_params_);
+  OB_UNIS_ADD_LEN(obsolete_sys_view_param_count);
   OB_UNIS_ADD_LEN(sql_mode_);
   OB_UNIS_ADD_LEN(autoinc_params_);
   OB_UNIS_ADD_LEN(tablet_autoinc_param_);
@@ -688,22 +695,39 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
 OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
 {
   int ret = OB_SUCCESS;
+  reset_datum_param_store();
   int64_t param_cnt = 0;
   int32_t real_param_cnt = 0;
   int64_t param_idx = OB_INVALID_INDEX;
-  ObObjParam param_obj;
   int64_t cursor_count = 0;
   int64_t local_var_array_cnt = 0;
   // used for function sys_view_bigint_param(idx), @note unused anymore
-  ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
+  int64_t obsolete_sys_view_param_count = 0;
   char message_[1] = {'\0'}; //error msg buffer, unused anymore
+  auto publish_parameter = [this](int64_t index) {
+    DatumParameter &parameter = param_store_.at(index);
+    parameter.set_param_meta();
+    if (parameter.has_lob_header()) { parameter.set_result_flag(HAS_LOB_HEADER_FLAG); }
+    return OB_SUCCESS;
+  };
   // Follow the old sequence method
   OB_UNIS_DECODE(tsc_snapshot_timestamp_);
   OB_UNIS_DECODE(cur_time_);
   OB_UNIS_DECODE(ts_timeout_us_);
   OB_UNIS_DECODE(consistency_level_);
-  OB_UNIS_DECODE(param_store_);
-  OB_UNIS_DECODE(sys_view_bigint_params_);
+  if (OB_SUCC(ret)) {
+    ret = DatumParameterCodec::decode_store(buf, data_len, pos, allocator_, param_store_);
+  }
+  OB_UNIS_DECODE(obsolete_sys_view_param_count);
+  if (OB_SUCC(ret) && (obsolete_sys_view_param_count < 0 ||
+      obsolete_sys_view_param_count > (data_len - pos) / sizeof(SqlTypeMeta))) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < obsolete_sys_view_param_count; ++i) {
+    ObDatum discarded;
+    SqlTypeMeta discarded_meta;
+    ret = DatumParameterCodec::decode_value(buf, data_len, pos, allocator_, discarded, discarded_meta);
+  }
   OB_UNIS_DECODE(sql_mode_);
   OB_UNIS_DECODE(autoinc_params_);
   OB_UNIS_DECODE(tablet_autoinc_param_);
@@ -712,36 +736,24 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   OB_UNIS_DECODE(expr_op_size_);
   OB_UNIS_DECODE(is_ignore_stmt_);
   OB_UNIS_DECODE(param_cnt);
+  if (OB_SUCC(ret) && param_cnt < 0) { ret = OB_DESERIALIZE_ERROR; }
   if (OB_SUCC(ret) && param_cnt > 0) {
-    if (OB_FAIL(param_store_.prepare_allocate(param_cnt))) {
-    } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &real_param_cnt))) {
+    if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &real_param_cnt))) {
+    } else if (real_param_cnt < 0 || real_param_cnt > (data_len - pos) / 7 ||
+               param_cnt > INT64_MAX / static_cast<int64_t>(sizeof(DatumParameter)) || !param_store_.empty()) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(param_store_.prepare_allocate(param_cnt))) {
     }
+    // Unselected slots stay NULL. Repeated indexes intentionally keep the last
+    // value, as the v2 sparse parameter stream permits duplicate row mappings.
     for (int64_t i = 0; OB_SUCC(ret) && i < real_param_cnt; ++i) {
       OB_UNIS_DECODE(param_idx);
-      OB_UNIS_DECODE(param_obj);
-      ObObjParam tmp = param_obj;
-      if (OB_UNLIKELY(param_idx < 0) || OB_UNLIKELY(param_idx >= param_cnt)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid param idx", K(param_idx), K(param_cnt));
-      } else if (OB_FAIL(deep_copy_obj(allocator_, param_obj, tmp))) {
-      } else {
-        param_store_.at(param_idx) = tmp;
-        param_store_.at(param_idx).set_param_meta();
-      }
+      if (OB_FAIL(ret)) {
+      } else if (param_idx < 0 || param_idx >= param_cnt) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (OB_FAIL(DatumParameterCodec::decode_parameter(buf, data_len, pos, allocator_, param_store_.at(param_idx)))) {
+      } else { ret = publish_parameter(param_idx); }
     }
-  }
-  if (OB_SUCC(ret) && param_cnt <= 0) {
-    //param count <= 0 not related to on-demand serialization partition param store, directly serialize all param
-    // So need to perform a deep copy on all elements of param store
-  	for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
-  	  const ObObjParam &objpara = param_store_.at(i);
-      ObObjParam tmp = objpara;
-      if (OB_FAIL(deep_copy_obj(allocator_, objpara, tmp))) {
-      } else {
-        param_store_.at(i) = tmp;
-        param_store_.at(i).set_param_meta();
-      }
-  	}
   }
   OB_UNIS_DECODE(foreign_key_checks_);
   OB_UNIS_DECODE(runtime_schema_version_);
@@ -783,14 +795,13 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
       OB_UNIS_DECODE(*local_vars);
     }
   }
-  // following is not deserialize, please add deserialize ahead.
-  if (OB_SUCC(ret) && array_group_count > 0 &&
-      datum_param_store_.count() == 0 &&
-      datum_param_store_.count() != param_store_.count()) {
-    if (OB_FAIL(init_param_store_after_deserialize())) {
+  OB_UNIS_DECODE(check_pdml_affected_rows_);
+  if (OB_SUCC(ret) && param_cnt == 0) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
+      ret = publish_parameter(i);
     }
   }
-  OB_UNIS_DECODE(check_pdml_affected_rows_);
+  if (OB_FAIL(ret)) { reset_datum_param_store(); }
   return ret;
 }
 
@@ -909,7 +920,7 @@ int ObPhysicalPlanCtx::get_subschema_id_by_udt_id(uint64_t udt_type_id,
   int ret = OB_SUCCESS;
   uint16_t temp_subschema_id = ObMaxSystemUDTSqlType;
   bool found = false;
-  if (!ObObjUDTUtil::ob_is_supported_sql_udt(udt_type_id)) {
+  if (!is_supported_sql_udt(udt_type_id)) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_NOT_NULL(phy_plan_)) { // physical plan exist, use subschema ctx on phy plan
     if (!phy_plan_->get_subschema_ctx().is_inited()) {
@@ -1010,7 +1021,7 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_string(const ObString &type_stri
 }
 
 
-int ObPhysicalPlanCtx::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+int ObPhysicalPlanCtx::get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                                      const ObIArray<common::ObString> &type_info,
                                                      uint16_t &subschema_id)
 {
@@ -1040,7 +1051,7 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
 }
 
 
-int ObPhysicalPlanCtx::inner_get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+int ObPhysicalPlanCtx::inner_get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                                       const ObIArray<common::ObString> &type_info,
                                                       uint16_t &subschema_id) const
 {
@@ -1092,7 +1103,7 @@ int ObPhysicalPlanCtx::build_subschema_by_fields(const ColumnsFieldIArray *field
     subschema_ctx_.set_fields(fields);
 
     for (uint32_t i = 0; OB_SUCC(ret) && i < fields->count(); i++) {
-      if (fields->at(i).type_.is_collection_sql_type()) {
+      if (fields->at(i).type_meta_.is_collection_sql_type()) {
         uint64_t udt_id = fields->at(i).accuracy_.get_accuracy();
         uint16_t subschema_id = 0;
         if (OB_FAIL(get_subschema_id_by_udt_id(udt_id, subschema_id, schema_guard))) {
@@ -1113,7 +1124,7 @@ int ObPhysicalPlanCtx::build_subschema_ctx_by_param_store(share::schema::ObSchem
   }
 
   for (uint32_t i = 0; OB_SUCC(ret) && i < param_store->count(); i++) {
-    ObObjParam &param = param_store->at(i);
+    DatumParameter &param = param_store->at(i);
     if (param.is_collection_sql_type()) {
       uint64_t udt_id = param.get_accuracy().get_accuracy();
       uint16_t subschema_id = 0;
@@ -1142,36 +1153,6 @@ int ObPhysicalPlanCtx::get_local_session_vars(int64_t local_var_array_id, const 
   return ret;
 }
 
-// white list: init param_store after deserialize which it's needed really.
-int ObPhysicalPlanCtx::init_param_store_after_deserialize()
-{
-  int ret = OB_SUCCESS;
-  datum_param_store_.reuse();
-  if (OB_FAIL(datum_param_store_.prepare_allocate(param_store_.count()))) {
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); i++) {
-    ObObjParam &obj_param = param_store_.at(i);
-    ObDatumObjParam &datum_param = datum_param_store_.at(i);
-    if (obj_param.is_ext_sql_array()) {
-      ObSqlArrayObj *array_obj = NULL;
-      if (OB_FAIL(ObSqlArrayObj::do_real_deserialize(allocator_,
-                                                     reinterpret_cast<char *>(obj_param.get_ext()),
-                                                     obj_param.get_val_len(),
-                                                     array_obj))) {
-      } else {
-        obj_param.set_extend(reinterpret_cast<int64_t>(array_obj), T_EXT_SQL_ARRAY);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(datum_param.alloc_datum_reserved_buff(obj_param.meta_,
-                                                        obj_param.get_precision(),
-                                                        allocator_))) {
-      } else if (OB_FAIL(datum_param.from_objparam(obj_param, &allocator_))) {
-      }
-    }
-  }
-  return ret;
-}
 
 } //sql
 } //oceanbase

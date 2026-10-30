@@ -124,52 +124,6 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
   return ret;
 }
 
-int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
-                                     const common::ObObj *objs,
-                                     int64_t param_num,
-                                     common::ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  bool is_null_result = false;
-  ObString res_wkt;
-  int64_t maxdecimaldigits = DEFAULT_DIGITS_IN_DOUBLE;
-
-  // get geo
-  if (objs[0].is_null()) {
-    is_null_result = true;
-  } else if (param_num > 1) { // get maxdecimaldigits
-    if (objs[1].is_null()){
-      is_null_result = true;
-    } else {
-      maxdecimaldigits = objs[1].get_int();
-    }
-  } else { /* do nothing */ }
-
-  if (OB_SUCC(ret)) {
-    ObString wkb = objs[0].get_string();
-    if (is_null_result) {
-      result.set_null();
-    } else if (OB_ISNULL(expr_ctx.exec_ctx_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                   *expr_ctx.exec_ctx_, &tmp_allocator, objs[0], wkb))) {
-    } else if (OB_FAIL(ObGeoTypeUtil::geo_to_ewkt(wkb,
-                                                  res_wkt,
-                                                  tmp_allocator,
-                                                  maxdecimaldigits))) {
-    } else {
-      common::ObTextStringObObjResult text_result(ObGeometryType, nullptr, &result, true);
-      if (OB_FAIL(text_result.init(res_wkt.length(), expr_ctx.calc_buf_))) {
-      } else if (OB_FAIL(text_result.append(res_wkt.ptr(), res_wkt.length()))) {
-      } else {
-        text_result.set_result();
-      }
-    }
-  }
-
-  return ret;
-}
 
 int ObExprPrivSTAsEwkt::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                   const ObRawExpr &raw_expr,

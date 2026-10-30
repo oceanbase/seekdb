@@ -253,7 +253,7 @@ int ObExprMap::deduce_element_type(ObExecContext *exec_ctx, ObExprResType* types
   }
 
 int ObExprMap::construct_key_array(ObEvalCtx &ctx, const ObExpr &expr,
-                                   const ObObjType elem_type, ObIArrayType *&full_key_arr,
+                                   const SqlValueType elem_type, ObIArrayType *&full_key_arr,
                                    uint32_t *&idx_arr, uint32_t &idx_count)
 {
   int ret = OB_SUCCESS;

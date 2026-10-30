@@ -147,7 +147,7 @@ private:
   ObBatchResultHolder brs_holder_;
   // for vectorized end
   
-  common::ObArrayWrap<ObObjParam> das_batch_params_recovery_;
+  common::ObArrayWrap<DatumParameter> das_batch_params_recovery_;
   // for das batch spf end
 };
 
@@ -272,7 +272,7 @@ private:
   // for das batch rescan
   uint64_t current_group_;  //The group id in this time right iter rescan;
   
-  common::ObArrayWrap<ObSqlArrayObj> das_batch_params_;
+  common::ObArrayWrap<DatumParameterArray> das_batch_params_;
   // for das batch rescan end
   ObChunkDatumStore left_rows_;
   ObChunkDatumStore::Iterator left_rows_iter_;
@@ -282,9 +282,6 @@ private:
   ObBatchRescanParams rescan_batch_params_;
   int64_t left_row_idx_;
   ObBatchRescanCtl batch_rescan_ctl_;
-  sql::ObTMArray<common::ObObjParam> cur_params_;
-  common::ObSArray<int64_t> cur_param_idxs_;
-  common::ObSArray<int64_t> cur_param_expr_idxs_;
   common::ObSEArray<Iterator*, 8> subplan_iters_to_check_;
   lib::MemoryContext last_store_row_mem_;
   ObBatchResultHolder brs_holder_;

@@ -198,7 +198,7 @@ int ObInsertResolver::add_column_conv_for_diagnosis(ObInsertStmt *insert_stmt,
           if (OB_SUCC(ret)) {
             if (OB_FAIL(add_additional_function_according_to_type(
                                               column_item, select_items.at(i).expr_, T_INSERT_SCOPE,
-                                              ObObjMeta::is_binary(tbl_col->get_data_type(),
+                                              SqlTypeMeta::is_binary(tbl_col->get_data_type(),
                                                                   tbl_col->get_collation_type())))) {
             }
           }

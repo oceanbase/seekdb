@@ -43,6 +43,7 @@
 
 namespace oceanbase
 {
+namespace common { class DatumParameter; }
 namespace pl
 {
 class ObPLBlockNS;
@@ -58,12 +59,12 @@ public:
   {
     MatchInfo()
       : need_cast_(false), src_type_(ObMaxType), dest_type_(ObMaxType) {}
-    MatchInfo(bool need_cast, ObObjType src_type, ObObjType dst_type)
+    MatchInfo(bool need_cast, SqlValueType src_type, SqlValueType dst_type)
       : need_cast_(need_cast), src_type_(src_type), dest_type_(dst_type) {}
 
     bool need_cast_;
-    ObObjType src_type_;
-    ObObjType dest_type_;
+    SqlValueType src_type_;
+    SqlValueType dest_type_;
 
     TO_STRING_KV(K_(need_cast), K_(src_type), K_(dest_type));
   };
@@ -95,7 +96,7 @@ public:
     return has_unknow_type;
   }
 
-  ObObjType get_type(int i)
+  SqlValueType get_type(int i)
   {
     return match_info_.at(i).dest_type_;
   }
@@ -174,22 +175,22 @@ public:
   static int resolve_sparse_vector_type_info(const ParseNode &type_node,
                                       ObStringBuffer &buf,
                                       uint8_t &depth);
-  inline static bool is_collection_support_type(const ObObjType type);
+  inline static bool is_collection_support_type(const SqlValueType type);
   // type_infos is %ori_cs_type, need convert to %cs_type first
   static int check_extended_type_info(common::ObIAllocator &alloc,
                                       ObIArray<ObString> &type_infos,
                                       ObCollationType ori_cs_type,
                                       const ObString &col_name,
-                                      ObObjType col_type,
+                                      SqlValueType col_type,
                                       ObCollationType cs_type,
                                       ObSQLMode sql_mode);
   static int check_duplicates_in_type_infos(const ObIArray<common::ObString> &type_infos,
                                             const ObString &col_name,
-                                            ObObjType col_type,
+                                            SqlValueType col_type,
                                             ObCollationType cs_type,
                                             ObSQLMode sql_mode,
                                             int32_t &dup_cnt);
-  static int check_max_val_count(common::ObObjType type,
+  static int check_max_val_count(common::SqlValueType type,
                                  const common::ObString &col_name,
                                  int64_t val_cnt,
                                  int32_t dup_cnt);
@@ -225,25 +226,25 @@ public:
   static int check_type_match(ObResolverParams &params,
                               ObRoutineMatchInfo::MatchInfo &match_info,
                               ObRawExpr *expr,
-                              ObObjType src_type,
+                              SqlValueType src_type,
                               uint64_t src_type_id,
                               pl::ObPLDataType &dst_pl_type);
   static int check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                               ObRoutineMatchInfo::MatchInfo &match_info,
                               ObRawExpr *expr,
-                              ObObjType src_type,
+                              SqlValueType src_type,
                               uint64_t src_type_id,
                               pl::ObPLDataType &dst_pl_type,
                               bool is_sys_package = false);
   static int check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                               ObRoutineMatchInfo::MatchInfo &match_info,
                               ObRawExpr *expr,
-                              ObObjType src_type,
+                              SqlValueType src_type,
                               ObCollationType src_coll_type,
                               uint64_t src_type_id,
                               pl::ObPLDataType &dst_pl_type,
                               bool is_sys_package = false);
-  static int get_type_and_type_id(ObRawExpr *expr, ObObjType &type, uint64_t &type_id);
+  static int get_type_and_type_id(ObRawExpr *expr, SqlValueType &type, uint64_t &type_id);
   static int check_match(const pl::ObPLResolveCtx &resolve_ctx,
                   const common::ObIArray<sql::ObRawExpr *> &expr_params,
                   const share::schema::ObIRoutineInfo *routine_info,
@@ -352,13 +353,17 @@ public:
    *
    * @return
    */
+
+
+  // Native literal output owns its payload in allocator. Failure leaves the
+  // destination unchanged; the old overload remains for unmigrated callers.
   static int resolve_const(const ParseNode *node,
                            const stmt::StmtType stmt_type,
                            common::ObIAllocator &allocator,
                            const common::ObCollationType connection_collation,
                            const ObCollationType nchar_collation,
                            const common::ObTimeZoneInfo *tz_info,
-                           common::ObObjParam &val,
+                           common::DatumParameter &val,
                            const bool is_paramlize,
                            common::ObString &literal_prefix,
                            const ObLengthSemantics default_length_semantics,
@@ -371,13 +376,6 @@ public:
                            int8_t min_const_integer_precision,
                            bool is_from_pl = false,
                            bool fmt_int_or_ch_decint = false);
-
-  static int set_string_val_charset(ObIAllocator &allocator,
-                                    ObObjParam &val, 
-                                    ObString &charset, 
-                                    ObObj &result_val, 
-                                    bool is_strict_mode, 
-                                    bool return_ret);
 
   static int resolve_data_type(const ParseNode &type_node,
                                const common::ObString &ident_name,
@@ -555,11 +553,11 @@ public:
                                             ObSQLSessionInfo &session_info,
                                             const share::schema::ObPartitionFuncType part_func_type,
                                             const share::schema::ObTableSchema &tbl_schema);
-  static bool is_valid_partition_column_type(const common::ObObjType type,
+  static bool is_valid_partition_column_type(const common::SqlValueType type,
                                              const share::schema::ObPartitionFuncType part_type,
                                              const bool is_check_value,
                                              const bool is_string_lob = false);
-  static bool is_partition_range_column_type(const common::ObObjType type);
+  static bool is_partition_range_column_type(const common::SqlValueType type);
   static bool is_restore_user(ObSQLSessionInfo &session_info);
   static bool is_drc_user(ObSQLSessionInfo &session_info);
   static int resolve_udf_name_by_parse_node(
@@ -678,9 +676,6 @@ public:
 
   static int get_select_into_node(const ParseNode &node, ParseNode* &into_node, bool top_level);
 
-  static int get_user_var_value(const ParseNode *node,
-                                ObSQLSessionInfo *session_info,
-                                ObObj &value);
   static int check_duplicated_column(ObSelectStmt &select_stmt, bool can_skip = false);
   static int check_secure_path(const common::ObString &secure_file_priv, const common::ObString &full_path);
   // get column item's default value. Use select item's expr to find the original column.
@@ -714,7 +709,8 @@ public:
   static int check_partition_range_value_result_type(const ObPartitionFuncType part_type,
                                                      const ObRawExprResType &column_type,
                                                      const ObString &column_name,
-                                                     ObObj &part_value);
+                                                     common::DatumValue &part_value,
+                                                     common::ObIAllocator &owner);
   static int resolve_file_size_node(const ParseNode *file_size_node, int64_t &parse_int_value);
   static int resolve_varchar_file_size(const ParseNode *child, int64_t &parse_int_value);
 
@@ -750,7 +746,7 @@ public:
                             const ObPCParam *pc_param,
                             const int64_t param_idx,
                             const bool enable_mysql_compatible_dates,
-                            ObObjParam &obj_param,
+                            DatumParameter &obj_param,
                             bool &is_param,
                             const bool enable_decimal_int);
   static int fast_get_param_type(const ParseNode &parse_node,
@@ -760,7 +756,7 @@ public:
                                  const ObCollationType server_collation,
                                  const bool enable_decimal_int,
                                  ObIAllocator &alloc,
-                                 ObObjType &obj_type,
+                                 SqlValueType &obj_type,
                                  ObCollationType &coll_type,
                                  ObCollationLevel &coll_level);
   static int create_values_table_query(ObSQLSessionInfo *session_info,
@@ -803,19 +799,20 @@ private:
 
   static double strntod(const char *str, size_t str_len, ObItemType type,
                         char **endptr, int *err);
-  static bool is_synonymous_type(ObObjType type1, ObObjType type2);
+  static bool is_synonymous_type(SqlValueType type1, SqlValueType type2);
 private:
   static int check_part_value_result_type(const ObPartitionFuncType part_func_type,
-                                          const ObObjType part_column_expr_type,
-                                          const ObObjMeta part_res_type,
-                                          const ObObjTypeClass expect_value_tc,
+                                          const SqlValueType part_column_expr_type,
+                                          const SqlTypeMeta part_res_type,
+                                          const SqlTypeClass expect_value_tc,
                                           bool is_const_expr,
-                                          ObObj &part_value);
-  static int deduce_expect_value_tc(const ObObjType part_column_expr_type,
+                                          common::DatumValue &part_value,
+                                          common::ObIAllocator *owner);
+  static int deduce_expect_value_tc(const SqlValueType part_column_expr_type,
                                     const ObPartitionFuncType part_func_type,
                                     const ObCollationType coll_type,
                                     const ObString &column_name,
-                                    ObObjTypeClass &expect_value_tc);
+                                    SqlTypeClass &expect_value_tc);
   static int log_err_msg_for_partition_value(const ObQualifiedName &name);
   static int check_partition_range_value_result_type(const share::schema::ObPartitionFuncType part_type,
                                                      const ObColumnRefRawExpr &part_column_expr,

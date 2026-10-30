@@ -69,7 +69,7 @@ static constexpr const char *json_type_string_map[] = {
 
    @return an index into json_type_string_map
 */
-uint32_t ObExprJsonType::opaque_index(ObObjType field_type)
+uint32_t ObExprJsonType::opaque_index(SqlValueType field_type)
 {
   uint32_t idx = 0;
 
@@ -126,7 +126,7 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
                          ObIAllocator *allocator, uint32_t &type_idx, bool &is_null)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
 
   if (data.is_null()) {

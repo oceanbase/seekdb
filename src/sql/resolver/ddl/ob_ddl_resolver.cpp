@@ -32,6 +32,11 @@
 #include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_table_schema.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include "sql/engine/expr/ob_datum_cast.h"
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include "share/object/ob_obj_cast_util.h"
+#include "sql/pl/ob_pl_user_type.h"
 
 namespace oceanbase
 {
@@ -41,6 +46,67 @@ using namespace share;
 using namespace obcall;
 namespace sql
 {
+namespace
+{
+int check_native_ddl_default_expression(ObSQLSessionInfo &session,
+    const ObColumnSchemaV2 &column, const DatumParameter &source,
+    ObIAllocator &allocator, DatumParameter &result,
+    ObISrsProvider *srs_provider, ObILobReadService *lob_read_service)
+{
+  int ret = OB_SUCCESS;
+  ObExecContext *context = session.get_cur_exec_ctx();
+  if (OB_ISNULL(context)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (column.is_extend()) {
+    // EXTEND -> EXTEND is an identity cast; clone its PL pointee before the
+    // evaluated input is destroyed by the caller.
+    if (!source.is_null() && !source.is_ext()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ret = pl::ObUserDefinedType::clone_parameter(allocator, source, result);
+    }
+  } else {
+    DatumValue converted;
+    if (ob_is_enumset_tc(column.get_data_type())) {
+      converted = source.value_view();
+      ret = ObDDLResolver::cast_enum_or_set_default_value(column, session, CM_NONE,
+                                                          converted, allocator);
+    } else {
+      const ObDataTypeCastParams dtc_params = session.get_dtc_params();
+      ObAccuracy accuracy = column.get_accuracy();
+      ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE,
+                          column.get_collation_type(), &accuracy);
+      session.configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
+      if (column.get_data_type() == source.get_type() && !source.is_string_type()
+          && !source.get_meta().is_geometry() && !source.get_meta().is_decimal_int()) {
+        // Match the old common cast's identity path, including native SQL
+        // collection values that need no scalar conversion or accuracy check.
+        ret = clone_typed_value(source.value_view(), converted, allocator);
+      } else {
+        ret = DatumValueCaster::to_type(column.get_data_type(), cast_ctx,
+                                        source.value_view(), allocator, converted);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      DatumParameter cast_value;
+      cast_value.assign_value(converted);
+      cast_value.set_accuracy(column.get_accuracy());
+      cast_value.set_param_meta();
+      ObDatumCaster *checker = nullptr;
+      ObDatumCaster nested;
+      OZ (context->get_native_datum_caster(checker));
+      if (OB_SUCC(ret) && checker->native_cast_active()) {
+        OZ (nested.init(*context, false));
+        OX (checker = &nested);
+      }
+      OZ (checker->check_accuracy_and_collation(cast_value, column.get_accuracy(),
+          column.get_collation_type(), CM_NONE, true, allocator, result));
+    }
+  }
+  return ret;
+}
+} // namespace
+
 ObDDLResolver::ObDDLResolver(ObResolverParams &params)
   : ObStmtResolver(params),
     block_size_(OB_DEFAULT_SSTABLE_BLOCK_SIZE),
@@ -248,14 +314,15 @@ int ObDDLResolver::check_add_column_as_pk_allowed(const ObColumnSchemaV2 &column
  * set default value for primary key
  */
 
-int update_datetime_default_value(ObObjParam &default_value, ParseNode &def_val,
-    const ObObjType datetime_type, const int64_t action_flag)
+int update_datetime_default_value(DatumParameter &default_value, ParseNode &def_val,
+    const SqlValueType datetime_type, const int64_t action_flag, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   int16_t scale = 0;
-  default_value.set_ext(action_flag);
+  ret = default_value.set_ext(action_flag, owner);
   default_value.set_param_meta();
-  if (def_val.value_ < 0) {
+  if (OB_FAIL(ret)) {
+  } else if (def_val.value_ < 0) {
     scale = ObAccuracy::DDL_DEFAULT_ACCURACY[datetime_type].get_scale();
     default_value.set_scale(scale);
   } else if (OB_ISNULL(def_val.children_) || OB_UNLIKELY(1 != def_val.num_child_)) {
@@ -272,17 +339,16 @@ int update_datetime_default_value(ObObjParam &default_value, ParseNode &def_val,
 }
 
 int ObDDLResolver::resolve_default_value(ParseNode *def_node,
-                                        //  const ObObjType column_data_type,
+                                        //  const SqlValueType column_data_type,
                                          ObDefaultValueRes &resolve_res)
 {
   int ret = OB_SUCCESS;
   ObString tmp_str;
   ObString str;
-  ObObj val;
   int16_t scale = -1;
   ObIAllocator *name_pool = NULL;
   ParseNode *def_val = NULL;
-  ObObjParam &default_value = resolve_res.value_;
+  DatumParameter &default_value = resolve_res.value_;
   resolve_res.is_literal_ = true;
   if (NULL != def_node) {
     def_val = def_node;
@@ -304,11 +370,11 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
     } else {
       switch (def_val->type_) {
       case T_INT:
-        default_value.set_int(def_val->value_);
+        ret = default_value.set_int(def_val->value_, *name_pool);
         default_value.set_param_meta();
         break;
       case T_UINT64:
-        default_value.set_uint64(static_cast<uint64_t>(def_val->value_));
+        ret = default_value.set_uint64(static_cast<uint64_t>(def_val->value_), *name_pool);
         default_value.set_param_meta();
         break;
       case T_NCHAR: //mysql mode
@@ -324,7 +390,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
             ObCharsetType charset_type = ObCharset::charset_type(charset.trim());
             coll = ObCharset::get_default_collation(charset_type);
           }
-          default_value.set_varchar(str);
+          ret = default_value.set_varchar(str, *name_pool);
           default_value.set_collation_type(coll);
           default_value.set_param_meta();
         }
@@ -336,12 +402,13 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
           SQL_RESV_LOG(WARN, "Can not malloc space for default value", K(ret));
           break;
         }
-        default_value.set_hex_string(str);
+        ret = default_value.set_string(ObHexStringType, str, *name_pool);
+        default_value.get_meta().set_hex_string();
         default_value.set_scale(0);
         default_value.set_param_meta();
         break;
       case T_YEAR:
-        default_value.set_year(static_cast<uint8_t>(def_val->value_));
+        ret = default_value.set_year(static_cast<uint8_t>(def_val->value_), *name_pool);
         default_value.set_scale(0);
         default_value.set_param_meta();
         break;
@@ -365,7 +432,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
             ret = OB_ERR_WRONG_VALUE;
             LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", helper.convert(time_str));
           } else {
-            default_value.set_mysql_date(mdate);
+            ret = default_value.set_mysql_date(mdate, *name_pool);
           }
         } else {
           int32_t time_val = 0;
@@ -373,7 +440,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
             ret = OB_ERR_WRONG_VALUE;
             LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", helper.convert(time_str));
           } else {
-            default_value.set_date(time_val);
+            ret = default_value.set_date(time_val, *name_pool);
           }
         }
         if (OB_SUCC(ret)) {
@@ -390,7 +457,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "TIME", helper.convert(time_str));
         } else {
-          default_value.set_time(time_val);
+          ret = default_value.set_time(time_val, *name_pool);
           default_value.set_scale(scale);
           default_value.set_param_meta();
         }
@@ -411,14 +478,14 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "TIMESTAMP", helper.convert(time_str));
         } else {
-          default_value.set_datetime(time_val);
+          ret = default_value.set_datetime(time_val, *name_pool);
           default_value.set_scale(scale);
           default_value.set_param_meta();
         }
         break;
       }
       case T_TIMESTAMP_TZ: {
-        ObObjType value_type = ObMaxType;
+        SqlValueType value_type = ObMaxType;
         ObOTimestampData tz_value;
         ObTimeConvertCtx cvrt_ctx(TZ_INFO(session_info_), false);
         ObString time_str(static_cast<int32_t>(def_val->str_len_), def_val->str_value_);
@@ -427,11 +494,18 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
           ret = OB_INVALID_DATE_VALUE;
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_INVALID_DATE_VALUE, 9, "TIMESTAMP", helper.convert(time_str));
+        } else if (!is_valid_sql_value_type(value_type)) {
+          // Do not index the native mapping table for an unsupported literal
+          // type. The current converter may leave value_type at ObMaxType.
+          ret = OB_INVALID_DATE_VALUE;
         } else {
           /* use max scale bug:#18093350 */
-          default_value.set_otimestamp_value(value_type, tz_value);
-          default_value.set_scale(OB_MAX_TIMESTAMP_TZ_PRECISION);
-          default_value.set_param_meta();
+          if (OB_FAIL(default_value.set_int(tz_value.time_us_, *name_pool))) {
+          } else {
+            default_value.get_meta().set_otimestamp_type(value_type);
+            default_value.set_scale(OB_MAX_TIMESTAMP_TZ_PRECISION);
+            default_value.set_param_meta();
+          }
         }
         break;
       }
@@ -444,7 +518,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
           ObCStringHelper helper;
           LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "DATE", helper.convert(time_str));
         } else {
-          default_value.set_datetime(time_val);
+          ret = default_value.set_datetime(time_val, *name_pool);
           default_value.set_scale(OB_MAX_DATE_PRECISION);
           default_value.set_param_meta();
         }
@@ -461,7 +535,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
           if (EOVERFLOW == err) {
             ret = OB_DATA_OUT_OF_RANGE;
           } else {
-            default_value.set_float(static_cast<float>(value));
+            ret = default_value.set_float(static_cast<float>(value), *name_pool);
             default_value.set_param_meta();
           }
           break;
@@ -478,7 +552,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
           if (EOVERFLOW == err) {
             ret = OB_DATA_OUT_OF_RANGE;
           } else {
-            default_value.set_double(value);
+            ret = default_value.set_double(value, *name_pool);
             default_value.set_param_meta();
           }
           break;
@@ -490,14 +564,14 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
             SQL_RESV_LOG(WARN, "Can not malloc space for default value", K(ret));
             break;
           }
-          default_value.set_varchar(str);
+          ret = default_value.set_varchar(str, *name_pool);
           default_value.set_type(ObVarcharType);
           default_value.set_collation_type(ObCharset::get_system_collation());
           default_value.set_param_meta();
           break;
         }
       case T_BOOL:
-        default_value.set_bool(def_val->value_ == 1 ? true : false);
+        ret = default_value.set_tinyint(def_val->value_ == 1 ? 1 : 0, *name_pool);
         default_value.set_param_meta();
         break;
       case T_NULL:
@@ -506,11 +580,12 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         break;
       case T_FUN_SYS_CUR_TIMESTAMP: {
         resolve_res.is_literal_ = def_node->is_default_literal_expression_;
-        ret = update_datetime_default_value(default_value, *def_val, ObTimestampType, ObActionFlag::OP_DEFAULT_NOW_FLAG);
+        ret = update_datetime_default_value(default_value, *def_val, ObTimestampType,
+                                             ObActionFlag::OP_DEFAULT_NOW_FLAG, *name_pool);
         break;
       }
       case T_DEFAULT_INT: {
-        default_value.set_int(def_val->value_);
+        ret = default_value.set_int(def_val->value_, *name_pool);
         default_value.set_param_meta();
         break;
       }
@@ -526,7 +601,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
       case T_FUN_MIN:
       case T_FUN_AVG: {
         resolve_res.is_literal_ = false;
-        ObObjParam arg;
+        DatumParameter arg;
         ObDefaultValueRes arg_res(arg);
         if (def_val->num_child_ != 2) {
           ret = OB_INVALID_ARGUMENT;
@@ -562,9 +637,9 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
       case T_FUN_SYS_ISNULL:
       case T_FUN_SYS_POINT: {
         resolve_res.is_literal_ = false;
-        ObObjParam first;
+        DatumParameter first;
         ObDefaultValueRes first_res(first);
-        ObObjParam second;
+        DatumParameter second;
         ObDefaultValueRes second_res(second);
         if (def_val->num_child_ != 2) {
           ret = OB_INVALID_ARGUMENT;
@@ -578,11 +653,11 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
       case T_OP_NOT_BTW:
       case T_CASE: {
         resolve_res.is_literal_ = false;
-        ObObjParam first;
+        DatumParameter first;
         ObDefaultValueRes first_res(first);
-        ObObjParam second;
+        DatumParameter second;
         ObDefaultValueRes second_res(second);
-        ObObjParam third;
+        DatumParameter third;
         ObDefaultValueRes third_res(third);
         if (def_val->num_child_ != 3) {
           ret = OB_INVALID_ARGUMENT;
@@ -602,7 +677,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
       case T_FUN_SYS_ARRAY:
       case T_FUN_SYS_MAP: {
         resolve_res.is_literal_ = false;
-        ObObjParam first;
+        DatumParameter first;
         ObDefaultValueRes first_res(first);
         if (def_val->num_child_ != 1) {
           ret = OB_INVALID_ARGUMENT;
@@ -613,14 +688,14 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
       }
       case T_FUN_SYS: {
         resolve_res.is_literal_ = false;
-        ObObjParam func_ident;
+        DatumParameter func_ident;
         ObDefaultValueRes func_res(func_ident);
         if (def_val->num_child_ < 1) {
           ret = OB_INVALID_ARGUMENT;
           SQL_RESV_LOG(WARN, "Invalid expression", K(ret), K(def_val->type_), K(def_val->num_child_));
         } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[0], func_res)))) {
         } else if (def_val->num_child_ == 2) {
-          ObObjParam argument;
+          DatumParameter argument;
           ObDefaultValueRes argument_res(argument);
           if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[1], argument_res)))) {
           }
@@ -630,9 +705,9 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
       case T_OP_LIKE: {
         resolve_res.is_literal_ = false;
         int child_num = def_val->num_child_;
-        ObObjParam value;
+        DatumParameter value;
         ObDefaultValueRes value_res(value);
-        ObObjParam pattern;
+        DatumParameter pattern;
         ObDefaultValueRes pattern_res(pattern);
         if (def_val->num_child_ < 2) {
           ret = OB_INVALID_ARGUMENT;
@@ -641,7 +716,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         } else if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[1], pattern_res)))) {
         }
         if (child_num == 3) {
-          ObObjParam escape;
+          DatumParameter escape;
           ObDefaultValueRes escape_res(escape);
           if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[2], escape_res)))) {
           }
@@ -654,7 +729,7 @@ int ObDDLResolver::resolve_default_value(ParseNode *def_node,
         resolve_res.is_literal_ = false;
         int num_child = def_val->num_child_;
         for (int i = 0; OB_SUCC(ret) && i<num_child; ++i) {
-          ObObjParam expr;
+          DatumParameter expr;
           ObDefaultValueRes expr_res(expr);
           if (OB_FAIL(SMART_CALL(resolve_default_value(def_val->children_[i], expr_res)))) {
           }
@@ -702,30 +777,30 @@ int ObDDLResolver::resolve_sign_in_default_value(
     ObIAllocator *name_pool, ParseNode *def_val, ObDefaultValueRes &resolve_res, const bool is_neg)
 {
   int ret = OB_SUCCESS;
-  if (is_neg) {
-    ObObjParam old_obj;
+  if (OB_ISNULL(name_pool) || OB_ISNULL(def_val)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (is_neg) {
+    DatumParameter old_obj;
     ObDefaultValueRes old_res(old_obj);
-    ObObjParam &default_value = resolve_res.value_;
+    DatumParameter &default_value = resolve_res.value_;
     ret = resolve_default_value(def_val->children_[0], old_res);
     resolve_res.is_literal_ = old_res.is_literal_;
     if (OB_FAIL(ret)) {
     } else if (ObIntType == old_obj.get_type()) {
       int64_t value = 0;
       old_obj.get_int(value);
-      default_value.set_int(-value);
+      ret = default_value.set_int(-value, *name_pool);
       default_value.set_param_meta();
     } else if (ObFloatType == old_obj.get_type()) {
       float value = 0.0f;
-      old_obj.get_float(value);
-      default_value.set_float(-value);
+      value = old_obj.get_float();
+      ret = default_value.set_float(-value, *name_pool);
       default_value.set_param_meta();
     } else if (ObDoubleType == old_obj.get_type()) {
       double value = 0.0;
-      if (OB_FAIL(old_obj.get_double(value))) {
-      } else {
-        default_value.set_double(-value);
-        default_value.set_param_meta();
-      }
+      value = old_obj.get_double();
+      ret = default_value.set_double(-value, *name_pool);
+      default_value.set_param_meta();
     } else if (T_NUMBER == def_val->children_[0]->type_) {
       ObString str;
       char buffer[number::ObNumber::MAX_PRINTABLE_SIZE];
@@ -735,7 +810,7 @@ int ObDDLResolver::resolve_sign_in_default_value(
                                           ObString::make_string(buffer),
                                           str)))) {
       } else {
-        default_value.set_varchar(str);
+        ret = default_value.set_varchar(str, *name_pool);
         default_value.set_collation_type(ObCharset::get_system_collation());
         default_value.set_param_meta();
       }
@@ -1800,7 +1875,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
     type_node = node->children_[1];
     if (OB_ISNULL(type_node)) {
       ret = OB_ERR_INVALID_DATATYPE;
-    } else if (OB_UNLIKELY(!ob_is_valid_obj_type(static_cast<ObObjType>(type_node->type_)))) {
+    } else if (OB_UNLIKELY(!is_valid_sql_value_type(static_cast<SqlValueType>(type_node->type_)))) {
       ret = OB_ERR_INVALID_DATATYPE;
       SQL_RESV_LOG(WARN, "type_node or stmt_ or datatype is invalid", K(ret), K(type_node->type_));
     }
@@ -1881,7 +1956,7 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       ret = OB_ERR_UNEXPECTED;
     } else {
       ObString expr_str(expr_node->str_len_, expr_node->str_value_);
-      ObObj default_value;
+      DatumValue default_value;
       /* bugfix:
        * in NO_BACKSLAH_ESCAPES sql_mode, mysql will convert '\\' to '\\\\';
        */
@@ -1892,10 +1967,12 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_,
                                                     session_info_->get_dtc_params(), expr_str))) {
       } else {
-        default_value.set_varchar(expr_str);
+        if (OB_FAIL(default_value.set_varchar(expr_str, *allocator_))) {
+        }
         default_value.set_collation_type(ObCharset::get_system_collation());
         default_value.set_collation_level(CS_LEVEL_COERCIBLE);
-        if (OB_FAIL(column.set_cur_default_value(
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(column.set_cur_default_value(
                 default_value,
                 column.is_default_expr_v2_column()))) {
         } else if (node->children_[4] != NULL && node->children_[4]->type_ == T_STORED_COLUMN) {
@@ -1994,7 +2071,7 @@ int ObDDLResolver::resolve_normal_column_attribute_constr_null(ObColumnSchemaV2 
 int ObDDLResolver::resolve_normal_column_attribute_constr_default(ObColumnSchemaV2 &column,
                                                                   ParseNode *attr_node,
                                                                   ObColumnResolveStat &resolve_stat,
-                                                                  ObObjParam& default_value,
+                                                                  DatumParameter& default_value,
                                                                   bool& is_set_cur_default)
 {
   INIT_SUCC(ret);
@@ -2012,7 +2089,7 @@ int ObDDLResolver::resolve_normal_column_attribute_constr_default(ObColumnSchema
       if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                             *allocator_, session_info_->get_dtc_params(), expr_str))) {
       } else {
-        default_value.set_varchar(expr_str);
+        ret = default_value.set_varchar(expr_str, *allocator_);
         default_value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
         default_value.set_param_meta();
       }
@@ -2046,10 +2123,10 @@ int ObDDLResolver::resolve_normal_column_attribute_constr_default(ObColumnSchema
   } else if (is_set_cur_default) {
     ret = OB_ERR_PARSER_SYNTAX;
     SQL_RESV_LOG(WARN, "cannot set current default value twice", K(ret));
+  } else if (OB_FAIL(column.set_cur_default_value(default_value, !resolve_res.is_literal_))) {
   } else {
     resolve_stat.is_set_default_value_ = true;
     is_set_cur_default = true;
-    column.set_cur_default_value(default_value, !resolve_res.is_literal_);
   }
   return ret;
 }
@@ -2065,7 +2142,7 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
                                                    const bool allow_has_default)
 {
   int ret = OB_SUCCESS;
-  ObObjParam default_value;
+  DatumParameter default_value;
   default_value.set_null();
   bool is_set_cur_default = false;
 
@@ -2522,7 +2599,7 @@ int ObDDLResolver::resolve_lob_storage_parameters(const ParseNode *node)
   int ret = OB_SUCCESS;
   ObColumnSchemaV2 *column_schema = nullptr;
   ObString column_name;
-  ObObjType type = ObObjType::ObNullType;
+  SqlValueType type = SqlValueType::ObNullType;
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(stmt_) ||
       OB_ISNULL(session_info_) || OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2537,7 +2614,7 @@ int ObDDLResolver::resolve_lob_storage_parameters(const ParseNode *node)
   } else if (OB_ISNULL(node->children_[0])) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "type node is null", K(ret), K(node));
-  } else if (OB_FALSE_IT(type = static_cast<ObObjType>(node->children_[0]->value_))) {
+  } else if (OB_FALSE_IT(type = static_cast<SqlValueType>(node->children_[0]->value_))) {
   } else if (! ob_is_json(type)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "type is not support", K(ret), K(type), K(node));
@@ -2721,114 +2798,117 @@ int ObDDLResolver::resolve_lob_inrow_threshold(const ParseNode *option_node, con
 
 
 int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
-                                      ObObj &default_value,
+                                      DatumValue &default_value,
                                       const ObTimeZoneInfo *tz_info,
                                       ObIAllocator &allocator,
                                       ObColumnSchemaV2 &column_schema,
                                       const ObSQLMode sql_mode)
 {
-  //cast default value
   int ret = OB_SUCCESS;
-  const int64_t CUR_TIME = 0;
-  bool need_cast = false;
-
-  if (default_value.is_null()) {
-    need_cast = false;
-  } else if (column_schema.get_data_type() != default_value.get_type()) {
-    need_cast = true;
-  } else if (column_schema.is_string_type() && default_value.is_string_type()
-             && column_schema.get_collation_type() != default_value.get_collation_type()) {
-    need_cast = true;
-  }
-
+  bool need_cast = !default_value.is_null()
+      && (column_schema.get_data_type() != default_value.get_type()
+          || (column_schema.is_string_type() && default_value.is_string_type()
+              && column_schema.get_collation_type() != default_value.get_collation_type()));
   if (need_cast) {
     ObAccuracy res_accuracy;
-    const ObDataTypeCastParams dtc_params(tz_info, CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_GENERAL_CI);
+    const ObDataTypeCastParams dtc_params(tz_info, CS_TYPE_INVALID, CS_TYPE_INVALID,
+                                          CS_TYPE_UTF8MB4_GENERAL_CI);
     ObCastMode cast_mode = CM_COLUMN_CONVERT;
-    if (is_allow_invalid_dates(sql_mode)) {
-      cast_mode |= CM_ALLOW_INVALID_DATES;
-    }
-    if (is_no_zero_date(sql_mode)) {
-      cast_mode |= CM_NO_ZERO_DATE;
-    }
+    if (is_allow_invalid_dates(sql_mode)) { cast_mode |= CM_ALLOW_INVALID_DATES; }
+    if (is_no_zero_date(sql_mode)) { cast_mode |= CM_NO_ZERO_DATE; }
     if (column_schema.get_meta_type().is_decimal_int()) {
       res_accuracy = column_schema.get_accuracy();
     }
-    ObCastCtx cast_ctx(&allocator, &dtc_params, CUR_TIME,
-                       cast_mode,
-                       column_schema.get_collation_type(), NULL, &res_accuracy);
-    ObSqlObjCastRuntime cast_runtime(session_info->get_cur_exec_ctx());
+    ObCastCtx cast_ctx(&allocator, &dtc_params, 0, cast_mode,
+                       column_schema.get_collation_type(), nullptr, &res_accuracy);
+    ObSqlDatumCastRuntime cast_runtime(session_info == nullptr ? nullptr : session_info->get_cur_exec_ctx());
     cast_ctx.runtime_ = &cast_runtime;
     if (ob_is_enumset_tc(column_schema.get_data_type())) {
-      if (OB_FAIL(cast_enum_or_set_default_value(column_schema, cast_ctx, default_value))) {
+      if (OB_ISNULL(session_info)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(cast_enum_or_set_default_value(column_schema, *session_info,
+                                                       cast_mode, default_value, allocator))) {
       }
     } else if (IS_DEFAULT_NOW_OBJ(default_value)) {
-      if (ObDateTimeTC == column_schema.get_data_type_class() ||
-            ObMySQLDateTimeTC == column_schema.get_data_type_class()) {
-        if (OB_FAIL(column_schema.set_cur_default_value(
-                default_value, column_schema.is_default_expr_v2_column()))) {
-        }
+      if (ObDateTimeTC == column_schema.get_data_type_class()
+          || ObMySQLDateTimeTC == column_schema.get_data_type_class()) {
+        ret = column_schema.set_cur_default_value(default_value,
+                                                  column_schema.is_default_expr_v2_column());
       } else {
         ret = OB_INVALID_DEFAULT;
         LOG_USER_ERROR(OB_INVALID_DEFAULT, column_schema.get_column_name_str().length(),
                        column_schema.get_column_name_str().ptr());
       }
     } else {
-      ObObjType obj_type = column_schema.get_data_type();
-      ObObjTypeClass obj_type_class = column_schema.get_data_type_class();
-      // for decimal int default value, we cast it to number first, then cast to decimal int
-      if (ObDecimalIntType == obj_type) {
-        obj_type = ObNumberType;
-        obj_type_class = ObNumberTC;
+      SqlValueType target = column_schema.get_data_type();
+      SqlTypeClass target_class = column_schema.get_data_type_class();
+      if (target == ObDecimalIntType) {
+        target = ObNumberType;
+        target_class = ObNumberTC;
       }
-      //so cool. cast in place.
-      if(OB_FAIL(ObObjCaster::to_type(obj_type, cast_ctx, default_value, default_value))) {
-      } else if (ObNumberTC == obj_type_class) {
-        number::ObNumber nmb;
-        nmb = default_value.get_number();
-        if (OB_FAIL(nmb.check_and_round(column_schema.get_data_precision(),
-                                        column_schema.get_data_scale()))) {
-        }
-        if (OB_SUCC(ret)) {
-          if (ObNumberTC == column_schema.get_data_type_class()) {
-            default_value.set_number(column_schema.get_data_type(), nmb);
+      DatumValue converted;
+      if (OB_FAIL(DatumValueCaster::to_type(target, cast_ctx, default_value, allocator, converted))) {
+      } else if (ObNumberTC == target_class) {
+        number::ObNumber rounded = converted.get_number();
+        if (OB_FAIL(rounded.check_and_round(column_schema.get_data_precision(),
+                                            column_schema.get_data_scale()))) {
+        } else if (ObNumberTC == column_schema.get_data_type_class()) {
+          ret = converted.set_number(column_schema.get_data_type(), rounded, allocator);
+        } else {
+          ObDecimalInt *decint = nullptr;
+          int32_t int_bytes = 0;
+          const ObScale scale = column_schema.get_data_scale();
+          if (OB_FAIL(wide::from_number(rounded, allocator, scale, decint, int_bytes))) {
           } else {
-            ObDecimalInt *decint = nullptr;
-            int32_t int_bytes = 0;
-            const ObScale scale = column_schema.get_data_scale();
-            if (OB_ISNULL(cast_ctx.allocator_v2_)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(wide::from_number(nmb, *cast_ctx.allocator_v2_, scale, decint, int_bytes))) {
-            } else {
-              default_value.set_decimal_int(int_bytes, scale, decint);
-            }
+            ret = converted.set_decimal_int(int_bytes, scale, decint, allocator);
           }
         }
-      } else if ((ObFloatTC == column_schema.get_data_type_class() ||
-                      ObDoubleTC == column_schema.get_data_type_class()) &&
-                   (column_schema.get_data_precision() != PRECISION_UNKNOWN_YET &&
-                    column_schema.get_data_scale() != SCALE_UNKNOWN_YET)) {
-        const ObObj *res_obj = &default_value;
-        const common::ObAccuracy &accuracy = column_schema.get_accuracy();
-        if (OB_FAIL(common::obj_accuracy_check(cast_ctx, accuracy,
-                            column_schema.get_collation_type(),
-                            *res_obj, default_value, res_obj))) {
+      } else if ((ObFloatTC == target_class || ObDoubleTC == target_class)
+          && column_schema.get_data_precision() != PRECISION_UNKNOWN_YET
+          && column_schema.get_data_scale() != SCALE_UNKNOWN_YET) {
+        // Retain the literal-default precision path rather than imposing the
+        // column-conversion checks on same-type defaults that never needed a cast.
+        if (ObFloatTC == target_class) {
+          float number = converted.get_float();
+          if (ob_is_unsigned_type(converted.get_type()) && number < 0.0) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(real_range_check(column_schema.get_accuracy(), number))) {
+          } else if (converted.get_float() != number) {
+            ret = converted.set_float(number, allocator);
+            if (OB_SUCC(ret)) { converted.set_type(target); }
+          }
+        } else {
+          double number = converted.get_double();
+          if (ob_is_unsigned_type(converted.get_type()) && number < 0.0) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(real_range_check(column_schema.get_accuracy(), number))) {
+          } else if (converted.get_double() != number) {
+            ret = converted.set_double(target, number, allocator);
+          }
         }
       }
       if (OB_FAIL(ret)) {
         ret = OB_INVALID_DEFAULT;
         LOG_USER_ERROR(OB_INVALID_DEFAULT, column_schema.get_column_name_str().length(),
                        column_schema.get_column_name_str().ptr());
+      } else {
+        default_value = converted;
       }
     }
   }
-  if (OB_SUCC(ret)) {
-    if (default_value.get_type() == column_schema.get_data_type()
-        && (ObTimeTC == column_schema.get_data_type_class() ||
-            ObDateTimeTC == column_schema.get_data_type_class())) {
-      int64_t value = default_value.get_time();
-      ObTimeConverter::round_datetime(column_schema.get_data_scale(), value);
-      default_value.set_time_value(value);
+  if (OB_SUCC(ret) && !default_value.is_null()
+      && default_value.get_type() == column_schema.get_data_type()
+      && (ObTimeTC == column_schema.get_data_type_class()
+          || ObDateTimeTC == column_schema.get_data_type_class())) {
+    int64_t rounded = default_value.get_time();
+    ObTimeConverter::round_datetime(column_schema.get_data_scale(), rounded);
+    DatumValue candidate = default_value;
+    ObDatum payload;
+    if (OB_FAIL(payload.deep_copy(default_value.datum_, allocator))) {
+    } else {
+      payload.set_time(rounded);
+      candidate.datum_ = payload;
+      default_value = candidate;
     }
   }
   return ret;
@@ -2837,8 +2917,9 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
 int ObDDLResolver::trim_space_for_default_value(
     const bool is_char_type,
     const ObCollationType &collation_type,
-    ObObj &default_value,
-    ObString &out_str)
+    DatumValue &default_value,
+    ObString &out_str,
+    ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(default_value.get_varchar(out_str))) {
@@ -2851,14 +2932,17 @@ int ObDDLResolver::trim_space_for_default_value(
         break;
       }
     }
-    default_value.set_varchar(str, len);
-    out_str.assign_ptr(str, len);
+    if (OB_FAIL(default_value.set_varchar(ObString(len, str), allocator))) {
+    } else {
+      out_str = default_value.get_string();
+    }
   }
   return ret;
 }
 
 int ObDDLResolver::check_default_value_length(const ObColumnSchemaV2 &column,
-                                              ObObj &default_value)
+                                              DatumValue &default_value,
+                                              ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   int64_t strlen = -1;
@@ -2871,10 +2955,10 @@ int ObDDLResolver::check_default_value_length(const ObColumnSchemaV2 &column,
       ObString str;
       if (default_value.is_null()) {
         strlen = 0;
-      } else if (OB_FAIL(trim_space_for_default_value(column.get_meta_type().is_char(), column.get_collation_type(), default_value, str))) {
+      } else if (OB_FAIL(trim_space_for_default_value(column.get_meta_type().is_char(), column.get_collation_type(), default_value, str, allocator))) {
       } else if (str.empty()) {
         strlen = 0;
-        default_value.set_varchar("");
+        ret = default_value.set_varchar(ObString(), allocator);
       } else {
         strlen = ObCharset::strlen_char(column.get_collation_type(), str.ptr(), str.length());
       }
@@ -2982,7 +3066,7 @@ void ObDDLResolver::reset_index()
   index_using_type_ = USING_BTREE;
 }
 
-bool ObDDLResolver::is_valid_prefix_key_type(const ObObjTypeClass column_type_class)
+bool ObDDLResolver::is_valid_prefix_key_type(const SqlTypeClass column_type_class)
 {
   return column_type_class == ObStringTC || column_type_class == ObTextTC;
 }
@@ -3053,7 +3137,7 @@ int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, co
 int ObDDLResolver::check_text_length(ObCharsetType cs_type,
                                      ObCollationType co_type,
                                      const char *name,
-                                     ObObjType &type,
+                                     SqlValueType &type,
                                      int32_t &length,
                                      bool need_rewrite_length,
                                      const bool is_byte_length/* = false */)
@@ -3091,7 +3175,7 @@ int ObDDLResolver::check_text_length(ObCharsetType cs_type,
         for (int64_t i = ObTinyTextType; i <= ObLongTextType; ++i) {
           default_length = ObAccuracy::DDL_DEFAULT_ACCURACY[i].get_length();
           if (length * mbmaxlen <= default_length) {
-            type = static_cast<ObObjType>(i);
+            type = static_cast<SqlValueType>(i);
             length = default_length;
             break;
           }
@@ -3115,7 +3199,7 @@ int ObDDLResolver::check_text_length(ObCharsetType cs_type,
 }
 
 // Keep text column lengths within the type's supported maximum.
-int ObDDLResolver::rewrite_text_length_mysql(ObObjType &type, int32_t &length)
+int ObDDLResolver::rewrite_text_length_mysql(SqlValueType &type, int32_t &length)
 {
   int ret = OB_SUCCESS;
   int32_t max_length = ObAccuracy::MAX_ACCURACY[type].get_length();
@@ -3134,7 +3218,7 @@ int ObDDLResolver::check_text_column_length_and_promote(ObColumnSchemaV2 &column
 {
   int ret = OB_SUCCESS;
   bool need_check_length = true;
-  ObObjType type = column.get_data_type();
+  SqlValueType type = column.get_data_type();
   int32_t length = column.get_data_length();
   if (OB_INVALID_ID != table_id && is_inner_table(table_id)) {
     // inner table don't need to rewrite
@@ -3418,7 +3502,7 @@ int ObDDLResolver::resolve_enum_or_set_column(const ParseNode *type_node, ObColu
 
 int ObDDLResolver::calc_enum_or_set_data_length(const ObIArray<common::ObString> &type_info,
                                                 const ObCollationType &collation_type,
-                                                const ObObjType &type,
+                                                const SqlValueType &type,
                                                 int32_t &length)
 {
   int ret = OB_SUCCESS;
@@ -3498,27 +3582,50 @@ int ObDDLResolver::check_type_info_incremental_change(const ObColumnSchemaV2 &or
   return ret;
 }
 
-int ObDDLResolver::cast_enum_or_set_default_value(const ObColumnSchemaV2 &column, ObCastCtx &cast_ctx, ObObj &def_val)
+int ObDDLResolver::cast_enum_or_set_default_value(const ObColumnSchemaV2 &column,
+    ObSQLSessionInfo &session_info, ObCastMode cast_mode, DatumValue &def_val,
+    ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!def_val.is_string_type())) {
     ret = OB_INVALID_DEFAULT;
-    LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(),
-                   column.get_column_name_str().ptr());
   } else if (OB_UNLIKELY(!ob_is_enumset_tc(column.get_data_type()))) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(session_info.get_cur_exec_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
   } else {
-    ObExpectType expect_type;
-    expect_type.set_type(column.get_data_type());
-    expect_type.set_collation_type(column.get_collation_type());
-    expect_type.set_type_infos(&column.get_extended_type_info());
-    if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, def_val, def_val))) {
-      ret = OB_INVALID_DEFAULT;
-      LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(),
-                     column.get_column_name_str().ptr());
+    ObExprResType target;
+    static_cast<SqlTypeMeta &>(target) = column.get_meta_type();
+    target.set_accuracy(column.get_accuracy());
+    DatumParameter input, output;
+    input.assign_value(def_val);
+    input.set_param_meta();
+    ObExecContext &context = *session_info.get_cur_exec_ctx();
+    ObDatumCaster *caster = nullptr;
+    ObDatumCaster nested;
+    OZ (context.get_native_datum_caster(caster));
+    if (OB_SUCC(ret) && caster->native_cast_active()) {
+      OZ (nested.init(context, false));
+      OX (caster = &nested);
+    }
+    OZ (caster->to_value(input, target, cast_mode, allocator, output,
+                         &column.get_extended_type_info()));
+    if (OB_SUCC(ret)) {
+      // The old in-place enum/set setter retained raw scale while setting
+      // numeric coercibility and binary collation; expression frame metadata
+      // intentionally uses invalid coercibility and must not leak here.
+      SqlTypeMeta value_meta = input.get_meta();
+      if (column.get_data_type() == ObEnumType) { value_meta.set_enum(); }
+      else { value_meta.set_set(); }
+      output.set_type_meta(value_meta);
+      def_val = output.value_view();
     }
   }
-
+  if (ret != OB_SUCCESS && ret != OB_ERR_UNEXPECTED) {
+    ret = OB_INVALID_DEFAULT;
+    LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(),
+                   column.get_column_name_str().ptr());
+  }
   return ret;
 }
 
@@ -3533,12 +3640,12 @@ int ObDDLResolver::print_expr_to_default_value(ObRawExpr &expr,
     MEMSET(expr_str_buf, 0, sizeof(expr_str_buf));
     int64_t pos = 0;
     ObString expr_def;
-    ObObj default_value;
+    DatumParameter default_value;
     ObRawExprPrinter expr_printer(expr_str_buf, OB_MAX_DEFAULT_VALUE_LENGTH, &pos,
                                   schema_checker->get_schema_guard(), tz_info);
     if (OB_FAIL(expr_printer.do_print(&expr, T_NONE_SCOPE, true))) {
     } else if (FALSE_IT(expr_def.assign_ptr(expr_str_buf, static_cast<int32_t>(pos)))) {
-    } else if (FALSE_IT(default_value.set_varchar(expr_def))) {
+    } else if (FALSE_IT(default_value.set_varchar_view(expr_def))) {
     } else if (FALSE_IT(default_value.set_collation_type(ObCharset::get_system_collation()))) {
     } else if (FALSE_IT(default_value.set_collation_level(CS_LEVEL_COERCIBLE))) {
     } else if (OB_FAIL(column.set_cur_default_value(
@@ -3590,7 +3697,7 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
   return ret;
 }
 
-int ObDDLResolver::reformat_generated_column_expr(ObObj &default_value,
+int ObDDLResolver::reformat_generated_column_expr(DatumValue &default_value,
                                                   const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                                   const ObLocalSessionVar &local_session_var,
                                                   ObIAllocator &allocator,
@@ -3619,6 +3726,8 @@ int ObDDLResolver::reformat_generated_column_expr(ObObj &default_value,
     } else if (OB_FAIL(default_value.get_string(expr_str))) {
     } else if (OB_FAIL(resolve_generated_column_expr(expr_str, allocator, table_schema, dummy_array, column,
                                           &empty_session, schema_checker, expr, expr_factory))) {
+    } else {
+      default_value = column.get_cur_default_value();
     }
     exec_ctx.set_physical_plan_ctx(NULL);
   }
@@ -3660,7 +3769,7 @@ int ObDDLResolver::resolve_generated_column_expr(ObString &expr_str,
 // Verifies the default value and performs type conversion on it.
 // this function is called in ddl service, which can not access user session_info, so need to
 // construct an empty session
-int ObDDLResolver::check_default_value(ObObj &default_value,
+int ObDDLResolver::check_default_value(DatumValue &default_value,
                                        const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                        const ObLocalSessionVar *local_session_var,
                                        ObIAllocator &allocator,
@@ -3688,6 +3797,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     } else if (FALSE_IT(empty_session.set_stmt_type(stmt::T_CREATE_TABLE))) { // set a fake ddl stmt type to specifiy ddl stmt type
     } else if (FALSE_IT(exec_ctx.set_physical_plan_ctx(&phy_plan_ctx))) {
     } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
+    } else if (FALSE_IT(exec_ctx.set_srs_provider(srs_provider))) {
+    } else if (FALSE_IT(exec_ctx.set_lob_read_service(lob_read_service))) {
     } else if (OB_FAIL(check_default_value(default_value, tz_info_wrap, allocator,
                                           table_schema, dummy_array,column, gen_col_expr_arr, sql_mode,
                                           &empty_session, schema_checker,
@@ -3698,7 +3809,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
   return ret;
 }
 // Parse the list expression by first looking for dependent columns in column_schema of table_schema, if not found, then look in resolved_cols
-int ObDDLResolver::check_default_value(ObObj &default_value,
+int ObDDLResolver::check_default_value(DatumValue &default_value,
                                        const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                        ObIAllocator &allocator,
                                        ObTableSchema &table_schema,
@@ -3713,7 +3824,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                                        bool coltype_not_defined)
 {
   int ret = OB_SUCCESS;
-  const ObObj input_default_value = default_value;
+  const DatumValue input_default_value = default_value;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (column.is_generated_column()) {
@@ -3739,6 +3850,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
         }
         OZ (adjust_string_column_length_within_max(column));
       }
+      if (OB_SUCC(ret)) { default_value = column.get_cur_default_value(); }
     }
   } else if (column.is_default_expr_v2_column()) {
     ObString expr_str;
@@ -3753,20 +3865,11 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     params.schema_checker_ = schema_checker;
     params.srs_provider_ = srs_provider;
     params.lob_read_service_ = lob_read_service;
-    common::ObObj tmp_default_value;
-    common::ObObj tmp_dest_obj;
-    const ObObj *tmp_res_obj = NULL;
-    common::ObObj tmp_dest_obj_null;
-    const bool is_strict = true;
+    DatumParameter tmp_default_value;
+    DatumParameter checked_default_value;
+    DatumValue tmp_dest_obj_null;
 
-    ObObjType data_type = column.get_data_type();
-    const ObAccuracy &accuracy = column.get_accuracy();
-    ObCollationType collation_type = column.get_collation_type();
     const ObDataTypeCastParams dtc_params = session_info->get_dtc_params();
-    ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
-    session_info->configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
-    ObAccuracy res_acc = accuracy;
-    cast_ctx.res_accuracy_ = &res_acc;
     bool transform_happened = false;
     if (OB_FAIL(input_default_value.get_string(expr_str))) {
     } else if (OB_FAIL(ObSQLUtils::convert_sql_text_from_schema_for_resolve(allocator,
@@ -3779,36 +3882,25 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     }
 
     if (OB_FAIL(ret)) {
-    } else if (ob_is_enumset_tc(column.get_data_type())) {
-      if (OB_FAIL(cast_enum_or_set_default_value(column, cast_ctx, tmp_default_value))) {
-      } else {
-        tmp_res_obj = &tmp_default_value;
-      }
-    } else {
-      if (OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, tmp_default_value, tmp_dest_obj, tmp_res_obj))) {
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(tmp_res_obj)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
-                                           *const_cast<ObObj*>(tmp_res_obj)))) {
-    } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
+    } else if (OB_FAIL(check_native_ddl_default_expression(*session_info, column,
+                                                       tmp_default_value, allocator,
+                                                       checked_default_value, srs_provider, lob_read_service))) {
     } else if (0 == input_default_value.get_string().compare("''")) {
       //if default is '', we should store '' instead of NULL.
       //FIXME::when observer differentiate '' and null, we can delete this code @yanhua
-      tmp_dest_obj_null.set_varchar(input_default_value.get_string());
+      ret = tmp_dest_obj_null.set_varchar(input_default_value.get_string(), allocator);
       tmp_dest_obj_null.set_collation_type(ObCharset::get_system_collation());
-      if (OB_FAIL(column.set_cur_default_value(
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(column.set_cur_default_value(
               tmp_dest_obj_null, column.is_default_expr_v2_column()))) {
       }
     } else if (OB_FAIL(print_expr_to_default_value(*expr, column, schema_checker, tz_info_wrap.get_time_zone_info()))) {
     }
+    if (OB_SUCC(ret)) { default_value = column.get_cur_default_value(); }
   } else {
     if (OB_FAIL(cast_default_value(session_info, default_value, tz_info_wrap.get_time_zone_info(),
                                    allocator, column, sql_mode))) {
-    } else if (OB_FAIL(check_default_value_length(column, default_value))) {
+    } else if (OB_FAIL(check_default_value_length(column, default_value, allocator))) {
     } else {
       default_value.set_collation_type(column.get_collation_type());
       LOG_DEBUG("succ to set default value", K(input_default_value), K(default_value), K(column), K(ret), K(lbt()));
@@ -3817,7 +3909,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
   return ret;
 }
 
-int ObDDLResolver::check_default_value(ObObj &default_value,
+int ObDDLResolver::check_default_value(DatumValue &default_value,
                                        const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                        const ObLocalSessionVar *local_session_var,
                                        ObIAllocator &allocator,
@@ -3846,7 +3938,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
 
 // called on rs, will not used to calc udt defaults
 int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
-                                      common::ObObj &default_value,
+                                      common::DatumValue &default_value,
                                       const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                       common::ObIAllocator &allocator)
 {
@@ -3860,7 +3952,7 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
         if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(cur_time, tz_info_wrap.get_time_zone_info(), dt_value))) {
         } else {
           ObTimeConverter::round_datetime(column.get_data_scale(), dt_value);
-          default_value.set_datetime(dt_value);
+          ret = default_value.set_datetime(dt_value, allocator);
         }
         break;
       }
@@ -3869,13 +3961,13 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
         if (OB_FAIL(ObTimeConverter::timestamp_to_mdatetime(cur_time, tz_info_wrap.get_time_zone_info(), mdt_value))) {
         } else {
           ObTimeConverter::round_mdatetime(column.get_data_scale(), mdt_value);
-          default_value.set_mysql_datetime(mdt_value);
+          ret = default_value.set_mysql_datetime(mdt_value, allocator);
         }
         break;
       }
       case ObTimestampType: {
         ObTimeConverter::round_datetime(column.get_data_scale(), cur_time);
-        default_value.set_timestamp(cur_time);
+        ret = default_value.set_timestamp(cur_time, allocator);
         break;
       }
       default: {
@@ -3888,6 +3980,7 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
     ObResolverParams params;
     ObRawExpr *expr = NULL;
     ObRawExprFactory expr_factory(allocator);
+    DatumParameter evaluated;
     SMART_VARS_3((sql::ObSQLSessionInfo, empty_session), (ObExecContext, exec_ctx, allocator),
                  (ObPhysicalPlanCtx, phy_plan_ctx, allocator)) {
       LinkExecCtxGuard link_guard(empty_session, exec_ctx);
@@ -3921,38 +4014,40 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
       } else if (OB_FAIL(ObResolverUtils::resolve_default_expr_v2_column_expr(params, expr_str,
                                             column, expr))) {
       } else if (OB_FAIL(ObSQLUtils::calc_simple_expr_without_row(
-          params.session_info_, expr, default_value, params.param_list_, allocator))) {
+          params.session_info_, expr, evaluated, params.param_list_, allocator))) {
       } else {
-        ObObjType data_type = column.get_data_type();
-        ObCollationType collation_type = column.get_collation_type();
-        ObObj dest_obj;
-        const ObDataTypeCastParams dtc_params(tz_info_wrap.get_time_zone_info(), CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_GENERAL_CI);
-        ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
-        if (ob_is_enumset_tc(data_type)) {
-          if (OB_FAIL(cast_enum_or_set_default_value(column, cast_ctx, default_value))) {
-          } else {
-            dest_obj = default_value;
-          }
+        DatumParameter converted;
+        DatumValue converted_value;
+        const ObDataTypeCastParams dtc_params(tz_info_wrap.get_time_zone_info(),
+            CS_TYPE_INVALID, CS_TYPE_INVALID, CS_TYPE_UTF8MB4_GENERAL_CI);
+        ObAccuracy accuracy = column.get_accuracy();
+        ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE,
+                            column.get_collation_type(), &accuracy);
+        if (ob_is_enumset_tc(column.get_data_type())) {
+          converted_value = evaluated.value_view();
+          ret = cast_enum_or_set_default_value(column, empty_session, CM_NONE,
+                                                converted_value, allocator);
         } else {
-          ObAccuracy res_acc = column.get_accuracy();
-        cast_ctx.res_accuracy_ = &res_acc;
-        if (OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, default_value, dest_obj))) {
-          }
+          ret = DatumValueCaster::to_type(column.get_data_type(), cast_ctx,
+              evaluated.value_view(), allocator, converted_value);
         }
         if (OB_FAIL(ret)) {
         } else {
+          converted.assign_value(converted_value);
           // remove lob header for lob
-          if (dest_obj.has_lob_header()) {
+          if (converted.has_lob_header()) {
             ObString str;
             if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                    exec_ctx, &allocator, dest_obj, str))) {
+                    exec_ctx, &allocator, converted, str))) {
             } else {
-              dest_obj.set_string(dest_obj.get_type(), str);
-              dest_obj.set_inrow();
+              ret = converted.set_string(converted.get_type(), str, allocator);
+              if (OB_SUCC(ret)) { converted.get_meta().set_inrow(); }
             }
           }
-          dest_obj.set_scale(column.get_data_scale());
-          default_value = dest_obj;
+          if (OB_SUCC(ret)) {
+            converted.set_scale(column.get_data_scale());
+            default_value = converted.value_view();
+          }
         }
       }
       exec_ctx.set_physical_plan_ctx(NULL);
@@ -3965,7 +4060,7 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
 }
 
 // check default value for udt, do not call this function on rs
-int ObDDLResolver::check_udt_default_value(ObObj &default_value,
+int ObDDLResolver::check_udt_default_value(DatumValue &default_value,
                                            const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                            ObIAllocator &allocator,
                                            ObTableSchema &table_schema,
@@ -3977,11 +4072,18 @@ int ObDDLResolver::check_udt_default_value(ObObj &default_value,
                                            common::ObILobReadService *lob_read_service,
                                            ObDDLArg &ddl_arg)
 {
-  ObObj extend_result;
-  return get_udt_column_default_values(default_value, tz_info_wrap, allocator,
-                                       column, sql_mode, session_info, schema_checker,
-                                       srs_provider, lob_read_service,
-                                       extend_result, ddl_arg);
+  DatumValue extend_result;
+  int ret = get_udt_column_default_values(default_value, tz_info_wrap, allocator,
+      column, sql_mode, session_info, schema_checker, srs_provider, lob_read_service,
+      extend_result, ddl_arg);
+  if (ret == OB_SUCCESS && column.is_default_expr_v2_column()) {
+    default_value = column.get_cur_default_value();
+  }
+  if (extend_result.is_pl_extend()) {
+    const int cleanup_ret = pl::ObUserDefinedType::destruct_obj(extend_result, session_info);
+    if (ret == OB_SUCCESS) { ret = cleanup_ret; }
+  }
+  return ret;
 }
 
 int ObDDLResolver::ob_add_ddl_dependency(const uint64_t schema_id,
@@ -4087,7 +4189,7 @@ int ObDDLResolver::add_default_expr_dependency(ObRawExpr *expr,
 }
 
 // check & calc udt default_value, do not call this function on RS
-int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
+int ObDDLResolver::get_udt_column_default_values(const DatumValue &default_value,
                                                  const common::ObTimeZoneInfoWrap &tz_info_wrap,
                                                  ObIAllocator &allocator,
                                                  ObColumnSchemaV2 &column,
@@ -4096,11 +4198,11 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
                                                  ObSchemaChecker *schema_checker,
                                                  common::ObISrsProvider *srs_provider,
                                                  common::ObILobReadService *lob_read_service,
-                                                 ObObj &extend_result,
+                                                 DatumValue &extend_result,
                                                  obcall::ObDDLArg &ddl_arg)
 {
   int ret = OB_SUCCESS;
-  const ObObj input_default_value = default_value;
+  const DatumValue input_default_value = default_value;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!(column.is_extend())) {
@@ -4125,18 +4227,11 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     params.schema_checker_ = schema_checker;
     params.srs_provider_ = srs_provider;
     params.lob_read_service_ = lob_read_service;
-    common::ObObj tmp_default_value;
-    common::ObObj tmp_dest_obj;
-    const ObObj *tmp_res_obj = NULL;
-    common::ObObj tmp_dest_obj_null;
-    const bool is_strict = true;
+    DatumParameter tmp_default_value;
+    DatumParameter checked_default_value;
+    DatumValue tmp_dest_obj_null;
 
-    ObObjType data_type = column.get_data_type();
-    const ObAccuracy &accuracy = column.get_accuracy();
-    ObCollationType collation_type = column.get_collation_type();
     const ObDataTypeCastParams dtc_params = session_info->get_dtc_params();
-    ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
-    session_info->configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
 
     if (OB_FAIL(input_default_value.get_string(expr_str))) {
     } else if (OB_FAIL(ObSQLUtils::convert_sql_text_from_schema_for_resolve(allocator,
@@ -4152,22 +4247,20 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     } else { /* do nothing */ }
 
     if (OB_FAIL(ret)) {
-    } else if(OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, tmp_default_value, tmp_dest_obj, tmp_res_obj))) {
-    } else if (OB_ISNULL(tmp_res_obj)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
-                                           *const_cast<ObObj*>(tmp_res_obj)))) {
-    } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
+    } else if (OB_FAIL(check_native_ddl_default_expression(*session_info, column,
+                                                       tmp_default_value, allocator,
+                                                       checked_default_value, srs_provider, lob_read_service))) {
     } else if (0 == input_default_value.get_string().compare("''")) {
-      tmp_dest_obj_null.set_varchar(input_default_value.get_string());
+      ret = tmp_dest_obj_null.set_varchar(input_default_value.get_string(), allocator);
       tmp_dest_obj_null.set_collation_type(ObCharset::get_system_collation());
-      if (OB_FAIL(column.set_cur_default_value(
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(column.set_cur_default_value(
               tmp_dest_obj_null, column.is_default_expr_v2_column()))) {
       }
     } else if (OB_FAIL(print_expr_to_default_value(*expr, column, schema_checker, tz_info_wrap.get_time_zone_info()))) {
     }
     if (OB_SUCC(ret)) {
-      extend_result = tmp_dest_obj;
+      extend_result = checked_default_value.value_view();
     }
     if (OB_SUCC(ret) && tmp_default_value.is_pl_extend()) {
       OZ (pl::ObUserDefinedType::destruct_obj(tmp_default_value, session_info));
@@ -4215,7 +4308,7 @@ int ObDDLResolver::fill_column_with_subschema(const ObRawExpr &expr,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(column.set_extended_type_info(*enum_set_meta->get_str_values()))) {
     } else {
-      column.set_meta_type(enum_set_meta->get_obj_meta());
+      column.set_meta_type(enum_set_meta->get_sql_type_meta());
       column.set_data_scale(SCALE_UNKNOWN_YET);
       OZ(column.set_extended_type_info(*enum_set_meta->get_str_values()), expr);
     }
@@ -4523,7 +4616,7 @@ int ObDDLResolver::resolve_vec_index_constraint(
       LOG_USER_ERROR(OB_ERR_BAD_VEC_INDEX_COLUMN,
           column_schema.get_column_name_str().length(),
           column_schema.get_column_name_str().ptr());
-      LOG_WARN("vector index can only be built on vector column", K(ret), K(column_schema), K(ob_obj_type_class(column_schema.get_data_type())));
+      LOG_WARN("vector index can only be built on vector column", K(ret), K(column_schema), K(sql_type_class(column_schema.get_data_type())));
     } else if (!is_text_column && OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(column_schema.get_extended_type_info(), is_sparse_vec_col))) {
     }
 

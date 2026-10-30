@@ -67,7 +67,7 @@ public:
   inline void set_prepare_protocol(bool is_prepare) { is_prepare_protocol_ = is_prepare; }
   inline void set_params(ParamStore *params) { params_ = params; }
   inline ParamStore *get_params() { return params_; }
-  int add_param(const common::ObObjParam& param);
+  int add_param(const common::DatumParameter& param);
   virtual obcall::ObDDLArg &get_ddl_arg() { return ddl_arg_; }
 
   int resolve_inout_param(ParseNode &block_node, ObAnonymousBlockStmt &stmt);

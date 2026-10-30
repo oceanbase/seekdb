@@ -15,6 +15,7 @@
  */
 #ifndef OCEANBASE_OBSERVER_OB_MOCK_PLUGIN_VECTOR_INDEX_UTILS_DEFINE_H_
 #define OCEANBASE_OBSERVER_OB_MOCK_PLUGIN_VECTOR_INDEX_UTILS_DEFINE_H_
+#include "common/datum/datum_value.h"
 #include "share/scn.h"
 #include "share/rc/ob_server_runtime.h"
 #include "query/vector/ob_vector_index_adaptor.h"
@@ -92,32 +93,32 @@ public:
   static int add_key_ranges(uint64_t table_id, ObRowkey& start_key, ObRowkey& end_key, storage::ObTableScanParam &scan_param);
   static int iter_table_rescan(storage::ObTableScanParam &scan_param, common::ObNewRowIterator *iter);
 
-  static int read_object_from_vid_rowkey_table_iter(ObObj *input_obj, 
+  static int read_object_from_vid_rowkey_table_iter(DatumValue *input_obj,
                                                     uint64_t table_id, 
                                                     storage::ObTableScanParam &scan_param, 
                                                     common::ObNewRowIterator *iter,
                                                     schema::ObIndexType type,
                                                     ObIAllocator &allocator, 
-                                                    ObObj *&output_obj,
+                                                    DatumValue *&output_obj,
                                                     int32_t data_table_rowkey_count);
-  static int read_object_from_data_table_iter(ObObj *&input_obj, 
+  static int read_object_from_data_table_iter(DatumValue *&input_obj,
                                               int32_t data_table_rowkey_count,
                                               uint64_t table_id, 
                                               storage::ObTableScanParam &scan_param, 
                                               common::ObNewRowIterator *iter,
                                               schema::ObIndexType type,
                                               ObIAllocator &allocator, 
-                                              ObObj &output_obj,
+                                              DatumValue &output_obj,
                                               int64_t extra_info_count,
                                               ObVecExtraInfoObj *output_extra_objs,
                                               bool &get_data);
-  static int read_object_from_embedded_table_iter(ObObj *&input_obj, 
+  static int read_object_from_embedded_table_iter(DatumValue *&input_obj,
                                                   int32_t data_table_rowkey_count,
                                                   uint64_t table_id, 
                                                   storage::ObTableScanParam &scan_param, 
                                                   common::ObNewRowIterator *iter,
                                                   ObIAllocator &allocator, 
-                                                  ObObj &output_vec_obj,
+                                                  DatumValue &output_vec_obj,
                                                   int64_t extra_column_count,
                                                   ObVecExtraInfoObj *output_extra_info_objs,
                                                   bool &get_data);

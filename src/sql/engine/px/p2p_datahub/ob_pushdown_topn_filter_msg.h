@@ -38,7 +38,7 @@ public:
     common::ObDatumCmpFuncType cmp_func_;
     sql::serializable_function ser_cmp_func_;
   };
-  ObObjMeta obj_meta_;
+  SqlTypeMeta obj_meta_;
   TO_STRING_KV(K(obj_meta_), K(ser_cmp_func_));
 };
 

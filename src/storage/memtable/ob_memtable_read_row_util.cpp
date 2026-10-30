@@ -58,9 +58,9 @@ int ObReadRow::iterate_row(
 int ObReadRow::iterate_row_key(const ObStoreRowkey &rowkey, ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
-  const ObObj *obj_ptr = rowkey.get_obj_ptr();
-  for (int64_t i = 0; OB_SUCC(ret) && i < rowkey.get_obj_cnt(); ++i) {
-    if (OB_FAIL(row.storage_datums_[i].from_obj_enhance(obj_ptr[i]))) {
+  const DatumValue *values = rowkey.get_values();
+  for (int64_t i = 0; OB_SUCC(ret) && i < rowkey.get_value_count(); ++i) {
+    if (OB_FAIL(row.storage_datums_[i].from_value(values[i]))) {
     } else if (OB_UNLIKELY(row.storage_datums_[i].is_nop_value())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "col in rowkey is unexpected nop", K(ret), K(i), K(rowkey));

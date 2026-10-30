@@ -65,7 +65,7 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   } else if ((!ob_is_collection_sql_type(type1.get_type()) && !type1.is_null())
              || (!ob_is_collection_sql_type(type2.get_type()) && !type2.is_null())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(type1.get_type()), ob_obj_type_str(type2.get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, sql_value_type_to_string(type1.get_type()), sql_value_type_to_string(type2.get_type()));
   } else if (type1.is_null() || type2.is_null()) {
     // do nothing
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type1))) {

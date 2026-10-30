@@ -68,7 +68,7 @@ int compare_mds_serialized_buffer(const char *lhs_buffer,
                                   int &compare_result)
 {
   int ret = OB_SUCCESS;
-  ObObjMeta binary_meta;
+  SqlTypeMeta binary_meta;
   binary_meta.set_binary();
   ObDatum lhs_datum;
   ObDatum rhs_datum;

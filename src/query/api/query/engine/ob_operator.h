@@ -28,6 +28,7 @@
 #include "query/engine/ob_io_event_observer.h"
 #include "query/ob_sql_define.h"
 #include "query/engine/ob_batch_rows.h"
+#include "query/engine/batch_rescan_params.h"
 #include "query/monitor/ob_monitor_node.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_trigger_info.h"
@@ -62,11 +63,11 @@ public:
       is_not_null_(false),
       order_type_(default_asc_direction()) {
   }
-  ObOpSchemaObj(common::ObObjType obj_type)
+  ObOpSchemaObj(common::SqlValueType obj_type)
     : obj_type_(obj_type),
       is_not_null_(false),
       order_type_(default_asc_direction()) {}
-  ObOpSchemaObj(common::ObObjType obj_type, ObOrderDirection order_type)
+  ObOpSchemaObj(common::SqlValueType obj_type, ObOrderDirection order_type)
     : obj_type_(obj_type), is_not_null_(false), order_type_(order_type) {}
 
   bool is_null_first() const {
@@ -78,7 +79,7 @@ public:
   }
   TO_STRING_KV(K_(obj_type), K_(is_not_null), K_(order_type));
 public:
-  common::ObObjType obj_type_;
+  common::SqlValueType obj_type_;
   bool is_not_null_;
   // Because ObSortColumn is serializable, but ObSortColumn does not use the serialization framework for information
   // Adding any field inside ObSortColumn will have compatibility issues
@@ -95,50 +96,6 @@ enum OperatorOpenOrder
   OPEN_SELF_ONLY = 4, // do not open children, but open self
   OPEN_NONE = 5, // do not open itself, nor open children, unused since 4.0
   OPEN_EXIT = 6
-};
-
-struct ObBatchRescanParams {
-  OB_UNIS_VERSION_V(1);
-public:
-  ObBatchRescanParams() :allocator_("PxBatchRescan"), params_(),
-      param_idxs_(), param_expr_idxs_(0) {}
-  ~ObBatchRescanParams() = default;
-  int64_t get_count() const { return params_.count(); }
-  common::ObIArray<common::ObObjParam>& get_one_batch_params(int64_t idx) {
-    return params_.at(idx);
-  }
-  int64_t get_param_idx(int64_t idx) {
-    return param_idxs_.at(idx);
-  }
-  int append_batch_rescan_param(const common::ObIArray<int64_t> &param_idxs,
-      const sql::ObTMArray<common::ObObjParam> &res_objs);
-  int append_batch_rescan_param(const common::ObIArray<int64_t> &param_idxs,
-      const sql::ObTMArray<common::ObObjParam> &res_objs,
-      const common::ObIArray<int64_t> &param_expr_idxs);
-  void reset()
-  {
-    params_.reset();
-    param_idxs_.reset();
-    param_expr_idxs_.reset();
-    allocator_.reset();
-  }
-
-  void reuse()
-  {
-    params_.reset();
-    param_idxs_.reset();
-    param_expr_idxs_.reset();
-    allocator_.reuse();
-  }
-
-  int assign(const ObBatchRescanParams &other);
-  int deep_copy_param(const common::ObObjParam &org_param, common::ObObjParam &new_param);
-public:
-  common::ObArenaAllocator allocator_;
-  common::ObSArray<sql::ObTMArray<common::ObObjParam>> params_;
-  common::ObSEArray<int64_t, 8> param_idxs_;
-  common::ObSEArray<int64_t, 8> param_expr_idxs_;
-  TO_STRING_KV(K(param_idxs_), K(params_), K_(param_expr_idxs));
 };
 
 struct ObBatchRescanCtl
@@ -209,7 +166,11 @@ public:
   virtual ~ObDynamicParamSetter() {}
 
   int set_dynamic_param(ObEvalCtx &eval_ctx) const;
-  int set_dynamic_param(ObEvalCtx &eval_ctx, common::ObObjParam *&param) const;
+  int set_dynamic_param(ObEvalCtx &eval_ctx, common::DatumParameter &param) const;
+  // A borrowed view of the current expression datum and its parameter metadata.
+  // Callers retaining it across evaluation must clone it into their own arena.
+  int capture_dynamic_param(ObEvalCtx &eval_ctx, common::DatumParameter &param) const;
+  int restore_dynamic_param(ObEvalCtx &eval_ctx, const common::DatumParameter &param) const;
   int update_dynamic_param(ObEvalCtx &eval_ctx, common::ObDatum &datum) const;
 
   static void clear_parent_evaluated_flag(ObEvalCtx &eval_ctx, const ObExpr &expr);

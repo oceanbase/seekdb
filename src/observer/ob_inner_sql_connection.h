@@ -143,16 +143,10 @@ public:
   }
   virtual int execute_read(const ObString &sql,
                            common::ObISQLClient::ReadResult &res, bool is_user_sql = false) override;
+  int execute_read_native(const ObString &sql, common::ObISQLClient::ReadResult &res,
+                          bool is_user_sql = false);
   virtual int execute_write(const ObString &sql,
                             int64_t &affected_rows, bool is_user_sql = false) override;
-  virtual int execute_proc(ObIAllocator &allocator,
-                          ParamStore &params,
-                          ObString &sql,
-                          const share::schema::ObRoutineInfo &routine_info,
-                          const common::ObIArray<const pl::ObUserDefinedType *> &udts,
-                          const ObTimeZoneInfo *tz_info,
-                          ObObj *result,
-                          bool is_sql) override;
   virtual int start_transaction(bool with_snap_shot = false) override;
   virtual int rollback() override;
   virtual int commit() override;
@@ -288,7 +282,8 @@ private:
   int set_timeout(int64_t &abs_timeout_us);
 
   int execute_read_inner(const ObString &sql,
-                         common::ObISQLClient::ReadResult &res, bool is_user_sql = false);
+                         common::ObISQLClient::ReadResult &res, bool is_user_sql = false,
+                         bool native_result = false);
   int execute_write_inner(const ObString &sql, int64_t &affected_rows,
       bool is_user_sql = false);
   int start_transaction_inner(bool with_snap_shot = false);

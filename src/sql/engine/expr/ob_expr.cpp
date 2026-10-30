@@ -17,11 +17,13 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr.h"
+#include "common/datum/datum_sql_print.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include "share/datum/datum_value_cast.h"
 
 namespace oceanbase
 {
@@ -74,7 +76,8 @@ ObEvalCtx::ObEvalCtx(ObEvalCtx &eval_ctx)
 ObEvalCtx::~ObEvalCtx()
 {
   if (NULL != datum_caster_) {
-    datum_caster_->destroy();
+    datum_caster_->~ObDatumCaster();
+    exec_ctx_.get_allocator().free(datum_caster_);
     datum_caster_ = NULL;
   }
 }
@@ -89,6 +92,8 @@ int ObEvalCtx::init_datum_caster()
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (FALSE_IT(datum_caster = new(buf) ObDatumCaster())) {
     } else if (OB_FAIL(datum_caster->init(exec_ctx_))) {
+      datum_caster->~ObDatumCaster();
+      exec_ctx_.get_allocator().free(datum_caster);
     } else {
       datum_caster_ = datum_caster;
     }
@@ -325,7 +330,7 @@ int ObExpr::eval_enumset(ObEvalCtx &ctx,
   OB_ASSERT(NULL != frame);
   datum = (ObDatum *)(frame + datum_off_);
   ObEvalInfo *eval_info = (ObEvalInfo *)(frame + eval_info_off_);
-  const common::ObObjTypeClass in_tc = args_[0]->obj_meta_.get_type_class();
+  const common::SqlTypeClass in_tc = args_[0]->obj_meta_.get_type_class();
   EvalEnumSetFunc eval_func;
 
   // do nothing for const/column reference expr or already evaluated expr
@@ -396,125 +401,87 @@ void *ObExprStrResAlloc::alloc(const int64_t size)
   return mem;
 }
 
-int ObDatumObjParam::from_objparam(const ObObjParam &objparam, ObIAllocator *allocator) {
+void capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value)
+{
+  DatumParameter view;
+  view.set_datum(expr.locate_expr_datum(ctx));
+  SqlTypeMeta meta = expr.obj_meta_;
+  ObAccuracy accuracy;
+  accuracy.set_scale(expr.datum_meta_.scale_);
+  accuracy.set_precision(expr.datum_meta_.precision_);
+  accuracy.set_length(expr.max_length_);
+  if (meta.is_string_or_lob_locator_type()) {
+    accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
+  } else if (meta.is_numeric_type() || meta.is_temporal_type()) {
+    meta.set_scale(expr.datum_meta_.scale_);
+  }
+  view.set_type_meta(meta);
+  view.set_accuracy(accuracy);
+  view.set_param_meta();
+  value = view;
+}
+
+int bind_datum_parameter(const DatumParameter &source, DatumParameter &destination,
+                          ObIAllocator *)
+{
+  destination = source;
+  return OB_SUCCESS;
+}
+
+int clone_datum_value(const ObDatum &source, const SqlTypeMeta &meta, ObDatum &destination,
+                      ObIAllocator &allocator)
+{
   int ret = OB_SUCCESS;
-  meta_ = ObDatumMeta(objparam.meta_.get_type(),
-                      objparam.meta_.get_collation_type(),
-                      objparam.meta_.get_scale());
-  if (OB_UNLIKELY(objparam.is_ext_sql_array())) {
-    if (OB_ISNULL(allocator)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(construct_array_param_datum(objparam, *allocator))) {
+  ObDatum owned;
+  if (meta.is_ext_sql_array() && !source.is_null()) {
+    DatumParameter input, copy;
+    input.set_datum(source);
+    input.set_type_meta(meta);
+    if (OB_FAIL(DatumParameterArray::clone_parameter(input, copy, allocator))) {
+    } else {
+      owned = copy.datum_;
     }
-  } else if (OB_FAIL(datum_.from_obj(objparam))) {
+  } else {
+    ret = owned.deep_copy(source, allocator);
   }
   if (OB_SUCC(ret)) {
-    accuracy_ = objparam.get_accuracy();
-    res_flags_ = objparam.get_result_flag();
-    flag_ = objparam.get_param_flag();
-    if (objparam.has_lob_header()) {
-      set_result_flag(HAS_LOB_HEADER_FLAG);
-    }
-  }
-
-  return ret;
-}
-
-int ObDatumObjParam::to_objparam(common::ObObjParam &obj_param, ObIAllocator *allocator)
-{
-  int ret = OB_SUCCESS;
-  ObObjMeta meta;
-  meta.set_type(meta_.type_);
-  meta.set_collation_type(meta_.cs_type_);
-  meta.set_scale(meta_.scale_);
-  if (res_flags_ & HAS_LOB_HEADER_FLAG) {
-    meta.set_has_lob_header();
-  }
-  if (OB_UNLIKELY(meta_.is_ext_sql_array())) {
-    if (OB_ISNULL(allocator)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(construct_sql_array_obj(obj_param, *allocator))) {
-    }
-  } else if (OB_FAIL(datum_.to_obj(obj_param, meta))) {
-  }
-  if (OB_SUCC(ret)) {
-    obj_param.set_accuracy(accuracy_);
-    obj_param.set_result_flag(res_flags_);
-    obj_param.set_param_flag(flag_);
-    obj_param.set_param_meta();
+    destination = owned;
   }
   return ret;
 }
 
-int ObDatumObjParam::construct_array_param_datum(const ObObjParam &obj_param, ObIAllocator &allocator)
+int clone_datum_value(const DatumParameter &source, DatumParameter &destination,
+                      ObIAllocator &allocator)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(obj_param.is_ext_sql_array())) {
-    ObSqlDatumArray *datum_array = NULL;
-    const ObSqlArrayObj *array_obj = reinterpret_cast<const ObSqlArrayObj*>(obj_param.get_ext());
-    datum_array = ObSqlDatumArray::alloc(allocator, array_obj->count_);
-    if (OB_ISNULL(datum_array)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      datum_array->element_ = array_obj->element_;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < array_obj->count_; ++i) {
-      // Every datum has its own type, datum_array->element_ is no longer accurate, but this only applies to insert values scenario
-      ObObjDatumMapType obj_datum_map = ObDatum::get_obj_datum_map_type(
-          array_obj->data_[i].get_type());
-      if (OB_LIKELY(OBJ_DATUM_NULL != obj_datum_map)) {
-        uint32_t def_res_len = ObDatum::get_reserved_size(obj_datum_map, array_obj->data_[i].get_precision());
-        if (OB_ISNULL(datum_array->data_[i].ptr_ = static_cast<char *>(allocator.alloc(def_res_len)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        }
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(datum_array->data_[i].from_obj(array_obj->data_[i]))) {
-        } else {
-        }
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      //you can't use datum_.extend_obj_ here, datum_.extend_obj_m is just to asign an ObObj pointer
-      //here you need to set the address of the constructed datum array
-      datum_.set_int(reinterpret_cast<int64_t>(datum_array));
-    }
+  ObDatum owned;
+  const int ret = clone_datum_value(source.datum_, source.get_meta(), owned, allocator);
+  if (ret == OB_SUCCESS) {
+    destination.datum_ = owned;
+    destination.set_type_meta(source.get_meta());
   }
   return ret;
 }
 
-int ObDatumObjParam::construct_sql_array_obj(ObObjParam &obj_param, ObIAllocator &allocator)
+int clone_datum_parameter(const DatumParameter &source, DatumParameter &destination,
+                           ObIAllocator &allocator)
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(meta_.is_ext_sql_array())) {
-    //you can't call get_ext() here, get_ext() in Datum is to get an ObObj pointer
-    //here you need to get the address of the constructed datum array
-    const ObSqlDatumArray *datum_array = reinterpret_cast<const ObSqlDatumArray *>(datum_.get_int());
-    ObSqlArrayObj *array_obj = ObSqlArrayObj::alloc(allocator, datum_array->count_);
-    if (OB_ISNULL(array_obj)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      array_obj->element_ = datum_array->element_;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < datum_array->count_; ++i) {
-      if (OB_FAIL(datum_array->data_[i].to_obj(array_obj->data_[i],
-                                               datum_array->element_.get_meta_type()))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      obj_param.set_extend(reinterpret_cast<int64_t>(array_obj), T_EXT_SQL_ARRAY);
-    }
-  }
-  return ret;
+  return DatumParameterArray::clone_parameter(source, destination, allocator);
+}
+
+// Array and string payloads remain native, owned by the parameter's arena.
+int assign_datum_parameter(const DatumParameter &source, DatumParameter &destination)
+{
+  destination = source;
+  return OB_SUCCESS;
 }
 
 DEF_TO_STRING(ObToStringDatum)
 {
-  ObObj obj;
-  int ret = d_.to_obj(obj, e_.obj_meta_);
+  int64_t pos = 0;
+  const DatumValue value(d_, e_.obj_meta_);
+  int ret = print_datum_debug_json(value, buf, buf_len, pos);
   UNUSED(ret);
-  return obj.to_string(buf, buf_len);
+  return pos;
 }
 
 DEF_TO_STRING(ObToStringExpr)
@@ -526,7 +493,7 @@ DEF_TO_STRING(ObToStringExpr)
     J_KV("Expr print ERROR", "vectorize execution but batch_size not specified");
     J_OBJ_END();
   } else if (c_.is_vectorized() && c_.get_batch_size() > 0 &&
-               c_.get_batch_idx() >= c_.get_batch_size()) {
+             c_.get_batch_idx() >= c_.get_batch_size()) {
     // vectorize execution but batch_idx is not set correctly, do nothing
     J_OBJ_START();
     J_KV("Expr print ERROR", "vectorize execution but batch_idx is not set correctly");
@@ -770,14 +737,15 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
     if (expr.extra_ >= param_store.count()) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      const ObObj &v = param_store.at(expr.extra_);
+      const DatumParameter &v = param_store.at(expr.extra_);
       if (v.get_type() != expr.datum_meta_.type_ && !v.is_null()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(expr_datum.from_obj(v, expr.obj_datum_map_))) {
-      } else if (is_lob_storage(v.get_type()) &&
-                 OB_FAIL(ob_adjust_lob_datum(ctx.exec_ctx_, v, expr.obj_meta_,
-                                             expr.obj_datum_map_,
-                                             ctx.exec_ctx_.get_allocator(), expr_datum))) {
+      } else {
+        expr_datum = v.datum_;
+        if (is_lob_storage(v.get_type())) {
+          ret = ob_adjust_lob_datum(ctx.exec_ctx_, v.datum_, v.get_meta(),
+                                    expr.obj_meta_, ctx.exec_ctx_.get_allocator(), expr_datum);
+        }
       }
     }
   }
@@ -798,10 +766,8 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(
                        session->get_stmt_type(), session, cast_mode))) {
     } else {
-      ObObj dst_obj;
-      ObDatumObjParam datum_param;
-      const ObObj &v = param_store.at(expr.extra_);
-      const common::ObObjMeta dst_meta = expr.obj_meta_;
+      const DatumParameter &parameter = param_store.at(expr.extra_);
+      const common::SqlTypeMeta dst_meta = expr.obj_meta_;
       ObIAllocator &allocator = ctx.exec_ctx_.get_allocator();
       const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
       cast_mode = (cast_mode | CM_COLUMN_CONVERT);
@@ -818,21 +784,18 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       if (ob_is_string_tc(dst_meta.get_type())) {
         cast_ctx.dest_max_length_ = expr.max_length_;
       }
-      if (dst_meta.is_collection_sql_type()) {
-        dst_obj.meta_.set_meta(dst_meta);
-      }
-      ObSqlObjCastRuntime cast_runtime(&ctx.exec_ctx_);
+      ObSqlDatumCastRuntime cast_runtime(&ctx.exec_ctx_);
       cast_ctx.runtime_ = &cast_runtime;
       session->configure_obj_cast(
           cast_ctx,
           ctx.exec_ctx_.get_srs_provider(),
           ctx.exec_ctx_.get_lob_read_service());
-      if (OB_FAIL(ObObjCaster::to_type(dst_meta.get_type(), cast_ctx, v, dst_obj))) {
-      } else if (OB_FAIL(datum_param.alloc_datum_reserved_buff(
-                          dst_meta, expr.datum_meta_.precision_, allocator))) {
-      } else if (OB_FAIL(datum_param.from_objparam(dst_obj, &allocator))) {
+      const DatumValue source(parameter.datum_, parameter.get_meta());
+      DatumValue converted;
+      if (OB_FAIL(DatumValueCaster::to_type(dst_meta.get_type(), cast_ctx,
+                                             source, allocator, converted))) {
       } else {
-        expr_datum = datum_param.datum_;
+        expr_datum = converted.datum_;
       }
     }
   }

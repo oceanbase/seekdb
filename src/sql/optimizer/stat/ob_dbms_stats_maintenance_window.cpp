@@ -23,6 +23,7 @@
 #include "query/scheduler/ob_scheduler_service.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 
 namespace oceanbase {
 
@@ -295,24 +296,26 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "the hour of interval must be between 0 and 24");
       }
     } else if (0 == attr_name.case_compare("next_date")) {
-      ObObj time_obj;
-      ObObj src_obj;
+      DatumValue converted_time;
+      DatumValue src_value;
       int64_t current_time = ObTimeUtility::current_time();
       ObArenaAllocator calc_buf("DbmsStatsWindow");
       ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
       cast_ctx.dtc_params_ = session->get_dtc_params();
       int64_t specify_time = -1;
       int32_t offset_sec = 0;
-      src_obj.set_string(ObVarcharType, val_name);
+      src_value.datum_.set_string(val_name);
+      src_value.meta_.set_varchar();
+      src_value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       const ObTimeZoneInfo* tz_info = get_timezone_info(session);
       if (NULL != tz_info) {
         if (OB_FAIL(tz_info->get_timezone_offset(ObTimeUtility::current_time(), offset_sec))) {
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, src_obj, time_obj))) {
+        if (OB_FAIL(DatumValueCaster::to_type(ObDateTimeType, cast_ctx, src_value, calc_buf, converted_time))) {
         } else {
-          specify_time = time_obj.get_datetime() - SEC_TO_USEC(offset_sec);
+          specify_time = converted_time.get_datetime() - SEC_TO_USEC(offset_sec);
         }
       }
       if (OB_SUCC(ret)) {

@@ -26,7 +26,6 @@ namespace oceanbase
 namespace common
 {
 class ObOTimestampData;
-class ObObj;
 }
 namespace storage
 {
@@ -108,7 +107,7 @@ private:
       const int64_t rowkey_column_count,
       const ObDatumRow &row,
       const ObIArray<int64_t> *update_idx);
-  int append_column(const common::ObObj &obj);
+  int append_column(const common::DatumValue &value);
   int append_column(const ObStorageDatum &datum);
   int append_8_bytes_column(const ObStorageDatum &datum);
   int init_common(char *buf, const int64_t buf_size, const int64_t pos);

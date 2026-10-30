@@ -33,18 +33,14 @@ namespace oceanbase
 {
 namespace sql
 {
-int ob_obj_to_ob_time_with_date(
-    const common::ObObj &obj,
-    const common::ObTimeZoneInfo *tz_info,
-    common::ObTime &ob_time,
-    int64_t cur_ts_value,
+int datum_value_to_ob_time_with_date(
+    const common::DatumValue &value, const common::ObTimeZoneInfo *timezone,
+    common::ObTime &result, int64_t current_timestamp,
     common::ObDateSqlMode date_sql_mode = 0);
-int ob_obj_to_ob_time_without_date(
-    const common::ObObj &obj,
-    const common::ObTimeZoneInfo *tz_info,
-    common::ObTime &ob_time);
-
-int get_obj_zero_value(const common::ObObjType expect_type, common::ObCollationType expect_cs_type, common::ObObj &zero_obj);
+int get_datum_zero_value(const common::SqlValueType expect_type,
+                         common::ObCollationType expect_cs_type,
+                         common::ObIAllocator &allocator,
+                         common::DatumValue &zero_value);
 
 class ObPhysicalPlanCtx;
 struct ObUserLoggingCtx;
@@ -60,7 +56,7 @@ public:
                                       const ObUserLoggingCtx *user_logging_ctx,
                                       ObIAllocator &alloc,
                                       number::ObNumber &nmb);
-  static int common_uint_int_wrap(const ObExpr &expr, const ObObjType &out_type, uint64_t in_val,
+  static int common_uint_int_wrap(const ObExpr &expr, const SqlValueType &out_type, uint64_t in_val,
                                   ObEvalCtx &ctx, int64_t &out_val);
   static int common_double_float_wrap(const ObExpr &expr, const double in_val, float &out_val);
   static int common_double_int_wrap(const double in, int64_t &out,
@@ -126,7 +122,7 @@ int time_usec_scale_check(const ObCastMode &cast_mode,
 int string_length_check(const ObExpr &expr,
                         const ObCastMode &cast_mode,
                         const ObAccuracy &accuracy,
-                        const ObObjType type,
+                        const SqlValueType type,
                         const ObCollationType cs_type,
                         ObEvalCtx &ctx,
                         const ObDatum &in_datum,
@@ -135,7 +131,7 @@ int string_length_check(const ObExpr &expr,
 int string_length_check(const ObExpr &expr,
                         const ObCastMode &cast_mode,
                         const ObAccuracy &accuracy,
-                        const ObObjType type,
+                        const SqlValueType type,
                         const ObCollationType cs_type,
                         ObEvalCtx &ctx,
                         const int64_t idx,
@@ -187,13 +183,13 @@ int vector_accuracy_check(const ObExpr &expr,
 // Otherwise return the longest valid string with check_cs_type as the character set
 int string_collation_check(const bool is_strict_mode,
                            const common::ObCollationType check_cs_type,
-                           const common::ObObjType str_type,
+                           const common::SqlValueType str_type,
                            common::ObString &str);
 // Convert the value in T to ob_time structure
 template<typename T>
 int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
                                   const T &datum,
-                                  const common::ObObjType type,
+                                  const common::SqlValueType type,
                                   const ObScale scale,
                                   const common::ObTimeZoneInfo* tz_info,
                                   common::ObTime& ob_time,
@@ -202,7 +198,7 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
                                   const bool has_lob_header)
 {
   int ret = OB_SUCCESS;
-  switch (ob_obj_type_class(type)) {
+  switch (sql_type_class(type)) {
     case ObIntTC:
       // fallthrough.
     case ObUIntTC: {
@@ -297,14 +293,14 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
 template<typename T>
 int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
                                     const T &datum,
-                                    const common::ObObjType type,
+                                    const common::SqlValueType type,
                                     const ObScale scale,
                                     const common::ObTimeZoneInfo *tz_info,
                                     common::ObTime &ob_time,
                                     const bool has_lob_header)
 {
   int ret = OB_SUCCESS;
-  switch (ob_obj_type_class(type)) {
+  switch (sql_type_class(type)) {
     case ObIntTC:
       // fallthrough.
     case ObUIntTC: {
@@ -409,12 +405,12 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
 }
 
 int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObAccuracy &accuracy, ObObjType &dest_type);
+                                 ObAccuracy &accuracy, SqlValueType &dest_type);
 
 int common_string_double(const ObExpr &expr,
-                         const ObObjType &in_type,
+                         const SqlValueType &in_type,
                          const ObCollationType &in_cs_type,
-                         const ObObjType &out_type,
+                         const SqlValueType &out_type,
                          const ObString &in_str,
                          ObDatum &res_datum);
 
@@ -423,8 +419,8 @@ int get_cast_ret_wrap(const ObCastMode &cast_mode, int ret, int &warning);
 // Perform datetime to string conversion, except for ob_datum_cast.cpp which needs to use it, some expressions also need to convert the result
 // From datetime to string, for example ObExprTimeStampAdd
 int common_datetime_string(const ObExpr &expr,
-                           const common::ObObjType in_type,
-                           const common::ObObjType out_type,
+                           const common::SqlValueType in_type,
+                           const common::SqlValueType out_type,
                            const common::ObScale in_scale,
                            const int64_t in_val, ObEvalCtx &ctx, char *buf,
                            int64_t buf_len, int64_t &out_len);
@@ -455,21 +451,10 @@ inline bool decimal_int_truncated_check(const ObDecimalInt *decint, const int32_
   return bret;
 #undef TRUNC_CHECK
 }
-// copied from ob_obj_cast.cpp, function logic has not been modified, only changed the input parameter from ObObj to ObDatum
+// Native Datum implementation of hexadecimal string decoding.
 class ObDatumHexUtils
 {
 public:
-static int hextoraw_string(const ObExpr &expr,
-                    const common::ObString &in_str,
-                    ObEvalCtx &ctx,
-                    ObDatum &res_datum,
-                    bool &has_set_res);
-static int get_uint(const common::ObObjType &in_type,
-                    const int8_t scale,
-                    const common::ObDatum &in,
-                    common::ObIAllocator &alloc, common::number::ObNumber &out);
-static int uint_to_raw(const common::number::ObNumber &uint_num, const ObExpr &expr,
-                           ObEvalCtx &ctx, ObDatum &res_datum);
 static int unhex(const ObExpr &expr,
                  const common::ObString &in_str,
                  ObEvalCtx &ctx,
@@ -486,49 +471,40 @@ static int hex(const ObExpr &expr,
 class ObDatumCast 
 {
 public:
-  static int get_implicit_cast_function(const common::ObObjType in_type,
+  static int get_implicit_cast_function(const common::SqlValueType in_type,
                                         const common::ObCollationType in_cs_type,
-                                        const common::ObObjType out_type,
+                                        const common::SqlValueType out_type,
                                         const common::ObCollationType out_cs_type,
                                         const int64_t cast_mode,
                                         ObExpr::EvalFunc &eval_func);
   // According to in_type/out_type etc. information, get cast func
-  static int choose_cast_function(const common::ObObjType in_type,
+  static int choose_cast_function(const common::SqlValueType in_type,
                                   const common::ObCollationType in_cs_type,
-                                  const common::ObObjType out_type,
+                                  const common::SqlValueType out_type,
                                   const common::ObCollationType out_cs_type,
                                   const int64_t cast_mode,
                                   common::ObIAllocator &allocator,
                                   bool &just_eval_arg,
                                   ObExpr &rt_expr);
-  static int get_enumset_cast_function(const common::ObObjTypeClass in_tc,
-                                       const common::ObObjType out_type,
+  static int get_enumset_cast_function(const common::SqlTypeClass in_tc,
+                                       const common::SqlValueType out_type,
                                        ObExpr::EvalEnumSetFunc &eval_func);
   // Check if the conversion is valid, some checks cannot be reflected in the conversion matrix
   // Example: string/text -> string/text when it is nonblob -> blob,
   // Requirement nonblob must be char/varchar type, this check cannot be reflected in the conversion matrix
   // These checks will be performed in this method
-  static int check_can_cast(const common::ObObjType in_type,
+  static int check_can_cast(const common::SqlValueType in_type,
                             const common::ObCollationType in_cs_type,
-                            const common::ObObjType out_type,
+                            const common::SqlValueType out_type,
                             const common::ObCollationType out_cs_type);
   // Some cast do nothing, for example int->bit, directly call cast_eval_arg() to calculate the value of the argument
   // CG phase will use this method to determine if result space does not need to be allocated for the cast expression, and can directly point to the result of the parameter instead
-  static int is_trivial_cast(const common::ObObjType in_type,
+  static int is_trivial_cast(const common::SqlValueType in_type,
                                 const common::ObCollationType in_cs_type,
-                                const common::ObObjType out_type,
+                                const common::SqlValueType out_type,
                                 const common::ObCollationType out_cs_type,
                                 const common::ObCastMode &cast_mode,
                                 bool &just_eval_arg);
-  // Function same as:
-  //    EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode)
-  //    EXPR_CAST_OBJ_V2(obj_type, obj, res_obj)
-  static int cast_obj(ObEvalCtx &ctx, common::ObIAllocator &alloc,
-                      const common::ObObjType &dst_type,
-                      common::ObAccuracy &dst_acc,
-                      const common::ObCollationType &dst_cs_type,
-                      const common::ObObj &src_obj,
-                      common::ObObj &dst_obj);
 
   static bool is_implicit_cast(const ObExpr &expr)
   {
@@ -584,7 +560,7 @@ public:
   static int align_decint_precision_unsafe(const ObDecimalInt *decint, const int32_t int_bytes,
                                            const int32_t expected_int_bytes,
                                            ObDecimalIntBuilder &res);
-  static void get_decint_cast(ObObjTypeClass in_tc, ObPrecision in_prec, ObScale in_scale,
+  static void get_decint_cast(SqlTypeClass in_tc, ObPrecision in_prec, ObScale in_scale,
                               ObPrecision out_prec, ObScale out_scale, bool is_explicit,
                               ObExpr::EvalBatchFunc &batch_cast_func, ObExpr::EvalFunc &cast_func);
 };
@@ -595,16 +571,40 @@ public:
     : inited_(false),
       eval_ctx_(NULL),
       cast_expr_(NULL),
-      extra_cast_expr_(NULL) {}
-  ~ObDatumCaster() {}
+      extra_cast_expr_(NULL), input_expr_(nullptr), column_expr_(nullptr), allocation_(nullptr), native_cast_active_(false) {}
+  ~ObDatumCaster() { destroy(); }
 
-  // init eval_ctx_/cast_expr_/extra_cast_expr_/frame. all mem comes from ObExecContext.
-  // frame layout:
-  // ObDatum | ObDatum | ObDynReserveBuf | res_buf | ObDynReserveBuf | res_buf
-  // res_buf_len is 128
-  int init(ObExecContext &ctx);
+  // Initialize two cast slots plus native input/column-check slots in one
+  // execution-owned allocation. Each slot has Datum/EvalInfo and a correctly
+  // aligned dynamic-buffer header followed by a 128-byte result buffer.
+  // Native-only casters do not capture replaceable SQL execution frames.
+  int init(ObExecContext &ctx, bool use_exec_frames = true);
 
-  // same with ObObjCaster::to_type().
+  // Native parameter conversion with the same column accuracy, collation and
+  // LOB checks used by expression execution. Result payload belongs to owner;
+  // it never borrows this caster's reusable frames or the source arena.
+  int to_column(const common::DatumParameter &source, const ObExprResType &type,
+                common::ObCastMode mode, common::ObIAllocator &owner,
+                common::DatumParameter &result,
+                const common::ObIArray<common::ObString> *type_infos = nullptr);
+
+  // Pure native cast: retain the caller's cast mode. This does not apply
+  // column-conversion rules, collation validation or accuracy checks.
+  int to_value(const common::DatumParameter &source, const ObExprResType &type,
+               common::ObCastMode mode, common::ObIAllocator &owner,
+               common::DatumParameter &result,
+               const common::ObIArray<common::ObString> *type_infos = nullptr);
+
+  // Check an already cast value, in the same order as default validation:
+  // strict character validation first, then the existing Datum accuracy path.
+  // No cast runs here and mode is never augmented with CM_COLUMN_CONVERT.
+  int check_accuracy_and_collation(const common::DatumParameter &source,
+               const common::ObAccuracy &accuracy, common::ObCollationType collation,
+               common::ObCastMode mode, bool strict_characters,
+               common::ObIAllocator &owner, common::DatumParameter &result,
+               int *warning = nullptr);
+
+  // Cast the source expression directly into a Datum of the destination type.
   // input is ObExpr, and output is ObDatum, it's better if input is also ObDatum.
   // we will do this later if necessary.
   // subschema id from sql udt type is a combination of (cs_type_ and cs_level_), 
@@ -625,6 +625,7 @@ public:
               int64_t batch_idx = 0);
 
   int destroy();
+  bool native_cast_active() const { return native_cast_active_; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDatumCaster);
 
@@ -641,26 +642,30 @@ private:
   ObEvalCtx *eval_ctx_;
   ObExpr *cast_expr_;
   ObExpr *extra_cast_expr_;
+  ObExpr *input_expr_;
+  ObExpr *column_expr_;
+  void *allocation_;
+  bool native_cast_active_;
 };
 
 struct ObBatchCast
 {
   using batch_func_ = int (*)(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                               const int64_t batch_size);
-  static batch_func_ get_explicit_cast_func(const ObObjTypeClass tc1, const ObObjTypeClass tc2);
+  static batch_func_ get_explicit_cast_func(const SqlTypeClass tc1, const SqlTypeClass tc2);
 
-  static batch_func_ get_implicit_cast_func(const ObObjTypeClass tc1, const ObObjTypeClass tc2);
+  static batch_func_ get_implicit_cast_func(const SqlTypeClass tc1, const SqlTypeClass tc2);
 
-  template <ObObjTypeClass in_tc, ObObjTypeClass out_tc>
+  template <SqlTypeClass in_tc, SqlTypeClass out_tc>
   static int explicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                  const int64_t batch_size);
 
-  template <ObObjTypeClass in_tc, ObObjTypeClass out_tc>
+  template <SqlTypeClass in_tc, SqlTypeClass out_tc>
   static int implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                  const int64_t batch_size);
 
 private:
-  template<ObObjTypeClass tc1, ObObjTypeClass tc2>
+  template<SqlTypeClass tc1, SqlTypeClass tc2>
   friend struct init_batch_func;
   static batch_func_ implicit_batch_funcs_[ObMaxTC][ObMaxTC];
   static batch_func_ explicit_batch_funcs_[ObMaxTC][ObMaxTC];

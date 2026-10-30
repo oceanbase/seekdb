@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_opt_stat_service.h"
@@ -256,10 +258,10 @@ int ObDbmsStatsHistoryManager::calssify_table_stat_part_ids(ObExecContext &ctx,
         ret = OB_ERR_UNEXPECTED;
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          ObObj tmp;
+          DatumValue tmp;
           int64_t idx = 0;
           int64_t partition_id = 0;
-          if (OB_FAIL(client_result->get_obj(idx, tmp))) {
+          if (OB_FAIL(client_result->get_value(idx, tmp))) {
           } else if (OB_FAIL(tmp.get_int(partition_id))) {
           } else if (OB_FAIL(have_stat_part_ids.push_back(partition_id))) {
           } else {/*do nothing*/}
@@ -458,14 +460,14 @@ int ObDbmsStatsHistoryManager::generate_having_stat_part_col_map(ObExecContext &
         ret = OB_ERR_UNEXPECTED;
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          ObObj tmp;
+          DatumValue tmp;
           int64_t idx1 = 0;
           int64_t idx2 = 1;
           int64_t partition_id = 0;
           int64_t column_id = 0;
-          if (OB_FAIL(client_result->get_obj(idx1, tmp))) {
+          if (OB_FAIL(client_result->get_value(idx1, tmp))) {
           } else if (OB_FAIL(tmp.get_int(partition_id))) {
-          } else if (OB_FAIL(client_result->get_obj(idx2, tmp))) {
+          } else if (OB_FAIL(client_result->get_value(idx2, tmp))) {
           } else if (OB_FAIL(tmp.get_int(column_id))) {
           } else {
             ObOptColumnStat::Key key(table_id, partition_id, static_cast<uint64_t>(column_id));
@@ -615,16 +617,16 @@ int ObDbmsStatsHistoryManager::backup_no_column_stats(ObMySQLTransaction &trans,
   int64_t total_cnt = partition_ids.count() * column_ids.count();
   if (having_stat_part_col_map.size() < total_cnt) {
     int64_t idx_part = 0;
-    ObObj null_obj;
+    DatumValue null_obj;
     null_obj.set_null();
     ObArenaAllocator allocator("OptStatsHistory", OB_MALLOC_NORMAL_BLOCK_SIZE);
-    ObObjPrintParams tmp_obj_print_params;
+    ObValuePrintParams tmp_obj_print_params;
     ObString null_str;
     ObSqlString null_sql_str;
     ObString b_null_str;
-    if (OB_FAIL(ObOptStatSqlService::get_obj_str(null_obj, allocator, null_str, tmp_obj_print_params))) {
+    if (OB_FAIL(ObOptStatSqlService::get_value_str(null_obj, allocator, null_str, tmp_obj_print_params))) {
     } else if (OB_FAIL(sql_append_hex_escape_str(null_str, null_sql_str))) {
-    } else if (OB_FAIL(ObOptStatSqlService::get_obj_binary_hex_str(null_obj, allocator, b_null_str))) {
+    } else if (OB_FAIL(ObOptStatSqlService::get_value_binary_hex_str(null_obj, allocator, b_null_str))) {
     } else {
       ObSqlString values_list;
       int64_t cur_cnt = 0;
@@ -737,7 +739,7 @@ int ObDbmsStatsHistoryManager::backup_histogram_stats(ObMySQLTransaction &trans,
 int ObDbmsStatsHistoryManager::purge_stats(ObExecContext &ctx, const int64_t specify_time)
 {
   int ret = OB_SUCCESS;
-  ObObj retention;
+  DatumValue retention;
   ObSQLSessionInfo *session = ctx.get_my_session();
   ObSqlString time_str;
   bool only_delete_one_batch = false;
@@ -843,7 +845,7 @@ int ObDbmsStatsHistoryManager::alter_stats_history_retention(ObExecContext &ctx,
 
 int ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ObExecContext &ctx,
                                                                             bool fetch_history_retention,
-                                                                            ObObj &result)
+                                                                            DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObSqlString raw_sql;
@@ -868,12 +870,12 @@ int ObDbmsStatsHistoryManager::get_stats_history_retention_and_availability(ObEx
       } else {
         bool is_first = true;
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          ObObj tmp;
+          DatumValue tmp;
           int64_t idx = 0;
           if (!is_first) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(client_result->get_obj(idx, tmp))) {
-          } else if (OB_FAIL(ob_write_obj(ctx.get_allocator(), tmp, result))) {
+          } else if (OB_FAIL(client_result->get_value(idx, tmp))) {
+          } else if (OB_FAIL(clone_typed_value(tmp, result, ctx.get_allocator()))) {
           } else {
             is_first = false;
           }
@@ -988,7 +990,7 @@ int ObDbmsStatsHistoryManager::fill_table_stat_history(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   int64_t int_value = 0;
-  ObObjMeta obj_type;
+  SqlTypeMeta obj_type;
   void *ptr = NULL;
   if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObOptTableStat)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1094,7 +1096,7 @@ int ObDbmsStatsHistoryManager::fill_column_stat_history(const ObTableStatParam &
     int64_t llc_bitmap_size = 0;
     int64_t bucket_cnt = 0;
     ObHistType histogram_type = ObHistType::INVALID_TYPE;
-    ObObjMeta obj_type;
+    SqlTypeMeta obj_type;
     ObHistogram &hist = col_stat->get_histogram();
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, partition_id, *col_stat, uint64_t);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, column_id, *col_stat, uint64_t);
@@ -1127,7 +1129,7 @@ int ObDbmsStatsHistoryManager::fill_column_stat_history(const ObTableStatParam &
       }
     }
     ObString hex_str;
-    common::ObObj obj;
+    DatumValue obj;
     if (OB_SUCC(ret)) {
       int64_t int_value = 0;
       if (OB_FAIL(result.get_timestamp("last_analyzed", NULL, int_value))) {
@@ -1137,18 +1139,18 @@ int ObDbmsStatsHistoryManager::fill_column_stat_history(const ObTableStatParam &
     }
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_min_value", hex_str);
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObOptStatSqlService::hex_str_to_obj(hex_str.ptr(), hex_str.length(),
+      if (OB_FAIL(ObOptStatSqlService::hex_str_to_value(hex_str.ptr(), hex_str.length(),
                                                       *param.allocator_, obj))) {
       } else {
-        col_stat->set_min_value(obj);
+        ret = col_stat->set_min_value(obj);
       }
     }
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_max_value", hex_str);
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObOptStatSqlService::hex_str_to_obj(hex_str.ptr(), hex_str.length(),
+      if (OB_FAIL(ObOptStatSqlService::hex_str_to_value(hex_str.ptr(), hex_str.length(),
                                                       *param.allocator_, obj))) {
       } else {
-        col_stat->set_max_value(obj);
+        ret = col_stat->set_max_value(obj);
       }
     }
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "distinct_cnt_synopsis", hex_str);
@@ -1243,9 +1245,9 @@ int ObDbmsStatsHistoryManager::fill_bucket_stat_histroy(ObIAllocator &allocator,
   EXTRACT_INT_FIELD_MYSQL(result, "endpoint_repeat_cnt", bkt.endpoint_repeat_count_, int64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObOptStatSqlService::hex_str_to_obj(str.ptr(), str.length(),
+    if (OB_FAIL(ObOptStatSqlService::hex_str_to_value(str.ptr(), str.length(),
                                                     allocator, bkt.endpoint_value_))) {
-    } else if (OB_FAIL(stat.get_histogram().add_bucket(bkt))) {
+    } else if (OB_FAIL(stat.get_histogram().add_bucket(bkt, allocator))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -1255,7 +1257,7 @@ int ObDbmsStatsHistoryManager::get_stats_history_retention(ObExecContext &ctx,
                                                            int64_t &retention_val)
 {
   int ret = OB_SUCCESS;
-  ObObj retention;
+  DatumValue retention;
   number::ObNumber num_retention;
   if (OB_FAIL(get_stats_history_retention_and_availability(ctx, true, retention))) {
   } else if (OB_FAIL(retention.get_number(num_retention))) {

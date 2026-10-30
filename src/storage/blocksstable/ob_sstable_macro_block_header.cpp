@@ -178,9 +178,9 @@ int ObSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64
     *fixed_header = fixed_header_;
     tmp_pos += get_fixed_header_size();
     if (buf + tmp_pos != reinterpret_cast<char *>(column_types_)) {
-      MEMCPY(buf + tmp_pos, column_types_, col_type_array_cnt * sizeof(ObObjMeta));
+      MEMCPY(buf + tmp_pos, column_types_, col_type_array_cnt * sizeof(SqlTypeMeta));
     }
-    tmp_pos += col_type_array_cnt * sizeof(ObObjMeta);
+    tmp_pos += col_type_array_cnt * sizeof(SqlTypeMeta);
     if (buf + tmp_pos != reinterpret_cast<char *>(column_orders_)) {
       MEMCPY(buf + tmp_pos, column_orders_, col_type_array_cnt * sizeof(ObOrderType));
     }
@@ -216,14 +216,14 @@ int ObSSTableMacroBlockHeader::deserialize(const char *buf, const int64_t data_l
     const int64_t col_type_array_cnt = fixed_header_.get_col_type_array_cnt();
     tmp_pos += get_fixed_header_size();
     const int64_t max_pos = pos + fixed_header->header_size_;
-    const int64_t obj_metas_size =  col_type_array_cnt * sizeof(ObObjMeta);
+    const int64_t obj_metas_size =  col_type_array_cnt * sizeof(SqlTypeMeta);
     const int64_t ord_types_size = col_type_array_cnt * sizeof(ObOrderType);
     const int64_t chksum_size = fixed_header->column_count_ * sizeof(int64_t);
     column_types_ = nullptr;
     column_orders_ = nullptr;
     column_checksum_ = nullptr;
     if (tmp_pos + obj_metas_size <= max_pos) {
-      column_types_ = reinterpret_cast<ObObjMeta *>(const_cast<char *>(buf + tmp_pos));
+      column_types_ = reinterpret_cast<SqlTypeMeta *>(const_cast<char *>(buf + tmp_pos));
     }
     tmp_pos += obj_metas_size;
 
@@ -263,14 +263,14 @@ int64_t ObSSTableMacroBlockHeader::get_variable_size_in_header(
     const int64_t column_cnt,
     const int64_t rowkey_col_cnt)
 {
-  return rowkey_col_cnt * sizeof(ObObjMeta) /* ObObjMeta */
+  return rowkey_col_cnt * sizeof(SqlTypeMeta) /* SqlTypeMeta */
        + rowkey_col_cnt * sizeof(ObOrderType) /* column orders */
        + column_cnt * sizeof(int64_t) /* column checksum */;
 }
 
 int ObSSTableMacroBlockHeader::init(
     const ObDataStoreDesc &desc,
-    common::ObObjMeta *col_types,
+    common::SqlTypeMeta *col_types,
     common::ObOrderType *col_orders,
     int64_t *col_checksum)
 {

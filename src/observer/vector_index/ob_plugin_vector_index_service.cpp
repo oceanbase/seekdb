@@ -1390,12 +1390,12 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
         while (OB_SUCC(ret) && OB_SUCC(result->next())) {
           const int64_t cid_col_idx = 0;
           const int64_t vec_col_idx = 1;
-          ObObj cid_obj;
-          ObObj vec_obj;
+          DatumValue cid_obj;
+          DatumValue vec_obj;
           ObString blob_data;
           uint64_t cid_prefix = 0;
-          if (OB_FAIL(result->get_obj(cid_col_idx, cid_obj))) {
-          } else if (OB_FAIL(result->get_obj(vec_col_idx, vec_obj))) {
+          if (OB_FAIL(result->get_value(cid_col_idx, cid_obj))) {
+          } else if (OB_FAIL(result->get_value(vec_col_idx, vec_obj))) {
           } else if (FALSE_IT(blob_data = vec_obj.get_string())) {
           } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(lob_read_options,
                                                                         &allocator,

@@ -27,6 +27,35 @@ namespace blocksstable
 {
 using namespace common;
 
+namespace
+{
+// The caller reserves scalar/NUMBER/DECIMAL storage in datum. Only string
+// payloads may borrow the ColumnParam, whose lifetime covers the scan. Normalize
+// flags from the persisted metadata instead of inheriting SQL LOB header flags.
+int copy_column_default_datum(const DatumValue &value, ObDatum &datum)
+{
+  int ret = OB_SUCCESS;
+  if (value.is_null() || value.get_meta().is_null()) {
+    datum.set_null();
+  } else if (value.is_invalid_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (value.datum_.len_ > 0 && OB_ISNULL(value.datum_.ptr_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (value.is_ext()) {
+    datum.datum2datum<OBJ_DATUM_EXTEND>(value.datum_);
+  } else {
+    ObDatum source = value.datum_;
+    source.pack_ = value.datum_.len_;
+    const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(value.get_type());
+    if (OBJ_DATUM_STRING == mapping && value.get_meta().is_outrow()) {
+      source.set_outrow();
+    }
+    ret = datum.from_storage_datum(source, mapping);
+  }
+  return ret;
+}
+} // namespace
+
 int ObNewColumnCommonDecoder::decode(
     const ObColumnParam *col_param, 
     common::ObIAllocator *allocator, 
@@ -34,8 +63,8 @@ int ObNewColumnCommonDecoder::decode(
 {
   int ret = OB_SUCCESS;
   // it is sure that col_param can not be nullptr here
-  const ObObj &def_cell = col_param->get_orig_default_value();
-  if (OB_FAIL(datum.from_obj(def_cell))) {
+  const DatumValue &def_cell = col_param->get_orig_default_value();
+  if (OB_FAIL(copy_column_default_datum(def_cell, datum))) {
   } else if (def_cell.is_lob_storage() && !def_cell.is_null()) {
     // lob def value must have no lob header when not null
     // When do lob decode, should add lob header for default value
@@ -118,7 +147,7 @@ int ObNewColumnCommonDecoder::read_distinct(
 {
   int ret = OB_SUCCESS;
   common::ObDatum *datums = group_by_cell.get_group_by_col_datums_to_fill();
-  if (OB_FAIL(datums[0].from_obj(col_param->get_orig_default_value(), ObDatum::get_obj_datum_map_type(col_param->get_orig_default_value().get_type())))) {
+  if (OB_FAIL(copy_column_default_datum(col_param->get_orig_default_value(), datums[0]))) {
   } else {
     group_by_cell.set_distinct_cnt(1);
   }

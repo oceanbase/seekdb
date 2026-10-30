@@ -33,27 +33,27 @@ public:
   // reads the value of the client_info field of the current session.
   // param format like following:
   //READ_CLIENT_INFO(CLIENT_INFO OUT VARCHAR2);
-  static int read_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int read_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 
   // reads the values of the module and action fields of the current session.
   // param format like following:
   //READ_MODULE(MODULE_NAME OUT VARCHAR2, ACTION_NAME OUT VARCHAR2);
-  static int read_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int read_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 
   // sets the name of the current action within the current module.
   // param format like following:
   //SET_ACTION(ACTION_NAME IN VARCHAR2);
-  static int set_action(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int set_action(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 
   // supplies additional information about the client application.
   // param format like following:
   //SET_CLIENT_INFO(CLIENT_INFO IN VARCHAR2);
-  static int set_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int set_client_info(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 
   // sets the name of the current application or module.
   // param format like following:
   //SET_MODULE(MODULE_NAME IN VARCHAR2, ACTION_NAME IN VARCHAR2);
-  static int set_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int set_module(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
 };
 
 } // end of pl

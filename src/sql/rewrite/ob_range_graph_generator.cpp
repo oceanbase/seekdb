@@ -1162,7 +1162,7 @@ int ObRangeGraphGenerator::generate_expr_final_info()
       ret = OB_ERR_UNEXPECTED;
     } else if (T_QUESTIONMARK == expr->get_expr_type()) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(expr);
-      const ObObj& val = const_expr->get_value();
+      const DatumValue &val = const_expr->get_value();
       if (OB_UNLIKELY(!val.is_unknown())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected value type", K(val));
@@ -1172,14 +1172,16 @@ int ObRangeGraphGenerator::generate_expr_final_info()
       }
     } else if (expr->has_flag(IS_CONST)) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(expr);
-      void *ptr = allocator_.alloc(sizeof(ObObj));
-      if (OB_ISNULL(ptr)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memeory for ObObj");
-      } else {
-        expr_info.const_val_ = new(ptr)ObObj();
+      void *ptr = allocator_.alloc(sizeof(ObDatum));
+      if (OB_ISNULL(ptr)) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else {
+        expr_info.const_val_ = new(ptr)ObDatum();
         expr_info.is_const_ = true;
-        if (OB_FAIL(ob_write_obj(allocator_, const_expr->get_value(), *expr_info.const_val_))) {
+        DatumValue owned;
+        if (OB_FAIL(clone_typed_value(const_expr->get_value(), owned, allocator_))) {
+        } else {
+          *expr_info.const_val_ = owned.datum_;
+          expr_info.const_meta_ = owned.meta_;
         }
       }
     } else if (OB_FAIL(ObStaticEngineExprCG::gen_expr_with_row_desc(

@@ -464,7 +464,7 @@ int ObSemiStructWhiteFilterNode::set_op_type(const ObRawExpr &raw_expr)
   return ObPushdownWhiteFilterNode::set_op_type(raw_expr);
 }
 
-int ObPushdownWhiteFilterNode::get_filter_val_meta(common::ObObjMeta &obj_meta) const
+int ObPushdownWhiteFilterNode::get_filter_val_meta(common::SqlTypeMeta &obj_meta) const
 {
   int ret = OB_SUCCESS;
   bool is_datum_column_found = false;
@@ -492,7 +492,7 @@ int ObPushdownWhiteFilterNode::get_filter_val_meta(common::ObObjMeta &obj_meta) 
   return ret;
 }
 
-int ObPushdownWhiteFilterNode::get_filter_in_val_meta(int64_t arg_idx, common::ObObjMeta &obj_meta) const
+int ObPushdownWhiteFilterNode::get_filter_in_val_meta(int64_t arg_idx, common::SqlTypeMeta &obj_meta) const
 {
   int ret = OB_SUCCESS;
   const ObExpr *expr = nullptr;
@@ -1325,11 +1325,11 @@ int ObPushdownFilterExecutor::init_filter_param(
         } else {
           blocksstable::ObStorageDatum default_datum;
           col_param = col_params.at(idx);
-          const common::ObObj &def_cell = col_param->get_orig_default_value();
-          const common::ObObjMeta &obj_meta = col_param->get_meta_type();
+          const common::DatumValue &def_cell = col_param->get_orig_default_value();
+          const common::SqlTypeMeta &obj_meta = col_param->get_meta_type();
           if (OB_FAIL(col_params_.push_back(col_param))) {
           } else if (!def_cell.is_nop_value()) {
-            if (OB_FAIL(default_datum.from_obj(def_cell))) {
+            if (OB_FAIL(default_datum.from_value(def_cell))) {
             } else if (!def_cell.is_null()) {
               if (need_padding && obj_meta.is_fixed_len_char_type()) {
                 if (OB_FAIL(data_plane::ObDatumReshape::pad_datum_value(
@@ -1868,8 +1868,8 @@ int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx &eval_ctx = op_.get_eval_ctx();
-  ObObjMeta col_obj_meta;
-  ObObjMeta param_obj_meta;
+  SqlTypeMeta col_obj_meta;
+  SqlTypeMeta param_obj_meta;
   bool is_ref_column_found = false;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
   } else if (OB_UNLIKELY(filter_.expr_->arg_cnt_ < 2)) {
@@ -1918,8 +1918,8 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx &eval_ctx = op_.get_eval_ctx();
-  ObObjMeta col_obj_meta;
-  ObObjMeta param_obj_meta;
+  SqlTypeMeta col_obj_meta;
+  SqlTypeMeta param_obj_meta;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
   } else if (OB_UNLIKELY(filter_.expr_->arg_cnt_ != 2)) {
     ret = OB_ERR_UNEXPECTED;

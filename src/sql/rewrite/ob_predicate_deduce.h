@@ -255,7 +255,7 @@ private:
   
   bool has_raw_const_equal_condition(int64_t param_idx);
 private:
-  ObObjMeta cmp_type_; // the compare meta used by all exprs in the graph
+  SqlTypeMeta cmp_type_; // the compare meta used by all exprs in the graph
   /// The expression corresponding to each node in the graph
   ObSEArray<ObRawExpr *, 4> input_exprs_;
   /// Construct the input predicate expression of the connected graph

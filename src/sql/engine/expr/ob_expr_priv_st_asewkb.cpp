@@ -47,7 +47,7 @@ int ObExprStPrivAsEwkb::calc_result_typeN(ObExprResType& type,
   type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongTextType]);
 
   if (1 == param_num) {
-    ObObjType data_type = types_stack[0].get_type();
+    SqlValueType data_type = types_stack[0].get_type();
     if (ob_is_geometry(data_type) || ob_is_null(data_type)) {
       // do nothing
     } else {

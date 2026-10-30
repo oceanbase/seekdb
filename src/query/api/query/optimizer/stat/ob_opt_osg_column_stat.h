@@ -51,12 +51,13 @@ struct ObMinMaxValEval {
     meta_.reset();
   }
   inline bool is_valid() const { return datum_ != NULL && cmp_func_ != NULL; }
-  int get_obj(ObObj &obj) const;
+  // Borrowed native view; publish_min_max_values copies into the statistic owner.
+  void get_value(DatumValue &value) const;
   int deep_copy(const ObMinMaxValEval &other, ObIAllocator &alloc);
 
   ValEvalType val_type_;
   ObDatum *datum_;
-  ObObjMeta meta_;
+  SqlTypeMeta meta_;
   ObDatumCmpFuncType cmp_func_;
   TO_STRING_KV(K_(val_type),
                K_(datum),
@@ -101,11 +102,9 @@ public:
   static ObOptOSGColumnStat* create_new_osg_col_stat(
       common::ObIAllocator &allocator,
       const ObDatumAccessContext *datum_access_ctx);
-  int get_min_obj(ObObj &obj);
-  int get_max_obj(ObObj &obj);
-  int set_min_max_datum_to_obj();
+  int publish_min_max_values();
   int merge_column_stat(const ObOptOSGColumnStat &other);
-  int update_column_stat_info(const ObDatum *datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int update_column_stat_info(const ObDatum *datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
 
   ObOptColumnStat *col_stat_;
   // members below is no need to serialize
@@ -120,10 +119,10 @@ public:
                K_(min_val),
                K_(max_val));
 private:
-  int inner_merge_min(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
-  int inner_merge_max(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
-  int inner_merge_min_max(const ObDatum &datum, const ObObjMeta &meta, const ObDatumCmpFuncType cmp_func);
-  int calc_col_len(const ObDatum &datum, const ObObjMeta &meta, int64_t &col_len);
+  int inner_merge_min(const ObDatum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int inner_merge_max(const ObDatum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int inner_merge_min_max(const ObDatum &datum, const SqlTypeMeta &meta, const ObDatumCmpFuncType cmp_func);
+  int calc_col_len(const ObDatum &datum, const SqlTypeMeta &meta, int64_t &col_len);
   DISALLOW_COPY_AND_ASSIGN(ObOptOSGColumnStat);
 };
 

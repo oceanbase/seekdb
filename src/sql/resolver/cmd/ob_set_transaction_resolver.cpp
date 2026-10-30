@@ -121,7 +121,7 @@ int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
 int ObSetTransactionResolver::build_isolation_expr(ObRawExpr *&expr, int32_t level)
 {
   int ret = OB_SUCCESS;
-  ObObjParam val;
+  DatumParameter val;
   ObConstRawExpr *c_expr = NULL;
   const ObString &level_name = ObTransIsolation::get_name(level);
   if (OB_ISNULL(params_.expr_factory_)) {
@@ -133,12 +133,12 @@ int ObSetTransactionResolver::build_isolation_expr(ObRawExpr *&expr, int32_t lev
   } else {
     // we use int type to represent isolation level, except for system variable tx_isolation,
     // which use varchar type, so we need cast int to varchar here.
-    val.set_varchar(level_name);
+    OZ (val.set_varchar(level_name, params_.expr_factory_->get_allocator()));
     val.set_collation_type(ObCharset::get_system_collation());
     val.set_param_meta();
-    c_expr->set_value(val);
+    OX (c_expr->set_value(val));
     c_expr->set_data_type(ObVarcharType);
-    expr = c_expr;
+    OX (expr = c_expr);
   }
   return ret;
 }
@@ -146,23 +146,19 @@ int ObSetTransactionResolver::build_isolation_expr(ObRawExpr *&expr, int32_t lev
 int ObSetTransactionResolver::build_access_expr(ObRawExpr *&expr, const bool is_read_only)
 {
   int ret = OB_SUCCESS;
-  ObObjParam val;
+  DatumParameter val;
   ObConstRawExpr *c_expr = NULL;
-  if (is_read_only) {
-    val.set_int(1);
-  } else {
-    val.set_int(0);
-  }
-  val.set_scale(0);
-  val.set_param_meta();
   if (OB_ISNULL(params_.expr_factory_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("invalid stmt", K_(stmt));
   } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_INT, c_expr))) {
   } else {
-    c_expr->set_value(val);
+    OZ (val.set_int(is_read_only ? 1 : 0, params_.expr_factory_->get_allocator()));
+    val.set_scale(0);
+    val.set_param_meta();
+    OX (c_expr->set_value(val));
     c_expr->set_data_type(ObIntType);
-    expr = c_expr;
+    OX (expr = c_expr);
   }
   return ret;
 }

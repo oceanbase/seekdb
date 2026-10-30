@@ -24,5 +24,5 @@ then
   libtool --mode=install cp $OCEANBASE_DIR/src/lib/compress/libzstd_1.3.8.la $LIB_DIR
   libtool --mode=install cp $OCEANBASE_DIR/src/observer/observer $BIN_DIR/
 fi
-rm -rf jar/*.jar
-wget "http://11.166.86.153:8877/mytest_latest.jar" -O jar/mytest.jar -o ./download.log
+echo "The legacy test harness is not bundled or downloaded by quick_copy.sh."
+echo "Set MYTEST_JAR to a compatible external harness when running ./mytest."

@@ -170,7 +170,7 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
 {
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
-  ObObjType type = expr.args_[0]->datum_meta_.type_;
+  SqlValueType type = expr.args_[0]->datum_meta_.type_;
   uint64_t orig_len = 0;
   bool not_final = false;
   if (OB_ISNULL(ctx.exec_ctx_.get_my_session())) {

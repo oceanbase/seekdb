@@ -59,7 +59,7 @@ int ObAllVirtualPsItemInfo::fill_cells(ObPsStmtId stmt_id,
                                        ObPsStmtInfo *stmt_info)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   int64_t col_count = output_column_ids_.count();
   if (OB_ISNULL(stmt_info)) {
     ret = OB_INVALID_ARGUMENT;
@@ -76,54 +76,53 @@ int ObAllVirtualPsItemInfo::fill_cells(ObPsStmtId stmt_id,
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::STMT_ID: {
-        cells[i].set_int(stmt_id);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_id) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::DB_ID: {
-        cells[i].set_int(stmt_info->get_sql_key().db_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_info->get_sql_key().db_id_) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::PS_SQL: {
         ObString ps_sql;
         if (OB_FAIL(ob_write_string(*allocator_, stmt_info->get_ps_sql(), ps_sql))) {
         } else {
-          cells[i].set_lob_value(ObLongTextType, ps_sql.ptr(),
-                                 static_cast<int32_t>(ps_sql.length()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, i, ObLongTextType, ObString(static_cast<int32_t>(ps_sql.length()), ps_sql.ptr())) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(
                                       ObCharset::get_default_charset()));
         }
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::PARAM_COUNT: {
-        cells[i].set_int(stmt_info->get_num_of_param());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_info->get_num_of_param()) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::STMT_ITEM_REF_COUNT: {
         if (OB_ISNULL(stmt_item)) {
-          cells[i].set_int(0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, 0) : ret);
         } else {
-          cells[i].set_int(stmt_item->get_ref_count());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_item->get_ref_count()) : ret);
         }
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::STMT_INFO_REF_COUNT: {
-        cells[i].set_int(stmt_info->get_ref_count());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_info->get_ref_count()) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::MEM_HOLD: {
-        cells[i].set_int(stmt_info->get_item_and_info_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_info->get_item_and_info_size()) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::STMT_TYPE: {
-        cells[i].set_int(stmt_info->get_stmt_type());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_info->get_stmt_type()) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::CHECKSUM: {
-        cells[i].set_int(stmt_info->get_ps_stmt_checksum());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, stmt_info->get_ps_stmt_checksum()) : ret);
         break;
       }
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::EXPIRED: {
-        cells[i].set_bool(stmt_info->is_expired());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cells, cur_row_.count_, i, stmt_info->is_expired()) : ret);
         break;
       }
       default: {

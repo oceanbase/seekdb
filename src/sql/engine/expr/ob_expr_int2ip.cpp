@@ -34,35 +34,6 @@ ObExprInt2ip::~ObExprInt2ip()
 }
 
 
-int ObExprInt2ip::int2ip(ObObj &result, const int64_t int_val, ObExprStringBuf &string_buf)
-{
-  int ret = OB_SUCCESS;
-  ObString str_result;
-  char *buf = static_cast<char *>(string_buf.alloc(16));
-  if (OB_ISNULL(buf)) {
-    result.set_null();
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc memory failed", K(ret));
-  } else {
-    if ((int_val >> 32) > 0 || int_val < 0) {
-      result.set_null();
-    } else {
-      in_addr addr;
-      addr.s_addr = htonl(static_cast<uint32_t>(int_val));
-      const char *iret = inet_ntop(AF_INET, &addr, buf, 16);
-      // Fixme : The problem with inet_ntop() is that it is available starting from Windows Vista,
-      // but the minimum supported version is Windows 2000.
-      if (OB_ISNULL(iret)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("fail to inet_ntop", K(ret), K(int_val), K(addr.s_addr));
-      } else {
-        str_result.assign_ptr(buf, static_cast<ObString::obstr_size_t>(strlen(buf)));
-        result.set_varchar(str_result);
-      }
-    }
-  }
-  return ret;
-}
 
 int ObExprInt2ip::int2ip(ObDatum &result, const int64_t int_val)
 {

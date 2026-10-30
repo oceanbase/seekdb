@@ -17,6 +17,10 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_topk_hist_estimator.h"
 #include "lib/alloc/alloc_func.h"
+#include "sql/executor/ob_execute_result.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "share/datum/typed_datum_compare.h"
+#include "share/datum/typed_datum_murmur.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 
 namespace oceanbase
@@ -59,7 +63,7 @@ struct CopyableComparer
 };
 
 //sort and reserve topk sort
-int ObTopKFrequencyHistograms::create_topk_fre_items(const ObObjMeta *obj_meta/*default null*/)
+int ObTopKFrequencyHistograms::create_topk_fre_items(const SqlTypeMeta *obj_meta/*default null*/)
 {
   int ret = OB_SUCCESS;
   topk_fre_items_.set_allocator(&topk_buf_);
@@ -72,6 +76,7 @@ int ObTopKFrequencyHistograms::create_topk_fre_items(const ObObjMeta *obj_meta/*
         ret = OB_ERR_UNEXPECTED;
       } else {
         topk_fre_items_.at(i) = *topk_item;
+        ret = clone_typed_value(topk_item->col_obj_, topk_fre_items_.at(i).col_obj_, topk_buf_);
       }
     } else {
       ObTopkDatumItem *datum_item = NULL;
@@ -79,10 +84,15 @@ int ObTopKFrequencyHistograms::create_topk_fre_items(const ObObjMeta *obj_meta/*
           OB_ISNULL(datum_item->datum_) ||
           OB_ISNULL(obj_meta)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(datum_item->datum_->to_obj(topk_fre_items_.at(i).col_obj_, *obj_meta))) {
       } else {
-        topk_fre_items_.at(i).fre_times_ = datum_item->fre_times_;
-        topk_fre_items_.at(i).delta_ = datum_item->delta_;
+        DatumValue view;
+        if (OB_FAIL(sql::ResultRowView::project_value(*datum_item->datum_, *obj_meta,
+                ObDatum::get_sql_value_datum_map_type(obj_meta->get_type()), SqlTypeMeta(), view, true))) {
+        } else if (OB_FAIL(clone_typed_value(view, topk_fre_items_.at(i).col_obj_, topk_buf_))) {
+        } else {
+          topk_fre_items_.at(i).fre_times_ = datum_item->fre_times_;
+          topk_fre_items_.at(i).delta_ = datum_item->delta_;
+        }
       }
     }
   }
@@ -121,13 +131,13 @@ void ObTopKFrequencyHistograms::reset_memory_usage()
   obj_buf2_.reset();
 }
 
-int ObTopKFrequencyHistograms::merge_distribute_top_k_fre_items(const ObObj &obj)
+int ObTopKFrequencyHistograms::merge_distribute_top_k_fre_items(const DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   ObTopKFrequencyHistograms topk_hist;
   if (obj.is_null() || by_pass_) {
     //do nothing
-  } else if (OB_UNLIKELY(!obj.is_lob())) {
+  } else if (OB_UNLIKELY(!obj.get_meta().is_lob())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(window_size_ <= 0 ||
                          item_size_ <= 0 ||
@@ -156,7 +166,7 @@ int ObTopKFrequencyHistograms::merge_distribute_top_k_fre_items(const ObObj &obj
       ObTopkBaseItem *item = NULL;
       uint64_t obj_hash = 0;
       uint64_t seed = 0;
-      if (OB_FAIL(topk_fre_items.at(i).col_obj_.hash_murmur(obj_hash, seed))) {
+      if (OB_FAIL(hash_datum_value_murmur(topk_fre_items.at(i).col_obj_, seed, obj_hash))) {
       } else if (NULL != (item = get_entry(obj_hash))) {
         item->fre_times_ += cur_item.fre_times_;
         item->delta_ += cur_item.delta_;
@@ -264,7 +274,7 @@ int ObTopKFrequencyHistograms::add_batch_items(const char **payloads, int32_t *l
   return ret;
 }
 
-int ObTopKFrequencyHistograms::add_top_k_frequency_item(const ObObj &obj, int64_t repeat_cnt)
+int ObTopKFrequencyHistograms::add_top_k_frequency_item(const DatumValue &obj, int64_t repeat_cnt)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(window_size_ <= 0 ||
@@ -285,7 +295,7 @@ int ObTopKFrequencyHistograms::add_top_k_frequency_item(const ObObj &obj, int64_
         ObTopkBaseItem *item = NULL;
         uint64_t obj_hash = 0;
         uint64_t seed = 0;
-        if (OB_FAIL(obj.hash_murmur(obj_hash, seed))) {
+        if (OB_FAIL(hash_datum_value_murmur(obj, seed, obj_hash))) {
         } else if (NULL != (item = get_entry(obj_hash))) {
           item->fre_times_ += repeat_cnt;
         } else if (OB_FAIL(add_entry(obj_hash, obj, repeat_cnt, bucket_num_ - 1))) {
@@ -338,7 +348,7 @@ int ObTopKFrequencyHistograms::add_entry(const uint64_t &datum_hash,
 }
 
 int ObTopKFrequencyHistograms::add_entry(const uint64_t &obj_hash,
-                                         const ObObj &obj,
+                                         const DatumValue &obj,
                                          const int64_t fre_time,
                                          const int64_t delta)
 {
@@ -350,7 +360,7 @@ int ObTopKFrequencyHistograms::add_entry(const uint64_t &obj_hash,
     item->fre_times_ = fre_time;
     item->delta_ = delta;
     item->obj_hash_ = obj_hash;
-    if (OB_FAIL(ob_write_obj(get_allocator(), obj, item->col_obj_))) {
+    if (OB_FAIL(clone_typed_value(obj, item->col_obj_, get_allocator()))) {
     } else if (OB_FAIL(topk_map_.set_refactored(obj_hash, reinterpret_cast<uint64_t>(item)))) {
     } else if (OB_FAIL(used_list_.push_back(item))) {
     }
@@ -512,6 +522,17 @@ int ObTopKFrequencyHistograms::shrink_memory_usage()
   int ret = OB_SUCCESS;
   ObIAllocator &next_allocator = get_next_allocator();
   ObIAllocator &curr_allocator = get_allocator();
+  ObSEArray<DatumValue, 16> candidates;
+  if (is_need_merge_topk_hist()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
+      ObTopkItem *item = static_cast<ObTopkItem *>(used_list_.at(i));
+      DatumValue owned;
+      if (item == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else if (OB_FAIL(clone_typed_value(item->col_obj_, owned, next_allocator))) {}
+      else if (OB_FAIL(candidates.push_back(owned))) {}
+    }
+    if (OB_FAIL(ret)) { return ret; }
+  }
   topk_map_.reuse();
   LOG_TRACE("begine to shrink memory usage", K(obj_memory_limit_), K(curr_allocator.used()));
   for (int64_t i = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
@@ -521,9 +542,6 @@ int ObTopKFrequencyHistograms::shrink_memory_usage()
       ObTopkItem *topk_item = NULL;
       if (OB_ISNULL(topk_item = static_cast<ObTopkItem *>(used_list_.at(i)))) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ob_write_obj(next_allocator,
-                                      topk_item->col_obj_,
-                                      topk_item->col_obj_))) {
       } else if (OB_FAIL(topk_map_.set_refactored(topk_item->obj_hash_,
                                                   reinterpret_cast<uint64_t>(topk_item)))) {
       }
@@ -542,24 +560,26 @@ int ObTopKFrequencyHistograms::shrink_memory_usage()
     }
   }
   if (OB_SUCC(ret)) {
+    if (is_need_merge_topk_hist()) {
+      for (int64_t i = 0; i < used_list_.count(); ++i) {
+        static_cast<ObTopkItem *>(used_list_.at(i))->col_obj_ = candidates.at(i);
+      }
+    }
     curr_allocator.reset();
     swap_allocator();
   }
   return ret;
 }
 
-int ObTopKFrequencyHistograms::read_result(const ObObj &result_obj)
+int ObTopKFrequencyHistograms::read_result(const DatumValue &result_value)
 {
   int ret = OB_SUCCESS;
-  ObString result_str;
+  ObString result;
   int64_t pos = 0;
-  if (result_obj.is_null()) {
-    // do nothing
-  } else if (OB_UNLIKELY(!result_obj.is_lob())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(result_obj.get_string(result_str))) {
-  } else if (OB_FAIL(deserialize(result_str.ptr(), result_str.length(), pos))) {
-  }
+  if (result_value.is_null()) {}
+  else if (!result_value.get_meta().is_lob()) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(result_value.get_string(result))) {}
+  else { ret = deserialize(result.ptr(), result.length(), pos); }
   return ret;
 }
 
@@ -571,7 +591,8 @@ OB_DEF_SERIALIZE(ObTopKFrequencyHistograms)
   OB_UNIS_ENCODE(items_count);
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     const ObTopkItem &top_k_fre_item = topk_fre_items_.at(i);
-    OB_UNIS_ENCODE(top_k_fre_item.col_obj_);
+    if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(top_k_fre_item.col_obj_.datum_,
+        top_k_fre_item.col_obj_.meta_, buf, buf_len, pos); }
     OB_UNIS_ENCODE(top_k_fre_item.fre_times_);
     OB_UNIS_ENCODE(top_k_fre_item.delta_);
   }
@@ -588,7 +609,9 @@ OB_DEF_SERIALIZE_SIZE(ObTopKFrequencyHistograms)
   OB_UNIS_ADD_LEN(items_count);
   for (int64_t i = 0; i < topk_fre_items_.count(); ++i) {
     const ObTopkItem &top_k_fre_item = topk_fre_items_.at(i);
-    OB_UNIS_ADD_LEN(top_k_fre_item.col_obj_);
+    int64_t value_size = 0;
+    if (DatumParameterCodec::value_size(top_k_fre_item.col_obj_.datum_, top_k_fre_item.col_obj_.meta_, value_size) != OB_SUCCESS) { return 0; }
+    len += value_size;
     OB_UNIS_ADD_LEN(top_k_fre_item.fre_times_);
     OB_UNIS_ADD_LEN(top_k_fre_item.delta_);
   }
@@ -608,10 +631,13 @@ OB_DEF_DESERIALIZE(ObTopKFrequencyHistograms)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     ObTopkItem top_k_fre_item;
-    OB_UNIS_DECODE(top_k_fre_item.col_obj_);
+    if (OB_SUCC(ret) && pos < data_len) {
+      ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, topk_buf_,
+          top_k_fre_item.col_obj_.datum_, top_k_fre_item.col_obj_.meta_);
+    }
     OB_UNIS_DECODE(top_k_fre_item.fre_times_);
     OB_UNIS_DECODE(top_k_fre_item.delta_);
-    if (OB_FAIL(topk_fre_items_.push_back(top_k_fre_item))) {
+    if (OB_SUCC(ret) && OB_FAIL(topk_fre_items_.push_back(top_k_fre_item))) {
     }
   }
   OB_UNIS_DECODE(by_pass_);

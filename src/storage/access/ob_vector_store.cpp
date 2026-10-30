@@ -119,13 +119,13 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
         } else if (out_cols_projector.at(i) >= out_cols_param->count()) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const common::ObObjMeta &obj_meta = out_cols_param->at(out_cols_projector.at(i))->get_meta_type();
+          const common::SqlTypeMeta &obj_meta = out_cols_param->at(out_cols_projector.at(i))->get_meta_type();
           col_param = out_cols_param->at(out_cols_projector.at(i));
-          ObObj def_cell(out_cols_param->at(out_cols_projector.at(i))->get_orig_default_value());
+          const common::DatumValue &def_cell = col_param->get_orig_default_value();
           blocksstable::ObStorageDatum default_datum;
           if (def_cell.is_nop_value()) {
             default_datum.set_nop();
-          } else if (OB_FAIL(default_datum.from_obj(def_cell, expr->obj_datum_map_))) {
+          } else if (OB_FAIL(default_datum.from_value(def_cell))) {
           } else if (obj_meta.is_lob_storage() && !def_cell.is_null()) {
             // lob def value must have no lob header when not null
             // When do lob pushdown, should add lob header for default value

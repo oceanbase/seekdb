@@ -16,7 +16,7 @@ Item_result item_cmp_type(Item_result a,Item_result b)
 }
 */
 
-static constexpr ObObjType RELATIONAL_CMP_TYPE[ObMaxType][ObMaxType] =
+static constexpr SqlValueType RELATIONAL_CMP_TYPE[ObMaxType][ObMaxType] =
 {
   /*NullType*/
   {

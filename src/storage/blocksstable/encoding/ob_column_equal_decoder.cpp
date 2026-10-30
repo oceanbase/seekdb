@@ -48,8 +48,8 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
     if (!has_exc(ctx)) {
       ref = -1;
     } else {
-      const ObObjType store_type = ctx.col_header_->get_store_obj_type();
-      const ObObjTypeClass tc = ob_obj_type_class(store_type);
+      const SqlValueType store_type = ctx.col_header_->get_store_obj_type();
+      const SqlTypeClass tc = sql_type_class(store_type);
       switch (get_store_class_map()[tc]) {
         case ObUIntSC:
         case ObIntSC: {

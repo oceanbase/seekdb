@@ -23,7 +23,7 @@ namespace common
 {
 class ObIAllocator;
 class ObILobReadService;
-class ObObj;
+struct DatumValue;
 }
 namespace sql
 {
@@ -32,7 +32,7 @@ class ObSQLSessionInfo;
 
 // Materializes a protocol-facing LOB value without exposing Observer's query
 // driver to PL. The implementation remains inside SQL's expression runtime.
-int materialize_lob_result(common::ObObj &value,
+int materialize_lob_result(common::DatumValue &value,
                            common::ObIAllocator *allocator,
                            const ObSQLSessionInfo &session_info,
                            common::ObILobReadService *lob_read_service);

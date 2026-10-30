@@ -18,6 +18,7 @@
 
 #include "query/das/ob_das_iter_access.h"
 #include "ob_spiv_dim_iter.h"
+#include "common/datum/datum_value_projection.h"
 
 namespace oceanbase
 {
@@ -90,6 +91,7 @@ void ObSPIVDaaTDimIter::reset()
   if (OB_NOT_NULL(inv_idx_agg_iter_)) {
     query::das_scan_reset(inv_idx_agg_iter_);
   }
+  advance_doc_id_.reset();
 }
 
 void ObSPIVDaaTDimIter::reuse()
@@ -163,18 +165,21 @@ int ObSPIVDaaTDimIter::update_scan_param(const ObDatum &id_datum)
   } else {
     ObRowkey start_rowkey = inv_idx_scan_param_->key_ranges_.at(0).start_key_;
     ObRowkey end_rowkey = inv_idx_scan_param_->key_ranges_.at(0).end_key_;
-    if (start_rowkey.get_obj_ptr()[0].get_uint32() != end_rowkey.get_obj_ptr()[0].get_uint32()) {
+    if (static_cast<uint32_t>(start_rowkey.get_cell(0).get_uint64()) != static_cast<uint32_t>(end_rowkey.get_cell(0).get_uint64())) {
       ret = OB_ERR_UNEXPECTED;
     }
-    // ob_ptr[0] is dim, ob_ptr[1] is docid
-    ObObj *obj_ptr = start_rowkey.get_obj_ptr();
+    // values[0] is dim, values[1] is docid.
+    DatumValue *values = start_rowkey.get_values();
     ObNewRange scan_range;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(id_datum.to_obj(obj_ptr[1], inv_scan_domain_id_expr_->obj_meta_))) {
+    } else if (OB_FAIL(project_datum_value_view(id_datum,
+                    inv_scan_domain_id_expr_->obj_meta_,
+                    ObDatum::get_sql_value_datum_map_type(inv_scan_domain_id_expr_->obj_meta_.get_type()),
+                    values[1].meta_, values[1], true))) {
     } else {
       scan_range.table_id_ = inv_idx_scan_param_->key_ranges_.at(0).table_id_;
-      scan_range.start_key_.assign(obj_ptr, INV_IDX_ROWKEY_COL_CNT);
-      scan_range.end_key_.assign(end_rowkey.get_obj_ptr(), INV_IDX_ROWKEY_COL_CNT);
+      scan_range.start_key_.assign(values, INV_IDX_ROWKEY_COL_CNT);
+      scan_range.end_key_.assign(end_rowkey.get_values(), INV_IDX_ROWKEY_COL_CNT);
       scan_range.border_flag_.set_inclusive_start();
       scan_range.border_flag_.set_inclusive_end();
     }
@@ -194,20 +199,25 @@ int ObSPIVDaaTDimIter::advance_to(const ObDatum &id_datum)
   int ret = OB_SUCCESS;
   int result = 0;
   bool find = false;
-
   if (cur_idx_ < 0) {
-    ret = OB_ERR_UNEXPECTED;
+    return OB_ERR_UNEXPECTED;
   }
+  // The caller's datum can belong to an expression frame reused by the scan.
+  // Keep all comparisons and the new range on the iterator-owned copy.
+  if (OB_FAIL(advance_doc_id_.from_datum(id_datum))) {
+    return ret;
+  }
+  const ObDatum &advance_id = advance_doc_id_.get_datum();
   while (OB_SUCC(ret) && !find) {
     if (cur_idx_ < count_) {
       if (OB_FAIL(cmp_func_(
-              id_datum, doc_ids_[cur_idx_].get_datum(), result, nullptr))) {
+              advance_id, doc_ids_[cur_idx_].get_datum(), result, nullptr))) {
       } else if (result <= 0) {
         find = true;
       } else {
         ++cur_idx_;
       }
-    } else if (OB_FAIL(update_scan_param(id_datum))) {
+    } else if (OB_FAIL(update_scan_param(advance_id))) {
     } else if (OB_FAIL(get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
       } else {
@@ -216,7 +226,7 @@ int ObSPIVDaaTDimIter::advance_to(const ObDatum &id_datum)
     } else if (cur_idx_ != 0) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(cmp_func_(
-                   id_datum, doc_ids_[cur_idx_].get_datum(), result, nullptr))) {
+                   advance_id, doc_ids_[cur_idx_].get_datum(), result, nullptr))) {
     } else if (result <= 0) {
       find = true;
     } else {

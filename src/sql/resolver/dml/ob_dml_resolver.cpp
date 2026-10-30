@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "rust/config.h"
 #include "ob_dml_resolver.h"
+#include "share/datum/datum_ndv_hash.h"
 #include "sql/resolver/dml/ob_view_table_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_default_value_utils.h"
@@ -41,6 +42,9 @@
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/hybrid_search/ob_hybrid_search_executor.h"
+
+#include "share/datum/datum_cast_support.h"
+#include "share/sql_udt_support.h"
 
 namespace oceanbase
 {
@@ -1308,7 +1312,7 @@ int ObDMLResolver::generate_pl_data_type(ObRawExpr *expr, pl::ObPLDataType &pl_d
         type.set_meta_type(final_type.get_data_type()->get_meta_type());
         type.set_accuracy(final_type.get_data_type()->get_accuracy());
       } else {
-        type.set_meta_type(expr->get_result_type().get_obj_meta());
+        type.set_meta_type(expr->get_result_type().get_sql_type_meta());
         type.set_accuracy(expr->get_result_type().get_accuracy());
       }
       OX (pl_data_type.set_data_type(type));
@@ -1552,24 +1556,21 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
             if (OB_SUCC(ret) && !skip_comp) {
               if (value_expr->get_data_type() != ObExtendType && into_pl_type.is_obj_type()) {
                 CK (OB_NOT_NULL(into_pl_type.get_data_type()));
-                OX (is_compatible = cast_supported(value_expr->get_data_type(),
-                                                  value_expr->get_collation_type(),
-                                                  into_pl_type.get_data_type()->get_obj_type(),
-                                                  into_pl_type.get_data_type()->get_collation_type()));
+                OX (is_compatible = datum_cast_supported(
+                    sql_type_class(value_expr->get_data_type()),
+                    sql_type_class(into_pl_type.get_data_type()->get_obj_type())));
               } else if (value_expr->get_data_type() == ObGeometryType && into_pl_type.is_record_type()) {
-                OX (is_compatible = cast_supported(value_expr->get_data_type(),
-                                                   value_expr->get_collation_type(),
-                                                   ObExtendType, CS_TYPE_BINARY));
+                OX (is_compatible = datum_cast_supported(
+                    sql_type_class(value_expr->get_data_type()), sql_type_class(ObExtendType)));
               } else if (value_expr->get_data_type() == ObUserDefinedSQLType) {
                 // sql udt to pl extend
                 uint16_t subschema_id = value_expr->get_subschema_id();
                 ObSqlUDTMeta udt_meta;
                 if (OB_FAIL(session_info_->get_cur_exec_ctx()->get_sqludt_meta_by_subschema_id(subschema_id, udt_meta))) {
-                } else if (!ObObjUDTUtil::ob_is_supported_sql_udt(udt_meta.udt_id_)) {
+                } else if (!is_supported_sql_udt(udt_meta.udt_id_)) {
                 }
-                OX (is_compatible = cast_supported(value_expr->get_data_type(),
-                                                   value_expr->get_collation_type(),
-                                                   ObExtendType, CS_TYPE_BINARY));
+                OX (is_compatible = datum_cast_supported(
+                    sql_type_class(value_expr->get_data_type()), sql_type_class(ObExtendType)));
               } else if (value_expr->get_data_type() == ObExtendType &&
                         (!into_pl_type.is_obj_type() ||
                          (into_pl_type.get_data_type() != NULL && into_pl_type.get_data_type()->get_meta_type().is_ext()))) {
@@ -1685,28 +1686,25 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
             if (OB_SUCC(ret) && !skip_comp) {
               if (value_expr->get_data_type() != ObExtendType && into_pl_type.is_obj_type()) {
                 CK (OB_NOT_NULL(into_pl_type.get_data_type()));
-                OX (is_compatible = cast_supported(value_expr->get_data_type(),
-                                                  value_expr->get_collation_type(),
-                                                  into_pl_type.get_data_type()->get_obj_type(),
-                                                  into_pl_type.get_data_type()->get_collation_type()));
+                OX (is_compatible = datum_cast_supported(
+                    sql_type_class(value_expr->get_data_type()),
+                    sql_type_class(into_pl_type.get_data_type()->get_obj_type())));
               } else if ((value_expr->get_data_type() == ObUserDefinedSQLType && into_pl_type.is_opaque_type()) ||
                          (value_expr->get_data_type() == ObGeometryType && into_pl_type.is_record_type())) {
                 // xml/gis to pl extend, dest collation type is not used
-                OX (is_compatible = cast_supported(value_expr->get_data_type(),
-                                                   value_expr->get_collation_type(),
-                                                   ObExtendType, CS_TYPE_BINARY));
+                OX (is_compatible = datum_cast_supported(
+                    sql_type_class(value_expr->get_data_type()), sql_type_class(ObExtendType)));
               } else if (value_expr->get_data_type() == ObUserDefinedSQLType) {
                 // sql udt to pl extend
                 uint16_t subschema_id = value_expr->get_subschema_id();
                 ObSqlUDTMeta udt_meta;
                 if (OB_FAIL(session_info_->get_cur_exec_ctx()->get_sqludt_meta_by_subschema_id(subschema_id, udt_meta))) {
-                } else if (!ObObjUDTUtil::ob_is_supported_sql_udt(udt_meta.udt_id_)) {
+                } else if (!is_supported_sql_udt(udt_meta.udt_id_)) {
                 } else if (into_pl_type.is_udt_type() && into_pl_type.get_user_type_id() != udt_meta.udt_id_) {
                   is_compatible = false;
                 } else {
-                  is_compatible = cast_supported(value_expr->get_data_type(),
-                                                  value_expr->get_collation_type(),
-                                                  ObExtendType, CS_TYPE_BINARY);
+                  is_compatible = datum_cast_supported(
+                      sql_type_class(value_expr->get_data_type()), sql_type_class(ObExtendType));
                 }
               } else if (value_expr->get_data_type() == ObExtendType &&
                         (!into_pl_type.is_obj_type() ||
@@ -1907,9 +1905,9 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       col_expr->set_lob_column(is_lob_column);
       column_item.expr_ = col_expr;
       if (session_info_->get_ddl_info().is_ddl()) {
-        column_item.set_default_value(col_schema->get_orig_default_value());
+        ret = column_item.set_default_value(col_schema->get_orig_default_value());
       } else {
-        column_item.set_default_value(col_schema->get_cur_default_value());
+        ret = column_item.set_default_value(col_schema->get_cur_default_value());
       }
     }
     if (OB_SUCC(ret)) {
@@ -1919,8 +1917,9 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       if (ObDomainIdUtils::is_domain_id_index_col(col_schema)
           && OB_FAIL(check_domain_id_need_column_ref_expr(*stmt, schema_guard, domain_id_need_column_ref_expr, col_schema))) {
       } else if (col_schema->is_generated_column()) {
-        column_item.set_default_value(ObObj()); // set null to generated default value
-        if (OB_FAIL(col_schema->get_cur_default_value().get_string(col_def))) {
+        // Generated columns have no implicit value, and NULL needs no bytes.
+        if (OB_FAIL(column_item.set_default_value(DatumValue()))) {
+        } else if (OB_FAIL(col_schema->get_cur_default_value().get_string(col_def))) {
         } else if (OB_FAIL(ObSQLUtils::convert_sql_text_from_schema_for_resolve(*allocator_,
                                               session_info_->get_dtc_params(), col_def))) {
         } else if (OB_FAIL(resolve_generated_column_expr(col_def, table_item, col_schema,
@@ -3449,7 +3448,7 @@ int ObDMLResolver::resolve_generate_table_item(ObSelectStmt *ref_query,
 int ObDMLResolver::resolve_str_const(const ParseNode &parse_tree, ObString& path_str)
 {
   INIT_SUCC(ret);
-  ObObjParam val;
+  DatumParameter val;
   char *buf = NULL;
   ObString literal_prefix;
   bool is_paramlize = false;
@@ -3738,8 +3737,10 @@ int ObDMLResolver::resolve_hybrid_search_item(const ParseNode &parse_tree, Table
     bool has_enable_param = false;
     global_hint.opt_params_.has_enable_opt_param(ObOptParamHint::OptParamType::HIDDEN_COLUMN_VISIBLE, has_enable_param);
     if (!has_enable_param) {
-      ObObj true_val;
-      true_val.set_varchar("true");
+      DatumValue true_val;
+      true_val.datum_.set_string("true", 4);
+      true_val.meta_.set_varchar();
+      true_val.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       if (OB_FAIL(global_hint.opt_params_.add_opt_param_hint(ObOptParamHint::OptParamType::HIDDEN_COLUMN_VISIBLE, true_val))) {
       }
     }
@@ -5804,7 +5805,7 @@ int ObDMLResolver::build_padding_expr(const ObSQLMode sql_mode,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(column_schema) || OB_ISNULL(expr) || OB_ISNULL(params_.expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (ObObjMeta::is_binary(column_schema->get_data_type(), column_schema->get_collation_type())) {
+  } else if (SqlTypeMeta::is_binary(column_schema->get_data_type(), column_schema->get_collation_type())) {
     if (OB_FAIL(ObRawExprUtils::build_pad_expr(*params_.expr_factory_,
                                                false,
                                                column_schema,
@@ -6041,9 +6042,10 @@ int ObDMLResolver::add_additional_function_according_to_type(const ColumnItem *c
           } else {
             ObGeoType geo_type = raw_expr->get_geo_type();
             ObConstRawExpr *type_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(0));
-            ObObj obj;
-            obj.set_int(ObInt32Type, static_cast<uint32_t>(geo_type) << 16 | ObGeometryType);
-            type_expr->set_value(obj);
+            DatumValue obj;
+            OZ (obj.set_int(ObInt32Type, static_cast<uint32_t>(geo_type) << 16 | ObGeometryType,
+                           params_.expr_factory_->get_allocator()));
+            OX (type_expr->set_value(obj));
           }
         }
       }
@@ -6376,7 +6378,7 @@ int ObDMLResolver::find_const_params_for_gen_column(const ObRawExpr &expr)
 
             const ObConstRawExpr *c_expr = dynamic_cast<const ObConstRawExpr *>(param_expr.expr_);
             CK( OB_NOT_NULL(c_expr) );
-            OC( (const_param_info.const_params_.push_back)(c_expr->get_value()) );
+            if (OB_SUCC(ret)) { ret = const_param_info.add_constant(c_expr->get_value(), *params_.allocator_); }
           }
         }
         OC( (params_.query_ctx_->all_possible_const_param_constraints_.push_back)(const_param_info) );
@@ -6715,7 +6717,7 @@ int ObDMLResolver::check_json_table_column_constrain(ObDmlJtColDef *col_def)
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObDataType &data_type = col_def->col_base_info_.data_type_;
-    ObObjType obj_type = data_type.get_obj_type();
+    SqlValueType obj_type = data_type.get_obj_type();
     if (obj_type != ObVarcharType && col_def->col_base_info_.truncate_) {
       ret = OB_ERR_UNSUPPORT_TRUNCATE_TYPE;
       LOG_USER_ERROR(OB_ERR_UNSUPPORT_TRUNCATE_TYPE);
@@ -6725,7 +6727,7 @@ int ObDMLResolver::check_json_table_column_constrain(ObDmlJtColDef *col_def)
 }
 
 int ObDMLResolver::resolve_function_table_column_item(const TableItem &table_item,
-                                                      const common::ObObjMeta &meta_type,
+                                                      const common::SqlTypeMeta &meta_type,
                                                       const common::ObAccuracy &accuracy,
                                                       const ObString &column_name,
                                                       uint64_t column_id,
@@ -6940,8 +6942,8 @@ int ObDMLResolver::resolve_json_table_column_type(const ParseNode &parse_tree,
 
   data_type.set_collation_level(CS_LEVEL_IMPLICIT);
   JtColType col_type = static_cast<JtColType>(column_type);
-  ObObjType obj_type;
-  obj_type = static_cast<ObObjType>(parse_tree.type_);
+  SqlValueType obj_type;
+  obj_type = static_cast<SqlValueType>(parse_tree.type_);
 
   if (col_type == COL_TYPE_ORDINALITY) {
     data_type.set_int();
@@ -6952,7 +6954,7 @@ int ObDMLResolver::resolve_json_table_column_type(const ParseNode &parse_tree,
              || col_type == COL_TYPE_VALUE
              || col_type == COL_TYPE_QUERY
              || col_type == COL_TYPE_QUERY_JSON_COL) {
-    if (OB_UNLIKELY(!ob_is_valid_obj_type(obj_type))) {
+    if (OB_UNLIKELY(!is_valid_sql_value_type(obj_type))) {
       ret = OB_INVALID_ARGUMENT;
     } else {
       bool convert_real_to_decimal = (true && config::_enable_convert_real_to_decimal());
@@ -7560,7 +7562,7 @@ int ObDMLResolver::resolve_function_table_column_item_udf(const TableItem &table
       const ObPLDataType *pl_type = record_type->get_record_member_type(i);
       ObString column_name;
       ObAccuracy accuracy = ObAccuracy(PRECISION_UNKNOWN_YET, SCALE_UNKNOWN_YET);
-      common::ObObjMeta meta;
+      common::SqlTypeMeta meta;
       OX (col_item = NULL);
       CK (OB_NOT_NULL(pl_type));
       CK (OB_NOT_NULL(record_type->get_record_member_name(i)));
@@ -7600,7 +7602,7 @@ int ObDMLResolver::resolve_function_table_column_item_udf(const TableItem &table
       //exist, ignore resolve...
     } else {
       ObAccuracy accuracy = ObAccuracy(PRECISION_UNKNOWN_YET, SCALE_UNKNOWN_YET);
-      common::ObObjMeta meta;
+      common::SqlTypeMeta meta;
       accuracy.set_accuracy(coll_type->get_element_type().get_user_type_id());
       meta.set_ext();
       meta.set_extend_type(coll_type->get_element_type().get_type());
@@ -8810,11 +8812,17 @@ int ObDMLResolver::resolve_global_hint(const ParseNode &hint_node,
     case T_OPT_PARAM_HINT: {
       CHECK_HINT_PARAM(hint_node, 2) {
         ObString param_name(child0->str_len_, child0->str_value_);
-        ObObj val;
+        DatumValue val;
         if (T_VARCHAR == child1->type_) {
-          val.set_varchar(child1->str_value_, static_cast<int32_t>(child1->str_len_));
+          val.datum_.set_string(child1->str_value_, static_cast<uint32_t>(child1->str_len_));
+          val.meta_.set_varchar();
+          val.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
         } else if (T_INT == child1->type_) {
-          val.set_int(child1->value_);
+          if (OB_ISNULL(allocator_)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            ret = val.set_int(child1->value_, *allocator_);
+          }
         } else {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected value type in opt param hint", "type", get_type_name(child1->type_));
@@ -11543,23 +11551,18 @@ int ObDMLResolver::compute_values_table_row_count(ObValuesTableDef &table_def)
   return ret;
 }
 
-int ObDMLResolver::add_obj_to_llc_bitmap(const ObObj &obj, char *llc_bitmap, double &num_null)
+int ObDMLResolver::add_datum_to_llc_bitmap(const ObDatum &datum, const SqlTypeMeta &meta,
+                                          char *llc_bitmap, double &num_null)
 {
   int ret = OB_SUCCESS;
   uint64_t hash_value = 0;
   if (OB_ISNULL(llc_bitmap)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (obj.is_null()) {
+  } else if (datum.is_null()) {
     num_null += 1.0;
-  } else {
-    if (obj.is_string_type()) {
-      hash_value = obj.varchar_hash(obj.get_collation_type(), hash_value);
-    } else if (OB_FAIL(obj.hash(hash_value, hash_value))) {
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObAggregateProcessor::llc_add_value(hash_value, llc_bitmap, ObOptColumnStat::NUM_LLC_BUCKET))) {
-      }
-    }
+  } else if (OB_FAIL(hash_datum_for_ndv(datum, meta, 0, hash_value))) {
+  } else if (OB_FAIL(ObAggregateProcessor::llc_add_value(
+               hash_value, llc_bitmap, ObOptColumnStat::NUM_LLC_BUCKET))) {
   }
   return ret;
 }
@@ -11611,14 +11614,15 @@ int ObDMLResolver::estimate_values_table_stats(ObValuesTableDef &table_def)
               ret = OB_ERR_UNEXPECTED;
             }
           } else if (param_store->at(param_idx).is_ext_sql_array()) {
-            const ObSqlArrayObj *array_obj =
-                      reinterpret_cast<const ObSqlArrayObj*>(param_store->at(param_idx).get_ext());
+            const DatumParameterArray *array_obj =
+                      reinterpret_cast<const DatumParameterArray*>(param_store->at(param_idx).get_ext());
             if (OB_ISNULL(array_obj)) {
               ret = OB_ERR_UNEXPECTED;
             } else {
               for (int64_t i = 0; OB_SUCC(ret) && i < array_obj->count_ && i < compute_ndv_thredhold; i++) {
-                const ObObjParam &obj_param = array_obj->data_[i];
-                if (OB_FAIL(add_obj_to_llc_bitmap(obj_param, llc_bitmap, num_null))) {
+                const DatumParameter &value = array_obj->data_[i];
+                if (OB_FAIL(add_datum_to_llc_bitmap(value.datum_, value.get_type_meta(),
+                                                     llc_bitmap, num_null))) {
                 }
               }
             }
@@ -11633,13 +11637,16 @@ int ObDMLResolver::estimate_values_table_stats(ObValuesTableDef &table_def)
             } else {
               ret = OB_ERR_UNEXPECTED;
             }
-          } else if (OB_FAIL(add_obj_to_llc_bitmap(param_store->at(param_idx), llc_bitmap, num_null))) {
+          } else if (OB_FAIL(add_datum_to_llc_bitmap(param_store->at(param_idx).datum_,
+                              param_store->at(param_idx).get_type_meta(), llc_bitmap, num_null))) {
           }
         }
-      } else if (ObValuesTableDef::ACCESS_OBJ == table_def.access_type_) {
+      } else if (ObValuesTableDef::ACCESS_VALUE == table_def.access_type_) {
         for (int64_t i = 0; OB_SUCC(ret) && i < table_def.row_cnt_ && i < compute_ndv_thredhold; i++) {
           int64_t param_idx = i * table_def.column_cnt_ + col_idx;
-          if (OB_FAIL(add_obj_to_llc_bitmap(table_def.access_objs_.at(param_idx), llc_bitmap, num_null))) {
+          const DatumParameter &value = table_def.access_values_.at(param_idx);
+          if (OB_FAIL(add_datum_to_llc_bitmap(value.datum_, value.get_type_meta(),
+                                               llc_bitmap, num_null))) {
           }
         }
       }
@@ -12207,7 +12214,7 @@ int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
               if (OB_UNLIKELY(param_idx < 0 || param_idx >= param_store->count())) {
                 ret = OB_ERR_UNEXPECTED;
               } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-              } else if (OB_FAIL(param_info.const_params_.push_back(param_store->at(param_idx)))) {
+              } else if (OB_FAIL(param_info.const_params_.push_back(param_store->at(param_idx).value_view()))) {
               } else if (OB_FAIL(param_constraints.push_back(param_info))) {
               }
             }

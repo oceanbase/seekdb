@@ -113,7 +113,7 @@ int ObExprToOutfileRow::calc_outfile_info(const ObExpr &expr,
                                           ObExprOutFileInfo &out_info)
 {
   int ret = OB_SUCCESS;
-  ObObj objs_array[PARAM_SELECT_ITEM];
+  DatumValue values[PARAM_SELECT_ITEM];
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
@@ -126,15 +126,14 @@ int ObExprToOutfileRow::calc_outfile_info(const ObExpr &expr,
   }
 
   for (int i = 0; OB_SUCC(ret) && i < PARAM_SELECT_ITEM; ++i) {
-    OZ(expr.locate_param_datum(ctx, i).to_obj(objs_array[i], expr.args_[i]->obj_meta_,
-                                              expr.args_[i]->obj_datum_map_));
+    values[i] = DatumValue(expr.locate_param_datum(ctx, i), expr.args_[i]->obj_meta_);
   }
   if (OB_SUCC(ret)) {
-    out_info.field_ = objs_array[PARAM_FIELD];
-    out_info.line_ = objs_array[PARAM_LINE];
-    out_info.enclose_ = objs_array[PARAM_ENCLOSED];
-    out_info.escape_ = objs_array[PARAM_ESCAPED];
-    out_info.print_params_.cs_type_ = static_cast<ObCollationType>(objs_array[PARAM_CHARSET].get_int());
+    out_info.field_ = values[PARAM_FIELD];
+    out_info.line_ = values[PARAM_LINE];
+    out_info.enclose_ = values[PARAM_ENCLOSED];
+    out_info.escape_ = values[PARAM_ESCAPED];
+    out_info.print_params_.cs_type_ = static_cast<ObCollationType>(values[PARAM_CHARSET].get_int());
   }
 
   OZ(extract_fisrt_wchar_from_varhcar(out_info.field_, out_info.wchar_field_));
@@ -168,11 +167,10 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         int64_t buf_len =  out_info->buf_len_;
         for (int64_t i = PARAM_SELECT_ITEM; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
           ObDatum &v = expr.locate_param_datum(ctx, i);
-          const ObObjMeta &obj_meta = expr.args_[i]->obj_meta_;
-          ObObj obj;
-          OZ(v.to_obj(obj, obj_meta, expr.args_[i]->obj_datum_map_));
-          if (!obj_meta.is_lob_storage()) {
-            OZ(print_field(buf, buf_len, pos, obj, *out_info));
+          const SqlTypeMeta &datum_meta = expr.args_[i]->obj_meta_;
+          DatumValue value(v, datum_meta);
+          if (!datum_meta.is_lob_storage()) {
+            OZ(print_field(buf, buf_len, pos, value, *out_info));
           } else { // text tc
             ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
             common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
@@ -181,9 +179,9 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                 && OB_FAIL(ctx.exec_ctx_.get_lob_read_options(lob_read_options))) {
             } else if (OB_SUCC(ret)
                 && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
-                               obj, obj, lob_read_options, &temp_allocator))) {
+                               value, value, lob_read_options, temp_allocator))) {
             }
-            OZ(print_field(buf, buf_len, pos, obj, *out_info));
+            OZ(print_field(buf, buf_len, pos, value, *out_info));
           }
           // print field terminator
           if (OB_SUCC(ret) && i != expr.arg_cnt_ - 1) {
@@ -207,14 +205,14 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   return ret;
 }
 
-int ObExprToOutfileRow::extract_fisrt_wchar_from_varhcar(const ObObj &obj, int32_t &wchar)
+int ObExprToOutfileRow::extract_fisrt_wchar_from_varhcar(const DatumValue &value, int32_t &wchar)
 {
   int ret = OB_SUCCESS;
   int32_t length = 0;
-  if (obj.is_varying_len_char_type()) {
-    ObString str = obj.get_varchar();
+  if (value.is_varchar_or_char()) {
+    ObString str = value.get_varchar();
     if (str.length() > 0) {
-      ret = ObCharset::mb_wc(obj.get_collation_type(), str.ptr(), str.length(), length, wchar);
+      ret = ObCharset::mb_wc(value.get_collation_type(), str.ptr(), str.length(), length, wchar);
     }
   }
   return ret;
@@ -231,25 +229,26 @@ int ObExprToOutfileRow::extract_fisrt_wchar_from_varhcar(const ObObj &obj, int32
 // 5. If the FIELDS ESCAPED BY character is empty, no characters are escaped and NULL is output
 //    as NULL, not \N.
 int ObExprToOutfileRow::print_field(char *buf, const int64_t buf_len, int64_t &pos,
-                                    const ObObj &obj, ObExprOutFileInfo &out_info)
+                                    const DatumValue &value, ObExprOutFileInfo &out_info)
 {
   int ret = OB_SUCCESS;
   int64_t tmp_pos = 0;
   const bool need_enclose = 0 != out_info.wchar_enclose_ &&
-                            (!out_info.is_optional_ || obj.is_string_type()) && !obj.is_null();
+                            (!out_info.is_optional_ || value.is_string_type()) && !value.is_null();
   if (need_enclose) {
     OZ(out_info.enclose_.print_plain_str_literal(buf, buf_len, pos, out_info.print_params_));
   }
   if (0 == out_info.wchar_escape_) {
-    OZ(obj.print_plain_str_literal(buf, buf_len, pos, out_info.print_params_));
-  } else if (obj.is_null()) {
+    OZ(value.print_plain_str_literal(buf, buf_len, pos, out_info.print_params_));
+  } else if (value.is_null()) {
     OZ(out_info.escape_.print_plain_str_literal(buf, buf_len, pos, out_info.print_params_));
     OZ(print_wchar_to_buf(buf, buf_len, pos, 'N', out_info.print_params_.cs_type_));
-  } else if (obj.is_string_or_lob_locator_type() && obj.get_collation_type() == CS_TYPE_BINARY) {
-    OZ(obj.print_plain_str_literal(buf, buf_len, pos, out_info.print_params_));
+  } else if ((value.get_meta().is_string_or_lob_locator_type() || value.is_lob_storage())
+             && value.get_collation_type() == CS_TYPE_BINARY) {
+    OZ(value.print_plain_str_literal(buf, buf_len, pos, out_info.print_params_));
   } else {
-    OZ(obj.print_plain_str_literal(out_info.tmp_buf_, out_info.tmp_buf_len_, tmp_pos,
-                                   out_info.print_params_));
+    OZ(value.print_plain_str_literal(out_info.tmp_buf_, out_info.tmp_buf_len_, tmp_pos,
+                                     out_info.print_params_));
     auto escape_func =
         [buf, buf_len, &pos, need_enclose, &out_info] (ObString &code_point, int32_t wchar) -> int {
       int ret = OB_SUCCESS;

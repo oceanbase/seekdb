@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_SYSTEM_VARIABLE_OB_SYSTEM_VARIABLE_INIT_
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include <stdint.h>
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 namespace oceanbase
 {
 namespace share
@@ -43,7 +43,7 @@ struct ObSysVarFlag
 struct ObSysVarFromJson{
   ObSysVarClassType id_;
   common::ObString name_;
-  common::ObObjType data_type_;
+  common::SqlValueType data_type_;
   common::ObString default_value_; // used for runtime initialization
   common::ObString base_value_; // used for session sync
   common::ObString min_val_;
@@ -69,7 +69,7 @@ public:
   static int64_t get_all_sys_var_count();
   static ObSysVarClassType get_sys_var_id(int64_t i);
   static common::ObString get_name(int64_t i);
-  static common::ObObjType get_type(int64_t i);
+  static common::SqlValueType get_type(int64_t i);
   static common::ObString get_value(int64_t i);
   static common::ObString get_base_str_value(int64_t i);
   static common::ObString get_min(int64_t i);
@@ -79,8 +79,8 @@ public:
   static bool need_serialize(int64_t i);
   static bool is_mysql_only(int64_t i);
   static common::ObString get_alias(int64_t i);
-  static const common::ObObj &get_default_value(int64_t i);
-  static const common::ObObj &get_base_value(int64_t i);
+  static const common::DatumValue &get_default_value(int64_t i);
+  static const common::DatumValue &get_base_value(int64_t i);
   static int64_t get_amount();
   static ObCollationType get_default_sysvar_collation();
   static int set_value(const char *name, const char * new_value);

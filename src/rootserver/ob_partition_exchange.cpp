@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rust/config.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_partition_exchange.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
@@ -180,8 +181,8 @@ int ObPartitionExchange::check_partition_exchange_schema_for_user(
             const ObListRowValues &inc_list_row_values = inc_part->get_list_row_values_struct();
             if ((PARTITION_FUNC_TYPE_RANGE == exchange_part_type)
                 || (PARTITION_FUNC_TYPE_RANGE_COLUMNS == exchange_part_type)) {
-              if (OB_UNLIKELY(!((base_sub_part->get_high_bound_val() == inc_part->get_high_bound_val())
-                  && (base_sub_part->get_low_bound_val() == inc_part->get_low_bound_val())))) {
+              if (OB_UNLIKELY(!((partition_bound_keys_equal(base_sub_part->get_high_bound_val(), inc_part->get_high_bound_val()))
+                  && (partition_bound_keys_equal(base_sub_part->get_low_bound_val(), inc_part->get_low_bound_val()))))) {
                 ret = OB_NOT_SUPPORTED;
                 LOG_WARN("the partition bounds do not match the subpartition bounds of the partition", KR(ret),
                     K(base_sub_part->get_high_bound_val()), K(inc_part->get_high_bound_val()),
@@ -191,7 +192,7 @@ int ObPartitionExchange::check_partition_exchange_schema_for_user(
             } else if ((PARTITION_FUNC_TYPE_LIST == exchange_part_type)
                         || (PARTITION_FUNC_TYPE_LIST_COLUMNS == exchange_part_type)) {
               for (int64_t j = 0; OB_SUCC(ret) && (j < base_list_row_values.count()); ++j) {
-                if (OB_UNLIKELY(!(base_list_row_values.at(j) == inc_list_row_values.at(j)))) {
+                if (OB_UNLIKELY(!(equal_partition_bound_rows(base_list_row_values.at(j), inc_list_row_values.at(j))))) {
                   ret = OB_NOT_SUPPORTED;
                   LOG_WARN("the partition bounds do not match the subpartition bounds of the partition", KR(ret),
                       K(base_list_row_values.at(j)), K(inc_list_row_values.at(j)), K(j));
@@ -655,10 +656,10 @@ int ObPartitionExchange::check_column_default_value_(const ObColumnSchemaV2 *bas
   } else {
     ObString base_col_expr_str;
     ObString inc_col_expr_str;
-    ObObj base_orig_default_value = base_table_col_schema->get_orig_default_value();
-    ObObj inc_orig_default_value = inc_table_col_schema->get_orig_default_value();
-    ObObj base_cur_default_value = base_table_col_schema->get_cur_default_value();
-    ObObj inc_cur_default_value = inc_table_col_schema->get_cur_default_value();
+    const DatumValue &base_orig_default_value = base_table_col_schema->get_orig_default_value();
+    const DatumValue &inc_orig_default_value = inc_table_col_schema->get_orig_default_value();
+    const DatumValue &base_cur_default_value = base_table_col_schema->get_cur_default_value();
+    const DatumValue &inc_cur_default_value = inc_table_col_schema->get_cur_default_value();
     if (OB_FAIL(compare_default_value_(base_orig_default_value, inc_orig_default_value, is_equal))) {
     } else if (!is_equal) {
       ret = OB_NOT_SUPPORTED;
@@ -670,7 +671,7 @@ int ObPartitionExchange::check_column_default_value_(const ObColumnSchemaV2 *bas
   return ret;
 }
 
-int ObPartitionExchange::compare_default_value_(ObObj &l_value, ObObj &r_value, bool &is_equal)
+int ObPartitionExchange::compare_default_value_(const DatumValue &l_value, const DatumValue &r_value, bool &is_equal)
 {
   int ret = OB_SUCCESS;
   is_equal = false;
@@ -682,7 +683,7 @@ int ObPartitionExchange::compare_default_value_(ObObj &l_value, ObObj &r_value, 
   } else if (OB_UNLIKELY(l_value.get_collation_type() != r_value.get_collation_type())) {
   } else if (CS_TYPE_INVALID == l_value.get_collation_type()) {
     is_equal = true;
-  } else if (OB_FAIL(l_value.compare(r_value, cmp))) {
+  } else if (OB_FAIL(compare_datum_values(l_value, r_value, cmp))) {
   } else if (OB_UNLIKELY(0 != cmp)) {
   } else {
     is_equal = true;

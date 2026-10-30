@@ -104,7 +104,7 @@ int ObExprOpSubQueryInPl::calc_result_typeN(ObExprResType &type,
 
   OX (type.set_type(result_type_.get_type()));
   OX (type.set_accuracy(result_type_.get_accuracy()));
-  OX (type.set_meta(result_type_.get_obj_meta()));
+  OX (type.set_meta(result_type_.get_sql_type_meta()));
   OX (type.set_length(result_type_.get_length()));
   return ret;
 }
@@ -137,14 +137,11 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   void *param_buf = nullptr;
   ParamStore *params = nullptr;
   ObSQLSessionInfo *session = nullptr;
-  ObObj result;
+  DatumParameter result;
 
   ObEvalCtx::TempAllocGuard memory_guard(ctx);
   ObArenaAllocator &alloc = memory_guard.get_allocator();
   const ObExprPlSubQueryInfo *info = static_cast<ObExprPlSubQueryInfo *>(expr.extra_info_);
-  ObObj *objs = nullptr;
-  CK(0 == expr.arg_cnt_ ||
-     OB_NOT_NULL(objs = static_cast<ObObj *> (alloc.alloc(expr.arg_cnt_ * sizeof(ObObj)))));
   CK(OB_NOT_NULL(info));
   CK(OB_NOT_NULL(session = ctx.exec_ctx_.get_my_session()));
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
@@ -164,8 +161,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   } else if (OB_ISNULL(param_buf = alloc.alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(params = new(param_buf)ParamStore(ObWrapperAllocator(alloc)))) {
-  } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
-  } else if (OB_FAIL(fill_param_store(objs, expr.arg_cnt_, *params))) {
+  } else if (OB_FAIL(fill_param_store(expr, ctx, *params, alloc))) {
   } else {
     pl::ObPLExecCtx pl_exec_ctx(&alloc, &ctx.exec_ctx_, params, nullptr, &ret, nullptr);
 
@@ -232,9 +228,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
         CK (OB_NOT_NULL(fields = spi_result.get_result_set()->get_field_columns()));
         CK (fields->count() > 0);
         if (OB_FAIL(ret)) {
-        } else if (info->result_type_.get_obj_meta() != result.get_meta()
+        } else if (info->result_type_.get_sql_type_meta() != result.get_meta()
                    || info->result_type_.get_accuracy() != fields->at(0).accuracy_) {
-          ObObj conv_res;
+          DatumParameter conv_res;
           OZ (sql::ObSPIService::spi_convert(*session,
                                              alloc,
                                              result,
@@ -251,9 +247,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    OZ(res.from_obj(result));
+    OX (res = result.datum_);
     if (is_lob_storage(result.get_type())) {
-      OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
+      OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result.datum_, result.get_meta(), expr.obj_meta_,
                              ctx.exec_ctx_.get_allocator(), res));
     }
     OZ(expr.deep_copy_datum(ctx, res));
@@ -263,7 +259,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
 }
 
 int ObExprOpSubQueryInPl::get_result(void *result_set,
-                                     ObObj &result,
+                                     DatumParameter &result,
                                      ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
@@ -272,7 +268,11 @@ int ObExprOpSubQueryInPl::get_result(void *result_set,
 
   if (OB_FAIL(fetch_row(result_set, row_count, current_row))) {
   } else {
-    OZ (deep_copy_obj(alloc, current_row.get_cell(0), result));
+    CK (current_row.count_ > 0 && current_row.cells_ != nullptr);
+    DatumValue owned;
+    OZ (clone_typed_value(current_row.get_cell(0), owned, alloc));
+    OX (result.datum_ = owned.datum_);
+    OX (result.set_type_meta(owned.meta_));
   }
   /* check result has more row */
   if (OB_FAIL(ret)) {
@@ -307,32 +307,15 @@ int ObExprOpSubQueryInPl::fetch_row(void *result_set, int64_t &row_count, ObNewR
   return ret;
 }
 
-int ObExprOpSubQueryInPl::fill_param_store(const ObObj *objs_stack,
-                                           int64_t param_num,
-                                           ParamStore& params)
+int ObExprOpSubQueryInPl::fill_param_store(const ObExpr &expr, ObEvalCtx &ctx,
+    ParamStore &params, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
-  CK (0 == param_num || OB_NOT_NULL(objs_stack));
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
-    ObObjParam param;
-    param.reset();
-    objs_stack[i].copy_value_or_obj(param, true);
-    param.set_param_meta();
-    OZ (params.push_back(param));
-  }
-
-  return ret;
-}
-
-int ObExprOpSubQueryInPl::fill_obj_stack(const ObExpr &expr,
-                                         ObEvalCtx &ctx,
-                                         ObObj *objs)
-{
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
-    ObDatum &param = expr.args_[i]->locate_expr_datum(ctx);
-    if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
-    }
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+    DatumParameter view, owned;
+    capture_datum_parameter(*expr.args_[i], ctx, view);
+    OZ (clone_datum_parameter(view, owned, owner));
+    OZ (params.push_back(owned));
   }
   return ret;
 }

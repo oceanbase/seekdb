@@ -1,4 +1,4 @@
-static constexpr ObObjType MOD_RESULT_TYPE[ObMaxType][ObMaxType] =
+static constexpr SqlValueType MOD_RESULT_TYPE[ObMaxType][ObMaxType] =
 {
   /*NullType*/
   {

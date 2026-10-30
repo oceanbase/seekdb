@@ -260,7 +260,7 @@ int ObSchema2DDLSql::type2str(
     nwrite += n;
     n = 0;
     if (!column_schema.get_orig_default_value().is_null()
-        && column_schema.get_orig_default_value().is_valid_type()
+        && !column_schema.get_orig_default_value().is_invalid_type()
         && column_schema.get_data_type() != ObLongTextType) {
       if (ObIntType == column_schema.get_data_type()) {
         int64_t value = 0;

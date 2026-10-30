@@ -154,7 +154,7 @@ int ObExprLowerUpper::cg_expr_common(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  ObObjType text_type = ObMaxType;
+  SqlValueType text_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {

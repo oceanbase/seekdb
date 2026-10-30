@@ -56,7 +56,7 @@ int ObExprSTDistance::calc_result_typeN(ObExprResType& type,
   }
   const int unit_param_index = 2;
   if (param_num == 3) {
-    ObObjType param_type = types_stack[unit_param_index].get_type();
+    SqlValueType param_type = types_stack[unit_param_index].get_type();
     if (ob_is_string_type(param_type)) {
       types_stack[unit_param_index].set_calc_collation_type(CS_TYPE_BINARY);
     } else {
@@ -77,8 +77,8 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObDatum *gis_datum2 = NULL;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
-  ObObjType input_type1 = gis_arg1->datum_meta_.type_;
-  ObObjType input_type2 = gis_arg2->datum_meta_.type_;
+  SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
+  SqlValueType input_type2 = gis_arg2->datum_meta_.type_;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   

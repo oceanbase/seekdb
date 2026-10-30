@@ -19,6 +19,11 @@
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+
+#include "share/datum/datum_value_cast.h"
+
 namespace oceanbase
 {
 namespace sql
@@ -310,8 +315,8 @@ int ObForeignKeyChecker::build_table_range(const ObIArray<ObForeignKeyColumn> &c
   return ret;
 }
 
-int ObForeignKeyChecker::check_fk_column_type(const ObObjMeta &col_obj_meta,
-                                              const ObObjMeta &dst_obj_meta,
+int ObForeignKeyChecker::check_fk_column_type(const SqlTypeMeta &col_obj_meta,
+                                              const SqlTypeMeta &dst_obj_meta,
                                               const ObPrecision col_precision,
                                               const ObPrecision dst_precision,
                                               bool &need_extra_cast)
@@ -345,29 +350,29 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
                                            bool &need_check)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
   int64_t rowkey_cnt = checker_ctdef_.rowkey_count_;
   int64_t fk_cnt = columns.count();
   // check parent table
   if (fk_cnt != checker_ctdef_.rowkey_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
+  } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr = new(buf) ObObj[rowkey_cnt];
+    obj_ptr = new(buf) DatumValue[rowkey_cnt];
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < fk_cnt; ++i) {
-    ObObj tmp_obj;
+    DatumValue tmp_obj;
     ObDatum *col_datum = nullptr;
     ObExpr *column_expr = row.at(columns.at(i).idx_);
-    const ObObjMeta &col_obj_meta = column_expr->obj_meta_;
-    const ObObjMeta &dst_obj_meta = columns.at(i).obj_meta_;
-    const ObObjDatumMapType &obj_datum_map = column_expr->obj_datum_map_;
+    const SqlTypeMeta &col_obj_meta = column_expr->obj_meta_;
+    const SqlTypeMeta &dst_obj_meta = columns.at(i).obj_meta_;
+    const SqlValueDatumMapType &obj_datum_map = column_expr->obj_datum_map_;
     int64_t rowkey_index = checker_ctdef_.rowkey_ids_.at(i);
     bool need_extra_cast = false;
-    ObObjMeta to_obj_meta = col_obj_meta;
+    SqlTypeMeta to_obj_meta = col_obj_meta;
     const ObPrecision dst_prec = dst_obj_meta.is_decimal_int() ?
         dst_obj_meta.get_stored_precision() : PRECISION_UNKNOWN_YET;
     if (rowkey_index < 0 || rowkey_index >= rowkey_cnt) {
@@ -377,7 +382,7 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
         need_extra_cast))) {
     } else if (OB_FAIL(column_expr->eval(eval_ctx_, col_datum))) {
     } else if (!need_extra_cast && FALSE_IT(to_obj_meta = dst_obj_meta)) {
-    } else if (OB_FAIL(col_datum->to_obj(tmp_obj, to_obj_meta, obj_datum_map))) {
+    } else if (OB_FAIL(project_datum_value_view(*col_datum, to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj))) {
     } else if (need_extra_cast) {
       ObCastMode cm = CM_NONE | CM_CONST_TO_DECIMAL_INT_EQ;
       ObCastCtx cast_ctx(allocator_, NULL, cm, ObCharset::get_system_collation());
@@ -387,8 +392,8 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
         res_acc.set_scale(dst_obj_meta.get_scale());
         cast_ctx.res_accuracy_ = &res_acc;
       }
-      ObObj ori_obj = tmp_obj;
-      if(OB_FAIL(ObObjCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, tmp_obj))) {
+      DatumValue ori_obj = tmp_obj;
+      if(OB_FAIL(DatumValueCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, *allocator_, tmp_obj))) {
         if (ret == OB_DATA_OUT_OF_RANGE) {
           // To compatible with MySQL. 
           // Also, if the value is not in the range, then it means that there's no referenced row.
@@ -397,7 +402,7 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ob_write_obj(*allocator_, tmp_obj, obj_ptr[rowkey_index]))) {
+    } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[rowkey_index], *allocator_))) {
     }
   }
 
@@ -427,31 +432,31 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
                                            bool &need_check)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
   int64_t rowkey_cnt = checker_ctdef_.rowkey_count_;
   int64_t fk_cnt = columns.count();
   if (fk_cnt != checker_ctdef_.rowkey_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
+  } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr = new(buf) ObObj[rowkey_cnt];
+    obj_ptr = new(buf) DatumValue[rowkey_cnt];
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
     if (i < fk_cnt) {
-      ObObj tmp_obj;
+      DatumValue tmp_obj;
       ObDatum *col_datum = nullptr;
       ObExpr *column_expr = row.at(columns.at(i).idx_);
-      const ObObjMeta &col_obj_meta = column_expr->obj_meta_;
-      const ObObjMeta &dst_obj_meta = columns.at(i).obj_meta_;
-      const ObObjDatumMapType &obj_datum_map = column_expr->obj_datum_map_;
+      const SqlTypeMeta &col_obj_meta = column_expr->obj_meta_;
+      const SqlTypeMeta &dst_obj_meta = columns.at(i).obj_meta_;
+      const SqlValueDatumMapType &obj_datum_map = column_expr->obj_datum_map_;
       int64_t rowkey_index = checker_ctdef_.rowkey_ids_.at(i);
       bool need_extra_cast = false;
       const ObPrecision dst_prec = dst_obj_meta.is_decimal_int() ?
         dst_obj_meta.get_stored_precision() : PRECISION_UNKNOWN_YET;
-      ObObjMeta to_obj_meta = col_obj_meta;
+      SqlTypeMeta to_obj_meta = col_obj_meta;
       if (rowkey_index < 0 || rowkey_index >= fk_cnt) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(check_fk_column_type(col_obj_meta, dst_obj_meta,
@@ -459,7 +464,7 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
           need_extra_cast))) {
       } else if (OB_FAIL(column_expr->eval(eval_ctx_, col_datum))) {
       } else if (!need_extra_cast && FALSE_IT(to_obj_meta = dst_obj_meta)) {
-      } else if (OB_FAIL(col_datum->to_obj(tmp_obj, to_obj_meta, obj_datum_map))) {
+      } else if (OB_FAIL(project_datum_value_view(*col_datum, to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj))) {
       } else if (need_extra_cast) {
         ObCastMode cm = CM_NONE | CM_CONST_TO_DECIMAL_INT_EQ;
         ObCastCtx cast_ctx(allocator_, NULL, cm, ObCharset::get_system_collation());
@@ -469,8 +474,8 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
           res_acc.set_scale(dst_obj_meta.get_scale());
           cast_ctx.res_accuracy_ = &res_acc;
         }
-        ObObj ori_obj = tmp_obj;
-        if(OB_FAIL(ObObjCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, tmp_obj))) {
+        DatumValue ori_obj = tmp_obj;
+        if(OB_FAIL(DatumValueCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, *allocator_, tmp_obj))) {
           if (ret == OB_DATA_OUT_OF_RANGE) {
             // To compatible with MySQL. 
             // Also, if the value is not in the range, then it means that there's no referenced row.
@@ -480,7 +485,7 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
       }
       if (OB_FAIL(ret)) {
       // Here a deep copy needs to be done
-      } else if (OB_FAIL(ob_write_obj(*allocator_, tmp_obj, obj_ptr[rowkey_index]))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[rowkey_index], *allocator_))) {
       }
     } else {
       // is parent key is unique key, the store key of the unique index is unique key + optional primary key
@@ -515,36 +520,36 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
                                                                     bool &need_check)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj_ptr_start = nullptr;
-  ObObj *obj_ptr_end = nullptr;
+  DatumValue *obj_ptr_start = nullptr;
+  DatumValue *obj_ptr_end = nullptr;
   void *buf_start = nullptr;
   void *buf_end = nullptr;
   int64_t rowkey_cnt = checker_ctdef_.rowkey_count_;
   int64_t fk_cnt = columns.count();
   if (fk_cnt != checker_ctdef_.rowkey_ids_.count()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(buf_start = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
+  } else if (OB_ISNULL(buf_start = allocator_->alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(buf_end = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
+  } else if (OB_ISNULL(buf_end = allocator_->alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr_start = new(buf_start) ObObj[rowkey_cnt];
-    obj_ptr_end = new(buf_end) ObObj[rowkey_cnt];
+    obj_ptr_start = new(buf_start) DatumValue[rowkey_cnt];
+    obj_ptr_end = new(buf_end) DatumValue[rowkey_cnt];
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
     if (i < fk_cnt) {
-      ObObj tmp_obj;
+      DatumValue tmp_obj;
       ObDatum *col_datum = nullptr;
       ObExpr *column_expr = row.at(columns.at(i).idx_);
-      const ObObjMeta &col_obj_meta = column_expr->obj_meta_;
-      const ObObjMeta &dst_obj_meta = columns.at(i).obj_meta_;
-      const ObObjDatumMapType &obj_datum_map = column_expr->obj_datum_map_;
+      const SqlTypeMeta &col_obj_meta = column_expr->obj_meta_;
+      const SqlTypeMeta &dst_obj_meta = columns.at(i).obj_meta_;
+      const SqlValueDatumMapType &obj_datum_map = column_expr->obj_datum_map_;
       int64_t rowkey_index = checker_ctdef_.rowkey_ids_.at(i);
       bool need_extra_cast = false;
       const ObPrecision dst_prec = dst_obj_meta.is_decimal_int() ?
         dst_obj_meta.get_stored_precision() : PRECISION_UNKNOWN_YET;
-      ObObjMeta to_obj_meta = col_obj_meta;
+      SqlTypeMeta to_obj_meta = col_obj_meta;
       if (rowkey_index < 0 || rowkey_index >= fk_cnt) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(check_fk_column_type(col_obj_meta, dst_obj_meta,
@@ -552,7 +557,7 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
           need_extra_cast))) {
       } else if (OB_FAIL(column_expr->eval(eval_ctx_, col_datum))) {
       } else if (!need_extra_cast && FALSE_IT(to_obj_meta = dst_obj_meta)) {
-      } else if (OB_FAIL(col_datum->to_obj(tmp_obj, to_obj_meta, obj_datum_map))) {
+      } else if (OB_FAIL(project_datum_value_view(*col_datum, to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj))) {
       } else if (need_extra_cast) {
         ObCastMode cm = CM_NONE | CM_CONST_TO_DECIMAL_INT_EQ;
         ObCastCtx cast_ctx(allocator_, NULL, cm, ObCharset::get_system_collation());
@@ -562,8 +567,8 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
           res_acc.set_scale(dst_obj_meta.get_scale());
           cast_ctx.res_accuracy_ = &res_acc;
         }
-        ObObj ori_obj = tmp_obj;
-        if(OB_FAIL(ObObjCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, tmp_obj))) {
+        DatumValue ori_obj = tmp_obj;
+        if(OB_FAIL(DatumValueCaster::to_type(dst_obj_meta.get_type(), cast_ctx, ori_obj, *allocator_, tmp_obj))) {
           if (ret == OB_DATA_OUT_OF_RANGE) {
             // To compatible with MySQL. 
             // Also, if the value is not in the range, then it means that there's no referenced row.
@@ -572,8 +577,8 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ob_write_obj(*allocator_, tmp_obj, obj_ptr_start[rowkey_index]))) {
-      } else if (OB_FAIL(ob_write_obj(*allocator_, tmp_obj, obj_ptr_end[rowkey_index]))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr_start[rowkey_index], *allocator_))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr_end[rowkey_index], *allocator_))) {
       }
     } else {
       obj_ptr_start[i].set_min_value();

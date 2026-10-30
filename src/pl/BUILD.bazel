@@ -75,7 +75,7 @@ cc_library(
     ],
     features = ["layering_check"],
     tags = ["manual"],
-    visibility = ["//src/observer:__pkg__"],
+    visibility = ["//src/observer:__pkg__", "//unittest/pl:__pkg__"],
 )
 
 

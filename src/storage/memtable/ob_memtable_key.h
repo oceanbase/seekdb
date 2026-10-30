@@ -17,14 +17,14 @@
 #ifndef OCEANBASE_MEMTABLE_OB_MEMTABLE_KEY2_
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_KEY2_
 
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "common/rowkey/ob_store_rowkey.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/access/ob_table_param.h"
-#include "storage/ob_obj_buf_array.h"
+#include "data_plane/native_key_value_buffer.h"
 
 namespace oceanbase
 {
@@ -56,7 +56,7 @@ public:
   OB_INLINE int decode(common::ObStoreRowkey &rowkey) const
   {
     int ret = common::OB_SUCCESS;
-    ret = rowkey.assign(rowkey_->get_obj_ptr(), rowkey_->get_obj_cnt());
+    ret = rowkey.assign(rowkey_->get_values(), rowkey_->get_value_count());
     return ret;
   }
 
@@ -164,15 +164,15 @@ public:
     if (!rowkey->is_regular()) {
       ret = common::OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "trying to encode an irregular rowkey", K(rowkey), K(ret));
-    } else if (rowkey->get_obj_cnt() > columns.count()) {
+    } else if (rowkey->get_value_count() > columns.count()) {
       TRANS_LOG(WARN, "size does not match",
-                "rowkey_len", rowkey->get_obj_cnt(),
+                "rowkey_len", rowkey->get_value_count(),
                 "columns_size", columns.count());
       ret = common::OB_ERR_UNEXPECTED;
     }
-    for (int64_t i = 0; common::OB_SUCCESS == ret && i < rowkey->get_obj_cnt(); ++i) {
-      common::ObObj &value = const_cast<common::ObObj &>(rowkey->get_obj_ptr()[i]);
-      const common::ObObjMeta &schema_meta = columns.at(i).col_type_;
+    for (int64_t i = 0; common::OB_SUCCESS == ret && i < rowkey->get_value_count(); ++i) {
+      common::DatumValue &value = const_cast<common::DatumValue &>(rowkey->get_values()[i]);
+      const common::SqlTypeMeta &schema_meta = columns.at(i).col_type_;
       if (common::ObNullType != value.get_type()
           && common::ObExtendType != value.get_type()
           && schema_meta.get_type() != value.get_type()
@@ -207,15 +207,15 @@ public:
     if (!rowkey->is_regular()) {
        ret = common::OB_ERR_UNEXPECTED;
        TRANS_LOG(WARN, "trying to encode an irregular rowkey", K(rowkey), K(ret));
-    } else if (rowkey->get_obj_cnt() > columns.count()) {
+    } else if (rowkey->get_value_count() > columns.count()) {
       TRANS_LOG(WARN, "size does not match",
-                "rowkey_len", rowkey->get_obj_cnt(),
+                "rowkey_len", rowkey->get_value_count(),
                 "columns_size", columns.count());
       ret = common::OB_ERR_UNEXPECTED;
     }
-    for (int64_t i = 0; common::OB_SUCCESS == ret && i < rowkey->get_obj_cnt(); ++i) {
-      common::ObObj &value = const_cast<common::ObObj &>(rowkey->get_obj_ptr()[i]);
-      const common::ObObjMeta &schema_meta = columns.at(i).col_type_;
+    for (int64_t i = 0; common::OB_SUCCESS == ret && i < rowkey->get_value_count(); ++i) {
+      common::DatumValue &value = const_cast<common::DatumValue &>(rowkey->get_values()[i]);
+      const common::SqlTypeMeta &schema_meta = columns.at(i).col_type_;
       if (common::ObNullType != value.get_type()
           && common::ObExtendType != value.get_type()
           && schema_meta.get_type() != value.get_type()
@@ -298,7 +298,7 @@ public:
   uint64_t hash() const { return rowkey_->hash(); }
   int checksum(common::ObBatchChecksum &bc) const { return rowkey_->checksum(bc); }
   int64_t to_string(char *buf, const int64_t buf_len) const { return rowkey_->to_string(buf, buf_len); }
-  const ObObj *get_ptr() const { return rowkey_->get_obj_ptr(); }
+  const DatumValue *get_ptr() const { return rowkey_->get_values(); }
 public:
   const common::ObStoreRowkey *rowkey_;
 };
@@ -327,7 +327,7 @@ private:
   ObArenaAllocator allocator_;
   int64_t rowkey_cnt_;
   const common::ObIArray<share::schema::ObColDesc> &columns_;
-  storage::ObObjBufArray obj_buf_;
+  storage::NativeKeyValueBuffer value_buf_;
   ObStoreRowkey store_rowkey_;
   ObMemtableKey memtable_key_;
   ObMemtableKeyBuffer *memtable_key_buffer_;

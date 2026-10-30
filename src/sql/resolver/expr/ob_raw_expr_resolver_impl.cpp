@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_raw_expr_resolver_impl.h"
+#include "lib/utility/ob_defer.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/pl/ob_pl_resolver.h"
@@ -229,7 +230,20 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
   const bool is_odd = neg_cnt % 2 == 1;
   if (neg_cnt > 0 && NULL != expr && expr->is_const_raw_expr()) {
     ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(expr);
-    const ObString &orig_literal_prefix = const_expr->get_literal_prefix();
+    const ObString orig_literal_prefix = const_expr->get_literal_prefix();
+    const DatumValue original_value = const_expr->get_value();
+    const DatumValue original_parameter = const_expr->get_param();
+    const ObRawExprResType original_type = const_expr->get_result_type();
+    const ObItemType original_kind = const_expr->get_expr_type();
+    // A later allocation (including the literal-prefix copy) can fail after
+    // the value was negated. Preserve the whole node for fallback/error paths.
+    DEFER(if (ret != OB_SUCCESS) {
+      const_expr->set_value(original_value);
+      const_expr->set_obj_param(original_parameter);
+      const_expr->set_result_type(original_type);
+      const_expr->set_expr_type(original_kind);
+      const_expr->set_literal_prefix(orig_literal_prefix);
+    });
     neg_const = true;
     switch (const_expr->get_expr_type()) {
       case T_INT: {
@@ -239,10 +253,10 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
             // -val will overflow if val is INT64_MIN, we must use neg expr to handle this.
             neg_const = false;
           } else if (is_odd) {
-            ObObj new_val;
-            new_val.set_int(-val);
+            DatumValue new_val;
+            OZ (new_val.set_int(-val, ctx_.expr_factory_.get_allocator()));
             const_expr->set_expr_type(T_INT);
-            const_expr->set_value(new_val);
+            OX (const_expr->set_value(new_val));
             const_expr->set_precision(static_cast<ObPrecision>(
                                       const_expr->get_accuracy().get_precision() + 1));
           }
@@ -253,11 +267,11 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
         float val = static_cast<float>(OB_INVALID_ID);
         if (is_odd && OB_SUCC(const_expr->get_value().get_float(val))) {
           if (!isnan(val)) { // OB only store nan, don't add negative nan
-            ObObj new_val;
-            new_val.set_float(-val);
+            DatumValue new_val;
+            OZ (new_val.set_float(-val, ctx_.expr_factory_.get_allocator()));
             new_val.set_scale(const_expr->get_accuracy().get_scale());
             const_expr->set_expr_type(T_FLOAT);
-            const_expr->set_value(new_val);
+            OX (const_expr->set_value(new_val));
             const_expr->set_precision(static_cast<ObPrecision>(const_expr->get_accuracy().get_precision() + 1));
           }
         }
@@ -267,11 +281,11 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
         double val = static_cast<double>(OB_INVALID_ID);
         if (is_odd && OB_SUCC(const_expr->get_value().get_double(val))) {
           if (!isnan(val)) { // OB only store nan, don't add negative nan
-            ObObj new_val;
-            new_val.set_double(-val);
+            DatumValue new_val;
+            OZ (new_val.set_double(-val, ctx_.expr_factory_.get_allocator()));
             new_val.set_scale(const_expr->get_accuracy().get_scale());
             const_expr->set_expr_type(T_DOUBLE);
-            const_expr->set_value(new_val);
+            OX (const_expr->set_value(new_val));
             const_expr->set_precision(static_cast<ObPrecision>(const_expr->get_accuracy().get_precision() + 1));
           }
         }
@@ -279,7 +293,7 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
       }
       case T_NUMBER: {
         bool negated = false;
-        ObObj new_val;
+        DatumValue new_val;
         if (const_expr->get_value().is_decimal_int()) {
           ObDecimalInt *neg_dec = nullptr;
           int32_t out_prec =
@@ -290,7 +304,7 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
                                           const_expr->get_value().get_int_bytes(), neg_dec,
                                           out_bytes, ctx_.expr_factory_.get_allocator()))) {
           } else {
-            new_val.set_decimal_int(out_bytes, const_expr->get_value().get_scale(), neg_dec);
+            OZ (new_val.set_decimal_int(out_bytes, const_expr->get_value().get_scale(), neg_dec, ctx_.expr_factory_.get_allocator()));
             negated = true;
           }
         } else {
@@ -298,14 +312,14 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
           number::ObNumber negative_val;
           if (is_odd && OB_SUCC(const_expr->get_value().get_number(val))
               && OB_SUCC(val.negate(negative_val, ctx_.expr_factory_.get_allocator()))) {
-            new_val.set_number(negative_val);
+            OZ (new_val.set_number(negative_val, ctx_.expr_factory_.get_allocator()));
             new_val.set_scale(const_expr->get_accuracy().get_scale());
             negated = true;
           }
         }
         if (OB_SUCC(ret) && negated) {
           const_expr->set_expr_type(T_NUMBER);
-          const_expr->set_value(new_val);
+          OX (const_expr->set_value(new_val));
           const_expr->set_precision(
             static_cast<ObPrecision>(const_expr->get_accuracy().get_precision() + 1));
         }
@@ -330,6 +344,9 @@ int ObRawExprResolverImpl::try_negate_const(ObRawExpr *&expr,
   if (OB_FAIL(ret)) {
     // ObConstRawExpr::type_ and ObConstRawExpr::value_ type may mismatch, value_ may be number
     // wile type_ is T_INT. This will cause get value error, ignore it.
+    // Allocation failure must abort; a prefix-copy failure may occur after
+    // the value was negated, so retrying a negation would change its sign.
+    if (ret == OB_ALLOCATE_MEMORY_FAILED) { return ret; }
     ret = OB_SUCCESS;
     neg_const = false;
   }
@@ -376,9 +393,9 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         ObConstRawExpr *c_expr = NULL;
         if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node->type_, c_expr))) {
         } else {
-          ObObj val;
+          DatumValue val;
           val.set_null();
-          c_expr->set_value(val);
+          OX (c_expr->set_value(val));
           expr = c_expr;
         }
         break;
@@ -389,9 +406,9 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         } else if (OB_ISNULL(c_expr)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObObj val;
-          val.set_int(node->value_);
-          c_expr->set_value(val);
+          DatumValue val;
+          OZ (val.set_int(node->value_, ctx_.expr_factory_.get_allocator()));
+          OX (c_expr->set_value(val));
           expr = c_expr;
         }
         break;
@@ -409,8 +426,8 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         } else if (OB_ISNULL(c_expr)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObObj val;
-          ObObjType data_type = static_cast<ObObjType>(node->int16_values_[OB_NODE_CAST_TYPE_IDX]);
+          DatumValue val;
+          SqlValueType data_type = static_cast<SqlValueType>(node->int16_values_[OB_NODE_CAST_TYPE_IDX]);
           bool need_set = true;
           if (ob_is_string_tc(data_type)) {
             int32_t len = node->int32_values_[1];
@@ -462,7 +479,6 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
                   }
                   if (OB_FAIL(ret)) {
                   } else if (OB_NOT_NULL(final_type.get_data_type())) { // basic type
-                    val.set_smallint(final_type.get_data_type()->get_meta_type().get_type());
                     int16_t type_val[4];
                     type_val[0] = final_type.get_data_type()->get_meta_type().get_type();
                     if (ObCharType == type_val[0]
@@ -480,7 +496,7 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
                                   | (((unsigned long)type_val[2] << 32) & 0x0000ffff00000000)
                                   | ((type_val[1] << 16) & 0x00000000ffff0000)
                                   | (type_val[0] & 0x000000000000ffff);
-                    val.set_int(v);
+                    OZ (val.set_int(v, ctx_.expr_factory_.get_allocator()));
                     need_set = false;
                   } else if (final_type.is_associative_array_type()) {
                     c_expr->set_udt_id(final_type.get_user_type_id());
@@ -523,10 +539,10 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
               ParseNode tmp_node;
               tmp_node.value_ = node->value_;
               tmp_node.int16_values_[OB_NODE_CAST_COLL_IDX] = coll_type;
-              val.set_int(tmp_node.value_);
+              OZ (val.set_int(tmp_node.value_, ctx_.expr_factory_.get_allocator()));
             }
           }
-          c_expr->set_value(val);
+          OX (c_expr->set_value(val));
           expr = c_expr;
         }
         break;
@@ -1693,7 +1709,7 @@ int ObRawExprResolverImpl::mock_set_type_info(common::ObIAllocator &allocator, O
 int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &node, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
-  ObObjParam val;
+  DatumParameter val;
   ObConstRawExpr *c_expr = NULL;
   ObString literal_prefix;
   bool is_paramlize = false;
@@ -1736,7 +1752,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
     if (node.is_date_unit_) {
       c_expr->set_is_date_unit();
     }
-    c_expr->set_value(val);
+    OX (c_expr->set_value(val));
     // Reset meta information to an empty string
     c_expr->set_expr_obj_meta(val.get_param_meta());
     c_expr->set_literal_prefix(literal_prefix);
@@ -1752,7 +1768,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
         if (NULL == ctx_.param_list_) {
           LOG_INFO("NOTICE : UNIT TEST Code direction.", K(ret));
         } else if (ctx_.param_list_->empty()) { // reach here means current val is ?, but param_list is empty, means it's prepare stage
-          ObObjMeta question_mark_meta;
+          SqlTypeMeta question_mark_meta;
           // Compatible with MySQL, use the default varbinary type for type deduce in the ps prepare phase
           question_mark_meta.set_varbinary();
           question_mark_meta.set_collation_level(CS_LEVEL_IMPLICIT);
@@ -1797,7 +1813,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
                   OX (c_expr->set_expr_obj_meta(*var->get_type().get_meta_type()));
                   OX (c_expr->set_accuracy(var->get_type().get_data_type()->get_accuracy()));
                 } else {
-                  ObObjMeta meta;
+                  SqlTypeMeta meta;
                   OX (meta.set_type(ObExtendType));
                   OX (c_expr->set_meta_type(meta));
                   OX (c_expr->set_udt_id(var->get_type().get_user_type_id()));
@@ -1817,7 +1833,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
           LOG_WARN("question mark index out of param list count",
                    "index", val.get_unknown(), "param_count", ctx_.param_list_->count());
         } else { // with parameter prepare or execute stmt stage, note: will there be a problem if c_expr's accuracy is not set here
-          const ObObjParam &param = ctx_.param_list_->at(val.get_unknown());
+          const DatumParameter &param = ctx_.param_list_->at(val.get_unknown());
           c_expr->set_is_literal_bool(param.is_boolean());
           if (param.is_ext()) {
               c_expr->set_meta_type(param.get_meta());
@@ -1853,8 +1869,8 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
               ObDatum datum;
               ObEnumSetInnerValue inner_value;
               ObSEArray<common::ObString, 64> type_info_value;
-              if (ObNullType != param.get_type()) {
-                OZ (datum.from_obj(param));
+              if (!param.is_null()) {
+                OX (datum = param.datum_);
                 OZ (datum.get_enumset_inner(inner_value));
                 if (ObEnumInnerType == c_expr->get_result_type().get_type()) {
                   OZ (mock_enum_type_info(ctx_.expr_factory_.get_allocator(), inner_value.string_value_, inner_value.numberic_value_, type_info_value));
@@ -1897,12 +1913,12 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
         } else if (param_idx >= ctx_.param_list_->count()) {
           ret = OB_ERR_BIND_VARIABLE_NOT_EXIST;
         } else {
-          const ObObjParam &param = ctx_.param_list_->at(param_idx);
+          const DatumParameter &param = ctx_.param_list_->at(param_idx);
           c_expr->set_is_literal_bool(param.is_boolean());
           if (param.is_ext()) {
             // values statement
             if (param.is_ext_sql_array()) {
-              ObSqlArrayObj *param_array = reinterpret_cast<ObSqlArrayObj*>(param.get_ext());
+              DatumParameterArray *param_array = reinterpret_cast<DatumParameterArray*>(param.get_ext());
               const ObExecContext *exec_ctx = NULL;
               const ObPhysicalPlanCtx *phy_ctx = NULL;
               if (OB_ISNULL(param_array) || OB_ISNULL(ctx_.session_info_) ||
@@ -2015,11 +2031,11 @@ int ObRawExprResolverImpl::process_char_charset_node(const ParseNode *node, ObRa
       LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset_str.length(), charset_str.ptr());
     } else {
       ObCollationType coll_type = ObCharset::get_system_collation();
-      ObObj val;
-      val.set_varchar(charset_str);
+      DatumValue val;
+      OZ (val.set_varchar(charset_str, ctx_.expr_factory_.get_allocator()));
       val.set_collation_type(coll_type);
       val.set_collation_level(CS_LEVEL_COERCIBLE);
-      c_expr->set_value(val);
+      OX (c_expr->set_value(val));
       expr = c_expr;
     }
   }
@@ -2381,8 +2397,8 @@ int ObRawExprResolverImpl::process_left_value_node(const ParseNode *node, ObRawE
     ObString str;
     str.assign_ptr(const_cast<char *>(node->str_value_), static_cast<int32_t>(node->str_len_));
     ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, str);
-    ObObj val;
-    val.set_varchar(str);
+    DatumValue val;
+    OZ (val.set_varchar(str, ctx_.expr_factory_.get_allocator()));
     val.set_collation_type(ObCharset::get_system_collation());
     val.set_collation_level(CS_LEVEL_IMPLICIT);
 
@@ -3875,11 +3891,11 @@ int ObRawExprResolverImpl::process_collation_node(const ParseNode *node, ObRawEx
     } else if (OB_ISNULL(c_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObj val;
-      val.set_int(static_cast<int64_t>(collation_type));
+      DatumValue val;
+      OZ (val.set_int(static_cast<int64_t>(collation_type), ctx_.expr_factory_.get_allocator()));
       val.set_collation_type(collation_type);
       val.set_collation_level(CS_LEVEL_IGNORABLE);
-      c_expr->set_value(val);
+      OX (c_expr->set_value(val));
       expr = c_expr;
     }
   }
@@ -5220,10 +5236,10 @@ int ObRawExprResolverImpl::process_sys_func_params(ObSysFunRawExpr &func_expr, i
       } else if (OB_UNLIKELY(!param1->is_const_raw_expr())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        const ObObj &param = static_cast<ObConstRawExpr*>(param1)->get_param();
+        const DatumValue &param = static_cast<ObConstRawExpr*>(param1)->get_param();
         ParseNode parse_node;
         parse_node.value_ = param.get_int();
-        ObObjType obj_type = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+        SqlValueType obj_type = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
         if (ob_is_extend(obj_type) && OB_NOT_NULL(ctx_.secondary_namespace_)) {
           const pl::ObUserDefinedType *user_type = NULL;
           if (OB_FAIL(ctx_.secondary_namespace_->get_pl_data_type_by_id(param1->get_udt_id(), user_type))) {
@@ -5416,10 +5432,6 @@ int ObRawExprResolverImpl::process_match(const ParseNode *node, ObRawExpr *&expr
     // resolve search query and mode
     ObRawExpr *search_keywords = nullptr;
     ObRawExpr *params = nullptr;
-    ObExecContext *exec_ctx = NULL;
-    ObIAllocator &allocator = ctx_.expr_factory_.get_allocator();
-    ObObj result;
-    bool got_result = false;
     if (OB_ISNULL(node->children_[1])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("match against search keywords is unexpected");
@@ -5681,10 +5693,11 @@ int ObRawExprResolverImpl::process_window_function_node(const ParseNode *node, O
         } else if (OB_ISNULL(c_expr)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObObj val;
-          val.set_int(1);
-          c_expr->set_value(val);
-          if (OB_FAIL(func_params.push_back(c_expr))) {
+          DatumValue val;
+          OZ (val.set_int(1, ctx_.expr_factory_.get_allocator()));
+          OX (c_expr->set_value(val));
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(func_params.push_back(c_expr))) {
           }
         }
       }
@@ -6327,21 +6340,17 @@ int ObRawExprResolverImpl::process_dml_event_node(const ParseNode *node, ObRawEx
     OZ (ctx_.expr_factory_.create_raw_expr(T_INT, c_expr));
     CK (OB_NOT_NULL(f_expr) && OB_NOT_NULL(c_expr));
     if (OB_SUCC(ret)) {
-      ObObjParam val;
-      if (T_DML_EVENT_UPDATING == node->value_) {
-        val.set_int(static_cast<int64_t>(ObDmlEventType::DE_UPDATING));
-        if (NULL != node->children_[0]) {
-          OZ (SMART_CALL(recursive_resolve(node->children_[0], col_expr)));
-        }
-      } else {
-        T_DML_EVENT_INSERTING == node->value_
-                                 ? val.set_int(static_cast<int64_t>(ObDmlEventType::DE_INSERTING))
-                                 : val.set_int(static_cast<int64_t>(ObDmlEventType::DE_DELETING));
+      DatumValue val;
+      const int64_t event = T_DML_EVENT_UPDATING == node->value_
+          ? static_cast<int64_t>(ObDmlEventType::DE_UPDATING)
+          : T_DML_EVENT_INSERTING == node->value_
+              ? static_cast<int64_t>(ObDmlEventType::DE_INSERTING)
+              : static_cast<int64_t>(ObDmlEventType::DE_DELETING);
+      OZ (val.set_int(event, ctx_.expr_factory_.get_allocator()));
+      if (OB_SUCC(ret) && T_DML_EVENT_UPDATING == node->value_ && node->children_[0] != nullptr) {
+        OZ (SMART_CALL(recursive_resolve(node->children_[0], col_expr)));
       }
-      if (OB_SUCC(ret)) {
-        val.set_param_meta();
-        c_expr->set_value(val);
-      }
+      OX (c_expr->set_value(val));
       if (NULL != col_expr) {
         OZ (f_expr->set_param_exprs(c_expr, col_expr));
       } else {
@@ -6508,7 +6517,7 @@ int ObRawExprResolverImpl::process_odbc_time_literals(const ObItemType dst_time_
         if (OB_ISNULL(ctx_.query_ctx_)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(const_param_info.const_idx_.push_back(expr_node->value_))) {
-        } else if (OB_FAIL(const_param_info.const_params_.push_back(ctx_.param_list_->at(expr_node->value_)))) {
+        } else if (OB_FAIL(const_param_info.const_params_.push_back(ctx_.param_list_->at(expr_node->value_).value_view()))) {
         } else if (OB_FAIL(ctx_.query_ctx_->all_plan_const_param_constraints_.push_back(const_param_info))) {
         } else {/* do nothing */}
       }

@@ -28,8 +28,8 @@ namespace common
 class ObRowUtil
 {
 public:
-  static int convert(const common::ObString &compact_row, ObNewRow &row);
-  static int convert(const char *compact_row, int64_t buf_len, ObNewRow &row);
+  static int convert(const common::ObString &compact_row, ObNewRow &row, DatumValue *scalar_slots, int64_t slot_capacity);
+  static int convert(const char *compact_row, int64_t buf_len, ObNewRow &row, DatumValue *scalar_slots, int64_t slot_capacity);
   static int compare_row(const ObNewRow &lrow, const ObNewRow &rrow, int &cmp);
 };
 

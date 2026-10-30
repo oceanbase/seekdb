@@ -29,7 +29,7 @@ using namespace oceanbase::sql;
 int ObDBMSIndexManager::refresh(
     ObPLExecCtx &ctx,
     sql::ParamStore &params,
-    common::ObObj &result)
+    common::DatumValue &result)
 {
   LOG_INFO("call dbms_index_manager.refresh");
   int ret = OB_SUCCESS;

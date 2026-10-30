@@ -19,6 +19,8 @@
 #include "query/engine/ob_exec_context_access.h"
 #include "query/session/ob_session_access.h"
 #include "ob_exec_context.h"
+#include "sql/engine/native_param_utils.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/ob_server_struct.h"
@@ -245,6 +247,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     admission_acquired_(false),
     use_temp_expr_ctx_cache_(false),
     temp_expr_ctx_map_(),
+    native_datum_caster_(nullptr),
     dml_event_(ObDmlEventType::DE_INVALID),
     update_columns_(nullptr),
     expect_range_count_(0),
@@ -316,6 +319,11 @@ void ObExecContext::set_runtime_services(const RuntimeServices &services)
 
 ObExecContext::~ObExecContext()
 {
+  if (native_datum_caster_ != nullptr) {
+    native_datum_caster_->~ObDatumCaster();
+    allocator_.free(native_datum_caster_);
+    native_datum_caster_ = nullptr;
+  }
   row_id_list_array_.reset();
   destroy_eval_allocator();
   reset_op_ctx();
@@ -520,6 +528,23 @@ void ObExecContext::destroy_eval_allocator()
   eval_res_allocator_.reset();
   eval_tmp_allocator_.reset();
   tmp_alloc_used_ = false;
+}
+
+int ObExecContext::get_native_datum_caster(ObDatumCaster *&caster)
+{
+  int ret = OB_SUCCESS;
+  if (native_datum_caster_ == nullptr) {
+    void *memory = allocator_.alloc(sizeof(ObDatumCaster));
+    if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      ObDatumCaster *created = new (memory) ObDatumCaster();
+      if (OB_FAIL(created->init(*this, false))) {
+        created->~ObDatumCaster(); allocator_.free(memory);
+      } else { native_datum_caster_ = created; }
+    }
+  }
+  if (OB_SUCC(ret)) { caster = native_datum_caster_; }
+  return ret;
 }
 
 int ObExecContext::get_temp_expr_eval_ctx(const ObTempExpr &temp_expr,
@@ -998,22 +1023,23 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(phy_plan_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (batch_id >= params.get_count()) {
+  } else if (batch_id < 0 || batch_id >= params.get_count()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    common::ObIArray<common::ObObjParam> &one_params =
+    common::ObIArray<DatumParameter> &one_params =
         params.get_one_batch_params(batch_id);
     ObEvalCtx eval_ctx(*this);
     for (int i = 0; OB_SUCC(ret) && i < one_params.count(); ++i) {
-      if (i > params.param_idxs_.count()) {
+      if (i >= params.param_idxs_.count() || params.get_param_idx(i) < 0 ||
+          params.get_param_idx(i) >= phy_plan_ctx_->get_param_store().count()) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        phy_plan_ctx_->get_param_store_for_update().at(params.get_param_idx(i)) = one_params.at(i);
+        ret = phy_plan_ctx_->set_runtime_parameter(params.get_param_idx(i), one_params.at(i));
         if (params.param_expr_idxs_.count() == one_params.count()) {
           const sql::ObExpr *expr = NULL;
           int64_t idx = params.param_expr_idxs_.at(i);
           if (OB_FAIL(ret)) {
-          } else if (OB_UNLIKELY(idx > array.count())) {
+          } else if (OB_UNLIKELY(idx <= 0 || idx > array.count())) {
             // do nothing.
             LOG_TRACE("param idx out of array count", K(idx), K(array.count()));
           } else if (FALSE_IT(expr = &array.at(idx - 1))) {
@@ -1023,10 +1049,11 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
             expr->get_eval_info(eval_ctx).clear_evaluated_flag();
             ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *expr);
             ObDatum &param_datum = expr->locate_datum_for_write(eval_ctx);
-            if (OB_FAIL(param_datum.from_obj(one_params.at(i), expr->obj_datum_map_))) {
+            ret = assign_parameter_to_expr(eval_ctx, *expr, one_params.at(i).datum_, one_params.at(i).get_type_meta());
+            if (OB_FAIL(ret)) {
             } else if (is_lob_storage(one_params.at(i).get_type()) &&
-                       OB_FAIL(ob_adjust_lob_datum(*this, one_params.at(i), expr->obj_meta_,
-                                                   expr->obj_datum_map_, get_allocator(), param_datum))) {
+                       OB_FAIL(ob_adjust_lob_datum(*this, one_params.at(i).datum_,
+                           one_params.at(i).get_type_meta(), expr->obj_meta_, get_allocator(), param_datum))) {
             } else {
               expr->get_eval_info(eval_ctx).evaluated_ = true;
             }
@@ -1277,7 +1304,7 @@ int ObExecContext::get_subschema_id_by_collection_elem_type(ObNestedType coll_ty
   return ret;
 }
 
-int ObExecContext::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+int ObExecContext::get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                                  const ObIArray<common::ObString> &type_info,
                                                  uint16_t &subschema_id)
 {
@@ -1291,7 +1318,7 @@ int ObExecContext::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
   return ret;
 }
 
-int ObExecContext::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+int ObExecContext::get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                                  const ObIArray<common::ObString> &type_info,
                                                  uint16_t &subschema_id) const
 {
@@ -1435,7 +1462,7 @@ sql::ObSQLSessionInfo *ObExecContextAccess::get_session(sql::ObExecContext &ctx)
 
 void ObExecContextAccess::configure_obj_cast(
     sql::ObExecContext &ctx,
-    common::ObObjCastParams &params)
+    common::DatumCastParams &params)
 {
   if (OB_NOT_NULL(ctx.get_my_session())) {
     ctx.get_my_session()->configure_obj_cast(

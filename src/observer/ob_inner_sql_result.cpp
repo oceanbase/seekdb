@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_inner_sql_result.h"
+#include "share/datum/typed_datum_compare.h"
+#include "lib/signal/ob_signal_struct.h"
+#include "observer/omt/ob_server_runtime_controller.h"
 #include "share/rc/ob_server_runtime.h"
 
 #include "omt/ob_server_runtime.h"
@@ -32,7 +35,7 @@ using namespace sql;
 
 namespace observer
 {
-inline int ObInnerSQLResult::check_extend_value(const common::ObObj &obj)
+inline int ObInnerSQLResult::check_extend_value(const common::DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   if (obj.is_null()) {
@@ -55,7 +58,7 @@ ObInnerSQLResult::ObInnerSQLResult(
       sql_ctx_(), schema_guard_(share::schema::ObSchemaMgrItem::MOD_INNER_SQL_RESULT),
       opened_(false), session_(session),
       plan_cache_access_service_(plan_cache_access_service),
-      result_set_(nullptr), row_(NULL),
+      result_set_(nullptr), row_(NULL), native_row_(), native_result_(false),
       execute_start_ts_(0), execute_end_ts_(0),
       is_inited_(false),
       store_first_row_(false),
@@ -134,7 +137,8 @@ int ObInnerSQLResult::open()
       } else if (is_read_&& is_select) {
         //prefetch 1 row for throwing error code and retry
         opened_ = true;
-        if (OB_FAIL(result_set_->get_next_row(row_))) {
+        if (OB_FAIL(native_result_ ? result_set_->get_next_native_result_row(native_row_)
+                                       : result_set_->get_next_row(row_))) {
           if (OB_ITER_END == ret) {
             iter_end_ = true;
             ret = OB_SUCCESS;
@@ -190,6 +194,8 @@ int ObInnerSQLResult::inner_close()
       result_set_->get_exec_context().get_das_ctx().record_access_error(ret);
     }
   }
+  row_ = nullptr;
+  native_row_ = ResultRowView();
   opened_ = false;
   store_first_row_ = false;
   iter_end_ = false;
@@ -209,16 +215,32 @@ int ObInnerSQLResult::next()
     store_first_row_ = false;
   } else {
     row_ = NULL;
+    native_row_ = ResultRowView();
     SQL_INFO_GUARD(session_.get_current_query_string(), session_.get_cur_sql_id());
     ObInnerSQLSessionGuard sess_guard(&session_);
     WITH_CONTEXT(mem_context_) {
-      if (OB_FAIL(result_set_->get_next_row(row_))) {
+      if (OB_FAIL(native_result_ ? result_set_->get_next_native_result_row(native_row_)
+                                       : result_set_->get_next_row(row_))) {
         if (OB_ITER_END != ret) {
           result_set_->get_exec_context().get_das_ctx().record_access_error(ret);
         }
       }
 
     }
+  }
+  return ret;
+}
+
+int ObInnerSQLResult::get_native_value(int64_t col_idx, ObIAllocator &owner,
+                                        DatumValue &value) const
+{
+  int ret = OB_SUCCESS;
+  if (!opened_) { ret = OB_NOT_INIT; }
+  else if (!native_result_) { ret = OB_INVALID_ARGUMENT; }
+  else {
+    DatumValue borrowed;
+    OZ(get_value(col_idx, borrowed));
+    OZ(clone_typed_value(borrowed, value, owner));
   }
   return ret;
 }
@@ -289,67 +311,55 @@ int ObInnerSQLResult::find_idx(const char *col_name, int64_t &idx) const
   return ret;
 }
 
-#define DEF_GET_VALUE_BY_INDEX_IMPL(name, obj_name, type)                                     \
-  int ObInnerSQLResult::name(const int64_t col_idx, type &val) const                          \
-  {                                                                                           \
-    int ret = OB_SUCCESS;                                                                     \
-    if (!opened_) {                                                                           \
-      ret = OB_NOT_INIT;                                                                      \
-      LOG_WARN("not opened", K(ret));                                                         \
-    } else if (NULL == row_) {                                                                \
-      ret = OB_ERR_UNEXPECTED;                                                                \
-      LOG_WARN("row is null", K(ret));                                                        \
-    } else if (col_idx                                                                        \
-        >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {               \
-      ret = OB_SIZE_OVERFLOW;                                                                 \
-      LOG_WARN("column index overflow", K(ret), K(col_idx), "row", *row_);                    \
-    } else {                                                                                  \
-      const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);   \
-      if (idx < 0 || idx >= row_->count_) {                                                   \
-        ret = OB_ERR_UNEXPECTED;                                                              \
-        LOG_WARN("invalid index", K(ret), K(idx), "cell count", row_->count_);                \
-      } else {                                                                                \
-        const ObObj &obj = row_->cells_[idx];                                                 \
-        if (OB_FAIL(check_extend_value(obj))) {                                               \
-          LOG_DEBUG("check extend value failed", K(ret));                                     \
-        } else if (OB_FAIL(obj.obj_name(val))) {                                              \
-          LOG_WARN("get "#type" value from obj failed", K(ret), K(obj), K(obj.get_meta().get_type()), K(col_idx), K_(row)); \
-        }                                                                                     \
-      }                                                                                       \
-    }                                                                                         \
-    return ret;                                                                               \
+#define DEF_GET_VALUE_BY_INDEX_IMPL(name, getter, type) \
+  int ObInnerSQLResult::name(const int64_t col_idx, type &val) const \
+  { \
+    int ret = OB_SUCCESS; \
+    DatumValue value; \
+    if (OB_FAIL(get_value(col_idx, value))) {} \
+    else if (OB_FAIL(check_extend_value(value))) {} \
+    else { ret = value.getter(val); } \
+    return ret; \
   }
-
 #define DEF_GET_VALUE_BY_INDEX(name, type) DEF_GET_VALUE_BY_INDEX_IMPL(name, name, type)
 
-//DEF_GET_VALUE_BY_INDEX(get_int, int64_t);
 DEF_GET_VALUE_BY_INDEX_IMPL(get_uint, get_uint64, uint64_t);
-DEF_GET_VALUE_BY_INDEX(get_datetime, int64_t);
-DEF_GET_VALUE_BY_INDEX(get_date, int32_t);
-DEF_GET_VALUE_BY_INDEX(get_time, int64_t);
-DEF_GET_VALUE_BY_INDEX(get_year, uint8_t);
+#define DEF_GET_TEMPORAL_VALUE(name, predicate, type) \
+  int ObInnerSQLResult::name(const int64_t col_idx, type &val) const \
+  { \
+    int ret = OB_SUCCESS; DatumValue value; \
+    if (OB_FAIL(get_value(col_idx, value))) {} \
+    else if (OB_FAIL(check_extend_value(value))) {} \
+    else if (!value.predicate()) { ret = OB_OBJ_TYPE_ERROR; } \
+    else { val = value.name(); } \
+    return ret; \
+  }
+DEF_GET_TEMPORAL_VALUE(get_datetime, is_datetime, int64_t);
+DEF_GET_TEMPORAL_VALUE(get_date, is_date, int32_t);
+DEF_GET_TEMPORAL_VALUE(get_time, is_time, int64_t);
+DEF_GET_TEMPORAL_VALUE(get_year, is_year, uint8_t);
+#undef DEF_GET_TEMPORAL_VALUE
 
-int ObInnerSQLResult::get_timestamp(const int64_t col_idx, const common::ObTimeZoneInfo *tz_info,
-    int64_t &val) const
+int ObInnerSQLResult::get_timestamp(const int64_t col_idx,
+    const common::ObTimeZoneInfo *tz_info, int64_t &val) const
 {
   UNUSED(tz_info);
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!opened_)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(NULL == row_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(col_idx >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_))) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
-    if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= row_->count_)) {
-      ret = OB_ERR_UNEXPECTED;
+  int ret = OB_SUCCESS; DatumValue value;
+  if (OB_FAIL(get_value(col_idx, value))) {}
+  else if (OB_FAIL(check_extend_value(value))) {}
+  else {
+    // This historical getter reads scalar bits without a timestamp type check.
+    // Native DATE/YEAR/FLOAT payloads have fewer bytes than the old union.
+    const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(value.get_type());
+    const int64_t bytes = ObDatum::get_reserved_size(mapping);
+    if ((mapping != OBJ_DATUM_8BYTE_DATA && mapping != OBJ_DATUM_4BYTE_DATA
+         && mapping != OBJ_DATUM_1BYTE_DATA)
+        || value.datum_.ptr_ == nullptr || value.datum_.len_ != bytes) {
+      ret = OB_OBJ_TYPE_ERROR;
     } else {
-      const ObObj &obj = row_->cells_[idx];
-      if (OB_FAIL(check_extend_value(obj))) {
-      } else {
-        val = obj.get_timestamp();
-      }
+      uint64_t scalar = 0;
+      MEMCPY(&scalar, value.datum_.ptr_, bytes);
+      val = static_cast<int64_t>(scalar);
     }
   }
   return ret;
@@ -376,104 +386,58 @@ DEF_GET_VALUE_BY_INDEX(get_double, double);
 
 int ObInnerSQLResult::get_int(const int64_t col_idx, int64_t &int_val) const
 {
-  int ret = OB_SUCCESS;
-  const ObObj *obj = NULL;
-  if (OB_FAIL(get_obj(col_idx, obj))) {
-  } else if (OB_ISNULL(obj)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(ObIntTC != obj->get_type_class())) {
-    ret = OB_OBJ_TYPE_ERROR;
-  } else {
-    int_val = obj->get_int();
-  }
+  int ret = OB_SUCCESS; DatumValue value;
+  if (OB_FAIL(get_value(col_idx, value))) {}
+  else if (OB_FAIL(check_extend_value(value))) {}
+  else if (value.get_type_class() != ObIntTC) { ret = OB_OBJ_TYPE_ERROR; }
+  else { int_val = value.get_int(); }
   return ret;
 }
 
 int ObInnerSQLResult::get_number_impl(const int64_t col_idx, number::ObNumber &ret_nmb) const
 {
-  int ret = OB_SUCCESS;
-  if (!opened_) {
-    ret = OB_NOT_INIT;
-  } else if (NULL == row_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (col_idx >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
-    if (idx < 0 || idx >= row_->count_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const ObObj &obj = row_->cells_[idx];
-      if (OB_FAIL(check_extend_value(obj))) {
-      } else if (obj.is_decimal_int()) {
-        if (OB_FAIL(wide::to_number(obj.get_decimal_int(), obj.get_int_bytes(), obj.get_scale(),
-                                    mem_context_->get_arena_allocator(), ret_nmb))) {
-        }
-      } else if (OB_FAIL(obj.get_number(ret_nmb))) {
-      }
-    }
-  }
+  int ret = OB_SUCCESS; DatumValue value;
+  if (OB_FAIL(get_value(col_idx, value))) {}
+  else if (OB_FAIL(check_extend_value(value))) {}
+  else if (value.is_decimal_int()) {
+    ret = wide::to_number(value.get_decimal_int(), value.get_int_bytes(), value.get_scale(),
+        mem_context_->get_arena_allocator(), ret_nmb);
+  } else { ret = value.get_number(ret_nmb); }
   return ret;
 }
 
 #undef DEF_GET_VALUE_BY_INDEX
 #undef DEF_GET_VALUE_BY_INDEX_IMPL
 
-int ObInnerSQLResult::get_type(const int64_t col_idx, ObObjMeta &type) const
+int ObInnerSQLResult::get_type(const int64_t col_idx, SqlTypeMeta &type) const
 {
-  int ret = OB_SUCCESS;
-  if (!opened_) {
-    ret = OB_NOT_INIT;
-  } else if (NULL == row_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (col_idx
-      >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
-    if (idx < 0 || idx >= row_->count_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const ObObj &obj = row_->cells_[idx];
-      type = obj.get_meta();
-    }
-  }
+  DatumValue value;
+  const int ret = get_value(col_idx, value);
+  if (ret == OB_SUCCESS) { type = value.meta_; }
   return ret;
 }
 
 int64_t ObInnerSQLResult::get_column_count() const
 {
-  int64_t column_count = -1;
-  if (!opened_) {
-  } else if (NULL == row_) {
-  } else {
-    column_count = (NULL == row_->projector_ ? row_->count_ : row_->projector_size_);
-  }
-  return column_count;
+  return !opened_ ? -1 : native_result_ ? native_row_.count()
+      : row_ == nullptr ? -1 : row_->get_count();
 }
 
-int ObInnerSQLResult::get_obj(const int64_t col_idx, ObObj &obj,
-                              const ObTimeZoneInfo *tz_info,
-                              ObIAllocator *allocator) const
+int ObInnerSQLResult::get_value(int64_t col_idx, DatumValue &value) const
 {
-  UNUSED(tz_info);
-  UNUSED(allocator);
   int ret = OB_SUCCESS;
-  if (!opened_) {
-    ret = OB_NOT_INIT;
-  } else if (NULL == row_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (col_idx
-      >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
-    if (idx < 0 || idx >= row_->count_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      obj = row_->cells_[idx];
-    }
+  DatumValue candidate;
+  if (!opened_) { ret = OB_NOT_INIT; }
+  else if (col_idx < 0) { ret = OB_INVALID_ARGUMENT; }
+  else if (native_result_) { ret = native_row_.get_value(col_idx, candidate); }
+  else if (row_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else if (col_idx >= row_->get_count()) { ret = OB_SIZE_OVERFLOW; }
+  else {
+    const int64_t idx = row_->projector_ == nullptr ? col_idx : row_->projector_[col_idx];
+    if (idx < 0 || idx >= row_->count_) { ret = OB_ERR_UNEXPECTED; }
+    else { candidate = row_->cells_[idx]; }
   }
+  if (OB_SUCC(ret)) { value = candidate; }
   return ret;
 }
 
@@ -516,8 +480,8 @@ DEF_GET_VALUE_BY_NAME(get_varchar, ObString);
 DEF_GET_VALUE_BY_NAME(get_float, float);
 DEF_GET_VALUE_BY_NAME(get_double, double);
 DEF_GET_VALUE_BY_NAME(get_number_impl, number::ObNumber);
-DEF_GET_VALUE_BY_NAME(get_type, ObObjMeta);
-DEF_GET_VALUE_BY_NAME(get_obj, ObObj);
+DEF_GET_VALUE_BY_NAME(get_type, SqlTypeMeta);
+DEF_GET_VALUE_BY_NAME(get_value, DatumValue);
 #undef DEF_GET_VALUE_BY_NAME
 
 int ObInnerSQLResult::get_timestamp(const char *col_name,  const common::ObTimeZoneInfo *tz_info,
@@ -593,31 +557,6 @@ int ObInnerSQLResult::inner_get_number(const char *col_name, number::ObNumber &n
   } else if (NULL == col_name) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(get_number_impl(col_name, nmb_val))) {
-  }
-  return ret;
-}
-
-int ObInnerSQLResult::get_obj(const int64_t col_idx, const common::ObObj *&result) const
-{
-  int ret = OB_SUCCESS;
-  if (!opened_) {
-    ret = OB_NOT_INIT;
-  } else if (NULL == row_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (col_idx
-      >= (NULL == row_->projector_ ? row_->count_ : row_->projector_size_)) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    const int64_t idx = (NULL != row_->projector_ ? row_->projector_[col_idx] : col_idx);
-    if (idx < 0 || idx >= row_->count_) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const ObObj &obj = row_->cells_[idx];
-      if (OB_FAIL(check_extend_value(obj))) {
-      } else {
-        result = &obj;
-      }
-    }
   }
   return ret;
 }

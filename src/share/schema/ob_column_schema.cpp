@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_column_schema.h"
 #include "share/schema/ob_schema_service.h"
+#include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
 
 namespace oceanbase
 {
@@ -44,6 +46,38 @@ ObColumnSchemaV2::ObColumnSchemaV2(ObIAllocator *allocator)
 
 ObColumnSchemaV2::~ObColumnSchemaV2()
 {
+}
+
+int ObColumnSchemaV2::copy_default_value(const DatumValue &source, DatumValue &target)
+{
+  if (error_ret_ != OB_SUCCESS) { return error_ret_; }
+  DatumValue value = source;
+  // The column already stores its declaration separately. A NULL default is
+  // the NULL value, including before/after its version-1 wire roundtrip.
+  if (value.is_null() && !value.meta_.is_null()) { value.meta_.set_null(); }
+  ObIAllocator *owner = get_allocator();
+  return owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED : clone_typed_value(value, target, *owner);
+}
+int ObColumnSchemaV2::copy_default_value(const DatumParameter &source, DatumValue &target)
+{
+  return copy_default_value(source.value_view(), target);
+}
+namespace {
+int64_t default_payload_size(const DatumValue &value, int depth = 0)
+{
+  if (value.is_null()) { return 0; }
+  int64_t size = value.datum_.get_deep_copy_size();
+  if (value.is_ext_sql_array() && depth <= 64) {
+    const auto *array = reinterpret_cast<const DatumParameterArray *>(value.get_ext());
+    if (array != nullptr) {
+      size += sizeof(DatumParameterArray) + sizeof(DatumParameter) * array->count_;
+      for (int64_t i = 0; i < array->count_; ++i) {
+        size += default_payload_size(array->data_[i].value_view(), depth + 1);
+      }
+    }
+  }
+  return size;
+}
 }
 
 int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
@@ -78,8 +112,8 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     skip_index_attr_ = src_schema.skip_index_attr_;
     lob_chunk_size_ = src_schema.lob_chunk_size_;
 
-    if (OB_FAIL(deep_copy_obj(src_schema.orig_default_value_, orig_default_value_))) {
-    } else if (OB_FAIL(deep_copy_obj(src_schema.cur_default_value_, cur_default_value_))) {
+    if (OB_FAIL(copy_default_value(src_schema.orig_default_value_, orig_default_value_))) {
+    } else if (OB_FAIL(copy_default_value(src_schema.cur_default_value_, cur_default_value_))) {
     } else if (OB_FAIL(deep_copy_str(src_schema.column_name_, column_name_))) {
     } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
     } else if (OB_FAIL(set_extended_type_info(src_schema.extended_type_info_))) {
@@ -116,8 +150,8 @@ int64_t ObColumnSchemaV2::get_convert_size() const
 {
   int64_t convert_size = sizeof(*this);
 
-  convert_size += orig_default_value_.get_deep_copy_size();
-  convert_size += cur_default_value_.get_deep_copy_size();
+  convert_size += default_payload_size(orig_default_value_);
+  convert_size += default_payload_size(cur_default_value_);
   convert_size += column_name_.length() + 1;
   convert_size += comment_.length() + 1;
   if (column_ref_idxs_ != NULL) {
@@ -211,9 +245,14 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
               is_hidden_,
               charset_type_,
               is_binary_collation_,
-              on_update_current_timestamp_,
-              orig_default_value_,
-              cur_default_value_,
+              on_update_current_timestamp_);
+  if (OB_SUCC(ret)) {
+    ret = DatumParameterCodec::encode_value(orig_default_value_.datum_, orig_default_value_.meta_, buf, buf_len, pos);
+  }
+  if (OB_SUCC(ret)) {
+    ret = DatumParameterCodec::encode_value(cur_default_value_.datum_, cur_default_value_.meta_, buf, buf_len, pos);
+  }
+  LST_DO_CODE(OB_UNIS_ENCODE,
               column_name_,
               comment_,
               column_flags_,
@@ -244,8 +283,8 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
 OB_DEF_DESERIALIZE(ObColumnSchemaV2)
 {
   int ret = OB_SUCCESS;
-  ObObj orig_default_value;
-  ObObj cur_default_value;
+  DatumValue orig_default_value;
+  DatumValue cur_default_value;
   ObString column_name;
   ObString comment;
   bool has_column_ref = false;
@@ -266,9 +305,21 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
               is_hidden_,
               charset_type_,
               is_binary_collation_,
-              on_update_current_timestamp_,
-              orig_default_value,
-              cur_default_value,
+              on_update_current_timestamp_);
+  // Match OB_UNIS_DECODE's omission rule for older version-1 bodies.
+  if (OB_SUCC(ret) && pos < data_len) {
+    ObIAllocator *owner = get_allocator();
+    ret = owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED
+        : DatumParameterCodec::decode_schema_value(buf, data_len, pos, *owner,
+            orig_default_value.datum_, orig_default_value.meta_);
+  }
+  if (OB_SUCC(ret) && pos < data_len) {
+    ObIAllocator *owner = get_allocator();
+    ret = owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED
+        : DatumParameterCodec::decode_schema_value(buf, data_len, pos, *owner,
+            cur_default_value.datum_, cur_default_value.meta_);
+  }
+  LST_DO_CODE(OB_UNIS_DECODE,
               column_name,
               comment,
               column_flags_,
@@ -284,8 +335,8 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
 
   if (!OB_SUCC(ret)) {
   } else if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
-  } else if (OB_FAIL(deep_copy_obj(orig_default_value, orig_default_value_))) {
-  } else if (OB_FAIL(deep_copy_obj(cur_default_value, cur_default_value_))) {
+  } else if (FALSE_IT(orig_default_value_ = orig_default_value)) {
+  } else if (FALSE_IT(cur_default_value_ = cur_default_value)) {
   } else if (OB_FAIL(deep_copy_str(column_name, column_name_))) {
   } else if (OB_FAIL(deep_copy_str(comment, comment_))) {
   } else {
@@ -320,9 +371,17 @@ OB_DEF_SERIALIZE_SIZE(ObColumnSchemaV2)
               is_hidden_,
               charset_type_,
               is_binary_collation_,
-              on_update_current_timestamp_,
-              orig_default_value_,
-              cur_default_value_,
+              on_update_current_timestamp_);
+  int64_t value_size = 0;
+  if (DatumParameterCodec::value_size(orig_default_value_.datum_, orig_default_value_.meta_, value_size) != OB_SUCCESS) {
+    return 0;
+  }
+  len += value_size;
+  if (DatumParameterCodec::value_size(cur_default_value_.datum_, cur_default_value_.meta_, value_size) != OB_SUCCESS) {
+    return 0;
+  }
+  len += value_size;
+  LST_DO_CODE(OB_UNIS_ADD_LEN,
               column_name_,
               comment_,
               column_flags_,

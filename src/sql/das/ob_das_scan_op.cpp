@@ -22,6 +22,9 @@
 #include "sql/das/iter/ob_das_iter_utils.h"
 
 
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 namespace common
@@ -1161,17 +1164,17 @@ int ObLocalIndexLookupOp::process_data_table_rowkey()
     rowkey_cnt -= 1;
   }
   int64_t group_idx = 0;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
   common::ObArenaAllocator& lookup_alloc = lookup_memctx_->get_arena_allocator();
   ObNewRange lookup_range;
-  if (OB_ISNULL(buf = lookup_alloc.alloc(sizeof(ObObj) * rowkey_cnt))) {
+  if (OB_ISNULL(buf = lookup_alloc.alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr = new (buf) ObObj[rowkey_cnt];
+    obj_ptr = new (buf) DatumValue[rowkey_cnt];
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < index_ctdef_->result_output_.count(); ++i) {
-    ObObj tmp_obj;
+    DatumValue tmp_obj;
     ObExpr *expr = index_ctdef_->result_output_.at(i);
     if (T_PSEUDO_GROUP_ID == expr->type_) {
       group_idx = ObNewRange::get_group_idx(expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_).get_int());
@@ -1179,8 +1182,8 @@ int ObLocalIndexLookupOp::process_data_table_rowkey()
       // do nothing
     } else {
       ObDatum &col_datum = expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
-      if (OB_FAIL(col_datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(ob_write_obj(lookup_alloc, tmp_obj, obj_ptr[i]))) {
+      if (OB_FAIL(project_datum_value_view(col_datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], lookup_alloc))) {
       }
     }
   }

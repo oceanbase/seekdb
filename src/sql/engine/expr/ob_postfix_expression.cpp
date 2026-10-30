@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_postfix_expression.h"
+#include "common/datum/datum_parameter_codec.h"
 
 namespace oceanbase
 {
@@ -24,14 +25,14 @@ using namespace common;
 namespace sql
 {
 
-int ObPostExprItem::assign(const common::ObObj &obj)
+int ObPostExprItem::assign(const common::DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   ObItemType item_type = static_cast<ObItemType>((obj.get_type()));
   if (OB_UNLIKELY(!IS_DATATYPE_OR_QUESTIONMARK_OP(item_type))) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    new(&v2_.v1_) ObObj(obj);
+    new(&v2_.value_bytes_) DatumValue(obj);
     item_type_ = item_type;
   }
   return ret;
@@ -118,8 +119,8 @@ DEFINE_SERIALIZE(ObPostExprItem)
       OB_UNIS_ENCODE(v2_.cell_index_);
       OB_UNIS_ENCODE(accuracy_);
     } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_)) {
-      ObObj tmp = get_obj();
-      OB_UNIS_ENCODE(tmp);
+      const DatumValue &tmp = get_obj();
+      OZ (DatumParameterCodec::encode_value(tmp.datum_, tmp.meta_, buf, buf_len, pos));
       OB_UNIS_ENCODE(accuracy_);
     } else if (IS_EXPR_OP(item_type_)) {
       OB_UNIS_ENCODE(*v2_.op_);
@@ -143,12 +144,10 @@ int ObPostExprItem::deserialize(ObIAllocator &alloc,
       OB_UNIS_DECODE(v2_.cell_index_);
       OB_UNIS_DECODE(accuracy_);
     } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_)) {
-      ObObj tmp;
-      OB_UNIS_DECODE(tmp);
-      ObObj local_mem_obj;
-      if (OB_FAIL(deep_copy_obj(alloc, tmp, local_mem_obj))) {
+      DatumValue owned;
+      if (OB_FAIL(DatumParameterCodec::decode_value(buf, data_len, pos, alloc, owned.datum_, owned.meta_))) {
       } else {
-        new(&v2_.v1_) ObObj(local_mem_obj);
+        new(&v2_.value_bytes_) DatumValue(owned);
         OB_UNIS_DECODE(accuracy_);
       }
     } else if (IS_EXPR_OP(item_type_)) {
@@ -176,8 +175,11 @@ DEFINE_GET_SERIALIZE_SIZE(ObPostExprItem)
     OB_UNIS_ADD_LEN(v2_.cell_index_);
     OB_UNIS_ADD_LEN(accuracy_);
   } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_)) {
-    ObObj tmp = get_obj();
-    OB_UNIS_ADD_LEN(tmp);
+    const DatumValue &tmp = get_obj();
+    int64_t value_size = 0;
+    const int err = DatumParameterCodec::value_size(tmp.datum_, tmp.meta_, value_size);
+    if (OB_SUCCESS == err) { len += value_size; }
+    else { LOG_WARN_RET(err, "cannot size expression constant", K(tmp)); }
     OB_UNIS_ADD_LEN(accuracy_);
   } else if (IS_EXPR_OP(item_type_)) {
     OB_UNIS_ADD_LEN(*v2_.op_);

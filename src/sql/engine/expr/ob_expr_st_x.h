@@ -38,13 +38,6 @@ public:
                                 ObExprResType *texts,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  int calc_common(common::ObObj &result,
-                  const common::ObObj *params,
-                  int64_t param_num,
-                  common::ObExprCtx &expr_ctx,
-                  bool is_first_d,
-                  bool only_geog) const;
-
   static int eval_common(const ObExpr &expr,
                          ObEvalCtx &ctx,
                          ObDatum &expr_datum,

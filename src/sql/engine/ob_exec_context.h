@@ -122,6 +122,7 @@ class ObIPLSqlRuntime;
 class ObIPreparedStatementRuntime;
 class ObISqlExecutionIdProvider;
 struct ObEvalCtx;
+class ObDatumCaster;
 typedef  common::ObArray<const common::ObIArray<int64_t> *> ObRowIdListArray;
 struct ColumnContent;
 typedef common::ObFixedArray<ColumnContent, common::ObIAllocator> ColContentFixedArray;
@@ -600,6 +601,7 @@ public:
   common::ObArenaAllocator &get_eval_res_allocator() { return eval_res_allocator_; }
   common::ObArenaAllocator &get_eval_tmp_allocator() { return eval_tmp_allocator_; }
   int get_temp_expr_eval_ctx(const ObTempExpr &temp_expr, ObTempExprCtx *&temp_expr_ctx);
+  int get_native_datum_caster(ObDatumCaster *&caster);
 
   void clean_resolve_ctx();
   int init_physical_plan_ctx(const ObPhysicalPlan &plan);
@@ -660,10 +662,10 @@ public:
   int get_enumset_meta_by_subschema_id(uint16_t subschema_id,
                                        bool is_in_pl,
                                        const ObEnumSetMeta *&meta) const;
-  int get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+  int get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                     const ObIArray<common::ObString> &type_info,
                                     uint16_t &subschema_id);
-  int get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+  int get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                     const ObIArray<common::ObString> &type_info,
                                     uint16_t &subschema_id) const;
   ObExecFeedbackInfo &get_feedback_info() { return fb_info_; };
@@ -904,6 +906,7 @@ protected:
   // used for temp expr ctx manager
   bool use_temp_expr_ctx_cache_;
   hash::ObHashMap<int64_t, int64_t> temp_expr_ctx_map_;
+  ObDatumCaster *native_datum_caster_;
   // for pl/trigger
   ObDmlEventType dml_event_;
   const ColContentFixedArray *update_columns_;

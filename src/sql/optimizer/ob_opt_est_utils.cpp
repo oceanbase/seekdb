@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_OPT
 
 #include "ob_opt_est_utils.h"
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/engine/expr/ob_expr_equal.h"
 
@@ -176,7 +178,7 @@ int ObOptEstUtils::get_expr_value(const ParamStore *params,
                                   ObExecContext *exec_ctx,
                                   ObIAllocator &allocator,
                                   bool &get_value,
-                                  ObObj &value)
+                                  DatumValue &value)
 {
   int ret = OB_SUCCESS;
   get_value = false;
@@ -202,7 +204,7 @@ int ObOptEstUtils::if_expr_value_null(const ParamStore *params,
   int ret = OB_SUCCESS;
   is_null = false;
   bool get_value = false;
-  ObObj value;
+  DatumValue value;
   if (OB_ISNULL(params)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(get_expr_value(params, expr, exec_ctx,
@@ -227,8 +229,8 @@ int ObOptEstUtils::if_expr_start_with_patten_sign(const ParamStore *params,
   bool get_value = false;
   bool valid_escape = true;
   char escape;
-  ObObj value;
-  ObObj esp_value;
+  DatumValue value;
+  DatumValue esp_value;
   if (OB_ISNULL(params) || OB_ISNULL(expr) || OB_ISNULL(esp_expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(get_expr_value(params, *esp_expr, exec_ctx,
@@ -292,8 +294,8 @@ int ObOptEstUtils::if_expr_value_equal(ObOptimizerContext &opt_ctx,
   equal = false;
   bool get_first = false;
   bool get_second = false;
-  ObObj first_value;
-  ObObj second_value;
+  DatumValue first_value;
+  DatumValue second_value;
   const ParamStore *params = opt_ctx.get_params();
   ObSQLSessionInfo *session = opt_ctx.get_session_info();
   ObIAllocator &allocator = opt_ctx.get_allocator();
@@ -322,9 +324,9 @@ int ObOptEstUtils::if_expr_value_equal(ObOptimizerContext &opt_ctx,
     equal = (first_value.is_min_value() && second_value.is_min_value());
   } else if (first_value.is_max_value() || second_value.is_max_value()) {
     equal = (first_value.is_max_value() && second_value.is_max_value());
-  } else if (first_value.can_compare(second_value)
+  } else if (can_compare_datum_values(first_value, second_value)
              && first_value.get_collation_type() == second_value.get_collation_type()) {
-    equal = (first_value == second_value);
+    ret = datum_values_equal(first_value, second_value, equal);
   } else {
     //When type of value or collation_type is different.We need to use
     //ObExprEqual to check whether values equal.
@@ -351,21 +353,14 @@ int ObOptEstUtils::if_expr_value_equal(ObOptimizerContext &opt_ctx,
     if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt->get_stmt_type(), *exec_ctx, allocator, expr_ctx))) {
     } else if (OB_FAIL(equal_op.calc_result_type2(result_type, first_type, second_type, type_ctx))) {
     } else {
-      ObCompareCtx cmp_ctx(result_type.get_type(),
-                           result_type.get_collation_type(),
-                           null_safe,
-                           expr_ctx.tz_offset_,
-                           default_null_pos());
       //cast_mode is CM_WARN_ON_FAIL in select_stmt||explain_stmt||not_strict_sql_mode
       //CM_WARN_ON_FAIL would cast 'a' to 0 without report error.
       //CM_NONE, the cast 'a' to int would return error.
       //Here we just use CM_WARN_ON_FAIL, as if CM_NONE, exectution would report the error.
       EXPR_DEFINE_CAST_CTX(expr_ctx, CM_WARN_ON_FAIL);
-      ObObj result;
-      if (OB_FAIL(ObExprEqual::calc(result, first_value, second_value, cmp_ctx, cast_ctx))) {
+      if (OB_FAIL(DatumValueComparator::equal(first_value, second_value, cast_ctx,
+                         result_type.get_type(), result_type.get_collation_type(), equal))) {
         ret = OB_SUCCESS;
-      } else {
-        equal = result.is_true();
       }
     }
 
@@ -374,7 +369,7 @@ int ObOptEstUtils::if_expr_value_equal(ObOptimizerContext &opt_ctx,
 }
 
 
-int ObOptEstObjToScalar::convert_obj_to_scalar(const ObObj *obj, double &scalar)
+int ObOptEstObjToScalar::convert_obj_to_scalar(const DatumValue *obj, double &scalar)
 {
   int ret = OB_SUCCESS;
   scalar = 0.0;
@@ -385,19 +380,21 @@ int ObOptEstObjToScalar::convert_obj_to_scalar(const ObObj *obj, double &scalar)
 
   if (NULL == obj) {
     //NULL obj means a double 0.0 as scalar to return
+  } else if (obj->is_null()) {
+    scalar = 0.0;
   } else {
     switch (obj->get_type()) {
     case ObNullType:
         scalar = 0;
         break;
     case ObTinyIntType:              // int8, aka mysql boolean type
-        scalar = static_cast<double>(obj->get_tinyint());
+        scalar = static_cast<double>(static_cast<int8_t>(obj->get_int()));
         break;
     case ObSmallIntType:               // int16
-        scalar = static_cast<double>(obj->get_smallint());
+        scalar = static_cast<double>(static_cast<int16_t>(obj->get_int()));
         break;
     case ObMediumIntType:              // int24
-        scalar = static_cast<double>(obj->get_mediumint());
+        scalar = static_cast<double>(static_cast<int32_t>(obj->get_int()));
         break;
     case ObInt32Type:                 // int32
         scalar = static_cast<double>(obj->get_int32());
@@ -406,16 +403,16 @@ int ObOptEstObjToScalar::convert_obj_to_scalar(const ObObj *obj, double &scalar)
         scalar = static_cast<double>(obj->get_int());
         break;
     case ObUTinyIntType:                // uint8
-        scalar = static_cast<double>(obj->get_utinyint());
+        scalar = static_cast<double>(static_cast<uint8_t>(obj->get_uint64()));
         break;
     case ObUSmallIntType:               // uint16
-        scalar = static_cast<double>(obj->get_usmallint());
+        scalar = static_cast<double>(static_cast<uint16_t>(obj->get_uint64()));
         break;
     case ObUMediumIntType:              // uint24
-        scalar = static_cast<double>(obj->get_umediumint());
+        scalar = static_cast<double>(static_cast<uint32_t>(obj->get_uint64()));
         break;
     case ObUInt32Type:                    // uint32
-        scalar = static_cast<double>(obj->get_uint32());
+        scalar = static_cast<double>(static_cast<uint32_t>(obj->get_uint64()));
         break;
     case ObUInt64Type:                 // uint64
         scalar = static_cast<double>(obj->get_uint64());
@@ -427,15 +424,15 @@ int ObOptEstObjToScalar::convert_obj_to_scalar(const ObObj *obj, double &scalar)
         scalar = obj->get_double();
         break;
     case ObUFloatType:            // unsigned single-precision floating point
-        scalar = static_cast<double>(obj->get_ufloat());
+        scalar = static_cast<double>(obj->get_float());
         break;
     case ObUDoubleType:           // unsigned double-precision floating point
-        scalar = static_cast<double>(obj->get_udouble());
+        scalar = static_cast<double>(obj->get_double());
         break;
     case ObNumberType:
     case ObUNumberType:
     case ObDecimalIntType:
-        // aka decimal/numeric, already converted to double in `convert_obj_to_scalar_obj`
+        // aka decimal/numeric, already converted to double in convert_obj_to_double
         scalar = static_cast<double>(obj->get_double());
         break;
     case ObDateTimeType:
@@ -467,7 +464,7 @@ int ObOptEstObjToScalar::convert_obj_to_scalar(const ObObj *obj, double &scalar)
         break;
     }
     case ObHexStringType: {
-        const ObString &str = obj->get_varbinary();
+        const ObString &str = obj->get_string();
         ret = convert_string_to_scalar(obj->get_collation_type(), str, scalar);
         break;
     }
@@ -491,105 +488,38 @@ int ObOptEstObjToScalar::convert_obj_to_scalar(const ObObj *obj, double &scalar)
   return ret;
 }
 
-int ObOptEstObjToScalar::convert_obj_to_double(const ObObj *obj, double &num)
+int ObOptEstObjToScalar::convert_obj_to_double(const DatumValue *obj, double &num)
 {
   int ret = OB_SUCCESS;
   num = 0.0;
   if (OB_ISNULL(obj)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (obj->is_null()) {
+    num = 0.0;
   } else if (ObNumberType == obj->get_type() || ObUNumberType == obj->get_type()
              || ObDecimalIntType == obj->get_type()) {
-    ObObj calc_obj;
     ObArenaAllocator calc_buffer(ObModIds::OB_BUFFER);
     // tz_info is UNUSED in converting number to double
     ObCastCtx cast_ctx(&calc_buffer, NULL, CM_NONE, obj->get_collation_type());
-    const ObObj *ref_out = NULL;
-    if (OB_SUCCESS == (ret = ObObjCaster::to_type(ObDoubleType, cast_ctx, *obj, calc_obj, ref_out))) {
-      if (OB_ISNULL(ref_out)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        num = ref_out->get_double();
-      }
+    DatumValue converted;
+    if (OB_FAIL(DatumValueCaster::to_type(ObDoubleType, cast_ctx, *obj, calc_buffer, converted))) {
     } else {
-      if (OB_LIKELY(OB_DATA_OUT_OF_RANGE == ret)) {
-        num = 0.0;
-      } else {
-      }
+      num = converted.get_double();
     }
   } else if (OB_FAIL(convert_obj_to_scalar(obj, num))) {
   }
   return ret;
 }
-
-int ObOptEstObjToScalar::convert_obj_to_scalar_obj(const common::ObObj* obj, common::ObObj* out)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(obj) || OB_ISNULL(out)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    switch (obj->get_type()) {
-    case ObDecimalIntType:
-    case ObNumberType: // aka decimal/numeric
-        // same as under
-    case ObUNumberType: {
-      ObObj calc_obj;
-      ObArenaAllocator calc_buffer(ObModIds::OB_BUFFER);
-      // tz_info is UNUSED in converting number to double
-      ObCastCtx cast_ctx(&calc_buffer, NULL, CM_NONE, obj->get_collation_type());
-      const ObObj *ref_out = NULL;
-      if (OB_SUCCESS == (ret = ObObjCaster::to_type(ObDoubleType, cast_ctx, *obj, calc_obj, ref_out))) {
-        if (OB_ISNULL(ref_out)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          out->set_double(ref_out->get_double());
-        }
-      } else {
-        if (OB_LIKELY(OB_DATA_OUT_OF_RANGE == ret)) {
-          if (obj->is_decimal_int()) {
-            if (wide::is_negative(obj->get_decimal_int(), obj->get_int_bytes())) {
-              out->set_min_value();
-            } else {
-              out->set_max_value();
-            }
-          } else if (obj->get_number().is_negative()) {
-            out->set_min_value();
-          } else {
-            out->set_max_value();
-          }
-        } else {
-        }
-      }
-      break;
-    }
-    case ObExtendType:
-    case ObUnknownType: {
-      //pass through min, max, etc
-      *out = *obj;
-      break;
-    }
-    default: {
-      double num = 0.0;
-      if (OB_FAIL(convert_obj_to_scalar(obj, num))) {
-      } else {
-        out->set_double(num);
-      }
-      break;
-    }
-    }
-  }
-  return ret;
-}
-
-
-int ObOptEstObjToScalar::convert_objs_to_scalars(
-    const ObObj *min,
-    const ObObj *max,
-    const ObObj *start,
-    const ObObj *end,
-    ObObj *min_out,
-    ObObj *max_out,
-    ObObj *start_out,
-    ObObj *end_out,
+int ObOptEstObjToScalar::convert_values_to_scalars_impl(
+    const DatumValue *min,
+    const DatumValue *max,
+    const DatumValue *start,
+    const DatumValue *end,
+    DatumValue *min_out,
+    DatumValue *max_out,
+    DatumValue *start_out,
+    DatumValue *end_out,
+    ObIAllocator &owner,
     bool convert2sortkey)
 {
   int ret = OB_SUCCESS;
@@ -599,8 +529,8 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
   const static int64_t MAX_POS = 3;
   const static int64_t OBJ_COUNT = 4;
   int64_t skip_count = 0;
-  const ObObj *input_ptrs[OBJ_COUNT] = {start, end, min, max};
-  ObObj *output_ptrs[OBJ_COUNT] = {start_out, end_out, min_out, max_out};
+  const DatumValue *input_ptrs[OBJ_COUNT] = {start, end, min, max};
+  DatumValue *output_ptrs[OBJ_COUNT] = {start_out, end_out, min_out, max_out};
   ObSEArray<double, 4> string_scalars;
   //this map is for recording which obj is converted using new method
   uint64_t str_conv_map = 0;
@@ -656,8 +586,8 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < OBJ_COUNT; ++i) {
-      ObObj *out_ptr = output_ptrs[i];
-      const ObObj *in_ptr = input_ptrs[i];
+      DatumValue *out_ptr = output_ptrs[i];
+      const DatumValue *in_ptr = input_ptrs[i];
       if ((START_POS == i || END_POS == i) && (OB_ISNULL(in_ptr) || OB_ISNULL(out_ptr))) {
         ret = OB_ERR_UNEXPECTED;
       } else if ((MIN_POS == i || MAX_POS == i) && ((NULL == in_ptr) != (NULL == out_ptr))) {
@@ -665,13 +595,12 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
       } else {
         if (str_conv_map & (0x1 << i)) {
           //this obj is already converted using string special method:
-          out_ptr->set_double(string_scalars.at(i - skip_count));
+          ret = out_ptr->set_double(string_scalars.at(i - skip_count), owner);
         } else {
           //this obj is to be converted using normal method:
           ++skip_count;
           if (NULL != out_ptr && NULL != in_ptr) {
-            if (OB_FAIL(convert_obj_to_scalar_obj(in_ptr, out_ptr))) {
-            }
+            ret = convert_value_to_scalar(in_ptr, out_ptr, owner);
           }
         }
       }
@@ -683,9 +612,49 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
   }
   return ret;
 }
+int ObOptEstObjToScalar::convert_values_to_scalars(const DatumValue *minimum,
+    const DatumValue *maximum, const DatumValue *start, const DatumValue *end,
+    DatumValue *minimum_out, DatumValue *maximum_out,
+    DatumValue *start_out, DatumValue *end_out, ObIAllocator &owner,
+    bool convert_to_sort_key)
+{
+  return convert_values_to_scalars_impl(minimum, maximum, start, end,
+      minimum_out, maximum_out, start_out, end_out, owner, convert_to_sort_key);
+}
+int ObOptEstObjToScalar::convert_value_to_scalar(const DatumValue *value,
+    DatumValue *output, ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  if (value == nullptr || output == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (value->is_ext() || value->is_unknown()) {
+    ret = clone_typed_value(*value, *output, owner);
+  } else if (!value->is_null() && (value->is_number() || value->is_unumber() || value->is_decimal_int())) {
+    ObArenaAllocator scratch(ObModIds::OB_BUFFER);
+    ObCastCtx context(&scratch, nullptr, CM_NONE, value->get_collation_type());
+    DatumValue converted;
+    if (OB_FAIL(DatumValueCaster::to_type(ObDoubleType, context, *value, scratch, converted))) {
+      if (ret == OB_DATA_OUT_OF_RANGE) {
+        const bool negative = value->is_decimal_int()
+            ? value->get_int_bytes() > 0 && wide::is_negative(value->get_decimal_int(), value->get_int_bytes())
+            : value->get_number().is_negative();
+        if (negative) { output->set_min_value(); } else { output->set_max_value(); }
+      }
+    } else {
+      ret = output->set_double(converted.get_double(), owner);
+    }
+  } else {
+    double scalar = 0.0;
+    if (OB_FAIL(convert_obj_to_scalar(value, scalar))) {
+    } else {
+      ret = output->set_double(scalar, owner);
+    }
+  }
+  return ret;
+}
 
 int ObOptEstObjToScalar::add_to_string_conversion_array(
-    const ObObj &strobj,
+    const DatumValue &strobj,
     common::ObIArray<ObCollationType> &cs_type,
     ObIArray<common::ObString> &arr,
     uint64_t &convertable_map,

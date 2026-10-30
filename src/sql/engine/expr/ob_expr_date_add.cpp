@@ -128,8 +128,8 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 {
   int ret = OB_SUCCESS;
   const ObSQLSessionInfo *session = NULL;
-  const ObObjType res_type = expr.datum_meta_.type_;
-  const ObObjType date_type = expr.args_[0]->datum_meta_.type_;
+  const SqlValueType res_type = expr.datum_meta_.type_;
+  const SqlValueType date_type = expr.args_[0]->datum_meta_.type_;
   ObDatum *date = NULL;
   ObDatum *interval = NULL;
   ObDatum *unit = NULL;
@@ -239,7 +239,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           expr_datum.set_mysql_datetime(mdatetime);
         }
       } else {     //RETURN STRING TYPE
-        ObObjType res_date;
+        SqlValueType res_date;
         bool dt_flag = false;
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret =
@@ -414,7 +414,7 @@ int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
   } else {
-    const ObObjType res_type = expr.datum_meta_.type_;
+    const SqlValueType res_type = expr.datum_meta_.type_;
     ObDateSqlMode date_sql_mode;
     date_sql_mode.init(sql_mode);
     date_sql_mode.no_zero_in_date_ = is_no_zero_in_date(sql_mode);

@@ -18,6 +18,7 @@
 #ifndef OCEANBASE_QUERY_VECTOR_INDEX_ADAPTOR_H_
 #define OCEANBASE_QUERY_VECTOR_INDEX_ADAPTOR_H_
 
+#include "common/datum/datum_value.h"
 #include "share/scn.h"
 #include "common/datum/ob_datum.h"
 #include "roaring/roaring64.h"
@@ -137,8 +138,8 @@ struct ObVectorParamData
   int64_t count_;
   int64_t curr_idx_;
   int64_t extra_column_count_;
-  ObObj *vectors_; // need do init by yourself
-  ObObj *vids_;
+  DatumValue *vectors_; // need do init by yourself
+  DatumValue *vids_;
   ObVecExtraInfoObj* extra_info_objs_; // need do init by yourself
   static const int64_t VI_PARAM_DATA_BATCH_SIZE = 1000;
   TO_STRING_KV(K_(dim), K_(count), K_(curr_idx), KP_(vectors), KP_(vids), KP_(extra_info_objs));
@@ -230,7 +231,7 @@ public:
   bool is_snap_;
   ObArenaAllocator tmp_alloc_;
   char *extra_buffer_;
-  ObObj *tmp_objs_;
+  DatumValue *tmp_objs_;
   const ObIArray<int64_t> *extra_in_rowkey_idxs_;
 };
 
@@ -284,8 +285,8 @@ public:
                      const sql::ExprFixedArray &rowkey_exprs, const ObIArray<int64_t> &extra_in_rowkey_idxs);
   bool is_prefilter_valid();
   bool is_range_prefilter();
-  ObObj *get_vids() { return vec_data_.vids_; }
-  ObObj *get_vectors() { return vec_data_.vectors_; }
+  DatumValue *get_vids() { return vec_data_.vids_; }
+  DatumValue *get_vectors() { return vec_data_.vectors_; }
   int64_t get_curr_idx() { return vec_data_.curr_idx_; }
   int64_t get_vec_cnt() { return vec_data_.count_ - vec_data_.curr_idx_ > ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE ?
                                 ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE :
@@ -301,8 +302,8 @@ public:
   ObIAllocator *get_tmp_allocator() { return tmp_allocator_; }
   ObIAllocator *get_batch_allocator() { return &batch_allocator_; }
   int set_vector(int64_t index, const char *ptr, common::ObString::obstr_size_t size);
-  int set_vector(int64_t index, ObObj &obj);
-  void set_vectors(ObObj *vectors) { vec_data_.vectors_ = vectors; }
+  int set_vector(int64_t index, DatumValue &obj);
+  void set_vectors(DatumValue *vectors) { vec_data_.vectors_ = vectors; }
   int set_extra_info(int64_t index, const ObRowkey &rowkey, const ObIArray<int64_t> &extra_in_rowkey_idxs);
   void set_extra_infos(ObVecExtraInfoObj *extra_info_objs) { vec_data_.extra_info_objs_ = extra_info_objs; }
   void set_status(PluginVectorQueryResStatus status) { status_ = status; }

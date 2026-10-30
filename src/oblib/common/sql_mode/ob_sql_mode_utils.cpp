@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  COMMON
 
 #include "common/sql_mode/ob_sql_mode_utils.h"
+#include "common/datum/datum_value.h"
 
 namespace oceanbase
 {
@@ -184,7 +185,8 @@ int ob_str_to_sql_mode(const ObString &str, ObSQLMode &mode)
   return ret;
 }
 
-int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *allocator)
+static int render_sql_mode(SqlValueType source_type, uint64_t uint64_val,
+                            ObString &str_val, ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
@@ -195,14 +197,9 @@ int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *alloc
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to alloc memory", K(ret));
   } else {
-    uint64_t uint64_val = 0;
-    if (ObIntType == int_val.get_type()) {
-      uint64_val = static_cast<uint64_t>(int_val.get_int());
-    } else if (ObUInt64Type == int_val.get_type()) {
-      uint64_val = int_val.get_uint64();
-    } else {
+    if (ObIntType != source_type && ObUInt64Type != source_type) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "invalid sql mode value type", K(ret), K(int_val));
+      COMMON_LOG(WARN, "invalid sql mode value type", K(ret), K(source_type));
     }
     if (OB_FAIL(ret)) {
     } else {
@@ -228,13 +225,31 @@ int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *alloc
       } else if (OB_UNLIKELY(end_ptr - buf > MAX_MODE_STR_BUF_LEN)) {
         ret = OB_BUF_NOT_ENOUGH;
       } else if (end_ptr == buf) {
-        str_val.set_varchar(ObString(""));
+        str_val = ObString("");
       } else {
         ObString value_str;
         value_str.assign_ptr(buf, static_cast<int32_t>(end_ptr - buf - 1));
-        str_val.set_varchar(value_str);
+        str_val = value_str;
       }
     }
+  }
+  return ret;
+}
+
+int ob_sql_mode_to_str(const DatumValue &int_val, DatumValue &str_val, ObIAllocator *allocator)
+{
+  const SqlValueType source_type = int_val.is_null() ? ObNullType : int_val.get_type();
+  const uint64_t mode = ObIntType == source_type
+      ? static_cast<uint64_t>(int_val.get_int())
+      : ObUInt64Type == source_type ? int_val.get_uint64() : 0;
+  ObString rendered;
+  int ret = render_sql_mode(source_type, mode, rendered, allocator);
+  if (OB_SUCC(ret)) {
+    // Renderer bytes already belong to the explicit output owner. Preserve
+    // preexisting collation and scale, as the legacy string setter did.
+    str_val.datum_.set_string(rendered);
+    str_val.meta_.set_varchar();
+    str_val.set_collation_level(CS_LEVEL_IMPLICIT);
   }
   return ret;
 }

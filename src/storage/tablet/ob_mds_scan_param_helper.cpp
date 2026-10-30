@@ -130,21 +130,28 @@ int ObMdsScanParamHelper::build_key_range(
     common::ObNewRange &key_range)
 {
   int ret = OB_SUCCESS;
-  void *buf = allocator.alloc(sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT);
+  void *buf = allocator.alloc(sizeof(DatumValue) * MDS_SSTABLE_ROWKEY_CNT + sizeof(int64_t));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    ObObj *obj = new (buf) ObObj[MDS_SSTABLE_ROWKEY_CNT]();
-    obj[0].set_tinyint(mds_unit_id);
-    obj[1].set_string(ObObjType::ObVarcharType, udf_key);
+    auto *values = new (buf) DatumValue[MDS_SSTABLE_ROWKEY_CNT]();
+    auto *unit_id = reinterpret_cast<int64_t *>(values + MDS_SSTABLE_ROWKEY_CNT);
+    *unit_id = static_cast<int8_t>(mds_unit_id);
+    values[0].meta_.set_tinyint();
+    values[0].datum_.set_string(reinterpret_cast<const char *>(unit_id), sizeof(*unit_id));
+    values[1].meta_.set_varchar();
+    values[1].set_collation_level(CS_LEVEL_IMPLICIT);
+    // The descriptor is owned by allocator; udf_key retains its established
+    // caller-borrowed lifetime until the scan finishes.
+    values[1].datum_.set_string(udf_key);
 
-    const ObRowkey rowkey(obj, MDS_SSTABLE_ROWKEY_CNT);
+    const ObRowkey rowkey(values, MDS_SSTABLE_ROWKEY_CNT);
     if (OB_FAIL(key_range.build_range(table_id, rowkey))) {
     }
 
     if (OB_FAIL(ret)) {
       for (int64_t i = 0; i < MDS_SSTABLE_ROWKEY_CNT; ++i) {
-        obj[i].~ObObj();
+        values[i].~DatumValue();
       }
       allocator.free(buf);
     }
@@ -160,15 +167,19 @@ int ObMdsScanParamHelper::build_key_range(
     common::ObNewRange &key_range)
 {
   int ret = OB_SUCCESS;
-  char *buf = static_cast<char *>(allocator.alloc(sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT  * 2));
+  char *buf = static_cast<char *>(allocator.alloc(
+      sizeof(DatumValue) * MDS_SSTABLE_ROWKEY_CNT * 2 + sizeof(int64_t)));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    ObObj *start_obj = new (buf) ObObj[MDS_SSTABLE_ROWKEY_CNT]();
-    ObObj *end_obj = new (buf + sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT) ObObj();
-    start_obj[0].set_tinyint(mds_unit_id);
+    auto *start_obj = new (buf) DatumValue[MDS_SSTABLE_ROWKEY_CNT * 2]();
+    auto *end_obj = start_obj + MDS_SSTABLE_ROWKEY_CNT;
+    auto *unit_id = reinterpret_cast<int64_t *>(end_obj + MDS_SSTABLE_ROWKEY_CNT);
+    *unit_id = static_cast<int8_t>(mds_unit_id);
+    start_obj[0].meta_.set_tinyint();
+    start_obj[0].datum_.set_string(reinterpret_cast<const char *>(unit_id), sizeof(*unit_id));
     start_obj[1].set_min_value();
-    end_obj[0].set_tinyint(mds_unit_id);
+    end_obj[0] = start_obj[0];
     end_obj[1].set_max_value();
 
     key_range.table_id_ = table_id;

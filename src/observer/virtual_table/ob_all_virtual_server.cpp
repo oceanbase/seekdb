@@ -170,7 +170,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         case SVR_IP:
           if (addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
-            cur_row_.cells_[i].set_varchar(ip_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ip_buf_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else {
             ret = OB_ERR_UNEXPECTED;
@@ -178,95 +178,95 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           }
           break;
         case SVR_PORT:
-          cur_row_.cells_[i].set_int(addr_.get_port());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, addr_.get_port()) : ret);
           break;
         case SQL_PORT:
-          cur_row_.cells_[i].set_int(obmysql::get_sql_nio_advertised_tcp_port());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, obmysql::get_sql_nio_advertised_tcp_port()) : ret);
           break;
         case RPC_PORT:
-          cur_row_.cells_[i].set_int(config::rpc_port());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, config::rpc_port()) : ret);
           break;
         case CPU_CAPACITY:
-          cur_row_.cells_[i].set_int(resource_info.cpu_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.cpu_) : ret);
           break;
         case CPU_CAPACITY_MAX:
-          cur_row_.cells_[i].set_double(resource_info.cpu_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cur_row_.cells_, cur_row_.count_, i, resource_info.cpu_) : ret);
           break;
         case CPU_ASSIGNED:
-          cur_row_.cells_[i].set_double(resource_info.report_cpu_assigned_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cur_row_.cells_, cur_row_.count_, i, resource_info.report_cpu_assigned_) : ret);
           break;
         case CPU_ASSIGNED_MAX:
-          cur_row_.cells_[i].set_double(resource_info.report_cpu_max_assigned_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cur_row_.cells_, cur_row_.count_, i, resource_info.report_cpu_max_assigned_) : ret);
           break;
         case MEM_CAPACITY:
-          cur_row_.cells_[i].set_int(resource_info.mem_total_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.mem_total_) : ret);
           break;
         case MEM_ASSIGNED:
-          cur_row_.cells_[i].set_int(resource_info.report_mem_assigned_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.report_mem_assigned_) : ret);
           break;
         case DATA_DISK_CAPACITY:
-          cur_row_.cells_[i].set_int(resource_info.data_disk_total_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.data_disk_total_) : ret);
           break;
         case DATA_DISK_IN_USE:
-          cur_row_.cells_[i].set_int(resource_info.data_disk_in_use_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.data_disk_in_use_) : ret);
           break;
         case DATA_DISK_ALLOCATED:
-          cur_row_.cells_[i].set_int(data_disk_allocated);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, data_disk_allocated) : ret);
           break;
         case DATA_DISK_HEALTH_STATUS:
-          cur_row_.cells_[i].set_varchar(data_disk_health_status);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, data_disk_health_status) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case DATA_DISK_ABNORMAL_TIME:
-          cur_row_.cells_[i].set_int(data_disk_abnormal_time);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, data_disk_abnormal_time) : ret);
           break;
         case LOG_DISK_CAPACITY:
-          cur_row_.cells_[i].set_int(resource_info.log_disk_total_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.log_disk_total_) : ret);
           break;
         case LOG_DISK_ASSIGNED:
-          cur_row_.cells_[i].set_int(resource_info.report_log_disk_assigned_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.report_log_disk_assigned_) : ret);
           break;
         case LOG_DISK_IN_USE:
-          cur_row_.cells_[i].set_int(resource_info.log_disk_in_use_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, resource_info.log_disk_in_use_) : ret);
           break;
         case RPC_CERT_EXPIRE_TIME:
-          cur_row_.cells_[i].set_int(GCTX.ssl_key_expired_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, GCTX.ssl_key_expired_time_) : ret);
           break;
         case RPC_TLS_ENABLED:
-          cur_row_.cells_[i].set_int(config::enable_rpc_tls());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, config::enable_rpc_tls()) : ret);
           break;
         case MEMORY_LIMIT:
           // Keep the legacy column name for virtual-table compatibility.
-          cur_row_.cells_[i].set_int(GMEMCONF.get_server_memory_budget());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, GMEMCONF.get_server_memory_budget()) : ret);
           break;
         case START_SERVICE_TIME:
-          cur_row_.cells_[i].set_int(GCTX.start_service_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, GCTX.start_service_time_) : ret);
           break;
         case CREATE_TIME:
-          cur_row_.cells_[i].set_int(config::server_create_time());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, config::server_create_time()) : ret);
           break;
         case ROLE:
-          cur_row_.cells_[i].set_varchar(role_buf_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, role_buf_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case SWITCHOVER_STATUS:
-          cur_row_.cells_[i].set_varchar(switchover_status_buf_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, switchover_status_buf_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case PENDING_ROLE:
-          cur_row_.cells_[i].set_varchar(pending_role_buf_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, pending_role_buf_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case LOG_RESTORE_SOURCE:
-          cur_row_.cells_[i].set_varchar(log_restore_source_buf_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, log_restore_source_buf_) : ret);
           cur_row_.cells_[i].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case SYNC_SCN:
-          cur_row_.cells_[i].set_uint64(sync_scn_val);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, sync_scn_val) : ret);
           break;
         case READABLE_SCN:
-          cur_row_.cells_[i].set_uint64(readable_scn_val);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, readable_scn_val) : ret);
           break;
         default: {
           ret = OB_ERR_UNEXPECTED;

@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
+#include "share/datum/datum_value_cast.h"
+#include "share/object/ob_decint_scale_util.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
 #include "share/schema/ob_schema_struct.h"  // relocated-definition owner
@@ -150,14 +152,14 @@ int ObPartitionExecutorUtils::calc_values_exprs(ObExecContext &ctx,
 template<class T>
 int check_list_value_duplicate(T **partition_array,
                                int64_t part_count,
-                               const ObNewRow &row,
+                               const PartitionBoundRow &row,
                                bool &is_dup) {
   int ret = OB_SUCCESS;
   is_dup = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < part_count; i ++) {
-    const common::ObIArray<common::ObNewRow> &list_values_exprs = partition_array[i]->get_list_row_values();
+    const common::ObIArray<common::PartitionBoundRow> &list_values_exprs = partition_array[i]->get_list_row_values();
     for (int64_t j = 0; OB_SUCC(ret) && j < list_values_exprs.count(); j ++) {
-      const ObNewRow &tmp_row = list_values_exprs.at(j);
+      const PartitionBoundRow &tmp_row = list_values_exprs.at(j);
       if (tmp_row.get_count() != row.get_count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("object count not equal should no be here", K(tmp_row), K(row), K(j));
@@ -169,7 +171,7 @@ int check_list_value_duplicate(T **partition_array,
           ret = OB_ERR_PARTITION_VALUE_ERROR;
         }
       }
-      if (OB_SUCC(ret) && tmp_row == row) {
+      if (OB_SUCC(ret) && equal_partition_bound_rows(tmp_row, row)) {
         is_dup = true;
         break;
       }
@@ -178,7 +180,7 @@ int check_list_value_duplicate(T **partition_array,
   return ret;
 }
 
-int ObPartitionExecutorUtils::cast_list_expr_to_obj(
+int ObPartitionExecutorUtils::cast_list_expr_to_values(
     ObExecContext &ctx,
     const stmt::StmtType stmt_type,
     const bool is_subpart,
@@ -220,7 +222,7 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
     }
   }
 
-  ObSEArray<ObObj, OB_DEFAULT_ARRAY_SIZE> list_partition_obj;
+  ObSEArray<DatumValue, OB_DEFAULT_ARRAY_SIZE> list_partition_obj;
   ObSEArray<ObRawExpr*, OB_DEFAULT_ARRAY_SIZE> list_value_exprs;
   for (int64_t i = 0; OB_SUCC(ret) && i < list_values_exprs.count(); ++i) {
     list_partition_obj.reset();
@@ -233,11 +235,9 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
       ret = OB_ERR_UNEXPECTED;
     } else if (row_expr->get_param_count() == 1 && ObMaxType == row_expr->get_param_expr(0)->get_data_type()) {
       // default
-      ObNewRow row;
-      common::ObIAllocator &allocator = ctx.get_allocator();
-      ObObj* obj_array = (ObObj *)allocator.alloc(sizeof(ObObj));
-      obj_array[0].set_max_value();
-      row.assign(obj_array, 1);
+      DatumValue value;
+      value.set_max_value();
+      PartitionBoundRow row(&value, 1);
       if (is_subpart) {
         if (OB_FAIL(subpart_info->add_list_row(row))) {
         }
@@ -245,22 +245,16 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
       }
     } else {
       if (OB_FAIL(row_expr_to_array(row_expr, list_value_exprs))) {
-      } else if (OB_FAIL(cast_expr_to_obj(ctx, stmt_type, true, list_fun_expr,
+      } else if (OB_FAIL(cast_expr_to_values(ctx, stmt_type, true, list_fun_expr,
                                           list_value_exprs, list_partition_obj))) {
       } else {
         int64_t fun_expr_num = list_fun_expr.count();
         int64_t element_pair_count = list_partition_obj.count() / list_fun_expr.count();
         ObIAllocator &allocator = ctx.get_allocator();
         for (int64_t j = 0; OB_SUCC(ret) && j < element_pair_count; ++j) {
-          ObNewRow row;
-          ObObj* obj_array = (ObObj *)allocator.alloc(fun_expr_num * sizeof(ObObj));
-          for (int64_t k = 0; OB_SUCC(ret) && k < fun_expr_num; ++k) {
-            new (obj_array + k) ObObj();
-            obj_array[k] = (&list_partition_obj.at(j * fun_expr_num))[k];
-          }
+          PartitionBoundRow row(&list_partition_obj.at(j * fun_expr_num), fun_expr_num);
           if (OB_SUCC(ret)) {
             bool is_dup = true;
-            row.assign(obj_array, fun_expr_num);
             if (is_subpart) {
               if (OB_FAIL(check_list_value_duplicate(subpartition_array, i + 1, row, is_dup))) {
               } else if (is_dup) {
@@ -298,12 +292,12 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
   return ret;
 }
 
-int ObPartitionExecutorUtils::cast_expr_to_obj(ObExecContext &ctx,
+int ObPartitionExecutorUtils::cast_expr_to_values(ObExecContext &ctx,
                                                const stmt::StmtType stmt_type,
                                                bool is_list_part,
                                                ObIArray<ObRawExpr *> &partition_fun_expr,
                                                ObIArray<ObRawExpr *> &partition_value_exprs,
-                                               ObIArray<ObObj> &partition_value_objs)
+                                               ObIArray<DatumValue> &partition_value_objs)
 {
   int ret = OB_SUCCESS;
 
@@ -320,14 +314,14 @@ int ObPartitionExecutorUtils::cast_expr_to_obj(ObExecContext &ctx,
     //calc range values and set high_bound_value rowkey
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
       for (int64_t j = 0;  OB_SUCC(ret) && j < fun_expr_num; j++) {
-        ObObj value_obj;
+        DatumValue value_obj;
         if (OB_ISNULL(fun_expr = partition_fun_expr.at(j)) ||
             OB_ISNULL(expr = partition_value_exprs.at(i * fun_expr_num + j))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (ObMaxType == expr->get_data_type()) {
-          value_obj = ObObj::make_max_obj();
+          value_obj.set_max_value();
         } else {
-          ObObjType fun_expr_type = fun_expr->get_data_type();
+          SqlValueType fun_expr_type = fun_expr->get_data_type();
           if ((stmt::T_CREATE_TABLE == stmt_type || stmt::T_ALTER_TABLE == stmt_type) &&
               OB_FAIL(expr_cal_and_cast_with_check_varchar_len(stmt_type,
                                                                is_list_part,
@@ -376,20 +370,20 @@ int ObPartitionExecutorUtils::set_range_part_high_bound(ObExecContext &ctx,
   const int64_t part_num = is_subpart ?
       table_schema.get_def_sub_part_num() : table_schema.get_first_part_num();
   const int64_t fun_expr_num = range_fun_exprs.count();
-  ObSEArray<ObObj, OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
+  ObSEArray<DatumValue, OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
   if (is_subpart && OB_UNLIKELY(!stmt.use_def_sub_part())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (is_subpart && (OB_ISNULL(subpartition_array))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!is_subpart && OB_ISNULL(partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(cast_expr_to_obj(ctx, stmt_type, false /*is_list_part*/, range_fun_exprs,
+  } else if (OB_FAIL(cast_expr_to_values(ctx, stmt_type, false /*is_list_part*/, range_fun_exprs,
                                       range_values_exprs, range_partition_obj))) {
   } else if (part_num * fun_expr_num != range_partition_obj.count()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < part_num; ++i) {
-      ObRowkey high_rowkey(&range_partition_obj.at(i * fun_expr_num), fun_expr_num);
+      PartitionBoundRow high_rowkey(&range_partition_obj.at(i * fun_expr_num), fun_expr_num);
       if (is_subpart) {
         if (OB_ISNULL(subpart_info = subpartition_array[i])) {
           ret = OB_ERR_UNEXPECTED;
@@ -410,7 +404,7 @@ int ObPartitionExecutorUtils::check_increasing_range_value(T **array,
                                                            const stmt::StmtType stmt_type)
 {
   int ret = OB_SUCCESS;
-  const ObRowkey *rowkey_last = NULL;
+  const PartitionBoundRow *rowkey_last = NULL;
   T* last_part = NULL;
   T* cur_part = NULL;
   if (OB_ISNULL(array)) {
@@ -422,38 +416,38 @@ int ObPartitionExecutorUtils::check_increasing_range_value(T **array,
     last_part = array[0];
   }
   for (int64_t i = 1; OB_SUCC(ret) && i < part_num; ++i) {
-    const ObRowkey *rowkey_cur = NULL;
+    const PartitionBoundRow *rowkey_cur = NULL;
     if (OB_ISNULL(cur_part = array[i])) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       bool is_increasing = true;
       bool need_check_maxvalue = false;
       rowkey_cur = &array[i]->get_high_bound_val();
-      if (rowkey_cur->get_obj_cnt() != rowkey_last->get_obj_cnt()) {
+      if (rowkey_cur->count() != rowkey_last->count()) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        for (int64_t j = 0; j < rowkey_cur->get_obj_cnt() && OB_SUCC(ret); j++) {
-          if (!ObSQLUtils::is_same_type_for_compare(rowkey_cur->get_obj_ptr()[j].get_meta(),
-                                                    rowkey_last->get_obj_ptr()[j].get_meta())
-              && !rowkey_cur->get_obj_ptr()[j].is_max_value()
-              && !rowkey_last->get_obj_ptr()[j].is_max_value()) {
+        for (int64_t j = 0; j < rowkey_cur->count() && OB_SUCC(ret); j++) {
+          if (!ObSQLUtils::is_same_type_for_compare(rowkey_cur->get_cells()[j].get_meta(),
+                                                    rowkey_last->get_cells()[j].get_meta())
+              && !rowkey_cur->get_cells()[j].is_max_value()
+              && !rowkey_last->get_cells()[j].is_max_value()) {
             ret = OB_ERR_PARTITION_VALUE_ERROR;
-          } else if (rowkey_cur->get_obj_ptr()[j].is_max_value() &&
-                     rowkey_last->get_obj_ptr()[j].is_max_value()) {
+          } else if (rowkey_cur->get_cells()[j].is_max_value() &&
+                     rowkey_last->get_cells()[j].is_max_value()) {
             need_check_maxvalue = true;
           }
         }
       }
       if (OB_SUCC(ret)) {
-        if (*rowkey_cur <= *rowkey_last) {
+        if (partition_bound_key_compare(*rowkey_cur, *rowkey_last) <= 0) {
           is_increasing = false;
         } else {
           if (OB_UNLIKELY(need_check_maxvalue)) {
-            for (int64_t j = 0; j < rowkey_cur->get_obj_cnt() && is_increasing && OB_SUCC(ret); j++) {
-              if (rowkey_cur->get_obj_ptr()[j].is_max_value() &&
-                  rowkey_last->get_obj_ptr()[j].is_max_value()) {
+            for (int64_t j = 0; j < rowkey_cur->count() && is_increasing && OB_SUCC(ret); j++) {
+              if (rowkey_cur->get_cells()[j].is_max_value() &&
+                  rowkey_last->get_cells()[j].is_max_value()) {
                 is_increasing = false;
-              } else if (0 != rowkey_cur->get_obj_ptr()[j].check_collation_free_and_compare(rowkey_last->get_obj_ptr()[j])) {
+              } else if (!partition_bound_values_equal(rowkey_cur->get_cells()[j], rowkey_last->get_cells()[j])) {
                 //  p0 (1, maxvalue), p1 (2, maxvalue) is allowed
                 //  p0 (1, maxvalue), p1 (1, maxvalue) is not allowed
                 //  p0 (maxvalue, 1), p1 (maxvalue, 2) is not allowed
@@ -489,19 +483,18 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
     const sql::ObRawExprResType &dst_res_type,
     const ObCollationType fun_collation_type,
     ObRawExpr *expr,
-    ObObj &value_obj)
+    DatumValue &value_obj)
 {
   int ret = OB_SUCCESS;
   ObExprCtx expr_ctx;
-  ObObj temp_obj;
-  ObObjType fun_expr_type = dst_res_type.get_type();
+  DatumValue temp_obj;
+  SqlValueType fun_expr_type = dst_res_type.get_type();
   if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt_type, ctx, ctx.get_allocator(), expr_ctx))) {
   } else {
     //CREATE TABLE t1 (a date) PARTITION BY RANGE (TO_DAYS(a)) (PARTITION p311 VALUES LESS THAN (TO_DAYS('abc')))
     // TO_DAYS('abc') is compatible with MySQL, regardless of what cast_mode is set to in the session, WARN_ON_FAIL is required here
     // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    ObNewRow tmp_row;
     RowDesc row_desc;
     ObTempExpr *temp_expr = NULL;
     CK(OB_NOT_NULL(ctx.get_sql_ctx()));
@@ -509,7 +502,15 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
        row_desc, ctx.get_allocator(), ctx.get_my_session(),
        ctx.get_sql_ctx()->schema_guard_, temp_expr));
     CK(OB_NOT_NULL(temp_expr));
-    OZ(temp_expr->eval(ctx, tmp_row, temp_obj));
+    OZ(temp_expr->eval_datum(ctx, ctx.get_allocator(), temp_obj.datum_));
+    if (OB_SUCC(ret)) {
+      const SqlTypeMeta &meta = temp_expr->rt_exprs_.at(temp_expr->expr_idx_).obj_meta_;
+      if (temp_obj.is_null()) {
+        temp_obj.set_null();
+        if (!meta.is_null()) { temp_obj.set_collation_level(meta.get_collation_level()); temp_obj.set_collation_type(meta.get_collation_type()); }
+      } else if (meta.is_decimal_int() && meta.get_scale() < 0) { ret = OB_ERR_UNEXPECTED; }
+      else { temp_obj.meta_ = meta; }
+    }
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (temp_obj.is_null()) {
@@ -527,7 +528,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
     }
     // Convert the calculated obj to the type of partition expression
     if (OB_SUCC(ret)) {
-      ObObjType expected_obj_type = fun_expr_type;
+      SqlValueType expected_obj_type = fun_expr_type;
       // When casting the value expression type, perform a promotion
       //create table t1 (c1 tinyint) partition by range(c1) (partitions p0 values less than (2500));
       // Although 2500 exceeds the value range of tinyint, MySQL still allows the table creation to succeed
@@ -539,7 +540,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
           ret = OB_ERR_UNEXPECTED;
         }
       }
-      const ObObj *out_val_ptr = NULL;
+      DatumValue converted;
       EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
       //cast_ctx.dest_collation_ = temp_obj.get_collation_type();
       cast_ctx.dest_collation_ = fun_collation_type;
@@ -551,13 +552,9 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
           cast_ctx.cast_mode_ |= CM_COLUMN_CONVERT;
         }
       }
-      EXPR_CAST_OBJ_V2(expected_obj_type, temp_obj, out_val_ptr);
+      if (OB_SUCC(ret)) { ret = DatumValueCaster::to_type(expected_obj_type, cast_ctx, temp_obj, ctx.get_allocator(), converted); }
       if (OB_SUCC(ret)) {
-        if (OB_ISNULL(out_val_ptr)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          value_obj = *out_val_ptr;
-        }
+        value_obj = converted;
       } else if (OB_ERR_UNEXPECTED != ret) {
         ret = OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR;
       } else { }//do nothing
@@ -572,12 +569,12 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     ObExecContext &ctx,
     const ObRawExprResType &dst_res_type,
     ObRawExpr *expr,
-    ObObj &value_obj)
+    DatumValue &value_obj)
 {
   int ret = OB_SUCCESS;
   ObExprCtx expr_ctx;
-  ObObj temp_obj;
-  const ObObjType fun_expr_type = dst_res_type.get_type();
+  DatumValue temp_obj;
+  const SqlValueType fun_expr_type = dst_res_type.get_type();
   const ObCollationType fun_collation_type = dst_res_type.get_collation_type();
   if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt_type, ctx, ctx.get_allocator(), expr_ctx))) {
   } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(ctx.get_my_session()->get_stmt_type(),
@@ -587,7 +584,6 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     // TO_DAYS('abc') compatible with mysql, regardless of what cast_mode is set in the session, WARN_ON_FAIL is required here
     // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ |= CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    ObNewRow tmp_row;
     RowDesc row_desc;
     ObTempExpr *temp_expr = NULL;
     CK(OB_NOT_NULL(ctx.get_sql_ctx()));
@@ -600,7 +596,15 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
         && NULL != temp_expr->rt_exprs_.at(temp_expr->expr_idx_).args_[0]) {
       temp_expr->rt_exprs_.at(temp_expr->expr_idx_).args_[0]->extra_ |= CM_WARN_ON_FAIL;
     }
-    OZ(temp_expr->eval(ctx, tmp_row, temp_obj));
+    OZ(temp_expr->eval_datum(ctx, ctx.get_allocator(), temp_obj.datum_));
+    if (OB_SUCC(ret)) {
+      const SqlTypeMeta &meta = temp_expr->rt_exprs_.at(temp_expr->expr_idx_).obj_meta_;
+      if (temp_obj.is_null()) {
+        temp_obj.set_null();
+        if (!meta.is_null()) { temp_obj.set_collation_level(meta.get_collation_level()); temp_obj.set_collation_type(meta.get_collation_type()); }
+      } else if (meta.is_decimal_int() && meta.get_scale() < 0) { ret = OB_ERR_UNEXPECTED; }
+      else { temp_obj.meta_ = meta; }
+    }
     if (OB_FAIL(ret)) {
     } else if (temp_obj.is_null()) {
       if (!is_list_part) {
@@ -617,7 +621,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     }
     // Convert the calculated obj to the type of partition expression
     if (OB_SUCC(ret)) {
-      ObObjType expected_obj_type = fun_expr_type;
+      SqlValueType expected_obj_type = fun_expr_type;
       // When casting the value expression type, perform a promotion
       //create table t1 (c1 tinyint) partition by range(c1) (partitions p0 values less than (2500));
       // Although 2500 exceeds the value range of tinyint, MySQL still allows the table creation to succeed
@@ -629,7 +633,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
           ret = OB_ERR_UNEXPECTED;
         }
       }
-      const ObObj *out_val_ptr = NULL;
+      DatumValue converted;
       ObCastMode cm = CM_NONE;
       ObAccuracy res_acc;
       EXPR_DEFINE_CAST_CTX(expr_ctx, cm);
@@ -646,22 +650,22 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
       }
       //cast_ctx.dest_collation_ = temp_obj.get_collation_type();
       cast_ctx.dest_collation_ = fun_collation_type;
-      EXPR_CAST_OBJ_V2(expected_obj_type, temp_obj, out_val_ptr);
+      if (OB_SUCC(ret)) { ret = DatumValueCaster::to_type(expected_obj_type, cast_ctx, temp_obj, ctx.get_allocator(), converted); }
       if (OB_SUCC(ret)) {
-        if (OB_ISNULL(out_val_ptr)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (!is_list_part && ObDecimalIntType == expected_obj_type) {
+        if (!is_list_part && ObDecimalIntType == expected_obj_type) {
           // range columns in mysql mode
           cast_ctx.cast_mode_ &= ~CM_WARN_ON_FAIL;
-          if (OB_FAIL(common::obj_accuracy_check(cast_ctx, dst_res_type.get_accuracy(), fun_collation_type, tmp_out_obj, tmp_out_obj, out_val_ptr))) {
+          ObDecimalIntBuilder rounded;
+          if (OB_FAIL(common::decint_scale::check_decimalint_accuracy(cast_ctx.cast_mode_, converted.get_decimal_int(),
+                  converted.get_int_bytes(), dst_res_type.get_accuracy().get_precision(), dst_res_type.get_accuracy().get_scale(), rounded, cast_ctx.warning_))) {
             if (ret == OB_ERR_DATA_TOO_LONG) {
                ret = OB_ERR_DATA_TOO_LONG_IN_PART_CHECK;
             }
           } else {
-            value_obj = *out_val_ptr;
+            ret = value_obj.set_decimal_int(rounded.get_int_bytes(), dst_res_type.get_scale(), rounded.get_decimal_int(), ctx.get_allocator());
           }
         } else {
-          value_obj = *out_val_ptr;
+          value_obj = converted;
         }
       } else if (OB_ERR_UNEXPECTED != ret) {
         ret = OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR;
@@ -690,7 +694,7 @@ int ObPartitionExecutorUtils::set_list_part_rows(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (!is_subpart && OB_ISNULL(partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(cast_list_expr_to_obj(ctx, stmt_type, is_subpart, part_num, partition_array,
+  } else if (OB_FAIL(cast_list_expr_to_values(ctx, stmt_type, is_subpart, part_num, partition_array,
                                            subpartition_array, list_fun_exprs, list_values_exprs))) {
   }
   return ret;
@@ -707,7 +711,7 @@ int ObPartitionExecutorUtils::set_individual_range_part_high_bound(ObExecContext
   ObSubPartition **subpartition_array = NULL;
   ObPartition *partition = NULL;
   ObSubPartition *subpartition = NULL;
-  ObSEArray<ObObj, OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
+  ObSEArray<DatumValue, OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
 
   const int64_t part_num = table_schema.get_part_option().get_part_num();
   ObIArray<ObRawExpr *> &range_fun_expr = stmt.get_subpart_fun_exprs();
@@ -724,13 +728,13 @@ int ObPartitionExecutorUtils::set_individual_range_part_high_bound(ObExecContext
     if (OB_ISNULL(partition = partition_array[i]) ||
         OB_ISNULL(subpartition_array = partition->get_subpart_array())) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(cast_expr_to_obj(ctx, stmt_type, false, range_fun_expr,
+    } else if (OB_FAIL(cast_expr_to_values(ctx, stmt_type, false, range_fun_expr,
                                         range_values_exprs_array.at(i), range_partition_obj))) {
     } else if (partition->get_sub_part_num() * fun_expr_num != range_partition_obj.count()) {
       ret = OB_ERR_UNEXPECTED;
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < partition->get_sub_part_num(); ++j) {
-      ObRowkey high_rowkey(&range_partition_obj.at(j * fun_expr_num), fun_expr_num);
+      PartitionBoundRow high_rowkey(&range_partition_obj.at(j * fun_expr_num), fun_expr_num);
       if (OB_ISNULL(subpartition = subpartition_array[j])) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(subpartition->set_high_bound_val(high_rowkey))) {
@@ -768,7 +772,7 @@ int ObPartitionExecutorUtils::set_individual_list_part_rows(ObExecContext &ctx,
   for (int64_t i = 0; OB_SUCC(ret) && i < part_num; ++i) {
     if (OB_ISNULL(partition = partition_array[i])) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(cast_list_expr_to_obj(ctx, stmt_type, true, partition->get_sub_part_num(),
+    } else if (OB_FAIL(cast_list_expr_to_values(ctx, stmt_type, true, partition->get_sub_part_num(),
                                              partition_array, partition->get_subpart_array(),
                                              list_fun_exprs, list_values_exprs_array.at(i)))) {
     }

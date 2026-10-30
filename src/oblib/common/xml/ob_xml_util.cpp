@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "common/xml/ob_xml_util.h"
+#include "lib/charset/ob_dtoa.h"
 #include "common/xml/ob_xml_parser.h"
 
 namespace oceanbase {

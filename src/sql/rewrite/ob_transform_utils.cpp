@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 
+#include "share/datum/typed_datum_compare.h"
+#include "share/datum/datum_value_cast.h"
 #include "ob_transform_utils.h"
 #include "sql/resolver/expr/ob_raw_expr_resolver_impl.h"
 #include "sql/rewrite/ob_equal_analysis.h"
@@ -1924,7 +1926,7 @@ int ObTransformUtils::is_const_expr_not_null(ObNotNullContext &ctx,
                                              bool &is_null)
 {
   int ret = OB_SUCCESS;
-  ObObj result;
+  DatumValue result;
   bool got_result = false;
   bool is_error_free = false;
   is_not_null = false;
@@ -6711,7 +6713,7 @@ int ObTransformUtils::compare_const_expr_result(ObTransformerCtx *ctx,
   } else if (OB_UNLIKELY(!expr->is_static_const_expr())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj obj_value;
+    DatumValue obj_value;
     bool got_result = true;
     if (expr->get_result_type().is_integer_type() ||
                 expr->get_result_type().is_number()) {
@@ -6773,8 +6775,8 @@ int ObTransformUtils::compare_const_expr_result(ObTransformerCtx *ctx,
              OB_UNLIKELY(!right_expr.is_static_const_expr())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj left_obj_value;
-    ObObj right_obj_value;
+    DatumValue left_obj_value;
+    DatumValue right_obj_value;
     bool left_got_result = true;
     bool right_got_result = true;
     if (left_expr.get_result_type().is_numeric_type() || //only integer and number now
@@ -7158,8 +7160,11 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
 {
   int ret = OB_SUCCESS;
   const ObRawExpr *limit_expr = NULL;
-  ObObj target_value;
-  target_value.set_int(ObIntType, limit);
+  // This local view cannot escape: a retained constraint takes its own copy.
+  DatumValue target_value;
+  target_value.meta_.set_int();
+  target_value.datum_.set_string(reinterpret_cast<const char *>(&limit), sizeof(limit));
+  int comparison = 0;
   is_equal = false;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
@@ -7173,7 +7178,7 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
     ObSEArray<ObRawExpr*, 4> params;
     ObRawExpr* param_expr = NULL;
     ObConstRawExpr *const_expr = NULL;
-    ObObj result;
+    DatumValue result;
     bool got_result = false;
     if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
                                     exec_ctx,
@@ -7186,8 +7191,9 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
     } else if (target_value.is_invalid_type() ||
                result.is_invalid_type()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (!target_value.can_compare(result) ||
-               0 != target_value.compare(result)) {
+    } else if (!can_compare_datum_values(target_value, result)) {
+    } else if (OB_FAIL(compare_datum_values(target_value, result, comparison))) {
+    } else if (comparison != 0) {
       //do nothing
     } else if (OB_FAIL(ObRawExprUtils::extract_params(const_cast<ObRawExpr*>(limit_expr), params))) {
     } else if (params.empty()) {
@@ -7200,17 +7206,18 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FALSE_IT(const_expr = static_cast<ObConstRawExpr*>(param_expr))) {
     } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_value().get_unknown()))) {
-    } else if (OB_FAIL(const_param_info.const_params_.push_back(target_value))) {
+    } else if (OB_FAIL(const_param_info.add_constant(target_value, *allocator))) {
     } else {
       is_equal = true;
     }
   } else if (limit_expr->is_const_raw_expr()) {
-    const ObObj &limit_value = static_cast<const ObConstRawExpr*>(limit_expr)->get_value();
+    const DatumValue &limit_value = static_cast<const ObConstRawExpr*>(limit_expr)->get_value();
     if (limit_value.is_invalid_type() ||
         target_value.is_invalid_type()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (!limit_value.can_compare(target_value) ||
-               0 != limit_value.compare(target_value)) {
+    } else if (!can_compare_datum_values(limit_value, target_value)) {
+    } else if (OB_FAIL(compare_datum_values(limit_value, target_value, comparison))) {
+    } else if (comparison != 0) {
     } else {
       is_equal = true;
     }
@@ -8226,7 +8233,7 @@ int ObTransformUtils::get_expr_int_value(ObRawExpr *expr,
   } else if (T_NULL == expr->get_expr_type()) {
     is_null_value = true;
   } else {
-    ObObj obj_value;
+    DatumValue obj_value;
     bool got_result = false;
     if ((expr->is_static_scalar_const_expr()) &&
                (expr->get_result_type().is_integer_type() ||
@@ -8276,7 +8283,7 @@ int ObTransformUtils::get_percentage_value(ObRawExpr *percent_expr,
   } else if (T_NULL == percent_expr->get_expr_type()) {
     is_null_value = true;
   } else {
-    ObObj value;
+    DatumValue value;
     bool got_result = false;
     if (percent_expr->is_static_scalar_const_expr() && 
         percent_expr->get_result_type().is_double()) {
@@ -8325,14 +8332,13 @@ int ObTransformUtils::add_const_param_constraints(ObRawExpr *expr,
         ret = OB_ERR_UNEXPECTED;
       } else {
         ObPCConstParamInfo param_info;
-        ObObj target_obj;
         ObConstRawExpr *const_expr = static_cast<ObConstRawExpr*>(params.at(i));
         int64_t param_idx = const_expr->get_value().get_unknown();
         if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_param_store().count())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
         } else if (OB_FAIL(param_info.const_params_.push_back(
-                                                      plan_ctx->get_param_store().at(param_idx)))) {
+                                                      plan_ctx->get_param_store().at(param_idx).value_view()))) {
         } else if (OB_FAIL(ctx->plan_const_param_constraints_.push_back(param_info))) {
         } else {/*do nothing*/}
       }
@@ -8438,7 +8444,7 @@ int ObTransformUtils::replace_with_groupby_exprs(ObSelectStmt *select_stmt,
 }
 
 
-bool ObTransformUtils::check_objparam_abs_equal(const ObObjParam &obj1, const ObObjParam &obj2,
+bool ObTransformUtils::check_objparam_abs_equal(const DatumParameter &obj1, const DatumParameter &obj2,
                                                 const bool override_ora_const_numeric_cmp)
 {
   int ret = OB_SUCCESS;
@@ -8476,7 +8482,7 @@ bool ObTransformUtils::check_objparam_abs_equal(const ObObjParam &obj1, const Ob
   return is_abs_equal;
 }
 
-bool ObTransformUtils::check_objparam_negative(const ObObjParam &obj1) {
+bool ObTransformUtils::check_objparam_negative(const DatumParameter &obj1) {
   bool is_neg = false;
   if (obj1.is_number()) {
     is_neg = obj1.is_negative_number();
@@ -8524,9 +8530,11 @@ int ObTransformUtils::add_compare_int_constraint(ObTransformerCtx *trans_ctx,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(true_expr->set_param_exprs(expr, int_expr))) {
     } else {
-      ObObj obj;
-      obj.set_int(ObIntType, val);
-      int_expr->set_value(obj);
+      DatumValue obj;
+      if (OB_FAIL(obj.set_int(val, expr_factory->get_allocator()))) {
+      } else {
+        int_expr->set_value(obj);
+      }
     }
 
     if (OB_SUCC(ret)) {
@@ -10041,7 +10049,7 @@ int ObTransformUtils::extract_const_bool_expr_result(ObTransformerCtx *ctx,
                                                    bool skip_warning_expr)
 {
   int ret = OB_SUCCESS;
-  ObObj result;
+  DatumValue result;
   bool is_valid = false;
   bool has_warning = false;
   is_true = false;
@@ -10060,7 +10068,7 @@ int ObTransformUtils::extract_const_bool_expr_result(ObTransformerCtx *ctx,
     // it exactly if the expression really runs.
   } else if (!is_valid) {
     /* do nothing */
-  } else if (OB_FAIL(ObObjEvaluator::is_true(result, is_true))) {
+  } else if (OB_FAIL(DatumValueEvaluator::is_true(result, is_true))) {
   } else if (!is_true) {
     is_false = true;
   }
@@ -10073,7 +10081,7 @@ int ObTransformUtils::check_static_expr_has_warning(ObTransformerCtx *ctx,
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObObj result;
+  DatumParameter result;
   const ParamStore *param_store = NULL;
   ObWarningBuffer *old_warning_buf = NULL;
   ObWarningBuffer probe_warning_buf;
@@ -10112,7 +10120,7 @@ int ObTransformUtils::check_static_expr_has_warning(ObTransformerCtx *ctx,
 
 int ObTransformUtils::calc_const_expr_result(ObRawExpr * expr,
                                              ObTransformerCtx *ctx,
-                                             ObObj &result,
+                                             DatumValue &result,
                                              bool &calc_happend,
                                              bool *has_warning)
 {
@@ -10975,32 +10983,38 @@ int ObTransformUtils::add_dummy_expr_for_json_object_node(ObTransformerCtx *ctx,
   } else if (OB_ISNULL(key_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj key_obj;
-    key_obj.set_varchar(ptr_name);
-    key_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-    key_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-    key_expr->set_value(key_obj);
+    DatumValue key_obj;
+    if (OB_FAIL(key_obj.set_varchar(ObString(ptr_name), ctx->expr_factory_->get_allocator()))) {
+    } else {
+      key_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      key_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+      key_expr->set_value(key_obj);
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ctx->expr_factory_->create_raw_expr(T_VARCHAR, value_expr))) {
   } else if (OB_ISNULL(key_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj val_obj;
-    val_obj.set_varchar(ptr_value);
-    val_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-    val_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-    value_expr->set_value(val_obj);
+    DatumValue val_obj;
+    if (OB_FAIL(val_obj.set_varchar(ObString(ptr_value), ctx->expr_factory_->get_allocator()))) {
+    } else {
+      val_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      val_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+      value_expr->set_value(val_obj);
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ctx->expr_factory_->create_raw_expr(T_INT, format_expr))) {
   } else if (OB_ISNULL(format_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj format_obj;
-    format_obj.set_int(0);
-    format_expr->set_data_type(ObIntType);
-    format_expr->set_value(format_obj);
+    DatumValue format_obj;
+    if (OB_FAIL(format_obj.set_int(0, ctx->expr_factory_->get_allocator()))) {
+    } else {
+      format_expr->set_data_type(ObIntType);
+      format_expr->set_value(format_obj);
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(param_array.push_back(key_expr))) {
@@ -11027,11 +11041,13 @@ int ObTransformUtils::add_column_expr_for_json_object_node(ObTransformerCtx *ctx
   } else if (OB_ISNULL(key_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj key_obj;
-    key_obj.set_varchar(col_item.column_name_);
-    key_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-    key_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-    key_expr->set_value(key_obj);
+    DatumValue key_obj;
+    if (OB_FAIL(key_obj.set_varchar(col_item.column_name_, ctx->expr_factory_->get_allocator()))) {
+    } else {
+      key_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+      key_obj.set_collation_level(CS_LEVEL_IMPLICIT);
+      key_expr->set_value(key_obj);
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(value_expr = col_item.expr_)) {
@@ -11041,10 +11057,12 @@ int ObTransformUtils::add_column_expr_for_json_object_node(ObTransformerCtx *ctx
     ret = OB_ERR_UNEXPECTED;
   } else if (check_is_json_constraint(ctx, stmt, col_item, is_json)) {
   } else {
-    ObObj format_obj;
-    format_obj.set_int(is_json);
-    format_expr->set_data_type(ObIntType);
-    format_expr->set_value(format_obj);
+    DatumValue format_obj;
+    if (OB_FAIL(format_obj.set_int(is_json, ctx->expr_factory_->get_allocator()))) {
+    } else {
+      format_expr->set_data_type(ObIntType);
+      format_expr->set_value(format_obj);
+    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(param_array.push_back(key_expr))) {
@@ -12869,7 +12887,7 @@ int ObTransformUtils::check_expr_eq_zero(ObExecContext *ctx,
   ObConstRawExpr *zero_expr = NULL;
   ObRawExpr *eq_zero_expr = NULL;
   bool got_result = false;
-  ObObj result;
+  DatumValue result;
   eq_zero = false;
   ObPhysicalPlanCtx *phy_ctx = NULL;
   if (OB_ISNULL(expr) || OB_ISNULL(ctx) || OB_ISNULL(ctx->get_my_session()) || 

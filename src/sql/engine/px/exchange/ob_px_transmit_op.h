@@ -229,7 +229,7 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
   int ret = OB_SUCCESS;
   int64_t send_row_time_recorder = 0;
   int64_t row_count = 0;
-  ObObj tablet_id;
+  int64_t tablet_id = 0;
 
   ObSliceIdxCalc::SliceIdxArray slice_idx_array;
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
@@ -277,7 +277,7 @@ int ObPxTransmitOp::send_rows_one_by_one(ObSliceIdxCalc &slice_calc)
                && OB_FAIL(slice_calc.get_previous_row_tablet_id(tablet_id))) {
     }
     FOREACH_CNT_X(slice_idx, slice_idx_array, OB_SUCC(ret)) {
-      if (OB_FAIL(send_row(*slice_idx, send_row_time_recorder, tablet_id.get_int()))) {
+      if (OB_FAIL(send_row(*slice_idx, send_row_time_recorder, tablet_id))) {
         if (OB_ITER_END != ret) {
         }
       }
@@ -295,7 +295,7 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
   int ret = OB_SUCCESS;
   int64_t send_row_time_recorder = 0;
   int64_t row_count = 0;
-  ObObj tablet_id;
+  int64_t tablet_id = 0;
   ObSliceIdxCalc::SliceIdxArray slice_idx_array;
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
   while (OB_SUCC(ret)) {
@@ -324,9 +324,9 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
         } else if (NULL != spec.tablet_id_expr_
                    && OB_FAIL(slice_calc.get_previous_row_tablet_id(tablet_id))) {
         }
-        LOG_DEBUG("send rows batch without prefetch", K(i), K(slice_idx_array), K(tablet_id.get_int()));
+        LOG_DEBUG("send rows batch without prefetch", K(i), K(slice_idx_array), K(tablet_id));
         FOREACH_CNT_X(slice_idx, slice_idx_array, OB_SUCC(ret)) {
-          if (OB_FAIL(send_row(*slice_idx, send_row_time_recorder, tablet_id.get_int()))) {
+          if (OB_FAIL(send_row(*slice_idx, send_row_time_recorder, tablet_id))) {
           }
         }
       }
@@ -359,7 +359,7 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
           batch_info_guard.set_batch_idx(i);
           row_count += 1;
           metric_.count();
-          if (OB_FAIL(send_row(indexes[i], send_row_time_recorder, tablet_id.get_int()))) {
+          if (OB_FAIL(send_row(indexes[i], send_row_time_recorder, tablet_id))) {
           }
         }
       }

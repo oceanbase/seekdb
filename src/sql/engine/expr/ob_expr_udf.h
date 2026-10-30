@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_UDF_H_
 #define OCEANBASE_SQL_OB_EXPR_UDF_H_
 
-#include "common/object/ob_object.h"
+#include "common/datum/datum_parameter.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
@@ -149,14 +149,14 @@ public:
   inline void set_loc(uint64_t loc) { loc_ = loc; }
   inline uint64_t get_loc() const { return loc_; }
 
-  static int process_in_params(const common::ObObj *objs_stack,
+  static int process_in_params(const common::DatumParameter *objs_stack,
                                int64_t param_num,
                                const common::ObIArray<ObUDFParamDesc> &params_desc,
                                const common::ObIArray<ObExprResType> &params_type,
                                common::ParamStore& iparams,
                                common::ObIAllocator &allocator,
-                               ObIArray<ObObj> *deep_in_objs = NULL);
-  static int process_out_params(const common::ObObj *objs_stack,
+                               ObIArray<DatumParameter> *deep_in_objs = NULL);
+  static int process_out_params(const common::DatumParameter *objs_stack,
                                 int64_t param_num,
                                 common::ParamStore& iparams,
                                 common::ObIAllocator &alloc,
@@ -164,10 +164,10 @@ public:
                                 const common::ObIArray<ObUDFParamDesc> &params_desc,
                                 const common::ObIArray<ObExprResType> &params_type);
 
-  static int is_child_of(const ObObj &parent, const ObObj &child, bool &is_child);
+  static int is_child_of(const DatumParameter &parent, const DatumParameter &child, bool &is_child);
   static int process_singal_out_param(int64_t i,
                                       ObIArray<bool> &dones,
-                                      const ObObj *objs_stack,
+                                      const DatumParameter *objs_stack,
                                       int64_t param_num,
                                       ParamStore& iparams,
                                       ObIAllocator &alloc,
@@ -177,7 +177,7 @@ public:
 
   static int process_package_out_param(int64_t idx,
                                        ObIArray<bool> &dones,
-                                       const ObObj *objs_stack,
+                                       const DatumParameter *objs_stack,
                                        int64_t param_num,
                                        ParamStore& iparams,
                                        ObIAllocator &alloc,
@@ -189,13 +189,13 @@ public:
                                 ObExecContext &exec_ctx);
   static int after_calc_result(share::schema::ObSchemaGetterGuard &schema_guard,
                                ObSqlCtx &sql_ctx, ObExecContext &exec_ctx);
-  static int need_deep_copy_in_parameter(const ObObj *objs_stack,
+  static int need_deep_copy_in_parameter(const DatumParameter *objs_stack,
                                           int64_t param_num,
                                           const ObIArray<ObUDFParamDesc> &params_desc,
                                           const ObIArray<ObExprResType> &params_type,
-                                          const ObObj &element,
-                                          bool &need_deep_copy);
-  static int extract_allocator_and_restore_obj(const ObObj &obj, ObObj &new_obj, ObIAllocator *&composite_alloc);
+                                          const DatumParameter &element,
+                                          bool &need_deep_copy, ObIAllocator &owner);
+  static int extract_allocator_and_restore_obj(const DatumParameter &obj, DatumParameter &new_obj, ObIAllocator *&composite_alloc, ObIAllocator &owner);
   int64_t get_udf_id() const { return udf_id_;}
   int64_t get_udf_package_id() const { return udf_package_id_;}
   const common::ObIArray<int64_t> &get_subprogram_path() const { return subprogram_path_;}
@@ -205,7 +205,7 @@ public:
   virtual bool need_rt_ctx() const override { return true; }
 
 private:
-  static int fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, common::ObObj *objs);
+  static int fill_datum_stack(const ObExpr &expr, ObEvalCtx &ctx, common::DatumParameter *objs);
   static int check_types(const ObExpr &expr, const ObExprUDFInfo &info);
   int64_t udf_id_;
   int64_t udf_package_id_;

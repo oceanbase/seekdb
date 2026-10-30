@@ -59,7 +59,7 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
   ObExecContext *exec_ctx = OB_ISNULL(session) ? NULL : session->get_cur_exec_ctx();
-  ObObjType lambda_type = types_stack[0].get_type();
+  SqlValueType lambda_type = types_stack[0].get_type();
   bool is_null_res = false;
 
   if (OB_ISNULL(exec_ctx)) {
@@ -141,13 +141,14 @@ int ObExprArrayFilter::fill_array_by_filter(ObArenaAllocator &allocator, ObIArra
                                             ObIArrayType *src_arr, ObIArrayType *res_arr)
 {
   int ret = OB_SUCCESS;
+  alignas(int512_t) char datum_buf[sizeof(int512_t)] = {};
   for (uint32_t i = 0; i < filter_arr->size() && OB_SUCC(ret); i++) {
-    ObObj filter_elem_obj;
-    ObIArrayType *elem_arr = NULL;
+    ObDatum filter_elem;
+    filter_elem.ptr_ = datum_buf;
     if (filter_arr->is_null(i)) {
       // do nothing
-    } else if (OB_FAIL(filter_arr->elem_at(i, filter_elem_obj))) {
-    } else if (filter_elem_obj.get_int() == 0) {
+    } else if (OB_FAIL(filter_arr->elem_at_datum(i, filter_elem))) {
+    } else if (filter_elem.get_int() == 0) {
       // do nothing
     } else if (OB_FAIL(res_arr->insert_from(*src_arr, i))) {
     }

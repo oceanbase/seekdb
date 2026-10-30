@@ -39,6 +39,7 @@ protected:
   virtual int do_index_lookup() override;
 
 private:
+  friend struct MviLookupTestAccess;
   bool check_has_rowkey();
   int save_rowkey();
 };

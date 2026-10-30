@@ -621,7 +621,7 @@ protected:
                                          const common::ObString &column_name,
                                          ColumnItem *&col_item);
   int resolve_function_table_column_item(const TableItem &table_item,
-                                         const common::ObObjMeta &meta_type,
+                                         const common::SqlTypeMeta &meta_type,
                                          const common::ObAccuracy &accuracy,
                                          const ObString &column_name,
                                          uint64_t column_id,
@@ -805,7 +805,8 @@ private:
                                 bool &is_true,
                                 ObIArray<ObExprConstraint> &constraints);
   int add_udt_dependency(const pl::ObUserDefinedType &udt_type);
-  int add_obj_to_llc_bitmap(const ObObj &obj, char *llc_bitmap, double &num_null);
+  int add_datum_to_llc_bitmap(const ObDatum &datum, const SqlTypeMeta &meta,
+                              char *llc_bitmap, double &num_null);
   int compute_values_table_row_count(ObValuesTableDef &table_def);
 protected:
   struct GenColumnExprInfo {

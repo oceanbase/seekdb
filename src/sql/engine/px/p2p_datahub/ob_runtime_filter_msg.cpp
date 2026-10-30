@@ -20,6 +20,9 @@
 #include "sql/engine/expr/ob_expr_hash.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
 
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::share;
@@ -666,7 +669,7 @@ int ObRFRangeFilterMsg::prepare_query_range()
     // only extract the first column
     int64_t prefix_col_idx = query_range_info_.prefix_col_idxs_.at(0);
     int64_t range_column_cnt = query_range_info_.range_column_cnt_;
-    const ObObjMeta &prefix_col_obj_meta = query_range_info_.prefix_col_obj_metas_.at(0);
+    const SqlTypeMeta &prefix_col_obj_meta = query_range_info_.prefix_col_obj_metas_.at(0);
 
     query_range_.table_id_ = query_range_info_.table_id_;
     query_range_.border_flag_.set_inclusive_start();
@@ -674,30 +677,33 @@ int ObRFRangeFilterMsg::prepare_query_range()
 
     const ObDatum &lower_bound = lower_bounds_.at(prefix_col_idx);
     const ObDatum &upper_bound = upper_bounds_.at(prefix_col_idx);
-    ObObj *start = NULL;
-    ObObj *end = NULL;
-    if (OB_ISNULL(start = static_cast<ObObj *>(
-                      query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
+    DatumValue *start = NULL;
+    DatumValue *end = NULL;
+    if (OB_ISNULL(start = static_cast<DatumValue *>(
+                      query_range_allocator_.alloc(sizeof(DatumValue) * range_column_cnt)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(end = static_cast<ObObj *>(
-                             query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
+    } else if (OB_ISNULL(end = static_cast<DatumValue *>(
+                             query_range_allocator_.alloc(sizeof(DatumValue) * range_column_cnt)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      new(start) ObObj();
-      new(end) ObObj();
-      lower_bound.to_obj(*start, prefix_col_obj_meta);
-      upper_bound.to_obj(*end, prefix_col_obj_meta);
+      new(start) DatumValue();
+      new(end) DatumValue();
+      DatumValue lower, upper;
+      if (OB_FAIL(project_datum_value_view(lower_bound, prefix_col_obj_meta, ObDatum::get_sql_value_datum_map_type(prefix_col_obj_meta.get_type()), start->meta_, lower, true))) {
+      } else if (OB_FAIL(project_datum_value_view(upper_bound, prefix_col_obj_meta, ObDatum::get_sql_value_datum_map_type(prefix_col_obj_meta.get_type()), end->meta_, upper, true))) {
+      } else if (OB_FAIL(clone_typed_value(lower, *start, query_range_allocator_))) {
+      } else if (OB_FAIL(clone_typed_value(upper, *end, query_range_allocator_))) {
+      }
       // fill left coloumn with (min, max)
-      for (int64_t i = 1; i < range_column_cnt; ++i) {
-        new(start + i) ObObj();
-        new(end + i) ObObj();
+      for (int64_t i = 1; OB_SUCC(ret) && i < range_column_cnt; ++i) {
+        new(start + i) DatumValue();
+        new(end + i) DatumValue();
         (start + i)->set_min_value();
         (end + i)->set_max_value();
       }
       ObRowkey start_key(start, range_column_cnt);
       ObRowkey end_key(end, range_column_cnt);
-      query_range_.start_key_ = start_key;
-      query_range_.end_key_ = end_key;
+      if (OB_SUCC(ret)) { query_range_.start_key_ = start_key; query_range_.end_key_ = end_key; }
     }
 
     if (OB_SUCC(ret)) {
@@ -1631,33 +1637,36 @@ int ObRFInFilterMsg::generate_one_range(int row_idx)
   int ret = OB_SUCCESS;
   int64_t range_column_cnt = query_range_info_.range_column_cnt_;
   const ObIArray<int64_t> &prefix_col_idxs = query_range_info_.prefix_col_idxs_;
-  const ObIArray<ObObjMeta> &prefix_col_obj_metas = query_range_info_.prefix_col_obj_metas_;
+  const ObIArray<SqlTypeMeta> &prefix_col_obj_metas = query_range_info_.prefix_col_obj_metas_;
 
   ObNewRange query_range;
   query_range.table_id_ = query_range_info_.table_id_;
   query_range.border_flag_.set_inclusive_start();
   query_range.border_flag_.set_inclusive_end();
-  ObObj *start = NULL;
-  ObObj *end = NULL;
-  if (OB_ISNULL(start = static_cast<ObObj *>(
-                    query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
+  DatumValue *start = NULL;
+  DatumValue *end = NULL;
+  if (OB_ISNULL(start = static_cast<DatumValue *>(
+                    query_range_allocator_.alloc(sizeof(DatumValue) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(end = static_cast<ObObj *>(
-                           query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
+  } else if (OB_ISNULL(end = static_cast<DatumValue *>(
+                           query_range_allocator_.alloc(sizeof(DatumValue) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   }
   for (int64_t j = 0; j < prefix_col_idxs.count() && OB_SUCC(ret); ++j) {
     int64_t col_idx = prefix_col_idxs.at(j);
-    const ObObjMeta &obj_meta = prefix_col_obj_metas.at(j);
+    const SqlTypeMeta &obj_meta = prefix_col_obj_metas.at(j);
     ObDatum &datum = serial_rows_.at(row_idx)->at(col_idx);
-    new (start + j) ObObj();
-    new (end + j) ObObj();
-    datum.to_obj(*(start + j), obj_meta);
-    datum.to_obj(*(end + j), obj_meta);
+    new (start + j) DatumValue();
+    new (end + j) DatumValue();
+    DatumValue value;
+    if (OB_FAIL(project_datum_value_view(datum, obj_meta, ObDatum::get_sql_value_datum_map_type(obj_meta.get_type()), start[j].meta_, value, true))) {
+    } else if (OB_FAIL(clone_typed_value(value, start[j], query_range_allocator_))) {
+    } else if (OB_FAIL(clone_typed_value(value, end[j], query_range_allocator_))) {
+    }
   }
   for (int64_t j = prefix_col_idxs.count(); j < range_column_cnt && OB_SUCC(ret); ++j) {
-    new (start + j) ObObj();
-    new (end + j) ObObj();
+    new (start + j) DatumValue();
+    new (end + j) DatumValue();
     (start + j)->set_min_value();
     (end + j)->set_max_value();
   }

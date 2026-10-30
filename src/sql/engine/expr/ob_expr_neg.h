@@ -39,8 +39,8 @@ public:
                       ObExpr &rt_expr) const override;
 private:
   static int calc_param_type(const ObExprResType &param_type,
-                             common::ObObjType &calc_type,
-                             common::ObObjType &result_type);
+                             common::SqlValueType &calc_type,
+                             common::SqlValueType &result_type);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprNeg) const;
 

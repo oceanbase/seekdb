@@ -87,7 +87,7 @@ int ObDBMSAiService::check_ai_model_privilege_(ObPLExecCtx &ctx, ObPrivSet requi
   return ret;
 }
 
-int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString endpoint_name;
@@ -126,7 +126,7 @@ int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore 
   return ret;
 }
 
-int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString endpoint_name;
@@ -163,7 +163,7 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
   return ret;  
 }
 
-int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString endpoint_name;
@@ -225,7 +225,7 @@ int ObDBMSAiService::get_json_base_(
   return ret;
 }
 
-int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString model_name;
@@ -285,7 +285,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
   return ret;
 }
 
-int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result)
+int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   ObString model_name;

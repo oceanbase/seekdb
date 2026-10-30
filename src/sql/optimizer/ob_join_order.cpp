@@ -7209,8 +7209,8 @@ int JoinPath::compute_hash_hash_sharding_info()
           OB_ISNULL(right_expr = join_expr->get_param_expr(1))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObObjType left_type = ObMaxType;
-        ObObjType right_type = ObMaxType;
+        SqlValueType left_type = ObMaxType;
+        SqlValueType right_type = ObMaxType;
         if (!left_expr->get_relation_ids().is_subset(left_path_->parent_->get_tables())) {
           std::swap(left_expr, right_expr);
         }
@@ -7234,7 +7234,7 @@ int JoinPath::compute_hash_hash_sharding_info()
       // determine if hybrid hash dm can be enabled
       // should check is_naaj - #issue/46230785
       if (OB_SUCC(ret) && !is_naaj_ && 1 == equal_join_conditions_.count()) {
-        ObArray<ObObj> popular_values;
+        ObArray<DatumValue> popular_values;
         if (OB_FAIL(log_plan->check_if_use_hybrid_hash_distribution(
                     log_plan->get_optimizer_context(),
                     log_plan->get_stmt(),
@@ -12209,10 +12209,11 @@ int ObJoinOrder::create_onetime_expr(const ObRelIds &ignore_relids, ObRawExpr* &
       ret = OB_ERR_UNEXPECTED;
     } else {
       new_expr->set_ref_expr(expr, true);
-      new_expr->set_param_index(*stmt->query_ctx_);
+      OZ (new_expr->set_param_index(*stmt->query_ctx_));
       new_expr->set_result_type(expr->get_result_type());
       ObSQLSessionInfo *session_info = get_plan()->get_optimizer_context().get_session_info();
-      if (OB_FAIL(new_expr->formalize(session_info))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(new_expr->formalize(session_info))) {
       } else {
         expr = new_expr;
       }
@@ -12888,8 +12889,8 @@ int ObJoinOrder::can_extract_unprecise_range(const uint64_t table_id,
     }
 
     if (OB_SUCC(ret) && NULL != column && NULL != exec_param) {
-      ObObjType column_type = column->get_result_type().get_type();
-      ObObjType exec_param_type = exec_param->get_result_type().get_type();
+      SqlValueType column_type = column->get_result_type().get_type();
+      SqlValueType exec_param_type = exec_param->get_result_type().get_type();
       if (column->get_table_id() != table_id
           || !ObOptimizerUtil::find_item(prefix_column_ids, column->get_column_id())) {
         /*do nothing*/
@@ -12910,8 +12911,8 @@ int ObJoinOrder::can_extract_unprecise_range(const uint64_t table_id,
                patten_expr->is_dynamic_const_expr() &&
                escape_expr->is_static_const_expr()) {
       column = static_cast<const ObColumnRefRawExpr*>(first_expr);
-      ObObjType column_type = column->get_result_type().get_type();
-      ObObjType patten_type = patten_expr->get_result_type().get_type();
+      SqlValueType column_type = column->get_result_type().get_type();
+      SqlValueType patten_type = patten_expr->get_result_type().get_type();
       if (column->get_table_id() != table_id
           || !ObOptimizerUtil::find_item(prefix_column_ids, column->get_column_id())) {
         /*do nothing*/
@@ -12939,8 +12940,8 @@ int ObJoinOrder::can_extract_unprecise_range(const uint64_t table_id,
     }
 
     if (OB_SUCC(ret) && NULL != column && NULL != exec_param) {
-      ObObjType column_type = column->get_result_type().get_type();
-      ObObjType exec_param_type = exec_param->get_result_type().get_type();
+      SqlValueType column_type = column->get_result_type().get_type();
+      SqlValueType exec_param_type = exec_param->get_result_type().get_type();
       if (column->get_table_id() != table_id
           || !ObOptimizerUtil::find_item(prefix_column_ids, column->get_column_id())) {
         /*do nothing*/
@@ -12997,8 +12998,8 @@ int ObJoinOrder::can_extract_unprecise_range_v2(const uint64_t table_id,
       exec_param = exec_param->get_param_expr(0);
     }
     if (OB_SUCC(ret) && NULL != column && NULL != exec_param) {
-      ObObjType column_type = column->get_result_type().get_type();
-      ObObjType exec_param_type = exec_param->get_result_type().get_type();
+      SqlValueType column_type = column->get_result_type().get_type();
+      SqlValueType exec_param_type = exec_param->get_result_type().get_type();
       if (column->get_table_id() != table_id
           || !ObOptimizerUtil::find_item(prefix_column_ids, column->get_column_id())) {
         /*do nothing*/
@@ -13025,8 +13026,8 @@ int ObJoinOrder::can_extract_unprecise_range_v2(const uint64_t table_id,
                patten_expr->is_const_expr() &&
                escape_expr->is_static_const_expr()) {
       column = static_cast<const ObColumnRefRawExpr*>(first_expr);
-      ObObjType column_type = column->get_result_type().get_type();
-      ObObjType patten_type = patten_expr->get_result_type().get_type();
+      SqlValueType column_type = column->get_result_type().get_type();
+      SqlValueType patten_type = patten_expr->get_result_type().get_type();
       if (column->get_table_id() != table_id
           || !ObOptimizerUtil::find_item(prefix_column_ids, column->get_column_id())) {
         /*do nothing*/
@@ -13113,8 +13114,8 @@ int ObJoinOrder::can_extract_unprecise_range_v2(const uint64_t table_id,
     }
 
     if (OB_SUCC(ret) && NULL != column && NULL != exec_param) {
-      ObObjType column_type = column->get_result_type().get_type();
-      ObObjType exec_param_type = exec_param->get_result_type().get_type();
+      SqlValueType column_type = column->get_result_type().get_type();
+      SqlValueType exec_param_type = exec_param->get_result_type().get_type();
       if (column->get_table_id() != table_id
           || !ObOptimizerUtil::find_item(prefix_column_ids, column->get_column_id())) {
         /*do nothing*/
@@ -13801,9 +13802,14 @@ int ObJoinOrder::init_est_info_for_index(const uint64_t table_id,
               col_meta->set_ndv(rows < global_ndv ? rows : global_ndv);
               col_meta->set_num_null(rows < num_null ? rows : num_null);
               col_meta->set_avg_len(col_stats.at(i).avglen_val_);
-              col_meta->set_min_value(col_stats.at(i).min_val_);
-              col_meta->set_max_value(col_stats.at(i).max_val_);
-              col_meta->set_min_max_inited(true);
+              DatumValue minimum, maximum;
+              if (OB_FAIL(clone_typed_value(col_stats.at(i).min_val_, minimum, OPT_CTX.get_allocator()))) {
+              } else if (OB_FAIL(clone_typed_value(col_stats.at(i).max_val_, maximum, OPT_CTX.get_allocator()))) {
+              } else {
+                col_meta->set_min_value(minimum);
+                col_meta->set_max_value(maximum);
+                col_meta->set_min_max_inited(true);
+              }
             }
           }
         }
@@ -15604,8 +15610,6 @@ int ObJoinOrder::build_prefix_index_compare_expr(ObRawExpr &column_expr,
   if (T_OP_LIKE == type) {
     //build value substr expr
     ObOpRawExpr *like_expr = NULL;
-    bool got_result = false;
-    ObObj result;
     ObOptimizerContext *opt_ctx = NULL;
     ObRawExpr *prefix_len_expr = NULL;
     if (OB_ISNULL(get_plan()) ||
@@ -15664,7 +15668,6 @@ int ObJoinOrder::build_prefix_index_compare_expr(ObRawExpr &column_expr,
     }
     // change to const
     if (OB_SUCC(ret)) {
-      ObObj result;
       ObConstRawExpr *c_expr = NULL;
       if (OB_FAIL(substr_expr->extract_info())) {
       } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(get_plan()->get_optimizer_context().get_expr_factory(),
@@ -16605,7 +16608,7 @@ int ObJoinOrder::init_basic_text_retrieval_info(uint64_t table_id,
 }
 
 int ObJoinOrder::get_query_tokens_by_boolean_mode(ObMatchFunRawExpr *match_expr,
-                                                  const ObObj &result,
+                                                  const common::DatumValue &result,
                                                   ObIArray<ObConstRawExpr*> &query_tokens)
 {
   int ret = OB_SUCCESS;
@@ -16688,7 +16691,7 @@ int ObJoinOrder::get_query_tokens(ObMatchFunRawExpr *match_expr,
                                   ObIArray<ObConstRawExpr*> &query_tokens)
 {
   int ret = OB_SUCCESS;
-  ObObj result;
+  DatumValue result;
   bool got_result = false;
   if (OB_ISNULL(allocator_) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
@@ -16708,7 +16711,7 @@ int ObJoinOrder::get_query_tokens(ObMatchFunRawExpr *match_expr,
     const ObString &search_text_string = result.get_string();
     const ObString &parser_name = index_schema->get_parser_name_str();
     const ObString &parser_properties = index_schema->get_parser_property_str();
-    const ObObjMeta &key_meta = match_expr->get_search_key()->get_result_meta();
+    const SqlTypeMeta &key_meta = match_expr->get_search_key()->get_result_meta();
     storage::ObFTParseHelper tokenize_helper;
     common::ObSEArray<ObFTWord, 16> tokens;
     hash::ObHashMap<ObFTWord, int64_t> token_map;
@@ -17611,7 +17614,7 @@ int ObJoinOrder::check_simple_gen_col_cmp_expr(ObRawExpr *expr,
         if (OB_UNLIKELY(param_idx < 0 || param_idx >= phy_plan_ctx->get_param_store().count())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-        } else if (OB_FAIL(param_info.const_params_.push_back(phy_plan_ctx->get_param_store().at(param_idx)))) {
+        } else if (OB_FAIL(param_info.const_params_.push_back(phy_plan_ctx->get_param_store().at(param_idx).value_view()))) {
         } else if (OB_FAIL(param_infos.push_back(param_info))) {
         }
       }

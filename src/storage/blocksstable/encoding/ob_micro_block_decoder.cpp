@@ -249,7 +249,7 @@ int ObIEncodeBlockReader::prepare(const int64_t column_cnt)
   int ret = OB_SUCCESS;
   if (column_cnt > DEFAULT_DECODER_CNT) {
     const int64_t store_ids_size = sizeof(store_id_array_[0]) * column_cnt;
-    const int64_t column_types_size = ALIGN_UP(sizeof(ObObjMeta) * column_cnt, 8);
+    const int64_t column_types_size = ALIGN_UP(sizeof(SqlTypeMeta) * column_cnt, 8);
     const int64_t col_decoder_size = sizeof(ObColumnDecoder) * column_cnt;
     char *buf = nullptr;
     if (nullptr
@@ -258,7 +258,7 @@ int ObIEncodeBlockReader::prepare(const int64_t column_cnt)
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       store_id_array_ = reinterpret_cast<int64_t *>(buf);
-      column_type_array_ = reinterpret_cast<ObObjMeta *>(buf + store_ids_size);
+      column_type_array_ = reinterpret_cast<SqlTypeMeta *>(buf + store_ids_size);
       decoders_ =  reinterpret_cast<ObColumnDecoder *>(buf + store_ids_size + column_types_size);
     }
   } else {
@@ -351,7 +351,7 @@ int ObIEncodeBlockReader::get_micro_metas(const ObMicroBlockHeader *&header,
 }
 
 int ObIEncodeBlockReader::add_decoder(
-    const int64_t store_idx, const ObObjMeta &obj_meta,
+    const int64_t store_idx, const SqlTypeMeta &obj_meta,
     int64_t &decoders_buf_pos, ObColumnDecoder &dest)
 {
   int ret = OB_SUCCESS;
@@ -496,10 +496,10 @@ int ObEncodeBlockGetReader::init_by_read_info(
     } else if (OB_FAIL(get_micro_metas(header_, col_header_, meta_data_,
         block_data.get_buf(), block_data.get_buf_size()))) {
     } else if (typeid(ObRowkeyReadInfo) == typeid(read_info)) {
-      ObObjMeta col_type;
+      SqlTypeMeta col_type;
       int64_t i = 0;
       for (; i < header_->column_count_; ++i) {
-        col_type.set_type(static_cast<ObObjType>(col_header_[i].obj_type_));
+        col_type.set_type(static_cast<SqlValueType>(col_header_[i].obj_type_));
         store_id_array_[i] = i;
         column_type_array_[i] = col_type;
       }
@@ -1014,7 +1014,7 @@ int ObMicroBlockDecoder::init_decoders()
     */
     int64_t decoders_buf_pos = 0;
     if (OB_ISNULL(read_info_) || typeid(ObRowkeyReadInfo) == typeid(*read_info_)) {
-      ObObjMeta col_type;
+      SqlTypeMeta col_type;
       if (OB_UNLIKELY((header_->column_count_ < request_cnt_ && nullptr == read_info_) ||
                       (header_->column_count_ > request_cnt_))) {
         ret = OB_ERR_UNEXPECTED;
@@ -1022,7 +1022,7 @@ int ObMicroBlockDecoder::init_decoders()
       } else {
         int64_t i = 0;
         for ( ; OB_SUCC(ret) && i < header_->column_count_; ++i) {
-          col_type.set_type(static_cast<ObObjType>(col_header_[i].obj_type_));
+          col_type.set_type(static_cast<SqlValueType>(col_header_[i].obj_type_));
           if (OB_FAIL(add_decoder(i, col_type, nullptr, decoders_buf_pos, decoders_[i]))) {
           }
         }
@@ -1049,7 +1049,7 @@ int ObMicroBlockDecoder::init_decoders()
 
 int ObMicroBlockDecoder::add_decoder(
     const int64_t store_idx, 
-    const ObObjMeta &obj_meta, 
+    const SqlTypeMeta &obj_meta,
     const ObColumnParam *col_param, 
     int64_t &decoders_buf_pos,
     ObColumnDecoder &dest)
@@ -1650,7 +1650,7 @@ int ObMicroBlockDecoder::filter_pushdown_retro(
       if (OB_FAIL(row_index_->get(row_id, row_data, row_len))) {
       } else {
         ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
-        const ObObjMeta &obj_meta = read_info_->get_columns_desc().at(col_offset).col_type_;
+        const SqlTypeMeta &obj_meta = read_info_->get_columns_desc().at(col_offset).col_type_;
         decoded_datum.reuse();
         if (OB_FAIL(decoders_[col_offset].decode(decoded_datum, row_id, bs, row_data, row_len))) {
         } else if (need_padding(filter.is_padding_mode(), obj_meta) && OB_FAIL(
@@ -1892,7 +1892,6 @@ int ObMicroBlockDecoder::get_col_datums(
   int ret = OB_SUCCESS;
   if (!decoders_[col_id].decoder_->can_vectorized()) {
     // normal path
-    common::ObObj cell;
     int64_t row_len = 0;
     const char *row_data = NULL;
     const int row_header_size = ObRowHeader::get_serialized_size();

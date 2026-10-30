@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_MYSQL_QUERY_DRIVER_
 #define OCEANBASE_OBSERVER_MYSQL_QUERY_DRIVER_
 
+#include "common/datum/datum_value.h"
 #include "share/ob_define.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
@@ -75,25 +76,22 @@ public:
                                     bool has_more_result = false,
                                     bool need_set_ps_out = false,
                                     sql::ObResultSet *result = NULL);
-  int convert_string_value_charset(common::ObObj& value, sql::ObResultSet &result,
+  int convert_string_value_charset(common::DatumValue &value, sql::ObResultSet &result,
                                    ObCharsetType charset_type);
-  int convert_text_value_charset(common::ObObj& value, sql::ObResultSet &result,
+  int convert_text_value_charset(common::DatumValue &value, sql::ObResultSet &result,
                                  ObCharsetType charset_type);
+  int process_lob_locator_results(common::DatumValue &value, sql::ObResultSet &result);
+  static int process_lob_locator_results(common::DatumValue &value,
+      common::ObIAllocator *owner, const sql::ObSQLSessionInfo *session,
+      sql::ObExecContext *exec_ctx = nullptr);
+  static int convert_text_value_charset(common::DatumValue &value, ObCharsetType charset_type,
+      common::ObIAllocator &owner, const sql::ObSQLSessionInfo *session,
+      sql::ObExecContext *exec_ctx = nullptr);
 
-  int process_lob_locator_results(common::ObObj& value, sql::ObResultSet &result);
-  static int process_lob_locator_results(common::ObObj& value, 
-                                         common::ObIAllocator *allocator,
-                                         const sql::ObSQLSessionInfo *session_info,
-                                         sql::ObExecContext *exec_ctx = nullptr);
   static int convert_string_charset(const common::ObString &in_str, 
                                     const common::ObCollationType in_cs_type,
                                     const common::ObCollationType out_cs_type, 
                                     char *buf, int32_t buf_len, uint32_t &result_len);
-  static int convert_text_value_charset(ObObj& value,
-                                        ObCharsetType charset_type, 
-                                        ObIAllocator &allocator,
-                                        const sql::ObSQLSessionInfo *session_info,
-                                        sql::ObExecContext *exec_ctx = nullptr);
 private:
   int convert_field_charset(common::ObIAllocator& allocator,
       const common::ObCollationType& from_collation,

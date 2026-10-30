@@ -40,7 +40,7 @@ int ObExprInnerRowCmpVal::calc_result_type3(ObExprResType &type,
   if (!ob_is_decimal_int(type1.get_type())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    type2.set_calc_meta(type1.get_obj_meta());
+    type2.set_calc_meta(type1.get_sql_type_meta());
     type2.set_calc_accuracy(type1.get_accuracy());
     const uint64_t cast_mode = type1.get_cast_mode();
     if (0 != (cast_mode & CM_CONST_TO_DECIMAL_INT_UP)) {
@@ -52,7 +52,7 @@ int ObExprInnerRowCmpVal::calc_result_type3(ObExprResType &type,
     }
   }
   if (OB_SUCC(ret)) {
-    type.set_meta(type3.get_obj_meta());
+    type.set_meta(type3.get_sql_type_meta());
     type.set_accuracy(type3.get_accuracy());
   }
   return ret;

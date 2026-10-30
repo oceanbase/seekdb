@@ -125,7 +125,7 @@ struct ObColDataStoreDesc
     const int64_t data_format_version);
   // be carefule to cal mock function
   int mock_valid_col_default_checksum_array(int64_t column_cnt);
-  OB_INLINE int add_col_desc(const ObObjMeta meta, int64_t col_idx);
+  OB_INLINE int add_col_desc(const SqlTypeMeta meta, int64_t col_idx);
   OB_INLINE int add_binary_col_desc(int64_t col_idx);
   TO_STRING_KV(K_(row_column_count),
                K_(rowkey_column_count), K_(schema_rowkey_col_cnt),

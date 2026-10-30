@@ -68,12 +68,12 @@ public:
                       ObExpr &rt_expr) const override;
   static int eval_object_construct(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
 
-  static int check_types(ObEvalCtx &ctx, const common::ObObj *objs_stack,
+  static int check_types(ObEvalCtx &ctx, const common::DatumParameter *objs_stack,
                          const common::ObIArray<ObExprResType> &elem_types,
                          int64_t param_num);
-  static int fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, ObObj *objs);
+  static int fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter *objs);
 
-  static int newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, ObIAllocator *alloc);
+  static int newx(ObEvalCtx &ctx, DatumValue &result, uint64_t udt_id, ObIAllocator *alloc);
 
   virtual void reset() {
     rowsize_ = 0;

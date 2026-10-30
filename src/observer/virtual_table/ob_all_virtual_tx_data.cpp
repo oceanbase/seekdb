@@ -60,33 +60,33 @@ int ObAllVirtualTxData::fill_in_row_(
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case TX_ID_COL:
-        cur_row_.cells_[i].set_int(tx_id_.get_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_id_.get_id()) : ret);
         break;
       case STATE_COL:
-        cur_row_.cells_[i].set_varchar(ObTxCommitData::get_state_string(row_data.state_));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObTxCommitData::get_state_string(row_data.state_)) : ret);
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       case START_SCN_COL: {
         uint64_t v = row_data.start_scn_.get_val_for_inner_table_field();
-        cur_row_.cells_[i].set_uint64(v);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
         break;
       }
       case END_SCN_COL: {
         uint64_t v = row_data.end_scn_.get_val_for_inner_table_field();
-        cur_row_.cells_[i].set_uint64(v);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
         break;
       }
       case COMMIT_VERSION_COL: {
         uint64_t v = row_data.commit_version_.get_val_for_inner_table_field();
-        cur_row_.cells_[i].set_uint64(v);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
         break;
       }
       case UNDO_STATUS_COL:
-        cur_row_.cells_[i].set_varchar(row_data.undo_status_list_str_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, row_data.undo_status_list_str_) : ret);
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       case TX_OP_COL:
-        cur_row_.cells_[i].set_varchar(row_data.tx_op_str_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, row_data.tx_op_str_) : ret);
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       default:
@@ -111,15 +111,15 @@ int ObAllVirtualTxData::get_primary_key_()
     SERVER_LOG(WARN, "invalid key ranges", KR(ret));
   } else {
     ObNewRange &key_range = key_ranges_.at(0);
-    if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() < 1 || key_range.get_end_key().get_obj_cnt() < 1)) {
+    if (OB_UNLIKELY(key_range.get_start_key().get_value_count() < 1 || key_range.get_end_key().get_value_count() < 1)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR,
                  "unexpected key_ranges_ of rowkey columns",
                  KR(ret),
                  "size of start key",
-                 key_range.get_start_key().get_obj_cnt(),
+                 key_range.get_start_key().get_value_count(),
                  "size of end key",
-                 key_range.get_end_key().get_obj_cnt());
+                 key_range.get_end_key().get_value_count());
     } else if (OB_FAIL(handle_key_range_(key_range))) {
     }
   }
@@ -130,8 +130,8 @@ int ObAllVirtualTxData::handle_key_range_(ObNewRange &key_range)
 {
   int ret = OB_SUCCESS;
   // In single-node mode, rowkey only has tx_id (index 0)
-  ObObj tx_id_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
-  ObObj tx_id_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
+  const DatumValue &tx_id_obj_low = (key_range.get_start_key().get_values()[0]);
+  const DatumValue &tx_id_obj_high = (key_range.get_end_key().get_values()[0]);
 
   ObTransID tx_id_low = tx_id_obj_low.is_min_value() ? ObTransID(0) : ObTransID(tx_id_obj_low.get_int());
   ObTransID tx_id_high = tx_id_obj_high.is_min_value() ? ObTransID(INT64_MAX) : ObTransID(tx_id_obj_high.get_int());

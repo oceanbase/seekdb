@@ -566,7 +566,7 @@ int ObDmlCgService::convert_data_table_rowkey_info(ObLogDelUpd &op,
   ObDASInsCtDef &das_ins_ctdef = ins_ctdef.das_ctdef_;
   ObSEArray<uint64_t, 8> rowkey_column_ids;
   ObSEArray<ObRawExpr *, 8> rowkey_exprs;
-  ObSEArray<ObObjMeta, 8> rowkey_column_types;
+  ObSEArray<SqlTypeMeta, 8> rowkey_column_types;
   // the type of rowkey_exprs must be column_ref expression
   if (OB_ISNULL(primary_dml_info)) {
     ret = OB_ERR_UNEXPECTED;
@@ -983,7 +983,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
     const ObRowkeyInfo &rowkey_info = index_schema->get_rowkey_info();
     const ObRowkeyColumn *rowkey_column = rowkey_info.get_column(i);
     const ObColumnSchemaV2 *column = index_schema->get_column_schema(rowkey_column->column_id_);
-    ObObjMeta column_type;
+    SqlTypeMeta column_type;
     column_type = column->get_meta_type();
     column_type.set_scale(column->get_accuracy().get_scale());
     if (is_lob_storage(column_type.get_type())) {
@@ -998,7 +998,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
     ObTableSchema::const_column_iterator iter = index_schema->column_begin();
     for (; OB_SUCC(ret) && iter != index_schema->column_end(); ++iter) {
       const ObColumnSchemaV2 *column = *iter;
-      ObObjMeta column_type;
+      SqlTypeMeta column_type;
       if (!column->is_rowkey_column() && (!column->is_virtual_generated_column())) {
         //skip virtual generated column or rowkey
         column_type = column->get_meta_type();

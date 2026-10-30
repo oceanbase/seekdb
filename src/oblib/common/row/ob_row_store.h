@@ -23,6 +23,7 @@
 #include "lib/container/ob_fixed_array.h"
 #include "lib/string/ob_string.h"
 #include "common/cell/ob_cell_writer.h"
+#include "lib/container/ob_array_wrap.h"
 
 namespace oceanbase
 {
@@ -41,19 +42,22 @@ public:
     int32_t compact_row_size_;
     int32_t reserved_cells_count_;
     int64_t payload_;
-    common::ObObj reserved_cells_[0];
+    common::DatumValue reserved_cells_[0];
     // ... compact_row
     const common::ObString get_compact_row() const;
     void *get_compact_row_ptr();
     const void *get_compact_row_ptr() const;
     TO_STRING_KV(N_PAYLOAD, payload_,
-                 N_CELLS, ObArrayWrap<ObObj>(reserved_cells_, reserved_cells_count_));
+                 N_CELLS, ObArrayWrap<DatumValue>(reserved_cells_, reserved_cells_count_));
   };
   class Iterator : public ObOuterRowIterator
   {
   public:
     friend class ObRowStore;
     Iterator();
+    Iterator(const Iterator &other);
+    Iterator &operator=(const Iterator &other);
+    ~Iterator();
     /// @param row [in/out] row.size_ is used to verify the data
     int get_next_row(ObNewRow &row);
     int get_next_row(ObNewRow &row, common::ObString *compact_row, StoredRow **stored_row);
@@ -65,10 +69,17 @@ public:
   private:
     explicit Iterator(const ObRowStore *row_store);
     int next_iter_pos(const BlockInfo *&iter_block, int64_t &iter_pos);
+    int reserve_decode_slots(int64_t count);
+    void release_decode_slots();
   protected:
     const ObRowStore *row_store_;
     const BlockInfo *cur_iter_block_;
     int64_t cur_iter_pos_;
+    // Explicit store allocator owns this reusable native scalar payload block.
+    // The store/allocator must outlive its iterators, like the borrowed rows.
+    ObIAllocator *decode_owner_;
+    DatumValue *decode_values_;
+    int64_t decode_capacity_;
   };
 public:
   ObRowStore(ObIAllocator &alloc,
@@ -85,7 +96,7 @@ public:
   void set_block_size(int64_t block_size = NORMAL_BLOCK_SIZE) { block_size_ = block_size; }
   int64_t get_block_size() const { return block_size_; }
 
-  /// add columns to be reserved as ObObj
+  /// add columns to be reserved as DatumValue
   int init_reserved_column_count(int64_t count)
   {
     return reserved_columns_.init(count);
@@ -221,7 +232,7 @@ private:
   int64_t get_compact_row_min_size(const int64_t row_columns_count) const;
   // @return OB_SIZE_OVERFLOW if buffer not enough
   int append_row(const ObNewRow &row, BlockInfo &block, StoredRow &stored_row);
-  inline int append_extend_cell(ObCellWriter &cell_writer, const ObObj &cell);
+  inline int append_extend_cell(ObCellWriter &cell_writer, const DatumValue &cell);
   void free_rollbacked_block(BlockInfo *iter);
   BlockInfo *find_pre_block();
   void del_block_list(BlockInfo *del_block);
@@ -243,14 +254,14 @@ private:
   bool has_big_block_;
   bool use_compact_row_;
   common::ObIAllocator &alloc_;
-  ObObj *pre_project_buf_;  //if compact row not used, we need to project row before deep copy
+  DatumValue *pre_project_buf_;  //if compact row not used, we need to project row before deep copy
   ObNewRow pre_project_row_;
   bool pre_alloc_block_;
 };
 
 inline int64_t ObRowStore::get_reserved_cells_size(const int64_t reserved_columns_count)
 {
-  return sizeof(StoredRow) + (sizeof(common::ObObj) * reserved_columns_count);
+  return sizeof(StoredRow) + DatumValueBuffer::allocation_size(reserved_columns_count);
 }
 
 //Every time I see this calculation, I feel entangled, I always feel unreasonable, and the calculation result is wrong.
@@ -267,12 +278,12 @@ inline int64_t ObRowStore::get_compact_row_min_size(const int64_t row_columns_co
 
 inline void *ObRowStore::StoredRow::get_compact_row_ptr()
 {
-  return reinterpret_cast<void*>(&reserved_cells_[reserved_cells_count_]);
+  return reinterpret_cast<void*>(reinterpret_cast<char *>(reserved_cells_) + DatumValueBuffer::allocation_size(reserved_cells_count_));
 }
 
 inline const void *ObRowStore::StoredRow::get_compact_row_ptr() const
 {
-  return reinterpret_cast<const void*>(&reserved_cells_[reserved_cells_count_]);
+  return reinterpret_cast<const void*>(reinterpret_cast<const char *>(reserved_cells_) + DatumValueBuffer::allocation_size(reserved_cells_count_));
 }
 
 inline const common::ObString ObRowStore::StoredRow::get_compact_row() const
@@ -290,8 +301,8 @@ int ObRowStore::append_row_store(const T &other_store)
     ObRowStore::Iterator row_store_it = other_store.begin();
     ObNewRow cur_row;
     int64_t col_count = other_store.get_col_count();
-    ObObj *cell = NULL;
-    if (OB_ISNULL(cell = static_cast<ObObj *>(alloca(sizeof(ObObj) * col_count)))) {
+    DatumValue *cell = NULL;
+    if (OB_ISNULL(cell = static_cast<DatumValue *>(alloca(sizeof(DatumValue) * col_count)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       COMMON_LOG(WARN, "fail to alloc obj array", K(ret));
     } else {

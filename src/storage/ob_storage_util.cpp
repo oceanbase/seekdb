@@ -77,32 +77,7 @@ OB_INLINE static int pad_on_local_buf(const ObString &space_pattern,
   return ret;
 }
 
-int pad_column(const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, common::ObObj &cell)
-{
-  int ret = OB_SUCCESS;
-  if (cell.is_fixed_len_char_type()) {
-    ObLength length = accuracy.get_length(); // byte or char length
-    int32_t cell_strlen = 0; // byte or char length
-    const ObString space_pattern = get_padding_str(cell.get_collation_type());
-    if (OB_FAIL(cell.get_char_length(accuracy, *(reinterpret_cast<int32_t *>(&cell_strlen))))) {
-    } else {
-      if (cell_strlen < length) {
-        uint32_t cell_len = cell.get_val_len();
-        const char *ptr = cell.get_string_ptr();
-        if (OB_FAIL(pad_on_local_buf(space_pattern, (length - cell_strlen), padding_alloc,
-                                     ptr, cell_len))) {
-        } else {
-          // watch out !!! in order to deep copy an ObObj instance whose type is char or varchar,
-          // set_collation_type() should be revoked. But here no need to set collation type
-          cell.set_string(cell.get_type(), ObString(cell_len, cell_len, ptr));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int pad_column(const ObObjMeta &obj_meta, const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, blocksstable::ObStorageDatum &datum)
+int pad_column(const SqlTypeMeta &obj_meta, const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, blocksstable::ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
   if (datum.is_null()) {
@@ -389,7 +364,7 @@ int decimal_or_number_to_int64(const ObDatum &datum,
                                int64_t &res)
 {
   int ret = OB_SUCCESS;
-  ObObjType ob_type = datum_meta.get_type();
+  SqlValueType ob_type = datum_meta.get_type();
   if (ObNumberType == ob_type) {
     const number::ObNumber nmb(datum.get_number());
     if (OB_FAIL(nmb.extract_valid_int64_with_trunc(res))) {

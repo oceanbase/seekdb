@@ -73,7 +73,7 @@ int ObExprGeomWkb::calc_result_typeN(ObExprResType& type,
   type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongTextType]);
 
   if (1 == param_num) {
-    ObObjType data_type = types_stack[0].get_type();
+    SqlValueType data_type = types_stack[0].get_type();
     if (ob_is_geometry(data_type) || ob_is_null(data_type)) {
       // do nothing
     } else {
@@ -84,7 +84,7 @@ int ObExprGeomWkb::calc_result_typeN(ObExprResType& type,
   }
 
   if (2 == param_num) {
-    ObObjType option_type = types_stack[1].get_type();
+    SqlValueType option_type = types_stack[1].get_type();
     if (ob_is_string_type(option_type) || ob_is_null(option_type)) {
       // do nothing
     } else {

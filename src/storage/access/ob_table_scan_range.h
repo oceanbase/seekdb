@@ -27,6 +27,7 @@ namespace oceanbase
 namespace storage
 {
 class ObTableScanParam;
+struct DatumLookupKey;
 
 struct ObTableScanRange
 {
@@ -52,6 +53,10 @@ private:
       const common::ObIArray<common::ObNewRange> &ranges,
       const common::ObQueryFlag &scan_flag,
       const blocksstable::ObStorageDatumUtils *datum_utils);
+  int init_datum_rowkeys(
+      const common::ObIArray<DatumLookupKey> &keys,
+      const common::ObQueryFlag &scan_flag,
+      const blocksstable::ObStorageDatumUtils &datum_utils);
   int init_ranges(
       const common::ObIArray<common::ObNewRange> &ranges,
       const common::ObQueryFlag &scan_flag,
@@ -73,6 +78,7 @@ private:
   RangeStatus status_;
   bool enable_new_false_range_;
   bool is_inited_;
+  bool owns_rowkey_datums_;
   DISALLOW_COPY_AND_ASSIGN(ObTableScanRange);
 };
 

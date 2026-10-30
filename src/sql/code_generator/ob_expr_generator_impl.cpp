@@ -683,9 +683,9 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
       for (int64_t j = 0; OB_SUCC(ret) && j < in_op->get_row_dimension(); ++j) {
         param_all_const &= param1->get_param_expr(0)->get_param_expr(j)
                                                     ->is_static_const_expr();
-        ObObjType first_obj_type = param1->get_param_expr(0)->get_param_expr(j)
+        SqlValueType first_obj_type = param1->get_param_expr(0)->get_param_expr(j)
                                                             ->get_data_type();
-        ObObjType cur_obj_type = ObMaxType;
+        SqlValueType cur_obj_type = ObMaxType;
         ObCollationType first_obj_cs_type = param1->get_param_expr(0)->get_param_expr(j)
                                                                       ->get_collation_type();
         ObCollationType cur_obj_cs_type = CS_TYPE_INVALID;
@@ -737,8 +737,8 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
       bool param_all_is_ext = true;
       bool param_all_same_cs_level = true;
       bool param_all_can_vectorize = param_all_const;
-      ObObjType first_obj_type = param1->get_param_expr(0)->get_data_type();
-      ObObjType cur_obj_type = ObMaxType;
+      SqlValueType first_obj_type = param1->get_param_expr(0)->get_data_type();
+      SqlValueType cur_obj_type = ObMaxType;
       ObCollationType first_obj_cs_type = param1->get_param_expr(0)->get_collation_type();
       ObCollationType cur_obj_cs_type = CS_TYPE_INVALID;
       ObCollationLevel first_obj_cs_level = param1->get_param_expr(0)->get_collation_level();
@@ -806,12 +806,8 @@ int ObExprGeneratorImpl::visit_field_expr(ObNonTerminalRawExpr &expr, ObExprFiel
 
 int ObExprGeneratorImpl::visit_strcmp_expr(ObNonTerminalRawExpr &expr, ObExprStrcmp *strcmp_op)
 {
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(strcmp_op)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(strcmp_op->set_cmp_func(ObVarcharType, ObVarcharType))) {
-  }
-  return ret;
+  UNUSED(expr);
+  return OB_ISNULL(strcmp_op) ? OB_ERR_UNEXPECTED : OB_SUCCESS;
 }
 
 int ObExprGeneratorImpl::visit_abs_expr(ObNonTerminalRawExpr &expr, ObExprAbs *abs_op)
@@ -910,9 +906,9 @@ int ObExprGeneratorImpl::set_need_cast(ObNonTerminalRawExpr &expr, bool &need_ca
     if (OB_ISNULL(expr.get_param_expr(i))) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType type = expr.get_param_expr(i)->get_data_type();
-      const ObObjMeta &cur_meta = expr.get_param_expr(i)->get_result_type().get_obj_meta();
-      const ObObjMeta &first_meta = expr.get_param_expr(0)->get_result_type().get_obj_meta();
+      SqlValueType type = expr.get_param_expr(i)->get_data_type();
+      const SqlTypeMeta &cur_meta = expr.get_param_expr(i)->get_result_type().get_sql_type_meta();
+      const SqlTypeMeta &first_meta = expr.get_param_expr(0)->get_result_type().get_sql_type_meta();
       //no need to test expr.get_param_expr(0) for NULL here.
       if (all_same_type && (!(first_meta == cur_meta) || ob_is_enumset_tc(type))) {
         all_same_type = false;
@@ -945,7 +941,7 @@ int ObExprGeneratorImpl::visit_argcase_expr(ObNonTerminalRawExpr &expr, ObExprAr
   } else if (argcase_expr.get_param_count() < 2 || OB_ISNULL(argcase_expr.get_arg_param_expr())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObObjMeta &case_meta = argcase_expr.get_arg_param_expr()->get_result_type();
+    const SqlTypeMeta &case_meta = argcase_expr.get_arg_param_expr()->get_result_type();
     bool need_cast = true;
     bool all_are_numeric = ob_is_accurate_numeric_type(case_meta.get_type());
     bool all_same_type = true;
@@ -954,7 +950,7 @@ int ObExprGeneratorImpl::visit_argcase_expr(ObNonTerminalRawExpr &expr, ObExprAr
       if (OB_ISNULL(argcase_expr.get_when_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        const ObObjMeta &param_meta = argcase_expr.get_when_param_expr(i)->get_result_type();
+        const SqlTypeMeta &param_meta = argcase_expr.get_when_param_expr(i)->get_result_type();
         if (all_same_type && !ObSQLUtils::is_same_type_for_compare(case_meta, param_meta)) {
           all_same_type = false;
         }
@@ -1508,7 +1504,7 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
                                                               raw_expr->get_collation_type(),
                                                               sort_keys.at(i).is_ascending()))) {
                 } else {
-                  ObOpSchemaObj op_schema_obj(ITEM_TO_OBJ_TYPE(raw_expr->get_data_type()),
+                  ObOpSchemaObj op_schema_obj(ITEM_TO_SQL_VALUE_TYPE(raw_expr->get_data_type()),
                                               sort_keys.at(i).order_type_);
                   if (OB_FAIL(aggr_expr->get_sort_extra_infos().push_back(op_schema_obj))) {
                   } else {
@@ -1738,7 +1734,7 @@ int ObExprGeneratorImpl::gen_fast_column_conv_expr(ObRawExpr &raw_expr)
     }
 
     if (OB_SUCC(ret)) {
-      ObObjType dst_type = static_cast<ObObjType>(data_type);
+      SqlValueType dst_type = static_cast<SqlValueType>(data_type);
       column_type.set_type(dst_type);
       column_type.set_collation_type(static_cast<ObCollationType>(coll_type));
       column_type.set_accuracy(accuracy_type);

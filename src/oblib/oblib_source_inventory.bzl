@@ -6,7 +6,6 @@ OBLIB_UNITY_GROUPS = {
             name = "oblib_common_common_0",
             language = "c++",
             srcs = [
-                "src/oblib/common/ob_obj_deep_copy.cpp",
                 "src/oblib/common/ob_hex_utils_base.cpp",
                 "src/oblib/common/ob_accuracy.cpp",
                 "src/oblib/common/ob_field.cpp",
@@ -27,7 +26,6 @@ OBLIB_UNITY_GROUPS = {
             srcs = [
                 "src/oblib/common/cell/ob_cell_reader.cpp",
                 "src/oblib/common/cell/ob_cell_writer.cpp",
-                "src/oblib/common/object/ob_obj_compare.cpp",
                 "src/oblib/common/object/ob_obj_type.cpp",
                 "src/oblib/common/object/ob_object.cpp",
                 "src/oblib/common/row/ob_row.cpp",
@@ -59,6 +57,11 @@ OBLIB_UNITY_GROUPS = {
             language = "c++",
             srcs = [
                 "src/oblib/common/datum/ob_datum.cpp",
+                "src/oblib/common/datum/datum_metadata.cpp",
+                "src/oblib/common/datum/datum_parameter_codec.cpp",
+                "src/oblib/common/datum/partition_bound_row.cpp",
+                "src/oblib/common/datum/datum_key_ops.cpp",
+                "src/oblib/common/datum/datum_sql_print.cpp",
             ],
         ),
         struct(

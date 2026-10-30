@@ -132,7 +132,7 @@ int ObPLDataType::transform_from_iparam(const ObRoutineParam *iparam,
     OX (data_type = pl_type.get_data_type());
     CK (OB_NOT_NULL(data_type));
     if (OB_SUCC(ret)) {
-      ObObjMeta &meta = const_cast<ObObjMeta&>(data_type->get_meta_type());
+      SqlTypeMeta &meta = const_cast<SqlTypeMeta&>(data_type->get_meta_type());
       if (data_type->get_meta_type().is_bit()) {
         meta.set_scale(data_type->get_accuracy().get_precision());
       } else {
@@ -167,7 +167,7 @@ int ObPLDataType::transform_from_iparam(const ObRoutineParam *iparam,
         OX (data_type = pl_type.get_data_type());
         CK (OB_NOT_NULL(data_type));
         if (OB_SUCC(ret)) {
-          ObObjMeta &meta = const_cast<ObObjMeta&>(data_type->get_meta_type());
+          SqlTypeMeta &meta = const_cast<SqlTypeMeta&>(data_type->get_meta_type());
           if (data_type->get_meta_type().is_bit()) {
             meta.set_scale(data_type->get_accuracy().get_precision());
           } else {
@@ -274,9 +274,9 @@ void ObPLDataType::set_data_type(const common::ObDataType &obj_type)
   }
 }
 
-common::ObObjType ObPLDataType::get_obj_type() const
+common::SqlValueType ObPLDataType::get_obj_type() const
 {
-  common::ObObjType type = common::ObNullType;;
+  common::SqlValueType type = common::ObNullType;;
   if (is_obj_type()) {
     type = get_data_type()->get_obj_type();
   } else {
@@ -293,7 +293,7 @@ uint64_t ObPLDataType::get_user_type_id() const
   }
   return user_type_id;
 }
-// Basic PL values are represented as ObObj values.
+// Basic PL members use compact typed Datum values.
 
 
 int ObPLDataType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const
@@ -318,7 +318,7 @@ int ObPLDataType::get_size(ObPLTypeSize type, int64_t &size) const
   UNUSED(type);
   int ret = OB_SUCCESS;
 //  if (is_obj_type()) {
-    size = sizeof(ObObj);
+    size = sizeof(DatumValue);
 //  } else {
 //    ObArenaAllocator allocator;
 //    OZ (ns.get_size(type, *this, size, &allocator));
@@ -327,75 +327,91 @@ int ObPLDataType::get_size(ObPLTypeSize type, int64_t &size) const
 }
 
 
+namespace {
+int initialize_session_scalar(const SqlTypeMeta &meta, ObIAllocator &allocator, DatumParameter &output)
+{
+  int ret = OB_SUCCESS;
+  DatumParameter value;
+  value.set_type_meta(meta);
+  const auto mapping = ObDatum::get_sql_value_datum_map_type(meta.get_type());
+  if (meta.is_null()) {
+  } else if (mapping == OBJ_DATUM_EXTEND) {
+    OZ(value.set_extend(0, meta.get_extend_type(), allocator));
+    value.set_type_meta(meta);
+  } else {
+    int64_t bytes = 0;
+    switch (mapping) {
+      case OBJ_DATUM_8BYTE_DATA: bytes = 8; break;
+      case OBJ_DATUM_4BYTE_DATA: bytes = 4; break;
+      case OBJ_DATUM_1BYTE_DATA: bytes = 1; break;
+      case OBJ_DATUM_NUMBER: bytes = sizeof(number::ObNumber::Desc); break;
+      default: break; // zero-length strings/decimal/opaque payloads
+    }
+    char *data = nullptr;
+    if (bytes > 0 && OB_ISNULL(data = static_cast<char *>(allocator.alloc(bytes)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      if (bytes > 0) { MEMSET(data, 0, bytes); }
+      value.datum_.set_string(data, bytes);
+    }
+  }
+  if (OB_SUCC(ret)) { output.assign_value(value); }
+  return ret;
+}
+}
+
 int ObPLDataType::init_session_var(const ObPLResolveCtx &resolve_ctx,
                                    ObIAllocator &obj_allocator,
                                    ObExecContext &exec_ctx,
                                    const sql::ObSqlExpression *default_expr,
                                    bool default_construct,
-                                   ObObj &obj) const
+                                   DatumParameter &obj) const
 {
   int ret = OB_SUCCESS;
   if (is_obj_type()) {
-    obj.set_meta_type(get_data_type()->get_meta_type());
     if (OB_ISNULL(default_expr)) {
-      // do nothing ...
+      OZ(initialize_session_scalar(get_data_type()->get_meta_type(), obj_allocator, obj));
     } else {
-      ObObj calc_obj;
-      ObArenaAllocator tmp_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_INIT_SESSION_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE);
-      if (OB_FAIL(ObSQLUtils::calc_sql_expression_without_row(exec_ctx,*default_expr,calc_obj, &tmp_allocator))) {
-      } else if (calc_obj.need_deep_copy()) {
-        char *copy_data = NULL;
-        int64_t copy_size = calc_obj.get_deep_copy_size();
-        int64_t copy_pos = 0;
-        if (OB_ISNULL(copy_data = static_cast<char *>(obj_allocator.alloc(copy_size)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else if (OB_FAIL(obj.deep_copy(calc_obj, copy_data, copy_size, copy_pos))) {
-        } else {}
-      } else {
-        obj = calc_obj;
-      }
+      DatumParameter calculated;
+      ObArenaAllocator temporary(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_INIT_SESSION_VAR), OB_MALLOC_NORMAL_BLOCK_SIZE);
+      OZ(ObSQLUtils::calc_sql_expression_without_row(exec_ctx, *default_expr, calculated, &temporary));
+      OZ(ObUserDefinedType::clone_parameter(obj_allocator, calculated, obj));
     }
   } else if (is_cursor_type()) {
-    OZ (ObSPIService::spi_cursor_alloc(obj_allocator, obj));
+    OZ(ObSPIService::spi_cursor_alloc(obj_allocator, obj));
   } else {
-    const ObUserDefinedType *user_type = NULL;
-    OZ (get_external_user_type(resolve_ctx, user_type), KPC(this));
-    CK (OB_NOT_NULL(user_type));
-    OZ (user_type->init_session_var(resolve_ctx,
-                                    obj_allocator,
-                                    exec_ctx,
-                                    default_expr,
-                                    default_construct,
-                                    obj), KPC(this));
+    const ObUserDefinedType *user_type = nullptr;
+    OZ(get_external_user_type(resolve_ctx, user_type), KPC(this));
+    CK(OB_NOT_NULL(user_type));
+    OZ(user_type->init_session_var(resolve_ctx, obj_allocator, exec_ctx, default_expr, default_construct, obj), KPC(this));
   }
   return ret;
 }
 
-int ObPLDataType::convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const
+int ObPLDataType::convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue *&dst) const
 {
   int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(src));
-  CK (OB_NOT_NULL(dst));
-  if (is_obj_type()) {
-    ObArenaAllocator tmp_alloc(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
-    ObRawExprResType result_type;
-    ObObj tmp;
-    result_type.reset();
-    CK (OB_NOT_NULL(get_data_type()));
-    OX (result_type.set_meta(get_data_type()->get_meta_type()));
-    OX (result_type.set_accuracy(get_data_type()->get_accuracy()));
-    OZ (ObSPIService::spi_convert(
-        ctx.session_info_, tmp_alloc, *src, result_type, tmp,
-        ctx.params_.srs_provider_, ctx.params_.lob_read_service_));
-    OZ (deep_copy_obj(ctx.allocator_, tmp, *dst));
-    OX (src ++);
-    OX (dst ++);
-  } else {
-    ObArenaAllocator allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
-    const ObUserDefinedType *user_type = NULL;
-    OZ (ctx.get_user_type(get_user_type_id(), user_type, &allocator));
-    CK (OB_NOT_NULL(user_type));
-    OZ (user_type->convert(ctx, src, dst));
+  CK (src != nullptr); CK (dst != nullptr);
+  if (OB_SUCC(ret) && is_obj_type()) {
+    DatumParameter source, output; source.assign_value(*src);
+    ObExprResType type;
+    CK (get_data_type() != nullptr);
+    OX (type.set_meta(get_data_type()->get_meta_type()));
+    OX (type.set_accuracy(get_data_type()->get_accuracy()));
+    ObIArray<ObString> *labels = nullptr;
+    OZ (get_type_info(labels));
+    OZ (ObSPIService::spi_convert(ctx.session_info_, ctx.allocator_, source, type, output,
+        ctx.params_.srs_provider_, ctx.params_.lob_read_service_, false, labels));
+    if (OB_SUCC(ret)) {
+      ret = ObUserDefinedType::destruct_objparam(ctx.allocator_, *dst, &ctx.session_info_);
+      if (OB_SUCCESS == ret) { *dst = output.value_view(); ++src; ++dst; }
+      else { ObUserDefinedType::destruct_objparam(ctx.allocator_, output, &ctx.session_info_); }
+    }
+  } else if (OB_SUCC(ret)) {
+    ObArenaAllocator temporary;
+    const ObUserDefinedType *type = nullptr;
+    OZ (ctx.get_user_type(get_user_type_id(), type, &temporary)); CK (type != nullptr);
+    OZ (type->convert(ctx, src, dst));
   }
   return ret;
 }
@@ -616,7 +632,9 @@ case type: {                                                            \
   return ret;
 }
 
-int ObPLDataType::obj_is_null(ObObj& obj, bool &is_null)
+namespace {
+template <typename Value>
+int pl_value_is_null(const Value &obj, bool &is_null)
 {
   int ret = OB_SUCCESS;
   
@@ -626,6 +644,7 @@ int ObPLDataType::obj_is_null(ObObj& obj, bool &is_null)
     is_null = true;
   } else if (obj.is_ext()) {
     uint64_t ext = obj.get_ext();
+    if (ext == 0) { is_null = true; return ret; }
     switch (obj.get_meta().get_extend_type()) {
       case pl::PL_RECORD_TYPE: {
         pl::ObPLRecord *rec = reinterpret_cast<pl::ObPLRecord *>(ext);
@@ -644,6 +663,9 @@ int ObPLDataType::obj_is_null(ObObj& obj, bool &is_null)
   return ret;
 }
 
+}
+int ObPLDataType::obj_is_null(const DatumParameter &obj, bool &is_null) { return pl_value_is_null(obj, is_null); }
+
 int ObPLDataType::datum_is_null(ObDatum* param, bool is_udt_type, bool &is_null)
 {
   int ret = OB_SUCCESS;
@@ -654,10 +676,21 @@ int ObPLDataType::datum_is_null(ObDatum* param, bool is_udt_type, bool &is_null)
     // do nothing
   } else if (!is_udt_type) {
     is_null = param->is_null();
-  } else if (param->is_null() || param->extend_obj_->is_null()) {
+  } else if (param->is_null() || param->is_extended_null()) {
     is_null = true;
   } else {
-    if (OB_FAIL(ObPLDataType::obj_is_null(*(ObObj*)param->extend_obj_, is_null))) {
+    if (!param->has_ext_value()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (param->get_extend_type() != pl::PL_RECORD_TYPE) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "check complex is null");
+    } else {
+      const pl::ObPLRecord *record = reinterpret_cast<const pl::ObPLRecord *>(param->get_ext());
+      if (OB_ISNULL(record)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        is_null = record->is_null();
+      }
     }
   }
   return ret;
@@ -1338,7 +1371,18 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
     ObSPICursor *src_cursor = src.get_spi_cursor();
     ObSPICursor *dest_cursor = NULL;
     CK (OB_NOT_NULL(copy_allocator));
-    CK (OB_NOT_NULL(src_cursor));
+    // A never-opened/fully closed cursor has no SPI state to clone. A fresh
+    // destination can own its metadata without inventing an empty row store.
+    // Do not drop existing destination resources in this newly allowed case.
+    const bool closed_without_spi = src_cursor == nullptr && !src.isopen_;
+    CK (OB_NOT_NULL(src_cursor) || closed_without_spi);
+    const auto empty_row = [](const ObNewRow &row) {
+      return row.cells_ == nullptr && row.count_ == 0
+          && row.projector_ == nullptr && row.projector_size_ == 0;
+    };
+    CK (!closed_without_spi || (spi_cursor_ == nullptr && entity_ == nullptr
+        && empty_row(src.current_row_) && empty_row(src.first_row_) && empty_row(src.last_row_)
+        && empty_row(current_row_) && empty_row(first_row_) && empty_row(last_row_)));
     if (OB_SUCC(ret)) {
       id_ = src.id_;
       is_explicit_ = src.is_explicit_;
@@ -1364,7 +1408,7 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
       //    ObIAllocator *allocator_;
     }
     //copy row store
-    if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret) && !closed_without_spi) {
       const ObNewRow *row = NULL;
       int64_t cur = 0;
       // it will happend not in ps cursor.
@@ -1384,9 +1428,15 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
             ret = OB_ERR_UNEXPECTED;
           } else {
             ObNewRow tmp_row = *row;
+            ObSEArray<DatumValue, 16> cells;
+            OZ (cells.prepare_allocate(row->count_));
+            if (OB_SUCC(ret)) {
+              for (int64_t i = 0; i < row->count_; ++i) { cells.at(i) = row->cells_[i]; }
+              tmp_row.cells_ = cells.get_data();
+            }
             for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row.get_count(); ++i) {
-              ObObj& obj = tmp_row.get_cell(i);
-              ObObj tmp;
+              DatumValue& obj = tmp_row.get_cell(i);
+              DatumValue tmp;
               if (obj.is_pl_extend()) {
                 if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(*(dest_cursor->allocator_), obj, tmp))) {
                 } else {

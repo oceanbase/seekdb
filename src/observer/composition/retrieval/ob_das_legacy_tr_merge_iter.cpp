@@ -21,6 +21,9 @@
 #include "sql/das/iter/sparse_retrieval/ob_das_text_retrieval_engine.h"
 #include "sql/das/ob_das_ir_define.h"
 
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 using namespace share;
@@ -639,20 +642,20 @@ int ObDASLegacyTRMergeIter::gen_inv_idx_scan_default_range(const ObString &query
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   common::ObArenaAllocator &ctx_alloc = mem_context_->get_arena_allocator();
   constexpr int64_t obj_cnt = INV_IDX_ROWKEY_COL_CNT * 2;
-  ObObj tmp_obj;
-  tmp_obj.set_string(ObVarcharType, query_token);
+  DatumValue tmp_obj;
+  tmp_obj.datum_.set_string(query_token);tmp_obj.meta_.set_varchar();tmp_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
   // We need to ensure collation type / level between query text and token column is compatible
   tmp_obj.set_meta_type(ir_ctdef_->search_text_->obj_meta_);
 
-  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(ObObj) * obj_cnt))) {
+  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(DatumValue) * obj_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(obj_ptr = new (buf) ObObj[obj_cnt])) {
+  } else if (OB_ISNULL(obj_ptr = new (buf) DatumValue[obj_cnt])) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-  } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[2]))) {
+  } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[0], ctx_alloc))) {
+  } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[2], ctx_alloc))) {
   } else {
     obj_ptr[1].set_min_value();
     obj_ptr[3].set_max_value();
@@ -672,20 +675,20 @@ int ObDASLegacyTRMergeIter::gen_inv_idx_scan_one_range(const ObString &query_tok
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   common::ObArenaAllocator &ctx_alloc = mem_context_->get_arena_allocator();
   constexpr int64_t obj_cnt = INV_IDX_ROWKEY_COL_CNT;
-  ObObj tmp_obj;
-  tmp_obj.set_string(ObVarcharType, query_token);
+  DatumValue tmp_obj;
+  tmp_obj.datum_.set_string(query_token);tmp_obj.meta_.set_varchar();tmp_obj.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
   // We need to ensure collation type / level between query text and token column is compatible
   tmp_obj.set_meta_type(ir_ctdef_->search_text_->obj_meta_);
 
-  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(ObObj) * obj_cnt))) {
+  if (OB_ISNULL(buf = ctx_alloc.alloc(sizeof(DatumValue) * obj_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(obj_ptr = new (buf) ObObj[obj_cnt])) {
+  } else if (OB_ISNULL(obj_ptr = new (buf) DatumValue[obj_cnt])) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-  } else if (OB_FAIL(doc_id.get_datum().to_obj(obj_ptr[1], ir_ctdef_->inv_scan_domain_id_col_->obj_meta_))) {
+  } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[0], ctx_alloc))) {
+  } else if (OB_FAIL(project_datum_value_view(doc_id.get_datum(), ir_ctdef_->inv_scan_domain_id_col_->obj_meta_, ObDatum::get_sql_value_datum_map_type(ir_ctdef_->inv_scan_domain_id_col_->obj_meta_.get_type()), obj_ptr[1].meta_, obj_ptr[1], true))) {
   } else {
     ObRowkey row_key(obj_ptr, obj_cnt);
     common::ObTableID inv_table_id = ir_ctdef_->get_inv_idx_scan_ctdef()->ref_table_id_;
@@ -1107,7 +1110,7 @@ int ObDASLegacyTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     const ObString &parser_name = ir_ctdef->get_inv_idx_scan_ctdef()->table_param_.get_parser_name();
     const ObString &parser_properties = ir_ctdef->get_inv_idx_scan_ctdef()->table_param_.get_parser_property();
 
-    const ObObjMeta &meta = search_text->obj_meta_;
+    const SqlTypeMeta &meta = search_text->obj_meta_;
     int64_t doc_length = 0;
     storage::ObFTParseHelper tokenize_helper;
     common::ObSEArray<ObFTWord, 16> tokens;

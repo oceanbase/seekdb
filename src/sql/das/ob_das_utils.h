@@ -17,6 +17,7 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_UTILS_H_
 #include "share/ob_define.h"
+#include "common/datum/datum_value.h"
 #include "common/ob_tablet_id.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/das/ob_das_define.h"
@@ -53,20 +54,20 @@ public:
                                  const IntFixedArray &row_projector,
                                  common::ObIAllocator &allocator,
                                  blocksstable::ObDatumRow &storage_row);
-  static int reshape_storage_value(const common::ObObjMeta &col_type,
+  static int reshape_storage_value(const common::SqlTypeMeta &col_type,
                                    const common::ObAccuracy &col_accuracy,
                                    common::ObIAllocator &allocator,
-                                   common::ObObj &value);
-  static int reshape_datum_value(const ObObjMeta &col_type,
+                                   common::DatumValue &value);
+  static int reshape_datum_value(const SqlTypeMeta &col_type,
                                  const ObAccuracy &col_accuracy,
                                  ObIAllocator &allocator,
                                  blocksstable::ObStorageDatum &datum_value);
-  static int reshape_datum_vector_value(const ObObjMeta &col_type,
+  static int reshape_datum_vector_value(const SqlTypeMeta &col_type,
                                         const ObAccuracy &col_accuracy,
                                         ObIAllocator &allocator,
                                         const common::ObDatumVector &datum_vector,
                                         share::ObBatchSelector &selector);
-  static int padding_fixed_string_value(int64_t max_len, ObIAllocator &alloc, ObObj &value);
+  static int padding_fixed_string_value(int64_t max_len, ObIAllocator &alloc, common::DatumValue &value);
   static int wait_das_retry(int64_t retry_cnt);
   static int find_child_das_def(const ObDASBaseCtDef *root_ctdef,
                                 ObDASBaseRtDef *root_rtdef,

@@ -48,7 +48,7 @@ int ObAllVirtualPrivilege::inner_get_next_row(common::ObNewRow *&row)
 int ObAllVirtualPrivilege::fill_scanner()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
@@ -64,22 +64,19 @@ int ObAllVirtualPrivilege::fill_scanner()
       int64_t col_id = output_column_ids_.at(j);
       switch(col_id) {
         case PRIVILEGE_COL: {
-          cells[cell_idx].set_varchar(
-            ObString::make_string(privilege_row.privilege_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(privilege_row.privilege_)) : ret);
           cells[cell_idx].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case CONTEXT_COL: {
-          cells[cell_idx].set_varchar(
-            ObString::make_string(privilege_row.context_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(privilege_row.context_)) : ret);
           cells[cell_idx].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case COMMENT_COL: {
-          cells[cell_idx].set_varchar(
-            ObString::make_string(privilege_row.comment_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(privilege_row.comment_)) : ret);
           cells[cell_idx].set_collation_type(
             ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;

@@ -92,15 +92,15 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
           }
         } else {
           // SET CHARACTER SET
-          ObObj database_charset;
-          ObObj database_collation;
+          int64_t database_charset = 0;
+          int64_t database_collation = 0;
           ObCollationType cs_coll_type = ObCharset::get_default_collation(ObCharset::charset_type(charset));
           if (OB_FAIL(session->get_sys_variable(SYS_VAR_CHARACTER_SET_DATABASE,
                                                        database_charset))) {
           } else if (OB_FAIL(session->get_sys_variable(SYS_VAR_COLLATION_DATABASE,
                                                        database_collation))) {
           } else {
-            ObCollationType collation_connection = static_cast<ObCollationType>(database_collation.get_int());
+            ObCollationType collation_connection = static_cast<ObCollationType>(database_collation);
             ObCharsetType charset_connection = ObCharset::charset_type_by_coll(collation_connection);
             if (!ObCharset::is_valid_connection_collation(collation_connection)) {
               ret = OB_NOT_SUPPORTED;
@@ -137,7 +137,7 @@ int ObSetNamesExecutor::get_global_sys_var_character_set_client(
   ObIAllocator &allocator = ctx.get_allocator();
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *var_schema = NULL;
-  ObObj value;
+  DatumValue value;
   if (NULL == (session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(ERROR, "session is NULL", K(ret), K(ctx));
@@ -150,12 +150,12 @@ int ObSetNamesExecutor::get_global_sys_var_character_set_client(
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "var_schema is null");
-  } else if (OB_FAIL(var_schema->get_value(&allocator,
+  } else if (OB_FAIL(var_schema->get_value(allocator,
                                            ObBasicSessionInfo::create_dtc_params(session),
                                            value))) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "get value from var_schema failed", K(ret), K(*var_schema));
-  }  else if (ObIntType != value.get_type()) {
+  }  else if (value.is_null() || ObIntType != value.get_type()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(ERROR, "sys var character_set_client's type must be ObIntType", K(ret), K(value));
   } else {

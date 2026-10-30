@@ -1,4 +1,4 @@
-static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
+static const SqlTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
 {
   {
     /*null -> XXX*/
@@ -505,7 +505,7 @@ static const ObObjTypeClass DIV_TYPE_PROMOTION[ObMaxTC][ObMaxTC] =
     ObMaxTC, /*rowid*/
   },
 };
- static const ObObjTypeClass DIV_TYPE_INT_DIV_CLASS_PROMOTION[ObMaxTC][ObMaxTC] =
+ static const SqlTypeClass DIV_TYPE_INT_DIV_CLASS_PROMOTION[ObMaxTC][ObMaxTC] =
 {
   {
     /*null -> XXX*/

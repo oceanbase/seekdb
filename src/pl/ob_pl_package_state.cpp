@@ -74,38 +74,70 @@ int ObPLPackageState::init()
   return inner_allocator_.init(nullptr);
 }
 
-int ObPLPackageState::add_package_var_val(const common::ObObj &value, ObPLType type)
+namespace {
+DatumParameter package_value_view(const DatumValue &value)
+{
+  DatumParameter parameter;
+  parameter.datum_ = value.datum_;
+  parameter.set_type_meta(value.meta_);
+  return parameter;
+}
+int package_reusable_bytes(const DatumParameter &value, int64_t &bytes)
+{
+  int ret = OB_SUCCESS;
+  bytes = 0;
+  if (!value.is_null() && value.get_meta().is_valid()) {
+    switch (ObDatum::get_sql_value_datum_map_type(value.get_type())) {
+      case OBJ_DATUM_8BYTE_DATA: bytes = 8; break;
+      case OBJ_DATUM_4BYTE_DATA: bytes = 4; break;
+      case OBJ_DATUM_1BYTE_DATA: bytes = 1; break;
+      case OBJ_DATUM_NUMBER:
+        if (value.datum_.ptr_ == nullptr || value.datum_.len_ < sizeof(number::ObNumber::Desc)
+            || value.datum_.len_ != sizeof(number::ObNumber::Desc)
+                + sizeof(uint32_t) * value.datum_.get_number_desc().len_) {
+          ret = OB_INVALID_ARGUMENT;
+        } else { bytes = value.datum_.len_; }
+        break;
+      case OBJ_DATUM_DECIMALINT:
+        if (value.datum_.len_ != 0 && value.datum_.len_ != 4 && value.datum_.len_ != 8
+            && value.datum_.len_ != 16 && value.datum_.len_ != 32 && value.datum_.len_ != 64) {
+          ret = OB_INVALID_ARGUMENT;
+        } else { bytes = value.datum_.len_; }
+        break;
+      default: break;
+    }
+    if (bytes > 0 && (value.datum_.ptr_ == nullptr || value.datum_.len_ != bytes)) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  return ret;
+}
+}
+
+int ObPLPackageState::add_package_var_val(const DatumParameter &value, ObPLType type)
 {
   int ret = OB_SUCCESS;
   OZ (types_.push_back(type));
-  if (OB_SUCC(ret) && OB_FAIL(vars_.push_back(value))) {
-    types_.pop_back();
-  }
+  if (OB_SUCC(ret) && OB_FAIL(vars_.push_back(value.value_view()))) { types_.pop_back(); }
   return ret;
 }
 
 void ObPLPackageState::reset(ObSQLSessionInfo *session_info)
 {
-  for (int64_t i = 0; i < types_.count(); ++i) {
-    if (!vars_.at(i).is_ext()) {
-      void *ptr = vars_.at(i).get_deep_copy_obj_ptr();
-      if (nullptr != ptr) {
-        inner_allocator_.free(ptr);
-      }
-    } else if (PL_RECORD_TYPE == types_.at(i)
-               || PL_NESTED_TABLE_TYPE == types_.at(i)
-               || PL_ASSOCIATIVE_ARRAY_TYPE == types_.at(i)
-               || PL_VARRAY_TYPE == types_.at(i)
-               || PL_OPAQUE_TYPE == types_.at(i)) {
-      int ret = OB_SUCCESS;
-      if (OB_FAIL(ObUserDefinedType::destruct_objparam(inner_allocator_, vars_.at(i), session_info))) {
-      }
-    } else if (PL_CURSOR_TYPE == types_.at(i)) {
-      ObPLCursorInfo *cursor = reinterpret_cast<ObPLCursorInfo *>(vars_.at(i).get_ext());
-      if (OB_NOT_NULL(cursor)) {
-        cursor->close(*session_info);
+  for (int64_t i = 0; i < vars_.count(); ++i) {
+    DatumParameter value = package_value_view(vars_.at(i));
+    // Cursor pointees use cursor_allocator_; descriptor bytes use the package
+    // allocator. Record destruction follows its own nested PL allocators.
+    if (PL_CURSOR_TYPE == types_.at(i) && !value.is_null()) {
+      ObPLCursorInfo *cursor = reinterpret_cast<ObPLCursorInfo *>(value.get_ext());
+      if (cursor != nullptr) {
+        if (session_info != nullptr) { cursor->close(*session_info); }
         cursor->~ObPLCursorInfo();
       }
+      inner_allocator_.free(const_cast<char *>(value.datum_.ptr_));
+    } else {
+      int ret = ObUserDefinedType::destruct_objparam(inner_allocator_, value, session_info);
+      if (OB_SUCCESS != ret) { LOG_WARN("release native package value failed", K(ret), K(i)); }
     }
   }
   types_.reset();
@@ -116,44 +148,64 @@ void ObPLPackageState::reset(ObSQLSessionInfo *session_info)
 }
 
 int ObPLPackageState::set_package_var_val(const int64_t var_idx,
-                                          const ObObj &value,
-                                          bool deep_copy_complex)
+                                          const DatumParameter &value,
+                                          bool deep_copy_complex,
+                                          ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
-  if (var_idx < 0 || var_idx >= vars_.count()) {
-    ret = OB_ARRAY_OUT_OF_RANGE;
-  } else if (value.need_deep_copy() && deep_copy_complex) {
-    int64_t pos = 0;
-    char *buf = static_cast<char *>(inner_allocator_.alloc(value.get_deep_copy_size()));
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    }
-    OZ (vars_.at(var_idx).deep_copy(value, buf, value.get_deep_copy_size(), pos));
-  } else if (value.is_pl_extend()
-             && value.get_meta().get_extend_type() != PL_CURSOR_TYPE
-             && deep_copy_complex) {
-    ObObj copy;
-    OZ (ObUserDefinedType::deep_copy_obj(inner_allocator_, value, copy));
-    OX (vars_.at(var_idx) = copy);
-  } else if (value.is_null()
-             && vars_.at(var_idx).is_pl_extend()
-             && types_.at(var_idx) != PL_CURSOR_TYPE) {
-    CK (vars_.at(var_idx).get_ext() != 0);
-    OZ (ObUserDefinedType::reset_composite(vars_.at(var_idx), NULL));
+  if (var_idx < 0 || var_idx >= vars_.count()) { return OB_ARRAY_OUT_OF_RANGE; }
+  DatumParameter old = package_value_view(vars_.at(var_idx));
+  int64_t reusable_bytes = 0;
+  if (deep_copy_complex && OB_FAIL(package_reusable_bytes(value, reusable_bytes))) { return ret; }
+  if (deep_copy_complex && reusable_bytes > 0 && !old.is_null()
+      && old.get_type() == value.get_type() && old.datum_.ptr_ != nullptr
+      && old.datum_.len_ == reusable_bytes) {
+    // This slot already owns a buffer of exactly the required size. Readers
+    // snapshot expression results before another assignment can change it.
+    MEMMOVE(const_cast<char *>(old.datum_.ptr_), value.datum_.ptr_, reusable_bytes);
+    old.datum_.pack_ = value.datum_.pack_;
+    old.set_type_meta(value.get_meta());
+    vars_.at(var_idx) = old.value_view();
+    return OB_SUCCESS;
+  }
+  if (value.is_null() && old.is_pl_extend() && types_.at(var_idx) != PL_CURSOR_TYPE) {
+    CK (old.get_ext() != 0);
+    OZ (ObUserDefinedType::reset_composite(old, session));
+    if (OB_SUCC(ret)) { vars_.at(var_idx) = old.value_view(); }
   } else {
-    vars_.at(var_idx) = value;
+    DatumParameter replacement;
+    if (value.is_pl_extend() && value.get_extend_type() == PL_CURSOR_TYPE) {
+      OZ (replacement.deep_copy(value, inner_allocator_));
+    } else if (!deep_copy_complex) {
+      // Initialization adopts a value already allocated by this package.
+      replacement.assign_value(value);
+    } else {
+      // Even scalars need package-owned bytes: a Datum may borrow a SQL arena.
+      OZ (ObUserDefinedType::clone_parameter(inner_allocator_, value, replacement));
+    }
+    if (OB_SUCC(ret)) {
+      vars_.at(var_idx) = replacement.value_view();
+      if (old.datum_.ptr_ != replacement.datum_.ptr_) {
+        const bool same_handle = old.is_pl_extend() && replacement.is_pl_extend()
+            && old.get_ext() == replacement.get_ext();
+        if (same_handle) {
+          // Replacing a descriptor must not destroy the live aliased pointee.
+          inner_allocator_.free(const_cast<char *>(old.datum_.ptr_));
+        } else {
+          const int cleanup_ret = ObUserDefinedType::destruct_objparam(inner_allocator_, old, session);
+          if (OB_SUCCESS != cleanup_ret) { LOG_WARN("release replaced package value failed", K(cleanup_ret), K(var_idx)); }
+        }
+      }
+    }
   }
   return ret;
 }
 
-int ObPLPackageState::get_package_var_val(const int64_t var_idx, ObObj &value)
+int ObPLPackageState::get_package_var_val(const int64_t var_idx, DatumParameter &value)
 {
   int ret = OB_SUCCESS;
-  if (var_idx < 0 || var_idx >= vars_.count()) {
-    ret = OB_ARRAY_OUT_OF_RANGE;
-  } else {
-    value = vars_.at(var_idx);
-  }
+  if (var_idx < 0 || var_idx >= vars_.count()) { ret = OB_ARRAY_OUT_OF_RANGE; }
+  else { value.assign_value(package_value_view(vars_.at(var_idx))); }
   return ret;
 }
 

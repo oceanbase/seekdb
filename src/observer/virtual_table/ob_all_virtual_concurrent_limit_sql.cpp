@@ -125,7 +125,7 @@ int ObAllVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_info
                                                   const ObMaxConcurrentParam *param)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   if (OB_ISNULL(cells = cur_row_.cells_)
       || OB_ISNULL(allocator_)
       || OB_ISNULL(session_)
@@ -139,18 +139,18 @@ int ObAllVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_info
       const uint64_t col_id = output_column_ids_.at(cell_idx);
       switch (col_id) {
         case DATABASE_ID : {
-          cells[cell_idx].set_int(static_cast<int64_t>(outline_info->get_database_id()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, static_cast<int64_t>(outline_info->get_database_id())) : ret);
           break;
         }
         case OUTLINE_ID : {
-          cells[cell_idx].set_int(static_cast<int64_t>(outline_info->get_outline_id()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, static_cast<int64_t>(outline_info->get_outline_id())) : ret);
           break;
         }
         case DATABASE_NAME : {
           DBInfo db_info;
           if (OB_FAIL(database_infos_.get_refactored(outline_info->get_database_id(), db_info))) {
           } else {
-            cells[cell_idx].set_varchar(db_info.db_name_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, db_info.db_name_) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -159,7 +159,7 @@ int ObAllVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_info
           ObString outline_name;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_name_str(), outline_name))) {
           } else {
-            cells[cell_idx].set_varchar(outline_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, outline_name) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -168,8 +168,7 @@ int ObAllVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_info
           ObString outline_content;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_outline_content_str(), outline_content))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, outline_content.ptr(),
-                                          static_cast<int32_t>(outline_content.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(outline_content.length()), outline_content.ptr())) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -180,8 +179,7 @@ int ObAllVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_info
           if (OB_FAIL(outline_info->get_visible_signature(local_str))) {
           } else if (OB_FAIL(ob_write_string(*allocator_, local_str, visible_sigature))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, visible_sigature.ptr(),
-                                          static_cast<int32_t>(visible_sigature.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(visible_sigature.length()), visible_sigature.ptr())) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -190,27 +188,25 @@ int ObAllVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_info
           ObString sql_text;
           if (OB_FAIL(ob_write_string(*allocator_, param->get_sql_text(), sql_text))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, sql_text.ptr(),
-                                          static_cast<int32_t>(sql_text.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(sql_text.length()), sql_text.ptr())) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
         case CONCURRENT_NUM : {
-          cells[cell_idx].set_int(param->get_concurrent_num());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, param->get_concurrent_num()) : ret);
           break;
         }
         case LIMIT_TARGET : {
           ObString visible_signature;
           ObString limit_sql;
           if (outline_info->get_sql_text_str().empty()) {
-            cells[cell_idx].set_lob_value(ObLongTextType, "", 0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(0, "")) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else if (OB_FAIL(outline_info->get_visible_signature(visible_signature))) {
           } else if (OB_FAIL(sql::ObSQLUtils::gen_limit_sql(visible_signature, param, *session_, *allocator_, limit_sql))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, limit_sql.ptr(),
-                                          static_cast<int32_t>(limit_sql.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(limit_sql.length()), limit_sql.ptr())) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;

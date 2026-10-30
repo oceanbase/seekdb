@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_repeat.h"
 
 
@@ -57,11 +58,11 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
   type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC);
   // repeat is mysql only epxr.
   if (OB_SUCC(ret)) {
-    ObObjType res_type = ObMaxType;
+    SqlValueType res_type = ObMaxType;
     if (text.is_null() && !count.is_null()) {
       res_type = ObVarcharType;
     } else if (count.is_literal() && !count.is_null()) {
-      const ObObj &obj = count.get_param();
+      const DatumValue &obj = count.get_param();
       ObArenaAllocator alloc(ObModIds::OB_SQL_RES_TYPE);
       const ObDataTypeCastParams dtc_params = type_ctx.get_dtc_params();
       int64_t cur_time = 0;
@@ -72,7 +73,13 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
         ObCastCtx cast_ctx(
             &alloc, &dtc_params, cur_time, cast_mode, CS_TYPE_INVALID);
         int64_t count_val = 0;
-        EXPR_GET_INT64_V2(obj, count_val);
+        {
+        DatumValue converted_literal;
+        if (OB_SUCC(ret)) {
+          ret = DatumValueCaster::to_type(ObIntType, cast_ctx, obj, alloc, converted_literal);
+        }
+        if (OB_SUCC(ret)) { ret = converted_literal.get_int(count_val); }
+      }
         res_type = get_result_type_mysql(text.get_length() * count_val);
       }
     } else {
@@ -152,7 +159,7 @@ int ObExprRepeat::repeat(ObString &output,
   return ret;
 }
 
-int ObExprRepeat::repeat_text(ObObjType res_type,
+int ObExprRepeat::repeat_text(SqlValueType res_type,
                               bool has_lob_header,
                               ObString &output,
                               bool &is_null,
@@ -194,42 +201,6 @@ int ObExprRepeat::repeat_text(ObObjType res_type,
         if (OB_SUCC(ret)) {
           result_buffer.get_result_buffer(output);
         }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObExprRepeat::calc(ObObj &result,
-                       const ObObjType res_type,
-                       const ObString &text,
-                       const int64_t count,
-                       ObIAllocator *allocator,
-                       const int64_t max_result_size)
-{
-  int ret = OB_SUCCESS;
-  ObString output;
-  bool is_null = false;
-  bool has_lob_header = (res_type != ObTinyTextType);
-  if (OB_ISNULL(allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (false == ob_is_string_type(res_type)) {
-    ret = OB_INVALID_ARGUMENT;
-    // ObExprRepeat::calc_result_type2() method specifies that the return result type must belong to some string type
-  } else if (!ob_is_text_tc(res_type)) {
-    ret = repeat(output, is_null, text, count, *allocator, max_result_size);
-  } else {
-    ret = repeat_text(res_type, has_lob_header, output, is_null,
-                      text, count, *allocator, max_result_size);
-  }
-  if (OB_FAIL(ret)) {
-  } else {
-    if (is_null) {
-      result.set_null();
-    } else {
-      result.set_string(res_type, output);
-      if (has_lob_header) {
-        result.set_has_lob_header();
       }
     }
   }

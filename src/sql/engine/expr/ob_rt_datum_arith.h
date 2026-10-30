@@ -27,11 +27,8 @@ namespace sql
 //
 // Runtime datum arithmetic evaluation.
 //
-// Why need this:
-// ObObj can do runtime arithmetic evaluation by the static interface of arithmetic expressions
-// (e.g.: ObExprMul::calc). ObDatum can not do this, because ObDatum's memory is binding to ObExpr,
-// it always need a ObExpr to do arithmetic evaluation. We must build the needed arithmetic
-// expressions in compile time in static typing engine, see: the `linear_inter_expr_` expression of
+// Runtime arithmetic builds a temporary expression tree because datum storage is bound to ObExpr;
+// evaluation therefore needs an expression context, rather than standalone static arithmetic calls.
 // 
 // to use,  we need a convenient way to do runtime ObDatum arithmetic evaluation.
 //

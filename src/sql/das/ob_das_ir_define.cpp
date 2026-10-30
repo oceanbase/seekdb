@@ -221,14 +221,6 @@ const ObDatum &ObDocIdExt::get_datum() const
   return datum_;
 }
 
-int ObDocIdExt::from_obj(const ObObj &obj)
-{
-  int ret = common::OB_SUCCESS;
-  if (OB_FAIL(datum_.from_obj(obj))) {
-  }
-  return ret;
-}
-
 int ObDocIdExt::from_datum(const ObDatum &datum)
 {
   int ret = common::OB_SUCCESS;

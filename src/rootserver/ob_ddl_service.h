@@ -1420,7 +1420,7 @@ int check_will_be_having_domain_index_operation(
                                             const common::ObTimeZoneInfo &tz_info);
   int modify_generated_column_local_vars(ObColumnSchemaV2 &generated_column,
                                         const common::ObString &column_name,
-                                        const ObObjType origin_type,
+                                        const SqlValueType origin_type,
                                         const AlterColumnSchema &new_column_schema,
                                         const ObTableSchema &table_schema,
                                         const share::ObLocalSessionVar *local_session_var);
@@ -1837,9 +1837,6 @@ private:
                                const share::schema::ObPartitionSchema &new_part);
   int check_add_list_subpartition(const share::schema::ObPartition &orig_part,
                                   const share::schema::ObPartition &new_part);
-  int is_list_values_equal(const common::ObIArray<common::ObNewRow> &fir_values,
-                           const common::ObIArray<common::ObNewRow> &sed_values,
-                           bool &equal);
 
   virtual int reconstruct_table_schema_from_recyclebin(share::schema::ObTableSchema &index_table_schema,
                                                        const share::schema::ObRecycleObject &recycle_obj,

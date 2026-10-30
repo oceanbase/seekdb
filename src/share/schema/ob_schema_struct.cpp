@@ -21,6 +21,17 @@
 #include "share/ob_timezone_mgr.h"
 #include "share/schema/ob_part_mgr_util.h"
 #include "share/object/ob_obj_cast.h"
+#include "share/datum/datum_value_cast.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "share/datum/typed_datum_compare.h"
+#include <type_traits>
+#include "share/inner_table/ob_inner_table_schema.h"
+#include "share/schema/ob_table_schema.h"
+#include "share/ob_ddl_common.h"
+#include "share/ob_force_print_log.h"
+#include "lib/utility/ob_smart_var.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/ob_schema_version_info.h"
 
 namespace oceanbase
 {
@@ -1172,30 +1183,6 @@ int ObSchema::deep_copy_str(const ObString &src, ObString &dest, ObIAllocator &a
   return ret;
 }
 
-int ObSchema::deep_copy_obj(const ObObj &src, ObObj &dest)
-{
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int64_t pos = 0;
-  int64_t size = src.get_deep_copy_size();
-
-  if (OB_SUCCESS != error_ret_) {
-    ret = error_ret_;
-  } else {
-    if (size > 0) {
-      if (NULL == (buf = static_cast<char*>(alloc(size)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("Fail to allocate memory, ", K(size), K(ret));
-      } else if (OB_FAIL(dest.deep_copy(src, buf, size, pos))){
-      }
-    } else {
-      dest = src;
-    }
-  }
-
-  return ret;
-}
-
 int ObSchema::deep_copy_string_array(const ObIArray<ObString> &src_array,
                                      ObArrayHelper<ObString> &dst_array)
 {
@@ -1664,29 +1651,34 @@ int ObSysVarSchema::assign(const ObSysVarSchema &src_schema)
   return ret;
 }
 
-int ObSysVarSchema::get_value(ObIAllocator *allocator, const ObDataTypeCastParams &dtc_params, ObObj &value) const
+int ObSysVarSchema::get_value(ObIAllocator &result_owner, const ObDataTypeCastParams &dtc_params, DatumValue &value) const
 {
   int ret = OB_SUCCESS;
+  DatumValue result;
+  const ObCollationType system_collation = ObCharset::get_system_collation();
   if (ob_is_string_type(data_type_)) {
-    value.set_string(data_type_, value_);
-    value.set_collation_type(ObCharset::get_system_collation());
+    // Match the legacy raw-string branch: it precedes nullable-empty handling
+    // and borrows the schema string while its schema guard remains alive.
+    result.meta_.set_type(data_type_);
+    result.set_collation_level(CS_LEVEL_IMPLICIT);
+    result.set_collation_type(system_collation);
+    result.datum_.set_string(value_);
   } else if (is_null_value()) {
-    value.set_null();
+    result.set_null();
   } else {
-    ObObj var_value;
-    var_value.set_varchar(value_);
-    ObCastCtx cast_ctx(allocator, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-    ObObj casted_val;
-    const ObObj *res_val = NULL;
-    if (OB_FAIL(ObObjCaster::to_type(data_type_, cast_ctx, var_value, casted_val, res_val))) {
-      ObCStringHelper helper;
-      _LOG_WARN("failed to cast object, ret=%d cell=%s from_type=%s to_type=%s",
-                 ret, helper.convert(var_value), ob_obj_type_str(var_value.get_type()), ob_obj_type_str(data_type_));
-    } else if (OB_ISNULL(res_val)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      value = *res_val;
+    DatumValue input;
+    input.meta_.set_varchar();
+    input.set_collation_level(CS_LEVEL_IMPLICIT);
+    // The legacy varchar setter leaves the default CS_TYPE_INVALID source collation;
+    // the cast context separately supplies the system destination collation.
+    input.datum_.set_string(value_);
+    ObCastCtx cast_ctx(&result_owner, &dtc_params, CM_NONE, system_collation);
+    if (OB_FAIL(DatumValueCaster::to_type(data_type_, cast_ctx, input, result_owner, result))) {
+      _LOG_WARN("failed to cast system variable text to DatumValue", K(ret), K(input), K(data_type_));
     }
+  }
+  if (OB_SUCC(ret)) {
+    value = result;
   }
   return ret;
 }
@@ -2908,7 +2900,7 @@ int ObPartitionSchema::mock_list_partition_array()
     // list_row_values
     if (OB_SUCC(ret)) {
       ObNewRow row;
-      ObObj obj;
+      DatumValue obj;
       obj.set_max_value();
       row.assign(&obj, 1);
       if (OB_FAIL(partition.add_list_row(row))) {
@@ -3422,10 +3414,10 @@ bool ObBasePartition::list_part_func_layout(
   } else {
     bool finish = false;
     for (int64_t i = 0; !finish && i < lhs->get_list_row_values().count(); ++i) {
-      const common::ObNewRow &l_row = lhs->get_list_row_values().at(i);
-      const common::ObNewRow &r_row = rhs->get_list_row_values().at(i);
+      const PartitionBoundRow &l_row = lhs->get_list_row_values().at(i);
+      const PartitionBoundRow &r_row = rhs->get_list_row_values().at(i);
       int cmp = 0;
-      if (OB_SUCCESS != ObRowUtil::compare_row(l_row, r_row, cmp)) {
+      if (OB_SUCCESS != compare_partition_bound_rows(l_row, r_row, cmp)) {
         LOG_ERROR_RET(OB_INVALID_ARGUMENT, "l or r is invalid");
         finish = true;
       } else if (cmp < 0) {
@@ -3443,25 +3435,31 @@ bool ObBasePartition::list_part_func_layout(
   return bool_ret;
 }
 
-int ObBasePartition::set_low_bound_val(const ObRowkey &low_bound_val)
+int ObBasePartition::set_low_bound_val(const ObRowkey &value)
 {
-  int ret = OB_SUCCESS;
-  ObIAllocator *allocator = get_allocator();
-  if (OB_ISNULL(allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(low_bound_val.deep_copy(low_bound_val_, *allocator))) {
-  } else { }
-  return ret;
+  return get_allocator() == nullptr ? OB_ERR_UNEXPECTED : copy_partition_bound(value, low_bound_val_, *get_allocator());
 }
-
-int ObBasePartition::set_high_bound_val(const ObRowkey &high_bound_val)
+int ObBasePartition::set_high_bound_val(const ObRowkey &value)
 {
-  int ret = OB_SUCCESS;
-  ObIAllocator *allocator = get_allocator();
-  if (OB_ISNULL(allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(high_bound_val.deep_copy(high_bound_val_, *allocator))) {
-  } else { }
+  return get_allocator() == nullptr ? OB_ERR_UNEXPECTED : copy_partition_bound(value, high_bound_val_, *get_allocator());
+}
+int ObBasePartition::set_low_bound_val(const PartitionBoundRow &value)
+{
+  return get_allocator() == nullptr ? OB_ERR_UNEXPECTED : value.clone(low_bound_val_, *get_allocator());
+}
+int ObBasePartition::set_high_bound_val(const PartitionBoundRow &value)
+{
+  return get_allocator() == nullptr ? OB_ERR_UNEXPECTED : value.clone(high_bound_val_, *get_allocator());
+}
+int ObBasePartition::add_list_row(const PartitionBoundRow &row)
+{
+  return get_allocator() == nullptr ? OB_ERR_UNEXPECTED : list_row_values_.push_back_with_deep_copy(*get_allocator(), row);
+}
+int ObBasePartition::add_list_row(const ObNewRow &row)
+{
+  PartitionBoundRow owned;
+  int ret = get_allocator() == nullptr ? OB_ERR_UNEXPECTED : copy_partition_bound(row, owned, *get_allocator());
+  if (OB_SUCC(ret)) { ret = list_row_values_.push_back(owned); }
   return ret;
 }
 
@@ -3532,13 +3530,13 @@ int ObBasePartition::convert_character_for_range_columns_part(
   ObIAllocator *allocator = get_allocator();
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (low_bound_val_.get_obj_cnt() > 0) {
+  } else if (low_bound_val_.count() > 0) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < high_bound_val_.get_obj_cnt(); i++) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < high_bound_val_.count(); i++) {
       const ObColumnSchemaV2 *part_column_schema = nullptr;
-      ObObj &obj = high_bound_val_.get_obj_ptr()[i];
-      const ObObjMeta &obj_meta = obj.get_meta();
+      DatumValue &obj = high_bound_val_.get_cells()[i];
+      const SqlTypeMeta &obj_meta = obj.get_meta();
       if (obj_meta.is_lob()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(get_part_column_schema(table_schema, i, info, part_column_schema))) {
@@ -3549,8 +3547,7 @@ int ObBasePartition::convert_character_for_range_columns_part(
         if (OB_FAIL(ObCharset::charset_convert(*allocator, obj.get_string(), obj.get_collation_type(),
                                                to_collation, dst_string))) {
         } else {
-          obj.set_string(obj.get_type(), dst_string);
-          obj.set_collation_type(to_collation);
+          if (OB_SUCC(ret = obj.set_string(obj.get_type(), dst_string, *allocator))) { obj.set_collation_type(to_collation); }
         }
       }
     }
@@ -3567,11 +3564,11 @@ int ObBasePartition::convert_character_for_list_columns_part(
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < list_row_values_.count(); i++) {
-      common::ObNewRow &row = list_row_values_.at(i);
+      PartitionBoundRow &row = list_row_values_.at(i);
       for (int64_t j = 0; OB_SUCC(ret) && j < row.get_count(); j++) {
         const ObColumnSchemaV2 *part_column_schema = nullptr;
-        ObObj &obj = row.get_cell(j);
-        const ObObjMeta &obj_meta = obj.get_meta();
+        DatumValue &obj = row.get_cell(j);
+        const SqlTypeMeta &obj_meta = obj.get_meta();
         if (obj_meta.is_lob()) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(get_part_column_schema(table_schema, j, info, part_column_schema))) {
@@ -3582,8 +3579,7 @@ int ObBasePartition::convert_character_for_list_columns_part(
           if (OB_FAIL(ObCharset::charset_convert(*allocator, obj.get_string(), obj.get_collation_type(),
                                                to_collation, dst_string))) {
           } else {
-            obj.set_string(obj.get_type(), dst_string);
-            obj.set_collation_type(to_collation);
+            if (OB_SUCC(ret = obj.set_string(obj.get_type(), dst_string, *allocator))) { obj.set_collation_type(to_collation); }
           }
         }
       }
@@ -3609,46 +3605,20 @@ OB_DEF_SERIALIZE(ObBasePartition)
 OB_DEF_DESERIALIZE(ObBasePartition)
 {
   int ret = OB_SUCCESS;
-  ObArenaAllocator allocator("BasePart");
-  ObRowkey high_bound_val;
-  ObRowkey low_bound_val;
   ObString name;
-  ObObj sub_interval_start;
-  ObObj sub_part_interval;
-
-  if (OB_SUCC(ret)) {
-    void *tmp_buf = NULL;
-    ObObj *array = NULL;
-    if (OB_ISNULL(tmp_buf = allocator.alloc(sizeof(ObObj) * OB_MAX_ROWKEY_COLUMN_NUMBER * 2))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(array = new (tmp_buf) ObObj[OB_MAX_ROWKEY_COLUMN_NUMBER * 2])) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      high_bound_val.assign(array, OB_MAX_ROWKEY_COLUMN_NUMBER);
-      low_bound_val.assign(&(array[OB_MAX_ROWKEY_COLUMN_NUMBER]), OB_MAX_ROWKEY_COLUMN_NUMBER);
-    }
-  }
-
-  LST_DO_CODE(OB_UNIS_DECODE, table_id_, part_id_,
-              schema_version_, name);
-  if (FAILEDx(high_bound_val.deserialize(buf, data_len, pos, true))) {
-  }
+  PartitionBoundRow high_bound_val, low_bound_val;
+  LST_DO_CODE(OB_UNIS_DECODE, table_id_, part_id_, schema_version_, name);
+  if (get_allocator() == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  if (FAILEDx(high_bound_val.deserialize(*get_allocator(), buf, data_len, pos))) {}
   LST_DO_CODE(OB_UNIS_DECODE, status_);
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(deep_copy_str(name, name_))) {
-  } else if (OB_FAIL(set_high_bound_val(high_bound_val))) {
-  } else if (OB_FAIL(list_row_values_.deserialize(*get_allocator(), buf, data_len, pos))) {
-  }
-
-  LST_DO_CODE(OB_UNIS_DECODE,
-              part_idx_,
-              is_empty_partition_name_,
-              partition_type_);
-  if (FAILEDx(low_bound_val.deserialize(buf, data_len, pos, true))) {
-  }
+  if (OB_FAIL(ret)) {}
+  else if (OB_FAIL(deep_copy_str(name, name_))) {}
+  else if (FALSE_IT(high_bound_val_ = high_bound_val)) {}
+  else if (OB_FAIL(list_row_values_.deserialize(*get_allocator(), buf, data_len, pos))) {}
+  LST_DO_CODE(OB_UNIS_DECODE, part_idx_, is_empty_partition_name_, partition_type_);
+  if (FAILEDx(low_bound_val.deserialize(*get_allocator(), buf, data_len, pos))) {}
   LST_DO_CODE(OB_UNIS_DECODE, tablet_id_);
-  if (OB_SUCC(ret) && OB_FAIL(set_low_bound_val(low_bound_val))) {
-  }
+  if (OB_SUCC(ret)) { low_bound_val_ = low_bound_val; }
   return ret;
 }
 
@@ -3677,18 +3647,14 @@ bool ObBasePartition::less_than(const ObBasePartition *lhs, const ObBasePartitio
   if (OB_ISNULL(lhs) || OB_ISNULL(rhs)) {
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "lhs or rhs should not be NULL", KPC(lhs), KPC(rhs));
   } else {
-    ObNewRow lrow;
-    lrow.cells_ = const_cast<ObObj*>(lhs->high_bound_val_.get_obj_ptr());
-    lrow.count_ = lhs->high_bound_val_.get_obj_cnt();
+    PartitionBoundRow lrow = lhs->high_bound_val_;
     lrow.projector_ = lhs->projector_;
     lrow.projector_size_ = lhs->projector_size_;
-    ObNewRow rrow;
-    rrow.cells_ = const_cast<ObObj*>(rhs->high_bound_val_.get_obj_ptr());
-    rrow.count_ = rhs->high_bound_val_.get_obj_cnt();
+    PartitionBoundRow rrow = rhs->high_bound_val_;
     rrow.projector_ = rhs->projector_;
     rrow.projector_size_ = rhs->projector_size_;
     int cmp = 0;
-    if (OB_SUCCESS != ObRowUtil::compare_row(lrow, rrow, cmp)) {
+    if (OB_SUCCESS != compare_partition_bound_rows(lrow, rrow, cmp)) {
       LOG_ERROR_RET(OB_INVALID_ARGUMENT, "lhs or rhs is invalid", K(lrow), K(rrow), K(lhs), K(rhs));
     } else {
       bret = (cmp < 0);
@@ -3703,18 +3669,14 @@ bool ObBasePartition::range_like_func_less_than(const ObBasePartition *lhs, cons
   if (OB_ISNULL(lhs) || OB_ISNULL(rhs)) {
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "lhs or rhs should not be NULL", KPC(lhs), KPC(rhs));
   } else {
-    ObNewRow lrow;
-    lrow.cells_ = const_cast<ObObj*>(lhs->high_bound_val_.get_obj_ptr());
-    lrow.count_ = lhs->high_bound_val_.get_obj_cnt();
+    PartitionBoundRow lrow = lhs->high_bound_val_;
     lrow.projector_ = lhs->projector_;
     lrow.projector_size_ = lhs->projector_size_;
-    ObNewRow rrow;
-    rrow.cells_ = const_cast<ObObj*>(rhs->high_bound_val_.get_obj_ptr());
-    rrow.count_ = rhs->high_bound_val_.get_obj_cnt();
+    PartitionBoundRow rrow = rhs->high_bound_val_;
     rrow.projector_ = rhs->projector_;
     rrow.projector_size_ = rhs->projector_size_;
     int cmp = 0;
-    if (OB_SUCCESS != ObRowUtil::compare_row(lrow, rrow, cmp)) {
+    if (OB_SUCCESS != compare_partition_bound_rows(lrow, rrow, cmp)) {
       LOG_ERROR_RET(OB_INVALID_ARGUMENT, "lhs or rhs is invalid", K(lrow), K(rrow), K(lhs), K(rhs));
     } else if (0 == cmp) {
       bret = lhs->get_part_id() < rhs->get_part_id();
@@ -3791,8 +3753,8 @@ int ObPartition::assign(const ObPartition & src_part)
   if (this != &src_part) {
     reset();
     if (OB_FAIL(ObBasePartition::assign(src_part))) {
-    } else if (OB_FAIL(deep_copy_obj(src_part.sub_interval_start_, sub_interval_start_))) {
-    } else if (OB_FAIL(deep_copy_obj(src_part.sub_part_interval_, sub_part_interval_))) {
+    } else if (OB_FAIL(clone_typed_value(src_part.sub_interval_start_, sub_interval_start_, *get_allocator()))) {
+    } else if (OB_FAIL(clone_typed_value(src_part.sub_part_interval_, sub_part_interval_, *get_allocator()))) {
     } else {
       sub_part_num_ = src_part.sub_part_num_;
 #define ASSIGN_SUBPARTITION_ARRAY(SUBPART_NAME) \
@@ -3827,10 +3789,9 @@ OB_DEF_SERIALIZE(ObPartition)
 {
   int ret = OB_SUCCESS;
   BASE_SER((, ObBasePartition));
-  LST_DO_CODE(OB_UNIS_ENCODE,
-              sub_part_num_,
-              sub_interval_start_,
-              sub_part_interval_);
+  LST_DO_CODE(OB_UNIS_ENCODE, sub_part_num_);
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(sub_interval_start_.datum_, sub_interval_start_.meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(sub_part_interval_.datum_, sub_part_interval_.meta_, buf, buf_len, pos); }
   if (FAILEDx(ObSchemaUtils::serialize_partition_array(
               subpartition_array_,
               subpartition_num_,
@@ -3847,15 +3808,13 @@ OB_DEF_DESERIALIZE(ObPartition)
 {
   int ret = OB_SUCCESS;
   BASE_DESER((, ObBasePartition));
-  ObObj sub_interval_start;
-  ObObj sub_part_interval;
-  LST_DO_CODE(OB_UNIS_DECODE,
-              sub_part_num_,
-              sub_interval_start,
-              sub_part_interval);
+  DatumValue sub_interval_start, sub_part_interval;
+  LST_DO_CODE(OB_UNIS_DECODE, sub_part_num_);
+  if (OB_SUCC(ret) && pos < data_len) { ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, *get_allocator(), sub_interval_start.datum_, sub_interval_start.meta_); }
+  if (OB_SUCC(ret) && pos < data_len) { ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, *get_allocator(), sub_part_interval.datum_, sub_part_interval.meta_); }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(deep_copy_obj(sub_interval_start, sub_interval_start_))) {
-  } else if (OB_FAIL(deep_copy_obj(sub_part_interval, sub_part_interval_))) {
+  } else if (FALSE_IT(sub_interval_start_ = sub_interval_start)) {
+  } else if (FALSE_IT(sub_part_interval_ = sub_part_interval)) {
   } else if (OB_FAIL(deserialize_subpartition_array(buf, data_len, pos))) {
   } else if (OB_FAIL(deserialize_subpartition_array(buf, data_len, pos))) {
   } else {}//do nothing
@@ -3887,10 +3846,10 @@ int ObPartition::deserialize_subpartition_array(
 OB_DEF_SERIALIZE_SIZE(ObPartition)
 {
   int64_t len = ObBasePartition::get_serialize_size();
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-              sub_part_num_,
-              sub_interval_start_,
-              sub_part_interval_);
+  LST_DO_CODE(OB_UNIS_ADD_LEN, sub_part_num_);
+  int64_t bytes = 0;
+  if (DatumParameterCodec::value_size(sub_interval_start_.datum_, sub_interval_start_.meta_, bytes) == OB_SUCCESS) { len += bytes; }
+  if (DatumParameterCodec::value_size(sub_part_interval_.datum_, sub_part_interval_.meta_, bytes) == OB_SUCCESS) { len += bytes; }
 
   len += ObSchemaUtils::get_partition_array_serialize_size(
          subpartition_array_, subpartition_num_);
@@ -3903,8 +3862,8 @@ int64_t ObPartition::get_convert_size() const
 {
   int64_t convert_size = sizeof(*this);
   convert_size += ObBasePartition::get_deep_copy_size();
-  convert_size += sub_interval_start_.get_deep_copy_size();
-  convert_size += sub_part_interval_.get_deep_copy_size();
+  convert_size += sub_interval_start_.datum_.get_deep_copy_size();
+  convert_size += sub_part_interval_.datum_.get_deep_copy_size();
   convert_size += ObSchemaUtils::get_partition_array_convert_size(
                   subpartition_array_, subpartition_num_);
   convert_size += ObSchemaUtils::get_partition_array_convert_size(
@@ -4094,18 +4053,14 @@ bool ObSubPartition::less_than(const ObSubPartition *lhs, const ObSubPartition *
   } else if (lhs->get_part_id() < rhs->get_part_id()) {
     b_ret = true;
   } else if (lhs->get_part_id() == rhs->get_part_id()) {
-    ObNewRow lrow;
-    lrow.cells_ = const_cast<ObObj*>(lhs->high_bound_val_.get_obj_ptr());
-    lrow.count_ = lhs->high_bound_val_.get_obj_cnt();
+    PartitionBoundRow lrow = lhs->high_bound_val_;
     lrow.projector_ = lhs->projector_;
     lrow.projector_size_ = lhs->projector_size_;
-    ObNewRow rrow;
-    rrow.cells_ = const_cast<ObObj*>(rhs->high_bound_val_.get_obj_ptr());
-    rrow.count_ = rhs->high_bound_val_.get_obj_cnt();
+    PartitionBoundRow rrow = rhs->high_bound_val_;
     rrow.projector_ = rhs->projector_;
     rrow.projector_size_ = rhs->projector_size_;
     int cmp = 0;
-    if (OB_SUCCESS != ObRowUtil::compare_row(lrow, rrow, cmp)) {
+    if (OB_SUCCESS != compare_partition_bound_rows(lrow, rrow, cmp)) {
       LOG_ERROR_RET(OB_INVALID_ARGUMENT, "lhs or rhs is invalid");
     } else {
       b_ret = (cmp < 0);
@@ -4386,6 +4341,132 @@ int ObPartitionUtils::get_tablet_and_part_id(
   return ret;
 }
 
+int ObPartitionUtils::compare_native_partition_bound(
+    const ObIArray<DatumValue> &row, const ObBasePartition &partition,
+    bool low_bound, ObIAllocator &scratch, int &result)
+{
+  int ret = OB_SUCCESS;
+  result = 0;
+  const PartitionBoundRow &bound = low_bound ? partition.low_bound_val_ : partition.high_bound_val_;
+  const int64_t bound_count = partition.projector_size_ > 0
+      ? partition.projector_size_ : bound.count();
+  const int64_t count = MAX(row.count(), bound_count);
+  for (int64_t i = 0; OB_SUCC(ret) && result == 0 && i < count; ++i) {
+    DatumValue stored;
+    if (i < bound_count) {
+      const int64_t index = partition.projector_size_ > 0 ? partition.projector_[i] : i;
+      if (index < 0 || index >= bound.count()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        stored = bound.get_cells()[index];
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (i < row.count() && i < bound_count) {
+      ret = compare_datum_values(row.at(i), stored, result);
+    } else if (i < row.count()) {
+      result = row.at(i).is_min_value() ? 0 : 1;
+    } else {
+      result = stored.is_min_value() ? 0 : -1;
+    }
+  }
+  return ret;
+}
+
+template <typename Partition>
+int ObPartitionUtils::get_native_partition_indexes(
+    const ObIArray<DatumValue> &row, Partition *const *partitions,
+    int64_t count, bool hash_part, bool range_part, bool list_part,
+    bool subpart, ObPartID parent_id, ObIArray<PartitionIndex> &indexes)
+{
+  int ret = OB_SUCCESS;
+  indexes.reset();
+  int64_t found = OB_INVALID_INDEX;
+  ObArenaAllocator scratch;
+  if (partitions == nullptr || count <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (hash_part) {
+    if (row.count() != 1 || (!row.at(0).is_null() && !row.at(0).is_int())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const int64_t hash = row.at(0).is_null() ? 0 : row.at(0).get_int();
+      if (hash < 0) { ret = OB_ERR_UNEXPECTED; }
+      else { ret = calc_hash_part_idx(hash, count, found); }
+    }
+  } else if (range_part && row.empty()) {
+    // The old temporary row is invalid when it has no cells. Its point-range
+    // search consequently emits no indexes; do not reinterpret it as MIN.
+  } else if (range_part) {
+    // The old point range uses upper_bound: equality belongs to the next
+    // partition, and falling above the final bound emits no partition.
+    int64_t first = 0, length = count;
+    while (OB_SUCC(ret) && length > 0) {
+      const int64_t half = length / 2, middle = first + half;
+      int cmp = 0;
+      if (partitions[middle] == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else { ret = compare_native_partition_bound(row, *partitions[middle], false, scratch, cmp); }
+      scratch.reuse();
+      if (OB_FAIL(ret)) {
+      } else if (cmp < 0) { length = half; }
+      else { first = middle + 1; length -= half + 1; }
+    }
+    if (OB_SUCC(ret) && first < count) {
+      found = first;
+      if (partitions[found]->low_bound_val_.count() > 0) {
+        int cmp = 0;
+        ret = compare_native_partition_bound(row, *partitions[found], true, scratch, cmp);
+        if (OB_SUCC(ret) && cmp < 0) { found = OB_INVALID_INDEX; }
+      }
+    }
+  } else if (list_part) {
+    int64_t default_index = OB_INVALID_INDEX;
+    for (int64_t i = 0; OB_SUCC(ret) && found == OB_INVALID_INDEX && i < count; ++i) {
+      if (partitions[i] == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        const ObIArray<PartitionBoundRow> &values = partitions[i]->get_list_row_values();
+        for (int64_t j = 0; OB_SUCC(ret) && found == OB_INVALID_INDEX && j < values.count(); ++j) {
+          const PartitionBoundRow &stored_row = values.at(j);
+          bool equal = row.count() == stored_row.get_count();
+          for (int64_t k = 0; OB_SUCC(ret) && equal && k < row.count(); ++k) {
+            ret = datum_values_equal(row.at(k), stored_row.get_cell(k), equal);
+          }
+          scratch.reuse();
+          if (OB_SUCC(ret) && equal) { found = i; }
+        }
+        if (values.count() == 1 && values.at(0).get_count() >= 1
+            && values.at(0).get_cell(0).is_max_value()) {
+          default_index = i;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && found == OB_INVALID_INDEX) { found = default_index; }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+  }
+  if (OB_SUCC(ret) && found != OB_INVALID_INDEX) {
+    if (found < 0 || found >= count || partitions[found] == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      int64_t routing_index = partitions[found]->get_part_idx();
+      if constexpr (std::is_same<Partition, ObSubPartition>::value) {
+        routing_index = partitions[found]->get_sub_part_idx();
+      }
+      if (hash_part && (routing_index != found
+            || (subpart && partitions[found]->get_part_id() != parent_id))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (subpart && (!partitions[found]->get_tablet_id().is_valid()
+                 || partitions[found]->get_part_id() != parent_id)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ret = indexes.push_back(subpart ? PartitionIndex(OB_INVALID_INDEX, found)
+                                       : PartitionIndex(found, OB_INVALID_INDEX));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObPartitionUtils::get_tablet_and_part_id(
     const share::schema::ObTableSchema &table_schema,
     const common::ObNewRow &row,
@@ -4421,6 +4502,52 @@ int ObPartitionUtils::get_tablet_and_part_id(
     } else {
       ret = OB_NOT_SUPPORTED;
     }
+    const bool fill_tablet_id = (PARTITION_LEVEL_ONE == part_level);
+    if (FAILEDx(fill_tablet_and_object_ids_(
+        fill_tablet_id, OB_INVALID_INDEX /*part_idx*/,
+        partition_indexes, table_schema, related_table,
+        tablet_ids, part_ids))) {
+    } else if (1 < part_ids.count()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (part_ids.count() > 0) {
+      part_id = part_ids.at(0);
+      if (!fill_tablet_id) {
+        // skip
+      } else if (1 != tablet_ids.count()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        tablet_id = tablet_ids.at(0);
+      }
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+  }
+  return ret;
+}
+
+int ObPartitionUtils::get_tablet_and_part_id(
+    const share::schema::ObTableSchema &table_schema,
+    const common::ObIArray<common::DatumValue> &row,
+    common::ObTabletID &tablet_id,
+    common::ObObjectID &part_id,
+    RelatedTableInfo *related_table /*= NULL*/)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<PartitionIndex, 1> partition_indexes;
+  ObSEArray<ObTabletID, 1> tablet_ids;
+  ObSEArray<ObObjectID, 1> part_ids;
+  ObPartitionLevel part_level = table_schema.get_part_level();
+  const uint64_t table_id = table_schema.get_table_id();
+  tablet_id.reset();
+  part_id = OB_INVALID_ID;
+  if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+  } else if (PARTITION_LEVEL_ONE == part_level
+             || PARTITION_LEVEL_TWO == part_level) {
+    ObPartition * const* part_array = table_schema.get_part_array();
+    const int64_t part_num = table_schema.get_partition_num();
+    ret = get_native_partition_indexes(row, part_array, part_num,
+        table_schema.is_hash_like_part(), table_schema.is_range_part(),
+        table_schema.is_list_part(), false, OB_INVALID_ID, partition_indexes);
     const bool fill_tablet_id = (PARTITION_LEVEL_ONE == part_level);
     if (FAILEDx(fill_tablet_and_object_ids_(
         fill_tablet_id, OB_INVALID_INDEX /*part_idx*/,
@@ -4602,6 +4729,54 @@ int ObPartitionUtils::get_tablet_and_subpart_id(
     } else {
       ret = OB_NOT_SUPPORTED;
     }
+    const bool fill_tablet_id = true;
+    if (FAILEDx(fill_tablet_and_object_ids_(
+        fill_tablet_id, part_idx, partition_indexes, table_schema,
+        related_table, tablet_ids, subpart_ids))) {
+    } else if (1 < subpart_ids.count()
+               || subpart_ids.count() != tablet_ids.count()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (subpart_ids.count() > 0) {
+      subpart_id = subpart_ids.at(0);
+      tablet_id = tablet_ids.at(0);
+    }
+  }
+  return ret;
+}
+
+int ObPartitionUtils::get_tablet_and_subpart_id(
+    const share::schema::ObTableSchema &table_schema,
+    const common::ObPartID &part_id,
+    const common::ObIArray<common::DatumValue> &row,
+    common::ObTabletID &tablet_id,
+    common::ObObjectID &subpart_id,
+    RelatedTableInfo *related_table /*= NULL*/)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<PartitionIndex, 1> partition_indexes;
+  ObSEArray<ObTabletID, 1> tablet_ids;
+  ObSEArray<ObObjectID, 1> subpart_ids;
+  ObPartitionLevel part_level = table_schema.get_part_level();
+  const uint64_t table_id = table_schema.get_table_id();
+  tablet_id.reset();
+  subpart_id = OB_INVALID_ID;
+  const ObPartition *partition = NULL;
+  int64_t part_idx = OB_INVALID_ID;
+  if (OB_FAIL(check_param_valid_(table_schema, related_table))) {
+  } else if (PARTITION_LEVEL_TWO != part_level) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(table_schema.get_partition_index_by_id(
+             part_id, CHECK_PARTITION_MODE_NORMAL, part_idx))) {
+  } else if (OB_FAIL(table_schema.get_partition_by_partition_index(
+             part_idx, CHECK_PARTITION_MODE_NORMAL, partition))) {
+  } else if (OB_ISNULL(partition)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObSubPartition * const* subpartition_array = partition->get_subpart_array();
+    int64_t subpartition_num = partition->get_subpartition_num();
+    ret = get_native_partition_indexes(row, subpartition_array, subpartition_num,
+        table_schema.is_hash_like_subpart(), table_schema.is_range_subpart(),
+        table_schema.is_list_subpart(), true, part_id, partition_indexes);
     const bool fill_tablet_id = true;
     if (FAILEDx(fill_tablet_and_object_ids_(
         fill_tablet_id, part_idx, partition_indexes, table_schema,
@@ -4812,8 +4987,8 @@ int ObPartitionUtils::get_hash_tablet_and_part_id_(
       || partition_num <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!range.is_single_rowkey()
-             || 1 != start_key.get_obj_cnt()
-             || ObIntType != start_key.get_obj_ptr()[0].get_type()) {
+             || 1 != start_key.get_value_count()
+             || ObIntType != start_key.get_values()[0].get_type()) {
     if (OB_FAIL(get_all_tablet_and_part_id_(
         partition_array, partition_num, indexes))) {
     }
@@ -4821,7 +4996,7 @@ int ObPartitionUtils::get_hash_tablet_and_part_id_(
     int64_t val = 0;
     int64_t part_idx = OB_INVALID_INDEX;
     const ObPartition *partition = NULL;
-    if (OB_FAIL(start_key.get_obj_ptr()[0].get_int(val))) {
+    if (OB_FAIL(start_key.get_values()[0].get_int(val))) {
     } else if (OB_UNLIKELY(val < 0)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(calc_hash_part_idx(val, partition_num, part_idx))) {
@@ -4845,16 +5020,12 @@ int ObPartitionUtils::get_range_tablet_and_part_id_(
 {
   int ret = OB_SUCCESS;
 
-  ObPartition start_tmp;
-  start_tmp.high_bound_val_ = range.start_key_;
-
-  ObPartition end_tmp;
-  end_tmp.high_bound_val_ = range.end_key_;
-
-  return get_range_tablet_and_part_id_(start_tmp, end_tmp,
-                                       range.border_flag_,
-                                       partition_array, partition_num,
-                                       indexes);
+  ObArenaAllocator owner("PartRange");
+  ObPartition start_tmp, end_tmp;
+  if (OB_FAIL(copy_partition_bound(range.start_key_, start_tmp.high_bound_val_, owner))) {}
+  else if (OB_FAIL(copy_partition_bound(range.end_key_, end_tmp.high_bound_val_, owner))) {}
+  else { ret = get_range_tablet_and_part_id_(start_tmp, end_tmp, range.border_flag_, partition_array, partition_num, indexes); }
+  return ret;
 }
 
 int ObPartitionUtils::get_list_tablet_and_part_id_(
@@ -4874,9 +5045,7 @@ int ObPartitionUtils::get_list_tablet_and_part_id_(
         partition_array, partition_num, indexes))) {
     }
   } else {
-    ObNewRow row;
-    row.cells_ = const_cast<ObObj*>(range.start_key_.get_obj_ptr());
-    row.count_ = range.start_key_.get_obj_cnt();
+    const PartitionBoundRow &row = range.start_key_.values_view();
     if (OB_FAIL(get_list_tablet_and_part_id_(
         row, partition_array, partition_num, indexes))) {
     }
@@ -4892,7 +5061,7 @@ int ObPartitionUtils::get_hash_tablet_and_part_id_(
 {
   int ret = OB_SUCCESS;
   indexes.reset();
-   const ObObj *obj = NULL;
+   const DatumValue *obj = NULL;
   if (OB_UNLIKELY(
       OB_ISNULL(partition_array)
       || partition_num <= 0)) {
@@ -4929,13 +5098,14 @@ int ObPartitionUtils::get_range_tablet_and_part_id_(
     common::ObIArray<PartitionIndex> &indexes)
 {
   int ret = OB_SUCCESS;
+  ObArenaAllocator owner("PartPoint");
   ObPartition start_tmp;
-  start_tmp.high_bound_val_.assign(row.cells_, row.count_);
+  if (OB_FAIL(copy_partition_bound(row, start_tmp.high_bound_val_, owner))) { return ret; }
   start_tmp.projector_ = row.projector_;
   start_tmp.projector_size_ = row.projector_size_;
 
   ObPartition end_tmp;
-  end_tmp.high_bound_val_.assign(row.cells_, row.count_);
+  end_tmp.high_bound_val_ = start_tmp.high_bound_val_;
   end_tmp.projector_ = row.projector_;
   end_tmp.projector_size_ = row.projector_size_;
 
@@ -4966,12 +5136,55 @@ int ObPartitionUtils::get_list_tablet_and_part_id_(
     int64_t part_idx = OB_INVALID_INDEX;
     int64_t default_value_idx = OB_INVALID_INDEX;
     for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_INDEX == part_idx && i < partition_num; i++) {
-      const ObIArray<common::ObNewRow> &list_row_values = partition_array[i]->get_list_row_values();
+      const ObIArray<PartitionBoundRow> &list_row_values = partition_array[i]->get_list_row_values();
       for (int64_t j = 0; OB_SUCC(ret) && OB_INVALID_INDEX == part_idx && j < list_row_values.count(); j++) {
-        const ObNewRow &list_row = list_row_values.at(j);
-        if (row == list_row) {
-          part_idx = i;
-        }
+        const PartitionBoundRow &list_row = list_row_values.at(j);
+        PartitionBoundRow native;
+        ObArenaAllocator owner("PartList");
+        if (OB_FAIL(copy_partition_bound(row, native, owner))) {}
+        else if (equal_partition_bound_rows(native, list_row)) { part_idx = i; }
+      } // end for
+      if (list_row_values.count() == 1
+          && list_row_values.at(0).get_count() >= 1
+          && list_row_values.at(0).get_cell(0).is_max_value()) {
+        // calc default value position
+        default_value_idx = i;
+      }
+    } // end dor
+
+    if (OB_SUCC(ret)) {
+      const ObPartition *partition = NULL;
+      part_idx = OB_INVALID_INDEX == part_idx ? default_value_idx : part_idx;
+      if (OB_UNLIKELY(OB_INVALID_INDEX == part_idx)) {
+        // return invalid part_id/tablet_id if partition not found.
+      } else if (OB_ISNULL(partition = partition_array[part_idx])) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(indexes.push_back(PartitionIndex(part_idx, OB_INVALID_INDEX)))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPartitionUtils::get_list_tablet_and_part_id_(
+    const common::PartitionBoundRow &row,
+    ObPartition * const* partition_array,
+    const int64_t partition_num,
+    common::ObIArray<PartitionIndex> &indexes)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(
+      OB_ISNULL(partition_array)
+      || partition_num <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    int64_t part_idx = OB_INVALID_INDEX;
+    int64_t default_value_idx = OB_INVALID_INDEX;
+    for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_INDEX == part_idx && i < partition_num; i++) {
+      const ObIArray<PartitionBoundRow> &list_row_values = partition_array[i]->get_list_row_values();
+      for (int64_t j = 0; OB_SUCC(ret) && OB_INVALID_INDEX == part_idx && j < list_row_values.count(); j++) {
+        const PartitionBoundRow &list_row = list_row_values.at(j);
+        if (equal_partition_bound_rows(row, list_row)) { part_idx = i; }
       } // end for
       if (list_row_values.count() == 1
           && list_row_values.at(0).get_count() >= 1
@@ -5011,8 +5224,8 @@ int ObPartitionUtils::get_hash_tablet_and_subpart_id_(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(
              !range.is_single_rowkey()
-             || 1 != start_key.get_obj_cnt()
-             || ObIntType != start_key.get_obj_ptr()[0].get_type())) {
+             || 1 != start_key.get_value_count()
+             || ObIntType != start_key.get_values()[0].get_type())) {
     if (OB_FAIL(get_all_tablet_and_subpart_id_(
         part_id, subpartition_array, subpartition_num, indexes))) {
     }
@@ -5020,7 +5233,7 @@ int ObPartitionUtils::get_hash_tablet_and_subpart_id_(
     int64_t val = 0;
     int64_t subpart_idx = OB_INVALID_INDEX;
     const ObSubPartition *subpartition = NULL;
-    if (OB_FAIL(start_key.get_obj_ptr()[0].get_int(val))) {
+    if (OB_FAIL(start_key.get_values()[0].get_int(val))) {
     } else if (OB_UNLIKELY(val < 0)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(calc_hash_part_idx(val, subpartition_num, subpart_idx))) {
@@ -5049,13 +5262,12 @@ int ObPartitionUtils::get_range_tablet_and_subpart_id_(
 {
   int ret = OB_SUCCESS;
 
-  ObSubPartition start_tmp;
+  ObArenaAllocator owner("SubPartRange");
+  ObSubPartition start_tmp, end_tmp;
   start_tmp.part_id_ = part_id;
-  start_tmp.high_bound_val_ = range.start_key_;
-
-  ObSubPartition end_tmp;
   end_tmp.part_id_ = part_id;
-  end_tmp.high_bound_val_ = range.end_key_;
+  if (OB_FAIL(copy_partition_bound(range.start_key_, start_tmp.high_bound_val_, owner))) { return ret; }
+  if (OB_FAIL(copy_partition_bound(range.end_key_, end_tmp.high_bound_val_, owner))) { return ret; }
 
   return get_range_tablet_and_subpart_id_(start_tmp, end_tmp,
                                           range.border_flag_, part_id,
@@ -5082,9 +5294,7 @@ int ObPartitionUtils::get_list_tablet_and_subpart_id_(
   } else {
     ObTabletID tablet_id;
     ObObjectID subpart_id;
-    ObNewRow row;
-    row.cells_ = const_cast<ObObj*>(range.start_key_.get_obj_ptr());
-    row.count_ = range.start_key_.get_obj_cnt();
+    const PartitionBoundRow &row = range.start_key_.values_view();
     if (OB_FAIL(get_list_tablet_and_subpart_id_(part_id, row,
                                                 subpartition_array, subpartition_num,
                                                 indexes))) {
@@ -5142,15 +5352,16 @@ int ObPartitionUtils::get_range_tablet_and_subpart_id_(
     common::ObIArray<PartitionIndex> &indexes)
 {
   int ret = OB_SUCCESS;
+  ObArenaAllocator owner("SubPartPoint");
   ObSubPartition start_tmp;
   start_tmp.part_id_ = part_id;
-  start_tmp.high_bound_val_.assign(row.cells_, row.count_);
+  if (OB_FAIL(copy_partition_bound(row, start_tmp.high_bound_val_, owner))) { return ret; }
   start_tmp.projector_ = row.projector_;
   start_tmp.projector_size_ = row.projector_size_;
 
   ObSubPartition end_tmp;
   end_tmp.part_id_ = part_id;
-  end_tmp.high_bound_val_.assign(row.cells_, row.count_);
+  end_tmp.high_bound_val_ = start_tmp.high_bound_val_;
   end_tmp.projector_ = row.projector_;
   end_tmp.projector_size_ = row.projector_size_;
 
@@ -5183,12 +5394,61 @@ int ObPartitionUtils::get_list_tablet_and_subpart_id_(
     int64_t subpart_idx = OB_INVALID_INDEX;
     int64_t default_value_idx = OB_INVALID_INDEX;
     for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_INDEX == subpart_idx && i < subpartition_num; i++) {
-      const ObIArray<common::ObNewRow> &list_row_values = subpartition_array[i]->get_list_row_values();
+      const ObIArray<PartitionBoundRow> &list_row_values = subpartition_array[i]->get_list_row_values();
       for (int64_t j = 0; OB_SUCC(ret) && OB_INVALID_INDEX == subpart_idx && j < list_row_values.count(); j++) {
-        const ObNewRow &list_row = list_row_values.at(j);
-        if (row == list_row) {
-          subpart_idx = i;
-        }
+        const PartitionBoundRow &list_row = list_row_values.at(j);
+        PartitionBoundRow native;
+        ObArenaAllocator owner("SubPartList");
+        if (OB_FAIL(copy_partition_bound(row, native, owner))) {}
+        else if (equal_partition_bound_rows(native, list_row)) { subpart_idx = i; }
+      } // end for
+      if (list_row_values.count() == 1
+          && list_row_values.at(0).get_count() >= 1
+          && list_row_values.at(0).get_cell(0).is_max_value()) {
+        // calc default value position
+        default_value_idx = i;
+      }
+    } // end dor
+
+    if (OB_SUCC(ret)) {
+      const ObSubPartition *subpartition = NULL;
+      subpart_idx = OB_INVALID_INDEX == subpart_idx ? default_value_idx : subpart_idx;
+      if (OB_UNLIKELY(OB_INVALID_INDEX == subpart_idx)) {
+        // return invalid subpart_id/tablet_id if subpartition not found.
+      } else if (OB_ISNULL(subpartition = subpartition_array[subpart_idx])) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_UNLIKELY(static_cast<ObPartID>(subpartition->get_part_id()) != part_id)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_UNLIKELY(!subpartition->get_tablet_id().is_valid())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(indexes.push_back(PartitionIndex(OB_INVALID_INDEX, subpart_idx)))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPartitionUtils::get_list_tablet_and_subpart_id_(
+    const common::ObPartID &part_id,
+    const common::PartitionBoundRow &row,
+    ObSubPartition * const* subpartition_array,
+    const int64_t subpartition_num,
+    common::ObIArray<PartitionIndex> &indexes)
+{
+  int ret = OB_SUCCESS;
+  indexes.reset();
+  if (OB_UNLIKELY(
+      OB_ISNULL(subpartition_array)
+      || subpartition_num <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    int64_t subpart_idx = OB_INVALID_INDEX;
+    int64_t default_value_idx = OB_INVALID_INDEX;
+    for (int64_t i = 0; OB_SUCC(ret) && OB_INVALID_INDEX == subpart_idx && i < subpartition_num; i++) {
+      const ObIArray<PartitionBoundRow> &list_row_values = subpartition_array[i]->get_list_row_values();
+      for (int64_t j = 0; OB_SUCC(ret) && OB_INVALID_INDEX == subpart_idx && j < list_row_values.count(); j++) {
+        const PartitionBoundRow &list_row = list_row_values.at(j);
+        if (equal_partition_bound_rows(row, list_row)) { subpart_idx = i; }
       } // end for
       if (list_row_values.count() == 1
           && list_row_values.at(0).get_count() >= 1
@@ -5246,8 +5506,8 @@ bool ObPartitionUtils::is_default_list_part(const ObPartition &part)
 
 /// special case: char and varchar
 bool ObPartitionUtils::is_types_equal_for_partition_check(
-     const common::ObObjType &type1,
-     const common::ObObjType &type2)
+     const common::SqlValueType &type1,
+     const common::SqlValueType &type2)
 {
   bool is_equal = false;
   if (type1 == type2) {
@@ -5262,7 +5522,7 @@ bool ObPartitionUtils::is_types_equal_for_partition_check(
 }
 
 int ObPartitionUtils::convert_rows_to_sql_literal(
-    const common::ObIArray<common::ObNewRow>& rows,
+    const common::ObIArray<common::PartitionBoundRow>& rows,
     char *buf,
     const int64_t buf_len,
     int64_t &pos,
@@ -5276,13 +5536,13 @@ int ObPartitionUtils::convert_rows_to_sql_literal(
       if (OB_FAIL(BUF_PRINTF(","))) {
       }
     }
-    const common::ObNewRow &row = rows.at(j);
+    const common::PartitionBoundRow &row = rows.at(j);
     if (OB_SUCC(ret) && row.get_count() > 1) {
       if (OB_FAIL(BUF_PRINTF("("))) {
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row.get_count(); ++i) {
-      const ObObj &tmp_obj = row.get_cell(i);
+      const DatumValue &tmp_obj = row.get_cell(i);
       if (0 != i) {
         if (OB_FAIL(BUF_PRINTF(","))) {
         }
@@ -5299,7 +5559,7 @@ int ObPartitionUtils::convert_rows_to_sql_literal(
       } else if (tmp_obj.is_year()) {
         if (OB_FAIL(ObTimeConverter::year_to_str(tmp_obj.get_year(), buf, buf_len, pos))) {
         }
-      } else if (OB_FAIL(tmp_obj.print_sql_literal(buf, buf_len, pos, tz_info))) {
+      } else if (OB_FAIL(tmp_obj.print_sql_literal(buf, buf_len, pos, ObValuePrintParams(tz_info)))) {
       } else { }
     }
     if (OB_SUCC(ret) && row.get_count() > 1) {
@@ -5312,7 +5572,7 @@ int ObPartitionUtils::convert_rows_to_sql_literal(
 
 
 int ObPartitionUtils::convert_rowkey_to_sql_literal(
-    const ObRowkey &rowkey,
+    const PartitionBoundRow &rowkey,
     char *buf,
     const int64_t buf_len,
     int64_t &pos,
@@ -5323,12 +5583,12 @@ int ObPartitionUtils::convert_rowkey_to_sql_literal(
   if (!rowkey.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObObj *objs = rowkey.get_obj_ptr();
+    const DatumValue *objs = rowkey.get_cells();
     if (NULL == objs) {
       ret = OB_ERR_UNEXPECTED;
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < rowkey.get_obj_cnt(); ++i) {
-      const ObObj &tmp_obj = objs[i];
+    for (int64_t i = 0; OB_SUCC(ret) && i < rowkey.count(); ++i) {
+      const DatumValue &tmp_obj = objs[i];
       if (0 != i) {
         if (OB_FAIL(BUF_PRINTF(","))) {
         }
@@ -5345,7 +5605,7 @@ int ObPartitionUtils::convert_rowkey_to_sql_literal(
       } else if (tmp_obj.is_year()) {
         if (OB_FAIL(ObTimeConverter::year_to_str(tmp_obj.get_year(), buf, buf_len, pos))) {
         }
-      } else if (OB_FAIL(tmp_obj.print_sql_literal(buf, buf_len, pos, tz_info))) {
+      } else if (OB_FAIL(tmp_obj.print_sql_literal(buf, buf_len, pos, ObValuePrintParams(tz_info)))) {
       }
     }
   }
@@ -5354,7 +5614,7 @@ int ObPartitionUtils::convert_rowkey_to_sql_literal(
 
 
 int ObPartitionUtils::convert_rows_to_hex(
-    const common::ObIArray<common::ObNewRow>& rows,
+    const common::ObIArray<common::PartitionBoundRow>& rows,
     char *buf,
     const int64_t buf_len,
     int64_t &pos)
@@ -5365,7 +5625,7 @@ int ObPartitionUtils::convert_rows_to_hex(
   int64_t seri_pos = 0;
   int64_t seri_length = 8;
   for (int64_t i = 0; OB_SUCC(ret) && i < rows.count(); i++) {
-    seri_length += rows.at(i).get_serialize_size();
+    seri_length += rows.at(i).get_row_serialize_size();
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(serialize_buf = static_cast<char*>(allocator.alloc(seri_length)))) {
@@ -5373,7 +5633,7 @@ int ObPartitionUtils::convert_rows_to_hex(
   } else if (OB_FAIL(serialization::encode_vi64(serialize_buf, seri_length, seri_pos, rows.count()))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < rows.count(); i ++) {
-    if (OB_FAIL(rows.at(i).serialize(serialize_buf, seri_length, seri_pos))) {
+    if (OB_FAIL(rows.at(i).serialize_row(serialize_buf, seri_length, seri_pos))) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -5384,7 +5644,7 @@ int ObPartitionUtils::convert_rows_to_hex(
 }
 
 int ObPartitionUtils::convert_rowkey_to_hex(
-    const ObRowkey &rowkey,
+    const PartitionBoundRow &rowkey,
     char *buf,
     const int64_t buf_len,
     int64_t &pos)

@@ -44,8 +44,8 @@ struct ObTextBlockMaxSpecView
   int32_t max_domain_id_index_;
   int32_t token_frequency_index_;
   int32_t document_length_index_;
-  common::ObObjMeta domain_id_meta_;
-  common::ObObjMeta dimension_meta_;
+  common::SqlTypeMeta domain_id_meta_;
+  common::SqlTypeMeta dimension_meta_;
 };
 
 struct ObVectorBlockMaxSpecView
@@ -54,8 +54,8 @@ struct ObVectorBlockMaxSpecView
   int32_t min_domain_id_index_;
   int32_t max_domain_id_index_;
   int32_t score_index_;
-  common::ObObjMeta domain_id_meta_;
-  common::ObObjMeta dimension_meta_;
+  common::SqlTypeMeta domain_id_meta_;
+  common::SqlTypeMeta dimension_meta_;
 };
 
 int get_text_block_max_spec(

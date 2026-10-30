@@ -46,7 +46,7 @@ int ObExprJsonValid::calc_result_type1(ObExprResType &type,
   type.set_scale(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].scale_);
   type.set_precision(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].precision_);
 
-  ObObjType in_type = type1.get_type();
+  SqlValueType in_type = type1.get_type();
   if (in_type == ObNullType) {
   } else if (in_type == ObJsonType) {
     // do nothing
@@ -69,7 +69,7 @@ int ObExprJsonValid::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta,
                           bool has_lob_header, MultimodeAlloctor *allocator, ObDatum &res)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
   bool is_null = false;
   bool is_empty_text = false;

@@ -169,10 +169,6 @@ public:
                                 ObExprResType &date_arg,
                                 ObExprResType &time_arg,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  virtual int calc_result2(common::ObObj &result,
-                           const common::ObObj &date_arg,
-                           const common::ObObj &time_arg,
-                           common::ObExprCtx &expr_ctx) const override;
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

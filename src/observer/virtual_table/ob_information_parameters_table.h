@@ -58,7 +58,7 @@ public:
   
 
 private:
-  int fill_row_cells(const share::schema::ObRoutineInfo *routine_info, const share::schema::ObRoutineParam *param_info, common::ObObj *&cells);
+  int fill_row_cells(const share::schema::ObRoutineInfo *routine_info, const share::schema::ObRoutineParam *param_info, common::DatumValue *&cells);
 
 private:
 private:

@@ -22,7 +22,7 @@ namespace oceanbase
 {
 namespace sql
 {
-int ObAnonymousBlockStmt::add_param(const ObObjParam &param)
+int ObAnonymousBlockStmt::add_param(const DatumParameter &param)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params_)) {

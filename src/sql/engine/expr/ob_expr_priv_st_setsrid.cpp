@@ -41,8 +41,8 @@ int ObExprPrivSTSetSRID::calc_result_type2(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  ObObjType type_geom = type1.get_type();
-  ObObjType type_srid = type2.get_type();
+  SqlValueType type_geom = type1.get_type();
+  SqlValueType type_srid = type2.get_type();
 
   if (!ob_is_geometry(type_geom)) {
     ret = OB_ERR_GIS_INVALID_DATA;

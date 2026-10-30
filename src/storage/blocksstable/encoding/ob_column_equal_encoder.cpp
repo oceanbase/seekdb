@@ -47,7 +47,7 @@ int ObColumnEqualEncoder::init(
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_idx, rows))) {
   } else {
     column_header_.type_ = type_;
-    store_class_ = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
+    store_class_ = get_store_class_map()[sql_type_class(column_type_.get_type())];
     is_inited_ = true;
   }
   return ret;

@@ -142,20 +142,20 @@ struct ObTruncateFilterEvaluator::Impl
   }
 
   int compile_values(
-      const ObRowkey &rowkey,
+      const PartitionBoundRow &rowkey,
       const int64_t key_count,
       ObStorageDatum *&values)
   {
     int ret = OB_SUCCESS;
     values = nullptr;
-    if (OB_UNLIKELY(rowkey.get_obj_cnt() != key_count)) {
+    if (OB_UNLIKELY(rowkey.count() != key_count)) {
       ret = OB_INVALID_DATA;
     } else if (OB_ISNULL(values = allocate_array<ObStorageDatum>(key_count))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < key_count; ++i) {
       values[i].reuse();
-      if (OB_FAIL(values[i].from_obj(rowkey.get_obj_ptr()[i]))) {
+      if (OB_FAIL(values[i].from_value(rowkey.get_cells()[i]))) {
       } else if (OB_UNLIKELY(values[i].is_null_or_nop())) {
         ret = OB_INVALID_DATA;
       }
@@ -217,14 +217,14 @@ struct ObTruncateFilterEvaluator::Impl
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         int64_t datum_index = 0;
-        const ObNewRow *rows = source.list_row_values_.get_values();
+        const PartitionBoundRow *rows = source.list_row_values_.get_values();
         for (int64_t i = 0; OB_SUCC(ret) && i < compiled.list_row_count_; ++i) {
           if (OB_UNLIKELY(rows[i].get_count() != compiled.key_count_)) {
             ret = OB_INVALID_DATA;
           }
           for (int64_t j = 0; OB_SUCC(ret) && j < compiled.key_count_; ++j, ++datum_index) {
             compiled.list_values_[datum_index].reuse();
-            if (OB_FAIL(compiled.list_values_[datum_index].from_obj(rows[i].get_cell(j)))) {
+            if (OB_FAIL(compiled.list_values_[datum_index].from_value(rows[i].get_cell(j)))) {
             } else if (OB_UNLIKELY(compiled.list_values_[datum_index].is_nop())) {
               ret = OB_INVALID_DATA;
             }

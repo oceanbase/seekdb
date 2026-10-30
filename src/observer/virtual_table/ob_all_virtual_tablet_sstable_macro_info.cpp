@@ -30,14 +30,14 @@ using namespace share::schema;
 namespace observer
 {
 
-static OB_INLINE bool is_safe_tail3_key_obj(const common::ObObj &obj)
+static OB_INLINE bool is_safe_tail3_key_obj(const common::DatumValue &obj)
 {
   bool ret = true;
   // Allow MIN/MAX sentinel to avoid type mismatch comparisons.
   if (obj.is_min_value() || obj.is_max_value()) {
     ret = true;
   } else {
-    const common::ObObjTypeClass tc = obj.get_type_class();
+    const common::SqlTypeClass tc = obj.get_type_class();
     ret = (tc == common::ObIntTC
            || tc == common::ObUIntTC
            || tc == common::ObNumberTC
@@ -49,8 +49,8 @@ static OB_INLINE bool is_safe_tail3_key_obj(const common::ObObj &obj)
 static OB_INLINE bool normalize_key_range_to_tail3(
     const common::ObNewRange &in,
     common::ObNewRange &out3,
-    common::ObObj (&sk3)[3],
-    common::ObObj (&ek3)[3])
+    common::DatumValue (&sk3)[3],
+    common::DatumValue (&ek3)[3])
 {
   bool ret = true;
   const int64_t sk_len = in.start_key_.length();
@@ -58,8 +58,8 @@ static OB_INLINE bool normalize_key_range_to_tail3(
   if (sk_len < 3 || ek_len < 3) {
     ret = false;
   } else {
-    const common::ObObj *sk = in.start_key_.get_obj_ptr() + (sk_len - 3);
-    const common::ObObj *ek = in.end_key_.get_obj_ptr() + (ek_len - 3);
+    const common::DatumValue *sk = in.start_key_.get_values() + (sk_len - 3);
+    const common::DatumValue *ek = in.end_key_.get_values() + (ek_len - 3);
     if (!(is_safe_tail3_key_obj(sk[0]) && is_safe_tail3_key_obj(sk[1]) && is_safe_tail3_key_obj(sk[2])
           && is_safe_tail3_key_obj(ek[0]) && is_safe_tail3_key_obj(ek[1]) && is_safe_tail3_key_obj(ek[2]))) {
       ret = false;
@@ -329,12 +329,12 @@ int ObAllVirtualTabletSSTableMacroInfo::get_macro_info(
     ObStoreRowkey &end_key = info.store_range_.get_end_key();
     const int64_t extra_rowkey_cnt = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     if (start_key != ObStoreRowkey::MIN_STORE_ROWKEY
-        && OB_FAIL(start_key.assign(start_key.get_obj_ptr(),
-            start_key.get_obj_cnt() > extra_rowkey_cnt ? start_key.get_obj_cnt() - extra_rowkey_cnt : start_key.get_obj_cnt()))) {
+        && OB_FAIL(start_key.assign(start_key.get_values(),
+            start_key.get_value_count() > extra_rowkey_cnt ? start_key.get_value_count() - extra_rowkey_cnt : start_key.get_value_count()))) {
       SERVER_LOG(WARN, "fail to set start key", K(ret), K(start_key));
     } else if (end_key != ObStoreRowkey::MAX_STORE_ROWKEY
-        && OB_FAIL(end_key.assign(end_key.get_obj_ptr(),
-            end_key.get_obj_cnt() > extra_rowkey_cnt ? end_key.get_obj_cnt() - extra_rowkey_cnt : end_key.get_obj_cnt()))) {
+        && OB_FAIL(end_key.assign(end_key.get_values(),
+            end_key.get_value_count() > extra_rowkey_cnt ? end_key.get_value_count() - extra_rowkey_cnt : end_key.get_value_count()))) {
       SERVER_LOG(WARN, "fail to set end key", K(ret), K(end_key));
     }
   }
@@ -357,7 +357,7 @@ int ObAllVirtualTabletSSTableMacroInfo::set_key_ranges(const ObIArray<ObNewRange
       // Make it robust: only trim when the tail is MIN/MAX.
       const int64_t sk_len = key_range.start_key_.length();
       if (sk_len > 0) {
-        const ObObj &sk_tail = key_range.start_key_.ptr()[sk_len - 1];
+        const DatumValue &sk_tail = key_range.start_key_.ptr()[sk_len - 1];
         if (sk_tail.is_max_value() || sk_tail.is_min_value()) {
           range.start_key_.set_length(sk_len - 1);
         }
@@ -367,7 +367,7 @@ int ObAllVirtualTabletSSTableMacroInfo::set_key_ranges(const ObIArray<ObNewRange
       }
       const int64_t ek_len = key_range.end_key_.length();
       if (ek_len > 0) {
-        const ObObj &ek_tail = key_range.end_key_.ptr()[ek_len - 1];
+        const DatumValue &ek_tail = key_range.end_key_.ptr()[ek_len - 1];
         if (ek_tail.is_max_value() || ek_tail.is_min_value()) {
           range.end_key_.set_length(ek_len - 1);
         }
@@ -397,60 +397,60 @@ int ObAllVirtualTabletSSTableMacroInfo::gen_row(
       switch(col_id) {
       case TABLET_ID:
         //tablet_id
-        cur_row_.cells_[i].set_int(table_key.tablet_id_.id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, table_key.tablet_id_.id()) : ret);
         break;
       case MACRO_IDX_IN_SSTABLE:
         //macro_idx_in_sstable
-        cur_row_.cells_[i].set_int(block_idx_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, block_idx_) : ret);
         break;
       case END_LOG_SCN:
         //end_log_scn
-        cur_row_.cells_[i].set_uint64(!table_key.get_end_scn().is_valid() ? 0 : table_key.get_end_scn().get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, !table_key.get_end_scn().is_valid() ? 0 : table_key.get_end_scn().get_val_for_inner_table_field()) : ret);
         break;
       case MACRO_LOGIC_VERSION:
         //macro_logic_version
-        cur_row_.cells_[i].set_uint64(macro_info.macro_logic_version_ < 0 ? 0 : macro_info.macro_logic_version_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, macro_info.macro_logic_version_ < 0 ? 0 : macro_info.macro_logic_version_) : ret);
         break;
       case MACRO_BLOCK_IDX:
         //macro_block_index
-        cur_row_.cells_[i].set_int(macro_info.macro_block_index_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.macro_block_index_) : ret);
         break;
       case DATA_SEQ:
         //data_seq_
-        cur_row_.cells_[i].set_int(macro_info.data_seq_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.data_seq_) : ret);
         break;
       case ROW_COUNT: {
         //row_count
-        cur_row_.cells_[i].set_int(macro_info.row_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.row_count_) : ret);
         break;
       }
       case ORIGINAL_SIZE:
         //original_size
-        cur_row_.cells_[i].set_int(macro_info.original_size_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.original_size_) : ret);
         break;
       case ENCODING_SIZE:
         //encoding_size
-        cur_row_.cells_[i].set_int(macro_info.data_size_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.data_size_) : ret);
         break;
       case COMPRESSED_SIZE:
         //compressed_size
-        cur_row_.cells_[i].set_int(macro_info.data_zsize_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.data_zsize_) : ret);
         break;
       case OCCUPY_SIZE:
         //occupy_size
-        cur_row_.cells_[i].set_int(macro_info.occupy_size_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.occupy_size_) : ret);
         break;
       case MICRO_BLOCK_CNT:
         //micro_block_count
-        cur_row_.cells_[i].set_int(macro_info.micro_block_count_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.micro_block_count_) : ret);
         break;
       case DATA_CHECKSUM:
         //data_checksum
-        cur_row_.cells_[i].set_int(macro_info.data_checksum_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, macro_info.data_checksum_) : ret);
         break;
       case START_KEY: {
         if (macro_info.store_range_.get_start_key().to_plain_string(start_key_buf_, sizeof(start_key_buf_)) >= 0) {
-          cur_row_.cells_[i].set_varchar(start_key_buf_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, start_key_buf_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         } else {
           // if error occur, set to null
@@ -460,7 +460,7 @@ int ObAllVirtualTabletSSTableMacroInfo::gen_row(
       }
       case END_KEY: {
         if (macro_info.store_range_.get_end_key().to_plain_string(end_key_buf_, sizeof(end_key_buf_)) >= 0) {
-          cur_row_.cells_[i].set_varchar(end_key_buf_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, end_key_buf_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         } else {
           // if error occur, set to null
@@ -472,11 +472,11 @@ int ObAllVirtualTabletSSTableMacroInfo::gen_row(
         //block type
         blocksstable::ObMacroDataSeq macro_data_seq(macro_info.data_seq_);
         if (macro_data_seq.is_data_block()) {
-          cur_row_.cells_[i].set_varchar(ObString::make_string("data_block"));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObString::make_string("data_block")) : ret);
         } else if (macro_data_seq.is_index_block()) {
-          cur_row_.cells_[i].set_varchar(ObString::make_string("index_block"));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObString::make_string("index_block")) : ret);
         } else if (macro_data_seq.is_meta_block()) {
-          cur_row_.cells_[i].set_varchar(ObString::make_string("meta_block"));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObString::make_string("meta_block")) : ret);
         } else {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpected block type, ", K(ret), K(macro_data_seq));
@@ -485,13 +485,13 @@ int ObAllVirtualTabletSSTableMacroInfo::gen_row(
       }
       case COMPRESSOR_NAME: {
         //compressor name
-        cur_row_.cells_[i].set_varchar(all_compressor_name[macro_info.compressor_type_]);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, all_compressor_name[macro_info.compressor_type_]) : ret);
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case ROW_STORE_TYPE:
         //row_store_type
-        cur_row_.cells_[i].set_varchar(ObString::make_string(ObStoreFormat::get_row_store_name(static_cast<ObRowStoreType>(macro_info.row_store_type_))));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, ObString::make_string(ObStoreFormat::get_row_store_name(static_cast<ObRowStoreType>(macro_info.row_store_type_)))) : ret);
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
@@ -646,12 +646,14 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_tablet_need_ignore(const ObTablet
   if (key_ranges_.empty()) {
     need_ignore = false;
   } else {
-    ObObj start_objs[3];
-    ObObj end_objs[3];
-    start_objs[0].set_int(tablet_meta.tablet_id_.id());
+    DatumValue start_objs[3];
+    DatumValue end_objs[3];
+    const int64_t tablet_id = static_cast<int64_t>(tablet_meta.tablet_id_.id());
+    start_objs[0].meta_.set_int();
+    start_objs[0].datum_.set_string(reinterpret_cast<const char *>(&tablet_id), sizeof(tablet_id));
     start_objs[1].set_min_value();
     start_objs[2].set_min_value();
-    end_objs[0].set_int(tablet_meta.tablet_id_.id());
+    end_objs[0] = start_objs[0];
     end_objs[1].set_max_value();
     end_objs[2].set_max_value();
 
@@ -667,8 +669,8 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_tablet_need_ignore(const ObTablet
         need_ignore = false; // unexpected, do not skip
       } else {
         ObNewRange kr3;
-        ObObj sk3[3];
-        ObObj ek3[3];
+        DatumValue sk3[3];
+        DatumValue ek3[3];
         if (!normalize_key_range_to_tail3(kr, kr3, sk3, ek3)) {
           need_ignore = false; // cannot safely compare, do not skip
         } else if (kr3.compare_endkey_with_startkey(tablet_range) >= 0
@@ -693,13 +695,16 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_sstable_need_ignore(const ObITabl
         ? 0
         : table_key.get_end_scn().get_val_for_inner_table_field();
 
-    ObObj start_objs[3];
-    ObObj end_objs[3];
-    start_objs[0].set_int(table_key.tablet_id_.id());
-    start_objs[1].set_uint64(end_log_scn);
+    DatumValue start_objs[3];
+    DatumValue end_objs[3];
+    const int64_t tablet_id = static_cast<int64_t>(table_key.tablet_id_.id());
+    start_objs[0].meta_.set_int();
+    start_objs[0].datum_.set_string(reinterpret_cast<const char *>(&tablet_id), sizeof(tablet_id));
+    start_objs[1].meta_.set_uint64();
+    start_objs[1].datum_.set_string(reinterpret_cast<const char *>(&end_log_scn), sizeof(end_log_scn));
     start_objs[2].set_min_value();
-    end_objs[0].set_int(table_key.tablet_id_.id());
-    end_objs[1].set_uint64(end_log_scn);
+    end_objs[0] = start_objs[0];
+    end_objs[1] = start_objs[1];
     end_objs[2].set_max_value();
 
     sstable_range.table_id_ = OB_ALL_VIRTUAL_TABLET_SSTABLE_MACRO_INFO_TID;
@@ -714,8 +719,8 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_sstable_need_ignore(const ObITabl
         need_ignore = false; // unexpected, do not skip
       } else {
         ObNewRange kr3;
-        ObObj sk3[3];
-        ObObj ek3[3];
+        DatumValue sk3[3];
+        DatumValue ek3[3];
         if (!normalize_key_range_to_tail3(kr, kr3, sk3, ek3)) {
           need_ignore = false; // cannot safely compare, do not skip
         } else if (kr3.compare_endkey_with_startkey(sstable_range) >= 0

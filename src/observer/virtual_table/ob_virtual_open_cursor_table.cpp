@@ -241,17 +241,17 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
           // the length make sure (tmp_saddr.ptr() + offset) do not have out-of-bounds access
           int64_t length = tmp_saddr.length() - offset > 8 ? 8 : tmp_saddr.length() - offset;
           ObString saddr(length, tmp_saddr.ptr() + offset);
-          cur_row_->cells_[i].set_varchar(saddr);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, saddr) : ret);
           cur_row_->cells_[i].set_collation_type(default_collation);
         }
         break;
       }
       case SID: {
-        cur_row_->cells_[i].set_int(sess_info.get_sid());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, i, sess_info.get_sid()) : ret);
         break;
       }
       case USER_NAME: {
-        cur_row_->cells_[i].set_varchar(sess_info.get_user_name());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, sess_info.get_user_name()) : ret);
         cur_row_->cells_[i].set_collation_type(default_collation);
         break;
       }
@@ -261,7 +261,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
         break;
       }
       case HASH_VALUE: {
-        // cur_row_->cells_[i].set_int(sess_info.id);
+        // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, i, sess_info.id) : ret);
         cur_row_->cells_[i].set_null();
         break;
       }
@@ -278,7 +278,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
         } else {
           OZ (ob_write_string(*allocator_, ObString(cursor->get_sql_id()), sql_id));
         }
-        OX (cur_row_->cells_[i].set_varchar(sql_id));
+        OX ((OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, sql_id) : ret));
         OX (cur_row_->cells_[i].set_collation_type(default_collation));
         break;
       }
@@ -289,7 +289,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
         } else {
           OZ (get_non_session_cursor_sql_text(sess_info, cursor, sql_text));
         }
-        OX (cur_row_->cells_[i].set_varchar(sql_text));
+        OX ((OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, sql_text) : ret));
         OX (cur_row_->cells_[i].set_collation_type(default_collation));
         break;
       }
@@ -304,9 +304,9 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
       }
       case CURSOR_TYPE: {
         if (is_session_cursor) {
-          cur_row_->cells_[i].set_varchar("SESSION CURSOR CACHED");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, "SESSION CURSOR CACHED") : ret);
         } else {
-          cur_row_->cells_[i].set_varchar("OPEN-PL/SQL");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, "OPEN-PL/SQL") : ret);
         }
         cur_row_->cells_[i].set_collation_type(default_collation);
         break;
@@ -316,7 +316,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cursor_cell(ObSQLSessionInfo &se
         break;
       }
       case CON_ID: {
-        cur_row_->cells_[i].set_int(1);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, i, 1) : ret);
         break;
       }
       default: {
@@ -351,16 +351,16 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
         // the length make sure (tmp_saddr.ptr() + offset) do not have out-of-bounds access
         int64_t length = tmp_saddr.length() - offset > 8 ? 8 : tmp_saddr.length() - offset;
         ObString saddr(length, tmp_saddr.ptr() + offset);
-        cur_row_->cells_[i].set_varchar(saddr);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, saddr) : ret);
         cur_row_->cells_[i].set_collation_type(default_collation);
         break;
       }
       case SID: {
-        cur_row_->cells_[i].set_int(sess_info.get_sid());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, i, sess_info.get_sid()) : ret);
         break;
       }
       case USER_NAME: {
-        cur_row_->cells_[i].set_varchar(sess_info.get_user_name());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, sess_info.get_user_name()) : ret);
         cur_row_->cells_[i].set_collation_type(default_collation);
         break;
       }
@@ -370,7 +370,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
         break;
       }
       case HASH_VALUE: {
-        // cur_row_->cells_[i].set_int(sess_info.id);
+        // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, i, sess_info.id) : ret);
         cur_row_->cells_[i].set_null();
         break;
       }
@@ -382,20 +382,20 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
         } else {
           sql_id[0] = '\0';
         }
-        cur_row_->cells_[i].set_varchar(ObString::make_string(sql_id));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, ObString::make_string(sql_id)) : ret);
         cur_row_->cells_[i].set_collation_type(default_collation);
         break;
       }
       case SQL_TEXT: {
         ObString sql = sess_info.get_current_query_string();
         int64_t len = 60 > sql.length() ? sql.length() : 60;
-        cur_row_->cells_[i].set_varchar(ObString(len, sql.ptr()));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, ObString(len, sql.ptr())) : ret);
         cur_row_->cells_[i].set_collation_type(default_collation);
         break;
       }
       case LAST_SQL_ACTIVE_TIME: {
         // session cursor not set now
-        cur_row_->cells_[i].set_timestamp(sess_info.get_query_start_time());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_->cells_, cur_row_->count_, i, sess_info.get_query_start_time()) : ret);
         break;
       }
       case SQL_EXEC_ID: {
@@ -403,7 +403,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
         break; 
       }
       case CURSOR_TYPE: {
-        cur_row_->cells_[i].set_varchar("OPEN");
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, i, "OPEN") : ret);
         cur_row_->cells_[i].set_collation_type(default_collation);
         break;
       }
@@ -412,7 +412,7 @@ int ObVirtualOpenCursorTable::FillScanner::fill_cur_plan_cell(ObSQLSessionInfo &
         break;
       }
       case CON_ID: {
-        cur_row_->cells_[i].set_int(1);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, i, 1) : ret);
         break;
       }
       default: {

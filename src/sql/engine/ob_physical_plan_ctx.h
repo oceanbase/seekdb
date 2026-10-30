@@ -19,6 +19,7 @@
 #include "share/ob_autoincrement_param.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "common/sql_mode/ob_sql_mode.h"
+#include "query/engine/statement_time.h"
 #include "common/ob_field.h"
 #include "lib/time/ob_clock_generator.h"
 #include "data_plane/transaction/ob_tx_options.h"
@@ -165,7 +166,7 @@ public:
   int reserve_param_space(int64_t param_count);
   const ParamStore &get_param_store() const { return param_store_; }
   ParamStore &get_param_store_for_update() { return param_store_; }
-  const common::ObObjParam *get_param_mem() const
+  const common::DatumParameter *get_param_mem() const
   {
     if (param_store_.count() <= 0) {
       return nullptr;
@@ -173,14 +174,16 @@ public:
       return &param_store_.at(0);
     }
   }
-  DatumParamStore &get_datum_param_store() { return datum_param_store_; }
-  const DatumParamStore &get_datum_param_store() const { return datum_param_store_; }
+  DatumParamStore &get_datum_param_store() { return param_store_; }
+  const DatumParamStore &get_datum_param_store() const { return param_store_; }
   const ObIArray<char *> &get_param_frame_ptrs() const { return param_frame_ptrs_; }
   int init_datum_param_store();
+  // Parameters have a single native owner; SQL frames borrow Datum views.
+  // The caller owns the value payload for as long as this binding is used.
+  int set_runtime_parameter(int64_t index, const DatumParameter &parameter);
   void reset_datum_param_store()
   {
     param_store_.reuse();
-    datum_param_store_.reuse();
     param_frame_ptrs_.reuse();
     original_param_cnt_ = 0;
     param_frame_capacity_ = 0;
@@ -191,10 +194,10 @@ public:
     cur_time_.set_timestamp(session_val);
   }
   void set_cur_time(const int64_t &session_val, const ObSQLSessionInfo &session);
-  const common::ObObj &get_cur_time() const { return cur_time_; }
-  common::ObObj &get_cur_time() { return cur_time_; }
+  const StatementTime &get_cur_time() const { return cur_time_; }
+  StatementTime &get_cur_time() { return cur_time_; }
   int64_t get_cur_time_tardy_value() const { return cur_time_.get_datetime() + DELTA_TARDY_TIME_US; }
-  bool has_cur_time() const { return common::ObTimestampType == cur_time_.get_type(); }
+  bool has_cur_time() const { return cur_time_.has_value(); }
   int64_t get_warning_count() const
   {
     return warning_count_;
@@ -474,7 +477,7 @@ public:
                                                const ObDataType &elem_type,
                                                uint16_t &subschema_id);
   int get_subschema_id_by_type_string(const ObString &type_string, uint16_t &subschema_id);
-  int get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+  int get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                     const ObIArray<common::ObString> &type_info,
                                     uint16_t &subschema_id);
   int build_subschema_by_fields(const ColumnsFieldIArray *fields,
@@ -490,14 +493,13 @@ public:
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
   bool is_param_datum_frame_inited() const { return param_frame_ptrs_.count() > 0; }
 private:
-  int init_param_store_after_deserialize();
   void reset_datum_frame(char *frame, int64_t expr_cnt);
   int extend_param_frame(const int64_t old_size);
   int reserve_param_frame(const int64_t capacity);
   void get_param_frame_info(int64_t param_idx,
                             ObDatum *&datum,
                             ObEvalInfo *&eval_info);
-  int inner_get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
+  int inner_get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                           const ObIArray<common::ObString> &type_info,
                                           uint16_t &subschema_id) const;
 private:
@@ -517,12 +519,11 @@ private:
   // used for TRANSACTION SET CONSISTENCY check
   int64_t tsc_snapshot_timestamp_;
   // only used when the sql contains fun like current_time
-  common::ObObj cur_time_;//used for session
+  StatementTime cur_time_; // fixed statement clock
   // execution timeout for this round of execution
   int64_t ts_timeout_us_;
   common::ObConsistencyLevel consistency_level_;
   ParamStore param_store_;
-  DatumParamStore datum_param_store_;
   common::ObSEArray<char *, 1, common::ModulePageAllocator, true> param_frame_ptrs_;
   // Original param cont for input SQL, used in static engine for param frames allocation.
   // Param store can be divided into three continuous part:

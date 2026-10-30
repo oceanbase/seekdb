@@ -57,7 +57,7 @@ int ObInfoSchemaPartitionsTable::inner_get_next_row(common::ObNewRow *&row)
     if (OB_FAIL(schema_guard_->get_database_schemas_in_runtime(database_schemas))) {
     } else {
       const int64_t col_count = output_column_ids_.count();
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       if (col_count < 0 || col_count > PARTITION_COLUMN_COUNT) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "column count error ", K(ret), K(col_count));
@@ -101,7 +101,7 @@ int ObInfoSchemaPartitionsTable::inner_get_next_row(common::ObNewRow *&row)
 }
 
 int ObInfoSchemaPartitionsTable::add_partitions(const ObDatabaseSchema &database_schema,
-                                                ObObj *cells,
+                                                DatumValue *cells,
                                                 const int64_t col_count)
 {
   int ret = OB_SUCCESS;
@@ -140,7 +140,7 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObDatabaseSchema &database
 
 int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &table_schema,
                                                 const ObString &database_name,
-                                                ObObj *cells,
+                                                DatumValue *cells,
                                                 const int64_t col_count)
 {
   int ret = OB_SUCCESS;
@@ -161,17 +161,17 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
       uint64_t col_id = output_column_ids_.at(j);
       switch(col_id) {
         case TABLE_CATALOG: {
-          cells[cell_idx].set_varchar(ObString("def"));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString("def")) : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case TABLE_SCHEMA: {
-          cells[cell_idx].set_varchar(database_name);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, database_name) : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case TABLE_NAME: {
-          cells[cell_idx].set_varchar(table_schema.get_table_name_str());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_table_name_str()) : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
@@ -182,7 +182,7 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "partition is null", KR(ret), K(part_info));
           } else {
-            cells[cell_idx].set_varchar(part_info.part_->get_part_name());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, part_info.part_->get_part_name()) : ret);
             cells[cell_idx].set_collation_type(
                         ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -195,7 +195,7 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "partition is null", KR(ret), K(part_info));
           } else {
-            cells[cell_idx].set_varchar(part_info.partition_->get_part_name());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, part_info.partition_->get_part_name()) : ret);
             cells[cell_idx].set_collation_type(
                         ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -205,13 +205,13 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
           if (PARTITION_LEVEL_ZERO == part_level) {
             cells[cell_idx].set_null();
           } else {
-            cells[cell_idx].set_uint64(part_info.part_idx_ + 1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, part_info.part_idx_ + 1) : ret);
           }
           break;
         }
         case SUBPARTITION_ORDINAL_POSITION: {
           if (PARTITION_LEVEL_TWO == part_level) {
-            cells[cell_idx].set_uint64(part_info.subpart_idx_ + 1);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, part_info.subpart_idx_ + 1) : ret);
           } else {
             cells[cell_idx].set_null();
           }
@@ -222,38 +222,38 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
           ObPartitionFuncType func_type = table_schema.get_part_option().get_part_func_type();
           switch (func_type){
             case PARTITION_FUNC_TYPE_HASH: {
-              cells[cell_idx].set_varchar("HASH");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "HASH") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case PARTITION_FUNC_TYPE_KEY :
             case PARTITION_FUNC_TYPE_KEY_IMPLICIT: {
-              cells[cell_idx].set_varchar("KEY");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "KEY") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case PARTITION_FUNC_TYPE_RANGE: {
-              cells[cell_idx].set_varchar("RANGE");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "RANGE") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case PARTITION_FUNC_TYPE_RANGE_COLUMNS: {
-              cells[cell_idx].set_varchar("RANGE COLUMNS");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "RANGE COLUMNS") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case PARTITION_FUNC_TYPE_LIST: {
-              cells[cell_idx].set_varchar("LIST");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "LIST") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case PARTITION_FUNC_TYPE_LIST_COLUMNS: {
-              cells[cell_idx].set_varchar("LIST COLUMNS");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "LIST COLUMNS") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             default: {
-              cells[cell_idx].set_varchar("UNKNOWN");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "UNKNOWN") : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
@@ -265,38 +265,38 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
             ObPartitionFuncType func_type = table_schema.get_sub_part_option().get_part_func_type();
             switch (func_type){
               case PARTITION_FUNC_TYPE_HASH: {
-                cells[cell_idx].set_varchar("HASH");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "HASH") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               case PARTITION_FUNC_TYPE_KEY :
               case PARTITION_FUNC_TYPE_KEY_IMPLICIT: {
-                cells[cell_idx].set_varchar("KEY");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "KEY") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               case PARTITION_FUNC_TYPE_RANGE: {
-                cells[cell_idx].set_varchar("RANGE");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "RANGE") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               case PARTITION_FUNC_TYPE_RANGE_COLUMNS: {
-                cells[cell_idx].set_varchar("RANGE COLUMNS");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "RANGE COLUMNS") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               case PARTITION_FUNC_TYPE_LIST: {
-                cells[cell_idx].set_varchar("LIST");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "LIST") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               case PARTITION_FUNC_TYPE_LIST_COLUMNS: {
-                cells[cell_idx].set_varchar("LIST COLUMNS");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "LIST COLUMNS") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
               default: {
-                cells[cell_idx].set_varchar("UNKNOWN");
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "UNKNOWN") : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
@@ -307,13 +307,13 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
           break;
         }
         case PARTITION_EXPRESSION: {
-          cells[cell_idx].set_varchar(table_schema.get_part_option().get_part_func_expr_str());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_part_option().get_part_func_expr_str()) : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case SUBPARTITION_EXPRESSION: {
           if (PARTITION_LEVEL_TWO == part_level) {
-            cells[cell_idx].set_varchar(table_schema.get_sub_part_option().get_part_func_expr_str());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema.get_sub_part_option().get_part_func_expr_str()) : ret);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else {
             cells[cell_idx].set_null();
@@ -325,13 +325,13 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
           if (table_schema.is_range_part()) {
             if (OB_FAIL(gen_high_bound_val_str(part_info.part_, desc))) {
             } else {
-              cells[cell_idx].set_varchar(desc);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, desc) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
           } else if (table_schema.is_list_part()) {
             if (OB_FAIL(gen_list_bound_val_str(part_info.part_, desc))) {
             } else {
-              cells[cell_idx].set_varchar(desc);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, desc) : ret);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
           } else {
@@ -341,37 +341,37 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
         }
         case TABLE_ROWS: {
           // TODO no row info now
-          // cells[cell_idx].set_uint64(0);
+          // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, 0) : ret);
           cells[cell_idx].set_null();
           break;
         }
         case AVG_ROW_LENGTH: {
           // TODO no row info now
-          // cells[cell_idx].set_uint64(0);
+          // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, 0) : ret);
           cells[cell_idx].set_null();
           break;
         }
         case DATA_LENGTH: {
           // TODO no row info now
-          // cells[cell_idx].set_uint64(0);
+          // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, 0) : ret);
           cells[cell_idx].set_null();
           break;
         }
         case MAX_DATA_LENGTH: {
           // TODO no row info now
-          // cells[cell_idx].set_uint64(0);
+          // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, 0) : ret);
           cells[cell_idx].set_null();
           break;
         }
         case INDEX_LENGTH: {
           // TODO no row info now
-          // cells[cell_idx].set_uint64(0);
+          // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, 0) : ret);
           cells[cell_idx].set_null();
           break;
         }
         case DATA_FREE: {
           // TODO no row info now
-          // cells[cell_idx].set_uint64(0);
+          // (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, cell_idx, 0) : ret);
           cells[cell_idx].set_null();
           break;
         }
@@ -396,7 +396,7 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
           break;
         }
         case NODEGROUP: {
-          cells[cell_idx].set_varchar("default");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "default") : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }

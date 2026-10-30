@@ -31,7 +31,7 @@ namespace sql
 
 ObDMLStmtPrinter::ObDMLStmtPrinter(char *buf, int64_t buf_len, int64_t *pos, const ObDMLStmt *stmt,
                                    ObSchemaGetterGuard *schema_guard,
-                                   ObObjPrintParams print_params,
+                                   ObValuePrintParams print_params,
                                    const ParamStore *param_store,
                                    const ObSQLSessionInfo *session)
   : buf_(buf),
@@ -942,7 +942,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
       } else if (col_info.col_type_ == static_cast<int32_t>(COL_TYPE_QUERY)) {
         // to print returning type
         OZ (print_json_return_type(col_info.res_type_, col_info.data_type_));
-        ObObjType cast_type = col_info.data_type_.get_obj_type();
+        SqlValueType cast_type = col_info.data_type_.get_obj_type();
         if (cast_type != ObJsonType){
           DATA_PRINTF(" format json");
         }
@@ -1440,7 +1440,7 @@ int ObDMLStmtPrinter::print_limit()
       if (NULL != offset_expr) {
         if (NULL != print_params_.exec_ctx_) {
           ObArenaAllocator allocator("PrintDMLStmt");
-          ObObj result;
+          DatumValue result;
           bool got_result = false;
           if (!offset_expr->is_static_const_expr()) {
             ret = OB_ERR_UNEXPECTED;
@@ -1466,7 +1466,7 @@ int ObDMLStmtPrinter::print_limit()
       if (NULL != limit_expr) {
         if (NULL != print_params_.exec_ctx_) {
           ObArenaAllocator allocator("PrintDMLStmt");
-          ObObj result;
+          DatumValue result;
           bool got_result = false;
           if (!limit_expr->is_static_const_expr()) {
             ret = OB_ERR_UNEXPECTED;

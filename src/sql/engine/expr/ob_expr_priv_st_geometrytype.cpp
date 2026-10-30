@@ -38,7 +38,7 @@ int ObExprPrivSTGeometryType::calc_result_type1(
     ObExprResType &type, ObExprResType &type1, common::ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType obj_type1 = type1.get_type();
+  SqlValueType obj_type1 = type1.get_type();
 
   if (!ob_is_string_type(obj_type1) && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
@@ -62,7 +62,7 @@ int ObExprPrivSTGeometryType::eval_priv_st_geometrytype(const ObExpr &expr, ObEv
   bool is_null_res = false;
   ObDatum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
-  ObObjType type1 = arg1->datum_meta_.type_;
+  SqlValueType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

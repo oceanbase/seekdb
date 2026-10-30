@@ -17,6 +17,7 @@
 #ifndef OB_DBMS_STATS_UTILS_H
 #define OB_DBMS_STATS_UTILS_H
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_opt_column_stat.h"
@@ -150,12 +151,12 @@ public:
                                ObIArray<int64_t> &subpart_ids,
                                OSGPartMap *part_map = NULL);
 
-  static int truncate_string_for_opt_stats(const ObObj *old_obj,
+  static int truncate_string_for_opt_stats(const DatumValue *old_obj,
                                            ObIAllocator &alloc,
-                                           ObObj *&new_obj,
+                                           DatumValue *&new_obj,
                                            const ObDatumAccessContext *datum_access_ctx);
 
-  static int truncate_string_for_opt_stats(ObObj &obj,
+  static int truncate_string_for_opt_stats(DatumValue &obj,
                                            ObIAllocator &allocator,
                                            const ObDatumAccessContext *datum_access_ctx);
 
@@ -164,7 +165,7 @@ public:
   static int remove_stat_gather_param_partition_info(int64_t reserved_partition_id,
                                                      ObOptStatGatherParam &param);
 
-  static int64_t check_text_can_reuse(const ObObj &obj, bool &can_reuse);
+  static int64_t check_text_can_reuse(const DatumValue &obj, bool &can_reuse);
 
   static int get_current_opt_stats(const ObTableStatParam &param,
                                    ObIArray<ObOptTableStatHandle> &cur_tab_handles,
@@ -252,7 +253,7 @@ public:
                                                     ObIArray<ObOptColumnStat *> &all_column_stats);
   static int copy_prefix_column_stat_to_text(ObIAllocator &allocator,
                                              const ObOptColumnStat &col_stat,
-                                             const ObObjMeta &text_col_meta,
+                                             const SqlTypeMeta &text_col_meta,
                                              ObOptColumnStat *&text_column_stat);
 
   static int get_max_work_area_size(
@@ -273,7 +274,7 @@ private:
                          const int64_t current_time,
                          const bool is_index_stat,
                          const bool is_online_stat = false,
-                         const ObObjPrintParams &print_params = ObObjPrintParams());
+                         const ObValuePrintParams &print_params = ObValuePrintParams());
 
   static int fetch_need_cancel_async_gather_stats_task(ObIAllocator &allocator,
                                                        sql::ObExecContext &ctx,

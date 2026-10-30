@@ -793,7 +793,8 @@ int ObSqlMemoryManager::get_max_work_area_size(
   const int64_t MIN_AVAILABLE_MEMORY = 1;
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *var_schema = NULL;
-  ObObj value;
+  ObArenaAllocator value_owner(ObModIds::OB_TEMP_VARIABLES);
+  DatumValue value;
   int64_t pctg = 0;
   max_wa_memory_size = 0;
   if (OB_ISNULL(GCTX.schema_service_)) {
@@ -803,9 +804,13 @@ int ObSqlMemoryManager::get_max_work_area_size(
     SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(var_schema->get_value(NULL, NULL, value))) {
-  } else if (OB_FAIL(value.get_int(pctg))) {
+  } else if (OB_FAIL(var_schema->get_value(value_owner, static_cast<const ObTimeZoneInfo *>(nullptr), value))) {
+  } else if (value.is_null() || !value.is_int()) {
+    ret = OB_OBJ_TYPE_ERROR;
   } else {
+    pctg = value.get_int();
+  }
+  if (OB_SUCC(ret)) {
     const int64_t memory_budget = lib::get_memory_budget();
     const int64_t work_area_max_size = memory_budget / 100 * pctg;
     const int64_t workarea_managed_used = get_workarea_managed_used();

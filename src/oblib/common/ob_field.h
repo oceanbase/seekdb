@@ -78,10 +78,13 @@ public:
   ObString org_tname_; // original table name
   ObString cname_;     // column name for display
   ObString org_cname_; // original column name
-  ObObj type_; // value type
+  SqlTypeMeta type_meta_; // value type metadata
   ObString type_owner_; // udt relation name, only valid when type is ObExtended
   ObString type_name_; // udt relation name, only valid when type is ObExtended
-  ObObj default_value_; //default value, only effective when command was COM_FIELD_LIST
+  // COM_FIELD_LIST's optional default_type protocol marker. Keep the wire
+  // value as an integer here to avoid making common metadata depend on MySQL.
+  // The legacy NOP marker is OP_NOP (3).
+  uint32_t field_list_default_type_;
   ObAccuracy accuracy_;
   uint16_t charsetnr_;    //collation of table, this is to correspond with charset.
   uint16_t flags_; // binary, not_null flag etc
@@ -91,9 +94,9 @@ public:
   uint8_t inout_mode_; // using for routine/anonymous resultset
 
   ObField()
-    : dname_(), tname_(), org_tname_(), cname_(), org_cname_(), type_(),
+    : dname_(), tname_(), org_tname_(), cname_(), org_cname_(), type_meta_(),
       type_owner_(), type_name_(),
-      default_value_(ObObj::make_nop_obj()), accuracy_(),
+      field_list_default_type_(static_cast<uint32_t>(ObActionFlag::OP_NOP)), accuracy_(),
       charsetnr_(CS_TYPE_UTF8MB4_GENERAL_CI),
       flags_(0), length_(0), paramed_ctx_(NULL), is_paramed_select_item_(false),
       inout_mode_(0)
@@ -107,7 +110,7 @@ public:
   int deep_copy(const ObField &other, ObIAllocator *allocator);
 
 
-  static int get_field_mb_length(const ObObjType type,
+  static int get_field_mb_length(const SqlValueType type,
                                  const ObAccuracy &accuracy,
                                  const ObCollationType charsetnr,
                                  int32_t &length);

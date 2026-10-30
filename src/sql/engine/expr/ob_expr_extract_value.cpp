@@ -49,7 +49,7 @@ int ObExprExtractValue::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_INVALID_XPATH_EXPRESSION;
   } else {
     for (int8_t i = 0; OB_SUCC(ret) && i < param_num; i++) {
-      ObObjType param_type = types[i].get_type();
+      SqlValueType param_type = types[i].get_type();
       if (param_type == ObNullType) {
       } else if (ob_is_string_type(param_type)) {
         if (ob_is_string_tc(param_type)) {

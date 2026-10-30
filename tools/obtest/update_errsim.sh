@@ -3,11 +3,8 @@
 httpserver=http://11.166.86.153:8877/
 VERSION=master
 
-# download mytest.jar
-if [ ! -f jar/mytest.jar ]; then
-  echo "begin to wget --no-check-certificate mytest10.jar ..."
-  wget --no-check-certificate ${httpserver}/mytest10.jar -O jar/mytest.jar >/dev/null 2>&1 &
-fi
+echo "The legacy test harness is not bundled or downloaded by update_errsim.sh."
+echo "Set MYTEST_JAR to a compatible external harness when running ./mytest."
 
 # download bin (default)
 if [ ! -n "$1" ];then

@@ -1,0 +1,35 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "storage_datum_extend_cases",
+    srcs = ["test_storage_datum_extend.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/data_plane:datum_row_interface",
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_storage_datum_extend",
+    linkstatic = True,
+    deps = [":storage_datum_extend_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "native_column_param_cases",
+    srcs = ["test_native_column_param.cpp"],
+    alwayslink = True,
+    deps = ["//src/data_plane:column_param", "//src/data_plane:table_param_interface", "//src/data_plane:datum_row_interface", "//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_column_param",
+    data = ["data/column_param_inputs.golden", "data/column_param.golden", "data/column_param_lob_temporal_inputs.golden", "data/column_param_lob_temporal.golden"],
+    linkstatic = True,
+    linkopts = select({"@platforms//os:linux": ["-Wl,--gc-sections"], "//conditions:default": []}),
+    deps = [":native_column_param_cases", "//src/oblib:oblib_test_runtime"],
+)

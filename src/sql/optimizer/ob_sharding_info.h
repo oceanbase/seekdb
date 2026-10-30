@@ -319,7 +319,7 @@ private:
                                                    const ObShardingInfo &sharding_info);
 
   static bool is_part_func_scale_sensitive(const sql::ObShardingInfo &sharding_info,
-                                           const common::ObObjType obj_type);
+                                           const common::SqlValueType obj_type);
 
 private:
   // Partition level

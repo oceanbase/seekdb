@@ -2483,7 +2483,8 @@ int ObLocalManagementService::check_weak_read_version_refresh_interval(int64_t r
     ObSchemaGetterGuard schema_guard;
     const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
     const ObSysVarSchema *var_schema = NULL;
-    ObObj obj;
+    ObArenaAllocator value_owner(ObModIds::OB_TEMP_VARIABLES);
+    DatumValue value;
     int64_t session_max_stale_time = 0;
     if (OB_SUCC(ret) && valid) {
       if (OB_FAIL(sys_schema_guard.get_server_runtime_info(runtime_schema))) {
@@ -2495,9 +2496,13 @@ int ObLocalManagementService::check_weak_read_version_refresh_interval(int64_t r
       } else if (OB_FAIL(schema_guard.get_system_variable(OB_SV_MAX_READ_STALE_TIME, var_schema))) {
       } else if (OB_ISNULL(var_schema)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(var_schema->get_value(NULL, NULL, obj))) {
-      } else if (OB_FAIL(obj.get_int(session_max_stale_time))) {
-      } else if (session_max_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME
+      } else if (OB_FAIL(var_schema->get_value(value_owner, static_cast<const ObTimeZoneInfo *>(nullptr), value))) {
+      } else if (value.is_null() || !value.is_int()) {
+        ret = OB_OBJ_TYPE_ERROR;
+      } else {
+        session_max_stale_time = value.get_int();
+      }
+      if (OB_SUCC(ret) && session_max_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME
                  && refresh_interval > session_max_stale_time) {
         valid = false;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,

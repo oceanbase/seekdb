@@ -133,7 +133,7 @@ int ObDDLBatchRows::init_vectors(const common::ObIArray<ObColumnSchemaItem> &col
   if (OB_FAIL(vectors_.prepare_allocate(column_schemas.count()))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < column_schemas.count(); ++i) {
-    const ObObjMeta &col_type = column_schemas.at(i).col_type_;
+    const SqlTypeMeta &col_type = column_schemas.at(i).col_type_;
     const bool is_nullable = true; // column_schemas.at(i).is_nullable_;// TODO@suzhi:batch rows not check input datum if nullable is false
     ObDDLVector *vector = nullptr;
     if (OB_FAIL(ObDDLVector::create_vector(col_type, is_nullable, max_batch_size, allocator_,

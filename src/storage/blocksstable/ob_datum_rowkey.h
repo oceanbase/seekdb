@@ -18,7 +18,7 @@
 #define OB_STORAGE_BLOCKSSTABLE_DATUM_ROWKEY_H
 
 #include "ob_storage_datum.h"
-#include "storage/ob_obj_buf_array.h"
+#include "data_plane/native_key_value_buffer.h"
 #include "lib/utility/ob_print_kv.h"
 //to be removed
 #include "common/rowkey/ob_store_rowkey.h"
@@ -92,7 +92,7 @@ public:
   int compare(const ObCommonDatumRowkey &rhs, const ObStorageDatumUtils &datum_utils, int &cmp_ret,
               const bool compare_datum_cnt = true) const;
   int from_rowkey(const ObRowkey &rowkey, common::ObIAllocator &allocator);
-  int to_rowkey(ObRowkey &rowkey, const ObObjMeta* obj_metas, common::ObIAllocator &allocator) const;
+  int to_rowkey(ObRowkey &rowkey, const SqlTypeMeta* obj_metas, common::ObIAllocator &allocator) const;
   int from_rowkey(const ObRowkey &rowkey, ObStorageDatumBuffer &datum_buffer);
   int to_store_rowkey(const common::ObIArray<share::schema::ObColDesc> &col_descs,
                       common::ObIAllocator &allocator,
@@ -122,10 +122,10 @@ struct ObDatumRowkeyHelper
 {
 public:
   ObDatumRowkeyHelper()
-    : local_allocator_(), allocator_(&local_allocator_), datum_buffer_(&local_allocator_), obj_buffer_()
+    : local_allocator_(), allocator_(&local_allocator_), datum_buffer_(&local_allocator_), value_buffer_()
    {}
   ObDatumRowkeyHelper(common::ObIAllocator &allocator)
-    : local_allocator_(), allocator_(&allocator), datum_buffer_(&allocator), obj_buffer_()
+    : local_allocator_(), allocator_(&allocator), datum_buffer_(&allocator), value_buffer_()
    {}
   ~ObDatumRowkeyHelper() {}
   int convert_datum_rowkey(const common::ObRowkey &rowkey, ObDatumRowkey &datum_rowkey);
@@ -144,7 +144,7 @@ private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator *allocator_;
   ObStorageDatumBuffer datum_buffer_;
-  storage::ObObjBufArray obj_buffer_;
+  storage::NativeKeyValueBuffer value_buffer_;
 };
 
 struct ObDatumRowkeyWrapper

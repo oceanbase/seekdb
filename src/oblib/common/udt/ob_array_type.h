@@ -47,7 +47,7 @@ struct ObArrayAttr {
   uint32_t length_;
 };
 
-OB_INLINE bool ob_is_array_supported_type(ObObjType type)
+OB_INLINE bool ob_is_array_supported_type(SqlValueType type)
 {
   return (ObUNumberType >= type && ObMediumIntType != type && ObUMediumIntType != type)
          || ObVarcharType == type || ObDecimalIntType == type;
@@ -116,7 +116,11 @@ public:
   virtual uint8_t *get_nullbitmap() const = 0;
   virtual void set_element_type(int32_t type) = 0;
   virtual void set_array_type(const ObCollectionTypeBase *array_type) = 0;
-  virtual int elem_at(uint32_t idx, ObObj &elem_obj) const = 0;
+  // Write a native value into the caller's already-reserved Datum buffer.
+  // Formats without a native implementation retain the compatibility API
+  // until their metadata and encoding rules are migrated.
+  virtual int elem_at_datum(uint32_t idx, ObDatum &value) const
+  { UNUSED(idx); UNUSED(value); return OB_NOT_SUPPORTED; }
   virtual int at(uint32_t idx, ObIArrayType &dest) const = 0;
   virtual void clear() = 0;
   virtual int flatten(ObArrayAttr *attrs, uint32_t attr_count, uint32_t &attr_idx) = 0;

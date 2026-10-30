@@ -336,17 +336,17 @@ bool ObDDLRedefinitionTask::check_can_validate_column_checksum(
     const ObColumnSchemaV2 &dest_column_schema)
 {
   bool can_validate_column_checksum = false;
-  ObObjType src_column_type = src_column_schema.get_data_type();
-  ObObjType dest_column_type = dest_column_schema.get_data_type();
+  SqlValueType src_column_type = src_column_schema.get_data_type();
+  SqlValueType dest_column_type = dest_column_schema.get_data_type();
   ObCollationType src_cs_type = src_column_schema.get_collation_type();
   ObCollationType dest_cs_type = dest_column_schema.get_collation_type();
   // to do, add more column types modification, bigint->int->mediumint->smallint for example.
   if (!src_column_schema.is_autoincrement() && dest_column_schema.is_autoincrement()) {
     // modify to auto increment can lead to data change, cannot verify checksum
     can_validate_column_checksum = false;
-  } else if (ObIntTC == ob_obj_type_class(src_column_type) && ObIntTC == ob_obj_type_class(dest_column_type)) {
+  } else if (ObIntTC == sql_type_class(src_column_type) && ObIntTC == sql_type_class(dest_column_type)) {
     can_validate_column_checksum = true;
-  } else if (ObUIntTC == ob_obj_type_class(src_column_type) && ObUIntTC == ob_obj_type_class(dest_column_type)) {
+  } else if (ObUIntTC == sql_type_class(src_column_type) && ObUIntTC == sql_type_class(dest_column_type)) {
     can_validate_column_checksum = true;
   } else if (ObMediumIntType == src_column_type && ObInt32Type == dest_column_type) {
     can_validate_column_checksum = true;
@@ -862,7 +862,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
         param.autoinc_table_id_ = target_object_id_;
         param.autoinc_table_part_num_ = dest_table_schema->get_all_part_num();
         param.autoinc_col_id_ = dst_column_schema->get_column_id();
-        ObObjType column_type = dst_column_schema->get_data_type();
+        SqlValueType column_type = dst_column_schema->get_data_type();
         param.autoinc_col_type_ = column_type;
         param.autoinc_desired_count_ = 0;
         param.autoinc_increment_ = 1;
@@ -949,7 +949,7 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
       }
       if (OB_SUCC(ret)) {
         if (alter_autoinc_column_id != 0) { // there is an autoinc column
-          ObObjType column_type = new_table_schema->get_column_schema(alter_autoinc_column_id)->get_data_type();
+          SqlValueType column_type = new_table_schema->get_column_schema(alter_autoinc_column_id)->get_data_type();
           ObUpdateAutoincSequenceTask task(object_id_, target_object_id_, schema_version_,
                                           alter_autoinc_column_id, column_type, alter_table_arg_.sql_mode_,
                                           trace_id_, task_id_);
@@ -976,7 +976,7 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
       param.autoinc_table_id_ = target_object_id_;
       param.autoinc_table_part_num_ = new_table_schema->get_all_part_num();
       param.autoinc_col_id_ = alter_autoinc_column_id;
-      ObObjType column_type = new_table_schema->get_column_schema(alter_autoinc_column_id)->get_data_type();
+      SqlValueType column_type = new_table_schema->get_column_schema(alter_autoinc_column_id)->get_data_type();
       param.autoinc_col_type_ = column_type;
       param.autoinc_desired_count_ = 0;
       param.autoinc_increment_ = 1;

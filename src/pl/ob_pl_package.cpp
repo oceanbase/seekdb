@@ -169,7 +169,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
                                            ObPLPackageState &package_state)
 {
   int ret = OB_SUCCESS;
-  ObObj value;
+  DatumParameter value;
   ARRAY_FOREACH(var_table_, var_idx) {
     const ObPLVar *var = var_table_.at(var_idx);
     const ObPLDataType &var_type = var->get_type();
@@ -194,7 +194,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
     } else if (value.is_null_or_empty_string() && var_type.is_not_null()) {
       ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
     }
-    OZ (package_state.set_package_var_val(var_idx, value, false));
+    OZ (package_state.set_package_var_val(var_idx, value, false, &resolve_ctx.session_info_));
     if (OB_SUCC(ret)) {
       const sql::ObSqlExpression *default_expr =
           var->is_formal_param() ? NULL : get_default_expr(var->get_default());
@@ -204,7 +204,14 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
       }
     }
     if (OB_FAIL(ret)) {
-      ObUserDefinedType::destruct_objparam(package_state.get_pkg_allocator(), value, &(resolve_ctx.session_info_));
+      ObIAllocator &owner = var_type.is_cursor_type() ? package_state.get_pkg_cursor_allocator()
+                                                     : package_state.get_pkg_allocator();
+      ObUserDefinedType::destruct_objparam(owner, value, &resolve_ctx.session_info_);
+    } else if (var_type.is_cursor_type()) {
+      // State adopted the cursor handle and copied its descriptor. The
+      // temporary descriptor was created in the cursor arena by initialization.
+      package_state.get_pkg_cursor_allocator().free(const_cast<char *>(value.datum_.ptr_));
+      value.set_null();
     }
   }
   if (OB_SUCC(ret)) {
@@ -226,7 +233,7 @@ int ObPLPackage::execute_init_routine(ObIAllocator &allocator, ObExecContext &ex
 
     if (OB_SUCC(ret)) {
       ParamStore params;
-      ObObj result;
+      DatumParameter result;
       int status;
       ObSEArray<int64_t, 2> subp_path;
       OZ (pl_engine->execute(exec_ctx,

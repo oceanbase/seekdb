@@ -41,8 +41,8 @@ public:
 
   ExtraInfo &get_info() { return info_; }
 
-  int calc_result(common::ObObj &result, common::ObIAllocator &alloc,
-                  const common::ObObj *objs_stack, int64_t param_num,
+  int calc_result(common::DatumParameter &result, common::ObIAllocator &alloc,
+                  const common::DatumParameter *objs_stack, int64_t param_num,
                   const ParamStore &param_store, ObEvalCtx *ctx = nullptr) const;
 
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
@@ -73,7 +73,7 @@ public:
     int assign(const ExtraInfo &other);
 
     int init_param_array(const ParamStore &param_store,
-                                const common::ObObj *objs_stack,
+                                const common::DatumParameter *objs_stack,
                                 int64_t param_num,
                                 ParamArray &param_array) const;
 
@@ -99,12 +99,12 @@ public:
                             ObSQLSessionInfo *session_info) const;
 
 
-    int calc(ObObj &result,
+    int calc(DatumParameter &result,
              ObIAllocator &alloc,
-             const ObObjMeta &res_type,
+             const SqlTypeMeta &res_type,
              const int32_t extend_size,
              const ParamStore &param_store,
-             const common::ObObj *params,
+             const common::DatumParameter *params,
              int64_t param_num,
              ObEvalCtx *ctx) const;
 

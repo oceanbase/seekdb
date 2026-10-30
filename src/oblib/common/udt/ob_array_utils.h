@@ -60,25 +60,25 @@ public :
     int ret = OB_SUCCESS;
     switch (array.get_format()) {
     case ArrayFormat::Fixed_Size :
-      if (static_cast<ObObjType>(array.get_element_type()) == ObTinyIntType) {
+      if (static_cast<SqlValueType>(array.get_element_type()) == ObTinyIntType) {
         FIXED_ARRAY_OBJ_CONTAINS(int8_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObSmallIntType) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObSmallIntType) {
         FIXED_ARRAY_OBJ_CONTAINS(int16_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObIntType) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObIntType) {
         FIXED_ARRAY_OBJ_CONTAINS(int64_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObInt32Type) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObInt32Type) {
         FIXED_ARRAY_OBJ_CONTAINS(int32_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObUTinyIntType) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObUTinyIntType) {
         FIXED_ARRAY_OBJ_CONTAINS(uint8_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObUSmallIntType) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObUSmallIntType) {
         FIXED_ARRAY_OBJ_CONTAINS(uint16_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObUInt64Type) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObUInt64Type) {
         FIXED_ARRAY_OBJ_CONTAINS(int64_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObUInt32Type) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObUInt32Type) {
         FIXED_ARRAY_OBJ_CONTAINS(uint32_t);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObFloatType) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObFloatType) {
         FIXED_ARRAY_OBJ_CONTAINS(float);
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObDoubleType) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObDoubleType) {
         FIXED_ARRAY_OBJ_CONTAINS(double);
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -90,10 +90,10 @@ public :
       }
       break;
     case ArrayFormat::Vector :
-      if (static_cast<ObObjType>(array.get_element_type()) == ObUTinyIntType) {
+      if (static_cast<SqlValueType>(array.get_element_type()) == ObUTinyIntType) {
         if (OB_FAIL(static_cast<const ObVectorU8Data *>(&array)->contains(elem, pos))) {
         }
-      } else if (static_cast<ObObjType>(array.get_element_type()) == ObFloatType) {
+      } else if (static_cast<SqlValueType>(array.get_element_type()) == ObFloatType) {
         if (OB_FAIL(static_cast<const ObVectorF32Data *>(&array)->contains(elem, pos))) {
         }
       } else {
@@ -113,7 +113,7 @@ public :
     return ret;
   }
 
-  static int append(ObIArrayType &array, const ObObjType elem_type, const ObDatum *datum);
+  static int append(ObIArrayType &array, const SqlValueType elem_type, const ObDatum *datum);
 
   template<typename Elem_Type>
   static int clone_except(ObIAllocator &alloc, const ObIArrayType &src_array, const Elem_Type *elem, bool is_null, ObIArrayType *&dst_array)
@@ -121,25 +121,25 @@ public :
     int ret = OB_SUCCESS;
     switch (src_array.get_format()) {
     case ArrayFormat::Fixed_Size :
-      if (static_cast<ObObjType>(src_array.get_element_type()) == ObTinyIntType) {
+      if (static_cast<SqlValueType>(src_array.get_element_type()) == ObTinyIntType) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(int8_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObSmallIntType) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObSmallIntType) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(int16_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObIntType) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObIntType) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(int64_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObInt32Type) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObInt32Type) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(int32_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObUTinyIntType) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObUTinyIntType) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(uint8_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObUSmallIntType) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObUSmallIntType) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(uint16_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObUInt64Type) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObUInt64Type) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(uint64_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObUInt32Type) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObUInt32Type) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(uint32_t);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObFloatType) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObFloatType) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(float);
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObDoubleType) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObDoubleType) {
         FIXED_ARRAY_OBJ_CLONE_EXCEPT(double);
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -151,10 +151,10 @@ public :
       }
       break;
     case ArrayFormat::Vector :
-      if (static_cast<ObObjType>(src_array.get_element_type()) == ObUTinyIntType) {
+      if (static_cast<SqlValueType>(src_array.get_element_type()) == ObUTinyIntType) {
         if (OB_FAIL(static_cast<const ObVectorU8Data *>(&src_array)->clone_except(alloc, elem, is_null, dst_array))) {
         }
-      } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObFloatType) {
+      } else if (static_cast<SqlValueType>(src_array.get_element_type()) == ObFloatType) {
         if (OB_FAIL(static_cast<const ObVectorF32Data *>(&src_array)->clone_except(alloc, elem, is_null, dst_array))) {
         }
       } else {

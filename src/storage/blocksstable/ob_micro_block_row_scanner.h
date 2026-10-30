@@ -356,9 +356,8 @@ private:
       const transaction::ObLockForReadArg &lock_for_read_arg,
       bool &can_read,
       int64_t &trans_version);
-  // The store_rowkey is a decoration of the ObObj pointer,
-  // and it will be destroyed when the life cycle of the rowkey_helper is end.
-  // So we have to send it into the function to avoid this situation.
+  // The store_rowkey borrows data owned by rowkey_helper, so pass the helper
+  // alongside it to keep the borrowed bytes alive while the key is used.
   int get_store_rowkey(ObStoreRowkey &store_rowkey, ObDatumRowkeyHelper &rowkey_helper);
 protected:
   // Use shallow_copy to directly quote the original data of the microblock when compacting,

@@ -16,6 +16,7 @@
 
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_TABLET_MAPPER_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_TABLET_MAPPER_H_
+#include "common/datum/datum_value.h"
 #include "share/ob_define.h"
 #include "share/schema/ob_schema_struct.h"
 #include "lib/container/ob_fixed_array.h"
@@ -144,7 +145,7 @@ public:
 
   int get_tablet_and_object_id(const share::schema::ObPartitionLevel part_level,
                                const common::ObPartID part_id,
-                               const common::ObObj &value,
+                               const common::DatumValue &value,
                                common::ObIArray<common::ObTabletID> &tablet_ids,
                                common::ObIArray<common::ObObjectID> &out_part_ids);
 
@@ -189,6 +190,13 @@ public:
       const share::schema::ObPartitionLevel part_level,
       const common::ObPartID part_id,
       const common::ObNewRow &row,
+      common::ObTabletID &tablet_id,
+      common::ObObjectID &object_id);
+
+  int get_tablet_and_object_id(
+      const share::schema::ObPartitionLevel part_level,
+      const common::ObPartID part_id,
+      const common::ObIArray<common::DatumValue> &row,
       common::ObTabletID &tablet_id,
       common::ObObjectID &object_id);
 

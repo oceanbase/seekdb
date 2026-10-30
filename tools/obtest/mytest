@@ -8,32 +8,14 @@ function print_usage
     echo -e "\t--conf=conf/configure.customized.ini"
     echo -e "\t--log4j=conf/log4j.customized.properties"
     echo "Commands:"
-    echo -e "\thelp Print help of mytest.jar"
-    echo -e "\tlist List commands of mytest.jar"
-    echo -e "\tcleanup Execute cleanup of mytest.jar"
+    echo -e "\thelp Print help of the external test harness"
+    echo -e "\tlist List commands of the external test harness"
+    echo -e "\tcleanup Execute cleanup of the external test harness"
 }
 
 export LD_LIBRARY_PATH=/usr/local/staf/lib/:$LD_LIBRARY_PATH
 
-num=`ls -l jar/*.jar | wc -l`
-if [[ $num > 1 ]]
-then
-    jar=`ls jar/mytest.jar`
-elif [[ $num = 1 ]]
-then 
-    jar=`ls jar/*.jar`
-elif [[ $num = 0 ]]
-then
-    echo "No jar/mytest.jar found"
-    exit 1
-fi 
-
-[[ -f bin/observer ]] || {
-    echo
-    echo "file not found: bin/observer, please copy it by run: copy.sh -l"
-    exit 2
-}
-
+jar=${MYTEST_JAR:-jar/mytest.jar}
 case=$1
 extra1=$2
 extra2=$3
@@ -47,6 +29,18 @@ if [ X$case = X"-h" -o X$case = X"-help" -o X$case = X"--help" ]
 then
     print_usage
     exit 0
+fi
+
+[[ -f bin/observer ]] || {
+    echo
+    echo "file not found: bin/observer, please copy it by run: copy.sh -l"
+    exit 2
+}
+
+if [[ ! -f "$jar" ]]; then
+    echo "External test harness not found: $jar" >&2
+    echo "Set MYTEST_JAR to a compatible harness file; no harness is bundled or downloaded by this repository." >&2
+    exit 1
 fi
 
 if [ $case = "help" ];then

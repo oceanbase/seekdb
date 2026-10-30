@@ -1208,7 +1208,7 @@ int ObJsonBin::deserialize_json_value(ObJsonNode *&json_tree)
         int64_t pos = pos_;
         ObString str_data;
         uint64_t need_len = sizeof(uint16_t) + sizeof(uint64_t) + sizeof(uint8_t);
-        ObObjType field_type = ObObjType::ObNullType;
+        SqlValueType field_type = SqlValueType::ObNullType;
         uint64_t val_length = 0;
         void *buf = allocator_->alloc(sizeof(ObJsonOpaque));
         if (buf == NULL) {
@@ -1433,7 +1433,7 @@ int ObJsonBin::get_area_size(uint64_t& size) const
         size = sizeof(int64_t);
         break;
       }
-      // opaque type : [vertype(uint8_t)][ObObjType(uint16_t)][length(uint64_t)][data]
+      // opaque type : [vertype(uint8_t)][SqlValueType(uint16_t)][length(uint64_t)][data]
       // length is fix_size encoding
       // element_count_ store data length 
       case ObJsonNodeType::J_OPAQUE: {
@@ -1876,7 +1876,7 @@ int ObJsonBin::init_opaque_node_v0()
   int64_t offset = sizeof(uint8_t);
   int64_t str_len = 0;
   ObString data;
-  // [vertype(uint8_t)][ObObjType(uint16_t)][length(uint64_t)][data]
+  // [vertype(uint8_t)][SqlValueType(uint16_t)][length(uint64_t)][data]
   if (OB_FAIL(cursor_->read_i16(pos_ + offset, reinterpret_cast<int16_t*>(&meta_.field_type_)))) {
   } else if (OB_FALSE_IT(offset += sizeof(uint16_t))) {
   } else if (OB_FAIL(cursor_->read_i64(pos_ + offset, &str_len))) {

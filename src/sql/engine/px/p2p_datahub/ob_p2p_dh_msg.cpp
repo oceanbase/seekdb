@@ -73,20 +73,20 @@ int ObP2PDatahubMsgBase::fill_empty_query_range(const ObPxQueryRangeInfo &query_
   int ret = OB_SUCCESS;
   query_range.table_id_ = query_range_info.table_id_;
 
-  ObObj *start = NULL;
-  ObObj *end = NULL;
+  DatumValue *start = NULL;
+  DatumValue *end = NULL;
   int64_t range_column_cnt = query_range_info.range_column_cnt_;
-  if (OB_ISNULL(start = static_cast<ObObj *>(
-                    allocator.alloc(sizeof(ObObj) * range_column_cnt)))) {
+  if (OB_ISNULL(start = static_cast<DatumValue *>(
+                    allocator.alloc(sizeof(DatumValue) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(end = static_cast<ObObj *>(
-                           allocator.alloc(sizeof(ObObj) * range_column_cnt)))) {
+  } else if (OB_ISNULL(end = static_cast<DatumValue *>(
+                           allocator.alloc(sizeof(DatumValue) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     // fill all columns with (max, min)
     for (int64_t i = 0; i < range_column_cnt; ++i) {
-      new (start + i) ObObj();
-      new (end + i) ObObj();
+      new (start + i) DatumValue();
+      new (end + i) DatumValue();
       (start + i)->set_max_value();
       (end + i)->set_min_value();
     }

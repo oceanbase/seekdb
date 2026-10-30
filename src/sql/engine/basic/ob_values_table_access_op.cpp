@@ -18,21 +18,84 @@
 
 #include "sql/engine/basic/ob_values_table_access_op.h"
 #include "sql/engine/ob_exec_context.h"
-#include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include "common/datum/datum_parameter_codec.h"
 
 namespace oceanbase
 {
 using namespace common;
 namespace sql
 {
-OB_SERIALIZE_MEMBER_INHERIT(ObValuesTableAccessSpec,
-                            ObOpSpec,
-                            access_type_,
-                            column_exprs_,
-                            value_exprs_,
-                            start_param_idx_,
-                            end_param_idx_,
-                            obj_params_);
+// Keep the existing count + bare-value wire; parameter-only accuracy and
+// flags were never serialized by the former constant-value array.
+OB_DEF_SERIALIZE_SIMPLE(ObValuesTableAccessSpec)
+{
+  int ret = OB_SUCCESS;
+  BASE_SER((ObValuesTableAccessSpec, ObOpSpec));
+  OB_UNIS_ENCODE(access_type_);
+  OB_UNIS_ENCODE(column_exprs_);
+  OB_UNIS_ENCODE(value_exprs_);
+  OB_UNIS_ENCODE(start_param_idx_);
+  OB_UNIS_ENCODE(end_param_idx_);
+  const int64_t count = datum_values_.count();
+  OB_UNIS_ENCODE(count);
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    const DatumValue &value = datum_values_.at(i);
+    ret = DatumParameterCodec::encode_value(value.datum_, value.meta_, buf, buf_len, pos);
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE_SIMPLE(ObValuesTableAccessSpec)
+{
+  int ret = OB_SUCCESS;
+  BASE_DESER((ObValuesTableAccessSpec, ObOpSpec));
+  OB_UNIS_DECODE(access_type_);
+  OB_UNIS_DECODE(column_exprs_);
+  OB_UNIS_DECODE(value_exprs_);
+  OB_UNIS_DECODE(start_param_idx_);
+  OB_UNIS_DECODE(end_param_idx_);
+  int64_t count = 0;
+  OB_UNIS_DECODE(count);
+  if (OB_FAIL(ret)) {
+  } else if (count < 0 || count > data_len - pos || datum_values_.get_allocator() == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    datum_values_.reset();
+    if (OB_FAIL(datum_values_.prepare_allocate(count))) {
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    DatumValue &value = datum_values_.at(i);
+    SqlTypeMeta meta;
+    if (OB_FAIL(DatumParameterCodec::decode_value(buf, data_len, pos,
+                                                *datum_values_.get_allocator(), value.datum_, meta))) {
+    } else {
+      value.meta_ = meta;
+    }
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE_SIMPLE(ObValuesTableAccessSpec)
+{
+  int64_t len = 0;
+  BASE_ADD_LEN((ObValuesTableAccessSpec, ObOpSpec));
+  OB_UNIS_ADD_LEN(access_type_);
+  OB_UNIS_ADD_LEN(column_exprs_);
+  OB_UNIS_ADD_LEN(value_exprs_);
+  OB_UNIS_ADD_LEN(start_param_idx_);
+  OB_UNIS_ADD_LEN(end_param_idx_);
+  const int64_t count = datum_values_.count();
+  OB_UNIS_ADD_LEN(count);
+  for (int64_t i = 0; i < count; ++i) {
+    int64_t size = 0;
+    const DatumValue &value = datum_values_.at(i);
+    if (DatumParameterCodec::value_size(value.datum_, value.meta_, size) == OB_SUCCESS) {
+      len += size;
+    }
+  }
+  return len;
+}
 
 ObValuesTableAccessOp::ObValuesTableAccessOp(ObExecContext &exec_ctx,
                                              const ObOpSpec &spec,
@@ -58,19 +121,26 @@ int ObValuesTableAccessOp::inner_open()
       if (ObValuesTableDef::FOLD_ACCESS_EXPR == MY_SPEC.access_type_) {
         if (OB_UNLIKELY(MY_SPEC.start_param_idx_ < 0 ||
                         MY_SPEC.start_param_idx_ > MY_SPEC.end_param_idx_ ||
-                        MY_SPEC.end_param_idx_ >= plan_ctx->get_param_store().count())) {
+                        MY_SPEC.end_param_idx_ >= plan_ctx->get_datum_param_store().count())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const ObObj &first_column_node = plan_ctx->get_param_store().at(MY_SPEC.start_param_idx_);
-          if (OB_FAIL(first_column_node.get_real_param_count(row_cnt_))) {
+          const DatumParameter &first = plan_ctx->get_datum_param_store().at(MY_SPEC.start_param_idx_);
+          row_cnt_ = 1;
+          if (first.get_type() == ObExtendType) {
+            const DatumParameterArray *array = first.get_array<DatumParameterArray>();
+            if (array == nullptr || array->count_ < 0) {
+              ret = OB_ERR_UNEXPECTED;
+            } else {
+              row_cnt_ = array->count_;
+            }
           }
         }
       } else if (ObValuesTableDef::ACCESS_PARAM == MY_SPEC.access_type_) {
         int64_t column_cnt = MY_SPEC.column_exprs_.count();
         row_cnt_ = (MY_SPEC.end_param_idx_ - MY_SPEC.start_param_idx_ + 1) / column_cnt;
-      } else if (ObValuesTableDef::ACCESS_OBJ == MY_SPEC.access_type_) {
+      } else if (ObValuesTableDef::ACCESS_VALUE == MY_SPEC.access_type_) {
         int64_t column_cnt = MY_SPEC.column_exprs_.count();
-        row_cnt_ = MY_SPEC.obj_params_.count() / column_cnt;
+        row_cnt_ = MY_SPEC.datum_values_.count() / column_cnt;
       } else {
         int64_t column_cnt = MY_SPEC.column_exprs_.count();
         row_cnt_ = MY_SPEC.value_exprs_.count() / column_cnt;
@@ -119,7 +189,7 @@ int ObValuesTableAccessOp::inner_get_next_row()
   return ret;
 }
 
-void ObValuesTableAccessOp::update_src_meta(const ObObjMeta &src_obj_meta,
+void ObValuesTableAccessOp::update_src_meta(const SqlTypeMeta &src_obj_meta,
                                             const ObAccuracy &src_obj_acc,
                                             ObDatumMeta &src_meta)
 {
@@ -132,31 +202,30 @@ void ObValuesTableAccessOp::update_src_meta(const ObObjMeta &src_obj_meta,
 int ObValuesTableAccessOp::get_real_src_obj_type(const int64_t row_idx,
                                                  ObExpr &src_expr,
                                                  ObDatumMeta &src_meta,
-                                                 ObObjMeta &src_obj_meta)
+                                                 SqlTypeMeta &src_obj_meta)
 {
   int ret = OB_SUCCESS;
   if (T_QUESTIONMARK == src_expr.type_) {
     int64_t param_idx = src_expr.extra_;
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-    const ObSqlArrayObj *array_obj = NULL;
-    if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_param_store().count())) {
+    const DatumParameterArray *array_obj = NULL;
+    if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_datum_param_store().count())) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (plan_ctx->get_param_store().at(param_idx).is_ext_sql_array()) {
+    } else if (plan_ctx->get_datum_param_store().at(param_idx).is_ext_sql_array()) {
       // If the parameter is is_ext_sql_array
-      if (OB_ISNULL(array_obj = reinterpret_cast<const ObSqlArrayObj*>(
-                                            plan_ctx->get_param_store().at(param_idx).get_ext()))) {
+      if (OB_ISNULL(array_obj = plan_ctx->get_datum_param_store().at(param_idx).get_array<DatumParameterArray>())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (array_obj->count_ <= row_idx) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        src_obj_meta = array_obj->data_[row_idx].meta_;
+        src_obj_meta = array_obj->data_[row_idx].get_type_meta();
         const ObAccuracy &src_obj_acc = array_obj->data_[row_idx].get_accuracy();
         update_src_meta(src_obj_meta, src_obj_acc, src_meta);
       }
     } else if (src_expr.frame_idx_ < spec_.plan_->get_expr_frame_info().const_frame_.count() +
                                      spec_.plan_->get_expr_frame_info().param_frame_.count()) {
-      src_obj_meta = plan_ctx->get_param_store().at(param_idx).meta_;
-      const ObAccuracy &src_obj_acc = plan_ctx->get_param_store().at(param_idx).get_accuracy();
+      src_obj_meta = plan_ctx->get_datum_param_store().at(param_idx).get_type_meta();
+      const ObAccuracy &src_obj_acc = plan_ctx->get_datum_param_store().at(param_idx).get_accuracy();
       update_src_meta(src_obj_meta, src_obj_acc, src_meta);
     }
   }
@@ -170,7 +239,7 @@ int ObValuesTableAccessOp::calc_datum_from_expr(const int64_t col_idx,
 {
   int ret = OB_SUCCESS;
   ObDatumMeta src_meta = src_expr->datum_meta_;
-  ObObjMeta src_obj_meta = src_expr->obj_meta_;
+  SqlTypeMeta src_obj_meta = src_expr->obj_meta_;
   ObDatum *datum = NULL;
   bool need_adjust_decimal_int = false;
   if (src_expr == dst_expr) {
@@ -203,11 +272,11 @@ int ObValuesTableAccessOp::calc_datum_from_expr(const int64_t col_idx,
       ObExpr real_src_expr = *src_expr;
       real_src_expr.datum_meta_ = src_meta;
       real_src_expr.obj_meta_ = src_obj_meta;
-      real_src_expr.obj_datum_map_ = ObDatum::get_obj_datum_map_type(src_meta.type_);
+      real_src_expr.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(src_meta.type_);
       if (OB_FAIL(datum_caster_.to_type(dst_expr->datum_meta_, real_src_expr, cm_, datum))) {
       } else {
         ObDatum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
-        if (ObObjDatumMapType::OBJ_DATUM_STRING == dst_expr->obj_datum_map_) {
+        if (SqlValueDatumMapType::OBJ_DATUM_STRING == dst_expr->obj_datum_map_) {
           ObExprStrResAlloc res_alloc(*dst_expr, eval_ctx_);
           if (OB_FAIL(dst_datum.deep_copy(*datum, res_alloc))) {
           }
@@ -223,38 +292,74 @@ int ObValuesTableAccessOp::calc_datum_from_expr(const int64_t col_idx,
   return ret;
 }
 
-int ObValuesTableAccessOp::calc_datum_from_param(const ObObj &src_obj, ObExpr *dst_expr)
+namespace {
+// Keep the expression adapter used by DECIMAL -> NUMBER off the ordinary
+// borrowed-value path. DECIMAL width/scale changes use the numeric kernel
+// directly below and never construct an input expression.
+OB_NOINLINE int cast_values_decimal_to_number(const ObDatum &source, const SqlTypeMeta &meta,
+                                               ObExpr &output, ObEvalCtx &ctx,
+                                               ObDatumCaster &caster, ObCastMode mode)
+{
+  ObDatum &dst = output.locate_expr_datum(ctx);
+  dst = source;
+  ObExpr input;
+  input.frame_idx_ = output.frame_idx_;
+  input.datum_off_ = reinterpret_cast<char *>(&dst) - ctx.frames_[input.frame_idx_];
+  input.eval_info_off_ = output.eval_info_off_;
+  input.obj_meta_ = meta;
+  input.datum_meta_.type_ = meta.get_type();
+  input.datum_meta_.cs_type_ = meta.get_collation_type();
+  input.datum_meta_.scale_ = meta.get_scale();
+  input.datum_meta_.precision_ = wide::ObDecimalIntConstValue::get_max_precision_by_int_bytes(
+      source.get_int_bytes());
+  input.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(meta.get_type());
+  ObDatum *converted = nullptr;
+  int ret = caster.to_type(output.datum_meta_, input, mode, converted);
+  if (OB_SUCC(ret)) {
+    ObDatum &owned = output.locate_datum_for_write(ctx);
+    ObDataBuffer allocator(const_cast<char *>(owned.ptr_), output.res_buf_len_);
+    ret = owned.deep_copy(*converted, allocator);
+  }
+  return ret;
+}
+
+OB_NOINLINE int scale_values_decimal(const ObDatum &source, const SqlTypeMeta &meta,
+                                      ObExpr &output, ObEvalCtx &ctx, ObCastMode mode)
 {
   int ret = OB_SUCCESS;
-  ObDatum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
-  const ObObjType &src_type = src_obj.get_type();
-  const ObObjType &dst_type =  dst_expr->obj_meta_.get_type();
-  const ObObjParam src_obj_param = static_cast<const ObObjParam>(src_obj);
-  bool need_adjust_decimal_int = ob_is_decimal_int_tc(src_type)
-                                 && ob_is_decimal_int_tc(dst_expr->datum_meta_.type_)
-                                 && ObDatumCast::need_scale_decimalint(src_obj_param.get_scale(),
-                                                                       src_obj_param.get_precision(),
-                                                                       dst_expr->datum_meta_.scale_,
-                                                                       dst_expr->datum_meta_.precision_);
-  if (ob_is_decimal_int_tc(src_type) && (ob_is_number_tc(dst_type) || need_adjust_decimal_int)) {
-    ObObj dst_obj;
-    const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(GET_MY_SESSION(ctx_));
-    ObAccuracy dst_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY2[0][dst_type];
-    if (ob_is_decimal_int_tc(dst_type)) {
-      dst_accuracy.set_scale(dst_expr->datum_meta_.scale_);
-      dst_accuracy.set_precision(dst_expr->datum_meta_.precision_);
-    }
-    ObCastCtx cast_ctx(&eval_ctx_.exec_ctx_.get_allocator(), &dtc_params, cm_, dst_expr->obj_meta_.get_collation_type(), &dst_accuracy);
-    ObSqlObjCastRuntime cast_runtime(&eval_ctx_.exec_ctx_);
-    cast_ctx.runtime_ = &cast_runtime;
-    if (OB_FAIL(ObObjCaster::to_type(dst_type, dst_expr->obj_meta_.get_collation_type(), cast_ctx,
-                                     src_obj, dst_obj))) {
-    } else if (OB_FAIL(dst_datum.from_obj(dst_obj))) {
-    } else {
-      dst_expr->set_evaluated_projected(eval_ctx_);
-    }
-  } else if (OB_FAIL(dst_datum.from_obj(src_obj))) {
+  ObDecimalIntBuilder converted;
+  if (OB_FAIL(ObDatumCast::common_scale_decimalint(source.get_decimal_int(), source.get_int_bytes(),
+              meta.get_scale(), output.datum_meta_.scale_, output.datum_meta_.precision_,
+              mode, converted, ctx.exec_ctx_.get_user_logging_ctx()))) {
   } else {
+    ObDatum view;
+    view.set_decimal_int_shallow(converted.get_decimal_int(), converted.get_int_bytes());
+    ObDatum &owned = output.locate_datum_for_write(ctx);
+    ObDataBuffer allocator(const_cast<char *>(owned.ptr_), output.res_buf_len_);
+    ret = owned.deep_copy(view, allocator);
+  }
+  return ret;
+}
+} // namespace
+
+int ObValuesTableAccessOp::calc_datum_from_param(const ObDatum &source, const SqlTypeMeta &meta, ObExpr *dst_expr)
+{
+  int ret = OB_SUCCESS;
+  const SqlValueType dst_type = dst_expr->datum_meta_.type_;
+  const bool decimal = !source.is_null() && meta.is_decimal_int();
+  if (decimal && dst_type == ObDecimalIntType &&
+      ObDatumCast::need_scale_decimalint(meta.get_scale(), source.get_int_bytes(),
+          dst_expr->datum_meta_.scale_,
+          wide::ObDecimalIntConstValue::get_int_bytes_by_precision(dst_expr->datum_meta_.precision_))) {
+    ret = scale_values_decimal(source, meta, *dst_expr, eval_ctx_, cm_);
+  } else if (decimal && ob_is_number_tc(dst_type)) {
+    ret = cast_values_decimal_to_number(source, meta, *dst_expr, eval_ctx_, datum_caster_, cm_);
+  } else {
+    // A borrowed native view does not need the reserved result-buffer pointer
+    // reset that locate_datum_for_write() performs before scalar construction.
+    dst_expr->locate_expr_datum(eval_ctx_) = source;
+  }
+  if (OB_SUCC(ret)) {
     dst_expr->set_evaluated_projected(eval_ctx_);
   }
   return ret;
@@ -292,15 +397,15 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
         }
         case ObValuesTableDef::ACCESS_PARAM: {
           int64_t param_idx = MY_SPEC.start_param_idx_ + col_idx + row_idx_ * col_num;
-          const ObObjParam &param = plan_ctx->get_param_store().at(param_idx);
-          if (OB_FAIL(calc_datum_from_param(param, col_expr))) {
+          const DatumParameter &param = plan_ctx->get_datum_param_store().at(param_idx);
+          if (OB_FAIL(calc_datum_from_param(param.datum_, param.get_type_meta(), col_expr))) {
           }
           break;
         }
-        case ObValuesTableDef::ACCESS_OBJ: {
+        case ObValuesTableDef::ACCESS_VALUE: {
           int64_t idx = row_idx_ * col_num + col_idx;
-          const ObObj &param = MY_SPEC.obj_params_.at(idx);
-          if (OB_FAIL(calc_datum_from_param(param, col_expr))) {
+          const DatumValue &param = MY_SPEC.datum_values_.at(idx);
+          if (OB_FAIL(calc_datum_from_param(param.datum_, param.meta_, col_expr))) {
           }
           break;
         }

@@ -132,8 +132,8 @@ public:
   OB_INLINE const sql::ObExpr *get_agg_expr() const { return basic_info_.agg_expr_; }
   OB_INLINE const share::schema::ObColumnParam *get_col_param() const { return basic_info_.col_param_; }
   OB_INLINE bool is_lob_col() const { return is_lob_col_; }
-  OB_INLINE ObObjType get_obj_type() const { return basic_info_.agg_expr_->obj_meta_.get_type(); }
-  OB_INLINE common::ObObjDatumMapType get_datum_map_type() const { return basic_info_.agg_expr_->obj_datum_map_; }
+  OB_INLINE SqlValueType get_obj_type() const { return basic_info_.agg_expr_->obj_meta_.get_type(); }
+  OB_INLINE common::SqlValueDatumMapType get_datum_map_type() const { return basic_info_.agg_expr_->obj_datum_map_; }
   OB_INLINE void set_group_by_result_cnt(const int64_t group_by_result_cnt) { group_by_result_cnt_ = group_by_result_cnt; }
   OB_INLINE bool is_padding_mode() const { return basic_info_.is_padding_mode(); }
   OB_INLINE bool need_padding() const { return basic_info_.need_padding(); }
@@ -357,7 +357,7 @@ public:
   virtual int collect_batch_result_in_group_by(const int64_t distinct_cnt) override { return OB_NOT_SUPPORTED; }
   virtual bool need_access_data() const override
   {
-    ObObjDatumMapType type = basic_info_.agg_expr_->args_[0]->obj_datum_map_;
+    SqlValueDatumMapType type = basic_info_.agg_expr_->args_[0]->obj_datum_map_;
     return type == OBJ_DATUM_STRING || type == OBJ_DATUM_NUMBER || type == OBJ_DATUM_DECIMALINT || exclude_null_;
   }
   virtual int reserve_group_by_buf(const int64_t size) override { return OB_NOT_SUPPORTED; }
@@ -370,7 +370,7 @@ private:
   OB_INLINE bool is_valid_op_size() const { return op_size_ >= 0; }
   OB_INLINE bool is_fixed_length_type() const
   {
-    ObObjDatumMapType type = basic_info_.agg_expr_->args_[0]->obj_datum_map_;
+    SqlValueDatumMapType type = basic_info_.agg_expr_->args_[0]->obj_datum_map_;
     return type != OBJ_DATUM_STRING && type != OBJ_DATUM_NUMBER && type != OBJ_DATUM_DECIMALINT;
   }
 
@@ -475,7 +475,7 @@ private:
       const common::ObDatum &datum,
       common::ObDatum &result);
   void clear_group_by_info();
-  ObObjTypeClass obj_tc_;
+  SqlTypeClass obj_tc_;
   bool sum_use_int_flag_;
   bool is_sum_use_temp_buf_;
   union {

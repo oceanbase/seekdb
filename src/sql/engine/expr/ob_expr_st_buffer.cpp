@@ -66,7 +66,7 @@ int ObExprSTBufferStrategy::calc_result_typeN(ObExprResType &type,
   UNUSED(type_ctx);
   INIT_SUCC(ret);
   // 1st param must be string or null 
-  ObObjType first_type = types[0].get_type();
+  SqlValueType first_type = types[0].get_type();
   if (ob_is_string_type(first_type) || ob_is_null(first_type)) {
     if (ob_is_string_type(first_type)) {
       types[0].set_calc_type(first_type);
@@ -244,7 +244,7 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
     // do nothing, not strategy argument, use default value;
   } else {
     ObExpr *first_strategy_arg = expr.args_[ST_BUFFER_STRATEG_ARG_START_IDX];
-    ObObjType strategy_data_type = first_strategy_arg->datum_meta_.type_;
+    SqlValueType strategy_data_type = first_strategy_arg->datum_meta_.type_;
     ObCollationType strategy_cs_type = first_strategy_arg->datum_meta_.cs_type_;
     bool is_priv_strategy = (ob_is_integer_type(strategy_data_type)
                              || (ob_is_string_type(strategy_data_type)

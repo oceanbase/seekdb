@@ -49,7 +49,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
   }
   if (OB_SUCC(ret)) {
     obcall::ObDropTableArg &drop_table_arg = drop_table_stmt->get_drop_table_arg();
-    ObObj is_recyclebin_open;
+    bool is_recyclebin_open = false;
     if (OB_ISNULL(parse_tree.children_[TABLE_LIST_NODE]) ||
         parse_tree.children_[TABLE_LIST_NODE]->num_child_ <= 0){
       ret = OB_ERR_UNEXPECTED;
@@ -58,7 +58,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
     } else {
       drop_table_arg.if_exist_ = (NULL != parse_tree.children_[IF_EXIST_NODE]) ? true : false;
       
-      drop_table_arg.to_recyclebin_ = is_recyclebin_open.get_bool();
+      drop_table_arg.to_recyclebin_ = is_recyclebin_open;
     }
 
     if (OB_FAIL(ret)) {

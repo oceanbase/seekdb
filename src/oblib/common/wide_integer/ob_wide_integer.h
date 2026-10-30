@@ -35,7 +35,6 @@ namespace lib
 } // end namespace lib
 namespace common
 {
-struct ObObj;
 namespace wide
 {
 enum

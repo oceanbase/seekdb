@@ -113,7 +113,7 @@ int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     LOG_USER_ERROR(OB_ERR_RESERVED_SYNTAX, fun_name.length(), fun_name.ptr());
   } else {
     //check if name < 0 to be compatiable with mysql
-    common::ObObjType name_type = name_expr->datum_meta_.get_type();
+    common::SqlValueType name_type = name_expr->datum_meta_.get_type();
     bool is_neg = false;
     if (ObFloatType == name_type) {
       is_neg = name_param->get_float() < 0;

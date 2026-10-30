@@ -94,33 +94,33 @@ int ObAllVirtualIDService::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
       case OB_APP_MIN_COLUMN_ID: { // id_service_type
-        cur_row_.cells_[i].set_int(service_type_[service_types_index_]);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, service_type_[service_types_index_]) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 1: { // last_id
-        cur_row_.cells_[i].set_int(last_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, last_id_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 2: { // limit_id
-        cur_row_.cells_[i].set_int(limit_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, limit_id_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 3: { // rec_log_scn
         uint64_t v = rec_log_ts_.is_valid() ? rec_log_ts_.get_val_for_inner_table_field() : 0;
-        cur_row_.cells_[i].set_uint64(v);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 4: { // latest_log_scn
         uint64_t v = latest_log_ts_.is_valid() ? latest_log_ts_.get_val_for_inner_table_field() : 0;
-        cur_row_.cells_[i].set_uint64(v);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, v) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 5: { // pre_allocated_range
-        cur_row_.cells_[i].set_int(pre_allocated_range_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, pre_allocated_range_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 6: { // submit_log_ts
-        cur_row_.cells_[i].set_int(submit_log_ts_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, submit_log_ts_) : ret);
         break;
       }
       default: {

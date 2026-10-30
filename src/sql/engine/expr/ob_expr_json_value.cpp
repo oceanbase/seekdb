@@ -112,7 +112,7 @@ int ObExprJsonValue::calc_result_typeN(ObExprResType& type,
 int ObExprJsonValue::calc_input_type(ObExprResType& types_stack, bool &is_json_input)
 {
   INIT_SUCC(ret);
-  ObObjType doc_type = types_stack.get_type();
+  SqlValueType doc_type = types_stack.get_type();
   if (types_stack.get_type() == ObNullType) {
   } else if (!ObJsonExprHelper::is_convertible_to_json(doc_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
@@ -257,7 +257,7 @@ int ObExprJsonValue::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   return ret;
 }
 
-int ObExprJsonQueryParamInfo::get_int_val_from_raw(ObIAllocator &alloc, ObExecContext *exec_ctx, const ObRawExpr* raw_expr, ObObj &const_data)
+int ObExprJsonQueryParamInfo::get_int_val_from_raw(ObIAllocator &alloc, ObExecContext *exec_ctx, const ObRawExpr* raw_expr, DatumValue &const_data)
 {
   INIT_SUCC(ret);
   const_data.reset();
@@ -281,7 +281,7 @@ int ObExprJsonQueryParamInfo::init_mismatch_array(const ObRawExpr* raw_expr,
   uint32_t pos = -1;
   ObArray<int8_t> val;
   ObArray<int8_t> type;
-  ObObj const_data;
+  DatumValue const_data;
   for(uint32_t i = JSN_VAL_MISMATCH; OB_SUCC(ret) 
                     && i < raw_expr->get_param_count(); i++) {
     if (OB_FAIL(get_int_val_from_raw(allocator_, exec_ctx, raw_expr->get_param_expr(i), const_data))) {
@@ -310,7 +310,7 @@ int ObExprJsonQueryParamInfo::init_jsn_val_expr_param(ObIAllocator &alloc, ObExp
   INIT_SUCC(ret);
   ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
   const ObRawExpr *path = raw_expr->get_param_expr(JSN_VAL_PATH);
-  ObObj const_data;
+  DatumValue const_data;
   ObArray<int8_t> param_vec;
   uint32_t pos = -1;
   // parse clause node
@@ -457,11 +457,11 @@ int ObExprJsonValue::get_clause_param_value(const ObExpr &expr, ObEvalCtx &ctx,
 
 template<typename Obj>
 int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
-                                                const ObObjType &type,
+                                                const SqlValueType &type,
                                                 const Obj *obj)
 {
   INIT_SUCC(ret);
-  ObObjTypeClass tc = ob_obj_type_class(type);
+  SqlTypeClass tc = sql_type_class(type);
 
   switch (tc) {
     case ObNumberTC: {
@@ -654,7 +654,7 @@ int ObExprJsonValue::get_default_value(ObExpr *expr,
                                       ObDatum **default_value)
 {
   INIT_SUCC(ret);
-  ObObjType val_type = expr->datum_meta_.type_;
+  SqlValueType val_type = expr->datum_meta_.type_;
   ObDatum *json_datum = NULL;
   {
     expr->extra_ &= ~CM_WARN_ON_FAIL; // make cast return error when fail

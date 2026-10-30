@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "share/datum/typed_datum_compare.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/plan_cache/ob_plan_cache.h"
@@ -222,7 +223,7 @@ int ObOptStatManager::update_column_stat(share::schema::ObSchemaGetterGuard *sch
                                          sqlclient::ObISQLConnection *conn,
                                          const ObIArray<ObOptColumnStat *> &column_stats,
                                          bool only_update_col_stat /*default false*/,
-                                         const ObObjPrintParams &print_params)
+                                         const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   int64_t current_time = ObTimeUtility::current_time();
@@ -334,7 +335,7 @@ int ObOptStatManager::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
                                   ObIArray<ObOptColumnStat *> &column_stats,
                                   const int64_t current_time,
                                   const bool is_index_stat,
-                                  const ObObjPrintParams &print_params)
+                                  const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("UpdateColStat", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -680,7 +681,7 @@ int ObOptStatManager::trans_col_handle_to_evals(
       } else if (OB_ISNULL(col_all_evals)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        col_all_evals->merge(*opt_col_stat);
+        ret = col_all_evals->merge(*opt_col_stat);
       }
     }
   }
@@ -715,9 +716,9 @@ int ObOptStatManager::update_all_eval_to_stats(
         opt_stats.ndv_val_ = ObOptSelectivity::scale_distinct(row_cnt, row_cnt / scale_ratio, opt_stats.ndv_val_);
       }
       if (col_all_evals->min_eval_.is_valid() &&
-          OB_FAIL(ob_write_obj(*alloc, col_all_evals->min_eval_.get(), opt_stats.min_val_))) {
+          OB_FAIL(clone_typed_value(col_all_evals->min_eval_.get(), opt_stats.min_val_, *alloc))) {
       } else if (col_all_evals->max_eval_.is_valid() &&
-                 OB_FAIL(ob_write_obj(*alloc, col_all_evals->max_eval_.get(), opt_stats.max_val_))) {
+                 OB_FAIL(clone_typed_value(col_all_evals->max_eval_.get(), opt_stats.max_val_, *alloc))) {
       }
     } else {
     }

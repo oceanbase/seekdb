@@ -107,7 +107,7 @@ int ObSliceIdxCalc::get_slice_idx_batch(const ObIArray<ObExpr*> &exprs, ObEvalCt
   return ret;
 }
 
-int ObSliceIdxCalc::get_previous_row_tablet_id(ObObj &tablet_id)
+int ObSliceIdxCalc::get_previous_row_tablet_id(int64_t &tablet_id)
 {
   int ret = OB_NOT_SUPPORTED;
   LOG_USER_ERROR(OB_NOT_SUPPORTED, "get previous tablet id");
@@ -269,10 +269,10 @@ int ObRepartSliceIdxCalc::get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
   return ret;
 }
 
-int ObRepartSliceIdxCalc::get_previous_row_tablet_id(ObObj &tablet_id)
+int ObRepartSliceIdxCalc::get_previous_row_tablet_id(int64_t &tablet_id)
 {
   int ret = OB_SUCCESS;
-  tablet_id.set_int(tablet_id_);
+  tablet_id = tablet_id_;
   return ret;
 }
 

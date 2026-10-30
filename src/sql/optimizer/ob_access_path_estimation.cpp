@@ -1188,7 +1188,7 @@ int ObAccessPathEstimation::choose_storage_estimation_ranges(const int64_t range
   } else if (is_geo_index) {
     const ObIArray<common::ObNewRange> &geo_ranges = ranges;
     int64_t total_cnt = geo_ranges.count();
-    if (geo_ranges.at(0).get_start_key().get_obj_cnt() < SPATIAL_ROWKEY_MIN_NUM) {
+    if (geo_ranges.at(0).get_start_key().get_value_count() < SPATIAL_ROWKEY_MIN_NUM) {
       ret = OB_ERR_UNEXPECTED;
     } else if (total_cnt <= range_limit || range_limit <= 0) {
       if (OB_FAIL(scan_ranges.assign(geo_ranges))) {
@@ -1465,8 +1465,8 @@ int ObAccessPathEstimation::construct_scan_range_batch(ObIAllocator &allocator,
 
 bool ObAccessPathEstimation::is_multi_geo_range(const ObNewRange &range)
 {
-  return OB_NOT_NULL(range.get_start_key().get_obj_ptr()) &&
-         range.get_start_key().get_obj_ptr()[0].get_uint64() != range.get_end_key().get_obj_ptr()[0].get_uint64();
+  return OB_NOT_NULL(range.get_start_key().get_values()) &&
+         range.get_start_key().get_values()[0].get_uint64() != range.get_end_key().get_values()[0].get_uint64();
 }
 
 
@@ -2473,23 +2473,24 @@ int RangePartitionHelper::construct_partition_range(ObArenaAllocator &allocator,
                                                     bool &is_valid_range)
 {
   int64_t ret = OB_SUCCESS;
-  ObObj *start_key = NULL;
-  ObObj *end_key = NULL;
+  DatumValue *start_key = NULL;
+  DatumValue *end_key = NULL;
   int64_t key_count = part_projector.count();
   is_valid_range = true;
   bool cnt_ext = false;
   int64_t next_pos = part_projector.empty() ? -1 : part_projector.at(part_projector.count() - 1) + 1;
-  if (OB_ISNULL(start_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * key_count))) ||
-      OB_ISNULL(end_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * key_count)))) {
+  if (OB_ISNULL(start_key = static_cast<DatumValue*>(allocator.alloc(sizeof(DatumValue) * key_count))) ||
+      OB_ISNULL(end_key = static_cast<DatumValue*>(allocator.alloc(sizeof(DatumValue) * key_count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   }
+  if (OB_SUCC(ret)) { new (start_key) DatumValue[key_count]; new (end_key) DatumValue[key_count]; }
   for (int64_t i = 0; OB_SUCC(ret) && i < key_count; ++i) {
     int64_t pos = part_projector.at(i);
-    if (OB_UNLIKELY(pos < 0 || pos >= scan_range.start_key_.get_obj_cnt())) {
+    if (OB_UNLIKELY(pos < 0 || pos >= scan_range.start_key_.get_value_count())) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      start_key[i] = scan_range.start_key_.get_obj_ptr()[pos];
-      end_key[i] = scan_range.end_key_.get_obj_ptr()[pos];
+      start_key[i] = scan_range.start_key_.get_values()[pos];
+      end_key[i] = scan_range.end_key_.get_values()[pos];
       if (start_key[i].is_ext() || end_key[i].is_ext()) {
         cnt_ext = true;
       }
@@ -2514,13 +2515,13 @@ int RangePartitionHelper::construct_partition_range(ObArenaAllocator &allocator,
         is_valid_range = false;
       }
     } else if (next_pos >= 0 &&
-               next_pos < scan_range.start_key_.get_obj_cnt() &&
-               next_pos < scan_range.end_key_.get_obj_cnt()) {
+               next_pos < scan_range.start_key_.get_value_count() &&
+               next_pos < scan_range.end_key_.get_value_count()) {
       // When the scan range is (1,MIN,MIN ; 4,MAX,MAX), if use scan_range's border flag,
       // we will get the wrong partition range (1,4).
       // The right partition range should be [1,4].
-      const ObObj &next_start_key = scan_range.start_key_.get_obj_ptr()[next_pos];
-      const ObObj &next_end_key = scan_range.end_key_.get_obj_ptr()[next_pos];
+      const DatumValue &next_start_key = scan_range.start_key_.get_values()[next_pos];
+      const DatumValue &next_end_key = scan_range.end_key_.get_values()[next_pos];
       if (!part_range.start_key_.is_min_row() && !next_start_key.is_max_value()) {
         part_range.border_flag_.set_inclusive_start();
       }

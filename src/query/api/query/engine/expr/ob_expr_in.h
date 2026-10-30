@@ -390,7 +390,7 @@ protected:
   static int setup_row(ObExpr **expr, ObEvalCtx &ctx, const bool is_iter,
                        const int64_t cmp_func_cnt, ObSubQueryIterator *&iter, ObExpr **&row);
   static void check_right_can_cmp_mem(const ObDatum &datum,
-                                      const common::ObObjMeta &meta,
+                                      const common::SqlTypeMeta &meta,
                                       bool &can_cmp_mem,
                                       bool &cnt_null);
   static void check_left_can_cmp_mem(const ObExpr &expr,

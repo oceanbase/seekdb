@@ -52,15 +52,15 @@ public:
   {
     into_type_ = into_type;
   }
-  inline void set_outfile_name(common::ObObj &name_str)
+  inline void set_outfile_name(const common::DatumValue &name_str)
   {
     outfile_name_ = name_str;
   }
-  inline void set_field_str(common::ObObj &field_str)
+  inline void set_field_str(const common::DatumValue &field_str)
   {
     field_str_ = field_str;
   }
-  inline void set_line_str(common::ObObj &line_str)
+  inline void set_line_str(const common::DatumValue &line_str)
   {
     line_str_ = line_str;
   }
@@ -88,11 +88,11 @@ public:
   {
     buffer_size_ = buffer_size;
   }
-  inline void set_closed_cht(common::ObObj &closed_cht)
+  inline void set_closed_cht(const common::DatumValue &closed_cht)
   {
     closed_cht_ = closed_cht;
   }
-  inline void set_escaped_cht(common::ObObj &escaped_cht)
+  inline void set_escaped_cht(const common::DatumValue &escaped_cht)
   {
     escaped_cht_ = escaped_cht;
   }
@@ -112,15 +112,15 @@ public:
   {
     return into_type_;
   }
-  inline common::ObObj get_outfile_name() const
+  inline const common::DatumValue &get_outfile_name() const
   {
     return outfile_name_;
   }
-  inline common::ObObj get_field_str() const
+  inline const common::DatumValue &get_field_str() const
   {
     return field_str_;
   }
-  inline common::ObObj get_line_str() const
+  inline const common::DatumValue &get_line_str() const
   {
     return line_str_;
   }
@@ -144,11 +144,11 @@ public:
   {
     return buffer_size_;
   }
-  inline common::ObObj get_closed_cht() const
+  inline const common::DatumValue &get_closed_cht() const
   {
     return closed_cht_;
   }
-  inline common::ObObj get_escaped_cht() const
+  inline const common::DatumValue &get_escaped_cht() const
   {
     return escaped_cht_;
   }
@@ -174,17 +174,17 @@ public:
   static const int64_t DEFAULT_BUFFER_SIZE = 1*1024*1024;
 private:
   ObItemType into_type_;
-  common::ObObj outfile_name_;
-  common::ObObj field_str_;
-  common::ObObj line_str_;
+  common::DatumValue outfile_name_;
+  common::DatumValue field_str_;
+  common::DatumValue line_str_;
   common::ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> select_exprs_;
   common::ObSEArray<common::ObString, 16, common::ModulePageAllocator, true> user_vars_;
-  common::ObObj closed_cht_;
+  common::DatumValue closed_cht_;
   bool is_optional_;
   bool is_single_;
   int64_t max_file_size_;
   int64_t buffer_size_;
-  common::ObObj escaped_cht_;
+  common::DatumValue escaped_cht_;
   common::ObCollationType cs_type_;
   bool is_overwrite_;
   common::ObString external_properties_;

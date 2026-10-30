@@ -27,7 +27,7 @@ namespace sql
 
 // ==================================================================================
 // accuracy checker
-template <ObObjTypeClass out_tc>
+template <SqlTypeClass out_tc>
 struct BatchAccuracyChecker
 {
   static int check(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
@@ -46,7 +46,7 @@ struct BatchAccuracyChecker<ObDecimalIntTC>
     int ret = OB_SUCCESS;
     int warn = ret;
     ObAccuracy out_acc;
-    ObObjType out_type;
+    SqlValueType out_type;
     ObDecimalIntBuilder *res_arr = nullptr;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
@@ -82,7 +82,7 @@ struct BatchAccuracyChecker<ObNumberTC>
     int ret = OB_SUCCESS;
     int warning = ret;
     ObAccuracy out_acc;
-    ObObjType out_type;
+    SqlValueType out_type;
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, out_acc, out_type))) {
     } else {
       ObDatumVector result_dv = expr.locate_expr_datumvector(ctx);
@@ -106,7 +106,7 @@ struct BatchAccuracyChecker<ObNumberTC>
 // ==================================================================================
 // helper functions
 
-template <ObObjTypeClass in_tc, ObObjTypeClass out_tc>
+template <SqlTypeClass in_tc, SqlTypeClass out_tc>
 int ObBatchCast::explicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                      const int64_t batch_size)
 {
@@ -674,7 +674,7 @@ static int int_fast_cast(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 // common batch datum casting routines
 // ==================================================================================
 
-template <ObObjTypeClass in_tc, ObObjTypeClass out_tc>
+template <SqlTypeClass in_tc, SqlTypeClass out_tc>
 int ObBatchCast::implicit_batch_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                      const int64_t batch_size)
 {
@@ -877,8 +877,8 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
 
 // ==================================================================================
 // helper function to get explicit/implicit cast functions
-ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const ObObjTypeClass tc1,
-                                                             const ObObjTypeClass tc2)
+ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const SqlTypeClass tc1,
+                                                             const SqlTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
   ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
@@ -891,8 +891,8 @@ ObBatchCast::batch_func_ ObBatchCast::get_explicit_cast_func(const ObObjTypeClas
   }
 }
 
-ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const ObObjTypeClass tc1,
-                                                             const ObObjTypeClass tc2)
+ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const SqlTypeClass tc1,
+                                                             const SqlTypeClass tc2)
 {
   OB_ASSERT(tc1 < ObMaxTC && tc2 < ObMaxTC);
   ObExpr::EvalFunc **func_arr = (ObExpr::EvalFunc **)OB_DATUM_CAST_MYSQL_IMPLICIT;
@@ -909,7 +909,7 @@ ObBatchCast::batch_func_ ObBatchCast::get_implicit_cast_func(const ObObjTypeClas
 ObBatchCast::batch_func_ ObBatchCast::implicit_batch_funcs_[ObMaxTC][ObMaxTC];
 ObBatchCast::batch_func_ ObBatchCast::explicit_batch_funcs_[ObMaxTC][ObMaxTC];
 
-template <ObObjTypeClass tc1, ObObjTypeClass tc2>
+template <SqlTypeClass tc1, SqlTypeClass tc2>
 struct init_batch_func
 {
   static int init()
@@ -922,14 +922,14 @@ struct init_batch_func
       ObBatchCast::implicit_batch_funcs_[tc1][tc2] = ObBatchCast::implicit_batch_cast<tc1, tc2>;
     }
     if (tc2 >= ObMaxTC - 1) {
-      return init_batch_func<static_cast<ObObjTypeClass>(tc1 + 1), ObNullTC>::init();
+      return init_batch_func<static_cast<SqlTypeClass>(tc1 + 1), ObNullTC>::init();
     } else {
-      return init_batch_func<tc1, static_cast<ObObjTypeClass>(tc2 + 1)>::init();
+      return init_batch_func<tc1, static_cast<SqlTypeClass>(tc2 + 1)>::init();
     }
   }
 };
 
-template <ObObjTypeClass tc1>
+template <SqlTypeClass tc1>
 struct init_batch_func<tc1, ObMaxTC>
 {
   static int init()
@@ -938,7 +938,7 @@ struct init_batch_func<tc1, ObMaxTC>
   }
 };
 
-template <ObObjTypeClass tc2>
+template <SqlTypeClass tc2>
 struct init_batch_func<ObMaxTC, tc2>
 {
   static int init()
@@ -951,7 +951,7 @@ static int init_batch_cast_funcs_ret = init_batch_func<ObNullTC, ObNullTC>::init
 
 // ==================================================================================
 // get_decint_cast
-void ObDatumCast::get_decint_cast(ObObjTypeClass in_tc, ObPrecision in_prec, ObScale in_scale,
+void ObDatumCast::get_decint_cast(SqlTypeClass in_tc, ObPrecision in_prec, ObScale in_scale,
                                   ObPrecision out_prec, ObScale out_scale, bool is_explicit,
                                   ObExpr::EvalBatchFunc &batch_cast_func,
                                   ObExpr::EvalFunc &cast_func)

@@ -19,6 +19,7 @@
 #include "common/xml/ob_path_parser.h"
 #include "common/xml/ob_xml_util.h"
 #include "common/mysqlclient/ob_mysql_global.h" // DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE
+#include "lib/charset/ob_dtoa.h"
 
 namespace oceanbase {
 namespace common {

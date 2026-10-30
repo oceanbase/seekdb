@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_func_partition_key.h"
 
+#include "share/datum/datum_hash_value_calculator.h"
 #include "sql/engine/expr/ob_wide_integer_partition_hash.h"
 
 namespace oceanbase
@@ -67,7 +68,7 @@ int ObExprFuncPartKey::calc_partition_key(const ObExpr &expr,
     for (int i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); i++) {
       ObDatum &param_datum = expr.locate_param_datum(ctx, i);
       if (ob_is_decimal_int(expr.args_[i]->datum_meta_.type_)) {
-        ret = wide::PartitionHash<ObMurmurHash, ObDatum>::calculate(
+        ret = wide::PartitionHash<DatumMurmurHash, ObDatum>::calculate(
             param_datum, hash_value, hash_value);
       } else {
         ret = expr.args_[i]->basic_funcs_->murmur_hash_(
@@ -101,7 +102,7 @@ int ObExprFuncPartKey::calc_partition_key_batch(BATCH_EVAL_FUNC_ARG_DECL)
     } else {
       const bool is_batch_seed = (i > 0);
       if (ob_is_decimal_int(e->datum_meta_.type_)) {
-        wide::PartitionHash<ObMurmurHash, ObDatum>::hash_batch(
+        wide::PartitionHash<DatumMurmurHash, ObDatum>::hash_batch(
             hash_values, e->locate_batch_datums(ctx), e->is_batch_result(),
             skip, size, is_batch_seed ? hash_values : &seed, is_batch_seed);
       } else {

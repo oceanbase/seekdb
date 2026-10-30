@@ -15,6 +15,8 @@
  */
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_exec_hash_struct.h"
+#include "share/datum/datum_hash_value_calculator.h"
+#include "share/datum/typed_datum_compare.h"
 
 namespace oceanbase
 {
@@ -31,28 +33,30 @@ uint64_t ObHashCols::inner_hash() const
     int64_t group_col_count = hash_col_idx_->count();
     if (stored_row_ != NULL
         && stored_row_->reserved_cells_count_ > 0) {
-      const ObObj *cells = stored_row_->reserved_cells_;
+      const DatumValue *cells = stored_row_->reserved_cells_;
       for (int32_t i = 0; i < group_col_count; ++i) {
         if (hash_col_idx_->at(i).index_ < stored_row_->reserved_cells_count_) {
-          const ObObj &cell = cells[hash_col_idx_->at(i).index_];
+          const DatumValue &cell = cells[hash_col_idx_->at(i).index_];
           if (cell.is_string_type()) {
-            result = cell.varchar_murmur_hash(hash_col_idx_->at(i).cs_type_, result);
+            result = ObCharset::hash(hash_col_idx_->at(i).cs_type_,
+                cell.datum_.ptr_, cell.datum_.len_, result, false, DatumMurmurHash::hash);
           } else {
-            cell.hash(result, result);
+            (void)hash_datum_value(cell, result, result);
           }
         }
       }
     } else if (row_ != NULL && row_->is_valid()) {
-      const ObObj *cells = row_->cells_;
+      const DatumValue *cells = row_->cells_;
       const int32_t *projector = row_->projector_;
       for (int64_t i = 0; i < group_col_count; ++i) {
         int64_t real_index = row_->projector_size_ > 0 ?
             projector[hash_col_idx_->at(i).index_] : hash_col_idx_->at(i).index_;
-        const ObObj &cell = cells[real_index];
+        const DatumValue &cell = cells[real_index];
         if (cell.is_string_type()) {
-          result = cell.varchar_murmur_hash(hash_col_idx_->at(i).cs_type_, result);
+          result = ObCharset::hash(hash_col_idx_->at(i).cs_type_,
+                cell.datum_.ptr_, cell.datum_.len_, result, false, DatumMurmurHash::hash);
         } else {
-          cell.hash(result, result);
+          (void)hash_datum_value(cell, result, result);
         }
       }
     }

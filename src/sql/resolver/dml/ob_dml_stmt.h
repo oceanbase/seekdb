@@ -23,6 +23,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_se_array.h"
 #include "sql/resolver/ob_stmt.h"
+#include "common/datum/datum_parameter_array.h"
 #include "sql/parser/parse_node.h"
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/dml/ob_sql_hint.h"
@@ -108,7 +109,7 @@ struct ObValuesTableDef {
     ACCESS_EXPR = 0,  // expr, one by one
     FOLD_ACCESS_EXPR, // expr, one expr->ObSqlArray
     ACCESS_PARAM,     // by a continuous space of param_store
-    ACCESS_OBJ,       // ObObj one by one, used for non-parametric
+    ACCESS_VALUE,     // native constant values, used for non-parametric
   };
   int deep_copy(const ObValuesTableDef &other,
                 ObIRawExprCopier &expr_copier,
@@ -116,7 +117,7 @@ struct ObValuesTableDef {
   common::ObArray<ObRawExpr*, common::ModulePageAllocator, true> access_exprs_;
   int64_t start_param_idx_;
   int64_t end_param_idx_;
-  common::ObArray<ObObjParam, common::ModulePageAllocator, true> access_objs_;
+  common::ObArray<common::DatumParameter, common::ModulePageAllocator, true> access_values_;
   common::ObArray<int64_t, common::ModulePageAllocator, true> column_ndvs_;  // column num distinct
   common::ObArray<int64_t, common::ModulePageAllocator, true> column_nnvs_;  // column num null
   int64_t column_cnt_;
@@ -125,7 +126,7 @@ struct ObValuesTableDef {
   bool is_const_; // values table’s outputs are all params.
   common::ObArray<ObRawExprResType, common::ModulePageAllocator, true> column_types_;
   virtual TO_STRING_KV(K(column_cnt_), K(row_cnt_), K(access_exprs_), K(start_param_idx_),
-                       K(end_param_idx_), K(access_objs_), K(column_ndvs_), K(column_nnvs_),
+                       K(end_param_idx_), K(access_values_), K(column_ndvs_), K(column_nnvs_),
                        K(access_type_), K(is_const_), K(column_types_));
 };
 
@@ -326,7 +327,10 @@ struct ColumnItem
   bool is_invalid() const { return NULL == expr_; }
   const ObColumnRefRawExpr *get_expr() const { return expr_; }
   ObColumnRefRawExpr *get_expr() { return expr_; }
-  void set_default_value(const common::ObObj &val);
+  // Clone non-NULL defaults into the explicit owner, or expr_'s plan arena.
+  // An explicit owner also supports temporary column items before expr_ is set.
+  int set_default_value(const common::DatumValue &val,
+                        common::ObIAllocator *owner = nullptr);
   void set_default_value_expr(ObRawExpr *expr)
   {
     default_value_expr_ = expr;
@@ -380,7 +384,7 @@ struct ColumnItem
   common::ObString column_name_;
   ObColumnRefRawExpr *expr_;
   // the following two are used by DML operations, such as insert or update
-  common::ObObj default_value_;
+  common::DatumValue default_value_;
   bool auto_filled_timestamp_;
   // json table reuse default_value_expr_ for on error default
   ObRawExpr *default_value_expr_;

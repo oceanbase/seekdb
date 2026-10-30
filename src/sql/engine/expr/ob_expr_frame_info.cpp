@@ -416,7 +416,7 @@ int ObPreCalcExprFrameInfo::assign(const ObPreCalcExprFrameInfo &other,
 }
 
 int ObPreCalcExprFrameInfo::eval(ObExecContext &exec_ctx,
-                                 ObIArray<ObDatumObjParam> &res_datum_params)
+                                 ObIArray<DatumParameter> &res_datum_params)
 {
   int ret = OB_SUCCESS;
   res_datum_params.reuse();
@@ -432,12 +432,12 @@ int ObPreCalcExprFrameInfo::eval(ObExecContext &exec_ctx,
 }
 
 OB_INLINE int ObPreCalcExprFrameInfo::do_normal_eval(ObExecContext &exec_ctx,
-                                                     ObIArray<ObDatumObjParam> &res_datum_params)
+                                                     ObIArray<DatumParameter> &res_datum_params)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx eval_ctx(exec_ctx);
   ObDatum *res_datum = NULL;
-  ObDatumObjParam datum_param;
+  DatumParameter datum_param;
   ObExpr *rt_expr = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < pre_calc_rt_exprs_.count(); ++i) {
     if (OB_ISNULL(rt_expr = pre_calc_rt_exprs_.at(i))) {
@@ -445,7 +445,11 @@ OB_INLINE int ObPreCalcExprFrameInfo::do_normal_eval(ObExecContext &exec_ctx,
     } else if (OB_FAIL(rt_expr->eval(eval_ctx, res_datum))) {
     } else {
       datum_param.set_datum(*res_datum);
-      datum_param.set_meta(rt_expr->datum_meta_);
+      datum_param.set_type_meta(rt_expr->obj_meta_);
+      ObAccuracy accuracy;
+      accuracy.set_scale(rt_expr->datum_meta_.scale_);
+      accuracy.set_precision(rt_expr->datum_meta_.precision_);
+      datum_param.set_accuracy(accuracy);
       if (rt_expr->obj_meta_.has_lob_header()) {
         datum_param.set_result_flag(HAS_LOB_HEADER_FLAG);
       }
@@ -457,26 +461,26 @@ OB_INLINE int ObPreCalcExprFrameInfo::do_normal_eval(ObExecContext &exec_ctx,
 }
 
 OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_ctx,
-                                                           ObIArray<ObDatumObjParam> &res_datum_params)
+                                                           ObIArray<DatumParameter> &res_datum_params)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx eval_ctx(exec_ctx);
   ObDatum *res_datum = NULL;
-  ObDatumObjParam datum_param;
+  DatumParameter datum_param;
   int64_t group_cnt = exec_ctx.get_sql_ctx()->get_batch_params_count();
-  ObSqlDatumArray *datum_array = nullptr;
+  DatumParameterArray *datum_array = nullptr;
   //construct sql array obj
   for (int64_t i = 0; OB_SUCC(ret) && i < pre_calc_rt_exprs_.count(); ++i) {
     ObExpr *rt_expr = NULL;
     if (OB_ISNULL(rt_expr = pre_calc_rt_exprs_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_ISNULL(datum_array = ObSqlDatumArray::alloc(exec_ctx.get_allocator(), group_cnt))) {
+    } else if (OB_ISNULL(datum_array = DatumParameterArray::alloc(exec_ctx.get_allocator(), group_cnt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       datum_array->element_.set_obj_type(rt_expr->datum_meta_.type_);
       datum_array->element_.set_collation_type(rt_expr->datum_meta_.cs_type_);
       datum_array->element_.set_scale(rt_expr->datum_meta_.scale_);
-      const ObObjTypeClass &dst_tc = ob_obj_type_class(rt_expr->datum_meta_.type_);
+      const SqlTypeClass &dst_tc = sql_type_class(rt_expr->datum_meta_.type_);
       if (ObStringTC == dst_tc || ObTextTC == dst_tc) {
         datum_array->element_.set_length_semantics(rt_expr->datum_meta_.length_semantics_);
       } else {
@@ -484,12 +488,14 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
       }
     }
     if (OB_SUCC(ret)) {
-      datum_param.meta_.type_ = ObExtendType;
-      datum_param.meta_.scale_ = T_EXT_SQL_ARRAY;
-      if (OB_FAIL(datum_param.alloc_datum_reserved_buff(datum_param.meta_, // is_ext_sql_array
+      SqlTypeMeta array_meta;
+      array_meta.set_ext();
+      array_meta.set_extend_type(T_EXT_SQL_ARRAY);
+      datum_param.set_type_meta(array_meta);
+      if (OB_FAIL(datum_param.alloc_datum_reserved_buff(array_meta, // is_ext_sql_array
                                                         PRECISION_UNKNOWN_YET, // precision is unknown
                                                         exec_ctx.get_allocator()))) {
-      } else if (FALSE_IT(datum_param.set_sql_array_datum(datum_array))) {
+      } else if (FALSE_IT(datum_param.set_array_address(datum_array))) {
         //always false, do nothing
       } else if (OB_FAIL(res_datum_params.push_back(datum_param))) {
       }
@@ -505,11 +511,20 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
     clear_datum_evaluted_flags(exec_ctx.get_frames());
     for (int64_t i = 0; OB_SUCC(ret) && i < pre_calc_rt_exprs_.count(); ++i) {
       ObExpr *rt_expr = pre_calc_rt_exprs_.at(i);
-      datum_array = res_datum_params.at(i).get_sql_datum_array();
+      datum_array = res_datum_params.at(i).get_array<DatumParameterArray>();
       if (OB_FAIL(rt_expr->eval(eval_ctx, res_datum))) {
-      } else if (OB_FAIL(datum_array->data_[group_id].deep_copy(*res_datum,
+      } else if (OB_FAIL(datum_array->data_[group_id].datum_.deep_copy(*res_datum,
                                                                 exec_ctx.get_allocator()))) {
       } else {
+        DatumParameter &value = datum_array->data_[group_id];
+        value.set_type_meta(rt_expr->obj_meta_);
+        ObAccuracy accuracy;
+        accuracy.set_scale(rt_expr->datum_meta_.scale_);
+        accuracy.set_precision(rt_expr->datum_meta_.precision_);
+        value.set_accuracy(accuracy);
+        if (rt_expr->obj_meta_.has_lob_header()) {
+          value.set_result_flag(HAS_LOB_HEADER_FLAG);
+        }
       }
     }
   }
@@ -573,46 +588,102 @@ ObTempExprCtx::~ObTempExprCtx()
   }
 }
 
-int ObTempExpr::eval(ObExecContext &exec_ctx, const ObNewRow &row, ObObj &result) const
+int ObTempExpr::eval_datum(ObExecContext &exec_ctx, ObIAllocator &result_allocator,
+                            ObDatum &result) const
 {
   int ret = OB_SUCCESS;
-  ObDatum *res_datum = NULL;
-  char **frames = NULL;
-  ObTempExprCtx *temp_expr_ctx = NULL;
-  OZ(exec_ctx.get_temp_expr_eval_ctx(*this, temp_expr_ctx));
-  CK(OB_NOT_NULL(temp_expr_ctx));
-  OX(ObSQLUtils::clear_expr_eval_flags(rt_exprs_.at(expr_idx_), *temp_expr_ctx));
-  OZ(row_to_frame(row, *temp_expr_ctx));
-  if (OB_SUCC(ret)) {
-    ObTempExprCtxReplaceGuard exec_ctx_backup_guard(exec_ctx, *temp_expr_ctx);
-    OZ(rt_exprs_.at(expr_idx_).eval(*temp_expr_ctx, res_datum));
-    OZ(res_datum->to_obj(result, rt_exprs_.at(expr_idx_).obj_meta_));
-    if (!exec_ctx.use_temp_expr_ctx_cache()) {
-      temp_expr_ctx->~ObTempExprCtx();
+  ObDatum *res_datum = nullptr;
+  ObTempExprCtx *temp_expr_ctx = nullptr;
+  result.set_null();
+  if (OB_UNLIKELY(!idx_col_arr_.empty() || expr_idx_ < 0 || expr_idx_ >= rt_exprs_.count())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    OZ(exec_ctx.get_temp_expr_eval_ctx(*this, temp_expr_ctx));
+    CK(OB_NOT_NULL(temp_expr_ctx));
+    OX(ObSQLUtils::clear_expr_eval_flags(rt_exprs_.at(expr_idx_), *temp_expr_ctx));
+    if (OB_SUCC(ret)) {
+      ObTempExprCtxReplaceGuard exec_ctx_backup_guard(exec_ctx, *temp_expr_ctx);
+      OZ(rt_exprs_.at(expr_idx_).eval(*temp_expr_ctx, res_datum));
+      CK(OB_NOT_NULL(res_datum));
+      OZ(result.deep_copy(*res_datum, result_allocator));
+      if (!exec_ctx.use_temp_expr_ctx_cache()) {
+        temp_expr_ctx->~ObTempExprCtx();
+      }
     }
   }
-
   return ret;
 }
 
-int ObTempExpr::row_to_frame(const ObNewRow &row, ObTempExprCtx &temp_expr_ctx) const
+int ObTempExpr::eval_datum(ObExecContext &exec_ctx, const ObIArray<DatumValue> &row,
+                            ObIAllocator &result_allocator, ObDatum &result) const
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < idx_col_arr_.count(); i++) {
-    const RowIdxColumnPair &idx_col = idx_col_arr_.at(i);
-    ObObj &v = row.cells_[idx_col.idx_];
-    ObExpr &expr = rt_exprs_.at(idx_col.expr_pos_);
-    ObDatum &expr_datum = expr.locate_datum_for_write(temp_expr_ctx);
-    if (v.get_type() != expr.datum_meta_.type_ && !v.is_null()) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(expr_datum.from_obj(v, expr.obj_datum_map_))) {
-    } else if (is_lob_storage(v.get_type()) &&
-               OB_FAIL(ob_adjust_lob_datum(temp_expr_ctx.exec_ctx_, v,
-                                           expr.obj_meta_, expr.obj_datum_map_,
-                                           temp_expr_ctx.exec_ctx_.get_allocator(), expr_datum))) {
+  ObTempExprCtx *temp_expr_ctx = nullptr;
+  if (OB_UNLIKELY(expr_idx_ < 0 || expr_idx_ >= rt_exprs_.count())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(exec_ctx.get_temp_expr_eval_ctx(*this, temp_expr_ctx))) {
+  } else if (OB_ISNULL(temp_expr_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    // A noncached context owns expression operator resources even if filling
+    // the input frame or evaluating its root fails.
+    struct ContextCleanup {
+      ObTempExprCtx *context_;
+      bool destroy_;
+      ~ContextCleanup() { if (destroy_) { context_->~ObTempExprCtx(); } }
+    } cleanup{temp_expr_ctx, !exec_ctx.use_temp_expr_ctx_cache()};
+    ObSQLUtils::clear_expr_eval_flags(rt_exprs_.at(expr_idx_), *temp_expr_ctx);
+    if (OB_FAIL(row_to_frame(row, *temp_expr_ctx))) {
+    } else {
+      ObTempExprCtxReplaceGuard guard(exec_ctx, *temp_expr_ctx);
+      ObDatum *evaluated = nullptr;
+      ObDatum owned;
+      if (OB_FAIL(rt_exprs_.at(expr_idx_).eval(*temp_expr_ctx, evaluated))) {
+      } else if (OB_ISNULL(evaluated)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(owned.deep_copy(*evaluated, result_allocator))) {
+      } else {
+        result = owned;
+      }
     }
   }
+  return ret;
+}
 
+int ObTempExpr::row_to_frame(const ObIArrayWrap<DatumValue> &row,
+                              ObTempExprCtx &temp_expr_ctx) const
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < idx_col_arr_.count(); ++i) {
+    const RowIdxColumnPair &column = idx_col_arr_.at(i);
+    if (column.idx_ < 0 || column.idx_ >= row.count()
+        || column.expr_pos_ < 0 || column.expr_pos_ >= rt_exprs_.count()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      const DatumValue &value = row.at(column.idx_);
+      ObExpr &expr = rt_exprs_.at(column.expr_pos_);
+      ObDatum input;
+      char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+      if (value.get_type() != expr.datum_meta_.type_ && !value.is_null()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(value.to_row_datum(input, extended_payload))) {
+      } else {
+        ObDatum &frame = expr.locate_datum_for_write(temp_expr_ctx);
+        if (value.is_ext() && !value.is_null()) {
+          // The normalized Extend uses stack scratch. Publish a copy in the
+          // expression's reserved result buffer before that scratch expires.
+          int64_t pos = 0;
+          ret = frame.deep_copy(input, const_cast<char *>(frame.ptr_), expr.res_buf_len_, pos);
+        } else {
+          frame = input;
+        }
+        if (OB_SUCC(ret) && is_lob_storage(value.get_type())) {
+          ret = ob_adjust_lob_datum(temp_expr_ctx.exec_ctx_, input, value.get_meta(),
+              expr.obj_meta_, temp_expr_ctx.exec_ctx_.get_allocator(), frame);
+        }
+      }
+    }
+  }
   return ret;
 }
 

@@ -20,6 +20,7 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/datum/ob_datum_funcs.h"
+#include "share/datum/datum_hash_value_calculator.h"
 
 namespace oceanbase
 {
@@ -28,7 +29,7 @@ namespace common
 
 using sql::ObBitVector;
 
-template <ObObjType L_T, ObObjType R_T, bool NULL_FIRST>
+template <SqlValueType L_T, SqlValueType R_T, bool NULL_FIRST>
 struct ObNullSafeDatumTypeCmp
 {
   inline static int cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
@@ -59,7 +60,7 @@ struct ObNullSafeDatumTypeCmp
   }
 };
 
-template <ObObjTypeClass L_TC, ObObjTypeClass R_TC, bool NULL_FIRST>
+template <SqlTypeClass L_TC, SqlTypeClass R_TC, bool NULL_FIRST>
 struct ObNullSafeDatumTCCmp
 {
   inline static int cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
@@ -736,13 +737,13 @@ struct DatumStrHashCalculator<CS_TYPE_UTF8MB4_BIN, calc_end_space, T, true /* is
   }
 };
 
-template <ObObjType type, typename T>
+template <SqlValueType type, typename T>
 struct DatumHashCalculator : public DefHashMethod<T>
 {
   static int calc_datum_hash(const ObDatum &datum, const uint64_t seed, uint64_t &res,
                              const ObDatumAccessContext *access_ctx)
   {
-    return ObjHashCalculator<type, T, ObDatum>::calc_hash_value(datum, seed, res);
+    return DatumHashValueCalculator<type, T>::calc_hash_value(datum, seed, res);
   }
   static int calc_datum_hash_v2(const ObDatum &datum, const uint64_t seed, uint64_t &res,
                                 const ObDatumAccessContext *access_ctx)
@@ -762,7 +763,7 @@ struct DatumHashCalculator : public DefHashMethod<T>
                                const ObDatumAccessContext *access_ctx)                   \
     {                                                                                   \
       UNUSED(access_ctx);                                                               \
-      return ObjHashCalculator<OBJTYPE, T, ObDatum>::calc_hash_value(datum, seed, res); \
+      return DatumHashValueCalculator<OBJTYPE, T>::calc_hash_value(datum, seed, res); \
     }                                                                                   \
     static int calc_datum_hash_v2(const ObDatum &datum, const uint64_t seed,             \
                                   uint64_t &res,                                         \
@@ -782,8 +783,6 @@ DEF_DATUM_SPECIAL_HASH_FUNCS(ObFloatType);
 DEF_DATUM_SPECIAL_HASH_FUNCS(ObUFloatType);
 DEF_DATUM_SPECIAL_HASH_FUNCS(ObDoubleType);
 DEF_DATUM_SPECIAL_HASH_FUNCS(ObUDoubleType);
-DEF_DATUM_SPECIAL_HASH_FUNCS(ObJsonType);
-DEF_DATUM_SPECIAL_HASH_FUNCS(ObGeometryType);
 extern ObDatumCmpFuncType NULLSAFE_JSON_CMP_FUNCS[2][2];
 extern ObDatumCmpFuncType NULLSAFE_STR_CMP_FUNCS[CS_TYPE_MAX][2][2];
 extern ObDatumCmpFuncType NULLSAFE_TEXT_CMP_FUNCS[CS_TYPE_MAX][2][2];
@@ -814,8 +813,8 @@ struct InitTypeCmpArray
 {
   template <bool... args>
   using Cmp = ObNullSafeDatumTypeCmp<
-      static_cast<ObObjType>(X), static_cast<ObObjType>(Y), args...>;
-  using Def = datum_cmp::ObDatumTypeCmp<static_cast<ObObjType>(X), static_cast<ObObjType>(Y)>;
+      static_cast<SqlValueType>(X), static_cast<SqlValueType>(Y), args...>;
+  using Def = datum_cmp::ObDatumTypeCmp<static_cast<SqlValueType>(X), static_cast<SqlValueType>(Y)>;
   static void init_array()
   {
     NULLSAFE_TYPE_CMP_FUNCS[X][Y][0] = Def::defined_ ? &Cmp<0>::cmp : NULL;
@@ -827,7 +826,7 @@ template<int X, int Y>
 struct InitTypeCmpArray<X, Y, false>: public DummyIniter {};
 
 template<int X, int Y>
-using TypeCmpIniter = InitTypeCmpArray<X, Y, datum_cmp::ObDatumTypeCmp<static_cast<ObObjType>(X), static_cast<ObObjType>(Y)>::defined_>;
+using TypeCmpIniter = InitTypeCmpArray<X, Y, datum_cmp::ObDatumTypeCmp<static_cast<SqlValueType>(X), static_cast<SqlValueType>(Y)>::defined_>;
 
 // init type class compare function array
 template <int X, int Y, bool defined = true>
@@ -835,10 +834,10 @@ struct InitTCCmpArray
 {
   template <bool... args>
   using Cmp = ObNullSafeDatumTCCmp<
-      static_cast<ObObjTypeClass>(X), static_cast<ObObjTypeClass>(Y), args...>;
+      static_cast<SqlTypeClass>(X), static_cast<SqlTypeClass>(Y), args...>;
   using Def = datum_cmp::ObDatumTCCmp<
-      static_cast<ObObjTypeClass>(X),
-      static_cast<ObObjTypeClass>(Y)>;
+      static_cast<SqlTypeClass>(X),
+      static_cast<SqlTypeClass>(Y)>;
   static void init_array()
   {
     NULLSAFE_TC_CMP_FUNCS[X][Y][0] = Def::defined_ ? &Cmp<0>::cmp : NULL;
@@ -850,49 +849,49 @@ template<int X, int Y>
 struct InitTCCmpArray<X, Y, false>: public DummyIniter {};
 
 template<int X, int Y>
-using TCCmpIniter = InitTCCmpArray<X, Y, datum_cmp::ObDatumTCCmp<static_cast<ObObjTypeClass>(X),static_cast<ObObjTypeClass>(Y)>::defined_>;
+using TCCmpIniter = InitTCCmpArray<X, Y, datum_cmp::ObDatumTCCmp<static_cast<SqlTypeClass>(X),static_cast<SqlTypeClass>(Y)>::defined_>;
 
 // init basic function array
 template <int X>
 struct InitBasicFuncArray
 {
   template <typename T>
-  using Hash = DefHashFunc<DatumHashCalculator<static_cast<ObObjType>(X), T>>;
+  using Hash = DefHashFunc<DatumHashCalculator<static_cast<SqlValueType>(X), T>>;
   template <bool NULL_FIRST>
   using TCCmp = ObNullSafeDatumTCCmp<
-      ObObjTypeTraits<static_cast<ObObjType>(X)>::tc_,
-      ObObjTypeTraits<static_cast<ObObjType>(X)>::tc_,
+      SqlValueTypeTraits<static_cast<SqlValueType>(X)>::tc_,
+      SqlValueTypeTraits<static_cast<SqlValueType>(X)>::tc_,
       NULL_FIRST>;
   using TCDef = datum_cmp::ObDatumTCCmp<
-      ObObjTypeTraits<static_cast<ObObjType>(X)>::tc_,
-      ObObjTypeTraits<static_cast<ObObjType>(X)>::tc_>;
+      SqlValueTypeTraits<static_cast<SqlValueType>(X)>::tc_,
+      SqlValueTypeTraits<static_cast<SqlValueType>(X)>::tc_>;
   template <bool NULL_FIRST>
   using TypeCmp = ObNullSafeDatumTypeCmp<
-      static_cast<ObObjType>(X),
-      static_cast<ObObjType>(X),
+      static_cast<SqlValueType>(X),
+      static_cast<SqlValueType>(X),
       NULL_FIRST>;
   using TypeDef = datum_cmp::ObDatumTypeCmp<
-      static_cast<ObObjType>(X),
-      static_cast<ObObjType>(X)>;
+      static_cast<SqlValueType>(X),
+      static_cast<SqlValueType>(X)>;
   static void init_array()
   {
     auto &basic_funcs = EXPR_BASIC_FUNCS;
-    basic_funcs[X].default_hash_ = Hash<ObDefaultHash>::hash;
-    basic_funcs[X].default_hash_batch_= Hash<ObDefaultHash>::hash_batch;
-    basic_funcs[X].murmur_hash_ = Hash<ObMurmurHash>::hash;
-    basic_funcs[X].murmur_hash_batch_ = Hash<ObMurmurHash>::hash_batch;
-    basic_funcs[X].xx_hash_ = Hash<ObXxHash>::hash;
-    basic_funcs[X].xx_hash_batch_ = Hash<ObXxHash>::hash_batch;
-    basic_funcs[X].wy_hash_ = Hash<ObWyHash>::hash;
-    basic_funcs[X].wy_hash_batch_ = Hash<ObWyHash>::hash_batch;
+    basic_funcs[X].default_hash_ = Hash<DatumDefaultHash>::hash;
+    basic_funcs[X].default_hash_batch_= Hash<DatumDefaultHash>::hash_batch;
+    basic_funcs[X].murmur_hash_ = Hash<DatumMurmurHash>::hash;
+    basic_funcs[X].murmur_hash_batch_ = Hash<DatumMurmurHash>::hash_batch;
+    basic_funcs[X].xx_hash_ = Hash<DatumXxHash>::hash;
+    basic_funcs[X].xx_hash_batch_ = Hash<DatumXxHash>::hash_batch;
+    basic_funcs[X].wy_hash_ = Hash<DatumWyHash>::hash;
+    basic_funcs[X].wy_hash_batch_ = Hash<DatumWyHash>::hash_batch;
     basic_funcs[X].null_first_cmp_ = TypeDef::defined_
         ? &TypeCmp<1>::cmp
         : TCDef::defined_ ? &TCCmp<1>::cmp : NULL;
     basic_funcs[X].null_last_cmp_ = TypeDef::defined_
         ? &TypeCmp<0>::cmp
         : TCDef::defined_ ? &TCCmp<0>::cmp : NULL;
-    basic_funcs[X].murmur_hash_v2_ = Hash<ObMurmurHash>::hash_v2;
-    basic_funcs[X].murmur_hash_v2_batch_ = Hash<ObMurmurHash>::hash_v2_batch;
+    basic_funcs[X].murmur_hash_v2_ = Hash<DatumMurmurHash>::hash_v2;
+    basic_funcs[X].murmur_hash_v2_batch_ = Hash<DatumMurmurHash>::hash_v2_batch;
   }
 };
 
@@ -945,33 +944,33 @@ struct InitBasicStrFuncArray<X, Y, true>
   {
     if (datum_cmp::SupportedCollection<static_cast<ObCollationType>(X)>::defined_) {
       auto &basic_funcs = EXPR_BASIC_STR_FUNCS;
-      basic_funcs[X][Y][0].default_hash_ = Hash<ObDefaultHash, false>::hash;
-      basic_funcs[X][Y][0].default_hash_batch_ = HashBatch<ObDefaultHash, false>::hash_batch;
-      basic_funcs[X][Y][0].murmur_hash_ = Hash<ObMurmurHash, false>::hash;
-      basic_funcs[X][Y][0].murmur_hash_batch_ = HashBatch<ObMurmurHash, false>::hash_batch;
-      basic_funcs[X][Y][0].xx_hash_ = Hash<ObXxHash, false>::hash;
-      basic_funcs[X][Y][0].xx_hash_batch_ = HashBatch<ObXxHash, false>::hash_batch;
-      basic_funcs[X][Y][0].wy_hash_ = Hash<ObWyHash, false>::hash;
-      basic_funcs[X][Y][0].wy_hash_batch_ = HashBatch<ObWyHash, false>::hash_batch;
+      basic_funcs[X][Y][0].default_hash_ = Hash<DatumDefaultHash, false>::hash;
+      basic_funcs[X][Y][0].default_hash_batch_ = HashBatch<DatumDefaultHash, false>::hash_batch;
+      basic_funcs[X][Y][0].murmur_hash_ = Hash<DatumMurmurHash, false>::hash;
+      basic_funcs[X][Y][0].murmur_hash_batch_ = HashBatch<DatumMurmurHash, false>::hash_batch;
+      basic_funcs[X][Y][0].xx_hash_ = Hash<DatumXxHash, false>::hash;
+      basic_funcs[X][Y][0].xx_hash_batch_ = HashBatch<DatumXxHash, false>::hash_batch;
+      basic_funcs[X][Y][0].wy_hash_ = Hash<DatumWyHash, false>::hash;
+      basic_funcs[X][Y][0].wy_hash_batch_ = HashBatch<DatumWyHash, false>::hash_batch;
       basic_funcs[X][Y][0].null_first_cmp_ = Def::defined_ ? &StrCmp<1>::cmp : NULL;
       basic_funcs[X][Y][0].null_last_cmp_ = Def::defined_ ? &StrCmp<0>::cmp : NULL;
-      basic_funcs[X][Y][0].murmur_hash_v2_ = Hash<ObMurmurHash, false>::hash_v2;
-      basic_funcs[X][Y][0].murmur_hash_v2_batch_ = HashBatch<ObMurmurHash, false>::hash_v2_batch;
+      basic_funcs[X][Y][0].murmur_hash_v2_ = Hash<DatumMurmurHash, false>::hash_v2;
+      basic_funcs[X][Y][0].murmur_hash_v2_batch_ = HashBatch<DatumMurmurHash, false>::hash_v2_batch;
 
-      basic_funcs[X][Y][1].default_hash_ = Hash<ObDefaultHash, true>::hash;
-      basic_funcs[X][Y][1].default_hash_batch_ = HashBatch<ObDefaultHash, true>::hash_batch;
-      basic_funcs[X][Y][1].murmur_hash_ = Hash<ObMurmurHash, true>::hash;
-      basic_funcs[X][Y][1].murmur_hash_batch_ = HashBatch<ObMurmurHash, true>::hash_batch;
-      // basic_funcs[X][Y][1].xx_hash_ = Hash<ObXxHash, true>::hash;
-      // basic_funcs[X][Y][1].xx_hash_batch_ = Hash<ObXxHash, true>::hash_batch;
-      // basic_funcs[X][Y][1].wy_hash_ = Hash<ObWyHash, true>::hash;
-      // basic_funcs[X][Y][1].wy_hash_batch_ = Hash<ObWyHash, true>::hash_batch;
+      basic_funcs[X][Y][1].default_hash_ = Hash<DatumDefaultHash, true>::hash;
+      basic_funcs[X][Y][1].default_hash_batch_ = HashBatch<DatumDefaultHash, true>::hash_batch;
+      basic_funcs[X][Y][1].murmur_hash_ = Hash<DatumMurmurHash, true>::hash;
+      basic_funcs[X][Y][1].murmur_hash_batch_ = HashBatch<DatumMurmurHash, true>::hash_batch;
+      // basic_funcs[X][Y][1].xx_hash_ = Hash<DatumXxHash, true>::hash;
+      // basic_funcs[X][Y][1].xx_hash_batch_ = Hash<DatumXxHash, true>::hash_batch;
+      // basic_funcs[X][Y][1].wy_hash_ = Hash<DatumWyHash, true>::hash;
+      // basic_funcs[X][Y][1].wy_hash_batch_ = Hash<DatumWyHash, true>::hash_batch;
 
       // Notice: ObLobType cannot compare, but is_locator = 1 used for other lob types
       basic_funcs[X][Y][1].null_first_cmp_ = DefText::defined_ ? &TextCmp<1>::cmp : NULL;
       basic_funcs[X][Y][1].null_last_cmp_ = DefText::defined_ ? &TextCmp<0>::cmp : NULL;
-      basic_funcs[X][Y][1].murmur_hash_v2_ = Hash<ObMurmurHash, true>::hash_v2;
-      basic_funcs[X][Y][1].murmur_hash_v2_batch_ = HashBatch<ObMurmurHash, true>::hash_v2_batch;
+      basic_funcs[X][Y][1].murmur_hash_v2_ = Hash<DatumMurmurHash, true>::hash_v2;
+      basic_funcs[X][Y][1].murmur_hash_v2_batch_ = HashBatch<DatumMurmurHash, true>::hash_v2_batch;
     }
   }
 };
@@ -1096,39 +1095,39 @@ struct InitBasicJsonFuncArray
   static void init_array()
   {
     auto &basic_funcs = EXPR_BASIC_JSON_FUNCS;
-    basic_funcs[0].default_hash_ = Hash<ObDefaultHash, false>::hash;
-    basic_funcs[0].default_hash_batch_= Hash<ObDefaultHash, false>::hash_batch;
-    basic_funcs[0].murmur_hash_ = Hash<ObMurmurHash, false>::hash;
-    basic_funcs[0].murmur_hash_batch_ = Hash<ObMurmurHash, false>::hash_batch;
-    basic_funcs[0].xx_hash_ = Hash<ObXxHash, false>::hash;
-    basic_funcs[0].xx_hash_batch_ = Hash<ObXxHash, false>::hash_batch;
-    basic_funcs[0].wy_hash_ = Hash<ObWyHash, false>::hash;
-    basic_funcs[0].wy_hash_batch_ = Hash<ObWyHash, false>::hash_batch;
+    basic_funcs[0].default_hash_ = Hash<DatumDefaultHash, false>::hash;
+    basic_funcs[0].default_hash_batch_= Hash<DatumDefaultHash, false>::hash_batch;
+    basic_funcs[0].murmur_hash_ = Hash<DatumMurmurHash, false>::hash;
+    basic_funcs[0].murmur_hash_batch_ = Hash<DatumMurmurHash, false>::hash_batch;
+    basic_funcs[0].xx_hash_ = Hash<DatumXxHash, false>::hash;
+    basic_funcs[0].xx_hash_batch_ = Hash<DatumXxHash, false>::hash_batch;
+    basic_funcs[0].wy_hash_ = Hash<DatumWyHash, false>::hash;
+    basic_funcs[0].wy_hash_batch_ = Hash<DatumWyHash, false>::hash_batch;
     basic_funcs[0].null_first_cmp_ = TypeDef::defined_
         ? &TypeCmp<1, 0>::cmp
         : TCDef::defined_ ? &TCCmp<1>::cmp : NULL;
     basic_funcs[0].null_last_cmp_ = TypeDef::defined_
         ? &TypeCmp<0, 0>::cmp
         : TCDef::defined_ ? &TCCmp<0>::cmp : NULL;
-    basic_funcs[0].murmur_hash_v2_ = Hash<ObMurmurHash, false>::hash_v2;
-    basic_funcs[0].murmur_hash_v2_batch_ = Hash<ObMurmurHash, false>::hash_v2_batch;
+    basic_funcs[0].murmur_hash_v2_ = Hash<DatumMurmurHash, false>::hash_v2;
+    basic_funcs[0].murmur_hash_v2_batch_ = Hash<DatumMurmurHash, false>::hash_v2_batch;
 
-    basic_funcs[1].default_hash_ = Hash<ObDefaultHash, true>::hash;
-    basic_funcs[1].default_hash_batch_= Hash<ObDefaultHash, true>::hash_batch;
-    basic_funcs[1].murmur_hash_ = Hash<ObMurmurHash, true>::hash;
-    basic_funcs[1].murmur_hash_batch_ = Hash<ObMurmurHash, true>::hash_batch;
-    // basic_funcs[1].xx_hash_ = Hash<ObXxHash, true>::hash;
-    // basic_funcs[1].xx_hash_batch_ = Hash<ObXxHash, true>::hash_batch;
-    // basic_funcs[1].wy_hash_ = Hash<ObWyHash, true>::hash;
-    // basic_funcs[1].wy_hash_batch_ = Hash<ObWyHash, true>::hash_batch;
+    basic_funcs[1].default_hash_ = Hash<DatumDefaultHash, true>::hash;
+    basic_funcs[1].default_hash_batch_= Hash<DatumDefaultHash, true>::hash_batch;
+    basic_funcs[1].murmur_hash_ = Hash<DatumMurmurHash, true>::hash;
+    basic_funcs[1].murmur_hash_batch_ = Hash<DatumMurmurHash, true>::hash_batch;
+    // basic_funcs[1].xx_hash_ = Hash<DatumXxHash, true>::hash;
+    // basic_funcs[1].xx_hash_batch_ = Hash<DatumXxHash, true>::hash_batch;
+    // basic_funcs[1].wy_hash_ = Hash<DatumWyHash, true>::hash;
+    // basic_funcs[1].wy_hash_batch_ = Hash<DatumWyHash, true>::hash_batch;
     basic_funcs[1].null_first_cmp_ = TypeDef::defined_
         ? &TypeCmp<1, 1>::cmp
         : TCDef::defined_ ? &TCCmp<1>::cmp : NULL;
     basic_funcs[1].null_last_cmp_ = TypeDef::defined_
         ? &TypeCmp<0, 1>::cmp
         : TCDef::defined_ ? &TCCmp<0>::cmp : NULL;
-    basic_funcs[1].murmur_hash_v2_ = Hash<ObMurmurHash, true>::hash_v2;
-    basic_funcs[1].murmur_hash_v2_batch_ = Hash<ObMurmurHash, true>::hash_v2_batch;
+    basic_funcs[1].murmur_hash_v2_ = Hash<DatumMurmurHash, true>::hash_v2;
+    basic_funcs[1].murmur_hash_v2_batch_ = Hash<DatumMurmurHash, true>::hash_v2_batch;
   }
 };
 
@@ -1167,6 +1166,35 @@ struct DatumGeoHashCalculator : public DefHashMethod<T>
   }
 };
 
+template <typename T>
+struct DatumHashCalculator<ObJsonType, T> : public DefHashMethod<T>
+{
+  static int calc_datum_hash(const ObDatum &datum, const uint64_t seed, uint64_t &result,
+                             const ObDatumAccessContext *access_ctx)
+  {
+    return DatumJsonHashCalculator<T, true>::calc_datum_hash(datum, seed, result, access_ctx);
+  }
+  static int calc_datum_hash_v2(const ObDatum &datum, const uint64_t seed, uint64_t &result,
+                                const ObDatumAccessContext *access_ctx)
+  {
+    return DatumJsonHashCalculator<T, true>::calc_datum_hash_v2(datum, seed, result, access_ctx);
+  }
+};
+template <typename T>
+struct DatumHashCalculator<ObGeometryType, T> : public DefHashMethod<T>
+{
+  static int calc_datum_hash(const ObDatum &datum, const uint64_t seed, uint64_t &result,
+                             const ObDatumAccessContext *access_ctx)
+  {
+    return DatumGeoHashCalculator<T, true>::calc_datum_hash(datum, seed, result, access_ctx);
+  }
+  static int calc_datum_hash_v2(const ObDatum &datum, const uint64_t seed, uint64_t &result,
+                                const ObDatumAccessContext *access_ctx)
+  {
+    return DatumGeoHashCalculator<T, true>::calc_datum_hash_v2(datum, seed, result, access_ctx);
+  }
+};
+
 template<int IDX>
 struct InitBasicGeoFuncArray
 {
@@ -1182,39 +1210,39 @@ struct InitBasicGeoFuncArray
   static void init_array()
   {
     auto &basic_funcs = EXPR_BASIC_GEO_FUNCS;
-    basic_funcs[0].default_hash_ = Hash<ObDefaultHash, false>::hash;
-    basic_funcs[0].default_hash_batch_= Hash<ObDefaultHash, false>::hash_batch;
-    basic_funcs[0].murmur_hash_ = Hash<ObMurmurHash, false>::hash;
-    basic_funcs[0].murmur_hash_batch_ = Hash<ObMurmurHash, false>::hash_batch;
-    // basic_funcs[0].xx_hash_ = Hash<ObXxHash, false>::hash;
-    // basic_funcs[0].xx_hash_batch_ = Hash<ObXxHash, false>::hash_batch;
-    // basic_funcs[0].wy_hash_ = Hash<ObWyHash, false>::hash;
-    // basic_funcs[0].wy_hash_batch_ = Hash<ObWyHash, false>::hash_batch;
+    basic_funcs[0].default_hash_ = Hash<DatumDefaultHash, false>::hash;
+    basic_funcs[0].default_hash_batch_= Hash<DatumDefaultHash, false>::hash_batch;
+    basic_funcs[0].murmur_hash_ = Hash<DatumMurmurHash, false>::hash;
+    basic_funcs[0].murmur_hash_batch_ = Hash<DatumMurmurHash, false>::hash_batch;
+    // basic_funcs[0].xx_hash_ = Hash<DatumXxHash, false>::hash;
+    // basic_funcs[0].xx_hash_batch_ = Hash<DatumXxHash, false>::hash_batch;
+    // basic_funcs[0].wy_hash_ = Hash<DatumWyHash, false>::hash;
+    // basic_funcs[0].wy_hash_batch_ = Hash<DatumWyHash, false>::hash_batch;
     basic_funcs[0].null_first_cmp_ = TypeDef::defined_
         ? &TypeCmp<1, 0>::cmp
         : TCDef::defined_ ? &TCCmp<1>::cmp : NULL;
     basic_funcs[0].null_last_cmp_ = TypeDef::defined_
         ? &TypeCmp<0, 0>::cmp
         : TCDef::defined_ ? &TCCmp<0>::cmp : NULL;
-    basic_funcs[0].murmur_hash_v2_ = Hash<ObMurmurHash, false>::hash_v2;
-    basic_funcs[0].murmur_hash_v2_batch_ = Hash<ObMurmurHash, false>::hash_v2_batch;
+    basic_funcs[0].murmur_hash_v2_ = Hash<DatumMurmurHash, false>::hash_v2;
+    basic_funcs[0].murmur_hash_v2_batch_ = Hash<DatumMurmurHash, false>::hash_v2_batch;
 
-    basic_funcs[1].default_hash_ = Hash<ObDefaultHash, true>::hash;
-    basic_funcs[1].default_hash_batch_= Hash<ObDefaultHash, true>::hash_batch;
-    basic_funcs[1].murmur_hash_ = Hash<ObMurmurHash, true>::hash;
-    basic_funcs[1].murmur_hash_batch_ = Hash<ObMurmurHash, true>::hash_batch;
-    basic_funcs[1].xx_hash_ = Hash<ObXxHash, true>::hash;
-    basic_funcs[1].xx_hash_batch_ = Hash<ObXxHash, true>::hash_batch;
-    basic_funcs[1].wy_hash_ = Hash<ObWyHash, true>::hash;
-    basic_funcs[1].wy_hash_batch_ = Hash<ObWyHash, true>::hash_batch;
+    basic_funcs[1].default_hash_ = Hash<DatumDefaultHash, true>::hash;
+    basic_funcs[1].default_hash_batch_= Hash<DatumDefaultHash, true>::hash_batch;
+    basic_funcs[1].murmur_hash_ = Hash<DatumMurmurHash, true>::hash;
+    basic_funcs[1].murmur_hash_batch_ = Hash<DatumMurmurHash, true>::hash_batch;
+    basic_funcs[1].xx_hash_ = Hash<DatumXxHash, true>::hash;
+    basic_funcs[1].xx_hash_batch_ = Hash<DatumXxHash, true>::hash_batch;
+    basic_funcs[1].wy_hash_ = Hash<DatumWyHash, true>::hash;
+    basic_funcs[1].wy_hash_batch_ = Hash<DatumWyHash, true>::hash_batch;
     basic_funcs[1].null_first_cmp_ = TypeDef::defined_
         ? &TypeCmp<1, 1>::cmp
         : TCDef::defined_ ? &TCCmp<1>::cmp : NULL;
     basic_funcs[1].null_last_cmp_ = TypeDef::defined_
         ? &TypeCmp<0, 1>::cmp
         : TCDef::defined_ ? &TCCmp<0>::cmp : NULL;
-    basic_funcs[1].murmur_hash_v2_ = Hash<ObMurmurHash, true>::hash_v2;
-    basic_funcs[1].murmur_hash_v2_batch_ = Hash<ObMurmurHash, true>::hash_v2_batch;
+    basic_funcs[1].murmur_hash_v2_ = Hash<DatumMurmurHash, true>::hash_v2;
+    basic_funcs[1].murmur_hash_v2_batch_ = Hash<DatumMurmurHash, true>::hash_v2_batch;
   }
 };
 
@@ -1380,18 +1408,18 @@ struct InitFixedDoubleBasicFuncArray
   static void init_array()
   {
     auto &basic_funcs = FIXED_DOUBLE_BASIC_FUNCS;
-    basic_funcs[X].default_hash_ = Hash<ObDefaultHash>::hash;
-    basic_funcs[X].default_hash_batch_= HashBatch<ObDefaultHash>::hash_batch;
-    basic_funcs[X].murmur_hash_ = Hash<ObMurmurHash>::hash;
-    basic_funcs[X].murmur_hash_batch_ = HashBatch<ObMurmurHash>::hash_batch;
-    basic_funcs[X].xx_hash_ = Hash<ObXxHash>::hash;
-    basic_funcs[X].xx_hash_batch_ = HashBatch<ObXxHash>::hash_batch;
-    basic_funcs[X].wy_hash_ = Hash<ObWyHash>::hash;
-    basic_funcs[X].wy_hash_batch_ = HashBatch<ObWyHash>::hash_batch;
+    basic_funcs[X].default_hash_ = Hash<DatumDefaultHash>::hash;
+    basic_funcs[X].default_hash_batch_= HashBatch<DatumDefaultHash>::hash_batch;
+    basic_funcs[X].murmur_hash_ = Hash<DatumMurmurHash>::hash;
+    basic_funcs[X].murmur_hash_batch_ = HashBatch<DatumMurmurHash>::hash_batch;
+    basic_funcs[X].xx_hash_ = Hash<DatumXxHash>::hash;
+    basic_funcs[X].xx_hash_batch_ = HashBatch<DatumXxHash>::hash_batch;
+    basic_funcs[X].wy_hash_ = Hash<DatumWyHash>::hash;
+    basic_funcs[X].wy_hash_batch_ = HashBatch<DatumWyHash>::hash_batch;
     basic_funcs[X].null_first_cmp_ = ObNullSafeFixedDoubleCmp<static_cast<ObScale>(X), true>::cmp;
     basic_funcs[X].null_last_cmp_ = ObNullSafeFixedDoubleCmp<static_cast<ObScale>(X), false>::cmp;
-    basic_funcs[X].murmur_hash_v2_ = Hash<ObMurmurHash>::hash_v2;
-    basic_funcs[X].murmur_hash_v2_batch_ = HashBatch<ObMurmurHash>::hash_v2_batch;
+    basic_funcs[X].murmur_hash_v2_ = Hash<DatumMurmurHash>::hash_v2;
+    basic_funcs[X].murmur_hash_v2_batch_ = HashBatch<DatumMurmurHash>::hash_v2_batch;
   }
 };
 
@@ -1443,18 +1471,18 @@ struct InitUDTBasicFuncArray
   static void init_array()
   {
     auto &basic_funcs = EXPR_BASIC_UDT_FUNCS;
-    basic_funcs[X].default_hash_ = Hash<ObDefaultHash, true>::hash;
-    basic_funcs[X].default_hash_batch_= Hash<ObDefaultHash, true>::hash_batch;
-    basic_funcs[X].murmur_hash_ = StrHash<ObMurmurHash>::hash;
-    basic_funcs[X].murmur_hash_batch_ = Hash<ObMurmurHash, true>::hash_batch;
-    basic_funcs[X].xx_hash_ = Hash<ObXxHash, true>::hash;
-    basic_funcs[X].xx_hash_batch_ = Hash<ObXxHash, true>::hash_batch;
-    basic_funcs[X].wy_hash_ = Hash<ObWyHash, true>::hash;
-    basic_funcs[X].wy_hash_batch_ = Hash<ObWyHash, true>::hash_batch;
+    basic_funcs[X].default_hash_ = Hash<DatumDefaultHash, true>::hash;
+    basic_funcs[X].default_hash_batch_= Hash<DatumDefaultHash, true>::hash_batch;
+    basic_funcs[X].murmur_hash_ = StrHash<DatumMurmurHash>::hash;
+    basic_funcs[X].murmur_hash_batch_ = Hash<DatumMurmurHash, true>::hash_batch;
+    basic_funcs[X].xx_hash_ = Hash<DatumXxHash, true>::hash;
+    basic_funcs[X].xx_hash_batch_ = Hash<DatumXxHash, true>::hash_batch;
+    basic_funcs[X].wy_hash_ = Hash<DatumWyHash, true>::hash;
+    basic_funcs[X].wy_hash_batch_ = Hash<DatumWyHash, true>::hash_batch;
     basic_funcs[X].null_first_cmp_ = &TypeCmp<1, 1>::cmp;
     basic_funcs[X].null_last_cmp_ = Def::defined_ ? &StrCmp<0>::cmp : NULL;
-    basic_funcs[X].murmur_hash_v2_ = Hash<ObMurmurHash, true>::hash_v2;
-    basic_funcs[X].murmur_hash_v2_batch_ = Hash<ObMurmurHash, true>::hash_v2_batch;
+    basic_funcs[X].murmur_hash_v2_ = Hash<DatumMurmurHash, true>::hash_v2;
+    basic_funcs[X].murmur_hash_v2_batch_ = Hash<DatumMurmurHash, true>::hash_v2_batch;
   }
 };
 
@@ -1491,39 +1519,39 @@ struct InitCollectionBasicFuncArray
   static void init_array()
   {
     auto &basic_funcs = EXPR_BASIC_COLLECTION_FUNCS;
-    basic_funcs[0].default_hash_ = Hash<ObDefaultHash, false>::hash;
-    basic_funcs[0].default_hash_batch_= Hash<ObDefaultHash, false>::hash_batch;
-    basic_funcs[0].murmur_hash_ = Hash<ObMurmurHash, false>::hash;
-    basic_funcs[0].murmur_hash_batch_ = Hash<ObMurmurHash, false>::hash_batch;
-    basic_funcs[0].xx_hash_ = Hash<ObXxHash, false>::hash;
-    basic_funcs[0].xx_hash_batch_ = Hash<ObXxHash, false>::hash_batch;
-    basic_funcs[0].wy_hash_ = Hash<ObWyHash, false>::hash;
-    basic_funcs[0].wy_hash_batch_ = Hash<ObWyHash, false>::hash_batch;
+    basic_funcs[0].default_hash_ = Hash<DatumDefaultHash, false>::hash;
+    basic_funcs[0].default_hash_batch_= Hash<DatumDefaultHash, false>::hash_batch;
+    basic_funcs[0].murmur_hash_ = Hash<DatumMurmurHash, false>::hash;
+    basic_funcs[0].murmur_hash_batch_ = Hash<DatumMurmurHash, false>::hash_batch;
+    basic_funcs[0].xx_hash_ = Hash<DatumXxHash, false>::hash;
+    basic_funcs[0].xx_hash_batch_ = Hash<DatumXxHash, false>::hash_batch;
+    basic_funcs[0].wy_hash_ = Hash<DatumWyHash, false>::hash;
+    basic_funcs[0].wy_hash_batch_ = Hash<DatumWyHash, false>::hash_batch;
     basic_funcs[0].null_first_cmp_ = TypeDef::defined_
         ? &TypeCmp<1, 0>::cmp
         : TCDef::defined_ ? &TCCmp<1>::cmp : NULL;
     basic_funcs[0].null_last_cmp_ = TypeDef::defined_
         ? &TypeCmp<0, 0>::cmp
         : TCDef::defined_ ? &TCCmp<0>::cmp : NULL;
-    basic_funcs[0].murmur_hash_v2_ = Hash<ObMurmurHash, false>::hash_v2;
-    basic_funcs[0].murmur_hash_v2_batch_ = Hash<ObMurmurHash, false>::hash_v2_batch;
+    basic_funcs[0].murmur_hash_v2_ = Hash<DatumMurmurHash, false>::hash_v2;
+    basic_funcs[0].murmur_hash_v2_batch_ = Hash<DatumMurmurHash, false>::hash_v2_batch;
 
-    basic_funcs[1].default_hash_ = Hash<ObDefaultHash, true>::hash;
-    basic_funcs[1].default_hash_batch_= Hash<ObDefaultHash, true>::hash_batch;
-    basic_funcs[1].murmur_hash_ = Hash<ObMurmurHash, true>::hash;
-    basic_funcs[1].murmur_hash_batch_ = Hash<ObMurmurHash, true>::hash_batch;
-    basic_funcs[1].xx_hash_ = Hash<ObXxHash, true>::hash;
-    basic_funcs[1].xx_hash_batch_ = Hash<ObXxHash, true>::hash_batch;
-    basic_funcs[1].wy_hash_ = Hash<ObWyHash, true>::hash;
-    basic_funcs[1].wy_hash_batch_ = Hash<ObWyHash, true>::hash_batch;
+    basic_funcs[1].default_hash_ = Hash<DatumDefaultHash, true>::hash;
+    basic_funcs[1].default_hash_batch_= Hash<DatumDefaultHash, true>::hash_batch;
+    basic_funcs[1].murmur_hash_ = Hash<DatumMurmurHash, true>::hash;
+    basic_funcs[1].murmur_hash_batch_ = Hash<DatumMurmurHash, true>::hash_batch;
+    basic_funcs[1].xx_hash_ = Hash<DatumXxHash, true>::hash;
+    basic_funcs[1].xx_hash_batch_ = Hash<DatumXxHash, true>::hash_batch;
+    basic_funcs[1].wy_hash_ = Hash<DatumWyHash, true>::hash;
+    basic_funcs[1].wy_hash_batch_ = Hash<DatumWyHash, true>::hash_batch;
     basic_funcs[1].null_first_cmp_ = TypeDef::defined_
         ? &TypeCmp<1, 1>::cmp
         : TCDef::defined_ ? &TCCmp<1>::cmp : NULL;
     basic_funcs[1].null_last_cmp_ = TypeDef::defined_
         ? &TypeCmp<0, 1>::cmp
         : TCDef::defined_ ? &TCCmp<0>::cmp : NULL;
-    basic_funcs[1].murmur_hash_v2_ = Hash<ObMurmurHash, true>::hash_v2;
-    basic_funcs[1].murmur_hash_v2_batch_ = Hash<ObMurmurHash, true>::hash_v2_batch;
+    basic_funcs[1].murmur_hash_v2_ = Hash<DatumMurmurHash, true>::hash_v2;
+    basic_funcs[1].murmur_hash_v2_batch_ = Hash<DatumMurmurHash, true>::hash_v2_batch;
   }
 };
 
@@ -1553,22 +1581,22 @@ struct InitDecintBasicFuncArray
   static void init_array()
   {
     auto &basic_funcs = DECINT_BASIC_FUNCS;
-    basic_funcs[width].default_hash_ = Hash<ObDefaultHash>::hash;
-    basic_funcs[width].default_hash_batch_= Hash<ObDefaultHash>::hash_batch;
-    basic_funcs[width].murmur_hash_ = Hash<ObMurmurHash>::hash;
-    basic_funcs[width].murmur_hash_batch_ = Hash<ObMurmurHash>::hash_batch;
-    basic_funcs[width].xx_hash_ = Hash<ObXxHash>::hash;
-    basic_funcs[width].xx_hash_batch_ = Hash<ObXxHash>::hash_batch;
-    basic_funcs[width].wy_hash_ = Hash<ObWyHash>::hash;
-    basic_funcs[width].wy_hash_batch_ = Hash<ObWyHash>::hash_batch;
+    basic_funcs[width].default_hash_ = Hash<DatumDefaultHash>::hash;
+    basic_funcs[width].default_hash_batch_= Hash<DatumDefaultHash>::hash_batch;
+    basic_funcs[width].murmur_hash_ = Hash<DatumMurmurHash>::hash;
+    basic_funcs[width].murmur_hash_batch_ = Hash<DatumMurmurHash>::hash_batch;
+    basic_funcs[width].xx_hash_ = Hash<DatumXxHash>::hash;
+    basic_funcs[width].xx_hash_batch_ = Hash<DatumXxHash>::hash_batch;
+    basic_funcs[width].wy_hash_ = Hash<DatumWyHash>::hash;
+    basic_funcs[width].wy_hash_batch_ = Hash<DatumWyHash>::hash_batch;
     basic_funcs[width].null_first_cmp_ =
       ObNullSafeDecintCmp<static_cast<ObDecimalIntWideType>(width),
                           static_cast<ObDecimalIntWideType>(width), true>::cmp;
     basic_funcs[width].null_last_cmp_ =
       ObNullSafeDecintCmp<static_cast<ObDecimalIntWideType>(width),
                           static_cast<ObDecimalIntWideType>(width), false>::cmp;
-    basic_funcs[width].murmur_hash_v2_ = Hash<ObMurmurHash>::hash_v2;
-    basic_funcs[width].murmur_hash_v2_batch_ = Hash<ObMurmurHash>::hash_v2_batch;
+    basic_funcs[width].murmur_hash_v2_ = Hash<DatumMurmurHash>::hash_v2;
+    basic_funcs[width].murmur_hash_v2_batch_ = Hash<DatumMurmurHash>::hash_v2_batch;
   }
 };
 

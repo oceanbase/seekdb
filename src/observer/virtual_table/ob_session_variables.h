@@ -26,7 +26,7 @@ class ObBasicSysVar;
 }
 namespace common
 {
-class ObObj;
+struct DatumValue;
 }
 namespace observer
 {
@@ -42,7 +42,7 @@ public:
     sys_variable_schema_ = sys_variable_schema;
   }
 private:
-  int set_pc_conf(const sql::ObBasicSysVar *sys_var, common::ObObj &cell);
+  int set_pc_conf(const sql::ObBasicSysVar *sys_var, common::DatumValue &cell);
 private:
   const share::schema::ObSysVariableSchema *sys_variable_schema_;
   DISALLOW_COPY_AND_ASSIGN(ObSessionVariables);

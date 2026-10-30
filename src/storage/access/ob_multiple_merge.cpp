@@ -1165,12 +1165,12 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
     if (OB_FAIL(nop_pos_.get_nop_pos(i, pos))) {
     } else {
       idx = access_param_->iter_param_.out_cols_project_->at(pos);
-      ObObj def_cell(out_cols_param->at(idx)->get_orig_default_value());
+      DatumValue def_cell(out_cols_param->at(idx)->get_orig_default_value());
       if (is_lob_storage(def_cell.get_type())
           && OB_FAIL(fuse_lob_default(def_cell, out_cols_param->at(idx)->get_column_id()))) {
         STORAGE_LOG(WARN, "Fail to fuse lob default, ", K(ret));
       } else if (NULL == access_param_->output_exprs_) {
-        if (OB_FAIL(row.storage_datums_[pos].from_obj(def_cell))) {
+        if (OB_FAIL(row.storage_datums_[pos].from_value(def_cell))) {
         }
       } else {
         // skip virtual column which has nop default value.
@@ -1180,13 +1180,27 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
               access_param_->get_op()->get_eval_ctx());
           sql::ObEvalInfo &eval_info = expr->get_eval_info(
               access_param_->get_op()->get_eval_ctx());
-          if (OB_FAIL(datum.from_obj(def_cell, expr->obj_datum_map_))) {
-          } else if (is_lob_storage(def_cell.get_type()) &&
-                     OB_FAIL(sql::ob_adjust_lob_datum(
-                         access_param_->get_op()->get_eval_ctx().exec_ctx_,
-                         def_cell, expr->obj_meta_, expr->obj_datum_map_,
-                         lob_reader_.get_allocator(), datum))) {
-          } else {
+          // Strings borrow the column parameter or row LOB arena. Numeric,
+          // decimal and extend payloads are copied into the expression frame,
+          // preserving its writable-buffer contract.
+          ObDatum source = def_cell.datum_;
+          if (ObDatum::get_sql_value_datum_map_type(def_cell.get_type()) == OBJ_DATUM_STRING
+              && !def_cell.is_null()) {
+            // The LOB header contract lives in meta. Match the former string
+            // mapping's OUTROW flag without inheriting SQL-only Datum flags.
+            source.pack_ = source.len_;
+            if (def_cell.get_meta().is_outrow()) { source.set_outrow(); }
+          }
+          if (source.is_ext()) {
+            datum.datum2datum<OBJ_DATUM_EXTEND>(source);
+          } else if (OB_FAIL(datum.from_storage_datum(source, expr->obj_datum_map_))) {
+          }
+          if (OB_SUCC(ret) && is_lob_storage(def_cell.get_type()) &&
+              OB_FAIL(sql::ob_adjust_lob_datum(
+                  access_param_->get_op()->get_eval_ctx().exec_ctx_,
+                  source, def_cell.get_meta(), expr->obj_meta_,
+                  lob_reader_.get_allocator(), datum))) {
+          } else if (OB_SUCC(ret)) {
             eval_info.evaluated_ = true;
           }
         }
@@ -1603,7 +1617,7 @@ OB_INLINE bool ObMultipleMerge::need_handle_lob_columns(const blocksstable::ObDa
     bret = false;
     for (int64_t i = access_param_->iter_param_.get_schema_rowkey_count(); !bret && i < row.count_; ++i) {
       blocksstable::ObStorageDatum &datum = row.storage_datums_[i];
-      ObObjMeta datum_meta = access_param_->iter_param_.get_col_params()->at(i)->get_meta_type();
+      SqlTypeMeta datum_meta = access_param_->iter_param_.get_col_params()->at(i)->get_meta_type();
       if (datum_meta.is_lob_storage() && !datum.is_null() && !datum.is_nop()) {
         const ObLobCommon *lob_common = reinterpret_cast<const ObLobCommon *>(datum.ptr_);
         bret |= (!lob_common->in_row_);
@@ -1637,7 +1651,7 @@ int ObMultipleMerge::handle_lob_before_fuse_row()
   return ret;
 }
 
-int ObMultipleMerge::fuse_lob_default(ObObj &def_cell, const uint64_t col_id)
+int ObMultipleMerge::fuse_lob_default(DatumValue &def_cell, const uint64_t col_id)
 {
   // Do not change this behavior dynamically while a scan is running;
   // otherwise the locator helper may not match the selected compatibility mode.
@@ -1657,8 +1671,8 @@ int ObMultipleMerge::fuse_lob_default(ObObj &def_cell, const uint64_t col_id)
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected lob locator helper", K(ret),
                     KPC(access_ctx_->lob_locator_helper_));
-      } else if (access_ctx_->lob_locator_helper_->fuse_mem_lob_header(def_cell,
-                  col_id, is_sys_table(access_param_->iter_param_.table_id_))) {
+      } else if (OB_FAIL(lob_locator_helper->fuse_mem_lob_header(def_cell,
+                  col_id, is_sys_table(access_param_->iter_param_.table_id_)))) {
         STORAGE_LOG(WARN, "fuse lob default with locator v2 failed", K(ret));
       }
     }

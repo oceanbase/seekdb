@@ -17,10 +17,6 @@
 #ifndef OB_WIDE_INTEGER_CMP_FUNCS_
 #define OB_WIDE_INTEGER_CMP_FUNCS_
 
-// #include "common/wide_integer/ob_wide_integer.h"
-
-// typedef int (*decint_obj_cmp_fp)(const oceanbase::common::ObObj &lhs,
-//                                  const oceanbase::common::ObObj &rhs);
 typedef int (*decint_cmp_fp)(const oceanbase::common::ObDecimalInt *lhs,
                              const oceanbase::common::ObDecimalInt *rhs);
 namespace oceanbase

@@ -87,7 +87,7 @@ int ObExprExp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   {
     OB_ASSERT(1 == rt_expr.arg_cnt_);
-    ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
+    SqlValueType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
       rt_expr.eval_func_ = calc_exp_expr_double;
     } else if (ObNumberType == arg_res_type) {

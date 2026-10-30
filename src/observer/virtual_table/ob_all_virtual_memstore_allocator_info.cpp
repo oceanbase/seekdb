@@ -115,7 +115,7 @@ int ObAllVirtualMemstoreAllocatorInfo::inner_get_next_row(ObNewRow *&row)
     }
 
     if (OB_SUCC(ret)) {
-      ObObj *cells = cur_row_.cells_;
+      DatumValue *cells = cur_row_.cells_;
 
       if (OB_ISNULL(cells)) {
         ret = OB_ERR_UNEXPECTED;
@@ -126,38 +126,38 @@ int ObAllVirtualMemstoreAllocatorInfo::inner_get_next_row(ObNewRow *&row)
           const uint64_t col_id = output_column_ids_.at(i);
           switch (col_id) {
             case TABLET_ID: {
-              cells[i].set_int(info.tablet_id_);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info.tablet_id_) : ret);
               break;
             }
             case START_TS: {
               //TODO:SCN
-              cells[i].set_uint64(info.scn_range_.start_scn_.get_val_for_inner_table_field());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, i, info.scn_range_.start_scn_.get_val_for_inner_table_field()) : ret);
               break;
             }
             case END_TS: {
-              cells[i].set_uint64(info.scn_range_.end_scn_.get_val_for_inner_table_field());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, i, info.scn_range_.end_scn_.get_val_for_inner_table_field()) : ret);
               break;
             }
             case IS_ACTIVE: {
-              cur_row_.cells_[i].set_varchar(info.is_active_ ? "YES" : "NO");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, info.is_active_ ? "YES" : "NO") : ret);
               break;
             }
             case RETIRE_CLOCK: {
-              cells[i].set_int(retire_clock_);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, retire_clock_) : ret);
               break;
             }
             case PROTECTION_CLOCK: {
-              cells[i].set_int(info.protection_clock_);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info.protection_clock_) : ret);
               break;
             }
             case ADDRESS: {
               snprintf(mt_addr_, sizeof(mt_addr_), "%p", info.mt_addr_);
-              cells[i].set_varchar(mt_addr_);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, mt_addr_) : ret);
               cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               break;
             }
             case REF_COUNT: {
-              cells[i].set_int(info.ref_cnt_);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, info.ref_cnt_) : ret);
               break;
             }
             default: {

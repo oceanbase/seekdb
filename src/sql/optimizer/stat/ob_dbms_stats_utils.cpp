@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include <type_traits>
 #include "share/rc/ob_server_runtime.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
@@ -141,7 +144,7 @@ int ObDbmsStatsUtils::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
                                   const int64_t current_time,
                                   const bool is_index_stat,
                                   const bool is_online_stat,
-                                  const ObObjPrintParams &print_params)
+                                  const ObValuePrintParams &print_params)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOptStatManager::get_instance().batch_write(schema_guard,
@@ -171,12 +174,12 @@ int ObDbmsStatsUtils::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
 int ObDbmsStatsUtils::cast_number_to_double(const number::ObNumber &src_val, double &dst_val)
 {
   int ret = OB_SUCCESS;
-  ObObj src_obj;
-  ObObj dest_obj;
-  src_obj.set_number(src_val);
+  DatumValue src_obj;
+  DatumValue dest_obj;
   ObArenaAllocator calc_buf("ObDbmsStatsUtil", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
-  if (OB_FAIL(ObObjCaster::to_type(ObDoubleType, cast_ctx, src_obj, dest_obj))) {
+  if (OB_FAIL(src_obj.set_number(src_val, calc_buf))) {
+  } else if (OB_FAIL(DatumValueCaster::to_type(ObDoubleType, cast_ctx, src_obj, calc_buf, dest_obj))) {
   } else if (OB_FAIL(dest_obj.get_double(dst_val))) {
   } else {
   }
@@ -780,18 +783,18 @@ int ObDbmsStatsUtils::get_subpart_infos(const ObTableSchema &table_schema,
   return ret;
 }
 
-int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
+int ObDbmsStatsUtils::truncate_string_for_opt_stats(const DatumValue *old_obj,
                                                     ObIAllocator &alloc,
-                                                    ObObj *&new_obj,
+                                                    DatumValue *&new_obj,
                                                     const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   bool is_truncated = false;
   if (OB_ISNULL(old_obj)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ObColumnStatParam::is_valid_opt_col_type(old_obj->get_type()) && old_obj->is_string_type()) {
+  } else if (!old_obj->is_null() && ObColumnStatParam::is_valid_opt_col_type(old_obj->get_type()) && old_obj->is_string_type()) {
     if(old_obj->is_lob_storage()) {
-      ObObj *tmp_obj = NULL;
+      DatumValue *tmp_obj = NULL;
       ObString str = old_obj->get_string();
       bool can_reuse = false;
       if (OB_FAIL(check_text_can_reuse(*old_obj, can_reuse))) {
@@ -806,8 +809,9 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
                      *old_obj,
                      str,
                      OPT_STATS_MAX_VALUE_CHAR_LEN))) {
-      } else if (OB_ISNULL(tmp_obj = static_cast<ObObj*>(alloc.alloc(sizeof(ObObj))))) {
+      } else if (OB_ISNULL(tmp_obj = static_cast<DatumValue*>(alloc.alloc(sizeof(DatumValue))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FALSE_IT(new (tmp_obj) DatumValue())) {
       } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(alloc, str, *tmp_obj))) {
       } else {
         tmp_obj->set_meta_type(old_obj->get_meta());
@@ -818,16 +822,17 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
       ObString str;
       if (OB_FAIL(old_obj->get_string(str))) {
       } else {
-        ObObj *tmp_obj = NULL;
+        DatumValue *tmp_obj = NULL;
         int64_t truncated_str_len = get_truncated_str_len(str, old_obj->get_collation_type());
         if (truncated_str_len == str.length()) {
           //do nothing
         } else if (OB_UNLIKELY(truncated_str_len < 0)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_ISNULL(tmp_obj = static_cast<ObObj*>(alloc.alloc(sizeof(ObObj))))) {
+        } else if (OB_ISNULL(tmp_obj = static_cast<DatumValue*>(alloc.alloc(sizeof(DatumValue))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
         } else {
-          tmp_obj->set_varchar(str.ptr(), static_cast<int32_t>(truncated_str_len));
+          new (tmp_obj) DatumValue();
+          tmp_obj->datum_.set_string(str.ptr(), static_cast<int32_t>(truncated_str_len));
           tmp_obj->set_meta_type(old_obj->get_meta());
           new_obj = tmp_obj;
           is_truncated = true;
@@ -836,21 +841,21 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
     }
   }
   if (OB_SUCC(ret) && !is_truncated) {
-    new_obj = const_cast<ObObj *>(old_obj);
+    new_obj = const_cast<DatumValue *>(old_obj);
   }
   return ret;
 }
 
 
 int ObDbmsStatsUtils::truncate_string_for_opt_stats(
-    ObObj &obj,
+    DatumValue &obj,
     ObIAllocator &allocator,
     const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
-  if (ObColumnStatParam::is_valid_opt_col_type(obj.get_type()) && obj.is_string_type()) {
+  if (!obj.is_null() && ObColumnStatParam::is_valid_opt_col_type(obj.get_type()) && obj.is_string_type()) {
     if(obj.is_lob_storage()) {
-      ObObjMeta ori_meta = obj.get_meta();
+      SqlTypeMeta ori_meta = obj.get_meta();
       ObString str = obj.get_string();
       bool can_reuse = false;
       if (OB_FAIL(check_text_can_reuse(obj, can_reuse))) {
@@ -878,7 +883,7 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(
         // do nothing
       } else {
         str.assign_ptr(str.ptr(), static_cast<int32_t>(truncated_str_len));
-        obj.set_common_value(str);
+        obj.datum_.set_string(str);
       }
     }
   }
@@ -898,7 +903,7 @@ int64_t ObDbmsStatsUtils::get_truncated_str_len(const ObString &str, const ObCol
   return truncated_str_len;
 }
 
-int64_t ObDbmsStatsUtils::check_text_can_reuse(const ObObj &obj, bool &can_reuse)
+int64_t ObDbmsStatsUtils::check_text_can_reuse(const DatumValue &obj, bool &can_reuse)
 {
   int ret = OB_SUCCESS;
   ObString str = obj.get_string();
@@ -914,7 +919,6 @@ int64_t ObDbmsStatsUtils::check_text_can_reuse(const ObObj &obj, bool &can_reuse
   }
   return ret;
 }
-
 int ObDbmsStatsUtils::get_current_opt_stats(const ObTableStatParam &param,
                                             ObIArray<ObOptTableStatHandle> &cur_tab_handles,
                                             ObIArray<ObOptColumnStatHandle> &cur_col_handles)
@@ -1590,10 +1594,10 @@ int ObDbmsStatsUtils::fetch_need_cancel_async_gather_stats_task(ObIAllocator &al
       } else {
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx = 0;
-          ObObj obj;
+          DatumValue obj;
           ObString str;
           ObString tmp_str;
-          if (OB_FAIL(client_result->get_obj(idx, obj))) {
+          if (OB_FAIL(client_result->get_value(idx, obj))) {
           } else if (OB_FAIL(obj.get_string(str))) {
           } else if (OB_FAIL(ob_write_string(allocator, str, tmp_str))) {
           } else if (OB_FAIL(task_ids.push_back(tmp_str))) {
@@ -1743,7 +1747,7 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
 
 int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
                                                       const ObOptColumnStat &col_stat,
-                                                      const ObObjMeta &text_col_meta,
+                                                      const SqlTypeMeta &text_col_meta,
                                                       ObOptColumnStat *&text_col_stat)
 {
   int ret = OB_SUCCESS;
@@ -1766,7 +1770,7 @@ int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
                                                                      min_value,
                                                                      text_col_stat->get_min_value()))) {
   } else {
-    ObObjMeta meta = text_col_meta;
+    SqlTypeMeta meta = text_col_meta;
     meta.set_has_lob_header();
     text_col_stat->get_max_value().set_meta_type(meta);
     text_col_stat->get_min_value().set_meta_type(meta);

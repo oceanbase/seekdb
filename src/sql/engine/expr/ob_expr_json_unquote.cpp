@@ -67,7 +67,7 @@ int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta met
 {
   INIT_SUCC(ret);
   ObIJsonBase *j_base = NULL;
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
 
   if (type == ObIntType || type == ObDoubleType) {

@@ -43,7 +43,7 @@ int ObExprTime::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   //param will be casted to ObTimeType before calculation
-  //see ObExprOperator::cast_operand_type for more details if necessary
+  // See the expression cast path for operand conversion details.
   type1.set_calc_type(ObTimeType);
   type.set_type(ObTimeType);
   //deduce scale now.
@@ -148,7 +148,7 @@ int ObExprTimeBase::cg_expr(ObExprCGCtx &op_cg_ctx,
 }
 
 static int ob_expr_convert_to_time(const ObDatum &datum,
-                                  ObObjType type,
+                                  SqlValueType type,
                                   const ObScale scale,
                                   bool with_date,
                                   bool is_allow_incomplete_dates,
@@ -362,7 +362,7 @@ int ObExprMonthName::calc_result_type1(ObExprResType &type,
   type.set_collation_type(cs_type);
   type.set_collation_level(CS_LEVEL_IMPLICIT);
   type.set_full_length(MONTHNAME_MAX_LENGTH, type1.get_length_semantics());
-  common::ObObjTypeClass tc1 = ob_obj_type_class(type1.get_type());
+  common::SqlTypeClass tc1 = sql_type_class(type1.get_type());
   if (common::ObEnumSetTC == tc1) {
     type1.set_calc_type(common::ObVarcharType);
     type1.set_collation_type(cs_type);

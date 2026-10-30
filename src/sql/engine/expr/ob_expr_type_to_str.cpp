@@ -59,7 +59,7 @@ int ObExprTypeToStr::calc_result_type2(ObExprResType &type,
   if (get_raw_expr()->get_dst_type() == 0) {
     type.set_type(ObVarcharType);
   } else {
-    ObObjType dst_type = static_cast<ObObjType>(get_raw_expr()->get_dst_type());
+    SqlValueType dst_type = static_cast<SqlValueType>(get_raw_expr()->get_dst_type());
     if (!ob_is_large_text(dst_type) && dst_type != ObCharType) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -506,7 +506,7 @@ int ObExprInnerTypeToEnumSet::calc_result_type2(ObExprResType &type,
   CK (OB_NOT_NULL(session->get_cur_exec_ctx()));
   OZ (session->get_cur_exec_ctx()->get_enumset_meta_by_subschema_id(subschema_id, true, enum_set_meta));
   CK (OB_NOT_NULL(enum_set_meta));
-  OX (type.set_meta(enum_set_meta->get_obj_meta()));
+  OX (type.set_meta(enum_set_meta->get_sql_type_meta()));
   OX (type.set_subschema_id(subschema_id));
   OX (type.mark_pl_enum_set_with_subschema());
   return ret;

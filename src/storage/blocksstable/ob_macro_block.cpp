@@ -417,10 +417,10 @@ int ObMacroBlock::reserve_header(const ObDataStoreDesc &spec, const int64_t &cur
     MEMSET(data_.current(), 0, macro_header_.get_fixed_header_size());
     char *col_types_buf = data_.current()  + macro_header_.get_fixed_header_size();
     const int64_t col_type_array_cnt = spec.get_fixed_header_col_type_cnt();
-    char *col_orders_buf = col_types_buf + sizeof(ObObjMeta) * col_type_array_cnt;
+    char *col_orders_buf = col_types_buf + sizeof(SqlTypeMeta) * col_type_array_cnt;
     char *col_checksum_buf = col_orders_buf + sizeof(ObOrderType) * col_type_array_cnt;
     if (OB_FAIL(macro_header_.init(spec,
-                                   reinterpret_cast<ObObjMeta *>(col_types_buf),
+                                   reinterpret_cast<SqlTypeMeta *>(col_types_buf),
                                    reinterpret_cast<ObOrderType *>(col_orders_buf),
                                    reinterpret_cast<int64_t *>(col_checksum_buf)))){
     } else {

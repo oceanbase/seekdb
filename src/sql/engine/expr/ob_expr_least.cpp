@@ -70,7 +70,7 @@ int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
     // Otherwise cast all parameters to the derived calc_type
     bool all_integer = true;
     for (int i = 0; i < param_num && all_integer; ++i) {
-      ObObjType obj_type = types[i].get_type();
+      SqlValueType obj_type = types[i].get_type();
       if (!ob_is_integer_type(obj_type) && ObNullType != obj_type) {
         all_integer = false;
       }
@@ -81,7 +81,7 @@ int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
     if (OB_SUCC(ret)) {
       // can't cast origin parameters.
       for (int64_t i = 0; i < param_num; i++) {
-        types[i].set_calc_meta(types[i].get_obj_meta());
+        types[i].set_calc_meta(types[i].get_sql_type_meta());
       }
       if (all_integer && type.is_integer_type()) {
         type.set_calc_type(ObNullType);
@@ -129,7 +129,7 @@ int ObExprLeastGreatest::cg_expr(ObExprCGCtx &op_cg_ctx,
       } else {
         rt_expr.eval_func_ = ObExprLeast::calc_least;
       }
-      const ObObjMeta &cmp_meta = raw_expr.get_extra_calc_meta();
+      const SqlTypeMeta &cmp_meta = raw_expr.get_extra_calc_meta();
       const bool is_explicit_cast = false;
       const int32_t result_flag = 0;
       ObCastMode cm = CM_NONE;

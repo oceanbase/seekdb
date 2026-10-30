@@ -21,10 +21,45 @@
 #include "share/object/ob_enumset_str_util.h"
 #include "share/ob_lob_access_utils.h"
 #include "lib/string/ob_sql_string.h"
+#include "common/datum/datum_parameter.h"
 
 namespace oceanbase {
 namespace common {
 namespace enumset_str {
+int to_varchar(const DatumParameter &source, const ObIArray<ObString> &str_values,
+               ObIAllocator &allocator, DatumParameter &result)
+{
+  int ret = OB_SUCCESS;
+  DatumParameter output;
+  if (OB_UNLIKELY(!ob_is_enum_or_set_type(source.get_type()))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_UNLIKELY(str_values.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_UNLIKELY(!ObCharset::is_valid_collation(source.get_collation_type()))) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (source.is_null()) {
+    output.set_null();
+  } else if (OB_UNLIKELY(source.datum_.ptr_ == nullptr || source.datum_.len_ != sizeof(uint64_t))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObTextStringResult text(ObVarcharType, false, &allocator);
+    if (source.get_type() == ObEnumType) {
+      ret = enum_to_str(source.get_enum(), str_values, text);
+    } else {
+      ret = set_to_str(source.get_collation_type(), source.get_set(), str_values, text);
+    }
+    if (OB_SUCC(ret)) {
+      ObString bytes;
+      text.get_result_buffer(bytes);
+      output.set_varchar_view(bytes);
+      output.get_meta().set_collation_type(source.get_collation_type());
+      output.set_length(source.get_length());
+    }
+  }
+  if (OB_SUCC(ret)) { result = output; }
+  return ret;
+}
+
 // same value as sql ObExprSetToStr::EFFECTIVE_COUNT(effective bit count for sets stored as uint64 bitmaps)
 static const int64_t EFFECTIVE_COUNT = 64;
 

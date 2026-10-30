@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_is.h"
 #include "ob_expr_json_func_helper.h"
+#include "common/datum/datum_value.h"
 
 namespace oceanbase
 {
@@ -55,10 +56,10 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
         type1.set_calc_accuracy(type1.get_accuracy());
     } else if (!const_param2->get_value().is_null()) {  // is true/false
       if (ob_is_numeric_type(type1.get_type())) {
-        type1.set_calc_meta(type1.get_obj_meta());
+        type1.set_calc_meta(type1.get_sql_type_meta());
         type1.set_calc_accuracy(type1.get_accuracy());
       } else if (ob_is_json(type1.get_type())) {
-        type1.set_calc_meta(type1.get_obj_meta());
+        type1.set_calc_meta(type1.get_sql_type_meta());
         type1.set_calc_accuracy(type1.get_accuracy());
       } else {
         type1.set_calc_type(ObNumberType);
@@ -82,7 +83,7 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprIsBase::is_infinite_nan(const ObObjType datum_type,
+int ObExprIsBase::is_infinite_nan(const SqlValueType datum_type,
                               ObDatum *datum,
                               bool &ret_bool,
                               Ieee754 inf_or_nan)
@@ -143,7 +144,7 @@ int ObExprIsBase::cg_expr_internal(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_
     eval_func = ObExprIs::type##_is_false;        \
   }
 
-int ObExprIsBase::cg_result_type_class(ObObjType type, ObExpr::EvalFunc &eval_func, bool is_not,
+int ObExprIsBase::cg_result_type_class(SqlValueType type, ObExpr::EvalFunc &eval_func, bool is_not,
                                         bool is_true) const {
   int ret = OB_SUCCESS;
   switch (type) {
@@ -196,7 +197,7 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
   int ret = OB_SUCCESS;
   const ObConstRawExpr *param2 = NULL;
   const ObConstRawExpr *param3 = NULL;
-  ObObjType param1_type = ObMaxType;
+  SqlValueType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
@@ -226,7 +227,7 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   int ret = OB_SUCCESS;
   const ObConstRawExpr *param2 = NULL;
   const ObConstRawExpr *param3 = NULL;
-  ObObjType param1_type = ObMaxType;
+  SqlValueType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
@@ -388,10 +389,10 @@ int ObExprInnerIsTrue::calc_result_type2(ObExprResType &type,
     type.set_result_flag(NOT_NULL_FLAG);
     type2.set_calc_type(type2.get_type());
     if (ob_is_numeric_type(type1.get_type())) {
-      type1.set_calc_meta(type1.get_obj_meta());
+      type1.set_calc_meta(type1.get_sql_type_meta());
       type1.set_calc_accuracy(type1.get_accuracy());
     } else if (ob_is_json(type1.get_type())) {
-      type1.set_calc_meta(type1.get_obj_meta());
+      type1.set_calc_meta(type1.get_sql_type_meta());
       type1.set_calc_accuracy(type1.get_accuracy());
     } else {
       type1.set_calc_type(ObNumberType);
@@ -408,7 +409,7 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
 {
   int ret = OB_SUCCESS;
   const ObConstRawExpr *param2 = NULL;
-  ObObjType param1_type = ObMaxType;
+  SqlValueType param1_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -559,7 +560,6 @@ NUMERIC_CALC_FUNC(json, ObExprIs, false, false, is)
   {                                                                               \
     int ret = OB_SUCCESS;                                                         \
     ObDatum *param1 = NULL;                                                       \
-    void *ptr = NULL;                                                             \
     bool ret_bool = false;                                                        \
     if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {                              \
       LOG_WARN("eval first param failed", K(ret));                                \
@@ -569,18 +569,13 @@ NUMERIC_CALC_FUNC(json, ObExprIs, false, false, is)
       ret_bool = !is_zero(param1->get_##type(), param1->len_);                    \
     }                                                                             \
     if (OB_SUCC(ret)) {                                                           \
-      if (OB_ISNULL(ptr = expr.get_str_res_mem(ctx, sizeof(ObObj)))) {            \
-        ret = OB_ALLOCATE_MEMORY_FAILED;                                          \
-        LOG_WARN("failed to allocate expr result memory");                        \
+      DatumValue result;                                                          \
+      if ((ret_bool && is_start) || (!ret_bool && !is_start)) {                   \
+        result.set_min_value();                                                   \
       } else {                                                                    \
-        ObObj *res_obj = new(ptr)ObObj();                                         \
-        if ((ret_bool && is_start) || (!ret_bool && !is_start)) {                 \
-          res_obj->set_min_value();                                               \
-        } else {                                                                  \
-          res_obj->set_max_value();                                               \
-        }                                                                         \
-        ret = expr_datum.from_obj(*res_obj);                                      \
+        result.set_max_value();                                                   \
       }                                                                           \
+      expr_datum = result.datum_;                                                 \
     }                                                                             \
     return ret;                                                                   \
   }

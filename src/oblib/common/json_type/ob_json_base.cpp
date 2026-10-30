@@ -3484,7 +3484,7 @@ int ObIJsonBase::print_opaque(ObJsonBuffer &j_buf, uint64_t depth, bool is_quote
   INIT_SUCC(ret);
   const char *data = get_data();
   uint64_t data_length = get_data_length();
-  ObObjType f_type = field_type();
+  SqlValueType f_type = field_type();
 
   if (f_type >= ObMaxType) {
     ret = OB_ERR_MAX_VALUE;
@@ -5845,9 +5845,9 @@ bool ObJsonBaseUtil::is_time_type(ObJsonNodeType j_type)
   return bool_ret;
 }
 
-ObObjType ObJsonBaseUtil::get_time_type(ObJsonNodeType json_type)
+SqlValueType ObJsonBaseUtil::get_time_type(ObJsonNodeType json_type)
 {
-  ObObjType type = ObMaxType;
+  SqlValueType type = ObMaxType;
   switch(json_type) {
     case  ObJsonNodeType::J_DATE: {
       type = ObDateType;

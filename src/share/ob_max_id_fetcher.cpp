@@ -377,8 +377,6 @@ int ObMaxIdFetcher::insert_initial_value(common::ObISQLClient &sql_client,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  ObObj obj;
-  obj.set_int(static_cast<int64_t>(initial_value));
   int64_t affected_rows = 0;
   const char *name = get_max_id_name(max_id_type);
   const char *info = get_max_id_info(max_id_type);
@@ -392,7 +390,7 @@ int ObMaxIdFetcher::insert_initial_value(common::ObISQLClient &sql_client,
       "(name, data_type, value, info) VALUES "
       "('%s', '%d', '%" PRId64 "', '%s') ON DUPLICATE KEY UPDATE value = value",
       OB_ALL_SYS_STAT_TNAME,
-      name, obj.get_type(),
+      name, static_cast<int>(ObIntType),
       static_cast<int64_t>(value), info))) {
   } else if (OB_FAIL(sql_client.write(sql.ptr(), group_id_, affected_rows))) {
   }

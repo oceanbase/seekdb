@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "share/datum/typed_datum_compare.h"
+#include "data_plane/native_key_value_buffer.h"
 #include "rust/config.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/tx/ob_ts_mgr.h"
@@ -330,7 +332,9 @@ int ObVectorQueryAdaptorResultContext::set_vector(int64_t index, const char *ptr
   } else {
     memcpy(copy_str, ptr, size);
     vec_data_.vectors_[index].reset();
-    vec_data_.vectors_[index].set_string(ObVarcharType, copy_str, size);
+    vec_data_.vectors_[index].meta_.set_varchar();
+    vec_data_.vectors_[index].meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    vec_data_.vectors_[index].datum_.set_string(copy_str, size);
   }
 
   return ret;
@@ -340,7 +344,7 @@ int ObVectorQueryAdaptorResultContext::set_extra_info(int64_t index, const ObRow
                                                       const ObIArray<int64_t> &extra_in_rowkey_idxs)
 {
   INIT_SUCC(ret);
-  int64_t extra_column_count = rowkey.get_obj_cnt();
+  int64_t extra_column_count = rowkey.get_value_count();
   if (index >= get_count()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (vec_data_.extra_column_count_ != extra_column_count) {
@@ -351,8 +355,8 @@ int ObVectorQueryAdaptorResultContext::set_extra_info(int64_t index, const ObRow
   for (int64_t i = 0; OB_SUCC(ret) && i < extra_column_count; ++i) {
     vec_data_.extra_info_objs_[index * extra_column_count + i].reset();
     int64_t in_rowkey_idx = extra_in_rowkey_idxs.at(i);
-    if (OB_FAIL(vec_data_.extra_info_objs_[index * extra_column_count + i].from_obj(
-            rowkey.get_obj_ptr()[in_rowkey_idx], &batch_allocator_))) {
+    if (OB_FAIL(vec_data_.extra_info_objs_[index * extra_column_count + i].from_value(
+            rowkey.get_values()[in_rowkey_idx], &batch_allocator_))) {
     }
   }
 
@@ -3089,7 +3093,7 @@ int ObPluginVectorIndexAdaptor::prepare_delta_mem_data(roaring::api::roaring64_b
       int index = 0;
       int64_t dim = 0;
       int64_t extra_column_count = ctx->get_extra_column_count();
-      ObObj *vids = nullptr;
+      DatumValue *vids = nullptr;
       int64_t vector_cnt = bitmap_cnt > ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE ?
                            ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE : bitmap_cnt;
       roaring::api::roaring64_iterator_t *bitmap_iter = nullptr;
@@ -3101,10 +3105,9 @@ int ObPluginVectorIndexAdaptor::prepare_delta_mem_data(roaring::api::roaring64_b
       } else if (OB_ISNULL(bitmap_iter)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(get_dim(dim))) {
-      } else if (OB_ISNULL(vids = static_cast<ObObj *>(ctx->tmp_allocator_->alloc(sizeof(ObObj) * bitmap_cnt)))) {
+      } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(*ctx->tmp_allocator_, bitmap_cnt, vids))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_ISNULL(ctx->vec_data_.vectors_ = static_cast<ObObj *>(ctx->tmp_allocator_->
-                                                      alloc(sizeof(ObObj) * vector_cnt)))) {
+      } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(*ctx->tmp_allocator_, vector_cnt, ctx->vec_data_.vectors_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         is_continue = roaring64_iterator_has_value(bitmap_iter);
@@ -3121,8 +3124,15 @@ int ObPluginVectorIndexAdaptor::prepare_delta_mem_data(roaring::api::roaring64_b
       }
 
       while (OB_SUCC(ret) && is_continue) {
-        vids[index].reset();
-        vids[index++].set_int(roaring64_iterator_value(bitmap_iter));
+        const int64_t vid = roaring64_iterator_value(bitmap_iter);
+        DatumValue value;
+        value.meta_.set_int();
+        value.datum_.ptr_ = reinterpret_cast<const char *>(&vid);
+        value.datum_.pack_ = sizeof(vid);
+        if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(value, vids, bitmap_cnt, index))) {
+        } else {
+          ++index;
+        }
         is_continue = roaring64_iterator_advance(bitmap_iter);
       }
 
@@ -4582,7 +4592,7 @@ bool ObHnswBitmapFilter::test(int64_t id)
     if (OB_NOT_NULL(adaptor_)) {
       ObPluginVectorIndexAdaptor *adaptor = static_cast<ObPluginVectorIndexAdaptor*>(adaptor_);
       int64_t extra_info_actual_size = valid_cnt_;
-      int64_t extra_column_cnt = rk_range_.at(0)->get_start_key().get_obj_cnt();
+      int64_t extra_column_cnt = rk_range_.at(0)->get_start_key().get_value_count();
       if (OB_FAIL(adaptor->get_extra_info_by_ids(&id, 1, extra_buffer_, is_snap_))) {
       } else {
         bret = test(reinterpret_cast<const char*>(extra_buffer_));
@@ -4598,12 +4608,15 @@ bool ObHnswBitmapFilter::test(const char* data)
   int ret = OB_SUCCESS;
   if (type_ == FilterType::SIMPLE_RANGE) {
     int64_t extra_info_actual_size = valid_cnt_;
-    int64_t extra_column_cnt = rk_range_.at(0)->get_start_key().get_obj_cnt();
-    if (OB_FAIL(ObVecExtraInfo::extra_buf_to_obj(data, extra_info_actual_size * extra_column_cnt, extra_column_cnt, tmp_objs_, extra_in_rowkey_idxs_))) {
+    int64_t extra_column_cnt = rk_range_.at(0)->get_start_key().get_value_count();
+    if (OB_FAIL(ObVecExtraInfo::extra_buf_to_values(data, extra_info_actual_size, extra_column_cnt, tmp_objs_, extra_in_rowkey_idxs_))) {
     } else {
+      for (int64_t i = 0; i < extra_column_cnt && OB_SUCC(ret); ++i) {
+        ret = storage::NativeKeyValueBuffer::project_value(tmp_objs_[i], tmp_objs_, extra_column_cnt, i);
+      }
       ObRowkey tmp_rk(tmp_objs_, extra_column_cnt);
       ObNewRange tmp_range;
-      if (OB_FAIL(tmp_range.build_range(rk_range_.at(0)->table_id_, tmp_rk))) {
+      if (OB_SUCC(ret) && OB_FAIL(tmp_range.build_range(rk_range_.at(0)->table_id_, tmp_rk))) {
       }
       // do compare
       for (int64_t i = 0; i < rk_range_.count() && !bret && OB_SUCC(ret); i++) {
@@ -4662,7 +4675,7 @@ int ObHnswBitmapFilter::init(void *adaptor, double selectivity, const ObIArray<c
     adaptor_ = adaptor;
     selectivity_ = selectivity;
     int64_t extra_info_actual_size = 0;
-    int64_t extra_column_cnt = rk_range_.at(0)->get_start_key().get_obj_cnt();
+    int64_t extra_column_cnt = rk_range_.at(0)->get_start_key().get_value_count();
     ObPluginVectorIndexAdaptor *adaptor = static_cast<ObPluginVectorIndexAdaptor*>(adaptor_);
     if (OB_FAIL(adaptor->get_extra_info_actual_size(extra_info_actual_size))) {
     } else if (extra_column_cnt == 0 || extra_info_actual_size == 0) {
@@ -4671,7 +4684,7 @@ int ObHnswBitmapFilter::init(void *adaptor, double selectivity, const ObIArray<c
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_ISNULL(extra_buffer_ = static_cast<char*>(tmp_alloc_.alloc(extra_info_actual_size * extra_column_cnt)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(tmp_objs_ = static_cast<ObObj*>(tmp_alloc_.alloc(sizeof(ObObj) * extra_column_cnt)))) {
+    } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(tmp_alloc_, extra_column_cnt, tmp_objs_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FALSE_IT(extra_in_rowkey_idxs_ = &extra_in_rowkey_idxs)) {
     } else {

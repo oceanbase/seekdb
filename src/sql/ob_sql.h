@@ -540,7 +540,7 @@ private:
   friend class ::test::TestOptimizerUtils;
 
 public:
-  static int add_param_to_param_store(const ObObjParam &param,
+  static int add_param_to_param_store(const DatumParameter &param,
                                       ParamStore &param_store);
   static bool is_exist_in_fixed_param_idx(const int64_t idx,
                                    const ObIArray<int64_t> &fixed_param_idx);

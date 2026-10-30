@@ -37,46 +37,6 @@ ObExprConcat::~ObExprConcat()
 }
 
 
-// non-text tc
-int ObExprConcat::calc(common::ObObj &result,
-                       const common::ObString obj1,
-                       const common::ObString obj2,
-                       ObIAllocator *allocator,
-                       const int64_t max_result_len)
-{
-  int ret = OB_SUCCESS;
-  int32_t this_len = obj1.length();
-  int32_t other_len = obj2.length();
-  ObString varchar;
-  int64_t max_length = max_result_len;
-  if (max_result_len <= 0) {
-    max_length = OB_MAX_VARCHAR_LENGTH;
-  }
-  if (OB_UNLIKELY(this_len + other_len > max_length)) {
-    //FIXME: The length of the merged string exceeds the maximum limit, the result is set to NULL
-    result.set_null();
-    ret = OB_SIZE_OVERFLOW;
-  } else if (OB_UNLIKELY(this_len <= 0)) {
-    result.set_varchar(obj2);
-  } else if (OB_UNLIKELY(other_len <= 0)) {
-    result.set_varchar(obj1);
-  } else if (OB_ISNULL(allocator)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    char *buf = NULL;
-    if (OB_ISNULL(buf = static_cast<char*>(allocator->alloc(this_len + other_len)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("alloc memory failed", K(ret), K(this_len + other_len));
-    } else {
-      MEMCPY(buf, obj1.ptr(), this_len);
-      MEMCPY(buf + this_len, obj2.ptr(), other_len);
-      varchar.assign(buf, this_len + other_len);
-      result.set_varchar(varchar);
-    }
-  }
-  return ret;
-}
-
 int ObExprConcat::calc_result_typeN(ObExprResType &type,
                                     ObExprResType *types,
                                     int64_t param_num,
@@ -191,7 +151,7 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
     int64_t null_cnt = 0;
     int64_t res_len = 0;
     int64_t lob_data_byte_len = 0;
-    ObObjType res_type = expr.datum_meta_.type_;
+    SqlValueType res_type = expr.datum_meta_.type_;
     // get result length
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
       ObDatum &v = expr.locate_param_datum(ctx, i);

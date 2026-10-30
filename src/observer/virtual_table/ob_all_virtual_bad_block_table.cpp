@@ -38,7 +38,7 @@ ObVirtualBadBlockTable::~ObVirtualBadBlockTable()
 int ObVirtualBadBlockTable::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_ISNULL(cells) || !is_inited_) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "Not inited", KP(cur_row_.cells_), K(is_inited_), K(ret));
@@ -51,29 +51,29 @@ int ObVirtualBadBlockTable::inner_get_next_row(common::ObNewRow *&row)
       const uint64_t col_id = output_column_ids_.at(i);
       switch (col_id){
         case DISK_ID: {
-          cells[i].set_int(bad_block_info.disk_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, bad_block_info.disk_id_) : ret);
           break;
         }
         case STORE_FILE_PATH: {
-          cells[i].set_varchar(bad_block_info.store_file_path_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, bad_block_info.store_file_path_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case MACRO_BLOCK_INDEX: {
-          cells[i].set_int(bad_block_info.macro_block_id_.block_index());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, bad_block_info.macro_block_id_.block_index()) : ret);
           break;
         }
         case ERROR_TYPE: {
-          cells[i].set_int(bad_block_info.error_type_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, bad_block_info.error_type_) : ret);
           break;
         }
         case ERROR_MSG: {
-          cells[i].set_varchar(bad_block_info.error_msg_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, bad_block_info.error_msg_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case CHECK_TIME: {
-          cells[i].set_timestamp(bad_block_info.check_time_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, bad_block_info.check_time_) : ret);
           break;
         }
         default: {

@@ -18,6 +18,7 @@
 #include "sql/resolver/dml/ob_default_value_utils.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
+#include "share/datum/typed_datum_compare.h"
 namespace oceanbase
 {
 using namespace common;
@@ -226,7 +227,7 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
 {
   int ret = OB_SUCCESS;
   ObConstRawExpr *c_expr = NULL;
-  ObObj default_value;
+  DatumValue default_value;
   if (OB_ISNULL(column_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguemnt", K(column_schema));
@@ -240,9 +241,10 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
         && !column_schema->is_nullable()
         && column_schema->get_cur_default_value().is_null()) {
       const uint64_t ENUM_FIRST_VAL = 1;
-      default_value.set_enum(ENUM_FIRST_VAL);
+      ret = default_value.set_enum(ENUM_FIRST_VAL, expr_factory.get_allocator());
     } else {
-      default_value = column_schema->get_cur_default_value();
+      ret = clone_typed_value(column_schema->get_cur_default_value(),
+          default_value, expr_factory.get_allocator());
     }
     if (OB_SUCC(ret)
         && (ob_is_enumset_tc(default_value.get_type()) || default_value.is_collection_sql_type())) {
@@ -312,16 +314,20 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
         ret = OB_ERR_UNEXPECTED;
       } else {
         const uint64_t ENUM_FIRST_VAL = 1;
-        ObObj enum_val;
-        enum_val.set_enum(ENUM_FIRST_VAL);
+        DatumValue enum_val;
+        ret = enum_val.set_enum(ENUM_FIRST_VAL, params_->expr_factory_->get_allocator());
         enum_val.set_subschema_id(column_expr->get_subschema_id());
         if (column_expr->is_enum_set_with_subschema()) {
           enum_val.set_scale(ObEnumSetMeta::MetaState::SQL);
         }
-        c_expr->set_value(enum_val);
+        if (OB_SUCC(ret)) { c_expr->set_value(enum_val); }
       }
     } else {
-      c_expr->set_value(column->default_value_);
+      DatumValue value;
+      if (OB_FAIL(clone_typed_value(column->default_value_, value, params_->expr_factory_->get_allocator()))) {
+      } else {
+        c_expr->set_value(value);
+      }
     }
     if (OB_SUCC(ret)) {
       if (!ob_is_numeric_type(column->get_column_type()->get_type())) {
@@ -564,7 +570,7 @@ int ObDefaultValueUtils::get_default_type_for_default_expr(const ColumnItem *col
 int ObDefaultValueUtils::build_default_expr_for_timestamp(const ColumnItem *column, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
-  ObObj default_value;
+  DatumValue default_value;
   ObConstRawExpr *c_expr = NULL;
   ObRawExprFactory *expr_factory = NULL;
   if (OB_ISNULL(column) || OB_ISNULL(params_) || OB_ISNULL(expr_factory = params_->expr_factory_)
@@ -576,7 +582,7 @@ int ObDefaultValueUtils::build_default_expr_for_timestamp(const ColumnItem *colu
     LOG_WARN("create raw expr fail", K(c_expr));
   } else if (IS_DEFAULT_NOW_OBJ(column->default_value_)) {
     if (column->is_not_null_for_write()) {
-      default_value.set_timestamp(ObTimeConverter::ZERO_DATETIME);
+      ret = default_value.set_timestamp(ObTimeConverter::ZERO_DATETIME, params_->expr_factory_->get_allocator());
       c_expr->set_expr_type(T_TIMESTAMP);
     } else {
       default_value.set_null();
@@ -624,16 +630,17 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
 {
   int ret = OB_SUCCESS;
   ObConstRawExpr *c_expr = NULL;
-  ObObj default_value;
+  DatumValue default_value;
   if (OB_ISNULL(column_schema)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!column_schema->get_cur_default_value().is_null()) {
-    default_value = column_schema->get_cur_default_value();
+    ret = clone_typed_value(column_schema->get_cur_default_value(),
+          default_value, expr_factory.get_allocator());
   } else if (column_schema->is_nullable()) {
     default_value.set_null();
   } else {
     default_value.set_type(column_schema->get_data_type());
-    if (OB_FAIL(default_value.build_not_strict_default_value(column_schema->get_accuracy().get_precision(), column_schema->get_collation_type()))) {
+    if (OB_FAIL(default_value.build_not_strict_default_value(column_schema->get_accuracy().get_precision(), column_schema->get_collation_type(), expr_factory.get_allocator()))) {
     } else if (ob_is_enumset_tc(default_value.get_type()) || default_value.is_collection_sql_type()) {
       uint16_t subschema_id = 0;
       if (OB_UNLIKELY(column_schema->get_extended_type_info().count() < 1)) {
@@ -644,7 +651,7 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
                                                           subschema_id))) {
       } else {
         default_value.set_subschema_id(subschema_id);
-        if (ob_is_enumset_tc(c_expr->get_data_type())) {
+        if (ob_is_enumset_tc(default_value.get_type())) {
           default_value.set_scale(ObEnumSetMeta::MetaState::SQL);
         }
       }
@@ -652,7 +659,7 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
   }
   if (OB_SUCC(ret)) {
     //create default value raw expr
-    // ObObjType must be the same as the item type related to the data type in ObItemType, so casting here is possible
+    // SqlValueType must be the same as the item type related to the data type in ObItemType, so casting here is possible
     if (OB_FAIL(expr_factory.create_raw_expr(
                 static_cast<ObItemType>(default_value.get_type()), c_expr))) {
     } else if (OB_ISNULL(c_expr)) {
@@ -678,7 +685,7 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
 {
   int ret = OB_SUCCESS;
   ObConstRawExpr *c_expr = NULL;
-  ObObj default_value;
+  DatumValue default_value;
   if (OB_ISNULL(column) || OB_ISNULL(params_) || OB_ISNULL(params_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!column->default_value_.is_null()) {
@@ -687,7 +694,7 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
     default_value.set_null();
   } else {
     default_value.set_type(column->get_column_type()->get_type());
-    if (OB_FAIL(default_value.build_not_strict_default_value(column->get_column_type()->get_accuracy().get_precision(), column->get_column_type()->get_collation_type()))) {
+    if (OB_FAIL(default_value.build_not_strict_default_value(column->get_column_type()->get_accuracy().get_precision(), column->get_column_type()->get_collation_type(), params_->expr_factory_->get_allocator()))) {
     } else if (ob_is_enumset_tc(default_value.get_type()) || default_value.is_collection_sql_type()) {
       const ObColumnRefRawExpr *column_expr = column->get_expr();
       if (OB_ISNULL(column_expr)) {
@@ -702,7 +709,7 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
   }
   if (OB_SUCC(ret)) {
     //create default value raw expr
-    // ObObjType must be the same as the item type related to the data type in ObItemType, so casting here is possible
+    // SqlValueType must be the same as the item type related to the data type in ObItemType, so casting here is possible
     if (OB_FAIL(params_->expr_factory_->create_raw_expr(static_cast<ObItemType>(default_value.get_type()), c_expr))) {
     } else if (OB_ISNULL(c_expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -867,7 +874,7 @@ int ObDefaultValueUtils::build_type_expr_static(ObRawExprFactory& expr_factory,
 {
   int ret = OB_SUCCESS;
   ObConstRawExpr *c_expr = NULL;
-  ObObjType data_type = column_schema.get_data_type();
+  SqlValueType data_type = column_schema.get_data_type();
   if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
               expr_factory, ObInt32Type, data_type, c_expr))) {
   } else if (column_schema.is_enum_or_set() || column_schema.is_collection()) {

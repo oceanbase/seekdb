@@ -18,6 +18,7 @@
 #define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_DES_HEX_STR_
 
 #include "common/expression/ob_expr_string_buf.h"
+#include "common/datum/datum_value.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
 namespace oceanbase
@@ -36,11 +37,12 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   static int eval_des_hex_str(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-private:
+  // Decode the historical serialized value wire representation into a native
+  // typed datum. This is public only to permit focused codec tests.
   static int deserialize_hex_cstr(const char *buf,
                                   int64_t buf_len,
-                                  common::ObExprStringBuf &string_buf,
-                                  common::ObObj &obj);
+                                  common::ObIAllocator &allocator,
+                                  common::DatumValue &value);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDesHexStr);
 };

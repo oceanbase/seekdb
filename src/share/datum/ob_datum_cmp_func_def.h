@@ -42,9 +42,9 @@ namespace datum_cmp
 
 // We define three core comparison:
 //
-// 1. ObDatumTypeCmp<ObObjType, ObObjType>: define non string obj type compare,
+// 1. ObDatumTypeCmp<SqlValueType, SqlValueType>: define non string obj type compare,
 //    if comparison not deinfed for specified type, use ObDatumTCCmp defined comparison.
-// 2. ObDatumTCCmp<ObObjTypeClass, ObObjTypeClass>: define non string obj type class compare
+// 2. ObDatumTCCmp<SqlTypeClass, SqlTypeClass>: define non string obj type class compare
 // 3. ObDatumStrCmp<ObCollationType, bool>: define string compare
 
 template <bool V = true>
@@ -53,8 +53,8 @@ struct ObDefined
   constexpr static bool defined_ = V;
 };
 
-// define compare by ObObjTypeClass
-template <ObObjTypeClass L_TC, ObObjTypeClass R_TC>
+// define compare by SqlTypeClass
+template <SqlTypeClass L_TC, SqlTypeClass R_TC>
 struct ObDatumTCCmp : public ObDefined<false>
 {
   inline static int cmp(const ObDatum &, const ObDatum &, int &cmp_ret)
@@ -64,7 +64,7 @@ struct ObDatumTCCmp : public ObDefined<false>
   }
 };
 
-template <ObObjTypeClass TC>
+template <SqlTypeClass TC>
 struct ObTCPayloadCmp : public ObDefined<>
 {
   inline static int cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret)
@@ -237,22 +237,22 @@ struct ObDatumTCCmp<ObMySQLDateTimeTC, ObMySQLDateTimeTC> : public ObTCPayloadCm
 // special process for extend and null class type.
 
 // extend type vs any type is depend on extend type is min or max
-template <ObObjTypeClass TC>
+template <SqlTypeClass TC>
 struct ObDatumTCCmp<ObExtendTC, TC> : public ObDefined<>
 {
   inline static int cmp(const ObDatum &l, const ObDatum &, int &cmp_ret)
   {
-    cmp_ret = (ObObj::MIN_OBJECT_VALUE == *l.int_ ? -1 : 1);
+    cmp_ret = (DATUM_MIN_EXT_VALUE == *l.int_ ? -1 : 1);
     return OB_SUCCESS;
   }
 };
 
-template <ObObjTypeClass TC>
+template <SqlTypeClass TC>
 struct ObDatumTCCmp<TC, ObExtendTC> : public ObDefined<>
 {
   inline static int cmp(const ObDatum &, const ObDatum &r, int &cmp_ret)
   {
-    cmp_ret = (ObObj::MIN_OBJECT_VALUE == *r.int_ ? -1 : 1);
+    cmp_ret = (DATUM_MIN_EXT_VALUE == *r.int_ ? -1 : 1);
     return OB_SUCCESS;
   }
 };
@@ -262,9 +262,9 @@ struct ObDatumTCCmp<ObExtendTC, ObExtendTC> : public ObDefined<>
 {
   inline static int cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret)
   {
-    cmp_ret = (ObObj::MIN_OBJECT_VALUE == *l.int_ && ObObj::MIN_OBJECT_VALUE == *r.int_)
-              || (ObObj::MAX_OBJECT_VALUE == *l.int_ && ObObj::MAX_OBJECT_VALUE == *r.int_)
-              ? 0 : (ObObj::MIN_OBJECT_VALUE == *l.int_ ? -1 : 1);
+    cmp_ret = (DATUM_MIN_EXT_VALUE == *l.int_ && DATUM_MIN_EXT_VALUE == *r.int_)
+              || (DATUM_MAX_EXT_VALUE == *l.int_ && DATUM_MAX_EXT_VALUE == *r.int_)
+              ? 0 : (DATUM_MIN_EXT_VALUE == *l.int_ ? -1 : 1);
     return OB_SUCCESS;
   }
 };
@@ -279,19 +279,19 @@ struct ObDummyCmp : public ObDefined<>
 };
 
 // null type compare is never used (out layer guaranteed), but should be defined.
-template <ObObjTypeClass TC> struct ObDatumTCCmp<TC, ObNullTC> : public ObDummyCmp {};
-template <ObObjTypeClass TC> struct ObDatumTCCmp<ObNullTC, TC> : public ObDummyCmp {};
+template <SqlTypeClass TC> struct ObDatumTCCmp<TC, ObNullTC> : public ObDummyCmp {};
+template <SqlTypeClass TC> struct ObDatumTCCmp<ObNullTC, TC> : public ObDummyCmp {};
 template <> struct ObDatumTCCmp<ObNullTC, ObExtendTC> : public ObDummyCmp {};
 template <> struct ObDatumTCCmp<ObExtendTC, ObNullTC> : public ObDummyCmp {};
 template <> struct ObDatumTCCmp<ObNullTC, ObNullTC> : public ObDummyCmp {};
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// begin define compare by ObObjType
+// begin define compare by SqlValueType
 ///////////////////////////////////////////////////////////////////////////////
 
-// define compare by ObObjType
-template <ObObjType L_T, ObObjType R_T>
+// define compare by SqlValueType
+template <SqlValueType L_T, SqlValueType R_T>
 struct ObDatumTypeCmp : public ObDefined<false>
 {
   inline static int cmp(const ObDatum &, const ObDatum &, int &cmp_ret)

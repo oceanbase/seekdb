@@ -37,9 +37,6 @@ public:
   static int int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
 private:
   // helper func
-  static int int2ip(common::ObObj &result,
-                    const int64_t text,
-                    common::ObExprStringBuf &string_buf);
   static int int2ip(common::ObDatum &result,
                     const int64_t text);
 private:

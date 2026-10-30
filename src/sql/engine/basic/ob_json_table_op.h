@@ -498,9 +498,9 @@ public:
   static void proc_query_on_error(JtScanCtx* ctx, ObRegCol &col_node, int& ret, bool& is_null);
   static int check_default_val_cast_allowed(JtScanCtx* ctx, ObMultiModeTableNode &col_node, ObExpr* expr)  { return 0; }  // check type of default value
   static int set_val_on_empty(JtScanCtx* ctx, ObRegCol &col_node, bool& need_cast_res, bool& is_null);
-  static bool check_cast_allowed(const ObObjType orig_type,
+  static bool check_cast_allowed(const SqlValueType orig_type,
                                 const ObCollationType orig_cs_type,
-                                const ObObjType expect_type,
+                                const SqlValueType expect_type,
                                 const ObCollationType expect_cs_type,
                                 const bool is_explicit_cast);
   static int check_item_method_json(ObRegCol &col_node, JtScanCtx* ctx);

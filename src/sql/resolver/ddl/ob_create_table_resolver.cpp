@@ -685,6 +685,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         CK (ele_pos >= 0 && ele_pos < resolved_cols_count);
         if (OB_SUCC(ret)) {
           ObColumnSchemaV2 &column = resolved_cols.at(ele_pos);
+          DatumValue checked_default;
           ObColumnResolveStat stat;
           common::ObString pk_name;
           // ele_pos + 1, points to the next column_schema
@@ -695,7 +696,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                                 table_schema,
                                                 false,
                                                 is_create_table_as))) {
-          } else if (OB_FAIL(check_default_value(column.get_cur_default_value(),
+          } else if (OB_FAIL(check_default_value(
+                                          (checked_default = column.get_cur_default_value()),
                                           session_info_->get_tz_info_wrap(),
                                           NULL,
                                           *allocator_,
@@ -709,6 +711,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                           params_.srs_provider_,
                                           params_.lob_read_service_,
                                           NULL == element->children_[1]))) {
+          } else if (OB_FAIL(column.set_cur_default_value_v2(checked_default))) {
           } else if (column.is_string_type() || is_lob_storage(column.get_data_type())) {
             int64_t length = 0;
             if (OB_FAIL(column.get_byte_length(length, false))) {
@@ -995,14 +998,16 @@ int ObCreateTableResolver::set_nullable_for_cta_column(ObSelectStmt *select_stmt
       if (T_WIN_FUN_RANK == win_expr->get_func_type() ||
           T_WIN_FUN_DENSE_RANK == win_expr->get_func_type() ||
           T_WIN_FUN_ROW_NUMBER == win_expr->get_func_type()) {
-        ObObj temp_default;
-        temp_default.set_uint64(0);
-        column.set_cur_default_value(temp_default, false);
+        DatumValue temp_default;
+        if (OB_FAIL(temp_default.set_uint64(0, allocator))) {
+        } else if (OB_FAIL(column.set_cur_default_value(temp_default, false))) {
+        }
       } else if (T_WIN_FUN_CUME_DIST == win_expr->get_func_type() ||
                   T_WIN_FUN_PERCENT_RANK == win_expr->get_func_type()) {
-        ObObj temp_default;
-        temp_default.set_double(0);
-        column.set_cur_default_value(temp_default, false);
+        DatumValue temp_default;
+        if (OB_FAIL(temp_default.set_double(0, allocator))) {
+        } else if (OB_FAIL(column.set_cur_default_value(temp_default, false))) {
+        }
       } else {}
     } else {}
     column.set_nullable(!is_not_null);
@@ -1134,20 +1139,22 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                 if (NULL != org_column &&
                     !org_column->is_generated_column() &&
                     !org_column->get_cur_default_value().is_null()) {
-                  column.set_cur_default_value(
-                      org_column->get_cur_default_value(),
-                      org_column->is_default_expr_v2_column());
+                  if (OB_FAIL(column.set_cur_default_value(
+                          org_column->get_cur_default_value(),
+                          org_column->is_default_expr_v2_column()))) {
                   }
+                }
               }
             } else if (new_table_item == NULL &&
                        (ObRawExpr::EXPR_CONST == expr->get_expr_class() ||
                         (ObRawExpr::EXPR_OPERATOR == expr->get_expr_class() &&
                          expr->is_static_const_expr())) &&
                         !expr->get_result_type().is_null()) {
-              common::ObObjType result_type = expr->get_result_type().get_obj_meta().get_type();
+              common::SqlValueType result_type = expr->get_result_type().get_sql_type_meta().get_type();
               if (ob_is_numeric_type(result_type) || ob_is_string_tc(result_type) || ob_is_time_tc(result_type)) {
-                common::ObObj zero_obj(0);
-                if (OB_FAIL(column.set_cur_default_value(zero_obj, false))) {
+                DatumValue zero_value;
+                if (OB_FAIL(zero_value.set_int(0, *allocator_))) {
+                } else if (OB_FAIL(column.set_cur_default_value(zero_value, false))) {
                 }
               }
             } else { /*do nothing*/ }
@@ -1160,12 +1167,12 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
             // do nothing
           } else if (expr->get_result_type().is_null()) { //bug16503918, NULL needs to be replaced with binary(0)
             const ObAccuracy binary_accuracy(0);
-            ObObjMeta binary_meta;
+            SqlTypeMeta binary_meta;
             binary_meta.set_binary();
             column.set_meta_type(binary_meta);
             column.set_accuracy(binary_accuracy);
           } else {
-            ObObjMeta column_meta = expr->get_result_type().get_obj_meta();
+            SqlTypeMeta column_meta = expr->get_result_type().get_sql_type_meta();
             column.set_meta_type(column_meta);
             ObCharsetType char_type = table_schema.get_charset_type();
             ObCollationType collation_type = expr->get_collation_type();

@@ -36,7 +36,12 @@ int ObVirtualTableProjector::project_row(const ObIArray<Column> &columns, ObNewR
     int64_t cell_idx = 0;
     FOREACH_CNT_X(column_id, output_column_ids_, OB_SUCCESS == ret) {
       bool find = false;
-      ObObj column_value = ObObj::make_nop_obj();
+      char nop_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+      DatumValue column_value;
+      column_value.meta_.set_ext();
+      column_value.datum_.ptr_ = nop_payload;
+      column_value.datum_.set_extend(ObActionFlag::OP_NOP, 0, 0,
+          CS_LEVEL_INVALID, CS_TYPE_INVALID);
       FOREACH_CNT_X(column, columns, !find) {
         if (*column_id == column->column_id_) {
           column_value = column->column_value_;
@@ -46,7 +51,7 @@ int ObVirtualTableProjector::project_row(const ObIArray<Column> &columns, ObNewR
       if (!find && full_columns) {
         ret = OB_ENTRY_NOT_EXIST;
       } else {
-        row.cells_[cell_idx] = column_value;
+        ret = DatumValueBuffer::assign_view(column_value, row.cells_, row.count_, cell_idx);
         ++cell_idx;
       }
     }

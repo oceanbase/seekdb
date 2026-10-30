@@ -109,7 +109,7 @@ int check_predicate_implicit_cast_deduce_safe(ObRawExpr *expr, bool &is_safe)
 int ObPredicateDeduce::add_predicate(ObRawExpr *pred, bool &is_added)
 {
   int ret = OB_SUCCESS;
-  ObObjMeta cmp_meta;
+  SqlTypeMeta cmp_meta;
   ObRawExpr *left_expr = NULL;
   ObRawExpr *right_expr = NULL;
   is_added = false;
@@ -584,7 +584,7 @@ int ObPredicateDeduce::check_type_safe(int64_t first, int64_t second, bool &type
   int ret = OB_SUCCESS;
   ObRawExpr *first_expr = NULL;
   ObRawExpr *second_expr = NULL;
-  ObObjMeta cmp_meta;
+  SqlTypeMeta cmp_meta;
   type_safe = false;
   if (first < 0 || first >= input_exprs_.count() ||
       second < 0 || second >= input_exprs_.count()) {
@@ -780,7 +780,7 @@ int ObPredicateDeduce::get_equal_exprs(ObRawExpr *pred,
 
 int ObPredicateDeduce::check_cmp_metas_for_general_preds(ObRawExpr *left_expr, ObRawExpr *pred, bool &type_safe) {
   int ret = OB_SUCCESS;
-  ObObjMeta cmp_meta;
+  SqlTypeMeta cmp_meta;
   if (OB_ISNULL(left_expr) || OB_ISNULL(pred)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (T_OP_IN == pred->get_expr_type()) {
@@ -964,7 +964,7 @@ int ObPredicateDeduce::check_aggr_validity(ObRawExpr *expr,
     }
   }
   if (OB_SUCC(ret) && is_valid) {
-    ObObjMeta cmp_meta;
+    SqlTypeMeta cmp_meta;
     if (OB_FAIL(ObRelationalExprOperator::get_equal_meta(
                   cmp_meta,
                   expr->get_result_type(),

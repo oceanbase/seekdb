@@ -59,7 +59,7 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
   } else if (param_num < 2) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObjTypeClass type_class = ObNullTC;
+    SqlTypeClass type_class = ObNullTC;
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
       type_class = types_stack[i].get_type_class();
       if (ObNullTC == type_class || ObEnumSetTC == type_class) {
@@ -99,7 +99,7 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
         }
       }
 
-      ObObjType calc_type = type.get_calc_type();
+      SqlValueType calc_type = type.get_calc_type();
 
       if (ObVarcharType == calc_type) {
         for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {

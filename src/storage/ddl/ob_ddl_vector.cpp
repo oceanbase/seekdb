@@ -136,7 +136,7 @@ int ObDDLVector::create_vector(const ObColDesc &col_desc, bool is_nullable,
   return create_vector(col_desc.col_type_, is_nullable, max_batch_size, allocator, vector);
 }
 
-int ObDDLVector::create_vector(const common::ObObjMeta &col_type, bool is_nullable,
+int ObDDLVector::create_vector(const common::SqlTypeMeta &col_type, bool is_nullable,
                                       const int64_t max_batch_size, ObIAllocator &allocator,
                                       ObDDLVector *&vector)
 {

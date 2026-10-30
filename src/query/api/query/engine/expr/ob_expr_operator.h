@@ -23,6 +23,7 @@
 #include <cmath>  // For std::isinf on macOS
 #include "lib/objectpool/ob_tc_factory.h"
 #include "lib/utility/ob_print_utils.h"
+#include "common/row/ob_row.h"
 #include "common/timezone/ob_timezone_info.h"
 #include "lib/container/ob_iarray.h"
 #include "query/engine/expr/ob_sql_expression.h"
@@ -30,7 +31,7 @@
 #include "share/datum/ob_datum_funcs.h"
 #include "common/expression/ob_expr_string_buf.h"
 #include "share/object/ob_obj_cast.h"
-#include "common/object/ob_obj_compare.h"
+#include "common/object/ob_cmp_op.h"
 #include "common/ob_accuracy.h"
 #include "common/mysqlclient/ob_mysql_global.h"
 #include "query/parser/ob_item_type.h"
@@ -73,7 +74,7 @@ public:
       calc_meta_(), max_length_(0), flag_(0)
   {}
 
-  ObFuncInputType(common::ObObjMeta calc_meta, common::ObLength max_length, uint32_t flag) :
+  ObFuncInputType(common::SqlTypeMeta calc_meta, common::ObLength max_length, uint32_t flag) :
                   calc_meta_(calc_meta), max_length_(max_length), flag_(flag)
   {
     if (OB_UNLIKELY(calc_meta.get_type() >= common::ObMaxType)) {
@@ -83,9 +84,9 @@ public:
   virtual ~ObFuncInputType() {}
 
 
-  common::ObObjType get_calc_type() const { return calc_meta_.get_type(); }
+  common::SqlValueType get_calc_type() const { return calc_meta_.get_type(); }
   common::ObLength get_length() const { return max_length_; }
-  const common::ObObjMeta &get_calc_meta() const { return calc_meta_; }
+  const common::SqlTypeMeta &get_calc_meta() const { return calc_meta_; }
   common::ObLength get_max_length() const { return max_length_; }
   bool is_zerofill() const { return flag_ & ZEROFILL_FLAG; }
 
@@ -96,7 +97,7 @@ public:
                N_FLAG,
                flag_);
 private:
-  common::ObObjMeta calc_meta_; // Convert ObObj to the type specified by calc_meta_
+  common::SqlTypeMeta calc_meta_; // Calculation type metadata.
   common::ObLength max_length_; // used for zerofill
   uint32_t flag_;
 };
@@ -261,7 +262,6 @@ public:
     : op_type_(operator_type)
   { }
   virtual ~ObFastExprOperator() {}
-  virtual int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result) const = 0;
   inline ObExprOperatorType get_op_type() const { return op_type_; }
   virtual int assign(const ObFastExprOperator &other) = 0;
 protected:
@@ -380,7 +380,7 @@ public:
   inline ObExprResType &get_result_type() { return result_type_; }
   inline const common::ObIArray<ObFuncInputType> &get_input_types() const {return input_types_;}
   inline void set_result_type(const ObExprResType &type) { result_type_ = type; }
-  inline void set_result_type(const common::ObObjType &type) { result_type_.set_type(type); }
+  inline void set_result_type(const common::SqlValueType &type) { result_type_.set_type(type); }
   inline void set_row_dimension(const int32_t row_dimension) { row_dimension_ = row_dimension; }
   inline void set_real_param_num(const int32_t param_num) {real_param_num_ = param_num;};
   inline void set_raw_expr(ObRawExpr *expr) { raw_expr_ = expr; }
@@ -410,77 +410,33 @@ public:
   // define derive type from expr argument value
   virtual int calc_result_type0(ObExprResType &type,
                                 common::ObExprTypeCtx &type_ctx,
-                                common::ObIArray<common::ObObj*> &arg_arrs) const;
+                                common::ObIArray<const common::DatumValue*> &arg_arrs) const;
   virtual int calc_result_type1(ObExprResType &type,
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx,
-                                common::ObIArray<common::ObObj*> &arg_arrs) const;
+                                common::ObIArray<const common::DatumValue*> &arg_arrs) const;
   virtual int calc_result_type2(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx,
-                                common::ObIArray<common::ObObj*> &arg_arrs) const;
+                                common::ObIArray<const common::DatumValue*> &arg_arrs) const;
   virtual int calc_result_type3(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 ObExprResType &type3,
                                 common::ObExprTypeCtx &type_ctx,
-                                common::ObIArray<common::ObObj*> &arg_arrs) const;
+                                common::ObIArray<const common::DatumValue*> &arg_arrs) const;
   virtual int calc_result_typeN(ObExprResType &type,
                                 ObExprResType *types_array,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx,
-                                common::ObIArray<common::ObObj*> &arg_arrs) const;
+                                common::ObIArray<const common::DatumValue*> &arg_arrs) const;
   //end define derive type from expr argment value
-
-  virtual int calc_result0(common::ObObj &result, common::ObExprCtx &expr_ctx) const;
-  virtual int calc_result1(common::ObObj &result,
-                           const common::ObObj &obj,
-                           common::ObExprCtx &expr_ctx) const;
-  virtual int calc_result2(common::ObObj &result,
-                           const common::ObObj &obj1,
-                           const common::ObObj &obj2,
-                           common::ObExprCtx &expr_ctx) const;
-  virtual int calc_result3(common::ObObj &result,
-                           const common::ObObj &obj1,
-                           const common::ObObj &obj2,
-                           const common::ObObj &obj3,
-                           common::ObExprCtx &expr_ctx) const;
-  /**
-   * cal value
-   * @param[out] result
-   * @param[in]  objs        array ob input arguments
-   * @param[in]  param_num   number of obobj(value) const
-   */
-  virtual int calc_resultN(common::ObObj &result,
-                           const common::ObObj *objs_array,
-                           int64_t param_num,
-                           common::ObExprCtx &expr_ctx) const;
-  /**
-   * call the operation on the stack
-   * pop the input argument from the stack and push the result into it
-   * @param stack [in/out]
-   * @param stack_size [in/out]
-   *
-   * @return ob error
-   */
-  virtual int call(common::ObObj *stack, int64_t &stack_size, common::ObExprCtx &expr_ctx) const;
-
-  // call() interface is used for postfix expression evaluation, will be discard.
-  // eval() is called in infix expression evaluation, support lazy evaluate.
-  virtual int eval(common::ObExprCtx &expr_ctx, common::ObObj &val,
-      common::ObObj *params, int64_t param_num) const;
-
-  // parameter evaluation.
-  // NOTICE: %param must in %params array which passed by eval().
-  int get_param_is_boolean(common::ObExprCtx &expr_ctx,
-                                const common::ObObj &param,
-                                bool &is_boolean) const;
 
   inline bool is_param_lazy_eval() const { return param_lazy_eval_; }
 
-  inline static bool is_type_valid(const common::ObObjType &type);
-  inline static bool is_type_valid_regexp(const common::ObObjType &type);
+  inline static bool is_type_valid(const common::SqlValueType &type);
+  inline static bool is_type_valid_regexp(const common::SqlValueType &type);
   virtual bool need_charset_convert() const { return need_charset_convert_; }
   virtual int64_t to_string(char *buf, const int64_t buf_len) const
   {
@@ -497,7 +453,7 @@ public:
     return pos;
   }
   bool is_enum_set_with_subschema_arg(const int64_t arg_idx) const;
-  ObObjType get_enumset_calc_type(const ObObjType expected_type, const int64_t arg_idx) const;
+  SqlValueType get_enumset_calc_type(const SqlValueType expected_type, const int64_t arg_idx) const;
 public:
   /*
     Aggregate arguments for comparison, e.g: a=b, a LIKE b, a RLIKE b
@@ -505,8 +461,8 @@ public:
     - don't allow DERIVATION_NONE
   */
   static int aggregate_charsets_for_comparison(
-    common::ObObjMeta &type,
-    const common::ObObjMeta *types,
+    common::SqlTypeMeta &type,
+    const common::SqlTypeMeta *types,
     int64_t param_num,
     common::ObExprTypeCtx &type_ctx);
   static int aggregate_charsets_for_comparison(
@@ -521,8 +477,8 @@ public:
     - allow DERIVATION_NONE
   */
   static int aggregate_charsets_for_string_result(
-    common::ObObjMeta &type,
-    const common::ObObjMeta *types,
+    common::SqlTypeMeta &type,
+    const common::SqlTypeMeta *types,
     int64_t param_num,
     common::ObExprTypeCtx &type_ctx);
   static int aggregate_charsets_for_string_result(
@@ -553,7 +509,7 @@ public:
     - disallow DERIVATION_NONE
   */
   static int aggregate_charsets_for_string_result_with_comparison(
-    common::ObObjMeta &type,
+    common::SqlTypeMeta &type,
     const ObExprResType *types,
     int64_t param_num,
     common::ObExprTypeCtx &type_ctx);
@@ -614,7 +570,7 @@ public:
   }
 
   static common::ObCollationType get_default_collation_type(
-      common::ObObjType type,
+      common::SqlValueType type,
       ObExprTypeCtx &type_ctx
       );
 
@@ -681,45 +637,32 @@ protected:
   inline static void calc_result_flagN(ObExprResType &type,
                                        const ObExprResType *types,
                                        int64_t param_num);
-  static common::ObObjType get_calc_cast_type(common::ObObjType param_type, common::ObObjType calc_type);
+  static common::SqlValueType get_calc_cast_type(common::SqlValueType param_type, common::SqlValueType calc_type);
 
   void disable_operand_auto_cast() { operand_auto_cast_ = false; }
 private:
-  static common::ObObjType enumset_calc_types_[2 /*use_subschema*/][common::ObMaxTC];
-  /*
-   * The framework itself provides a generic data type conversion method, converting parameters to types in input_types_.
-   * This may not be the behavior expected by the expression, if this behavior needs to be disabled, it must be explicitly called in the constructor disable_operand_auto_cast().
-   *
-   * @output: The conversion result is saved in place on the stack.
-   */
-  int cast_operand_type(common::ObObj *params,
-                        const int64_t param_num,
-                        common::ObExprCtx &expr_ctx) const;
-
-  int OB_INLINE cast_operand_type(common::ObObj &param, const ObFuncInputType &type,
-      common::ObExprCtx &expr_ctx) const;
-
+  static common::SqlValueType enumset_calc_types_[2 /*use_subschema*/][common::ObMaxTC];
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprOperator);
   // types and constants
 
 protected:
   static int aggregate_collations(
-    common::ObObjMeta &type,
-    const common::ObObjMeta *types_array,
+    common::SqlTypeMeta &type,
+    const common::SqlTypeMeta *types_array,
     int64_t param_num,
     uint32_t flag,
     const common::ObCollationType conn_coll_type);
 
   static int aggregate_charsets(
-    common::ObObjMeta &type,
-    const common::ObObjMeta *types,
+    common::SqlTypeMeta &type,
+    const common::SqlTypeMeta *types,
     int64_t param_num,
     uint32_t flags,
     common::ObExprTypeCtx &type_ctx);
 
   static int aggregate_charsets(
-    common::ObObjMeta &type,
+    common::SqlTypeMeta &type,
     const ObExprResType *types,
     int64_t param_num,
     uint32_t flags,
@@ -746,7 +689,7 @@ protected:
    *
    * detail: During the calc_result_type phase, all information about the operator is known, especially
    * what type each operand needs to be converted to during the operation. During the postfix expression
-   * calculation phase, the calculation framework will convert ObObj according to the types specified
+   * calculation phase, the framework converts operands according to the declared types
    * in @input_types_, and then call calc_result.
    * Inside calc_result, there is no need to concern the type of the operands; only an assert on the type
    * is required.
@@ -768,7 +711,7 @@ protected:
 
 class ObSQLSessionInfo;
 const common::ObTimeZoneInfo *get_timezone_info(const ObSQLSessionInfo *session);
-const common::ObObjPrintParams get_obj_print_params(const ObSQLSessionInfo *session);
+const common::ObValuePrintParams get_obj_print_params(const ObSQLSessionInfo *session);
 class ObPhysicalPlanCtx;
 int64_t get_cur_time(ObPhysicalPlanCtx *phy_plan_ctx);
 int get_tz_offset(const common::ObTimeZoneInfo *tz_info, int64_t &offset);
@@ -801,7 +744,7 @@ inline ObExprOperator::ObExprOperator(common::ObIAllocator &alloc,
 
 inline int ObExprOperator::calc_result_type0(ObExprResType &type,
                                              common::ObExprTypeCtx &type_ctx,
-                                             common::ObIArray<common::ObObj*> &arg_arrs) const
+                                             common::ObIArray<const common::DatumValue*> &arg_arrs) const
 {
   UNUSED(type);
   UNUSED(type_ctx);
@@ -813,7 +756,7 @@ inline int ObExprOperator::calc_result_type0(ObExprResType &type,
 inline int ObExprOperator::calc_result_type1(ObExprResType &type,
                                              ObExprResType &type1,
                                              common::ObExprTypeCtx &type_ctx,
-                                             common::ObIArray<common::ObObj*> &arg_arrs) const
+                                             common::ObIArray<const common::DatumValue*> &arg_arrs) const
 {
   UNUSED(type);
   UNUSED(type1);
@@ -827,7 +770,7 @@ inline int ObExprOperator::calc_result_type2(ObExprResType &type,
                                              ObExprResType &type1,
                                              ObExprResType &type2,
                                              common::ObExprTypeCtx &type_ctx,
-                                             common::ObIArray<common::ObObj*> &arg_arrs) const
+                                             common::ObIArray<const common::DatumValue*> &arg_arrs) const
 {
   UNUSED(type);
   UNUSED(type1);
@@ -843,7 +786,7 @@ inline int ObExprOperator::calc_result_type3(ObExprResType &type,
                                              ObExprResType &type2,
                                              ObExprResType &type3,
                                              common::ObExprTypeCtx &type_ctx,
-                                             common::ObIArray<common::ObObj*> &arg_arrs) const
+                                             common::ObIArray<const common::DatumValue*> &arg_arrs) const
 {
   UNUSED(type);
   UNUSED(type1);
@@ -859,7 +802,7 @@ inline int ObExprOperator::calc_result_typeN(ObExprResType &type,
                                              ObExprResType *types,
                                              int64_t param_num,
                                              common::ObExprTypeCtx &type_ctx,
-                                             common::ObIArray<common::ObObj*> &arg_arrs) const
+                                             common::ObIArray<const common::DatumValue*> &arg_arrs) const
 {
   UNUSED(type);
   UNUSED(types);
@@ -931,60 +874,10 @@ inline int ObExprOperator::calc_result_typeN(ObExprResType &type,
   return common::OB_NOT_IMPLEMENT;
 }
 
-inline int ObExprOperator::calc_result0(common::ObObj &result, common::ObExprCtx &expr_ctx) const
-{
-  UNUSED(result);
-  UNUSED(expr_ctx);
-  return common::OB_NOT_IMPLEMENT;
-}
 
-inline int ObExprOperator::calc_result1(common::ObObj &result,
-                                        const common::ObObj &obj,
-                                        common::ObExprCtx &expr_ctx) const
-{
-  UNUSED(result);
-  UNUSED(obj);
-  UNUSED(expr_ctx);
-  return common::OB_NOT_IMPLEMENT;
-}
 
-inline int ObExprOperator::calc_result2(common::ObObj &result,
-                                        const common::ObObj &obj1,
-                                        const common::ObObj &obj2,
-                                        common::ObExprCtx &expr_ctx) const
-{
-  UNUSED(result);
-  UNUSED(obj1);
-  UNUSED(obj2);
-  UNUSED(expr_ctx);
-  return common::OB_NOT_IMPLEMENT;
-}
 
-inline int ObExprOperator::calc_result3(common::ObObj &result,
-                                        const common::ObObj &obj1,
-                                        const common::ObObj &obj2,
-                                        const common::ObObj &obj3,
-                                        common::ObExprCtx &expr_ctx) const
-{
-  UNUSED(result);
-  UNUSED(obj1);
-  UNUSED(obj2);
-  UNUSED(obj3);
-  UNUSED(expr_ctx);
-  return common::OB_NOT_IMPLEMENT;
-}
 
-inline int ObExprOperator::calc_resultN(common::ObObj &result,
-                                        const common::ObObj *objs,
-                                        int64_t param_num,
-                                        common::ObExprCtx &expr_ctx) const
-{
-  UNUSED(result);
-  UNUSED(objs);
-  UNUSED(param_num);
-  UNUSED(expr_ctx);
-  return common::OB_NOT_IMPLEMENT;
-}
 
 inline void ObExprOperator::reset()
 {
@@ -997,13 +890,13 @@ inline void ObExprOperator::reset()
 }
 
 // may be a new mod can be defined for it
-inline bool ObExprOperator::is_type_valid(const common::ObObjType &type)
+inline bool ObExprOperator::is_type_valid(const common::SqlValueType &type)
 {
-  common::ObObjTypeClass type_class = ob_obj_type_class(type);
+  common::SqlTypeClass type_class = sql_type_class(type);
   return (common::ob_is_castable_type_class(type_class) || common::ObUnknownTC == type_class);
 }
 
-inline bool ObExprOperator::is_type_valid_regexp(const common::ObObjType &type)
+inline bool ObExprOperator::is_type_valid_regexp(const common::SqlValueType &type)
 {
   return is_type_valid(type);
 }
@@ -1082,7 +975,7 @@ public:
  * Therefore, the calc_type of these two parameters (i.e., what type to expect to convert to) is decimal(number)
  * Note that due to performance considerations, calc_type is not always equal to cmp_type.
  * For example, although 3(int) > 2(uint), although cmp_type is decimal(number), we do not need any conversion
- * So how do we know which ones can be compared directly without conversion? Through ObObjCmpFuncs::can_cmp_without_cast
+ * Direct comparison eligibility is decided from Datum type metadata.
  */
 class ObRelationalExprOperator : public ObExprOperator
 {
@@ -1095,87 +988,13 @@ public:
                            int32_t param_num,
                            int32_t dimension = NOT_ROW_DIMENSION,
                            bool is_internal_for_mysql = false)
-      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql),
-        cmp_op_func2_(NULL)
+      : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension, is_internal_for_mysql)
   {
   }
 
   virtual ~ObRelationalExprOperator()
   {
   }
-  /**
-   * general compare.
-   * use this func if you are NOT SURE the compare need cast or not.
-   * @param[out] result: true / false / -1 / 0 / 1 / null.
-   * @param[in] obj1
-   * @param[in] obj2
-   * @param[in] cmp_ctx
-   * @param[in] cast_ctx
-   * @param[in] cmp_op: CO_EQ / CO_LE / CO_LT / CO_GE / CO_GT / CO_NE / CO_CMP.
-   * @return ob error code.
-   */
-  static int compare(common::ObObj &result,
-                     const common::ObObj &obj1,
-                     const common::ObObj &obj2,
-                     const common::ObCompareCtx &cmp_ctx,
-                     common::ObCastCtx &cast_ctx,
-                     common::ObCmpOp cmp_op);
-  /**
-   * compare with no cast.
-   * use this func if you are SURE the compare NEED NOT cast.
-   * @param[out] result: true / false / -1 / 0 / 1 / null.
-   * @param[in] obj1
-   * @param[in] obj2
-   * @param[in] cmp_ctx
-   * @param[in] cmp_op: CO_EQ / CO_LE / CO_LT / CO_GE / CO_GT / CO_NE / CO_CMP.
-   * @param[out] need_cast: set to true if can't compare without cast, otherwise false.
-   * @return ob error code.
-   */
-  OB_INLINE static int compare_nocast(common::ObObj &result,
-                                      const common::ObObj &obj1,
-                                      const common::ObObj &obj2,
-                                      const common::ObCompareCtx &cmp_ctx,
-                                      common::ObCmpOp cmp_op,
-                                      bool &need_cast)
-  {
-    return common::ObObjCmpFuncs::compare(result, obj1, obj2, cmp_ctx, cmp_op, need_cast);
-  }
-
-  /**
-   * compare with cast.
-   * use this func if you are SURE the compare always NEED cast.
-   * like ObExprBetween / ObExprNotBetween / ObExprField / ObExprStrcmp.
-   * @param[out] result: true / false / -1 / 0 / 1 / null.
-   * @param[in] obj1
-   * @param[in] obj2
-   * @param[in] cmp_ctx
-   * @param[in] cast_ctx
-   * @param[in] cmp_op: CO_EQ / CO_LE / CO_LT / CO_GE / CO_GT / CO_NE / CO_CMP.
-   * @return ob error code.
-   */
-  static int compare_cast(common::ObObj &result,
-                          const common::ObObj &obj1,
-                          const common::ObObj &obj2,
-                          const common::ObCompareCtx &cmp_ctx,
-                          common::ObCastCtx &cast_ctx,
-                          common::ObCmpOp cmp_op);
-  /**
-   * general compare, null safe.
-   * use this func if you are NOT SURE the compare need cast or not.
-   * @param[out] result: -1 / 0 / 1.
-   * @param[in] obj1
-   * @param[in] obj2
-   * @param[in] cast_ctx
-   * @param[in] cmp_type
-   * @param[in] cmp_cs_type
-   * @return ob error code.
-   */
-  static int compare_nullsafe(int64_t &result,
-                              const common::ObObj &obj1,
-                              const common::ObObj &obj2,
-                              common::ObCastCtx &cast_ctx,
-                              common::ObObjType cmp_type,
-                              common::ObCollationType cmp_cs_type);
   // determine the type used for comparison of the two types
   // binary comparison
   virtual int calc_result_type2(ObExprResType &type,
@@ -1201,7 +1020,7 @@ public:
                               ObExprResType &type2,
                               ObExprResType &type3,
                               common::ObExprTypeCtx &type_ctx,
-                              const common::ObObjType cmp_type) const;
+                              const common::SqlValueType cmp_type) const;
   int get_cmp_result_type3(ObExprResType &type,
                            bool &need_no_cast,
                            ObExprResType *types,
@@ -1214,18 +1033,10 @@ public:
                                 ObExprResType *types,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  virtual int calc_result2(common::ObObj &result, const common::ObObj &obj1,
-                           const common::ObObj &obj2,
-                           common::ObExprCtx &expr_ctx, bool is_null_safe,
-                           common::ObCmpOp cmp_op) const;
-
-  static int is_equal_transitive(const common::ObObjMeta &meta1,
-                                 const common::ObObjMeta &meta2,
+  static int is_equal_transitive(const common::SqlTypeMeta &meta1,
+                                 const common::SqlTypeMeta &meta2,
                                  bool &result);
   int assign(const ObExprOperator &other);
-  int set_cmp_func(const common::ObObjType type1,
-                   const common::ObObjType type2);
-   common::obj_cmp_func get_cmp_fun() const { return cmp_op_func2_; }
 
    // pure virtual but implemented, derived classes can use this implement.
    virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
@@ -1270,15 +1081,12 @@ public:
     } else { /* do nothing */ }
     return ret;
   }
-   static int get_equal_meta(common::ObObjMeta &meta,
-                             const common::ObObjMeta &meta1,
-                             const common::ObObjMeta &meta2);
-  // This function is added for UDT comparison in pl, UDT comparison does not require cast, the behavior of this function is consistent with set_cmp_func.
-  // The reason for adding this function instead of using set_cmp_func is because this function is called in calc_reult_2, and this function is
-  // const modified, adding this function is for compatibility with the former. At the same time, modify cmp_op_func2_ to mutable.
+   static int get_equal_meta(common::SqlTypeMeta &meta,
+                             const common::SqlTypeMeta &meta1,
+                             const common::SqlTypeMeta &meta2);
   // Prepare for pl's udt comparison, when comparing udt, compare the values of its internal elements rather than the udt itself.
-  static int pl_udt_compare2(CollectionPredRes &cmp_result, const common::ObObj &obj1,
-                      const common::ObObj &obj2, ObExecContext &exec_ctx,
+  static int pl_udt_compare2(CollectionPredRes &cmp_result, const common::ObDatum &obj1,
+                      const common::ObDatum &obj2, ObExecContext &exec_ctx,
                       const common::ObCmpOp cmp_op);
 
   static int eval_pl_udt_compare(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
@@ -1329,8 +1137,8 @@ public:
   }
 
   static int eval_compare_composite(CollectionPredRes &cmp_result,
-                                    const common::ObObj &obj1,
-                                    const common::ObObj &obj2,
+                                    const common::ObDatum &obj1,
+                                    const common::ObDatum &obj2,
                                     ObExecContext &exec_ctx,
                                     const ObCmpOp cmp_op);
 
@@ -1419,25 +1227,6 @@ protected:
     return ret_bool;
   }
 
-  /**
-   * fast path. cmp_func should not be NULL.
-   */
-  OB_INLINE static int compare_nocast(common::ObObj &result,
-                                      const common::ObObj &obj1,
-                                      const common::ObObj &obj2,
-                                      const common::ObCompareCtx &cmp_ctx,
-                                      common::ObCmpOp cmp_op,
-                                      const common::obj_cmp_func cmp_func)
-  {
-    return common::ObObjCmpFuncs::compare(result, obj1, obj2, cmp_ctx, cmp_op, cmp_func);
-  }
-
-    protected :
-    // only use for comparison with 2 operands(calc_result2)
-    // if cmp_op_func2_ is not NULL, that means we can compare the 2 objs directly without any casts
-    // otherwise, compare_cast is necessary.
-    // It is used for performance optimization.
-    common::obj_cmp_func cmp_op_func2_;
 };
 
 class ObSubQueryRelationalExpr : public ObExprOperator
@@ -1490,18 +1279,6 @@ public:
                                 ObExprResType *types,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  int calc_result2(common::ObObj &result,
-                   const common::ObObj &obj1,
-                   const common::ObObj &obj2,
-                   common::ObExprCtx &expr_ctx) const;
-  int calc_resultN(common::ObObj &result,
-                   const common::ObObj *param_array,
-                   int64_t param_num,
-                   common::ObExprCtx &expr_ctx) const;
-  virtual int call(common::ObObj *stack, int64_t &stack_size, common::ObExprCtx &expr_ctx) const;
-  virtual int eval(common::ObExprCtx &expr_ctx, common::ObObj &val,
-      common::ObObj *params, int64_t param_num) const override;
-
   static int subquery_cmp_eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
 
   VIRTUAL_TO_STRING_KV(N_EXPR_TYPE, get_type_name(type_),
@@ -1511,30 +1288,6 @@ public:
                        K_(left_is_iter),
                        K_(right_is_iter));
 protected:
-  // Processing the result of a subquery as a vector, in this case, the result of the subquery can have at most one row of data, multiple rows are not allowed
-  // According to the characteristics of vectors, the result of the subquery cannot be a single column of data, the result of a single row and single column subquery is a scalar
-  int calc_result_with_none(common::ObObj &result,
-                            const common::ObNewRow &left_row,
-                            int64_t subquery_idx,
-                            common::ObExprCtx &expr_ctx) const;
-  // Handle comparison ALL(subquery) case,
-  // In this case, the subquery result is a set, and the comparison result of all elements in the set is true, the entire expression result is true
-  // Otherwise, the expression result is false
-  int calc_result_with_all(common::ObObj &result,
-                           const common::ObNewRow &left_row,
-                           int64_t subquery_idx,
-                           common::ObExprCtx &expr_ctx) const;
-  // Handle comparison ANY(subquery) case,
-  // In this case, the subquery result is a collection, and at least one element in the collection has a comparison result of true, the entire expression result is true
-  // Otherwise, the expression result is false
-  int calc_result_with_any(common::ObObj &result,
-                           const common::ObNewRow &left_row,
-                           int64_t subquery_idx,
-                           common::ObExprCtx &expr_ctx) const;
-  virtual int compare_single_row(const common::ObNewRow &left_row,
-                                 const common::ObNewRow &right_row,
-                                 common::ObExprCtx &expr_ctx,
-                                 common::ObObj &result) const;
   virtual int calc_result_type2_(ObExprResType &type,
                                 ObExprResType &type1,
                                 ObExprResType &type2,
@@ -1580,17 +1333,11 @@ protected:
 typedef int (*ObResultTypeFunc)(ObExprResType &type,
                                 const ObExprResType &type1,
                                 const ObExprResType &type2);
-typedef int (*ObCalcTypeFunc)(common::ObObjType &calc_type,
-                              common::ObObjType &calc_ob1_type,
-                              common::ObObjType &calc_ob2_type,
-                              const common::ObObjType type1,
-                              const common::ObObjType type2);
-typedef int (*ObArithFunc)(common::ObObj &res,
-                           const common::ObObj &left,
-                           const common::ObObj &right,
-                           common::ObIAllocator *allocator,
-                           common::ObScale scale);
-
+typedef int (*ObCalcTypeFunc)(common::SqlValueType &calc_type,
+                              common::SqlValueType &calc_ob1_type,
+                              common::SqlValueType &calc_ob2_type,
+                              const common::SqlValueType type1,
+                              const common::SqlValueType type2);
 class ObArithExprOperator : public ObExprOperator
 {
 public:
@@ -1600,12 +1347,10 @@ public:
                       int32_t param_num,
                       int32_t dimension,
                       ObResultTypeFunc result_type_func,
-                      ObCalcTypeFunc calc_type_func,
-                      const ObArithFunc *arith_funcs)
+                      ObCalcTypeFunc calc_type_func)
       : ObExprOperator(alloc, type, name, param_num, VALID_FOR_GENERATED_COL, dimension),
       result_type_func_(result_type_func),
-      calc_type_func_(calc_type_func),
-      arith_funcs_(arith_funcs)
+      calc_type_func_(calc_type_func)
   {
   };
 
@@ -1662,39 +1407,9 @@ protected:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  virtual int calc_result2(common::ObObj &result,
-                           const common::ObObj &left,
-                           const common::ObObj &right,
-                           common::ObExprCtx &expr_ctx) const;
-  static int calc(common::ObObj &result,
-                  const common::ObObj &left,
-                  const common::ObObj &right,
-                  common::ObIAllocator *allocator,
-                  common::ObScale scale,
-                  ObCalcTypeFunc calc_type_func,
-                  const ObArithFunc *arith_funcs);
-  static int calc(common::ObObj &result,
-                  const common::ObObj &left,
-                  const common::ObObj &right,
-                  common::ObExprCtx &expr_ctx,
-                  common::ObScale calc_scale,
-                  ObCalcTypeFunc calc_type_func,
-                  const ObArithFunc *arith_funcs);
-
   ObResultTypeFunc result_type_func_;
   ObCalcTypeFunc calc_type_func_;
-  const ObArithFunc *arith_funcs_;
 protected:
-  static int calc_(common::ObObj &res,
-                   const common::ObObj &left,
-                   const common::ObObj &right,
-                   common::ObExprCtx &expr_ctx,
-                   common::ObScale calc_scale,
-                   common::ObObjType calc_type,
-                   const ObArithFunc *arith_func);
-  static bool is_datetime_add_minus_calc(const common::ObObjType calc_type,
-                                         const ObArithFunc *arith_funcs);
-
 };
 
 class ObVectorExprOperator : public ObExprOperator
@@ -1846,9 +1561,9 @@ protected:
   static int extract_enum_set_collation_for_args(const ObExprResType &text,
                                                  const ObExprResType &pattern,
                                                  ObExprTypeCtx &type_ctx,
-                                                 ObObjMeta *real_types);
+                                                 SqlTypeMeta *real_types);
 protected:
-  common::ObObjType get_result_type_mysql(int64_t char_length) const;
+  common::SqlValueType get_result_type_mysql(int64_t char_length) const;
   static const int64_t MAX_CHAR_LENGTH_FOR_VARCAHR_RESULT = 512;
   static const int64_t MAX_CHAR_LENGTH_FOR_TEXT_RESULT = 65535;
 
@@ -1922,14 +1637,6 @@ protected:
   typedef int (*GetUIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, uint64_t &,
                              common::ObCastMode &);
 
-  static int get_uint64(const common::ObObj &obj,
-                        common::ObExprCtx &expr_ctx,
-                        bool is_round,
-                        uint64_t &out);
-  static int get_int64(const common::ObObj &obj,
-                        common::ObExprCtx &expr_ctx,
-                        bool is_round,
-                        int64_t &out);
   // Initialize eval_func_, inner_functions_, extra_ fields
   static int cg_bitwise_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                             ObExpr &rt_expr, const BitOperator op);
@@ -2001,20 +1708,6 @@ protected:
                                       const bool enable_decimal_int) const;
 
 protected:
-  // least should set cmp_op to CO_LT.
-  // greatest should set cmp_op to CO_GT.
-  OB_INLINE static int calc_without_cast(common::ObObj &result,
-                                         const common::ObObj *objs_stack,
-                                         int64_t param_num,
-                                         const ObExprResType &result_type,
-                                         common::ObExprCtx &expr_ctx,
-                                         common::ObCmpOp cmp_op);
-  OB_INLINE static int calc_with_cast(common::ObObj &result,
-                                      const common::ObObj *objs_stack,
-                                      int64_t param_num,
-                                      const ObExprResType &result_type,
-                                      common::ObExprCtx &expr_ctx,
-                                      common::ObCmpOp cmp_op);
 protected:
   //if all params are of same types
   //or if all params are numeric
@@ -2042,15 +1735,6 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  virtual int calc_result2(common::ObObj &result,
-                           const common::ObObj &obj1,
-                           const common::ObObj &obj2,
-                           common::ObExprCtx &expr_ctx) const;
-  virtual int calc_result3(common::ObObj &result,
-                           const common::ObObj &obj1,
-                           const common::ObObj &obj2,
-                           const common::ObObj &obj3,
-                           common:: ObExprCtx &expr_ctx) const;
   // for sql engine 3.0
   static int calc_(const ObExpr &expr, const ObExpr &sub_arg, const ObExpr &ori_arg,
                    ObEvalCtx &ctx, ObDatum &res_datum);
@@ -2059,7 +1743,6 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const;
 private:
-  OB_INLINE static int get_pos_int64(const common::ObObj &obj, common::ObExprCtx &expr_ctx, int64_t &out);
 };
 
 class ObExprFindIntCachedValue : public ObExprOperatorCtx
@@ -2136,12 +1819,6 @@ private:
 ////////////////////////////////////////////////////////////////
 // macros that use new cast function.
 
-#define EXPR_DEFINE_CMP_CTX(calc_type, is_null_safe, expr_ctx) \
-  ObCompareCtx cmp_ctx(calc_type.get_type(), \
-                       calc_type.get_collation_type(), \
-                       is_null_safe, \
-                       expr_ctx.tz_offset_,\
-                       default_null_pos())
 // external variables: expr_ctx.
 #define EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode)                       \
     EXPR_DEFINE_CAST_CTX_ZF(expr_ctx, cast_mode , NULL)
@@ -2178,43 +1855,6 @@ private:
       (expr_ctx).my_session_->configure_obj_cast(cast_ctx, NULL, NULL);      \
     }                                                                       \
   }
-
-// external variables: ret, cast_ctx.
-// can not use do ... while(0), because the buf obj will be freed.
-#define EXPR_CAST_OBJ_V2(obj_type, obj, res_obj)                        \
-  common::ObObj tmp_out_obj;                                                      \
-  if (OB_SUCC(ret) && OB_FAIL(ObObjCaster::to_type(obj_type, cast_ctx, obj, tmp_out_obj, res_obj))) { \
-    SQL_LOG(WARN, "failed to cast object to "#obj_type, K(ret), K(obj),K(obj_type)); \
-  }
-
-// external variables: ret, cast_ctx.
-#define EXPR_GET_VAL_V2(type, obj, val, func)                           \
-  do {                                                                  \
-    const common::ObObj *res_obj = NULL;                                        \
-    EXPR_CAST_OBJ_V2(type, obj, res_obj);                               \
-    if (OB_SUCC(ret)) {                                                       \
-      if (OB_ISNULL(res_obj)) { \
-        ret = OB_ERR_UNEXPECTED;  \
-        SQL_LOG(WARN, "unexpected error. res_obj is null", K(ret), K(type), K(obj), K(type)); \
-      } else if (OB_FAIL(res_obj->get_##func(val))) {\
-        SQL_LOG(WARN, "unexpected error. get val failed", K(ret), K(obj), K(type), K(*res_obj)); \
-      }\
-    }                                                                   \
-  } while (0)
-
-#define EXPR_GET_TINYINT_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObTinyIntType, arg_obj, arg_val, tinyint)
-#define EXPR_GET_INT32_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObInt32Type, arg_obj, arg_val, int32)
-#define EXPR_GET_UINT32_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObUInt32Type, arg_obj, arg_val, uint32)
-#define EXPR_GET_INT64_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObIntType, arg_obj, arg_val, int)
-#define EXPR_GET_UINT64_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObUInt64Type, arg_obj, arg_val, uint64)
-#define EXPR_GET_FLOAT_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObFloatType, arg_obj, arg_val, float)
-#define EXPR_GET_DOUBLE_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObDoubleType, arg_obj, arg_val, double)
-#define EXPR_GET_NUMBER_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObNumberType, arg_obj, arg_val, number)
-#define EXPR_GET_DATETIME_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObDateTimeType, arg_obj, arg_val, datetime)
-#define EXPR_GET_TIMESTAMP_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObTimestampType, arg_obj, arg_val, timestamp)
-#define EXPR_GET_DATE_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObDateType, arg_obj, arg_val, date)
-#define EXPR_GET_TIME_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObTimeType, arg_obj, arg_val, time)
-#define EXPR_GET_VARCHAR_V2(arg_obj, arg_val) EXPR_GET_VAL_V2(ObVarcharType, arg_obj, arg_val, varchar)
 
 #define TYPE_CHECK(obj_to_check, expected_type) \
   do\

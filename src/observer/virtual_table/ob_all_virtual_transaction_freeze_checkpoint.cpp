@@ -107,11 +107,11 @@ int ObAllVirtualFreezeCheckpointInfo::inner_get_next_row(ObNewRow *&row)
       switch (col_id) {
         
         case OB_APP_MIN_COLUMN_ID: {
-          cur_row_.cells_[i].set_int(freeze_checkpoint.tablet_id.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, freeze_checkpoint.tablet_id.id()) : ret);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 1: {
-          cur_row_.cells_[i].set_uint64(freeze_checkpoint.rec_scn.is_valid() ? freeze_checkpoint.rec_scn.get_val_for_inner_table_field() : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, freeze_checkpoint.rec_scn.is_valid() ? freeze_checkpoint.rec_scn.get_val_for_inner_table_field() : 0) : ret);
           break;
         }
         case OB_APP_MIN_COLUMN_ID + 2:
@@ -120,12 +120,12 @@ int ObAllVirtualFreezeCheckpointInfo::inner_get_next_row(ObNewRow *&row)
                                                            sizeof(freeze_checkpoint_location_buf_)))) {
           } else {
             freeze_checkpoint_location_buf_[MAX_FREEZE_CHECKPOINT_LOCATION_BUF_LENGTH - 1] = '\0';
-            cur_row_.cells_[i].set_varchar(freeze_checkpoint_location_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, freeze_checkpoint_location_buf_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         case OB_APP_MIN_COLUMN_ID + 3:
-          cur_row_.cells_[i].set_int(freeze_checkpoint.rec_scn_is_stable ? 1 : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, freeze_checkpoint.rec_scn_is_stable ? 1 : 0) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

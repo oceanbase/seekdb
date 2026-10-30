@@ -97,7 +97,8 @@ public:
   int next_row(const ObNewRow *&obmr);
   int64_t to_string(char *buf, const int64_t buf_len) const;
   int32_t get_type() {return 0;};
-  static int to_mysql_field(const ObField &field, ObMySQLField &mfield);
+  static int to_mysql_field(const ObField &field, ObMySQLField &mfield,
+                            bool is_field_list = false);
 
 private:
   int64_t field_index_;     /**< The index of the next field to be read */

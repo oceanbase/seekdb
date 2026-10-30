@@ -157,7 +157,7 @@ int ObExprJsonSchemaValidInfo::init_json_schema_extra_info(ObIAllocator &alloc,
   INIT_SUCC(ret);
   ObExecContext *exec_ctx = op_cg_ctx.session_->get_cur_exec_ctx();
   got_data = false;
-  ObObj const_data;
+  DatumValue const_data;
   ObIJsonBase* j_schema = nullptr;
   if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                         schema,

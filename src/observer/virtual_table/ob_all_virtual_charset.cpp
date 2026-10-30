@@ -47,7 +47,7 @@ int ObAllVirtualCharset::inner_get_next_row(common::ObNewRow *&row)
 int ObAllVirtualCharset::fill_scanner()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const ObCharsetWrapper *charset_wrap_arr = NULL;
   int64_t charset_wrap_arr_len = 0;
   ObCharset::get_charset_wrap_arr(charset_wrap_arr, charset_wrap_arr_len);
@@ -68,28 +68,25 @@ int ObAllVirtualCharset::fill_scanner()
       int64_t col_id = output_column_ids_.at(j);
       switch(col_id) {
         case CHARSET: {
-          cells[cell_idx].set_varchar(
-              ObString::make_string(ObCharset::charset_name(charset_wrap.charset_)));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ObCharset::charset_name(charset_wrap.charset_))) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case DESCRIPTION: {
-          cells[cell_idx].set_varchar(
-              ObString::make_string(charset_wrap.description_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(charset_wrap.description_)) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case DEFAULT_COLLATION: {
-          cells[cell_idx].set_varchar(
-              ObString::make_string(ObCharset::collation_name(ObCharset::get_default_collation(charset_wrap.charset_))));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ObCharset::collation_name(ObCharset::get_default_collation(charset_wrap.charset_)))) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case MAX_LENGTH: {
-          cells[cell_idx].set_int(charset_wrap.maxlen_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, charset_wrap.maxlen_) : ret);
           break;
         }
         default: {

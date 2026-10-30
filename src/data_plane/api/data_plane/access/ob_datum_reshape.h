@@ -24,7 +24,7 @@ namespace common
 class ObAccuracy;
 class ObIAllocator;
 class ObIVector;
-class ObObjMeta;
+class SqlTypeMeta;
 struct ObDatumVector;
 }
 namespace share
@@ -44,23 +44,23 @@ class ObDatumReshape
 {
 public:
   static int pad_datum_value(
-      const common::ObObjMeta &col_type,
+      const common::SqlTypeMeta &col_type,
       const common::ObAccuracy &col_accuracy,
       common::ObIAllocator &allocator,
       blocksstable::ObStorageDatum &datum_value);
   static int reshape_datum_value(
-      const common::ObObjMeta &col_type,
+      const common::SqlTypeMeta &col_type,
       const common::ObAccuracy &col_accuracy,
       common::ObIAllocator &allocator,
       blocksstable::ObStorageDatum &datum_value);
   static int reshape_datum_vector_value(
-      const common::ObObjMeta &col_type,
+      const common::SqlTypeMeta &col_type,
       const common::ObAccuracy &col_accuracy,
       common::ObIAllocator &allocator,
       const common::ObDatumVector &datum_vector,
       share::ObBatchSelector &selector);
   static int reshape_vector_value(
-      const common::ObObjMeta &col_type,
+      const common::SqlTypeMeta &col_type,
       const common::ObAccuracy &col_accuracy,
       common::ObIAllocator &allocator,
       common::ObIVector *&vector,

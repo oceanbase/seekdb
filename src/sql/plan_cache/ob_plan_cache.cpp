@@ -1627,7 +1627,7 @@ int ObPlanCache::update_memory_conf()
         &pc_mem_conf.high_pct_
       };
   ObArenaAllocator alloc;
-  ObObj obj_val;
+  DatumValue obj_val;
 
   {
     for (int32_t i = 0; i < 3 && OB_SUCC(ret); ++i) {

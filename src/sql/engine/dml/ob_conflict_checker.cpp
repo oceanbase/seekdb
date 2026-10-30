@@ -18,6 +18,10 @@
 #include "sql/engine/dml/ob_conflict_checker.h"
 #include "sql/das/ob_das_utils.h"
 
+#include "common/datum/datum_value_projection.h"
+#include "common/datum/datum_sql_print.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -158,17 +162,19 @@ int ObConflictRowMapCtx::init_conflict_map(int64_t replace_row_cnt, int64_t rowk
     allocator_ = allocator;
   }
   if (OB_SUCC(ret) && !conflict_map_.created()) {
-    ObObj *objs = NULL;
+    DatumValue *objs = NULL;
     int64_t bucket_num = 0;
     int64_t real_row_buckets = replace_row_cnt * 10;
     bucket_num = real_row_buckets < MAX_ROW_BATCH_SIZE ? real_row_buckets : MAX_ROW_BATCH_SIZE;
     // map not created scenario requires creation, here it may be called repeatedly
     if (NULL == (rowkey_ = static_cast<ObRowkey*>(allocator_->alloc(sizeof(ObRowkey))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (NULL == (objs = static_cast<ObObj*>(allocator_->alloc(sizeof(ObObj)* rowkey_cnt)))){
+    } else if (NULL == (objs = static_cast<DatumValue*>(allocator_->alloc(sizeof(DatumValue)* rowkey_cnt)))){
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(conflict_map_.create(bucket_num, ObModIds::OB_HASH_BUCKET))) {
     } else {
+      new (rowkey_) ObRowkey();
+      new (objs) DatumValue[rowkey_cnt];
       rowkey_->assign(objs, rowkey_cnt);
     }
   }
@@ -274,7 +280,7 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
                                     ObRowkeyCstCtdef *rowkey_info)
 {
   int ret = OB_SUCCESS;
-  ObObj *objs = NULL;
+  DatumValue *objs = NULL;
   int64_t rowkey_cnt = 0;
   ObIAllocator &alloc = das_ref_.get_das_alloc();
   ObIAllocator *tmp_string_buffer = nullptr;
@@ -289,16 +295,17 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
   } else if (NULL == (rowkey = static_cast<ObRowkey*>(alloc.alloc(sizeof(ObRowkey))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (NULL ==
-      (objs = static_cast<ObObj*>(das_ref_.get_das_alloc().alloc(sizeof(ObObj)* rowkey_cnt)))){
+      (objs = static_cast<DatumValue*>(das_ref_.get_das_alloc().alloc(sizeof(DatumValue)* rowkey_cnt)))){
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(ObSQLUtils::clear_evaluated_flag(rowkey_info->calc_exprs_, eval_ctx_))) {
   } else if (OB_FAIL(get_tmp_string_buffer(tmp_string_buffer))) {
   }
 
+  if (OB_SUCC(ret)) { new (rowkey) ObRowkey(); new (objs) DatumValue[rowkey_cnt]; }
   for (int i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
     ObDatum *datum = NULL;
-    ObObj tmp_obj;
-    const ObObjMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
+    DatumValue tmp_obj;
+    const SqlTypeMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
     ObExpr *expr = rowkey_info->rowkey_expr_.at(i);
     const ObAccuracy &col_accuracy = rowkey_info->rowkey_accuracys_.at(i);
 
@@ -308,12 +315,12 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
     }
     // Here a shallow copy of datum is made, because at this point the datum comes from the data scanned out of the storage layer table_scan,
     // Read subsequent lines will overwrite the previous data, so a deep copy must be done here
-    else if (OB_FAIL(datum->to_obj(tmp_obj, col_obj_meta))) {
+    else if (OB_FAIL(project_datum_value_view(*datum, col_obj_meta, ObDatum::get_sql_value_datum_map_type(col_obj_meta.get_type()), tmp_obj.meta_, tmp_obj, true))) {
     } else if (OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
                                                   col_accuracy,
                                                   *tmp_string_buffer,
                                                   tmp_obj))) {
-    } else if (OB_FAIL(ob_write_obj(alloc, tmp_obj, objs[i]))) {
+    } else if (OB_FAIL(clone_typed_value(tmp_obj, objs[i], alloc))) {
     }
   }
 
@@ -339,7 +346,7 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
   }
 
   if (OB_SUCC(ret)) {
-    ObObj *obj_ptr = rowkey->get_obj_ptr();
+    DatumValue *obj_ptr = rowkey->get_values();
     ObIAllocator *tmp_string_buffer = nullptr;
 
     if (OB_ISNULL(obj_ptr)) {
@@ -349,13 +356,13 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
     }
     for (int i = 0; OB_SUCC(ret) && i < rowkey_info->rowkey_expr_.count(); ++i) {
       ObDatum *datum = NULL;
-      const ObObjMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
+      const SqlTypeMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
       ObExpr *expr = rowkey_info->rowkey_expr_.at(i);
       const ObAccuracy &col_accuracy = rowkey_info->rowkey_accuracys_.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(datum->to_obj(obj_ptr[i], col_obj_meta))) {
+      } else if (OB_FAIL(project_datum_value_view(*datum, col_obj_meta, ObDatum::get_sql_value_datum_map_type(col_obj_meta.get_type()), obj_ptr[i].meta_, obj_ptr[i], true))) {
       } else if (OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
                                                     col_accuracy,
                                                     *tmp_string_buffer,
@@ -675,7 +682,7 @@ int ObConflictChecker::add_lookup_range_no_dup(storage::ObTableScanParam &scan_p
       ret = OB_SUCCESS;
     } else if (OB_HASH_NOT_EXIST == ret) {
       //step3: if not exist, deep copy data and add ObRowkey to hash set
-      //step3.1: Init the buffer of ObObj Array
+      //step3.1: Init the buffer for copied rowkey data
       ret = OB_SUCCESS;
       if (OB_FAIL(conflict_range_dist_ctx_->set_refactored(conflict_range))) {
       } else if (OB_FAIL(scan_param.key_ranges_.push_back(lookup_range))) {
@@ -771,17 +778,17 @@ int ObConflictChecker::get_das_scan_op(DASRuntimeTabletAccess *tablet_access, Ob
 int ObConflictChecker::build_data_table_range(ObNewRange &lookup_range, ObRowkey &table_rowkey)
 {
   int ret = OB_SUCCESS;
-  ObObj *obj_ptr = nullptr;
+  DatumValue *obj_ptr = nullptr;
   void *buf = nullptr;
   int64_t rowkey_cnt = checker_ctdef_.rowkey_count_;
-  if (OB_ISNULL(buf = das_ref_.get_das_alloc().alloc(sizeof(ObObj) * rowkey_cnt))) {
+  if (OB_ISNULL(buf = das_ref_.get_das_alloc().alloc(sizeof(DatumValue) * rowkey_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    obj_ptr = new(buf) ObObj[rowkey_cnt];
+    obj_ptr = new(buf) DatumValue[rowkey_cnt];
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
-    ObObj tmp_obj;
+    DatumValue tmp_obj;
     ObExpr *expr = checker_ctdef_.data_table_rowkey_expr_.at(i);
     ObDatum *col_datum = nullptr;
     if (OB_ISNULL(expr)) {
@@ -789,10 +796,10 @@ int ObConflictChecker::build_data_table_range(ObNewRange &lookup_range, ObRowkey
     } else if (OB_FAIL(expr->eval(eval_ctx_, col_datum))) {
     } else if (OB_ISNULL(col_datum)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(col_datum->to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
+    } else if (OB_FAIL(project_datum_value_view(*col_datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
     }
     // Here a deep copy needs to be done
-    else if (OB_FAIL(ob_write_obj(das_ref_.get_das_alloc(), tmp_obj, obj_ptr[i]))) {
+    else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], das_ref_.get_das_alloc()))) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -860,7 +867,7 @@ int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_in
 {
   int ret = OB_SUCCESS;
   ObDatum *r_datum = NULL;
-  ObObj r_obj;
+  DatumValue r_obj;
   int64_t unique_key_cnt = 0;
   int64_t pos = 0;
   ObSQLSessionInfo *session = eval_ctx_.exec_ctx_.get_my_session();
@@ -887,7 +894,7 @@ int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_in
     } else if (OB_FAIL(expr->eval(eval_ctx_, r_datum))) {
     } else if (OB_ISNULL(r_datum)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(r_datum->to_obj(r_obj, expr->obj_meta_))) {
+    } else if (OB_FAIL(project_datum_value_view(*r_datum, expr->obj_meta_, ObDatum::get_sql_value_datum_map_type(expr->obj_meta_.get_type()), r_obj.meta_, r_obj, true))) {
     } else if (OB_FAIL(r_obj.print_plain_str_literal(buf, buf_len - 1, pos, session->get_timezone_info()))) {
     } else if (i == unique_key_cnt - 1) {
       // do nothing

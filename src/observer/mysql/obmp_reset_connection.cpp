@@ -153,11 +153,12 @@ int ObMPResetConnection::process()
 
     // 8. Resets the value of LAST_INSERT_ID() to 0.
     if (OB_SUCC(ret)) {
-      ObObj last_insert_id;
-      last_insert_id.set_uint64(0);
+      DatumValue last_insert_id;
+      OZ(last_insert_id.set_uint64(0, session->get_allocator()));
       // FIXME @qianfu temporarily written as update_sys_variable function, to be implemented with the ability to pass in ObSysVarClassType and
       // and set system variable statement follow the same logic function, call here
-      if (OB_FAIL(session->update_sys_variable(SYS_VAR_LAST_INSERT_ID, last_insert_id))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_LAST_INSERT_ID, last_insert_id))) {
       } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_IDENTITY, last_insert_id))) {
       } else {
         NG_TRACE_EXT(last_insert_id, OB_ID(last_insert_id), 0);

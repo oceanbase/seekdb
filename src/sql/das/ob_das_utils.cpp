@@ -164,7 +164,7 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < row_projector.count(); ++i) {
     int64_t projector_idx = row_projector.at(i);
-    const ObObjMeta &col_type = dml_ctdef.column_types_.at(i);
+    const SqlTypeMeta &col_type = dml_ctdef.column_types_.at(i);
     const ObAccuracy &col_accuracy = dml_ctdef.column_accuracys_.at(i);
     if (projector_idx < 0) {
       //this column is not touched by query, only need to be marked as nop
@@ -198,21 +198,42 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
   return ret;
 }
 
-int ObDASUtils::reshape_storage_value(const ObObjMeta &col_type,
+int ObDASUtils::reshape_storage_value(const SqlTypeMeta &col_type,
                                       const ObAccuracy &col_accuracy,
                                       ObIAllocator &allocator,
-                                      ObObj &value)
+                                      DatumValue &value)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(padding_fixed_string_value(col_accuracy.get_length(), allocator, value))) {
+  UNUSED(col_type);
+  int ret=OB_SUCCESS;
+  if(value.meta_.is_binary()){
+    const int32_t binary_len=col_accuracy.get_length(),len=value.get_string_len();
+    if(binary_len>len){
+      char *bytes=static_cast<char *>(allocator.alloc(binary_len));
+      if(bytes==nullptr)ret=OB_ALLOCATE_MEMORY_FAILED;
+      else {
+        MEMCPY(bytes,value.get_string_ptr(),len);MEMSET(bytes+len,0,binary_len-len);
+        ObDatum datum;datum.set_string(bytes,binary_len);
+        SqlTypeMeta meta=value.meta_;meta.set_char();meta.set_collation_type(CS_TYPE_BINARY);meta.set_collation_level(CS_LEVEL_IMPLICIT);
+        value=DatumValue(datum,meta);
+      }
+    }
+  }else if(value.meta_.is_fixed_len_char_type()){
+    const char *bytes=value.get_string_ptr();int32_t len=value.get_string_len();
+    const ObString space=ObCharsetUtils::get_const_str(value.get_collation_type(),' ');
+    for(;len>=space.length();len-=space.length()){
+      if(MEMCMP(bytes+len-space.length(),space.ptr(),space.length())!=0)break;
+    }
+    ObDatum datum;datum.set_string(bytes,len);SqlTypeMeta meta=value.meta_;meta.set_collation_level(CS_LEVEL_IMPLICIT);
+    value=DatumValue(datum,meta);
   }
   return ret;
 }
 
-int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &allocator, ObObj &value)
+int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &allocator,
+                                           DatumValue &value)
 {
   int ret = OB_SUCCESS;
-  if (value.is_binary()) {
+  if (value.meta_.is_binary()) {
     int32_t binary_len = max_len;
     int32_t len = value.get_string_len();
     if (binary_len > len) {
@@ -224,10 +245,15 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
         char pad_char = '\0';
         MEMCPY(dest_str, str, len);
         MEMSET(dest_str + len, pad_char, binary_len - len);
-        value.set_binary(ObString(binary_len, dest_str));
+        ObDatum datum;
+        datum.set_string(dest_str, binary_len);
+        value.datum_ = datum;
+        value.meta_.set_char();
+        value.meta_.set_collation_type(CS_TYPE_BINARY);
+        value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
       }
     }
-  } else if (value.is_fixed_len_char_type()) {
+  } else if (value.meta_.is_fixed_len_char_type()) {
     const char *str = value.get_string_ptr();
     int32_t len = value.get_string_len();
     ObString space_pattern = ObCharsetUtils::get_const_str(value.get_collation_type(), ' ');
@@ -236,9 +262,10 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
         break;
       }
     }
-    // need to set collation type
-    value.set_string(value.get_type(), ObString(len, str));
-    value.set_collation_type(value.get_collation_type());
+    ObDatum datum;
+    datum.set_string(str, len);
+    value.datum_ = datum;
+    value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
   }
   return ret;
 }

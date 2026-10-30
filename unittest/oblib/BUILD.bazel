@@ -22,3 +22,152 @@ cc_test(
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
+
+cc_library(
+    name = "datum_extend_cases",
+    srcs = ["test_datum_extend.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_datum_extend",
+    linkstatic = True,
+    deps = [":datum_extend_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_parameter_cases",
+    srcs = ["test_datum_parameter.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_datum_parameter",
+    linkstatic = True,
+    deps = [":datum_parameter_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_core_cases",
+    srcs = ["test_datum_core.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_datum_core",
+    data = ["data/default_values.golden"],
+    linkstatic = True,
+    deps = [":datum_core_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_parameter_codec_cases",
+    srcs = ["test_datum_parameter_codec.cpp", "test_native_store_include_order.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_datum_parameter_codec",
+    data = ["data/datum_parameter_codec.golden"],
+    linkstatic = True,
+    deps = [":datum_parameter_codec_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_sql_printer_cases",
+    srcs = ["test_datum_sql_printer.cpp", "test_datum_collection_printer.cpp", "test_datum_debug_printer.cpp"],
+    alwayslink = True,
+    deps = ["//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_datum_sql_printer",
+    data = ["data/datum_sql_print.golden", "data/datum_default_print.golden"],
+    linkstatic = True,
+    deps = [":datum_sql_printer_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_row_checksum_cases",
+    srcs = ["test_datum_row_checksum.cpp"],
+    alwayslink = True,
+    deps = ["//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_datum_row_checksum",
+    data = ["data/datum_common_row_checksum.golden"],
+    linkstatic = True,
+    deps = [":datum_row_checksum_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "partition_bound_row_cases",
+    srcs = ["test_partition_bound_row.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_partition_bound_row",
+    linkstatic = True,
+    deps = [":partition_bound_row_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "native_rowkey_cases",
+    srcs = ["test_native_rowkey.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_rowkey",
+    data = ["data/native_rowkey.golden"],
+    linkstatic = True,
+    deps = [":native_rowkey_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "datum_value_projection_cases",
+    srcs = ["test_datum_value_projection.cpp"],
+    alwayslink = True,
+    deps = ["//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_datum_value_projection",
+    linkstatic = True,
+    deps = [":datum_value_projection_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "native_row_cases",
+    srcs = ["row/test_native_row.cpp", "row/test_native_cell_store.cpp", "row/native_row_test_main.cpp"],
+    alwayslink = True,
+    deps = ["//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_row",
+    data = ["row/data/native_row.golden", "row/data/native_cell.golden"],
+    linkstatic = True,
+    deps = [":native_row_cases", "//src/oblib:oblib_test_runtime"],
+)

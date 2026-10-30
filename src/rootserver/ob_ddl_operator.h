@@ -108,9 +108,6 @@ public:
   virtual int drop_database(const share::schema::ObDatabaseSchema &db_schema,
                             common::ObMySQLTransaction &trans,
                             const common::ObString *ddl_stmt_str = NULL);
-  static bool is_list_values_equal(
-       const common::ObRowkey &fir_values,
-       const common::ObIArray<common::ObNewRow> &sed_values);
 
   int modify_check_constraints_state(
       const share::schema::ObTableSchema &orig_table_schema,

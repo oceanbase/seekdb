@@ -412,7 +412,8 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
         ObGlobalNotNullEval not_null_eval;
         ObGlobalNdvEval ndv_eval;
         ObGlobalAvglenEval avglen_eval;
-        ObSEArray<ObHistogram, 4> all_part_histograms;
+        // Borrow partition histograms only while part_opt_stats remains alive.
+        ObSEArray<const ObHistogram *, 4> all_part_histograms;
         int64_t sample_size = 0;
         int64_t total_row_cnt = 0;
         int64_t max_bucket_num = param.column_params_.at(i).bucket_num_;
@@ -437,12 +438,13 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
           } else if (opt_col_stat->get_num_distinct() == 0 && opt_col_stat->get_num_null() == 0) {
             /*do nothing*/
           } else if (need_derive_hist && opt_col_stat->get_histogram().is_valid() &&
-                     OB_FAIL(all_part_histograms.push_back(opt_col_stat->get_histogram()))) {
+                     OB_FAIL(all_part_histograms.push_back(&opt_col_stat->get_histogram()))) {
           } else {
             null_eval.add(opt_col_stat->get_num_null());
             if (opt_col_stat->get_num_distinct() != 0) {
-              min_eval.add(opt_col_stat->get_min_value());
-              max_eval.add(opt_col_stat->get_max_value());
+              if (OB_FAIL(min_eval.add(opt_col_stat->get_min_value()))) {
+              } else if (OB_FAIL(max_eval.add(opt_col_stat->get_max_value()))) {
+              }
               ndv_eval.add(opt_col_stat->get_num_distinct(), opt_col_stat->get_llc_bitmap());
               not_null_eval.add(opt_tab_stat->get_row_count() - opt_col_stat->get_num_null());
             }
@@ -465,14 +467,9 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
           ndv_eval.get_llc_bitmap(col_stat->get_llc_bitmap(), col_stat->get_llc_bitmap_size());
           col_stat->set_llc_bitmap_size(ObOptColumnStat::NUM_LLC_BUCKET);
           col_stat->set_collation_type(param.column_params_.at(i).cs_type_);
-          ObObj new_min_obj, new_max_obj;
-          //maybe the stat is from KVCACHE, need deep copy min/max obj.
-          if (OB_FAIL(ob_write_obj(alloc, min_eval.get(), new_min_obj)) ||
-              FALSE_IT(col_stat->set_min_value(new_min_obj))) {
-            LOG_WARN("failed to set min value", K(ret), K(min_eval.get()), K(new_min_obj));
-          } else if (OB_FAIL(ob_write_obj(alloc, max_eval.get(), new_max_obj)) ||
-                     FALSE_IT(col_stat->set_max_value(new_max_obj))) {
-            LOG_WARN("failed to set max value", K(ret), K(max_eval.get()), K(new_max_obj));
+          // Copy cache-backed extrema directly into the destination owner.
+          if (OB_FAIL(col_stat->set_min_value(min_eval.get()))) {
+          } else if (OB_FAIL(col_stat->set_max_value(max_eval.get()))) {
           } else if (OB_FAIL(col_stats.push_back(col_stat))) {
           } else if (need_derive_hist) {
             if (col_stat->get_num_distinct() > 0 && !all_part_histograms.empty()) {
@@ -557,7 +554,7 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
   return ret;
 }
 
-int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<ObHistogram> &all_part_histograms,
+int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<const ObHistogram *> &all_part_histograms,
                                                         common::ObIAllocator &allocator,
                                                         int64_t max_bucket_num,
                                                         int64_t total_row_count,
@@ -581,11 +578,13 @@ int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<ObHistogram> &a
     top_k_fre_hist->set_is_topk_hist_need_des_row(true);
     top_k_fre_hist->set_max_disuse_cnt(std::ceil(not_null_count * 1.0 / max_bucket_num));
     for (int64_t i = 0; OB_SUCC(ret) && i < all_part_histograms.count(); ++i) {
-      if (all_part_histograms.at(i).is_valid()) {
-        if (all_part_histograms.at(i).get_type() == ObHistType::FREQUENCY ||
-            all_part_histograms.at(i).get_type() == ObHistType::TOP_FREQUENCY ||
-            all_part_histograms.at(i).get_type() == ObHistType::HYBIRD) {
-          const ObHistogram::Buckets &part_bkts = all_part_histograms.at(i).get_buckets();
+      if (OB_ISNULL(all_part_histograms.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (all_part_histograms.at(i)->is_valid()) {
+        if (all_part_histograms.at(i)->get_type() == ObHistType::FREQUENCY ||
+            all_part_histograms.at(i)->get_type() == ObHistType::TOP_FREQUENCY ||
+            all_part_histograms.at(i)->get_type() == ObHistType::HYBIRD) {
+          const ObHistogram::Buckets &part_bkts = all_part_histograms.at(i)->get_buckets();
           for (int64_t j = 0; OB_SUCC(ret) && j < part_bkts.count(); ++j) {
             if (OB_FAIL(top_k_fre_hist->add_top_k_frequency_item(part_bkts.at(j).endpoint_value_,
                                                                  part_bkts.at(j).endpoint_repeat_count_))) {

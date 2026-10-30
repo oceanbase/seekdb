@@ -134,7 +134,7 @@ private:
   *    select 2 * sum(c1) + 4 * count(c1) from t1;
   */
   int split_const_in_aggr_func(ObDMLStmt * stmt, bool &trans_happened);
-  bool is_numeric(ObObjType type);
+  bool is_numeric(SqlValueType type);
   bool is_column_or_cast_column_expr(ObRawExpr &expr);
   int check_aggr_validity(ObAggFunRawExpr &agg_expr,
                           ObRawExpr *&column_expr,

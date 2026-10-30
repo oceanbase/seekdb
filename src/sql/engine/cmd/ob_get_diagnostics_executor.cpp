@@ -28,82 +28,73 @@ namespace oceanbase
 namespace sql
 {
 
-#define SET_OBJ_VAR(expect_type, integer_val, str_val, has_lob_header) do {             \
-    ObObj obj;                                         \
-    if (ObTinyIntType == expect_type) {                \
-      obj.set_tinyint(integer_val);                    \
-    } else if (ObSmallIntType == expect_type) {        \
-      obj.set_smallint(integer_val);                   \
-    } else if (ObMediumIntType == expect_type) {       \
-      obj.set_mediumint(integer_val);                  \
-    } else if (ObInt32Type == expect_type) {           \
-      obj.set_int32(integer_val);                      \
-    } else if (ObIntType == expect_type) {             \
-      obj.set_int(integer_val);                        \
-    } else if (ObUTinyIntType == expect_type) {        \
-      obj.set_utinyint(integer_val);                   \
-    } else if (ObUSmallIntType == expect_type) {       \
-      obj.set_usmallint(integer_val);                  \
-    } else if (ObUMediumIntType == expect_type) {      \
-      obj.set_umediumint(integer_val);                 \
-    } else if (ObUInt32Type == expect_type) {          \
-      obj.set_uint32(integer_val);                     \
-    } else if (ObUInt64Type == expect_type) {          \
-      obj.set_uint64(integer_val);                     \
-    } else if (ObFloatType == expect_type) {           \
-      obj.set_float(integer_val);                      \
-    } else if (ObDoubleType == expect_type) {          \
-      obj.set_double(integer_val);                     \
-    } else if (ObUFloatType == expect_type) {          \
-      obj.set_ufloat(integer_val);                     \
-    } else if (ObUDoubleType == expect_type) {         \
-      obj.set_udouble(integer_val);                    \
-    } else if (ObNumberType == expect_type) {          \
-      number::ObNumber num;                            \
-      num.from(integer_val, ctx.get_allocator());      \
-      obj.set_number(num);                             \
-    } else if (ObUNumberType == expect_type) {         \
-      number::ObNumber num;                            \
-      num.from(integer_val, ctx.get_allocator());      \
-      obj.set_unumber(num);                            \
-    } else if (ObVarcharType == expect_type) {         \
-      obj.set_varchar(str_val);                        \
-      obj.set_collation_level(CS_LEVEL_COERCIBLE);     \
-      obj.set_collation_type(collation_type);          \
-    } else if (ObCharType == expect_type) {            \
-      obj.set_char(str_val);                           \
-      obj.set_collation_level(CS_LEVEL_COERCIBLE);     \
-      obj.set_collation_type(collation_type);          \
-    } else if (ObTinyTextType == expect_type ||        \
-               ObTextType == expect_type ||            \
-               ObMediumTextType == expect_type ||      \
-               ObLongTextType == expect_type ||        \
-               ObJsonType == expect_type) {            \
-      ObTextStringResult lob(expect_type, has_lob_header, &ctx.get_allocator());         \
-      if (OB_FAIL(lob.init(str_val.length()))) {                         \
-        LOG_WARN("fail to init lob", K(ret), K(lob));                    \
-      } else if (OB_FAIL(lob.append(str_val))) {                         \
-        LOG_WARN("fail to append str", K(ret), K(lob), K(str_val));      \
-      } else {                                                           \
-        ObString lob_str;                                                \
-        lob.get_result_buffer(lob_str);                                  \
-        obj.set_string(expect_type, lob_str);                            \
-        obj.set_collation_level(CS_LEVEL_COERCIBLE);                     \
-        obj.set_collation_type(collation_type);                          \
-        if (lob.has_lob_header()) {                                      \
-          obj.set_has_lob_header();                                      \
-        }                                                                \
-      }                                                                  \
-    } else {                                           \
-      ret = OB_NOT_SUPPORTED;                          \
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not supported pl var type");  \
-    }                                                  \
-    if (OB_SUCC(ret)) {                                \
-      ObObjParam value(obj);                           \
-      value.set_param_meta();                          \
-      result = value;                                  \
-    }                                                  \
-  } while (0)
+namespace {
+int make_diagnostic_value(SqlValueType type, int64_t integer, const ObString &text,
+                          bool has_lob_header, ObCollationType collation,
+                          ObIAllocator &allocator, DatumParameter &output)
+{
+  int ret = OB_SUCCESS;
+  DatumParameter value;
+  switch (type) {
+    case ObTinyIntType: ret = value.set_tinyint(integer, allocator); break;
+    case ObSmallIntType: ret = value.set_smallint(integer, allocator); break;
+    case ObMediumIntType: ret = value.set_mediumint(integer, allocator); break;
+    case ObInt32Type: ret = value.set_int32(integer, allocator); break;
+    case ObIntType: ret = value.set_int(integer, allocator); break;
+    case ObUTinyIntType: ret = value.set_utinyint(integer, allocator); break;
+    case ObUSmallIntType: ret = value.set_usmallint(integer, allocator); break;
+    case ObUMediumIntType: ret = value.set_umediumint(integer, allocator); break;
+    case ObUInt32Type: ret = value.set_uint32(integer, allocator); break;
+    case ObUInt64Type: ret = value.set_uint64(integer, allocator); break;
+    case ObFloatType: ret = value.set_float(integer, allocator); break;
+    case ObDoubleType: ret = value.set_double(integer, allocator); break;
+    case ObUFloatType:
+      ret = value.set_float(integer, allocator); value.set_type(type); break;
+    case ObUDoubleType:
+      ret = value.set_double(integer, allocator); value.set_type(type); break;
+    case ObNumberType:
+    case ObUNumberType: {
+      number::ObNumber number;
+      if (OB_FAIL(number.from(integer, allocator))) {
+      } else if (OB_FAIL(value.set_number(number, allocator))) {
+      } else { value.set_type(type); }
+      break;
+    }
+    case ObVarcharType:
+    case ObCharType:
+      // text may point at the caller's formatting buffer.
+      ret = value.set_string(type, text, allocator);
+      value.set_collation_level(CS_LEVEL_COERCIBLE);
+      value.set_collation_type(collation);
+      break;
+    case ObTinyTextType:
+    case ObTextType:
+    case ObMediumTextType:
+    case ObLongTextType:
+    case ObJsonType: {
+      ObTextStringResult lob(type, has_lob_header, &allocator);
+      if (OB_FAIL(lob.init(text.length()))) {
+      } else if (OB_FAIL(lob.append(text))) {
+      } else {
+        ObString data;
+        lob.get_result_buffer(data);
+        // ObTextStringResult leaves its allocator-owned buffer alive.
+        value.set_string_view(type, data);
+        value.set_collation_level(CS_LEVEL_COERCIBLE);
+        value.set_collation_type(collation);
+        if (lob.has_lob_header()) { value.set_has_lob_header(); }
+      }
+      break;
+    }
+    default:
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "not supported pl var type");
+      break;
+  }
+  if (OB_SUCC(ret)) { value.set_param_meta(); output = value; }
+  return ret;
+}
+} // namespace
 
 ObGetDiagnosticsExecutor::ObGetDiagnosticsExecutor() {}
 
@@ -181,7 +172,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(var_expr);
       if (T_QUESTIONMARK == const_expr->get_expr_type()) {
         ObCollationType collation_type;
-        ObObjParam result;
+        DatumParameter result;
         pl::ObPLContext *pl_context = nullptr;
         pl::ObPLExecState *pl_state = nullptr;
         char str[50] = {0};
@@ -195,39 +186,38 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
         CK (idx != OB_INVALID_INDEX);
         CK (idx < pl_state->get_function().get_variables().count());
         if (OB_SUCC(ret)) {
-          ObObj obj;
           pl::ObPLDataType pl_data_type = pl_state->get_function().get_variables().at(idx);
           CK (nullptr != pl_data_type.get_data_type());
           if (OB_SUCC(ret)) {
-            ObObjType expect_type = pl_data_type.get_data_type()->get_obj_type();
+            SqlValueType expect_type = pl_data_type.get_data_type()->get_obj_type();
             bool has_lob_header = pl_data_type.get_data_type()->get_meta_type().has_lob_header();
             switch (info_type) {
               case MYSQL_ERRNO_TYPE:
                 {
                   int64_t errnum = ob_errpkt_errno(err_ret);
                   sprintf(str, "%ld", errnum);
-                  SET_OBJ_VAR(expect_type, errnum, ObString(str), has_lob_header);
+                  OZ(make_diagnostic_value(expect_type, errnum, ObString(str), has_lob_header, collation_type, ctx.get_allocator(), result));
                 }
                 break;
               case MESSAGE_TEXT_TYPE:
                 {
-                  SET_OBJ_VAR(expect_type, (int64_t)0, err_msg_c, has_lob_header);
+                  OZ(make_diagnostic_value(expect_type, (int64_t)0, err_msg_c, has_lob_header, collation_type, ctx.get_allocator(), result));
                 }
                 break;
               case RETURNED_SQLSTATE_TYPE:
                 {
                   ObString sqlstate(ob_sqlstate(err_ret));
                   if (err_ret > 0) {
-                    SET_OBJ_VAR(expect_type, (int64_t)0, sql_state_c, has_lob_header);
+                    OZ(make_diagnostic_value(expect_type, (int64_t)0, sql_state_c, has_lob_header, collation_type, ctx.get_allocator(), result));
                   } else {
-                    SET_OBJ_VAR(expect_type, (int64_t)0, sqlstate, has_lob_header);
+                    OZ(make_diagnostic_value(expect_type, (int64_t)0, sqlstate, has_lob_header, collation_type, ctx.get_allocator(), result));
                   }
                 }
                 break;
               case CLASS_ORIGIN_TYPE:
               case SUBCLASS_ORIGIN_TYPE:
                 {
-                  SET_OBJ_VAR(expect_type, (int64_t)0, ObString("ISO 9075"), has_lob_header);
+                  OZ(make_diagnostic_value(expect_type, (int64_t)0, ObString("ISO 9075"), has_lob_header, collation_type, ctx.get_allocator(), result));
                 }
                 break;
               case COLUMN_NAME_TYPE:
@@ -282,7 +272,7 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
         if (T_QUESTIONMARK == const_expr->get_expr_type()) {
           CK (OB_NOT_NULL(pl_context = session_info->get_pl_context()));
           CK (OB_NOT_NULL(pl_state = pl_context->get_current_state()));
-          ObObjParam value;
+          DatumParameter value;
           int64_t idx = const_expr->get_value().get_unknown();
           idx = stmt.get_origin_param_index(idx);
           CK (idx != OB_INVALID_INDEX);
@@ -321,7 +311,7 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObString var_name = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().get_varchar();
-          ObObj value;
+          DatumValue value;
           int64_t number = 0;
           if (OB_FAIL(session_info->get_user_variable_value(var_name, value))) {
           } else if (value.is_integer_type()) {
@@ -515,8 +505,8 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
           CK (OB_NOT_NULL(pl_context = session_info->get_pl_context()));
           CK (OB_NOT_NULL(pl_state = pl_context->get_current_state()));
 
-          ObObjParam result;
-          ObObjParam origin_obj;
+          DatumParameter result;
+          DatumParameter origin_obj;
           ObCollationType collation_type;
           char str[50] = {0};
           int64_t idx = const_expr->get_value().get_unknown();
@@ -528,14 +518,14 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
             pl::ObPLDataType pl_data_type = pl_state->get_function().get_variables().at(idx);
             CK (nullptr != pl_data_type.get_data_type());
             if (OB_SUCC(ret)) {
-              ObObjType expect_type = pl_data_type.get_data_type()->get_obj_type();
+              SqlValueType expect_type = pl_data_type.get_data_type()->get_obj_type();
               bool has_lob_header = pl_data_type.get_data_type()->get_meta_type().has_lob_header();
               if (val == "NUMBER") {
                 sprintf(str, "%ld", number);
-                SET_OBJ_VAR(expect_type, number, ObString(str), has_lob_header);
+                OZ(make_diagnostic_value(expect_type, number, ObString(str), has_lob_header, collation_type, ctx.get_allocator(), result));
               } else if (val == "ROW_COUNT") {
                 sprintf(str, "%ld", old_affected_rows);
-                SET_OBJ_VAR(expect_type, old_affected_rows, ObString(str), has_lob_header);
+                OZ(make_diagnostic_value(expect_type, old_affected_rows, ObString(str), has_lob_header, collation_type, ctx.get_allocator(), result));
               } else {
                 ret = OB_ERR_UNEXPECTED;
               }
@@ -555,6 +545,5 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   }
   return ret;
 }
-#undef SET_OBJ_VAR
 }/* ns sql*/
 }/* ns oceanbase */

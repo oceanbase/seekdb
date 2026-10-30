@@ -2301,8 +2301,8 @@ int ObVectorIndexUtil::check_extra_info_size(const ObTableSchema &tbl_schema,
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "extra_info not support column type");
       } else {
-        common::ObObjDatumMapType obj_map_type =
-            common::ObDatum::get_obj_datum_map_type(rowkey_column.type_.get_type());
+        common::SqlValueDatumMapType obj_map_type =
+            common::ObDatum::get_sql_value_datum_map_type(rowkey_column.type_.get_type());
         tmp_obj.obj_map_type_ = obj_map_type;
         if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
           rowkey_size += ObVecExtraInfo::FIXED_TYPE_LENGTH;
@@ -5603,51 +5603,55 @@ int ObVecExtraInfo::extra_infos_to_buf(ObIAllocator &allocator, const ObVecExtra
   return ret;
 }
 
-int ObVecExtraInfo::extra_buf_to_obj(const char *buf, int64_t data_len, int64_t extra_column_count, ObObj *obj,
-                                     const ObIArray<int64_t> *extra_in_rowkey_idxs_ /*nullptr*/)
+// The wire layout is unchanged. Returned values borrow the encoded buffer; callers
+// retaining scalars beyond this buffer copy them into their native row/key owner.
+int ObVecExtraInfo::extra_buf_to_values(const char *buf, int64_t data_len,
+                                      int64_t extra_column_count, DatumValue *values,
+                                      const ObIArray<int64_t> *extra_in_rowkey_idxs_)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(buf) || OB_ISNULL(obj)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (extra_column_count <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_NOT_NULL(extra_in_rowkey_idxs_) && extra_in_rowkey_idxs_->count() != extra_column_count) {
+  if (OB_ISNULL(buf) || OB_ISNULL(values) || data_len <= 0 || extra_column_count <= 0
+      || (OB_NOT_NULL(extra_in_rowkey_idxs_) && extra_in_rowkey_idxs_->count() != extra_column_count)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t pos = 0;
-    uint32_t len = 0;
     int64_t version = 0;
     OB_UNIS_DECODE(version);
-    if (OB_SUCC(ret)) {
-      if (version != UNIS_VERSION) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
+    if (OB_SUCC(ret) && version != UNIS_VERSION) { ret = OB_ERR_UNEXPECTED; }
     for (int64_t i = 0; i < extra_column_count && OB_SUCC(ret); ++i) {
-      int64_t real_idx = OB_ISNULL(extra_in_rowkey_idxs_) ? i : extra_in_rowkey_idxs_->at(i);
-      if (real_idx >= extra_column_count || OB_ISNULL(obj + real_idx)) {
+      const int64_t real_idx = OB_ISNULL(extra_in_rowkey_idxs_) ? i : extra_in_rowkey_idxs_->at(i);
+      if (real_idx < 0 || real_idx >= extra_column_count) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        common::ObObjDatumMapType obj_map_type = ObDatum::get_obj_datum_map_type(obj[real_idx].get_type());
-        if (OB_UNLIKELY(!is_obj_type_supported(obj[real_idx].get_type()))) {
+        DatumValue &value = values[real_idx];
+        const auto mapping = ObDatum::get_sql_value_datum_map_type(value.get_type());
+        int64_t len = 0;
+        if (!is_obj_type_supported(value.get_type())) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_8BYTE_DATA ||
-                   obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_4BYTE_DATA ||
-                   obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_1BYTE_DATA) {
-          len = ObDatum::get_reserved_size(obj_map_type);
-          memcpy(&obj[real_idx].v_.uint64_, buf + pos, len);
-          pos += len;
-        } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
-          len = *(int32_t *)(buf + pos);
-          pos += sizeof(len);
-          obj[real_idx].v_.string_ = buf + pos;
-          obj[real_idx].val_len_ = len;
-          pos += len;
+        } else if (is_fixed_length_type(mapping)) {
+          len = ObDatum::get_reserved_size(mapping);
+        } else if (mapping == common::SqlValueDatumMapType::OBJ_DATUM_STRING) {
+          int32_t string_length = 0;
+          if (pos > data_len - static_cast<int64_t>(sizeof(string_length))) {
+            ret = OB_INVALID_DATA;
+          } else {
+            MEMCPY(&string_length, buf + pos, sizeof(string_length));
+            pos += sizeof(string_length);
+            len = string_length;
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (len < 0 || pos > data_len - len) {
+            ret = OB_INVALID_DATA;
+          } else {
+            value.datum_.ptr_ = buf + pos;
+            value.datum_.pack_ = len;
+            pos += len;
+          }
         }
       }
     }
   }
-
   return ret;
 }
 
@@ -5665,14 +5669,14 @@ int ObVecExtraInfo::extra_info_to_buf(const ObVecExtraInfoObj *extra_obj, int64_
         if (OB_UNLIKELY(OB_ISNULL(extra_obj + i))) {
           ret = OB_INVALID_DATA;
         } else {
-          common::ObObjDatumMapType obj_map_type = extra_obj[i].obj_map_type_;
-          if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_8BYTE_DATA ||
-              obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_4BYTE_DATA ||
-              obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_1BYTE_DATA) {
+          common::SqlValueDatumMapType obj_map_type = extra_obj[i].obj_map_type_;
+          if (obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_8BYTE_DATA ||
+              obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_4BYTE_DATA ||
+              obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_1BYTE_DATA) {
             len = ObDatum::get_reserved_size(obj_map_type);
             memcpy(buf + pos, extra_obj[i].ptr_, len);
             pos += len;
-          } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+          } else if (obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_STRING) {
             len = extra_obj[i].len_;
             memcpy(buf + pos, &extra_obj[i].len_, sizeof(len));
             pos += sizeof(len);
@@ -5696,10 +5700,10 @@ int64_t ObVecExtraInfo::get_encode_size(const ObIArray<ObVecExtraInfoObj> &extra
   int64_t extra_column_count = extra_obj.count();
   if (extra_column_count > 0) {
     for (int64_t i = 0; i < extra_column_count && OB_SUCCESS == ret; ++i) {
-      common::ObObjDatumMapType obj_map_type = extra_obj.at(i).obj_map_type_;
+      common::SqlValueDatumMapType obj_map_type = extra_obj.at(i).obj_map_type_;
       if (is_fixed_length_type(obj_map_type)) {
         len += ObDatum::get_reserved_size(obj_map_type);
-      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+      } else if (obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_STRING) {
         len += sizeof(extra_obj.at(i).len_);
         len += extra_obj.at(i).len_;
       }
@@ -5708,20 +5712,20 @@ int64_t ObVecExtraInfo::get_encode_size(const ObIArray<ObVecExtraInfoObj> &extra
   return len;
 }
 
-int ObVecExtraInfoObj::from_datum(const ObDatum &datum, const common::ObObjMeta &type, ObIAllocator *allocator /*nullptr*/)
+int ObVecExtraInfoObj::from_datum(const ObDatum &datum, const common::SqlTypeMeta &type, ObIAllocator *allocator /*nullptr*/)
 {
   int ret = OB_SUCCESS;
   // Note: extra_info must not null
   if (OB_UNLIKELY(datum.is_null() || !ObVecExtraInfo::is_obj_type_supported(type.get_type()))) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const common::ObObjDatumMapType &obj_map_type = common::ObDatum::get_obj_datum_map_type(type.get_type());
+    const common::SqlValueDatumMapType &obj_map_type = common::ObDatum::get_sql_value_datum_map_type(type.get_type());
     if (allocator == nullptr) {
       if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
         ptr_ = datum.ptr_;
         len_ = ObDatum::get_reserved_size(obj_map_type);
         obj_map_type_ = obj_map_type;
-      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+      } else if (obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_STRING) {
         ptr_ = datum.ptr_;
         len_ = datum.len_;
         obj_map_type_ = obj_map_type;
@@ -5729,7 +5733,7 @@ int ObVecExtraInfoObj::from_datum(const ObDatum &datum, const common::ObObjMeta 
     } else {
       if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
         len_ = ObDatum::get_reserved_size(obj_map_type);
-      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+      } else if (obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_STRING) {
         len_ = datum.len_;
       }
       char *buf = nullptr;
@@ -5745,55 +5749,15 @@ int ObVecExtraInfoObj::from_datum(const ObDatum &datum, const common::ObObjMeta 
   return ret;
 }
 
-int ObVecExtraInfoObj::from_obj(const ObObj &obj, ObIAllocator *allocator /*nullptr*/)
+int ObVecExtraInfoObj::from_value(const DatumValue &value, ObIAllocator *allocator)
 {
-  int ret = OB_SUCCESS;
-  // Note: extra_info must not null
-  if (OB_UNLIKELY(obj.is_null() || !ObVecExtraInfo::is_obj_type_supported(obj.get_type()))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const common::ObObjDatumMapType &obj_map_type = common::ObDatum::get_obj_datum_map_type(obj.get_type());
-    if (allocator == nullptr) {
-      if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
-        ptr_ =  reinterpret_cast<const char *>(&obj.v_.uint64_);
-        len_ = ObDatum::get_reserved_size(obj_map_type);
-        obj_map_type_ = obj_map_type;
-      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
-        ptr_ = obj.v_.string_;
-        len_ = obj.val_len_ ;
-        obj_map_type_ = obj_map_type;
-      }
-    } else {
-      char *buf = nullptr;
-      if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
-        len_ = ObDatum::get_reserved_size(obj_map_type);
-        if (OB_ISNULL(buf = static_cast<char *>(allocator->alloc(len_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          MEMCPY(buf, &obj.v_.uint64_, len_);
-          ptr_ = buf;
-          obj_map_type_ = obj_map_type;
-        }
-      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
-        len_ = obj.val_len_ ;
-        if (OB_ISNULL(buf = static_cast<char *>(allocator->alloc(len_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          MEMCPY(buf, obj.v_.string_, len_);
-          ptr_ = buf;
-          obj_map_type_ = obj_map_type;
-        }
-      }
-    }
-  }
-
-  return ret;
+  return from_datum(value.datum_, value.meta_, allocator);
 }
 
 int ObVecExtraInfoObj::from_vector(
     const ObIVector &vector,
     const int row_pos,
-    const common::ObObjMeta &type,
+    const common::SqlTypeMeta &type,
     ObIAllocator *allocator /*nullptr*/)
 {
   int ret = OB_SUCCESS;
@@ -5801,14 +5765,14 @@ int ObVecExtraInfoObj::from_vector(
   if (OB_UNLIKELY(vector.is_null(row_pos) || !ObVecExtraInfo::is_obj_type_supported(type.get_type()))) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const common::ObObjDatumMapType &obj_map_type = common::ObDatum::get_obj_datum_map_type(type.get_type());
+    const common::SqlValueDatumMapType &obj_map_type = common::ObDatum::get_sql_value_datum_map_type(type.get_type());
     ObString s = vector.get_string(row_pos);
     if (allocator == nullptr) {
       if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
         ptr_ = s.ptr();
         len_ = ObDatum::get_reserved_size(obj_map_type);
         obj_map_type_ = obj_map_type;
-      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+      } else if (obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_STRING) {
         ptr_ = s.ptr();
         len_ = s.length();
         obj_map_type_ = obj_map_type;
@@ -5816,7 +5780,7 @@ int ObVecExtraInfoObj::from_vector(
     } else {
       if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
         len_ = ObDatum::get_reserved_size(obj_map_type);
-      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+      } else if (obj_map_type == common::SqlValueDatumMapType::OBJ_DATUM_STRING) {
         len_ = s.length();
       }
       char *buf = nullptr;

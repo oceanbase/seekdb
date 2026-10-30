@@ -110,9 +110,6 @@ private:
                                           bool &need_disconnect,
                                           bool is_ins_multi_val_opt);
   int deserialize_com_field_list();
-  int store_params_value_to_str(ObIAllocator &allocator,
-                                sql::ObSQLSessionInfo &session,
-                                common::ParamStore &params);
 public:
   static const int64_t MAX_SELF_OBJ_SIZE = 2.5 * 1024L;
 private:

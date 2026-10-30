@@ -26,7 +26,7 @@ using namespace common;
 namespace sql
 {
 
-template<ObObjTypeClass>
+template<SqlTypeClass>
 static int eval_neg_func(const ObExpr &expr,
                          ObEvalCtx &eval_ctx,
                          ObDatum &expr_datum)
@@ -192,7 +192,7 @@ struct ObEvalNegFuncIniter
 {
   static int init_array()
   {
-    eval_neg_funcs[N] = &eval_neg_func<static_cast<ObObjTypeClass>(N)>;
+    eval_neg_funcs[N] = &eval_neg_func<static_cast<SqlTypeClass>(N)>;
     return 0;
   }
 };
@@ -214,7 +214,7 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_LIKELY(NOT_ROW_DIMENSION == row_dimension_)) {
     // result type
-    ObObjType itype = ObMaxType;
+    SqlValueType itype = ObMaxType;
     if (OB_SUCC(ObExprResultTypeUtil::get_neg_result_type(itype, type1.get_type()))) {
       if (ObMaxType == itype) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -239,8 +239,8 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
         }
       }
       
-      ObObjType res_param_type = ObMaxType;
-      ObObjType result_type = ObMaxType;
+      SqlValueType res_param_type = ObMaxType;
+      SqlValueType result_type = ObMaxType;
       if (type1.get_type() == ObJsonType) {
           type.set_type(ObDoubleType);
           type1.set_calc_type(ObDoubleType);
@@ -272,15 +272,15 @@ int ObExprNeg::cg_expr(ObExprCGCtx &op_cg_ctx,
       OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObjTypeClass param_tc = OBJ_TYPE_TO_CLASS[rt_expr.args_[0]->datum_meta_.type_];
+    SqlTypeClass param_tc = OBJ_TYPE_TO_CLASS[rt_expr.args_[0]->datum_meta_.type_];
     rt_expr.eval_func_ = eval_neg_funcs[param_tc];
   }
   return ret;
 }
 
 int ObExprNeg::calc_param_type(const ObExprResType &param_type,
-                               ObObjType &calc_type,
-                               ObObjType &result_type)
+                               SqlValueType &calc_type,
+                               SqlValueType &result_type)
 {
   int ret = OB_SUCCESS;
   switch (OBJ_TYPE_TO_CLASS[param_type.get_type()]) {
@@ -297,7 +297,7 @@ int ObExprNeg::calc_param_type(const ObExprResType &param_type,
   case ObYearTC:
   case ObIntTC: {
     if (ObIntType == param_type.get_type() && param_type.is_literal()) {
-      const ObObj &obj = param_type.get_param();
+      const DatumValue &obj = param_type.get_param();
       if (OB_UNLIKELY(!obj.is_int())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (INT64_MIN == obj.get_int()) {

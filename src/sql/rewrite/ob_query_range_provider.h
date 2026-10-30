@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_REWRITE_QUERY_RANGE_PROVIDER_
 #define OCEANBASE_SQL_REWRITE_QUERY_RANGE_PROVIDER_
 
+#include "common/datum/datum_param_store.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"
@@ -59,7 +60,7 @@ public:
   virtual int get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                          common::ObIAllocator &allocator,
                                          ObExecContext &exec_ctx,
-                                         const ParamStore &param_store,
+                                         const common::DatumParamStore &param_store,
                                          int64_t range_buffer_idx,
                                          void *range_buffer,
                                          ObQueryRangeArray &ranges,

@@ -49,7 +49,7 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "schema guard is NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -71,29 +71,29 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
                 const uint64_t col_id = output_column_ids_.at(col_idx);
                 switch (col_id) {
                   case (HOST): {
-                    cells[col_idx].set_varchar(user_info->get_host_name_str());
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, user_info->get_host_name_str()) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (DB): {
-                    cells[col_idx].set_varchar(db_priv->get_database_name_str());
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, db_priv->get_database_name_str()) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (USER): {
-                    cells[col_idx].set_varchar(user_info->get_user_name_str());
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, user_info->get_user_name_str()) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
 #define EXIST_PRIV_CASE(PRIV_NAME) \
   case (PRIV_NAME##_PRIV): {    \
-    cells[col_idx].set_varchar((db_priv->get_priv_set() & OB_PRIV_##PRIV_NAME) ? "Y" : "N"); \
+    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, (db_priv->get_priv_set() & OB_PRIV_##PRIV_NAME) ? "Y" : "N") : ret); \
     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));\
     break;\
   }
 #define NO_EXIST_PRIV_CASE(PRIV_NAME) \
   case (PRIV_NAME##_PRIV): {    \
-    cells[col_idx].set_varchar("N"); \
+    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "N") : ret); \
     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));\
     break;\
   }

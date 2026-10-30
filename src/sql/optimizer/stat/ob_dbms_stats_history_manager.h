@@ -17,6 +17,7 @@
 #ifndef OB_DBMS_STATS_HISTORY_MANAGER_H
 #define OB_DBMS_STATS_HISTORY_MANAGER_H
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
@@ -59,7 +60,7 @@ public:
 
   static int get_stats_history_retention_and_availability(ObExecContext &ctx,
                                                           bool fetch_history_retention,
-                                                          ObObj &result);
+                                                          DatumValue &result);
 
   static int alter_stats_history_retention(ObExecContext &ctx, const int64_t new_retention);
 

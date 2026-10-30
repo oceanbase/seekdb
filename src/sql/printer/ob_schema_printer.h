@@ -33,7 +33,6 @@ class ObSqlSchemaGuard;
 namespace common
 {
 class ObTimeZoneInfo;
-class ObObj;
 class ObString;
 class ObMySQLProxy;
 class ObIAllocator;

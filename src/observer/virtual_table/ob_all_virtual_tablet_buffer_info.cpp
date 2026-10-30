@@ -99,7 +99,7 @@ int ObAllVirtualTabletBufferInfo::gen_row(
       MEMSET(tablet_buffer_pointer_, 0, STR_LEN);
       pos = 0;
       databuff_print_obj(tablet_buffer_pointer_, STR_LEN, pos, static_cast<void *>(buffer_info.tablet_buffer_ptr_));
-      cur_row_.cells_[i].set_varchar(tablet_buffer_pointer_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, tablet_buffer_pointer_) : ret);
       cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case TABLET_OBJ_PTR:
@@ -107,26 +107,26 @@ int ObAllVirtualTabletBufferInfo::gen_row(
       MEMSET(tablet_pointer_, 0, STR_LEN);
       pos = 0;
       databuff_print_obj(tablet_pointer_, STR_LEN, pos, static_cast<void *>(buffer_info.tablet_));
-      cur_row_.cells_[i].set_varchar(tablet_pointer_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, tablet_pointer_) : ret);
       cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case POOL_TYPE:
       //pool_type
-      cur_row_.cells_[i].set_varchar(buffer_info.pool_type_ == ObTabletPoolType::TP_LARGE 
-        ? "TP_LARGE" : "TP_NORMAL");
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, buffer_info.pool_type_ == ObTabletPoolType::TP_LARGE
+        ? "TP_LARGE" : "TP_NORMAL") : ret);
       cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       break;
     case TABLET_ID:
       //tablet_id
-      cur_row_.cells_[i].set_int(buffer_info.tablet_id_.id());
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, buffer_info.tablet_id_.id()) : ret);
       break;
     case IN_MAP:
       //in_map
-      cur_row_.cells_[i].set_bool(buffer_info.in_map_);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_bool(cur_row_.cells_, cur_row_.count_, i, buffer_info.in_map_) : ret);
       break;
     case LAST_ACCESS_TIME:
       //last_access_time
-      cur_row_.cells_[i].set_timestamp(buffer_info.last_access_time_ / 1000L);
+      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, buffer_info.last_access_time_ / 1000L) : ret);
       break;
     default:{
       ret = OB_ERR_UNEXPECTED;

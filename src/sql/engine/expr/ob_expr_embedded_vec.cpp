@@ -80,13 +80,6 @@ int ObExprEmbeddedVec::pack_embedded_res(const ObExpr &expr, ObEvalCtx &ctx, ObD
   return ret;
 }
 
-int ObExprEmbeddedVec::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprEmbeddedVec::cg_expr(
     ObExprCGCtx &expr_cg_ctx,

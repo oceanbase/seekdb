@@ -100,7 +100,7 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
   int64_t col_count = output_column_ids_.count();
   is_filled = false;
   fetcher_.reuse();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_ISNULL(cells)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cells pointer is NULL", K(ret));
@@ -122,15 +122,15 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
         uint64_t col_id = output_column_ids_.at(i);
         switch (col_id) {
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::SESSION_ID: {
-          cells[i].set_uint64(cur_session_info_->get_sid());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cells, cur_row_.count_, i, cur_session_info_->get_sid()) : ret);
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::PS_CLIENT_STMT_ID: {
-          cells[i].set_int(ps_client_stmt_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, ps_client_stmt_id) : ret);
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::PS_INNER_STMT_ID: {
-          cells[i].set_int(fetcher_.get_inner_stmt_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, fetcher_.get_inner_stmt_id()) : ret);
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::STMT_TYPE: {
@@ -140,14 +140,14 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
           if (OB_FAIL(
                   ob_write_string(*allocator_, stmt_type_tmp, stmt_type_str))) {
           } else {
-            cells[i].set_varchar(stmt_type_str);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, stmt_type_str) : ret);
             cells[i].set_collation_type(ObCharset::get_default_collation(
                 ObCharset::get_default_charset()));
           }
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::PARAM_COUNT: {
-          cells[i].set_int(fetcher_.get_param_count());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, fetcher_.get_param_count()) : ret);
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::PARAM_TYPES: {
@@ -156,19 +156,18 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
           if (OB_FAIL(format_param_types(fetcher_.get_param_types(),
                                         allocator_, types_str, len))) {
           } else {
-            cells[i].set_lob_value(ObLongTextType, types_str,
-                                  static_cast<int32_t>(len));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, i, ObLongTextType, ObString(static_cast<int32_t>(len), types_str)) : ret);
             cells[i].set_collation_type(ObCharset::get_default_collation(
                 ObCharset::get_default_charset()));
           }
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::REF_COUNT: {
-          cells[i].set_int(fetcher_.get_ref_count());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, fetcher_.get_ref_count()) : ret);
           break;
         }
         case share::ALL_VIRTUAL_SESSION_PS_INFO_CDE::CHECKSUM: {
-          cells[i].set_int(fetcher_.get_ps_stmt_checksum());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, fetcher_.get_ps_stmt_checksum()) : ret);
           break;
         }
         default: {

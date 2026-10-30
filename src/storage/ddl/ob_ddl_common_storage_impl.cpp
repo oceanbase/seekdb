@@ -25,7 +25,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value_projection.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_tablet_local_checksum_table_storage.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -818,9 +818,11 @@ int ObDDLStorageUtil::extract_index_key(const ObTableSchema &index_schema,
         break;
       } else {
         const blocksstable::ObStorageDatum &datum = index_key.get_datum(i);
-        ObObj obj;
-        if (OB_FAIL(datum.to_obj(obj, column->get_meta_type()))) {
-        } else if (OB_FAIL(obj.print_plain_str_literal(buffer, buffer_len, pos))) {
+        DatumValue value;
+        if (OB_FAIL(project_datum_value_view(datum, column->get_meta_type(),
+                ObDatum::get_sql_value_datum_map_type(column->get_meta_type().get_type()),
+                value.meta_, value, true /*keep_null_collation*/))) {
+        } else if (OB_FAIL(value.print_plain_str_literal(buffer, buffer_len, pos))) {
         } else if (OB_FAIL(databuff_printf(buffer,  buffer_len, pos, "-"))) {
         }
       }
@@ -1087,7 +1089,7 @@ int ObDDLStorageUtil::handle_lob_column(
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObDatum temp_datum;
-    const ObObjMeta &col_type = column_schema_item.col_type_;
+    const SqlTypeMeta &col_type = column_schema_item.col_type_;
     const VectorFormat format = vector->get_format();
     switch (format) {
       case VEC_CONTINUOUS:

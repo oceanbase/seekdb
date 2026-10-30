@@ -63,12 +63,12 @@ int ObExprStringToArray::calc_result_typeN(ObExprResType &type,
       types[i].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", ob_obj_type_str(types[i].get_type()));
+      LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", sql_value_type_to_string(types[i].get_type()));
     }
   }
 
   if (OB_SUCC(ret)) {
-    ObObjMeta meta;
+    SqlTypeMeta meta;
     meta.set_varchar();
     res_data_type.set_meta_type(meta);
     res_data_type.set_length(OB_MAX_VARCHAR_LENGTH / 4);

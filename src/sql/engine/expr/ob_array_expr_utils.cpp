@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "common/object/ob_obj_compare.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -425,7 +424,7 @@ int ObArrayExprUtils::get_array_element_type(ObExecContext *exec_ctx, uint16_t s
   return ret;
 }
 
-int ObArrayExprUtils::get_array_element_type(ObExecContext *exec_ctx, uint16_t subid, ObObjType &obj_type,
+int ObArrayExprUtils::get_array_element_type(ObExecContext *exec_ctx, uint16_t subid, SqlValueType &obj_type,
                                              uint32_t &depth, bool &is_vec)
 {
   int ret = OB_SUCCESS;
@@ -648,7 +647,7 @@ int ObVectorElemArithFunc::operator()(ObDatum &res, const ObDatum &l, const ObDa
     OB_LOG(WARN, "not supported vector element type", K(ret), K(arr_type->element_type_->type_id_));
   } else {
     ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
-    ObObjType obj_type = elem_type->basic_meta_.get_obj_type();
+    SqlValueType obj_type = elem_type->basic_meta_.get_obj_type();
     if (obj_type == ObFloatType) {
       const float *data_l = reinterpret_cast<const float*>(arr_l->get_data());
       const uint32_t size = arr_l->size();
@@ -836,7 +835,7 @@ int ObArrayExprUtils::deduce_array_type(ObExecContext *exec_ctx, ObExprResType &
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "array element in binary type");
     } else if (elem_type->type_id_ == ObNestedType::OB_BASIC_TYPE) {
       if (type2.get_type() != static_cast<ObCollectionBasicType *>(elem_type)->basic_meta_.get_obj_type()) {
-        ObObjMeta calc_meta = type2.get_obj_meta();
+        SqlTypeMeta calc_meta = type2.get_sql_type_meta();
         if (type2.get_type() == ObDecimalIntType || type2.get_type() == ObNumberType || type2.get_type() == ObUNumberType) {
           calc_meta.set_type(ObDoubleType);
           if (get_decimalint_type(type2.get_precision()) == DECIMAL_INT_32) {
@@ -930,22 +929,6 @@ int ObNestedVectorFunc::construct_param(
 }
 
 
-
-int ObArrayExprUtils::get_basic_elem(ObIArrayType *src, uint32_t idx, ObObj &elem_obj, bool &is_null)
-{
-  int ret = OB_SUCCESS;
-  if (src->get_format() == Nested_Array) {
-    ObArrayNested *arr_nested = static_cast<ObArrayNested *>(src);
-    if (OB_FAIL(get_basic_elem(arr_nested->get_child_array(), idx, elem_obj, is_null))) {
-    }
-  } else {
-    if (src->is_null(idx)) {
-      is_null = true;
-    } else if (OB_FAIL(src->elem_at(idx, elem_obj))) {
-    }
-  }
-  return ret;
-}
 
 template int ObArrayExprUtils::calc_array_sum(unsigned int, unsigned char*, const char*,
                                               unsigned int, ObCollectionArrayType*, double&);
@@ -1110,7 +1093,7 @@ int ObArrayExprUtils::calc_fixed_size_key_index(ObIArrayType *src_key_arr, uint3
 
 int ObArrayExprUtils::get_collection_raw_data(
     ObIAllocator &allocator,
-    const ObObjMeta &meta,
+    const SqlTypeMeta &meta,
     const void *data,
     ObLength len,
     ObString &bin_str,
@@ -1144,7 +1127,7 @@ int ObArrayExprUtils::convert_to_string(common::ObIAllocator &allocator, ObEvalC
 }
 
 int ObArrayExprUtils::calc_collection_hash_val(
-    const ObObjMeta &meta, const void *data, ObLength len,
+    const SqlTypeMeta &meta, const void *data, ObLength len,
     hash_algo hash_func, uint64_t seed, uint64_t &hash_val,
     const ObDatumAccessContext *access_ctx)
 {
@@ -1162,7 +1145,7 @@ int ObArrayExprUtils::calc_collection_hash_val(
   return ret;
 }
 
-int ObArrayExprUtils::collection_compare(const ObObjMeta &l_meta, const ObObjMeta &r_meta,
+int ObArrayExprUtils::collection_compare(const SqlTypeMeta &l_meta, const SqlTypeMeta &r_meta,
                                          const void *l_v, const ObLength l_len,
                                          const void *r_v, const ObLength r_len,
                                          int &cmp_ret,

@@ -378,8 +378,10 @@ int ObInnerSQLConnection::init_session_info(
     const bool use_server_defaults = true;
     ObPCMemPctConf pc_mem_conf;
     session->set_inner_session();
-    ObObj mysql_sql_mode;
-    mysql_sql_mode.set_uint(ObUInt64Type, DEFAULT_MYSQL_MODE);
+    const uint64_t default_mode = DEFAULT_MYSQL_MODE;
+    DatumValue mysql_sql_mode;
+    mysql_sql_mode.meta_.set_uint64();
+    mysql_sql_mode.datum_.set_string(reinterpret_cast<const char *>(&default_mode), sizeof(default_mode));
     if (!NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_essential_sys_vars_only(print_info_log, use_server_defaults))) {
     } else if (NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_default_sys_variable(print_info_log, use_server_defaults))) {
     } else if (OB_FAIL(session->update_max_packet_size())) {
@@ -770,6 +772,7 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
         res.set_is_read(true);
         if (retry_cnt > 0) { // reset result set
           bool is_user_sql = res.result_set().is_user_sql();
+          bool native_result = res.is_native_result();
           res.~ObInnerSQLResult();
           new (&res) ObInnerSQLResult(
               get_session(), ob_sql_->get_plan_cache_access_service(),
@@ -777,6 +780,7 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
           if (OB_FAIL(res.init())) {
           } else {
             res.result_set().set_user_sql(is_user_sql);
+            res.set_native_result(native_result);
             res.set_is_read(true);
           }
         }
@@ -1055,20 +1059,6 @@ int ObInnerSQLConnection::execute_write(const ObString &sql,
   return ret;
 }
 
-int ObInnerSQLConnection::execute_proc(ObIAllocator &allocator,
-                                      ParamStore &params,
-                                      ObString &sql,
-                                      const share::schema::ObRoutineInfo &routine_info,
-                                      const common::ObIArray<const pl::ObUserDefinedType *> &udts,
-                                      const ObTimeZoneInfo *tz_info,
-                                      ObObj *result,
-                                      bool is_sql)
-{
-  UNUSEDx(allocator, params, sql, routine_info, udts, tz_info, result, is_sql);
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql)
 {
@@ -1124,9 +1114,22 @@ int ObInnerSQLConnection::execute_read(const ObString &sql,
   return ret;
 }
 
+int ObInnerSQLConnection::execute_read_native(const ObString &sql,
+                                              ObISQLClient::ReadResult &res,
+                                              bool is_user_sql)
+{
+  int ret = OB_SUCCESS;
+  auto function = [&]() {
+    res.reuse();
+    return execute_read_inner(sql, res, is_user_sql, true);
+  };
+  OZ(execute_with_timeout(function));
+  return ret;
+}
+
 int ObInnerSQLConnection::execute_read_inner(const ObString &sql,
                                              ObISQLClient::ReadResult &res,
-                                             bool is_user_sql)
+                                             bool is_user_sql, bool native_result)
 {
   int ret = OB_SUCCESS;
   ObInnerSQLReadContext *read_ctx = NULL;
@@ -1143,6 +1146,7 @@ int ObInnerSQLConnection::execute_read_inner(const ObString &sql,
   } else if (OB_FAIL(res.create_handler(read_ctx, *this))) {
   } else if (OB_FAIL(read_ctx->get_result().init())) {
   } else {
+    read_ctx->get_result().set_native_result(native_result);
     read_ctx->get_result().result_set().set_user_sql(is_user_sql);
     if (OB_FAIL(query(executor, read_ctx->get_result(),
                       &read_ctx->get_vt_iter_factory()))) {
@@ -1245,15 +1249,11 @@ int ObInnerSQLConnection::set_session_timeout(int64_t query_timeout, int64_t trx
 {
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret)) {
-    ObObj val;
-    val.set_int(query_timeout);
-    if (OB_FAIL(get_session().update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, val))) {
+    if (OB_FAIL(get_session().update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, query_timeout))) {
     }
   }
   if (OB_SUCC(ret)) {
-    ObObj val;
-    val.set_int(trx_timeout);
-    if (OB_FAIL(get_session().update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, val))) {
+    if (OB_FAIL(get_session().update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, trx_timeout))) {
     }
   }
 
@@ -1280,7 +1280,7 @@ int ObInnerSQLConnection::get_session_variable(const ObString &name, int64_t &va
     ret = OB_NOT_INIT;
   } else if (0 == name.case_compare("tx_isolation")) {
     // Isolation level is a varchar value
-    ObObj obj;
+    DatumValue obj;
     if (OB_FAIL(get_session().get_sys_variable_by_name(name, obj))) {
     } else {
       // varchar conversion to int
@@ -1299,10 +1299,8 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, int64_t val
     ret = OB_NOT_INIT;
   } else if (0 == name.case_compare("tx_isolation")) {
     // Isolation level is a string
-    ObObj obj;
-    obj.set_varchar(transaction::ObTransIsolation::get_name(val));
-    obj.set_collation_type(ObCharset::get_system_collation());
-    if (OB_FAIL(get_session().update_sys_variable_by_name(name, obj))) {
+    const ObString isolation = transaction::ObTransIsolation::get_name(val);
+    if (OB_FAIL(get_session().update_sys_variable(name, isolation))) {
     }
   } else if (OB_FAIL(get_session().update_sys_variable_by_name(name, val))) {
   } else if (0 == name.case_compare("ob_read_consistency")) {
@@ -1494,6 +1492,23 @@ sql::ObSQLSessionInfo *ObInnerSQLConnectionAccess::get_session(
       static_cast<observer::ObInnerSQLConnection *>(connection);
   return nullptr == native_connection ? nullptr
                                       : &native_connection->get_session();
+}
+
+int ObInnerSQLConnectionAccess::execute_read_native(
+    common::sqlclient::ObISQLConnection *connection, const common::ObString &sql,
+    common::ObISQLClient::ReadResult &result, bool is_user_sql)
+{
+  return nullptr == connection ? common::OB_INVALID_ARGUMENT
+      : static_cast<observer::ObInnerSQLConnection *>(connection)
+            ->execute_read_native(sql, result, is_user_sql);
+}
+
+int ObInnerSQLConnectionAccess::get_native_value(
+    common::sqlclient::ObMySQLResult *result, int64_t col_idx,
+    common::ObIAllocator &owner, common::DatumValue &value)
+{
+  return nullptr == result ? common::OB_INVALID_ARGUMENT
+      : static_cast<observer::ObInnerSQLResult *>(result)->get_native_value(col_idx, owner, value);
 }
 
 int ObInnerSQLConnectionAccess::lock_obj(

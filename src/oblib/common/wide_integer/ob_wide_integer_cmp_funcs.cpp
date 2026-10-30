@@ -17,7 +17,7 @@
 #ifdef _WIN32
 #define USING_LOG_PREFIX LIB
 #endif
-#include "common/object/ob_object.h"
+#include "common/wide_integer/ob_wide_integer.h"
 
 namespace oceanbase
 {
@@ -39,10 +39,6 @@ int decimalint_decimalint_cmp_func(const ObDecimalInt *lhs, const ObDecimalInt *
   template <>                                                                                      \
   int decimalint_decimalint_cmp_func<LEN0, LEN1>(const ObDecimalInt *lhs_dec,                      \
                                                  const ObDecimalInt *rhs_dec)
-
-#define DEFINE_DECINT_TC_CMP_FUNC(LEN, TC)                                                         \
-  template <>                                                                                      \
-  int decimalint_tc_cmp_func<LEN, TC>(const ObObj &lhs, const ObObj &rhs)
 
 #define REG_DECINT_DECINT_CMP_FUNC(LEN0, LEN1)                                                     \
   ObDecimalIntCmpSet::decint_decint_cmp_set_[LEN0][LEN1] =                                         \

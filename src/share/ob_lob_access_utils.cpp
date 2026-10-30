@@ -23,6 +23,7 @@
 #include "share/lob/ob_lob_diff_struct.h"
 #include "share/lob/ob_lob_text_iter_context.h"
 #include "share/object/ob_obj_cast.h"
+#include "common/datum/datum_value.h"
 
 namespace oceanbase
 {
@@ -425,75 +426,73 @@ int ObTextStringIter::get_byte_len(int64_t &byte_len)
 }
 
 
-// Only used to response client, append full lob data after outrow lob locator, disk locator is not changed
-
-// Notice: if input is an outrow lob, the result will be a templob!
-int ObTextStringIter::convert_outrow_lob_to_inrow_templob(const ObObj &in_obj,
-                                                          ObObj &out_obj,
+int ObTextStringIter::convert_outrow_lob_to_inrow_templob(const DatumValue &input,
+                                                          DatumValue &output,
                                                           const ObLobReadOptions *options,
-                                                          ObIAllocator *allocator,
+                                                          ObIAllocator &owner,
                                                           bool allow_persist_inrow,
                                                           bool need_deep_copy)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = in_obj.get_type();
-  int64_t lob_data_byte_len = 0;
-  int64_t pos = 0;
-  bool is_pass_thougth = true;
-
-  if (!in_obj.has_lob_header()) {
-  } else if (!is_lob_storage(type)) {
-  } else if (in_obj.is_null() || in_obj.is_nop_value()) {
+  const SqlValueType type = input.get_type();
+  // Match the existing caller contract: these inputs leave output untouched.
+  if (!input.has_lob_header() || !is_lob_storage(type)
+      || input.is_null() || input.is_nop_value()) {
   } else {
-    ObLobLocatorV2 loc(in_obj.get_string(), in_obj.has_lob_header());
-    if (!loc.is_valid()) {
+    ObLobLocatorV2 locator(input.get_string(), true);
+    int64_t byte_length = 0;
+    if (!locator.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "Lob: invalid lob loc", K(ret), K(loc), K(in_obj));
-    } else if ((!loc.is_persist_lob() || allow_persist_inrow) &&
-               (loc.is_inrow() || loc.is_simple())) { // do nothing
-    } else if (loc.is_delta_temp_lob()) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "Lob: converting delta lob!", K(ret));
-    } else if (OB_FAIL(loc.get_lob_data_byte_len(lob_data_byte_len))) {
-    } else if (lob_data_byte_len < 0 || lob_data_byte_len > UINT32_MAX) {
-      ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "Lob: inrow lob data length error", K(lob_data_byte_len));
-    } else {
-      is_pass_thougth = false;
-      ObTextStringResult new_tmp_lob(in_obj.get_type(), in_obj.has_lob_header(), allocator);
-      if (OB_FAIL(new_tmp_lob.init(lob_data_byte_len))) {
-      } else {
-        // copy inrow data
-        ObTextStringIterState state;
-        ObString src_block_data;
-        ObTextStringIter instr_iter(in_obj);
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(instr_iter.init(0, options, allocator))) {
-        } else {
-          while (OB_SUCC(ret)
-                && pos < lob_data_byte_len
-                && (state = instr_iter.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
-            if (OB_FAIL(new_tmp_lob.append(src_block_data))) {
-            } else {
-              pos += src_block_data.length();
-            }
-          }
-          OB_ASSERT(pos == lob_data_byte_len);
-          ObString res;
-          new_tmp_lob.get_result_buffer(res);
-          out_obj = in_obj; // copy meta
-          out_obj.set_lob_value(in_obj.get_type(), res.ptr(), res.length());
-          out_obj.set_has_lob_header(); // must has lob header
-        }
-      }
-    }
-
-    if (OB_SUCC(ret) && is_pass_thougth) {
+    } else if ((!locator.is_persist_lob() || allow_persist_inrow)
+               && (locator.is_inrow() || locator.is_simple())) {
       if (need_deep_copy) {
-        if (OB_FAIL(ob_write_obj(*allocator, in_obj, out_obj))) {
+        // The locator is already validated. Copy its bytes without changing
+        // the independent metadata (including unspecified raw collation).
+        DatumValue candidate = input;
+        if (OB_SUCC(ret = candidate.datum_.deep_copy(input.datum_, owner))) {
+          output = candidate;
         }
       } else {
-        out_obj = in_obj;
+        output = input;
+      }
+    } else if (locator.is_delta_temp_lob()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(locator.get_lob_data_byte_len(byte_length))) {
+    } else if (byte_length < 0 || byte_length > UINT32_MAX) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ObTextStringResult result(type, true, &owner);
+      ObTextStringIter iterator(type, input.get_collation_type(), input.get_string(), true);
+      if (OB_FAIL(result.init(byte_length))) {
+      } else if (OB_FAIL(iterator.init(0, options, &owner))) {
+      } else {
+        int64_t copied = 0;
+        ObString block;
+        while (OB_SUCC(ret) && copied < byte_length) {
+          const ObTextStringIterState state = iterator.get_next_block(block);
+          if (state != TEXTSTRING_ITER_NEXT) {
+            ret = iterator.get_inner_ret();
+            if (ret == OB_SUCCESS) { ret = OB_ERR_UNEXPECTED; }
+          } else if (block.empty() || block.length() > byte_length - copied) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(result.append(block))) {
+          } else {
+            copied += block.length();
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ObString bytes;
+          result.get_result_buffer(bytes);
+          DatumValue candidate = input;
+          candidate.datum_.set_string(bytes);
+          candidate.meta_.set_type(type);
+          candidate.meta_.set_inrow();
+          if (type != ObCollectionSQLType) {
+            candidate.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+          }
+          candidate.meta_.set_has_lob_header();
+          output = candidate;
+        }
       }
     }
   }
@@ -674,39 +673,13 @@ int ObTextStringResult::get_reserved_buffer(char *&empty_start, int64_t &empty_l
   return ret;
 }
 
-int ObTextStringResult::ob_convert_obj_temporay_lob(ObObj &obj, ObIAllocator &allocator)
-{
-  int ret = OB_SUCCESS;
-  ObObjType type = obj.get_type();
-  if (!is_lob_storage(type)) {
-  } else if (obj.has_lob_header()) {
-    ret = OB_UNEXPECT_INTERNAL_ERROR;
-    COMMON_LOG(WARN, "Lob: not support to convert obj has lob header to tempory lob", K(ret), K(obj));
-  } else if (obj.is_null() || obj.is_nop_value()) {
-  } else {
-    ObString row_str = obj.get_string();
-    ObTextStringResult new_tmp_lob(obj.get_type(), true, &allocator);
-    if (OB_FAIL(new_tmp_lob.init(row_str.length()))) {
-    } else if (OB_FAIL(new_tmp_lob.append(row_str))) {
-    } else {
-      ObString result;
-      new_tmp_lob.get_result_buffer(result);
-      obj.set_lob_value(type, result.ptr(), static_cast<int32_t>(result.length()));
-      if (new_tmp_lob.has_lob_header()) {
-        obj.set_has_lob_header();
-      }
-    }
-  }
-  return ret;
-}
-
 int ObTextStringResult::ob_convert_datum_temporay_lob(ObDatum &datum,
-                                                      const ObObjMeta &in_obj_meta,
-                                                      const ObObjMeta &out_obj_meta,
+                                                      const SqlTypeMeta &in_obj_meta,
+                                                      const SqlTypeMeta &out_obj_meta,
                                                       ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = in_obj_meta.get_type();
+  SqlValueType type = in_obj_meta.get_type();
   if (!is_lob_storage(type)) {
   } else if (in_obj_meta.has_lob_header()
              || !out_obj_meta.has_lob_header()
@@ -952,7 +925,7 @@ namespace lob_helper
 {
 int read_real_string_data(
     ObIAllocator *allocator,
-    ObObjType type,
+    SqlValueType type,
     ObCollationType cs_type,
     bool has_lob_header,
     ObString &str,
@@ -973,46 +946,23 @@ int read_real_string_data(
   return ret;
 }
 
-int read_real_string_data(
-    ObIAllocator *allocator,
-    const common::ObObj &obj,
-    ObString &str,
-    const ObLobReadOptions *options)
-{
-  int ret = OB_SUCCESS;
-  const ObObjMeta& meta = obj.get_meta();
-  str = obj.get_string();
-  if (meta.is_null()) {
-    str.reset();
-  } else if (! obj.is_lob_storage()) {
-  } else if (obj.has_lob_header() && obj.get_string_len() != 0 &&
-      ! obj.get_lob_value()->is_mem_loc_ && obj.get_lob_value()->in_row_) {
-    const ObLobCommon* lob = obj.get_lob_value();
-    str.assign_ptr(lob->get_inrow_data_ptr(), static_cast<int32_t>(lob->get_byte_size(obj.get_string_len())));
-  } else if (OB_FAIL(read_real_string_data(
-      allocator, meta.get_type(), meta.get_collation_type(),
-      obj.has_lob_header(), str, options))) {
-  }
-  return ret;
-}
 }  // namespace lob_helper
 }  // namespace common
 namespace common
 {
-int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
+int ObTextStringResult::init_cast_buffer(int64_t res_len,
+    DatumCastParams *params, ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (is_init_) {
-  } else if (OB_ISNULL(allocator) && OB_ISNULL(params_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(res_obj_)) {
+  } else if (OB_ISNULL(allocator) && OB_ISNULL(params)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObTextStringResult::calc_buffer_len(res_len))) {
   } else if (buff_len_ == 0) {
     OB_ASSERT(has_lob_header_ == false); // empty result without header
   } else {
     buffer_ = OB_ISNULL(allocator)
-              ? static_cast<char*>(params_->alloc(buff_len_)) : static_cast<char*>(allocator->alloc(buff_len_));
+              ? static_cast<char*>(params->alloc(buff_len_)) : static_cast<char*>(allocator->alloc(buff_len_));
     if (OB_ISNULL(buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(fill_temp_lob_header(res_len))) {
@@ -1024,12 +974,23 @@ int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
   return ret;
 }
 
-void ObTextStringObObjResult::set_result()
+int ObTextStringDatumValueResult::init(int64_t res_len, ObIAllocator *allocator)
 {
-  res_obj_->set_lob_value(type_, buffer_, pos_);
+  if (is_init_) { return OB_SUCCESS; }
+  if (result_ == nullptr) { return OB_INVALID_ARGUMENT; }
+  return init_cast_buffer(res_len, params_, allocator);
+}
+
+void ObTextStringDatumValueResult::set_result()
+{
+  result_->meta_.set_type(type_);
+  result_->meta_.set_inrow();
+  if (type_ != ObCollectionSQLType) {
+    result_->meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+  }
+  result_->datum_.set_string(buffer_, static_cast<uint32_t>(pos_));
   if (is_lob_storage(type_) && has_lob_header_) {
-    // Notice: should not be null or nop
-    res_obj_->set_has_lob_header();
+    result_->meta_.set_has_lob_header();
   }
 }
 }  // namespace common

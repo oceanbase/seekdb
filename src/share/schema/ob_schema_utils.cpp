@@ -237,7 +237,7 @@ int ObSchemaUtils::convert_sys_param_to_sysvar_schema(const ObSysParam &sysparam
   } else {
     sysvar_schema.set_flags(sysparam.flags_);
     
-    sysvar_schema.set_data_type(static_cast<ObObjType>(sysparam.data_type_));
+    sysvar_schema.set_data_type(static_cast<SqlValueType>(sysparam.data_type_));
   }
   return ret;
 }
@@ -256,9 +256,13 @@ int ObSchemaUtils::get_runtime_int_variable(
 {
   int ret = OB_SUCCESS;
   schema::ObSchemaGetterGuard schema_guard;
-  ObObj value;
-  if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, value))) {
-  } else if (OB_FAIL(value.get_int(v))) {
+  ObArenaAllocator result_owner(ObModIds::OB_TEMP_VARIABLES);
+  DatumValue value;
+  if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, result_owner, value))) {
+  } else if (value.is_null() || !value.is_int()) {
+    ret = OB_OBJ_TYPE_ERROR;
+  } else {
+    v = value.get_int();
   }
   return ret;
 }
@@ -271,9 +275,9 @@ int ObSchemaUtils::get_runtime_varchar_variable(
 {
   int ret = OB_SUCCESS;
   schema::ObSchemaGetterGuard schema_guard;
-  ObObj value;
+  DatumValue value;
   ObString tmp;
-  if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, value))) {
+  if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, allocator, value))) {
   } else if (OB_FAIL(value.get_varchar(tmp))) {
   } else if (OB_FAIL(ob_write_string(allocator, tmp, v))) {
   }
@@ -283,7 +287,8 @@ int ObSchemaUtils::get_runtime_varchar_variable(
 int ObSchemaUtils::get_runtime_variable(ObMultiVersionSchemaService &schema_service,
                                        schema::ObSchemaGetterGuard &schema_guard,
                                        ObSysVarClassType var_id,
-                                       ObObj &value)
+                                       ObIAllocator &result_owner,
+                                       DatumValue &value)
 {
   int ret = OB_SUCCESS;
   const schema::ObSysVarSchema *var_schema = NULL;
@@ -292,7 +297,7 @@ int ObSchemaUtils::get_runtime_variable(ObMultiVersionSchemaService &schema_serv
               var_id, var_schema))) {
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(var_schema->get_value(NULL, NULL, value))) {
+  } else if (OB_FAIL(var_schema->get_value(result_owner, static_cast<const ObTimeZoneInfo *>(nullptr), value))) {
   }
   return ret;
 }

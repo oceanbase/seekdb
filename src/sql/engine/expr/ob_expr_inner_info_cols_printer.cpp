@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_inner_info_cols_printer.h"
 #include <string.h>
 #include "share/object/ob_obj_cast.h"
@@ -93,16 +94,16 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
       } else {
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-        ObObj def_obj = tmp_column_schema->get_cur_default_value();
+        const DatumValue &def_obj = tmp_column_schema->get_cur_default_value();
         if (IS_DEFAULT_NOW_OBJ(def_obj)) {
           expr_datum.set_string(ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP));
-        } else if (def_obj.is_bit() || ob_is_enum_or_set_type(def_obj.get_type())) {
+        } else if (def_obj.get_type() == ObBitType || ob_is_enum_or_set_type(def_obj.get_type())) {
           char *buf = NULL;
           int64_t buf_len = number::ObNumber::MAX_PRINTABLE_SIZE;
           int64_t pos = 0;
           if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(calc_alloc.alloc(buf_len))))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else if (def_obj.is_bit()) {
+          } else if (def_obj.get_type() == ObBitType) {
             if (OB_FAIL(def_obj.print_varchar_literal(buf, buf_len, pos, TZ_INFO(ctx.exec_ctx_.get_my_session())))) {
             } else {
               expr_datum.set_string(ObString(static_cast<int32_t>(pos), buf));
@@ -116,17 +117,13 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
         } else {
           const ObDataTypeCastParams dtc_params = sql::ObBasicSessionInfo::create_dtc_params(ctx.exec_ctx_.get_my_session());
           ObCastCtx cast_ctx(&calc_alloc, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-          ObObj casted_cell;
-          const ObObj *res_cell = NULL;
-          if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx,
-                                           def_obj,
-                                           casted_cell, res_cell))) {
+          DatumValue casted_value;
+          if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType, cast_ctx,
+                                                def_obj, calc_alloc, casted_value))) {
+          } else if (casted_value.is_null()) {
+            expr_datum.set_null();
           } else {
-            if (!res_cell->is_null()) {
-              expr_datum.set_string(res_cell->get_string());
-            } else {
-              expr_datum.set_null();
-            }
+            expr_datum.set_string(casted_value.get_string());
           }
         }
       }
@@ -191,7 +188,7 @@ int ObExprInnerInfoColsCharLenPrinter::eval_column_char_len(const ObExpr &expr, 
   } else if (data_type->is_null() || collation_type->is_null() || data_length->is_null()) {
     expr_datum.set_null();
   } else {
-    if (ob_is_string_tc(static_cast<ObObjType> (data_type->get_int()))) {
+    if (ob_is_string_tc(static_cast<SqlValueType> (data_type->get_int()))) {
       ObCollationType coll = static_cast<ObCollationType> (collation_type->get_int());
       int64_t mbmaxlen = 0;
       if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
@@ -199,8 +196,8 @@ int ObExprInnerInfoColsCharLenPrinter::eval_column_char_len(const ObExpr &expr, 
         expr_datum.set_int(static_cast<uint64_t>(
                 mbmaxlen * data_length->get_int()));
       }
-    } else if (ob_is_text_tc(static_cast<ObObjType> (data_type->get_int())) ||
-        ob_is_json(static_cast<ObObjType> (data_type->get_int())) || ob_is_geometry(static_cast<ObObjType> (data_type->get_int()))) {
+    } else if (ob_is_text_tc(static_cast<SqlValueType> (data_type->get_int())) ||
+        ob_is_json(static_cast<SqlValueType> (data_type->get_int())) || ob_is_geometry(static_cast<SqlValueType> (data_type->get_int()))) {
       expr_datum.set_int(static_cast<uint64_t>(data_length->get_int()));
     } else {
       expr_datum.set_null();
@@ -263,10 +260,10 @@ int ObExprInnerInfoColsCharNamePrinter::eval_column_char_name(const ObExpr &expr
     expr_datum.set_null();
   } else {
     ObCharsetType charset = ObCharset::charset_type_by_coll(static_cast<ObCollationType> (collation_type->get_int()));
-    if(ob_is_varchar_char_type(static_cast<ObObjType> (data_type->get_int()),
+    if(ob_is_varchar_char_type(static_cast<SqlValueType> (data_type->get_int()),
                                static_cast<ObCollationType> (collation_type->get_int())) 
-      || ob_is_enum_or_set_type(static_cast<ObObjType> (data_type->get_int()))
-      || ob_is_text(static_cast<ObObjType> (data_type->get_int()),
+      || ob_is_enum_or_set_type(static_cast<SqlValueType> (data_type->get_int()))
+      || ob_is_text(static_cast<SqlValueType> (data_type->get_int()),
                     static_cast<ObCollationType> (collation_type->get_int()))) {
         expr_datum.set_string(common::ObCharset::charset_name(charset));
         ObExprStrResAlloc res_alloc(expr, ctx);
@@ -334,10 +331,10 @@ int ObExprInnerInfoColsCollNamePrinter::eval_column_collation_name(const ObExpr 
     expr_datum.set_null();
   } else {
     ObCharsetType charset = ObCharset::charset_type_by_coll(static_cast<ObCollationType> (collation_type->get_int()));
-    if(ob_is_varchar_char_type(static_cast<ObObjType> (data_type->get_int()),
+    if(ob_is_varchar_char_type(static_cast<SqlValueType> (data_type->get_int()),
                                static_cast<ObCollationType> (collation_type->get_int())) 
-      || ob_is_enum_or_set_type(static_cast<ObObjType> (data_type->get_int()))
-      || ob_is_text(static_cast<ObObjType> (data_type->get_int()),
+      || ob_is_enum_or_set_type(static_cast<SqlValueType> (data_type->get_int()))
+      || ob_is_text(static_cast<SqlValueType> (data_type->get_int()),
                     static_cast<ObCollationType> (collation_type->get_int()))) {
         expr_datum.set_string(common::ObCharset::collation_name(static_cast<ObCollationType> (collation_type->get_int())));
         ObExprStrResAlloc res_alloc(expr, ctx);
@@ -636,7 +633,7 @@ int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr
     static const int64_t SRS_ID_MASK = UINT64_MAX >> (64 - 5);
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-    ObObjType column_type = ObMaxType;
+    SqlValueType column_type = ObMaxType;
     char *data_type_str = nullptr;
     ObArrayHelper<ObString> extended_infos;
     int64_t pos = 0;
@@ -649,7 +646,7 @@ int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr
                                                              pos, extended_infos, &calc_alloc))) {
     } else if (OB_FAIL(ob_sql_type_str(data_type_str,
                                        OB_MAX_SYS_PARAM_NAME_LENGTH,
-                                       static_cast<ObObjType> (data_type->get_int()),
+                                       static_cast<SqlValueType> (data_type->get_int()),
                                        static_cast<ObCollationType> (collation_type->get_int()),
                                        extended_infos,
                                        static_cast<common::ObGeoType> (srs_id->get_int() & SRS_ID_MASK)))) {
@@ -734,7 +731,7 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
     static const int64_t SRS_ID_MASK = UINT64_MAX >> (64 - 5);
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-    ObObjType column_type = ObMaxType;
+    SqlValueType column_type = ObMaxType;
     char *data_type_str = nullptr;
     ObArrayHelper<ObString> extended_infos;
     int64_t pos = 0;
@@ -742,8 +739,8 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
     accuracy.length_ = data_length->get_int();
     accuracy.precision_ = data_precision->get_int();
     accuracy.scale_ = data_scale->get_int();
-    ObObjMeta meta;
-    meta.set_type(static_cast<ObObjType> (data_type->get_int()));
+    SqlTypeMeta meta;
+    meta.set_type(static_cast<SqlValueType> (data_type->get_int()));
     meta.set_collation_type(static_cast<ObCollationType> (collation_type->get_int()));
     meta.set_collation_level(ObCollationLevel::CS_LEVEL_IMPLICIT);
     meta.set_scale(data_scale->get_int());
@@ -757,9 +754,9 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
     } else {
       int64_t pos = 0;
       const ObLengthSemantics default_length_semantics = ctx.exec_ctx_.get_my_session()->get_default_length_semantics();
-      const uint64_t sub_type = ObExtendType == static_cast<ObObjType> (data_type->get_int()) ?
+      const uint64_t sub_type = ObExtendType == static_cast<SqlValueType> (data_type->get_int()) ?
                                 sub_data_type->get_int() : static_cast<uint64_t>(srs_id->get_int() & SRS_ID_MASK);
-      ObObjType column_type = ObMaxType;
+      SqlValueType column_type = ObMaxType;
       const ObColumnSchemaV2 *tmp_column_schema = NULL;
       if (OB_FAIL(ob_sql_type_str(meta,
                                   accuracy,

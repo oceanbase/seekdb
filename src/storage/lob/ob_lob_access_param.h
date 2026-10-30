@@ -19,6 +19,7 @@
 
 #include "common/sql_mode/ob_sql_mode.h"
 #include "storage/tx/ob_trans_define_v4.h"
+#include "common/datum/datum_core.h"
 #include "share/ob_tablet_autoincrement_param.h"
 
 namespace oceanbase
@@ -56,7 +57,9 @@ public:
       main_table_rowkey_col_(false), is_index_table_(false),
       inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD), schema_chunk_size_(OB_DEFAULT_LOB_CHUNK_SIZE), 
       access_ctx_(nullptr), lob_id_geneator_(nullptr)
-  {}
+  {
+    ext_info_log_.set_null();
+  }
   ~ObLobAccessParam();
 
 public:
@@ -201,7 +204,7 @@ public:
   bool is_index_table_;
   int64_t inrow_threshold_;
   int64_t schema_chunk_size_;
-  ObObj ext_info_log_;
+  common::ObDatum ext_info_log_;
   ObLobAccessCtx *access_ctx_;
   share::ObTabletCacheInterval *lob_id_geneator_;
 };

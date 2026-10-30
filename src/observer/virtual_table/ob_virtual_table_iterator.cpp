@@ -15,8 +15,11 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "share/datum/datum_value_cast.h"
 #include "observer/virtual_table/ob_virtual_table_iterator.h"
-#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "sql/engine/expr/ob_datum_cast.h"
+#include "sql/engine/ob_exec_context.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -39,9 +42,10 @@ void ObVirtualTableIterator::reset()
   schema_guard_ = NULL;
   table_schema_ = NULL;
   index_schema_ = NULL;
-  //Since ObObj's destructor does not do meaningful operations, in order to save performance, ObObj's destructor call is omitted, and the cells_memory is directly released.
-  if (OB_LIKELY(NULL != allocator_ && NULL != cur_row_.cells_)) {
-    allocator_->free(cur_row_.cells_);
+  // Native descriptors and their fixed payload slots share this one owned block.
+  if (OB_LIKELY(NULL != allocator_ && NULL != row_cells_)) {
+    allocator_->free(row_cells_);
+    row_cells_ = nullptr;
   }
   cur_row_.cells_ = NULL;
   cur_row_.count_ = 0;
@@ -55,8 +59,9 @@ void ObVirtualTableIterator::reset()
 
 void ObVirtualTableIterator::reset_convert_ctx()
 {
-  if (OB_LIKELY(NULL != allocator_ && NULL != convert_row_.cells_)) {
-    allocator_->free(convert_row_.cells_);
+  if (OB_LIKELY(NULL != allocator_ && NULL != convert_cells_)) {
+    allocator_->free(convert_cells_);
+    convert_cells_ = nullptr;
   }
   saved_key_ranges_.reset();
   cols_schema_.reset();
@@ -80,8 +85,9 @@ int ObVirtualTableIterator::free_convert_ctx()
       if (OB_FAIL(key_ranges_.assign(saved_key_ranges_))) {
       }
       saved_key_ranges_.reset();
-      //Since ObObj's destructor does not do meaningful operations, in order to save performance, ObObj's destructor call is omitted, and the cells_memory is directly released.
-      allocator_->free(convert_row_.cells_);
+      // Native descriptors and their fixed payload slots share this one owned block.
+      allocator_->free(convert_cells_);
+      convert_cells_ = nullptr;
       convert_row_.cells_ = NULL;
       convert_row_.count_ = 0;
       convert_alloc_.reset();
@@ -94,22 +100,22 @@ int ObVirtualTableIterator::free_convert_ctx()
 int ObVirtualTableIterator::convert_key(const ObRowkey &src, ObRowkey &dst, common::ObIArray<const ObColumnSchemaV2*> &key_cols)
 {
   int ret = OB_SUCCESS;
-  if (src.get_obj_cnt() > 0) {
-    const ObObj *src_key_objs = src.get_obj_ptr();
+  if (src.get_value_count() > 0) {
+    const DatumValue *src_key_objs = src.get_values();
     void *tmp_ptr = NULL;
-    ObObj *new_key_obj = NULL;
-    tmp_ptr = allocator_->alloc(src.get_obj_cnt() * sizeof(ObObj));
+    DatumValue *new_key_obj = NULL;
+    tmp_ptr = allocator_->alloc(src.get_value_count() * sizeof(DatumValue));
     if (OB_ISNULL(tmp_ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(new_key_obj = new (tmp_ptr) ObObj[src.get_obj_cnt()])) {
+    } else if (OB_ISNULL(new_key_obj = new (tmp_ptr) DatumValue[src.get_value_count()])) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (src.get_obj_cnt() > key_cols.count()) {
+    } else if (src.get_value_count() > key_cols.count()) {
       ret = OB_ERR_UNEXPECTED;
     }
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
     ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-    for (uint64_t nth_obj = 0; OB_SUCC(ret) && nth_obj < src.get_obj_cnt(); ++nth_obj) {
-      const ObObj &src_obj = src_key_objs[nth_obj];
+    for (uint64_t nth_obj = 0; OB_SUCC(ret) && nth_obj < src.get_value_count(); ++nth_obj) {
+      const DatumValue &src_obj = src_key_objs[nth_obj];
       if (src_obj.is_min_value()) {
         new_key_obj[nth_obj].set_min_value();
       } else if (src_obj.is_max_value()) {
@@ -117,15 +123,15 @@ int ObVirtualTableIterator::convert_key(const ObRowkey &src, ObRowkey &dst, comm
       } else if (src_obj.is_null()) {
         new_key_obj[nth_obj].set_null();
       } else {
-        if (OB_FAIL(ObObjCaster::to_type(key_cols.at(nth_obj)->get_data_type(),
+        if (OB_FAIL(DatumValueCaster::to_type(key_cols.at(nth_obj)->get_data_type(),
                                         cast_ctx,
                                         src_key_objs[nth_obj],
-                                        new_key_obj[nth_obj]))) {
+                                        *allocator_, new_key_obj[nth_obj]))) {
         }
       }
     }//end for
     if (OB_SUCC(ret)) {
-      dst.assign(new_key_obj, src.get_obj_cnt());
+      dst.assign(new_key_obj, src.get_value_count());
     }
   }
   return ret;
@@ -224,16 +230,13 @@ int ObVirtualTableIterator::init_convert_ctx()
   cast_ctx_ = cast_ctx;
 
   if (need_convert_) {
-    ObObj *cells = NULL;
-    void *tmp_ptr = NULL;
+    DatumValue *cells = nullptr;
     if (OB_UNLIKELY(NULL == allocator_ || NULL == table_schema_ || NULL == session_)) {
       ret = OB_NOT_INIT;
-    } else if (OB_ISNULL(tmp_ptr = allocator_->alloc(reserved_column_cnt_ <= 0 ? 1 * sizeof(ObObj): reserved_column_cnt_ * sizeof(ObObj)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(DatumValueBuffer::allocate(*allocator_, row_cell_capacity(), cells))) {
       COMMON_LOG(ERROR, "fail to alloc cells", K(ret), K(reserved_column_cnt_));
-    } else if (OB_ISNULL(cells = new (tmp_ptr) ObObj[reserved_column_cnt_ <= 0 ? 1 : reserved_column_cnt_])) {
-      ret = OB_ERR_UNEXPECTED;
     } else {
+      convert_cells_ = cells;
       convert_row_.cells_ = cells;
       convert_row_.count_ = reserved_column_cnt_;
       if (OB_FAIL(convert_key_ranges())) {
@@ -246,20 +249,18 @@ int ObVirtualTableIterator::init_convert_ctx()
 int ObVirtualTableIterator::open()
 {
   int ret = OB_SUCCESS;
-  void *tmp_ptr = NULL;
-  ObObj *cells = NULL;
+  DatumValue *cells = nullptr;
   if (OB_UNLIKELY(NULL == allocator_)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(scan_param_)
              || (NULL != scan_param_->output_exprs_ && NULL == scan_param_->op_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(tmp_ptr = allocator_->alloc( (reserved_column_cnt_ > 0 ? reserved_column_cnt_ : 1) * sizeof(ObObj)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(DatumValueBuffer::allocate(*allocator_, row_cell_capacity(), cells))) {
     COMMON_LOG(ERROR, "fail to alloc cells", K(ret), K(reserved_column_cnt_));
-  } else if (OB_ISNULL(cells = new (tmp_ptr) ObObj[(reserved_column_cnt_ > 0 ? reserved_column_cnt_ : 1)])) {
-    ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(init_sql_schema_guard_())) {
+    allocator_->free(cells);
   } else {
+    row_cells_ = cells;
     cur_row_.cells_ = cells;
     cur_row_.count_ = reserved_column_cnt_;
     if (OB_FAIL(init_convert_ctx())) {
@@ -300,17 +301,75 @@ int ObVirtualTableIterator::convert_output_row(ObNewRow *&cur_row)
       const ObColumnSchemaV2 *col_schema = cols_schema_.at(i);
       if (cur_row->get_cell(i).is_null()
           || (cur_row->get_cell(i).is_string_type() && 0 == cur_row->get_cell(i).get_data_length())
-          || ob_is_empty_lob(cur_row->get_cell(i))
+          || ob_is_empty_lob(cur_row->get_cell(i).get_type(), cur_row->get_cell(i).datum_,
+                             cur_row->get_cell(i).has_lob_header())
           || (cur_row->get_cell(i).is_timestamp() && cur_row->get_cell(i).get_timestamp() <= 0)) {
         convert_row_.cells_[i].set_null();
-      } else if (OB_FAIL(ObObjCaster::to_type(col_schema->get_data_type(),
-                                              col_schema->get_collation_type(),
-                                              cast_ctx_,
-                                              cur_row->get_cell(i),
-                                              convert_row_.cells_[i]))) {
+      } else {
+        ObCastCtx context = cast_ctx_;
+        context.dest_collation_ = col_schema->get_collation_type();
+        context.expect_obj_collation_ = col_schema->get_collation_type();
+        const DatumValue &source = cur_row->get_cell(i);
+        if (source.get_type() == col_schema->get_data_type()
+            && !source.is_decimal_int() && !source.is_string_type()) {
+          // A same-type scalar reuses the fixed slot; no per-row scalar allocation.
+          ret = DatumValueBuffer::assign_view(source, convert_cells_, row_cell_capacity(), i);
+        } else {
+          ret = DatumValueCaster::to_type(col_schema->get_data_type(), context,
+              source, convert_alloc_, convert_row_.cells_[i]);
+        }
       }
     }
     cur_row = &convert_row_;
+  }
+  return ret;
+}
+
+int ObVirtualTableIterator::convert_temporary_lob(DatumValue &value, ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  if (!value.is_null() && value.is_lob_storage() && !value.has_lob_header()) {
+    SqlTypeMeta result_meta = value.meta_;
+    result_meta.set_has_lob_header();
+    if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
+            value.datum_, value.meta_, result_meta, owner))) {
+    } else { value.meta_ = result_meta; }
+  }
+  return ret;
+}
+
+// Preserve the old virtual-table column conversion order: pure native cast,
+// then non-strict character validation and the existing native accuracy check.
+int ObVirtualTableIterator::check_output_value(const DatumValue &source,
+    const ObColumnSchemaV2 &column, ObCastCtx &context, DatumValue &output)
+{
+  int ret = OB_SUCCESS;
+  ObExecContext *exec_ctx = scan_param_ != nullptr && scan_param_->op_ != nullptr
+      ? &scan_param_->op_->get_eval_ctx().exec_ctx_
+      : session_ != nullptr ? session_->get_cur_exec_ctx() : nullptr;
+  if (exec_ctx == nullptr) {
+    ret = OB_NOT_INIT;
+  } else {
+    ObDatumCaster *caster = nullptr;
+    ObDatumCaster nested;
+    DatumParameter input, casted, checked;
+    input.assign_value(source);
+    ObExprResType target;
+    target.set_type(column.get_data_type());
+    target.set_collation_type(column.get_collation_type());
+    target.set_accuracy(column.get_accuracy());
+    if (OB_FAIL(exec_ctx->get_native_datum_caster(caster))) {
+    } else if (caster->native_cast_active()) {
+      if (OB_FAIL(nested.init(*exec_ctx, false))) {}
+      else { caster = &nested; }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(caster->to_value(input, target, context.cast_mode_, row_calc_buf_, casted))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(caster->check_accuracy_and_collation(casted,
+          column.get_accuracy(), column.get_collation_type(), context.cast_mode_, false,
+          row_calc_buf_, checked, &context.warning_))) {
+    } else if (OB_SUCC(ret)) {
+      output = checked.value_view();
+    }
   }
   return ret;
 }
@@ -361,8 +420,13 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
     if (OB_SUCC(ret)
         && is_lob_storage(col_schema->get_data_type())
         && !cur_row->cells_[i].has_lob_header()) { // cannot be json type;
-        ObObj &obj_convert = cur_row->cells_[i];
-      if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(obj_convert, row_calc_buf_))) {
+      DatumValue &value = cur_row->cells_[i];
+      SqlTypeMeta result_meta = value.meta_;
+      result_meta.set_has_lob_header();
+      if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
+              value.datum_, value.meta_, result_meta, row_calc_buf_))) {
+      } else if (!value.is_null()) {
+        value.meta_ = result_meta;
       }
     }
     if (OB_SUCC(ret) && ob_is_string_tc(col_schema->get_data_type())
@@ -372,22 +436,12 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
                 && col_schema->get_collation_type() != cur_row->cells_[i].get_collation_type()))) {
       //Check the column schema to ensure that it meets the schema definition;
       //But currently, only strings that exceed the length limit are processed to prevent occupying too many performance resources and causing too much interface delay
-      ObObj output_obj;
-      ObArray<ObString> *type_infos = NULL;
-      const bool is_strict = false;
-      ObRawExprResType res_type;
-      res_type.set_accuracy(col_schema->get_accuracy());
-      res_type.set_collation_type(col_schema->get_collation_type());
-      res_type.set_type(col_schema->get_data_type());
-      ObCastCtx cast_ctx = cast_ctx_;
-      cast_ctx.cast_mode_ = cast_ctx_.cast_mode_ | CM_WARN_ON_FAIL;
-      if (OB_FAIL(ObExprColumnConv::convert_skip_null_check(output_obj, cur_row->cells_[i],
-                                                            res_type, is_strict, cast_ctx,
-                                                            type_infos))) {
+      DatumValue output;
+      ObCastCtx context = cast_ctx_;
+      context.cast_mode_ |= CM_WARN_ON_FAIL;
+      if (OB_FAIL(check_output_value(cur_row->cells_[i], *col_schema, context, output))) {
       } else {
-        cur_row->cells_[i] = output_obj;
-        if (OB_SUCCESS != cast_ctx.warning_) {
-        }
+        cur_row->cells_[i] = output;
       }
     }
   }
@@ -438,11 +492,17 @@ int ObVirtualTableIterator::get_next_row()
     for (int64_t i = 0; OB_SUCC(ret) && i < scan_param_->output_exprs_->count(); i++) {
       ObExpr *expr = scan_param_->output_exprs_->at(i);
       ObDatum &datum = expr->locate_datum_for_write(scan_param_->op_->get_eval_ctx());
-      if (OB_FAIL(datum.from_obj(row->cells_[i], expr->obj_datum_map_))) {
-      } else if (is_lob_storage(row->cells_[i].get_type()) &&
-                 OB_FAIL(ob_adjust_lob_datum(scan_param_->op_->get_eval_ctx().exec_ctx_,
-                                             row->cells_[i], expr->obj_meta_,
-                                             expr->obj_datum_map_, *allocator_, datum))) {
+      const DatumValue &value = row->cells_[i];
+      ObDatum projected;
+      char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+      if (OB_FAIL(value.to_row_datum(projected, extended_payload))) {
+      } else if (value.is_ext() && OB_FAIL(datum.deep_copy(projected, row_calc_buf_))) {
+      } else {
+        if (!value.is_ext()) { datum = projected; }
+        if (is_lob_storage(value.get_type())) {
+          ret = ob_adjust_lob_datum(scan_param_->op_->get_eval_ctx().exec_ctx_,
+              static_cast<const ObDatum &>(datum), value.meta_, expr->obj_meta_, *allocator_, datum);
+        }
       }
     }
   }
@@ -460,9 +520,10 @@ int ObVirtualTableIterator::close()
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      //Since ObObj's destructor does not do meaningful operations, in order to save performance, ObObj's destructor call is omitted, and the cells_memory is directly released.
-      if (cur_row_.cells_ != NULL) {
-        allocator_->free(cur_row_.cells_);
+      // Native descriptors and their fixed payload slots share this one owned block.
+      if (row_cells_ != nullptr) {
+        allocator_->free(row_cells_);
+        row_cells_ = nullptr;
       }
       cur_row_.cells_ = NULL;
       cur_row_.count_ = 0;

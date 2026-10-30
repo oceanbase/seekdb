@@ -143,6 +143,8 @@ private:
   uint32_t dim_;
   ObFixedArray<float, ObIAllocator> scores_;  // when ~ObFixedArray(), will destory itself
   ObFixedArray<ObDocIdExt, ObIAllocator> doc_ids_;
+  // Own the advance key bytes before DAS reuse/row advancement invalidates input.
+  ObDocIdExt advance_doc_id_;
   common::ObDatumCmpFuncType cmp_func_;
   float max_score_;
   bool max_score_cached_;

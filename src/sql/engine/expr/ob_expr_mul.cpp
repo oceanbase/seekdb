@@ -38,8 +38,7 @@ ObExprMul::ObExprMul(ObIAllocator &alloc, ObExprOperatorType type)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_mul_result_type,
-                        ObExprResultTypeUtil::get_mul_calc_type,
-                        mul_funcs_)
+                        ObExprResultTypeUtil::get_mul_calc_type)
 {
   param_lazy_eval_ = false;
 }
@@ -127,218 +126,6 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
 }
 
 
-
-ObArithFunc ObExprMul::mul_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMul::mul_int,
-  ObExprMul::mul_uint,
-  NULL,
-  ObExprMul::mul_double,
-  ObExprMul::mul_number,
-  NULL,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-  NULL,//otimestamp
-  NULL,//raw
-  NULL,//interval
-};
-
-ObArithFunc ObExprMul::agg_mul_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprMul::mul_int,
-  ObExprMul::mul_uint,
-  NULL,
-  ObExprMul::mul_double_no_overflow,
-  ObExprMul::mul_number,
-  NULL,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetInner
-  NULL,//otimestamp
-  NULL,//raw
-  NULL,//interval
-};
-
-int ObExprMul::mul_int(ObObj &res,
-                       const ObObj &left,
-                       const ObObj &right,
-                       ObIAllocator *allocator,
-                       ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  int64_t left_i = left.get_int();
-  int64_t right_i = right.get_int();
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    if (OB_UNLIKELY(is_multi_overflow64(left_i, right_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld * %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT", expr_str);
-    }
-    res.set_int(left_i * right_i);
-  } else if (OB_UNLIKELY(ObUIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_UNLIKELY(is_int_uint_mul_out_of_range(left_i, right_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%ld * %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-    res.set_uint64(left_i * right_i);
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMul::mul_uint(ObObj &res,
-                        const ObObj &left,
-                        const ObObj &right,
-                        ObIAllocator *allocator,
-                        ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  uint64_t left_i = left.get_uint64();
-  uint64_t right_i = right.get_uint64();
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (left.get_type_class() == right.get_type_class()) {
-    if (OB_UNLIKELY(is_uint_uint_mul_out_of_range(left_i, right_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu * %lu)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-
-    }
-    res.set_uint64(left_i * right_i);
-  } else if (OB_UNLIKELY(ObIntTC != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_UNLIKELY(is_int_uint_mul_out_of_range(right_i, left_i))) {
-      ret = OB_OPERATE_OVERFLOW;
-      pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%lu * %ld)'",
-                      left_i,
-                      right_i);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "BIGINT UNSIGNED", expr_str);
-    }
-    res.set_uint64(left_i * right_i);
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMul::mul_double(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d * right_d);
-    if (OB_UNLIKELY(is_double_out_of_range(res.get_double()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%e * %e)'",
-                      left_d,
-                      right_d);
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-      res.set_null();
-    }
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprMul::mul_double_no_overflow(ObObj &res,
-                                      const ObObj &left,
-                                      const ObObj &right,
-                                      ObIAllocator *,
-                                      ObScale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    double left_d = left.get_double();
-    double right_d = right.get_double();
-    res.set_double(left_d * right_d);
-  }
-  return ret;
-}
-
-int ObExprMul::mul_number(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  number::ObNumber res_nmb;
-  if (OB_UNLIKELY(NULL == allocator)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("allocator is null", K(ret));
-  } else if (OB_FAIL(left.get_number().mul_v3(right.get_number(), res_nmb, *allocator))) {
-  } else {
-    ObObjType res_type = res.get_type();
-    if (ObUNumberType == res_type) {
-      res.set_unumber(res_nmb);
-    } else {
-      res.set_number(res_nmb);
-    }
-  }
-  UNUSED(scale);
-  return ret;
-}
 
 struct ObIntIntBatchMulRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
 {
@@ -1058,10 +845,10 @@ int ObExprMul::cg_expr(ObExprCGCtx &op_cg_ctx,
   OB_ASSERT(NULL != rt_expr.args_);
   OB_ASSERT(NULL != rt_expr.args_[0]);
   OB_ASSERT(NULL != rt_expr.args_[1]);
-  const common::ObObjType left = rt_expr.args_[0]->datum_meta_.type_;
-  const common::ObObjType right = rt_expr.args_[1]->datum_meta_.type_;
-  const ObObjTypeClass left_tc = ob_obj_type_class(left);
-  const ObObjTypeClass right_tc = ob_obj_type_class(right);
+  const common::SqlValueType left = rt_expr.args_[0]->datum_meta_.type_;
+  const common::SqlValueType right = rt_expr.args_[1]->datum_meta_.type_;
+  const SqlTypeClass left_tc = sql_type_class(left);
+  const SqlTypeClass right_tc = sql_type_class(right);
 
   rt_expr.inner_functions_ = NULL;
   rt_expr.may_not_need_raw_check_ = false;

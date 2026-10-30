@@ -40,7 +40,7 @@ struct ObSpillColumnDesc
     : type_(common::ObMaxType), scale_(0), precision_(0)
   {}
 
-  common::ObObjType type_;
+  common::SqlValueType type_;
   int16_t scale_;
   int16_t precision_;
   TO_STRING_KV(K_(type), K_(scale), K_(precision));

@@ -19,7 +19,11 @@
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "share/rc/ob_server_runtime.h"
 #include "data_plane/access/ob_tablet_scan.h"
+#include "data_plane/blocksstable/ob_storage_datum.h"
 #include "src/sql/engine/ob_exec_context.h"
+
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
 
 namespace oceanbase
 {
@@ -55,6 +59,8 @@ int ObDASScanIter::inner_reuse()
   } else if (OB_FAIL(tsc_service_->reuse_scan_iter(scan_param_->need_switch_param_, result_))) {
   } else {
     scan_param_->key_ranges_.reuse();
+    scan_param_->datum_lookup_keys_ = nullptr;
+    datum_lookup_keys_.reuse();
     scan_param_->mbr_filters_.reuse();
   }
   return ret;
@@ -68,6 +74,10 @@ int ObDASScanIter::inner_release()
     }
     result_ = nullptr;
   }
+  if (nullptr != scan_param_) {
+    scan_param_->datum_lookup_keys_ = nullptr;
+  }
+  datum_lookup_keys_.reset();
   return ret;
 }
 
@@ -162,23 +172,23 @@ int ObDASScanIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
   if (OB_ISNULL(eval_ctx) || OB_UNLIKELY(rowkey_exprs.empty()) || OB_ISNULL(lookup_ctdef) || OB_ISNULL(alloc)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObj *obj_ptr = nullptr;
+    DatumValue *obj_ptr = nullptr;
     void *buf = nullptr;
     int64_t rowkey_cnt = rowkey_exprs.count();
-    if (OB_ISNULL(buf = alloc->alloc(sizeof(ObObj) * rowkey_cnt))) {
+    if (OB_ISNULL(buf = alloc->alloc(sizeof(DatumValue) * rowkey_cnt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      obj_ptr = new (buf) ObObj(rowkey_cnt);
+      obj_ptr = new (buf) DatumValue[rowkey_cnt];
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; i++) {
-      ObObj tmp_obj;
+      DatumValue tmp_obj;
       const ObExpr *expr = rowkey_exprs.at(i);
       ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx);
       if (OB_UNLIKELY(T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_)) {
         // skip.
-      } else if (OB_FAIL(col_datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(ob_write_obj(*alloc, tmp_obj, obj_ptr[i]))) {
+      } else if (OB_FAIL(project_datum_value_view(col_datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+      } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], *alloc))) {
       }
     }
 
@@ -193,6 +203,80 @@ int ObDASScanIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
     }
   }
 
+  return ret;
+}
+
+int ObDASScanIter::set_scan_datum_rowkey(ObEvalCtx *eval_ctx,
+                                       const ObIArray<ObExpr *> &rowkey_exprs,
+                                       const ObDASScanCtDef *lookup_ctdef,
+                                       ObIAllocator *alloc,
+                                       int64_t group_id)
+{
+  if (OB_ISNULL(eval_ctx) || rowkey_exprs.empty() || OB_ISNULL(lookup_ctdef)
+      || OB_ISNULL(alloc) || OB_ISNULL(scan_param_)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  // Expressions and their metadata are fixed for this lookup batch.
+  if (nullptr != scan_param_->datum_lookup_keys_) {
+    return add_datum_lookup_key(*eval_ctx, rowkey_exprs, *alloc, group_id);
+  }
+  // Full/LOB datums and pseudo columns keep the existing typed adapter.
+  // A real table point key otherwise has identical SQL/storage payloads;
+  // collation and comparison metadata already live in table_param_.
+  bool use_datums = !is_virtual_table(lookup_ctdef->ref_table_id_);
+  for (int64_t i = 0; use_datums && i < rowkey_exprs.count(); ++i) {
+    const ObExpr &expr = *rowkey_exprs.at(i);
+    use_datums = expr.type_ != T_PSEUDO_GROUP_ID
+                 && expr.type_ != T_PSEUDO_ROW_TRANS_INFO_COLUMN
+                 && expr.obj_datum_map_ != OBJ_DATUM_EXTEND
+                 && expr.obj_datum_map_ < OBJ_DATUM_MAPPING_MAX
+                 && !expr.obj_meta_.is_lob_storage()
+                 && !(expr.obj_meta_.is_decimal_int() && expr.obj_meta_.get_scale() < 0);
+  }
+  if (use_datums) {
+    return add_datum_lookup_key(*eval_ctx, rowkey_exprs, *alloc, group_id);
+  }
+  return set_scan_rowkey(eval_ctx, rowkey_exprs, lookup_ctdef, alloc, group_id);
+}
+
+int ObDASScanIter::add_datum_lookup_key(ObEvalCtx &eval_ctx,
+                                      const ObIArray<ObExpr *> &rowkey_exprs,
+                                      ObIAllocator &allocator,
+                                      int64_t group_id)
+{
+  int ret = OB_SUCCESS;
+  storage::DatumLookupKey key;
+  key.count_ = rowkey_exprs.count();
+  // Match ObNewRange's group_idx assignment (the index-order bits are zero).
+  key.group_id_ = group_id & ~static_cast<int64_t>(UINT32_MAX);
+  void *buf = nullptr;
+  if (OB_UNLIKELY(!scan_param_->key_ranges_.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(buf = allocator.alloc(sizeof(blocksstable::ObStorageDatum) * key.count_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    key.datums_ = static_cast<blocksstable::ObStorageDatum *>(buf);
+    for (int64_t i = 0; OB_SUCC(ret) && i < key.count_; ++i) {
+      // Construct and fill each cell together, so initialization overwritten
+      // by the copy can be eliminated without a separate constructor loop.
+      blocksstable::ObStorageDatum &dest = *new (key.datums_ + i) blocksstable::ObStorageDatum();
+      const ObDatum &datum = rowkey_exprs.at(i)->locate_expr_datum(eval_ctx);
+      if (!datum.is_null() && !datum.is_ext() && datum.len_ == sizeof(uint64_t)) {
+        // Integer keys (and other eight-byte payloads) need one fixed-size
+        // copy, without dispatching through the generic memcpy routine.
+        dest.reuse();
+        dest.pack_ = datum.pack_;
+        MEMCPY(dest.buf_, datum.ptr_, sizeof(uint64_t));
+      } else if (OB_FAIL(dest.deep_copy_from_datum(datum, allocator))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(datum_lookup_keys_.push_back(key))) {
+    }
+    if (OB_SUCC(ret)) {
+      scan_param_->datum_lookup_keys_ = &datum_lookup_keys_;
+      scan_param_->is_get_ = true;
+    }
+  }
   return ret;
 }
 

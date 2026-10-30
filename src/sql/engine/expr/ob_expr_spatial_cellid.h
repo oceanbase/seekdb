@@ -31,9 +31,6 @@ public:
   virtual int calc_result_type1(ObExprResType &type,
                                 ObExprResType &type1,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  virtual int calc_result1(common::ObObj &result,
-                           const common::ObObj &obj,
-                           common::ObExprCtx &expr_ctx) const;
   static int eval_spatial_cellid(const ObExpr &expr,
                                  ObEvalCtx &ctx,
                                  ObDatum &res);

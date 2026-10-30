@@ -47,7 +47,7 @@ inline int ObExprDate::calc_result_type1(ObExprResType &type,
 {
   UNUSED(type_ctx);
   UNUSED(type1);
-  const ObObjType res_type = type_ctx.enable_mysql_compatible_dates() ?
+  const SqlValueType res_type = type_ctx.enable_mysql_compatible_dates() ?
       common::ObMySQLDateType : common::ObDateType;
   type.set_type(res_type);
   type.set_scale(common::DEFAULT_SCALE_FOR_DATE);

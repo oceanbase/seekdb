@@ -2,7 +2,8 @@
 
 basename=`pwd`
 
-wget "http://11.166.86.153:8877/mytest10.jar" >/dev/null 2>&1 -O jar/mytest.jar
+echo "The legacy test harness is not bundled or downloaded by update_local_bin.sh."
+echo "Set MYTEST_JAR to a compatible external harness when running ./mytest."
 
 if [ ! -d "./bin" ]
 then

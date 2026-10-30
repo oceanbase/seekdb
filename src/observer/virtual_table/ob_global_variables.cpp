@@ -61,14 +61,14 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
   } else {
     if (!start_to_read_) {
       const int64_t col_count = output_column_ids_.count();
-      ObObj *cells = cur_row_.cells_;
+      DatumValue *cells = cur_row_.cells_;
       ObSysVarFactory sys_var_fac;
       for (int64_t i = 0; OB_SUCC(ret) && i < sys_variable_schema_->get_sysvar_count(); ++i) {
         const ObSysVarSchema *sysvar_schema = sys_variable_schema_->get_sysvar_schema(i);
         if (sysvar_schema != NULL) {
           ObSysVarClassType var_id = share::ObSysVarMeta::find_sys_var_id_by_name(sysvar_schema->get_name(), true);
           ObBasicSysVar *sysvar = NULL;
-          ObObj value;
+          DatumValue value;
           const common::ObDataTypeCastParams dtc_params
                     = ObBasicSessionInfo::create_dtc_params(session_);
           if (SYS_VAR_INVALID == var_id) {
@@ -76,9 +76,9 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
           } else if (OB_FAIL(sys_var_fac.create_sys_var(var_id, sysvar)) || OB_ISNULL(sysvar)) {
             ret = COVER_SUCC(OB_ERR_UNEXPECTED);
             SERVER_LOG(WARN, "create system variable failed", K(ret), K(var_id));
-          } else if (OB_FAIL(sysvar_schema->get_value(allocator_, dtc_params, value))) {
+          } else if (OB_FAIL(ObSysVarUtils::get_schema_value(*sysvar_schema, dtc_params, *allocator_, value))) {
+          } else if (OB_FAIL(sysvar->set_value(value, *allocator_))) {
           } else {
-            sysvar->set_value(value);
             sysvar->set_data_type(sysvar_schema->get_data_type());
             sysvar->set_flags(sysvar_schema->get_flags());
           }
@@ -94,7 +94,7 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
               uint64_t col_id = output_column_ids_.at(j);
               switch(col_id) {
                 case OB_APP_MIN_COLUMN_ID: {
-                  cells[cell_idx].set_varchar(sysvar->get_name());
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sysvar->get_name()) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                           ObCharset::get_default_charset()));
                   break;
@@ -103,18 +103,18 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
                   //deal with read_only
                   if (sysvar->get_type() == SYS_VAR_READ_ONLY) {
                     if (sys_variable_schema_->is_read_only()) {
-                      cells[cell_idx].set_varchar("ON");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "ON") : ret);
                     } else {
-                      cells[cell_idx].set_varchar("OFF");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "OFF") : ret);
                     }
                   } else if (share::SYS_VAR_VERSION == sysvar->get_type()
                              && 0 == sysvar->get_value().get_string_len()) {
-                    cells[cell_idx].set_varchar(ObSpecialSysVarValues::version_);
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObSpecialSysVarValues::version_) : ret);
                   } else {
                     ObString show_str;
                     if (OB_FAIL(sysvar->to_show_str(*allocator_, *session_, show_str))) {
                     } else {
-                      cells[cell_idx].set_varchar(show_str);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, show_str) : ret);
                     }
                   }
                   if (OB_SUCC(ret)) {

@@ -64,24 +64,6 @@ int ObExprTimeDiff::get_diff_value_with_ob_time(ObTime &ot1,
   return ret;
 }
 
-int ObExprTimeDiff::get_diff_value(const ObObj &obj1,
-                                   const ObObj &obj2,
-                                   const ObTimeZoneInfo *tz_info,
-                                   int64_t &diff)
-{
-  int ret = OB_INVALID_DATE_VALUE;
-  ObTime ot1;
-  ObTime ot2;
-  if (OB_LIKELY(OB_SUCCESS == ob_obj_to_ob_time_without_date(obj1, tz_info, ot1)
-             && OB_SUCCESS == ob_obj_to_ob_time_without_date(obj2, tz_info, ot2))) {
-    ret = get_diff_value_with_ob_time(ot1, ot2, tz_info, diff);
-  } /*else ret will be OB_INVALID_DATE_VALUE itself.
-      NOT overwritten by last call for ob_obj_to_ob_time_without_date.
-      by design*/
-  return ret;
-}
-
-
 int ObExprTimeDiff::cg_expr(ObExprCGCtx &op_cg_ctx,
                               const ObRawExpr &raw_expr,
                               ObExpr &rt_expr) const

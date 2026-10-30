@@ -118,7 +118,7 @@ public:
                                  sqlclient::ObISQLConnection *conn,
                                  const common::ObIArray<ObOptColumnStat *> &column_stats,
                                  bool only_update_col_stat = false,
-                                 const ObObjPrintParams &print_params = ObObjPrintParams());
+                                 const ObValuePrintParams &print_params = ObValuePrintParams());
 
 
   int delete_table_stat(const uint64_t ref_id,
@@ -148,7 +148,7 @@ public:
                   ObIArray<ObOptColumnStat *> &column_stats,
                   const int64_t current_time,
                   const bool is_index_stat,
-                  const ObObjPrintParams &print_params);
+                  const ObValuePrintParams &print_params);
 
   /**  @brief  External interface for obtaining row statistics information */
   virtual int get_table_stat(const ObOptTableStat::Key &key,

@@ -72,9 +72,9 @@ public:
     uint64_t idx_;
     ObTempExpr *expr_;
   };
-  ObObj obj_;
+  common::DatumValue value_;
 
-  ObObjType dst_type_;
+  SqlValueType dst_type_;
   ObCollationType dst_cs_type_;
   uint16_t enum_set_values_cnt_;
   common::ObString *enum_set_values_;
@@ -193,17 +193,22 @@ struct ObPLFuncValueNode : public PartitionCalcNode
 public:
   struct ParamValuePair
   {
-    OB_UNIS_VERSION_V(1);
+    static const int64_t UNIS_VERSION = 1;
+    int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+    int serialize_(char *buf, int64_t buf_len, int64_t &pos) const;
+    int64_t get_serialize_size() const;
+    int64_t get_serialize_size_() const;
+    int deserialize(common::ObIAllocator &owner, const char *buf, int64_t data_len, int64_t &pos);
   public:
-    ParamValuePair(int64_t param_idx, const common::ObObj obj_val)
-        : param_idx_(param_idx), obj_value_(obj_val)
+    ParamValuePair(int64_t param_idx, const common::DatumValue &value)
+        : param_idx_(param_idx), value_(value)
     { }
-    ParamValuePair() : param_idx_(-1), obj_value_()
+    ParamValuePair() : param_idx_(-1), value_()
     { }
     virtual ~ParamValuePair() {}
-    TO_STRING_KV(K_(param_idx), K_(obj_value));
+    TO_STRING_KV(K_(param_idx), K_(value));
     int64_t param_idx_;
-    common::ObObj obj_value_;
+    common::DatumValue value_;
   };
 
   ObPLFuncValueNode(common::ObIAllocator &allocator)
@@ -396,9 +401,11 @@ public:
                                RowDesc &row_desc);
     inline void set_column_cnt(int64_t column_cnt) { column_cnt_ = column_cnt; }
     int calc_part_row(ObExecContext &ctx,
-                      const common::ObNewRow &input_row,
-                      common::ObNewRow *&part_row) const;
-    void project_part_row(share::schema::ObPartitionLevel part_level, common::ObNewRow &part_row) const;
+                      const common::ObIArray<common::DatumValue> &input_row,
+                      common::ObIArray<common::DatumValue> *&part_row) const;
+    int project_part_row(share::schema::ObPartitionLevel part_level,
+                         const common::ObIArray<common::DatumValue> &input,
+                         common::ObIArray<common::DatumValue> &output) const;
     TO_STRING_KV(K_(column_cnt),
                  "part_projector", common::ObArrayWrap<int32_t>(part_projector_, part_projector_size_),
                  "subpart_projector", common::ObArrayWrap<int32_t>(subpart_projector_, subpart_projector_size_));
@@ -830,7 +837,7 @@ private:
                                       const common::ObIArray<ObObjectID> *part_ids = NULL) const;
 
   int calc_partition_id_by_func_value(ObDASTabletMapper &tablet_mapper,
-                                      const common::ObObj &func_value,
+                                      const common::DatumValue &func_value,
                                       const bool calc_hash,
                                       common::ObIArray<common::ObTabletID> &tablet_ids,
                                       common::ObIArray<common::ObObjectID> &partition_ids,
@@ -998,6 +1005,13 @@ private:
                                common::ObIArray<common::ObObjectID> &partition_ids,
                                const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
 
+  int calc_partition_id_by_row(ObExecContext &exec_ctx,
+                               ObDASTabletMapper &tablet_mapper,
+                               const common::ObIArray<common::DatumValue> &row,
+                               common::ObIArray<common::ObTabletID> &tablet_ids,
+                               common::ObIArray<common::ObObjectID> &partition_ids,
+                               const common::ObIArray<common::ObObjectID> *part_ids = NULL) const;
+
   int calc_partition_ids_by_rowkey(ObExecContext &exec_ctx,
                                    ObDASTabletMapper &tablet_mapper,
                                    const common::ObIArray<ObRowkey> &rowkeys,
@@ -1006,23 +1020,23 @@ private:
 
   int init_row(common::ObIAllocator &allocator,
                const int64_t column_num,
-               common::ObNewRow &row) const;
+               common::ObIArray<common::DatumValue> &row) const;
 
 public:
   static int se_calc_value_item(ObCastCtx cast_ctx,
                                 ObExecContext &exec_ctx,
                                 const ParamStore &params,
                                 const ValueItemExpr &vie,
-                                const ObNewRow &input_row,
-                                ObObj &value);
+                                const common::ObIArray<common::DatumValue> &input_row,
+                                common::DatumValue &value);
 private:
   int se_calc_value_item_row(common::ObExprCtx &expr_ctx,
                              ObExecContext &exec_ctx,
                              const ISeValueItemExprs &vies,
                              const int64_t key_count,
                              const int64_t value_idx,
-                             common::ObNewRow &input_row,
-                             common::ObNewRow &output_row) const;
+                             const common::ObIArray<common::DatumValue> &input_row,
+                             common::ObIArray<common::DatumValue> &output_row) const;
 
   int set_partition_calc_node(const ObDMLStmt &stmt,
                              const common::ObIArray<ObRawExpr*> &filter_exprs,
@@ -1051,15 +1065,16 @@ private:
                                    bool &hit,
                                    const share::schema::ObTableSchema *table_schema);
   int get_part_col_type(const ObRawExpr *expr,
-                        ObObjType &col_type,
+                        SqlValueType &col_type,
                         ObCollationType &collation_type,
                         const share::schema::ObTableSchema *table_schema,
                         bool &is_valid);
-  int convert_row_obj_type(const ObNewRow &from,
-                           ObNewRow &to,
-                           ObObjType col_type,
+  int convert_partition_value_type(const common::ObIArray<common::DatumValue> &from,
+                           common::ObIArray<common::DatumValue> &to,
+                           SqlValueType col_type,
                            ObCollationType collation_type,
                            const common::ObDataTypeCastParams &dtc_params,
+                           common::ObIAllocator &owner,
                            bool &is_all,
                            bool &is_none) const;
 
@@ -1144,9 +1159,9 @@ private:
   ObTempExpr *se_sub_gen_col_expr_;
 
   common::ObFixedArray<common::ObObjectID, common::ObIAllocator> part_hint_ids_;
-  ObObjType part_col_type_;
+  SqlValueType part_col_type_;
   ObCollationType part_collation_type_;
-  ObObjType subpart_col_type_;
+  SqlValueType subpart_col_type_;
   ObCollationType subpart_collation_type_;
   bool is_in_hit_;
   PartProjector part_projector_;

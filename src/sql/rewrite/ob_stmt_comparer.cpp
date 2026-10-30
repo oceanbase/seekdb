@@ -276,8 +276,7 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
         bret = false;
       } else if (ignore_param_) {
         bret = ObExprEqualCheckContext::compare_const(left, right);
-      } else if (left.get_param().is_equal(
-                   right.get_param(), CS_TYPE_BINARY)) {
+      } else if (common::binary_equal_datum_values(left.get_param(), right.get_param())) {
         ObPCParamEqualInfo info;
         info.first_param_idx_ = left.get_value().get_unknown();
         info.second_param_idx_ = right.get_value().get_unknown();
@@ -292,20 +291,23 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
         const ObConstRawExpr &unkonwn_expr = left.get_value().is_unknown() ? left : right;
         ObPCConstParamInfo const_param_info;
         if (OB_FAIL(const_param_info.const_idx_.push_back(unkonwn_expr.get_value().get_unknown()))) {
-        } else if (OB_FAIL(const_param_info.const_params_.push_back(unkonwn_expr.get_param()))) {
+        } else if (OB_ISNULL(unkonwn_expr.get_expr_factory())) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(const_param_info.add_constant(
+                     unkonwn_expr.get_param(), unkonwn_expr.get_expr_factory()->get_allocator()))) {
         } else if (OB_FAIL(const_param_info_.push_back(const_param_info))) {
         }
       }
     } else {
-      bret = left.get_value().is_equal(right.get_value(), CS_TYPE_BINARY);
+      bret = common::binary_equal_datum_values(left.get_value(), right.get_value());
     }
   } else if (OB_SUCC(ret) && ora_numeric_cmp_for_grouping_items_) {
     // select (a - 1) from t group by grouping sets(a, 1);
     // `1` parsed as decimal int in `a - 1`
     // `1' parsed as number in grouping sets
     // special comparision is needed here to replace const `1`
-    const ObObj l_obj = left.get_value().is_unknown() ? left.get_param() : left.get_value();
-    const ObObj r_obj = right.get_value().is_unknown() ? right.get_param() : right.get_value();
+    const DatumValue l_obj = left.get_value().is_unknown() ? left.get_param() : left.get_value();
+    const DatumValue r_obj = right.get_value().is_unknown() ? right.get_param() : right.get_value();
     if ((l_obj.is_decimal_int() && r_obj.is_number())
         || (l_obj.is_number() && r_obj.is_decimal_int())) {
       ObNumber l_nmb, r_nmb;

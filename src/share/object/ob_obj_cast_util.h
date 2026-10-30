@@ -214,7 +214,7 @@ OB_INLINE int numeric_upper_check(const InType in_val,
 }
 
 template <typename InType>
-OB_INLINE int int_range_check(const ObObjType out_type,
+OB_INLINE int int_range_check(const SqlValueType out_type,
                               const InType in_val,
                               int64_t &out_val)
 {
@@ -222,20 +222,20 @@ OB_INLINE int int_range_check(const ObObjType out_type,
 }
 
 template <typename InType>
-OB_INLINE int int_upper_check(const ObObjType out_type,
+OB_INLINE int int_upper_check(const SqlValueType out_type,
                               InType in_val,
                               int64_t &out_val)
 {
   return numeric_upper_check(in_val, INT_MAX_VAL[out_type], out_val);
 }
 
-OB_INLINE int uint_upper_check(const ObObjType out_type, uint64_t &out_val)
+OB_INLINE int uint_upper_check(const SqlValueType out_type, uint64_t &out_val)
 {
   return numeric_upper_check(out_val, UINT_MAX_VAL[out_type], out_val);
 }
 
 template <typename InType>
-OB_INLINE int uint_range_check(const ObObjType out_type,
+OB_INLINE int uint_range_check(const SqlValueType out_type,
                                const InType in_val,
                                uint64_t &out_val)
 {
@@ -244,7 +244,7 @@ OB_INLINE int uint_range_check(const ObObjType out_type,
 }
 
 template <typename InType, typename OutType>
-OB_INLINE int real_range_check(const ObObjType out_type,
+OB_INLINE int real_range_check(const SqlValueType out_type,
                                const InType in_val,
                                OutType &out_val)
 {
@@ -298,7 +298,7 @@ int check_convert_str_err(const char *str,
 // decimal(aka NumberType) cast to double/float precision increment. If it is an unsigned decimal,
 // don’t need to increment precision, otherwise increment 1 to cover sign bit. If scale is
 // equal to 0, don’t need to increment precision, otherwise increment 1 to cover dot bit.
-inline int16_t decimal_to_double_precision_inc(const ObObjType type, const ObScale s)
+inline int16_t decimal_to_double_precision_inc(const SqlValueType type, const ObScale s)
 {
   return ((type == ObUNumberType) ? 0 : 1) + ((s > 0) ? 1 : 0);
 }

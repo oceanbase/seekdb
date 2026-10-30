@@ -566,7 +566,7 @@ public:
            || OB_EAGAIN == ret || OB_LOG_STREAM_ACCESS_NOT_READY == ret || OB_TRANS_CTX_NOT_EXIST == ret;
   }
 
-  static int check_can_convert_character(const ObObjMeta &obj_meta, const bool is_domain_index, const bool is_string_lob)
+  static int check_can_convert_character(const SqlTypeMeta &obj_meta, const bool is_domain_index, const bool is_string_lob)
   {
     return (obj_meta.is_string_type() || obj_meta.is_enum_or_set()) &&
             (is_string_lob || (CS_TYPE_BINARY != obj_meta.get_collation_type() && !is_domain_index));
@@ -627,7 +627,7 @@ public:
       ObSqlString &sql_string);
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
-      const ObObjMeta &obj_meta);
+      const SqlTypeMeta &obj_meta);
   static int64_t calc_inner_sql_execute_timeout()
   {
     return max(OB_MAX_DDL_BUILD_TIMEOUT, config::_ob_ddl_timeout());
@@ -703,7 +703,7 @@ public:
 
   static int get_table_lob_col_idx(const ObTableSchema &table_schema, ObIArray<uint64_t> &lob_col_idxs);
 
-  static bool need_reshape(const ObObjMeta &col_type);
+  static bool need_reshape(const SqlTypeMeta &col_type);
   static bool is_vector_index_complement(const ObIndexType index_type);
   static int64_t generate_idempotent_value(
       const int64_t slice_count,

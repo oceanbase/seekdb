@@ -146,12 +146,12 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case OB_APP_MIN_COLUMN_ID + 0: {// tablet_id
-        cur_row_.cells_[i].set_int(key.tablet_id_.id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, key.tablet_id_.id()) : ret);
         break;
       }
       
       case OB_APP_MIN_COLUMN_ID + 1: {// tid
-        cur_row_.cells_[i].set_int(event.thread_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, event.thread_id()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 2: {// tname
@@ -159,7 +159,7 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, "%s", event.thread_name());
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 3: {// trace
@@ -167,11 +167,11 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, event.trace_id());
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 4: {// timestamp
-        cur_row_.cells_[i].set_timestamp(event.timestamp());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cur_row_.cells_, cur_row_.count_, i, event.timestamp()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 5: {// event
@@ -179,7 +179,7 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, "%s", event.event_name());
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 6: {// info
@@ -187,7 +187,7 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, event.info());
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 7: {// user_key
@@ -195,7 +195,7 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, event.key());
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 8: {// writer_type
@@ -203,27 +203,27 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.writer_type()));
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 9: {// writer_id
-        cur_row_.cells_[i].set_int(event.writer_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, event.writer_id()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 10: {// seq_no
-        cur_row_.cells_[i].set_int(event.seq_no().get_seq());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, event.seq_no().get_seq()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 11: {// redo_scn
-        cur_row_.cells_[i].set_uint64(event.redo_scn().get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, event.redo_scn().get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 12: {// end_scn
-        cur_row_.cells_[i].set_uint64(event.end_scn().get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, event.end_scn().get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 13: {// trans_version
-        cur_row_.cells_[i].set_uint64(event.trans_version().get_val_for_inner_table_field());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, event.trans_version().get_val_for_inner_table_field()) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 14: {// node_type
@@ -231,7 +231,7 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.node_type()));
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 15: {// state
@@ -239,7 +239,7 @@ int ObAllVirtualMdsEventHistory::convert_event_info_to_row_(const MdsEventKey &k
         databuff_printf(buffer, buffer_size, pos, "%s", mds::obj_to_string(event.state()));
         buffer += pos;
         buffer_size -= pos;
-        cur_row_.cells_[i].set_string(ObLongTextType, ObString(pos, buffer - pos));
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cur_row_.cells_, cur_row_.count_, i, ObLongTextType, ObString(pos, buffer - pos)) : ret);
         break;
       }
     }
@@ -254,16 +254,16 @@ int ObAllVirtualMdsEventHistory::get_primary_key_ranges_()
   if (key_ranges_.count() >= 1) {
     for (int64_t i = 0; OB_SUCC(ret) && i < key_ranges_.count(); i++) {
       ObNewRange &key_range = key_ranges_.at(i);
-      if (OB_UNLIKELY(key_range.get_start_key().get_obj_cnt() < 1
-                      || key_range.get_end_key().get_obj_cnt() < 1)) {
+      if (OB_UNLIKELY(key_range.get_start_key().get_value_count() < 1
+                      || key_range.get_end_key().get_value_count() < 1)) {
         ret = OB_ERR_UNEXPECTED;
         MDS_LOG(ERROR, "unexpected  # of rowkey columns",
                   K(ret),
-                  "size of start key", key_range.get_start_key().get_obj_cnt(),
-                  "size of end key", key_range.get_end_key().get_obj_cnt());
+                  "size of start key", key_range.get_start_key().get_value_count(),
+                  "size of end key", key_range.get_end_key().get_value_count());
       } else {
-        ObObj tablet_obj_low = (key_range.get_start_key().get_obj_ptr()[0]);
-        ObObj tablet_obj_high = (key_range.get_end_key().get_obj_ptr()[0]);
+        const DatumValue &tablet_obj_low = (key_range.get_start_key().get_values()[0]);
+        const DatumValue &tablet_obj_high = (key_range.get_end_key().get_values()[0]);
 
         ObTabletID tablet_low = tablet_obj_low.is_min_value() ? ObTabletID(0) : ObTabletID(tablet_obj_low.get_uint64());
         ObTabletID tablet_high = tablet_obj_high.is_max_value() ? ObTabletID(UINT64_MAX) : ObTabletID(tablet_obj_high.get_uint64());

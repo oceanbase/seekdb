@@ -52,7 +52,8 @@ private:
 
 class ObSelectIntoSpec : public ObOpSpec
 {
-  OB_UNIS_VERSION_V(1);
+  // Version 2 serializes typed Datum payloads and metadata separately.
+  OB_UNIS_VERSION_V(2);
 public:
   ObSelectIntoSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
     : ObOpSpec(alloc, type),
@@ -77,15 +78,15 @@ public:
 
   ObItemType into_type_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> user_vars_;
-  common::ObObj outfile_name_;
-  common::ObObj field_str_;
-  common::ObObj line_str_;
-  common::ObObj closed_cht_;
+  common::DatumValue outfile_name_;
+  common::DatumValue field_str_;
+  common::DatumValue line_str_;
+  common::DatumValue closed_cht_;
   bool is_optional_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> select_exprs_;
   bool is_single_;
   int64_t max_file_size_;
-  common::ObObj escaped_cht_;
+  common::DatumValue escaped_cht_;
   common::ObCollationType cs_type_;
   int64_t parallel_;
   int64_t buffer_size_;
@@ -203,15 +204,17 @@ private:
   int into_dumpfile(ObExternalFileWriter *data_writer);
   int into_outfile(ObExternalFileWriter *data_writer);
   int into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFileWriter *data_writer);
-  int extract_fisrt_wchar_from_varhcar(const ObObj &obj, int32_t &wchar);
+  int extract_fisrt_wchar_from_varhcar(const common::ObString &str,
+                                       common::ObCollationType coll_type,
+                                       int32_t &wchar);
   int print_wchar_to_buf(char *buf,
                          const int64_t buf_len,
                          int64_t &pos,
                          int32_t wchar,
                          ObString &str,
                          ObCollationType coll_type);
-  int print_field(const ObObj &obj, ObCsvFileWriter &data_writer);
-  int print_lob_field(const ObObj &obj,
+  int print_field(const common::DatumValue &value, ObCsvFileWriter &data_writer);
+  int print_lob_field(const common::DatumValue &value,
                       const ObExpr &expr,
                       const ObDatum &datum,
                       ObCsvFileWriter &data_writer);
@@ -231,16 +234,25 @@ private:
                            int64_t &buf_len,
                            int64_t &pos,
                            int64_t str_len);
-  int write_obj_to_file(const ObObj &obj, ObCsvFileWriter &data_writer, bool need_escape = false);
-  int print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWriter &data_writer);
-  int print_normal_obj_without_escape(const ObObj &obj, ObCsvFileWriter &data_writer);
-  int print_json_to_json_buf(const ObObj &obj,
+  int write_value_to_file(const common::DatumValue &value,
+                          ObCsvFileWriter &data_writer,
+                          bool need_escape = false);
+  int write_raw_string_to_file(const common::ObString &value,
+                               ObCsvFileWriter &data_writer);
+  int print_value_with_escape(const common::DatumValue &value,
+                              ObCsvFileWriter &data_writer);
+  int print_complex_value_with_escape(const common::DatumValue &value,
+                                      ObCsvFileWriter &data_writer,
+                                      bool need_escape);
+  int print_normal_value_without_escape(const common::DatumValue &value,
+                                        ObCsvFileWriter &data_writer);
+  int print_json_to_json_buf(const common::DatumValue &value,
                              char* &buf,
                              int64_t &buf_len,
                              int64_t &pos,
                              ObCsvFileWriter &data_writer);
   int write_single_char_to_file(const char *wchar, ObCsvFileWriter &data_writer);
-  int write_lob_to_file(const ObObj &obj,
+  int write_lob_to_file(const common::DatumValue &value,
                         const ObExpr &expr,
                         const ObDatum &datum,
                         ObCsvFileWriter &data_writer);
@@ -266,9 +278,9 @@ private:
 private:
   int64_t top_limit_cnt_;
   bool is_first_;
-  ObObj field_str_;
-  ObObj line_str_;
-  ObObj file_name_;
+  common::ObString field_str_;
+  common::ObString line_str_;
+  common::DatumParameter file_name_;
   common::ObCollationType cs_type_;
   ObString basic_url_; // url without partition expr
   ObExternalFileWriter* data_writer_;
@@ -280,7 +292,7 @@ private:
   bool has_lob_;
   bool has_json_;
   bool has_coll_;
-  common::ObObjPrintParams print_params_;
+  common::ObValuePrintParams print_params_;
   ObEscapePrinter escape_printer_;
   char *json_buf_;  // json needs one more buffer to hold the string before escaping
   int64_t json_buf_len_;

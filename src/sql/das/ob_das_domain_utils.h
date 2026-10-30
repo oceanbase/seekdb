@@ -35,8 +35,8 @@ namespace sql
 class ObFTIndexRowCache final
 {
 public:
-  static ObObjDatumMapType FTS_INDEX_TYPES[4];
-  static ObObjDatumMapType FTS_DOC_WORD_TYPES[4];
+  static SqlValueDatumMapType FTS_INDEX_TYPES[4];
+  static SqlValueDatumMapType FTS_DOC_WORD_TYPES[4];
   static ObExprOperatorType FTS_INDEX_EXPR_TYPE[4];
   static ObExprOperatorType FTS_DOC_WORD_EXPR_TYPE[4];
 
@@ -46,7 +46,7 @@ public:
       const bool is_fts_index_aux,
       const common::ObString &parser_name,
       const common::ObString &parser_properties);
-  int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
+  int segment(const common::SqlTypeMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
@@ -182,7 +182,7 @@ public:
       ObDomainIndexRow &spat_rows);
   static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
                                          storage::ObFTParseHelper *helper,
-                                         const common::ObObjMeta &ft_obj_meta,
+                                         const common::SqlTypeMeta &ft_obj_meta,
                                          const ObDatum &doc_id_datum,
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
@@ -200,7 +200,7 @@ private:
   static int segment_and_calc_word_count(
       common::ObIAllocator &allocator,
       storage::ObFTParseHelper *helper,
-      const common::ObObjMeta &meta,
+      const common::SqlTypeMeta &meta,
       const ObString &fulltext,
       int64_t &doc_length,
       storage::ObFTWordMap &words_count);
@@ -301,12 +301,12 @@ private:
       const ObChunkDatumStore::StoredRow *store_row,
       int64_t &geo_idx,
       ObString &geo_wkb,
-      ObObjMeta &geo_meta) const;
+      SqlTypeMeta &geo_meta) const;
   int get_geo_wkb_for_update(
       const ObChunkDatumStore::StoredRow *store_row,
       int64_t &geo_idx,
       ObString &geo_wkb,
-      ObObjMeta &geo_meta) const;
+      SqlTypeMeta &geo_meta) const;
   common::ObISrsProvider *srs_provider_;
 };
 
@@ -379,11 +379,11 @@ protected:
   int get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store_row,
                         ObDatum &doc_id_datum,
                         ObString &ft,
-                        common::ObObjMeta &ft_meta);
+                        common::SqlTypeMeta &ft_meta);
   int get_ft_and_doc_id_for_update(const ObChunkDatumStore::StoredRow *store_row,
                                    ObDatum &doc_id_datum,
                                    ObString &ft,
-                                   common::ObObjMeta &ft_meta);
+                                   common::SqlTypeMeta &ft_meta);
   int generate_ft_word_rows(const ObChunkDatumStore::StoredRow *store_row);
   int scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store_row);
   int build_ft_word_row(blocksstable::ObDatumRow *src_row, blocksstable::ObDatumRow *&dest_row);

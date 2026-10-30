@@ -49,7 +49,7 @@ int ObConstEncoder::init(
   } else if (OB_FAIL(dict_encoder_.init(ctx, column_index, rows))) {
   } else {
     column_header_.type_ = type_;
-    sc_ = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
+    sc_ = get_store_class_map()[sql_type_class(column_type_.get_type())];
     ht_ = ctx.ht_;
   }
   return ret;

@@ -21,27 +21,6 @@
 #include "sql/session/ob_sql_session_info.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
-ObArithFunc ObExprIntDiv::int_div_funcs_[ObMaxTC] =
-{
-  NULL,
-  ObExprIntDiv::intdiv_int,//int
-  ObExprIntDiv::intdiv_uint,//uint
-  ObExprIntDiv::intdiv_number,//float
-  ObExprIntDiv::intdiv_number,//double
-  ObExprIntDiv::intdiv_number,//number
-  NULL,//datetime
-  NULL,//date
-  NULL,//time
-  NULL,//year
-  NULL,//string
-  NULL,//extend
-  NULL,//unknown
-  NULL,//text
-  NULL,//bit
-  NULL,//enumset
-  NULL,//enumsetinner
-};
-
 #define REPORT_OUT_OF_RANGE_ERROR(format, meta, left, right) \
   do \
   {\
@@ -68,8 +47,7 @@ ObExprIntDiv::ObExprIntDiv(ObIAllocator &alloc)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_int_div_result_type,
-                        ObExprResultTypeUtil::get_int_div_calc_type,
-                        int_div_funcs_)
+                        ObExprResultTypeUtil::get_int_div_calc_type)
 {}
 
 int ObExprIntDiv::calc_result_type2(ObExprResType &type, ObExprResType &type1, ObExprResType &type2, ObExprTypeCtx &type_ctx) const
@@ -84,109 +62,15 @@ int ObExprIntDiv::calc_result_type2(ObExprResType &type, ObExprResType &type1, O
 }
 
 
-int ObExprIntDiv::intdiv_int(ObObj &res, const ObObj &left, const ObObj &right, ObIAllocator *allocator, ObScale scale)
-{
-  UNUSED(allocator);
-  UNUSED(scale);
-  int ret = OB_SUCCESS;
-  int64_t left_i = left.get_int();
-  int64_t right_i = 0;
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (OB_UNLIKELY(left.get_type_class() != ObIntTC)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected operator type", "left type", left.get_type_class(), "right type", right.get_type_class());
-  } else {
-    if (OB_LIKELY(ObIntTC == right.get_type_class())) {
-      right_i = right.get_int();
-      if (OB_UNLIKELY(0 == right_i)) {
-        res.set_null();
-      } else if (OB_UNLIKELY(INT64_MIN == left_i && (-1) == right_i)) {
-        //INT64_MIN / -1 is undefined behavior in C language.
-        //report an error no matter in dml or ddl stmt to be compatible with mysql
-        REPORT_OUT_OF_RANGE_ERROR("'(%ld div %ld)'", "BIGINT", left_i, right_i);
-      } else {
-        int64_t res_i = left_i / right_i;
-        if (OB_UNLIKELY(is_int_int_out_of_range(left_i, right_i, res_i))) {
-          REPORT_OUT_OF_RANGE_ERROR("'(%ld div %ld)'", "BIGINT", left_i, right_i);
-        } else {
-          res.set_int(res_i);
-        }
-      }
-    } else if (ObUIntTC == right.get_type_class()) {
-      uint64_t left_ui = left_i < 0 ? -left_i : left_i;
-      uint64_t right_ui = right.get_uint64();
-      if (OB_UNLIKELY(0 == right_ui)) {
-        res.set_null();
-      } else {
-        uint64_t res_ui = left_ui / right_ui;
-        if (OB_UNLIKELY(left_i < 0 && res_ui > 0)){
-          REPORT_OUT_OF_RANGE_ERROR("'(%ld div %lu)'", "BIGINT UNSIGNED", left_i, right_ui);
-        } else  {
-          res.set_uint64(res_ui);
-        }
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected operator type", "left type", left.get_type_class(), "right type", right.get_type_class());
-    }
-  }
-  return ret;
-}
 
-int ObExprIntDiv::intdiv_uint(ObObj &res, const ObObj &left, const ObObj &right, ObIAllocator *allocator, ObScale scale)
-{
-  UNUSED(allocator);
-  UNUSED(scale);
-  int ret = OB_SUCCESS;
-  uint64_t left_ui = left.get_uint64();
-  uint64_t right_ui = 0;
-  char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-  int64_t pos = 0;
-  if (OB_UNLIKELY(left.get_type_class() != ObUIntTC)){
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected operator type", "left type", left.get_type_class(), "right type", right.get_type_class());
-  } else {
-    if (OB_LIKELY(ObUIntTC == right.get_type_class())) {
-      right_ui = right.get_uint64();
-      if (OB_UNLIKELY(0 == right_ui)) {
-        res.set_null();
-      } else {
-        uint64_t res_ui = left_ui / right_ui;
-        res.set_uint64(res_ui);
-      }
-    } else if (ObIntTC == right.get_type_class()){
-      int64_t right_i = right.get_int();
-      right_ui = right_i < 0 ? -right_i : right_i;
-      if (OB_UNLIKELY(0 == right_ui)) {
-        res.set_null();
-      } else {
-        uint64_t res_ui = left_ui / right_ui;
-        if (OB_UNLIKELY(right_i < 0 && res_ui > 0)) { // eg: 7 div -6
-          REPORT_OUT_OF_RANGE_ERROR("'(%lu div %ld)'", "BIGINT UNSIGNED", left_ui, right_i);
-        } else  {
-          res.set_uint64(res_ui);
-        }
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected operator type", "left type", left.get_type_class(), "right type", right.get_type_class());
-    }
-  }
-  return ret;
-}
 
-int ObExprIntDiv::intdiv_number(ObObj &res, const ObObj &left, const ObObj &right, ObIAllocator *allocator, ObScale scale)
-{
-  int ret=OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected operator type", "left type", left.get_type_class(), "right type", right.get_type_class());
-  } else if (OB_FAIL(ObExprDiv::calc(res, left, right, allocator, scale))) {
-  } else {/* do nothing */ }
-  return ret;
-}
 
+
+// Preserve the signed-division overflow predicate used by the Datum evaluator.
+static OB_INLINE bool is_int_int_out_of_range(int64_t val1, int64_t val2, int64_t res)
+{
+  return (val1 >> 63) && (val2 >> 63) && (res >> 63);
+}
 
 int ObExprIntDiv::div_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
 {
@@ -371,10 +255,10 @@ int ObExprIntDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   OB_ASSERT(NULL != rt_expr.args_);
   OB_ASSERT(NULL != rt_expr.args_[0]);
   OB_ASSERT(NULL != rt_expr.args_[1]);
-  const common::ObObjType left = rt_expr.args_[0]->datum_meta_.type_;
-  const common::ObObjType right = rt_expr.args_[1]->datum_meta_.type_;
-  const ObObjTypeClass left_tc = ob_obj_type_class(left);
-  const ObObjTypeClass right_tc = ob_obj_type_class(right);
+  const common::SqlValueType left = rt_expr.args_[0]->datum_meta_.type_;
+  const common::SqlValueType right = rt_expr.args_[1]->datum_meta_.type_;
+  const SqlTypeClass left_tc = sql_type_class(left);
+  const SqlTypeClass right_tc = sql_type_class(right);
 
   rt_expr.inner_functions_ = NULL;
   if (ObIntTC == left_tc) {

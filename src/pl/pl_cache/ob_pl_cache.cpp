@@ -770,7 +770,7 @@ bool ObPLObjectValue::match_params_info(const Ob2DArray<ObPlParamInfo,
 }
 
 int ObPLObjectValue::match_complex_type_info(const ObPlParamInfo &param_info,
-                                              const ObObjParam &param,
+                                              const DatumParameter &param,
                                               bool &is_same) const
 {
   int ret = OB_SUCCESS;
@@ -806,7 +806,7 @@ int ObPLObjectValue::match_complex_type_info(const ObPlParamInfo &param_info,
 }
 
 int ObPLObjectValue::match_param_info(const ObPlParamInfo &param_info,
-                                              const ObObjParam &param,
+                                              const DatumParameter &param,
                                               bool &is_same) const
 {
   int ret = OB_SUCCESS;
@@ -845,7 +845,7 @@ int ObPLObjectValue::match_param_info(const ObPlParamInfo &param_info,
   }
   if (is_same && param_info.flag_.need_to_check_bool_value_) {
     bool is_value_true = false;
-    if (OB_FAIL(ObObjEvaluator::is_true(param, is_value_true))) {
+    if (OB_FAIL(DatumBoolEvaluator::is_true(param, is_value_true))) {
     } else if (is_value_true != param_info.flag_.expected_bool_value_) {
       is_same = false;
     }

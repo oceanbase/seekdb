@@ -192,7 +192,7 @@ public:
 
   // key compare
   virtual int compare(const ObString& key, int& res) { return 0; }
-  ObObjType field_type() const { return ObNullType;}
+  SqlValueType field_type() const { return ObNullType;}
   // Add text order to add new nodes
   virtual int append(ObIMulModeBase* node);
   // Add members at fixed positions

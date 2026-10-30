@@ -48,7 +48,7 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
     SERVER_LOG(WARN, "argument is NULL", K(allocator_), K(schema_guard_), K(session_), K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -114,12 +114,12 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                 const uint64_t col_id = output_column_ids_.at(col_idx);
                 switch (col_id) {
                   case (DB): {
-                    cells[col_idx].set_varchar(db_schema->get_database_name());
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, db_schema->get_database_name()) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (DEFINER): {
-                    cells[col_idx].set_varchar(user_name);
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, user_name) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
@@ -157,15 +157,13 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                         if (OB_FAIL(ret)) {
                           // do nothing
                         } else if (type_is_lob) {
-                          cells[col_idx].set_lob_value(ObLongTextType,
-                                                       value_str.ptr(),
-                                                       value_str.length());
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, col_idx, ObLongTextType, ObString(value_str.length(), value_str.ptr())) : ret);
                           ObCollationType cs_type = tmp_column_schema->get_collation_type() == CS_TYPE_BINARY
                                                      ? CS_TYPE_BINARY  // when this column is longblob
                                                      : ObCharset::get_default_collation(ObCharset::get_default_charset()); // when this column is longtext
                           cells[col_idx].set_collation_type(cs_type);
                         } else {
-                          cells[col_idx].set_varchar(value_str);
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, value_str) : ret);
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                         }
                       }
@@ -189,15 +187,13 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                           ObString value_str(static_cast<int32_t>(pos), static_cast<int32_t>(pos), param_list_buf);
 
                           if (type_is_lob) {
-                            cells[col_idx].set_lob_value(ObLongTextType,
-                                                         value_str.ptr(),
-                                                         value_str.length());
+                            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, col_idx, ObLongTextType, ObString(value_str.length(), value_str.ptr())) : ret);
                             ObCollationType cs_type = tmp_column_schema->get_collation_type() == CS_TYPE_BINARY
                                                      ? CS_TYPE_BINARY  // when this column is longblob
                                                      : ObCharset::get_default_collation(ObCharset::get_default_charset()); // when this column is longtext
                             cells[col_idx].set_collation_type(cs_type);
                           } else {
-                            cells[col_idx].set_varchar(value_str);
+                            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, value_str) : ret);
                             cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                           }
                         }
@@ -246,15 +242,13 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                         ObString value_str(static_cast<int32_t>(pos), static_cast<int32_t>(pos), returns_buf);
 
                         if (type_is_lob) {
-                          cells[col_idx].set_lob_value(ObLongTextType,
-                                                        value_str.ptr(),
-                                                        value_str.length());
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, col_idx, ObLongTextType, ObString(value_str.length(), value_str.ptr())) : ret);
                           ObCollationType cs_type = tmp_column_schema->get_collation_type() == CS_TYPE_BINARY
                                                     ? CS_TYPE_BINARY  // when this column is longblob
                                                     : ObCharset::get_default_collation(ObCharset::get_default_charset()); // when this column is longtext
                           cells[col_idx].set_collation_type(cs_type);
                         } else {
-                          cells[col_idx].set_varchar(value_str);
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, value_str) : ret);
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                         }
                       }
@@ -262,8 +256,10 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                     break;
                   }
                   case (SQL_MODE): {
-                    ObObj int_value;
-                    int_value.set_int(exec_env.get_sql_mode());
+                    const int64_t sql_mode_value = exec_env.get_sql_mode();
+          DatumValue int_value;
+                    int_value.meta_.set_int();
+          int_value.datum_.set_string(reinterpret_cast<const char *>(&sql_mode_value), sizeof(sql_mode_value));
                     if (OB_FAIL(ob_sql_mode_to_str(int_value, cells[col_idx], allocator_))) {
                     } else {
                       cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -271,29 +267,29 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                     break;
                   }
                   case (CHARACTER_SET_CLIENT): {
-                    cells[col_idx].set_varchar(ObCharset::charset_name(exec_env.get_charset_client()));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, ObCharset::charset_name(exec_env.get_charset_client())) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (COLLATION_CONNECTION): {
-                    cells[col_idx].set_varchar(ObCharset::collation_name(exec_env.get_collation_connection()));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, ObCharset::collation_name(exec_env.get_collation_connection())) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (DB_COLLATION): {
-                    cells[col_idx].set_varchar(ObCharset::collation_name(exec_env.get_collation_database()));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, ObCharset::collation_name(exec_env.get_collation_database())) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
                   case (SQL_DATA_ACCESS): {
                     if (routine_info->is_no_sql()) {
-                      cells[col_idx].set_varchar("NO_SQL");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "NO_SQL") : ret);
                     } else if (routine_info->is_reads_sql_data()) {
-                      cells[col_idx].set_varchar("READS_SQL_DATA");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "READS_SQL_DATA") : ret);
                     } else if (routine_info->is_modifies_sql_data()) {
-                      cells[col_idx].set_varchar("MODIFIES_SQL_DATA");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "MODIFIES_SQL_DATA") : ret);
                     } else {
-                      cells[col_idx].set_varchar("CONTAINS_SQL");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "CONTAINS_SQL") : ret);
                     }
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
@@ -316,13 +312,13 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                                                     ObString(min(OB_MAX_VARCHAR_LENGTH, body_node->text_len_), body_node->raw_text_),
                                                     value_str))) {
                         } else {
-                          cells[col_idx].set_varchar(value_str);
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, value_str) : ret);
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                         }
                       }
                     } else {
                       const ObString &body = routine_info->get_routine_body();
-                      cells[col_idx].set_varchar(body);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, body) : ret);
                       cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset())); 
                     }
                     break;
@@ -331,25 +327,25 @@ int ObMySQLProcTable::inner_get_next_row(common::ObNewRow *&row)
                   case (MODIFIED): {
                     int64_t routine_time = OB_INVALID_TIMESTAMP;
                     get_info_from_all_routine(col_id, routine_info, routine_time);
-                    cells[col_idx].set_timestamp(routine_time);
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, col_idx, routine_time) : ret);
                     cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                     break;
                   }
 
 #define COLUMN_SET_WITH_TYPE(COL_NAME, TYPE, VALUE) \
 case (COL_NAME): {    \
-  cells[col_idx].set_##TYPE(VALUE); \
+  if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_##TYPE(cells, cur_row_.count_, col_idx, VALUE); } \
   cells[col_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset())); \
   break;\
 }
 
-                  COLUMN_SET_WITH_TYPE(NAME, varchar, routine_info->get_routine_name())
-                  COLUMN_SET_WITH_TYPE(TYPE, varchar, ROUTINE_PROCEDURE_TYPE == routine_info->get_routine_type() ? "PROCEDURE" : "FUNCTION")
-                  COLUMN_SET_WITH_TYPE(SPECIFIC_NAME, varchar, routine_info->get_routine_name())
-                  COLUMN_SET_WITH_TYPE(LANGUAGE, varchar, "SQL")
-                  COLUMN_SET_WITH_TYPE(IS_DETERMINISTIC, varchar, routine_info->is_deterministic() ? "YES" : "NO")
-                  COLUMN_SET_WITH_TYPE(SECURITY_TYPE, varchar, routine_info->is_invoker_right() ? "INVOKER" : "DEFINER")
-                  COLUMN_SET_WITH_TYPE(COMMENT, varchar, routine_info->get_comment())
+                  COLUMN_SET_WITH_TYPE(NAME, varchar_view, routine_info->get_routine_name())
+                  COLUMN_SET_WITH_TYPE(TYPE, varchar_view, ROUTINE_PROCEDURE_TYPE == routine_info->get_routine_type() ? "PROCEDURE" : "FUNCTION")
+                  COLUMN_SET_WITH_TYPE(SPECIFIC_NAME, varchar_view, routine_info->get_routine_name())
+                  COLUMN_SET_WITH_TYPE(LANGUAGE, varchar_view, "SQL")
+                  COLUMN_SET_WITH_TYPE(IS_DETERMINISTIC, varchar_view, routine_info->is_deterministic() ? "YES" : "NO")
+                  COLUMN_SET_WITH_TYPE(SECURITY_TYPE, varchar_view, routine_info->is_invoker_right() ? "INVOKER" : "DEFINER")
+                  COLUMN_SET_WITH_TYPE(COMMENT, varchar_view, routine_info->get_comment())
 
 #undef COLUMN_SET_WITH_TYPE
 

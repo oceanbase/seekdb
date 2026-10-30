@@ -164,7 +164,6 @@ int ObIColumnDecoder::get_null_count(
   // Default implementation, decode the column data and check whether is null
   int ret = OB_SUCCESS;
   null_count = 0;
-  common::ObObj cell;
   ObStorageDatum datum;
   const char *row_data = NULL;
   int64_t row_len = 0;

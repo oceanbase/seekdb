@@ -130,68 +130,67 @@ int ObSqlWorkareaActive::fill_row(
   common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
     switch(col_id) {
       case PLAN_ID: {
-        cells[cell_idx].set_int(wa_active.plan_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.plan_id_) : ret);
         break;
       }
       case SQL_ID: {
         ObString sql_id(wa_active.sql_id_);
-        cells[cell_idx].set_varchar(sql_id);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sql_id) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case SQL_EXEC_ID: {
-        cells[cell_idx].set_int(wa_active.sql_exec_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.sql_exec_id_) : ret);
         break;
       }
       case OPERATION_TYPE: {
         const char* operator_str = get_phy_op_name(wa_active.profile_.get_operator_type());
         ObString op_type(operator_str);
-        cells[cell_idx].set_varchar(op_type);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, op_type) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case OPERATION_ID: {
-        cells[cell_idx].set_int(wa_active.profile_.get_operator_id());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.profile_.get_operator_id()) : ret);
         break;
       }
       case SID: {
-        cells[cell_idx].set_int(wa_active.session_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.session_id_) : ret);
         break;
       }
       case ACTIVE_TIME: {
-        cells[cell_idx].set_int(
-            ObTimeUtility::current_time() - wa_active.profile_.get_active_time());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, ObTimeUtility::current_time() - wa_active.profile_.get_active_time()) : ret);
         break;
       }
       case WORK_AREA_SIZE: {
-        cells[cell_idx].set_int(wa_active.profile_.get_cache_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.profile_.get_cache_size()) : ret);
         break;
       }
       case EXPECTED_SIZE: {
-        cells[cell_idx].set_int(wa_active.profile_.get_expect_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.profile_.get_expect_size()) : ret);
         break;
       }
       case ACTUAL_MEM_USED: {
-        cells[cell_idx].set_int(wa_active.profile_.get_mem_used());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.profile_.get_mem_used()) : ret);
         break;
       }
       case MAX_MEM_USED: {
-        cells[cell_idx].set_int(wa_active.profile_.get_max_mem_used());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.profile_.get_max_mem_used()) : ret);
         break;
       }
       case NUMBER_PASSES: {
-        cells[cell_idx].set_int(wa_active.profile_.get_number_pass());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.profile_.get_number_pass()) : ret);
         break;
       }
       case TEMPSEG_SIZE: {
-        cells[cell_idx].set_int(wa_active.profile_.get_max_dumped_size());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.profile_.get_max_dumped_size()) : ret);
         break;
       }
       case POLICY: {
@@ -201,13 +200,13 @@ int ObSqlWorkareaActive::fill_row(
         } else {
           exec_str.assign_ptr(EXECUTION_MANUAL_POLICY, static_cast<ObString::obstr_size_t>(strlen(EXECUTION_MANUAL_POLICY)));
         }
-        cells[cell_idx].set_varchar(exec_str);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, exec_str) : ret);
         cells[cell_idx].set_collation_type(
           ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }
       case DB_ID: {
-        cells[cell_idx].set_int(wa_active.database_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, wa_active.database_id_) : ret);
         break;
       }
       default: {

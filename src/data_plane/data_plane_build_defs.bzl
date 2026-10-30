@@ -1,6 +1,7 @@
 """Data Plane-owned build topology exposed to its BUILD file."""
 
 DATA_PLANE_API_INTERFACE_HEADERS = [
+    "api/data_plane/native_key_value_buffer.h",
     "api/data_plane/access/ob_data_access_retry.h",
     "api/data_plane/access/ob_datum_reshape.h",
     "api/data_plane/access/ob_dml_execution.h",

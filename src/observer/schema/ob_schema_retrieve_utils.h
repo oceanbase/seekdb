@@ -256,9 +256,9 @@ public:
   static int retrieve_system_variable(T &result, SCHEMA &runtime_schema);
 
   template<typename T>
-  static int retrieve_system_variable_obj(T &result,
+  static int retrieve_system_variable_value(T &result,
              ObIAllocator &allocator,
-             ObObj &out_var_obj);
+             common::DatumValue &out_value);
 
   //for batch table
   template<typename T, typename TABLE_SCHEMA>

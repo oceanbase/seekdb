@@ -21,6 +21,7 @@
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "share/datum/datum_value_cast.h"
 
 namespace oceanbase
 {
@@ -80,9 +81,8 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
     ObPhysicalPlanCtx phy_plan_ctx(ctx.get_allocator());
     ObExecContext *exec_ctx = NULL;//because ObExecContext is bigger than 10K, can't use it as local variable
     ObExprCtx expr_ctx;
-    ObNewRow tmp_row;
     RowDesc row_desc;
-    ObObj value_obj;
+    ObDatum value_datum;
     ObRawExpr *value_expr = NULL;
     void *tmp_ptr = NULL;
     if (OB_FAIL(ret)) {
@@ -114,25 +114,28 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
              ctx.get_sql_ctx()->schema_guard_, temp_expr))) {
         } else if (OB_ISNULL(temp_expr)) {
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(temp_expr->eval(ctx, tmp_row, value_obj))) {
+        } else if (OB_FAIL(temp_expr->eval_datum(ctx, allocator, value_datum))) {
         } else {
-          const ObObj *res_obj = NULL;
+          const ObExpr &result_expr = temp_expr->rt_exprs_.at(temp_expr->expr_idx_);
+          DatumValue value(value_datum, result_expr.obj_meta_);
           if (stmt.is_alter_system_kill()) {
-            ObString str = value_obj.get_string();
+            ObString str = value.get_string();
             const char* index = str.find(',');
             if (index != NULL) {
               str = str.split_on(index);
             }
-            value_obj.set_string(value_obj.get_type(), str);
+            value.datum_.set_string(str);
           }
           EXPR_DEFINE_CAST_CTX(expr_ctx, CM_WARN_ON_FAIL);
-          EXPR_CAST_OBJ_V2(ObIntType, value_obj, res_obj);
+          DatumValue res_value;
+          if (OB_FAIL(DatumValueCaster::to_type(ObIntType, cast_ctx, value,
+                                                 allocator, res_value))) {
+          }
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD == ret ? OB_SUCCESS : ret;
           if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(res_obj)) {
-            ret = OB_ERR_UNEXPECTED;
           } else {
-            sess_id_ = static_cast<uint32_t>(res_obj->get_int());
+            // Keep NULL target identifiers mapped to zero.
+            sess_id_ = res_value.is_null() ? 0 : static_cast<uint32_t>(res_value.get_int());
           }
         }
       }

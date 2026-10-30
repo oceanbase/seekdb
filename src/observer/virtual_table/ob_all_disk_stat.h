@@ -24,7 +24,7 @@ namespace oceanbase
 {
 namespace common
 {
-class ObObj;
+struct DatumValue;
 }
 
 namespace observer

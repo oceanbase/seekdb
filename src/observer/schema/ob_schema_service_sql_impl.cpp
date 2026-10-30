@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "rust/config.h"
 #include "ob_schema_service_sql_impl.h"
+#include "common/datum/datum_value.h"
 #include <inttypes.h>
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_share_util.h"
@@ -1023,7 +1024,7 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable(
   } else if (OB_INVALID_VERSION == schema_version) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObObj var_lower_case;
+    DatumValue var_lower_case;
     int64_t var_value = OB_INVALID_ID;
     ObString lower_case_name(OB_SV_LOWER_CASE_TABLE_NAMES);
     if (OB_FAIL(get_system_variable(schema_status, allocator,
@@ -1033,25 +1034,31 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable(
         ret = OB_SUCCESS;
       } else {
       }
-    } else if (OB_FAIL(var_lower_case.get_int(var_value))) {
-    } else if (var_value <= OB_NAME_CASE_INVALID || var_value >= OB_NAME_CASE_MAX) {
-      ret = OB_ERR_UNEXPECTED;
+    } else if (var_lower_case.is_null() || !var_lower_case.is_int()) {
+      ret = OB_OBJ_TYPE_ERROR;
     } else {
-      ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
-      case_mode = static_cast<ObNameCaseMode>(var_value);
-      sys_variable.set_name_case_mode(case_mode);
+      var_value = var_lower_case.get_int();
+      if (var_value <= OB_NAME_CASE_INVALID || var_value >= OB_NAME_CASE_MAX) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ObNameCaseMode case_mode = static_cast<ObNameCaseMode>(var_value);
+        sys_variable.set_name_case_mode(case_mode);
+      }
     }
+
     if (OB_SUCC(ret)) {
       ObString read_only_name(OB_SV_READ_ONLY);
-      ObObj var_read_only;
+      DatumValue var_read_only;
       if (OB_FAIL(get_system_variable(schema_status, allocator,
           client, schema_version, read_only_name, var_read_only))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
         } else {
         }
-      } else if (OB_FAIL(var_read_only.get_int(var_value))) {
+      } else if (var_read_only.is_null() || !var_read_only.is_int()) {
+        ret = OB_OBJ_TYPE_ERROR;
       } else {
+        var_value = var_read_only.get_int();
         sys_variable.set_read_only(0 != var_value);
       }
     }
@@ -1069,7 +1076,7 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
                                                        ObISQLClient &sql_client,
                                                        int64_t schema_version,
                                                        ObString &var_name,
-                                                       ObObj &out_var_obj)
+                                                       DatumValue &out_var_value)
 {
   int ret = OB_SUCCESS;
   bool try_sys_variable = false;
@@ -1092,7 +1099,7 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(result->next())) {
-      } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable_obj(*result, allocator, out_var_obj))) {
+      } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable_value(*result, allocator, out_var_value))) {
       }
     }
   }
@@ -1113,7 +1120,7 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
           ret = OB_ENTRY_NOT_EXIST;
         } else {
         }
-      } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable_obj(*result, allocator, out_var_obj))) {
+      } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable_value(*result, allocator, out_var_value))) {
       }
     }
   }

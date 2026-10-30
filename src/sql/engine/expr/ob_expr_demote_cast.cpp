@@ -53,7 +53,7 @@ int ObExprDemoteCastBase::get_column_res_type(const ObExprResType &param_type,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_column_datum_meta(param_type.get_param().get_int(), column_datum_meta))) {
   } else {
-    column_res_type.set_type(static_cast<ObObjType>(column_datum_meta.type_));
+    column_res_type.set_type(static_cast<SqlValueType>(column_datum_meta.type_));
     column_res_type.set_cs_type(static_cast<ObCollationType>(column_datum_meta.cs_type_));
     if (ob_is_string_type(column_res_type.get_type())) {
       column_res_type.set_length(column_datum_meta.length_semantics_);
@@ -70,7 +70,7 @@ int ObExprDemoteCastBase::get_column_datum_meta(const int64_t val, ObDatumMeta &
   int ret = OB_SUCCESS;
   ParseNode parse_node;
   parse_node.value_ = val;
-  column_datum_meta.type_ = static_cast<ObObjType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
+  column_datum_meta.type_ = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
   column_datum_meta.cs_type_ =
     static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]);
   if (ob_is_string_type(column_datum_meta.type_)) {
@@ -177,7 +177,7 @@ int ObExprDemoteCastBase::demote_field_constant(const ObDatum &constant,
   int ret = OB_SUCCESS;
   // Must be consistent with `ObRawExprTypeDemotion::type_can_demote. An error will be thrown
   // during execution stage if an unsupported type is encountered.
-  switch (ob_obj_type_class(dst_meta.type_)) {
+  switch (sql_type_class(dst_meta.type_)) {
     case ObIntTC:
     case ObUIntTC: {
       ret = demote_int_field_constant(constant, src_meta, dst_meta, res);

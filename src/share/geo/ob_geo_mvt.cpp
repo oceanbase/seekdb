@@ -18,6 +18,9 @@
 #include "ob_geo_mvt.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/object/ob_obj_cast.h"
+#include "share/datum/datum_value_cast.h"
+#include "common/ob_hex_utils_base.h"
+#include "lib/geometry/ob_geo_wkb_define.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/geo/ob_geo_mvt_encode_visitor.h"
@@ -38,29 +41,29 @@ int mvt_agg_result::init_layer()
   return ret;
 }
 
-int mvt_agg_result::generate_feature(ObObj *tmp_obj, uint32_t obj_cnt)
+int mvt_agg_result::generate_feature(const DatumValue *values, uint32_t obj_cnt)
 {
   int ret = OB_SUCCESS;
   if (geom_idx_ >= obj_cnt) {
     ret = OB_ERR_GIS_UNSUPPORTED_ARGUMENT;
-  } else if (tmp_obj[geom_idx_].is_null()) {
+  } else if (values[geom_idx_].is_null()) {
     // geometry column is null. do nothing
-  } else if (!tmp_obj[geom_idx_].is_geometry()) {
+  } else if (!values[geom_idx_].get_meta().is_geometry()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     feature_ = static_cast<VectorTile__Tile__Feature *>(allocator_.alloc(sizeof(VectorTile__Tile__Feature)));
     if (OB_ISNULL(feature_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      const ObObjMeta& meta = tmp_obj[geom_idx_].get_meta();
-      ObString str = tmp_obj[geom_idx_].get_string();
+      const SqlTypeMeta& meta = values[geom_idx_].get_meta();
+      ObString str = values[geom_idx_].get_string();
       ObGeometry *geo = NULL;
       vector_tile__tile__feature__init(feature_);
       if (OB_FAIL(features_.push_back(feature_))) {
       } else if (meta.is_null()) {
         str.reset();
       } else if (is_lob_storage(meta.get_type())) {
-        ObTextStringIter str_iter(meta.get_type(), meta.get_collation_type(), str, tmp_obj[geom_idx_].has_lob_header());
+        ObTextStringIter str_iter(meta.get_type(), meta.get_collation_type(), str, meta.has_lob_header());
         const ObLobReadOptions read_options(lob_read_service_);
         if (OB_FAIL(str_iter.init(0, &read_options, temp_allocator_))) {
         } else if (OB_FAIL(str_iter.get_full_data(str))) {
@@ -68,7 +71,7 @@ int mvt_agg_result::generate_feature(ObObj *tmp_obj, uint32_t obj_cnt)
         } else if (ObGeoTypeUtil::is_3d_geo_type(geo->type())
                   && OB_FAIL(ObGeoTypeUtil::convert_geometry_3D_to_2D(NULL, allocator_, geo, ObGeoBuildFlag::GEO_ALL_DISABLE, geo))) {
         } else if (OB_FAIL(transform_geom(*geo))) {
-        } else if (OB_FAIL(transform_other_column(tmp_obj, obj_cnt))) {
+        } else if (OB_FAIL(transform_other_column(values, obj_cnt))) {
         } else {
           feature_->n_tags = tags_.size();
           feature_->tags = static_cast<uint32_t *>(allocator_.alloc(feature_->n_tags * sizeof(*(feature_->tags))));
@@ -127,6 +130,44 @@ int mvt_agg_result::transform_geom(const ObGeometry &geo)
   return ret;
 }
 
+int mvt_agg_result::geometry_to_varchar(const DatumValue &value, ObIAllocator &scratch, ObString &result)
+{
+  int ret = OB_SUCCESS;
+  ObString wkb = value.get_string();
+  if (value.is_null() || !value.get_meta().is_geometry()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (is_lob_storage(value.get_type())) {
+    ObTextStringIter str_iter(value.get_type(), value.get_collation_type(), wkb, value.has_lob_header());
+    const ObLobReadOptions read_options(lob_read_service_);
+    if (OB_FAIL(str_iter.init(0, &read_options, &scratch))) {
+    } else if (OB_FAIL(str_iter.get_full_data(wkb))) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    const int64_t src_len = wkb.length();
+    uint32_t offset = WKB_GEO_SRID_SIZE;
+    int64_t result_len = src_len;
+    if (src_len <= WKB_OFFSET) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const uint8_t version = static_cast<uint8_t>(wkb.ptr()[WKB_GEO_SRID_SIZE]);
+      if (IS_GEO_VERSION(version)) {
+        result_len -= WKB_VERSION_SIZE;
+        offset += WKB_VERSION_SIZE;
+      }
+      char *buffer = nullptr;
+      if (OB_ISNULL(buffer = static_cast<char *>(allocator_.alloc(result_len)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        MEMCPY(buffer, wkb.ptr(), WKB_GEO_SRID_SIZE);
+        MEMCPY(buffer + WKB_GEO_SRID_SIZE, wkb.ptr() + offset, result_len - WKB_GEO_SRID_SIZE);
+        result.assign_ptr(buffer, static_cast<int32_t>(result_len));
+      }
+    }
+  }
+  return ret;
+}
+
 int mvt_agg_result::get_key_id(ObString col_name, uint32_t &key_id)
 {
   int ret = OB_SUCCESS;
@@ -142,7 +183,7 @@ int mvt_agg_result::get_key_id(ObString col_name, uint32_t &key_id)
   return ret;
 }
 
-int mvt_agg_result::transform_json_column(ObObj &json)
+int mvt_agg_result::transform_json_column(const DatumValue &json)
 {
   int ret = OB_SUCCESS;
   ObString str;
@@ -262,48 +303,48 @@ int mvt_agg_result::transform_json_column(ObObj &json)
   return ret;
 }
 
-int mvt_agg_result::transform_other_column(ObObj *tmp_obj, uint32_t obj_cnt)
+int mvt_agg_result::transform_other_column(const DatumValue *values, uint32_t obj_cnt)
 {
   int ret = OB_SUCCESS;
   for (uint32_t i = column_offset_; i < obj_cnt && OB_SUCC(ret); i += 2) {
-    ObObjTypeClass tc = tmp_obj[i].get_type_class();
-    ObObjType type = tmp_obj[i].get_type();
+    SqlTypeClass tc = values[i].get_type_class();
+    SqlValueType type = values[i].get_type();
     uint32_t key_id;
     if (i == geom_idx_) {
       // do nothing
     } else if (i == feat_id_idx_) {
       // feature id
-      if (ob_is_null(type)) {
+      if (values[i].is_null()) {
         // do nothing, ignore null
       } else if (!ob_is_int_tc(type) && !ob_is_uint_tc(type)) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
       } else {
-        int64_t v = tmp_obj[i].get_int();
+        int64_t v = values[i].get_int();
         if (v >= 0) {
           feature_->has_id = true;
           feature_->id = v;
         }
       }
-    } else if (ob_is_json(type)) {
-      if (OB_FAIL(transform_json_column(tmp_obj[i]))) {
+    } else if (!values[i].is_null() && ob_is_json(type)) {
+      if (OB_FAIL(transform_json_column(values[i]))) {
       }
-    } else if (tmp_obj[i].is_null()
+    } else if (values[i].is_null()
               || ob_is_enum_or_set_type(type)) { // enum/set type mvt encode isn't supported
       // do nothing
-    } else if (OB_FAIL(get_key_id(tmp_obj[i + 1].get_string(), key_id))) {
+    } else if (OB_FAIL(get_key_id(values[i + 1].get_string(), key_id))) {
     } else {
       ObTileValue tile_value;
       VectorTile__Tile__Value value;
       vector_tile__tile__value__init(&value);
       if (type == ObTinyIntType) {
         // bool type
-        bool v = (0 == tmp_obj[i].get_int()) ? false : true;
+        bool v = (0 == values[i].get_int()) ? false : true;
         value.bool_value = v;
         value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_BOOL_VALUE;
         tile_value.ptr_ = &value.bool_value;
         tile_value.len_ = sizeof(value.bool_value);
       } else if (ob_is_int_tc(type)) {
-        int64_t v = tmp_obj[i].get_int();
+        int64_t v = values[i].get_int();
         if (v >= 0) {
           value.uint_value = v;
           value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_UINT_VALUE;
@@ -316,19 +357,19 @@ int mvt_agg_result::transform_other_column(ObObj *tmp_obj, uint32_t obj_cnt)
           tile_value.len_ = sizeof(value.int_value);
         }
       } else if (ob_is_uint_tc(type)) {
-        uint64_t v = tmp_obj[i].get_uint64();
+        uint64_t v = values[i].get_uint64();
         value.uint_value = v;
         value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_UINT_VALUE;
         tile_value.ptr_ = &value.uint_value;
         tile_value.len_ = sizeof(value.uint_value);
       } else if (ob_is_float_tc(type)) {
-        float v = tmp_obj[i].get_float();
+        float v = values[i].get_float();
         value.float_value = v;
         value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_FLOAT_VALUE;
         tile_value.ptr_ = &value.float_value;
         tile_value.len_ = sizeof(value.float_value);
       } else if (ob_is_double_tc(type)) {
-        double v = tmp_obj[i].get_double();
+        double v = values[i].get_double();
         value.double_value = v;
         value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_DOUBLE_VALUE;
         tile_value.ptr_ = &value.double_value;
@@ -337,14 +378,20 @@ int mvt_agg_result::transform_other_column(ObObj *tmp_obj, uint32_t obj_cnt)
         // do nothing, enum/set type mvt encode isn't supported
       } else {
         // other type cast to varchar
-        ObObj obj;
-        ObObj geo_hex;
         ObString str;
-        ObCastCtx cast_ctx(temp_allocator_, NULL, CM_NONE, ObCharset::get_system_collation());
-        if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, tmp_obj[i], obj))) {
-        } else if (ob_is_geometry(type) && OB_FAIL(ObHexUtils::hex(ObString(obj.get_string().length(), obj.get_string().ptr()),
-                                                                   cast_ctx, geo_hex))) {
-        } else if (OB_FAIL(ob_write_string(allocator_, ob_is_geometry(type) ? geo_hex.get_string() : obj.get_string(), str, true))) {
+        DatumCastParams cast_ctx(temp_allocator_, nullptr, CM_NONE, ObCharset::get_system_collation());
+        DatumValue varchar_value;
+        if (ob_is_geometry(type)) {
+          ObString hex_string;
+          ObString cast_string;
+          if (OB_FAIL(geometry_to_varchar(values[i], *temp_allocator_, cast_string))) {
+          } else if (OB_FAIL(ObHexUtilsBase::hex(hex_string, allocator_, cast_string.ptr(), cast_string.length()))) {
+          } else if (OB_FAIL(ob_write_string(allocator_, hex_string, str, true))) {
+          }
+        } else if (OB_FAIL(DatumValueCaster::to_type(ObVarcharType,
+                                                      cast_ctx,
+                                                      values[i], allocator_, varchar_value))) {
+        } else if (OB_FAIL(ob_write_string(allocator_, varchar_value.get_string(), str, true))) {
         } else {
           value.string_value = str.ptr();
           value.test_oneof_case = VECTOR_TILE__TILE__VALUE__TEST_ONEOF_STRING_VALUE;

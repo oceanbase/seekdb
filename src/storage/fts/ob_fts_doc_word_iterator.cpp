@@ -237,25 +237,33 @@ int ObFTDocWordScanIterator::build_key_range(const uint64_t table_id,
   int ret = OB_SUCCESS;
   static int64_t ROWKEY_COLUMN_COUNT = 2;
   common::ObNewRange range;
-  common::ObObj *objs = nullptr;
+  common::DatumValue *values = nullptr;
   if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(objs = OB_NEW_ARRAY(common::ObObj, &allocator_, ROWKEY_COLUMN_COUNT * 2))) {
+  } else if (OB_ISNULL(values = static_cast<common::DatumValue *>(allocator_.alloc(
+                 sizeof(common::DatumValue) * ROWKEY_COLUMN_COUNT * 2 + sizeof(uint64_t))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
+    new (values) common::DatumValue[ROWKEY_COLUMN_COUNT * 2];
     if (docid_type_ == ObDocIDType::HIDDEN_INC_PK) {
-      objs[0].set_uint64(doc_id_datum.get_uint64());
-      objs[2].set_uint64(doc_id_datum.get_uint64());
+      auto *doc_id = reinterpret_cast<uint64_t *>(values + ROWKEY_COLUMN_COUNT * 2);
+      *doc_id = doc_id_datum.get_uint64();
+      values[0].meta_.set_uint64();
+      values[0].datum_.set_string(reinterpret_cast<const char *>(doc_id), sizeof(*doc_id));
+      values[2] = values[0];
     } else if (docid_type_ == ObDocIDType::TABLET_SEQUENCE) {
-      objs[0].set_varbinary(doc_id_datum.get_string());
-      objs[2].set_varbinary(doc_id_datum.get_string());
+      values[0].meta_.set_varchar();
+      values[0].set_collation_type(common::CS_TYPE_BINARY);
+      values[0].set_collation_level(common::CS_LEVEL_IMPLICIT);
+      values[0].datum_.set_string(doc_id_datum.get_string());
+      values[2] = values[0];
     }
-    objs[1] = common::ObObj::make_min_obj();
-    objs[3] = common::ObObj::make_max_obj();
+    values[1].set_min_value();
+    values[3].set_max_value();
 
     range.table_id_ = table_id;
-    range.start_key_ = ObRowkey(objs, ROWKEY_COLUMN_COUNT);
-    range.end_key_ = ObRowkey(objs + ROWKEY_COLUMN_COUNT, ROWKEY_COLUMN_COUNT);
+    range.start_key_ = ObRowkey(values, ROWKEY_COLUMN_COUNT);
+    range.end_key_ = ObRowkey(values + ROWKEY_COLUMN_COUNT, ROWKEY_COLUMN_COUNT);
     range.border_flag_.set_inclusive_start();
     range.border_flag_.set_inclusive_end();
     if (OB_FAIL(rowkey_range.push_back(range))) {

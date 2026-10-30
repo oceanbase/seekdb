@@ -27,7 +27,7 @@ function usage() {
     echo "Options:"
     echo " -h, --help                     Display this help message"
     echo " --ob_admin ob_admin包链接       支持提供一个ob_admin的远程链接下载地址"
-    echo " --mytest mytest.jar包链接       支持提供一个mytest.jar的远程链接下载地址"
+    echo " --mytest <URL>                  可选：指定外部测试 harness 的下载地址"
     echo " -r, --run                      选择运行模式，支持local和farm2种，默认是farm运行"
     echo " --alarm_url                    发送执行结果到指定钉钉群中, 需要提供指定群机器人的url"
     echo " -s, --cases                    设置执行的case集合， 若-s、-t2个参数都未指定,默认执行测试全集"
@@ -297,7 +297,7 @@ function observer_io_check() {
 
 function update_binary() {
 
-    echo "更新observer binary and mytest.jar and ob_admin..."
+    echo "更新 observer binary and ob_admin..."
     cd $OCEANBASE_DIR/tools/obtest
     mkdir -p bin etc
     # 更新observer binary
@@ -314,19 +314,13 @@ function update_binary() {
        echo "observer not exist,please use -c or --observer to specify it" 
     fi
     
-   # 更新mytest.jar
-   if [[ $MYTEST_DIR =~ ^http:// ]] || [[ $MYTEST_DIR =~ ^https:// ]]; then
-        echo "downloading mytest.jar from $MYTEST_DIR..."
-        wget $MYTEST_DIR -o ./wget_mytestjar.log -O jar/mytest.jar && chmod +x jar/mytest.jar
-   else 
-        echo "downloading mytest_latest.jar from pkg"
-        #wget http://11.166.86.153:8877/mytest_latest.jar -o ./wget_mytestjar.log -O jar/mytest.jar && chmod +x jar/mytest.jar
-        mkdir -p mytest_jar && cd mytest_jar
-        curl "http://11.166.86.153:8877/pkg/downloader.sh" | bash -s -- --pkg_name mytest --pkg_type tool
-        tar -xvzf mytest.tar.gz
-        cp -r mytest/mytest.jar $OCEANBASE_DIR/tools/obtest/jar/mytest.jar
-        cd $OCEANBASE_DIR/tools/obtest
-        chmod +x jar/mytest.jar
+   # The test harness is intentionally external and is never fetched implicitly.
+   if [[ -n "$MYTEST_DIR" ]]; then
+        mkdir -p jar
+        echo "downloading external test harness from $MYTEST_DIR..."
+        wget "$MYTEST_DIR" -o ./wget_mytestjar.log -O jar/mytest.jar && chmod +x jar/mytest.jar
+   elif [[ ! -f "${MYTEST_JAR:-jar/mytest.jar}" ]]; then
+        echo "No external test harness configured; set MYTEST_JAR or pass --mytest <URL>."
    fi
    # 更新ob_admin
    if [[ $OB_ADMIN_DIR =~ ^http:// ]] || [[ $OB_ADMIN_DIR =~ ^https:// ]]; then
@@ -456,7 +450,6 @@ function test_run_backup() {
 function test_run_upgrade() {
 
     host_ip=`hostname -i`
-    sed  -i  '/mytest_latest.jar/s/^/#/' copy_for_compat.sh
     observer_branch=`cat observer.version |grep BUILD_BRANCH |awk -F ' ' '{printf $2}'`
     if [[ "$observer_branch" == "4_3_5_release" ]]; then
       cp t/compat/test_temp.sh test.sh

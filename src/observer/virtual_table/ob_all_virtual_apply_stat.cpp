@@ -55,10 +55,10 @@ int ObAllVirtualApplyStat::insert_stat_(logservice::LSApplyStat &apply_stat)
     uint64_t col_id = output_column_ids_.at(i);
     switch (col_id) {
       case OB_APP_MIN_COLUMN_ID:
-        cur_row_.cells_[i].set_uint64(apply_stat.end_lsn_.val_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, apply_stat.end_lsn_.val_) : ret);
         break;
       case OB_APP_MIN_COLUMN_ID + 1:
-        cur_row_.cells_[i].set_int(apply_stat.pending_cnt_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, apply_stat.pending_cnt_) : ret);
         break;
       default:
         ret = OB_ERR_UNEXPECTED;

@@ -203,8 +203,8 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
                                                cast_mode));
     CK(NULL != new_expr);
     if (OB_SUCC(ret) && child_ptr != new_expr) { // cast expr added
-      ObObjTypeClass ori_tc = ob_obj_type_class(child_ptr->get_data_type());
-      ObObjTypeClass expect_tc = ob_obj_type_class(input_type.get_calc_type());
+      SqlTypeClass ori_tc = sql_type_class(child_ptr->get_data_type());
+      SqlTypeClass expect_tc = sql_type_class(input_type.get_calc_type());
       if (T_FUN_UDF == parent.get_expr_type()
           && ObNumberTC == ori_tc
           && ObLobTC == expect_tc) {

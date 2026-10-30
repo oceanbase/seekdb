@@ -357,7 +357,7 @@ int ObExprArrayMapCommon::get_lambda_subschema_id(ObExecContext *exec_ctx,
   } else {
     ObDataType elem_type;
     const ObExprResType &lambda_type = lambda_expr->get_result_type();
-    elem_type.set_meta_type(lambda_type.get_obj_meta());
+    elem_type.set_meta_type(lambda_type.get_sql_type_meta());
     elem_type.set_accuracy(lambda_type.get_accuracy());
     if (ob_is_collection_sql_type(elem_type.get_obj_type())) {
       if (OB_FAIL(ObArrayExprUtils::deduce_nested_array_subschema_id(exec_ctx, elem_type, lambda_subschema_id))) {
@@ -434,7 +434,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
   ObDataType elem_type;
   uint16_t subschema_id;
   bool is_null_res = false;
-  ObObjType lambda_type = types_stack[0].get_type();
+  SqlValueType lambda_type = types_stack[0].get_type();
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -460,7 +460,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
       elem_type.meta_.set_utinyint(); // default type
     } else if (lambda_type == ObDecimalIntType || lambda_type == ObNumberType || lambda_type == ObUNumberType) {
       // decimalint isn't supported in array, so cast to supported type
-      ObObjType calc_type = ObIntType; 
+      SqlValueType calc_type = ObIntType;
       if (types_stack[0].get_scale() != 0) {
         calc_type = ObDoubleType;
       }
@@ -468,7 +468,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
       elem_type.set_meta_type(types_stack[0].get_calc_meta());
       elem_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[calc_type]);
     } else {
-      elem_type.set_meta_type(types_stack[0].get_obj_meta());
+      elem_type.set_meta_type(types_stack[0].get_sql_type_meta());
       elem_type.set_accuracy(types_stack[0].get_accuracy());
     }
     if (ob_is_collection_sql_type(elem_type.get_obj_type())) {

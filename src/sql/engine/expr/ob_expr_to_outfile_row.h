@@ -43,16 +43,16 @@ public:
       buf_(nullptr),
       buf_len_(0){}
 
-  common::ObObj field_;
-  common::ObObj line_;
-  common::ObObj enclose_;
-  common::ObObj escape_;
+  common::DatumValue field_;
+  common::DatumValue line_;
+  common::DatumValue enclose_;
+  common::DatumValue escape_;
   bool is_optional_;
   int32_t wchar_field_;
   int32_t wchar_line_;
   int32_t wchar_enclose_;
   int32_t wchar_escape_;
-  common::ObObjPrintParams print_params_;
+  common::ObValuePrintParams print_params_;
 
   char *tmp_buf_;
   int64_t tmp_buf_len_;
@@ -82,8 +82,8 @@ public:
   static int to_outfile_str(const ObExpr &expr,
                             ObEvalCtx &ctx,
                             ObDatum &datum);
-  static int extract_fisrt_wchar_from_varhcar(const common::ObObj &obj, int32_t &wchar);
-  static int print_field(char *buf, const int64_t buf_len, int64_t &pos, const common::ObObj &obj,
+  static int extract_fisrt_wchar_from_varhcar(const common::DatumValue &value, int32_t &wchar);
+  static int print_field(char *buf, const int64_t buf_len, int64_t &pos, const common::DatumValue &value,
                          ObExprOutFileInfo &out_info);
   static int print_wchar_to_buf(char *buf, const int64_t buf_len, int64_t &pos,
                                 int32_t wchar, common::ObCollationType coll_type);

@@ -306,7 +306,8 @@ int ObOptimizerTraceImpl::append(const double & value)
   return append_format<32>("%f", value);
 }
 
-int ObOptimizerTraceImpl::append(const ObObj& value)
+template <typename Value>
+int ObOptimizerTraceImpl::append_typed_value(const Value &value)
 {
   int ret = OB_SUCCESS;
   char buf[1024] = {0};
@@ -318,6 +319,11 @@ int ObOptimizerTraceImpl::append(const ObObj& value)
   } else if (OB_FAIL(log_handle_.append(buf, pos))) {
   }
   return ret;
+}
+
+int ObOptimizerTraceImpl::append(const DatumValue &value)
+{
+  return append_typed_value(value);
 }
 
 int ObOptimizerTraceImpl::append(const OpParallelRule& rule)

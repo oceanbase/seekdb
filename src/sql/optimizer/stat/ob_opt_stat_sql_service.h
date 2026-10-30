@@ -138,7 +138,7 @@ public:
                          const common::ObIArray<ObOptColumnStat*> &column_stats,
                          const int64_t current_time,
                          bool only_update_col_stat = false,
-                         const ObObjPrintParams &print_params = ObObjPrintParams());
+                         const ObValuePrintParams &print_params = ObValuePrintParams());
 
   int delete_table_stat(const uint64_t table_id,
                         const ObIArray<int64_t> &part_ids,
@@ -170,25 +170,16 @@ public:
                               ObSqlString &sql_string);
 
 
-  static int get_obj_str(const common::ObObj &obj,
-                         common::ObIAllocator &allocator,
-                         common::ObString &out_str,
-                         const ObObjPrintParams &print_params);
-
-  static int get_obj_binary_hex_str(const common::ObObj &obj,
-                                    common::ObIAllocator &allocator,
-                                    common::ObString &out_str);
-
-  static int hex_str_to_obj(const char *buf,
-                            int64_t buf_len,
-                            common::ObIAllocator &allocator,
-                            common::ObObj &obj);
-
-  static int get_valid_obj_str(const common::ObObj &src_obj,
-                               common::ObObjMeta dst_column_meta,
-                               common::ObIAllocator &allocator,
-                               common::ObString &dest_str,
-                               const ObObjPrintParams &print_params);
+  // Native min/max and histogram endpoint persistence and display.
+  static int get_value_str(const DatumValue &value, ObIAllocator &allocator,
+                           ObString &out_str, const ObValuePrintParams &print_params);
+  static int get_value_binary_hex_str(const DatumValue &value, ObIAllocator &allocator,
+                                      ObString &out_str);
+  static int hex_str_to_value(const char *buf, int64_t length, ObIAllocator &allocator,
+                              DatumValue &value);
+  static int get_valid_value_str(const DatumValue &value, SqlTypeMeta destination_meta,
+                                 ObIAllocator &allocator, ObString &out_str,
+                                 const ObValuePrintParams &print_params);
 
   int fetch_table_rowcnt(const uint64_t table_id,
                          const ObIArray<ObTabletID> &all_tablet_ids,
@@ -208,16 +199,16 @@ private:
   int get_column_stat_sql(ObIAllocator &allocator,
                                 const ObOptColumnStat &stat,
                                 const int64_t current_time,
-                                ObObjMeta min_meta,
-                                ObObjMeta max_meta,
+                                SqlTypeMeta min_meta,
+                                SqlTypeMeta max_meta,
                                 ObSqlString &sql_string,
-                                const ObObjPrintParams &print_params);
+                                const ObValuePrintParams &print_params);
   int get_histogram_stat_sql(const ObOptColumnStat &stat,
                              common::ObIAllocator &allocator,
                              ObHistBucket &bucket,
-                             ObObjMeta endpoint_meta,
+                             SqlTypeMeta endpoint_meta,
                              ObSqlString &sql_string,
-                             const ObObjPrintParams &print_params);
+                             const ObValuePrintParams &print_params);
 
   int generate_in_list(const ObIArray<uint64_t> &list,
                        ObSqlString &sql_string);
@@ -227,7 +218,7 @@ private:
                                 const ObIArray<ObOptColumnStat*> &column_stats,
                                 const int64_t current_time,
                                 ObSqlString &column_stats_sql,
-                                const ObObjPrintParams &print_params);
+                                const ObValuePrintParams &print_params);
 
   int construct_delete_column_histogram_sql(const ObIArray<ObOptColumnStat*> &column_stats,
                                             ObSqlString &delete_histogram_sql);
@@ -238,7 +229,7 @@ private:
                                      const int64_t current_time,
                                      ObSqlString &insert_histogram_sql,
                                      bool &need_histogram,
-                                     const ObObjPrintParams &print_params);
+                                     const ObValuePrintParams &print_params);
 
   int generate_specified_keys_list_str_for_column(ObIArray<ObOptKeyColumnStat> &key_col_stats,
                                                   ObSqlString &keys_list_str);
@@ -253,12 +244,12 @@ private:
 
   int get_column_stat_min_max_meta(share::schema::ObSchemaGetterGuard *schema_guard,
                                           const uint64_t table_id,
-                                          ObObjMeta &min_meta,
-                                          ObObjMeta &max_meta);
+                                          SqlTypeMeta &min_meta,
+                                          SqlTypeMeta &max_meta);
 
   int get_histogram_endpoint_meta(share::schema::ObSchemaGetterGuard *schema_guard,
                                   const uint64_t table_id,
-                                  ObObjMeta &endpoint_meta);
+                                  SqlTypeMeta &endpoint_meta);
 
   int gen_tablet_list_str(const ObIArray<ObTabletID> &all_tablet_ids,
                           ObSqlString &tablet_list_str,

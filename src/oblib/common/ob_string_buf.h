@@ -28,7 +28,7 @@ namespace oceanbase
 namespace common
 {
 // This class is not thread safe.
-// ObStringBufT is used to store the ObString and ObObj object.
+// ObStringBufT stores strings, numbers, and rowkeys in an arena.
 template <typename PageAllocatorT = ModulePageAllocator, typename PageArenaT = PageArena<char, PageAllocatorT> >
 class ObStringBufT
 {
@@ -49,11 +49,6 @@ public:
   // @return OB_SUCCESS if succeed, other error code if error occurs.
   int write_string(const ObString &str, ObString *stored_str);
   int write_number(const number::ObNumber &nmb, number::ObNumber *stored_nmb);
-  // Writes an obj to buf.
-  // @param [in] obj the object to be stored.
-  // @param [out] stored_obj records the stored obj
-  // @return OB_SUCCESS if succeed, other error code if error occurs.
-  int write_obj(const ObObj &obj, ObObj *stored_obj);
   // Write a rowkey
   int write_string(const ObRowkey &rowkey, ObRowkey *stored_rowkey);
 

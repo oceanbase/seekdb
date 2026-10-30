@@ -79,7 +79,6 @@ public :
   void set_array_type(const ObCollectionTypeBase *array_type) { 
     map_type_ = static_cast<const ObCollectionMapType*>(array_type);
   }
-  int elem_at(uint32_t idx, ObObj &elem_obj) const { return OB_NOT_SUPPORTED; }
   int at(uint32_t idx, ObIArrayType &dest) const { return OB_NOT_SUPPORTED; }
   void clear() {}
   int flatten(ObArrayAttr *attrs, uint32_t attr_count, uint32_t &attr_idx);

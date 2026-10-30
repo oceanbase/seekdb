@@ -29,6 +29,7 @@
 #include "sql/session/ob_sql_session_info.h"
 
 #include "common/object/ob_object.h"
+#include "common/datum/datum_value_buffer.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "share/ob_lob_access_utils.h"
 
@@ -66,7 +67,7 @@ OB_SERIALIZE_MEMBER(ObFuncInputType, calc_meta_, max_length_, flag_);
 // TODO: use ObRawExprResType instead of ObExprResType in sql executor
 OB_DEF_SERIALIZE_SIMPLE(ObExprResType)
 {
-  int ret = ObObjMeta::serialize(buf, buf_len, pos);
+  int ret = SqlTypeMeta::serialize(buf, buf_len, pos);
   LST_DO_CODE(OB_UNIS_ENCODE,
         accuracy_,
         calc_accuracy_,
@@ -77,7 +78,8 @@ OB_DEF_SERIALIZE_SIMPLE(ObExprResType)
 
 OB_DEF_DESERIALIZE_SIMPLE(ObExprResType)
 {
-  int ret = ObObjMeta::deserialize(buf, data_len, pos);
+  param_.reset(); // literal views are compile-time state, absent from the wire
+  int ret = SqlTypeMeta::deserialize(buf, data_len, pos);
   LST_DO_CODE(OB_UNIS_DECODE,
         accuracy_,
         calc_accuracy_,
@@ -88,7 +90,7 @@ OB_DEF_DESERIALIZE_SIMPLE(ObExprResType)
 
 OB_DEF_SERIALIZE_SIZE_SIMPLE(ObExprResType)
 {
-  int64_t len = ObObjMeta::get_serialize_size();
+  int64_t len = SqlTypeMeta::get_serialize_size();
   LST_DO_CODE(OB_UNIS_ADD_LEN,
         accuracy_,
         calc_accuracy_,
@@ -101,7 +103,7 @@ const ObTimeZoneInfo *get_timezone_info(const ObSQLSessionInfo *session)
 {
   return TZ_INFO(session);
 }
-const common::ObObjPrintParams get_obj_print_params(const ObSQLSessionInfo *session)
+const common::ObValuePrintParams get_obj_print_params(const ObSQLSessionInfo *session)
 {
   return CREATE_OBJ_PRINT_PARAM(session);
 }
@@ -266,9 +268,9 @@ bool ObExprOperator::is_default_expr_cg() const
 #endif
 }
 
-ObObjType ObExprOperator::get_calc_cast_type(ObObjType param_type, ObObjType calc_type)
+SqlValueType ObExprOperator::get_calc_cast_type(SqlValueType param_type, SqlValueType calc_type)
 {
-  ObObjType cast_type = param_type;
+  SqlValueType cast_type = param_type;
   if (ObNullType == param_type || ObNullType == calc_type) {
     cast_type = param_type;
   } else if (ObMaxType == param_type || ObMaxType == calc_type) {
@@ -283,346 +285,17 @@ ObObjType ObExprOperator::get_calc_cast_type(ObObjType param_type, ObObjType cal
   return cast_type;
 }
 
-int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
-    const ObFuncInputType &res_type,
-    common::ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  // check if need to cast
-  const ObObjType param_type = res_obj.get_type();
-  const ObObjType calc_type = res_type.get_calc_type();
-  const ObCollationType param_collation_type = res_obj.get_collation_type();
-  const ObCollationType calc_collation_type = res_type.get_calc_meta().get_collation_type();
-  if (OB_LIKELY((calc_type != param_type && ObNullType != param_type) ||
-      (ob_is_string_or_lob_type(param_type) &&
-       ob_is_string_or_lob_type(calc_type) &&
-       param_collation_type != calc_collation_type))) {
-    LOG_DEBUG("need cast operand", K(res_type), K(res_type.get_calc_meta().get_scale()),
-              K(res_obj), K(res_obj.get_scale()));
-    ObCastMode cast_mode = get_cast_mode();
-
-    if (OB_UNLIKELY(T_FUN_PAD == get_type()
-        && ob_is_bit_tc(param_type)
-        && ob_is_varbinary_type(calc_type, calc_collation_type)
-        && CM_IS_COLUMN_CONVERT(expr_ctx.column_conv_ctx_.cast_mode_))) {
-      // In PAD expression, we need add COLUMN_CONVERT to cast mode when cast is
-      // from bit to binary and column convert is set in column_conv_ctx_. The COLUMN_CONVERT
-      // cast mode is used in bit_to_string to decide which cast way is appropriate.
-      cast_mode |= CM_COLUMN_CONVERT;
-    } else if (OB_UNLIKELY(T_FUN_SYS_BIT_COUNT == get_type()
-               && ObIntType == param_type
-               && ObUInt64Type == calc_type)) {
-      // when param_type is ObIntType and calc_type is ObUInt64Type,
-      // set CM_NO_RANGE_CHECK in cast_mode,
-      // so that res_obj will not convert to zero even res_obj is less than 0.
-      cast_mode |= CM_NO_RANGE_CHECK;
-    }
-    bool is_bool = false;
-    ObItemType item_type = T_NULL;
-    if (calc_type == ObJsonType && ob_obj_type_class(param_type) == ObIntTC) {
-      if (OB_FAIL(get_param_is_boolean(expr_ctx, res_obj, is_bool))) {
-      }
-    }
-    
-    if (OB_FAIL(ret)) {
-    } else if (is_bool) {
-      const ObObj *tmp_res_obj = NULL;
-      EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
-      if (CS_TYPE_INVALID != calc_collation_type) {
-        cast_ctx.dest_collation_ = calc_collation_type;
-      } else if (CS_TYPE_INVALID != param_collation_type) {
-        cast_ctx.dest_collation_ = param_collation_type;
-      }
-      ret = ObObjCaster::bool_to_json(calc_type, cast_ctx, res_obj, res_obj, tmp_res_obj);
-    } else if (ob_is_string_or_lob_type(res_type.get_calc_type()) && res_type.is_zerofill()) {
-      // For zerofilled string
-      ObZerofillInfo zf_info(true, res_type.get_length());
-      EXPR_DEFINE_CAST_CTX_ZF(expr_ctx, cast_mode, &zf_info);
-      if (OB_FAIL(ObObjCaster::to_type(res_type.get_calc_type(),
-          cast_ctx,
-          res_obj,
-          res_obj))) {
-      }
-    } else {
-      // TODO: (jiuren, xiaochu) Implement more complex conversion patterns here
-      /* Type conversion collation setting logic as follows:
-       * 1.cast_ctx sets the target collation to the system default collation, which is currently utf8mb4
-       * 2.If both the target and source types are ObStringTC, set according to the following logic:
-       *   a.If calc_collation is set, use that collation
-       *   b.If not, use the source type collation
-       */
-      EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
-      if (ob_is_string_or_lob_type(calc_type)) {
-        if (ob_is_string_or_lob_type(param_type)) {
-          if (CS_TYPE_INVALID != calc_collation_type) {
-            cast_ctx.dest_collation_ = calc_collation_type;
-          } else if (CS_TYPE_INVALID != param_collation_type) {
-            cast_ctx.dest_collation_ = param_collation_type;
-          }
-        } else {
-          if (CS_TYPE_INVALID != calc_collation_type) {
-            cast_ctx.dest_collation_ = calc_collation_type;
-          } else {
-            cast_ctx.dest_collation_ = ObCharset::get_bin_collation(CHARSET_UTF8MB4);
-          }
-        }
-      } else if (ob_is_json(calc_type)) {
-        cast_ctx.dest_collation_ = CS_TYPE_UTF8MB4_BIN;
-      }
-      ObObj tmp_obj;
-      cast_ctx.expect_obj_collation_ = cast_ctx.dest_collation_;
-      if (OB_FAIL(ObObjCaster::to_type(res_type.get_calc_type(),
-          cast_ctx,
-          res_obj,
-          tmp_obj))) {
-      } else {
-        res_obj = tmp_obj;
-      }
-      if (OB_SUCC(ret)
-          && ob_is_string_or_lob_type(param_type)
-          && ob_is_string_or_lob_type(calc_type)
-          && param_collation_type != calc_collation_type
-          && calc_collation_type != CS_TYPE_INVALID) {
-        res_obj.set_collation_type(calc_collation_type);
-      }
-    }
-  }
-  return ret;
-}
-
-int ObExprOperator::cast_operand_type(ObObj *params,
-                                      const int64_t param_num,
-                                      ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-
-  /*
-   * TODO: (xiaochu)
-   * 1. During the Optimizer stage, to calculate the partition index, ObExprOperator is artificially created, which leads to input_types_ not being initialized
-   * 2. The path for cast and conv in the CG stage is a bit abnormal, haven't figured it out yet
-   * 3. How to handle vectors, how to handle multi-row data? Skip for now, don't convert
-   */
-  const bool fallback_old_mode = false;
-  if (OB_ISNULL(params) || OB_UNLIKELY(param_num < 0)
-      || OB_UNLIKELY(param_num != real_param_num_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("NULL param or invalid number",
-        K(params), K(param_num), K(real_param_num_), K(ret));
-  } else if (fallback_old_mode) {
-    // fallback
-  }  else if (OB_UNLIKELY(real_param_num_ <= 0 ||
-              0 == input_types_.count() ||
-              NOT_ROW_DIMENSION != row_dimension_ ||
-              /* insert default time, expr generation is not standardized */
-              T_FUN_SYS_TIMESTAMP_NVL == get_type() /*||
-              T_FUN_SYS_CAST == get_type() ||
-              T_OP_CASE == get_type() ||
-              T_OP_ARG_CASE == get_type() ||
-              T_FUN_COLUMN_CONV == get_type()*/)) {
-              // skip
-  } else if (OB_UNLIKELY(input_types_.count() != real_param_num_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("real_param_num_ is wrong",K(input_types_.count()), K_(real_param_num));
-  } else {
-    // Convert the data type of each parameter of Operator
-    // Only conversion is needed when it is inconsistent with the target type
-    for (int64_t i = 0; OB_SUCC(ret) && i < real_param_num_; ++i) {
-      if (OB_FAIL(cast_operand_type(params[i], input_types_.at(i), expr_ctx))) {
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx) const
-
-{
-  ObObj result;
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(stack) || OB_ISNULL(this) || OB_UNLIKELY(real_param_num_ < 0)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("stack or this is null or stack_size is wrong", K(stack),
-             K(this), K(real_param_num_), K(ret));
-  } else if (OB_UNLIKELY(real_param_num_ > stack_size)) {
-    ret = OB_INVALID_ARGUMENT_NUM;
-  } else if (OB_LIKELY(row_dimension_ != NOT_ROW_DIMENSION)) {
-    int32_t param_num = real_param_num_ * row_dimension_;
-    if (OB_UNLIKELY(param_num > stack_size)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("wrong number of input arguments on stack", K(param_num), K(stack_size));
-      // vector operator
-    } else if (OB_FAIL(this->calc_resultN(result,
-                                          &stack[stack_size - param_num],
-                                          param_num,
-                                          expr_ctx))) {
-    } else {
-      stack[stack_size - param_num] = result;
-      stack_size -= (param_num - 1);
-    }
-  // FIXME: (xiaochu.yh) In the case of Row, do not cast_operand_type, let the user handle it themselves?
-  } else if (operand_auto_cast_
-      && OB_FAIL(cast_operand_type(stack + stack_size - real_param_num_,
-      real_param_num_, expr_ctx))) {
-  } else {
-    if (OB_UNLIKELY(param_num_ > 0 && param_num_ != real_param_num_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("bug! param_num is not equal than real_param_num",
-                K_(name), K(get_type_name(type_)),
-                K_(type), K_(param_num), K_(real_param_num),
-                K_(row_dimension), K(input_types_.count()),
-                K(stack_size), K(ret));
-    }
-    if (OB_SUCC(ret) && OB_UNLIKELY(real_param_num_ < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("bug! real_param_num is less than 0", K_(name), K(get_type_name(type_)),
-                K_(type), K_(param_num), K_(real_param_num),
-                K_(row_dimension), K(input_types_.count()),
-                K(stack_size), K(ret));
-    }
-    // Here @param_num_ is used because it is a static value bound to the Operator type,
-    // The definition of Operator specifies the number of parameters it can accept.
-    // For concat, partition_key, etc., functions, param_num_ is a negative number,
-    // Prompt call its own calc_resultN method
-    if (OB_SUCC(ret)) {
-      switch (param_num_) {
-      case 0: {
-          if (OB_FAIL(this->calc_result0(result, expr_ctx))) {
-          } else {
-            stack[stack_size] = result;
-            ++ stack_size;
-          }
-          break;
-        }
-      case 1: {
-          if (OB_FAIL(this->calc_result1(result, stack[stack_size - 1], expr_ctx))) {
-          } else {
-            stack[stack_size - 1] = result;
-          }
-          break;
-        }
-      case 2: {
-          if (OB_FAIL(this->calc_result2(result,
-                                         stack[stack_size - 2],
-                                         stack[stack_size - 1],
-                                         expr_ctx))) {
-          } else {
-            stack[stack_size - 2] = result;
-            stack_size--;
-          }
-          break;
-        }
-      case 3: {
-            // org mode
-          if (OB_FAIL(this->calc_result3(result,
-                                         stack[stack_size - 3],
-                                         stack[stack_size - 2],
-                                         stack[stack_size - 1],
-                                         expr_ctx))) {
-          } else {
-            stack[stack_size - 3] = result;
-            stack_size -= 2;
-          }
-          break;
-        }
-      default: {
-          if (OB_FAIL(this->calc_resultN(result,
-                                         &stack[stack_size - real_param_num_],
-                                         real_param_num_,
-                                         expr_ctx))) {
-          } else {
-            stack[stack_size - real_param_num_] = result;
-            stack_size -= real_param_num_ - 1;
-          }
-          break;
-        }
-      } // end switch
-      if (!stack[stack_size - 1].is_bit()) {
-        stack[stack_size - 1].set_scale(result_type_.get_scale());
-      }
-
-    }
-  }
-  return ret;
-}
-
-int ObExprOperator::eval(common::ObExprCtx &expr_ctx, common::ObObj &val,
-      common::ObObj *params, int64_t param_num) const
-{
-  int ret = OB_SUCCESS;
-  // some expr (e.g.: subtime) rely on the default value of ObObj, so we construct it again.
-  // (see ObExprOperator::calc(), use an new stack ObObj variable and assign to val finally).
-  new (&val) ObObj();
-  if (OB_ISNULL(params) || OB_UNLIKELY(param_num < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(row_dimension_ != NOT_ROW_DIMENSION)) {
-    // row operator
-    if (OB_FAIL(calc_resultN(val, params, param_num, expr_ctx))) {
-    }
-  } else if (!is_param_lazy_eval() && operand_auto_cast_
-      && OB_FAIL(cast_operand_type(params, param_num, expr_ctx))) {
-  } else {
-    if (OB_UNLIKELY(param_num != real_param_num_)
-        || OB_UNLIKELY(param_num_ > 0 && param_num_ != real_param_num_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("wrong param num", K(ret), K(param_num), K(param_num_), K(real_param_num_));
-    } else {
-      // Must use %param_num_, because it will set to negative number to indicate that
-      // we should call calc_resultN here. e.g.: concat
-      switch (param_num_) {
-        case 0: {
-          ret = calc_result0(val, expr_ctx);
-          break;
-        }
-        case 1: {
-          ret = calc_result1(val, params[0], expr_ctx);
-          break;
-        }
-        case 2: {
-          ret = calc_result2(val, params[0], params[1], expr_ctx);
-          break;
-        }
-        case 3: {
-          ret = calc_result3(val, params[0], params[1], params[2], expr_ctx);
-          break;
-        }
-        default: {
-          ret = calc_resultN(val, params, param_num, expr_ctx);
-        }
-      }
-      if (OB_FAIL(ret)) {
-      }
-      if (!val.is_bit() && !val.is_ext()) {
-        val.set_scale(result_type_.get_scale());
-      }
-    }
-  }
-  return ret;
-}
 
 
 
-int ObExprOperator::get_param_is_boolean(common::ObExprCtx &expr_ctx,
-      const common::ObObj &param, bool &is_boolean) const
-{
-  int ret = OB_SUCCESS;
-  is_boolean = false;
-  if (OB_ISNULL(expr_ctx.infix_expr_)) {
-    // do nothing for postfix expression
-  } else {
-    if (OB_FAIL(expr_ctx.infix_expr_->get_param_is_boolean(expr_ctx, param,
-                                                               is_boolean))) {
-    }
-  }
-  return ret;
-}
+
 
 /*
  * get default collation type from session for string type
  * do not use this function for non-string type
  * */
 ObCollationType ObExprOperator::get_default_collation_type(
-    ObObjType type,
+    SqlValueType type,
     ObExprTypeCtx &type_ctx
     )
 {
@@ -635,8 +308,8 @@ ObCollationType ObExprOperator::get_default_collation_type(
 
 OB_SERIALIZE_MEMBER(ObExprOperator, row_dimension_, real_param_num_, result_type_, input_types_, id_);
 
-int ObExprOperator::aggregate_collations(ObObjMeta &type,
-                                         const ObObjMeta *types,
+int ObExprOperator::aggregate_collations(SqlTypeMeta &type,
+                                         const SqlTypeMeta *types,
                                          int64_t param_num,
                                          uint32_t flags,
                                          const ObCollationType conn_coll_type)
@@ -749,8 +422,8 @@ int ObExprOperator::aggregate_two_collation(const ObCollationLevel level1,
 }
 
 int ObExprOperator::aggregate_charsets_for_string_result(
-  ObObjMeta &type,
-  const ObObjMeta *types,
+  SqlTypeMeta &type,
+  const SqlTypeMeta *types,
   int64_t param_num,
   common::ObExprTypeCtx &type_ctx)
 {
@@ -775,8 +448,8 @@ int ObExprOperator::aggregate_charsets_for_string_result(
 }
 
 int ObExprOperator::aggregate_charsets_for_comparison(
-  ObObjMeta &type,
-  const ObObjMeta *types,
+  SqlTypeMeta &type,
+  const SqlTypeMeta *types,
   int64_t param_num,
   common::ObExprTypeCtx &type_ctx)
 {
@@ -803,7 +476,7 @@ int ObExprOperator::aggregate_charsets_for_comparison(
 
 
 int ObExprOperator::aggregate_charsets_for_string_result_with_comparison(
-  ObObjMeta &type,
+  SqlTypeMeta &type,
   const ObExprResType *types,
   int64_t param_num,
   common::ObExprTypeCtx &type_ctx)
@@ -816,8 +489,8 @@ int ObExprOperator::aggregate_charsets_for_string_result_with_comparison(
 }
 
 int ObExprOperator::aggregate_charsets(
-  ObObjMeta &type,
-  const ObObjMeta *types,
+  SqlTypeMeta &type,
+  const SqlTypeMeta *types,
   int64_t param_num,
   uint32_t flags,
   common::ObExprTypeCtx &type_ctx)
@@ -826,7 +499,7 @@ int ObExprOperator::aggregate_charsets(
 }
 
 int ObExprOperator::aggregate_charsets(
-  ObObjMeta &type,
+  SqlTypeMeta &type,
   const ObExprResType *types,
   int64_t param_num,
   uint32_t flags,
@@ -837,13 +510,13 @@ int ObExprOperator::aggregate_charsets(
      !OB_UNLIKELY(param_num < 1));
 
   if (OB_SUCC(ret)) {
-    ObSEArray<ObObjMeta, 16> coll_types;
-    ObObjMeta coll;
+    ObSEArray<SqlTypeMeta, 16> coll_types;
+    SqlTypeMeta coll;
     for (int i = 0; OB_SUCC(ret) && i < param_num; ++i) {
       coll.reset();
       coll.set_collation_level(types[i].get_collation_level());
       if (types[i].is_enum_set_with_subschema()) {
-        ObObjMeta obj_meta;
+        SqlTypeMeta obj_meta;
         if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(types[i], type_ctx.get_session(),
                                                                obj_meta))) {
         } else {
@@ -906,7 +579,7 @@ int ObExprOperator::aggregate_string_type_and_charset_extended(
    *    comprehensively consider each param type to get result type
    *    get result collation from session based on the type's corresponding collation
    * */
-  ObObjType result_type = ObMaxType;
+  SqlValueType result_type = ObMaxType;
   ObCollationType result_charset = CS_TYPE_INVALID;
 
   if (OB_SUCC(ret)) {
@@ -1061,7 +734,7 @@ int ObExprOperator::aggregate_result_type_for_merge(
     type.set_collation_level(common::CS_LEVEL_IMPLICIT);
     type.set_collation_type(type_ctx.get_coll_type());
   } else {
-    ObObjType res_type = types[0].get_type();
+    SqlValueType res_type = types[0].get_type();
     const ObLengthSemantics default_length_semantics = ((OB_NOT_NULL(type_ctx.get_session())) ?
                                                        type_ctx.get_session()->get_actual_length_semantics() : LS_BYTE);
 
@@ -1091,7 +764,7 @@ int ObExprOperator::aggregate_result_type_for_merge(
           for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
             if (OB_FAIL(restored_types.push_back(types[i]))) {
             } else if (types[i].is_enum_set_with_subschema()) {
-              ObObjMeta obj_meta;
+              SqlTypeMeta obj_meta;
               if (OB_FAIL(ObRawExprUtils::extract_enum_set_collation(types[i], session_info,
                                                                      obj_meta))) {
               } else {
@@ -1427,7 +1100,7 @@ int ObExprOperator::aggregate_collection_sql_type(
 ObExprFindIntCachedValue::~ObExprFindIntCachedValue() {
 }
 
-ObObjType ObExprOperator::enumset_calc_types_[2 /*use_subschema*/][ObMaxTC] =
+SqlValueType ObExprOperator::enumset_calc_types_[2 /*use_subschema*/][ObMaxTC] =
 {
   {
     ObUInt64Type,/*ObNullTC*/
@@ -1521,9 +1194,9 @@ int ObArithExprOperator::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("result_type_func_  or calc_type_func_is null",K(ret));
   } else {
-    ObObjType calc_type = ObMaxType;
-    ObObjType calc_ob1_type = ObMaxType;
-    ObObjType calc_ob2_type = ObMaxType;
+    SqlValueType calc_type = ObMaxType;
+    SqlValueType calc_ob1_type = ObMaxType;
+    SqlValueType calc_ob2_type = ObMaxType;
     if (OB_UNLIKELY(NOT_ROW_DIMENSION != row_dimension_)) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
     } else if (OB_FAIL(result_type_func_(type, type1, type2))) {
@@ -1545,608 +1218,21 @@ int ObArithExprOperator::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObArithExprOperator::calc_result2(ObObj &result,
-                                      const ObObj &left,
-                                      const ObObj &right,
-                                      ObExprCtx &expr_ctx) const
-{
-  return calc_(result,
-               left,
-               right,
-               expr_ctx,
-               result_type_.get_calc_scale(),
-               result_type_.get_calc_type(),
-               arith_funcs_);
-}
-
-int ObArithExprOperator::calc(ObObj &result,
-                              const ObObj &left,
-                              const ObObj &right,
-                              ObIAllocator *allocator,
-                              ObScale scale,
-                              ObCalcTypeFunc calc_type_func,
-                              const ObArithFunc *arith_funcs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(calc_type_func) || OB_ISNULL(allocator) || OB_ISNULL(arith_funcs)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("the pointer is null", K(calc_type_func), K(allocator), K(arith_funcs),K(ret));
-  } else {
-    ObObjType calc_type = ObMaxType;
-    ObObjType calc_ob1_type = ObMaxType;
-    ObObjType calc_ob2_type = ObMaxType;
-    if (OB_FAIL(calc_type_func(calc_type,
-                               calc_ob1_type,
-                               calc_ob2_type,
-                               left.get_type(),
-                               right.get_type()))) {
-    } else {
-      ObExprCtx expr_ctx(NULL, NULL, NULL, allocator);
-      ret = calc_(result, left, right, expr_ctx, scale, calc_type, arith_funcs);
-    }
-  }
-  return ret;
-}
-
-int ObArithExprOperator::calc(ObObj &result,
-                              const ObObj &left,
-                              const ObObj &right,
-                              ObExprCtx &expr_ctx,
-                              ObScale calc_scale,
-                              ObCalcTypeFunc calc_type_func,
-                              const ObArithFunc *arith_funcs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(calc_type_func) || OB_ISNULL(arith_funcs)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("calc_type_func is null",K(ret));
-  } else {
-    ObObjType calc_type = ObMaxType;
-    ObObjType calc_ob1_type = ObMaxType;
-    ObObjType calc_ob2_type = ObMaxType;
-    if (OB_FAIL(calc_type_func(calc_type,
-                               calc_ob1_type,
-                               calc_ob2_type,
-                               left.get_type(),
-                               right.get_type()))) {
-    } else {
-      ret = calc_(result, left, right, expr_ctx, calc_scale, calc_type, arith_funcs);
-    }
-  }
-  return ret;
-}
-
-int ObArithExprOperator::calc_(ObObj &result,
-                               const ObObj &left,
-                               const ObObj &right,
-                               ObExprCtx &expr_ctx,
-                               ObScale calc_scale,
-                               ObObjType calc_type,
-                               const ObArithFunc *arith_funcs)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(arith_funcs) || OB_ISNULL(expr_ctx.calc_buf_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(ObNullType == calc_type || ObMaxType == calc_type)) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  }
-
-  if (OB_SUCC(ret) && (OB_UNLIKELY(ObNullType == left.get_type() || ObNullType == right.get_type()))) {
-    result.set_null();
-  } else if (OB_SUCC(ret)) {
-    const ObObj *res_left = &left;
-    const ObObj *res_right = &right;
-    ObObj tmp_left_obj;
-    ObObj tmp_right_obj;
-    if (left.get_type() != calc_type || right.get_type() != calc_type) {
-      EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NO_CAST_INT_UINT);
-      if (is_datetime_add_minus_calc(calc_type, arith_funcs)) {
-        if (OB_FAIL(ObObjCaster::to_datetime(calc_type, cast_ctx,
-                                             left, tmp_left_obj, res_left))) {
-        } else if (OB_FAIL(ObObjCaster::to_datetime(calc_type, cast_ctx,
-                                                    right, tmp_right_obj, res_right))) {
-        }
-      } else if (OB_FAIL(ObObjCaster::to_type(calc_type,
-                                              cast_ctx,
-                                              left,
-                                              tmp_left_obj,
-                                              res_left))) {
-      } else if (OB_FAIL(ObObjCaster::to_type(calc_type,
-                                              cast_ctx,
-                                              right,
-                                              tmp_right_obj,
-                                              res_right))) {
-      }
-    }
-    //ok, let's calc it.
-    if (OB_SUCC(ret)) {
-      ObArithFunc arith_func = arith_funcs[res_left->get_type_class()];
-      LOG_DEBUG("begin calc", K(left), KPC(res_left), K(right), KPC(res_right), K(calc_scale),
-                              K(calc_type), K(lbt()));
-      if (OB_ISNULL(arith_func)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        ret = arith_func(result,
-                         *res_left,
-                         *res_right,
-                         expr_ctx.calc_buf_,
-                         calc_scale);
-        if (OB_ERR_UNEXPECTED == ret) {
-          ob_abort();
-        }
-      }
-    }
-    //    }
-  }
-  return ret;
-}
-
-bool ObArithExprOperator::is_datetime_add_minus_calc(const common::ObObjType calc_type,
-    const ObArithFunc *arith_funcs)
-{
-  return (NULL != arith_funcs
-          && (ObExprAdd::add_datetime == arith_funcs[ob_obj_type_class(calc_type)]
-              || ObExprMinus::minus_datetime == arith_funcs[ob_obj_type_class(calc_type)]));
-}
-
 int ObRelationalExprOperator::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
 {
-  int ret = OB_SUCCESS;
-  cmp_op_func2_ = NULL;
-  ret = ObExprOperator::deserialize(buf, data_len, pos);
+  int ret = ObExprOperator::deserialize(buf, data_len, pos);
   if (OB_SUCC(ret) && (IS_COMMON_COMPARISON_OP(type_) || T_FUN_SYS_STRCMP == type_)
-                   && ObExprOperator::NOT_ROW_DIMENSION == row_dimension_
-                   && real_param_num_ == 2) {
-    if (input_types_.count() != 2) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("unexpected error. invalid input types",
-                K(ret),
-                K(type_),
-                K(real_param_num_),
-                K(input_types_.count()));
-    } else {
-      ObObjType left_operand_type = input_types_.at(0).get_calc_type();
-      ObObjType right_operand_type = input_types_.at(1).get_calc_type();
-      if (OB_FAIL(set_cmp_func(left_operand_type, right_operand_type))) {
-        cmp_op_func2_ = NULL;//defensive code
-      }
-    }
-  }
-  return ret;
-}
-
-int ObRelationalExprOperator::compare(ObObj &result,
-                                      const ObObj &obj1,
-                                      const ObObj &obj2,
-                                      const ObCompareCtx &cmp_ctx,
-                                      ObCastCtx &cast_ctx,
-                                      ObCmpOp cmp_op)
-{
-  int ret = OB_SUCCESS;
-  bool need_cast = false;
-  if (OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, need_cast))) {
-  } else if (need_cast) {
-    if (OB_FAIL(compare_cast(result, obj1, obj2, cmp_ctx, cast_ctx, cmp_op))) {
-    }
-  }
-  return ret;
-}
-
-int ObRelationalExprOperator::compare_cast(ObObj &result,
-                                           const ObObj &obj1,
-                                           const ObObj &obj2,
-                                           const ObCompareCtx &cmp_ctx,
-                                           ObCastCtx &cast_ctx,
-                                           ObCmpOp cmp_op)
-{
-  int ret = OB_SUCCESS;
-  ObObj buf_obj1;
-  ObObj buf_obj2;
-  const ObObj *res_obj1 = NULL;
-  const ObObj *res_obj2 = NULL;
-  bool need_cast = false;
-  cast_ctx.dest_collation_ = cmp_ctx.cmp_cs_type_;
-  ObCompareCtx tmp_cmp_ctx = cmp_ctx;
-  if (ob_is_decimal_int(tmp_cmp_ctx.cmp_type_)) {
-    // result accuracy can't determined here,
-    // just use ObNumberType instead
-    tmp_cmp_ctx.cmp_type_ = ObNumberType;
-  }
-  if (OB_FAIL(ObObjCaster::to_type(tmp_cmp_ctx.cmp_type_, cast_ctx, obj1, buf_obj1, res_obj1))) {
-  } else if (OB_FAIL(
-               ObObjCaster::to_type(tmp_cmp_ctx.cmp_type_, cast_ctx, obj2, buf_obj2, res_obj2))) {
-  } else if (OB_ISNULL(res_obj1) || OB_ISNULL(res_obj2)) {
+      && ObExprOperator::NOT_ROW_DIMENSION == row_dimension_
+      && real_param_num_ == 2 && input_types_.count() != 2) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ObObjCmpFuncs::compare(result, *res_obj1, *res_obj2, tmp_cmp_ctx, cmp_op,
-                                            need_cast))) {
-  } else if (need_cast) {
-    ret = OB_ERR_UNEXPECTED;
+    LOG_ERROR("unexpected error. invalid input types",
+              K(ret),
+              K(type_),
+              K(real_param_num_),
+              K(input_types_.count()));
   }
   return ret;
 }
-
-int ObRelationalExprOperator::compare_nullsafe(int64_t &result,
-                                               const ObObj &obj1,
-                                               const ObObj &obj2,
-                                               ObCastCtx &cast_ctx,
-                                               ObObjType cmp_type,
-                                               ObCollationType cmp_cs_type)
-{
-  int ret = OB_SUCCESS;
-  ObObj res_obj;
-  int64_t tz_offset = 0;
-  if (OB_FAIL(get_tz_offset(cast_ctx.dtc_params_.tz_info_, tz_offset))) {
-  } else {
-    ObCompareCtx cmp_ctx(cmp_type,
-                         cmp_cs_type,
-                         true,
-                         tz_offset,
-                         default_null_pos());
-    if (OB_FAIL(compare(res_obj, obj1, obj2, cmp_ctx, cast_ctx, CO_CMP))) {
-    } else {
-      result = res_obj.get_int();
-    }
-  }
-  return ret;
-}
-
-bool ObRelationalExprOperator::can_cmp_without_cast(ObExprResType type1,
-                                                    ObExprResType type2,
-                                                    ObCmpOp cmp_op)
-{
-  bool need_no_cast = false;
-  bool has_lob_header = type1.has_lob_header() || type2.has_lob_header();
-  // Special processing display call compare(e.g.: c1 > c2), at this time enum/set should all be converted to string handling
-  // Internal comparison (order by), enum/set does not need conversion.
-  if (ob_is_enum_or_set_type(type1.get_type())
-      && ob_is_enum_or_set_type(type2.get_type())) {
-    need_no_cast = false;
-  } else if ((type1.is_null() && ObDatumFuncs::is_null_aware_hash_type(type2.get_type())) ||
-               (type2.is_null() && ObDatumFuncs::is_null_aware_hash_type(type1.get_type()))) {
-    need_no_cast = false;
-  } else {
-    if (ObDatumFuncs::is_string_type(type1.get_type())
-        && ObDatumFuncs::is_string_type(type2.get_type())) {
-      need_no_cast = (ObCharset::charset_type_by_coll(type1.get_collation_type())
-                       == ObCharset::charset_type_by_coll(type2.get_collation_type()));
-    } else if (ob_is_decimal_int_tc(type1.get_type()) && ob_is_decimal_int_tc(type2.get_type())) {
-      // if scale1 != scale2 or int_bytes1 != int_bytes2
-      need_no_cast = (type1.get_scale() == type2.get_scale()
-                      && get_decimalint_type(type1.get_precision())
-                           == get_decimalint_type(type2.get_precision()));
-    } else if (ob_is_double_tc(type1.get_type()) && ob_is_double_tc(type2.get_type())) {
-      need_no_cast = (type1.get_scale() == type2.get_scale());
-    } else {
-      auto func_ptr = ObExprCmpFuncsHelper::get_eval_expr_cmp_func(type1.get_type(),
-                                                                   type2.get_type(),
-                                                                   type1.get_scale(),
-                                                                   type2.get_scale(),
-                                                                   type1.get_precision(),
-                                                                   type2.get_precision(),
-                                                                   cmp_op,
-                                                                   CS_TYPE_BINARY,
-                                                                   has_lob_header);
-      need_no_cast = (func_ptr != nullptr);
-    }
-  }
-  return need_no_cast;
-}
-
-/*
- * Note that, the original motivation of this function is that,
- *
- * Provided that we have a = b and b = c, can we deduce that a = c holds actually?
- *
- * The return value of result is true represents equal comparison a = b is transitive, which means
- * for any a = b and b = c, if both of them are transitive, then we can always deduce a = c
- *
- * For example, we have the table definition like this
- * create table t1(c1 int, c2 tinyint, c3 int unsigned, c4 enum('a', 'b'), c5 enum('c', 'd'))
- * Then there is no need to add any implicit cast in c1 = c2, c1 = c3, c1 = c4, c1 = c5.
- * c1 = c2 and c1 = c3 is equal transitive, then we can deduce c2 = c3.
- * For comparison between enum types, they need cast to varchar implicitly, so we define comparison
- * between enum and int type class is not transitive.
- * Then we can not deduce c4 = c5 via c1 = c4 and c1 = c5, because they are not equal transitive.
- */
-int ObRelationalExprOperator::is_equal_transitive(const common::ObObjMeta &meta1,
-                                                  const common::ObObjMeta &meta2,
-                                                  bool &result)
-{
-  int ret = OB_SUCCESS;
-  result = false;
-  ObObjType type = ObMaxType;
-  if (OB_FAIL(ObExprResultTypeUtil::get_relational_equal_type(type,
-                                                              meta1.get_type(),
-                                                              meta2.get_type()))) {
-  } else if (ObMaxType == type) {
-    // do nothing
-  } else if (!ob_is_string_or_lob_type(type)) {
-    result = true;
-  } else {
-    result = meta1.get_collation_type() == meta2.get_collation_type();
-  }
-  return ret;
-}
-
-int ObRelationalExprOperator::get_equal_meta(ObObjMeta &meta,
-                                             const ObObjMeta &meta1,
-                                             const ObObjMeta &meta2)
-{
-  int ret = OB_SUCCESS;
-  ObObjType type = ObMaxType;
-  if (OB_FAIL(ObExprResultTypeUtil::get_relational_equal_type(type,
-                                                              meta1.get_type(),
-                                                              meta2.get_type()))) {
-  } else if (ob_is_string_or_lob_type(type)) {
-    if (meta1.get_collation_type() != meta2.get_collation_type()) {
-      type = ObMaxType;
-    } else {
-      meta.set_collation_type(meta1.get_collation_type());
-    }
-  }
-  if (OB_SUCC(ret)) {
-    meta.set_type(type);
-  }
-  return ret;
-}
-// MySQL uses item_cmp_type to calculate what type the values need to be converted to before comparison
-// Note: comparison type, not result type. compare result type is LongLong
-int ObExprOperator::calc_cmp_type2(ObExprResType &type,
-                                   const ObExprResType &type1,
-                                   const ObExprResType &type2,
-                                   common::ObExprTypeCtx &type_ctx,
-                                   const bool left_is_const, /* false */
-                                   const bool right_is_const /* false*/) const
-{
-  int ret = OB_SUCCESS;
-  ObObjType cmp_type = ObMaxType;
-  // todo(jiuren): we can add such code after plan cache add same optimization.
-//  if (is_int_cmp_const_str(&type1, &type2, cmp_type)) {
-//  } else
-  ObObjType obj_type1 = type1.get_type();
-  ObObjType obj_type2 = type2.get_type();
-  bool is_finish = false;
-  // decimal int cmps number, rules are follows:
-  // 1. if decimal int is not const, number is const, cast number_const as decimal_int
-  // 2. if number's (P, S) does not satisfy: P >= S && S >= 0,  cast decimal int as number
-  if (ObDecimalIntType == obj_type1 && ObNumberTC == ob_obj_type_class(obj_type2)) {
-    if (!left_is_const && right_is_const) {
-      cmp_type = ObDecimalIntType;
-      is_finish = true;
-    } else if (type2.get_precision() == PRECISION_UNKNOWN_YET || type2.get_scale() < 0
-               || type2.get_precision() < type2.get_scale()) {
-      cmp_type = ObNumberType;
-      is_finish = true;
-    }
-  } else if (ObDecimalIntType == obj_type2 && ObNumberTC == ob_obj_type_class(obj_type1)) {
-    if (!right_is_const && left_is_const) {
-      cmp_type = ObDecimalIntType;
-      is_finish = true;
-    } else if (type1.get_precision() == PRECISION_UNKNOWN_YET || type1.get_scale() < 0
-               || type1.get_precision() < type1.get_scale()) {
-      cmp_type = ObNumberType;
-      is_finish = true;
-    }
-  }
-  if (is_finish) {// do nothing
-  } else if ((type1.is_geometry() || type2.is_geometry())
-             && !(type_ == T_OP_EQ
-                  || type_ == T_OP_NE
-                  || type_ == T_OP_NSEQ
-                  || type_ == T_OP_SQ_EQ
-                  || type_ == T_OP_SQ_NE
-                  || type_ == T_OP_SQ_NSEQ
-                  || type_ == T_OP_IS
-                  || type_ == T_OP_IS_NOT
-                  || type_ == T_OP_IN
-                  || type_ == T_OP_NOT_IN)) {
-    ret = OB_INVALID_ARGUMENT;
-#if defined(__ANDROID__)
-  } else if ((type_ == T_OP_EQ || type_ == T_OP_NE || type_ == T_OP_NSEQ
-                 || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE || type_ == T_OP_SQ_NSEQ)
-             && (type1.is_collection_sql_type() != type2.is_collection_sql_type())
-             && !ob_is_null(type1.get_type())
-             && !ob_is_null(type2.get_type())
-             && !ob_is_string_or_lob_type(type1.get_type())
-             && !ob_is_string_or_lob_type(type2.get_type())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (type_ == T_OP_NSEQ
-             && type1.is_collection_sql_type()
-             && type2.is_collection_sql_type()) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-#endif
-  } else if ((type1.is_collection_sql_type() || type2.is_collection_sql_type())
-             && !(type_ == T_OP_EQ
-                  || type_ == T_OP_NE
-                  || type_ == T_OP_NSEQ)) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
-                                                            type1.get_type(),
-                                                            type2.get_type()))) {
-  } else if (OB_UNLIKELY(ObMaxType == cmp_type)) {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  if (OB_SUCC(ret)) {
-    type.set_calc_type(cmp_type);
-    // collation
-    if (ob_is_string_or_lob_type(cmp_type)) {
-      ObObjMeta coll_types[2];
-      coll_types[0].set_collation(type1);
-      coll_types[1].set_collation(type2);
-      ret = aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 2, type_ctx);
-      if (OB_FAIL(ret)) {
-      }
-    } else if (ob_is_collection_sql_type(cmp_type)) {
-      if (type1.is_collection_sql_type() && !type2.is_collection_sql_type()) {
-        type.get_calc_meta().set_subschema_id(type1.get_subschema_id());
-      } else if (!type1.is_collection_sql_type() && type2.is_collection_sql_type()) {
-        type.get_calc_meta().set_subschema_id(type2.get_subschema_id());
-      } else if (type1.is_collection_sql_type() && type2.is_collection_sql_type()) {
-        if (type1.get_subschema_id() == type2.get_subschema_id()) {
-          type.get_calc_meta().set_subschema_id(type1.get_subschema_id());
-        }
-      }
-    }
-    LOG_DEBUG("calc cmp type", K(type1), K(type2), K(type.get_calc_meta()), K(lbt()));
-  }
-  return ret;
-}
-
-int ObExprOperator::calc_cmp_type3(ObExprResType &type,
-                                   const ObExprResType &type1,
-                                   const ObExprResType &type2,
-                                   const ObExprResType &type3,
-                                   common::ObExprTypeCtx &type_ctx) const
-{
-  int ret = OB_SUCCESS;
-  // cmp type
-  ObObjType cmp_type = type1.get_type();
-#if defined(__ANDROID__)
-  if (type1.is_collection_sql_type() || type2.is_collection_sql_type() || type3.is_collection_sql_type()) {
-    if (!type1.is_collection_sql_type()
-        && type2.is_collection_sql_type()
-        && type3.is_collection_sql_type()) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    }
-  }
-#endif
-  if (OB_SUCC(ret)
-      && OB_SUCC(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, type2.get_type(), cmp_type))) {
-    if (OB_UNLIKELY(ObMaxType == cmp_type)) {
-      ret = OB_INVALID_ARGUMENT; // not compatible input
-    } else if (OB_SUCC(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, cmp_type, type3.get_type()))) {
-      if (OB_UNLIKELY(ObMaxType == cmp_type)) {
-        ret = OB_INVALID_ARGUMENT; // not compatible input
-      }
-    }
-  }
-
-  // collation
-  if (OB_SUCC(ret)) {
-    type.set_calc_type(cmp_type);
-    if (ob_is_string_or_lob_type(cmp_type)) {
-      ObObjMeta coll_types[3];
-      coll_types[0].set_collation(type1);
-      coll_types[1].set_collation(type2);
-      coll_types[2].set_collation(type3);
-      ret = aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 3, type_ctx);
-    }
-  }
-  return ret;
-}
-// Used for type inference of trigonometric functions as well as square root, exponential, and logarithmic functions
-int ObExprOperator::calc_trig_function_result_type1(ObExprResType &type,
-                                                    ObExprResType &type1,
-                                                    common::ObExprTypeCtx &type_ctx) const
-{
-  UNUSED(type_ctx);
-  int ret = OB_SUCCESS;
-  if (NOT_ROW_DIMENSION != row_dimension_ || ObMaxType == type1.get_type()) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  } else if (type1.is_geometry()){
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    type.set_double();
-  } 
-  type1.set_calc_type(type.get_type());
-  // Do not add NOT_NULL constraint to return values of trigonometric, exp, and ln functions.
-  return ret;
-}
-
-int ObExprOperator::calc_trig_function_result_type2(ObExprResType &type,
-                                                    ObExprResType &type1,
-                                                    ObExprResType &type2,
-                                                    common::ObExprTypeCtx &type_ctx) const
-{
-  UNUSED(type_ctx);
-  int ret = OB_SUCCESS;
-  if (NOT_ROW_DIMENSION != row_dimension_) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP; // arithmetic not support row
-  } else if (ObMaxType == type1.get_type() || ObMaxType == type2.get_type()) {
-    ret = OB_ERR_INVALID_TYPE_FOR_OP;
-  } else if (type1.is_geometry() || type2.is_geometry()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    type.set_double();
-  }
-  type1.set_calc_type(type.get_type());
-  type2.set_calc_type(type.get_type());
-  ObExprOperator::calc_result_flag2(type, type1, type2);
-  return ret;
-}
-
-ObCastMode ObExprOperator::get_cast_mode() const
-{
-  return CM_NONE;
-}
-
-int ObExprOperator::is_valid_for_generated_column(const ObRawExpr*expr, const common::ObIArray<ObRawExpr *> &exprs, bool &is_valid) const
-{
-  is_valid = is_valid_for_generated_col_;
-  return OB_SUCCESS;
-}
-
-
-ObExpr *ObExprOperator::get_rt_expr(const ObRawExpr &raw_expr) const
-{
-  return raw_expr.rt_expr_;
-}
-
-DEF_SET_LOCAL_SESSION_VARS(ObExprOperator, raw_expr) {
-  return OB_SUCCESS;
-}
-
-int ObExprOperator::add_local_var_to_expr(share::ObSysVarClassType var_type,
-                                          const ObBasicSessionInfo *session,
-                                          ObLocalSessionVar &local_vars)
-{
-  int ret = OB_SUCCESS;
-  ObSessionSysVar *sys_var = NULL;
-  if (OB_SUCC(ret) && NULL == sys_var && NULL != session) {
-    ObObj session_val;
-    if (share::SYS_VAR_SQL_MODE == var_type) {
-      session_val.set_uint64(session->get_sql_mode());
-    } else if (OB_FAIL(session->get_sys_variable(var_type, session_val))) {
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(local_vars.add_local_var(var_type, session_val))) {
-      }
-    }
-  }
-  return ret;
-}
-
-bool ObExprOperator::is_enum_set_with_subschema_arg(const int64_t arg_idx) const
-{
-  bool bret = false;
-  const ObRawExpr *arg_expr = NULL;
-  if (arg_idx >= 0 && OB_NOT_NULL(raw_expr_) && arg_idx < raw_expr_->get_param_count()
-        && OB_NOT_NULL(arg_expr = raw_expr_->get_param_expr(arg_idx))
-        && arg_expr->is_enum_set_with_subschema()) {
-    bret = true;
-  }
-  return bret;
-}
-
-ObObjType ObExprOperator::get_enumset_calc_type(const ObObjType expected_type,
-                                                const int64_t arg_idx) const
-{
-  ObObjType calc_type = ObMaxType;
-  if (is_enum_set_with_subschema_arg(arg_idx)) {
-    calc_type = enumset_calc_types_[1 /*use subschema*/][OBJ_TYPE_TO_CLASS[expected_type]];
-    // set calc type to dst type direct, otherwise multiple casts may occur.
-    if (ob_is_string_type(expected_type)) {
-      calc_type = expected_type;
-    }
-  } else {
-    calc_type = enumset_calc_types_[0 /*for compatibility*/][OBJ_TYPE_TO_CLASS[expected_type]];
-  }
-  return calc_type;
-}
-
-OB_SERIALIZE_MEMBER(ObIterExprOperator, expr_id_, expr_type_);
 
 int ObRelationalExprOperator::calc_result_type2(ObExprResType &type,
                                                 ObExprResType &type1,
@@ -2337,7 +1423,7 @@ int ObRelationalExprOperator::calc_calc_type3(ObExprResType &type1,
                                               ObExprResType &type2,
                                               ObExprResType &type3,
                                               ObExprTypeCtx &type_ctx,
-                                              const ObObjType cmp_type) const
+                                              const SqlValueType cmp_type) const
 {
   int ret = OB_SUCCESS;
   //a(type1) between b(type2) and c(type3) <==> b<=a && a <=c
@@ -2351,8 +1437,8 @@ int ObRelationalExprOperator::calc_calc_type3(ObExprResType &type1,
   } else if (OB_FAIL(calc_cmp_type2(cmp_type21, type2, type1, type_ctx))) {
   } else if (OB_FAIL(calc_cmp_type2(cmp_type13, type1, type3, type_ctx))) {
   } else {
-    ObObjType type21 = cmp_type21.get_calc_type();
-    ObObjType type13 = cmp_type13.get_calc_type();
+    SqlValueType type21 = cmp_type21.get_calc_type();
+    SqlValueType type13 = cmp_type13.get_calc_type();
     if (OB_LIKELY(type21 == type13 && type13 == cmp_type)) {
       //type21 == type13 == cmp_type
       need_no_cast_21 = can_cmp_without_cast(
@@ -2510,33 +1596,6 @@ int ObRelationalExprOperator::get_cmp_result_type3(ObExprResType &type, bool &ne
   return ret;
 }
 
-int ObRelationalExprOperator::calc_result2(ObObj &result,
-                                           const ObObj &obj1,
-                                           const ObObj &obj2,
-                                           ObExprCtx &expr_ctx,
-                                           bool is_null_safe,
-                                           ObCmpOp cmp_op) const
-{
-  int ret = OB_SUCCESS;
-  //TODO::@yanhua raw
-  bool need_cast = false;
-  EXPR_DEFINE_CMP_CTX(result_type_.get_calc_meta(), is_null_safe, expr_ctx);
-  /*
-   * FIX ME,please. It seems that we must check obj1 and obj2 are null or not here
-   *
-   * But this is so ugly and everything will be retarded
-   */
-  if (OB_LIKELY(!obj1.is_null() && !obj2.is_null() && cmp_op_func2_ != NULL && !need_cast)) {
-    if (OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, cmp_op_func2_))) {
-    }
-  } else if (!need_cast && OB_FAIL(compare_nocast(result, obj1, obj2, cmp_ctx, cmp_op, need_cast))) {
-  } else if (need_cast) {
-    EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    if (OB_FAIL(compare_cast(result, obj1, obj2, cmp_ctx, cast_ctx, cmp_op))) {
-    }
-  }
-  return ret;
-}
 
 int ObRelationalExprOperator::assign(const ObExprOperator &other)
 {
@@ -2547,28 +1606,14 @@ int ObRelationalExprOperator::assign(const ObExprOperator &other)
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
-      this->cmp_op_func2_ = tmp_other->cmp_op_func2_;
     }
   }
   return ret;
 }
 
-int ObRelationalExprOperator::set_cmp_func(const ObObjType type1,
-                                           const ObObjType type2)
-{
-  int ret = OB_SUCCESS;
-  ObCmpOp cmp_op = get_cmp_op(type_);
-  ObObjTypeClass tc1 = ob_obj_type_class(type1);
-  ObObjTypeClass tc2 = ob_obj_type_class(type2);
-  if (OB_FAIL(ObObjCmpFuncs::get_cmp_func(tc1, tc2, cmp_op, cmp_op_func2_))) {
-  }
-  return ret;
-}
-
-
 int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
-                                              const ObObj &obj1,
-                                              const ObObj &obj2,
+                                              const ObDatum &obj1,
+                                              const ObDatum &obj2,
                                               ObExecContext &exec_ctx,
                                               const ObCmpOp cmp_op)
 {
@@ -2589,8 +1634,8 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
   */
   if (OB_ISNULL(c1) || OB_ISNULL(c2)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if ((pl::PL_NESTED_TABLE_TYPE != obj1.get_meta().get_extend_type() && pl::PL_VARRAY_TYPE != obj1.get_meta().get_extend_type())
-               || (pl::PL_NESTED_TABLE_TYPE != obj2.get_meta().get_extend_type() && pl::PL_VARRAY_TYPE != obj2.get_meta().get_extend_type())
+  } else if ((pl::PL_NESTED_TABLE_TYPE != obj1.get_extend_type() && pl::PL_VARRAY_TYPE != obj1.get_extend_type())
+               || (pl::PL_NESTED_TABLE_TYPE != obj2.get_extend_type() && pl::PL_VARRAY_TYPE != obj2.get_extend_type())
                || (pl::PL_NESTED_TABLE_TYPE != c1->get_type() && pl::PL_VARRAY_TYPE != c1->get_type())
                || (pl::PL_NESTED_TABLE_TYPE != c2->get_type() && pl::PL_VARRAY_TYPE != c2->get_type())) {
     ret = OB_NOT_SUPPORTED;
@@ -2619,39 +1664,34 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
   } else if (0 == c1->get_actual_count() && 0 == c2->get_actual_count()) {
     SET_CMP_RESULT(COLL_PRED_TRUE, COLL_PRED_FALSE, COLL_PRED_INVALID);
   } else {
-    common::ObArray<const ObObj *> c1_copy, c2_copy;
+    common::ObArray<const DatumValue *> c1_copy, c2_copy;
     int64_t c1_null_count = 0;
     int64_t c2_null_count = 0;
-    // for (int64_t i = 0; OB_SUCC(ret) && i < c1->get_count(); ++i) {
-    //   OZ (c1_copy.push_back(reinterpret_cast<const ObObj*>(c1->get_data()) + i));
-    //   OZ (c2_copy.push_back(reinterpret_cast<const ObObj*>(c2->get_data()) + i));
-    // }
-    bool del_flag = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < c1->get_count(); ++i) {
-      const ObObj *elem = reinterpret_cast<const ObObj*>(c1->get_data()) + i;
+      const DatumValue *elem = static_cast<const DatumValue*>(c1->get_data()) + i;
       CK (OB_NOT_NULL(elem));
       if (OB_SUCC(ret)) {
-        if (elem->is_null()) {
+        // A deleted member can have a NULL datum with invalid metadata;
+        // it must not contribute to the live NULL-element count.
+        if (elem->is_invalid_type()) {
+        } else if (elem->is_null()) {
           c1_null_count += 1;
-        } else if (c1->is_elem_deleted(i, del_flag)) {
         } else {
-          if (!del_flag) {
-            OZ (c1_copy.push_back(elem));
-          }
+          OZ (c1_copy.push_back(elem));
         }
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < c2->get_count(); ++i) {
-      const ObObj *elem = reinterpret_cast<const ObObj*>(c2->get_data()) + i;
+      const DatumValue *elem = static_cast<const DatumValue*>(c2->get_data()) + i;
       CK (OB_NOT_NULL(elem));
       if (OB_SUCC(ret)) {
-        if (elem->is_null()) {
+        // A deleted member can have a NULL datum with invalid metadata;
+        // it must not contribute to the live NULL-element count.
+        if (elem->is_invalid_type()) {
+        } else if (elem->is_null()) {
           c2_null_count += 1;
-        } else if (c2->is_elem_deleted(i, del_flag)) {
         } else {
-          if (!del_flag) {
-            OZ (c2_copy.push_back(elem));
-          }
+          OZ (c2_copy.push_back(elem));
         }
       }
     }
@@ -2659,38 +1699,57 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
       if (0 == c1_copy.count()) {  // all element in c1 is NULL
         cmp_result = CollectionPredRes::COLL_PRED_NULL;
       } else {
-        common::hash::ObHashMap<ObObj, int64_t, common::hash::NoPthreadDefendMode> c1_map;
+        // Keys borrow stable collection members. Cache the native hash and
+        // retain a separate comparison status because a container lookup's
+        // success code must not hide a value-comparison failure.
+        struct CollectionKey {
+          const DatumValue *value_ = nullptr;
+          uint64_t hash_ = 0;
+          int *status_ = nullptr;
+          int init(const DatumValue &value, int &status) {
+            value_ = &value; status_ = &status;
+            return hash_datum_value(value, 0, hash_);
+          }
+          int hash(uint64_t &result) const { result = hash_; return OB_SUCCESS; }
+          bool operator==(const CollectionKey &other) const {
+            bool equal = false;
+            const int err = datum_values_equal(*value_, *other.value_, equal);
+            if (err != OB_SUCCESS) { *status_ = err; }
+            return err == OB_SUCCESS && equal;
+          }
+        };
+        int comparison_status = OB_SUCCESS;
+        common::hash::ObHashMap<CollectionKey, int64_t, common::hash::NoPthreadDefendMode> c1_map;
         if (OB_FAIL(c1_map.create(c1_copy.count(), ObModIds::OB_SQL_HASH_SET))) {
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < c1_copy.count(); ++i) {
+            CollectionKey key;
             if (OB_ISNULL(c1_copy.at(i))) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(c1_map.set_refactored(*c1_copy.at(i), 1))) {
-              if (OB_HASH_EXIST == ret) {
-                ret = OB_SUCCESS;
-
-                int64_t *count = const_cast<int64_t*>(c1_map.get(*c1_copy.at(i)));
-
-                if (OB_ISNULL(count)) {
-                  ret = OB_ERR_UNEXPECTED;
-                } else {
-                  *count += 1;
-                }
-              } else {
-              }
+            } else if (OB_FAIL(key.init(*c1_copy.at(i), comparison_status))) {
+            } else {
+              const int map_ret = c1_map.set_refactored(key, 1);
+              if (comparison_status != OB_SUCCESS) {
+                ret = comparison_status;
+              } else if (map_ret == OB_HASH_EXIST) {
+                int64_t *count = const_cast<int64_t*>(c1_map.get(key));
+                if (comparison_status != OB_SUCCESS) { ret = comparison_status; }
+                else if (count == nullptr) { ret = OB_ERR_UNEXPECTED; }
+                else { *count += 1; }
+              } else { ret = map_ret; }
             }
           }
 
           if (OB_SUCC(ret)) {
             int64_t c2_unique = 0;
-
             for (int64_t i = 0; OB_SUCC(ret) && i < c2_copy.count(); ++i) {
-              int64_t *count = const_cast<int64_t*>(c1_map.get(*c2_copy.at(i)));
-
-              if (OB_NOT_NULL(count) && 0 < *count) {
-                *count -= 1;
-              } else {
-                c2_unique +=1;
+              CollectionKey key;
+              OZ (key.init(*c2_copy.at(i), comparison_status));
+              if (OB_SUCC(ret)) {
+                int64_t *count = const_cast<int64_t*>(c1_map.get(key));
+                if (comparison_status != OB_SUCCESS) { ret = comparison_status; }
+                else if (count != nullptr && *count > 0) { *count -= 1; }
+                else { c2_unique += 1; }
               }
             }
 
@@ -2724,7 +1783,7 @@ int ObRelationalExprOperator::eval_pl_udt_compare(const ObExpr &expr,
       expr_datum.set_null();
     } else {
       CollectionPredRes cmp_res = CollectionPredRes::COLL_PRED_INVALID;
-      OZ(pl_udt_compare2(cmp_res, *l->extend_obj_, *r->extend_obj_,
+      OZ(pl_udt_compare2(cmp_res, *l, *r,
                          ctx.exec_ctx_, get_cmp_op(expr.type_)));
       if (OB_SUCC(ret)) {
         switch (cmp_res) {
@@ -2747,8 +1806,8 @@ int ObRelationalExprOperator::eval_pl_udt_compare(const ObExpr &expr,
 }
 
 int ObRelationalExprOperator::eval_compare_composite(CollectionPredRes &cmp_result,
-                                                     const common::ObObj &obj1,
-                                                     const common::ObObj &obj2,
+                                                     const common::ObDatum &obj1,
+                                                     const common::ObDatum &obj2,
                                                      ObExecContext &exec_ctx,
                                                      const ObCmpOp cmp_op)
 {
@@ -2851,281 +1910,6 @@ int ObSubQueryRelationalExpr::calc_result_typeN(ObExprResType &type,
 
   return ret;
 }
-int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
-                                           const ObObj &obj1,
-                                           const ObObj &obj2,
-                                           ObExprCtx &expr_ctx) const
-{
-  // In the calc_result2 interface, the right operand must be an iterator
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!right_is_iter_) || OB_ISNULL(expr_ctx.subplan_iters_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("right_is_iter_ is wrong or expr_ctx.subplan_iters_ is null",
-             K(right_is_iter_), K(expr_ctx.subplan_iters_),K(ret));
-  } else {
-    int64_t subquery_idx = OB_INVALID_INDEX;
-    ObNewRow tmp_row;
-    ObNewRow *left_row = NULL;
-    ObNewRowIterator *left_row_iter = NULL;
-    if (left_is_iter_) {
-      int64_t left_idx = OB_INVALID_INDEX;
-      if (OB_FAIL(obj1.get_int(left_idx))) {
-      } else if (OB_ISNULL(left_row_iter = expr_ctx.subplan_iters_->at(left_idx))) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("get row iterator failed", K(left_idx));
-      } else if (OB_FAIL(left_row_iter->get_next_row(left_row))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          result.set_null();
-        } else {
-        }
-      }
-    } else {
-      tmp_row.cells_ = const_cast<ObObj*>(&obj1);
-      tmp_row.count_ = 1;
-      left_row = &tmp_row;
-    }
-    if (OB_SUCC(ret) && NULL != left_row) {
-      if (OB_FAIL(obj2.get_int(subquery_idx))) {
-      } else if (T_WITH_ALL == subquery_key_) {
-        if (OB_FAIL(calc_result_with_all(result, *left_row, subquery_idx, expr_ctx))) {
-        }
-      } else if (T_WITH_ANY == subquery_key_) {
-        if (OB_FAIL(calc_result_with_any(result, *left_row, subquery_idx, expr_ctx))) {
-        }
-      } else if (T_WITH_NONE == subquery_key_) {
-        // Vector comparison, this situation can only occur if both sides are subqueries
-        if (OB_UNLIKELY(!left_is_iter_)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("left_is_iter_ is wrong", K(ret));
-        } else if (OB_FAIL(calc_result_with_none(result, *left_row, subquery_idx, expr_ctx))) {
-        }
-      }
-    }
-    //for the comparison of subquery, if the left param is row iterator,
-    //we must check the row count of the left row iterator
-    //the left row iterator can only return one row
-    if (OB_SUCC(ret) && left_is_iter_) {
-      ObNewRow *tmp_left_row = NULL;
-      if (OB_FAIL(left_row_iter->get_next_row(tmp_left_row))) {
-        if (OB_LIKELY(OB_ITER_END == ret)) {
-          ret = OB_SUCCESS; // First iteration returned data, unable to iterate to the second row of data, meets the semantics of none, return OB_SUCCESS
-        } else {
-        }
-      } else {
-        //The second iteration produced data that does not conform to the semantics of the vector, so an error should be reported externally
-        ret = OB_SUBQUERY_TOO_MANY_ROW;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
-                                           const ObObj *param_array,
-                                           int64_t param_num,
-                                           ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(param_num <= 2)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("param_num is wrong", K(param_array), K(ret));
-  } else if (OB_UNLIKELY(left_is_iter_ && right_is_iter_)
-             || OB_ISNULL(expr_ctx.subplan_iters_)
-             || OB_ISNULL(param_array)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    // For the calc_resultN interface, param_array has at least one iterator parameter, but not all are iterator parameters
-    int64_t subquery_idx = OB_INVALID_ID;
-    ObNewRow tmp_row;
-    ObNewRow *left_row = NULL;
-    ObNewRowIterator *row_iter = NULL;
-    if (left_is_iter_) {
-      int64_t left_idx = OB_INVALID_INDEX;
-      const ObObj &idx_obj = param_array[0];
-      if (OB_FAIL(idx_obj.get_int(left_idx))) {
-      } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(left_idx))) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("get row iterator failed", K(left_idx));
-      } else if (OB_FAIL(row_iter->get_next_row(left_row))) {
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-          result.set_null();
-        } else {
-        }
-      } else {
-        ObNewRow *tmp_left_row = NULL;
-        tmp_row.cells_ = const_cast<ObObj*>(&param_array[1]);
-        tmp_row.count_ = param_num - 1;
-        if (OB_ISNULL(left_row)) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(compare_single_row(*left_row, tmp_row, expr_ctx, result))) {
-        } else if (OB_FAIL(row_iter->get_next_row(tmp_left_row))) {
-          if (OB_ITER_END == ret) {
-            ret = OB_SUCCESS; // First iteration returned data, unable to iterate to the second row of data, meets the semantics of none, return OB_SUCCESS
-          } else {
-          }
-        } else {
-           //The second iteration produced data that does not conform to the semantics of the vector, so an error should be reported externally
-          ret = OB_SUBQUERY_TOO_MANY_ROW;
-        }
-      }
-    } else if (right_is_iter_) {
-      tmp_row.cells_ = const_cast<ObObj*>(param_array);
-      tmp_row.count_ = param_num - 1;
-      left_row = &tmp_row;
-      const ObObj &idx_obj = param_array[param_num - 1];
-      OB_ASSERT(left_row != nullptr);
-      if (OB_FAIL(idx_obj.get_int(subquery_idx))) {
-      } else if (T_WITH_ALL == subquery_key_) {
-        if (OB_FAIL(calc_result_with_all(result, *left_row, subquery_idx, expr_ctx))) {
-        }
-      } else if (T_WITH_ANY == subquery_key_) {
-        if (OB_FAIL(calc_result_with_any(result, *left_row, subquery_idx, expr_ctx))) {
-        }
-      } else if (T_WITH_NONE == subquery_key_) {
-        if (OB_FAIL(calc_result_with_none(result, *left_row, subquery_idx, expr_ctx))) {
-        }
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("left_is_iter_ and right_is_iter are all false", K(ret));
-    }
-  }
-
-  return ret;
-}
-
-int ObSubQueryRelationalExpr::call(ObObj *stack,
-                                   int64_t &stack_size,
-                                   ObExprCtx &expr_ctx) const
-{
-  ObObj result;
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(stack) || OB_UNLIKELY(real_param_num_ < 0)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("stack is null or the param is wrong", K(stack),
-              K(real_param_num_), K(ret));
-  } else if (OB_UNLIKELY(real_param_num_ > stack_size)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    // subquery's operation is different from ordinary operation, there is no concept of parameter dimension and vector dimension,
-    // subquery-related expression operations, left parameter is the number of non-subquery parameters, right is a subquery ref parameter
-    // For exist(subquery) parameter count is 1, parameter is only subquery ref operator
-    // For c1 > (subquery) this situation, parameter count is 2, left parameter is column_ref(c1), right is subquery_ref index
-    // For (c1, c2)=(subquery) this situation, parameter count is 3, left parameters are column_ref(c1), column_ref(c2),
-    // Right parameter is subquery_ref index
-    switch (real_param_num_) {
-    case 1: {
-        if (OB_FAIL(calc_result1(result, stack[stack_size - 1], expr_ctx))) {
-        } else {
-          stack[stack_size - 1] = result;
-        }
-        break;
-      }
-    case 2: {
-        if (OB_FAIL(calc_result2(result,
-                                 stack[stack_size - 2],
-                                 stack[stack_size - 1],
-                                 expr_ctx))) {
-        } else {
-          stack[stack_size - 2] = result;
-          stack_size--;
-        }
-        break;
-      }
-    default: {
-        if (OB_FAIL(this->calc_resultN(result,
-                                 &stack[stack_size - real_param_num_],
-                                 real_param_num_,
-                                 expr_ctx))) {
-        } else {
-          stack[stack_size - real_param_num_] = result;
-          stack_size -= real_param_num_ - 1;
-        }
-        break;
-      } // end switch
-    }
-  }
-  return ret;
-}
-
-
-int ObSubQueryRelationalExpr::eval(common::ObExprCtx &expr_ctx, common::ObObj &val,
-      common::ObObj *params, int64_t param_num) const
-{
-  int ret = OB_SUCCESS;
-  new (&val) ObObj();
-  if (OB_ISNULL(params) || OB_UNLIKELY(param_num < 0)
-      || OB_UNLIKELY(real_param_num_ != param_num)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    switch (real_param_num_) {
-      case 1: {
-        ret = calc_result1(val, params[0], expr_ctx);
-        break;
-      }
-      case 2: {
-        ret = calc_result2(val, params[0], params[1], expr_ctx);
-        break;
-      }
-      default: {
-        ret = calc_resultN(val, params, param_num, expr_ctx);
-      }
-    }
-    if (OB_FAIL(ret)) {
-    }
-  }
-  return ret;
-}
-
-int ObSubQueryRelationalExpr::calc_result_with_none(ObObj &result,
-                                                    const ObNewRow &left_row,
-                                                    int64_t subquery_idx,
-                                                    ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  ObNewRowIterator *row_iter = NULL;
-  ObNewRow *row = NULL;
-  if (OB_ISNULL(expr_ctx.subplan_iters_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(subquery_idx < 0 || subquery_idx >= expr_ctx.subplan_iters_->count())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery_idx is invalied", K(subquery_idx),
-             "iter count", expr_ctx.subplan_iters_->count());
-  } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(subquery_idx))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(row_iter->get_next_row(row))) {
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-      result.set_null();
-    } else {
-    }
-  } else {
-    if (OB_ISNULL(row)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_UNLIKELY(left_row.get_count() != row->get_count())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("left_row and right row is not equal");
-    } else {
-      if (OB_FAIL(compare_single_row(left_row, *row, expr_ctx, result))) {
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(row_iter->get_next_row(row))) {
-      if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS; // First iteration returned data, unable to iterate out the second row of data, meets the semantics of none, return OB_SUCCESS
-      } else {
-      }
-    } else {
-      //Second iteration produced data, which does not conform to the semantics of the vector, so an error should be reported externally
-      ret = OB_SUBQUERY_TOO_MANY_ROW;
-    }
-  }
-  return ret;
-}
-
 /**
  * ALL means the entire expression is true only if all value comparisons are true
  * If one of the values is false, then the condition of the entire expression is definitely not met, resulting in false
@@ -3133,58 +1917,6 @@ int ObSubQueryRelationalExpr::calc_result_with_none(ObObj &result,
  * Then we need to look at the remaining results, if the remaining results are all true, then NULL should be returned, because there is an uncertain row value
  * Other cases return true
  */
-int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
-                                                   const ObNewRow &left_row,
-                                                   int64_t subquery_idx,
-                                                   ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  ObNewRowIterator *row_iter = NULL;
-  ObNewRow *row = NULL;
-  ObObj tmp_result;
-  bool cnt_null = false;
-  if (OB_ISNULL(expr_ctx.subplan_iters_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(subquery_idx < 0 || subquery_idx >= expr_ctx.subplan_iters_->count())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery_idx is invalied", K(subquery_idx), "iter count",
-             expr_ctx.subplan_iters_->count());
-  } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(subquery_idx))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    // If ALL collection is empty, the comparison result is true, so initialize to true.
-    tmp_result.set_bool(true);
-    while (OB_SUCC(ret) && OB_SUCC(row_iter->get_next_row(row))) {
-      if (OB_ISNULL(row)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_UNLIKELY(left_row.get_count() != row->get_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("left_row and right_row is not equal",K(ret));
-      } else {
-        if (OB_FAIL(compare_single_row(left_row, *row, expr_ctx, tmp_result))) {
-        } else if (OB_UNLIKELY(!tmp_result.is_int32() && !tmp_result.is_null())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("result type type is invalid", K(tmp_result));
-        } else if (tmp_result.is_false()) {
-          // As long as one element does not meet the condition, the entire expression is false, so we need to break out of the loop
-          break;
-        } else if (tmp_result.is_null()) {
-          cnt_null = true;
-        }
-      }
-    }
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-    }
-    if (OB_SUCC(ret)) {
-      if (tmp_result.is_true() && cnt_null) {
-        tmp_result.set_null();
-      }
-      result = tmp_result;
-    }
-  }
-  return ret;
-}
 
 /**
  * ANY's semantics is that if any value in the collection evaluates to true, the entire expression is true
@@ -3193,68 +1925,8 @@ int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
  * Then we need to look at the remaining results, if all the remaining results are false, then NULL should be returned, because there is an uncertain value
  * Other cases return true
  */
-int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
-                                                   const ObNewRow &left_row,
-                                                   int64_t subquery_idx,
-                                                   ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  ObNewRowIterator *row_iter = NULL;
-  ObNewRow *row = NULL;
-  ObObj tmp_result;
-  bool cnt_null = false;
-  if (OB_ISNULL(expr_ctx.subplan_iters_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(subquery_idx < 0 || subquery_idx >= expr_ctx.subplan_iters_->count())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subquery_idx is invalied", K(subquery_idx),
-             "iter count", expr_ctx.subplan_iters_->count());
-  } else if (OB_ISNULL(row_iter = expr_ctx.subplan_iters_->at(subquery_idx))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    // If ANY collection is empty, the comparison result is false, so initialize to false.
-    tmp_result.set_bool(false);
-    while (OB_SUCC(ret) && OB_SUCC(row_iter->get_next_row(row))) {
-      if (OB_UNLIKELY(left_row.get_count() != row->get_count())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("left_row and right_row is not equal", K(ret));
-      } else {
-        if (OB_FAIL(compare_single_row(left_row, *row, expr_ctx, tmp_result))) {
-        } else if (OB_UNLIKELY(!tmp_result.is_int32() && !tmp_result.is_null())) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if(tmp_result.is_true()) {
-          break;
-          // As long as one element satisfies the condition, the result is true, so break the iteration
-        } else if (tmp_result.is_null()) {
-          cnt_null = true;
-        }
-      }
-    }
-    if (OB_ITER_END == ret) {
-      ret = OB_SUCCESS;
-    }
-    if (OB_SUCC(ret)) {
-      if (tmp_result.is_false() && cnt_null) {
-        tmp_result.set_null();
-      }
-      result = tmp_result;
-    }
-  }
-  return ret;
-}
 
 
-int ObSubQueryRelationalExpr::compare_single_row(const ObNewRow &left_row,
-                                                 const ObNewRow &right_row,
-                                                 ObExprCtx &expr_ctx,
-                                                 ObObj &result) const
-{
-  UNUSED(left_row);
-  UNUSED(right_row);
-  UNUSED(expr_ctx);
-  UNUSED(result);
-  return OB_NOT_IMPLEMENT;
-}
 
 int ObSubQueryRelationalExpr::get_param_types(
     const ObRawExpr &param, const bool is_iter, ObIArray<ObExprResType> &types) const
@@ -3990,7 +2662,7 @@ void ObStringExprOperator::calc_temporal_format_result_length(ObExprResType &typ
 int ObStringExprOperator::extract_enum_set_collation_for_args(const ObExprResType &text,
                                                               const ObExprResType &pattern,
                                                               ObExprTypeCtx &type_ctx,
-                                                              ObObjMeta *real_types)
+                                                              SqlTypeMeta *real_types)
 {
   int ret = OB_SUCCESS;
   if (OB_SUCC(ret) && text.is_enum_set_with_subschema()) {
@@ -4006,7 +2678,7 @@ int ObStringExprOperator::extract_enum_set_collation_for_args(const ObExprResTyp
   return ret;
 }
 
-ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
+SqlValueType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
 {
   /*
     drop table t1;
@@ -4140,7 +2812,7 @@ ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
    *    text or blob is enough, see:
    *    repeat(col_text, 1) => text, repeat(col_blob, 1) => blob.
    */
-  ObObjType res_type = ObMaxType;
+  SqlValueType res_type = ObMaxType;
   if (char_length <= MAX_CHAR_LENGTH_FOR_VARCAHR_RESULT) {
     res_type = ObVarcharType;
   } else if (char_length <= MAX_CHAR_LENGTH_FOR_TEXT_RESULT) {
@@ -4353,11 +3025,11 @@ int ObBitwiseExprOperator::cg_bitwise_expr(ObExprCGCtx &expr_cg_ctx, const ObRaw
 int ObBitwiseExprOperator::choose_get_int_func(const ObDatumMeta datum_meta, void *&out_func)
 {
   int ret = OB_SUCCESS;
-  ObObjType type = datum_meta.get_type();
-  if (ObNumberTC == ob_obj_type_class(type)) {
+  SqlValueType type = datum_meta.get_type();
+  if (ObNumberTC == sql_type_class(type)) {
     out_func = reinterpret_cast<void*>(
         ObBitwiseExprOperator::get_uint64_from_number_type);
-  } else if (ObDecimalIntTC == ob_obj_type_class(type)) {
+  } else if (ObDecimalIntTC == sql_type_class(type)) {
     out_func = reinterpret_cast<void*>(ObBitwiseExprOperator::get_uint64_from_decimalint_type);
   } else {
     // For non-number input, the type inference stage will add implicit cast to convert it to int64/uint64
@@ -4441,81 +3113,6 @@ int ObBitwiseExprOperator::get_uint64_from_decimalint_type(
   return ret;
 }
 
-int ObBitwiseExprOperator::get_int64(const ObObj &obj,
-                                     ObExprCtx &expr_ctx,
-                                     bool is_round,
-                                     int64_t &out)
-{
-  int ret = OB_SUCCESS;
-  out = 0;
-  ObObjType type = obj.get_type();
-  if (OB_LIKELY(ob_is_int_tc(type))) {
-    out = obj.get_int();
-  } else if (OB_UNLIKELY(obj.is_number())) {
-    int64_t tmp_int = 0;
-    number::ObNumber nmb;
-    EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    if (OB_FAIL(nmb.from(obj.get_number(), cast_ctx))) {
-    } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
-    } else if (nmb.is_valid_int64(tmp_int)) {
-      out = tmp_int;
-    } else  {
-      ret = OB_ERR_TRUNCATED_WRONG_VALUE;
-      if (CM_IS_WARN_ON_FAIL(cast_ctx.cast_mode_)) {
-        ret = OB_SUCCESS;
-        out = 0;
-      }
-    }
-  } else {
-    EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    EXPR_GET_INT64_V2(obj, out);
-  }
-  return ret;
-}
-
-int ObBitwiseExprOperator::get_uint64(const ObObj &obj,
-                                      ObExprCtx &expr_ctx,
-                                      bool is_round,
-                                      uint64_t &out)
-{
-  int ret = OB_SUCCESS;
-  out = 0;
-  ObObjType type = obj.get_type();
-  if (OB_LIKELY(ob_is_int_tc(type))) {
-    out = static_cast<uint64_t>(obj.get_int());
-  } else if (ob_is_uint_tc(type)) {
-    out = obj.get_uint64();
-  } else if (OB_UNLIKELY(obj.is_number())) {
-    uint64_t tmp_uint = 0;
-    number::ObNumber value = obj.get_number();
-    if (OB_LIKELY(value.is_valid_uint64(tmp_uint))) {
-      out = tmp_uint;
-    } else {
-      int64_t tmp_int = 0;
-      number::ObNumber nmb;
-      EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-      if (OB_FAIL(nmb.from(value, cast_ctx))) {
-      } else if (OB_UNLIKELY(!nmb.is_integer() && OB_FAIL(is_round ? nmb.round(0) : nmb.trunc(0)))) {
-      } else if (nmb.is_valid_int64(tmp_int)) {
-        out = static_cast<uint64_t>(tmp_int);
-      } else if (nmb.is_valid_uint64(tmp_uint)) {
-        out = tmp_uint;
-      } else {
-        ret = OB_ERR_TRUNCATED_WRONG_VALUE;
-        if (CM_IS_WARN_ON_FAIL(cast_ctx.cast_mode_)) {
-          ret = OB_SUCCESS;
-          out = 0;
-        }
-      }
-    }
-  } else {
-    // need add CM_NO_RANGE_CHECK, otherwise 1 & -3.5(float) return 0.
-    EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NO_RANGE_CHECK | CM_STRING_INTEGER_TRUNC);
-    EXPR_GET_UINT64_V2(obj, out);
-  }
-  return ret;
-}
-
 DEF_SET_LOCAL_SESSION_VARS(ObBitwiseExprOperator, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
@@ -4547,7 +3144,7 @@ int ObMinMaxExprOperator::aggregate_result_type_for_comparison(ObExprResType &ty
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("types is null or param_num is wrong", K(types), K(param_num), K(ret));
   } else {
-    ObObjType res_type = types[0].get_type();
+    SqlValueType res_type = types[0].get_type();
     ObScale max_scale = types[0].get_scale();
     for (int64_t i = 1; OB_SUCC(ret) && i < param_num; ++i) {
       if (OB_FAIL(ObExprResultTypeUtil::get_relational_result_type(res_type,
@@ -4577,7 +3174,7 @@ int ObMinMaxExprOperator::aggregate_cmp_type_for_comparison(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("types is null or param_num is wrong", K(types), K(param_num), K(ret));
   } else {
-    ObObjType cmp_type = types[0].get_type();
+    SqlValueType cmp_type = types[0].get_type();
     for (int64_t i = 1; OB_SUCC(ret) && i < param_num; ++i) {
       if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
                                                                 cmp_type,
@@ -4696,7 +3293,7 @@ int ObMinMaxExprOperator::calc_result_meta_for_comparison(
 
   for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
     if (ob_is_enumset_tc(types_stack[i].get_type())) {
-      ObObjType dest_type = get_enumset_calc_type(type.get_calc_type(), i);
+      SqlValueType dest_type = get_enumset_calc_type(type.get_calc_type(), i);
       if (OB_UNLIKELY(ObMaxType == dest_type)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "invalid type", K(type), K(ret));
@@ -4708,119 +3305,6 @@ int ObMinMaxExprOperator::calc_result_meta_for_comparison(
   return ret;
 }
 
-
-int ObMinMaxExprOperator::calc_without_cast(ObObj &result,
-                                            const ObObj *objs_stack,
-                                            int64_t param_num,
-                                            const ObExprResType &result_type,
-                                            ObExprCtx &expr_ctx,
-                                            ObCmpOp cmp_op)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(CO_LT != cmp_op && CO_GT != cmp_op)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("the compare oper is wrong", K(ret), K(cmp_op));
-  } else if (OB_ISNULL(objs_stack)
-             || OB_ISNULL(expr_ctx.calc_buf_)
-             || OB_UNLIKELY(param_num < 1)
-             || OB_UNLIKELY(result_type.is_invalid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    bool has_null = false;
-    for (int i = 0; OB_SUCC(ret) && !has_null && i < param_num; ++i) {
-      if (objs_stack[i].is_null()) {
-        has_null = true;
-        result.set_null();
-      }
-    }
-    if (!has_null) {
-      // compare all params.
-      int res_idx = 0;
-      ObCollationType cmp_cs_type = result_type.get_calc_collation_type();
-      for (int i = 1; OB_SUCC(ret) && i < param_num; ++i) {
-        if (ObObjCmpFuncs::compare_oper_nullsafe(objs_stack[i], objs_stack[res_idx], cmp_cs_type, cmp_op)) {
-          res_idx = i;
-        }
-      }
-      // ok, we got the least / greatest param.
-      if (OB_SUCC(ret)) {
-        if (OB_LIKELY(result_type.get_type() == objs_stack[res_idx].get_type()
-            && result_type.get_collation_type() == objs_stack[res_idx].get_collation_type())) {
-          result = objs_stack[res_idx];
-        } else { //slow path
-          EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-          if (OB_FAIL(ObObjCaster::to_type(result_type.get_type(), result_type.get_collation_type(),
-                                         cast_ctx, objs_stack[res_idx], result))) {
-          }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObMinMaxExprOperator::calc_with_cast(ObObj &result,
-                                         const ObObj *objs_stack,
-                                         int64_t param_num,
-                                         const ObExprResType &result_type,
-                                         ObExprCtx &expr_ctx,
-                                         ObCmpOp cmp_op)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(CO_LT != cmp_op && CO_GT != cmp_op)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("the compare oper is wrong", K(ret), K(cmp_op));
-  } else if (OB_ISNULL(objs_stack)
-             || OB_ISNULL(expr_ctx.calc_buf_)
-             || OB_UNLIKELY(param_num < 1)
-             || OB_UNLIKELY(result_type.is_invalid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    if (ob_is_json(result_type.get_calc_type())) {
-      cast_ctx.dest_collation_ = CS_TYPE_UTF8MB4_BIN;
-    } else if (CS_TYPE_INVALID != result_type.get_collation_type()) {
-      cast_ctx.dest_collation_ = result_type.get_collation_type();
-    }
-    ObFixedArray<ObObj, ObIAllocator> buf_obj(expr_ctx.calc_buf_, param_num);
-    ObFixedArray<const ObObj*, ObIAllocator> res_obj(expr_ctx.calc_buf_, param_num);// inited in the for loop below.
-    if (OB_FAIL(buf_obj.prepare_allocate(param_num))) {
-    } else if (OB_FAIL(res_obj.prepare_allocate(param_num))) {
-    }
-    //ret status will be checked within OB_SUCC(ret)s
-    bool has_null = false;
-    // cast all params to cmp type, and check if exist null.
-    for (int i = 0; OB_SUCC(ret) && !has_null && i < param_num; ++i) {
-      res_obj[i] = NULL;
-      if (objs_stack[i].is_null()) {
-        has_null = true;
-        result.set_null();
-      } else if (OB_FAIL(ObObjCaster::to_type(result_type.get_calc_type(), cast_ctx,
-                                              objs_stack[i], buf_obj[i], res_obj[i]))) {
-
-      } else if (OB_ISNULL(res_obj[i])) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-    if (OB_SUCC(ret) && !has_null) {
-      // compare all params.
-      int res_idx = 0;
-      ObCollationType cmp_cs_type = result_type.get_calc_collation_type();
-      for (int i = 1; OB_SUCC(ret) && i < param_num; ++i) {
-        if (ObObjCmpFuncs::compare_oper_nullsafe(*res_obj[i], *res_obj[res_idx], cmp_cs_type, cmp_op)) {
-          res_idx = i;
-        }
-      }
-      // ok, we got the least / greatest param.
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(ObObjCaster::to_type(result_type.get_type(), result_type.get_collation_type(),
-                                         cast_ctx, objs_stack[res_idx], result))) {
-        }
-      }
-    }
-  }
-  return ret;
-}
 
 int ObMinMaxExprOperator::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
 {
@@ -4866,7 +3350,7 @@ int ObLocationExprOperator::calc_result_type2(ObExprResType &type,
   type1.set_calc_type(ObVarcharType);
   type2.set_calc_type(ObVarcharType);
   type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC);
-  ObObjMeta types[2] = {type1, type2};
+  SqlTypeMeta types[2] = {type1, type2};
   OZ(aggregate_charsets_for_comparison(type.get_calc_meta(), types, 2, type_ctx));
   OX(type1.set_calc_collation_type(type.get_calc_collation_type()));
   OX(type1.set_calc_collation_level(type.get_calc_collation_level()));
@@ -4875,100 +3359,8 @@ int ObLocationExprOperator::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObLocationExprOperator::calc_result2(common::ObObj &result,
-                                         const common::ObObj &obj1,
-                                         const common::ObObj &obj2,
-                                         common::ObExprCtx &expr_ctx) const
-{
-  ObObj position;
-  position.set_int(1);
-  return ObLocationExprOperator::calc_result3(result, obj1, obj2, position, expr_ctx);
-}
 
-int ObLocationExprOperator::calc_result3(common::ObObj &result,
-                                         const common::ObObj &obj1,
-                                         const common::ObObj &obj2,
-                                         const common::ObObj &obj3,
-                                         ObExprCtx &expr_ctx) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr_ctx.calc_buf_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(obj1.is_null() || obj2.is_null())) {
-    result.set_null();
-  } else if (obj3.is_null()) {
-    result.set_int(0);
-  } else if (OB_UNLIKELY(!is_type_valid(obj1.get_type())
-                         || !is_type_valid(obj2.get_type())
-                         || !is_type_valid(obj3.get_type()))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    int64_t pos = 0;
-    ret = get_pos_int64(obj3, expr_ctx, pos);
-    if (OB_SUCC(ret)) {
-      TYPE_CHECK(obj1, ObVarcharType);
-      TYPE_CHECK(obj2, ObVarcharType);
-      ObString str1 = obj1.get_string();
-      ObString str2 = obj2.get_string();
-      uint32_t idx = ObCharset::locate(result_type_.get_calc_collation_type(),
-                                       str2.ptr(),
-                                       str2.length(),
-                                       str1.ptr(),
-                                       str1.length(),
-                                       pos);
-      result.set_int(static_cast<int64_t>(idx));
-    }
-  }
-  return ret;
-}
 
-int ObLocationExprOperator::get_pos_int64(const ObObj &obj, ObExprCtx &expr_ctx, int64_t &out)
-{
-  int ret = OB_SUCCESS;
-  out = 0;
-  ObObjType type = obj.get_type();
-  if (OB_LIKELY(ob_is_int_tc(type))) {
-    out = obj.get_int();
-  } else if (ob_is_uint_tc(type)) {
-    uint64_t value = obj.get_uint64();
-    out = (value > INT64_MAX) ? 0 : static_cast<int64_t>(value);
-  } else if (OB_UNLIKELY(obj.is_number())) {
-    int64_t tmp_int = 0;
-    uint64_t tmp_uint = 0;
-    number::ObNumber nmb = obj.get_number();
-    number::ObNumber *pnmb = &nmb;
-    number::ObNumber newmb;
-    if (OB_UNLIKELY(!nmb.is_integer())) {
-      //such as select locate('bar', 'foobarbar', 5.3); yeah, really ugly.
-      EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-      if (OB_FAIL(newmb.from(nmb, cast_ctx))) {
-      } else if (OB_FAIL(newmb.round(0))) {
-      } else {
-        pnmb = &newmb;
-      }
-    }
-    if (OB_FAIL(ret)) {
-      //do nothing
-    } else {
-      OB_ASSERT(pnmb != nullptr);
-      if (pnmb->is_valid_int64(tmp_int)) {
-        out = tmp_int;
-      } else if (pnmb->is_valid_uint64(tmp_uint)) {
-        out = 0; // no errors  no warnings in mysql.
-      } else {
-        ret = OB_ERR_TRUNCATED_WRONG_VALUE;
-        if (CM_IS_WARN_ON_FAIL(expr_ctx.cast_mode_)) {
-          ret = OB_SUCCESS;
-          out = 0;
-        }
-      }
-    }
-  } else {
-    EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    EXPR_GET_INT64_V2(obj, out);
-  }
-  return ret;
-}
 // location-related expressions' first and second parameters, cs_type should be set to the same before calculation, otherwise
 // ObCharset::locate() cannot determine which cs_type to use for calculation
 int ObLocationExprOperator::get_calc_cs_type(const ObExpr &expr, ObCollationType &calc_cs_type)
@@ -5163,8 +3555,8 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
     rt_expr.inner_functions_ = NULL;
 
     const ObCmpOp cmp_op = get_cmp_op(raw_expr.get_expr_type());
-    const ObObjType input_type1 = rt_expr.args_[0]->datum_meta_.type_;
-    const ObObjType input_type2 = rt_expr.args_[1]->datum_meta_.type_;
+    const SqlValueType input_type1 = rt_expr.args_[0]->datum_meta_.type_;
+    const SqlValueType input_type2 = rt_expr.args_[1]->datum_meta_.type_;
     const bool has_lob_header = rt_expr.args_[0]->obj_meta_.has_lob_header() ||
                                 rt_expr.args_[1]->obj_meta_.has_lob_header();
     const ObScale input_scale1 = rt_expr.args_[0]->datum_meta_.scale_;
@@ -5234,8 +3626,8 @@ int ObRelationalExprOperator::cg_row_cmp_expr(const int row_dimension,
 
       for (int i = 0; OB_SUCC(ret) && i < row_dimension; i++)
       {
-        const ObObjType type1 = left_row->args_[i]->datum_meta_.type_;
-        const ObObjType type2 = right_row->args_[i]->datum_meta_.type_;
+        const SqlValueType type1 = left_row->args_[i]->datum_meta_.type_;
+        const SqlValueType type2 = right_row->args_[i]->datum_meta_.type_;
         const ObScale scale1 = left_row->args_[i]->datum_meta_.scale_;
         const ObScale scale2 = right_row->args_[i]->datum_meta_.scale_;
         const ObPrecision prec1 = left_row->args_[i]->datum_meta_.precision_;
@@ -5495,4 +3887,353 @@ int ObExprKMPSearchCtx::get_kmp_ctx_from_exec_ctx(ObExecContext &exec_ctx,
 }
 
 }
+
+int ObExprOperator::calc_cmp_type2(ObExprResType &type,
+                                   const ObExprResType &type1,
+                                   const ObExprResType &type2,
+                                   common::ObExprTypeCtx &type_ctx,
+                                   const bool left_is_const, /* false */
+                                   const bool right_is_const /* false*/) const
+{
+  int ret = OB_SUCCESS;
+  SqlValueType cmp_type = ObMaxType;
+  // todo(jiuren): we can add such code after plan cache add same optimization.
+//  if (is_int_cmp_const_str(&type1, &type2, cmp_type)) {
+//  } else
+  SqlValueType obj_type1 = type1.get_type();
+  SqlValueType obj_type2 = type2.get_type();
+  bool is_finish = false;
+  // decimal int cmps number, rules are follows:
+  // 1. if decimal int is not const, number is const, cast number_const as decimal_int
+  // 2. if number's (P, S) does not satisfy: P >= S && S >= 0,  cast decimal int as number
+  if (ObDecimalIntType == obj_type1 && ObNumberTC == sql_type_class(obj_type2)) {
+    if (!left_is_const && right_is_const) {
+      cmp_type = ObDecimalIntType;
+      is_finish = true;
+    } else if (type2.get_precision() == PRECISION_UNKNOWN_YET || type2.get_scale() < 0
+               || type2.get_precision() < type2.get_scale()) {
+      cmp_type = ObNumberType;
+      is_finish = true;
+    }
+  } else if (ObDecimalIntType == obj_type2 && ObNumberTC == sql_type_class(obj_type1)) {
+    if (!right_is_const && left_is_const) {
+      cmp_type = ObDecimalIntType;
+      is_finish = true;
+    } else if (type1.get_precision() == PRECISION_UNKNOWN_YET || type1.get_scale() < 0
+               || type1.get_precision() < type1.get_scale()) {
+      cmp_type = ObNumberType;
+      is_finish = true;
+    }
+  }
+  if (is_finish) {// do nothing
+  } else if ((type1.is_geometry() || type2.is_geometry())
+             && !(type_ == T_OP_EQ
+                  || type_ == T_OP_NE
+                  || type_ == T_OP_NSEQ
+                  || type_ == T_OP_SQ_EQ
+                  || type_ == T_OP_SQ_NE
+                  || type_ == T_OP_SQ_NSEQ
+                  || type_ == T_OP_IS
+                  || type_ == T_OP_IS_NOT
+                  || type_ == T_OP_IN
+                  || type_ == T_OP_NOT_IN)) {
+    ret = OB_INVALID_ARGUMENT;
+#if defined(__ANDROID__)
+  } else if ((type_ == T_OP_EQ || type_ == T_OP_NE || type_ == T_OP_NSEQ
+                 || type_ == T_OP_SQ_EQ || type_ == T_OP_SQ_NE || type_ == T_OP_SQ_NSEQ)
+             && (type1.is_collection_sql_type() != type2.is_collection_sql_type())
+             && !ob_is_null(type1.get_type())
+             && !ob_is_null(type2.get_type())
+             && !ob_is_string_or_lob_type(type1.get_type())
+             && !ob_is_string_or_lob_type(type2.get_type())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (type_ == T_OP_NSEQ
+             && type1.is_collection_sql_type()
+             && type2.is_collection_sql_type()) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+#endif
+  } else if ((type1.is_collection_sql_type() || type2.is_collection_sql_type())
+             && !(type_ == T_OP_EQ
+                  || type_ == T_OP_NE
+                  || type_ == T_OP_NSEQ)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  } else if (OB_FAIL(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type,
+                                                            type1.get_type(),
+                                                            type2.get_type()))) {
+  } else if (OB_UNLIKELY(ObMaxType == cmp_type)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_SUCC(ret)) {
+    type.set_calc_type(cmp_type);
+    // collation
+    if (ob_is_string_or_lob_type(cmp_type)) {
+      SqlTypeMeta coll_types[2];
+      coll_types[0].set_collation(type1);
+      coll_types[1].set_collation(type2);
+      ret = aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 2, type_ctx);
+      if (OB_FAIL(ret)) {
+      }
+    } else if (ob_is_collection_sql_type(cmp_type)) {
+      if (type1.is_collection_sql_type() && !type2.is_collection_sql_type()) {
+        type.get_calc_meta().set_subschema_id(type1.get_subschema_id());
+      } else if (!type1.is_collection_sql_type() && type2.is_collection_sql_type()) {
+        type.get_calc_meta().set_subschema_id(type2.get_subschema_id());
+      } else if (type1.is_collection_sql_type() && type2.is_collection_sql_type()) {
+        if (type1.get_subschema_id() == type2.get_subschema_id()) {
+          type.get_calc_meta().set_subschema_id(type1.get_subschema_id());
+        }
+      }
+    }
+    LOG_DEBUG("calc cmp type", K(type1), K(type2), K(type.get_calc_meta()), K(lbt()));
+  }
+  return ret;
+}
+
+int ObExprOperator::calc_cmp_type3(ObExprResType &type,
+                                   const ObExprResType &type1,
+                                   const ObExprResType &type2,
+                                   const ObExprResType &type3,
+                                   common::ObExprTypeCtx &type_ctx) const
+{
+  int ret = OB_SUCCESS;
+  // cmp type
+  SqlValueType cmp_type = type1.get_type();
+#if defined(__ANDROID__)
+  if (type1.is_collection_sql_type() || type2.is_collection_sql_type() || type3.is_collection_sql_type()) {
+    if (!type1.is_collection_sql_type()
+        && type2.is_collection_sql_type()
+        && type3.is_collection_sql_type()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    }
+  }
+#endif
+  if (OB_SUCC(ret)
+      && OB_SUCC(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, type2.get_type(), cmp_type))) {
+    if (OB_UNLIKELY(ObMaxType == cmp_type)) {
+      ret = OB_INVALID_ARGUMENT; // not compatible input
+    } else if (OB_SUCC(ObExprResultTypeUtil::get_relational_cmp_type(cmp_type, cmp_type, type3.get_type()))) {
+      if (OB_UNLIKELY(ObMaxType == cmp_type)) {
+        ret = OB_INVALID_ARGUMENT; // not compatible input
+      }
+    }
+  }
+
+  // collation
+  if (OB_SUCC(ret)) {
+    type.set_calc_type(cmp_type);
+    if (ob_is_string_or_lob_type(cmp_type)) {
+      SqlTypeMeta coll_types[3];
+      coll_types[0].set_collation(type1);
+      coll_types[1].set_collation(type2);
+      coll_types[2].set_collation(type3);
+      ret = aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 3, type_ctx);
+    }
+  }
+  return ret;
+}
+
+ObCastMode ObExprOperator::get_cast_mode() const
+{
+  return CM_NONE;
+}
+
+int ObExprOperator::is_valid_for_generated_column(const ObRawExpr*expr, const common::ObIArray<ObRawExpr *> &exprs, bool &is_valid) const
+{
+  is_valid = is_valid_for_generated_col_;
+  return OB_SUCCESS;
+}
+
+ObExpr *ObExprOperator::get_rt_expr(const ObRawExpr &raw_expr) const
+{
+  return raw_expr.rt_expr_;
+}
+
+DEF_SET_LOCAL_SESSION_VARS(ObExprOperator, raw_expr) {
+  return OB_SUCCESS;
+}
+
+int ObExprOperator::add_local_var_to_expr(share::ObSysVarClassType var_type,
+                                          const ObBasicSessionInfo *session,
+                                          ObLocalSessionVar &local_vars)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(session)) {
+    common::DatumValue session_val;
+    if (share::SYS_VAR_SQL_MODE == var_type) {
+      // add_local_var clones the value synchronously; keep the scalar payload
+      // alive through that call instead of writing through a null Datum ptr.
+      uint64_t sql_mode = session->get_sql_mode();
+      common::ObDatum datum;
+      datum.ptr_ = reinterpret_cast<char *>(&sql_mode);
+      datum.set_uint(sql_mode);
+      common::SqlTypeMeta meta;
+      meta.set_uint64();
+      session_val = common::DatumValue(datum, meta);
+    } else if (OB_FAIL(session->get_sys_variable(var_type, session_val))) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(local_vars.add_local_var(var_type, session_val))) {
+    }
+  }
+  return ret;
+}
+
+
+int ObExprOperator::calc_trig_function_result_type1(ObExprResType &type,
+                                                    ObExprResType &type1,
+                                                    common::ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  int ret = OB_SUCCESS;
+  if (NOT_ROW_DIMENSION != row_dimension_ || ObMaxType == type1.get_type()) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  } else if (type1.is_geometry()){
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    type.set_double();
+  }
+  type1.set_calc_type(type.get_type());
+  // Do not add NOT_NULL constraint to return values of trigonometric, exp, and ln functions.
+  return ret;
+}
+
+int ObExprOperator::calc_trig_function_result_type2(ObExprResType &type,
+                                                    ObExprResType &type1,
+                                                    ObExprResType &type2,
+                                                    common::ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  int ret = OB_SUCCESS;
+  if (NOT_ROW_DIMENSION != row_dimension_) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP; // arithmetic not support row
+  } else if (ObMaxType == type1.get_type() || ObMaxType == type2.get_type()) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+  } else if (type1.is_geometry() || type2.is_geometry()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    type.set_double();
+  }
+  type1.set_calc_type(type.get_type());
+  type2.set_calc_type(type.get_type());
+  ObExprOperator::calc_result_flag2(type, type1, type2);
+  return ret;
+}
+
+bool ObExprOperator::is_enum_set_with_subschema_arg(const int64_t arg_idx) const
+{
+  bool bret = false;
+  const ObRawExpr *arg_expr = NULL;
+  if (arg_idx >= 0 && OB_NOT_NULL(raw_expr_) && arg_idx < raw_expr_->get_param_count()
+        && OB_NOT_NULL(arg_expr = raw_expr_->get_param_expr(arg_idx))
+        && arg_expr->is_enum_set_with_subschema()) {
+    bret = true;
+  }
+  return bret;
+}
+
+SqlValueType ObExprOperator::get_enumset_calc_type(const SqlValueType expected_type,
+                                                const int64_t arg_idx) const
+{
+  SqlValueType calc_type = ObMaxType;
+  if (is_enum_set_with_subschema_arg(arg_idx)) {
+    calc_type = enumset_calc_types_[1 /*use subschema*/][OBJ_TYPE_TO_CLASS[expected_type]];
+    // set calc type to dst type direct, otherwise multiple casts may occur.
+    if (ob_is_string_type(expected_type)) {
+      calc_type = expected_type;
+    }
+  } else {
+    calc_type = enumset_calc_types_[0 /*for compatibility*/][OBJ_TYPE_TO_CLASS[expected_type]];
+  }
+  return calc_type;
+}
+
+OB_SERIALIZE_MEMBER(ObIterExprOperator, expr_id_, expr_type_);
+
+
+int ObRelationalExprOperator::is_equal_transitive(const common::SqlTypeMeta &meta1,
+                                                  const common::SqlTypeMeta &meta2,
+                                                  bool &result)
+{
+  int ret = OB_SUCCESS;
+  result = false;
+  SqlValueType type = ObMaxType;
+  if (OB_FAIL(ObExprResultTypeUtil::get_relational_equal_type(type,
+                                                              meta1.get_type(),
+                                                              meta2.get_type()))) {
+  } else if (ObMaxType == type) {
+    // do nothing
+  } else if (!ob_is_string_or_lob_type(type)) {
+    result = true;
+  } else {
+    result = meta1.get_collation_type() == meta2.get_collation_type();
+  }
+  return ret;
+}
+
+int ObRelationalExprOperator::get_equal_meta(SqlTypeMeta &meta,
+                                             const SqlTypeMeta &meta1,
+                                             const SqlTypeMeta &meta2)
+{
+  int ret = OB_SUCCESS;
+  SqlValueType type = ObMaxType;
+  if (OB_FAIL(ObExprResultTypeUtil::get_relational_equal_type(type,
+                                                              meta1.get_type(),
+                                                              meta2.get_type()))) {
+  } else if (ob_is_string_or_lob_type(type)) {
+    if (meta1.get_collation_type() != meta2.get_collation_type()) {
+      type = ObMaxType;
+    } else {
+      meta.set_collation_type(meta1.get_collation_type());
+    }
+  }
+  if (OB_SUCC(ret)) {
+    meta.set_type(type);
+  }
+  return ret;
+}
+
+
+bool ObRelationalExprOperator::can_cmp_without_cast(ObExprResType type1,
+                                                    ObExprResType type2,
+                                                    ObCmpOp cmp_op)
+{
+  bool need_no_cast = false;
+  bool has_lob_header = type1.has_lob_header() || type2.has_lob_header();
+  // Special processing display call compare(e.g.: c1 > c2), at this time enum/set should all be converted to string handling
+  // Internal comparison (order by), enum/set does not need conversion.
+  if (ob_is_enum_or_set_type(type1.get_type())
+      && ob_is_enum_or_set_type(type2.get_type())) {
+    need_no_cast = false;
+  } else if ((type1.is_null() && ObDatumFuncs::is_null_aware_hash_type(type2.get_type())) ||
+               (type2.is_null() && ObDatumFuncs::is_null_aware_hash_type(type1.get_type()))) {
+    need_no_cast = false;
+  } else {
+    if (ObDatumFuncs::is_string_type(type1.get_type())
+        && ObDatumFuncs::is_string_type(type2.get_type())) {
+      need_no_cast = (ObCharset::charset_type_by_coll(type1.get_collation_type())
+                       == ObCharset::charset_type_by_coll(type2.get_collation_type()));
+    } else if (ob_is_decimal_int_tc(type1.get_type()) && ob_is_decimal_int_tc(type2.get_type())) {
+      // if scale1 != scale2 or int_bytes1 != int_bytes2
+      need_no_cast = (type1.get_scale() == type2.get_scale()
+                      && get_decimalint_type(type1.get_precision())
+                           == get_decimalint_type(type2.get_precision()));
+    } else if (ob_is_double_tc(type1.get_type()) && ob_is_double_tc(type2.get_type())) {
+      need_no_cast = (type1.get_scale() == type2.get_scale());
+    } else {
+      auto func_ptr = ObExprCmpFuncsHelper::get_eval_expr_cmp_func(type1.get_type(),
+                                                                   type2.get_type(),
+                                                                   type1.get_scale(),
+                                                                   type2.get_scale(),
+                                                                   type1.get_precision(),
+                                                                   type2.get_precision(),
+                                                                   cmp_op,
+                                                                   CS_TYPE_BINARY,
+                                                                   has_lob_header);
+      need_no_cast = (func_ptr != nullptr);
+    }
+  }
+  return need_no_cast;
+}
+
 }

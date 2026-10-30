@@ -16,6 +16,7 @@
 
 #ifndef _OB_DYNAMIC_SAMPLING_H_
 #define _OB_DYNAMIC_SAMPLING_H_
+#include "common/datum/datum_value.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/printer/ob_raw_expr_printer.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -204,9 +205,9 @@ public:
   virtual ~ObDSStatItem() { reset(); }
   virtual bool is_needed() const { return true; }//TODO, need refine??
   virtual int gen_expr(common::ObIAllocator &allocator, char *buf, const int64_t buf_len, int64_t &pos);
-  virtual int decode(double sample_ratio, ObObj &obj);
+  virtual int decode(double sample_ratio, DatumValue &obj);
   ObDSStatItemType get_type() { return type_; }
-  int cast_int(const ObObj &obj, int64_t &ret_value);
+  int cast_int(const DatumValue &obj, int64_t &ret_value);
   TO_STRING_KV(KPC(result_item_),
                K(filter_string_),
                KPC(column_expr_),
@@ -288,7 +289,7 @@ public:
     return num < 0 ? 0 : (num > 100.0 ? 100.0 : num); }
   const ObIArray<ObDSStatItem*> &get_ds_items() const { return ds_stat_items_; }
   int64_t get_ds_item_size() const { return ds_stat_items_.count(); }
-  int add_result(ObObj &obj) { return results_.push_back(obj); }
+  int add_result(DatumValue &obj) { return results_.push_back(obj); }
   int64_t get_micro_block_num() const { return micro_block_num_; }
 
 template <class T>
@@ -373,7 +374,7 @@ private:
   ObString basic_hints_;
   ObString where_conditions_;
   ObSEArray<ObDSStatItem *, 4, common::ModulePageAllocator, true> ds_stat_items_;
-  ObSEArray<ObObj, 4, common::ModulePageAllocator, true> results_;
+  ObSEArray<DatumValue, 4, common::ModulePageAllocator, true> results_;
   bool is_big_table_;
   int64_t sample_big_table_rown_cnt_;
   ObString table_clause_;
@@ -433,7 +434,7 @@ public:
                                        const common::ObIArray<int64_t> &used_part_id,
                                        const common::ObIArray<ObDSFailTabInfo> &failed_list);
 
-  static bool is_valid_ds_col_type(const ObObjType type);
+  static bool is_valid_ds_col_type(const SqlValueType type);
 
 private:
 

@@ -242,7 +242,7 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
+      SqlValueType flag_expr_type = flag_expr->get_result_type().get_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;
@@ -528,7 +528,7 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
     if (OB_ISNULL(flag_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObObjType flag_expr_type = flag_expr->get_result_type().get_type();
+      SqlValueType flag_expr_type = flag_expr->get_result_type().get_type();
       if (OB_UNLIKELY(ObNullType != flag_expr_type &&
                   !ob_is_integer_type(flag_expr_type))) {
         ret = OB_ERR_UNEXPECTED;

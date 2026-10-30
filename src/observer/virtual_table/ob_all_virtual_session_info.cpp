@@ -127,8 +127,8 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
         uint64_t col_id = output_column_ids_.at(i);
         switch(col_id) {
           case ID: {
-            cur_row_->cells_[cell_idx].set_uint64(static_cast<uint64_t>(
-                                  sess_info->get_sid()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_->cells_, cur_row_->count_, cell_idx, static_cast<uint64_t>(
+                                  sess_info->get_sid())) : ret);
             break;
           }
           case USER: {
@@ -137,10 +137,10 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
               // before we finally find the reason and resolve the bug. otherwise we cannot
               // use this command in on-line cluster.
               // see 
-              cur_row_->cells_[cell_idx].set_varchar("");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, "") : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             } else {
-              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_user_name());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_user_name()) : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             }
             break;
@@ -150,44 +150,44 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "fail to get ip string", K(ret), K(sess_info->get_peer_addr()));
             } else {
-              cur_row_->cells_[cell_idx].set_varchar(ObString::make_string(peer_buf));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, ObString::make_string(peer_buf)) : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             }
             break;
           }
           case DB_NAME: {
             if (0 == sess_info->get_database_name().length()) {//session don't select database
-              cur_row_->cells_[cell_idx].set_varchar(ObString::make_string("NULL"));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, ObString::make_string("NULL")) : ret);
             } else {
-              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_database_name());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_database_name()) : ret);
             }
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
           case COMMAND: {
-            cur_row_->cells_[cell_idx].set_varchar(ObString::make_string(sess_info->get_mysql_cmd_str()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, ObString::make_string(sess_info->get_mysql_cmd_str())) : ret);
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
           case SQL_ID: {
             sess_info->get_cur_sql_id(sql_id, OB_MAX_SQL_ID_LENGTH + 1);
-            cur_row_->cells_[cell_idx].set_varchar(ObString::make_string(sql_id));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, ObString::make_string(sql_id)) : ret);
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
           case TIME: {
             if (type_is_double) {
               double time_sec = (static_cast<double> (current_time - sess_info->get_cur_state_start_time())) / 1000000;
-              cur_row_->cells_[cell_idx].set_double(time_sec);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cur_row_->cells_, cur_row_->count_, cell_idx, time_sec) : ret);
               cur_row_->cells_[cell_idx].set_scale(6);
             } else {
               int64_t time_sec = (current_time - sess_info->get_cur_state_start_time()) / 1000000;
-              cur_row_->cells_[cell_idx].set_int(time_sec);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, cell_idx, time_sec) : ret);
             }
             break;
           }
           case STATE: {
-            cur_row_->cells_[cell_idx].set_varchar(ObString::make_string(sess_info->get_session_state_str()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, ObString::make_string(sess_info->get_session_state_str())) : ret);
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
@@ -195,7 +195,7 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
             if (obmysql::COM_QUERY == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
-              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_current_query_string());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_current_query_string()) : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             } else {
               cur_row_->cells_[cell_idx].set_null();
@@ -206,7 +206,7 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
             if (ObBasicSessionInfo::INVALID_SESSID == sess_info->get_master_sessid()) {
               cur_row_->cells_[cell_idx].set_null();
             } else {
-              cur_row_->cells_[cell_idx].set_uint64(sess_info->get_master_sessid());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_master_sessid()) : ret);
             }
             break;
           }
@@ -214,7 +214,7 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
             if (sess_info->get_client_ip().empty()) {
               cur_row_->cells_[cell_idx].set_null();
             } else {
-              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_client_ip());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_client_ip()) : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             }
             break;
@@ -223,26 +223,25 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
             if (sess_info->get_host_name().empty()) {
               cur_row_->cells_[cell_idx].set_null();
             } else {
-              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_host_name());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_host_name()) : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             }
             break;
           }
           case TRANS_ID: {
             uint64_t tx_id = sess_info->get_tx_id();
-            cur_row_->cells_[cell_idx].set_uint64(tx_id);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_->cells_, cur_row_->count_, cell_idx, tx_id) : ret);
             break;
           }
           case THREAD_ID: {
-            cur_row_->cells_[cell_idx].set_uint64(
-                static_cast<uint64_t>(sess_info->get_thread_id()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_->cells_, cur_row_->count_, cell_idx, static_cast<uint64_t>(sess_info->get_thread_id())) : ret);
             break;
           }
           case SSL_CIPHER: {
             if (sess_info->get_ssl_cipher().empty()) {
               cur_row_->cells_[cell_idx].set_null();
             } else {
-              cur_row_->cells_[cell_idx].set_varchar(sess_info->get_ssl_cipher());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_ssl_cipher()) : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             }
             break;
@@ -252,7 +251,7 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
                 obmysql::COM_STMT_EXECUTE == sess_info->get_mysql_cmd() ||
                 obmysql::COM_STMT_PREPARE == sess_info->get_mysql_cmd()) {
               int len = sess_info->get_current_trace_id().to_string(trace_id_, sizeof(trace_id_));
-              cur_row_->cells_[cell_idx].set_varchar(trace_id_, len);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, ObString(len, trace_id_)) : ret);
               cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             } else {
               // when cmd=Sleep, we don't want to display its last query trace id
@@ -263,26 +262,25 @@ bool ObAllVirtualSessionInfo::FillScanner::operator()(
           }
           case TRANS_STATE: {
             if (sess_info->is_in_transaction()) {
-              cur_row_->cells_[cell_idx].set_varchar(
-                sess_info->get_tx_desc()->get_tx_state_str());
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_tx_desc()->get_tx_state_str()) : ret);
             } else {
-              cur_row_->cells_[cell_idx].set_varchar("");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_->cells_, cur_row_->count_, cell_idx, "") : ret);
             }
             cur_row_->cells_[cell_idx].set_collation_type(default_collation);
             break;
           }
           case USER_CLIENT_PORT: {
-            cur_row_->cells_[cell_idx].set_int(sess_info->get_client_addr_port());
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_->cells_, cur_row_->count_, cell_idx, sess_info->get_client_addr_port()) : ret);
             break;
           }
           case TOTAL_CPU_TIME: {
             if (ObSQLSessionState::QUERY_ACTIVE == sess_info->get_session_state()) {
               // time_sec = current time - sql packet received from easy time
               double time_sec = (static_cast<double> (sess_info->get_retry_active_time() + current_time - sess_info->get_cur_state_start_time())) / 1000000;
-              cur_row_->cells_[cell_idx].set_double(time_sec);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cur_row_->cells_, cur_row_->count_, cell_idx, time_sec) : ret);
             } else {
               double time_sec = (static_cast<double> (sess_info->get_retry_active_time())) / 1000000;
-              cur_row_->cells_[cell_idx].set_double(time_sec);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_double(cur_row_->cells_, cur_row_->count_, cell_idx, time_sec) : ret);
             }
             cur_row_->cells_[cell_idx].set_scale(6);
             break;

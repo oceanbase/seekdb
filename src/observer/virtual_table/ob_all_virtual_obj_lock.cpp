@@ -290,7 +290,7 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
         case LOCK_ID: {
           lock_op.lock_id_.to_string(lock_id_buf_, sizeof(lock_id_buf_));
           lock_id_buf_[MAX_LOCK_ID_BUF_LENGTH - 1] = '\0';
-          cur_row_.cells_[i].set_varchar(lock_id_buf_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_id_buf_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
@@ -300,16 +300,16 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
                                           sizeof(lock_mode_buf_)))) {
           } else {
             lock_mode_buf_[MAX_LOCK_MODE_BUF_LENGTH - 1] = '\0';
-            cur_row_.cells_[i].set_varchar(lock_mode_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_mode_buf_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
         case OWNER_ID:
-          cur_row_.cells_[i].set_int(lock_op.owner_id_.id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, lock_op.owner_id_.id()) : ret);
           break;
         case CREATE_TRANS_ID:
-          cur_row_.cells_[i].set_int(lock_op.create_trans_id_.get_id());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, lock_op.create_trans_id_.get_id()) : ret);
           break;
         case OP_TYPE: {
           if (OB_FAIL(lock_op_type_to_string(lock_op.op_type_,
@@ -317,7 +317,7 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
                                              sizeof(lock_op_type_buf_)))) {
           } else {
             lock_op_type_buf_[MAX_LOCK_OP_TYPE_BUF_LENGTH - 1] = '\0';
-            cur_row_.cells_[i].set_varchar(lock_op_type_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_op_type_buf_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
@@ -328,21 +328,21 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
                                                sizeof(lock_op_status_buf_)))) {
           } else {
             lock_op_status_buf_[MAX_LOCK_OP_STATUS_BUF_LENGTH - 1] = '\0';
-            cur_row_.cells_[i].set_varchar(lock_op_status_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_op_status_buf_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
         case TRANS_VERSION: {
-          cur_row_.cells_[i].set_uint64(lock_op.commit_version_.get_val_for_inner_table_field());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_uint64(cur_row_.cells_, cur_row_.count_, i, lock_op.commit_version_.get_val_for_inner_table_field()) : ret);
           break;
         }
         case CREATE_TIMESTAMP: {
-          cur_row_.cells_[i].set_int(lock_op.create_timestamp_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, lock_op.create_timestamp_) : ret);
           break;
         }
         case CREATE_SCHEMA_VERSION: {
-          cur_row_.cells_[i].set_int(lock_op.create_schema_version_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, lock_op.create_schema_version_) : ret);
           break;
         }
         case EXTRA_INFO:
@@ -352,11 +352,11 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
                        ? lock_op.lock_seq_no_.cast_to_int() : 0),
                    is_iter_tx_ ? "tx_ctx" : "lock_table");
           lock_op_extra_info_[MAX_LOCK_OP_EXTRA_INFO_LENGTH - 1] = '\0';
-          cur_row_.cells_[i].set_varchar(lock_op_extra_info_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_op_extra_info_) : ret);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case TIME_AFTER_CREATE: {
-          cur_row_.cells_[i].set_int(ObTimeUtility::current_time() - lock_op.create_timestamp_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, ObTimeUtility::current_time() - lock_op.create_timestamp_) : ret);
           break;
         }
         case OBJ_TYPE: {
@@ -365,17 +365,17 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
                                               sizeof(lock_obj_type_buf_)))) {
           } else {
             lock_obj_type_buf_[MAX_LOCK_OBJ_TYPE_BUF_LENGTH - 1] = '\0';
-            cur_row_.cells_[i].set_varchar(lock_obj_type_buf_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_obj_type_buf_) : ret);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
         case OBJ_ID: {
-          cur_row_.cells_[i].set_int(lock_op.lock_id_.obj_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, lock_op.lock_id_.obj_id_) : ret);
           break;
         }
         case OWNER_TYPE: {
-          cur_row_.cells_[i].set_int(lock_op.owner_id_.type());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, lock_op.owner_id_.type()) : ret);
           break;
         }
         case PRIORITY: {
@@ -384,16 +384,16 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
                                              sizeof(lock_op_priority_buf_)))) {
          } else {
            lock_obj_type_buf_[MAX_LOCK_OP_PRIORITY_BUF_LENGTH - 1] = '\0';
-           cur_row_.cells_[i].set_varchar(lock_op_priority_buf_);
+           (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, lock_op_priority_buf_) : ret);
            cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
          }
           break;
         }
         case WAIT_SEQ: {
           if (is_iter_priority_list_ && is_iter_tx_) {
-            cur_row_.cells_[i].set_int(lock_op.create_timestamp_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, lock_op.create_timestamp_) : ret);
           } else {
-            cur_row_.cells_[i].set_int(0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, 0) : ret);
           }
           break;
         }

@@ -53,14 +53,6 @@ int ObExprVecIVFCenterVector::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprVecIVFCenterVector::calc_resultN(ObObj &result,
-                                  const ObObj *objs_array,
-                                  int64_t param_num,
-                                  ObExprCtx &expr_ctx) const
-{
-  // TODO by query ivf index
-  return OB_NOT_SUPPORTED;
-}
 
 int ObExprVecIVFCenterVector::cg_expr(
     ObExprCGCtx &expr_cg_ctx,

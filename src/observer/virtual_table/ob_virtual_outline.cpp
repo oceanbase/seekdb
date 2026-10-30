@@ -110,7 +110,7 @@ void ObVirtualOutline::reset()
 int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   if (OB_ISNULL(cells = cur_row_.cells_)
       || OB_ISNULL(allocator_)
       || OB_ISNULL(session_)
@@ -123,11 +123,11 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
       const uint64_t col_id = output_column_ids_.at(cell_idx);
       switch (col_id) {
         case DATABASE_ID : {
-          cells[cell_idx].set_int(static_cast<int64_t>(outline_info->get_database_id()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, static_cast<int64_t>(outline_info->get_database_id())) : ret);
           break;
         }
         case OUTLINE_ID : {
-          cells[cell_idx].set_int(static_cast<int64_t>(outline_info->get_outline_id()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, static_cast<int64_t>(outline_info->get_outline_id())) : ret);
           break;
         }
         case VISIBLE_SIGNATURE : {
@@ -136,8 +136,7 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
           if (OB_FAIL(outline_info->get_visible_signature(local_str))) {
           } else if (OB_FAIL(ob_write_string(*allocator_, local_str, visible_sigature))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, visible_sigature.ptr(),
-                                          static_cast<int32_t>(visible_sigature.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(visible_sigature.length()), visible_sigature.ptr())) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -148,7 +147,7 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_name_str(),
                                       outline_name))) {
           } else {
-            cells[cell_idx].set_varchar(outline_name);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, outline_name) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -157,13 +156,13 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
         case DATABASE_NAME : {
           DBInfo db_info;
           if (is_outline_database_id(outline_info->get_database_id())) {
-            cells[cell_idx].set_varchar(OB_MOCK_DEFAULT_DATABASE_NAME);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, OB_MOCK_DEFAULT_DATABASE_NAME) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else if (OB_FAIL(database_infos_.get_refactored(outline_info->get_database_id(),
                               db_info))) {
           } else {
-            cells[cell_idx].set_varchar(db_info.db_name_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, db_info.db_name_) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -173,8 +172,7 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
           ObString sql_text;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_sql_text_str(), sql_text))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, sql_text.ptr(),
-                                          static_cast<int32_t>(sql_text.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(sql_text.length()), sql_text.ptr())) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -183,14 +181,13 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
         case OUTLINE_TARGET : {
           ObString outline_target;
           if (outline_info->get_sql_text_str().empty()) {
-            cells[cell_idx].set_lob_value(ObLongTextType, "", 0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(0, "")) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_outline_target_str(),
                                               outline_target))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, outline_target.ptr(),
-                                          static_cast<int32_t>(outline_target.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(outline_target.length()), outline_target.ptr())) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -199,13 +196,12 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
         case OUTLINE_SQL : {
           ObString outline_sql;
           if (outline_info->get_sql_text_str().empty()) {
-            cells[cell_idx].set_lob_value(ObLongTextType, "", 0);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(0, "")) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else if (OB_FAIL(sql::ObSQLUtils::get_outline_sql(*outline_info, *allocator_, *session_, outline_sql))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, outline_sql.ptr(),
-                                          static_cast<int32_t>(outline_sql.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(outline_sql.length()), outline_sql.ptr())) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -215,7 +211,7 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
           ObString sql_id;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_sql_id_str(), sql_id))) {
           } else {
-            cells[cell_idx].set_varchar(sql_id);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sql_id) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -226,8 +222,7 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_outline_content_str(),
                                       outline_content))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, outline_content.ptr(),
-                                          static_cast<int32_t>(outline_content.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(outline_content.length()), outline_content.ptr())) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -237,8 +232,7 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
           ObString format_sql_text;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_format_sql_text_str(), format_sql_text))) {
           } else {
-            cells[cell_idx].set_lob_value(ObLongTextType, format_sql_text.ptr(),
-                                          static_cast<int32_t>(format_sql_text.length()));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(format_sql_text.length()), format_sql_text.ptr())) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -248,14 +242,14 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
           ObString format_sql_id;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_format_sql_id_str(), format_sql_id))) {
           } else {
-            cells[cell_idx].set_varchar(format_sql_id);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, format_sql_id) : ret);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
         case FORMAT_OUTLINE : {
-          cells[cell_idx].set_int(static_cast<int64_t>(outline_info->is_format()));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, static_cast<int64_t>(outline_info->is_format())) : ret);
           break;
         }
         default: {

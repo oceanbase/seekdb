@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_LOCAL_SESSION_VAR_H_
 
 #include "share/system_variable/ob_sys_var_class_type.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/allocator/page_arena.h"
 
@@ -28,14 +28,22 @@ namespace share
 {
 
 struct ObSessionSysVar {
-  OB_UNIS_VERSION(1);
 public:
+  ObSessionSysVar() : type_(SYS_VAR_INVALID), val_() {}
+  int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int serialize_(char *buf, int64_t buf_len, int64_t &pos) const;
+  int64_t get_serialize_size() const;
+  int64_t get_serialize_size_() const;
+  int deserialize(const char *buf, int64_t data_len, int64_t &pos,
+                  common::ObIAllocator &owner);
   TO_STRING_KV(K_(type), K_(val));
-  bool is_equal(const common::ObObj &other_val) const;
+  bool is_equal(const common::DatumValue &other_val) const;
   int64_t get_deep_copy_size() const;
 
   share::ObSysVarClassType type_;
-  common::ObObj val_;
+  common::DatumValue val_; // Payload belongs to the container's explicit arena.
+private:
+  static const int64_t UNIS_VERSION = 1;
 };
 
 class ObLocalSessionVar {
@@ -56,7 +64,7 @@ public:
   }
   void reset();
   int set_local_var_capacity(int64_t sz);
-  int add_local_var(share::ObSysVarClassType var_type, const common::ObObj &value);
+  int add_local_var(share::ObSysVarClassType var_type, const common::DatumValue &value);
   int add_local_var(const ObSessionSysVar *var);
   int get_local_var(share::ObSysVarClassType var_type, ObSessionSysVar *&sys_var) const;
   int get_local_vars(common::ObIArray<const ObSessionSysVar *> &var_array) const;

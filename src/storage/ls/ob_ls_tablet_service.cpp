@@ -2683,7 +2683,7 @@ int ObLSTabletService::check_old_row_legitimacy(
       for (int64_t i = 0; OB_SUCC(ret) && i < old_row.count_; ++i) {
         const ObStorageDatum &storage_val = storage_old_row->storage_datums_[i];
         const ObStorageDatum &sql_val = old_row.storage_datums_[i];
-        const ObObjMeta &sql_meta = column_descs.at(i).col_type_;
+        const SqlTypeMeta &sql_meta = column_descs.at(i).col_type_;
         int cmp_ret = 0;
         if (sql_meta.is_lob_storage()) {
           // skip all text and lob
@@ -3302,7 +3302,7 @@ int ObLSTabletService::extract_rowkey(
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < valid_rowkey_size; ++i) {
-      const ObObj &obj  = rowkey.get_obj_ptr()[i];
+      const DatumValue &obj = rowkey.get_cell(i);
       if (OB_FAIL(obj.print_plain_str_literal(buffer, buffer_len - 1, pos, tz_info))) {
       } else if (i < valid_rowkey_size - 1) {
         if (OB_FAIL(databuff_printf(buffer,  buffer_len - 1, pos, "-"))) {

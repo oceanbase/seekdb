@@ -134,7 +134,7 @@ int ObIColAggregator::copy_agg_datum(const ObDatum &src, ObDatum &dst)
 
 int ObIColAggregator::copy_inrow_string_prefix(
     const ObDatum &orig_datum,
-    const ObObjType obj_type,
+    const SqlValueType obj_type,
     const ObCollationType collation_type,
     const int64_t max_prefix_byte_len,
     ObStorageDatum &prefix_datum)
@@ -184,7 +184,7 @@ int ObIColAggregator::copy_agg_datum_for_min_max(const ObDatum &datum, const ObS
   return ret;
 }
 
-bool ObIColAggregator::need_set_not_aggregate(const ObObjType type, const ObDatum &datum) const
+bool ObIColAggregator::need_set_not_aggregate(const SqlValueType type, const ObDatum &datum) const
 {
   const bool is_outrow_lob = is_lob_storage(type) && !datum.is_null() && !datum.get_lob_data().in_row_;
   const bool datum_exceed_limit = !datum.is_null() && datum.len_ > ObSkipIndexColMeta::MAX_SKIP_INDEX_COL_LENGTH;
@@ -406,7 +406,7 @@ int ObColMaxAggregator::cmp_with_prefix(
           left_str = left_datum.get_string();
           right_str = right_datum.get_string();
         }
-        const ObObjType &obj_type = col_desc_.col_type_.get_type();
+        const SqlValueType &obj_type = col_desc_.col_type_.get_type();
         const ObCollationType &coll = col_desc_.col_type_.get_collation_type();
         const int64_t left_char_num = ObCharset::strlen_char(coll, left_str.ptr(), left_str.length());
         const int64_t right_char_num = ObCharset::strlen_char(coll, right_str.ptr(), right_str.length());
@@ -664,30 +664,30 @@ int ObColSumAggregator::get_result(const ObStorageDatum *&result)
 int ObColSumAggregator::choose_eval_func(const bool is_data)
 {
   int ret = OB_SUCCESS;
-  const ObObjTypeClass obj_tc = col_desc_.col_type_.get_type_class();
+  const SqlTypeClass obj_tc = col_desc_.col_type_.get_type_class();
   if (is_data) {
     switch (obj_tc) {
-      case ObObjTypeClass::ObIntTC: {
+      case SqlTypeClass::ObIntTC: {
         eval_func_ = &ObColSumAggregator::eval_int_number;
         break;
       }
-      case ObObjTypeClass::ObUIntTC: {
+      case SqlTypeClass::ObUIntTC: {
         eval_func_ = &ObColSumAggregator::eval_uint_number;
         break;
       }
-      case ObObjTypeClass::ObFloatTC: {
+      case SqlTypeClass::ObFloatTC: {
         eval_func_ = &ObColSumAggregator::eval_float;
         break;
       }
-      case ObObjTypeClass::ObDoubleTC: {
+      case SqlTypeClass::ObDoubleTC: {
         eval_func_ = &ObColSumAggregator::eval_double;
         break;
       }
-      case ObObjTypeClass::ObNumberTC: {
+      case SqlTypeClass::ObNumberTC: {
         eval_func_ = &ObColSumAggregator::eval_number;
         break;
       }
-      case ObObjTypeClass::ObDecimalIntTC: {
+      case SqlTypeClass::ObDecimalIntTC: {
         eval_func_ = &ObColSumAggregator::eval_decimal_int_number;
         break;
       }
@@ -698,18 +698,18 @@ int ObColSumAggregator::choose_eval_func(const bool is_data)
     }
   } else {
     switch (obj_tc) {
-      case ObObjTypeClass::ObIntTC:
-      case ObObjTypeClass::ObUIntTC:
-      case ObObjTypeClass::ObDecimalIntTC:
-      case ObObjTypeClass::ObNumberTC: {
+      case SqlTypeClass::ObIntTC:
+      case SqlTypeClass::ObUIntTC:
+      case SqlTypeClass::ObDecimalIntTC:
+      case SqlTypeClass::ObNumberTC: {
         eval_func_ = &ObColSumAggregator::eval_number;
         break;
       }
-      case ObObjTypeClass::ObFloatTC: {
+      case SqlTypeClass::ObFloatTC: {
         eval_func_ = &ObColSumAggregator::eval_float;
         break;
       }
-      case ObObjTypeClass::ObDoubleTC: {
+      case SqlTypeClass::ObDoubleTC: {
         eval_func_ = &ObColSumAggregator::eval_double;
         break;
       }
@@ -1251,12 +1251,12 @@ int ObISkipIndexAggregator::calc_max_agg_size(
       int64_t start = i, end = i;
       int64_t cur_max_cell_size = 0;
       const int64_t cur_col_idx = full_agg_metas.at(start).col_idx_;
-      const ObObjType &obj_type = full_col_descs.at(cur_col_idx).col_type_.get_type();
+      const SqlValueType &obj_type = full_col_descs.at(cur_col_idx).col_type_.get_type();
       int16_t precision = PRECISION_UNKNOWN_YET;
       if (ob_is_decimal_int(obj_type)) {
         precision = full_col_descs.at(cur_col_idx).col_type_.get_stored_precision();
       }
-      ObObjDatumMapType datum_type = ObDatum::get_obj_datum_map_type(obj_type);
+      SqlValueDatumMapType datum_type = ObDatum::get_sql_value_datum_map_type(obj_type);
       uint32_t agg_cell_size = 0;
       uint32_t sum_store_size = 0;
       if (OB_FAIL(get_skip_index_store_upper_size(datum_type, precision, agg_cell_size))) {
@@ -1434,7 +1434,7 @@ int ObISkipIndexAggregator::init_col_aggregator(
   int ret = OB_SUCCESS;
   ObIColAggregator *col_aggregator = nullptr;
   void *buf = nullptr;
-  const ObObjType col_type = col_desc.col_type_.get_type();
+  const SqlValueType col_type = col_desc.col_type_.get_type();
   if (!is_skip_index_while_list_type(col_type) &&
       !is_skip_index_black_list_type(col_type)) {
     ret = OB_NOT_SUPPORTED;
@@ -1590,7 +1590,7 @@ int ObSkipIndexDataAggregator::eval(const ObIMicroBlockWriter &data_micro_writer
 
 bool ObSkipIndexDataAggregator::can_use_pre_agg_integer(const ObSkipIndexColMeta &col_meta)
 {
-  const ObObjTypeClass type_class = full_col_descs_->at(col_meta.col_idx_).col_type_.get_type_class();
+  const SqlTypeClass type_class = full_col_descs_->at(col_meta.col_idx_).col_type_.get_type_class();
   const ObSkipIndexColType idx_type = static_cast<ObSkipIndexColType>(col_meta.col_type_);
 
   const bool data_type_valid = (ObIntTC == type_class || ObUIntTC == type_class);
@@ -1606,10 +1606,10 @@ int ObSkipIndexDataAggregator::do_col_agg_with_pre_agg_integer(
 {
   int ret = OB_SUCCESS;
   uint64_t pre_agg_result = 0;
-  const ObObjTypeClass type_class = full_col_descs_->at(col_meta.col_idx_).col_type_.get_type_class();
+  const SqlTypeClass type_class = full_col_descs_->at(col_meta.col_idx_).col_type_.get_type_class();
   const ObSkipIndexColType idx_type = static_cast<ObSkipIndexColType>(col_meta.col_type_);
-  const ObObjDatumMapType datum_type =
-      ObDatum::get_obj_datum_map_type(full_col_descs_->at(col_meta.col_idx_).col_type_.get_type());
+  const SqlValueDatumMapType datum_type =
+      ObDatum::get_sql_value_datum_map_type(full_col_descs_->at(col_meta.col_idx_).col_type_.get_type());
   ObStorageDatum tmp_result;
   if (SK_IDX_MIN == idx_type) {
     pre_agg_result = agg_param.min_integer_;

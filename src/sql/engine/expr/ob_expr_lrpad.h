@@ -53,7 +53,7 @@ public:
                      common::ObIAllocator *allocator,
                      char* &result,
                      int64_t &size,
-                     ObObjType res_type,
+                     SqlValueType res_type,
                      bool has_lob_header);
   static int padding_inner(LRpadType type,
                            const char *text,
@@ -76,9 +76,9 @@ public:
                                     int64_t &size);
 
   static int calc_type_length_mysql(const ObExprResType result_type,
-                                    const common::ObObj &text,
-                                    const common::ObObj &pad_text,
-                                    const common::ObObj &len,
+                                    const common::DatumValue &text,
+                                    const common::DatumValue &pad_text,
+                                    const common::DatumValue &len,
                                     const ObExprTypeCtx &type_ctx,
                                     int64_t &result_size);
 
@@ -98,7 +98,7 @@ public:
                               const ObString &str_pad,
                               ObIAllocator &res_alloc,
                               ObDatum &res);
-  int get_origin_len_obj(ObObj &len_obj) const;
+  int get_origin_len_obj(common::DatumValue &len_obj) const;
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprBaseLRpad);

@@ -21,6 +21,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_server_struct.h"
 #include "sql/engine/cmd/ob_table_executor.h"
+#include "share/datum/datum_value_cast.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/runtime/ob_query_runtime_environment.h"
@@ -179,7 +180,7 @@ int ObCreateTableExecutor::prepare_ins_arg(ObCreateTableStmt &stmt,
   bool no_osg_hint = false;
   bool online_sys_var = false;
   ObSelectStmt *select_stmt = stmt.get_sub_select();
-  ObObjPrintParams obj_print_params(select_stmt->get_query_ctx()->get_timezone_info());
+  ObValuePrintParams obj_print_params(select_stmt->get_query_ctx()->get_timezone_info());
   obj_print_params.print_origin_stmt_ = true;
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -191,10 +192,8 @@ int ObCreateTableExecutor::prepare_ins_arg(ObCreateTableStmt &stmt,
     no_osg_hint = select_stmt->get_query_ctx()->get_global_hint().has_no_gather_opt_stat_hint();
 
     //get system variable
-    ObObj online_sys_var_obj;
-    if (OB_FAIL(my_session->get_sys_variable(SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, online_sys_var_obj))) {
+    if (OB_FAIL(my_session->get_sys_variable(SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, online_sys_var))) {
     } else {
-      online_sys_var = online_sys_var_obj.get_bool();
     }
   }
 
@@ -1013,17 +1012,17 @@ int ObAlterTableExecutor::calc_range_part_high_bound(
   int ret = OB_SUCCESS;
   ObExprCtx expr_ctx;
   ObAccuracy accuracy(dst_res_type.get_accuracy());
-  const ObObjType fun_expr_type = dst_res_type.get_type();
+  const SqlValueType fun_expr_type = dst_res_type.get_type();
   const ObCollationType fun_collation_type = dst_res_type.get_collation_type();
-  ObObjType expected_obj_type = fun_expr_type;
-  ObSEArray<ObObj, obcall::OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
+  SqlValueType expected_obj_type = fun_expr_type;
+  ObSEArray<DatumValue, obcall::OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
   if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_ALTER_TABLE, ctx, ctx.get_allocator(), expr_ctx))) {
   } else {
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    const common::ObRowkey &row_key = part.get_high_bound_val();
-    int64_t obj_cnt = row_key.get_obj_cnt();
+    const PartitionBoundRow &row_key = part.get_high_bound_val();
+    int64_t obj_cnt = row_key.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < obj_cnt; ++i) {
-      const ObObj &src_obj = row_key.get_obj_ptr()[i];
+      const DatumValue &src_obj = row_key.get_cells()[i];
       if (src_obj.is_max_value()) {
         if (OB_FAIL(range_partition_obj.push_back(src_obj))) {
         }
@@ -1032,21 +1031,19 @@ int ObAlterTableExecutor::calc_range_part_high_bound(
           // Type promotion to int64 or uint64
           expected_obj_type = ob_is_int_tc(fun_expr_type) ? ObIntType : ObUInt64Type;
         }
-        const ObObj *dst_obj = NULL;
+        DatumValue dst_obj;
         EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
         cast_ctx.dest_collation_ = fun_collation_type;
         cast_ctx.res_accuracy_ = &accuracy;
-        EXPR_CAST_OBJ_V2(expected_obj_type, src_obj, dst_obj);
+        if (OB_SUCC(ret)) { ret = DatumValueCaster::to_type(expected_obj_type, cast_ctx, src_obj, ctx.get_allocator(), dst_obj); }
         if (OB_SUCC(ret)) {
-          if (OB_ISNULL(dst_obj)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if ((PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_func_type
+          if ((PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_func_type
                     || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_func_type)
                     && OB_FAIL(ObResolverUtils::check_partition_range_value_result_type(part_func_type,
                                                                                         dst_res_type,
                                                                                         col_name,
-                                                                                        const_cast<ObObj&>(*dst_obj)))) {
-          } else if (OB_FAIL(range_partition_obj.push_back(*dst_obj))) {
+                                                                                        dst_obj, ctx.get_allocator()))) {
+          } else if (OB_FAIL(range_partition_obj.push_back(dst_obj))) {
           }
         } else if (OB_ERR_UNEXPECTED != ret) {
           ret = OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR;
@@ -1055,8 +1052,7 @@ int ObAlterTableExecutor::calc_range_part_high_bound(
       }
     }
     if (OB_SUCC(ret)) {
-      ObRowkey high_rowkey(&range_partition_obj.at(0), range_partition_obj.count());
-      part.reset_high_bound_val();
+      PartitionBoundRow high_rowkey(&range_partition_obj.at(0), range_partition_obj.count());
       if (OB_FAIL(part.set_high_bound_val(high_rowkey))) {
       }
     }
@@ -1139,19 +1135,19 @@ int ObAlterTableExecutor::calc_list_part_rows(
 {
   int ret = OB_SUCCESS;
   ObExprCtx expr_ctx;
-  const ObObjType fun_expr_type = dst_res_type.get_type();
+  const SqlValueType fun_expr_type = dst_res_type.get_type();
   const ObCollationType fun_collation_type = dst_res_type.get_collation_type();
-  ObObjType expected_obj_type = fun_expr_type;
-  ObSEArray<ObObj, obcall::OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
+  SqlValueType expected_obj_type = fun_expr_type;
+  ObSEArray<DatumValue, obcall::OB_DEFAULT_ARRAY_SIZE> range_partition_obj;
   if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_ALTER_TABLE, ctx, ctx.get_allocator(), expr_ctx))) {
   } else {
     new_part.reset_list_row_values();
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-    const common::ObIArray<common::ObNewRow>& row_list = orig_part.get_list_row_values();
+    const common::ObIArray<common::PartitionBoundRow>& row_list = orig_part.get_list_row_values();
     for (int64_t i = 0; OB_SUCC(ret) && i < row_list.count(); i ++) {
-      const common::ObNewRow &row = row_list.at(i);
+      const common::PartitionBoundRow &row = row_list.at(i);
       for (int64_t j = 0; OB_SUCC(ret) && j < row.get_count(); ++j) {
-        const ObObj &src_obj = row.get_cell(j);
+        const DatumValue &src_obj = row.get_cell(j);
         if (src_obj.is_max_value()) {
           if (OB_FAIL(range_partition_obj.push_back(src_obj))) {
           }
@@ -1160,20 +1156,18 @@ int ObAlterTableExecutor::calc_list_part_rows(
             // Type promotion to int64 or uint64
             expected_obj_type = ob_is_int_tc(fun_expr_type) ? ObIntType : ObUInt64Type;
           }
-          const ObObj *dst_obj = NULL;
+          DatumValue dst_obj;
           EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
           cast_ctx.dest_collation_ = fun_collation_type;
-          EXPR_CAST_OBJ_V2(expected_obj_type, src_obj, dst_obj);
+          if (OB_SUCC(ret)) { ret = DatumValueCaster::to_type(expected_obj_type, cast_ctx, src_obj, ctx.get_allocator(), dst_obj); }
           if (OB_SUCC(ret)) {
-            if (OB_ISNULL(dst_obj)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if ((PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_func_type
+            if ((PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_func_type
                       || PARTITION_FUNC_TYPE_LIST_COLUMNS == part_func_type)
                       && OB_FAIL(ObResolverUtils::check_partition_range_value_result_type(part_func_type,
                                                                                           dst_res_type,
                                                                                           col_name,
-                                                                                          const_cast<ObObj&>(*dst_obj)))) {
-            } else if (OB_FAIL(range_partition_obj.push_back(*dst_obj))) {
+                                                                                          dst_obj, ctx.get_allocator()))) {
+            } else if (OB_FAIL(range_partition_obj.push_back(dst_obj))) {
             }
           } else if (OB_ERR_UNEXPECTED != ret) {
             ret = OB_ERR_WRONG_TYPE_COLUMN_VALUE_ERROR;
@@ -1182,14 +1176,7 @@ int ObAlterTableExecutor::calc_list_part_rows(
         }
       }
       if (OB_SUCC(ret)) {
-        ObNewRow row;
-        ObObj* obj_array = (ObObj *)allocator.alloc(range_partition_obj.count() * sizeof(ObObj));
-        CK (OB_NOT_NULL(obj_array));
-        for (int64_t k = 0; OB_SUCC(ret) && k < range_partition_obj.count(); k ++) {
-          new (obj_array + k) ObObj();
-          obj_array[k] = (&range_partition_obj.at(0))[k];
-        }
-        OX (row.assign(obj_array, range_partition_obj.count()));
+        PartitionBoundRow row(range_partition_obj.get_data(), range_partition_obj.count());
         OZ (new_part.add_list_row(row));
         OX (range_partition_obj.reuse());
       }

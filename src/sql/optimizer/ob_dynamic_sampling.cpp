@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX COMMON
 #include "rust/config.h"
 #include "ob_dynamic_sampling.h"
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
@@ -937,10 +939,10 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
             ret = OB_ERR_UNEXPECTED;
           }
           for (int64_t i = 0; OB_SUCC(ret) && i < get_ds_item_size(); ++i) {
-            ObObj tmp;
-            ObObj val;
-            if (OB_FAIL(client_result->get_obj(i, tmp))) {
-            } else if (OB_FAIL(ob_write_obj(allocator_, tmp, val))) {
+            DatumValue tmp;
+            DatumValue val;
+            if (OB_FAIL(client_result->get_value(i, tmp))) {
+            } else if (OB_FAIL(clone_typed_value(tmp, val, allocator_))) {
             } else if (OB_FAIL(add_result(val))) {
             }
           }
@@ -1052,7 +1054,7 @@ int ObDynamicSampling::decode(double sample_ratio)
   return ret;
 }
 
-int ObDSStatItem::decode(double sample_ratio, ObObj &obj)
+int ObDSStatItem::decode(double sample_ratio, DatumValue &obj)
 {
   int ret = OB_SUCCESS;
   int64_t res = 0;
@@ -1099,13 +1101,13 @@ int ObDSStatItem::decode(double sample_ratio, ObObj &obj)
   return ret;
 }
 
-int ObDSStatItem::cast_int(const ObObj &obj, int64_t &ret_value)
+int ObDSStatItem::cast_int(const DatumValue &obj, int64_t &ret_value)
 {
   int ret = OB_SUCCESS;
-  ObObj dest_obj;
+  DatumValue dest_obj;
   ObArenaAllocator calc_buffer("ObOptDS");
   ObCastCtx cast_ctx(&calc_buffer, NULL, CM_NONE, ObCharset::get_system_collation());
-  if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, obj, dest_obj))) {
+  if (OB_FAIL(DatumValueCaster::to_type(ObIntType, cast_ctx, obj, calc_buffer, dest_obj))) {
   } else if (dest_obj.is_null()) {
     /*do nothing*/
   } else if (OB_FAIL(dest_obj.get_int(ret_value))) {
@@ -1540,12 +1542,12 @@ bool ObDynamicSamplingUtils::is_ds_virtual_table(const int64_t table_id)
           table_id == share::OB_ALL_VIRTUAL_COLLATION_TID);
 }
 
-bool ObDynamicSamplingUtils::is_valid_ds_col_type(const ObObjType type)
+bool ObDynamicSamplingUtils::is_valid_ds_col_type(const SqlValueType type)
 {
   bool bret = true;
   if (!ObColumnStatParam::is_valid_opt_col_type(type)) {
     bret = false;
-  } else if (ob_obj_type_class(type) == ColumnTypeClass::ObTextTC &&
+  } else if (sql_type_class(type) == ColumnTypeClass::ObTextTC &&
              type != ObTinyTextType) {
     bret = false;
   }

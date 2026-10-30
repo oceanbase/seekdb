@@ -27,7 +27,7 @@ class ObSchemaGetterGuard;
 namespace common {
 class ObIAllocator;
 class ObISQLClient;
-class ObObj;
+struct DatumValue;
 class ObString;
 } // namespace common
 namespace sql {
@@ -53,7 +53,7 @@ public:
   static int add_scheduler_job(common::ObISQLClient &sql_client, const int64_t job_id,
                                const common::ObString &job_name,
                                const common::ObString &job_action,
-                               const common::ObObj &start_date,
+                               const common::DatumValue &start_date,
                                const int64_t repeat_interval_ts,
                                const common::ObString &exec_env);
 

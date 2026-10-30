@@ -74,11 +74,11 @@ int ObRowReshapeUtil::need_reshape_table_row(
   } else {
     ObString space_pattern;
     for (int64_t i = 0; !need_reshape && i < column_cnt; ++i) {
-      const ObObj &cell = row.get_cell(i);
-      if (cell.is_fixed_len_char_type()) {
+      const DatumValue &cell = row.get_cell(i);
+      if (cell.meta_.is_fixed_len_char_type()) {
         space_pattern = ObCharsetUtils::get_const_str(cell.get_collation_type(), ' ');
       }
-      if (cell.is_fixed_len_char_type() && cell.get_string_len() >= space_pattern.length() &&
+      if (cell.meta_.is_fixed_len_char_type() && cell.get_string_len() >= space_pattern.length() &&
           0 == MEMCMP(cell.get_string_ptr() + cell.get_string_len() - space_pattern.length(),
                    space_pattern.ptr(),
                    space_pattern.length())) {
@@ -112,7 +112,7 @@ int ObRowReshapeUtil::reshape_row(
     int64_t binary_len_array_count = row_reshape_ins->binary_len_array_.count();
     ObDataBuffer data_buffer(row_reshape_ins->binary_buffer_ptr_, row_reshape_ins->binary_buffer_len_);
     for (int64_t i = 0, j = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
-      const ObObj &cell = row.get_cell(i);
+      const DatumValue &cell = row.get_cell(i);
       if (cell.is_binary()) {
         for (; j < binary_len_array_count; j++) {
           if (row_reshape_ins->binary_len_array_.at(j).first == i) {
@@ -142,10 +142,11 @@ int ObRowReshapeUtil::reshape_row(
           }
           if (OB_SUCC(ret)) {
             // set_binary set both type_ and cs_type
-            row_reshape_ins->row_reshape_cells_[i].set_binary(ObString(binary_len, dest_str));
+            row_reshape_ins->row_reshape_cells_[i].meta_.set_binary();
+            row_reshape_ins->row_reshape_cells_[i].datum_.set_string(dest_str, binary_len);
           }
         }
-      } else if (cell.is_fixed_len_char_type()) {
+      } else if (cell.meta_.is_fixed_len_char_type()) {
         const char *str = cell.get_string_ptr();
         int32_t len = cell.get_string_len();
         ObString space_pattern = ObCharsetUtils::get_const_str(cell.get_collation_type(), ' ');
@@ -155,10 +156,13 @@ int ObRowReshapeUtil::reshape_row(
           }
         }
         // need to set collation type
-        row_reshape_ins->row_reshape_cells_[i].set_string(cell.get_type(), ObString(len, str));
+        row_reshape_ins->row_reshape_cells_[i].meta_.set_type(cell.get_type());
+        row_reshape_ins->row_reshape_cells_[i].meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        row_reshape_ins->row_reshape_cells_[i].datum_.set_string(str, len);
         row_reshape_ins->row_reshape_cells_[i].set_collation_type(cell.get_collation_type());
       } else {
-        row_reshape_ins->row_reshape_cells_[i] = cell;
+        ret = DatumValueBuffer::assign_view(cell, row_reshape_ins->row_reshape_cells_,
+            row_reshape_ins->row_reshape_cells_len_, i);
       }
     }
     tbl_row.row_val_.cells_ = row_reshape_ins->row_reshape_cells_;

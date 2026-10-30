@@ -33,7 +33,7 @@ public:
   static int refresh(
           ObPLExecCtx &ctx,
           sql::ParamStore &params,
-          common::ObObj &result);
+          common::DatumValue &result);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDBMSIndexManager);
 };

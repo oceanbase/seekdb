@@ -63,14 +63,14 @@ public:
     info_.pl_integer_range_.set_range(lower, upper);
   }
   template<typename T>
-  static int check_range(const T &obj, const ObObjType type, int64_t range);
-  static int calc(ObObj &result,
-                  const ObObj &obj,
+  static int check_range(const T &obj, const SqlValueType type, int64_t range);
+  static int calc(common::DatumParameter &result,
+                  const common::DatumParameter &source,
                   const pl::ObPLIntegerType &pls_type,
                   const pl::ObPLIntegerRange &pls_range,
-                  ObIAllocator &calc_buf);
+                  ObIAllocator &owner);
   static int calc(ObDatum &expr_datum,
-                  const ObObjType type,
+                  const SqlValueType type,
                   const ObDatum &param,
                   const pl::ObPLIntegerType &pls_type,
                   const pl::ObPLIntegerRange &pls_range,

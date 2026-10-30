@@ -71,8 +71,8 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
                                                 ObString wkb1,
                                                 ObString wkb2,
                                                 double distance_tolerance,
-                                                ObObjType input_type1,
-                                                ObObjType input_type2,
+                                                SqlValueType input_type1,
+                                                SqlValueType input_type2,
                                                 ResType &res)
 {
   int ret = OB_SUCCESS;
@@ -155,8 +155,8 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
   ObExpr *gis_arg3 = expr.args_[2];
-  ObObjType input_type1 = gis_arg1->datum_meta_.type_;
-  ObObjType input_type2 = gis_arg2->datum_meta_.type_;
+  SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
+  SqlValueType input_type2 = gis_arg2->datum_meta_.type_;
   bool is_null_res = false;
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

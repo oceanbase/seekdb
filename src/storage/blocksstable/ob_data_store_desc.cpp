@@ -359,13 +359,13 @@ void ObColDataStoreDesc::fresh_col_meta(const share::schema::ObMergeSchema &merg
 
 int ObColDataStoreDesc::add_binary_col_desc(int64_t col_idx)
 {
-  ObObjMeta meta;
+  SqlTypeMeta meta;
   meta.set_varchar();
   meta.set_collation_type(CS_TYPE_BINARY);
   return add_col_desc(meta, col_idx);
 }
 
-int ObColDataStoreDesc::add_col_desc(const ObObjMeta meta, int64_t col_idx)
+int ObColDataStoreDesc::add_col_desc(const SqlTypeMeta meta, int64_t col_idx)
 {
   int ret = OB_SUCCESS;
   share::schema::ObColDesc fake_col;

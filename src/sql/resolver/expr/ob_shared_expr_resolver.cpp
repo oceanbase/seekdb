@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/rewrite/ob_transform_utils.h"
+#include "share/datum/typed_datum_compare.h"
 
 using namespace oceanbase;
 using namespace oceanbase::sql;
@@ -35,10 +36,10 @@ bool ObQuestionmarkEqualCtx::compare_const(const ObConstRawExpr &left,
       OB_SUCCESS != err_code_) {
     // do nothing
   } else if (left.get_expr_type() != T_QUESTIONMARK) {
-    bret = left.get_value().strict_equal(right.get_value());
+    bret = common::strict_equal_datum_values(left.get_value(), right.get_value());
   } else {
     bret = !left.get_param().is_null() && !right.get_param().is_null() &&
-        left.get_param().strict_equal(right.get_param());
+        common::strict_equal_datum_values(left.get_param(), right.get_param());
     if (bret) {
       ObPCParamEqualInfo equal_info;
       equal_info.first_param_idx_ = left.get_value().get_unknown();

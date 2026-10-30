@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_text_retrieval_token_iter.h"
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
 #include "query/das/ob_das_iter_access.h"
 #include "share/rc/ob_server_runtime.h"
 #include "query/engine/expr/ob_expr_bm25.h"
@@ -273,18 +275,21 @@ int ObTextRetrievalTokenIter::advance_to(const ObDatum &id_datum)
   } else {
     ObRowkey start_rowkey = inv_idx_scan_param_->key_ranges_.at(0).start_key_;
     ObRowkey end_rowkey = inv_idx_scan_param_->key_ranges_.at(0).end_key_;
-    if (&start_rowkey.get_obj_ptr()[2] != &end_rowkey.get_obj_ptr()[0]) {
+    if (&start_rowkey.get_values()[2] != &end_rowkey.get_values()[0]) {
       ret = OB_ERR_UNEXPECTED;
     }
-    // obj_ptr[0] is token, obj_ptr[1] is docid
-    ObObj *obj_ptr = start_rowkey.get_obj_ptr();
+    // values[0] is token, values[1] is docid. advance_doc_id_ owns id bytes.
+    DatumValue *values = start_rowkey.get_values();
     ObNewRange scan_range;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(advance_doc_id_.get_datum().to_obj(obj_ptr[1], inv_scan_domain_id_col_->obj_meta_))) {
+    } else if (OB_FAIL(project_datum_value_view(advance_doc_id_.get_datum(),
+                    inv_scan_domain_id_col_->obj_meta_,
+                    ObDatum::get_sql_value_datum_map_type(inv_scan_domain_id_col_->obj_meta_.get_type()),
+                    values[1].meta_, values[1], true))) {
     } else {
       scan_range.table_id_ = inv_idx_scan_param_->key_ranges_.at(0).table_id_;
-      scan_range.start_key_.assign(obj_ptr, INV_IDX_ROWKEY_COL_CNT);
-      scan_range.end_key_.assign(&obj_ptr[2], INV_IDX_ROWKEY_COL_CNT);
+      scan_range.start_key_.assign(values, INV_IDX_ROWKEY_COL_CNT);
+      scan_range.end_key_.assign(&values[2], INV_IDX_ROWKEY_COL_CNT);
       scan_range.border_flag_.set_inclusive_start();
       scan_range.border_flag_.set_inclusive_end();
     }
@@ -306,13 +311,13 @@ int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::O
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObNewRange scan_range = inv_idx_agg_param_->key_ranges_.at(0);
-    ObObj tmp_obj;
-    tmp_obj.set_string(ObVarcharType, token);
-    tmp_obj.set_meta_type(scan_range.start_key_.get_obj_ptr()->meta_);
-    if (scan_range.start_key_.get_obj_ptr() + 2 != scan_range.end_key_.get_obj_ptr()) {
+    DatumValue token_value;
+    token_value.datum_.set_string(token);
+    token_value.meta_ = scan_range.start_key_.get_cell(0).meta_;
+    if (scan_range.start_key_.get_values() + 2 != scan_range.end_key_.get_values()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_range.start_key_.get_obj_ptr()))) {
-    } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_range.end_key_.get_obj_ptr()))) {
+    } else if (OB_FAIL(clone_typed_value(token_value, scan_range.start_key_.get_cell(0), allocator))) {
+    } else if (OB_FAIL(clone_typed_value(token_value, scan_range.end_key_.get_cell(0), allocator))) {
     } else if (!need_inv_idx_agg()) {
       // skip inverted index aggregate iterator
     } else if (OB_FAIL(query::das_scan_reuse(inv_idx_agg_iter_))) {
@@ -325,13 +330,13 @@ int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::O
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(inv_idx_scan_param_->key_ranges_.empty())) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (inv_idx_scan_param_->key_ranges_.at(0).start_key_.get_obj_ptr()
-        == inv_idx_scan_param_->key_ranges_.at(0).end_key_.get_obj_ptr()) {
+    } else if (inv_idx_scan_param_->key_ranges_.at(0).start_key_.get_values()
+        == inv_idx_scan_param_->key_ranges_.at(0).end_key_.get_values()) {
       // function lookup mode
       ObSEArray<ObNewRange, 4> scan_ranges;
       scan_ranges.assign(inv_idx_scan_param_->key_ranges_);
       for (int64_t i = 0; OB_SUCC(ret) && i < scan_ranges.count(); ++i) {
-        if (OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_ranges.at(i).start_key_.get_obj_ptr()))) {
+        if (OB_FAIL(clone_typed_value(token_value, scan_ranges.at(i).start_key_.get_cell(0), allocator))) {
         }
       }
       if (FAILEDx(query::das_scan_reuse(inv_idx_scan_iter_))) {

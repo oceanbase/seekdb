@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
 #include "ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_timezone_mgr.h"
@@ -23,14 +24,14 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-int ObExprUtil::get_int64_from_obj(const ObObj &obj,
+int ObExprUtil::get_int64_from_value(const DatumValue &obj,
                                    ObExprCtx &expr_ctx,
                                    const bool is_trunc, //true: trunc; false: round
                                    int64_t &out)
 {
   int ret = OB_SUCCESS;
   out = 0;
-  ObObjType type = obj.get_type();
+  SqlValueType type = obj.get_type();
   if (OB_LIKELY(ob_is_int_tc(type))) {
     out = obj.get_int();
   } else if (ob_is_uint_tc(type)) {
@@ -50,7 +51,12 @@ int ObExprUtil::get_int64_from_obj(const ObObj &obj,
     // and trunc to an integer
     number::ObNumber nmb;
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-    EXPR_GET_NUMBER_V2(obj, nmb);
+    DatumValue converted;
+    if (expr_ctx.calc_buf_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(DatumValueCaster::to_type(ObNumberType, cast_ctx, obj,
+        *expr_ctx.calc_buf_, converted))) {
+    } else if (converted.is_null() || !converted.is_number()) { ret = OB_OBJ_TYPE_ERROR; }
+    else { nmb = converted.get_number(); }
     if (OB_SUCC(ret)) {
       ret = get_int64_from_num(nmb, expr_ctx, is_trunc, out);
     }
@@ -58,15 +64,10 @@ int ObExprUtil::get_int64_from_obj(const ObObj &obj,
   return ret;
 }
 
-int ObExprUtil::get_trunc_int64(const ObObj &obj, ObExprCtx &expr_ctx, int64_t &out)
-{
-  return get_int64_from_obj(obj, expr_ctx, true, out);
-}
-
-int ObExprUtil::get_round_int64(const ObObj &obj, ObExprCtx &expr_ctx, int64_t &out)
-{
-  return get_int64_from_obj(obj, expr_ctx, false, out);
-}
+int ObExprUtil::get_trunc_int64(const DatumValue &value, ObExprCtx &ctx, int64_t &out)
+{ return get_int64_from_value(value, ctx, true, out); }
+int ObExprUtil::get_round_int64(const DatumValue &value, ObExprCtx &ctx, int64_t &out)
+{ return get_int64_from_value(value, ctx, false, out); }
 
 
 

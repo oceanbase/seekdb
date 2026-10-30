@@ -53,7 +53,7 @@ public:
   bool is_null_first_;
   bool is_memcmp_;
   bool is_valid_uni_;
-  ObObjType type_;
+  SqlValueType type_;
   ObSorEncMode enc_mod_;
   bool is_simdopt_;
 
@@ -65,7 +65,7 @@ public:
       is_null_first_(false),
       is_memcmp_(false),
       is_valid_uni_(true),
-      type_(ObObjType::ObNullType),
+      type_(SqlValueType::ObNullType),
       enc_mod_(ObSorEncMode::OB_INVALID_MODE),
       is_simdopt_(true)
   {}
@@ -115,7 +115,7 @@ public:
                                 int64_t &to_len);
 
   static int encode_tails(unsigned char *to, int64_t max_buf_len, int64_t &to_len, bool is_mem, common::ObCollationType cs,  bool with_empty_str);
-  inline static bool can_encode_sortkey(common::ObObjType type, common::ObCollationType cs)
+  inline static bool can_encode_sortkey(common::SqlValueType type, common::ObCollationType cs)
   {
     return (type == ObTinyIntType || type == ObSmallIntType || type == ObDateType
            || type == ObMediumIntType || type == ObInt32Type

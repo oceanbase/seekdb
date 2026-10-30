@@ -85,7 +85,7 @@ private:
 
   int64_t ref_col_idx_;
   common::ObArray<int64_t> exc_row_ids_;
-  ObObjTypeStoreClass store_class_;
+  SqlValueTypeStoreClass store_class_;
   ObBitMapMetaBaseWriter base_meta_writer_;
   const ObColumnEncodingCtx *ref_ctx_;
   DISALLOW_COPY_AND_ASSIGN(ObColumnEqualEncoder);

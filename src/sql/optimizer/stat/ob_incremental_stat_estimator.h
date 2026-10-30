@@ -121,7 +121,7 @@ private:
                                     const int64_t partition_id,
                                     ObOptStat &global_opt_stat);
 
-  static int derive_global_histogram(ObIArray<ObHistogram> &all_part_histogram,
+  static int derive_global_histogram(ObIArray<const ObHistogram *> &all_part_histogram,
                                      common::ObIAllocator &allocator,
                                      int64_t max_bucket_num,
                                      int64_t total_row_count,

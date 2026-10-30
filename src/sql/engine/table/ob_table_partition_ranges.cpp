@@ -54,7 +54,7 @@ OB_DEF_DESERIALIZE(ObPartitionScanRanges)
       if (OB_ISNULL(deserialize_allocator_)) {
         ret = OB_NOT_INIT;
       } else {
-        ObObj array[OB_MAX_ROWKEY_COLUMN_NUMBER * 2];
+        DatumValue array[OB_MAX_ROWKEY_COLUMN_NUMBER * 2];
         ObNewRange copy_range;
         ObNewRange key_range;
         copy_range.start_key_.assign(array, OB_MAX_ROWKEY_COLUMN_NUMBER);
@@ -166,15 +166,13 @@ int ObMultiPartitionsRangesWarpper::get_new_partition_ranges(ObPartitionScanRang
 int ObMultiPartitionsRangesWarpper::init_main_table_rowkey(const int64_t column_count, common::ObNewRow &row)
 {
   int ret = OB_SUCCESS;
-  void *ptr = NULL;
+  DatumValue *values = nullptr;
   if (column_count <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(ptr = allocator_.alloc(column_count * sizeof(ObObj)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("alloc memory for row failed", "size", column_count * sizeof(ObObj));
+  } else if (OB_FAIL(DatumValueBuffer::allocate(allocator_, column_count, values))) {
+    LOG_WARN("allocate native row cells failed", K(ret), K(column_count));
   } else {
-    row.cells_ = new(ptr) common::ObObj[column_count];
-    row.count_ = column_count;
+    row.assign(values, column_count);
   }
   return ret;
 }

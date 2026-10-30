@@ -114,7 +114,7 @@ public:
       int64_t &pos,
       const int64_t buf_size,
       const int64_t row_cnt,
-      const ObObjMeta *obj_meta,
+      const SqlTypeMeta *obj_meta,
       ObColumnVector &vector);
   static int construct_datum_vector(
       char *buf,

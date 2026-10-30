@@ -79,7 +79,7 @@ public:
 
   EncoderDesc &get_desc() { return desc_; }
   ObColumnHeader &get_column_header() { return column_header_; }
-  ObObjType get_obj_type() { return column_type_.get_type(); }
+  SqlValueType get_obj_type() { return column_type_.get_type(); }
   // var data store only
   virtual int set_data_pos(const int64_t offset, const int64_t length)
   {
@@ -163,7 +163,7 @@ public:
 
 protected:
   bool is_inited_;
-  common::ObObjMeta column_type_;
+  common::SqlTypeMeta column_type_;
   const ObColumnEncodingCtx *ctx_;
   int64_t column_index_;
   int64_t extend_value_bit_;

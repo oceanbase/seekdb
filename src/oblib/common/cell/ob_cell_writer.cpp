@@ -18,11 +18,19 @@
 
 #include "common/cell/ob_cell_writer.h"
 #include "common/timezone/ob_time_convert.h"
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value_buffer.h"
 namespace oceanbase
 {
 namespace common
 {
+
+namespace {
+void set_string_view(DatumValue &value, SqlValueType type, const char *bytes, int64_t length)
+{
+  value.meta_.set_type(type); value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+  value.datum_.set_string(bytes, length);
+}
+}
 
 #define WRITE_META(meta_type, meta_attr) \
   { \
@@ -49,7 +57,7 @@ namespace common
   } \
 }
 
-int ObCellWriter::write_int(const ObObj &obj, const enum ObObjType meta_type, const int64_t value)
+int ObCellWriter::write_int(const DatumValue &obj, const enum SqlValueType meta_type, const int64_t value)
 {
   UNUSED(obj);
   int ret = OB_SUCCESS;
@@ -95,15 +103,15 @@ int ObCellWriter::write_int(const ObObj &obj, const enum ObObjType meta_type, co
   return ret;
 }
 
-int ObCellWriter::write_number(const enum ObObjType meta_type, const number::ObNumber &number, ObObj *clone_obj)
+int ObCellWriter::write_number(const enum SqlValueType meta_type, const number::ObNumber &number, DatumValue *clone_obj)
 {
   int ret = OB_SUCCESS;
   WRITE_META(meta_type, 0);
   if (OB_SUCC(ret)) {
     if (NULL != clone_obj) {
-      number::ObNumber clone_number;
-      ret = number.encode(buf_, buf_size_, pos_, &clone_number);
-      clone_obj->set_number_value(clone_number);
+      const int64_t start = pos_;
+      ret = number.encode(buf_, buf_size_, pos_);
+      if (ret == OB_SUCCESS) { clone_obj->datum_.set_string(buf_ + start, pos_ - start); }
     } else {
       ret = number.encode(buf_, buf_size_, pos_);
     }
@@ -111,7 +119,7 @@ int ObCellWriter::write_number(const enum ObObjType meta_type, const number::ObN
   return ret;
 }
 
-int ObCellWriter::write_char(const ObObj &obj, const enum ObObjType meta_type, const ObString &str, ObObj *clone_obj)
+int ObCellWriter::write_char(const DatumValue &obj, const enum SqlValueType meta_type, const ObString &str, DatumValue *clone_obj)
 {
   int ret = OB_SUCCESS;
   uint32_t str_len = static_cast<uint32_t> (str.length());
@@ -142,9 +150,9 @@ int ObCellWriter::write_char(const ObObj &obj, const enum ObObjType meta_type, c
     MEMCPY(buf_ + pos_, str.ptr(), str_len);
     if (OB_UNLIKELY(NULL != clone_obj)) {
       if (0 != str_len) {
-        clone_obj->set_string(meta_type, buf_ + pos_, str_len);
+        set_string_view(*clone_obj, meta_type, buf_ + pos_, str_len);
       } else {
-        clone_obj->set_string(meta_type, NULL, str_len);
+        set_string_view(*clone_obj, meta_type, NULL, str_len);
       }
     }
     pos_ += str_len;
@@ -152,7 +160,7 @@ int ObCellWriter::write_char(const ObObj &obj, const enum ObObjType meta_type, c
   return ret;
 }
 
-int ObCellWriter::write_text(const ObObj &obj, const enum ObObjType store_type, const ObString &char_value, ObObj *clone_obj)
+int ObCellWriter::write_text(const DatumValue &obj, const enum SqlValueType store_type, const ObString &char_value, DatumValue *clone_obj)
 {
   int ret = OB_SUCCESS;
   CellMeta meta;
@@ -194,9 +202,9 @@ int ObCellWriter::write_text(const ObObj &obj, const enum ObObjType store_type, 
       MEMCPY(buf_ + pos_, char_value.ptr(), char_value.length());
       if (NULL != clone_obj) {
         if (char_value.empty()) {
-          clone_obj->set_string((store_type), NULL, 0);
+          set_string_view(*clone_obj, store_type, NULL, 0);
         } else {
-          clone_obj->set_string((store_type), buf_ + pos_, char_value.length());
+          set_string_view(*clone_obj, store_type, buf_ + pos_, char_value.length());
         }
       }
       pos_ += char_value.length();
@@ -205,7 +213,7 @@ int ObCellWriter::write_text(const ObObj &obj, const enum ObObjType store_type, 
   return ret;
 }
 
-int ObCellWriter::write_binary(const enum ObObjType meta_type, const ObString &str, ObObj *clone_obj)
+int ObCellWriter::write_binary(const enum SqlValueType meta_type, const ObString &str, DatumValue *clone_obj)
 {
   int ret = OB_SUCCESS;
   uint32_t str_len = static_cast<uint32_t> (str.length());
@@ -223,9 +231,9 @@ int ObCellWriter::write_binary(const enum ObObjType meta_type, const ObString &s
     MEMCPY(buf_ + pos_, str.ptr(), str_len);
     if (OB_UNLIKELY(NULL != clone_obj)) {
       if (str_len != 0) {
-        clone_obj->set_string(meta_type, buf_ + pos_, str_len);
+        set_string_view(*clone_obj, meta_type, buf_ + pos_, str_len);
       } else {
-        clone_obj->set_string(meta_type, NULL, str_len);
+        set_string_view(*clone_obj, meta_type, NULL, str_len);
       }
     }
     pos_ += str_len;
@@ -252,10 +260,10 @@ int ObCellWriter::write_ext(const int64_t ext_value)
     case ObActionFlag::OP_ROW_DOES_NOT_EXIST:
       WRITE_DATA(ObExtendType, EA_OTHER, int8_t, EV_NOT_EXIST_ROW);
       break;
-    case ObObj::MIN_OBJECT_VALUE:
+    case DATUM_MIN_EXT_VALUE:
       WRITE_DATA(ObExtendType, EA_OTHER, int8_t, EV_MIN_CELL);
       break;
-    case ObObj::MAX_OBJECT_VALUE:
+    case DATUM_MAX_EXT_VALUE:
       WRITE_DATA(ObExtendType, EA_OTHER, int8_t, EV_MAX_CELL);
       break;
     default:
@@ -265,7 +273,7 @@ int ObCellWriter::write_ext(const int64_t ext_value)
   return ret;
 }
 
-int ObCellWriter::write_decimal_int(const ObObj &obj, ObObj *clone_obj)
+int ObCellWriter::write_decimal_int(const DatumValue &obj, DatumValue *clone_obj)
 {
   int ret = OB_SUCCESS;
   uint32_t val_len = static_cast<uint32_t>(obj.get_val_len());
@@ -287,7 +295,8 @@ int ObCellWriter::write_decimal_int(const ObObj &obj, ObObj *clone_obj)
 
     MEMCPY(buf_ + pos_, obj.get_decimal_int(), val_len);
     if (OB_LIKELY(clone_obj != NULL)) {
-      clone_obj->set_decimal_int(val_len, obj.get_scale(), (ObDecimalInt *)(buf_ + pos_));
+      clone_obj->meta_.set_decimal_int(obj.get_scale());
+      clone_obj->datum_.set_string(buf_ + pos_, val_len);
     }
     pos_ += val_len;
   }
@@ -368,21 +377,22 @@ int ObCellWriter::revert_buf(char *buf, int64_t size)
   return ret;
 }
 
-int ObCellWriter::append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj)
+int ObCellWriter::append(uint64_t column_id, const DatumValue &obj, DatumValue *clone_obj, char *clone_scalar)
 {
   int ret = OB_SUCCESS;
-  ObObjType obj_type = obj.get_type();
+  // Declared metadata survives SQL NULL evaluation; the Datum bit owns nullness.
+  const SqlValueType obj_type = obj.is_null() ? ObNullType : obj.get_type();
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObCellWriter should be inited first, ", K(ret));
-  } else if (OB_UNLIKELY(!obj.is_valid_type())) {
+  } else if (OB_UNLIKELY(obj.is_invalid_type())) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument, ", K(ret), "type", obj.get_type());
+  } else if (clone_obj != nullptr && clone_scalar == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
-    if (NULL != clone_obj) {
-      *clone_obj = obj;
-    }
+    if (NULL != clone_obj) { *clone_obj = obj; }
 
     switch (obj_type) {
       case ObNullType:
@@ -392,10 +402,10 @@ int ObCellWriter::append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj)
         ret = write_int(obj, ObTinyIntType, obj.get_tinyint());
         break;
       case ObSmallIntType:
-        ret = write_int(obj, ObSmallIntType, obj.get_smallint());
+        ret = write_int(obj, ObSmallIntType, static_cast<int16_t>(obj.get_int()));
         break;
       case ObMediumIntType:
-        ret = write_int(obj, ObMediumIntType, obj.get_mediumint());
+        ret = write_int(obj, ObMediumIntType, static_cast<int32_t>(obj.get_int()));
         break;
       case ObInt32Type:
         ret = write_int(obj, ObInt32Type, obj.get_int32());
@@ -404,16 +414,16 @@ int ObCellWriter::append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj)
         ret = write_int(obj, ObIntType, obj.get_int());
         break;
       case ObUTinyIntType:
-        ret = write_int(obj, ObUTinyIntType, obj.get_utinyint());
+        ret = write_int(obj, ObUTinyIntType, static_cast<uint8_t>(obj.get_uint64()));
         break;
       case ObUSmallIntType:
-        ret = write_int(obj, ObUSmallIntType, obj.get_usmallint());
+        ret = write_int(obj, ObUSmallIntType, static_cast<uint16_t>(obj.get_uint64()));
         break;
       case ObUMediumIntType:
-        ret = write_int(obj, ObUMediumIntType, obj.get_umediumint());
+        ret = write_int(obj, ObUMediumIntType, static_cast<uint32_t>(obj.get_uint64()));
         break;
       case ObUInt32Type:
-        ret = write_int(obj, ObUInt32Type, obj.get_uint32());
+        ret = write_int(obj, ObUInt32Type, static_cast<uint32_t>(obj.get_uint64()));
         break;
       case ObUInt64Type:
         ret = write_int(obj, ObUInt64Type, obj.get_uint64());
@@ -425,16 +435,16 @@ int ObCellWriter::append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj)
         WRITE_DATA(ObDoubleType, 0, double, obj.get_double());
         break;
       case ObUFloatType:
-        WRITE_DATA(ObUFloatType, 0, float, obj.get_ufloat());
+        WRITE_DATA(ObUFloatType, 0, float, obj.get_float());
         break;
       case ObUDoubleType:
-        WRITE_DATA(ObUDoubleType, 0, double, obj.get_udouble());
+        WRITE_DATA(ObUDoubleType, 0, double, obj.get_double());
         break;
       case ObNumberType:
         ret = write_number(ObNumberType, obj.get_number(), clone_obj);
         break;
       case ObUNumberType:
-        ret = write_number(ObUNumberType, obj.get_unumber(), clone_obj);
+        ret = write_number(ObUNumberType, obj.get_number(), clone_obj);
         break;
       case ObDateType:
         WRITE_DATA(ObDateType, 0, int32_t, obj.get_date());
@@ -461,7 +471,7 @@ int ObCellWriter::append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj)
         ret = write_char(obj, ObCharType, obj.get_string(), clone_obj);
         break;
       case ObHexStringType:
-        ret = write_binary(ObHexStringType, obj.get_hex_string(), clone_obj);
+        ret = write_binary(ObHexStringType, obj.get_string(), clone_obj);
         break;
       case ObExtendType:
         ret = write_ext(obj.get_ext());
@@ -513,6 +523,12 @@ int ObCellWriter::append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj)
       }
     }
     if (OB_SUCC(ret)) {
+      // Scalar clone bytes belong to an explicit caller-provided fixed slot.
+      // Larger strings/numbers borrow the newly written compact buffer.
+      if (clone_obj != nullptr && !clone_obj->is_null() && clone_obj->datum_.len_ <= 16) {
+        if (clone_obj->datum_.len_ > 0) { MEMMOVE(clone_scalar, clone_obj->datum_.ptr_, clone_obj->datum_.len_); }
+        clone_obj->datum_.ptr_ = clone_scalar;
+      }
       ++cell_cnt_;
       //Save the last_append_pos site for easy column append retry
       last_append_pos_ = pos_;
@@ -524,7 +540,7 @@ int ObCellWriter::append(uint64_t column_id, const ObObj &obj, ObObj *clone_obj)
   return ret;
 }
 
-int ObCellWriter::append(const ObObj &obj)
+int ObCellWriter::append(const DatumValue &obj)
 {
   return append(OB_INVALID_ID, obj);
 }

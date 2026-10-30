@@ -17,6 +17,7 @@
 #include "rust/config.h"
 #include "lib/container/ob_se_array.h"
 #include "common/json_type/ob_json_bin.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "share/ob_errno.h"
 #define USING_LOG_PREFIX SQL_DAS
 
@@ -36,9 +37,43 @@ namespace sql
 {
 using storage::ObFTWordMap;
 
+namespace
+{
+// A zero-count non-unique MVI still decodes one MIN scalar. The old reader
+// replaced its type with the column metadata before creating the storage row:
+// fixed-width destinations used the scalar bits, while strings had length zero.
+// Normalize those native payload descriptors explicitly; do not retain Ext
+// flags after that metadata replacement or reinterpret an Ext-sized Datum.
+int normalize_das_multivalue_scalar(DatumValue &value, const SqlTypeMeta &column_meta)
+{
+  int ret = OB_SUCCESS;
+  if (!value.is_null()) {
+    const SqlValueDatumMapType target = ObDatum::get_sql_value_datum_map_type(column_meta.get_type());
+    if (value.is_ext()) {
+      if (!value.is_min_value()) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else if (target == OBJ_DATUM_STRING) {
+        value.datum_.set_string(ObString());
+      } else if (target == OBJ_DATUM_8BYTE_DATA || target == OBJ_DATUM_4BYTE_DATA
+                 || target == OBJ_DATUM_1BYTE_DATA) {
+        // The native Ext payload begins with the same int64 scalar bits. The
+        // decoded bytes belong to the row batch arena and survive this view.
+        value.datum_.pack_ = ObDatum::get_reserved_size(target);
+      } else {
+        ret = OB_DESERIALIZE_ERROR;
+      }
+    } else if (ObDatum::get_sql_value_datum_map_type(value.get_type()) != target) {
+      ret = OB_DESERIALIZE_ERROR;
+    }
+    if (OB_SUCC(ret)) { value.set_meta_type(column_meta); }
+  }
+  return ret;
+}
+} // namespace
 
-ObObjDatumMapType ObFTIndexRowCache::FTS_INDEX_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
-ObObjDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
+
+SqlValueDatumMapType ObFTIndexRowCache::FTS_INDEX_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
+SqlValueDatumMapType ObFTIndexRowCache::FTS_DOC_WORD_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
 
 ObExprOperatorType ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE[] = {T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
 ObExprOperatorType ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE[] = {T_FUN_SYS_DOC_ID, T_FUN_SYS_WORD_SEGMENT, T_FUN_SYS_WORD_COUNT, T_FUN_SYS_DOC_LENGTH};
@@ -80,7 +115,7 @@ int ObFTIndexRowCache::init(
   return ret;
 }
 
-int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
+int ObFTIndexRowCache::segment(const common::SqlTypeMeta &ft_obj_meta,
                                const ObDatum &doc_id_datum,
                                const ObString &fulltext)
 {
@@ -193,7 +228,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
         } else {
           // Index row[cellid_obj][mbr_obj][rowkey_obj]
           for(uint64_t j = 0; OB_SUCC(ret) && j < rowkey_num; j++) {
-            const ObObjMeta &col_type = das_ctdef.column_types_.at(j);
+            const SqlTypeMeta &col_type = das_ctdef.column_types_.at(j);
             const ObAccuracy &col_accuracy = das_ctdef.column_accuracys_.at(j);
             int64_t projector_idx = row_projector.at(j);
             if (FALSE_IT(rows[i].storage_datums_[j].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
@@ -276,7 +311,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
 
 /*static*/ int ObDASDomainUtils::generate_fulltext_word_rows(common::ObIAllocator &allocator,
                                                              storage::ObFTParseHelper *helper,
-                                                             const common::ObObjMeta &ft_obj_meta,
+                                                             const common::SqlTypeMeta &ft_obj_meta,
                                                              const ObDatum &doc_id_datum,
                                                              const ObString &fulltext,
                                                              const bool is_fts_index_aux,
@@ -340,7 +375,7 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
 /*static*/ int ObDASDomainUtils::segment_and_calc_word_count(
     common::ObIAllocator &allocator,
     storage::ObFTParseHelper *helper,
-    const common::ObObjMeta &meta,
+    const common::SqlTypeMeta &meta,
     const ObString &fulltext,
     int64_t &doc_length,
     ObFTWordMap &words_count)
@@ -372,7 +407,16 @@ int ObDASDomainUtils::get_pure_mutivalue_data(const ObString &json_str, const ch
     data = bin.get_data();
     data_len = bin.get_data_length();
 
-    record_num = *reinterpret_cast<const uint32_t*>(data);
+    if (OB_ISNULL(data) || data_len < static_cast<int64_t>(sizeof(record_num))) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else {
+      MEMCPY(&record_num, data, sizeof(record_num));
+      // Every value has at least its four metadata bytes. Reject impossible
+      // counts before allocating a row array or walking a truncated blob.
+      if (record_num > (data_len - sizeof(record_num)) / 4) {
+        ret = OB_DESERIALIZE_ERROR;
+      }
+    }
   }
 
   return ret;
@@ -387,6 +431,7 @@ int ObDASDomainUtils::calc_save_rowkey_policy(
     bool& is_save_rowkey)
 {
   int ret = OB_SUCCESS;
+  UNUSED(allocator);
   is_save_rowkey = true;
 
   uint64_t column_num = das_ctdef.column_ids_.count();
@@ -402,26 +447,24 @@ int ObDASDomainUtils::calc_save_rowkey_policy(
     ret = OB_INVALID_ARGUMENT;
   } else {
 
-    ObObj *obj_arr = nullptr;
-    if (OB_ISNULL(obj_arr = reinterpret_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * column_num)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    }
-
     uint32_t pure_data_size = 0;
     uint64_t rowkey_column_start = mulvalue_column_end;
     // -1 :  doc id column
     uint64_t rowkey_column_end = column_num - 1;
 
     for(uint64_t j = rowkey_column_start; OB_SUCC(ret) && j < rowkey_column_end; j++) {
-      obj_arr[j].set_nop_value();
-      const ObObjMeta &col_type = das_ctdef.column_types_.at(j);
-      const ObAccuracy &col_accuracy = das_ctdef.column_accuracys_.at(j);
-      int64_t projector_idx = row_projector.at(j);
+      const SqlTypeMeta &col_type = das_ctdef.column_types_.at(j);
+      const int64_t projector_idx = row_projector.at(j);
+      int64_t wire_size = 0;
       if (das_ctdef.column_ids_.at(j) == multivalue_arr_col_id) {
          // do nothing
-      } else if (OB_FAIL(dml_row.cells()[projector_idx].to_obj(obj_arr[j], col_type))) {
+      } else if (!dml_row.cells()[projector_idx].is_null()
+                 && col_type.is_decimal_int() && col_type.get_scale() < 0) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(DatumParameterCodec::value_size(
+                   dml_row.cells()[projector_idx], col_type, wire_size))) {
       } else {
-        pure_data_size += obj_arr[j].get_serialize_size();
+        pure_data_size += wire_size;
       }
     }
 
@@ -481,14 +524,16 @@ int ObDASDomainUtils::generate_multivalue_index_rows(ObIAllocator &allocator,
         if (OB_FAIL(rows[i].init(allocator, column_num))) {
         } else {
           for(uint64_t j = 0; OB_SUCC(ret) && j < column_num; j++) {
-            ObObjMeta col_type = das_ctdef.column_types_.at(j);
+            SqlTypeMeta col_type = das_ctdef.column_types_.at(j);
             const ObAccuracy &col_accuracy = das_ctdef.column_accuracys_.at(j);
             int64_t projector_idx = row_projector.at(j);
 
             if (multivalue_idx == projector_idx) {
-              ObObj obj;
-              obj.set_nop_value();
-              if (OB_FAIL(obj.deserialize(data, data_len, pos))) {
+              DatumValue value;
+              // Decoding owns payloads in the same batch allocator as rows;
+              // variable-width storage cells may borrow them until batch reset.
+              if (OB_FAIL(DatumParameterCodec::decode_value(data, data_len, pos,
+                            allocator, value.datum_, value.meta_))) {
               } else {
                 is_none_unique_done = true;
                 if (ob_is_number_or_decimal_int_tc(col_type.get_type()) || ob_is_temporal_type(col_type.get_type())) {
@@ -496,10 +541,8 @@ int ObDASDomainUtils::generate_multivalue_index_rows(ObIAllocator &allocator,
                 } else {
                   col_type.set_collation_level(CS_LEVEL_IMPLICIT);
                 }
-                if (!obj.is_null()) {
-                  obj.set_meta_type(col_type);
-                }
-                if (OB_FAIL(rows[i].storage_datums_[j].from_obj_enhance(obj))) {
+                if (OB_FAIL(normalize_das_multivalue_scalar(value, col_type))) {
+                } else if (OB_FAIL(rows[i].storage_datums_[j].from_value(value))) {
                 }
               }
             } else if (!is_save_rowkey && (j >= rowkey_column_start && j < rowkey_column_end)) {
@@ -773,7 +816,7 @@ int ObSpatialDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredRo
     const uint64_t geo_col_id = das_ctdef_->table_param_.get_data_table().get_spatial_geo_col_id();
     int64_t geo_idx = -1;
     ObString geo_wkb;
-    ObObjMeta geo_meta;
+    SqlTypeMeta geo_meta;
     if (!is_update_ && OB_FAIL(get_geo_wkb(store_row, geo_idx, geo_wkb, geo_meta))) {
     } else if (is_update_ && OB_FAIL(get_geo_wkb_for_update(store_row, geo_idx, geo_wkb, geo_meta))) {
     } else if (OB_UNLIKELY(geo_idx == -1)) {
@@ -795,7 +838,7 @@ int ObSpatialDMLIterator::get_geo_wkb(
     const ObChunkDatumStore::StoredRow *store_row,
     int64_t &geo_idx,
     ObString &geo_wkb,
-    ObObjMeta &geo_meta) const
+    SqlTypeMeta &geo_meta) const
 {
   int ret = OB_SUCCESS;
   const uint64_t rowkey_num = das_ctdef_->table_param_.get_data_table().get_rowkey_column_num();
@@ -820,7 +863,7 @@ int ObSpatialDMLIterator::get_geo_wkb_for_update(
     const ObChunkDatumStore::StoredRow *store_row,
     int64_t &geo_idx,
     ObString &geo_wkb,
-    ObObjMeta &geo_meta) const
+    SqlTypeMeta &geo_meta) const
 {
   int ret = OB_SUCCESS;
   const uint64_t rowkey_num = das_ctdef_->table_param_.get_data_table().get_rowkey_column_num();
@@ -1020,7 +1063,7 @@ int ObFTDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredRow *st
 int ObFTDMLIterator::generate_ft_word_rows(const ObChunkDatumStore::StoredRow *store_row)
 {
   int ret = OB_SUCCESS;
-  common::ObObjMeta ft_meta;
+  common::SqlTypeMeta ft_meta;
   ObString ft;
   ObDatum doc_id_datum;
   const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
@@ -1104,7 +1147,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     ObDatum check_id_datum;
     ObString doc_id;
     ObString ft;
-    common::ObObjMeta ft_meta;
+    common::SqlTypeMeta ft_meta;
     ObDomainIndexRow rows;
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     if (OB_FAIL(ft_parse_helper.init(&allocator, parser_str, parser_property_str))) {
@@ -1185,7 +1228,7 @@ int ObFTDMLIterator::build_ft_word_row(
 int ObFTDMLIterator::get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store_row,
                                        ObDatum &doc_id_datum,
                                        ObString &ft,
-                                       common::ObObjMeta &ft_meta)
+                                       common::SqlTypeMeta &ft_meta)
 {
   int ret = OB_SUCCESS;
   const uint64_t fts_col_id = das_ctdef_->table_param_.get_data_table().get_fulltext_col_id();
@@ -1216,7 +1259,7 @@ int ObFTDMLIterator::get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store
 int ObFTDMLIterator::get_ft_and_doc_id_for_update(const ObChunkDatumStore::StoredRow *store_row,
                                                   ObDatum &doc_id_datum,
                                                   ObString &ft,
-                                                  common::ObObjMeta &ft_meta)
+                                                  common::SqlTypeMeta &ft_meta)
 {
   int ret = OB_SUCCESS;
   const uint64_t rowkey_col_cnt = das_ctdef_->table_param_.get_data_table().get_rowkey_column_num();

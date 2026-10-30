@@ -741,7 +741,7 @@ int ObTransformerImpl::finalize_exec_params(ObDMLStmt *stmt, ObIArray<ObExecPara
     } else if (exec_param->get_param_index() >= 0) {
       // do nothing
     } else {
-      exec_param->set_param_index(*stmt->query_ctx_);
+      OZ (exec_param->set_param_index(*stmt->query_ctx_));
       exec_param->set_result_type(exec_param->get_ref_expr()->get_result_type());
     }
   }
@@ -865,8 +865,8 @@ int ObTransformerImpl::add_all_rowkey_columns_to_stmt(const ObTableSchema &table
       column_item.base_tid_ = table_item.ref_id_;
       column_item.base_cid_ = rowkey->get_column_id();
       column_item.column_name_ = rowkey->get_column_name();
-      column_item.set_default_value(column_schema->get_cur_default_value());
-      if (OB_FAIL(stmt.add_column_item(column_item))) {
+      if (OB_FAIL(column_item.set_default_value(column_schema->get_cur_default_value()))) {
+      } else if (OB_FAIL(stmt.add_column_item(column_item))) {
       } else if (OB_FAIL(column_items.push_back(column_item))) {
       } else if (FALSE_IT(rowkey->clear_explicited_referece())) {
       } else if (OB_ISNULL(ctx_)) {
@@ -916,7 +916,7 @@ int ObTransformerImpl::verify_all_expr_types(ObDMLStmt *stmt, const ObSQLSession
           has_diff_type = true;
         }
         for (int64_t j = 0; OB_SUCC(ret) && !has_diff_type && j < origin_types.count(); ++j) {
-          if (origin_types.at(j).get_obj_meta() != formalize_types.at(j).get_obj_meta()) {
+          if (origin_types.at(j).get_sql_type_meta() != formalize_types.at(j).get_sql_type_meta()) {
             // jinmao TODO: origin_types.at(j).get_result_flag() != formalize_types.at(j).get_result_flag()
             has_diff_type = true;
           } else if (ob_is_int_tc(origin_types.at(j).get_type()) ||

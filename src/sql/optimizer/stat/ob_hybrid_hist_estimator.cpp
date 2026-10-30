@@ -15,7 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "ob_hybrid_hist_estimator.h"
+#include "sql/executor/ob_execute_result.h"
+#include "common/datum/datum_parameter_codec.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
@@ -274,7 +279,7 @@ int ObHybridHistEstimator::try_build_hybrid_hist(const ObColumnStatParam &param,
         col_stat.get_histogram().get_buckets().reset();
         if (OB_FAIL(col_stat.get_histogram().prepare_allocate_buckets(allocator_,
                                                                       hybrid_hist.get_buckets().count()))) {
-        } else if (OB_FAIL(col_stat.get_histogram().assign_buckets(hybrid_hist.get_buckets()))) {
+        } else if (OB_FAIL(col_stat.get_histogram().assign_buckets(hybrid_hist.get_buckets(), allocator_))) {
         } else {
           col_stat.get_histogram().set_type(ObHistType::HYBIRD);
           col_stat.get_histogram().set_sample_size(total_count);
@@ -385,14 +390,14 @@ int ObHybridHistEstimator::compute_estimate_percent(int64_t total_row_count,
   return ret;
 }
 
-int ObHybridHistograms::read_result(const ObObj &result_obj)
+int ObHybridHistograms::read_result(const DatumValue &result_obj)
 {
   int ret = OB_SUCCESS;
   ObString result_str;
   int64_t pos = 0;
   if (result_obj.is_null()) {
     // do nothing
-  } else if (OB_UNLIKELY(!result_obj.is_lob())) {
+  } else if (OB_UNLIKELY(!result_obj.meta_.is_lob())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(result_obj.get_string(result_str))) {
   } else if (OB_FAIL(deserialize(result_str.ptr(), result_str.length(), pos))) {
@@ -480,7 +485,7 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
                                           int64_t num_distinct,
                                           int64_t pop_count,
                                           int64_t pop_freq,
-                                          const ObObjMeta &obj_meta,
+                                          const SqlTypeMeta &obj_meta,
                                           const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
@@ -533,7 +538,7 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
           }
           if (bucket_rows > bucket_size || 0 == i || extra->get_material_row_count() - 1 == i) {
             bucket_rows = 0;
-            ObObj ep_val;
+            DatumValue ep_val;
             common::ObArenaAllocator tmp_alloctor("BulidHybridHist", OB_MALLOC_NORMAL_BLOCK_SIZE);
             ObDatum new_datum = row->cells()[0];
             if (obj_meta.is_lob_storage() &&
@@ -541,8 +546,8 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
                                                        obj_meta, row->cells()[0],
                                                        new_datum,
                                                        datum_access_ctx))) {
-            } else if (OB_FAIL(new_datum.to_obj(ep_val, obj_meta))) {
-            } else if (OB_FAIL(ob_write_obj(*alloc, ep_val, ep_val))) {
+            } else if (OB_FAIL(sql::ResultRowView::project_value(new_datum, obj_meta,
+                           ObDatum::get_sql_value_datum_map_type(obj_meta.get_type()), SqlTypeMeta(), ep_val, true))) {
             } else {
               ObHistBucket bkt(ep_val, ep_count, ep_num);
               if (!is_pop) {
@@ -584,7 +589,7 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
 }
 
 int ObHybridHistograms::build_prefix_str_datum_for_lob(ObIAllocator &allocator,
-                                                       const ObObjMeta &obj_meta,
+                                                       const SqlTypeMeta &obj_meta,
                                                        const ObDatum &old_datum,
                                                        ObDatum &new_datum,
                                                        const ObDatumAccessContext *datum_access_ctx)
@@ -593,10 +598,11 @@ int ObHybridHistograms::build_prefix_str_datum_for_lob(ObIAllocator &allocator,
   if (!obj_meta.is_lob_storage()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObj obj;
+    DatumValue obj;
     ObString str;
     bool can_reuse = false;
-    if (OB_FAIL(old_datum.to_obj(obj, obj_meta))) {
+    if (OB_FAIL(sql::ResultRowView::project_value(old_datum, obj_meta,
+            ObDatum::get_sql_value_datum_map_type(obj_meta.get_type()), SqlTypeMeta(), obj, true))) {
     } else if (OB_FAIL(ObDbmsStatsUtils::check_text_can_reuse(obj, can_reuse))) {
     } else if (can_reuse) {
       new_datum = old_datum;
@@ -632,7 +638,8 @@ OB_DEF_SERIALIZE(ObHybridHistograms)
   OB_UNIS_ENCODE(items_count);
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     const ObHistBucket &hist_bucket = hybrid_buckets_.at(i);
-    OB_UNIS_ENCODE(hist_bucket.endpoint_value_);
+    if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(hist_bucket.endpoint_value_.datum_,
+        hist_bucket.endpoint_value_.meta_, buf, buf_len, pos); }
     OB_UNIS_ENCODE(hist_bucket.endpoint_repeat_count_);
     OB_UNIS_ENCODE(hist_bucket.endpoint_num_);
   }
@@ -650,7 +657,9 @@ OB_DEF_SERIALIZE_SIZE(ObHybridHistograms)
   OB_UNIS_ADD_LEN(items_count);
   for (int64_t i = 0; i < items_count; ++i) {
     const ObHistBucket &hist_bucket = hybrid_buckets_.at(i);
-    OB_UNIS_ADD_LEN(hist_bucket.endpoint_value_);
+    int64_t value_size = 0;
+    if (DatumParameterCodec::value_size(hist_bucket.endpoint_value_.datum_, hist_bucket.endpoint_value_.meta_, value_size) != OB_SUCCESS) { return 0; }
+    len += value_size;
     OB_UNIS_ADD_LEN(hist_bucket.endpoint_repeat_count_);
     OB_UNIS_ADD_LEN(hist_bucket.endpoint_num_);
   }
@@ -668,10 +677,13 @@ OB_DEF_DESERIALIZE(ObHybridHistograms)
   OB_UNIS_DECODE(items_count);
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     ObHistBucket hist_bucket;
-    OB_UNIS_DECODE(hist_bucket.endpoint_value_);
+    if (OB_SUCC(ret) && pos < data_len) {
+      ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, value_owner_,
+          hist_bucket.endpoint_value_.datum_, hist_bucket.endpoint_value_.meta_);
+    }
     OB_UNIS_DECODE(hist_bucket.endpoint_repeat_count_);
     OB_UNIS_DECODE(hist_bucket.endpoint_num_);
-    if (OB_FAIL(hybrid_buckets_.push_back(hist_bucket))) {
+    if (OB_SUCC(ret) && OB_FAIL(hybrid_buckets_.push_back(hist_bucket))) {
     }
   }
   return ret;

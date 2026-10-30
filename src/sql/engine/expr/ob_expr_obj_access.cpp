@@ -121,9 +121,9 @@ int ObExprObjAccess::assign(const ObExprOperator &other)
   return ret;
 }
 
-#define GET_VALID_INT64_PARAM_FROM_NUMBER(obj) \
-  if (!obj.get_number().is_valid_int64(param_value)) { \
-    number::ObNumber number = obj.get_number(); \
+#define GET_VALID_INT64_PARAM_FROM_NUMBER(number_value) \
+  if (!(number_value).is_valid_int64(param_value)) { \
+    number::ObNumber number = (number_value); \
     if (OB_FAIL(number.round(0))) { \
       LOG_WARN("failed to round number", K(ret), K(number)); \
     } else if (!number.is_valid_int64(param_value)) { \
@@ -137,18 +137,16 @@ int ObExprObjAccess::assign(const ObExprOperator &other)
     if (OB_SUCC(ret)) { \
       int64_t param_value = 0; \
       if (obj.is_integer_type() || obj.is_ext()) { \
-        param_value = obj.get_int(); \
+        param_value = obj.is_ext() ? obj.get_ext() : obj.get_int(); \
       } else if (obj.is_number()) { \
-        GET_VALID_INT64_PARAM_FROM_NUMBER(obj) \
+        GET_VALID_INT64_PARAM_FROM_NUMBER(obj.get_number()) \
       } else if (obj.is_decimal_int()) { \
         number::ObNumber numb; \
         ObNumStackOnceAlloc alloc; \
-        ObObj tmp_obj; \
         if (OB_FAIL(wide::to_number(obj.get_decimal_int(), obj.get_int_bytes(), obj.get_scale(), alloc, numb))) { \
           LOG_WARN("fail to cast decimal int to number", K(ret)); \
         } else { \
-          tmp_obj.set_number(numb); \
-          GET_VALID_INT64_PARAM_FROM_NUMBER(tmp_obj); \
+          GET_VALID_INT64_PARAM_FROM_NUMBER(numb); \
         } \
       } else if (obj.is_null()) { \
         if (!skip_check_error) {  \
@@ -169,7 +167,7 @@ int ObExprObjAccess::assign(const ObExprOperator &other)
   } while (0)
 
 int ObExprObjAccess::ExtraInfo::init_param_array(const ParamStore &param_store,
-                                                 const ObObj *objs_stack,
+                                                 const DatumParameter *objs_stack,
                                                  int64_t param_num,
                                                  ParamArray &param_array) const
 {
@@ -177,12 +175,12 @@ int ObExprObjAccess::ExtraInfo::init_param_array(const ParamStore &param_store,
   for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs_.count(); ++i) {
     CK (param_idxs_.at(i) >= 0 && param_idxs_.at(i) < param_store.count());
     if (OB_SUCC(ret)) {
-      const ObObjParam &obj_param = param_store.at(param_idxs_.at(i));
+      const DatumParameter &obj_param = param_store.at(param_idxs_.at(i));
       GET_VALID_INT64_PARAM(obj_param, false);
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
-    const ObObj &obj = objs_stack[i];
+    const DatumParameter &obj = objs_stack[i];
     GET_VALID_INT64_PARAM(obj,
       (i == param_num - 1
         && (pl::ObCollectionType::NEXT_PROPERTY == property_type_
@@ -193,9 +191,9 @@ int ObExprObjAccess::ExtraInfo::init_param_array(const ParamStore &param_store,
 }
 
 
-int ObExprObjAccess::calc_result(ObObj &result,
+int ObExprObjAccess::calc_result(DatumParameter &result,
                                  ObIAllocator &alloc,
-                                 const ObObj *objs_stack,
+                                 const DatumParameter *objs_stack,
                                  int64_t param_num,
                                  const ParamStore &param_store,
                                  ObEvalCtx *ctx) const
@@ -237,7 +235,7 @@ int ObExprObjAccess::ExtraInfo::get_collection_attr(int64_t* params,
     }
   }
   if (OB_SUCC(ret) && !current_access.is_property()) {
-    ObObj &element_obj = current_coll->get_data()[element_idx];
+    DatumValue &element_obj = current_coll->get_data()[element_idx];
     if (for_write_) {
       current_allocator = current_coll->get_allocator();
     }
@@ -266,7 +264,7 @@ int ObExprObjAccess::ExtraInfo::get_collection_attr(int64_t* params,
             OX (record->set_null());
           }
           OZ (type->get_size(pl::PL_TYPE_INIT_SIZE, init_size));
-          OX (element_obj.set_extend(ptr, type->get_type(), init_size));
+          OZ (element_obj.set_extend(ptr, type->get_type(), *current_coll->get_allocator(), init_size));
         }
       }
     }
@@ -289,7 +287,7 @@ int ObExprObjAccess::ExtraInfo::get_record_attr(const pl::ObObjAccessIdx &curren
   const pl::ObRecordType *record_type = NULL;
   pl::ObPLComposite *current_composite = reinterpret_cast<pl::ObPLComposite*>(current_value);
   pl::ObPLRecord* current_record = static_cast<pl::ObPLRecord*>(current_composite);
-  ObObj* element_obj = NULL;
+  DatumValue* element_obj = NULL;
   CK (OB_NOT_NULL(current_composite));
   CK (current_composite->is_record());
   CK (OB_NOT_NULL(current_record));
@@ -376,7 +374,7 @@ int ObExprObjAccess::ExtraInfo::get_attr_func(int64_t param_cnt,
       }
       if (OB_FAIL(ret)) {
       } else if (current_access.var_type_.is_composite_type()) {
-        ObObj* value = reinterpret_cast<ObObj*>(current_value);
+        DatumValue* value = reinterpret_cast<DatumValue*>(current_value);
         CK (OB_NOT_NULL(value));
         CK (value->is_ext());
         OX (composite_addr = reinterpret_cast<pl::ObPLComposite*>(value->get_ext()));
@@ -408,12 +406,12 @@ int ObExprObjAccess::ExtraInfo::get_attr_func(int64_t param_cnt,
   return ret;
 }
 
-int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
+int ObExprObjAccess::ExtraInfo::calc(DatumParameter &result,
                                      ObIAllocator &alloc,
-                                     const ObObjMeta &res_type,
+                                     const SqlTypeMeta &res_type,
                                      const int32_t extend_size,
                                      const ParamStore &param_store,
-                                     const common::ObObj *params,
+                                     const common::DatumParameter *params,
                                      int64_t param_num,
                                      ObEvalCtx *ctx) const
 {
@@ -431,7 +429,7 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
     if (OB_FAIL(ret)) {
       if (OB_ERR_COLLECION_NULL == ret && pl::ObCollectionType::EXISTS_PROPERTY == property_type_) {
         ret = OB_SUCCESS;
-        result.set_tinyint(0);
+        ret = result.set_tinyint(0, alloc);
       }
     } else if (OB_UNLIKELY(0 >= attr_addr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -461,21 +459,29 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
         } else {
           composite_write->allocator_ = allocator_addr;
           composite_write->value_addr_ = attr_addr;
-          result.set_extend(reinterpret_cast<int64_t>(composite_write), res_type.get_extend_type(), extend_size);
+          ret = result.set_extend(reinterpret_cast<int64_t>(composite_write),
+                                   res_type.get_extend_type(), alloc, extend_size);
         }
       } else {
-        OX(result.set_extend(attr_addr, res_type.get_extend_type(), extend_size));
+        OZ(result.set_extend(attr_addr, res_type.get_extend_type(), alloc, extend_size));
       }
     } else {
-      ObObj *datum = reinterpret_cast<ObObj*>(attr_addr);
+      DatumValue *datum = reinterpret_cast<DatumValue*>(attr_addr);
       if (ObMaxType == datum->get_type()) { //means has been deleted
         ret = OB_READ_NOTHING;
       } else if (res_type.is_number() && datum->is_decimal_int()) {
-        ObCastCtx cast_ctx(&alloc, NULL, CM_NONE, res_type.get_collation_type(), NULL);
-        const ObObj *res_obj = nullptr;
-        if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, *datum, result, res_obj))) {
+        number::ObNumber converted;
+        if (OB_FAIL(wide::to_number(datum->get_decimal_int(), datum->get_int_bytes(),
+                                    datum->get_scale(), alloc, converted))) {
+        } else {
+          ret = result.set_number(converted, alloc);
         }
-      } else if (OB_FAIL(result.apply(*datum))) {
+      } else {
+        DatumParameter field, view; view.assign_value(*datum);
+        if (OB_FAIL(clone_datum_value(view, field, alloc))) {
+        } else {
+          ret = result.apply(field);
+        }
       }
       if (OB_SUCC(ret)) {
        if (!result.is_null()
@@ -549,14 +555,20 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
   const ExtraInfo *info = static_cast<const ExtraInfo *>(expr.extra_info_);
   const ParamStore &param_store = ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store();
   OZ(expr.eval_param_value(ctx));
-  ObObj params[expr.arg_cnt_];
+  DatumParameter params[expr.arg_cnt_];
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
     const ObExpr *e = expr.args_[i];
     const ObDatum &d = e->locate_expr_datum(ctx);
-    OZ(d.to_obj(params[i], e->obj_meta_, e->obj_datum_map_));
+    if (d.is_null()) {
+      params[i].set_null();
+    } else {
+      params[i].set_datum(d);
+      params[i].set_type_meta(e->obj_meta_);
+      params[i].set_scale(e->obj_meta_.get_scale());
+    }
   }
 
-  ObObj result;
+  DatumParameter result;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   OZ(info->calc(result,
                 alloc_guard.get_allocator(),
@@ -567,11 +579,14 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
                 expr.arg_cnt_,
                 &ctx));
 
-  OZ(expr_datum.from_obj(result, expr.obj_datum_map_));
-  if (is_lob_storage(result.get_type())) {
-    OZ (ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
-                            ctx.exec_ctx_.get_allocator(), expr_datum));
+  ObDatum adjusted = result.datum_;
+  if (OB_SUCC(ret) && is_lob_storage(result.get_type())) {
+    OZ (ob_adjust_lob_datum(ctx.exec_ctx_, result.datum_, result.get_meta(), expr.obj_meta_,
+                            ctx.exec_ctx_.get_allocator(), adjusted));
   }
+  // Adjustment may return a slice into temporary locator bytes. Copy after
+  // adjustment, before this guard ends or another expression reuses the arena.
+  OZ(expr.deep_copy_datum(ctx, adjusted));
   return ret;
 }
 

@@ -17,6 +17,7 @@
 #ifndef OB_STATS_ESTIMATOR_H
 #define OB_STATS_ESTIMATOR_H
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
@@ -43,7 +44,7 @@ protected:
 
   int decode(ObIAllocator &allocator);
 
-  int add_result(ObObj &obj)  { return results_.push_back(obj); }
+  int add_result(DatumValue &obj)  { return results_.push_back(obj); }
 
   int do_estimate(const ObOptStatGatherParam &gather_param,
                   const ObString &raw_sql,
@@ -116,7 +117,7 @@ protected:
   ObString where_string_;
 
   ObArray<ObStatItem *> stat_items_;
-  ObArray<ObObj> results_;
+  ObArray<DatumValue> results_;
   double sample_value_;
   ObString current_scn_string_;
 };

@@ -40,7 +40,7 @@ int ObExprPrivSTTransform::calc_result_typeN(ObExprResType& type,
   UNUSED(type_ctx); 
   int ret = OB_SUCCESS;
 
-  const ObObjType &type1 = types_stack[0].get_type();
+  const SqlValueType &type1 = types_stack[0].get_type();
   if (!ob_is_string_type(type1) &&
       !ob_is_geometry(type1) &&
       !ob_is_null(type1)) {

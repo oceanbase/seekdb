@@ -146,13 +146,13 @@ struct ObDummyRelationalFunc
   }
 };
 
-template<bool, ObObjType L_T, ObObjType R_T>
+template<bool, SqlValueType L_T, SqlValueType R_T>
 struct ObRelationalTypeFunc {};
 
-template<ObObjType L_T, ObObjType R_T>
+template<SqlValueType L_T, SqlValueType R_T>
 struct ObRelationalTypeFunc<false, L_T, R_T> : public ObDummyRelationalFunc {};
 
-template<ObObjType L_T, ObObjType R_T>
+template<SqlValueType L_T, SqlValueType R_T>
 struct ObRelationalTypeFunc<true, L_T, R_T>
 {
   struct DatumCmp
@@ -534,8 +534,8 @@ struct ObRelationalExtraFunc
                    const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
-      ObObjType lt = expr.args_[0]->datum_meta_.type_;
-      ObObjType rt = expr.args_[1]->datum_meta_.type_;
+      SqlValueType lt = expr.args_[0]->datum_meta_.type_;
+      SqlValueType rt = expr.args_[1]->datum_meta_.type_;
       int cmp_ret = 0;
       if (ObExtendType == lt && ObExtendType == rt) {
         ret = datum_cmp::ObDatumTCCmp<ObExtendTC, ObExtendTC>::cmp(l, r, cmp_ret);
@@ -947,11 +947,11 @@ template<int X, int Y, bool defined = true>
 struct TypeExprCmpFuncIniter
 {
   using Def = datum_cmp::ObDatumTypeCmp<
-      static_cast<ObObjType>(X),
-      static_cast<ObObjType>(Y)>;
+      static_cast<SqlValueType>(X),
+      static_cast<SqlValueType>(Y)>;
 
   using EvalCmp = ObRelationalTypeFunc<Def::defined_,
-        static_cast<ObObjType>(X), static_cast<ObObjType>(Y)>;
+        static_cast<SqlValueType>(X), static_cast<SqlValueType>(Y)>;
   static void init_array()
   {
     using ContextAdapter = ObDatumCmpContextAdapter<Def>;
@@ -969,14 +969,14 @@ template<int X, int Y>
 struct TypeExprCmpFuncIniter<X, Y, false>: public ExprDummyIniter {};
 
 template<int X, int Y>
-using TypeExprCmpIniter = TypeExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTypeCmp<static_cast<ObObjType>(X),static_cast<ObObjType>(Y)>::defined_>;
+using TypeExprCmpIniter = TypeExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTypeCmp<static_cast<SqlValueType>(X),static_cast<SqlValueType>(Y)>::defined_>;
 
 template<int X, int Y, bool defined = true>
 struct TCExprCmpFuncIniter
 {
   using Def = datum_cmp::ObDatumTCCmp<
-      static_cast<ObObjTypeClass>(X),
-      static_cast<ObObjTypeClass>(Y)>;
+      static_cast<SqlTypeClass>(X),
+      static_cast<SqlTypeClass>(Y)>;
 
   static void init_array()
   {
@@ -998,7 +998,7 @@ template<int X, int Y>
 struct TCExprCmpFuncIniter<X, Y, false>: public ExprDummyIniter{};
 
 template<int X, int Y>
-using TCExprCmpIniter = TCExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTCCmp<static_cast<ObObjTypeClass>(X),static_cast<ObObjTypeClass>(Y)>::defined_>;
+using TCExprCmpIniter = TCExprCmpFuncIniter<X, Y, datum_cmp::ObDatumTCCmp<static_cast<SqlTypeClass>(X),static_cast<SqlTypeClass>(Y)>::defined_>;
 
 template<int X, bool defined =
     datum_cmp::SupportedCollection<static_cast<ObCollationType>(X)>::defined_>

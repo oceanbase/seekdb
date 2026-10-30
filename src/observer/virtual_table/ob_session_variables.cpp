@@ -61,7 +61,7 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
                    K(output_column_ids_.count()));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = cur_row_.cells_;
+      DatumValue *cells = cur_row_.cells_;
       ObString sys_var_show_str;
       for (int64_t i = 0; OB_SUCC(ret) && i < session_->get_sys_var_count(); ++i) {
         const ObBasicSysVar *sys_var = NULL;
@@ -77,7 +77,7 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
             uint64_t col_id = output_column_ids_.at(j);
             switch(col_id) {
               case OB_APP_MIN_COLUMN_ID: {
-                cells[cell_idx].set_varchar(sys_var->get_name());
+                (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sys_var->get_name()) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                 break;
               }
@@ -85,9 +85,9 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
                 //deal with read_only
                 if (share::SYS_VAR_READ_ONLY == sys_var->get_type()) {
                   if (sys_variable_schema_->is_read_only()) {
-                    cells[cell_idx].set_varchar("ON");
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "ON") : ret);
                   } else {
-                    cells[cell_idx].set_varchar("OFF");
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "OFF") : ret);
                   }
                 } else if (share::SYS_VAR_OB_PLAN_CACHE_PERCENTAGE == sys_var->get_type()
                            || share::SYS_VAR_OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE == sys_var->get_type()
@@ -98,7 +98,7 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
                   sys_var_show_str.reset();
                   if (OB_FAIL(sys_var->to_show_str(*allocator_, *session_, sys_var_show_str))) {
                   } else {
-                    cells[cell_idx].set_varchar(sys_var_show_str);
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sys_var_show_str) : ret);
                   }
                 }
                 if (OB_SUCC(ret)) {
@@ -139,7 +139,7 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
   return ret;
 }
 
-int ObSessionVariables::set_pc_conf(const ObBasicSysVar *sys_var, ObObj &cell)
+int ObSessionVariables::set_pc_conf(const ObBasicSysVar *sys_var, DatumValue &cell)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sys_var) || OB_ISNULL(allocator_) || OB_ISNULL(session_)) {
@@ -161,21 +161,27 @@ int ObSessionVariables::set_pc_conf(const ObBasicSysVar *sys_var, ObObj &cell)
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "fail to transform plan cache conf from int to varchar", K(ret));
       } else {
-        cell.set_varchar(buff, static_cast<int>(pos));
+        cell.meta_.set_varchar();
+        cell.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        cell.datum_.set_string(buff, static_cast<int>(pos));
       }
     } else if (share::SYS_VAR_OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE == sys_var->get_type()) {
       if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%ld", pc->get_mem_high_pct()))) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "fail to transform plan cache conf from int to varchar", K(ret));
       } else {
-        cell.set_varchar(buff, static_cast<int>(pos));
+        cell.meta_.set_varchar();
+        cell.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        cell.datum_.set_string(buff, static_cast<int>(pos));
       }
     } else if (share::SYS_VAR_OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE == sys_var->get_type()) {
       if (OB_FAIL(databuff_printf(buff, OB_MAX_CONFIG_VALUE_LEN, pos, "%ld", pc->get_mem_low_pct()))) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "fail to transform plan cache conf from int to varchar", K(ret));
       } else {
-        cell.set_varchar(buff, static_cast<int>(pos));
+        cell.meta_.set_varchar();
+        cell.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        cell.datum_.set_string(buff, static_cast<int>(pos));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;

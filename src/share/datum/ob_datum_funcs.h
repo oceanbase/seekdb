@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OB_DATUM_FUNCS_H_
 #define OCEANBASE_OB_DATUM_FUNCS_H_
 
-#include "common/object/ob_obj_compare.h"
+#include "common/object/ob_type_metadata.h"
 #include "common/datum/ob_datum.h"  // ObDatum complete type(do not rely on the preceding include chain)
 #include "common/object/ob_obj_type.h"
 #include "lib/charset/ob_charset.h"
@@ -53,10 +53,10 @@ typedef int (*ObDatumHashFuncType)(const ObDatum &datum,
                                   uint64_t &res,
                                   const ObDatumAccessContext *access_ctx);
 
-class ObObjMeta;
+class SqlTypeMeta;
 // Row comparison and batch hashing are layer-neutral datum vocabulary. Query
 // keeps its established names through aliases in the ObExpr interface.
-typedef int (*NullSafeRowCmpFunc) (const ObObjMeta &l_meta, const ObObjMeta &r_meta,
+typedef int (*NullSafeRowCmpFunc) (const SqlTypeMeta &l_meta, const SqlTypeMeta &r_meta,
                                    const void *l_data, const int32_t l_len, const bool l_null,
                                    const void *r_data, const int32_t r_len, const bool r_null,
                                    int &cmp_ret,
@@ -88,8 +88,8 @@ struct ObDatumBasicFuncs
 
 class ObDatumFuncs {
 public:
-  static ObDatumCmpFuncType get_nullsafe_cmp_func(const ObObjType type1,
-                                                  const ObObjType type2,
+  static ObDatumCmpFuncType get_nullsafe_cmp_func(const SqlValueType type1,
+                                                  const SqlValueType type2,
                                                   const ObCmpNullPos null_pos,
                                                   const ObCollationType cs_type,
                                                   const ObScale max_scale,
@@ -97,14 +97,14 @@ public:
                                                   const ObPrecision prec1 = PRECISION_UNKNOWN_YET,
                                                   const ObPrecision prec2 = PRECISION_UNKNOWN_YET);
 
-  static bool is_string_type(const ObObjType type);
-  static bool is_json(const ObObjType type);
-  static bool is_geometry(const ObObjType type);
-  static bool is_collection(const ObObjType type);
-  static bool is_varying_len_char_type(const ObObjType type, const ObCollationType cs_type) {
+  static bool is_string_type(const SqlValueType type);
+  static bool is_json(const SqlValueType type);
+  static bool is_geometry(const SqlValueType type);
+  static bool is_collection(const SqlValueType type);
+  static bool is_varying_len_char_type(const SqlValueType type, const ObCollationType cs_type) {
     return (type == ObVarcharType && cs_type != CS_TYPE_BINARY);
   }
-  static bool is_null_aware_hash_type(const ObObjType type);
+  static bool is_null_aware_hash_type(const SqlValueType type);
   static ObScale max_scale(const ObScale s1, const ObScale s2)
   {
     ObScale max_scale = SCALE_UNKNOWN_YET;
@@ -113,7 +113,7 @@ public:
     }
     return max_scale;
   }
-  static ObDatumBasicFuncs* get_basic_func(const ObObjType type,
+  static ObDatumBasicFuncs* get_basic_func(const SqlValueType type,
                                            const ObCollationType cs_type,
                                            const ObScale scale = SCALE_UNKNOWN_YET,
                                            const bool is_lob_locator = true,

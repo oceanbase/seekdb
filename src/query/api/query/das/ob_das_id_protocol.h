@@ -21,7 +21,6 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "common/datum/ob_datum.h"
-#include "common/object/ob_object.h"
 
 namespace oceanbase
 {
@@ -41,7 +40,6 @@ public:
   int hash(uint64_t &hash_val) const;
   const common::ObDatum &get_datum() const;
   int from_datum(const common::ObDatum &datum);
-  int from_obj(const common::ObObj &obj);
 
   ObDocIdExt &operator=(const ObDocIdExt &other);
   bool operator==(const ObDocIdExt &other) const;

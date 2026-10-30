@@ -17,6 +17,7 @@
 #ifndef OB_DBMS_STATS_EXPORT_IMPORT_H
 #define OB_DBMS_STATS_EXPORT_IMPORT_H
 
+#include "common/datum/datum_value.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
@@ -97,7 +98,7 @@ private:
 
   static int get_opt_stat(ObExecContext &ctx,
                           const ObTableStatParam &param,
-                          const ObIArray<ObObj> &result_objs,
+                          const ObIArray<DatumValue> &result_objs,
                           bool &is_index_stat,
                           ObIArray<ObOptTableStat *> &all_tstats,
                           ObIArray<ObOptColumnStat *> &all_cstats);
@@ -136,14 +137,10 @@ private:
   static int gen_col_sel_str(const ObTableStatParam &param,
                              ObSqlString &col_str);
 
-  static int convert_bin_hex_raw_to_obj(ObIAllocator &allocator,
-                                        const ObObj &src_obj,
-                                        ObObj &dst_obj);
-
-  static int convert_bin_hex_text_to_obj(ObExecContext &ctx,
+  static int convert_bin_hex_text_to_value(ObExecContext &ctx,
                                          ObIAllocator &allocator,
-                                         const ObObj &src_obj,
-                                         ObObj &dst_obj);
+                                         const DatumValue &src_obj,
+                                         DatumValue &dst_obj);
 
   static int gen_import_partition_list(const ObTableStatParam &param,
                                        ObSqlString &partition_list);

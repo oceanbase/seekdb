@@ -92,12 +92,12 @@ int ObExprUDF::calc_result_typeN(ObExprResType &type,
     for (int64_t i = 0; i < param_num && OB_SUCC(ret); i++) {
       if (params_desc_.at(i).is_out()
           && params_desc_.at(i).is_obj_access_out()) {
-        ObObjMeta meta;
+        SqlTypeMeta meta;
         meta.set_ext();
         types[i].set_calc_meta(meta);
       } else {
         types[i].set_calc_accuracy(params_type_.at(i).get_accuracy());
-        types[i].set_calc_meta(params_type_.at(i).get_obj_meta());
+        types[i].set_calc_meta(params_type_.at(i).get_sql_type_meta());
         if (params_type_.at(i).get_collation_type() == CS_TYPE_ANY) {
           if (types[i].is_string_or_lob_locator_type()) {
             types[i].set_calc_collation_type(types[i].get_collation_type());
@@ -113,7 +113,7 @@ int ObExprUDF::calc_result_typeN(ObExprResType &type,
     }
     if (OB_SUCC(ret)) {
       type.set_accuracy(result_type_.get_accuracy());
-      type.set_meta(result_type_.get_obj_meta());
+      type.set_meta(result_type_.get_sql_type_meta());
       if (!type.is_ext()) {
         type.set_length(result_type_.get_length());
       }
@@ -144,41 +144,42 @@ int ObExprUDF::check_types(const ObExpr &expr, const ObExprUDFInfo &info)
   return ret;
 }
 
-int ObExprUDF::extract_allocator_and_restore_obj(const ObObj &obj, ObObj &new_obj, ObIAllocator *&composite_allocator)
+int ObExprUDF::extract_allocator_and_restore_obj(const DatumParameter &obj, DatumParameter &new_obj, ObIAllocator *&composite_allocator, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
 
   pl::ObPlCompiteWrite *composite_write = nullptr;
-  CK (obj.is_ext());
+  CK (!obj.is_null() && obj.is_ext());
   OX (composite_write = reinterpret_cast<pl::ObPlCompiteWrite *>(obj.get_ext()));
   CK (OB_NOT_NULL(composite_write));
-  OX (new_obj.set_extend(composite_write->value_addr_, obj.get_meta().get_extend_type(), obj.get_val_len()));
+  OZ (new_obj.set_extend(composite_write->value_addr_, obj.get_meta().get_extend_type(), owner, obj.get_val_len()));
   OX (composite_allocator = reinterpret_cast<ObIAllocator *>(composite_write->allocator_));
 
   return ret;
 }
 
-int ObExprUDF::need_deep_copy_in_parameter(const ObObj *objs_stack,
+int ObExprUDF::need_deep_copy_in_parameter(const DatumParameter *objs_stack,
                                             int64_t param_num,
                                             const ObIArray<ObUDFParamDesc> &params_desc,
                                             const ObIArray<ObExprResType> &params_type,
-                                            const ObObj &element,
-                                            bool &need_deep_copy)
+                                            const DatumParameter &element,
+                                            bool &need_deep_copy, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   need_deep_copy = false;
-  for (int64_t i = 0; !need_deep_copy && i < param_num; ++i) {
+  CK (param_num >= 0 && param_num == params_desc.count() && param_num == params_type.count());
+  CK (param_num == 0 || objs_stack != nullptr);
+  for (int64_t i = 0; OB_SUCC(ret) && !need_deep_copy && i < param_num; ++i) {
     if (params_desc.at(i).is_out()
         && ObExtendType == params_type.at(i).get_type()) {
-      ObObj value = objs_stack[i];
+      DatumParameter value = objs_stack[i];
       if (params_desc.at(i).is_obj_access_out()) {
         ObIAllocator *dum_alloc = nullptr;
-        OZ (extract_allocator_and_restore_obj(value, value, dum_alloc));
+        OZ (extract_allocator_and_restore_obj(value, value, dum_alloc, owner));
       }
       if (OB_SUCC(ret)) {
-        if(element.get_ext() == value.get_ext()
-          && value.is_pl_extend()
-          && element.is_pl_extend()
+        if(value.is_pl_extend() && element.is_pl_extend()
+          && element.get_ext() == value.get_ext()
           && value.get_meta().get_extend_type() == element.get_meta().get_extend_type()) {
           need_deep_copy = true;
         }
@@ -188,19 +189,19 @@ int ObExprUDF::need_deep_copy_in_parameter(const ObObj *objs_stack,
   return ret;
 }
 
-int ObExprUDF::process_in_params(const ObObj *objs_stack,
+int ObExprUDF::process_in_params(const DatumParameter *objs_stack,
                                  int64_t param_num,
                                  const ObIArray<ObUDFParamDesc> &params_desc,
                                  const ObIArray<ObExprResType> &params_type,
                                  ParamStore& iparams,
                                  ObIAllocator &allocator,
-                                 ObIArray<ObObj> *deep_in_objs)
+                                 ObIArray<DatumParameter> *deep_in_objs)
 {
   int ret = OB_SUCCESS;
   CK (0 == param_num || OB_NOT_NULL(objs_stack));
-  CK (param_num == params_desc.count());
+  CK (param_num >= 0 && param_num == params_desc.count() && param_num == params_type.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
-    ObObjParam param;
+    DatumParameter param;
     param.reset();
     if (params_type.at(i).is_null()) {
       // default value, mock a max obj to tell pl engine here need replace to default value.
@@ -208,57 +209,62 @@ int ObExprUDF::process_in_params(const ObObj *objs_stack,
     } else if (!params_desc.at(i).is_out()) { // in parameter
       if (ObExtendType == params_type.at(i).get_type()) {
         bool need_copy = false;
-        OZ (need_deep_copy_in_parameter(objs_stack, param_num, params_desc, params_type, objs_stack[i], need_copy));
+        OZ (need_deep_copy_in_parameter(objs_stack, param_num, params_desc, params_type, objs_stack[i], need_copy, allocator));
         if (need_copy) {
           OZ (pl::ObUserDefinedType::deep_copy_obj(allocator, objs_stack[i], param, true));
-          if (OB_NOT_NULL(deep_in_objs)) {
-            OZ (deep_in_objs->push_back(param));
+          if (OB_SUCC(ret) && OB_NOT_NULL(deep_in_objs)) {
+            if (OB_FAIL(deep_in_objs->push_back(param))) {
+              pl::ObUserDefinedType::destruct_obj(param);
+            }
           }
         } else {
           if (!objs_stack[i].is_null()) {
-            param.set_extend(objs_stack[i].get_ext(),
-                         objs_stack[i].get_meta().get_extend_type(), objs_stack[i].get_val_len());
+            OZ (param.set_extend(objs_stack[i].get_ext(),
+                         objs_stack[i].get_meta().get_extend_type(), allocator, objs_stack[i].get_val_len()));
             param.set_param_meta();
           } else {
-            objs_stack[i].copy_value_or_obj(param, true);
+            OZ (clone_datum_value(objs_stack[i], param, allocator));
           }
         }
       } else {
-        objs_stack[i].copy_value_or_obj(param, true);
+        OZ (clone_datum_value(objs_stack[i], param, allocator));
         param.set_param_meta();
       }
     } else if (params_desc.at(i).is_local_out()
               || params_desc.at(i).is_package_var_out()
               || params_desc.at(i).is_subprogram_var_out()) {
       if (ObExtendType != params_type.at(i).get_type()) {
-        OZ (deep_copy_obj(allocator, objs_stack[i], param));
+        OZ (clone_datum_value(objs_stack[i], param, allocator));
       } else {
-        objs_stack[i].copy_value_or_obj(param, true);
+        OZ (clone_datum_value(objs_stack[i], param, allocator));
       }
     } else {
       ObIAllocator *dum_alloc = nullptr;
-      ObObj value = objs_stack[i];
-      OZ (extract_allocator_and_restore_obj(value, value, dum_alloc));
+      DatumParameter value = objs_stack[i];
+      OZ (extract_allocator_and_restore_obj(value, value, dum_alloc, allocator));
       if (OB_SUCC(ret)) {
         if (params_type.at(i).get_type() == ObExtendType) {
           if (params_desc.at(i).is_obj_access_pure_out()) {
             OZ (pl::ObUserDefinedType::deep_copy_obj(allocator, value, param));
-            if (OB_NOT_NULL(deep_in_objs)) {
-              OZ (deep_in_objs->push_back(param));
+            if (OB_SUCC(ret) && OB_NOT_NULL(deep_in_objs)) {
+              if (OB_FAIL(deep_in_objs->push_back(param))) {
+              pl::ObUserDefinedType::destruct_obj(param);
+            }
             }
           } else {
-            param.set_extend(value.get_ext(), value.get_meta().get_extend_type(), value.get_val_len());
+            OZ (param.set_extend(value.get_ext(), value.get_meta().get_extend_type(), allocator, value.get_val_len()));
             param.set_param_meta();
           }
         } else {
           void *ptr = NULL;
-          ObObj *obj = NULL;
+          DatumValue *obj = NULL;
           CK (value.is_ext());
           OX (ptr = reinterpret_cast<void*>(value.get_ext()));
           CK (OB_NOT_NULL(ptr));
-          OX (obj = reinterpret_cast<ObObj*>(ptr));
+          OX (obj = reinterpret_cast<DatumValue*>(ptr));
           CK (OB_NOT_NULL(obj));
-          OX ((*obj).copy_value_or_obj(param, true));
+          DatumParameter field; field.assign_value(*obj);
+          OZ (clone_datum_parameter(field, param, allocator));
           OX (param.set_param_meta());
         }
       }
@@ -271,7 +277,7 @@ int ObExprUDF::process_in_params(const ObObj *objs_stack,
   return ret;
 }
 
-int ObExprUDF::process_out_params(const ObObj *objs_stack,
+int ObExprUDF::process_out_params(const DatumParameter *objs_stack,
                                   int64_t param_num,
                                   ParamStore& iparams,
                                   ObIAllocator &alloc,
@@ -281,7 +287,9 @@ int ObExprUDF::process_out_params(const ObObj *objs_stack,
 {
   int ret = OB_SUCCESS;
   UNUSED (param_num);
-  CK (iparams.count() == params_desc.count());
+  CK (param_num >= 0 && param_num == iparams.count()
+      && param_num == params_desc.count() && param_num == params_type.count());
+  CK (param_num == 0 || objs_stack != nullptr);
   ObSEArray<bool, 16> dones;
   for (int64_t i = 0; OB_SUCC(ret) && i < iparams.count(); ++i) {
     OZ (dones.push_back(!params_desc.at(i).is_out()));
@@ -302,7 +310,7 @@ int ObExprUDF::process_out_params(const ObObj *objs_stack,
 
 int ObExprUDF::process_singal_out_param(int64_t i,
                                         ObIArray<bool> &dones,
-                                        const ObObj *objs_stack,
+                                        const DatumParameter *objs_stack,
                                         int64_t param_num,
                                         ParamStore& iparams,
                                         ObIAllocator &alloc,
@@ -314,7 +322,7 @@ int ObExprUDF::process_singal_out_param(int64_t i,
   pl::ObPLExecCtx *ctx = nullptr;
   ObIAllocator *symbol_alloc = nullptr;
   ObIAllocator *cur_expr_allocator = nullptr;
-  ObObjParam tmp;
+  DatumParameter tmp;
   if (OB_NOT_NULL(exec_ctx.get_my_session()->get_pl_context())) {
     ctx = exec_ctx.get_my_session()->get_pl_context()->get_current_ctx();
     CK (OB_NOT_NULL(ctx));
@@ -328,45 +336,23 @@ int ObExprUDF::process_singal_out_param(int64_t i,
   } else if (params_desc.at(i).is_local_out()) { //out param in paramstore of caller
     const ParamStore &param_store = exec_ctx.get_physical_plan_ctx()->get_param_store();
     int64_t position = params_desc.at(i).get_index();
-    ObObjParam *modify = NULL;
-    ObObjParam result;
-    CK (position < param_store.count());
-    CK (OB_NOT_NULL(modify = const_cast<ObObjParam*>(&(param_store.at(position)))));
-    // ext type cannot convert. just copy it.
+    DatumParameter *modify = NULL;
+    DatumParameter result;
+    CK (position >= 0 && position < param_store.count());
+    CK (OB_NOT_NULL(modify = const_cast<DatumParameter*>(&(param_store.at(position)))));
+    ObIAllocator &caller_owner = symbol_alloc != nullptr ? *symbol_alloc : alloc;
     if (iparams.at(i).is_ext()) {
-      if (modify->is_null()) {
-        OX (iparams.at(i).copy_value_or_obj(*modify, true));
-        OX (modify->set_param_meta());
-      } else if (!modify->is_ext()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("process function out param failed, type mismatch", K(ret),
-                                                               K(iparams.at(i)), K(*modify));
-      } else {
-        OX (iparams.at(i).copy_value_or_obj(*modify, true));
-        OX (modify->set_param_meta());
-      }
+      CK (modify->is_null() || modify->is_ext());
+      OZ (clone_datum_value(iparams.at(i), result, caller_owner));
     } else {
-      OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(),
-                                         nullptr != cur_expr_allocator ? cur_expr_allocator : &alloc,
-                                         iparams.at(i),
-                                         params_type.at(i),
-                                         tmp,
-                                         exec_ctx.get_srs_provider(),
-                                         exec_ctx.get_lob_read_service()));
-      if (symbol_alloc != nullptr) {
-        OZ (deep_copy_obj(*symbol_alloc, tmp, result));
-      } else {
-        OX (result = tmp);
-      }
-      if (OB_SUCC(ret) && symbol_alloc != nullptr) {
-        void *ptr = modify->get_deep_copy_obj_ptr();
-        if (nullptr != ptr) {
-          symbol_alloc->free(ptr);
-        }
-      }
-      OX (result.copy_value_or_obj(*modify, true));
-      OX (modify->set_param_meta());
+      OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(), &caller_owner,
+          iparams.at(i), params_type.at(i), result,
+          exec_ctx.get_srs_provider(), exec_ctx.get_lob_read_service()));
     }
+    // Previous bytes may be borrowed from a caller frame. Their arena owns
+    // reclamation; replacing a binding must not free an unknown allocation.
+    OX (modify->assign_value(result));
+    OX (modify->set_param_meta());
     OX (dones.at(i) = true);
   } else if (params_desc.at(i).is_package_var_out()) {
     OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(),
@@ -405,17 +391,17 @@ int ObExprUDF::process_singal_out_param(int64_t i,
       i, dones, objs_stack, param_num, iparams, alloc, exec_ctx, params_desc, params_type)));
   } else if (!params_type.at(i).is_ext()) {
     void *ptr = NULL;
-    ObObj *obj = NULL;
-    ObObjParam result;
-    ObObjParam tmp;
+    DatumValue *obj = NULL;
+    DatumParameter result;
+    DatumParameter tmp;
     ObArenaAllocator tmp_alloc;
-    ObObj value = objs_stack[i];
+    DatumParameter value = objs_stack[i];
     ObIAllocator *composite_allocator = nullptr;
-    OZ (extract_allocator_and_restore_obj(value, value, composite_allocator));
+    OZ (extract_allocator_and_restore_obj(value, value, composite_allocator, alloc));
     CK (value.is_ext());
     OX (ptr = reinterpret_cast<void*>(value.get_ext()));
     CK (OB_NOT_NULL(ptr));
-    OX (obj = reinterpret_cast<ObObj*>(ptr));
+    OX (obj = reinterpret_cast<DatumValue*>(ptr));
     CK (OB_NOT_NULL(obj));
     OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(),
                                        &alloc, iparams.at(i),
@@ -423,25 +409,18 @@ int ObExprUDF::process_singal_out_param(int64_t i,
                                        tmp,
                                        exec_ctx.get_srs_provider(),
                                        exec_ctx.get_lob_read_service()));
-    if (composite_allocator != nullptr) {
-      OZ (deep_copy_obj(*composite_allocator, tmp, result));
-    } else {
-      OX (result = tmp);
-    }
-    if (OB_SUCC(ret) && composite_allocator != nullptr) {
-      void *ptr = obj->get_deep_copy_obj_ptr();
-      if (nullptr != ptr) {
-        composite_allocator->free(ptr);
-      }
-    }
-    OX (result.copy_value_or_obj(*obj, true));
+    CK (composite_allocator != nullptr);
+    OZ (pl::ObPLComposite::copy_element(tmp.value_view(), *obj,
+        *composite_allocator,
+        nullptr, exec_ctx.get_my_session(), nullptr, exec_ctx.get_srs_provider(),
+        exec_ctx.get_lob_read_service(), false));
     OX (result.set_param_meta());
     OX (dones.at(i) = true);
   } else if (params_desc.at(i).is_obj_access_pure_out()) { // objaccess complex type pure out sence
-    ObObj &obj = iparams.at(i);
-    ObObj origin_value = objs_stack[i];
+    DatumParameter &obj = iparams.at(i);
+    DatumParameter origin_value = objs_stack[i];
     ObIAllocator *composite_allocator = nullptr;
-    OZ (extract_allocator_and_restore_obj(origin_value, origin_value, composite_allocator));
+    OZ (extract_allocator_and_restore_obj(origin_value, origin_value, composite_allocator, alloc));
     if (obj.is_ext()) {
       OZ (pl::ObUserDefinedType::deep_copy_obj(nullptr != composite_allocator ? *composite_allocator : alloc, obj, origin_value, true));
     }
@@ -452,7 +431,7 @@ int ObExprUDF::process_singal_out_param(int64_t i,
 
 int ObExprUDF::process_package_out_param(int64_t idx,
                                          ObIArray<bool> &dones,
-                                         const ObObj *objs_stack,
+                                         const DatumParameter *objs_stack,
                                          int64_t param_num,
                                          ParamStore& iparams,
                                          ObIAllocator &alloc,
@@ -466,10 +445,10 @@ int ObExprUDF::process_package_out_param(int64_t idx,
     if (!dones.at(i) && iparams.at(i).is_ext()) {
       bool is_child = false;
       ObIAllocator *dum_alloc = nullptr;
-      ObObj origin_value_i = objs_stack[i];
-      ObObj origin_value_idx = objs_stack[idx];
-      OZ (extract_allocator_and_restore_obj(origin_value_i, origin_value_i, dum_alloc));
-      OZ (extract_allocator_and_restore_obj(origin_value_idx, origin_value_idx, dum_alloc));
+      DatumParameter origin_value_i = objs_stack[i];
+      DatumParameter origin_value_idx = objs_stack[idx];
+      OZ (extract_allocator_and_restore_obj(origin_value_i, origin_value_i, dum_alloc, alloc));
+      OZ (extract_allocator_and_restore_obj(origin_value_idx, origin_value_idx, dum_alloc, alloc));
       OZ (is_child_of(origin_value_idx, origin_value_i, is_child));
       if (OB_SUCC(ret) && is_child) {
         OZ (SMART_CALL(process_singal_out_param(
@@ -477,11 +456,11 @@ int ObExprUDF::process_package_out_param(int64_t idx,
       }
     }
   }
-  ObObj origin_value = objs_stack[idx];
+  DatumParameter origin_value = objs_stack[idx];
   ObIAllocator *allocator = NULL;
   pl::ObPLExecCtx plctx(nullptr, &exec_ctx, nullptr, nullptr, nullptr, nullptr);
   ObIAllocator *composite_allocator = nullptr;
-  OZ (extract_allocator_and_restore_obj(origin_value, origin_value, composite_allocator));
+  OZ (extract_allocator_and_restore_obj(origin_value, origin_value, composite_allocator, alloc));
   if (OB_SUCC(ret)) {
     if (OB_NOT_NULL(composite_allocator)) {
       allocator = composite_allocator;
@@ -495,13 +474,13 @@ int ObExprUDF::process_package_out_param(int64_t idx,
   if (OB_FAIL(ret)) {
   } else if (!params_type.at(idx).is_ext()) {
     void *ptr = NULL;
-    ObObj *obj = NULL;
-    ObObjParam result;
-    ObObjParam tmp;
+    DatumValue *obj = NULL;
+    DatumParameter result;
+    DatumParameter tmp;
     CK (origin_value.is_ext());
     OX (ptr = reinterpret_cast<void*>(origin_value.get_ext()));
     CK (OB_NOT_NULL(ptr));
-    OX (obj = reinterpret_cast<ObObj*>(ptr));
+    OX (obj = reinterpret_cast<DatumValue*>(ptr));
     CK (OB_NOT_NULL(obj));
     OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(),
                                        &alloc,
@@ -511,20 +490,16 @@ int ObExprUDF::process_package_out_param(int64_t idx,
                                        exec_ctx.get_srs_provider(),
                                        exec_ctx.get_lob_read_service()));
     if (allocator != nullptr) {
-      OZ (deep_copy_obj(*allocator, tmp, result));
+      OZ (clone_datum_value(tmp, result, *allocator));
     } else {
       OX (result = tmp);
     }
-    if (OB_SUCC(ret) && allocator != nullptr) {
-      void *ptr = obj->get_deep_copy_obj_ptr();
-      if (nullptr != ptr) {
-        allocator->free(ptr);
-      }
-    }
-    OX (result.copy_value_or_obj(*obj, true));
+    OZ (pl::ObPLComposite::copy_element(result.value_view(), *obj,
+        allocator != nullptr ? *allocator : alloc, nullptr, exec_ctx.get_my_session(),
+        nullptr, exec_ctx.get_srs_provider(), exec_ctx.get_lob_read_service(), false));
     OX (result.set_param_meta());
   } else {
-    ObObj &obj = iparams.at(idx);
+    DatumParameter &obj = iparams.at(idx);
     if (OB_SUCC(ret) && nullptr != allocator) {
       if (obj.is_ext()) {
         OZ (pl::ObUserDefinedType::deep_copy_obj(*allocator, obj, origin_value, true));
@@ -536,52 +511,38 @@ int ObExprUDF::process_package_out_param(int64_t idx,
   return ret;
 }
 
-int ObExprUDF::is_child_of(const ObObj &parent, const ObObj &child, bool &is_child)
+namespace {
+int native_child_of(const DatumValue &parent, int64_t child_address, bool &is_child)
 {
   int ret = OB_SUCCESS;
-  if (parent.is_ext() && child.is_ext() && parent.get_ext() == child.get_ext()) {
+  if (parent.is_ext() && parent.get_ext() == child_address) {
     is_child = true;
   } else if (parent.is_pl_extend() && parent.get_ext() != 0) {
-    switch (parent.get_meta().get_extend_type()) {
-      case pl::PL_NESTED_TABLE_TYPE:
-      case pl::PL_ASSOCIATIVE_ARRAY_TYPE:
-      case pl::PL_VARRAY_TYPE: {
-        pl::ObPLCollection* coll = reinterpret_cast<pl::ObPLCollection*>(parent.get_ext());
-        CK (OB_NOT_NULL(coll));
-        for (int64_t i = 0; OB_SUCC(ret) && i < coll->get_count(); ++i) {
-          CK (OB_NOT_NULL(coll->get_data()));
-          if (OB_FAIL(ret)) {
-          } else if (!(coll->get_data()[i]).is_ext()) {
-            ObObj tmp;
-            tmp.set_ext(reinterpret_cast<int64_t>(&(coll->get_data()[i])));
-            OZ (SMART_CALL(is_child_of(tmp, child, is_child)));
-          } else {
-            OZ (SMART_CALL(is_child_of(coll->get_data()[i], child, is_child)));
-          }
-        }
-      } break;
-      case pl::PL_RECORD_TYPE: {
-        pl::ObPLRecord* record = reinterpret_cast<pl::ObPLRecord*>(parent.get_ext());
-        CK (OB_NOT_NULL(record));
-        for (int64_t i = 0; OB_SUCC(ret) && i < record->get_count(); ++i) {
-          ObObj *obj = NULL;
-          OZ (record->get_element(i, obj));
-          CK (OB_NOT_NULL(obj));
-          if (OB_FAIL(ret)) {
-          } else if (!obj->is_ext()) {
-            ObObj tmp;
-            tmp.set_ext(reinterpret_cast<int64_t>(obj));
-            OZ (SMART_CALL(is_child_of(tmp, child, is_child)));
-          } else {
-            OZ (SMART_CALL(is_child_of(*obj, child, is_child)));
-          }
-        }
-      } break;
-      default: {
-      } break;
+    const DatumValue *values = nullptr;
+    int64_t count = 0;
+    if (parent.get_extend_type() == pl::PL_RECORD_TYPE) {
+      auto *record = reinterpret_cast<pl::ObPLRecord *>(parent.get_ext());
+      values = record->get_element(); count = record->get_count();
+    } else if (parent.get_extend_type() == pl::PL_NESTED_TABLE_TYPE
+        || parent.get_extend_type() == pl::PL_ASSOCIATIVE_ARRAY_TYPE
+        || parent.get_extend_type() == pl::PL_VARRAY_TYPE) {
+      auto *collection = reinterpret_cast<pl::ObPLCollection *>(parent.get_ext());
+      values = collection->get_data(); count = collection->get_count();
+    }
+    CK (count == 0 || values != nullptr);
+    for (int64_t i = 0; OB_SUCC(ret) && !is_child && i < count; ++i) {
+      if (!values[i].is_ext()) { is_child = reinterpret_cast<int64_t>(values + i) == child_address; }
+      else { OZ (SMART_CALL(native_child_of(values[i], child_address, is_child))); }
     }
   }
   return ret;
+}
+}
+int ObExprUDF::is_child_of(const DatumParameter &parent, const DatumParameter &child, bool &is_child)
+{
+  is_child = false;
+  if (parent.is_null() || child.is_null() || !parent.is_ext() || !child.is_ext()) { return OB_SUCCESS; }
+  return native_child_of(parent.value_view(), child.get_ext(), is_child);
 }
 
 int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_guard,
@@ -675,8 +636,8 @@ int ObExprUDF::build_udf_ctx(int64_t udf_ctx_id,
 int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp_result;
-  ObObj result;
+  DatumParameter tmp_result;
+  DatumParameter result;
   pl::ObPL *pl_engine = nullptr;
   ParamStore *udf_params = nullptr;
   uint64_t udf_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
@@ -685,6 +646,7 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObIAllocator *alloc = &ctx.exec_ctx_.get_allocator();
   pl::ObPLExecCtx *pl_exec_ctx = nullptr;
   const ObExprUDFInfo *info = static_cast<ObExprUDFInfo *>(expr.extra_info_);
+  CK (OB_NOT_NULL(info));
   if (OB_SUCC(ret) && expr.arg_cnt_ != info->params_desc_.count()) {
     ret = OB_ERR_UNEXPECTED;
   }
@@ -721,14 +683,14 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       cur_obj_count = ctx.exec_ctx_.get_pl_ctx()->get_objects().count();
     }
 
-    ObObj *objs = nullptr;
-    ObSEArray<ObObj, 2> deep_in_objs;
+    DatumParameter *objs = nullptr;
+    ObSEArray<DatumParameter, 2> deep_in_objs;
     if (expr.arg_cnt_ > 0) {
-      objs = static_cast<ObObj *> (allocator.alloc(expr.arg_cnt_ * sizeof(ObObj)));
+      objs = static_cast<DatumParameter *> (allocator.alloc(expr.arg_cnt_ * sizeof(DatumParameter)));
       if (OB_ISNULL(objs)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       }
-      OZ (fill_obj_stack(expr, ctx, objs));
+      OZ (fill_datum_stack(expr, ctx, objs));
       OZ (process_in_params(
         objs, expr.arg_cnt_, info->params_desc_, info->params_type_, *udf_params, *alloc, &deep_in_objs));
     }
@@ -789,18 +751,21 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
         int tmp_ret = OB_SUCCESS;
         CK (OB_NOT_NULL(ctx.exec_ctx_.get_pl_ctx()));
         OZ (pl::ObUserDefinedType::deep_copy_obj(*alloc, tmp_result, result, true));
-        if (OB_SUCC(ret)) {
+        // The registered temporary result is retired exactly once, including
+        // clone failure. A successful independent snapshot can now be adopted.
+        if (ctx.exec_ctx_.get_pl_ctx() != nullptr) {
           ctx.exec_ctx_.get_pl_ctx()->reset_obj_range_to_end(cur_obj_count);
-          OZ (ctx.exec_ctx_.get_pl_ctx()->add(result));
+        }
+        if (OB_SUCC(ret)) {
+          OZ (ctx.exec_ctx_.get_pl_ctx()->add(result, ctx.exec_ctx_.get_allocator()));
           if (OB_FAIL(ret)) {
             if ((tmp_ret = pl::ObUserDefinedType::destruct_obj(result, ctx.exec_ctx_.get_my_session())) != OB_SUCCESS) {
             }
           }
         }
-        if ((tmp_ret = pl::ObUserDefinedType::destruct_obj(tmp_result, ctx.exec_ctx_.get_my_session())) != OB_SUCCESS) {
-          LOG_WARN("failed to destruct tmp result object", K(ret), K(tmp_ret));
-          ret = OB_SUCCESS == ret ? tmp_ret : ret;
-        }
+        // The PL result is registered in the range above. Resetting that
+        // range already destroyed its pointee; never destruct this alias again.
+        tmp_result.set_null();
       } else {
         result = tmp_result;
         if (OB_NOT_NULL(ctx.exec_ctx_.get_pl_ctx())) {
@@ -821,10 +786,9 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       if (!result.is_null() && result.get_type() != expr.datum_meta_.type_) {
         ret = OB_INVALID_ARGUMENT;
       }
-      OZ(res.from_obj(result, expr.obj_datum_map_));
+      OX (res = result.datum_);
       if (is_lob_storage(result.get_type())) {
-        OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
-                              expr.obj_datum_map_,
+        OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result.datum_, result.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), res));
       }
       OZ(expr.deep_copy_datum(ctx, res));
@@ -845,14 +809,12 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   return ret;
 }
 
-int ObExprUDF::fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, ObObj *objs)
+int ObExprUDF::fill_datum_stack(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter *objs)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
-    objs[i].reset();
-    ObDatum &param = expr.args_[i]->locate_expr_datum(ctx);
-    if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
-    }
+    new (objs + i) DatumParameter();
+    capture_datum_parameter(*expr.args_[i], ctx, objs[i]);
   }
   return ret;
 }

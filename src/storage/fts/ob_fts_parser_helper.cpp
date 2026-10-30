@@ -361,7 +361,7 @@ void ObFTParseHelper::reset()
 }
 
 int ObFTParseHelper::segment(
-    const ObObjMeta &meta,
+    const SqlTypeMeta &meta,
     const char *fulltext,
     const int64_t fulltext_len,
     int64_t &doc_length,

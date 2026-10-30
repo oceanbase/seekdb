@@ -58,7 +58,7 @@ int ObExprAlignDate4Cmp::calc_result_type3(ObExprResType &type,
         if (const_param->get_value().is_null()) {
           type.set_null();
         } else {
-          ObObjType res_type = ObObjType(const_param->get_value().get_int());
+          SqlValueType res_type = SqlValueType(const_param->get_value().get_int());
           switch(res_type) {
             case ObNullType: {
               type.set_null();
@@ -106,16 +106,16 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum* cmp_type_datum = NULL;
   ObDatum* res_type_datum = NULL;
   DateArgType date_arg_type = NON_DATE;
-  ObObjType res_type;
+  SqlValueType res_type;
   ObTime ob_time;
-  ObObjType date_arg_obj_type = ObMaxType;
+  SqlValueType date_arg_obj_type = ObMaxType;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, date_datum))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_type_datum))) {
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, res_type_datum))) {
   } else {
     date_arg_obj_type = expr.args_[0]->datum_meta_.type_;
-    res_type = ObObjType(res_type_datum->get_int());
+    res_type = SqlValueType(res_type_datum->get_int());
     if (OB_FAIL(datum_to_ob_time(ctx.exec_ctx_, expr, date_datum, date_arg_obj_type,
                                 date_arg_type, ob_time))) {
     }
@@ -353,7 +353,7 @@ int ObExprAlignDate4Cmp::str_to_ob_time(const ObString &date, DateArgType &date_
 int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
                                           const ObExpr &expr,
                                           const ObDatum* date_datum,
-                                          const ObObjType& date_arg_obj_type,
+                                          const SqlValueType& date_arg_obj_type,
                                           DateArgType &date_arg_type,
                                           ObTime &ob_time)
 {
@@ -430,7 +430,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
 }
 
 int ObExprAlignDate4Cmp::set_res(ObDatum &res, ObTime &ob_time,
-                                 const ObObjType &res_type,
+                                 const SqlValueType &res_type,
                                  const bool is_valid_time,
                                  const bool offset,
                                  const bool is_zero_on_warn,
@@ -486,7 +486,7 @@ int ObExprAlignDate4Cmp::set_res(ObDatum &res, ObTime &ob_time,
 }
 
 int ObExprAlignDate4Cmp::set_zero_res(ObDatum &res, ObTime &ob_time,
-                                       const ObObjType &res_type,
+                                       const SqlValueType &res_type,
                                        bool is_no_zero_date)
 {
   int ret = OB_SUCCESS;
@@ -519,7 +519,7 @@ int ObExprAlignDate4Cmp::set_zero_res(ObDatum &res, ObTime &ob_time,
   return ret;
 }
 
-bool ObExprAlignDate4Cmp::is_align_date4cmp_support_obj_type(const ObObjType &obj_type) {
+bool ObExprAlignDate4Cmp::is_align_date4cmp_support_obj_type(const SqlValueType &obj_type) {
   bool res = false;
   if (ObNullType <= obj_type && obj_type <= ObUNumberType) {
     res = true;

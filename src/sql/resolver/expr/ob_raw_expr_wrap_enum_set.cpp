@@ -92,11 +92,11 @@ int ObRawExprWrapEnumSet::wrap_sub_select(ObInsertStmt &stmt)
                                                               wrapped_expr,
                                                               my_session_,
                                                               true /*is_type_to_str*/,
-                                                              static_cast<ObObjType>(const_value)))) {
+                                                              static_cast<SqlValueType>(const_value)))) {
           }
         }
       } else if (OB_FAIL(wrap_type_to_str_if_necessary(conv_expr->get_param_expr(4),
-                                                       static_cast<ObObjType>(const_value),
+                                                       static_cast<SqlValueType>(const_value),
                                                        is_same_need,
                                                        wrapped_expr))) {
       }
@@ -173,7 +173,7 @@ int ObRawExprWrapEnumSet::wrap_target_list(ObSelectStmt &select_stmt)
       ObSysFunRawExpr *new_expr = NULL;
       // the return type of mysql client for enum/set is FIELD_TYPE_STRING instead of
       // FIELD_TYPE_VAR_STRING.
-      const ObObjType dst_type = target_expr->is_enum_set_with_subschema() ?
+      const SqlValueType dst_type = target_expr->is_enum_set_with_subschema() ?
           ObCharType : ObVarcharType;
       if (OB_FAIL(ObRawExprUtils::create_type_to_str_expr(expr_factory_, target_expr,
                                                           new_expr,
@@ -318,7 +318,7 @@ int ObRawExprWrapEnumSet::visit(ObOpRawExpr &expr)
 }
 
 int ObRawExprWrapEnumSet::wrap_type_to_str_if_necessary(ObRawExpr *expr,
-                                                        ObObjType dest_type,
+                                                        SqlValueType dest_type,
                                                         bool is_same_need,
                                                         ObSysFunRawExpr *&wrapped_expr)
 {
@@ -347,7 +347,7 @@ int ObRawExprWrapEnumSet::visit(ObCaseOpRawExpr &expr)
   } else {
     ObSysFunRawExpr *wrapped_expr = NULL;
     const bool is_same_need = false;
-    ObObjType result_type = expr.get_result_type().get_type();
+    SqlValueType result_type = expr.get_result_type().get_type();
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_then_expr_size(); i++) {
       ObRawExpr *then_expr = expr.get_then_param_expr(i);
       wrapped_expr = NULL;
@@ -461,7 +461,7 @@ int ObRawExprWrapEnumSet::wrap_nullif_expr(ObSysFunRawExpr &expr)
       ret = OB_ERR_UNEXPECTED;
     } else {
       if (ob_is_enumset_tc(left_param->get_data_type())) {
-        ObObjType calc_type = expr.get_extra_calc_meta().get_type();
+        SqlValueType calc_type = expr.get_extra_calc_meta().get_type();
         const bool is_type_to_str = ObVarcharType == calc_type;
         ObSysFunRawExpr *wrapped_expr = NULL;
         if (OB_FAIL(ObRawExprUtils::create_type_to_str_expr(expr_factory_,
@@ -475,7 +475,7 @@ int ObRawExprWrapEnumSet::wrap_nullif_expr(ObSysFunRawExpr &expr)
       }
 
       if (OB_SUCC(ret) && ob_is_enumset_tc(right_param->get_data_type())) {
-        ObObjType calc_type = expr.get_extra_calc_meta().get_type();
+        SqlValueType calc_type = expr.get_extra_calc_meta().get_type();
         ObSysFunRawExpr *wrapped_expr = NULL;
         const bool is_same_need = false;
         if (OB_FAIL(wrap_type_to_str_if_necessary(right_param, calc_type,
@@ -489,7 +489,7 @@ int ObRawExprWrapEnumSet::wrap_nullif_expr(ObSysFunRawExpr &expr)
 }
 
 
-int ObRawExprWrapEnumSet::wrap_param_expr(ObIArray<ObRawExpr*> &param_exprs, ObObjType dest_type)
+int ObRawExprWrapEnumSet::wrap_param_expr(ObIArray<ObRawExpr*> &param_exprs, SqlValueType dest_type)
 {
   int ret = OB_SUCCESS;
   const bool is_same_need = false;

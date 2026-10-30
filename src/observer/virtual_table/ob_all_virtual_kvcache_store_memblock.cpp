@@ -110,28 +110,28 @@ int ObAllVirtualKVCacheStoreMemblock::process_row(const ObKVCacheStoreMemblockIn
       uint64_t col_id = output_column_ids_.at(cell_idx);
       switch (col_id) {
         case MEMBLOCK_PTR : {
-          cur_row_.cells_[cell_idx].set_varchar(info.memblock_ptr_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, info.memblock_ptr_) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case STATUS : {
-          cur_row_.cells_[cell_idx].set_int(info.using_status_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, info.using_status_) : ret);
           break;
         }
         case POLICY : {
-          cur_row_.cells_[cell_idx].set_int(info.policy_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, info.policy_) : ret);
           break;
         }
         case KV_CNT : {
-          cur_row_.cells_[cell_idx].set_int(info.kv_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, info.kv_cnt_) : ret);
           break;
         }
         case GET_CNT : {
-          cur_row_.cells_[cell_idx].set_int(info.get_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, info.get_cnt_) : ret);
           break;
         }
         case RECENT_GET_CNT : {
-          cur_row_.cells_[cell_idx].set_int(info.recent_get_cnt_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, info.recent_get_cnt_) : ret);
           break;
         }
         case SCORE : {
@@ -146,12 +146,12 @@ int ObAllVirtualKVCacheStoreMemblock::process_row(const ObKVCacheStoreMemblockIn
             SERVER_LOG(WARN, "snprintf fail", K(ret), K(errno), KERRNOMSG(errno));
           } else if (OB_FAIL(num.from(buf, str_buf_))) {
           } else {
-            cur_row_.cells_[cell_idx].set_number(num);
+            (OB_SUCC(ret) ? ret = cur_row_.cells_[cell_idx].set_number(num, row_calc_buf_) : ret);
           }
           break;
         }
         case ALIGN_SIZE : {
-          cur_row_.cells_[cell_idx].set_int(info.align_size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, info.align_size_) : ret);
           break;
         }
         default : {

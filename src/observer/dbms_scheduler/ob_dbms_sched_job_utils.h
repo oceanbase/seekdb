@@ -18,6 +18,7 @@
 #define SRC_OBSERVER_DBMS_SCHED_JOB_UTILS_H_
 
 #include "query/scheduler/ob_scheduler_job.h"
+#include "common/datum/datum_value.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "lib/container/ob_iarray.h"
 
@@ -62,7 +63,7 @@ public:
       common::ObISQLClient &sql_client,
       const ObDBMSSchedJobInfo &job_info,
       const common::ObString &job_attribute_name,
-      const common::ObObj &job_attribute_value,
+      const common::DatumValue &job_attribute_value,
       bool from_pl_set_attr = false);
   static int get_dbms_sched_job_info(
       common::ObISQLClient &sql_client,

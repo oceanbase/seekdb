@@ -155,7 +155,7 @@ public:
       const int64_t agg_row_idx = 0) = 0;
   // virtual bool need_access_data() const = 0;
   // virtual int32_t get_col_offset() const = 0;
-  virtual ObObjType get_obj_type() const = 0;
+  virtual SqlValueType get_obj_type() const = 0;
   int reserve_bitmap(const int64_t size);
   OB_INLINE bool is_assigned_to_group_by_processor() const 
   { return is_assigned_to_group_by_processor_; }
@@ -264,7 +264,7 @@ public:
   OB_INLINE int64_t get_batch_size() const { return batch_size_; }
   OB_INLINE int32_t get_group_by_col_offset() const { return group_by_col_offset_; }
   OB_INLINE const share::schema::ObColumnParam *get_group_by_col_param() const { return group_by_col_param_; }
-  OB_INLINE ObObjDatumMapType get_obj_datum_map_type() const {return group_by_col_expr_->obj_datum_map_; }
+  OB_INLINE SqlValueDatumMapType get_sql_value_datum_map_type() const {return group_by_col_expr_->obj_datum_map_; }
   OB_INLINE virtual bool is_exceed_sql_batch() const { return true; }
   virtual common::ObDatum *get_group_by_col_datums_to_fill() = 0;
   virtual const char **get_cell_datas() = 0;

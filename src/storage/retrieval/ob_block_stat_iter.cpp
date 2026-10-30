@@ -636,7 +636,7 @@ int ObBlockStatIterator::next_merged_range(bool &beyond_range)
         if (OB_UNLIKELY(nullptr == scan_param_ || nullptr == scan_param_->get_scan_param() ||
                         scan_param_->get_scan_param()->key_ranges_.empty())) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(current_token.from_obj(scan_param_->get_scan_param()->key_ranges_.at(0).end_key_.get_obj_ptr()[0]))) {
+        } else if (OB_FAIL(current_token.from_value(scan_param_->get_scan_param()->key_ranges_.at(0).end_key_.get_cell(0)))) {
         } else if (OB_FAIL(rowkey_read_info_->get_datum_utils().get_cmp_funcs().at(0).compare(endkey_token, current_token, cmp_ret))) {
         } else {
           exceeds_current_token = cmp_ret > 0;

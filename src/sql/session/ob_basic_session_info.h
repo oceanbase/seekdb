@@ -29,6 +29,7 @@
 #include "lib/objectpool/ob_pool.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/string/ob_sql_string.h"
+#include "common/datum/datum_value.h"
 #include "common/timezone/ob_time_convert.h"
 #include "common/timezone/ob_timezone_info.h"
 #include "rpc/ob_sql_request_operator.h"
@@ -81,7 +82,7 @@ struct ObSessionNLSParams
   (NULL != (session) ? (session)->get_timezone_info() : NULL)
 
 #define CREATE_OBJ_PRINT_PARAM(session) \
-  (NULL != (session) ? (session)->create_obj_print_params() : ObObjPrintParams())
+  (NULL != (session) ? (session)->create_obj_print_params() : ObValuePrintParams())
 
 // flag is a single bit, but marco(e.g., IS_NO_BACKSLASH_ESCAPES) compare two 64-bits int using '&';
 // if we directly assign the result to flag(single bit), only the last bit of the result is used,
@@ -732,15 +733,15 @@ public:
   static int get_global_sys_variable(const ObBasicSessionInfo *session,
                                      common::ObIAllocator &calc_buf,
                                      const common::ObString &var_name,
-                                     common::ObObj &val);
+                                     common::DatumValue &val);
   static int get_global_sys_variable(common::ObIAllocator &calc_buf,
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const common::ObString &var_name,
-                                     common::ObObj &val);
+                                     common::DatumValue &val);
   static int get_global_sys_variable(common::ObIAllocator &calc_buf,
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const share::ObSysVarClassType var_id,
-                                     common::ObObj &val);
+                                     common::DatumValue &val);
   sql::ObBasicSysVar *get_sys_var(const int64_t idx);
   int64_t get_sys_var_count() const { return share::ObSysVarMeta::ALL_SYS_VARS_COUNT; }
   // deserialized scene need use base_value as baseline.
@@ -751,14 +752,14 @@ public:
   int ensure_sys_var_loaded(const share::ObSysVarClassType sys_var_id) const;
   int load_default_configs_in_pc();
   int update_query_sensitive_system_variable(share::schema::ObSchemaGetterGuard &schema_guard);
-  int apply_server_runtime_default(const common::ObString &var, common::ObObj &val);
-  int apply_server_runtime_default(const share::ObSysVarClassType sys_var_id, common::ObObj &val);
+  int apply_server_runtime_default(const common::ObString &var, common::DatumValue &val);
+  int apply_server_runtime_default(const share::ObSysVarClassType sys_var_id, common::DatumValue &val);
   int load_sys_variable(common::ObIAllocator &calc_buf,
                         const common::ObString &name,
-                        const common::ObObj &type,
-                        const common::ObObj &value,
-                        const common::ObObj &min_val,
-                        const common::ObObj &max_val,
+                        const common::DatumValue &type,
+                        const common::DatumValue &value,
+                        const common::DatumValue &min_val,
+                        const common::DatumValue &max_val,
                         const int64_t flags,
                         bool is_from_sys_table,
                         int64_t store_idx = -1);
@@ -771,43 +772,43 @@ public:
                         const int64_t flags,
                         bool is_from_sys_table,
                         int64_t store_idx = -1);
-  // Convert varchar type value, max_val, min_val to the corresponding type ObObj
+  // Convert varchar type value, max_val, min_val to the corresponding type DatumValue
   int cast_sys_variable(common::ObIAllocator &calc_buf,
                         bool is_range_value,
                         const share::ObSysVarClassType sys_var_id,
-                        const common::ObObj &type,
-                        const common::ObObj &value,
+                        const common::DatumValue &type,
+                        const common::DatumValue &value,
                         int64_t flags,
-                        common::ObObj &out_type,
-                        common::ObObj &out_value);
+                        common::DatumValue &out_type,
+                        common::DatumValue &out_value);
 
   int load_sys_variable_fast(common::ObIAllocator &calc_buf,
                             const share::ObSysVarClassType sys_var_id,
-                            const common::ObObj &type,
-                            const common::ObObj &value,
-                            const common::ObObj &min_val,
-                            const common::ObObj &max_val,
+                            const common::DatumValue &type,
+                            const common::DatumValue &value,
+                            const common::DatumValue &min_val,
+                            const common::DatumValue &max_val,
                             int64_t flags,
                             bool is_update_sys_var);
 
   int update_sys_variable(const common::ObString &var, const common::ObString &val);
-  int update_sys_variable(const share::ObSysVarClassType sys_var_id, const common::ObObj &val);
+  int update_sys_variable(const share::ObSysVarClassType sys_var_id, const common::DatumValue &val);
   int update_sys_variable(const share::ObSysVarClassType sys_var_id, const common::ObString &val);
   int update_sys_variable(const share::ObSysVarClassType sys_var_id, int64_t val);
   /// @note get system variables by id is prefered
-  int update_sys_variable_by_name(const common::ObString &var, const common::ObObj &val);
+  int update_sys_variable_by_name(const common::ObString &var, const common::DatumValue &val);
   int update_sys_variable_by_name(const common::ObString &var, int64_t val);
   //int update_sys_variable(const char* const var, const common::ObString &v);
   ///@}
   ///@{ Get the value of the system variable
-  int get_sys_variable(const share::ObSysVarClassType sys_var_id, common::ObObj &val) const;
+  int get_sys_variable(const share::ObSysVarClassType sys_var_id, common::DatumValue &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, common::ObString &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, int64_t &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, uint64_t &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, bool &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, sql::ObBasicSysVar *&val) const;
   /// @note get system variables by id is prefered
-  int get_sys_variable_by_name(const common::ObString &var, common::ObObj &val) const;
+  int get_sys_variable_by_name(const common::ObString &var, common::DatumValue &val) const;
   int get_sys_variable_by_name(const common::ObString &var, sql::ObBasicSysVar *&val) const;
   int get_sys_variable_by_name(const common::ObString &var, int64_t &val) const;
   ///@}
@@ -858,7 +859,7 @@ public:
   // @synopsis Get the type of this variable based on the variable name
   // @param var_name
   // @returns
-  common::ObObjType get_sys_variable_type(const common::ObString &var_name) const;
+  common::SqlValueType get_sys_variable_type(const common::ObString &var_name) const;
   // The following helper function is for conveniently viewing the value of a system variable
   int if_aggr_pushdown_allowed(bool &aggr_pushdown_allowed) const;
   int is_transformation_enabled(bool &transformation_enabled) const;
@@ -886,10 +887,12 @@ public:
   int replace_user_variable(const common::ObString &var, const ObSessionVariable &val, bool need_track = true);
   int replace_user_variables(const ObSessionValMap &user_var_map);
   int remove_user_variable(const common::ObString &var);
+  // Returned records and value payloads borrow the session variable map. A map
+  // mutation, compaction, reuse or reset may invalidate these views.
   int get_user_variable(const common::ObString &var, ObSessionVariable &val) const;
-  int get_user_variable_value(const common::ObString &var, common::ObObj &val) const;
+  int get_user_variable_value(const common::ObString &var, common::DatumValue &val) const;
   const ObSessionVariable *get_user_variable(const common::ObString &var) const;
-  const common::ObObj *get_user_variable_value(const common::ObString &var) const;
+  const common::DatumValue *get_user_variable_value(const common::ObString &var) const;
   bool user_variable_exists(const common::ObString &var) const;
   inline void set_need_reset_package(bool need_reset) { need_reset_package_ = need_reset; }
   bool need_reset_package() { return need_reset_package_; }
@@ -925,9 +928,9 @@ public:
     return session_nls_params;
   }
 
-  inline ObObjPrintParams create_obj_print_params() const
+  inline ObValuePrintParams create_obj_print_params() const
   {
-    ObObjPrintParams res(get_timezone_info(), get_local_collation_connection());
+    ObValuePrintParams res(get_timezone_info(), get_local_collation_connection());
     res.print_origin_stmt_ = true;
     return res;
   }
@@ -937,10 +940,11 @@ public:
   /// @{ TRACE_SESSION_INFO related:
   struct ChangedVar {
     ChangedVar() : id_(), old_val_() {}
-    ChangedVar(share::ObSysVarClassType id, const ObObj& val) :
+    ChangedVar(share::ObSysVarClassType id, const common::DatumValue &val) :
       id_(id), old_val_(val) {}
     share::ObSysVarClassType id_;
-    ObObj old_val_;   // record the old val, used to compare if the final value has changed
+    // Payload is owned by changed_var_pool_ until reset_session_changed_info().
+    common::DatumValue old_val_;
     TO_STRING_KV(K(id_), K(old_val_));
   };
   void reset_session_changed_info();
@@ -948,16 +952,17 @@ public:
     const share::ObSysVarClassType &sys_var_id, const common::ObIArray<ChangedVar> &array) const;
   bool is_already_tracked(
     const common::ObString &name, const common::ObIArray<common::ObString> &array) const;
-  int add_changed_sys_var(const share::ObSysVarClassType &sys_var_id, const common::ObObj &old_val,
+  int add_changed_sys_var(const share::ObSysVarClassType &sys_var_id, const common::DatumValue &old_val,
                           common::ObIArray<ChangedVar> &array);
   int add_changed_user_var(const common::ObString &name, common::ObIArray<common::ObString> &array);
-  int track_sys_var(const share::ObSysVarClassType &sys_var_id, const common::ObObj &old_val);
+  int track_sys_var(const share::ObSysVarClassType &sys_var_id, const common::DatumValue &old_val);
   int track_user_var(const common::ObString &user_var);
   int remove_changed_user_var(const common::ObString &user_var);
   int is_sys_var_actully_changed(const share::ObSysVarClassType &sys_var_id,
-                                 const common::ObObj &old_val,
-                                 common::ObObj &new_val,
-                                 bool &changed);
+                                 const common::DatumValue &old_val,
+                                 common::DatumValue &new_val,
+                                 bool &changed,
+                                 common::ObIAllocator &owner);
   inline bool is_sys_var_changed() const { return !changed_sys_vars_.empty(); }
   inline bool is_user_var_changed() const { return !changed_user_vars_.empty(); }
   inline bool is_database_changed() const { return is_database_changed_; }
@@ -1130,19 +1135,19 @@ public:
   bool is_real_inner_session() const { return is_real_inner_session_; }
   void set_real_inner_session(bool value) { is_real_inner_session_ = value; }
 protected:
-  int process_session_variable(share::ObSysVarClassType var, const common::ObObj &value,
+  int process_session_variable(share::ObSysVarClassType var, const common::DatumValue &value,
                                const bool check_timezone_valid = true,
                                const bool is_update_sys_var = false,
                                const bool is_load_default = false);
   int process_session_variable_fast();
   //@brief process session log_level setting like 'all.*:info, sql.*:debug'.
-  //int process_session_ob_binlog_row_image(const common::ObObj &value);
-  int process_session_log_level(const common::ObObj &val);
-  int process_session_sql_mode_value(const common::ObObj &value);
-  int process_session_time_zone_value(const common::ObObj &value, const bool check_timezone_valid);
-  int process_session_overlap_time_value(const ObObj &value);
-  int process_session_autocommit_value(const common::ObObj &val);
-  int process_session_debug_sync(const common::ObObj &val, const bool is_global,
+  //int process_session_ob_binlog_row_image(const common::DatumValue &value);
+  int process_session_log_level(const common::DatumValue &val);
+  int process_session_sql_mode_value(const common::DatumValue &value);
+  int process_session_time_zone_value(const common::DatumValue &value, const bool check_timezone_valid);
+  int process_session_overlap_time_value(const DatumValue &value);
+  int process_session_autocommit_value(const common::DatumValue &val);
+  int process_session_debug_sync(const common::DatumValue &val, const bool is_global,
                                 const bool is_update_sys_var);
   // session switch interface
   int base_save_session(BaseSavedValue &saved_value, bool skip_cur_stmt_tables = false);
@@ -1167,11 +1172,11 @@ private:
   //***************
 
   static int change_value_for_special_sys_var(const common::ObString &sys_var_name,
-                                              const common::ObObj &ori_val,
-                                              common::ObObj &new_val);
+                                              const common::DatumValue &ori_val,
+                                              common::DatumValue &new_val);
   static int change_value_for_special_sys_var(const share::ObSysVarClassType sys_var_id,
-                                              const common::ObObj &ori_val,
-                                              common::ObObj &new_val);
+                                              const common::DatumValue &ori_val,
+                                              common::DatumValue &new_val);
   int get_int64_sys_var(const share::ObSysVarClassType sys_var_id, int64_t &int64_val) const;
   int get_uint64_sys_var(const share::ObSysVarClassType sys_var_id, uint64_t &uint64_val) const;
   int get_bool_sys_var(const share::ObSysVarClassType sys_var_id, bool &bool_val) const;
@@ -1196,9 +1201,11 @@ private:
                                common::ObIArray<common::ObString> &user_var_names) const;
   int deep_copy_sys_variable(sql::ObBasicSysVar &sys_var,
                              const share::ObSysVarClassType sys_var_id,
-                             const common::ObObj &src_val);
-  int defragment_sys_variable_from(ObArray<std::pair<int64_t, ObObj>> &tmp_value);
-  void defragment_sys_variable_to(ObArray<std::pair<int64_t, ObObj>> &tmp_value);
+                             const common::DatumValue &src_val);
+  int defragment_sys_variable_from(ObArray<std::pair<int64_t, DatumValue>> &tmp_value,
+      share::ObSysVarClassType pending_id, const common::DatumValue &pending,
+      common::ObIAllocator &owner);
+  void defragment_sys_variable_to(ObArray<std::pair<int64_t, DatumValue>> &tmp_value);
   inline int store_query_string_(const ObString &stmt);
   inline int store_query_string_(const ObString &stmt, int64_t& buf_len, char *& query, volatile int64_t& query_len);
   inline int set_session_state_(ObSQLSessionState state);
@@ -1816,7 +1823,7 @@ private:
   static int fill_sys_vars_cache_base_value(
       share::ObSysVarClassType var,
       SysVarsCache &sys_vars_cache,
-      const common::ObObj &val);
+      const common::DatumValue &val);
 private:
   // The end time of the previous statement
   int64_t curr_trans_last_stmt_end_time_;

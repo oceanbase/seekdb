@@ -78,36 +78,30 @@ int ObBasicNestedLoopJoinOp::prepare_rescan_params(bool is_group)
   int64_t param_cnt = get_spec().rescan_params_.count();
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   CK(OB_NOT_NULL(plan_ctx));
-  ObObjParam *param = NULL;
-  sql::ObTMArray<common::ObObjParam> params;
-  common::ObSArray<int64_t> param_idxs;
-  common::ObSArray<int64_t> param_expr_idxs;
   ObBatchRescanCtl *batch_rescan_ctl = (get_spec().enable_px_batch_rescan_ && is_group)
-      ? &static_cast<ObNestedLoopJoinOp*>(this)->batch_rescan_ctl_
-      : NULL;
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
-    const ObDynamicParamSetter &rescan_param = get_spec().rescan_params_.at(i);
-    if (OB_FAIL(rescan_param.set_dynamic_param(eval_ctx_, param))) {
-    } else if (NULL != batch_rescan_ctl) {
-      if (OB_ISNULL(param)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ObObjParam copy_res;
-        int64_t expr_idx = 0;
-        OZ(batch_rescan_ctl->params_.deep_copy_param(*param, copy_res));
-        OZ(params.push_back(copy_res));
-        OZ(param_idxs.push_back(rescan_param.param_idx_));
-        CK(OB_NOT_NULL(plan_ctx->get_phy_plan()));
-        OZ(plan_ctx->get_phy_plan()->get_expr_frame_info().get_expr_idx_in_frame(
-            rescan_param.dst_, expr_idx));
-        OZ(param_expr_idxs.push_back(expr_idx));
-        param = NULL;
-      }
+      ? &static_cast<ObNestedLoopJoinOp*>(this)->batch_rescan_ctl_ : NULL;
+  if (batch_rescan_ctl == nullptr) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
+      ret = get_spec().rescan_params_.at(i).set_dynamic_param(eval_ctx_);
     }
-  }
-  if (OB_SUCC(ret) && NULL != batch_rescan_ctl) {
-    batch_rescan_ctl->param_version_ += 1;
-    OZ(batch_rescan_ctl->params_.append_batch_rescan_param(param_idxs, params, param_expr_idxs));
+  } else {
+    ObBatchRescanParams::RowBuilder builder(batch_rescan_ctl->params_);
+    common::ObSEArray<int64_t, 8> param_idxs, param_expr_idxs;
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
+      const ObDynamicParamSetter &setter = get_spec().rescan_params_.at(i);
+      DatumParameter value;
+      int64_t expr_idx = 0;
+      OZ(setter.set_dynamic_param(eval_ctx_, value));
+      OZ(builder.append(value));
+      OZ(param_idxs.push_back(setter.param_idx_));
+      CK(OB_NOT_NULL(plan_ctx->get_phy_plan()));
+      OZ(plan_ctx->get_phy_plan()->get_expr_frame_info().get_expr_idx_in_frame(setter.dst_, expr_idx));
+      OZ(param_expr_idxs.push_back(expr_idx));
+    }
+    if (OB_SUCC(ret)) {
+      batch_rescan_ctl->param_version_ += 1;
+      ret = builder.finish(param_idxs, param_expr_idxs);
+    }
   }
   // After each row comes out from the left side, notify the right-side GI to implement part id filtering, avoid unnecessary partition scanning in PKEY NLJ scenario
   if (OB_SUCC(ret) && !get_spec().enable_px_batch_rescan_ && get_spec().enable_gi_partition_pruning_) {

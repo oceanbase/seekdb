@@ -64,10 +64,10 @@ int calc_sign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObDatum *arg_datum = NULL;
-  const ObObjType &arg_type = expr.args_[0]->datum_meta_.type_;
+  const SqlValueType &arg_type = expr.args_[0]->datum_meta_.type_;
   const ObCollationType &arg_cs_type = expr.args_[0]->datum_meta_.cs_type_;
-  const ObObjType &res_type = expr.datum_meta_.type_;
-  const ObObjTypeClass &arg_tc = ob_obj_type_class(arg_type);
+  const SqlValueType &res_type = expr.datum_meta_.type_;
+  const SqlTypeClass &arg_tc = sql_type_class(arg_type);
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg_datum))) {
   } else if (arg_datum->is_null()) {
     res_datum.set_null();

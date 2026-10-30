@@ -64,7 +64,7 @@ int ObExprAIComplete::calc_result_typeN(ObExprResType &type,
 
     if (OB_FAIL(ret)) {
     } else if (param_num == 3) {
-      ObObjType in_type = types_stack[CONFIG_IDX].get_type();
+      SqlValueType in_type = types_stack[CONFIG_IDX].get_type();
       if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, CONFIG_IDX, N_AI_COMPLETE))) {
       } else if (ob_is_string_type(in_type) && types_stack[CONFIG_IDX].get_collation_type() != CS_TYPE_BINARY) {
         if (types_stack[CONFIG_IDX].get_charset_type() != CHARSET_UTF8MB4) {
@@ -168,34 +168,6 @@ int ObExprAIComplete::cg_expr(ObExprCGCtx &expr_cg_ctx,
                               ObExpr &rt_expr) const 
 {
   INIT_SUCC(ret);
-  // TODO: support schema version match in plan cache for ai func
-  // const ObRawExpr *model_key = raw_expr.get_param_expr(0);
-  // if (OB_NOT_NULL(model_key)
-  //     && (model_key->is_static_scalar_const_expr() || model_key->is_const_expr())
-  //     && model_key->get_expr_type() != T_OP_GET_USER_VAR &&
-  //     OB_NOT_NULL(expr_cg_ctx.schema_guard_)) {
-  //   ObIAllocator *allocator = expr_cg_ctx.allocator_;
-  //   ObExecContext *exec_ctx = expr_cg_ctx.session_->get_cur_exec_ctx();
-  //   bool got_data = false;
-  //   ObObj const_data;
-  //   ObAIFuncExprInfo *info = nullptr;
-  //   if (OB_ISNULL(allocator)) {
-  //     ret = OB_ERR_UNEXPECTED;
-  //     LOG_WARN("allocator is null", K(ret));
-  //   } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
-  //                                                         model_key,
-  //                                                         const_data,
-  //                                                         got_data,
-  //                                                         *allocator))) {
-  //     LOG_WARN("failed to calc offset expr", K(ret));
-  //   } else if (!got_data || const_data.is_null()) {
-  //   } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(*allocator, const_data.get_string(), *expr_cg_ctx.schema_guard_, info))) {
-  //     LOG_WARN("failed to get ai func info", K(ret), K(const_data.get_string()));
-  //   } else {
-  //     rt_expr.extra_info_ = info;
-  //   }
-  // }
-
   if (OB_SUCC(ret)) {
     rt_expr.eval_func_ = ObExprAIComplete::eval_ai_complete;
   }

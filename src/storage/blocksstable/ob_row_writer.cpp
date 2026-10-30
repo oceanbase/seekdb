@@ -162,11 +162,11 @@ int ObRowWriter::write_lock_rowkey(const common::ObStoreRowkey &rowkey, char *&b
   len = 0;
   do {
     if (OB_FAIL(alloc_buf_and_init(OB_BUF_NOT_ENOUGH == ret))) {
-    } else if (OB_FAIL(append_row_header(ObDmlFlag::DF_LOCK, 0, 0, rowkey.get_obj_cnt(), rowkey.get_obj_cnt()))) {
+    } else if (OB_FAIL(append_row_header(ObDmlFlag::DF_LOCK, 0, 0, rowkey.get_value_count(), rowkey.get_value_count()))) {
     } else {
       update_idx_array_ = nullptr;
-      rowkey_column_cnt_ = rowkey.get_obj_cnt();
-      if (OB_FAIL(inner_write_cells(rowkey.get_obj_ptr(), rowkey.get_obj_cnt()))) {
+      rowkey_column_cnt_ = rowkey.get_value_count();
+      if (OB_FAIL(inner_write_cells(rowkey.get_values(), rowkey.get_value_count()))) {
         if (OB_BUF_NOT_ENOUGH != ret) {
         }
       } else {
@@ -543,6 +543,19 @@ void ObRowWriter::loop_cells(
   }
 }
 
+namespace {
+template <typename T>
+bool row_writer_is_outrow(const T &value)
+{
+  return value.is_outrow();
+}
+
+bool row_writer_is_outrow(const DatumValue &value)
+{
+  return value.get_meta().is_outrow();
+}
+} // namespace
+
 template <typename T>
 int ObRowWriter::append_sparse_cell_array(
     const T *cells,
@@ -570,7 +583,7 @@ int ObRowWriter::append_sparse_cell_array(
       } else if (cells[i].is_null()) {
         special_vals_[column_index_count_] = ObRowHeader::VAL_NULL;
       } else {
-        special_vals_[column_index_count_] = cells[i].is_outrow() ? ObRowHeader::VAL_OUTROW : ObRowHeader::VAL_NORMAL;
+        special_vals_[column_index_count_] = row_writer_is_outrow(cells[i]) ? ObRowHeader::VAL_OUTROW : ObRowHeader::VAL_NORMAL;
         if (OB_FAIL(append_column(cells[i]))) {
           if (OB_BUF_NOT_ENOUGH != ret) {
           }
@@ -613,7 +626,7 @@ int ObRowWriter::append_flat_cell_array(
       } else if (cells[i].is_null()) {
         special_vals_[column_index_count_] = ObRowHeader::VAL_NULL;
       } else {
-        special_vals_[column_index_count_] = cells[i].is_outrow() ? ObRowHeader::VAL_OUTROW : ObRowHeader::VAL_NORMAL;
+        special_vals_[column_index_count_] = row_writer_is_outrow(cells[i]) ? ObRowHeader::VAL_OUTROW : ObRowHeader::VAL_NORMAL;
         if (OB_FAIL(append_column(cells[i]))) {
           if (OB_BUF_NOT_ENOUGH != ret) {
           }
@@ -699,11 +712,11 @@ int ObRowWriter::append_8_bytes_column(const ObStorageDatum &datum)
   return ret;
 }
 
-int ObRowWriter::append_column(const ObObj &obj)
+int ObRowWriter::append_column(const DatumValue &value)
 {
   int ret = OB_SUCCESS;
   ObStorageDatum datum;
-  if (OB_FAIL(datum.from_obj_enhance(obj))) {
+  if (OB_FAIL(datum.from_value(value))) {
   } else if (OB_FAIL(append_column(datum))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
       STORAGE_LOG(WARN, "Failed to append datum column", K(ret), K(datum));

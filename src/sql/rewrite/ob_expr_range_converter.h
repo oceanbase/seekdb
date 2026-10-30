@@ -73,7 +73,7 @@ public:
                                ObRangeNode &range_node) const;
   
   int check_expr_precise(const ObRawExpr &const_expr,
-                         const ObObjMeta &calc_type,
+                         const SqlTypeMeta &calc_type,
                          const ObRawExprResType &column_res_type);
 
   inline int64_t get_mem_used() const { return mem_used_; }
@@ -96,7 +96,7 @@ private:
   int gen_row_column_cmp_node(const ObIArray<const ObColumnRefRawExpr*> &l_exprs,
                               const ObIArray<const ObRawExpr*> &r_exprs,
                               ObItemType cmp_type,
-                              const ObIArray<const ObObjMeta*> &calc_types,
+                              const ObIArray<const SqlTypeMeta*> &calc_types,
                               int64_t expr_depth,
                               int64_t row_dim,
                               bool null_safe,
@@ -128,7 +128,7 @@ private:
   int check_escape_valid(const ObRawExpr *escape, char &escape_ch, bool &is_valid);
   int build_decode_like_expr(ObRawExpr *pattern, ObRawExpr *escape, char escape_ch,
                              ObRangeColumnMeta *column_meta, int64_t &start_val_idx, int64_t &end_val_idx);
-  int get_calculable_expr_val(const ObRawExpr *expr, ObObj &val, bool &is_valid, const bool ignore_error = true);
+  int get_calculable_expr_val(const ObRawExpr *expr, DatumValue &val, bool &is_valid, const bool ignore_error = true);
   int check_calculable_expr_valid(const ObRawExpr *expr, bool &is_valid, const bool ignore_error = true);
   int add_precise_constraint(const ObRawExpr *expr, bool is_precise);
   int add_prefix_pattern_constraint(const ObRawExpr *expr);
@@ -181,7 +181,7 @@ private:
   int gen_row_implicit_cast_range(const ObIArray<const ObColumnRefRawExpr*> &column_exprs,
                                   const ObIArray<const ObRawExpr*> &const_exprs,
                                   ObItemType cmp_type,
-                                  const ObIArray<const ObObjMeta*> &calc_types,
+                                  const ObIArray<const SqlTypeMeta*> &calc_types,
                                   ObIArray<int64_t> &implicit_cast_idxs,
                                   int64_t expr_depth,
                                   int64_t row_dim,

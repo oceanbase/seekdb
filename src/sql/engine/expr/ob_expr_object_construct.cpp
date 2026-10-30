@@ -43,7 +43,7 @@ int ObExprObjectConstruct::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   return ret;
 }
-int ObExprObjectConstruct::check_types(ObEvalCtx &ctx, const ObObj *objs_stack,
+int ObExprObjectConstruct::check_types(ObEvalCtx &ctx, const DatumParameter *objs_stack,
                                        const common::ObIArray<ObExprResType> &elem_types,
                                        int64_t param_num)
 {
@@ -72,7 +72,7 @@ int ObExprObjectConstruct::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, ObIAllocator *alloc)
+int ObExprObjectConstruct::newx(ObEvalCtx &ctx, DatumValue &result, uint64_t udt_id, ObIAllocator *alloc)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
@@ -113,17 +113,22 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
       ns = session->get_pl_context()->get_current_ctx();
     }
     if (OB_SUCC(ret)) {
-      ObObj new_composite;
+      DatumValue new_composite;
       int64_t ptr = 0;
       int64_t init_size = OB_INVALID_SIZE;
       const pl::ObUserDefinedType *user_type = NULL;
       CK (OB_NOT_NULL(ns));
       OZ (ns->get_user_type(udt_id, user_type, &tmp_alloc));
       CK (OB_NOT_NULL(user_type));
-      OZ (user_type->newx(*alloc, ns, ptr));
       OZ (user_type->get_size(pl::PL_TYPE_INIT_SIZE, init_size));
-      OX (new_composite.set_extend(ptr, user_type->get_type(), init_size));
-      OX (result = new_composite);
+      OZ (new_composite.set_extend(0, user_type->get_type(), *alloc, init_size));
+      OZ (user_type->newx(*alloc, ns, ptr));
+      if (OB_SUCC(ret)) {
+        new_composite.datum_.set_extend(ptr, user_type->get_type(), init_size);
+        result = new_composite;
+      } else {
+        alloc->free(const_cast<char *>(new_composite.datum_.ptr_));
+      }
     }
   }
   return ret;
@@ -135,17 +140,19 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
   pl::ObPLRecord *record = NULL;
   const ObExprObjectConstructInfo *info
                   = static_cast<ObExprObjectConstructInfo *>(expr.extra_info_);
-  ObObj result;
+  DatumValue result;
+  OZ (result.set_extend(0, pl::PL_RECORD_TYPE, ctx.exec_ctx_.get_allocator(),
+                        pl::ObRecordType::get_init_size(expr.arg_cnt_)));
   ObSQLSessionInfo *session = nullptr;
   CK(OB_NOT_NULL(info));
   CK(expr.arg_cnt_ >= info->elem_types_.count());
   CK(OB_NOT_NULL(session = ctx.exec_ctx_.get_my_session()));
-  ObObj *objs = nullptr;
+  DatumParameter *objs = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else if (expr.arg_cnt_ > 0
-     && OB_ISNULL(objs = static_cast<ObObj *>
-        (ctx.exec_ctx_.get_allocator().alloc(expr.arg_cnt_ * sizeof(ObObj))))) {
+     && OB_ISNULL(objs = static_cast<DatumParameter *>
+        (ctx.exec_ctx_.get_allocator().alloc(expr.arg_cnt_ * sizeof(DatumParameter))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
   } else if (expr.arg_cnt_ > 0 && OB_FAIL(check_types(ctx, objs, info->elem_types_, expr.arg_cnt_))) {
@@ -179,8 +186,8 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
                                                     &ctx.exec_ctx_.get_allocator(),
                                                     &(objs[i])));
         }
-        // param ObObj may have different accuracy with the argument, need conversion
-        ObObj tmp;
+        // Parameter accuracy may differ from the argument, so conversion is required.
+        DatumParameter tmp;
         OZ (ObSPIService::spi_convert(*session,
                                       ctx.exec_ctx_.get_allocator(),
                                       objs[i],
@@ -192,41 +199,41 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
         if (OB_FAIL(ret)) {
         } else if (tmp.is_ext()) {
           OZ (pl::ObUserDefinedType::deep_copy_obj(*record->get_allocator(),
-                                                    tmp,
-                                                    record->get_element()[i]));
+                                                    tmp.value_view(), record->get_element()[i]));
         } else {
-          OZ (deep_copy_obj(*record->get_allocator(), tmp, record->get_element()[i]));
+          OZ (pl::ObPLComposite::copy_element(tmp.value_view(), record->get_element()[i],
+              *record->get_allocator(), nullptr, nullptr, nullptr, nullptr, nullptr, false));
         }
       }
     }
-    result.set_extend(reinterpret_cast<int64_t>(record),
-                      pl::PL_RECORD_TYPE, pl::ObRecordType::get_init_size(expr.arg_cnt_));
-    OZ(res.from_obj(result, expr.obj_datum_map_));
-    if (OB_NOT_NULL(record->get_allocator())) {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_ISNULL(ctx.exec_ctx_.get_pl_ctx())) {
-        tmp_ret = ctx.exec_ctx_.init_pl_ctx();
-      }
-      if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(ctx.exec_ctx_.get_pl_ctx())) {
-        tmp_ret = ctx.exec_ctx_.get_pl_ctx()->add(result);
-      }
-      if (OB_SUCCESS != tmp_ret) {
-        int tmp = pl::ObUserDefinedType::destruct_obj(result, nullptr);
-        LOG_WARN("fail to collect pl collection allocator, try to free memory", K(tmp_ret), K(tmp));
-      }
-      ret = OB_SUCCESS == ret ? tmp_ret : ret;
+    result.datum_.set_extend(reinterpret_cast<int64_t>(record), pl::PL_RECORD_TYPE,
+                             pl::ObRecordType::get_init_size(expr.arg_cnt_));
+    if (OB_SUCC(ret)) {
+      if (ctx.exec_ctx_.get_pl_ctx() == nullptr) { OZ (ctx.exec_ctx_.init_pl_ctx()); }
+      OZ (ctx.exec_ctx_.get_pl_ctx()->add(result, ctx.exec_ctx_.get_allocator()));
+      OX (res = result.datum_);
     }
+    if (OB_FAIL(ret)) {
+      if (record->get_allocator() != nullptr) {
+        pl::ObUserDefinedType::destruct_objparam(ctx.exec_ctx_.get_allocator(), result, session);
+      } else {
+        ctx.exec_ctx_.get_allocator().free(record);
+        ctx.exec_ctx_.get_allocator().free(const_cast<char *>(result.datum_.ptr_));
+      }
+    }
+
   }
   return ret;
 }
 
-int ObExprObjectConstruct::fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, ObObj *objs)
+int ObExprObjectConstruct::fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter *objs)
 {
   int ret = OB_SUCCESS;
-  for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
-    ObDatum &param = expr.locate_param_datum(ctx, i);
-    if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
-    }
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+    new (objs + i) DatumParameter();
+    ObDatum *value = nullptr;
+    OZ (expr.args_[i]->eval(ctx, value)); CK (value != nullptr);
+    if (OB_SUCC(ret)) { capture_datum_parameter(*expr.args_[i], ctx, objs[i]); }
   }
   return ret;
 }

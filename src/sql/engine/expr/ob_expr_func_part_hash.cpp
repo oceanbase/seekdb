@@ -16,9 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_func_part_hash.h"
-#include "sql/resolver/ob_resolver_utils.h"
-
-#include "sql/engine/expr/ob_wide_integer_partition_hash.h"
 
 namespace oceanbase
 {
@@ -34,16 +31,15 @@ ObExprFuncPartHashBase::ObExprFuncPartHashBase(common::ObIAllocator &alloc, ObEx
 {
 }
 
-template<typename T>
-int ObExprFuncPartHashBase::calc_value_for_mysql(const T &input, T &output,
-                                                 const ObObjType input_type)
+int ObExprFuncPartHashBase::calc_value_for_mysql(const ObDatum &input, ObDatum &output,
+                                                 const SqlValueType input_type)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(input.is_null())) {
     output.set_int(0);
   } else {
     int64_t num = 0;
-    switch (ob_obj_type_class(input_type)) {
+    switch (sql_type_class(input_type)) {
       case ObIntTC: {
         num = input.get_int();
         break;
@@ -99,7 +95,7 @@ int ObExprFuncPartHash::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
-      ObObjTypeClass tc = types_stack[i].get_type_class();
+      SqlTypeClass tc = types_stack[i].get_type_class();
       if (OB_UNLIKELY(ObIntTC != tc && ObUIntTC != tc && ObBitTC != tc && ObYearTC != tc)) {
         ret = OB_ERR_PARTITION_FUNC_NOT_ALLOWED_ERROR;
         LOG_WARN("expr type class is not correct", "type", types_stack[i].get_type_class());
@@ -115,59 +111,6 @@ int ObExprFuncPartHash::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed, uint64_t &res)
-{
-  int ret = OB_SUCCESS;
-  ObObjType type = obj.get_type();
-  // Fixed-length types need to remove trailing spaces, see
-  if (ObCharType == type) {
-    ObObj obj_trimmed;
-    int32_t val_len = obj.get_val_len();
-    const char* obj1_str = obj.get_string_ptr();
-    char* real_end = NULL;
-    // Keep partition hash stable by trimming fixed-length character padding.
-    if (OB_FAIL(common::ObCharset::trim_end_of_str(obj1_str, val_len, real_end,
-                                                   ObCharset::charset_type_by_coll(obj.get_collation_type())))){
-    } else if (OB_ISNULL(real_end)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      val_len = real_end - obj1_str;
-      if (val_len < 0) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected length", K(val_len));
-      } else {
-        obj_trimmed.set_collation_type(obj.get_collation_type());
-        obj_trimmed.set_string(ObCharType, obj.get_string_ptr(), val_len);
-        if (OB_FAIL(obj_trimmed.hash_murmur(res, seed))) {
-        }
-      }
-    }
-  } else if (obj.is_decimal_int()) {
-    ret = wide::PartitionHash<ObMurmurHash, ObObj>::calculate(obj, seed, res);
-  } else {
-    if (OB_FAIL(obj.hash_murmur(res, seed))) {
-    }
-  }
-  return ret;
-}
-int ObExprFuncPartHash::calc_value(
-    ObExprCtx &expr_ctx,
-    const ObObj *objs_stack,
-    int64_t param_num,
-    ObObj &result)
-{
-  int ret = OB_SUCCESS;
-  //DO not change this function's result.
-  //This will influence data.
-  //If you need to do, remember TableAccessPlan has the same code!!!
-  // mysql mode only allows one parameter, syntax already restricts
-  if (OB_ISNULL(objs_stack) || 1 != param_num) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ret = calc_value_for_mysql(objs_stack[0], result, objs_stack[0].get_type());
-  }
-  return ret;
-}
 
 int ObExprFuncPartHash::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 {

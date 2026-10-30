@@ -19,7 +19,7 @@
 
 #include "query/engine/expr/ob_expr.h"
 #include "common/object/ob_object.h"
-#include "common/object/ob_obj_compare.h"
+#include "common/object/ob_cmp_op.h"
 #include "lib/charset/ob_charset.h"
 
 namespace oceanbase
@@ -39,8 +39,8 @@ public:
   static common::ObCmpOp get_cmp_op(const ObExprOperatorType type);
 
   static sql::ObExpr::EvalFunc get_eval_expr_cmp_func(
-      const common::ObObjType type1,
-      const common::ObObjType type2,
+      const common::SqlValueType type1,
+      const common::SqlValueType type2,
       const common::ObScale scale1,
       const common::ObScale scale2,
       const common::ObPrecision prec1,
@@ -50,8 +50,8 @@ public:
       const bool has_lob_header);
 
   static sql::ObExpr::EvalBatchFunc get_eval_batch_expr_cmp_func(
-      const common::ObObjType type1,
-      const common::ObObjType type2,
+      const common::SqlValueType type1,
+      const common::SqlValueType type2,
       const common::ObScale scale1,
       const common::ObScale scale2,
       const common::ObPrecision prec1,
@@ -61,8 +61,8 @@ public:
       const bool has_lob_header);
 
   static DatumCmpFunc get_datum_expr_cmp_func(
-      const common::ObObjType type1,
-      const common::ObObjType type2,
+      const common::SqlValueType type1,
+      const common::SqlValueType type2,
       const common::ObScale scale1,
       const common::ObScale scale2,
       const common::ObPrecision prec1,

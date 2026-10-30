@@ -174,13 +174,14 @@ int ObMemtableMutatorMeta::set_flags(const uint8_t row_flag)
 }
 
 ObMutator::ObMutator():
+    rowkey_owner_("MutatorKey"),
     rowkey_(),
     row_size_(0),
     table_id_(OB_INVALID_ID),
     table_version_(0),
     seq_no_()
 {
-  rowkey_.assign((ObObj*)obj_array_, OB_MAX_ROWKEY_COLUMN_NUMBER);
+  rowkey_.assign(key_values_, OB_MAX_ROWKEY_COLUMN_NUMBER);
 }
 
 ObMutator::ObMutator(
@@ -188,6 +189,7 @@ ObMutator::ObMutator(
     const common::ObStoreRowkey &rowkey,
     const int64_t table_version,
     const transaction::ObTxSEQ seq_no):
+    rowkey_owner_("MutatorKey"),
     rowkey_(rowkey),
     row_size_(0),
     table_id_(table_id),
@@ -200,7 +202,14 @@ void ObMutator::reset()
   row_size_ = 0;
   table_id_ = OB_INVALID_ID;
   rowkey_.reset();
-  rowkey_.get_rowkey().assign((ObObj*)obj_array_, OB_MAX_ROWKEY_COLUMN_NUMBER);
+  for (auto &value : key_values_) {
+    // Short legal UNIS values retain prior metadata, but never the old
+    // payload address after recycling its owner. The decoder starts bytes
+    // from zero, as the historical value union did.
+    value.datum_ = ObDatum();
+  }
+  rowkey_.get_rowkey().assign(key_values_, OB_MAX_ROWKEY_COLUMN_NUMBER);
+  rowkey_owner_.reuse();
   table_version_ = 0;
   seq_no_.reset();
 }
@@ -405,7 +414,7 @@ int ObMemtableMutatorRow::deserialize(const char *buf, const int64_t buf_len, in
     row_buf_len = row_size - (data_pos - pos);
     row_size_ = row_size;
     new_pos = 0;
-    if (OB_FAIL(rowkey_.deserialize(row_buf, row_buf_len, new_pos))
+    if (OB_FAIL(rowkey_.deserialize(rowkey_owner_, row_buf, row_buf_len, new_pos, false))
               || OB_FAIL(decode_vi64(row_buf, row_buf_len, new_pos, &table_version_))
               || OB_FAIL(decode_i8(row_buf, row_buf_len, new_pos, (int8_t *)&dml_flag_))
               || OB_FAIL(decode_vi32(row_buf, row_buf_len, new_pos, (int32_t *)&update_seq_))

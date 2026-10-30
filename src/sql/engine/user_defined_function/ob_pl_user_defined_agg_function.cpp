@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "sql/ob_spi.h"
 #include "ob_pl_user_defined_agg_function.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/ob_resolver_utils.h"
@@ -83,7 +84,7 @@ int ObPlAggUdfFunction::init(ObSQLSessionInfo *session_info,
                              uint64_t type_id,
                              const ObIArray<ObExprResType> &params_type,
                              const ObExprResType result_type,
-                             ObObjParam &pl_obj)
+                             DatumParameter &pl_obj)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_info) || OB_ISNULL(allocator) || OB_ISNULL(exec_ctx)) {
@@ -104,7 +105,7 @@ int ObPlAggUdfFunction::init(ObSQLSessionInfo *session_info,
 
 int ObPlAggUdfFunction::call_pl_engine_exectue_udf(ParamStore& udf_params,
                                                    const ObRoutineInfo *routine_info,
-                                                   ObObj &result)
+                                                   DatumParameter &result)
 {
   int ret = OB_SUCCESS;
   pl::ObPL *pl_engine = NULL;
@@ -146,9 +147,9 @@ int ObPlAggUdfFunction::call_pl_engine_exectue_udf(ParamStore& udf_params,
   return ret;
 }
 
-int ObPlAggUdfFunction::build_in_params_store(ObObjParam &pl_obj,
+int ObPlAggUdfFunction::build_in_params_store(DatumParameter &pl_obj,
                                               bool is_out_param,
-                                              const ObObj *obj_params,
+                                              const DatumParameter *datum_params,
                                               int64_t param_num,
                                               ObIArray<ObUDFParamDesc> &params_desc,
                                               ObIArray<ObExprResType> &params_type,
@@ -158,41 +159,43 @@ int ObPlAggUdfFunction::build_in_params_store(ObObjParam &pl_obj,
   udf_params = NULL;
   void *param_store_buf = NULL;
   if (OB_ISNULL(allocator_) ||
-      (OB_ISNULL(obj_params) && param_num > 0) ||
-      (OB_NOT_NULL(obj_params) && param_num < 1)) {
+      (OB_ISNULL(datum_params) && param_num > 0) ||
+      (OB_NOT_NULL(datum_params) && param_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (param_num > 0 && OB_FAIL(check_types(obj_params, param_num, params_type))) {
+  } else if (param_num > 0 && OB_FAIL(check_types(datum_params, param_num, params_type))) {
   } else if (OB_ISNULL(param_store_buf = allocator_->alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     udf_params = new(param_store_buf)ParamStore(ObWrapperAllocator(*allocator_));
-    ObObjParam param;
+    DatumParameter param;
     param.reset();
     if (is_out_param) {
-      param.set_extend(pl_obj.get_ext(),
-                       pl_obj.get_meta().get_extend_type(), pl_obj.get_val_len());
-      param.set_param_meta();
+      OZ (param.set_extend(pl_obj.get_ext(),
+                          pl_obj.get_meta().get_extend_type(), *allocator_, pl_obj.get_val_len()));
+      OX (param.set_param_meta());
     } else {
-      pl_obj.copy_value_or_obj(param, true);
+      OZ (clone_datum_parameter(pl_obj, param, *allocator_));
     }
-    if (OB_FAIL(udf_params->push_back(param))) {
-    } else if (obj_params != NULL &&
-               OB_FAIL(ObExprUDF::process_in_params(obj_params, param_num, params_desc,
-                                                    params_type, *udf_params, *allocator_))) {
-    } else {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(udf_params->push_back(param))) {
+    } else if (datum_params != nullptr) {
+      // The aggregate row already carries Datum payloads and expression type
+      // metadata. Keep the input native through the PL parameter preparation.
+      OZ (ObExprUDF::process_in_params(datum_params, param_num, params_desc,
+          params_type, *udf_params, *allocator_));
     }
   }
   return ret;
 }
 
-int ObPlAggUdfFunction::process_init_pl_agg_udf(ObObjParam &pl_obj)
+int ObPlAggUdfFunction::process_init_pl_agg_udf(DatumParameter &pl_obj)
 {
   int ret = OB_SUCCESS;
   return ret;
 }
 
-int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
-                                                const ObObj *obj_params,
+int ObPlAggUdfFunction::process_calc_pl_agg_udf(DatumParameter &pl_obj,
+                                                const DatumParameter *datum_params,
                                                 int64_t param_num)
 {
   int ret = OB_SUCCESS;
@@ -200,14 +203,13 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
   const char *str = "ODCIAGGREGATEITERATE"; //for pl agg udf, the type function name is stable
   ObString routine_name(strlen(str), str);
   ParamStore *udf_params = NULL;
-  ObObj tmp_result;
+  DatumParameter tmp_result;
   bool is_null_params = false;
-  if (OB_ISNULL(obj_params) || OB_UNLIKELY(param_num != params_type_.count())) {
+  if (OB_ISNULL(datum_params) || OB_UNLIKELY(param_num != params_type_.count())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(check_params_validty(obj_params, param_num, is_null_params))) {
+  } else if (OB_FAIL(check_params_validty(datum_params, param_num, is_null_params))) {
   } else if (is_null_params) {
     /*no nothing*/
-  } else if (OB_FAIL(process_obj_params(const_cast<ObObj*>(obj_params), param_num))) {
   } else {
     ObSEArray<ObUDFParamDesc, 4> params_desc;
     ObSEArray<ObUDFParamDesc, 4> all_params_desc;
@@ -230,7 +232,7 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
         } else {/*do nothing*/}
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(build_in_params_store(pl_obj, true, obj_params, param_num, params_desc,
+        if (OB_FAIL(build_in_params_store(pl_obj, true, datum_params, param_num, params_desc,
                                           params_type, udf_params))) {
         } else if (OB_ISNULL(udf_params)) {
           ret = OB_ERR_UNEXPECTED;
@@ -239,7 +241,7 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
         } else if (OB_UNLIKELY(udf_params->count() < 1)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          udf_params->at(0).copy_value_or_obj(pl_obj, true);
+          OZ (clone_datum_parameter(udf_params->at(0), pl_obj, *allocator_));
         }
       }
     }
@@ -247,26 +249,15 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
   return ret;
 }
 
-int ObPlAggUdfFunction::process_obj_params(ObObj *obj_params,
-                                           int64_t param_num)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(obj_params) || OB_ISNULL(allocator_) || OB_UNLIKELY(param_num <= 0)) {
-    ret = OB_ERR_UNEXPECTED;
-  }
-  return ret;
-}
-
-
-int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
-                                                      ObObj &result)
+int ObPlAggUdfFunction::process_get_pl_agg_udf_result(DatumParameter &pl_obj,
+                                                      DatumParameter &result)
 {
   int ret = OB_SUCCESS;
   const ObRoutineInfo *routine_info = NULL;
   const char *str = "ODCIAGGREGATETERMINATE"; //for pl agg udf, the type function name is stable
   ObString routine_name(strlen(str), str);
   ParamStore *udf_params = NULL;
-  ObObj tmp_result;
+  DatumParameter tmp_result;
 
   //for pl agg udf, type member ODCIAggregateTerminate() the first param must be self and is IN,
   //the second param is OUT, the third param is number. so we need rebuild relation infos.
@@ -274,7 +265,8 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
   ObSEArray<ObUDFParamDesc, 4> all_params_desc;
   ObSEArray<ObExprResType, 4> params_type;
   ObSEArray<ObExprResType, 4> all_params_type;
-  result.set_meta_type(result_type_);
+  result.set_type_meta(result_type_);
+  result.set_param_meta();
   if (OB_FAIL(params_type.push_back(result_type_))) {
   } else if (OB_FAIL(params_desc.push_back(
       ObUDFParamDesc(ObUDFParamDesc::LOCAL_OUT, 0)))) {
@@ -289,12 +281,10 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
     param_type.set_udt_id(type_id_);
     flags_type.set_number();
     number::ObNumber num;
-    ObObj number;
-    number.set_number(ObNumberType, num);
-    ObObjParam param;
-    param.reset();
-    number.copy_value_or_obj(param, true);
-    if (OB_FAIL(udf_params->push_back(param))) {
+    DatumParameter param;
+    OZ (param.set_number(num, *allocator_));
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(udf_params->push_back(param))) {
     } else if (OB_FAIL(all_params_type.push_back(param_type))) {
     } else if (OB_FAIL(all_params_desc.push_back(ObUDFParamDesc()))) {
     } else if (OB_FAIL(all_params_type.push_back(result_type_))) {
@@ -311,15 +301,11 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
                                             result_type_.get_type(),
                                             result_type_.get_collation_type()))) {
     } else {
-      ObObj src_obj;
-      udf_params->at(1).copy_value_or_obj(src_obj, true);
-      ObCastMode cast_mode = CM_NONE;
-      if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session_info_, cast_mode))) {
-      } else {
-        ObCastCtx cast_ctx(allocator_, NULL, cast_mode, result_type_.get_collation_type(), NULL);
-        if (OB_FAIL(ObObjCaster::to_type(result_type_.get_type(), cast_ctx, src_obj, result))) {
-        } else {
-        }
+      DatumParameter converted;
+      OZ (ObSPIService::spi_convert(session_info_, allocator_, udf_params->at(1), result_type_, converted,
+                                    exec_ctx_->get_srs_provider(), exec_ctx_->get_lob_read_service()));
+      if (OB_SUCC(ret)) {
+        result = converted;
       }
     }
   }
@@ -327,35 +313,35 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
   return ret;
 }
 
-int ObPlAggUdfFunction::check_types(const ObObj *obj_params,
+int ObPlAggUdfFunction::check_types(const DatumParameter *datum_params,
                                     int64_t param_num,
                                     ObIArray<ObExprResType> &params_type)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(obj_params) || OB_UNLIKELY(param_num < 1 || param_num != params_type.count())) {
+  if (OB_ISNULL(datum_params) || OB_UNLIKELY(param_num < 1 || param_num != params_type.count())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param_num; i++) {
-      if (!obj_params[i].is_null()) {
-        TYPE_CHECK(obj_params[i], params_type.at(i).get_type());
+      if (!datum_params[i].is_null()) {
+        TYPE_CHECK(datum_params[i], params_type.at(i).get_type());
       }
     }
   }
   return ret;
 }
 
-int ObPlAggUdfFunction::check_params_validty(const ObObj *obj_params,
+int ObPlAggUdfFunction::check_params_validty(const DatumParameter *datum_params,
                                              int64_t param_num,
                                              bool &is_null_params)
 {
   int ret = OB_SUCCESS;
   is_null_params = false;
-  if (OB_UNLIKELY(param_num <= 0) || OB_ISNULL(obj_params)) {
+  if (OB_UNLIKELY(param_num <= 0) || OB_ISNULL(datum_params)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     is_null_params = true;
     for (int64_t i = 0; is_null_params && i < param_num; ++i) {
-      if (obj_params[i].is_null()) {
+      if (datum_params[i].is_null()) {
         /*do nothing*/
       } else {
         is_null_params = false;

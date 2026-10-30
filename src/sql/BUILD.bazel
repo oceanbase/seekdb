@@ -164,7 +164,7 @@ cc_library(
         if dep not in _SQL_PUBLIC_CLOSURE_SHARE_DEPS
     ],
     tags = ["manual"],
-    visibility = ["//src:__subpackages__"],
+    visibility = ["//unittest/sql:__pkg__", "//src:__subpackages__"],
 )
 
 # Observer is the final composition root for the legacy physical retrieval
@@ -202,7 +202,7 @@ cc_library(
     ],
     implementation_deps = _SQL_PRIVATE_HEADER_SHARE_DEPS,
     tags = ["manual"],
-    visibility = ["//src/sql:__subpackages__"],
+    visibility = ["//unittest/sql:__pkg__", "//src/sql:__subpackages__"],
 )
 
 _SQL_RUNTIME_UNITY_GROUPS = groups_without(
@@ -421,4 +421,58 @@ cc_library(
     ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
+)
+
+# The SQL header builds native LOB outputs with the Share LOB buffer writer.
+# Keep its standalone test dependency inside the SQL module boundary.
+cc_library(
+    name = "native_lob_result_test_runtime",
+    testonly = True,
+    deps = [
+        "//src/share:lob_read_context",
+        "//src/share:lob_read_service",
+        "//src/share:lob_runtime",
+    ],
+    tags = ["manual"],
+    visibility = ["//unittest/sql:__pkg__"],
+)
+
+cc_library(
+    name = "native_range_test_runtime",
+    testonly = True,
+    deps = ["//src/share:datum"],
+    tags = ["manual"],
+    visibility = ["//unittest/sql:__pkg__"],
+)
+
+# The scalar PX test constructs a real schema through the SQL-owned test seam.
+cc_library(
+    name = "native_px_tablet_id_test_runtime",
+    testonly = True,
+    deps = ["//src/share:schema_registry"],
+    tags = ["manual"],
+    visibility = ["//unittest/sql:__pkg__"],
+)
+
+# Native session tests consume Share APIs through the SQL module boundary.
+cc_library(
+    name = "session_native_values_test_runtime",
+    testonly = True,
+    deps = [
+        "//src/share:datum",
+        "//src/share:value_cast_constants",
+        "//src/share:system_variable_metadata",
+    ],
+    tags = ["manual"],
+    visibility = ["//unittest/sql:__pkg__"],
+)
+
+# The histogram tests exercise SQL aggregate headers whose declarations include
+# Share's geometry serialization types. Keep that dependency inside SQL.
+cc_library(
+    name = "native_histogram_values_test_runtime",
+    testonly = True,
+    deps = ["//src/share:geo_serialization"],
+    tags = ["manual"],
+    visibility = ["//unittest/sql:__pkg__"],
 )

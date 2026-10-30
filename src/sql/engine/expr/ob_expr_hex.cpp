@@ -41,7 +41,7 @@ int ObExprHex::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
 
-  common::ObObjType param_type = text.get_type();
+  common::SqlValueType param_type = text.get_type();
   const int32_t mbmaxlen = 4;
   if (ObTextType == param_type
       || ObMediumTextType == param_type
@@ -98,18 +98,6 @@ int ObExprHex::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprHex::get_uint64(const ObObj &obj, ObCastCtx &cast_ctx, uint64_t &out)
-{
-  int ret = OB_SUCCESS;
-  out = 0;
-  if (OB_UNLIKELY(obj.is_number())) {
-    if (OB_FAIL(number_uint64(obj.get_number(), out))) {
-    }
-  } else {
-    EXPR_GET_UINT64_V2(obj, out);
-  }
-  return ret;
-}
 
 int ObExprHex::number_uint64(const number::ObNumber &num_val, uint64_t &out)
 {
@@ -172,7 +160,7 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else {
-    const ObObjType in_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType in_type = expr.args_[0]->datum_meta_.type_;
     if (ObUInt64Type == in_type || ObNumberType == in_type || ObDecimalIntType == in_type) {
       uint64_t val = 0;
       if (ObNumberType == in_type) {

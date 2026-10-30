@@ -122,7 +122,7 @@ struct AutoincParam
   uint64_t          autoinc_table_id_;
   int64_t           autoinc_table_part_num_;
   uint64_t          autoinc_col_id_;
-  common::ObObjType autoinc_col_type_;
+  common::SqlValueType autoinc_col_type_;
   uint64_t          total_value_count_;
   uint64_t          autoinc_desired_count_;
   int64_t           autoinc_old_value_index_; //used in insert on duplicate key

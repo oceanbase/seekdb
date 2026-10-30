@@ -65,7 +65,7 @@ int ObExprJsonQuote::calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, con
                           ObDatumMeta meta, bool has_lob_header, ObJsonBuffer &j_buf, bool &is_null)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
   if (type == ObIntType || type == ObDoubleType) {
     // special for mathematical function, consistent with mysql

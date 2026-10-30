@@ -28,7 +28,7 @@ int ObAllVirtualDDLSimPoint::inner_get_next_row(common::ObNewRow *&row)
 {
 #ifdef ERRSIM
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   ObDDLSimPoint sim_point;
   while (OB_SUCC(ret)) {
     if (point_idx_ >= MAX_DDL_SIM_POINT_ID) {
@@ -43,16 +43,16 @@ int ObAllVirtualDDLSimPoint::inner_get_next_row(common::ObNewRow *&row)
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
         case SIM_POINT_ID: {
-          cells[i].set_int(sim_point.id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, sim_point.id_) : ret);
           break;
         }
         case SIM_POINT_NAME: {
-          cells[i].set_varchar(sim_point.name_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, sim_point.name_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case SIM_POINT_DESC: {
-          cells[i].set_varchar(sim_point.desc_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, sim_point.desc_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
@@ -60,7 +60,7 @@ int ObAllVirtualDDLSimPoint::inner_get_next_row(common::ObNewRow *&row)
           memset(action_str_, 0, sizeof(action_str_));
           sim_point.action_->to_string(action_str_, sizeof(action_str_));
           action_str_[sizeof(action_str_) - 1] = 0;
-          cells[i].set_varchar(action_str_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, action_str_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
@@ -108,7 +108,7 @@ int ObAllVirtualDDLSimPointStat::inner_get_next_row(common::ObNewRow *&row)
 {
 #ifdef ERRSIM
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
   } else if (idx_ >= task_sim_points_.count()) {
@@ -120,15 +120,15 @@ int ObAllVirtualDDLSimPointStat::inner_get_next_row(common::ObNewRow *&row)
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
         case DDL_TASK_ID: {
-          cells[i].set_int(task_sim_point.task_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, task_sim_point.task_id_) : ret);
           break;
         }
         case SIM_POINT_ID: {
-          cells[i].set_int(task_sim_point.point_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, task_sim_point.point_id_) : ret);
           break;
         }
         case TRIGGER_COUNT: {
-          cells[i].set_int(sim_count);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, sim_count) : ret);
           break;
         }
       }

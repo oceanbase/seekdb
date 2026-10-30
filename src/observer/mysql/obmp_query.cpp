@@ -1007,38 +1007,6 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   return ret;
 }
 
-int ObMPQuery::store_params_value_to_str(ObIAllocator &allocator,
-                                         sql::ObSQLSessionInfo &session,
-                                         common::ParamStore &params)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  int64_t length = OB_MAX_SQL_LENGTH;
-  CK (OB_NOT_NULL(params_value_ = static_cast<char *>(allocator.alloc(OB_MAX_SQL_LENGTH))));
-  for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
-    const common::ObObjParam &param = params.at(i);
-    if (param.is_ext()) {
-      pos = 0;
-      params_value_ = NULL;
-      params_value_len_ = 0;
-      break;
-    } else {
-      OZ (param.print_sql_literal(params_value_, length, pos, allocator, TZ_INFO(&session)));
-      if (i != params.count() - 1) {
-        OZ (databuff_printf(params_value_, length, pos, allocator, ","));
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-    params_value_ = NULL;
-    params_value_len_ = 0;
-    ret = OB_SUCCESS;
-  } else {
-    params_value_len_ = pos;
-  }
-  return ret;
-}
-
 int ObMPQuery::check_readonly_stmt(ObMySQLResultSet &result)
 {
   int ret = OB_SUCCESS;

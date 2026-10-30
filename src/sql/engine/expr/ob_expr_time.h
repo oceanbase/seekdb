@@ -68,7 +68,7 @@ inline int ObExprTimeBase::calc_result_type1(ObExprResType &type,
   type.set_int32();
   type.set_precision(4);
   type.set_scale(0);
-  common::ObObjTypeClass tc1 = ob_obj_type_class(type1.get_type());
+  common::SqlTypeClass tc1 = sql_type_class(type1.get_type());
   if (ob_is_enum_or_set_type(type1.get_type()) || ob_is_string_type(type1.get_type())) {
     type1.set_calc_type_default_varchar();
   } else if ((common::ObFloatTC == tc1) || (common::ObDoubleTC == tc1)) {

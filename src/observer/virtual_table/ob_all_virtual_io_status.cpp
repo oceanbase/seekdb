@@ -98,7 +98,7 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
   } else if (is_end_) {
@@ -109,20 +109,20 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
         case STORAGE_NAME: {
-          cells[i].set_varchar("DATA");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "DATA") : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case STATUS: {
           if (0 == start_ts_ && 0 == finish_ts_) {
-            cells[i].set_varchar("NOT AVAILABLE");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "NOT AVAILABLE") : ret);
           } else if (start_ts_ > 0 && 0 == finish_ts_) {
-            cells[i].set_varchar("IN PROGRESS");
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "IN PROGRESS") : ret);
           } else if (start_ts_ > 0 && finish_ts_ > 0) {
             if (OB_SUCCESS == ret_code_) {
-              cells[i].set_varchar("READY");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "READY") : ret);
             } else {
-              cells[i].set_varchar("FAILED");
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "FAILED") : ret);
             }
           }
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -132,7 +132,7 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
           if (0 == start_ts_) {
             cells[i].set_null();
           } else {
-            cells[i].set_timestamp(start_ts_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, start_ts_) : ret);
           }
           break;
         }
@@ -140,7 +140,7 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
           if (0 == finish_ts_) {
             cells[i].set_null();
           } else {
-            cells[i].set_timestamp(finish_ts_);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, i, finish_ts_) : ret);
           }
           break;
         }
@@ -194,7 +194,7 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
   } else if (!io_ability_.is_valid()) {
@@ -221,31 +221,31 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
         case STORAGE_NAME: {
-          cells[i].set_varchar("DATA");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, "DATA") : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case MODE: {
           const char *io_mode_string = get_io_mode_string(item.mode_);
-          cells[i].set_varchar(io_mode_string);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, io_mode_string) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case SIZE: {
-          cells[i].set_int(item.size_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.size_) : ret);
           break;
         }
         case IOPS: {
-          cells[i].set_int(static_cast<int64_t>(item.iops_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.iops_)) : ret);
           break;
         }
         case MBPS: {
           int64_t mbps = item.size_ * item.iops_ / 1024L / 1024L; // unit MB/s
-          cells[i].set_int(mbps);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, mbps) : ret);
           break;
         }
         case LATENCY: {
-          cells[i].set_int(static_cast<int64_t>(item.rt_us_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.rt_us_)) : ret);
           break;
         }
         default: {
@@ -417,7 +417,7 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   row = nullptr;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
   } else if (quota_pos_ >= quota_infos_.count()) {
@@ -429,61 +429,61 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
         case GROUP_ID: {
-          cells[i].set_int(item.group_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.group_id_) : ret);
           break;
         }
         case MODE: {
           const char *str = get_io_mode_string(item.group_mode_);
-          cells[i].set_varchar(str);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, str) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case SIZE: {
-          cells[i].set_int(static_cast<int64_t>(item.size_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.size_)) : ret);
           break;
         }
         case MIN_IOPS: {
-          cells[i].set_int(static_cast<int64_t>(item.min_iops_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.min_iops_)) : ret);
           break;
         }
         case MAX_IOPS: {
-          cells[i].set_int(static_cast<int64_t>(item.max_iops_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.max_iops_)) : ret);
           break;
         }
         case REAL_IOPS: {
-          cells[i].set_int(static_cast<int64_t>(item.real_iops_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.real_iops_)) : ret);
           break;
         }
         case MIN_MBPS: {
           if (item.min_iops_ == INT64_MAX) {
-            cells[i].set_int(INT64_MAX);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, INT64_MAX) : ret);
           } else {
-            cells[i].set_int(static_cast<int64_t>(item.min_iops_ * item.size_ / 1024L / 1024L));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.min_iops_ * item.size_ / 1024L / 1024L)) : ret);
           }
           break;
         }
         case MAX_MBPS: {
           if (item.max_iops_ == INT64_MAX){
-            cells[i].set_int(INT64_MAX);
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, INT64_MAX) : ret);
           } else {
-            cells[i].set_int(static_cast<int64_t>(item.max_iops_ * item.size_ / 1024L / 1024L));
+            (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.max_iops_ * item.size_ / 1024L / 1024L)) : ret);
           }
           break;
         }
         case REAL_MBPS: {
-          cells[i].set_int(static_cast<int64_t>(item.real_iops_ * item.size_ / 1024L / 1024L));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, static_cast<int64_t>(item.real_iops_ * item.size_ / 1024L / 1024L)) : ret);
           break;
         }
         case SCHEDULE_US: {
-          cells[i].set_int(item.schedule_us_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.schedule_us_) : ret);
           break;
         }
         case IO_DELAY_US: {
-          cells[i].set_int(item.io_delay_us_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.io_delay_us_) : ret);
           break;
         }
         case TOTAL_US: {
-          cells[i].set_int(item.total_us_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.total_us_) : ret);
           break;
         }
         default: {
@@ -676,7 +676,7 @@ int ObAllVirtualGroupIOStat::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
 
   row = nullptr;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
   } else if (group_io_stats_pos_ >= group_io_stats_.count()) {
@@ -688,33 +688,33 @@ int ObAllVirtualGroupIOStat::inner_get_next_row(common::ObNewRow *&row)
       const uint64_t column_id = output_column_ids_.at(i);
       switch (column_id) {
         case GROUP_ID: {
-          cells[i].set_int(item.group_id_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.group_id_) : ret);
           break;
         }
         case GROUP_NAME: {
-          cells[i].set_varchar(item.group_name_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, item.group_name_) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case MODE: {
-          cells[i].set_varchar(get_io_mode_string(item.mode_));
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, i, get_io_mode_string(item.mode_)) : ret);
           cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case MAX_IOPS: {
-          cells[i].set_int(item.max_iops_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.max_iops_) : ret);
           break;
         }
         case MIN_IOPS: {
-          cells[i].set_int(item.min_iops_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.min_iops_) : ret);
           break;
         }
         case NORM_IOPS: {
-          cells[i].set_int(item.norm_iops_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.norm_iops_) : ret);
           break;
         }
         case REAL_IOPS: {
-          cells[i].set_int(item.real_iops_);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, i, item.real_iops_) : ret);
           break;
         }
       }

@@ -21,7 +21,7 @@
 #include "lib/container/ob_fixed_array.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashset.h"
-#include "common/object/ob_obj_compare.h"
+#include "common/object/ob_cmp_op.h"
 #include "common/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/semistruct/ob_sub_column_path.h"
@@ -75,7 +75,7 @@ public:
   ~ObSqlDatumInfo() = default;
   OB_INLINE void reset() { datum_ptr_ = nullptr; expr_ = nullptr; }
   OB_INLINE bool is_valid() const { return datum_ptr_ != nullptr && expr_ != nullptr; }
-  OB_INLINE common::ObObjDatumMapType get_obj_datum_map() const { return expr_->obj_datum_map_; }
+  OB_INLINE common::SqlValueDatumMapType get_obj_datum_map() const { return expr_->obj_datum_map_; }
   TO_STRING_KV(KP_(datum_ptr), KP_(expr));
 
   common::ObDatum *datum_ptr_;
@@ -427,9 +427,9 @@ public:
   ~ObPushdownWhiteFilterNode() {}
   virtual OB_INLINE int set_op_type(const ObRawExpr &raw_expr);
   OB_INLINE ObWhiteFilterOperatorType get_op_type() const { return op_type_; }
-  virtual int get_filter_val_meta(common::ObObjMeta &obj_meta) const;
-  int get_filter_in_val_meta(int64_t arg_idx, common::ObObjMeta &obj_meta) const;
-  inline virtual ObObjType get_filter_arg_obj_type(int64_t arg_idx) const
+  virtual int get_filter_val_meta(common::SqlTypeMeta &obj_meta) const;
+  int get_filter_in_val_meta(int64_t arg_idx, common::SqlTypeMeta &obj_meta) const;
+  inline virtual SqlValueType get_filter_arg_obj_type(int64_t arg_idx) const
   {
     const ObExpr *expr = WHITE_OP_IN == op_type_ ? expr_->args_[1] : expr_;
     return expr->args_[arg_idx]->obj_meta_.get_type();
@@ -471,14 +471,14 @@ public:
   inline bool is_first_child() { return is_first_child_; }
   inline void set_last_child(bool val) { is_last_child_ = val; }
   inline bool is_last_child() { return is_last_child_; }
-  inline void set_filter_val_meta(const ObObjMeta &val_meta) { val_meta_ = val_meta; }
-  inline ObObjMeta get_filter_val_meta() const { return val_meta_; }
-  inline int get_filter_val_meta(ObObjMeta &obj_meta) const override final
+  inline void set_filter_val_meta(const SqlTypeMeta &val_meta) { val_meta_ = val_meta; }
+  inline SqlTypeMeta get_filter_val_meta() const { return val_meta_; }
+  inline int get_filter_val_meta(SqlTypeMeta &obj_meta) const override final
   {
     obj_meta = val_meta_;
     return OB_SUCCESS;
   }
-  inline ObObjType get_filter_arg_obj_type(int64_t arg_idx) const override final
+  inline SqlValueType get_filter_arg_obj_type(int64_t arg_idx) const override final
   {
     UNUSED(arg_idx);
     return val_meta_.get_type();
@@ -512,7 +512,7 @@ private:
   */
   bool is_first_child_;
   bool is_last_child_;
-  ObObjMeta val_meta_;
+  SqlTypeMeta val_meta_;
   DynamicFilterType dynamic_filter_type_; // FARM COMPAT WHITELIST for prepare_data_func_type_
 };
 
@@ -1168,7 +1168,7 @@ public:
     }
   }
 protected:
-  OB_INLINE bool is_null_param(const ObDatum &datum, const ObObjMeta obj_meta)
+  OB_INLINE bool is_null_param(const ObDatum &datum, const SqlTypeMeta obj_meta)
   {
     return datum.is_null();
   }
@@ -1277,11 +1277,11 @@ public:
                      const ObDatumAccessContext *access_ctx);
   int add_to_small_set(const ObDatum &datum);
   virtual int exist_in_set(const common::ObDatum &datum, bool &is_exist) const override final;
-  inline void set_filter_val_meta(const ObObjMeta &val_meta_)
+  inline void set_filter_val_meta(const SqlTypeMeta &val_meta_)
   {
     return static_cast<ObPushdownDynamicFilterNode &>(filter_).set_filter_val_meta(val_meta_);
   }
-  inline ObObjMeta get_filter_val_meta() const
+  inline SqlTypeMeta get_filter_val_meta() const
   {
     return static_cast<ObPushdownDynamicFilterNode &>(filter_).get_filter_val_meta();
   }
@@ -1338,7 +1338,7 @@ private:
   int64_t batch_cnt_;
   ObExprOperatorCtx *runtime_filter_ctx_;
   bool is_first_check_;
-  ObObjType build_obj_type_; // for runtime filter, the datum_params_ are from the build table
+  SqlValueType build_obj_type_; // for runtime filter, the datum_params_ are from the build table
   DynamicFilterAction filter_action_;
   // for topn runtime filter, we need continuosly update the dynamic filter data
   // stored_data_version_ means the data version now the dynamic filter use

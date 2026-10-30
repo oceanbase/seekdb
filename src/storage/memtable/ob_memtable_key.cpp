@@ -15,6 +15,7 @@
  */
 
 #include "ob_memtable_key.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
 
 namespace oceanbase
 {
@@ -29,8 +30,8 @@ int ObMemtableKeyGenerator::init()
   } else if (columns_.count() < rowkey_cnt_) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(ERROR, "rowkey number mismatched", K(columns_.count()), K(rowkey_cnt_));
-  } else if (OB_FAIL(obj_buf_.init(&allocator_))) {
-  } else if (OB_FAIL(obj_buf_.reserve(rowkey_cnt_))) {
+  } else if (OB_FAIL(value_buf_.init(&allocator_))) {
+  } else if (OB_FAIL(value_buf_.reserve(rowkey_cnt_))) {
   } else {
     is_inited_ = true;
   }
@@ -47,15 +48,15 @@ int ObMemtableKeyGenerator::generate_memtable_key(const blocksstable::ObDatumRow
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), K(row));
   } else {
-    ObObj *objs = obj_buf_.get_data();
+    DatumValue *values = value_buf_.get_data();
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt_; i++) {
-      if (OB_FAIL(row.storage_datums_[i].to_obj_enhance(objs[i], columns_.at(i).col_type_))) {
+      if (OB_FAIL(value_buf_.assign_storage(i, row.storage_datums_[i], columns_.at(i).col_type_))) {
       } else if (columns_.at(i).col_type_.is_lob_storage()) {
-        objs[i].set_has_lob_header();
+        values[i].meta_.set_has_lob_header();
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(store_rowkey_.assign(objs, rowkey_cnt_))) {
+      if (OB_FAIL(store_rowkey_.assign(values, rowkey_cnt_))) {
       } else if (OB_FAIL(memtable_key_.encode(columns_, &store_rowkey_))) {
       }
     }

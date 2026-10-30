@@ -1408,7 +1408,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         } else {
         }
       } else {
-        ObObj val = sys_var->get_value();
+        const DatumValue &val = sys_var->get_value();
         obj_type.set_obj_type(val.get_type());
         data_type.set_data_type(obj_type);
       }
@@ -2529,7 +2529,7 @@ int ObPLBlockNS::expand_data_type_once(const ObUserDefinedType *user_type,
       }
     } else {
       ObDataType ext_type;
-      ObObjMeta meta;
+      SqlTypeMeta meta;
       meta.set_type(ObExtendType);
       meta.set_extend_type(member->get_type());
       ext_type.set_meta_type(meta);
@@ -2723,7 +2723,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
     //   fetch c_cursor into nums(1);
     //
     // We got `num(1)` by T_OBJ_ACCESS_REF expression for write. T_OBJ_ACCESS_REF return
-    // the address of ObObj by extend value in execution, so %expr's result type is set to
+    // the address of the datum-backed extend value in execution, so %expr's result type is set to
     // ObExtendType. We get the obj type from final type of T_OBJ_ACCESS_REF here.
     const auto &access_expr = static_cast<const ObObjAccessRawExpr &>(expr);
     OZ(access_expr.get_final_type(final_type));
@@ -2747,7 +2747,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
     if (OB_SUCC(ret)) {
       if (final_type.is_cursor_type() || final_type.is_opaque_type()) {
         ObDataType ext_type;
-        ObObjMeta meta_type;
+        SqlTypeMeta meta_type;
         meta_type.set_type(ObExtendType);
         meta_type.set_extend_type(final_type.get_type());
         ext_type.set_meta_type(meta_type);
@@ -2778,7 +2778,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
           ObDataType ext_type;
           ObDataType type;
           ObPLIntegerRange range;
-          ObObjMeta meta;
+          SqlTypeMeta meta;
           meta.set_type(ObExtendType);
           meta.set_extend_type(final_type.get_type());
           ext_type.set_meta_type(meta);
@@ -3111,10 +3111,10 @@ int ObPLFunctionAST::add_argument(const common::ObString &name,
     if (OB_ISNULL(type)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (type->get_meta_type().is_bit()) {
-      ObObjMeta &meta_type = const_cast<ObObjMeta&>(type->get_meta_type());
+      SqlTypeMeta &meta_type = const_cast<SqlTypeMeta&>(type->get_meta_type());
       meta_type.set_scale(type->get_precision());
     } else {
-      ObObjMeta &meta_type = const_cast<ObObjMeta&>(type->get_meta_type());
+      SqlTypeMeta &meta_type = const_cast<SqlTypeMeta&>(type->get_meta_type());
       meta_type.set_scale(type->get_scale());
     }
   }

@@ -237,7 +237,7 @@ private:
   static int build_row(ObEvalCtx &ctx,
                        common::ObIAllocator &allocator,
                        const ObExpr &expr,
-                       common::ObNewRow &row);
+                       common::ObIArray<common::DatumValue> &row);
   static int calc_partition_id(const ObExpr &expr,
                                ObEvalCtx &ctx,
                                const CalcPartitionBaseInfo &tl_expr_info,

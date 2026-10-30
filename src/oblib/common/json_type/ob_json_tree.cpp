@@ -1059,7 +1059,7 @@ ObJsonNode *ObJsonArray::get_value(uint64_t index) const
   return j_node;
 }
 
-ObJsonDatetime::ObJsonDatetime(const ObTime &time, ObObjType field_type)
+ObJsonDatetime::ObJsonDatetime(const ObTime &time, SqlValueType field_type)
       : ObJsonScalar(),
         value_(time)
 {

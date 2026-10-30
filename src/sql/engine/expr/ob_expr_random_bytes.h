@@ -33,9 +33,6 @@ public:
                                 ObExprResType &len,
                                 common::ObExprTypeCtx &type_ctx) const;
   
-  virtual int calc_result1(common::ObObj &result,
-                           const common::ObObj &len,
-                           common::ObExprCtx &expr_ctx) const;
   
   static int generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx, 
                                    ObDatum &expr_datum);

@@ -54,39 +54,21 @@ int ObFastColumnConvExpr::assign(const ObFastExprOperator &other)
     const ObFastColumnConvExpr &other_conv = static_cast<const ObFastColumnConvExpr&>(other);
     column_type_ = other_conv.column_type_;
     value_item_ = other_conv.value_item_;
-    if (OB_FAIL(ob_write_string(alloc_, other_conv.column_info_, column_info_))) {
+    if (IS_DATATYPE_OR_QUESTIONMARK_OP(value_item_.get_item_type())
+        && OB_FAIL(set_const_value(other_conv.value_item_.get_obj()))) {
+    } else if (OB_FAIL(ob_write_string(alloc_, other_conv.column_info_, column_info_))) {
     }
   }
   return ret;
 }
 
-int ObFastColumnConvExpr::calc(ObExprCtx &expr_ctx, const ObNewRow &row, ObObj &result) const
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(OB_ISNULL(expr_ctx.my_session_))) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    bool is_strict = is_strict_mode(expr_ctx.my_session_->get_sql_mode());
-    const ObObj *value = NULL;
-    const ObString *column_info = NULL;
-    if (has_column_info()) {
-      column_info = &column_info_;
-    }
-    if (OB_FAIL(value_item_.get_item_value_directly(*expr_ctx.phy_plan_ctx_, row, value))) {
-    } else if (OB_FAIL(ObSqlExpressionUtil::expand_array_params(expr_ctx, *value, value))) {
-    } else if (OB_FAIL(ObExprColumnConv::convert_skip_null_check(result, *value, column_type_,
-                                         is_strict, expr_ctx.column_conv_ctx_,
-                                         &str_values_, column_info))) {
-    }
-  }
-  return ret;
-}
 
-int ObFastColumnConvExpr::set_const_value(const ObObj &value)
+
+int ObFastColumnConvExpr::set_const_value(const DatumValue &value)
 {
   int ret = OB_SUCCESS;
-  ObObj tmp;
-  if (OB_FAIL(ob_write_obj(alloc_, value, tmp))) {
+  DatumValue tmp;
+  if (OB_FAIL(clone_typed_value(value, tmp, alloc_))) {
   } else if (OB_FAIL(value_item_.assign(tmp))) {
   }
   return ret;
@@ -124,73 +106,21 @@ int ObExprColumnConv::assign(const ObExprOperator &other)
   return ret;
 }
 
-int ObExprColumnConv::convert_with_null_check(ObObj &result,
-                                              const ObObj &obj,
-                                              const ObExprResType &res_type,
-                                              bool is_strict,
-                                              ObCastCtx &cast_ctx,
-                                              const ObIArray<ObString> *type_infos)
+int ObExprColumnConv::convert_with_null_check(ObExecContext &context,
+    const DatumParameter &source, const ObExprResType &type, ObCastMode mode,
+    ObIAllocator &owner, DatumParameter &result, const ObIArray<ObString> *type_infos)
 {
   int ret = OB_SUCCESS;
-  bool is_not_null = res_type.is_not_null_for_write();
-  if (OB_FAIL(ObExprColumnConv::convert_skip_null_check(result, obj, res_type, is_strict,
-                                                        cast_ctx, type_infos))) {
-  } else if (is_not_null && (result.is_null())) {
-    ret = OB_BAD_NULL_ERROR;
+  ObDatumCaster *caster = nullptr;
+  OZ (context.get_native_datum_caster(caster));
+  // A UDT/PL cast can call back into scalar conversion on the same execution
+  // context. Keep its nested frames separate from the outer live conversion.
+  ObDatumCaster nested;
+  if (OB_SUCC(ret) && caster->native_cast_active()) {
+    OZ (nested.init(context, false));
+    OX (caster = &nested);
   }
-  return ret;
-}
-
-int ObExprColumnConv::convert_skip_null_check(ObObj &result,
-                                              const ObObj &obj,
-                                              const ObExprResType &res_type,
-                                              bool is_strict,
-                                              ObCastCtx &cast_ctx,
-                                              const ObIArray<ObString> *type_infos,
-                                              const ObString *column_info)
-{
-  int ret = OB_SUCCESS;
-  ObObjType type = res_type.get_type();
-  const ObAccuracy &accuracy = res_type.get_accuracy();
-  ObCollationType collation_type = res_type.get_collation_type();
-  const ObObj *res_obj = NULL;
-  cast_ctx.expect_obj_collation_ = collation_type;
-  cast_ctx.dest_collation_ = collation_type;
-
-  ObAccuracy tmp_accuracy = accuracy;
-  cast_ctx.res_accuracy_ = &tmp_accuracy;
-  if (OB_UNLIKELY(ob_is_enum_or_set_type(type))) {
-    ObExpectType expect_type;
-    expect_type.set_type(type);
-    expect_type.set_collation_type(collation_type);
-    expect_type.set_type_infos(type_infos);
-    if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, obj, result))) {
-    } else {
-      res_obj = &result;
-    }
-  } else if (OB_FAIL(ObObjCaster::to_type(type, cast_ctx, obj, result, res_obj)) || OB_ISNULL(res_obj)) {
-    ret = COVER_SUCC(OB_ERR_UNEXPECTED);
-  } else {
-  }
-  if (OB_SUCC(ret)) {
-    const int64_t max_accuracy_len = static_cast<int64_t>(res_type.
-                                                          get_accuracy().get_length());
-    const int64_t str_len_byte = static_cast<int64_t>(result.get_string_len());
-    if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
-                                    *const_cast<ObObj*>(res_obj)))) {
-    } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *res_obj, result, res_obj))) {
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (res_obj != &result) {
-      // res_obj does not point to the address of result, need to copy the value of res_obj to result
-      result = *res_obj;
-    }
-//    if (is_not_null && (result.is_null())) {
-//      ret = OB_BAD_NULL_ERROR;
-//      LOG_WARN("Column should not be null", K(ret));
-//    }
-  }
+  OZ (caster->to_column(source, type, mode, owner, result, type_infos));
   return ret;
 }
 
@@ -259,8 +189,8 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
 
     if (OB_SUCC(ret) && !wrap_to_str) {
       //cast type when type not same.
-      const ObObjTypeClass value_tc = ob_obj_type_class(types[4].get_type());
-      const ObObjTypeClass type_tc = ob_obj_type_class(types[0].get_type());
+      const SqlTypeClass value_tc = sql_type_class(types[4].get_type());
+      const SqlTypeClass type_tc = sql_type_class(types[0].get_type());
       ObSQLSessionInfo *session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
       bool is_prepare_stage = session->is_pl_prepare_stage();
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() |
@@ -293,7 +223,7 @@ int ObExprColumnConv::calc_enum_set_result_type(ObExprResType &type,
   // for enum set type with subschema, it can directly execute any type of cast,
   // so there is no need to wrap type_to_str.
   if (ob_is_enumset_tc(types[4].get_type())) {
-    ObObjType calc_type = get_enumset_calc_type(types[0].get_type(), 4);
+    SqlValueType calc_type = get_enumset_calc_type(types[0].get_type(), 4);
     // When the types are inconsistent or it doesn't support enum/set type with subschema,
     // new cast expression is required.
     const bool has_enum_set_subschema_arg = is_enum_set_with_subschema_arg(4);
@@ -417,7 +347,7 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
     const ObEnumSetInfo *enumset_info = static_cast<ObEnumSetInfo *>(expr.extra_info_);
     const uint64_t cast_mode = enumset_info->cast_mode_;
     bool is_strict = CM_IS_STRICT_MODE(cast_mode) && !CM_IS_IGNORE_CHARSET_CONVERT_ERR(cast_mode);
-    ObObjType out_type = expr.datum_meta_.type_;
+    SqlValueType out_type = expr.datum_meta_.type_;
     ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
     ObDatum *val = NULL;
     if (ob_is_enum_or_set_type(out_type) && !expr.args_[4]->obj_meta_.is_enum_or_set()) {
@@ -454,7 +384,7 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
         if (OB_SUCC(ret)) {
         }
       } else {
-        ObObjType in_type = expr.args_[4]->obj_meta_.get_type();
+        SqlValueType in_type = expr.args_[4]->obj_meta_.get_type();
         ObCollationType in_cs_type = expr.args_[4]->obj_meta_.get_collation_type();
         bool has_lob_header = expr.args_[4]->obj_meta_.has_lob_header();
         bool has_lob_header_for_check = has_lob_header;
@@ -530,7 +460,7 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
                                            const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObObjType out_type = expr.datum_meta_.type_;
+  SqlValueType out_type = expr.datum_meta_.type_;
   ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
   const ObEnumSetInfo *enumset_info = static_cast<ObEnumSetInfo *>(expr.extra_info_);
   const uint64_t cast_mode = enumset_info->cast_mode_;
@@ -550,7 +480,7 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
     ObAccuracy accuracy;
     accuracy.set_length(expr.max_length_);
     accuracy.set_scale(expr.datum_meta_.scale_);
-    const ObObjTypeClass &dst_tc = ob_obj_type_class(expr.datum_meta_.type_);
+    const SqlTypeClass &dst_tc = sql_type_class(expr.datum_meta_.type_);
     const ObLength max_accuracy_len = accuracy.get_length();
     if (is_string_type) {
       accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
@@ -586,7 +516,7 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
     } else {
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx); // temp alloc only used for lob types
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-      ObObjType in_type = expr.args_[4]->obj_meta_.get_type();
+      SqlValueType in_type = expr.args_[4]->obj_meta_.get_type();
       ObCollationType in_cs_type = expr.args_[4]->obj_meta_.get_collation_type();
       bool has_lob_header = expr.args_[4]->obj_meta_.has_lob_header();
       bool has_lob_header_for_check = has_lob_header;
@@ -792,7 +722,7 @@ int ObExprColumnConv::inner_loop_for_convert_batch(const ObExpr &expr,
                                                   ObEvalCtx::BatchInfoScopeGuard &batch_info_guard)
 {
   int ret = OB_SUCCESS;
-  ObObjType out_type = expr.datum_meta_.type_;
+  SqlValueType out_type = expr.datum_meta_.type_;
   ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
   int32_t int_bytes = 0;
   const ObDecimalInt *min_decint = nullptr, *max_decint = nullptr;

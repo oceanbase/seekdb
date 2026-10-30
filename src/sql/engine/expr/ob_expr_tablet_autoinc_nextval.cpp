@@ -63,11 +63,11 @@ int ObExprTabletAutoincNextval::calc_result_typeN(ObExprResType &type,
     if (OB_SUCC(ret) && 2 == param_num) {
       // column_conv() is add before nextval() in static tying engine. Parameter 2 is converted
       // to defined type, only uint/int allowed.
-      ObObjTypeClass tc = ob_obj_type_class(type.get_type());
+      SqlTypeClass tc = sql_type_class(type.get_type());
       if (!(ObNullTC == tc || ObIntTC == tc || ObUIntTC == tc)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        static_cast<ObObjMeta &>(type) = types_array[1];
+        static_cast<SqlTypeMeta &>(type) = types_array[1];
       }
     }
   }

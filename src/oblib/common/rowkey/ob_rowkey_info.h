@@ -30,25 +30,25 @@ namespace oceanbase
 namespace common
 {
 
-typedef ObObjType ColumnType;
-typedef ObObjTypeClass ColumnTypeClass;
+typedef SqlValueType ColumnType;
+typedef SqlTypeClass ColumnTypeClass;
 struct ObRowkeyColumn
 {
   ObRowkeyColumn() { memset(this, 0, sizeof(ObRowkeyColumn)); }
   bool is_valid() const
   {
     return (length_ >= 0) && common::OB_INVALID_ID != column_id_
-           && common::ob_is_valid_obj_type(static_cast<ObObjType>(type_.get_type()));
+           && common::is_valid_sql_value_type(static_cast<SqlValueType>(type_.get_type()));
   }
   bool is_equal_except_column_id(const ObRowkeyColumn &other) const;
   ObRowkeyColumn &operator=(const ObRowkeyColumn &other);
   bool operator==(const ObRowkeyColumn &other) const;
-  const ObObjMeta get_meta_type() const { return type_; }
+  const SqlTypeMeta get_meta_type() const { return type_; }
   TO_STRING_KV(K_(length), K_(column_id), K_(type), K_(order), K_(fulltext_flag), K(spatial_flag_));
 
   int64_t length_;
   uint64_t column_id_;
-  ObObjMeta type_;
+  SqlTypeMeta type_;
   ObOrderType order_;
   bool fulltext_flag_;
   bool spatial_flag_;
@@ -111,8 +111,8 @@ public:
   NEED_SERIALIZE_AND_DESERIALIZE;
 private:
   int expand(const int64_t size);
-  int get_fulltext_col_id_by_type(const ObObjType type, uint64_t &column_id) const;
-  int get_spatial_col_id_by_type(uint64_t &column_id, ObObjType type) const;
+  int get_fulltext_col_id_by_type(const SqlValueType type, uint64_t &column_id) const;
+  int get_spatial_col_id_by_type(uint64_t &column_id, SqlValueType type) const;
   static const int64_t DEFAULT_ROWKEY_COLUMN_ARRAY_CAPACITY = 8;
   ObRowkeyColumn *columns_;
   int64_t size_;

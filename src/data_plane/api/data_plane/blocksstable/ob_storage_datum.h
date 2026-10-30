@@ -23,6 +23,7 @@
 
 #include "common/ob_action_flag.h"
 #include "common/datum/ob_datum.h"
+#include "common/datum/datum_value.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log_module.h"
@@ -44,27 +45,28 @@ struct ObStorageDatum : public common::ObDatum
   // ext value section
   OB_INLINE void reuse() { ptr_ = buf_; reserved_ = 0; pack_ = 0; }
   OB_INLINE void set_ext_value(const int64_t ext_value)
-  { reuse(); set_ext(); no_cv(extend_obj_)->set_ext(ext_value); }
+  { reuse(); common::ObDatum::set_ext_value(ext_value); }
   OB_INLINE void set_nop() { set_ext_value(ObActionFlag::OP_NOP); }
-  OB_INLINE void set_min() { set_ext_value(common::ObObj::MIN_OBJECT_VALUE); }
-  OB_INLINE void set_max() { set_ext_value(common::ObObj::MAX_OBJECT_VALUE); }
+  OB_INLINE void set_min() { set_ext_value(common::DATUM_MIN_EXT_VALUE); }
+  OB_INLINE void set_max() { set_ext_value(common::DATUM_MAX_EXT_VALUE); }
   OB_INLINE bool is_nop_value() const { return is_nop(); } // temp solution
   // conversion section
   OB_INLINE bool is_local_buf() const { return ptr_ == buf_; }
   OB_INLINE int from_buf_enhance(const char *buf, const int64_t buf_len);
-  OB_INLINE int from_obj_enhance(const common::ObObj &obj);
-  OB_INLINE int to_obj_enhance(common::ObObj &obj, const common::ObObjMeta &meta) const;
+  OB_INLINE int from_value(const common::DatumValue &value);
+  // Borrows this storage datum until its row/buffer is reused. NULL and Ext
+  // metadata follow the same enhanced rowkey conversion contract.
+  OB_INLINE int to_value_view(const common::SqlTypeMeta &meta, common::DatumValue &value) const;
   OB_INLINE int deep_copy(const ObStorageDatum &src, common::ObIAllocator &allocator);
   OB_INLINE int deep_copy(const ObStorageDatum &src, char *buf, const int64_t buf_len, int64_t &pos);
+  OB_INLINE int deep_copy_from_datum(const common::ObDatum &src, common::ObIAllocator &allocator);
   OB_INLINE void shallow_copy_from_datum(const common::ObDatum &src);
   OB_INLINE int64_t get_deep_copy_size() const;
   OB_INLINE ObStorageDatum &operator=(const ObStorageDatum &other);
   OB_INLINE int64_t storage_to_string(char *buf, int64_t buf_len, const bool for_dump = false) const;
-  OB_INLINE bool need_copy_for_encoding_column_with_flat_format(const common::ObObjDatumMapType map_type) const;
+  OB_INLINE bool need_copy_for_encoding_column_with_flat_format(const common::SqlValueDatumMapType map_type) const;
   OB_INLINE const char *to_cstring2(const bool for_dump = false) const;
-  // only for unittest
   OB_INLINE bool operator==(const ObStorageDatum &other) const;
-  OB_INLINE bool operator==(const common::ObObj &other) const;
 
   // datum 12 byte
   int32_t reserved_;
@@ -150,6 +152,34 @@ OB_INLINE int ObStorageDatum::deep_copy(
   return ret;
 }
 
+// SQL expression frames can be overwritten by the next index row/batch. Copy
+// their values directly, retaining small payloads in the storage datum itself.
+// Extended lookup keys require the existing sentinel/type validation adapter.
+OB_INLINE int ObStorageDatum::deep_copy_from_datum(
+    const common::ObDatum &src, common::ObIAllocator &allocator)
+{
+  int ret = common::OB_SUCCESS;
+  if (static_cast<const common::ObDatum *>(this) == &src) {
+    // Already owned by this storage datum.
+  } else if (OB_UNLIKELY(src.is_ext())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    reuse();
+    pack_ = src.pack_;
+    if (!src.is_null() && src.len_ > 0) {
+      char *dest = buf_;
+      if (src.len_ > sizeof(buf_) && OB_ISNULL(dest = static_cast<char *>(allocator.alloc(src.len_)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        pack_ = 0;
+      } else {
+        MEMCPY(dest, src.ptr_, src.len_);
+        ptr_ = dest;
+      }
+    }
+  }
+  return ret;
+}
+
 OB_INLINE void ObStorageDatum::shallow_copy_from_datum(const common::ObDatum &src)
 {
   if (this != &src) {
@@ -193,32 +223,46 @@ OB_INLINE int ObStorageDatum::from_buf_enhance(const char *buf, const int64_t bu
   return ret;
 }
 
-OB_INLINE int ObStorageDatum::from_obj_enhance(const common::ObObj &obj)
+// Default values already use the native contiguous payload layout. Keep the
+// same storage flags/checksums as the former Obj input path: persisted LOB
+// metadata determines OUTROW, rather than inheriting SQL HAS_LOB_HEADER flags.
+OB_INLINE int ObStorageDatum::from_value(const common::DatumValue &value)
 {
-  int ret = common::OB_SUCCESS;
-
   reuse();
-  if (obj.is_ext()) {
-    set_ext_value(obj.get_ext());
-  } else if (OB_FAIL(from_obj(obj))) {
+  if (value.is_null() || value.get_meta().is_null()) {
+    set_null();
+  } else if (value.is_ext()) {
+    set_ext_value(value.get_ext());
+  } else if (value.is_invalid_type()) {
+    return common::OB_ERR_UNEXPECTED;
+  } else if (value.datum_.len_ > 0 && value.datum_.ptr_ == nullptr) {
+    return common::OB_INVALID_ARGUMENT;
+  } else {
+    const auto mapping = common::ObDatum::get_sql_value_datum_map_type(value.get_type());
+    pack_ = value.datum_.len_;
+    if (mapping == common::OBJ_DATUM_STRING || mapping == common::OBJ_DATUM_DECIMALINT) {
+      ptr_ = value.datum_.ptr_;
+      if (mapping == common::OBJ_DATUM_STRING && value.get_meta().is_outrow()) { set_outrow(); }
+    } else if (value.datum_.len_ <= sizeof(buf_)) {
+      if (value.datum_.len_ > 0) { MEMCPY(buf_, value.datum_.ptr_, value.datum_.len_); }
+    } else {
+      ptr_ = value.datum_.ptr_;
+    }
   }
-
-  return ret;
+  return common::OB_SUCCESS;
 }
 
-OB_INLINE int ObStorageDatum::to_obj_enhance(common::ObObj &obj, const common::ObObjMeta &meta) const
+OB_INLINE int ObStorageDatum::to_value_view(const common::SqlTypeMeta &meta, common::DatumValue &value) const
 {
   int ret = common::OB_SUCCESS;
-  if (is_null()) {
-    obj.set_null();
-  } else if (is_outrow()) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "lob should not set outrow in datum", K(ret), K(*this), K(obj), K(meta));
-  } else if (is_ext()) {
-    obj.set_ext(get_ext());
-  } else if (OB_FAIL(to_obj(obj, meta))) {
-  }
-
+  common::DatumValue candidate = value;
+  if (is_null()) { candidate.set_null(); }
+  else if (is_outrow()) { ret = common::OB_ERR_UNEXPECTED; }
+  else if (is_ext()) { candidate.meta_.set_ext(); candidate.datum_ = *this; }
+  else if (meta.is_decimal_int() && meta.get_scale() < 0) { ret = common::OB_ERR_UNEXPECTED; }
+  else if (!meta.is_valid()) { ret = common::OB_ERR_UNEXPECTED; }
+  else { candidate.meta_ = meta; candidate.datum_ = *this; candidate.datum_.pack_ = len_; }
+  if (ret == common::OB_SUCCESS) { value = candidate; }
   return ret;
 }
 
@@ -246,23 +290,9 @@ OB_INLINE bool ObStorageDatum::operator==(const ObStorageDatum &other) const
   if (is_null()) {
     bret = other.is_null();
   } else if (is_ext()) {
-    bret = other.is_ext() && extend_obj_->get_ext() == other.extend_obj_->get_ext();
+    bret = other.is_ext() && get_ext() == other.get_ext();
   } else {
     bret = common::ObDatum::binary_equal(*this, other);
-  }
-  if (!bret) {
-  }
-  return bret;
-}
-
-OB_INLINE bool ObStorageDatum::operator==(const common::ObObj &other) const
-{
-  int ret = OB_SUCCESS;
-  bool bret = true;
-  ObStorageDatum datum;
-  if (OB_FAIL(datum.from_obj_enhance(other))) {
-  } else {
-    bret = *this == datum;
   }
   if (!bret) {
   }
@@ -335,7 +365,7 @@ OB_INLINE const char *ObStorageDatum::to_cstring2(const bool for_dump) const
 }
 
 OB_INLINE bool ObStorageDatum::need_copy_for_encoding_column_with_flat_format(
-    const common::ObObjDatumMapType map_type) const
+    const common::SqlValueDatumMapType map_type) const
 {
   return common::OBJ_DATUM_STRING == map_type && sizeof(uint64_t) == len_ && is_local_buf();
 }

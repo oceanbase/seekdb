@@ -48,7 +48,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "argument is NULL", K(allocator_), K(schema_guard_), K(session_), K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -113,7 +113,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                           ret = OB_ERR_UNEXPECTED;
                           SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
                         } else {
-                          cells[col_idx].set_varchar(db->get_database_name());
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, db->get_database_name()) : ret);
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(
                                                             ObCharset::get_default_charset()));
                         }
@@ -124,11 +124,11 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                         cells[col_idx].set_collation_type(ObCharset::get_default_collation(
                                                             ObCharset::get_default_charset()));
                         if (ObDmlEventType::DE_INSERTING == tg_event) {
-                           cells[col_idx].set_varchar("INSERT");
+                           (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "INSERT") : ret);
                         } else if (ObDmlEventType::DE_UPDATING == tg_event) {
-                          cells[col_idx].set_varchar("UPDATE");
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "UPDATE") : ret);
                         } else if (ObDmlEventType::DE_DELETING == tg_event) {
-                          cells[col_idx].set_varchar("DELETE");
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "DELETE") : ret);
                         } else {
                           ret = OB_ERR_UNEXPECTED;
                           SERVER_LOG(WARN, "Invalid trigger event", K(tg_event), K(ret));
@@ -143,7 +143,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                           ret = OB_ERR_UNEXPECTED;
                           SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
                         } else {
-                          cells[col_idx].set_varchar(table_db->get_database_name());
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, table_db->get_database_name()) : ret);
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(
                                                             ObCharset::get_default_charset()));
                         }
@@ -151,8 +151,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                       }
                       case ACTION_STATEMENT: {
                         const ObString tg_body = tg_info->get_trigger_body();
-                        cells[col_idx].set_lob_value(ObLongTextType, tg_body.ptr(),
-                                                     static_cast<int32_t>(tg_body.length()));
+                        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, col_idx, ObLongTextType, ObString(static_cast<int32_t>(tg_body.length()), tg_body.ptr())) : ret);
                         cells[col_idx].set_collation_type(ObCharset::get_default_collation(
                                                             ObCharset::get_default_charset()));
                         break;
@@ -160,9 +159,9 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                       case ACTION_TIMING: {
                         const uint64_t timing_points = tg_info->get_timing_points();
                         if (4 == timing_points) {
-                          cells[col_idx].set_varchar("BEFORE");
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "BEFORE") : ret);
                         } else if (8 == timing_points) {
-                          cells[col_idx].set_varchar("AFTER");
+                          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, col_idx, "AFTER") : ret);
                         } else {
                           SERVER_LOG(WARN, "Invalid timing points in mysql mode", K(timing_points),
                                      K(ret));
@@ -172,8 +171,10 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                         break;
                       }
                       case SQL_MODE: {
-                        ObObj int_value;
-                        int_value.set_int(exec_env.get_sql_mode());
+                        const int64_t sql_mode_value = exec_env.get_sql_mode();
+          DatumValue int_value;
+                        int_value.meta_.set_int();
+          int_value.datum_.set_string(reinterpret_cast<const char *>(&sql_mode_value), sizeof(sql_mode_value));
                         if (OB_FAIL(ob_sql_mode_to_str(int_value, cells[col_idx], allocator_))) {
                         } else {
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(
@@ -190,25 +191,25 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                       }
 #define COLUMN_SET_WITH_TYPE(COL_NAME, TYPE, VALUE) \
   case (COL_NAME): {    \
-    cells[col_idx].set_##TYPE(VALUE); \
+    if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_##TYPE(cells, cur_row_.count_, col_idx, VALUE); } \
     cells[col_idx].set_collation_type(  \
                       ObCharset::get_default_collation(ObCharset::get_default_charset())); \
     break;\
   }
-                      COLUMN_SET_WITH_TYPE(TRIGGER_CATALOG, varchar, "def")
-                      COLUMN_SET_WITH_TYPE(TRIGGER_NAME, varchar, tg_info->get_trigger_name())
-                      COLUMN_SET_WITH_TYPE(EVENT_OBJECT_CATALOG, varchar, "def")
-                      COLUMN_SET_WITH_TYPE(EVENT_OBJECT_TABLE, varchar, table->get_table_name())
+                      COLUMN_SET_WITH_TYPE(TRIGGER_CATALOG, varchar_view, "def")
+                      COLUMN_SET_WITH_TYPE(TRIGGER_NAME, varchar_view, tg_info->get_trigger_name())
+                      COLUMN_SET_WITH_TYPE(EVENT_OBJECT_CATALOG, varchar_view, "def")
+                      COLUMN_SET_WITH_TYPE(EVENT_OBJECT_TABLE, varchar_view, table->get_table_name())
                       COLUMN_SET_WITH_TYPE(ACTION_ORDER, int, tg_info->get_action_order())
-                      COLUMN_SET_WITH_TYPE(ACTION_ORIENTATION, varchar, "ROW")
-                      COLUMN_SET_WITH_TYPE(ACTION_REFERENCE_OLD_ROW, varchar, "OLD")
-                      COLUMN_SET_WITH_TYPE(ACTION_REFERENCE_NEW_ROW, varchar, "NEW")
-                      COLUMN_SET_WITH_TYPE(DEFINER, varchar, user_name)
-                      COLUMN_SET_WITH_TYPE(CHARACTER_SET_CLIENT, varchar,
+                      COLUMN_SET_WITH_TYPE(ACTION_ORIENTATION, varchar_view, "ROW")
+                      COLUMN_SET_WITH_TYPE(ACTION_REFERENCE_OLD_ROW, varchar_view, "OLD")
+                      COLUMN_SET_WITH_TYPE(ACTION_REFERENCE_NEW_ROW, varchar_view, "NEW")
+                      COLUMN_SET_WITH_TYPE(DEFINER, varchar_view, user_name)
+                      COLUMN_SET_WITH_TYPE(CHARACTER_SET_CLIENT, varchar_view,
                                            ObCharset::charset_name(exec_env.get_charset_client()))
-                      COLUMN_SET_WITH_TYPE(COLLATION_CONNECTION, varchar,
+                      COLUMN_SET_WITH_TYPE(COLLATION_CONNECTION, varchar_view,
                                       ObCharset::charset_name(exec_env.get_collation_connection()))
-                      COLUMN_SET_WITH_TYPE(DATABASE_COLLATION, varchar,
+                      COLUMN_SET_WITH_TYPE(DATABASE_COLLATION, varchar_view,
                                       ObCharset::charset_name(exec_env.get_collation_database()))
 #undef COLUMN_SET_WITH_TYPE
                       default: {

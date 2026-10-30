@@ -15,6 +15,7 @@
  */
 
 #include "ob_hybrid_search_executor.h"
+#include "share/datum/typed_datum_compare.h"
 #include "query/ob_sql_name_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
@@ -65,7 +66,7 @@ int ObHybridSearchExecutor::init(sql::ObExecContext *ctx, const ObHybridSearchAr
   return ret;
 }
 
-int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
+int ObHybridSearchExecutor::execute_search(DatumValue &query_res) {
   int ret = OB_SUCCESS;
   ObString query_sql;
   common::ObMySQLProxy *sql_proxy = NULL;
@@ -106,14 +107,14 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
                                            && !session_info_->is_real_inner_session()))) {
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
-            ObObj tmp_res;
-            if (OB_FAIL(result.get_result()->get_obj("hits", tmp_res))) {
+            DatumValue tmp_res;
+            if (OB_FAIL(result.get_result()->get_value("hits", tmp_res))) {
               if (OB_ERR_NULL_VALUE == ret || OB_ERR_COLUMN_NOT_FOUND == ret) {
                 query_res.set_null();
                 ret = OB_SUCCESS;
               } else {
               }
-            } else if (OB_FAIL(common::deep_copy_obj(ctx_->get_allocator(), tmp_res, query_res))) {
+            } else if (OB_FAIL(common::clone_typed_value(tmp_res, query_res, ctx_->get_allocator()))) {
             }
           } else if (OB_ITER_END == ret) {
             LOG_INFO("no result return!", K(ret));

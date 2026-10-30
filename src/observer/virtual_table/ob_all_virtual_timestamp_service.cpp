@@ -52,11 +52,11 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
       case OB_APP_MIN_COLUMN_ID: { // ts_value
-        cur_row_.cells_[i].set_int(ts_value_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, ts_value_) : ret);
         break;
       }
       case OB_APP_MIN_COLUMN_ID + 1: { // ts_type
-        cur_row_.cells_[i].set_varchar("GTS");
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, i, "GTS") : ret);
         cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
         break;
       }

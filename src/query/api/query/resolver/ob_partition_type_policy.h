@@ -31,7 +31,7 @@ namespace query
 class ObPartitionTypePolicy
 {
 public:
-  static bool requires_range_columns(const common::ObObjType type)
+  static bool requires_range_columns(const common::SqlValueType type)
   {
     return common::ob_is_float_tc(type)
         || common::ob_is_double_tc(type)
@@ -44,7 +44,7 @@ public:
   }
 
   static bool is_valid_partition_column(
-      const common::ObObjType type,
+      const common::SqlValueType type,
       const share::schema::ObPartitionFuncType part_type,
       const bool is_check_value,
       const bool is_string_lob = false)
@@ -64,7 +64,7 @@ public:
           || common::ObBitType == type;
     } else if (share::schema::PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type
         || share::schema::PARTITION_FUNC_TYPE_LIST_COLUMNS == part_type) {
-      const common::ObObjTypeClass type_class = common::ob_obj_type_class(type);
+      const common::SqlTypeClass type_class = common::sql_type_class(type);
       valid = is_string_lob
           || common::ObIntTC == type_class
           || common::ObUIntTC == type_class

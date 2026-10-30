@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_left.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -36,26 +37,28 @@ ObExprLeft::~ObExprLeft()
 }
 
 // to make "select left('abcd', '1.9')" compatible with mysql
-int ObExprLeft::cast_param_type(const ObObj& in,
+int ObExprLeft::cast_param_type(const DatumValue& in,
                                 ObExprCtx& expr_ctx,
-                                ObObj& out) const
+                                DatumValue& out) const
 {
   int ret = OB_SUCCESS;
   ObCastMode cast_mode = CM_NONE;
   EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
   // select left('abcd', '1.9'); -- MySQL will trunc '1.9' to 2
   // select left('abcd', 1.9); -- MySQL will round 1.9 to 1
-  if (ObVarcharType == in.get_type()) {
+  if (expr_ctx.calc_buf_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (ObVarcharType == in.get_type()) {
     int64_t tmp = 0;
     if (OB_FAIL(ObExprUtil::get_trunc_int64(in, expr_ctx, tmp))) {
     } else if (INT_MAX < tmp) {
-      out.set_int(INT_MAX);
+      ret = out.set_int(INT_MAX, *expr_ctx.calc_buf_);
     } else if (INT_MIN > tmp) {
-      out.set_int(INT_MIN);
+      ret = out.set_int(INT_MIN, *expr_ctx.calc_buf_);
     } else {
-      out.set_int(static_cast<int>(tmp));
+      ret = out.set_int(static_cast<int>(tmp), *expr_ctx.calc_buf_);
     }
-  } else if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, in, out))) {
+  } else if (OB_FAIL(DatumValueCaster::to_type(ObIntType, cast_ctx, in, *expr_ctx.calc_buf_, out))) {
   }
   return ret;
 }
@@ -80,8 +83,8 @@ int ObExprLeft::calc_result_type2(ObExprResType &type,
     type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC);
     type.set_varchar();
     int64_t result_len = type1.get_length();
-    const ObObj &result_len_obj = type2.get_param();
-    ObObj int_obj;
+    const DatumValue &result_len_obj = type2.get_param();
+    DatumValue int_obj;
     ObExprCtx tmp_expr_ctx;
     ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC);
     tmp_expr_ctx.calc_buf_ = &allocator;

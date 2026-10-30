@@ -183,7 +183,7 @@ namespace oceanbase
 namespace pl
 {
 
-typedef int(*PL_C_INTERFACE_t)(ObPLExecCtx&, ParamStore&, ObObj&);
+typedef int(*PL_C_INTERFACE_t)(ObPLExecCtx&, ParamStore&, DatumValue&);
 
 enum ObPLInterfaceType
 {
@@ -218,7 +218,7 @@ public:
   virtual ~ObPLInterfaceImpl() {}
 
 public:
-  static int call(sql::ObExecContext &ctx, sql::ParamStore &params, common::ObObj &result);
+  static int call(sql::ObExecContext &ctx, sql::ParamStore &params, common::DatumValue &result);
   virtual int check_params() = 0;
 
 };

@@ -33,40 +33,12 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int minus_datetime(common::ObObj &res,
-                            const common::ObObj &left,
-                            const common::ObObj &right,
-                            common::ObIAllocator *allocator,
-                            common::ObScale scale);
+
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 private:
-  OB_INLINE static int minus_int(common::ObObj &res,
-                       const common::ObObj &left,
-                       const common::ObObj &right,
-                       common::ObIAllocator *allocator,
-                       common::ObScale scale);
-  OB_INLINE static int minus_uint(common::ObObj &res,
-                        const common::ObObj &left,
-                        const common::ObObj &right,
-                        common::ObIAllocator *allocator,
-                        common::ObScale scale);
-  static int minus_double(common::ObObj &res,
-                          const common::ObObj &left,
-                          const common::ObObj &right,
-                          common::ObIAllocator *allocator,
-                          common::ObScale scale);
-  static int minus_double_no_overflow(common::ObObj &res,
-                                      const common::ObObj &left,
-                                      const common::ObObj &right,
-                                      common::ObIAllocator *allocator,
-                                      common::ObScale scale);
-  static int minus_number(common::ObObj &res,
-                          const common::ObObj &left,
-                          const common::ObObj &right,
-                          common::ObIAllocator *allocator,
-                          common::ObScale scale);
+
 
 
   DISALLOW_COPY_AND_ASSIGN(ObExprMinus);
@@ -179,8 +151,6 @@ public:
     return val1 < val2;
   }
 private:
-  static ObArithFunc minus_funcs_[common::ObMaxTC];
-  static ObArithFunc agg_minus_funcs_[common::ObMaxTC];
   static const int64_t SHIFT_OFFSET = 63;
 };
 

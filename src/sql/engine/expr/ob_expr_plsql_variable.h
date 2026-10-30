@@ -71,10 +71,9 @@ public:
   common::ObString& get_plsql_variable() { return plsql_variable_; }
 
 private:
-  static int get_plsql_unit(common::ObObj &result,
-                            common::ObIAllocator &alloc,
+  // The returned view borrows the active PL frame until its caller copies it.
+  static int get_plsql_unit(common::ObString &result,
                             ObSQLSessionInfo &session,
-                            const ObExprResType &result_type,
                             const ObString &plsql_variable);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprPLSQLVariable);

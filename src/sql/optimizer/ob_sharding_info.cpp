@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_sharding_info.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 
@@ -341,7 +342,7 @@ int ObShardingInfo::is_expr_equivalent(const EqualSets &equal_sets,
 }
 
 bool ObShardingInfo::is_part_func_scale_sensitive(
-  const sql::ObShardingInfo &sharding_info, const common::ObObjType obj_type)
+  const sql::ObShardingInfo &sharding_info, const common::SqlValueType obj_type)
 {
   bool ret = false;
   ObPartitionFuncType part_func_type = PARTITION_FUNC_TYPE_MAX;
@@ -701,7 +702,7 @@ int ObShardingInfo::check_if_match_repart_or_rehash(const EqualSets &equal_sets,
                   == left_key->get_result_type().get_type_class()
               && right_part_key->get_result_type().get_collation_type()
                   == left_key->get_result_type().get_collation_type()
-              && !ObObjCmpFuncs::is_datetime_timestamp_cmp(
+              && !is_datetime_timestamp_type_pair(
                   right_part_key->get_result_type().get_type(),
                   left_key->get_result_type().get_type())) {
             is_found = true;

@@ -17,7 +17,9 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_LOB_UTILS_H_
 #define OCEANBASE_SQL_OB_EXPR_LOB_UTILS_H_
 
+#include <type_traits>
 #include "share/ob_lob_access_utils.h"
+#include "common/datum/datum_parameter.h"
 #include "query/engine/expr/ob_expr_util.h"
 #include "query/engine/vector/ob_i_vector.h"
 
@@ -33,13 +35,13 @@ template <typename VectorType>
 class ObTextStringVectorResult : public common::ObTextStringResult
 {
 public:
-  ObTextStringVectorResult(const ObObjType type, const ObExpr* expr, ObEvalCtx *ctx, ObDatum *res_datum) :
+  ObTextStringVectorResult(const SqlValueType type, const ObExpr* expr, ObEvalCtx *ctx, ObDatum *res_datum) :
     common::ObTextStringResult(type, expr->obj_meta_.has_lob_header(), NULL), expr_(expr), ctx_(ctx), res_datum_(res_datum), res_vec_(NULL), batch_idx_(0)
   {}
-  ObTextStringVectorResult(const ObObjType type, bool has_header, ObDatum *res_datum) :
+  ObTextStringVectorResult(const SqlValueType type, bool has_header, ObDatum *res_datum) :
     common::ObTextStringResult(type, has_header, NULL), expr_(NULL), ctx_(NULL), res_datum_(res_datum), res_vec_(NULL), batch_idx_(0)
   {}
-  ObTextStringVectorResult(const ObObjType type, const ObExpr* expr, ObEvalCtx *ctx, VectorType *res_vec, int64_t batch_idx) :
+  ObTextStringVectorResult(const SqlValueType type, const ObExpr* expr, ObEvalCtx *ctx, VectorType *res_vec, int64_t batch_idx) :
     common::ObTextStringResult(type, expr->obj_meta_.has_lob_header(), NULL), expr_(expr), ctx_(ctx), res_datum_(NULL), res_vec_(res_vec), batch_idx_(batch_idx)
   {}
 
@@ -156,19 +158,13 @@ public:
   static int read_real_string_data(
       ObExecContext &exec_ctx,
       ObIAllocator *allocator,
-      const common::ObObj &obj,
-      ObString &str);
-
-  static int read_real_string_data(
-      const common::ObLobReadOptions &options,
-      ObIAllocator *allocator,
-      const common::ObObj &obj,
+      const common::DatumParameter &value,
       ObString &str);
 
   static int read_real_string_data(
       ObExecContext &exec_ctx,
       ObIAllocator *allocator,
-      ObObjType type,
+      SqlValueType type,
       ObCollationType cs_type,
       bool has_lob_header,
       ObString &str);
@@ -176,7 +172,7 @@ public:
   static int read_real_string_data(
       const common::ObLobReadOptions &options,
       ObIAllocator *allocator,
-      ObObjType type,
+      SqlValueType type,
       ObCollationType cs_type,
       bool has_lob_header,
       ObString &str);
@@ -275,7 +271,7 @@ public:
   static int read_real_string_data(
       ObExecContext &exec_ctx,
       ObIAllocator *allocator,
-      ObObjType type,
+      SqlValueType type,
       bool has_lob_header,
       ObString &str)
   {
@@ -286,7 +282,7 @@ public:
   static int read_real_string_data(
       const common::ObLobReadOptions &options,
       ObIAllocator *allocator,
-      ObObjType type,
+      SqlValueType type,
       bool has_lob_header,
       ObString &str)
   {
@@ -341,9 +337,10 @@ public:
   };
 
   // get outrow lob prefix or inrow/string tc full data
+  template <typename Value>
   static int read_prefix_string_data(ObExecContext &exec_ctx,
                                      ObIAllocator *allocator,
-                                     const common::ObObj &obj,
+                                     const Value &obj,
                                      ObString &str,
                                      uint32_t prefix_char_len = DEAFULT_LOB_PREFIX_BYTE_LEN)
   {
@@ -351,10 +348,11 @@ public:
         exec_ctx, allocator, obj, str, prefix_char_len);
   }
 
+  template <typename Value>
   static int read_prefix_string_data(
       const common::ObLobReadOptions &options,
       ObIAllocator *allocator,
-      const common::ObObj &obj,
+      const Value &obj,
       ObString &str,
       uint32_t prefix_char_len = DEAFULT_LOB_PREFIX_BYTE_LEN)
   {
@@ -531,18 +529,18 @@ private:
     return ret;
   };
 
-  template <typename LobReadContext>
+  template <typename LobReadContext, typename Value>
   static int read_prefix_string_data_impl(
       LobReadContext &lob_read_context,
       ObIAllocator *allocator,
-      const common::ObObj &obj,
+      const Value &obj,
       ObString &str,
       uint32_t prefix_char_len)
   {
     int ret = OB_SUCCESS;
-    const ObObjMeta& meta = obj.get_meta();
+    const SqlTypeMeta& meta = obj.get_meta();
     str = obj.get_string();
-    if (meta.is_null()) {
+    if (obj.is_null()) {
       str.reset();
     } else if (ob_is_text_tc(meta.get_type())) {
       ObTextStringIter str_iter(meta.get_type(), meta.get_collation_type(), str, obj.has_lob_header());
@@ -566,16 +564,28 @@ public:
     return ret;
   };
 
-  static int str_to_lob_storage_obj(ObIAllocator &allocator, const ObString& input, common::ObObj& output)
+  template <typename Value>
+  static int str_to_lob_storage_obj(ObIAllocator &allocator, const ObString &input, Value &output)
   {
-    INIT_SUCC(ret);
-    // pl must has lob header
-    bool has_lob_header = true;
-    common::ObTextStringObObjResult text_result(ObLongTextType, nullptr, &output, has_lob_header);
+    int ret = OB_SUCCESS;
+    common::ObTextStringResult text_result(ObLongTextType, true, &allocator);
     if (OB_FAIL(text_result.init(input.length(), &allocator))) {
     } else if (OB_FAIL(text_result.append(input.ptr(), input.length()))) {
     } else {
-      text_result.set_result();
+      ObString bytes;
+      text_result.get_result_buffer(bytes);
+      if constexpr (std::is_same<Value, common::DatumValue>::value) {
+        common::DatumValue value = output;
+        value.meta_.set_type(ObLongTextType);
+        value.meta_.set_inrow();
+        value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        value.meta_.set_has_lob_header();
+        value.datum_.set_string(bytes);
+        output = value;
+      } else {
+        output.set_lob_value(ObLongTextType, bytes.ptr(), bytes.length());
+        output.set_has_lob_header();
+      }
     }
     return ret;
   }
@@ -588,19 +598,6 @@ public:
     if (OB_FAIL(pack_to_disk_inrow_lob(allocator, data, result))) {
     } else {
       res_datum.set_string(result.ptr(), result.length());
-    }
-    return ret;
-  }
-
-  template <typename Allocator>
-  static int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, const ObObjType type, ObObj &res_obj)
-  {
-    int ret = OB_SUCCESS;
-    ObString result;
-    if (OB_FAIL(pack_to_disk_inrow_lob(allocator, data, result))) {
-    } else {
-      res_obj.set_lob_value(type, result.ptr(), result.length());
-      res_obj.set_has_lob_header();
     }
     return ret;
   }
@@ -643,35 +640,23 @@ public:
 };
 
 int ob_adjust_lob_datum(ObExecContext &exec_ctx,
-                        const ObObj &origin_obj,
-                        const common::ObObjMeta &obj_meta,
-                        const ObObjDatumMapType &obj_datum_map_,
-                        ObIAllocator &allocator, // can avoid allocator if no persist lobs call this function,
-                        ObDatum &out_datum);
-
-int ob_adjust_lob_datum(ObExecContext &exec_ctx,
-                        const ObObj &origin_obj,
-                        const common::ObObjMeta &obj_meta,
+                        const ObDatum &origin_datum,
+                        const common::SqlTypeMeta &origin_meta,
+                        const common::SqlTypeMeta &result_meta,
                         ObIAllocator &allocator,
                         ObDatum &out_datum);
-
-int ob_adjust_lob_datum(ObExecContext &exec_ctx,
-                        const ObObj &origin_obj,
-                        const common::ObObjMeta &obj_meta,
-                        ObIAllocator &allocator,
-                        ObDatum *out_datum);
 
 int ob_adjust_lob_datum(ObExecContext &exec_ctx,
                         ObDatum &datum,
-                        const common::ObObjMeta &in_obj_meta,
-                        const common::ObObjMeta &out_obj_meta,
+                        const common::SqlTypeMeta &in_obj_meta,
+                        const common::SqlTypeMeta &out_obj_meta,
                         ObIAllocator &allocator);
 
 // Constant-plan literals cannot contain persistent or delta LOB locators. Keep
 // that invariant explicit instead of fabricating a runtime read context during
 // code generation.
-int ob_adjust_in_memory_lob_datum(const ObObj &origin_obj,
-                                  const common::ObObjMeta &obj_meta,
+int ob_adjust_in_memory_lob_datum(const common::DatumValue &source,
+                                  const common::SqlTypeMeta &result_meta,
                                   ObIAllocator &allocator,
                                   ObDatum *out_datum);
 

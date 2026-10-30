@@ -846,7 +846,7 @@ When a subclass inherits from a parent class, the subclass contains all the data
 Multiple inheritance is also used in OceanBase seekdb. The scenario is rare, and requires at most one base class to contain implementation, and other base classes are pure interface classes.
 
 ## 4.10 Operator Overloading
-**Except for container classes, custom data types (`ObString`, `ObNumber`, etc.) and a few global basic classes such as `ObRowkey`, `ObObj`, `ObRange`, etc., do not overload operators (except simple structure assignment operations)**. If it must be violated, please discuss and approve it in advance, and explain the reasons in detail.
+**Except for container classes, custom data types (`ObString`, `ObNumber`, etc.) and a few global basic classes such as `ObRowkey`, `ObRange`, etc., do not overload operators (except simple structure assignment operations)**. If it must be violated, please discuss and approve it in advance, and explain the reasons in detail.
 
 C++ STL template classes have a large number of overloaded operators, such as comparison functions, four operators, self-increment, and self-decrement. Such codes seem to be more intuitive, but in fact they often confuse the caller, such as making the caller mistaken for some time-consuming Operations are as efficient as built-in operations.
 

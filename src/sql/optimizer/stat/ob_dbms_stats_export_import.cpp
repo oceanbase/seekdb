@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_export_import.h"
 #include "query/engine/expr/ob_expr_lob_utils.h"
@@ -465,12 +467,12 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
       } else {
         bool is_index_stat = false;
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
-          ObSEArray<ObObj, 31> result_objs;
+          ObSEArray<DatumValue, 31> result_objs;
           for (int64_t i = 0; OB_SUCC(ret) && i < StatTableColumnName::MAX_COL; ++i) {
-            ObObj tmp;
-            ObObj val;
-            if (OB_FAIL(client_result->get_obj(i, tmp))) {
-            } else if (OB_FAIL(ob_write_obj(*param.allocator_, tmp, val))) {
+            DatumValue tmp;
+            DatumValue val;
+            if (OB_FAIL(client_result->get_value(i, tmp))) {
+            } else if (OB_FAIL(clone_typed_value(tmp, val, *param.allocator_))) {
             } else if (OB_FAIL(result_objs.push_back(val))) {
             }
           }
@@ -514,7 +516,7 @@ int ObDbmsStatsExportImport::do_import_stats(ObExecContext &ctx,
   return ret;
 }
 
-static int get_nmb_val(const ObObj &obj, ObIAllocator &allocator, number::ObNumber &nmb_val)
+static int get_nmb_val(const DatumValue &obj, ObIAllocator &allocator, number::ObNumber &nmb_val)
 {
   int ret = OB_SUCCESS;
   if (obj.is_decimal_int()) {
@@ -565,7 +567,7 @@ static int get_nmb_val(const ObObj &obj, ObIAllocator &allocator, number::ObNumb
  */
 int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                                           const ObTableStatParam &param,
-                                          const ObIArray<ObObj> &result_objs,
+                                          const ObIArray<DatumValue> &result_objs,
                                           bool &is_index_stat,
                                           ObIArray<ObOptTableStat *> &all_tstats,
                                           ObIArray<ObOptColumnStat *> &all_cstats)
@@ -870,7 +872,9 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
           case StatTableColumnName::D1: {//Last analyzed
             int64_t last_date = 0;
             if (!result_objs.at(i).is_null() &&
-                OB_FAIL(result_objs.at(i).get_timestamp(last_date))) {
+                OB_FAIL(result_objs.at(i).is_timestamp() && !result_objs.at(i).is_null()
+                            ? (last_date = result_objs.at(i).get_timestamp(), OB_SUCCESS)
+                            : OB_OBJ_TYPE_ERROR)) {
             } else if (stat_type == TABLE_STAT || stat_type == INDEX_STAT) {
               tbl_stat->set_last_analyzed(last_date);
             } else if (stat_type == COLUMN_STAT) {
@@ -882,34 +886,34 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
             break;
           }
           case StatTableColumnName::R1: {//Lower raw value('C')
-            ObObj min_obj;
+            DatumValue min_obj;
             if (stat_type != COLUMN_STAT) {
               if (OB_UNLIKELY(!result_objs.at(i).is_null())) {
                 ret = OB_ERR_DBMS_STATS_PL;
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+            } else if (OB_FAIL(convert_bin_hex_text_to_value(ctx,
                                                            *param.allocator_,
                                                            result_objs.at(i),
                                                            min_obj))) {
             } else {
-              col_stat->set_min_value(min_obj);
+              ret = col_stat->set_min_value(min_obj);
             }
             break;
           }
           case StatTableColumnName::R2: {//High raw value('C')
-            ObObj max_obj;
+            DatumValue max_obj;
             if (stat_type != COLUMN_STAT) {
               if (OB_UNLIKELY(!result_objs.at(i).is_null())) {
                 ret = OB_ERR_DBMS_STATS_PL;
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+            } else if (OB_FAIL(convert_bin_hex_text_to_value(ctx,
                                                            *param.allocator_,
                                                            result_objs.at(i),
                                                            max_obj))) {
             } else {
-              col_stat->set_max_value(max_obj);
+              ret = col_stat->set_max_value(max_obj);
             }
             break;
           }
@@ -919,7 +923,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 ret = OB_ERR_DBMS_STATS_PL;
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+            } else if (OB_FAIL(convert_bin_hex_text_to_value(ctx,
                                                            *param.allocator_,
                                                            result_objs.at(i),
                                                            hist_bucket.endpoint_value_))) {
@@ -927,7 +931,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                                                  col_stat->get_histogram().get_bucket_size())) {
               ret = OB_ERR_DBMS_STATS_PL;
               LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
-            } else if (OB_FAIL(col_stat->get_histogram().add_bucket(hist_bucket))) {
+            } else if (OB_FAIL(col_stat->get_histogram().add_bucket(hist_bucket, *param.allocator_))) {
             } else {/*do nothing*/}
             break;
           }
@@ -1231,27 +1235,24 @@ int ObDbmsStatsExportImport::gen_col_sel_str(const ObTableStatParam &param,
   return ret;
 }
 
-int ObDbmsStatsExportImport::convert_bin_hex_raw_to_obj(ObIAllocator &allocator,
-                                                        const ObObj &src_obj,
-                                                        ObObj &dst_obj)
-{
-  int ret = OB_ERR_UNEXPECTED;
-  return ret;
-}
-
-int ObDbmsStatsExportImport::convert_bin_hex_text_to_obj(
+int ObDbmsStatsExportImport::convert_bin_hex_text_to_value(
     ObExecContext &ctx,
     ObIAllocator &allocator,
-    const ObObj &src_obj,
-    ObObj &dst_obj)
+    const DatumValue &src_obj,
+    DatumValue &dst_obj)
 {
   int ret = OB_SUCCESS;
   ObString str;
-  if (OB_UNLIKELY(!src_obj.is_text())) {
+  if (OB_UNLIKELY(!src_obj.get_meta().is_text())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                 ctx, &allocator, src_obj, str))) {
-  } else if (OB_FAIL(ObOptStatSqlService::hex_str_to_obj(str.ptr(), str.length(), allocator, dst_obj))) {
+  } else {
+    DatumParameter input;
+    input.datum_ = src_obj.datum_;
+    input.set_type_meta(src_obj.meta_);
+    ret = ObTextStringHelper::read_real_string_data(ctx, &allocator, input, str);
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObOptStatSqlService::hex_str_to_value(str.ptr(), str.length(), allocator, dst_obj))) {
   } else {
   }
   return ret;

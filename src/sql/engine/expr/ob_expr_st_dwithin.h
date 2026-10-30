@@ -42,8 +42,8 @@ public:
                                     ObString wkb1,
                                     ObString wkb2,
                                     double distance_tolerance,
-                                    ObObjType input_type1,
-                                    ObObjType input_type2,
+                                    SqlValueType input_type1,
+                                    SqlValueType input_type2,
                                     ResType &res);
   static int eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

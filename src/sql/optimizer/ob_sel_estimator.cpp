@@ -15,6 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "share/datum/datum_value_cast.h"
+#include "share/datum/datum_value_set.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
@@ -27,202 +30,6 @@ namespace sql
 {
 inline double revise_sel_ndv(double ndv) { return ndv < 1.0 ? 1.0 : ndv; }
 
-void SimpleRange::set_whole_range()
-{
-  start_.set_min_value();
-  end_.set_max_value();
-  inclusive_start_ = false;
-  inclusive_end_ = false;
-}
-
-void SimpleRange::set_false_range()
-{
-  start_.set_max_value();
-  end_.set_min_value();
-  inclusive_start_ = false;
-  inclusive_end_ = false;
-}
-
-int SimpleRange::compare_with_end(const SimpleRange &r, int &cmp) const
-{
-  int ret = OB_SUCCESS;
-  cmp = 0;
-  if (end_.is_max_value()) {
-    if (!r.end_.is_max_value()) {
-      cmp = 1;
-    }
-  } else if (r.end_.is_max_value()) {
-    cmp = -1;
-  } else if (OB_FAIL(end_.compare(r.end_, cmp))) {
-  } else {
-    if (0 == cmp) {
-      if (inclusive_end_ && !r.inclusive_end_) {
-        cmp = 1;
-      } else if (!inclusive_end_ && r.inclusive_end_) {
-        cmp = -1;
-      }
-    }
-  }
-  return ret;
-}
-
-int SimpleRange::compare_with_start(const SimpleRange &r, int &cmp) const
-{
-  int ret = OB_SUCCESS;
-  cmp = 0;
-  if (start_.is_min_value()) {
-    if (!r.start_.is_min_value()) {
-      cmp = -1;
-    }
-  } else if (r.start_.is_min_value()) {
-    cmp = 1;
-  } else if (OB_FAIL(start_.compare(r.start_, cmp))) {
-  } else {
-    if (0 == cmp) {
-      if (inclusive_start_ && !r.inclusive_start_) {
-        cmp = -1;
-      } else if (!inclusive_start_ && r.inclusive_start_) {
-        cmp = 1;
-      }
-    }
-  }
-  return ret;
-}
-
-bool SimpleRange::intersect(const SimpleRange &r)
-{
-  bool bret = false;
-  int ret = OB_SUCCESS;
-  int cmp_start = 0;
-  int cmp_end = 0;
-  if (!start_.can_compare(r.start_) || !end_.can_compare(r.end_)) {
-    // do nothing
-  } else if (OB_FAIL(compare_with_start(r, cmp_start))) {
-  } else if (OB_FAIL(compare_with_end(r, cmp_end))) {
-  } else {
-    bret = true;
-    if (cmp_start == -1) {
-      start_ = r.start_;
-      inclusive_start_ = r.inclusive_start_;
-    }
-    if (cmp_end == 1) {
-      end_ = r.end_;
-      inclusive_end_ = r.inclusive_end_;
-    }
-  }
-  return bret;
-}
-
-void SimpleRange::set_bound(ObItemType item_type, ObObj bound)
-{
-  if (bound.is_null()) {
-    if (T_OP_IS == item_type || T_OP_NSEQ == item_type) {
-      start_.set_null();
-      end_.set_null();
-      inclusive_start_ = true;
-      inclusive_end_ = true;
-    } else if (T_OP_IS_NOT == item_type) {
-      set_whole_range();
-    } else {
-      set_false_range();
-    }
-  } else if (T_OP_LE == item_type) {
-    end_ = bound;
-    inclusive_end_ = true;
-  } else if (T_OP_LT == item_type) {
-    end_ = bound;
-    inclusive_end_ = false;
-  } else if (T_OP_GE == item_type) {
-    start_ = bound;
-    inclusive_start_ = true;
-  } else if (T_OP_GT == item_type) {
-    start_ = bound;
-    inclusive_start_ = false;
-  } else if (T_OP_EQ == item_type || T_OP_NSEQ == item_type) {
-    start_ = bound;
-    end_ = bound;
-    inclusive_start_ = true;
-    inclusive_end_ = true;
-  }
-}
-
-void SimpleRange::set_bound(ObItemType item_type, double bound)
-{
-  ObObj obj;
-  obj.set_double(bound);
-  set_bound(item_type, obj);
-}
-
-bool SimpleRange::is_valid_range()
-{
-  bool bret = false;
-  int cmp = 0;
-  if (!start_.can_compare(end_)) {
-    bret = false;
-  } else if (start_.is_null() && end_.is_null()) {
-    bret = true;
-  } else if (start_.is_max_value() || end_.is_min_value() ||
-             start_.is_null() || end_.is_null()) {
-    bret = false;
-  } else if (start_.is_min_value() || end_.is_max_value()) {
-    bret = true;
-  } else if (OB_SUCCESS != start_.compare(end_, cmp)) {
-    bret = false;
-  } else {
-    if (-1 == cmp) {
-      bret = true;
-    } else if (1 == cmp) {
-      bret = false;
-    } else if (0 == cmp) {
-      if (inclusive_start_ && inclusive_end_) {
-        bret = true;
-      } else {
-        bret = false;
-      }
-    }
-  }
-  return bret;
-}
-
-bool SimpleRange::is_superset(const SimpleRange &r) const
-{
-  bool bret = false;
-  int ret = OB_SUCCESS;
-  int cmp_start = 0;
-  int cmp_end = 0;
-  if (!start_.can_compare(r.start_) || !end_.can_compare(r.end_)) {
-    // do nothing
-  } else if (OB_FAIL(compare_with_start(r, cmp_start))) {
-  } else if (OB_FAIL(compare_with_end(r, cmp_end))) {
-  } else {
-    bret = cmp_start <= 0 && cmp_end >= 0;
-  }
-  return bret;
-}
-
-void SimpleRange::multiply_double(double coff)
-{
-  if (start_.is_double()) {
-    start_.set_double(start_.get_double() * coff);
-  }
-  if (end_.is_double()) {
-    end_.set_double(end_.get_double() * coff);
-  }
-  if (coff < 0) {
-    std::swap(start_, end_);
-    std::swap(inclusive_start_, inclusive_end_);
-    if (start_.is_min_value()) {
-      start_.set_max_value();
-    } else if (start_.is_max_value()) {
-      start_.set_min_value();
-    }
-    if (end_.is_min_value()) {
-      end_.set_max_value();
-    } else if (end_.is_max_value()) {
-      end_.set_min_value();
-    }
-  }
-}
 
 int ObSelEstimator::append_estimators(ObIArray<ObSelEstimator *> &sel_estimators, ObSelEstimator *new_estimator)
 {
@@ -313,7 +120,7 @@ int ObConstSelEstimator::get_const_sel(const OptSelectivityCtx &ctx,
   if (OB_ISNULL(params) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (ObOptEstUtils::is_calculable_expr(qual, params->count())) {
-    ObObj const_value;
+    DatumValue const_value;
     bool got_result = false;
     bool is_true = false;
     if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx.get_opt_ctx().get_exec_ctx(),
@@ -323,7 +130,7 @@ int ObConstSelEstimator::get_const_sel(const OptSelectivityCtx &ctx,
                                                           ctx.get_allocator()))) {
     } else if (!got_result) {
       selectivity = DEFAULT_SEL;
-    } else if (OB_FAIL(ObObjEvaluator::is_true(const_value, is_true))) {
+    } else if (OB_FAIL(DatumValueEvaluator::is_true(const_value, is_true))) {
     } else {
       selectivity = is_true ? 1.0 : 0.0;
     }
@@ -376,9 +183,9 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
   } else if (OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(left_expr))) {
   } else if (OB_LIKELY(left_expr->is_column_ref_expr() && !right_expr->has_flag(CNT_COLUMN))) {
     ObOptColumnStatHandle handler;
-    ObObj expr_value;
+    DatumValue expr_value;
     const ObColumnRefRawExpr *col = static_cast<const ObColumnRefRawExpr *>(left_expr);
-    hash::ObHashSet<ObObj> obj_set;
+    DatumValueSet<> obj_set;
     ObHistEqualSelHelper helper;
     if (OB_FAIL(obj_set.create(hash::cal_next_prime(right_expr->get_param_count()), 
                                "OptSelHashSet", "OptSelHashSet"))) {
@@ -402,9 +209,10 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
       if (OB_SUCC(ret)) {
         if (helper.is_valid() && get_value) {
           helper.set_compare_value(expr_value);
-          if (OB_HASH_EXIST == obj_set.exist_refactored(expr_value)) {
+          bool inserted = false;
+          if (OB_FAIL(obj_set.insert(expr_value, inserted))) {
+          } else if (!inserted) {
             // duplicate value, do nothing
-          } else if (OB_FAIL(obj_set.set_refactored(expr_value))) {
           } else if (OB_FAIL(helper.get_sel(ctx, tmp_selectivity))) {
           } else {
             selectivity += tmp_selectivity * (1 - null_sel);
@@ -417,13 +225,16 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
             selectivity += distinct_sel;
           }
           use_hist = false;
-        } else if (OB_HASH_EXIST == obj_set.exist_refactored(expr_value)) {
-          // do nothing
-        } else if (OB_FAIL(obj_set.set_refactored(expr_value))) {
-        } else if (expr_value.is_null()) {
-          contain_null = true;
         } else {
-          selectivity += distinct_sel;
+          bool inserted = false;
+          if (OB_FAIL(obj_set.insert(expr_value, inserted))) {
+          } else if (!inserted) {
+            // do nothing
+          } else if (expr_value.is_null()) {
+            contain_null = true;
+          } else {
+            selectivity += distinct_sel;
+          }
         }
       }
     }
@@ -738,7 +549,6 @@ int ObEqualSelEstimator::get_equal_sel(const OptTableMetas &table_metas,
     const ObRawExpr *cnt_col_expr = left_expr.has_flag(CNT_COLUMN) ? &left_expr : &right_expr;
     const ObRawExpr &calc_expr = left_expr.has_flag(CNT_COLUMN) ? right_expr : left_expr;
     ObOptColumnStatHandle handler;
-    ObObj expr_value;
     bool can_use_hist = false;
     ObHistEqualSelHelper helper;
     if (OB_FAIL(ObOptSelectivity::remove_ignorable_func_for_est_sel(cnt_col_expr))) {
@@ -933,7 +743,6 @@ int ObEqualSelEstimator::try_calc_equal_sel_with_hist(const OptTableMetas &table
   ObOptColumnStatHandle right_handler;
   const ObOptColumnStat *left_col_stat = NULL;
   const ObOptColumnStat *right_col_stat = NULL;
-  obj_cmp_func cmp_func = NULL;
   calc_with_hist = false;
   const ObColumnRefRawExpr *left_col = static_cast<const ObColumnRefRawExpr *>(left_expr);
   const ObColumnRefRawExpr *right_col = static_cast<const ObColumnRefRawExpr *>(right_expr);
@@ -944,9 +753,8 @@ int ObEqualSelEstimator::try_calc_equal_sel_with_hist(const OptTableMetas &table
     // do nothing
   } else if (left_expr->get_relation_ids() == right_expr->get_relation_ids()) {
     // do nothing
-  } else if (!ObObjCmpFuncs::can_cmp_without_cast(left_col->get_result_type(),
-                                                  right_col->get_result_type(),
-                                                  CO_EQ, cmp_func))  {
+  } else if (!can_compare_types_without_cast(left_col->get_result_type(),
+                                             right_col->get_result_type()))  {
     // do nothing
   } else if (OB_FAIL(ObOptSelectivity::get_histogram_by_column(table_metas, ctx, left_col->get_table_id(),
                                                                left_col->get_column_id(), left_handler))) {
@@ -1123,12 +931,12 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   const ObDMLStmt *stmt = ctx.get_stmt();
   ObExecContext *exec_ctx = ctx.get_opt_ctx().get_exec_ctx();
   ObIAllocator &alloc = ctx.get_allocator();
-  ObObj result1;
-  ObObj result2;
+  DatumValue result1;
+  DatumValue result2;
   bool got_result;
   double distinct_sel = 1.0;
-  ObObj maxobj;
-  ObObj minobj;
+  DatumValue maxobj;
+  DatumValue minobj;
   maxobj.set_max_value();
   minobj.set_min_value();
   if (OB_ISNULL(aggr_expr.get_param_expr(0)) || OB_ISNULL(params) ||
@@ -1152,7 +960,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
       for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
         double tmp_sel = T_OP_IN == type ? DEFAULT_AGG_EQ : DEFAULT_AGG_RANGE;
         const ObRawExpr *sub_expr = NULL;
-        ObObj tmp_result;
+        DatumValue tmp_result;
         if (OB_ISNULL(sub_expr = const_expr1->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (!ObOptEstUtils::is_calculable_expr(*sub_expr, params->count())) {
@@ -1214,9 +1022,9 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   return ret;
 }
 // Calculate sum/avg(col) =/<=>/!= const selection rate
-double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
-                                         const ObObj &minobj,
-                                         const ObObj &constobj,
+double ObAggSelEstimator::get_agg_eq_sel(const DatumValue &maxobj,
+                                         const DatumValue &minobj,
+                                         const DatumValue &constobj,
                                          const double distinct_sel,
                                          const double rows_per_group,
                                          const bool is_eq,
@@ -1228,8 +1036,8 @@ double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
     // The result of sum/avg(col) will not contain null, even if null safe equal selectivity is still 0
     sel_ret = 0.0;
   } else if (minobj.is_integer_type() ||
-             (minobj.is_number() && minobj.get_meta().get_obj_meta().get_scale() == 0) ||
-             (minobj.is_unumber() && minobj.get_meta().get_obj_meta().get_scale() == 0)) {
+             (minobj.is_number() && minobj.get_meta().get_sql_type_meta().get_scale() == 0) ||
+             (minobj.is_unumber() && minobj.get_meta().get_sql_type_meta().get_scale() == 0)) {
     double const_val;
     double min_val;
     double max_val;
@@ -1262,9 +1070,9 @@ double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
   return sel_ret;
 }
 // Calculate sum/avg(col) >/>=/</= const selection rate
-double ObAggSelEstimator::get_agg_range_sel(const ObObj &maxobj,
-                                            const ObObj &minobj,
-                                            const ObObj &constobj,
+double ObAggSelEstimator::get_agg_range_sel(const DatumValue &maxobj,
+                                            const DatumValue &minobj,
+                                            const DatumValue &constobj,
                                             const double rows_per_group,
                                             const ObItemType type,
                                             const bool is_sum)
@@ -1321,10 +1129,10 @@ double ObAggSelEstimator::get_agg_range_sel(const ObObj &maxobj,
   return sel_ret;
 }
 // Calculate sum/avg(col) [not] between const1 and const2 selection rate
-double ObAggSelEstimator::get_agg_btw_sel(const ObObj &maxobj,
-                                          const ObObj &minobj,
-                                          const ObObj &constobj1,
-                                          const ObObj &constobj2,
+double ObAggSelEstimator::get_agg_btw_sel(const DatumValue &maxobj,
+                                          const DatumValue &minobj,
+                                          const DatumValue &constobj1,
+                                          const DatumValue &constobj2,
                                           const double rows_per_group,
                                           const ObItemType type,
                                           const bool is_sum)
@@ -1546,7 +1354,7 @@ int ObLikeSelEstimator::get_sel(const OptTableMetas &table_metas,
 int ObLikeSelEstimator::get_wildcard_length(const OptSelectivityCtx &ctx, double &wildcard_length)
 {
   int ret = OB_SUCCESS;
-  ObObj pattern_value;
+  DatumValue pattern_value;
   bool got_result = false;
   wildcard_length = 1.0; // default guess value
   if (OB_ISNULL(pattern_)) {
@@ -2263,8 +2071,8 @@ int ObInequalJoinSelEstimator::extract_column_offset(const OptSelectivityCtx &ct
       is_valid = false;
     }
   } else if (expr->is_static_scalar_const_expr()) {
-    ObObj const_value;
-    ObObj scalar_value;
+    DatumValue const_value;
+    double scalar_value = 0.0;
     bool got_result = false;
     if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx.get_opt_ctx().get_exec_ctx(),
                                                           expr,
@@ -2273,12 +2081,12 @@ int ObInequalJoinSelEstimator::extract_column_offset(const OptSelectivityCtx &ct
                                                           ctx.get_allocator()))) {
     } else if (!got_result || !const_value.is_numeric_type() || const_value.is_null()) {
       is_valid = false;
-    } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_scalar_obj(&const_value, &scalar_value))) {
+    } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&const_value, scalar_value))) {
     } else {
       if (is_minus) {
-        offset -= scalar_value.get_double();
+        offset -= scalar_value;
       } else {
-        offset += scalar_value.get_double();
+        offset += scalar_value;
       }
     }
   } else {
@@ -2493,13 +2301,13 @@ int ObInequalJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
                                        ObIArray<ObExprSelPair> &all_predicate_sel)
 {
   int ret = OB_SUCCESS;
-  ObObj obj_min, obj_max, tmp_obj;
+  DatumValue obj_min, obj_max, tmp_obj;
   selectivity = 1.0;
   double nns1, nns2, ndv1, ndv2;
   double min1, min2, max1, max2;
-  double lower_bound = range_.start_.get_double();
+  double lower_bound = range_.start_.is_double() ? range_.start_.get_double() : 0.0;
   bool has_lower_bound = !range_.start_.is_min_value();
-  double upper_bound = range_.end_.get_double();
+  double upper_bound = range_.end_.is_double() ? range_.end_.get_double() : 0.0;
   bool has_upper_bound = !range_.end_.is_max_value();
   bool is_valid = range_.is_valid_range();
   bool is_eq = range_.inclusive_start_ && range_.inclusive_end_ &&
@@ -2534,18 +2342,18 @@ int ObInequalJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
              obj_max.is_max_value() || obj_max.is_min_value()) {
     selectivity = DEFAULT_INEQ_JOIN_SEL;
     use_default_ = true;
-  } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_scalar_obj(&obj_min, &tmp_obj))) {
+  } else if (OB_FAIL(ObOptEstObjToScalar::convert_value_to_scalar(&obj_min, &tmp_obj, ctx.get_allocator()))) {
   } else if (FALSE_IT(min1 = tmp_obj.get_double() * term_.coefficient1_)) {
-  } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_scalar_obj(&obj_max, &tmp_obj))) {
+  } else if (OB_FAIL(ObOptEstObjToScalar::convert_value_to_scalar(&obj_max, &tmp_obj, ctx.get_allocator()))) {
   } else if (FALSE_IT(max1 = tmp_obj.get_double() * term_.coefficient1_)) {
   } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, *term_.col2_, obj_min, obj_max))) {
   } else if (obj_min.is_min_value() || obj_min.is_max_value() ||
              obj_max.is_max_value() || obj_max.is_min_value()) {
     selectivity = DEFAULT_INEQ_JOIN_SEL;
     use_default_ = true;
-  } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_scalar_obj(&obj_min, &tmp_obj))) {
+  } else if (OB_FAIL(ObOptEstObjToScalar::convert_value_to_scalar(&obj_min, &tmp_obj, ctx.get_allocator()))) {
   } else if (FALSE_IT(min2 = tmp_obj.get_double() * term_.coefficient2_)) {
-  } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_scalar_obj(&obj_max, &tmp_obj))) {
+  } else if (OB_FAIL(ObOptEstObjToScalar::convert_value_to_scalar(&obj_max, &tmp_obj, ctx.get_allocator()))) {
   } else if (FALSE_IT(max2 = tmp_obj.get_double() * term_.coefficient2_)) {
   } else {
     if (term_.coefficient1_ < 0) {
@@ -2940,8 +2748,8 @@ int ObNormalRangeSelEstimator::get_expr_range(const OptSelectivityCtx &ctx,
   expr = NULL;
   const ObRawExpr *const_expr1 = NULL;
   const ObRawExpr *const_expr2 = NULL;
-  ObObj const_value1;
-  ObObj const_value2;
+  DatumValue const_value1;
+  DatumValue const_value2;
   bool got_result = false;
   range.set_whole_range();
   ObItemType type = qual.get_expr_type();
@@ -3038,13 +2846,14 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
                                         ObIArray<ObExprSelPair> &all_predicate_sel)
 {
   int ret = OB_SUCCESS;
+  ObArenaAllocator scalar_owner("OptSelScalar");
   selectivity = DEFAULT_INEQ_SEL;
-  ObObj expr_min;
-  ObObj expr_max;
-  ObObj min_scalar;
-  ObObj max_scalar;
-  ObObj start_scalar;
-  ObObj end_scalar;
+  DatumValue expr_min;
+  DatumValue expr_max;
+  DatumValue min_scalar;
+  DatumValue max_scalar;
+  DatumValue start_scalar;
+  DatumValue end_scalar;
   expr_min.set_min_value();
   expr_max.set_max_value();
   double ndv = 1.0;
@@ -3065,14 +2874,14 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
   } else if (expr_min.is_min_value() || expr_min.is_max_value() || expr_min.is_null() ||
              expr_max.is_min_value() || expr_max.is_max_value() || expr_max.is_null()) {
     // do nothing
-  } else if (OB_UNLIKELY(!expr_min.can_compare(expr_max)) ||
-             OB_UNLIKELY(!expr_min.can_compare(range_.start_)) ||
-             OB_UNLIKELY(!expr_min.can_compare(range_.end_))) {
+  } else if (OB_UNLIKELY(!can_compare_datum_values(expr_min, expr_max)) ||
+             OB_UNLIKELY(!can_compare_datum_values(expr_min, range_.start_)) ||
+             OB_UNLIKELY(!can_compare_datum_values(expr_min, range_.end_))) {
     // ignore
-  } else if (OB_FAIL(ObOptEstObjToScalar::convert_objs_to_scalars(&expr_min, &expr_max,
+  } else if (OB_FAIL(ObOptEstObjToScalar::convert_values_to_scalars(&expr_min, &expr_max,
                                                                   &range_.start_, &range_.end_,
                                                                   &min_scalar, &max_scalar,
-                                                                  &start_scalar, &end_scalar))) {
+                                                                  &start_scalar, &end_scalar, scalar_owner))) {
   } else if (OB_FAIL(ObOptSelectivity::calculate_distinct(table_metas, ctx, *expr_, ctx.get_current_rows(), ndv))) {
   } else if (OB_FAIL(ObOptSelectivity::do_calc_range_selectivity(min_scalar.get_double(),
                                                                  max_scalar.get_double(),
@@ -3090,8 +2899,8 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
                                               expr_max,
                                               min_scalar.get_double(),
                                               max_scalar.get_double(),
-                                              start_scalar.get_double(),
-                                              end_scalar.get_double(),
+                                              start_scalar.is_double() ? start_scalar.get_double() : 0.0,
+                                              end_scalar.is_double() ? end_scalar.get_double() : 0.0,
                                               selectivity))) {
   } else {
     if (is_not_op_) {
@@ -3105,8 +2914,8 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
 
 int ObUniformRangeSelEstimator::refine_out_of_bounds_sel(const OptTableMetas &table_metas,
                                                          const OptSelectivityCtx &ctx,
-                                                         const ObObj &min_val,
-                                                         const ObObj &max_val,
+                                                         const DatumValue &min_val,
+                                                         const DatumValue &max_val,
                                                          const double min_scalar,
                                                          const double max_scalar,
                                                          const double start_scalar,

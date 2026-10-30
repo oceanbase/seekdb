@@ -51,7 +51,7 @@ int ObPxRFStaticInfo::assign(const ObPxRFStaticInfo &other)
 
 int ObPxQueryRangeInfo::init(int64_t table_id, int64_t range_column_cnt,
                              const ObIArray<int64_t> &prefix_col_idxs,
-                             const ObIArray<ObObjMeta> &prefix_col_obj_metas)
+                             const ObIArray<SqlTypeMeta> &prefix_col_obj_metas)
 {
   int ret = OB_SUCCESS;
   table_id_ = table_id;

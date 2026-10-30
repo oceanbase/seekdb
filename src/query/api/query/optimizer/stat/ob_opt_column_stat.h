@@ -18,7 +18,7 @@
 #define _OB_OPT_COLUMN_STAT_H_
 
 #include <stdint.h>
-#include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "share/cache/ob_kvcache_struct.h"
@@ -48,7 +48,8 @@ public:
   ObHistBucket(int64_t repeat_count, int64_t endpoint_num)
     : endpoint_repeat_count_(repeat_count), endpoint_num_(endpoint_num)
   {}
-  ObHistBucket(const ObObj &obj, int64_t repeat_count, int64_t endpoint_num)
+  // Constructor borrows the view. Publishing into a histogram requires its owner.
+  ObHistBucket(const DatumValue &obj, int64_t repeat_count, int64_t endpoint_num)
     : endpoint_value_(obj),
       endpoint_repeat_count_(repeat_count),
       endpoint_num_(endpoint_num)
@@ -59,13 +60,13 @@ public:
                 const int64_t buf_len,
                 int64_t &pos);
   int deep_copy(ObIAllocator &alloc, const ObHistBucket &src);
-  int64_t deep_copy_size() const { return endpoint_value_.get_deep_copy_size(); }
+  int64_t deep_copy_size() const;
 
   TO_STRING_KV(K_(endpoint_value),
                K_(endpoint_repeat_count),
                K_(endpoint_num));
 
-  common::ObObj endpoint_value_;
+  DatumValue endpoint_value_;
   int64_t endpoint_repeat_count_; // the frequence for the endpoint_value;
   int64_t endpoint_num_; // cumlative frequence
 };
@@ -99,7 +100,7 @@ public:
 
   int deep_copy(const ObHistogram &src, char *buf, const int64_t buf_len, int64_t &pos);
   int deep_copy(ObIAllocator &alloc, const ObHistogram &src);
-  int assign(const ObHistogram &other);
+  int assign(const ObHistogram &other, ObIAllocator &owner);
   int64_t deep_copy_size() const;
 
   bool is_valid() const
@@ -134,8 +135,8 @@ public:
   void set_pop_count(int64_t pop_count) { pop_count_ = pop_count; }
 
   int prepare_allocate_buckets(ObIAllocator &allocator, const int64_t bucket_size);
-  int add_bucket(const ObHistBucket &bucket);
-  int assign_buckets(const ObIArray<ObHistBucket> &buckets);
+  int add_bucket(const ObHistBucket &bucket, ObIAllocator &owner);
+  int assign_buckets(const ObIArray<ObHistBucket> &buckets, ObIAllocator &owner);
 
   void calc_density(ObHistType hist_type,
                     const int64_t row_count,
@@ -245,13 +246,13 @@ public:
   uint64_t get_column_id() const { return column_id_; }
   void set_column_id(uint64_t cid) { column_id_ = cid; }
 
-  const common::ObObj &get_max_value() const { return max_value_; }
-  common::ObObj &get_max_value() { return max_value_; }
-  void set_max_value(const common::ObObj &max) { max_value_ = max; }
+  const DatumValue &get_max_value() const { return max_value_; }
+  DatumValue &get_max_value() { return max_value_; }
+  int set_max_value(const DatumValue &max);
 
-  const common::ObObj &get_min_value() const { return min_value_; }
-  common::ObObj &get_min_value() { return min_value_; }
-  void set_min_value(const common::ObObj &min) { min_value_ = min; }
+  const DatumValue &get_min_value() const { return min_value_; }
+  DatumValue &get_min_value() { return min_value_; }
+  int set_min_value(const DatumValue &min);
 
   int64_t get_num_distinct() const { return num_distinct_; }
   void set_num_distinct(int64_t num_distinct) { num_distinct_ = num_distinct; }
@@ -343,7 +344,7 @@ public:
                K_(histogram));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObOptColumnStat);
-  int merge_min_max(ObObj &cur, const ObObj &other, bool is_cmp_min);
+  int merge_min_max(DatumValue &cur, const DatumValue &other, bool is_cmp_min);
 protected:
   uint64_t table_id_;
   int64_t partition_id_;
@@ -354,8 +355,9 @@ protected:
   int64_t num_not_null_;
   int64_t num_distinct_;
   int64_t avg_length_;
-  common::ObObj min_value_;
-  common::ObObj max_value_;
+  // Native views whose payload is owned by allocator_ (or the cache copy buffer).
+  DatumValue min_value_;
+  DatumValue max_value_;
   int64_t llc_bitmap_size_;
   char *llc_bitmap_;
   ObHistogram histogram_;

@@ -53,7 +53,7 @@ int ObExprCeilFloor::calc_result_type1(ObExprResType &type,
                                        ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObObjType res_type = ObMaxType;
+  SqlValueType res_type = ObMaxType;
   if (type1.is_column()
       && (type1.is_number() || type1.is_decimal_int())) {
     if (type1.is_number()) {
@@ -206,10 +206,10 @@ int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   } else if (arg_datum->is_null()) {
     res_datum.set_null();
   } else {
-    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
-    const ObObjType res_type = expr.datum_meta_.type_;
+    const SqlValueType arg_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType res_type = expr.datum_meta_.type_;
     const bool is_floor = (T_FUN_SYS_FLOOR == expr.type_) ? true : false;
-    if (ObNumberTC == ob_obj_type_class(arg_type)) {
+    if (ObNumberTC == sql_type_class(arg_type)) {
       ObNumStackOnceAlloc tmp_alloc;
       const number::ObNumber arg_nmb(arg_datum->get_number());
       number::ObNumber res_nmb;
@@ -223,7 +223,7 @@ int calc_ceil_floor(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
           }
         }
         if (OB_SUCC(ret)) {
-          if (ObNumberTC == ob_obj_type_class(res_type)) {
+          if (ObNumberTC == sql_type_class(res_type)) {
             res_datum.set_number(res_nmb);
           } else if (ob_is_integer_type(res_type)) {
             int64_t res_int = 0;
@@ -297,8 +297,8 @@ int do_eval_batch_ceil_floor(const ObExpr &expr,
               if (OB_FAIL(res_nmb.ceil(0))) {
               }
             }
-            const ObObjType res_type = expr.datum_meta_.type_;
-            if (ObNumberTC == ob_obj_type_class(res_type)) {
+            const SqlValueType res_type = expr.datum_meta_.type_;
+            if (ObNumberTC == sql_type_class(res_type)) {
               res_datums[i].set_number(res_nmb);
             } else if (ob_is_integer_type(res_type)) {
               int64_t res_int = 0;
@@ -355,9 +355,9 @@ int eval_batch_ceil_floor(const ObExpr &expr,
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
+    const SqlValueType arg_type = expr.args_[0]->datum_meta_.type_;
     const bool is_floor = (T_FUN_SYS_FLOOR == expr.type_) ? true : false;
-    if (ObNumberTC == ob_obj_type_class(arg_type)) {
+    if (ObNumberTC == sql_type_class(arg_type)) {
       ret = is_floor
       ? do_eval_batch_ceil_floor<NUMBER_TYPE, true>(expr, ctx, skip, batch_size)
       : do_eval_batch_ceil_floor<NUMBER_TYPE, false>(expr, ctx, skip, batch_size);

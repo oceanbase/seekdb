@@ -56,7 +56,7 @@ int ObInfoSchemaSessionVariablesTable::inner_get_next_row(ObNewRow *&row)
     SERVER_LOG(WARN, "system variable schema should not be NULL", K(ret));
   } else {
     if (!start_to_read_) {
-      ObObj *cells = NULL;
+      DatumValue *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
       if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -85,7 +85,7 @@ int ObInfoSchemaSessionVariablesTable::inner_get_next_row(ObNewRow *&row)
               col_id = output_column_ids_.at(j);
               switch (col_id) {
               case VARIABLE_NAME: {
-                  cells[cell_idx].set_varchar(sys_var->get_name());
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sys_var->get_name()) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                     ObCharset::get_default_charset()));
                   break;
@@ -94,15 +94,15 @@ int ObInfoSchemaSessionVariablesTable::inner_get_next_row(ObNewRow *&row)
                   //deal with read_only
                   if (SYS_VAR_READ_ONLY == sys_var->get_type()) {
                     if (sys_variable_schema_->is_read_only()) {
-                      cells[cell_idx].set_varchar("ON");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "ON") : ret);
                     } else {
-                      cells[cell_idx].set_varchar("OFF");
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "OFF") : ret);
                     }
                   } else {
                     sys_var_show_str.reset();
                     if (OB_FAIL(sys_var->to_show_str(*allocator_, *session_, sys_var_show_str))) {
                     } else {
-                      cells[cell_idx].set_varchar(sys_var_show_str);
+                      (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, sys_var_show_str) : ret);
                     }
                   }
                   if (OB_SUCC(ret)) {

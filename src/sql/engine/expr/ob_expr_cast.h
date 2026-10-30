@@ -25,7 +25,7 @@ namespace oceanbase
 namespace sql
 {
 
-// The length of array need to be equal to the number of types defined at ObObjType
+// The length of array need to be equal to the number of types defined at SqlValueType
 static const int32_t CAST_STRING_DEFUALT_LENGTH[ObMaxType + 1] = {
   0, //null
   4, //tinyint
@@ -109,9 +109,9 @@ private:
                            ObSQLMode sql_mode,
                            const ObRawExpr &cast_raw_expr,
                            common::ObCastMode &cast_mode) const;
-  bool check_cast_allowed(const common::ObObjType orig_type,
+  bool check_cast_allowed(const common::SqlValueType orig_type,
                           const common::ObCollationType orig_cs_type,
-                          const common::ObObjType expect_type,
+                          const common::SqlValueType expect_type,
                           const common::ObCollationType expect_cs_type,
                           const bool is_explicit_cast) const;
 

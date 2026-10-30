@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_lob_result_materializer.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
+#include "share/datum/datum_value_cast.h"
 
 namespace oceanbase
 {
@@ -86,15 +87,11 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
       } else if (is_not_match) {
         /*do nothing*/
       } else {
-        if (OB_FAIL(ObMySQLResultSet::to_mysql_field(ob_field, field))) {
+        if (OB_FAIL(ObMySQLResultSet::to_mysql_field(ob_field, field, is_field_list))) {
         } else {
         }
         if (OB_SUCC(ret)) {
           ObMySQLResultSet::replace_lob_type(field);
-          if (is_field_list) {
-            field.default_value_ =
-                static_cast<EMySQLFieldType>(ob_field.default_value_.get_ext());
-          }
           if (OB_FAIL(mysql_fields.push_back(field))) {
           }
         }
@@ -134,6 +131,9 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   can_retry = true;
   bool is_first_row = true;
   const ObNewRow *result_row = NULL;
+  ResultRowView result_view;
+  ObSEArray<int64_t, 16> obj_indexes;
+  ObSEArray<DatumValue, 4> fallback_cells;
   bool is_cac_found_rows =  result.is_calc_found_rows();
   int64_t row_num = 0;
   ObSqlCtx *sql_ctx = result.get_exec_context().get_sql_ctx();
@@ -167,8 +167,37 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
 
   const ObDataTypeCastParams dtc_params =
       ObBasicSessionInfo::create_dtc_params(&session_);
-  while (OB_SUCC(ret) && row_num < limit_count && !OB_FAIL(result.get_next_row(result_row)) ) {
-    ObNewRow *row = const_cast<ObNewRow*>(result_row);
+  while (OB_SUCC(ret) && row_num < limit_count && !OB_FAIL(result.get_next_result_row(result_view)) ) {
+    ObNewRow *row = const_cast<ObNewRow*>(result_view.legacy_row());
+    if (result_view.is_datum_row()) {
+      if (OB_UNLIKELY(result_view.count() != fields->count())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (is_first_row) {
+        int64_t obj_count = 0;
+        if (OB_FAIL(obj_indexes.prepare_allocate(result_view.count()))) {
+        } else {
+          for (int64_t i = 0; i < result_view.count(); ++i) {
+            bool convert_charset = false;
+            // Negative entries select raw Datum bytes or charset conversion;
+            // nonnegative entries address converted native value views.
+            obj_indexes.at(i) = DatumMysqlRow::can_encode(
+                result_view.expr(i), fields->at(i), charset_type, result.is_ps_protocol(), convert_charset)
+                                    ? (convert_charset ? -2 : -1) : obj_count++;
+          }
+          ret = fallback_cells.prepare_allocate(obj_count);
+        }
+      }
+      // Finish all compatibility materialization before sending the header,
+      // retaining the old retry boundary for conversion errors.
+      for (int64_t i = 0; OB_SUCC(ret) && i < result_view.count(); ++i) {
+        if (obj_indexes.at(i) >= 0) {
+          ret = result_view.get_value(i, fallback_cells.at(obj_indexes.at(i)));
+        }
+      }
+      if (OB_FAIL(ret)) {
+        break;
+      }
+    }
     // If it is the first line, then reply to the client with field information etc.
     if (is_first_row) {
       is_first_row = false;
@@ -176,16 +205,18 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       if (OB_FAIL(response_query_header(result, has_more_result, false))) {
       }
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < row->get_count(); i++) {
-      ObObj& value = row->get_cell(i);
+    for (int64_t i = 0; OB_SUCC(ret) && i < result_view.count(); i++) {
+      if (result_view.is_datum_row() && obj_indexes.at(i) < 0) {
+        continue;
+      }
+      DatumValue& value = result_view.is_datum_row()
+                         ? fallback_cells.at(obj_indexes.at(i)) : row->get_cell(i);
       if (result.is_ps_protocol() && !is_packed) {
-        if (value.get_type() != fields->at(i).type_.get_type()) {
+        if (value.get_type() != fields->at(i).type_meta_.get_type()) {
           ObCastCtx cast_ctx(&result.get_mem_pool(), NULL, CM_WARN_ON_FAIL, 
-            fields->at(i).type_.get_collation_type());
-          if (OB_FAIL(common::ObObjCaster::to_type(fields->at(i).type_.get_type(),
-                                           cast_ctx,
-                                           value,
-                                           value))) {
+            fields->at(i).type_meta_.get_collation_type());
+          if (OB_FAIL(common::DatumValueCaster::to_type(fields->at(i).type_meta_.get_type(),
+                                           cast_ctx, value, result.get_mem_pool(), value))) {
           }
         }
       }
@@ -204,7 +235,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
                     && OB_FAIL(convert_text_value_charset(value, result, charset_type))) {
         }
         if (OB_FAIL(ret)){
-        } else if ((value.is_lob() || value.is_json() || value.is_geometry())
+        } else if ((value.get_meta().is_lob() || value.is_json() || value.is_geometry())
                   && OB_FAIL(process_lob_locator_results(value, result))) {
         } else if ((value.is_collection_sql_type() || value.is_geometry()) &&
                    OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value, result))) {
@@ -212,14 +243,17 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       }
     }
     if (OB_SUCC(ret)) {
-      ObSMRow sm(protocol_type, *row, dtc_params,
-                         session_,  
-                         result.get_field_columns(),
-                         ctx_.schema_guard_);
-      sm.set_packed(is_packed);
-      OMPKRow rp(sm);
-      if (OB_FAIL(sender_.response_packet(rp))) {
+      if (result_view.is_datum_row()) {
+        DatumMysqlRow sm(protocol_type, result_view, obj_indexes, fallback_cells,
+                        dtc_params, session_, *fields, charset_type, ctx_.schema_guard_);
+        OMPKRow rp(sm);
+        ret = sender_.response_packet(rp);
       } else {
+        ObSMRow sm(protocol_type, *row, dtc_params, session_,
+                   result.get_field_columns(), ctx_.schema_guard_);
+        sm.set_packed(is_packed);
+        OMPKRow rp(sm);
+        ret = sender_.response_packet(rp);
       }
       if (OB_SUCC(ret)) {
         ++row_num;
@@ -280,44 +314,151 @@ int ObQueryDriver::convert_field_charset(ObIAllocator& allocator,
   return ret;
 }
 
-int ObQueryDriver::convert_string_value_charset(ObObj& value, ObResultSet &result,
+namespace {
+void set_native_lob_view(DatumValue &value, SqlValueType type, const ObString &bytes)
+{
+  value.meta_.set_type(type);
+  value.meta_.set_inrow();
+  if (type != ObCollectionSQLType) { value.meta_.set_collation_level(CS_LEVEL_IMPLICIT); }
+  value.datum_.set_string(bytes);
+}
+}
+
+int ObQueryDriver::convert_string_value_charset(DatumValue &value, ObResultSet &result,
                                                 ObCharsetType charset_type)
 {
   int ret = OB_SUCCESS;
-  ObCollationType to_collation_type = ObCharset::get_default_collation(charset_type);
-  ObArenaAllocator *allocator = NULL;
-  ObCollationType from_collation_type = value.get_collation_type();
-  if (OB_FAIL(ret)) {
-  } else if (from_collation_type == to_collation_type) {
-    const ObCharsetInfo *charset_info = ObCharset::get_charset(from_collation_type);
-    if (OB_ISNULL(charset_info)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (CS_TYPE_INVALID == from_collation_type) {
+  ObCollationType collation = value.get_collation_type();
+  const ObCollationType target = ObCharset::get_default_collation(charset_type);
+  ObArenaAllocator *owner = nullptr;
+  if (collation == target) {
+    if (ObCharset::get_charset(collation) == nullptr || collation == CS_TYPE_INVALID) {
       ret = OB_ERR_UNEXPECTED;
     }
-  } else if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-  } else if (OB_ISNULL(allocator)) {
+  } else if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(owner))) {
+  } else if (owner == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    OZ (value.convert_string_value_charset(charset_type, *allocator));
+    ObString bytes;
+    if (OB_FAIL(value.get_string(bytes))) {
+    } else if (OB_FAIL(ObCharsetUtils::convert_string_value_charset(bytes, collation,
+                                                                  charset_type, *owner))) {
+    } else if (collation != value.get_collation_type()) {
+      value.datum_.set_string(bytes);
+      value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+      value.set_collation_type(collation);
+    }
   }
   return ret;
 }
 
-int ObQueryDriver::convert_text_value_charset(common::ObObj& value, sql::ObResultSet &result,
+int ObQueryDriver::convert_text_value_charset(DatumValue &value, ObResultSet &result,
                                               ObCharsetType charset_type)
 {
   int ret = OB_SUCCESS;
-
-  const ObSQLSessionInfo &my_session = result.get_session();
-
-  ObArenaAllocator *allocator = NULL;
-  if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-  } else if (OB_ISNULL(allocator)) {
+  ObArenaAllocator *owner = nullptr;
+  if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(owner))) {
+  } else if (owner == nullptr) {
     ret = OB_ERR_UNEXPECTED;
+  } else {
+    ret = convert_text_value_charset(value, charset_type, *owner,
+                                     &result.get_session(), &result.get_exec_context());
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(convert_text_value_charset(value, charset_type, *allocator, &my_session, &result.get_exec_context()))) {
+  return ret;
+}
+
+int ObQueryDriver::convert_text_value_charset(DatumValue &value, ObCharsetType charset_type,
+    ObIAllocator &owner, const ObSQLSessionInfo *session, ObExecContext *exec_ctx)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(session);
+  if (value.is_null() || value.is_nop_value()) {
+  } else {
+    const ObString raw = value.get_string();
+    if (raw.ptr() == nullptr || raw.empty()) {
+      if (value.has_lob_header() && value.is_lob_storage()) { ret = OB_ERR_UNEXPECTED; }
+    } else if (ObCharset::is_valid_charset(charset_type) && charset_type != CHARSET_BINARY) {
+      const ObCollationType from = value.get_collation_type();
+      const ObCollationType to = ObCharset::get_default_collation(charset_type);
+      const ObCharsetInfo *from_info = ObCharset::get_charset(from);
+      const ObCharsetInfo *to_info = ObCharset::get_charset(to);
+      if (from_info == nullptr || to_info == nullptr || from == CS_TYPE_INVALID || to == CS_TYPE_INVALID) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (from != CS_TYPE_BINARY && to != CS_TYPE_BINARY && strcmp(from_info->csname, to_info->csname) != 0) {
+        ObString bytes = raw;
+        int64_t data_bytes = raw.length();
+        ObArenaAllocator temporary("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
+        if (value.has_lob_header()) {
+          ObLobLocatorV2 locator(raw, true);
+          ObTextStringIter input(value.get_type(), from, raw, true);
+          if (exec_ctx == nullptr) {
+            ret = OB_INVALID_ARGUMENT;
+          } else if (OB_FAIL(ObTextStringHelper::build_text_iter(input, *exec_ctx,
+                                                        &temporary, &temporary))) {
+          } else if (OB_FAIL(input.get_full_data(bytes))) {
+          } else if (OB_FAIL(locator.get_lob_data_byte_len(data_bytes))) {
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ObTextStringResult output(value.get_type(), value.has_lob_header(), &owner);
+          char *buffer = nullptr;
+          int64_t capacity = 0;
+          uint32_t count = 0;
+          if (OB_FAIL(output.init(data_bytes * ObCharset::CharConvertFactorNum))) {
+          } else if (OB_FAIL(output.get_reserved_buffer(buffer, capacity))) {
+          } else if (OB_FAIL(convert_string_charset(bytes, from, to, buffer, capacity, count))) {
+          } else if (OB_FAIL(output.lseek(count, 0))) {
+          } else {
+            ObString converted;
+            output.get_result_buffer(converted);
+            set_native_lob_view(value, value.get_type(), converted);
+            value.set_collation_type(to);
+            if (output.has_lob_header()) { value.meta_.set_has_lob_header(); }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObQueryDriver::process_lob_locator_results(DatumValue &value, ObResultSet &result)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator *owner = nullptr;
+  if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(owner))) {
+  } else if (owner == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ret = process_lob_locator_results(value, owner, &result.get_session(), &result.get_exec_context());
+  }
+  return ret;
+}
+
+int ObQueryDriver::process_lob_locator_results(DatumValue &value, ObIAllocator *owner,
+    const ObSQLSessionInfo *session, ObExecContext *exec_ctx)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(session);
+  if (!(value.get_meta().is_lob() || value.is_json() || value.is_geometry())
+             || value.is_null() || value.is_nop_value()) {
+  } else if (exec_ctx == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObLobLocatorV2 locator(value.get_string(), value.has_lob_header());
+    if (!locator.is_null()) {
+      ObString bytes;
+      ObArenaAllocator temporary("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
+      ObTextStringIter input(value.get_type(), value.get_collation_type(),
+                             value.get_string(), value.has_lob_header());
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(input, *exec_ctx, owner, &temporary))) {
+      } else if (OB_FAIL(input.get_full_data(bytes))) {
+      } else {
+        const SqlValueType type = value.is_json() ? ObJsonType
+            : value.is_geometry() ? ObGeometryType : ObLongTextType;
+        set_native_lob_view(value, type, bytes);
+      }
+    }
   }
   return ret;
 }
@@ -372,62 +513,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
 }
 
 
-int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &result)
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator *allocator = NULL;
-  if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-  } else if (OB_ISNULL(allocator)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(process_lob_locator_results(value, 
-                                                 allocator,
-                                                 &result.get_session(),
-                                                 &result.get_exec_context()))) {
-  }
-  return ret;
-}
-
-int ObQueryDriver::process_lob_locator_results(ObObj& value,
-                                               ObIAllocator *allocator,
-                                               const sql::ObSQLSessionInfo *session_info,
-                                               sql::ObExecContext *exec_ctx)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(session_info);
-  bool is_lob_type = value.is_lob()
-                     || value.is_json() || value.is_geometry();
-  if (!is_lob_type) {
-    // not lob types, do nothing
-  } else if (value.is_null() || value.is_nop_value()) {
-    // do nothing
-  } else if (OB_ISNULL(exec_ctx)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    // Should remove locator header and read full lob data
-    ObString data;
-    ObLobLocatorV2 loc(value.get_string(), value.has_lob_header());
-    if (loc.is_null()) { // maybe v1 empty lob
-    } else { // lob locator v2
-      ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
-      ObTextStringIter instr_iter(value);
-      if (OB_FAIL(ObTextStringHelper::build_text_iter(
-              instr_iter, *exec_ctx, allocator, &tmp_alloc))) {
-      } else if (OB_FAIL(instr_iter.get_full_data(data))) {
-      } else {
-        ObObjType dst_type = ObLongTextType;
-        if (value.is_json()) {
-          dst_type = ObJsonType;
-        } else if (value.is_geometry()) {
-          dst_type = ObGeometryType;
-        }
-        // remove has lob header flag
-        value.set_lob_value(dst_type, data.ptr(), static_cast<int32_t>(data.length()));
-      }
-    }
-  }
-  return ret;
-}
-
 int ObQueryDriver::convert_string_charset(const ObString &in_str, const ObCollationType in_cs_type,
                                           const ObCollationType out_cs_type, 
                                           char *buf, int32_t buf_len, uint32_t &result_len)
@@ -457,85 +542,6 @@ int ObQueryDriver::convert_string_charset(const ObString &in_str, const ObCollat
     } else {
       result_len = buf_offset;
       ret = OB_SUCCESS;
-    }
-  }
-  return ret;
-}
-
-int ObQueryDriver::convert_text_value_charset(ObObj& value,
-                                              ObCharsetType charset_type, 
-                                              ObIAllocator &allocator,
-                                              const sql::ObSQLSessionInfo *session,
-                                              sql::ObExecContext *exec_ctx)
-{
-  int ret = OB_SUCCESS;
-  UNUSED(session);
-  ObString raw_str = value.get_string();
-  if (value.is_null() || value.is_nop_value()) {
-  } else if (OB_ISNULL(raw_str.ptr()) || raw_str.length() == 0) {
-    if (!value.has_lob_header() || !value.is_lob_storage()) {
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  } else if (ObCharset::is_valid_charset(charset_type) && CHARSET_BINARY != charset_type) {
-    ObCollationType to_collation_type = ObCharset::get_default_collation(charset_type);
-    ObCollationType from_collation_type = value.get_collation_type();
-    const ObCharsetInfo *from_charset_info = ObCharset::get_charset(from_collation_type);
-    const ObCharsetInfo *to_charset_info = ObCharset::get_charset(to_collation_type);
-    const ObObjType type = value.get_type();
-
-    if (OB_ISNULL(from_charset_info) || OB_ISNULL(to_charset_info)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (CS_TYPE_INVALID == from_collation_type || CS_TYPE_INVALID == to_collation_type) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (CS_TYPE_BINARY != from_collation_type && CS_TYPE_BINARY != to_collation_type
-        && strcmp(from_charset_info->csname, to_charset_info->csname) != 0) {
-      {
-        // get full data, buffer size is full byte length * ObCharset::CharConvertFactorNum
-        ObString data_str = value.get_string();
-        int64_t lob_data_byte_len = data_str.length();
-        ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
-        if (!value.has_lob_header()) {
-        } else {
-          ObLobLocatorV2 loc(raw_str, value.has_lob_header());
-          ObTextStringIter str_iter(value);
-          // it's fine that res_allocator and tmp_allocator is same
-          // because the final result will be allocated by allocator when convert charset
-          if (OB_ISNULL(exec_ctx)) {
-            ret = OB_INVALID_ARGUMENT;
-          } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
-                         str_iter,
-                         *exec_ctx,
-                         &tmp_alloc/*res_allocator*/,
-                         &tmp_alloc/*tmp_allocator*/))) {
-          } else if (OB_FAIL(str_iter.get_full_data(data_str))) {
-          } else if (OB_FAIL(loc.get_lob_data_byte_len(lob_data_byte_len))) {
-          }
-        } 
-        if (OB_SUCC(ret)) {
-          // mock result buffer and reserve data length
-          // could do streaming charset convert
-          ObTextStringResult new_tmp_lob(type, value.has_lob_header(), &allocator);
-          char *buf = NULL;
-          int64_t buf_len = 0;
-          uint32_t result_len = 0;
-          int64_t converted_len = lob_data_byte_len * ObCharset::CharConvertFactorNum;
-          if (OB_FAIL(new_tmp_lob.init(converted_len))) {
-          } else if (OB_FAIL(new_tmp_lob.get_reserved_buffer(buf, buf_len))) {
-          } else if (OB_FAIL(convert_string_charset(data_str, from_collation_type, to_collation_type,
-                                                    buf, buf_len, result_len))) {
-          } else if (OB_FAIL(new_tmp_lob.lseek(result_len, 0))) {
-          } else {
-            ObString lob_loc_str;
-            new_tmp_lob.get_result_buffer(lob_loc_str);
-            value.set_lob_value(type, lob_loc_str.ptr(), lob_loc_str.length());
-            value.set_collation_type(to_collation_type);
-            if (new_tmp_lob.has_lob_header()) {
-              value.set_has_lob_header();
-            }
-          }
-        }
-      }
     }
   }
   return ret;

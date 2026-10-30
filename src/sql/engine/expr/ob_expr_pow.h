@@ -33,10 +33,6 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc(common::ObObj &result,
-                  const common::ObObj &obj1,
-                  const common::ObObj &obj2,
-                  common::ObExprCtx &expr_ctx);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
   static int safe_set_double(common::ObDatum &datum, double value);

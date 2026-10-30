@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SQL_OB_LOG_PLAN_H
 #define OCEANBASE_SQL_OB_LOG_PLAN_H
+#include "common/datum/datum_value.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "sql/ob_sql_context.h"
@@ -383,7 +384,7 @@ public:
                                             const ObDMLStmt *stmt,
                                             ObJoinType join_type,
                                             ObRawExpr  &expr,
-                                            common::ObIArray<common::ObObj> &popular_values) const;
+                                            common::ObIArray<common::DatumValue> &popular_values) const;
   int get_source_table_info(ObLogicalOperator &child_op,
                                uint64_t source_table_id,
                                ObShardingInfo *&sharding_info,
@@ -1754,7 +1755,7 @@ private: // member functions
                                   ObOptColumnStatHandle &handle) const;
   int get_popular_values_hash(common::ObIAllocator &allocator,
                               ObOptColumnStatHandle &handle,
-                              common::ObIArray<ObObj> &popular_values) const;
+                              common::ObIArray<DatumValue> &popular_values) const;
 
   int prepare_text_retrieval_info(const uint64_t ref_table_id,
                                   const uint64_t index_table_id,

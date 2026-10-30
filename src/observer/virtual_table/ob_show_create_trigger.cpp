@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/virtual_table/ob_show_create_trigger.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -85,13 +86,13 @@ int ObShowCreateTrigger::calc_show_trigger_id(uint64_t &tg_id)
   for (int64_t i = 0; OB_SUCCESS == ret && OB_INVALID_ID == tg_id && i < key_ranges_.count(); ++i) {
     const ObRowkey &start_key = key_ranges_.at(i).start_key_;
     const ObRowkey &end_key = key_ranges_.at(i).end_key_;
-    const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-    const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-    if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
+    const DatumValue *start_key_obj_ptr = start_key.get_values();
+    const DatumValue *end_key_obj_ptr = end_key.get_values();
+    if (start_key.get_value_count() > 0 && start_key.get_value_count() == end_key.get_value_count()) {
       if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
-      } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
+      } else if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])
                  && ObIntType == start_key_obj_ptr[0].get_type()) {
         tg_id = start_key_obj_ptr[0].get_int();
       } else {/*do nothing*/}
@@ -136,12 +137,14 @@ int ObShowCreateTrigger::fill_row_cells(uint64_t tg_id, const ObTriggerInfo &tg_
       uint64_t col_id = output_column_ids_.at(i);
       switch(col_id) {
         case TRIGGER_ID: {
-          cur_row_.cells_[cell_idx].set_int(tg_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, cell_idx, tg_id) : ret);
           break;
         }
         case SQL_MODE: {
-          ObObj int_value;
-          int_value.set_int(exec_env.get_sql_mode());
+          const int64_t sql_mode_value = exec_env.get_sql_mode();
+          DatumValue int_value;
+          int_value.meta_.set_int();
+          int_value.datum_.set_string(reinterpret_cast<const char *>(&sql_mode_value), sizeof(sql_mode_value));
           if (OB_FAIL(ob_sql_mode_to_str(int_value,  cur_row_.cells_[cell_idx], allocator_))) {
           } else {
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(
@@ -154,25 +157,24 @@ int ObShowCreateTrigger::fill_row_cells(uint64_t tg_id, const ObTriggerInfo &tg_
           int64_t pos = 0;
           OZ (schema_printer.print_trigger_definition(tg_info, tg_def_buf, 
                                                       OB_MAX_VARCHAR_LENGTH, pos));
-          OX (cur_row_.cells_[cell_idx].set_lob_value(ObLongTextType,
-                                                    tg_def_buf, static_cast<int32_t>(pos)));
+          OX ((OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cur_row_.cells_, cur_row_.count_, cell_idx, ObLongTextType, ObString(static_cast<int32_t>(pos), tg_def_buf)) : ret));
           OX (cur_row_.cells_[cell_idx].set_collation_type(
                       ObCharset::get_default_collation(ObCharset::get_default_charset())));
           break;
         }
 #define COLUMN_SET_WITH_TYPE(COL_NAME, TYPE, VALUE) \
   case (COL_NAME): {    \
-    cur_row_.cells_[cell_idx].set_##TYPE(VALUE); \
+    if (OB_SUCC(ret)) { ret = DatumValueBuffer::set_##TYPE(cur_row_.cells_, cur_row_.count_, cell_idx, VALUE); } \
     cur_row_.cells_[cell_idx].set_collation_type( \
                       ObCharset::get_default_collation(ObCharset::get_default_charset())); \
     break;\
   }
-        COLUMN_SET_WITH_TYPE(TRIGGER_NAME, varchar, tg_info.get_trigger_name())
-        COLUMN_SET_WITH_TYPE(CHARACTER_SET_CLIENT, varchar,
+        COLUMN_SET_WITH_TYPE(TRIGGER_NAME, varchar_view, tg_info.get_trigger_name())
+        COLUMN_SET_WITH_TYPE(CHARACTER_SET_CLIENT, varchar_view,
                              ObCharset::charset_name(exec_env.get_charset_client()))
-        COLUMN_SET_WITH_TYPE(COLLATION_CONNECTION, varchar,
+        COLUMN_SET_WITH_TYPE(COLLATION_CONNECTION, varchar_view,
                              ObCharset::charset_name(exec_env.get_collation_connection()))
-        COLUMN_SET_WITH_TYPE(COLLATION_DATABASE, varchar,
+        COLUMN_SET_WITH_TYPE(COLLATION_DATABASE, varchar_view,
                              ObCharset::charset_name(exec_env.get_collation_database()))
 #undef COLUMN_SET_WITH_TYPE
         default: {

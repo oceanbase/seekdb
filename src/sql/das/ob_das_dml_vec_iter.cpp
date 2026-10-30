@@ -168,7 +168,7 @@ int ObVecIndexDMLIterator::generate_vec_delta_buff_row(common::ObIAllocator &all
     ObString ins(1, VEC_DELTA_INSERT); // "I"
     ObString del(1, VEC_DELTA_DELETE); // "D"
     // set type charset
-    // ObObjMeta col_type = das_ctdef_->column_types_.at(type_idx);
+    // SqlTypeMeta col_type = das_ctdef_->column_types_.at(type_idx);
     // obj_arr[type_idx].set_collation_level(col_type.get_collation_level());
     // obj_arr[type_idx].set_collation_type(col_type.get_collation_type());
     switch (das_ctdef_->op_type_) {

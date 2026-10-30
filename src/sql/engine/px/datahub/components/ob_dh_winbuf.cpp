@@ -204,7 +204,7 @@ OB_DEF_DESERIALIZE(ObWinbufPieceMsg)
       if (col_count_ > 0 &&
           OB_FAIL(ob_create_row(deseria_allocator_, col_count_, row_))) {
       } else {
-        LST_DO_CODE(OB_UNIS_DECODE, row_);
+        if (pos < data_len) { ret = row_.deserialize(deseria_allocator_, buf, data_len, pos); }
       }
     }
   }

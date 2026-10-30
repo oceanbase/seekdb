@@ -59,8 +59,8 @@ int ObExprBitLength::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, 
   {
     OB_ASSERT(rt_expr.arg_cnt_ == 1);
     OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
-    ObObjType text_type = rt_expr.args_[0]->datum_meta_.type_;
-    ObObjTypeClass type_class = ob_obj_type_class(text_type);
+    SqlValueType text_type = rt_expr.args_[0]->datum_meta_.type_;
+    SqlTypeClass type_class = sql_type_class(text_type);
 
     if (!ob_is_castable_type_class(type_class)) {
       rt_expr.eval_func_ = ObExprBitLength::calc_null;

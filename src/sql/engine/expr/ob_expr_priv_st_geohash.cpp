@@ -46,12 +46,12 @@ int ObExprPrivSTGeoHash::calc_result_typeN(
     ret = OB_ERR_PARAM_SIZE;
     LOG_USER_ERROR(OB_ERR_PARAM_SIZE, fun_name.length(), fun_name.ptr());
   } else {
-    ObObjType type_geom = types[0].get_type();
+    SqlValueType type_geom = types[0].get_type();
     if (!ob_is_geometry(type_geom) && !ob_is_string_type(type_geom) && !ob_is_null(type_geom)) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOHASH);
     } else if (param_num == 2) {
-      ObObjType prec_type = types[1].get_type();
+      SqlValueType prec_type = types[1].get_type();
       if ((ob_is_integer_type(prec_type) && ObTinyIntType != prec_type) || ob_is_null(prec_type)) {
         // do noting
       } else if (ob_is_string_type(prec_type)) {

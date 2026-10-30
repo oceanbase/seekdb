@@ -193,14 +193,14 @@ bool init_dict_cmp_ref_funcs()
 
 bool dict_cmp_ref_funcs_inited = init_dict_cmp_ref_funcs();
 
-int ObDictDecoder::init(const common::ObObjType &store_obj_type, const char *meta_header)
+int ObDictDecoder::init(const common::SqlValueType &store_obj_type, const char *meta_header)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited())) {
     ret = OB_INIT_TWICE;
   } else {
-    store_class_ = get_store_class_map()[ob_obj_type_class(store_obj_type)];
-    if (ObIntTC == ob_obj_type_class(store_obj_type)) {
+    store_class_ = get_store_class_map()[sql_type_class(store_obj_type)];
+    if (ObIntTC == sql_type_class(store_obj_type)) {
       int64_t type_store_size = get_type_size_map()[store_obj_type];
       integer_mask_ = ~INTEGER_MASK_TABLE[type_store_size];
     } else {
@@ -249,7 +249,7 @@ int ObDictDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, const i
   return ret;
 }
 
-int ObDictDecoder::decode(const common::ObObjType &obj_type, common::ObDatum &datum, const int64_t ref, const int64_t meta_length) const
+int ObDictDecoder::decode(const common::SqlValueType &obj_type, common::ObDatum &datum, const int64_t ref, const int64_t meta_length) const
 {
   int ret = OB_SUCCESS;
 
@@ -289,8 +289,7 @@ int ObDictDecoder::decode(const common::ObObjType &obj_type, common::ObDatum &da
       if (ref == count) {
         datum.set_null();
       } else if (ref == count + 1) {
-        datum.set_ext();
-        datum.no_cv(datum.extend_obj_)->set_ext(common::ObActionFlag::OP_NOP);
+        datum.set_ext_value(common::ObActionFlag::OP_NOP);
       } else {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -394,8 +393,8 @@ int ObDictDecoder::batch_decode(
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
   } else if (fast_decode_valid(ctx)) {
-    const ObObjType store_obj_type = ctx.col_header_->get_store_obj_type();
-    const ObObjTypeStoreClass store_class = get_store_class_map()[ob_obj_type_class(store_obj_type)];
+    const SqlValueType store_obj_type = ctx.col_header_->get_store_obj_type();
+    const SqlValueTypeStoreClass store_class = get_store_class_map()[sql_type_class(store_obj_type)];
 
     const char *ref_data = reinterpret_cast<char *>(
         const_cast<ObDictMetaHeader *>(meta_header_)) + ctx.col_header_->length_;
@@ -403,7 +402,7 @@ int ObDictDecoder::batch_decode(
     if (meta_header_->is_fix_length_dict()) {
       // Only need store_len for UIntSC/IntSC
       const int64_t store_size = meta_header_->data_size_;
-      const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(store_obj_type);
+      const SqlValueDatumMapType map_type = ObDatum::get_sql_value_datum_map_type(store_obj_type);
       bool read_as_signed_data = ObIntSC == store_class
                                 && store_size == get_type_size_map()[store_obj_type];
       const int64_t func_entry_store_size_idx = (store_class == ObIntSC || store_class == ObUIntSC)
@@ -456,7 +455,7 @@ int ObDictDecoder::batch_decode(
 // Internal call, not check parameters for performance
 // datums[i].len_ should stand for the reference to dictionary as input parameter
 int ObDictDecoder::batch_decode_dict(
-    const common::ObObjType &obj_type,
+    const common::SqlValueType &obj_type,
     const char **cell_datas,
     const int64_t row_cap,
     const int64_t meta_length,
@@ -526,8 +525,8 @@ int ObDictDecoder::batch_decode_dict(
 bool ObDictDecoder::fast_decode_valid(const ObColumnDecoderCtx &ctx) const
 {
   bool valid = false;
-  const ObObjTypeStoreClass store_class =
-      get_store_class_map()[ob_obj_type_class(ctx.col_header_->get_store_obj_type())];
+  const SqlValueTypeStoreClass store_class =
+      get_store_class_map()[sql_type_class(ctx.col_header_->get_store_obj_type())];
   if (meta_header_->is_fix_length_dict()) {
     valid = !ctx.is_bit_packing()
           && meta_header_->row_ref_size_ <= 2
@@ -1393,7 +1392,7 @@ int ObDictDecoder::batch_read_distinct(
   int ret = OB_SUCCESS;
   const int64_t count = meta_header_->count_;
   const char *dict_payload = meta_header_->payload_;
-  const common::ObObjType obj_type = ctx.col_header_->get_store_obj_type();
+  const common::SqlValueType obj_type = ctx.col_header_->get_store_obj_type();
   common::ObDatum *datums = group_by_cell.get_group_by_col_datums_to_fill();
   group_by_cell.set_distinct_cnt(count);
   if (meta_header_->is_fix_length_dict()) {

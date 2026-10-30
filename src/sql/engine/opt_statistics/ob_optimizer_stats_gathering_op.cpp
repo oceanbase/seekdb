@@ -512,7 +512,7 @@ int ObOptimizerStatsGatheringOp::get_col_stat_map(ColStatIndMap &col_stat_map)
       ObOptOSGColumnStat *osg_col_stat = NULL;
       if (OB_ISNULL(osg_col_stat = it->second) || OB_ISNULL(osg_col_stat->col_stat_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(osg_col_stat->set_min_max_datum_to_obj())) {
+      } else if (OB_FAIL(osg_col_stat->publish_min_max_values())) {
       } else if (OB_FAIL(col_stat_map.set_refactored(it->first, osg_col_stat->col_stat_))) {
       }
     }
@@ -567,7 +567,7 @@ int ObOptimizerStatsGatheringOp::get_col_stats(common::ObIArray<ObOptColumnStat*
     ObOptOSGColumnStat *osg_col_stat = NULL;
     if (OB_ISNULL(osg_col_stat = it->second) || OB_ISNULL(osg_col_stat->col_stat_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(osg_col_stat->set_min_max_datum_to_obj())) {
+    } else if (OB_FAIL(osg_col_stat->publish_min_max_values())) {
     } else if (OB_FAIL(col_stats.push_back(osg_col_stat->col_stat_))) {
     }
   }

@@ -19,6 +19,10 @@
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/engine/ob_exec_context.h"
 
+#include "common/datum/datum_value_projection.h"
+#include "data_plane/native_key_value_buffer.h"
+#include "share/datum/typed_datum_compare.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -81,10 +85,7 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
     void *buf = nullptr;
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObObj) * rowkey_cnt))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      obj_ptr_ = new(buf) ObObj[rowkey_cnt];
+    } else if (OB_FAIL(storage::NativeKeyValueBuffer::allocate_values(*allocator_, rowkey_cnt, obj_ptr_))) {
     }
   }
 
@@ -94,7 +95,9 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
       // do nothing
     } else {
       ObDatum &col_datum = expr->locate_expr_datum(*scan_rtdef_->eval_ctx_);
-      if (OB_FAIL(col_datum.to_obj(obj_ptr_[i], expr->obj_meta_, expr->obj_datum_map_))) {
+      DatumValue value;
+      if (OB_FAIL(project_datum_value_view(col_datum, expr->obj_meta_, expr->obj_datum_map_, obj_ptr_[i].meta_, value))) {
+      } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(value, obj_ptr_, rowkey_cnt, i))) {
       }
     }    
   }
@@ -103,10 +106,10 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
     ObRowkey table_rowkey(obj_ptr_, rowkey_cnt);
     bool pass_through = true;
 
-    ObObj mbr_obj;
+    DatumValue mbr_obj;
     ObExpr *mbr_expr = scan_ctdef_->result_output_.at(rowkey_cnt);
     ObDatum &mbr_datum = mbr_expr->locate_expr_datum(*scan_rtdef_->eval_ctx_);
-    if (OB_FAIL(mbr_datum.to_obj(mbr_obj, mbr_expr->obj_meta_, mbr_expr->obj_datum_map_))) {
+    if (OB_FAIL(project_datum_value_view(mbr_datum, mbr_expr->obj_meta_, mbr_expr->obj_datum_map_, mbr_obj.meta_, mbr_obj))) {
     } else if (!is_whole_range_ && OB_FAIL(filter_by_mbr(mbr_obj, pass_through))) {
     } else if (!is_whole_range_ && pass_through) {
       // not target
@@ -119,7 +122,7 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
   return ret;
 }
 
-int ObDASSpatialScanIter::filter_by_mbr(const ObObj &mbr_obj, bool &pass_through)
+int ObDASSpatialScanIter::filter_by_mbr(const DatumValue &mbr_obj, bool &pass_through)
 {
   int ret = OB_SUCCESS;
 

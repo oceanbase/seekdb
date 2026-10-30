@@ -72,7 +72,7 @@ int ObSysVarDefaultValue::inner_get_next_row(ObNewRow *&row)
 int ObSysVarDefaultValue::add_row()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = nullptr;
+  DatumValue *cells = nullptr;
   if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -86,12 +86,12 @@ int ObSysVarDefaultValue::add_row()
           uint64_t col_id = output_column_ids_.at(j);
           switch(col_id) {
             case NAME: {
-              cells[j].set_varchar(ObSysVariables::get_name(store_idx));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, j, ObSysVariables::get_name(store_idx)) : ret);
               cells[j].set_collation_type(ObSysVariables::get_default_sysvar_collation());
               break;
             }
             case DEFAULT_VALUE: {
-              cells[j].set_varchar(ObSysVariables::get_value(store_idx));
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, j, ObSysVariables::get_value(store_idx)) : ret);
               cells[j].set_collation_type(ObSysVariables::get_default_sysvar_collation());
               break;
             }

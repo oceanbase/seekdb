@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_datum_funcs.h"
+#include "datum_ndv_hash.h"
 #include "ob_datum_cmp_func_def.h"
-#include "common/object/ob_obj_funcs.h"
 
 namespace oceanbase {
 namespace common {
@@ -62,9 +62,9 @@ static int64_t fill_type_with_tc_cmp_func()
 {
   int64_t cnt = 0;
   for (int64_t i = 0; i < ObMaxType; i++) {
-    ObObjTypeClass i_tc = ob_obj_type_class((ObObjType)i);
+    SqlTypeClass i_tc = sql_type_class((SqlValueType)i);
     for (int64_t j = 0; j < ObMaxType; j++) {
-      ObObjTypeClass j_tc = ob_obj_type_class((ObObjType)j);
+      SqlTypeClass j_tc = sql_type_class((SqlValueType)j);
       if (NULL == NULLSAFE_TYPE_CMP_FUNCS[i][j][0]) {
         NULLSAFE_TYPE_CMP_FUNCS[i][j][0] = NULLSAFE_TC_CMP_FUNCS[i_tc][j_tc][0];
         NULLSAFE_TYPE_CMP_FUNCS[i][j][1] = NULLSAFE_TC_CMP_FUNCS[i_tc][j_tc][1];
@@ -93,7 +93,7 @@ ObDatumCmpFuncType FIXED_DOUBLE_CMP_FUNCS[OB_NOT_FIXED_SCALE][2];
 ObDatumCmpFuncType DECINT_CMP_FUNCS[DECIMAL_INT_MAX][DECIMAL_INT_MAX][2];
 
 ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
-    const ObObjType type1, const ObObjType type2, const ObCmpNullPos null_pos,
+    const SqlValueType type1, const SqlValueType type2, const ObCmpNullPos null_pos,
     const ObCollationType cs_type, const ObScale max_scale,
     const bool has_lob_header, const ObPrecision prec1, const ObPrecision prec2) {
   OB_ASSERT(type1 >= ObNullType && type1 < ObMaxType);
@@ -137,9 +137,9 @@ ObDatumCmpFuncType ObDatumFuncs::get_nullsafe_cmp_func(
   return func_ptr;
 }
 
-bool ObDatumFuncs::is_collection(const ObObjType type)
+bool ObDatumFuncs::is_collection(const SqlValueType type)
 {
-  const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
+  const SqlTypeClass tc = OBJ_TYPE_TO_CLASS[type];
   return (tc == ObCollectionSQLTC);
 }
 
@@ -173,7 +173,7 @@ static bool init_all_str_funcs()
 
 bool g_all_str_funcs_intied = init_all_str_funcs();
 
-ObDatumBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
+ObDatumBasicFuncs* ObDatumFuncs::get_basic_func(const SqlValueType type,
                                                 const ObCollationType cs_type,
                                                 const ObScale scale,
                                                 const bool has_lob_locator,
@@ -212,21 +212,47 @@ ObDatumBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
   return res;
 }
 
-bool ObDatumFuncs::is_string_type(const ObObjType type)
+int hash_datum_for_ndv(const ObDatum &datum, const SqlTypeMeta &meta,
+                               const uint64_t seed, uint64_t &result)
 {
-  const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
+  int ret = OB_SUCCESS;
+  const SqlValueType type = meta.get_type();
+  if (OB_UNLIKELY(type < ObNullType || type >= ObMaxType)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if ((meta.is_string_type() || meta.is_enumset_inner_type()
+              || ob_is_json(type) || ob_is_geometry(type))
+             && !datum.is_null()) {
+    // VALUES statistics historically hash the stored bytes, including any
+    // locator header, without dereferencing external LOB data. ENUM/SET inner
+    // values use the same string representation. JSON and geometry's legacy
+    // value hashes also use these raw bytes; expression hashes may parse/read LOBs.
+    result = ObCharset::hash(meta.get_collation_type(), datum.ptr_, datum.len_,
+                             seed, false, NULL);
+  } else if (OB_ISNULL(EXPR_BASIC_FUNCS[type].default_hash_)) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    // Use the unspecialized scalar table: get_basic_func() may select rounded
+    // DOUBLE, width-specific DECIMAL or LOB-reading expression semantics.
+    ret = EXPR_BASIC_FUNCS[type].default_hash_(datum, seed, result, NULL);
+  }
+  return ret;
+}
+
+bool ObDatumFuncs::is_string_type(const SqlValueType type)
+{
+  const SqlTypeClass tc = OBJ_TYPE_TO_CLASS[type];
   return (tc == ObStringTC || tc == ObRawTC || tc == ObTextTC);
 }
 
-bool ObDatumFuncs::is_json(const ObObjType type)
+bool ObDatumFuncs::is_json(const SqlValueType type)
 {
-  const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
+  const SqlTypeClass tc = OBJ_TYPE_TO_CLASS[type];
   return (tc == ObJsonTC);
 }
 
-bool ObDatumFuncs::is_geometry(const ObObjType type)
+bool ObDatumFuncs::is_geometry(const SqlValueType type)
 {
-  const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
+  const SqlTypeClass tc = OBJ_TYPE_TO_CLASS[type];
   return (tc == ObGeometryTC);
 }
 
@@ -236,9 +262,9 @@ bool ObDatumFuncs::is_geometry(const ObObjType type)
  * It ensures that the hashing process treats null values and null type representations
  * consistently across such data types, avoiding discrepancies in hash results.
  */
-bool ObDatumFuncs::is_null_aware_hash_type(const ObObjType type)
+bool ObDatumFuncs::is_null_aware_hash_type(const SqlValueType type)
 {
-  const ObObjTypeClass tc = OBJ_TYPE_TO_CLASS[type];
+  const SqlTypeClass tc = OBJ_TYPE_TO_CLASS[type];
   return is_string_type(type) || is_json(type) || is_geometry(type) ||
             (tc == ObUserDefinedSQLTC) || (tc == ObFloatTC) || (tc == ObDoubleTC);
 }

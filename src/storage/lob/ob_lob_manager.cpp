@@ -2050,7 +2050,7 @@ int ObLobManager::get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
 
 
 int ObLobManager::get_delta_lob_full_data(common::ObLobTextIterCtx &ctx,
-                                          common::ObObjType type,
+                                          common::SqlValueType type,
                                           common::ObCollationType cs_type,
                                           common::ObLobLocatorV2 &lob_locator,
                                           common::ObIAllocator *allocator,
@@ -2774,13 +2774,17 @@ int read_lob_to_buffer(common::ObIAllocator &allocator,
   return ret;
 }
 
-void set_zero_lob_value(common::ObObjType type, common::ObObj &value)
+void set_zero_lob_value(common::SqlValueType type, common::DatumValue &value)
 {
-  value.set_lob_value(
-      type,
-      reinterpret_cast<const char *>(&storage::ObLobManager::ZERO_LOB),
-      sizeof(common::ObLobCommon));
-  value.set_has_lob_header();
+  common::ObDatum datum;
+  datum.set_string(reinterpret_cast<const char *>(&storage::ObLobManager::ZERO_LOB),
+                   sizeof(common::ObLobCommon));
+  common::SqlTypeMeta meta;
+  meta.set_type(type);
+  meta.set_inrow();
+  meta.set_collation_level(common::CS_LEVEL_IMPLICIT);
+  meta.set_has_lob_header();
+  value = common::DatumValue(datum, meta);
 }
 
 int fill_lob_header(common::ObIAllocator &allocator,

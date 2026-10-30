@@ -645,7 +645,7 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
         && OB_NOT_NULL(op.get_plan()->get_stmt()->get_query_ctx()));
     CK (OB_NOT_NULL(phy_plan_));
     if (OB_SUCC(ret)) {
-      ObObj val;
+      DatumValue val;
       ObLogPlan *log_plan = op.get_plan();
       const ObOptParamHint *opt_params = &log_plan->get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
       if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::WORKAREA_SIZE_POLICY, val))) {
@@ -669,7 +669,7 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
   } else {
     const ObOptParamHint *opt_params =
       &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
-    ObObj hint_val;
+    DatumValue hint_val;
     if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::SPILL_COMPRESSION_CODEC, hint_val))) {
     } else if (hint_val.is_nop_value()) { // get compression algorithm from configure
       configured_codec = config::spill_compression_codec();
@@ -1699,7 +1699,7 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
     ObIAllocator &allocator = phy_plan_->get_allocator();
     if (OB_FAIL(spec.column_exprs_.prepare_allocate(op.get_column_exprs().count()))) {
     } else if (OB_FAIL(spec.value_exprs_.prepare_allocate(table_def->access_exprs_.count()))) {
-    } else if (OB_FAIL(spec.obj_params_.prepare_allocate(table_def->access_objs_.count()))) {
+    } else if (OB_FAIL(spec.datum_values_.prepare_allocate(table_def->access_values_.count()))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < op.get_column_exprs().count(); i++) {
         ObColumnRefRawExpr *col_expr = op.get_column_exprs().at(i);
@@ -1727,10 +1727,12 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
           spec.value_exprs_.at(i) = expr;
         }
       }
-      for (int64_t i = 0; OB_SUCC(ret) && i < table_def->access_objs_.count(); i++) {
-        if (OB_FAIL(ob_write_obj(allocator,
-                                 table_def->access_objs_.at(i),
-                                 spec.obj_params_.at(i)))) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < table_def->access_values_.count(); i++) {
+        const DatumParameter &source = table_def->access_values_.at(i);
+        DatumValue &value = spec.datum_values_.at(i);
+        if (OB_FAIL(clone_datum_value(source.datum_, source.get_type_meta(), value.datum_, allocator))) {
+        } else {
+          value.meta_ = source.get_type_meta();
         }
       }
       if (OB_FAIL(ret)) {
@@ -2576,7 +2578,7 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
       common::ObIArray<ObRawExpr *> &join_use_exprs = join_filter_use->get_join_exprs();
 
       // we need objmeta to transform datum to obobj
-      ObSEArray<ObObjMeta, 8> prefix_col_obj_metas;
+      ObSEArray<SqlTypeMeta, 8> prefix_col_obj_metas;
       for (int64_t i = 0; i < op.get_rf_prefix_col_idxs().count() && OB_SUCC(ret); ++i) {
         int64_t prefix_col_idx = op.get_rf_prefix_col_idxs().at(i);
         ObExpr *join_use_rt_expr = static_cast<ObExpr *>(
@@ -2957,7 +2959,7 @@ int ObStaticEngineCG::generate_range_dist_spec(
 
 int ObStaticEngineCG::generate_popular_values_hash(
     const common::ObHashFunc &hash_func,
-    const ObIArray<ObObj> &popular_values_expr,
+    const ObIArray<DatumValue> &popular_values_expr,
     common::ObFixedArray<uint64_t, common::ObIAllocator> &popular_values_hash)
 {
   int ret = OB_SUCCESS;
@@ -2972,10 +2974,6 @@ int ObStaticEngineCG::generate_popular_values_hash(
       : exec_ctx->get_lob_read_service();
   popular_values_hash.set_capacity(popular_values_expr.count());
   popular_values_hash.set_allocator(&phy_plan_->get_allocator());
-  // we allocate a temp buffer for datum, it's enough to hold any datatype
-  ObDatum datum;
-  char buf[OBJ_DATUM_MAX_RES_SIZE];
-  datum.ptr_ = buf;
   uint64_t hash_val = 0;
   if (OB_ISNULL(lob_read_service)) {
     ret = OB_NOT_INIT;
@@ -2984,9 +2982,10 @@ int ObStaticEngineCG::generate_popular_values_hash(
         *lob_read_service, session->get_query_timeout_ts());
     const common::ObDatumAccessContext datum_access_ctx(lob_read_options);
     for (int64_t i = 0; OB_SUCC(ret) && i < popular_values_expr.count(); ++i) {
-      if (OB_FAIL(datum.from_obj(popular_values_expr.at(i)))) {
-      } else if (OB_FAIL(hash_func.hash_func_(
-                     datum, 0, hash_val, &datum_access_ctx))) {
+      ObDatum row_datum;
+      char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+      if (OB_FAIL(popular_values_expr.at(i).to_row_datum(row_datum, extended_payload))) {
+      } else if (OB_FAIL(hash_func.hash_func_(row_datum, 0, hash_val, &datum_access_ctx))) {
       } else if (OB_FAIL(popular_values_hash.push_back(hash_val))) {
       }
     }
@@ -3750,7 +3749,7 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
                                                  has_io_gap_percentage_hint))) {
     }
     if (OB_SUCC(ret) && has_io_batch_size_hint) {
-      ObObj io_read_batch_size_obj;
+      DatumValue io_read_batch_size_obj;
       bool is_valid = false;
       if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::IO_READ_BATCH_SIZE, io_read_batch_size_obj))) {
       } else if (FALSE_IT(hint_io_read_batch_size = ObConfigCapacityParser::get(io_read_batch_size_obj.get_varchar().ptr(), is_valid))) {
@@ -4440,11 +4439,11 @@ int ObStaticEngineCG::generate_spec(
       if (OB_SUCC(ret)) {
         const ObRawExpr *from = child->get_output_exprs().at(idx);
         ObExpr *rt_expr = NULL;
-        ObObjType from_type = from->get_result_type().get_type();
-        ObObjType to_type = col_expr->get_result_type().get_type();
+        SqlValueType from_type = from->get_result_type().get_type();
+        SqlValueType to_type = col_expr->get_result_type().get_type();
         ObCollationType from_coll = from->get_result_type().get_collation_type();
         ObCollationType to_coll = col_expr->get_result_type().get_collation_type();
-        if (OB_UNLIKELY(ob_obj_type_class(from_type) != ob_obj_type_class(to_type) ||
+        if (OB_UNLIKELY(sql_type_class(from_type) != sql_type_class(to_type) ||
                         (ob_is_string_or_lob_type(from_type) && from_coll != to_coll))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (ob_is_decimal_int_tc(from_type) &&
@@ -5188,8 +5187,8 @@ int ObStaticEngineCG::fill_wf_info(ObIArray<ObExpr *> &all_expr,
       // ObFloatTC and ObDoubleTC may cause precision question
       if (common::REMOVE_STATISTICS == wf_info.remove_type_
           && !wf_info.aggr_info_.param_exprs_.empty()) {
-        const ObObjTypeClass column_tc =
-          ob_obj_type_class(wf_info.aggr_info_.get_first_child_type());
+        const SqlTypeClass column_tc =
+          sql_type_class(wf_info.aggr_info_.get_first_child_type());
         if (ObFloatTC == column_tc || ObDoubleTC == column_tc) {
           wf_info.remove_type_ = common::REMOVE_INVALID;
         }
@@ -5452,11 +5451,11 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != op.get_num_of_child())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_outfile_name(), spec.outfile_name_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_field_str(), spec.field_str_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_line_str(), spec.line_str_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_closed_cht(), spec.closed_cht_))) {
-  } else if (OB_FAIL(deep_copy_obj(alloc, op.get_escaped_cht(), spec.escaped_cht_))) {
+  } else if (OB_FAIL(clone_typed_value(op.get_outfile_name(), spec.outfile_name_, alloc))) {
+  } else if (OB_FAIL(clone_typed_value(op.get_field_str(), spec.field_str_, alloc))) {
+  } else if (OB_FAIL(clone_typed_value(op.get_line_str(), spec.line_str_, alloc))) {
+  } else if (OB_FAIL(clone_typed_value(op.get_closed_cht(), spec.closed_cht_, alloc))) {
+  } else if (OB_FAIL(clone_typed_value(op.get_escaped_cht(), spec.escaped_cht_, alloc))) {
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {

@@ -1873,12 +1873,12 @@ public:
   inline void set_expr_type(ObItemType v) { type_ = v; }
   inline ObItemType get_expr_type() const { return type_; }
 
-  void set_data_type(const common::ObObjType &data_type);
-  common::ObObjType get_data_type() const;
+  void set_data_type(const common::SqlValueType &data_type);
+  common::SqlValueType get_data_type() const;
 
   inline common::ObScale get_scale() const;
-  common::ObObjTypeClass get_type_class() const;
-  inline const common::ObObjMeta &get_result_meta() const;
+  common::SqlTypeClass get_type_class() const;
+  inline const common::SqlTypeMeta &get_result_meta() const;
   const sql::ObRawExprResType &get_result_type() const;
   common::ObCollationLevel get_collation_level() const;
   common::ObCollationType get_collation_type() const;
@@ -1890,12 +1890,12 @@ public:
   int get_length_for_meta_in_bytes(common::ObLength &length) const;
   /* meta info for client */
   int get_length_for_meta_in_bytes(common::ObLength &length, ObCollationType collation_type) const;
-  void set_meta_type(const common::ObObjMeta &meta_type);
+  void set_meta_type(const common::SqlTypeMeta &meta_type);
   void set_result_type(const sql::ObRawExprResType &result_type);
   void set_collation_level(common::ObCollationLevel cs_level);
   void set_collation_type(common::ObCollationType cs_type);
   void set_accuracy(const common::ObAccuracy &accuracy);
-  void set_collation(const common::ObObjMeta &meta_type);
+  void set_collation(const common::SqlTypeMeta &meta_type);
   void set_result_flag(const uint32_t flag);
   void set_scale(const int16_t scale);
   void set_precision(const int16_t precision);
@@ -1948,6 +1948,7 @@ public:
   void unset_result_flag(uint32_t result_flag);
   //void set_op_factory(ObExprOperatorFactory &factory) { op_factory_ = &factory; }
   void set_allocator(common::ObIAllocator &alloc);
+  common::ObIAllocator *get_value_allocator() const { return inner_alloc_; }
   void set_expr_factory(ObRawExprFactory &factory) { expr_factory_ = &factory; }
   ObRawExprFactory *get_expr_factory() { return expr_factory_; }
   const ObRawExprFactory *get_expr_factory() const { return expr_factory_; }
@@ -2249,12 +2250,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObRawExpr);
 };
 
-inline void ObRawExpr::set_data_type(const common::ObObjType &data_type)
+inline void ObRawExpr::set_data_type(const common::SqlValueType &data_type)
 {
   result_type_.set_type(data_type);
 }
 
-inline common::ObObjType ObRawExpr::get_data_type() const
+inline common::SqlValueType ObRawExpr::get_data_type() const
 {
   return result_type_.get_type();
 }
@@ -2264,7 +2265,7 @@ inline common::ObScale ObRawExpr::get_scale() const
   return result_type_.get_scale();
 }
 
-inline common::ObObjTypeClass ObRawExpr::get_type_class() const
+inline common::SqlTypeClass ObRawExpr::get_type_class() const
 {
   return result_type_.get_type_class();
 }
@@ -2298,7 +2299,7 @@ inline uint16_t ObRawExpr::get_subschema_id() const
 inline uint32_t ObRawExpr::get_result_flag() const
 {
   uint32_t flag = result_type_.get_result_flag();
-  ObObjType obj_type = result_type_.get_type();
+  SqlValueType obj_type = result_type_.get_type();
   if (ObCharset::is_valid_collation(static_cast<ObCollationType>(result_type_.get_collation_type()))
     && ObCharset::is_bin_sort(result_type_.get_collation_type())) {
     if (!is_column_ref_expr() ||
@@ -2324,11 +2325,11 @@ inline int ObRawExpr::get_length_for_meta_in_bytes(common::ObLength &length, ObC
 {
   return result_type_.get_length_for_meta_in_bytes(length, collation_type);
 }
-inline void ObRawExpr::set_meta_type(const common::ObObjMeta &meta_type)
+inline void ObRawExpr::set_meta_type(const common::SqlTypeMeta &meta_type)
 {
   result_type_.set_meta(meta_type);
 }
-inline const common::ObObjMeta &ObRawExpr::get_result_meta() const
+inline const common::SqlTypeMeta &ObRawExpr::get_result_meta() const
 {
   return result_type_;
 }
@@ -2348,7 +2349,7 @@ inline void ObRawExpr::set_accuracy(const common::ObAccuracy &accuracy)
 {
   result_type_.set_accuracy(accuracy);
 }
-inline void ObRawExpr::set_collation(const common::ObObjMeta &meta_type)
+inline void ObRawExpr::set_collation(const common::SqlTypeMeta &meta_type)
 {
   result_type_.set_collation(meta_type);
 }
@@ -2571,7 +2572,7 @@ public:
     set_expr_class(EXPR_CONST);
     extra_.array_param_group_id_ = -1;
   }
-  ObConstRawExpr(const oceanbase::common::ObObj &val, ObItemType expr_type = T_INVALID)
+  ObConstRawExpr(const oceanbase::common::DatumValue &val, ObItemType expr_type = T_INVALID)
     : ObTerminalRawExpr(expr_type),
       is_date_unit_(false),
       is_literal_bool_(false),
@@ -2588,15 +2589,19 @@ public:
   int inner_deep_copy(ObIRawExprCopier &copier) override;
   virtual int replace_expr(const common::ObIArray<ObRawExpr *> &other_exprs,
                            const common::ObIArray<ObRawExpr *> &new_exprs);
-  void set_value(const oceanbase::common::ObObj &val);
+  // Borrow payloads owned by the expression/plan arena. Producers allocating
+  // scalars must check their explicit-owner setter before publishing this view.
+  void set_value(const oceanbase::common::DatumValue &val);
+  void set_value(const common::DatumParameter &val) { set_value(val.value_view()); }
   void set_literal_prefix(const common::ObString &name);
-  void set_obj_param(const oceanbase::common::ObObj &param);
-  void set_expr_obj_meta(const common::ObObjMeta &meta) { obj_meta_ = meta; }
-  common::ObObj &get_value() { return value_; }
-  const common::ObObj &get_value() const  { return value_; }
-  const common::ObObjMeta &get_expr_obj_meta() const { return obj_meta_; }
+  void set_obj_param(const oceanbase::common::DatumValue &param);
+  void set_obj_param(const common::DatumParameter &param) { set_obj_param(param.value_view()); }
+  void set_expr_obj_meta(const common::SqlTypeMeta &meta) { obj_meta_ = meta; }
+  common::DatumValue &get_value() { return value_; }
+  const common::DatumValue &get_value() const  { return value_; }
+  const common::SqlTypeMeta &get_expr_obj_meta() const { return obj_meta_; }
   const common::ObString &get_literal_prefix() const { return literal_prefix_; }
-  const common::ObObj &get_param() const { return param_; }
+  const common::DatumValue &get_param() const { return param_; }
   void set_is_date_unit();
   bool is_date_unit() {return true == is_date_unit_; }
   virtual void reset();
@@ -2623,11 +2628,11 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 
 protected:
-  common::ObObj value_;
+  common::DatumValue value_;
 private:
   common::ObString literal_prefix_; // only used at compile time, irrelevant at runtime
-  common::ObObjMeta obj_meta_;
-  common::ObObj param_;
+  common::SqlTypeMeta obj_meta_;
+  common::DatumValue param_;
   bool is_date_unit_;
   // for mysql mode to distinguish tinyint and literal bool
   bool is_literal_bool_;
@@ -2695,7 +2700,7 @@ public:
   ObUserVarIdentRawExpr() : is_contain_assign_(false), query_has_udf_(false) {}
   ObUserVarIdentRawExpr(common::ObIAllocator &alloc)
     : ObConstRawExpr(alloc), is_contain_assign_(false), query_has_udf_(false) {}
-  ObUserVarIdentRawExpr(const oceanbase::common::ObObj &val, ObItemType expr_type = T_INVALID)
+  ObUserVarIdentRawExpr(const oceanbase::common::DatumValue &val, ObItemType expr_type = T_INVALID)
     : ObConstRawExpr(val, expr_type), is_contain_assign_(false), query_has_udf_(false) {}
   virtual ~ObUserVarIdentRawExpr() {}
   int assign(const ObRawExpr &other) override;
@@ -2714,7 +2719,7 @@ public:
   void set_is_contain_assign(bool is_contain_assign) { is_contain_assign_ = is_contain_assign; }
   bool get_query_has_udf() const { return query_has_udf_; }
   void set_query_has_udf(bool query_has_udf) { query_has_udf_ = query_has_udf; }
-  bool is_same_variable(const ObObj &obj) const;
+  bool is_same_variable(const common::DatumValue &obj) const;
   DECLARE_VIRTUAL_TO_STRING;
 
 private:
@@ -2750,8 +2755,8 @@ public:
   }
 
   virtual ~ObExecParamRawExpr() {}
-  void set_param_index(ObQueryCtx &query_ctx);
-  void set_param_index(int64_t index);
+  int set_param_index(ObQueryCtx &query_ctx);
+  int set_param_index(int64_t index);
   int64_t get_param_index() const;
 
   void set_ref_expr(ObRawExpr *expr, bool is_onetime = false)
@@ -3092,7 +3097,7 @@ public:
 
   inline uint64_t get_udt_set_id() const { return udt_set_id_; };
   inline void set_udt_set_id(uint64_t udt_set_id) { udt_set_id_ = udt_set_id; };
-  bool is_geo_column() const { return get_data_type() == ObObjType::ObGeometryType; }
+  bool is_geo_column() const { return get_data_type() == SqlValueType::ObGeometryType; }
   inline common::ObGeoType get_geo_type() const { return static_cast<common::ObGeoType>(srs_info_.geo_type_); }
 
   VIRTUAL_TO_STRING_KVP(N_ITEM_TYPE, type_,
@@ -4958,7 +4963,7 @@ public:
 
   // OP types: constants, ? etc.
   virtual int visit(ObConstRawExpr &expr) = 0;
-  // OP types: ObObjtypes
+  // OP types: variable references
   virtual int visit(ObVarRawExpr &expr) = 0;
   // OP types: operator pseudo column expr
   virtual int visit(ObOpPseudoColumnRawExpr &expr) = 0;
@@ -5104,7 +5109,7 @@ public:
     query_ctx_ = NULL;
   }
 
-  inline common::ObIAllocator &get_allocator() { return allocator_; }
+  inline common::ObIAllocator &get_allocator() const { return allocator_; }
   common::ObObjStore<ObRawExpr*, common::ObIAllocator&, true> &get_expr_store() { return expr_store_; }
   void set_is_called_sql(const bool is_called_sql) { is_called_sql_ = is_called_sql; }
   inline uint64_t inc_worker_check_status_times() { return ++worker_check_status_times_; }

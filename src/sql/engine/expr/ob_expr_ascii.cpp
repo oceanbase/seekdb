@@ -63,41 +63,6 @@ int ObExprAscii::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-inline void calc_ascii_inner(common::ObObj &obj, ObExprCtx &expr_ctx, const ObString &str_val)
-{
-  uint8_t tiny_val;
-  EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
-  if (str_val.length() <= 0){
-    tiny_val = 0;
-  } else {
-    tiny_val = static_cast<uint8_t>(str_val[0]);
-  }
-  obj.set_utinyint(tiny_val);
-}
-
-int ObExprAscii::calc(common::ObObj &obj,
-                      const common::ObObj &obj1,
-                      ObExprCtx &expr_ctx)
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_ISNULL(expr_ctx.calc_buf_) || OB_ISNULL(expr_ctx.exec_ctx_)) {
-    ret = OB_NOT_INIT;
-  } else if (obj1.is_null()) {
-    obj.set_null();
-  } else if (!ob_is_text_tc(obj1.get_type())) {
-    ObString str_val = obj1.get_string();
-    calc_ascii_inner(obj, expr_ctx, str_val);
-  } else {
-    ObString str_val = obj1.get_string();
-    if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
-            *expr_ctx.exec_ctx_, expr_ctx.calc_buf_, obj1, str_val))) {
-    } else {
-      calc_ascii_inner(obj, expr_ctx, str_val);
-    }
-  }
-  return ret;
-}
 
 inline void calc_ascii_expr_inner(ObDatum &res_datum, const ObString &str_val)
 {
@@ -174,30 +139,6 @@ int ObExprOrd::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-inline int calc_ord_inner(uint8_t &type, const ObString &str_val,
-                          const ObCollationType &cs_type, common::ObObj &obj)
-{
-  int ret = OB_SUCCESS;
-  const char *str_ptr = str_val.ptr();
-  if (NULL != str_ptr) {
-    const char *end = str_val.ptr() + str_val.length();
-    const ObCharsetInfo *cs = ObCharset::get_charset(cs_type);
-    uint64_t n = 0, char_len = ob_ismbchar(cs, str_ptr, end);
-    if (char_len > str_val.length()){
-      ret = OB_ERR_UNEXPECTED;
-    } else if (0 == char_len){
-      type = 1;
-    } else {
-      while (char_len--){
-        n = (n << 8) | (uint64_t)((uint8_t) *str_ptr++);
-      }
-      obj.set_uint64(n);
-    }
-  } else {
-    type = 1;
-  }
-  return ret;
-}
 
 
 static int calc_ord_expr_inner(const ObCollationType &cs_type,
@@ -264,7 +205,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
     }
 
     if (OB_SUCC(ret)) {
-      const ObObjType &res_type = expr.datum_meta_.type_;
+      const SqlValueType &res_type = expr.datum_meta_.type_;
       if (res_null) {
         res_datum.set_null();
       } else if (ObNumberType == res_type) {

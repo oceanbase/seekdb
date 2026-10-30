@@ -42,7 +42,7 @@ int ObExprPrivSTMakeEnvelope::calc_result_typeN(
   if (param_num != 4 && param_num != 5) {
     ret = OB_ERR_PARAM_SIZE;
   } else {
-    ObObjType cur_type = ObObjType::ObMaxType;
+    SqlValueType cur_type = SqlValueType::ObMaxType;
     for (int i = 0; OB_SUCC(ret) && i < 4; ++i) {
       cur_type = types_stack[i].get_type();
       if (!ob_is_numeric_type(cur_type) && !ob_is_string_type(cur_type) && !ob_is_null(cur_type)) {
@@ -80,7 +80,7 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
 {
   int ret = OB_SUCCESS;
   ObExpr *arg = nullptr;
-  ObObjType type = ObObjType::ObMaxType;
+  SqlValueType type = SqlValueType::ObMaxType;
   ObDatum *datum = nullptr;
   double coord = 0.0;
 

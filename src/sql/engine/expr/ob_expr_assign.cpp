@@ -42,7 +42,7 @@ int ObExprAssign::calc_result_type2(ObExprResType &type,
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
   UNUSED(key);
-  ObObjType val_type = value.get_type();
+  SqlValueType val_type = value.get_type();
   if (ob_is_temporal_type(val_type)){
     type.set_varchar();
     type.set_collation_level(common::CS_LEVEL_IMPLICIT);
@@ -73,7 +73,7 @@ int ObExprAssign::calc_result_type2(ObExprResType &type,
    type.set_full_length(value.get_length(), value.get_length_semantics());
   }
 
-  value.set_calc_meta(type.get_obj_meta());
+  value.set_calc_meta(type.get_sql_type_meta());
   value.set_calc_accuracy(type.get_accuracy());
   value.set_calc_collation_type(type.get_collation_type());
   value.set_calc_collation_level(type.get_collation_level());
@@ -94,11 +94,11 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, key_res)) ||
              OB_FAIL(expr.args_[1]->eval(ctx, val_res))) {
   } else {
-    ObObj obj;
-    ObObjMeta obj_meta;
+    DatumValue value;
+    SqlTypeMeta obj_meta;
     ObSessionVariable sess_var;
     if (val_res->is_null()) {
-      obj.set_null();
+      value.set_null();
       obj_meta.set_null();
       // A NULL assignment keeps the default implicit collation metadata.
       obj_meta.set_collation_level(CS_LEVEL_IMPLICIT);
@@ -113,11 +113,26 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
          // use temp meta to session var，ensure flag in expr.args_[1](val_res) copy to dest
         obj_meta.set_has_lob_header();
       }
-      if (OB_FAIL(val_res->to_obj(obj, obj_meta))) {
+      // The session map takes its own recursive snapshot before publishing.
+      // The expression frame remains alive until replace_user_variable returns.
+      value = DatumValue(*val_res, obj_meta);
+      if (OB_UNLIKELY(obj_meta.is_decimal_int() && obj_meta.get_scale() < 0)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (obj_meta.is_ext()) {
+        if (!val_res->has_ext_value()) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          value.meta_.set_extend_type(val_res->get_extend_type());
+          value.meta_.set_cs_level(val_res->get_extend_collation_level());
+          value.meta_.set_cs_type(val_res->get_extend_collation());
+        }
+      } else if (ObDatum::get_sql_value_datum_map_type(obj_meta.get_type()) == OBJ_DATUM_STRING
+                 && val_res->is_outrow()) {
+        value.meta_.set_outrow();
       }
     }
     if (OB_SUCC(ret)) {
-      sess_var.value_ = obj;
+      sess_var.value_ = value;
       sess_var.meta_ = obj_meta;
     }
     if (OB_SUCC(ret) && OB_FAIL(session->replace_user_variable(

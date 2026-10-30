@@ -47,7 +47,7 @@ void ObGVTxCtxMgrStat::destroy()
 int ObGVTxCtxMgrStat::prepare_start_to_read_()
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
 
   if (NULL == allocator_ || NULL == trans_service_) {
     SERVER_LOG(WARN, "invalid argument, allocator_ or trans_service_ is null", "allocator",
@@ -86,24 +86,23 @@ int ObGVTxCtxMgrStat::inner_get_next_row(ObNewRow *&row)
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {
         case OB_APP_MIN_COLUMN_ID:
-          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.is_stopped() ? 1 : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_ctx_mgr_stat_.is_stopped() ? 1 : 0) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 1:
-          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.is_tx_blocked() ? 1 : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_ctx_mgr_stat_.is_tx_blocked() ? 1 : 0) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 2:
-          cur_row_.cells_[i].set_int(
-              tx_ctx_mgr_stat_.is_normal_tx_blocked() ? 1 : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_ctx_mgr_stat_.is_normal_tx_blocked() ? 1 : 0) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 3:
-          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.is_all_blocked() ? 1 : 0);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_ctx_mgr_stat_.is_all_blocked() ? 1 : 0) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 4:
           // total_tx_ctx_count
-          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.get_total_tx_ctx_count());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_ctx_mgr_stat_.get_total_tx_ctx_count()) : ret);
           break;
         case OB_APP_MIN_COLUMN_ID + 5:
-          cur_row_.cells_[i].set_int(tx_ctx_mgr_stat_.get_mgr_addr());
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cur_row_.cells_, cur_row_.count_, i, tx_ctx_mgr_stat_.get_mgr_addr()) : ret);
           break;
         default:
           ret = OB_ERR_UNEXPECTED;

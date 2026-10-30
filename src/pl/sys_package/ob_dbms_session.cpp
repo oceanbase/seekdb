@@ -25,7 +25,7 @@ namespace pl
 
 int ObDBMSSession::clear_identifier(sql::ObExecContext &ctx,
                                     sql::ParamStore &params,
-                                    common::ObObj &result)
+                                    common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = ctx.get_my_session();
@@ -43,7 +43,7 @@ int ObDBMSSession::clear_identifier(sql::ObExecContext &ctx,
 
 int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = ctx.get_my_session();
@@ -69,7 +69,7 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
 
 int ObDBMSSession::reset_package(sql::ObExecContext &ctx,
                                   sql::ParamStore &params,
-                                  common::ObObj &result)
+                                  common::DatumValue &result)
 {
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = ctx.get_my_session();

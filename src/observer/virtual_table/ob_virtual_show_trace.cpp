@@ -339,7 +339,7 @@ int ObVirtualShowTrace::fill_cells(ObShowTraceRec &record)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
 
   if (OB_ISNULL(cells)) {
     ret = OB_INVALID_ARGUMENT;
@@ -349,59 +349,55 @@ int ObVirtualShowTrace::fill_cells(ObShowTraceRec &record)
       uint64_t col_id = output_column_ids_.at(cell_idx);
       switch(col_id) {
       case TRACE_ID: {
-        cells[cell_idx].set_varchar(record.data_.trace_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, record.data_.trace_id_) : ret);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                              ObCharset::get_default_charset()));
       } break;
       case REQUEST_ID: {
-        cells[cell_idx].set_int(record.data_.req_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, record.data_.req_id_) : ret);
       } break;
       case SPAN_ID: {
-        cells[cell_idx].set_varchar(record.data_.span_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, record.data_.span_id_) : ret);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                              ObCharset::get_default_charset()));
       } break;
       case PARENT_SPAN_ID: {
-        cells[cell_idx].set_varchar(record.data_.parent_span_id_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, record.data_.parent_span_id_) : ret);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                              ObCharset::get_default_charset()));
       } break;
       case SPAN_NAME: {
-        cells[cell_idx].set_varchar(record.data_.span_name_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, record.data_.span_name_) : ret);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                              ObCharset::get_default_charset()));
       } break;
       case REF_TYPE: {
         if (record.data_.ref_type_ == 0) {
-          cells[cell_idx].set_varchar("CHILD");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "CHILD") : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
         } else if (record.data_.ref_type_ == 1) {
-          cells[cell_idx].set_varchar("FOLLOW");
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "FOLLOW") : ret);
           cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                                ObCharset::get_default_charset()));
         }
       } break;
       case START_TS: {
-        cells[cell_idx].set_timestamp(record.data_.start_ts_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, record.data_.start_ts_) : ret);
       } break;
       case END_TS: {
-        cells[cell_idx].set_timestamp(record.data_.end_ts_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, record.data_.end_ts_) : ret);
       } break;
       case ELAPSE: {
-        cells[cell_idx].set_int(record.data_.end_ts_ - record.data_.start_ts_);
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, record.data_.end_ts_ - record.data_.start_ts_) : ret);
       } break;
       case TAGS: {
-        cells[cell_idx].set_lob_value(ObLongTextType,
-                                      record.data_.tags_.ptr(),
-                                      record.data_.tags_.length());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(record.data_.tags_.length(), record.data_.tags_.ptr())) : ret);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                              ObCharset::get_default_charset()));
       } break;
       case LOGS: {
-        cells[cell_idx].set_lob_value(ObLongTextType,
-                                      record.data_.logs_.ptr(),
-                                      record.data_.logs_.length());
+        (OB_SUCC(ret) ? ret = DatumValueBuffer::set_lob_view(cells, cur_row_.count_, cell_idx, ObLongTextType, ObString(record.data_.logs_.length(), record.data_.logs_.ptr())) : ret);
         cells[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                              ObCharset::get_default_charset()));
       } break;

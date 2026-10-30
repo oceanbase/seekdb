@@ -52,7 +52,7 @@ public:
   static int to_datum(common::ObIVector *vector, const int64_t idx, common::ObDatum &datum);
 
   // Normalize values used by storage-only direct-load batches.
-  static int reshape_storage_vector(const common::ObObjMeta &col_type,
+  static int reshape_storage_vector(const common::SqlTypeMeta &col_type,
                                     const common::ObAccuracy &col_accuracy,
                                     common::ObIAllocator &allocator,
                                     common::ObIVector *&vector,

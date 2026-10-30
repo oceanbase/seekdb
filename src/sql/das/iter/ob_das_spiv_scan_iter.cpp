@@ -114,21 +114,25 @@ int ObDASSPIVScanIter::build_range(ObNewRange &range, uint64_t table_id)
   int ret = OB_SUCCESS;
 
   ObArenaAllocator &allocator = mem_context_->get_arena_allocator();
-  ObObj *start_key_ptr = nullptr;
-  ObObj *end_key_ptr = nullptr;
+  DatumValue *start_key_ptr = nullptr;
+  DatumValue *end_key_ptr = nullptr;
   ObRowkey start_key;
   ObRowkey end_key;
   
-  if (OB_ISNULL(start_key_ptr = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * 2)))) {
+  if (OB_ISNULL(start_key_ptr = static_cast<DatumValue *>(allocator.alloc(sizeof(DatumValue) * 2)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(end_key_ptr = static_cast<ObObj *>(allocator.alloc(sizeof(ObObj) * 2)))) {
+  } else if (OB_ISNULL(end_key_ptr = static_cast<DatumValue *>(allocator.alloc(sizeof(DatumValue) * 2)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    start_key_ptr[0].set_uint32(dim_);
+    new (start_key_ptr) DatumValue[2];
+    new (end_key_ptr) DatumValue[2];
+    if (OB_FAIL(start_key_ptr[0].set_uint64(dim_, allocator))) { return ret; }
+    start_key_ptr[0].meta_.set_uint32();
     start_key_ptr[1].set_min_value();
     start_key.assign(start_key_ptr, 2);
 
-    end_key_ptr[0].set_uint32(dim_);
+    if (OB_FAIL(end_key_ptr[0].set_uint64(dim_, allocator))) { return ret; }
+    end_key_ptr[0].meta_.set_uint32();
     end_key_ptr[1].set_max_value();
     end_key.assign(end_key_ptr, 2);
 

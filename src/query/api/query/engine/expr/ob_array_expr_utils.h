@@ -63,7 +63,7 @@ public:
   static int deduce_array_type(ObExecContext *exec_ctx, ObExprResType &type1, ObExprResType &type2,uint16_t &subschema_id);
   static int check_array_type_compatibility(ObExecContext *exec_ctx, uint16_t l_subid, uint16_t r_subid, bool &is_compatiable);
   static int get_coll_info_by_subschema_id(ObExecContext*exec_ctx, uint16_t subid, const ObSqlCollectionInfo *&coll_info);
-  static int get_array_element_type(ObExecContext *exec_ctx, uint16_t subid, ObObjType &obj_type, uint32_t &depth, bool &is_vec);
+  static int get_array_element_type(ObExecContext *exec_ctx, uint16_t subid, SqlValueType &obj_type, uint32_t &depth, bool &is_vec);
   static int get_array_element_type(ObExecContext *exec_ctx, uint16_t subid, ObDataType &elem_type, uint32_t &depth, bool &is_vec);
   static int get_array_type_by_subschema_id(ObEvalCtx &ctx, const uint16_t subschema_id, ObCollectionArrayType *&arr_type);
   static int get_coll_type_by_subschema_id(ObExecContext *exec_ctx, const uint16_t subschema_id, ObCollectionTypeBase *&coll_type);
@@ -75,10 +75,10 @@ public:
                                       const ObDatum &datum, ObArrayNested *nest_array);
   static int get_child_subschema_id(ObExecContext *exec_ctx, uint16_t subid, uint16_t &child_subid);
   static int calc_collection_hash_val(
-      const ObObjMeta &meta, const void *data, ObLength len,
+      const SqlTypeMeta &meta, const void *data, ObLength len,
       hash_algo hash_func, uint64_t seed, uint64_t &hash_val,
       const common::ObDatumAccessContext *access_ctx);
-  static int collection_compare(const ObObjMeta &l_meta, const ObObjMeta &r_meta,
+  static int collection_compare(const SqlTypeMeta &l_meta, const SqlTypeMeta &r_meta,
                                 const void *l_v, const ObLength l_len,
                                 const void *r_v, const ObLength r_len,
                                 int &cmp_ret,
@@ -120,7 +120,7 @@ public:
     } else if (arr_type->element_type_->type_id_ != ObNestedType::OB_BASIC_TYPE) {
       ret = OB_NOT_SUPPORTED;
     } else {
-      ObObjType obj_type = elem_type->basic_meta_.get_obj_type();
+      SqlValueType obj_type = elem_type->basic_meta_.get_obj_type();
       switch (obj_type) {
       case ObTinyIntType: {
         ret = calc_array_sum_by_type<int8_t>(data_len, len, data_ptr, nullbitmaps, sum);
@@ -209,7 +209,6 @@ public:
                               ObIAllocator &allocator,
                               ObDatum *tmp_res = nullptr,
                               bool negative = false);
-  static int get_basic_elem(ObIArrayType *src, uint32_t idx, ObObj &elem_obj, bool &is_null);
   // check
   template<typename T>
   static int raw_check_add(const T &res, const T &l, const T &r);
@@ -224,7 +223,7 @@ private:
   static const char* DEFAULT_CAST_TYPE_NAME;
   static const ObString DEFAULT_CAST_TYPE_STR;
   static int get_collection_raw_data(
-      ObIAllocator &allocator, const ObObjMeta &meta, const void *data,
+      ObIAllocator &allocator, const SqlTypeMeta &meta, const void *data,
       ObLength len, ObString &bin_str,
       const common::ObDatumAccessContext *access_ctx);
 };

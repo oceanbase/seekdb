@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "rust/sql_nio.h"
+#include "share/datum/typed_datum_compare.h"
 
 #include "obmp_stmt_execute.h"
 #include "lib/ob_running_mode.h"
@@ -167,23 +168,23 @@ int ObMPStmtExecute::init_arraybinding_field(int64_t column_field_cnt,
   ObField sql_no_field, err_no_field, err_msg_field;
 
   OX (sql_no_field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI);
-  OX (sql_no_field.type_.set_type(ObIntType));
-  OZ (common::ObField::get_field_mb_length(sql_no_field.type_.get_type(),
+  OX (sql_no_field.type_meta_.set_type(ObIntType));
+  OZ (common::ObField::get_field_mb_length(sql_no_field.type_meta_.get_type(),
                                            sql_no_field.accuracy_,
                                            common::CS_TYPE_INVALID,
                                            sql_no_field.length_));
   OX (sql_no_field.cname_ = ObString("sql_no"));
 
   OX (err_no_field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI);
-  OX (err_no_field.type_.set_type(ObIntType));
-  OZ (common::ObField::get_field_mb_length(err_no_field.type_.get_type(),
+  OX (err_no_field.type_meta_.set_type(ObIntType));
+  OZ (common::ObField::get_field_mb_length(err_no_field.type_meta_.get_type(),
                                            err_no_field.accuracy_,
                                            common::CS_TYPE_INVALID, err_no_field.length_));
   OX (err_no_field.cname_ = ObString("error_code"));
 
   OX (err_msg_field.charsetnr_ = CS_TYPE_UTF8MB4_GENERAL_CI);
-  OX (err_msg_field.type_.set_type(ObVarcharType));
-  OZ (common::ObField::get_field_mb_length(err_msg_field.type_.get_type(),
+  OX (err_msg_field.type_meta_.set_type(ObVarcharType));
+  OZ (common::ObField::get_field_mb_length(err_msg_field.type_meta_.get_type(),
                                            err_msg_field.accuracy_,
                                            common::CS_TYPE_INVALID,
                                            err_msg_field.length_));
@@ -199,16 +200,10 @@ int ObMPStmtExecute::init_arraybinding_field(int64_t column_field_cnt,
 int ObMPStmtExecute::init_row_for_arraybinding(ObIAllocator &alloc, int64_t array_binding_row_num)
 {
   int ret = OB_SUCCESS;
-  ObObj* obj = static_cast<ObObj*>(alloc.alloc(sizeof(ObObj) * array_binding_row_num));
-  if (OB_ISNULL(obj)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  DatumValue *cells = nullptr;
+  if (OB_FAIL(DatumValueBuffer::allocate(alloc, array_binding_row_num, cells))) {
   } else {
-    ObObj *ptr = obj;
-    for (int64_t i = 0; i < array_binding_row_num; ++i) {
-      ptr = new(ptr)ObObj();
-      ptr++;
-    }
-    arraybinding_row_->assign(obj, array_binding_row_num);
+    arraybinding_row_->assign(cells, array_binding_row_num);
   }
   return ret;
 }
@@ -284,7 +279,7 @@ int ObMPStmtExecute::check_param_type_for_arraybinding(ParamTypeInfoArray &param
   return ret;
 }
 
-int ObMPStmtExecute::check_param_value_for_arraybinding(ObObjParam &param)
+int ObMPStmtExecute::check_param_value_for_arraybinding(DatumParameter &param)
 {
   int ret = OB_SUCCESS;
   ObPLCollection *coll = NULL;
@@ -299,83 +294,125 @@ int ObMPStmtExecute::check_param_value_for_arraybinding(ObObjParam &param)
   return ret;
 }
 
-int ObMPStmtExecute::construct_execute_param_for_arraybinding(int64_t pos)
+int ObMPStmtExecute::construct_execute_param_for_arraybinding(int64_t pos,
+                                                               ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(arraybinding_params_));
   CK (OB_NOT_NULL(params_));
   CK (arraybinding_params_->count() == params_->count());
   for (int64_t i = 0; OB_SUCC(ret) && i < arraybinding_params_->count(); ++i) {
-    ObObjParam &obj = arraybinding_params_->at(i);
-    ObPLCollection *coll = NULL;
-    ObObj *data = NULL;
+    const DatumParameter &obj = arraybinding_params_->at(i);
+    const ObPLCollection *coll = nullptr;
+    const DatumValue *data = nullptr;
     CK (obj.is_ext());
-    CK (OB_NOT_NULL(coll = reinterpret_cast<ObPLCollection*>(obj.get_ext())));
-    CK (coll->get_count() > pos);
+    CK (OB_NOT_NULL(coll = reinterpret_cast<const ObPLCollection*>(obj.get_ext())));
+    CK (pos >= 0 && coll->get_count() > pos);
     CK (1 == coll->get_column_count());
-    CK (OB_NOT_NULL(data = reinterpret_cast<ObObj*>(coll->get_data())));
-    if (stmt::T_ANONYMOUS_BLOCK == stmt_type_) {
-      // for anonymous block, no need to convert int type to number
-      OX (params_->at(i) = *(data + pos));
-    } else {
-      OZ (param_assign_after_convert_int2number(params_->at(i), *(data + pos)));
-    }
-    if (data[pos].is_numeric_type()) {
-      ObAccuracy default_acc =
-        ObAccuracy::DDL_DEFAULT_ACCURACY[data[pos].get_type()];
-      if (params_->at(i).get_scale() == NUMBER_SCALE_UNKNOWN_YET) {
-        params_->at(i).set_scale(default_acc.get_scale());
+    CK (OB_NOT_NULL(data = coll->get_data()));
+    if (OB_SUCC(ret)) {
+      // The old value representation could only express a NULL by raw Null
+      // metadata. Preserve decorated raw Null metadata; only map a native
+      // typed NULL through the old set_null metadata operation before numeric defaults.
+      DatumValue source = data[pos];
+      if (source.is_null() && !source.meta_.is_null()) { source.set_null(); }
+      const bool anonymous = stmt::T_ANONYMOUS_BLOCK == stmt_type_;
+      // The immutable consumer assigns an Obj temporary to ObjParam for an
+      // anonymous block (resetting the whole parameter). Its SQL/CALL helper
+      // assigns only the value and preserves declaration/accuracy/flags.
+      DatumParameter candidate = anonymous ? DatumParameter() : params_->at(i);
+      if (source.is_pl_extend()) {
+        DatumParameter view, owned;
+        view.assign_value(source);
+        // PL descriptors contain a pointer: copying descriptor bytes does not
+        // clone the record/cursor. Always use a fresh execution snapshot.
+        OZ (ObUserDefinedType::clone_parameter(owner, view, owned));
+        OX (candidate.assign_value(owned));
+      } else if (anonymous) {
+        DatumValue owned;
+        OZ (clone_typed_value(source, owned, owner));
+        OX (candidate.assign_value(owned));
+      } else {
+        OZ (param_assign_after_convert_int2number(candidate, source, owner));
       }
-      if (params_->at(i).get_precision() == PRECISION_UNKNOWN_YET) {
-        params_->at(i).set_precision(default_acc.get_precision());
+      if (OB_SUCC(ret) && source.is_numeric_type()) {
+        const ObAccuracy default_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[source.get_type()];
+        if (candidate.get_scale() == NUMBER_SCALE_UNKNOWN_YET) {
+          candidate.set_scale(default_acc.get_scale());
+        }
+        if (candidate.get_precision() == PRECISION_UNKNOWN_YET) {
+          candidate.set_precision(default_acc.get_precision());
+        }
       }
+      OX (candidate.set_param_meta());
+      // All fallible work for this cell precedes publication. The production
+      // loop retires each PL snapshot after its synchronous SQL completes.
+      OX (params_->at(i) = candidate);
     }
-    params_->at(i).set_param_meta();
   }
   return ret;
 }
 
-// Convert int to number before passing params to the SQL layer when the target anonymous-array
-// element uses number semantics. The conversion lives here because `parse_integer_value()` cannot
-// distinguish whether the current anonymous array is of arraybinding structure when deserializing
-// an integer in the anonymous array.
-int ObMPStmtExecute::param_assign_after_convert_int2number(ObObj& dst, const ObObj& src)
+// Convert only the six integer element families historically promoted for
+// non-anonymous SQL array binding. The destination owns the native bytes while
+// the collection continues to own its elements and any extended pointees.
+int ObMPStmtExecute::param_assign_after_convert_int2number(
+    DatumParameter &dst, const DatumValue &src, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
-  ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
-  number::ObNumber ob_num;
-  switch (src.get_type()) {
-    // do the cast which we should have done in parse_integer_value()
-    // EMySQLFieldType::MYSQL_TYPE_SHORT
-    case ObSmallIntType:
-      OZ (ob_num.from(static_cast<int64_t>(src.get_smallint()), alloc), src);
-      OX (dst.set_number(ob_num));
-      break;
-    case ObUSmallIntType:
-      OZ (ob_num.from(static_cast<uint64_t>(src.get_usmallint()), alloc), src);
-      OX (dst.set_number(ob_num));
-      break;
-    // EMySQLFieldType::MYSQL_TYPE_LONG
-    case ObInt32Type:
-      OZ (ob_num.from(static_cast<int64_t>(src.get_int32()), alloc), src);
-      OX (dst.set_number(ob_num));
-      break;
-    case ObUInt32Type:
-      OZ (ob_num.from(static_cast<uint64_t>(src.get_uint32()), alloc), src);
-      OX (dst.set_number(ob_num));
-      break;
-    // EMySQLFieldType::MYSQL_TYPE_LONGLONG
-    case ObIntType:
-      OZ (ob_num.from(src.get_int(), alloc), src);
-      OX (dst.set_number(ob_num));
-      break;
-    case ObUInt64Type:
-      OZ (ob_num.from(src.get_uint64(), alloc), src);
-      OX (dst.set_number(ob_num));
-      break;
-    default:
-      OX (dst = src);
-      break;
+  number::ObNumber number;
+  if (!src.is_null() && (src.get_type() == ObSmallIntType
+      || src.get_type() == ObUSmallIntType || src.get_type() == ObInt32Type
+      || src.get_type() == ObUInt32Type || src.get_type() == ObIntType
+      || src.get_type() == ObUInt64Type)) {
+    switch (src.get_type()) {
+      case ObSmallIntType:
+        OZ (number.from(static_cast<int64_t>(static_cast<int16_t>(src.get_int())), owner));
+        break;
+      case ObUSmallIntType:
+        OZ (number.from(static_cast<uint64_t>(static_cast<uint16_t>(src.get_uint64())), owner));
+        break;
+      case ObInt32Type:
+        OZ (number.from(static_cast<int64_t>(src.get_int32()), owner));
+        break;
+      case ObUInt32Type:
+        OZ (number.from(static_cast<uint64_t>(static_cast<uint32_t>(src.get_uint64())), owner));
+        break;
+      case ObIntType:
+        OZ (number.from(src.get_int(), owner));
+        break;
+      case ObUInt64Type:
+        OZ (number.from(src.get_uint64(), owner));
+        break;
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        break;
+    }
+    OZ (dst.set_number(number, owner));
+  } else {
+    DatumValue owned;
+    OZ (clone_typed_value(src, owned, owner));
+    OX (dst.assign_value(owned));
+  }
+  return ret;
+}
+
+// Array execution owns independent PL snapshots. Retire them while the
+// session required by cursor destruction is still available, including cells
+// already published before a later parameter failed to clone. Scalar request
+// arena payloads remain valid until request teardown, as before.
+int ObMPStmtExecute::release_arraybinding_row(ObIAllocator &owner,
+                                              ObSQLSessionInfo &session)
+{
+  int ret = OB_SUCCESS;
+  if (params_ != nullptr) {
+    for (int64_t i = 0; i < params_->count(); ++i) {
+      DatumParameter &value = params_->at(i);
+      if (value.is_pl_extend()) {
+        const int cleanup_ret = ObUserDefinedType::destruct_objparam(owner, value, &session);
+        if (OB_SUCCESS == ret) { ret = cleanup_ret; }
+      }
+    }
   }
   return ret;
 }
@@ -384,7 +421,7 @@ void ObMPStmtExecute::reset_complex_param_memory(ParamStore *params, ObSQLSessio
 {
   if (OB_NOT_NULL(params)) {
     for (int64_t i = 0; i < params->count(); ++i) {
-      ObObjParam &obj = params->at(i);
+      DatumParameter &obj = params->at(i);
       if (obj.is_pl_extend()) {
         int ret = ObUserDefinedType::destruct_obj(obj, session_info);
         if (OB_SUCCESS != ret) {
@@ -444,9 +481,12 @@ int ObMPStmtExecute::response_result_for_arraybinding(
       const ObDataTypeCastParams dtc_params =
           ObBasicSessionInfo::create_dtc_params(&session_info);
       for (int64_t i = 0; OB_SUCC(ret) && i < exception_array.count(); ++i) {
-        arraybinding_row_->get_cell(0).set_int(exception_array.at(i).pos_);
-        arraybinding_row_->get_cell(1).set_int(exception_array.at(i).error_code_);
-        arraybinding_row_->get_cell(2).set_varchar(exception_array.at(i).error_msg_);
+        OZ (DatumValueBuffer::set_int(arraybinding_row_->cells_, arraybinding_row_->count_,
+                                      0, exception_array.at(i).pos_));
+        OZ (DatumValueBuffer::set_int(arraybinding_row_->cells_, arraybinding_row_->count_,
+                                      1, exception_array.at(i).error_code_));
+        OZ (DatumValueBuffer::set_varchar_view(arraybinding_row_->cells_, arraybinding_row_->count_,
+                                               2, exception_array.at(i).error_msg_));
 
         ObSMRow sm_row(BINARY,
                 *arraybinding_row_,
@@ -659,7 +699,7 @@ int ObMPStmtExecute::parse_request_type(const char *&pos, int64_t num_of_params,
     if (OB_SUCC(ret)) {
       if (EMySQLFieldType::MYSQL_TYPE_COMPLEX != type) {
         const int16_t unsigned_flag = 128;
-        ObObjType ob_elem_type;
+        SqlValueType ob_elem_type;
         if (OB_FAIL(ObSMUtils::get_ob_type(
                 ob_elem_type, static_cast<EMySQLFieldType>(type),
                 flag & unsigned_flag ? true : false))) {
@@ -672,7 +712,7 @@ int ObMPStmtExecute::parse_request_type(const char *&pos, int64_t num_of_params,
         type_name_info.is_basic_type_ = false;
         if (OB_FAIL(decode_type_info(pos, type_name_info))) {
         } else if (type_name_info.type_name_.empty()) {
-          ObObjType ob_elem_type;
+          SqlValueType ob_elem_type;
           type_name_info.is_elem_type_ = true;
           PS_DEFENSE_CHECK(1) // elem_type(1)
           {
@@ -718,7 +758,7 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
                                              int64_t idx,
                                              EMySQLFieldType &param_type,
                                              TypeInfo &param_type_info,
-                                             ObObjParam &param,
+                                             DatumParameter &param,
                                              const char *bitmap)
 {
   int ret = OB_SUCCESS;
@@ -732,7 +772,7 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
   } else if (OB_FAIL(session->get_collation_server(cs_server))) {
   }
   // Step5: decode value
-  ObObjType ob_type;
+  SqlValueType ob_type;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObSMUtils::get_ob_type(
         ob_type, static_cast<EMySQLFieldType>(param_type)))) {
@@ -755,10 +795,10 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
 }
 
 int ObMPStmtExecute::set_standard_timestamp_param(
-    const EMySQLFieldType field_type, const uint16_t year, const uint8_t month,
+    ObIAllocator &allocator, const EMySQLFieldType field_type, const uint16_t year, const uint8_t month,
     const uint8_t day, const uint8_t hour, const uint8_t minute,
     const uint8_t second, const uint32_t microseconds, const bool is_zero,
-    const ObTimeZoneInfo *tz_info, ObObj &param) {
+    const ObTimeZoneInfo *tz_info, DatumParameter &param) {
   int ret = OB_SUCCESS;
   ObPreciseDateTime value = 0;
   if (!is_zero) {
@@ -789,13 +829,13 @@ int ObMPStmtExecute::set_standard_timestamp_param(
       if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(value, tz_info,
                                                          timestamp))) {
       } else {
-        param.set_timestamp(timestamp);
+        ret = param.set_timestamp(timestamp, allocator);
       }
     } else if (MYSQL_TYPE_DATETIME == field_type) {
-      param.set_datetime(value);
+      ret = param.set_datetime(value, allocator);
     } else if (MYSQL_TYPE_DATE == field_type ||
                MYSQL_TYPE_NEWDATE == field_type) {
-      param.set_date(static_cast<int32_t>(value));
+      ret = param.set_date(static_cast<int32_t>(value), allocator);
     } else {
       ret = OB_ERR_ILLEGAL_TYPE;
     }
@@ -804,9 +844,9 @@ int ObMPStmtExecute::set_standard_timestamp_param(
 }
 
 int ObMPStmtExecute::set_standard_time_param(
-    const uint32_t days, const uint8_t hour, const uint8_t minute,
+    ObIAllocator &allocator, const uint32_t days, const uint8_t hour, const uint8_t minute,
     const uint8_t second, const uint32_t microseconds, const bool negative,
-    const bool is_zero, ObObj &param) {
+    const bool is_zero, DatumParameter &param) {
   int ret = OB_SUCCESS;
   int64_t value = 0;
   if (!is_zero) {
@@ -829,7 +869,7 @@ int ObMPStmtExecute::set_standard_time_param(
     }
   }
   if (OB_SUCC(ret)) {
-    param.set_time(value);
+    ret = param.set_time(value, allocator);
   }
   return ret;
 }
@@ -838,7 +878,7 @@ int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
                                               const uint32_t type,
                                               const ObCharsetType charset,
                                               const ObCollationType cs_type,
-                                              const ObString &str, ObObj &param,
+                                              const ObString &str, DatumParameter &param,
                                               const bool is_complex_element) {
   int ret = OB_SUCCESS;
   ObString dst;
@@ -876,33 +916,38 @@ int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
       number::ObNumber number;
       if (OB_FAIL(number.from(str.ptr(), str.length(), allocator))) {
       } else {
-        param.set_number(number);
+        ret = param.set_number(number, allocator);
       }
     } else if (MYSQL_TYPE_ORA_BLOB == type || MYSQL_TYPE_ORA_CLOB == type) {
       param.set_collation_type(MYSQL_TYPE_ORA_BLOB == type ? CS_TYPE_BINARY
                                                            : cs_type);
-      param.set_lob_value(ObLongTextType, dst.ptr(), dst.length());
+      param.set_string_view(ObLongTextType, dst);
       param.set_has_lob_header();
     } else if (MYSQL_TYPE_TINY_BLOB == type || MYSQL_TYPE_MEDIUM_BLOB == type ||
                MYSQL_TYPE_BLOB == type || MYSQL_TYPE_LONG_BLOB == type ||
                MYSQL_TYPE_JSON == type || MYSQL_TYPE_GEOMETRY == type) {
       param.set_collation_type(cs_type);
       if (MYSQL_TYPE_TINY_BLOB == type) {
-        param.set_lob_value(ObTinyTextType, dst.ptr(), dst.length());
+        param.set_string_view(ObTinyTextType, dst);
       } else if (MYSQL_TYPE_MEDIUM_BLOB == type) {
-        param.set_lob_value(ObMediumTextType, dst.ptr(), dst.length());
+        param.set_string_view(ObMediumTextType, dst);
       } else if (MYSQL_TYPE_BLOB == type) {
-        param.set_lob_value(ObTextType, dst.ptr(), dst.length());
+        param.set_string_view(ObTextType, dst);
       } else if (MYSQL_TYPE_LONG_BLOB == type) {
-        param.set_lob_value(ObLongTextType, dst.ptr(), dst.length());
+        param.set_string_view(ObLongTextType, dst);
       } else if (MYSQL_TYPE_JSON == type) {
-        param.set_json_value(ObJsonType, dst.ptr(), dst.length());
+        param.set_string_view(ObJsonType, dst);
       } else {
-        param.set_geometry_value(ObGeometryType, dst.ptr(), dst.length());
+        param.set_string_view(ObGeometryType, dst);
       }
-      if (param.is_lob_storage() && dst.length() > 0 &&
-          OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(param,
-                                                                  allocator))) {
+      if (param.is_lob_storage() && dst.length() > 0) {
+        SqlTypeMeta output_meta = param.get_meta();
+        output_meta.set_has_lob_header();
+        if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
+                param.datum_, param.get_meta(), output_meta, allocator))) {
+        } else {
+          param.set_type_meta(output_meta);
+        }
       }
     } else if (MYSQL_TYPE_STRING == type || MYSQL_TYPE_VARCHAR == type ||
                MYSQL_TYPE_VAR_STRING == type) {
@@ -910,12 +955,13 @@ int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
       if (is_complex_element && dst.empty()) {
         param.set_null();
       } else if (is_complex_element && MYSQL_TYPE_STRING == type) {
-        param.set_char(dst);
+        param.set_string_view(ObCharType, dst);
       } else {
-        param.set_varchar(dst);
+        param.set_varchar_view(dst);
       }
     } else if (MYSQL_TYPE_OB_RAW == type) {
-      param.set_raw_value(dst.ptr(), dst.length());
+      param.set_string_view(param.get_type(), dst);
+      param.set_collation_type(CS_TYPE_BINARY);
     }
   }
   return ret;
@@ -924,7 +970,7 @@ int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
 int ObMPStmtExecute::materialize_standard_long_data(
     ObIAllocator &allocator, ObSQLSessionInfo &session,
     const EMySQLFieldType type, const ObCharsetType charset,
-    const ObCollationType cs_type, const int64_t param_id, ObObjParam &param) {
+    const ObCollationType cs_type, const int64_t param_id, DatumParameter &param) {
   int ret = OB_SUCCESS;
   bool is_supported_type = false;
   ObPieceCache *piece_cache = session.get_piece_cache(false);
@@ -1071,8 +1117,8 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
         static_cast<EMySQLFieldType>(desc.mysql_type);
     const bool is_unsigned =
         0 != (desc.flags & static_cast<uint8_t>(oceanbase::nio::ExecuteFlag::Unsigned));
-    ObObjParam &param = params_->at(i);
-    ObObjType ob_type = ObMaxType;
+    DatumParameter &param = params_->at(i);
+    SqlValueType ob_type = ObMaxType;
     param.reset();
     if (OB_FAIL(ObSMUtils::get_ob_type(ob_type, mysql_type, is_unsigned))) {
     } else {
@@ -1095,24 +1141,24 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
       const int64_t signed_value = static_cast<int64_t>(desc.value);
       switch (mysql_type) {
       case MYSQL_TYPE_TINY:
-        is_unsigned ? param.set_utinyint(static_cast<uint8_t>(desc.value))
-                    : param.set_tinyint(static_cast<int8_t>(signed_value));
+        ret = is_unsigned ? param.set_utinyint(static_cast<uint8_t>(desc.value), alloc)
+                    : param.set_tinyint(static_cast<int8_t>(signed_value), alloc);
         break;
       case MYSQL_TYPE_SHORT:
-        is_unsigned ? param.set_usmallint(static_cast<uint16_t>(desc.value))
-                    : param.set_smallint(static_cast<int16_t>(signed_value));
+        ret = is_unsigned ? param.set_usmallint(static_cast<uint16_t>(desc.value), alloc)
+                    : param.set_smallint(static_cast<int16_t>(signed_value), alloc);
         break;
       case MYSQL_TYPE_INT24:
-        is_unsigned ? param.set_umediumint(static_cast<uint32_t>(desc.value))
-                    : param.set_mediumint(static_cast<int32_t>(signed_value));
+        ret = is_unsigned ? param.set_umediumint(static_cast<uint32_t>(desc.value), alloc)
+                    : param.set_mediumint(static_cast<int32_t>(signed_value), alloc);
         break;
       case MYSQL_TYPE_LONG:
-        is_unsigned ? param.set_uint32(static_cast<uint32_t>(desc.value))
-                    : param.set_int32(static_cast<int32_t>(signed_value));
+        ret = is_unsigned ? param.set_uint32(static_cast<uint32_t>(desc.value), alloc)
+                    : param.set_int32(static_cast<int32_t>(signed_value), alloc);
         break;
       case MYSQL_TYPE_LONGLONG:
-        is_unsigned ? param.set_uint(ObUInt64Type, desc.value)
-                    : param.set_int(signed_value);
+        ret = is_unsigned ? param.set_uint64(desc.value, alloc)
+                    : param.set_int(signed_value, alloc);
         break;
       default:
         ret = OB_ERR_ILLEGAL_TYPE;
@@ -1122,17 +1168,17 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
       const uint32_t bits = static_cast<uint32_t>(desc.value);
       float value = 0;
       MEMCPY(&value, &bits, sizeof(value));
-      param.set_float(value);
+      ret = param.set_float(value, alloc);
     } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::F64Bits) == desc.kind) {
       double value = 0;
       MEMCPY(&value, &desc.value, sizeof(value));
-      param.set_double(value);
+      ret = param.set_double(value, alloc);
     } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Year) == desc.kind) {
       uint8_t year = 0;
       if (OB_FAIL(ObTimeConverter::int_to_year(static_cast<int64_t>(desc.value),
                                                year))) {
       } else {
-        param.set_year(year);
+        ret = param.set_year(year, alloc);
       }
     } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Bytes) == desc.kind) {
       if (desc.value_off < 0 || desc.value_len < 0 ||
@@ -1151,13 +1197,13 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
                static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Datetime) == desc.kind ||
                static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Timestamp) == desc.kind) {
       if (OB_FAIL(set_standard_timestamp_param(
-              mysql_type, desc.year, desc.month, desc.day, desc.hour,
+              alloc, mysql_type, desc.year, desc.month, desc.day, desc.hour,
               desc.minute, desc.second, desc.microseconds, 0 == desc.value_len,
               session->get_timezone_info(), param))) {
       }
     } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Time) == desc.kind) {
       if (OB_FAIL(set_standard_time_param(
-              desc.days, desc.hour, desc.minute, desc.second, desc.microseconds,
+              alloc, desc.days, desc.hour, desc.minute, desc.second, desc.microseconds,
               0 != (desc.flags & static_cast<uint8_t>(oceanbase::nio::ExecuteFlag::Negative)),
               0 == desc.value_len, param))) {
       }
@@ -1316,7 +1362,7 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
 
       // Step5: decode value
       for (int64_t i = 0; OB_SUCC(ret) && i < input_param_num; ++i) {
-        ObObjParam &param = is_arraybinding_ ? arraybinding_params_->at(i) : params_->at(i);
+        DatumParameter &param = is_arraybinding_ ? arraybinding_params_->at(i) : params_->at(i);
         param.reset();
         if (OB_SUCC(ret) && OB_FAIL(parse_request_param_value(alloc,
                                                               session,
@@ -1857,8 +1903,12 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
         ctx_.multi_stmt_item_.set_ab_cnt(0);
         for (int64_t i = 0; OB_SUCC(ret) && i < arraybinding_size_; ++i) {
           set_curr_sql_idx(i);
-          OZ (construct_execute_param_for_arraybinding(i));
+          OZ (construct_execute_param_for_arraybinding(
+              i, CURRENT_CONTEXT->get_arena_allocator()));
           OZ (do_process_single(session, params_, has_more_result, force_sync_resp, async_resp_used));
+          const int cleanup_ret = release_arraybinding_row(
+              CURRENT_CONTEXT->get_arena_allocator(), session);
+          if (OB_SUCC(ret)) { ret = cleanup_ret; }
           if (OB_FAIL(ret)) {
             if (is_save_exception_) {
               ret = save_exception_for_arraybinding(i, ret, exception_array);
@@ -2058,7 +2108,7 @@ int ObMPStmtExecute::parse_complex_param_value(ObIAllocator &allocator,
                                                const char *&data,
                                                const common::ObTimeZoneInfo *tz_info,
                                                TypeInfo *type_info,
-                                               ObObjParam &param)
+                                               DatumParameter &param)
 {
   int ret = OB_SUCCESS;
   const pl::ObUserDefinedType *pl_type = NULL;
@@ -2067,7 +2117,9 @@ int ObMPStmtExecute::parse_complex_param_value(ObIAllocator &allocator,
   CK (OB_NOT_NULL(type_info));
   OZ (get_pl_type_by_type_info(allocator, type_info, pl_type));
   CK (OB_NOT_NULL(pl_type));
-  OZ (pl_type->init_obj(*(ctx_.schema_guard_), allocator, param, param_size));
+  DatumValue pl_value;
+  OZ (pl_type->init_obj(*(ctx_.schema_guard_), allocator, pl_value, param_size));
+  OX (param.assign_value(pl_value));
   OX (param.set_udt_id(pl_type->get_user_type_id()));
   CK (OB_NOT_NULL(session));
   OZ (pl_type->deserialize(*(ctx_.schema_guard_), allocator, session, charset, cs_type,
@@ -2081,73 +2133,85 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
                                              sql::ObSQLSessionInfo *session,
                                              const ObCharsetType charset,
                                              const ObCollationType cs_type,
-                                             const char *& data,
+                                             const char *&data,
                                              const common::ObTimeZoneInfo *tz_info,
-                                             ObObj &param,
+                                             DatumParameter &param,
                                              bool is_complex_element,
                                              ObPSAnalysisChecker *checker,
                                              bool is_unsigned)
 {
   int ret = OB_SUCCESS;
-  UNUSED(charset);
-  switch(type) {
-    case MYSQL_TYPE_TINY:
-    case MYSQL_TYPE_SHORT:
-    case MYSQL_TYPE_LONG:
+  UNUSED(session);
+  bool native_scalar = true;
+  switch (type) {
+    case MYSQL_TYPE_TINY: {
+      int8_t value = 0;
+      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value)) {
+        ObMySQLUtil::get_int1(data, value);
+        ret = is_unsigned
+            ? param.set_utinyint(static_cast<uint8_t>(value), allocator)
+            : param.set_tinyint(value, allocator);
+      }
+      break;
+    }
+    case MYSQL_TYPE_SHORT: {
+      int16_t value = 0;
+      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value)) {
+        ObMySQLUtil::get_int2(data, value);
+        ret = is_unsigned
+            ? param.set_usmallint(static_cast<uint16_t>(value), allocator)
+            : param.set_smallint(value, allocator);
+      }
+      break;
+    }
+    case MYSQL_TYPE_LONG: {
+      int32_t value = 0;
+      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value)) {
+        ObMySQLUtil::get_int4(data, value);
+        ret = is_unsigned
+            ? param.set_uint32(static_cast<uint32_t>(value), allocator)
+            : param.set_int32(value, allocator);
+      }
+      break;
+    }
     case MYSQL_TYPE_LONGLONG: {
-      if (OB_FAIL(parse_integer_value(type, data, param, allocator, is_complex_element, checker, is_unsigned))) {
+      int64_t value = 0;
+      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value)) {
+        ObMySQLUtil::get_int8(data, value);
+        ret = is_unsigned
+            ? param.set_uint64(static_cast<uint64_t>(value), allocator)
+            : param.set_int(value, allocator);
       }
       break;
     }
-    case MYSQL_TYPE_FLOAT: {
-      float value = 0;
-      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value))
-      {
-        MEMCPY(&value, data, sizeof(value));
-        data += sizeof(value);
-        param.set_float(value);
-      }
-      break;
-    }
+    case MYSQL_TYPE_FLOAT:
     case MYSQL_TYPE_ORA_BINARY_FLOAT: {
       float value = 0;
-      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value))
-      {
+      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value)) {
         MEMCPY(&value, data, sizeof(value));
         data += sizeof(value);
-        param.set_float(value);
+        ret = param.set_float(value, allocator);
       }
       break;
     }
-    case MYSQL_TYPE_DOUBLE: {
-      double value = 0;
-      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value))
-      {
-        MEMCPY(&value, data, sizeof(value));
-        data += sizeof(value);
-        param.set_double(value);
-      }
-      break;
-    }
+    case MYSQL_TYPE_DOUBLE:
     case MYSQL_TYPE_ORA_BINARY_DOUBLE: {
       double value = 0;
-      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value))
-      {
+      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value)) {
         MEMCPY(&value, data, sizeof(value));
         data += sizeof(value);
-        param.set_double(value);
+        ret = param.set_double(value, allocator);
       }
       break;
     }
     case MYSQL_TYPE_YEAR: {
       int16_t value = 0;
-      PS_STATIC_DEFENSE_CHECK(checker, 2)
-      {
+      PS_STATIC_DEFENSE_CHECK(checker, sizeof(value)) {
         ObMySQLUtil::get_int2(data, value);
         uint8_t year = 0;
         if (OB_FAIL(ObTimeConverter::int_to_year(value, year))) {
         } else {
-        param.set_year(year);
+          ret = param.set_year(year, allocator);
         }
       }
       break;
@@ -2155,158 +2219,243 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
     case MYSQL_TYPE_DATE:
     case MYSQL_TYPE_DATETIME:
     case MYSQL_TYPE_TIMESTAMP: {
-      if (OB_FAIL(parse_mysql_timestamp_value(static_cast<EMySQLFieldType>(type), data,
-                                              param, tz_info, checker))) {
+      int8_t length = 0;
+      int16_t year = 0;
+      int8_t month = 0, day = 0, hour = 0, minute = 0, second = 0;
+      int32_t microsecond = 0;
+      ObPreciseDateTime value = 0;
+      PS_STATIC_DEFENSE_CHECK(checker, 1) {
+        ObMySQLUtil::get_int1(data, length);
+        if (0 == length) {
+          value = 0;
+        } else if (4 == length) {
+          PS_STATIC_DEFENSE_CHECK(checker, 4) {
+            ObMySQLUtil::get_int2(data, year);
+            ObMySQLUtil::get_int1(data, month);
+            ObMySQLUtil::get_int1(data, day);
+          }
+        } else if (7 == length) {
+          PS_STATIC_DEFENSE_CHECK(checker, 7) {
+            ObMySQLUtil::get_int2(data, year);
+            ObMySQLUtil::get_int1(data, month);
+            ObMySQLUtil::get_int1(data, day);
+            ObMySQLUtil::get_int1(data, hour);
+            ObMySQLUtil::get_int1(data, minute);
+            ObMySQLUtil::get_int1(data, second);
+          }
+        } else if (11 == length) {
+          PS_STATIC_DEFENSE_CHECK(checker, 11) {
+            ObMySQLUtil::get_int2(data, year);
+            ObMySQLUtil::get_int1(data, month);
+            ObMySQLUtil::get_int1(data, day);
+            ObMySQLUtil::get_int1(data, hour);
+            ObMySQLUtil::get_int1(data, minute);
+            ObMySQLUtil::get_int1(data, second);
+            ObMySQLUtil::get_int4(data, microsecond);
+          }
+        } else {
+          ret = OB_ERROR;
+          LOG_WARN("invalid mysql timestamp value length", K(length));
+        }
+      }
+      if (OB_SUCC(ret) && 0 != length) {
+        ObTime ob_time;
+        ob_time.parts_[DT_YEAR] = year;
+        ob_time.parts_[DT_MON] = month;
+        ob_time.parts_[DT_MDAY] = day;
+        ob_time.parts_[DT_HOUR] = hour;
+        ob_time.parts_[DT_MIN] = minute;
+        ob_time.parts_[DT_SEC] = second;
+        ob_time.parts_[DT_USEC] = microsecond;
+        if (!ObTimeUtility2::is_valid_date(year, month, day)
+            || !ObTimeUtility2::is_valid_time(hour, minute, second, microsecond)) {
+          ret = OB_INVALID_DATE_FORMAT;
+        } else {
+          ObTimeConvertCtx cvrt_ctx(NULL, false);
+          ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
+          if (type == MYSQL_TYPE_DATE) {
+            value = ob_time.parts_[DT_DATE];
+          } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, value))) {
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (type == MYSQL_TYPE_TIMESTAMP) {
+          int64_t timestamp = 0;
+          if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(value, tz_info, timestamp))) {
+          } else {
+            ret = param.set_timestamp(timestamp, allocator);
+          }
+        } else if (type == MYSQL_TYPE_DATETIME) {
+          ret = param.set_datetime(value, allocator);
+        } else {
+          ret = param.set_date(static_cast<int32_t>(value), allocator);
+        }
       }
       break;
     }
-    case MYSQL_TYPE_TIME:{
-      if (OB_FAIL(parse_mysql_time_value(data, param, checker))) {
+    case MYSQL_TYPE_TIME: {
+      int8_t length = 0, is_negative = 0;
+      int32_t day = 0, microsecond = 0;
+      int8_t hour = 0, minute = 0, second = 0;
+      int64_t value = 0;
+      PS_STATIC_DEFENSE_CHECK(checker, 1) {
+        ObMySQLUtil::get_int1(data, length);
+        if (0 == length) {
+          value = 0;
+        } else if (8 == length || 12 == length) {
+          PS_STATIC_DEFENSE_CHECK(checker, length) {
+            ObMySQLUtil::get_int1(data, is_negative);
+            ObMySQLUtil::get_int4(data, day);
+            ObMySQLUtil::get_int1(data, hour);
+            ObMySQLUtil::get_int1(data, minute);
+            ObMySQLUtil::get_int1(data, second);
+            if (12 == length) { ObMySQLUtil::get_int4(data, microsecond); }
+          }
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_ERROR("unexpected time length", K(length), K(ret));
+        }
+        if (OB_SUCC(ret) && 0 != length) {
+          if (!ObTimeUtility2::is_valid_time(hour, minute, second, microsecond)) {
+            ret = OB_INVALID_DATE_FORMAT;
+          } else {
+            ObTime ob_time;
+            ob_time.parts_[DT_YEAR] = 0;
+            ob_time.parts_[DT_MON] = 0;
+            ob_time.parts_[DT_MDAY] = day;
+            ob_time.parts_[DT_HOUR] = hour;
+            ob_time.parts_[DT_MIN] = minute;
+            ob_time.parts_[DT_SEC] = second;
+            ob_time.parts_[DT_USEC] = microsecond;
+            ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
+            ob_time.parts_[DT_HOUR] += ob_time.parts_[DT_MDAY] * 24;
+            ob_time.parts_[DT_MDAY] = 0;
+            value = ObTimeConverter::ob_time_to_time(ob_time);
+            if (is_negative) { value = -value; }
+          }
+        }
       }
+      if (OB_SUCC(ret)) { ret = param.set_time(value, allocator); }
       break;
     }
-    case MYSQL_TYPE_OB_TIMESTAMP_WITH_TIME_ZONE:
-    case MYSQL_TYPE_OB_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-    case MYSQL_TYPE_OB_TIMESTAMP_NANO: {
-      ObTimeConvertCtx cvrt_ctx(tz_info, true);
-      if (OB_FAIL(parse_ob_timestamp_value(
-                            static_cast<EMySQLFieldType>(type), data, cvrt_ctx, param, checker))) {
-      }
-      break;
-    }
-    case MYSQL_TYPE_OB_RAW:
-    case MYSQL_TYPE_TINY_BLOB:
-    case MYSQL_TYPE_MEDIUM_BLOB:
-    case MYSQL_TYPE_LONG_BLOB:
-    case MYSQL_TYPE_BLOB:
-    case MYSQL_TYPE_STRING:
-    case MYSQL_TYPE_VARCHAR:
-    case MYSQL_TYPE_VAR_STRING:
-    case MYSQL_TYPE_NEWDECIMAL:
-    case MYSQL_TYPE_ORA_BLOB:
-    case MYSQL_TYPE_ORA_CLOB:
-    case MYSQL_TYPE_JSON:
-    case MYSQL_TYPE_GEOMETRY: {
+    case MYSQL_TYPE_NEWDECIMAL: {
       ObString str;
-      ObString dst;
       uint64_t length = 0;
-      ObCollationType cur_cs_type = ObCharset::get_default_collation(charset);
-      PS_STATIC_DEFENSE_CHECK(checker, 1)
-      {
-        if (OB_FAIL(read_checked_length(data, length, checker))) {
-        }
-        PS_STATIC_DEFENSE_CHECK(checker, length)
-        {
-          str.assign_ptr(data, static_cast<ObString::obstr_size_t>(length));
+      PS_STATIC_DEFENSE_CHECK(checker, 1) {
+        if (OB_FAIL(ObMySQLUtil::get_length(data, length))) {
+        } else {
+          PS_STATIC_DEFENSE_CHECK(checker, length) {
+            str.assign_ptr(data, static_cast<ObString::obstr_size_t>(length));
+          }
         }
       }
-      if (OB_FAIL(ret)) {
-      } else if (length > OB_MAX_LONGTEXT_LENGTH) {
+      if (OB_SUCC(ret) && length > OB_MAX_LONGTEXT_LENGTH) {
         ret = OB_ERR_INVALID_INPUT_ARGUMENT;
-      } else {
-        if (MYSQL_TYPE_STRING == type
-            || MYSQL_TYPE_VARCHAR == type
-            || MYSQL_TYPE_VAR_STRING == type
-            || MYSQL_TYPE_ORA_CLOB == type
-            || MYSQL_TYPE_JSON == type
-            || MYSQL_TYPE_GEOMETRY == type) {
-          int64_t extra_len = 0;
-          if (MYSQL_TYPE_ORA_CLOB == type) {
-            ObLobLocatorV2 lob(str);
-            if (!lob.is_valid()) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("got invalid ps lob param", K(length), K(lob), K(type), K(cs_type));
-            } // if INROW, does it need to do copy_or_convert_str?
-          }
-          if (MYSQL_TYPE_ORA_CLOB != type) {
-            OZ(copy_or_convert_str(allocator,
-                                cur_cs_type,
-                                cs_type,
-                                ObString(str.length() - extra_len, str.ptr() + extra_len),
-                                dst,
-                                extra_len));
-          }
-          if (OB_SUCC(ret) && MYSQL_TYPE_ORA_CLOB == type) {
-            if (OB_FAIL(ob_write_string(allocator, str, dst))) {
-            }
-          }
-        } else if (OB_FAIL(ob_write_string(allocator, str, dst))) {
-        }
-        if (OB_SUCC(ret)) {
-          if (MYSQL_TYPE_NEWDECIMAL == type) {
-            number::ObNumber nb;
-            if (OB_FAIL(nb.from(str.ptr(), length, allocator))) {
-            } else {
-              param.set_number(nb);
-            }
-          } else if (MYSQL_TYPE_ORA_BLOB == type
-                    || MYSQL_TYPE_ORA_CLOB == type) {
-            if (MYSQL_TYPE_ORA_BLOB == type) {
-              param.set_collation_type(CS_TYPE_BINARY);
-            } else {
-              param.set_collation_type(cs_type);
-            }
-            ObLobLocatorV2 lobv2(str);
-            param.set_lob_value(ObLongTextType, dst.ptr(), dst.length());
-            param.set_has_lob_header();
-          } else if (MYSQL_TYPE_TINY_BLOB == type
-                    || MYSQL_TYPE_MEDIUM_BLOB == type
-                    || MYSQL_TYPE_BLOB == type
-                    || MYSQL_TYPE_LONG_BLOB == type
-                    || MYSQL_TYPE_JSON == type
-                    || MYSQL_TYPE_GEOMETRY == type) {
-            // in ps protocol:
-            //    MySQL mode: no need to call hextoraw
-            // in text protocol:
-            //    MySQL mode: no need to call hextoraw
-            // Notice: text tc without lob header here, should not set has_lob_header flag here
-            param.set_collation_type(cs_type);
-            if (MYSQL_TYPE_TINY_BLOB == type) {
-              param.set_lob_value(ObTinyTextType, dst.ptr(), dst.length());
-            } else if (MYSQL_TYPE_MEDIUM_BLOB == type) {
-              param.set_lob_value(ObMediumTextType, dst.ptr(), dst.length());
-            } else if (MYSQL_TYPE_BLOB == type) {
-              param.set_lob_value(ObTextType, dst.ptr(), dst.length());
-            } else if (MYSQL_TYPE_LONG_BLOB == type) {
-              param.set_lob_value(ObLongTextType, dst.ptr(), dst.length());
-            } else if (MYSQL_TYPE_JSON == type) {
-              param.set_json_value(ObJsonType, dst.ptr(), dst.length());
-            } else if (MYSQL_TYPE_GEOMETRY == type) {
-              param.set_geometry_value(ObGeometryType, dst.ptr(), dst.length());
-            }
-            if (OB_SUCC(ret) && param.is_lob_storage() && dst.length() > 0) {
-              if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(param, allocator))) {
-              }
-            }
-          } else if (MYSQL_TYPE_STRING == type
-                     || MYSQL_TYPE_VARCHAR == type
-                     || MYSQL_TYPE_VAR_STRING == type) {
-            param.set_collation_type(cs_type);
-            if (is_complex_element) {
-              if (dst.length()== 0) {
-                param.set_null();
-              } else if (MYSQL_TYPE_STRING == type) {  // ObCharType
-                param.set_char(dst);
-              } else {
-                param.set_varchar(dst);
-              }
-            } else {
-              param.set_varchar(dst);
-            }
-          }
+      } else if (OB_SUCC(ret)) {
+        number::ObNumber number;
+        if (OB_FAIL(number.from(str.ptr(), length, allocator))) {
+        } else {
+          ret = param.set_number(number, allocator);
         }
       }
       data += length;
       break;
     }
-    default: {
-      LOG_USER_ERROR(OB_ERR_ILLEGAL_TYPE, type);
-      ret = OB_ERR_ILLEGAL_TYPE;
+    case MYSQL_TYPE_STRING:
+    case MYSQL_TYPE_VARCHAR:
+    case MYSQL_TYPE_VAR_STRING: {
+      ObString str, converted;
+      uint64_t length = 0;
+      const ObCollationType src_collation = ObCharset::get_default_collation(charset);
+      PS_STATIC_DEFENSE_CHECK(checker, 1) {
+        if (OB_FAIL(ObMySQLUtil::get_length(data, length))) {
+        } else {
+          PS_STATIC_DEFENSE_CHECK(checker, length) {
+            str.assign_ptr(data, static_cast<ObString::obstr_size_t>(length));
+          }
+        }
+      }
+      if (OB_SUCC(ret) && length > OB_MAX_LONGTEXT_LENGTH) {
+        ret = OB_ERR_INVALID_INPUT_ARGUMENT;
+      } else if (OB_SUCC(ret)) {
+        if (OB_FAIL(copy_or_convert_str(allocator, src_collation, cs_type, str, converted))) {
+        } else if (is_complex_element && converted.length() == 0) {
+          param.set_null();
+        } else if (is_complex_element && type == MYSQL_TYPE_STRING) {
+          param.set_string_view(ObCharType, converted);
+        } else {
+          param.set_varchar_view(converted);
+        }
+        if (OB_SUCC(ret)) { param.set_collation_type(cs_type); }
+      }
+      data += length;
       break;
     }
+    case MYSQL_TYPE_OB_TIMESTAMP_WITH_TIME_ZONE:
+    case MYSQL_TYPE_OB_TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+    case MYSQL_TYPE_OB_TIMESTAMP_NANO: {
+      // These wire types currently have no supported value mapping in ObSMUtils,
+      // and the Datum type map has no corresponding supported value type.
+      // Preserve the existing observable failure after consuming only
+      // the length byte; do not manufacture an invalid Datum metadata type.
+      int8_t total_len = 0;
+      SqlValueType obj_type = ObMaxType;
+      PS_STATIC_DEFENSE_CHECK(checker, 1) {
+        ObMySQLUtil::get_int1(data, total_len);
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(ObSMUtils::get_ob_type(obj_type,
+                static_cast<EMySQLFieldType>(type)))) {
+          // The wire value type is not mapped yet.
+        } else {
+          ret = OB_NOT_SUPPORTED;
+        }
+      }
+      break;
+    }
+    default:
+      native_scalar = false;
+      break;
   }
-  if (OB_SUCC(ret)) {
-    param.set_collation_level(CS_LEVEL_COERCIBLE);
+  if (native_scalar) {
+    if (OB_SUCC(ret)) {
+      param.set_collation_level(CS_LEVEL_COERCIBLE);
+    }
+  } else {
+    // Keep byte-oriented protocol values native as well. Their backing bytes
+    // are copied/converted into the request allocator before the Datum is
+    // published, so they outlive the packet buffer.
+    ObString str;
+    uint64_t length = 0;
+    if (type != MYSQL_TYPE_ORA_BLOB && type != MYSQL_TYPE_ORA_CLOB &&
+        type != MYSQL_TYPE_TINY_BLOB && type != MYSQL_TYPE_MEDIUM_BLOB &&
+        type != MYSQL_TYPE_BLOB && type != MYSQL_TYPE_LONG_BLOB &&
+        type != MYSQL_TYPE_JSON && type != MYSQL_TYPE_GEOMETRY &&
+        type != MYSQL_TYPE_OB_RAW) {
+      LOG_USER_ERROR(OB_ERR_ILLEGAL_TYPE, type);
+      ret = OB_ERR_ILLEGAL_TYPE;
+    } else {
+      PS_STATIC_DEFENSE_CHECK(checker, 1) {
+        if (OB_FAIL(ObMySQLUtil::get_length(data, length))) {
+        } else {
+          PS_STATIC_DEFENSE_CHECK(checker, length) {
+            str.assign_ptr(data, static_cast<ObString::obstr_size_t>(length));
+          }
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (length > OB_MAX_LONGTEXT_LENGTH) {
+      ret = OB_ERR_INVALID_INPUT_ARGUMENT;
+    } else {
+      ret = set_standard_bytes_param(allocator, type, charset, cs_type, str,
+                                     param, is_complex_element);
+    }
+    data += length;
+    if (OB_SUCC(ret)) {
+      param.set_collation_level(CS_LEVEL_COERCIBLE);
+    }
   }
   return ret;
 }
@@ -2318,7 +2467,7 @@ int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
                                        const char *&data,
                                        const common::ObTimeZoneInfo *tz_info,
                                        TypeInfo *type_info,
-                                       ObObjParam &param,
+                                       DatumParameter &param,
                                        const char *bitmap,
                                        int64_t param_id)
 {
@@ -2338,11 +2487,12 @@ int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
   } else if (OB_ISNULL(piece_cache) || OB_ISNULL(piece)) {
     // send piece data will init piece cache
     // if piece cache is null, it must not be send piece protocol
-    bool is_null = ObSMUtils::update_from_bitmap(param, bitmap, param_id);
+    bool is_null = ObSMUtils::update_from_bitmap(bitmap, param_id);
+    if (is_null) { param.set_null(); }
     if (is_null) {
       if (ob_is_accuracy_length_valid_tc(param.get_param_meta().get_type())) {
-        const_cast<ObObjMeta &>(param.get_param_meta()).set_collation_type(cs_type);
-        const_cast<ObObjMeta &>(param.get_param_meta()).set_collation_level(CS_LEVEL_COERCIBLE);
+        const_cast<SqlTypeMeta &>(param.get_param_meta()).set_collation_type(cs_type);
+        const_cast<SqlTypeMeta &>(param.get_param_meta()).set_collation_level(CS_LEVEL_COERCIBLE);
       }
     } else if (OB_UNLIKELY(MYSQL_TYPE_COMPLEX == type)) {
       if (OB_FAIL(parse_complex_param_value(allocator, charset, cs_type,
@@ -2367,7 +2517,8 @@ int ObMPStmtExecute::parse_param_value(ObIAllocator &allocator,
   } else {
     if (OB_UNLIKELY(MYSQL_TYPE_COMPLEX == type)) {
       // this must be array bounding.
-      bool is_null = ObSMUtils::update_from_bitmap(param, bitmap, param_id);
+      bool is_null = ObSMUtils::update_from_bitmap(bitmap, param_id);
+      if (is_null) { param.set_null(); }
       if (is_null) {
       } else {
         // 1. read count
@@ -2506,256 +2657,6 @@ int ObMPStmtExecute::copy_or_convert_str(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObMPStmtExecute::parse_integer_value(const uint32_t type,
-                                         const char *&data,
-                                         ObObj &param,
-                                         ObIAllocator &allocator,
-                                         bool is_complex_element,
-                                         ObPSAnalysisChecker *checker,
-                                         bool is_unsigned)
-{
-  int ret = OB_SUCCESS;
-  switch(type) {
-    case MYSQL_TYPE_TINY: {
-      PS_STATIC_DEFENSE_CHECK(checker, 1)
-      {
-        int8_t value;
-        ObMySQLUtil::get_int1(data, value);
-        is_unsigned ? param.set_utinyint(value) : param.set_tinyint(value);
-      }
-      break;
-    }
-    case MYSQL_TYPE_SHORT: {
-      PS_STATIC_DEFENSE_CHECK(checker, 2)
-      {
-        int16_t value = 0;
-        ObMySQLUtil::get_int2(data, value);
-        is_unsigned ? param.set_usmallint(value) : param.set_smallint(value);
-      }
-      break;
-    }
-    case MYSQL_TYPE_LONG: {
-      PS_STATIC_DEFENSE_CHECK(checker, 4)
-      {
-        int32_t value = 0;
-        ObMySQLUtil::get_int4(data, value);
-        is_unsigned ? param.set_uint32(value) : param.set_int32(value);
-      }
-      break;
-    }
-    case MYSQL_TYPE_LONGLONG: {
-      PS_STATIC_DEFENSE_CHECK(checker, 8)
-      {
-        int64_t value = 0;
-        ObMySQLUtil::get_int8(data, value);
-        is_unsigned ? param.set_uint(ObUInt64Type, value) : param.set_int(value);
-      }
-      break;
-    }
-    default: {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("unexpected integer type", K(type), K(ret));
-      break;
-    }
-  }
-  return ret;
-}
-
-int ObMPStmtExecute::parse_mysql_timestamp_value(const EMySQLFieldType field_type,
-                                                 const char *&data,
-                                                 ObObj &param,
-                                                 const common::ObTimeZoneInfo *tz_info,
-                                                 ObPSAnalysisChecker *checker)
-{
-  int ret = OB_SUCCESS;
-  int8_t length = 0;
-  int16_t year = 0;
-  int8_t month = 0;
-  int8_t day = 0;
-  int8_t hour = 0;
-  int8_t min = 0;
-  int8_t second = 0;
-  int32_t microsecond = 0;
-  ObPreciseDateTime value;
-  PS_STATIC_DEFENSE_CHECK(checker, 1)
-  {
-    ObMySQLUtil::get_int1(data, length);
-    if (0 == length) {
-      value = 0;
-    } else if (4 == length) {
-      PS_STATIC_DEFENSE_CHECK(checker, 4)
-      {
-        ObMySQLUtil::get_int2(data, year);
-        ObMySQLUtil::get_int1(data, month);
-        ObMySQLUtil::get_int1(data, day);
-      }
-    } else if (7 == length) {
-      PS_STATIC_DEFENSE_CHECK(checker, 7)
-      {
-        ObMySQLUtil::get_int2(data, year);
-        ObMySQLUtil::get_int1(data, month);
-        ObMySQLUtil::get_int1(data, day);
-        ObMySQLUtil::get_int1(data, hour);
-        ObMySQLUtil::get_int1(data, min);
-        ObMySQLUtil::get_int1(data, second);
-      }
-    } else if (11 == length) {
-      PS_STATIC_DEFENSE_CHECK(checker, 11)
-      {
-        ObMySQLUtil::get_int2(data, year);
-        ObMySQLUtil::get_int1(data, month);
-        ObMySQLUtil::get_int1(data, day);
-        ObMySQLUtil::get_int1(data, hour);
-        ObMySQLUtil::get_int1(data, min);
-        ObMySQLUtil::get_int1(data, second);
-        ObMySQLUtil::get_int4(data, microsecond);
-      }
-    } else {
-      ret = OB_ERROR;
-      LOG_WARN("invalid mysql timestamp value length", K(length));
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    ObTime ob_time;
-    if (0 != length) {
-      ob_time.parts_[DT_YEAR] = year;
-      ob_time.parts_[DT_MON] = month;
-      ob_time.parts_[DT_MDAY] = day;
-      ob_time.parts_[DT_HOUR] = hour;
-      ob_time.parts_[DT_MIN] = min;
-      ob_time.parts_[DT_SEC] = second;
-      ob_time.parts_[DT_USEC] = microsecond;
-      if (!ObTimeUtility2::is_valid_date(year, month, day)
-          || !ObTimeUtility2::is_valid_time(hour, min, second, microsecond)) {
-        ret = OB_INVALID_DATE_FORMAT;
-      } else {
-        ObTimeConvertCtx cvrt_ctx(NULL, false);
-        ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
-        if (field_type == MYSQL_TYPE_DATE) {
-          value = ob_time.parts_[DT_DATE];
-        } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, value))){
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    if (field_type == MYSQL_TYPE_TIMESTAMP) {
-      int64_t ts_value = 0;
-      if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(value, tz_info, ts_value))) {
-      } else {
-        param.set_timestamp(ts_value);
-      }
-    } else if (field_type == MYSQL_TYPE_DATETIME) {
-      param.set_datetime(value);
-    } else if (field_type == MYSQL_TYPE_DATE) {
-      param.set_date(static_cast<int32_t>(value));
-    }
-  }
-  return ret;
-}
-
-int ObMPStmtExecute::parse_ob_timestamp_value(const obmysql::EMySQLFieldType field_type,
-    const char *&data, const ObTimeConvertCtx &cvrt_ctx, ObObj &param, ObPSAnalysisChecker *checker)
-{
-  int ret = OB_SUCCESS;
-  int8_t total_len = 0;
-  ObObjType obj_type;
-  ObOTimestampData ot_data;
-  int8_t scale = -1;
-  PS_STATIC_DEFENSE_CHECK(checker, 1)
-  {
-    ObMySQLUtil::get_int1(data, total_len);
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObSMUtils::get_ob_type(obj_type, field_type))) {
-  } else if (OB_FAIL(ObTimeConverter::decode_otimestamp(obj_type, data, total_len, cvrt_ctx, ot_data, scale))) {
-  } else {
-    PS_STATIC_DEFENSE_CHECK(checker, total_len)
-    {
-      data += total_len;
-      param.set_otimestamp_value(obj_type, ot_data);
-      param.set_scale(scale);
-    }
-  }
-  return ret;
-}
-
-int ObMPStmtExecute::parse_mysql_time_value(const char *&data, ObObj &param, ObPSAnalysisChecker *checker)
-{
-  int ret = OB_SUCCESS;
-  int8_t length = 0;
-  int8_t is_negative = 0;
-  int16_t year = 0;
-  int8_t month = 0;
-  int32_t day = 0;
-  int8_t hour = 0;
-  int8_t min = 0;
-  int8_t second = 0;
-  int32_t microsecond = 0;
-  struct tm tmval;
-  MEMSET(&tmval, 0, sizeof(tmval));
-  int64_t value;
-  PS_STATIC_DEFENSE_CHECK(checker, 1)
-  {
-    ObMySQLUtil::get_int1(data, length);
-    if (0 == length) {
-      value = 0;
-    } else if (8 == length) {
-      PS_STATIC_DEFENSE_CHECK(checker, 8)
-      {
-        ObMySQLUtil::get_int1(data, is_negative);
-        ObMySQLUtil::get_int4(data, day);
-        ObMySQLUtil::get_int1(data, hour);
-        ObMySQLUtil::get_int1(data, min);
-        ObMySQLUtil::get_int1(data, second);
-      }
-    } else if (12 == length) {
-      PS_STATIC_DEFENSE_CHECK(checker, 12)
-      {
-        ObMySQLUtil::get_int1(data, is_negative);
-        ObMySQLUtil::get_int4(data, day);
-        ObMySQLUtil::get_int1(data, hour);
-        ObMySQLUtil::get_int1(data, min);
-        ObMySQLUtil::get_int1(data, second);
-        ObMySQLUtil::get_int4(data, microsecond);
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("unexpected time length", K(length), K(ret));
-    }
-
-    if (OB_SUCC(ret)) {
-      ObTime ob_time;
-      if (0 != length) {
-        ob_time.parts_[DT_YEAR] = year;
-        ob_time.parts_[DT_MON] = month;
-        ob_time.parts_[DT_MDAY] = day;
-        ob_time.parts_[DT_HOUR] = hour;
-        ob_time.parts_[DT_MIN] = min;
-        ob_time.parts_[DT_SEC] = second;
-        ob_time.parts_[DT_USEC] = microsecond;
-        if (!ObTimeUtility2::is_valid_time(hour, min, second, microsecond)) {
-          ret = OB_INVALID_DATE_FORMAT;
-        } else {
-          ob_time.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ob_time);
-          ob_time.parts_[DT_HOUR] += ob_time.parts_[DT_MDAY] * 24;
-          ob_time.parts_[DT_MDAY] = 0;
-          value = ObTimeConverter::ob_time_to_time(ob_time);
-          if(is_negative) {
-            value = -value;
-          }
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    param.set_time(value);
-  }
-  LOG_INFO("get time", K(length), K(year), K(month), K(day), K(hour), K(min),K(second),  K(microsecond), K(value));
-  return ret;
-}
-
 int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObPLServerCursorInfo &cursor)
 {
   int ret = OB_SUCCESS;
@@ -2778,38 +2679,3 @@ int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObPLSe
 
 } //end of namespace observer
 } //end of namespace oceanbase
-
-namespace oceanbase
-{
-namespace query
-{
-
-int decode_mysql_basic_param_value(
-    common::ObIAllocator &allocator,
-    uint32_t type,
-    common::ObCharsetType charset,
-    common::ObCharsetType ncharset,
-    common::ObCollationType collation,
-    const char *&data,
-    const common::ObTimeZoneInfo *time_zone,
-    common::ObObj &value,
-    bool is_complex_element,
-    bool is_unsigned)
-{
-  UNUSED(ncharset);
-  return observer::ObMPStmtExecute::parse_basic_param_value(
-      allocator,
-      type,
-      nullptr,
-      charset,
-      collation,
-      data,
-      time_zone,
-      value,
-      is_complex_element,
-      nullptr,
-      is_unsigned);
-}
-
-} // namespace query
-} // namespace oceanbase

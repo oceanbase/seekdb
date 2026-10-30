@@ -35,7 +35,6 @@ private:
   common::ObIAllocator &allocator_;
   blocksstable::ObMacroBlockRowBareIterator iter_;
   common::ObStoreRowkey rowkey_;
-  common::ObObj *rowkey_obobj_;
   int64_t schema_rowkey_column_count_;
   bool is_inited_;
 };

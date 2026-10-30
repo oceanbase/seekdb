@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_calc_partition_id.h"
+#include "common/datum/datum_value_projection.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_cmp_func.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
@@ -374,35 +376,21 @@ int ObExprCalcPartitionBase::calc_part_and_subpart_and_tablet_id(const ObExpr *c
 int ObExprCalcPartitionBase::build_row(ObEvalCtx &ctx,
                                        ObIAllocator &allocator,
                                        const ObExpr &expr,
-                                       ObNewRow &row)
+                                       ObIArray<DatumValue> &row)
 {
   int ret = OB_SUCCESS;
   OB_ASSERT(T_OP_ROW == expr.type_);
   OB_ASSERT(expr.arg_cnt_ > 0);
-  //TODO shengle Here the memory of the first allocated cells_ can be placed into expr_ctx,
-  // Reuse for optimization;
-  if (OB_ISNULL(row.cells_ = static_cast<ObObj *>(
-                allocator.alloc(sizeof(ObObj) * expr.arg_cnt_)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    for (int64_t i = 0; i < expr.arg_cnt_; i++) {
-      new (&row.cells_[i]) ObObj();
-    }
-    row.count_ = expr.arg_cnt_;
-    row.projector_size_ = 0;
-    row.projector_ = NULL;
-  }
-  if (OB_SUCC(ret)) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
-      ObExpr *col_expr = expr.args_[i];
-      ObDatum &col_datum = col_expr->locate_expr_datum(ctx);
-      if (OB_FAIL(col_datum.to_obj(row.cells_[i],
-                                   col_expr->obj_meta_,
-                                   col_expr->obj_datum_map_))) {
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+    ObExpr *col_expr = expr.args_[i];
+    const ObDatum &col_datum = col_expr->locate_expr_datum(ctx);
+    DatumValue view, owned;
+    if (OB_FAIL(project_datum_value_view(col_datum, col_expr->obj_meta_,
+                    col_expr->obj_datum_map_, view.meta_, view))) {
+    } else if (OB_FAIL(clone_typed_value(view, owned, allocator))) {
+    } else if (OB_FAIL(row.push_back(owned))) {
     }
   }
-
   return ret;
 }
 
@@ -435,7 +423,7 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
       }
     }
     if (OB_SUCC(ret)) {
-      ObNewRow row;
+      ObSEArray<DatumValue, 4> row;
       ObEvalCtx::TempAllocGuard alloc_guard(ctx);
       ObIAllocator &allocator = alloc_guard.get_allocator();
       if (OB_FAIL(build_row(ctx, allocator, part_expr, row))) {
@@ -448,29 +436,32 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
       }
     }
   } else { // not list/range columns
-    ObObj func_value;
-    ObObj result;
+    DatumValue func_value;
+    DatumValue result;
+    ObArenaAllocator value_owner("CalcPartValue");
     ObDatum *datum = NULL;
     if (OB_FAIL(part_expr.eval(ctx, datum))) {
-    } else if (OB_FAIL(datum->to_obj(func_value,
-                                     part_expr.obj_meta_,
-                                     part_expr.obj_datum_map_))) {
-    } else if (func_value.is_outrow_lob()) {
+    } else if (OB_FAIL(project_datum_value_view(*datum, part_expr.obj_meta_,
+                              part_expr.obj_datum_map_, func_value.meta_, func_value))) {
+    } else if (func_value.is_lob_storage() && func_value.has_lob_header()
+               && func_value.datum_.len_ != 0
+               && ObLobLocatorV2(func_value.get_string(), true).is_valid()
+               && !ObLobLocatorV2(func_value.get_string(), true).has_inrow_data()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "outrow lob as partition key");
     } else {
       result = func_value;
       if (PARTITION_FUNC_TYPE_HASH == part_type) {
-        if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(func_value, result,
-                    func_value.get_type()))) {
+        if (OB_FAIL(result.set_int(0, value_owner))) {
+        } else if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(
+                             func_value.datum_, result.datum_, func_value.get_type()))) {
         }
       }
       if (OB_SUCC(ret)) {
         ObSEArray<ObTabletID, 1> tablet_ids;
         ObSEArray<ObObjectID, 1> partition_ids;
-        // Here you can also uniformly use the above ObNewRow interface, and put calc_value_for_mysql
-        // Use datum to implement, temporarily keep consistent with the previous method
-        ObRowkey rowkey(const_cast<ObObj*>(&result), 1);
+        // Keep scalar point-range routing distinct from the native row API.
+        ObRowkey rowkey(&result, 1);
         ObNewRange range;
         if (OB_FAIL(range.build_range(calc_part_info.ref_table_id_, rowkey))) {
         } else if (OB_FAIL(tablet_mapper.get_tablet_and_object_id(
@@ -583,8 +574,7 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
   for (int i = 0; OB_SUCC(ret) && i < part_num; ++i) {
     if (part_array[i]->get_high_bound_val().is_max_row()) {
       range_partitions_.at(i).set_max_range_part();
-    } else if (OB_FAIL(tmp_datum.from_obj(
-            *(part_array[i]->get_high_bound_val().get_obj_ptr())))) {
+    } else if (FALSE_IT(tmp_datum = part_array[i]->get_high_bound_val().get_cells()[0].datum_)) {
     } else if (OB_FAIL(range_partitions_.at(i).datum_.deep_copy(tmp_datum,
                                         allocator))) {
     }
@@ -618,7 +608,7 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
   ObPartition * const* part_array = table_schema.get_part_array();
   int64_t list_val_cnt = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < part_num; ++i) {
-    const ObIArray<common::ObNewRow> &list_row_values = 
+    const ObIArray<PartitionBoundRow> &list_row_values =
             part_array[i]->get_list_row_values();
     list_val_cnt += list_row_values.count();
     // calc default value position
@@ -640,11 +630,10 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
         if (i == default_list_part_idx_) {
           continue;
         }
-        const ObIArray<common::ObNewRow> &list_row_values = 
+        const ObIArray<PartitionBoundRow> &list_row_values =
               part_array[i]->get_list_row_values();
         for (int64_t j = 0; OB_SUCC(ret) && j < list_row_values.count(); ++j) {
-          ObObj *list_part_obj = list_row_values.at(j).cells_;
-          if (OB_FAIL(list_part_datum.from_obj(*list_part_obj))) {
+          if (FALSE_IT(list_part_datum = list_row_values.at(j).get_cell(0).datum_)) {
           } else {
             PartValKey list_part_row;
             if (OB_FAIL(list_part_row.datum_.deep_copy(list_part_datum,

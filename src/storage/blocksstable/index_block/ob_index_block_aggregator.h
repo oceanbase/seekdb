@@ -100,12 +100,12 @@ protected:
   int copy_agg_datum_for_min_max(const ObDatum &datum, const ObSkipIndexDatumAttr &agg_datum_attr);
   static int copy_inrow_string_prefix(
       const ObDatum &orig_datum,
-      const ObObjType obj_type,
+      const SqlValueType obj_type,
       const ObCollationType collation_type,
       const int64_t max_prefix_byte_len,
       ObStorageDatum &prefix_datum);
   static int copy_agg_datum(const ObDatum &src, ObDatum &dst);
-  bool need_set_not_aggregate(const ObObjType type, const ObDatum &datum) const;
+  bool need_set_not_aggregate(const SqlValueType type, const ObDatum &datum) const;
   void process_nop_for_loose_agg(const bool is_major);
 protected:
   ObColDesc col_desc_;

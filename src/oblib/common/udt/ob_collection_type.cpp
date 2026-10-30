@@ -167,7 +167,7 @@ bool ObCollectionArrayType::check_is_valid_vector() const
   if (OB_ISNULL(meta_info) || meta_info->type_id_ != ObNestedType::OB_BASIC_TYPE) {
     is_valid = false;
   } else {
-    ObObjType obj_type = meta_info->basic_meta_.get_obj_type();
+    SqlValueType obj_type = meta_info->basic_meta_.get_obj_type();
     if (obj_type != ObFloatType && obj_type != ObUTinyIntType) {
       is_valid = false;
     }
@@ -350,7 +350,7 @@ int ObSqlCollectionInfo::set_element_meta_unsigned(ObCollectionBasicType *meta_i
   if (OB_ISNULL(meta_info) || meta_info->type_id_ != ObNestedType::OB_BASIC_TYPE) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObjType obj_type = meta_info->basic_meta_.get_obj_type();
+    SqlValueType obj_type = meta_info->basic_meta_.get_obj_type();
     switch (obj_type) {
       case ObTinyIntType:
         meta_info->basic_meta_.meta_.set_utinyint();
@@ -387,8 +387,8 @@ int ObSqlCollectionInfo::set_element_meta_info(const std::string &name, uint8_t 
   if (OB_ISNULL(meta_info) || meta_info->type_id_ != ObNestedType::OB_BASIC_TYPE) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObObjType obj_type = meta_info->basic_meta_.get_obj_type();
-    ObObjTypeClass tc = meta_info->basic_meta_.get_type_class();
+    SqlValueType obj_type = meta_info->basic_meta_.get_obj_type();
+    SqlTypeClass tc = meta_info->basic_meta_.get_type_class();
     const ObAccuracy &default_accuracy = ObAccuracy::DDL_DEFAULT_ACCURACY[obj_type];
     switch (tc) {
       case ObIntTC:

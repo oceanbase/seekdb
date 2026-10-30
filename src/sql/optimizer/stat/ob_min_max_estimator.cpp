@@ -54,7 +54,7 @@ int ObStatMinMaxSubquery::gen_expr(char *buf, const int64_t buf_len, int64_t &po
 }
 
 int ObStatMinMaxSubquery::decode(
-    ObObj &obj,
+    DatumValue &obj,
     ObIAllocator &allocator,
     const ObDatumAccessContext *datum_access_ctx)
 {
@@ -64,9 +64,9 @@ int ObStatMinMaxSubquery::decode(
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  obj, allocator, datum_access_ctx))) {
   } else if (is_min_) {
-    col_stat_->set_min_value(obj);
+    ret = col_stat_->set_min_value(obj);
   } else {
-    col_stat_->set_max_value(obj);
+    ret = col_stat_->set_max_value(obj);
   }
   return ret;
 }

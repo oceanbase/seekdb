@@ -18,6 +18,7 @@
 #define __OCEANBASE_SQL_ENGINE_PX_UTIL_H__
 
 #include "lib/container/ob_array.h"
+#include "query/engine/expr/expr_extra_serialize_info.h"
 #include "sql/engine/px/ob_dfo.h"
 #include "sql/dtl/ob_dtl_task.h"
 #include "sql/dtl/ob_dtl_flow_control.h"
@@ -39,18 +40,6 @@ public:
   virtual int on_root_data_channel_setup() = 0;
 };
 
-
-struct ObExprExtraSerializeInfo
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObExprExtraSerializeInfo() :
-    current_time_(nullptr),
-    last_trace_id_(nullptr)
-    { }
-  common::ObObj *current_time_;
-  common::ObCurTraceId::TraceId *last_trace_id_;
-};
 
 class ObBaseOrderMap
 {

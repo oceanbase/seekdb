@@ -39,7 +39,7 @@ namespace sql
       ObExprResType &type,
       const ObExprResType &type1,
       const ObExprResType &type2,
-      const common::ObObjType map[common::ObMaxTC][common::ObMaxTC]);
+      const common::SqlValueType map[common::ObMaxTC][common::ObMaxTC]);
 };
 
 }

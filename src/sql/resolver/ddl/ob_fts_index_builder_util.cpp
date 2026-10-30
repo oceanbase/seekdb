@@ -36,6 +36,16 @@ namespace share
 {
 namespace
 {
+DatumValue make_default_expr_value(const ObString &expr)
+{
+  ObDatum datum;
+  datum.set_string(expr);
+  SqlTypeMeta meta;
+  meta.set_varchar();
+  meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  return DatumValue(datum, meta);
+}
+
 bool get_function_args(const ObString &expr_string,
                        const ObString &func_name,
                        ObString &args)
@@ -994,8 +1004,7 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
       if (OB_FAIL(databuff_printf(ft_expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, "DOC_ID()"))) {
       } else {
         ObColumnSchemaV2 column_schema;
-        ObObj default_value;
-        default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+        const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
         column_schema.set_rowkey_position(0); //non-primary key column
         column_schema.set_index_position(0); // non-index column
         column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -1143,8 +1152,7 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
                                     def_pos,
                                     ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+          const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -1248,8 +1256,7 @@ int ObFtsIndexBuilderUtil::generate_word_count_column(
                                     def_pos,
                                     ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+          const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); //non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -1348,8 +1355,7 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
                                     def_pos,
                                     ")"))) {
         } else {
-          ObObj default_value;
-          default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
+          const DatumValue default_value = make_default_expr_value(ObString(def_pos, ft_expr_def));
           column_schema.set_rowkey_position(0); //non-primary key column
           column_schema.set_index_position(0); // non-index column
           column_schema.set_tbl_part_key_pos(0); // not partition key
@@ -2637,10 +2643,9 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
         gen_budy_col = data_schema.get_column_schema(gen_col->get_column_id());
       } else {
         //need to add new generated column
-        ObObj default_value;
+        const DatumValue default_value = make_default_expr_value(expr_def);
         char col_name_buf[OB_MAX_COLUMN_NAMES_LENGTH] = {'\0'};
         pos = 0;
-        default_value.set_varchar(expr_def);
         multival_col.set_rowkey_position(0); //non-primary key column
         multival_col.set_index_position(0); //non-index column
         multival_col.set_tbl_part_key_pos(0); //not partition key
@@ -2698,14 +2703,13 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
           multival_arr_col.add_column_flag(MULTIVALUE_INDEX_GENERATED_ARRAY_COLUMN_FLAG);
 
           pos = 0;
-          ObObj default_value;
           char col_name_buf[OB_MAX_COLUMN_NAMES_LENGTH] = {'\0'};
           snprintf(expr_def_buf + expr_str_len - 1, OB_MAX_DEFAULT_VALUE_LENGTH - (expr_str_len - 1),
                  "%s", " multivalue)");
 
           expr_str_len = strlen(expr_def_buf);
           expr_def.assign_ptr(expr_def_buf, static_cast<ObString::obstr_size_t>(expr_str_len));
-          default_value.set_varchar(expr_def);
+          const DatumValue default_value = make_default_expr_value(expr_def);
 
           multival_arr_col.set_data_type(ObJsonType);
           multival_arr_col.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -2754,7 +2758,7 @@ bool ObMulValueIndexBuilderUtil::is_multivalue_array_column(const ObString& expr
 bool ObMulValueIndexBuilderUtil::is_multivalue_array_column(
    const share::schema::ObColumnSchemaV2 &column_schema)
 {
-  const ObObj& default_value = column_schema.get_orig_default_value();
+  const DatumValue& default_value = column_schema.get_orig_default_value();
   const ObString orig_str = default_value.get_string();
   return is_multivalue_array_column(orig_str);
 }
@@ -2766,8 +2770,8 @@ int ObMulValueIndexBuilderUtil::is_matched_budy_column(
    bool& is_match)
 {
   int ret = OB_SUCCESS;
-  const ObObj& default_value = ori_column_schema.get_orig_default_value();
-  const ObObj& budy_default_value = budy_column_schema.get_orig_default_value();
+  const DatumValue& default_value = ori_column_schema.get_orig_default_value();
+  const DatumValue& budy_default_value = budy_column_schema.get_orig_default_value();
 
   const ObString orig_str = default_value.get_string();
   const ObString budy_orig_str = budy_default_value.get_string();

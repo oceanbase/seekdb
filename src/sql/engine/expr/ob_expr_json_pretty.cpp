@@ -60,7 +60,7 @@ int ObExprJsonPretty::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta
                            MultimodeAlloctor *allocator, ObJsonBuffer &j_buf, bool &is_null)
 {
   INIT_SUCC(ret);
-  ObObjType type = meta.type_;
+  SqlValueType type = meta.type_;
   ObCollationType cs_type = meta.cs_type_;
   ObIJsonBase *j_base = NULL;
   ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);

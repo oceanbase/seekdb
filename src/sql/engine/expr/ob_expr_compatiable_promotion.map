@@ -1,5 +1,5 @@
 /*not use any more*/
-static ObObjTypeClass COMPATIABLE_TYPE_PROMOTION[ObMaxTC][ObMaxType] =
+static SqlTypeClass COMPATIABLE_TYPE_PROMOTION[ObMaxTC][ObMaxType] =
 {
   {
     /*null -> XXX*/

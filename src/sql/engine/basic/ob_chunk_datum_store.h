@@ -126,7 +126,7 @@ public:
                      common::ObIAllocator &alloc,
                      const uint32_t extra_size = 0);
 
-    //shadow_datums means that the memory of datum may come from other datum or ObObj
+    //shadow_datums means that datum memory may be owned by another value container
     //the memory of shadow_datums is not continuous,
     //so you cannot directly copy the memory of the entire datum array,
     //and you should make a deep copy of each datum in turn
@@ -407,7 +407,7 @@ public:
     {
       if (nullptr != store_row_) {
         uint32_t payload_len = store_row_->cnt_ * sizeof(ObDatum);
-        //reserve the memory of datum.ptr_ to assign ObObj
+        //clear the datum payload before reusing the row storage
         MEMSET(store_row_->payload_, 0, payload_len);
         store_row_->row_size_ = payload_len + sizeof(StoredRow);
       }
@@ -1200,7 +1200,7 @@ inline int ObChunkDatumStore::BlockBuffer::advance(int64_t size)
   return ret;
 }
 
-//shadow_datums means that the memory of datum may come from other datum or ObObj
+//shadow_datums means that datum memory may be owned by another value container
 //the memory of shadow_datums is not continuous,
 //so you cannot directly copy the memory of the entire datum array,
 //and you should make a deep copy of each datum in turn

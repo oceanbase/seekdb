@@ -100,7 +100,7 @@ int ObExprFormat::calc_result_type(ObExprResType &type, ObExprResType *type_arra
   ObExprResType ori_type = type_array[0];
   if (OB_FAIL(get_origin_param_type(ori_type))) {
   } else {
-    const ObObjType obj_type = ori_type.get_type();
+    const SqlValueType obj_type = ori_type.get_type();
     if (ob_is_integer_type(obj_type)) {
       int64_t max_char_length = type_array[0].get_length();
       int64_t max_sep_count = (max_char_length / 3) + /*decimals*/1 + /*sign*/1;
@@ -266,7 +266,7 @@ int ObExprFormat::convert_num_to_str(const ObDatumMeta &x_meta,
                                      ObString &num_str)
 {
   int ret = OB_SUCCESS;
-  const ObObjType obj_type = x_meta.type_;
+  const SqlValueType obj_type = x_meta.type_;
   int64_t str_len = 0;
   if (ObDoubleType == obj_type || ObUDoubleType == obj_type) {
     str_len = ob_fcvt(ObExprUtil::round_double(x_datum.get_double(), scale), scale, buf_len,

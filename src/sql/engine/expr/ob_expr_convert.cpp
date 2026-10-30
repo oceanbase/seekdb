@@ -51,7 +51,7 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
   if (ob_is_string_type(type.get_type())) {
     type.set_length(type1.get_length());
   }
-  const ObObj &dest_collation = type2.get_param();
+  const DatumValue &dest_collation = type2.get_param();
   TYPE_CHECK(dest_collation, ObVarcharType);
   if (OB_SUCC(ret)) {
     ObString cs_name = dest_collation.get_string();
@@ -66,7 +66,7 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
       type2.set_calc_type(ObVarcharType);
       // cast expression will cast the first child node of convert expression to type1, calculation result of convert is the first one
       // Subnode result
-      type1.set_calc_meta(type.get_obj_meta());
+      type1.set_calc_meta(type.get_sql_type_meta());
       type1.set_calc_collation_type(type.get_collation_type());
       type1.set_calc_collation_level(type.get_collation_level());
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_CHARSET_CONVERT_IGNORE_ERR);

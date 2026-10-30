@@ -41,16 +41,16 @@ public:
   static int calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
                                  ObDatum &res_datum);
 private:
-  static int calc_(common::ObObj &result, const common::ObString &var_name, 
+  static int calc_(common::DatumValue &result, const common::ObString &var_name,
                    const int64_t var_scope, ObSQLSessionInfo *session, 
                    ObExecContext *exec_ctx, common::ObIAllocator &alloc);
-  static int get_session_var(common::ObObj &result, const common::ObString &var_name,
+  static int get_session_var(common::DatumValue &result, const common::ObString &var_name,
                              common::ObIAllocator &alloc, ObSQLSessionInfo *session, 
                              ObExecContext *exec_ctx);
   static int get_sys_var_disp_obj(common::ObIAllocator &allocator,
                            const ObSQLSessionInfo &session,
                            const common::ObString &var_name,
-                           common::ObObj &disp_obj);
+                           common::DatumValue &disp_obj);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprGetSysVar);

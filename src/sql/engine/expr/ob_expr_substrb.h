@@ -33,13 +33,6 @@ public:
                                 ObExprResType *types_stack,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc(common::ObObj &result,
-                  const common::ObString &text,
-                  int64_t start_pos,
-                  int64_t length,
-                  common::ObCollationType cs_type,
-                  const common::ObObjType &res_type,
-                  common::ObExprCtx &expr_ctx);
   static int calc(common::ObString &res_str, const common::ObString &text,
                   int64_t start, int64_t length, common::ObCollationType cs_type,
                   common::ObIAllocator &alloc);

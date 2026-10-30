@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "common/mysqlclient/ob_isql_connection.h"
+#include "common/datum/datum_value.h"
 
 namespace oceanbase
 {
@@ -61,6 +62,14 @@ public:
 
   static sql::ObSQLSessionInfo *get_session(
       common::sqlclient::ObISQLConnection *connection);
+
+  // These ports require an Observer inner connection/result created above.
+  // Native mode is selected before open (including first-row prefetch/retry).
+  static int execute_read_native(common::sqlclient::ObISQLConnection *connection,
+      const common::ObString &sql, common::ObISQLClient::ReadResult &result,
+      bool is_user_sql = false);
+  static int get_native_value(common::sqlclient::ObMySQLResult *result, int64_t col_idx,
+      common::ObIAllocator &owner, common::DatumValue &value);
 
   static int lock_obj(
       const transaction::tablelock::ObLockObjRequest &request,

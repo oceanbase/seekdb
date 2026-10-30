@@ -332,7 +332,7 @@ public:
                              const uint64_t offset,
                              const uint64_t increment,
                              uint64_t &prev_value);
-  static uint64_t get_max_value(const common::ObObjType type);
+  static uint64_t get_max_value(const common::SqlValueType type);
 
 private:
   int sync_insert_value_to_store(AutoincParam &param, CacheHandle *&cache_handle,

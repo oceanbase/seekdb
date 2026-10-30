@@ -342,179 +342,6 @@ int ColumnMap::get(const uint64_t column_id, int32_t &proj) const
   return ret;
 }
 
-ObColumnParam::ObColumnParam(ObIAllocator &allocator)
-    : allocator_(allocator)
-{
-  reset();
-}
-
-ObColumnParam::~ObColumnParam()
-{
-}
-
-void ObColumnParam::reset()
-{
-  column_id_ = OB_INVALID_ID;
-  meta_type_.reset();
-  order_ = ObOrderType::ASC;
-  accuracy_.reset();
-  orig_default_value_.reset();
-  cur_default_value_.reset();
-  is_nullable_for_write_ = false;
-  is_nullable_for_read_ = false;
-  is_gen_col_ = false;
-  is_virtual_gen_col_ = false;
-  is_gen_col_udf_expr_ = false;
-  is_hidden_ = false;
-  lob_chunk_size_ = OB_DEFAULT_LOB_CHUNK_SIZE;
-  is_data_table_rowkey_ = false;
-}
-
-void ObColumnParam::destroy()
-{
-  if (orig_default_value_.need_deep_copy()) {
-    allocator_.free(orig_default_value_.get_deep_copy_obj_ptr());
-    orig_default_value_.reset();
-  }
-  if (cur_default_value_.need_deep_copy()) {
-    allocator_.free(cur_default_value_.get_deep_copy_obj_ptr());
-    cur_default_value_.reset();
-  }
-  ObColumnParam::reset();
-}
-
-int ObColumnParam::deep_copy_obj(const ObObj &src, ObObj &dest)
-{
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int64_t pos = 0;
-  int64_t size = src.get_deep_copy_size();
-
-  if (size > 0) {
-    if (NULL == (buf = static_cast<char*>(allocator_.alloc(size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("Fail to allocate memory, ", K(size), K(ret));
-    } else if (OB_FAIL(dest.deep_copy(src, buf, size, pos))){
-    }
-  } else {
-    dest = src;
-  }
-
-  return ret;
-}
-
-int32_t ObColumnParam::get_data_length() const
-{
-  return ObColumnSchemaV2::get_data_length(accuracy_, meta_type_);
-}
-
-OB_DEF_SERIALIZE(ObColumnParam)
-{
-  int ret = OB_SUCCESS;
-
-  LST_DO_CODE(OB_UNIS_ENCODE,
-              column_id_,
-              meta_type_,
-              accuracy_,
-              orig_default_value_,
-              cur_default_value_,
-              order_,
-              is_nullable_for_write_,
-              is_gen_col_,
-              is_virtual_gen_col_,
-              is_gen_col_udf_expr_,
-              is_nullable_for_read_,
-              is_hidden_,
-              lob_chunk_size_,
-              is_data_table_rowkey_);
-  return ret;
-}
-
-OB_DEF_DESERIALIZE(ObColumnParam)
-{
-  int ret = OB_SUCCESS;
-  ObObj orig_default_value;
-  ObObj cur_default_value;
-
-  LST_DO_CODE(OB_UNIS_DECODE,
-              column_id_,
-              meta_type_,
-              accuracy_,
-              orig_default_value,
-              cur_default_value,
-              order_);
-
-  // compatibility code
-  if (OB_SUCC(ret)) {
-    if (pos < data_len) {
-      if (OB_FAIL(serialization::decode(buf, data_len, pos, is_nullable_for_write_))) {
-      }
-    } else {
-      is_nullable_for_write_ = false;
-    }
-  }
-  OB_UNIS_DECODE(is_gen_col_);
-  OB_UNIS_DECODE(is_virtual_gen_col_);
-  OB_UNIS_DECODE(is_gen_col_udf_expr_);
-  OB_UNIS_DECODE(is_nullable_for_read_);
-  OB_UNIS_DECODE(is_hidden_);
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(deep_copy_obj(orig_default_value, orig_default_value_))) {
-    } else if (OB_FAIL(deep_copy_obj(cur_default_value, cur_default_value_))) {
-    }
-  }
-  OB_UNIS_DECODE(lob_chunk_size_);
-  OB_UNIS_DECODE(is_data_table_rowkey_);
-
-  return ret;
-}
-
-OB_DEF_SERIALIZE_SIZE(ObColumnParam)
-{
-  int64_t len = 0;
-
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-              column_id_,
-              meta_type_,
-              accuracy_,
-              orig_default_value_,
-              cur_default_value_,
-              order_,
-              is_nullable_for_write_,
-              is_nullable_for_read_,
-              is_gen_col_,
-              is_virtual_gen_col_,
-              is_gen_col_udf_expr_,
-              is_hidden_,
-              lob_chunk_size_,
-              is_data_table_rowkey_);
-  return len;
-}
-
-int ObColumnParam::assign(const ObColumnParam &other)
-{
-  int ret = OB_SUCCESS;
-  if (&other != this) {
-    column_id_ = other.column_id_;
-    meta_type_ = other.meta_type_;
-    order_ = other.order_;
-    accuracy_ = other.accuracy_;
-    is_nullable_for_write_ = other.is_nullable_for_write_;
-    is_nullable_for_read_ = other.is_nullable_for_read_;
-    is_gen_col_ = other.is_gen_col_;
-    is_virtual_gen_col_ = other.is_virtual_gen_col_;
-    is_gen_col_udf_expr_= other.is_gen_col_udf_expr_;
-    is_hidden_ = other.is_hidden_;
-    lob_chunk_size_ = other.lob_chunk_size_;
-    is_data_table_rowkey_ = other.is_data_table_rowkey_;
-    if (OB_FAIL(deep_copy_obj(other.cur_default_value_, cur_default_value_))) {
-    } else if (OB_FAIL(deep_copy_obj(other.orig_default_value_, orig_default_value_))) {
-    }
-  }
-  return ret;
-}
-
 /************************************* ObTableParam **********************************/
 ObTableParam::ObTableParam(ObIAllocator &allocator)
   : allocator_(allocator),
@@ -904,7 +731,7 @@ int ObTableParam::construct_columns_and_projector(
       } else if (OB_UNLIKELY(common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID == column_id) ||
                  common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID == column_id ||
                  common::OB_HIDDEN_GROUP_IDX_COLUMN_ID == column_id) {
-        ObObjMeta meta_type;
+        SqlTypeMeta meta_type;
         meta_type.set_int();
         column->set_column_id(column_id);
         column->set_meta_type(meta_type);
@@ -1152,7 +979,7 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
       if (OB_ISNULL(col_param = storage_project_columns.at(i))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObObjType type = col_param->get_meta_type().get_type();
+        SqlValueType type = col_param->get_meta_type().get_type();
         use_lob_locator = is_lob_storage(type);
       }
     }
@@ -1228,7 +1055,7 @@ int ObTableParam::convert_column_schema_to_param(const ObColumnSchemaV2 &column_
                                                  ObColumnParam &column_param)
 {
   int ret = OB_SUCCESS;
-  ObObjMeta meta_type = column_schema.get_meta_type();
+  SqlTypeMeta meta_type = column_schema.get_meta_type();
   if (meta_type.is_decimal_int()) {
     meta_type.set_stored_precision(column_schema.get_accuracy().get_precision());
     meta_type.set_scale(column_schema.get_accuracy().get_scale());
@@ -1246,11 +1073,14 @@ int ObTableParam::convert_column_schema_to_param(const ObColumnSchemaV2 &column_
   column_param.set_lob_chunk_size(column_schema.get_lob_chunk_size());
   LOG_DEBUG("convert_column_schema_to_param", K(column_schema), K(column_param), K(lbt()));
   if (column_schema.is_generated_column()) {
-    ObObj nop_obj;
-    nop_obj.set_nop_value();
-    ret = column_param.set_orig_default_value(nop_obj);
+    DatumValue nop_value;
+    char nop_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+    nop_value.datum_.ptr_ = nop_payload;
+    nop_value.datum_.set_extend(ObActionFlag::OP_NOP, 0);
+    nop_value.meta_.set_ext();
+    ret = column_param.set_orig_default_value(nop_value);
     if (OB_SUCC(ret)) {
-      ret = column_param.set_cur_default_value(nop_obj);
+      ret = column_param.set_cur_default_value(nop_value);
     }
   } else {
     ret = column_param.set_orig_default_value(column_schema.get_orig_default_value());

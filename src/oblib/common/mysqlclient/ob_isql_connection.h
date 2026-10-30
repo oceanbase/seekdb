@@ -21,7 +21,6 @@
 #include "lib/container/ob_iarray.h"
 #include "common/mysqlclient/ob_isql_client.h"
 #include "common/timezone/ob_timezone_info.h"
-#include "common/object/ob_object.h"
 
 namespace oceanbase
 {
@@ -30,19 +29,6 @@ namespace sql
 class ObSql;
 struct ObSqlCtx;
 class ObResultSet;
-}
-namespace share
-{
-namespace schema
-{
-class ObRoutineInfo;
-}
-
-}
-
-namespace pl
-{
-class ObUserDefinedType;
 }
 namespace common
 {
@@ -86,14 +72,6 @@ public:
   virtual int execute_write(const ObString &sql,
       int64_t &affected_rows, bool is_user_sql = false) = 0;
   virtual int execute_proc() { return OB_NOT_SUPPORTED; }
-  virtual int execute_proc(ObIAllocator &allocator,
-                        ParamStore &params,
-                        ObString &sql,
-                        const share::schema::ObRoutineInfo &routine_info,
-                        const common::ObIArray<const pl::ObUserDefinedType *> &udts,
-                        const ObTimeZoneInfo *tz_info,
-                        ObObj *result,
-                        bool is_sql) = 0;
   virtual int prepare(const ObString &sql, int64_t param_count, ObIAllocator *allocator = NULL) {
     UNUSED(sql);
     return OB_NOT_SUPPORTED;

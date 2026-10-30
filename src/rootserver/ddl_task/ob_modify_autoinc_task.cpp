@@ -34,7 +34,7 @@ ObUpdateAutoincSequenceTask::ObUpdateAutoincSequenceTask(
     const int64_t dest_table_id,
     const int64_t schema_version,
     const uint64_t column_id,
-    const ObObjType &orig_column_type,
+    const SqlValueType &orig_column_type,
     const ObSQLMode &sql_mode,
     const common::ObCurTraceId::TraceId &trace_id,
     const int64_t task_id)
@@ -87,7 +87,7 @@ int ObUpdateAutoincSequenceTask::process()
         session_param.ddl_info_.set_is_ddl(true);
         // if data_table_id != dest_table_id, meaning this is happening in ddl double write
         session_param.ddl_info_.set_source_table_hidden(data_table_id_ != dest_table_id_);
-        ObObj obj;
+        DatumValue obj;
         const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
         if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
         } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
@@ -99,9 +99,9 @@ int ObUpdateAutoincSequenceTask::process()
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(result->next())) {
-        } else if (OB_FAIL(result->get_obj("MAX_VALUE", obj))) {
+        } else if (OB_FAIL(result->get_value("MAX_VALUE", obj))) {
         } else {
-          max_value = MAX(0, obj.get_int());
+          max_value = obj.is_null() ? 0 : MAX(0, obj.get_int());
         }
       }
     }
@@ -324,7 +324,7 @@ int ObModifyAutoincTask::modify_autoinc()
           LOG_WARN("invalid alter column info", K(alter_column_id));
         } else {
           const AlterTableSchema &alter_table_schema = alter_table_arg_.alter_table_schema_;
-          ObObjType column_type = orig_table_schema->get_column_schema(alter_column_id)->get_data_type();
+          SqlValueType column_type = orig_table_schema->get_column_schema(alter_column_id)->get_data_type();
           ObUpdateAutoincSequenceTask task(object_id_, target_object_id_, schema_version_,
                                           alter_column_id, column_type, alter_table_arg_.sql_mode_,
                                           trace_id_, task_id_);

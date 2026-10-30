@@ -147,11 +147,13 @@ int ObExtInfoCallback::set(
   lob_id_ = lob_id;
   allocator_ = &(lob_mngr->get_ext_info_log_allocator());
 
-  key_obj_.reset();
+  key_value_.reset();
   rowkey_.reset();
   key_.reset();
-  key_obj_.set_uint64(seq_no_cur_.cast_to_int());
-  rowkey_.assign(&key_obj_, OB_EXT_INFO_MUTATOR_ROW_KEY_CNT);
+  key_seq_ = static_cast<uint64_t>(seq_no_cur_.cast_to_int());
+  key_value_.meta_.set_uint64();
+  key_value_.datum_.set_string(reinterpret_cast<const char *>(&key_seq_), sizeof(key_seq_));
+  rowkey_.assign(&key_value_, OB_EXT_INFO_MUTATOR_ROW_KEY_CNT);
   SMART_VAR(blocksstable::ObRowWriter, row_writer) {
     if (data.empty()) {
       ret = OB_ERR_UNEXPECTED;
@@ -159,7 +161,7 @@ int ObExtInfoCallback::set(
     } else if (OB_NOT_NULL(mutator_row_buf_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(datum_row.init(allocator, OB_EXT_INFO_MUTATOR_ROW_COUNT))) {
-    } else if (OB_FAIL(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_KEY_IDX].from_obj_enhance(key_obj_))) {
+    } else if (OB_FAIL(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_KEY_IDX].from_value(key_value_))) {
     } else if (OB_FALSE_IT(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_VALUE_IDX].set_string(data))) {
     } else if (OB_FALSE_IT(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_LOB_ID_IDX].set_string(reinterpret_cast<char*>(&lob_id_), sizeof(lob_id_)))) {
     } else if (OB_FAIL(row_writer.write(OB_EXT_INFO_MUTATOR_ROW_KEY_CNT, datum_row, buf, len))) {
@@ -220,9 +222,10 @@ int ObExtInfoCbRegister::register_cb(
     const transaction::ObTxSEQ &seq_no_st,
     const int64_t seq_no_cnt,
     const ObString &index_data,
-    const ObObjType index_data_type,
+    const SqlValueType index_data_type,
     const ObExtInfoLogHeader &header,
-    ObObj &ext_info_data)
+    const SqlValueType ext_info_data_type,
+    const ObDatum &ext_info_data)
 {
   int ret = OB_SUCCESS;
   ext_info_data_ = ext_info_data;
@@ -239,7 +242,7 @@ int ObExtInfoCbRegister::register_cb(
   } else if (OB_ISNULL(mvcc_ctx_ = ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_lob_id(index_data, index_data_type, lob_id))) {
-  } else if (OB_FAIL(build_data_iter(ext_info_data))) {
+  } else if (OB_FAIL(build_data_iter(ext_info_data, ext_info_data_type))) {
   } else {
     transaction::ObTxSEQ seq_no_cur = seq_no_st_;
     ObString data;
@@ -271,7 +274,7 @@ int ObExtInfoCbRegister::register_cb(
   return ret;
 }
 
-int ObExtInfoCbRegister::build_data_iter(ObObj &ext_info_data)
+int ObExtInfoCbRegister::build_data_iter(const ObDatum &ext_info_data, const SqlValueType ext_info_data_type)
 {
   int ret = OB_SUCCESS;
   ObLobManager *lob_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
@@ -282,7 +285,7 @@ int ObExtInfoCbRegister::build_data_iter(ObObj &ext_info_data)
   if (OB_ISNULL(lob_mgr)) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "lob manager is  null", K(ret));
-  } else if (! is_lob_storage(ext_info_data.get_type())) {
+  } else if (! is_lob_storage(ext_info_data_type)) {
     if (OB_FAIL(lob_mgr->query(data, data_iter_))) {
     } else {
       data_size_ = data.length();
@@ -351,7 +354,7 @@ int ObExtInfoCbRegister::get_data(ObString &data)
   return ret;
 }
 
-int ObExtInfoCbRegister::get_lob_id(const ObString &index_data, const ObObjType type, ObLobId &lob_id)
+int ObExtInfoCbRegister::get_lob_id(const ObString &index_data, const SqlValueType type, ObLobId &lob_id)
 {
   int ret = OB_SUCCESS;
   if (is_lob_storage(type)) {

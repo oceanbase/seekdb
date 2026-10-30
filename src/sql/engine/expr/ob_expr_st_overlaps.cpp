@@ -65,8 +65,8 @@ int ObExprSTOverlaps::process_input_geometry(common::ObSrsCacheGuard &srs_guard,
   ObDatum *gis_datum2 = NULL;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
-  ObObjType input_type1 = gis_arg1->datum_meta_.type_;
-  ObObjType input_type2 = gis_arg2->datum_meta_.type_;
+  SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
+  SqlValueType input_type2 = gis_arg2->datum_meta_.type_;
   is_null_res = false;
   if (OB_FAIL(allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {

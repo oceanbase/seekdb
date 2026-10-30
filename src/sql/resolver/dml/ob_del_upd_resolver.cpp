@@ -260,19 +260,19 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
             CK (OB_NOT_NULL(col_expr));
             CK (OB_NOT_NULL(c_expr));
             if (OB_FAIL(ret)) {
-            } else if (col_expr->get_result_type().get_obj_meta().is_enum_or_set()
+            } else if (col_expr->get_result_type().get_sql_type_meta().is_enum_or_set()
               || params_.is_batch_stmt_) {
               // enum, set, rowid do not support cast
               int64_t param_idx = 0;
               OZ (c_expr->get_value().get_unknown(param_idx));
               CK (OB_NOT_NULL(params_.param_list_));
               CK (param_idx < params_.param_list_->count());
-              OX (const_cast<ObObjParam &>(
+              OX (const_cast<DatumParameter &>(
               params_.param_list_->at(param_idx)).set_need_to_check_type(true));
             } else {
               OZ (c_expr->add_flag(IS_TABLE_ASSIGN));
               OX (c_expr->set_result_type(col_expr->get_result_type()));
-              if (col_expr->get_result_type().get_obj_meta().is_collection_sql_type()) {
+              if (col_expr->get_result_type().get_sql_type_meta().is_collection_sql_type()) {
                 c_expr->set_subschema_id(col_expr->get_subschema_id());
               }
             }
@@ -1925,7 +1925,7 @@ int ObDelUpdResolver::build_column_conv_function_with_value_desc(ObInsertTableIn
     if (OB_FAIL(ret)) {
     } else if (!skip_convert && OB_FAIL(add_additional_function_according_to_type(column_item, column_ref,
                                         T_INSERT_SCOPE,
-                                        ObObjMeta::is_binary(tbl_col->get_data_type(),
+                                        SqlTypeMeta::is_binary(tbl_col->get_data_type(),
                                                              tbl_col->get_collation_type())))) {
     }
     if (OB_SUCC(ret)) {
@@ -1994,7 +1994,7 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
         // For binary type, compare and hash not ignore '\0', so need to padding
         // '\0' for optimizer calculating partition targets. As storage do right
         // trim of '\0', so don't worry extra space usage.
-        if (ObObjMeta::is_binary(tbl_col->get_data_type(),
+        if (SqlTypeMeta::is_binary(tbl_col->get_data_type(),
                                  tbl_col->get_collation_type())) {
           if (OB_FAIL(build_padding_expr(session_info_, column_item, expr))) {
           }
@@ -2074,7 +2074,7 @@ int ObDelUpdResolver::build_autoinc_param(
     ret = OB_INVALID_ARGUMENT;
   } else {
     const uint64_t column_id = column_schema->get_column_id();
-    const ObObjType column_type = column_schema->get_data_type();
+    const SqlValueType column_type = column_schema->get_data_type();
     
     param.autoinc_table_id_ = table_id;
     param.autoinc_table_part_num_ = table_schema->get_all_part_num();

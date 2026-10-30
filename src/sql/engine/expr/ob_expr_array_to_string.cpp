@@ -60,7 +60,7 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
     // do nothing
   } else if (!ob_is_collection_sql_type(array_type->get_type())) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(array_type->get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", sql_value_type_to_string(array_type->get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(array_type->get_subschema_id(), arr_meta))) {
   } else if (arr_meta.type_ != ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -76,7 +76,7 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
     delimiter_type->set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
   } else {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", ob_obj_type_str(delimiter_type->get_type()));
+    LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", sql_value_type_to_string(delimiter_type->get_type()));
   }
   if (OB_SUCC(ret) && param_num == 3) {
     ObExprResType *null_str_type = &types[2];
@@ -86,7 +86,7 @@ int ObExprArrayToString::calc_result_typeN(ObExprResType &type,
       null_str_type->set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", ob_obj_type_str(null_str_type->get_type()));
+      LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "VARCHAR", sql_value_type_to_string(null_str_type->get_type()));
     }
   }
 

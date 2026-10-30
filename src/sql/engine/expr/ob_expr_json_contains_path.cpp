@@ -88,7 +88,7 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
     bool one_flag;
     ObDatum *json_datum = NULL;
     ObExpr *json_arg = expr.args_[1];
-    ObObjType val_type = json_arg->datum_meta_.type_;
+    SqlValueType val_type = json_arg->datum_meta_.type_;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
     } else if (val_type == ObNullType || json_datum->is_null()) {
       is_null_result = true;

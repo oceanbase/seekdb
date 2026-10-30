@@ -118,7 +118,7 @@ private:
   int get_next_aggregate_row(blocksstable::ObDatumRow *&row);
   int fuse_default(blocksstable::ObDatumRow &row);
   int fill_lob_locator(blocksstable::ObDatumRow &row);
-  int fuse_lob_default(ObObj &def_cell, const uint64_t col_id);
+  int fuse_lob_default(common::DatumValue &def_cell, const uint64_t col_id);
   int pad_columns(blocksstable::ObDatumRow &row);
   int fill_virtual_columns(blocksstable::ObDatumRow &row);
   int project_row(const blocksstable::ObDatumRow &unprojected_row, blocksstable::ObDatumRow &projected_row);

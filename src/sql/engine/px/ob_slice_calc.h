@@ -53,7 +53,7 @@ public:
       K_(expr_idx), K_(cmp_type));
 
   int64_t expr_idx_;
-  common::ObObjType cmp_type_;
+  common::SqlValueType cmp_type_;
 };
 
 class ObSliceIdxCalc
@@ -114,7 +114,7 @@ public:
   // Get the target partition corresponding to the row passed in the previous call to get_slice_indexes
   // This interface is currently only used for ObRepartSliceIdxCalc and ObAffinitizedRepartSliceIdxCalc
   // The calculated tablet_id is used to tell the target operator which partition the current row belongs to
-  virtual int get_previous_row_tablet_id(ObObj &tablet_id);
+  virtual int get_previous_row_tablet_id(int64_t &tablet_id);
 
   // support vectorized slice indexes calculation.
   bool support_vectorized_calc() const { return support_vectorized_calc_; }
@@ -243,7 +243,7 @@ public:
   int get_tablet_id(ObEvalCtx &eval_ctx, int64_t &tablet_id, ObBitVector *skip = NULL);
   int get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
                                 const int64_t batch_size, int64_t *&tablet_ids);
-  virtual int get_previous_row_tablet_id(ObObj &tablet_id) override;
+  virtual int get_previous_row_tablet_id(int64_t &tablet_id) override;
 
   int init_partition_cache_map();
 

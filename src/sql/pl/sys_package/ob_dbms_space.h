@@ -94,7 +94,7 @@ public:
 public:
   static int create_index_cost(sql::ObExecContext &ctx,
                                sql::ParamStore &params,
-                               common::ObObj &result);
+                               common::DatumValue &result);
 
   /* in param:
    *  info table_id_; // data table's table id;
@@ -138,8 +138,9 @@ private:
 
   static int calc_index_size(OptStats &opt_stats,
                              IndexCostInfo &info,
-                             ObObjParam &actual_size,
-                             ObObjParam &alloc_size);
+                             ObIAllocator &allocator,
+                             DatumParameter &actual_size,
+                             DatumParameter &alloc_size);
 
   static int get_compressed_ratio(ObExecContext &ctx,
                                   IndexCostInfo &info);

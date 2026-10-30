@@ -58,7 +58,7 @@ private:
   int set_scale_for_single_param(ObExprResType &type,
                                  const ObExprResType &type1) const;
 
-  common::ObObjType calc_one_param_type(ObExprResType *params) const;
+  common::SqlValueType calc_one_param_type(ObExprResType *params) const;
 
   static int get_usec_from_datum(const common::ObDatum &param_datum,
                                  common::ObIAllocator &alloc,

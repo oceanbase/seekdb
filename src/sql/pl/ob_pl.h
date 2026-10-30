@@ -101,11 +101,11 @@ public:
   virtual int init_complex_obj(ObIAllocator &allocator,
                                ObIAllocator &expr_allocator,
                                const ObPLDataType &pl_type,
-                               common::ObObjParam &obj,
+                               common::DatumParameter &obj,
                                bool set_allocator = false,
                                bool set_null = true);
 
-  virtual int calc_expr(uint64_t package_id, int64_t expr_idx, ObObjParam &result);
+  virtual int calc_expr(uint64_t package_id, int64_t expr_idx, DatumParameter &result);
 };
 
 class ObPLFunctionBase
@@ -423,21 +423,20 @@ struct ObPLCtx
 public:
   ObPLCtx() {}
   ~ObPLCtx();
-  int add(ObObj &obj) {
-    return objects_.push_back(obj);
-  }
+  int add(const DatumValue &obj, common::ObIAllocator &owner);
+  int add(const DatumParameter &obj, common::ObIAllocator &owner) { return add(obj.value_view(), owner); }
   void clear() {
     objects_.reset();
   }
   void reset_obj();
   void reset_obj_range_to_end(int64_t index);
-  common::ObIArray<ObObj>& get_objects() { return objects_; }
+  common::ObIArray<DatumValue>& get_objects() { return objects_; }
 private:
   // Used to collect Allocators used during PL execution,
   // Some data has a lifecycle for the entire execution period, so it cannot be released immediately after PL execution is complete, such as OUT parameters
   // The Allocator here needs to ensure allocation by ObExecContext->allocator,
   // This is to ensure that the pointer is valid when the allocator here is released
-  ObSEArray<ObObj, 32> objects_;
+  ObSEArray<DatumValue, 32> objects_;
 };
 
 class ObPLPackageGuard;
@@ -457,7 +456,7 @@ struct ObPLExecCtx : public ObPLINS
   ObPLExecCtx(common::ObIAllocator *allocator,
               sql::ObExecContext *exec_ctx,
               ParamStore *params,
-              common::ObObj *result,
+              common::DatumParameter *result,
               int *status,
               ObPLFunction *func,
               bool in_function = false,
@@ -489,7 +488,7 @@ struct ObPLExecCtx : public ObPLINS
   virtual int get_user_type(uint64_t type_id,
                             const ObUserDefinedType *&user_type,
                             ObIAllocator *allocator = NULL) const;
-  virtual int calc_expr(uint64_t package_id, int64_t expr_idx, ObObjParam &result);
+  virtual int calc_expr(uint64_t package_id, int64_t expr_idx, DatumParameter &result);
   void set_is_sensitive(bool is_sensitive) const
   {
     if (OB_NOT_NULL(exec_ctx_) && OB_NOT_NULL(exec_ctx_->get_sql_ctx())) {
@@ -500,7 +499,7 @@ struct ObPLExecCtx : public ObPLINS
   common::ObIAllocator *allocator_; // Symbol Allocator
   sql::ObExecContext *exec_ctx_;
   ParamStore *params_; // param store, corresponding to the symbol table of PL Function
-  common::ObObj *result_;
+  common::DatumParameter *result_;
   int *status_; // SQL errors in PL will directly throw exceptions and will not reach the normal return value of the function to return an error code, so the error code needs to be recorded here
   ObPLFunction *func_; // corresponds to the func_ of the context to be executed
   bool in_function_; // Record whether the current state is inside a function
@@ -533,7 +532,7 @@ public:
                 sql::ObExecContext &ctx,
                 ObPLPackageGuard &guard,
                 ObPLFunction &func,
-                common::ObObj &result,
+                common::DatumParameter &result,
                 int &status,
                 bool top_call = false,
                 bool inner_call = false,
@@ -570,24 +569,24 @@ public:
   virtual ~ObPLExecState();
 
   int init(const ParamStore *params = NULL, bool is_anonymous = false);
-  int defend_stored_routine_change(const ObObjParam &actual_param, const ObPLDataType &formal_param_type);
+  int defend_stored_routine_change(const DatumParameter &actual_param, const ObPLDataType &formal_param_type);
   int check_routine_param_legal(ParamStore *params = NULL);
   int check_anonymous_collection_compatible(const ObPLComposite &composite, const ObPLDataType &dest_type, bool &need_cast);
-  int convert_composite(ObObjParam &param, const ObPLDataType &dest_type);
+  int convert_composite(DatumParameter &param, const ObPLDataType &dest_type);
   int init_params(const ParamStore *params = NULL, bool is_anonymous = false);
   int execute();
   int final(int ret);
   int deep_copy_result_if_need(common::ObIAllocator &allocator);
-  int init_complex_obj(common::ObIAllocator &allocator, const ObPLDataType &pl_type, common::ObObjParam &obj, bool set_null = true);
-  inline const common::ObObj &get_result() const { return result_; }
+  int init_complex_obj(common::ObIAllocator &allocator, const ObPLDataType &pl_type, common::DatumParameter &obj, bool set_null = true);
+  inline const common::DatumParameter &get_result() const { return result_; }
   inline common::ObIAllocator *get_allocator() { return ctx_.allocator_; }
   inline const sql::ObPhysicalPlanCtx &get_physical_plan_ctx() const { return phy_plan_ctx_; }
   inline sql::ObPhysicalPlanCtx &get_physical_plan_ctx() { return phy_plan_ctx_; }
   inline const ParamStore &get_params() const { return phy_plan_ctx_.get_param_store(); }
   inline ParamStore &get_params() { return phy_plan_ctx_.get_param_store_for_update(); }
   ObPLFunction &get_function() { return func_; }
-  int get_var(int64_t var_idx, ObObjParam& result);
-  int set_var(int64_t var_idx, const ObObjParam& value);
+  int get_var(int64_t var_idx, DatumParameter& result);
+  int set_var(int64_t var_idx, const DatumParameter& value);
   ObPLExecCtx& get_exec_ctx() { return ctx_; }
   int check_pl_execute_priv(ObSchemaGetterGuard &guard,
                                           const uint64_t user_id,
@@ -646,7 +645,7 @@ private:
   ObPLFunction &func_;
   sql::ObPhysicalPlanCtx phy_plan_ctx_; //The runtime param values are stored here, corresponding one-to-one with variables_ in ObPLFunction, default values need to be set during initialization
   sql::ObEvalCtx eval_ctx_;
-  common::ObObj &result_;
+  common::DatumParameter &result_;
   ObPLExecCtx ctx_;
   bool inner_call_;
   bool top_call_;
@@ -745,12 +744,12 @@ public:
                                     int64_t package_id,
                                     int64_t routine_id,
                                     int64_t var_idx,
-                                    ObObjParam &result);
+                                    DatumParameter &result);
   static int set_subprogram_var_from_local(sql::ObSQLSessionInfo &session_info,
                                     int64_t package_id,
                                     int64_t routine_id,
                                     int64_t var_idx,
-                                    const ObObjParam &value);
+                                    const DatumParameter &value);
   int inc_and_check_depth(int64_t package_id, int64_t routine_id, bool is_function);
   void dec_and_check_depth(int64_t package_id, int64_t routine_id, int &ret, bool inner_call);
 
@@ -884,7 +883,7 @@ public:
               uint64_t routine_id,
               const ObIArray<int64_t> &subprogram_path,
               ParamStore &params,
-              common::ObObj &result,
+              common::DatumParameter &result,
               int *status = NULL,
               bool inner_call = false,
               bool in_function = false,
@@ -926,7 +925,7 @@ private:
               ObPLPackageGuard &package_guard,
               ObPLFunction &routine,
               ParamStore *params,
-              ObObj *result,
+              DatumParameter *result,
               int *status = NULL,
               bool is_top_stack = false,
               bool is_inner_call = false,
@@ -949,7 +948,7 @@ public:
                           int64_t path_length,
                           uint64_t line_num, /* call position line number, for call_stack info*/
                           int64_t argc,
-                          common::ObObjParam **argv);
+                          common::DatumParameter **argv);
 
   inline ObPLPackageManager &get_package_manager() { return package_manager_; }
   inline common::ObMySQLProxy *get_sql_proxy() { return sql_proxy_; }

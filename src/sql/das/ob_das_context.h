@@ -50,14 +50,14 @@ public:
     : param_idx_(common::OB_INVALID_ID),
       gr_param_(nullptr)
   { }
-  GroupRescanParam(int64_t param_idx, ObSqlArrayObj *gr_param)
+  GroupRescanParam(int64_t param_idx, DatumParameterArray *gr_param)
   : param_idx_(param_idx),
     gr_param_(gr_param)
   { }
   TO_STRING_KV(K_(param_idx),
                KPC_(gr_param));
   int64_t param_idx_;
-  ObSqlArrayObj *gr_param_; //group rescan param
+  DatumParameterArray *gr_param_; //group rescan param
 };
 typedef common::ObArrayWrap<GroupRescanParam> GroupParamArray;
 class ObDASCtx

@@ -74,9 +74,9 @@ public:
   static int construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObString &expr_name, ObReqExpr *param1, ObReqExpr *param2, const ObString &alias_name = ObString());
   static int construct_expr(ObReqExpr *&expr, ObIAllocator &alloc, const ObString &expr_name, const common::ObIArray<ObReqExpr *> &params, const ObString &alias_name = ObString());
   virtual ~ObReqExpr() {}
-  virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  virtual int translate_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   virtual int get_expr_type() { return ObReqExprType::NORMAL_EXPR; }
-  int translate_alias(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_);
+  int translate_alias(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_);
   inline void set_alias(const ObString &alias) { alias_name = alias; }
   TO_STRING_KV("expr name", expr_name, N_PARAM, params);
   common::ObString expr_name;
@@ -102,7 +102,7 @@ public:
   ObReqMatchExpr() = delete;
   static int construct_match_expr(ObReqMatchExpr *&expr, ObIAllocator &alloc, ObReqExpr *field_expr, ObReqExpr *query_expr, ObEsScoreType score_type = SCORE_TYPE_BEST_FIELDS);
   virtual ~ObReqMatchExpr() {}
-  virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  virtual int translate_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   virtual int get_expr_type() { return ObReqExprType::MATCH_EXPR; }
   ObEsScoreType score_type_;
 private:
@@ -124,7 +124,7 @@ public:
                                       ObReqExpr *default_expr = nullptr,
                                       ObReqExpr *arg_expr = nullptr);
   virtual ~ObReqCaseWhenExpr() {}
-  virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  virtual int translate_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   virtual int get_expr_type() { return ObReqExprType::CASE_EXPR; }
   ObReqExpr *arg_expr_;
   common::ObSEArray<ObReqExpr *, 4, common::ModulePageAllocator, true> when_exprs_;
@@ -158,7 +158,7 @@ public:
   static int construct_column_expr(ObReqColumnExpr *&expr, ObIAllocator &alloc, const ObString &expr_name = ObString(), double weight = -1.0, bool print_weight = false);
   static int construct_column_expr(ObReqColumnExpr *&expr, ObIAllocator &alloc, const ObString &expr_name, const ObString &table_name, double weight = -1.0, bool print_weight = false);
   virtual ~ObReqColumnExpr() {}
-  virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  virtual int translate_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   virtual int get_expr_type() { return ObReqExprType::COLUMN_EXPR; }
   common::ObString table_name;
   double weight_;
@@ -172,19 +172,19 @@ class ObReqConstExpr : public ObReqExpr
 {
 public:
   ObReqConstExpr() = delete;
-  static int construct_const_expr(ObReqConstExpr *&expr, ObIAllocator &alloc, const ObString &expr_name, ObObjType var_type);
-  static int construct_const_numeric_expr(ObReqConstExpr *&expr, ObIAllocator &alloc, double num_value, ObObjType var_type);
+  static int construct_const_expr(ObReqConstExpr *&expr, ObIAllocator &alloc, const ObString &expr_name, SqlValueType var_type);
+  static int construct_const_numeric_expr(ObReqConstExpr *&expr, ObIAllocator &alloc, double num_value, SqlValueType var_type);
   virtual ~ObReqConstExpr() {}
-  virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  virtual int translate_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   virtual int get_expr_type() { return ObReqExprType::CONST_EXPR; }
   inline bool is_numeric() const { return is_numeric_; }
   inline double get_numeric_value() const { return numeric_value_; }
-  int set_numeric(ObIAllocator &alloc, double numeric_value, ObObjType var_type);
+  int set_numeric(ObIAllocator &alloc, double numeric_value, SqlValueType var_type);
   inline void set_numeric() { is_numeric_ = ob_is_numeric_type(var_type_); }
-  ObObjType var_type_;
+  SqlValueType var_type_;
   double weight_;
 private:
-  ObReqConstExpr(ObObjType val_type, const ObString &expr_name) : ObReqExpr(expr_name), var_type_(val_type), weight_(-1.0), is_numeric_(false), numeric_value_(0.0) {}
+  ObReqConstExpr(SqlValueType val_type, const ObString &expr_name) : ObReqExpr(expr_name), var_type_(val_type), weight_(-1.0), is_numeric_(false), numeric_value_(0.0) {}
   bool is_numeric_;
   double numeric_value_;
 };
@@ -198,8 +198,8 @@ public:
   static int construct_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc, ObItemType type, const common::ObIArray<ObReqExpr *> &params);
   static int construct_in_expr(ObIAllocator &alloc, ObReqExpr *key_expr, common::ObIArray<ObReqConstExpr *> &value_exprs, ObReqOpExpr *&in_expr);
   virtual ~ObReqOpExpr() {}
-  virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
-  int translate_in_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  virtual int translate_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  int translate_in_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   inline void set_op_type(ObItemType op_type) { op_type_ = op_type; }
   virtual int get_expr_type() { return ObReqExprType::OP_EXPR; }
   bool need_parentheses_;
@@ -224,7 +224,7 @@ public:
   ObReqWindowFunExpr() = delete;
   static int construct_window_fun_expr(ObIAllocator &alloc, OrderInfo *order_info, const ObString &expr_name, const ObString &alias, ObReqWindowFunExpr *&expr);
   virtual ~ObReqWindowFunExpr() {}
-  virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
+  virtual int translate_expr(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   virtual int get_expr_type() { return ObReqExprType::NORMAL_EXPR; }
   common::ObArray<OrderInfo *, common::ModulePageAllocator, true> order_items_;
 private :
@@ -246,7 +246,7 @@ struct OrderInfo
   ObReqExpr *order_item;
   bool ascent;
   bool null_first;
-  int translate(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE);
+  int translate(ObValuePrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE);
   TO_STRING_KV("N_ORDER_BY", *order_item, K(ascent), K(null_first));
 };
 

@@ -37,11 +37,11 @@ void ObAnalyzeSampleInfo::set_rows(double row_num)
   sample_value_ = row_num;
 }
 
-bool ObColumnStatParam::is_valid_opt_col_type(const ObObjType type, bool is_online_stat)
+bool ObColumnStatParam::is_valid_opt_col_type(const SqlValueType type, bool is_online_stat)
 {
   bool ret = false;
   // currently, we only support the following type to collect histogram
-  ColumnTypeClass type_class = ob_obj_type_class(type);
+  ColumnTypeClass type_class = sql_type_class(type);
   if (type_class == ColumnTypeClass::ObIntTC ||
       type_class == ColumnTypeClass::ObUIntTC ||
       type_class == ColumnTypeClass::ObFloatTC ||
@@ -66,11 +66,11 @@ bool ObColumnStatParam::is_valid_opt_col_type(const ObObjType type, bool is_onli
   return ret;
 }
 
-bool ObColumnStatParam::is_valid_avglen_type(const ObObjType type)
+bool ObColumnStatParam::is_valid_avglen_type(const SqlValueType type)
 {
   bool ret = false;
   // currently, we only support the following type to collect avg len
-  ColumnTypeClass type_class = ob_obj_type_class(type);
+  ColumnTypeClass type_class = sql_type_class(type);
   if (is_valid_opt_col_type(type) ||
       type_class == ColumnTypeClass::ObTextTC ||
       type_class == ColumnTypeClass::ObRowIDTC ||
@@ -80,10 +80,10 @@ bool ObColumnStatParam::is_valid_avglen_type(const ObObjType type)
   return ret;
 }
 
-bool ObColumnStatParam::is_valid_refine_min_max_type(const ObObjType type)
+bool ObColumnStatParam::is_valid_refine_min_max_type(const SqlValueType type)
 {
   bool ret = false;
-  ColumnTypeClass type_class = ob_obj_type_class(type);
+  ColumnTypeClass type_class = sql_type_class(type);
   if (type_class == ColumnTypeClass::ObIntTC ||
       type_class == ColumnTypeClass::ObUIntTC ||
       type_class == ColumnTypeClass::ObFloatTC ||

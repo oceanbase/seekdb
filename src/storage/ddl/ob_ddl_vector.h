@@ -86,7 +86,7 @@ public:
   static int create_vector(const share::schema::ObColDesc &col_desc, bool is_nullable,
                            const int64_t max_batch_size, ObIAllocator &allocator,
                            ObDDLVector *&vector);
-  static int create_vector(const common::ObObjMeta &col_type, bool is_nullable,
+  static int create_vector(const common::SqlTypeMeta &col_type, bool is_nullable,
                            const int64_t max_batch_size, ObIAllocator &allocator,
                            ObDDLVector *&vector);
 };

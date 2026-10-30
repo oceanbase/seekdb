@@ -1,0 +1,68 @@
+# Datum result rows: direct cells and compatibility columns share one advance
+DROP TABLE IF EXISTS datum_result_row_test;
+CREATE TABLE datum_result_row_test (
+id INT PRIMARY KEY,
+si BIGINT,
+ui BIGINT UNSIGNED,
+z INT(8) UNSIGNED ZEROFILL,
+s VARCHAR(40) CHARACTER SET utf8mb4,
+b VARBINARY(20),
+n DECIMAL(18,4),
+d DATETIME(6),
+j JSON
+);
+INSERT INTO datum_result_row_test VALUES
+(1,-9223372036854775808,18446744073709551615,7,'中文','a\0b',12345.6789,'2026-10-22 12:34:56.123456','{"a":1}'),
+(2,0,0,0,'','',0,'2000-01-01 00:00:00.000001','[]'),
+(3,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+SELECT id,si,ui,z,s,HEX(b),n,d,j FROM datum_result_row_test ORDER BY id;
+id	si	ui	z	s	HEX(b)	n	d	j
+1	-9223372036854775808	18446744073709551615	00000007	中文	610062	12345.6789	2026-10-22 12:34:56.123456	{"a": 1}
+2	0	0	00000000			0.0000	2000-01-01 00:00:00.000001	[]
+3	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+PREPARE datum_result_ps FROM 'SELECT id,si,ui,z,s,HEX(b),n,d,j FROM datum_result_row_test WHERE id >= ? ORDER BY id';
+SET @datum_result_id=1;
+EXECUTE datum_result_ps USING @datum_result_id;
+id	si	ui	z	s	HEX(b)	n	d	j
+1	-9223372036854775808	18446744073709551615	00000007	中文	610062	12345.6789	2026-10-22 12:34:56.123456	{"a": 1}
+2	0	0	00000000			0.0000	2000-01-01 00:00:00.000001	[]
+3	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+SET @datum_result_id=3;
+EXECUTE datum_result_ps USING @datum_result_id;
+id	si	ui	z	s	HEX(b)	n	d	j
+3	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+SET @datum_result_id=4;
+EXECUTE datum_result_ps USING @datum_result_id;
+id	si	ui	z	s	HEX(b)	n	d	j
+DEALLOCATE PREPARE datum_result_ps;
+SET @datum_result_counter=0;
+SELECT id,(@datum_result_counter:=@datum_result_counter+1) AS seq FROM datum_result_row_test ORDER BY id;
+id	seq
+1	1
+2	2
+3	3
+SELECT @datum_result_counter;
+@datum_result_counter
+3
+SET sql_select_limit=1;
+SELECT id,s,n FROM datum_result_row_test ORDER BY id;
+id	s	n
+1	中文	12345.6789
+SET sql_select_limit=DEFAULT;
+SELECT SQL_CALC_FOUND_ROWS id,s FROM datum_result_row_test ORDER BY id LIMIT 1;
+id	s
+1	中文
+SELECT FOUND_ROWS();
+FOUND_ROWS()
+3
+SELECT id,s FROM datum_result_row_test WHERE id<0;
+id	s
+SET character_set_results=binary;
+SELECT id,s FROM datum_result_row_test WHERE id=2;
+id	s
+2	
+SET character_set_results=utf8mb4;
+SELECT id,s FROM datum_result_row_test WHERE id=1;
+id	s
+1	中文
+DROP TABLE datum_result_row_test;

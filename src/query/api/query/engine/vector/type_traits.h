@@ -61,7 +61,6 @@ class ObString;
 class ObOTimestampData;
 class ObOTimestampTinyData;
 class ObVectorBase;
-class ObObj;
 
 template <VecValueTypeClass vec_tc>
 struct RTTypeTraits {};
@@ -84,7 +83,6 @@ DEFINE_VECTOR_TC_TRAITS(VEC_TC_DATETIME, true, int64_t);
 DEFINE_VECTOR_TC_TRAITS(VEC_TC_DATE, true, int32_t);
 DEFINE_VECTOR_TC_TRAITS(VEC_TC_TIME, true, int64_t);
 DEFINE_VECTOR_TC_TRAITS(VEC_TC_YEAR, true, uint8_t);
-DEFINE_VECTOR_TC_TRAITS(VEC_TC_EXTEND, false, ObObj);
 DEFINE_VECTOR_TC_TRAITS(VEC_TC_UNKNOWN, true, int64_t);
 DEFINE_VECTOR_TC_TRAITS(VEC_TC_STRING, false, ObString);
 DEFINE_VECTOR_TC_TRAITS(VEC_TC_BIT, true, uint64_t);

@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_index_merge_iter.h"
 #include "src/sql/das/ob_das_attach_define.h"
+#include "common/datum/datum_key_ops.h"
+#include "common/datum/datum_value_projection.h"
 namespace oceanbase
 {
 using namespace common;
@@ -541,15 +543,20 @@ int ObDASIndexMergeIter::compare(int64_t cur_idx, int64_t &output_idx, int &cmp_
     if (OB_ISNULL(cur_datums) || OB_ISNULL(output_datums)) {
       ret = OB_ERR_UNEXPECTED;
     }
-    ObObj cur_obj;
-    ObObj output_obj;
+    DatumValue cur_value;
+    DatumValue output_value;
     for (int64_t i = 0; (cmp_ret == 0) && OB_SUCC(ret) && i < rowkey_exprs_->count(); i++) {
       const ObExpr *expr = rowkey_exprs_->at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(cur_datums[i].to_obj(cur_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(output_datums[i].to_obj(output_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-      } else if (OB_FAIL(cur_obj.check_collation_free_and_compare(output_obj, cmp_ret))) {
+      } else if (OB_FAIL(project_datum_value_view(cur_datums[i], expr->obj_meta_,
+                                                 expr->obj_datum_map_, cur_value.get_meta(),
+                                                 cur_value, false /* keep_null_collation */))) {
+      } else if (OB_FAIL(project_datum_value_view(output_datums[i], expr->obj_meta_,
+                                                 expr->obj_datum_map_, output_value.get_meta(),
+                                                 output_value, false /* keep_null_collation */))) {
+      } else if (OB_FAIL(compare_key_value(cur_value, output_value, cmp_ret,
+                                            true /* collation_free */))) {
       } else if (cmp_ret != 0) {
         if (cmp_ret < 0) {
           output_idx = OB_UNLIKELY(is_reverse_) ? output_idx : cur_idx;

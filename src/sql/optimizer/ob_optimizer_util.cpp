@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "rust/config.h"
+#include "share/datum/datum_value_cast.h"
+#include "common/datum/datum_key_ops.h"
 #include "ob_optimizer_util.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -805,12 +807,12 @@ int ObOptimizerUtil::compute_const_exprs(ObRawExpr *cur_expr,
                                      cur_expr->get_param_expr(1);
         if (T_OP_EQ == cur_expr->get_expr_type()) {
           bool is_const = true;
-          if (!ob_is_valid_obj_tc(const_expr->get_type_class()) ||
-              !ob_is_valid_obj_tc(common_expr->get_type_class())) {
+          if (!is_valid_sql_type_class(const_expr->get_type_class()) ||
+              !is_valid_sql_type_class(common_expr->get_type_class())) {
             // (a, a) = (1, 1);
             is_const = false;
-          } else if (OB_FAIL(ObObjCaster::is_const_consistent(const_expr->get_result_type().get_obj_meta(),
-                                                              common_expr->get_result_type().get_obj_meta(),
+          } else if (OB_FAIL(ObTypeCastRules::is_const_consistent(const_expr->get_result_type().get_sql_type_meta(),
+                                                              common_expr->get_result_type().get_sql_type_meta(),
                                                               orig_const_expr->get_result_type().get_type(),
                                                               orig_const_expr->get_result_type().get_collation_type(),
                                                               is_const))) {
@@ -913,7 +915,7 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
       bool is_consistent = false;
       if (OB_ISNULL(param_expr)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObObjCaster::is_order_consistent(param_expr->get_result_type(),
+      } else if (OB_FAIL(ObTypeCastRules::is_order_consistent(param_expr->get_result_type(),
                                                           expr->get_result_type(),
                                                           is_consistent))) {
         if (OB_ERR_UNEXPECTED == ret) {
@@ -978,8 +980,7 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
       bool is_one = false;
       ObRawExpr* param_expr = NULL;
       const ObConstRawExpr *const_expr = NULL;
-      ObObj target_value;
-      target_value.set_int(ObIntType, 1);
+      DatumValue target_value;
       if (OB_ISNULL(param_expr_str) || OB_ISNULL(param_expr_pos)) {
         ret = OB_ERR_UNEXPECTED;
       } else if ((ObCharset::is_bin_sort(param_expr_str->get_result_type().get_collation_type()) ||
@@ -996,7 +997,8 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
                                                                         param_store, const_param_info)))) {
         } else if (OB_FALSE_IT(const_expr = static_cast<const ObConstRawExpr*>(param_expr_pos))) {
         } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_value().get_unknown()))) {
-        } else if (OB_FAIL(const_param_info.const_params_.push_back(target_value))) {
+        } else if (OB_FAIL(target_value.set_int(1, ctx.get_allocator()))) {
+        } else if (OB_FAIL(const_param_info.add_constant(target_value, ctx.get_allocator()))) {
         } else {
           monotonicity = mono;
           is_strict = false;
@@ -2313,7 +2315,10 @@ int ObOptimizerUtil::check_equal_prefix_null_count(const common::ObNewRange *ran
     ret = OB_INVALID_ARGUMENT;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < equal_prefix_count; ++i) {
-    if (range->start_key_.ptr()[i] != range->end_key_.ptr()[i]) {
+    bool same = false;
+    if (OB_FAIL(sql_equal_key_value(range->start_key_.get_cell(i),
+                                   range->end_key_.get_cell(i), same))) {
+    } else if (!same) {
       ret = OB_ERR_UNEXPECTED;
     } else if (range->start_key_.ptr()[i].is_null()) {
       ++equal_prefix_null_count;
@@ -2337,19 +2342,25 @@ int ObOptimizerUtil::check_prefix_range_count(const common::ObNewRange *range,
     equal_prefix_count = range->start_key_.length();
     for (int64_t i = 0; OB_SUCC(ret) && i < range->start_key_.length()
         && equal_prefix_count == range->start_key_.length(); ++i) {
-      if (range->start_key_.ptr()[i].is_min_value() ||
+      bool same = false;
+      if (OB_FAIL(sql_equal_key_value(range->start_key_.get_cell(i),
+                                     range->end_key_.get_cell(i), same))) {
+      } else if (range->start_key_.ptr()[i].is_min_value() ||
           range->start_key_.ptr()[i].is_max_value() ||
           range->end_key_.ptr()[i].is_min_value() ||
           range->end_key_.ptr()[i].is_max_value()) {
         equal_prefix_count = i;
-      } else if (range->start_key_.ptr()[i] != range->end_key_.ptr()[i]) {
+      } else if (!same) {
         equal_prefix_count = i;
       } else { /* do nothing */ }
     }
     range_prefix_count = range->start_key_.length();
     for (int64_t i = 0; OB_SUCC(ret) && i < range->start_key_.length() &&
         range_prefix_count == range->start_key_.length(); ++i) {
-      if ((range->start_key_.ptr()[i].is_min_value() ||
+      bool same = false;
+      if (OB_FAIL(sql_equal_key_value(range->start_key_.get_cell(i),
+                                     range->end_key_.get_cell(i), same))) {
+      } else if ((range->start_key_.ptr()[i].is_min_value() ||
            range->start_key_.ptr()[i].is_max_value()) &&
           (range->end_key_.ptr()[i].is_min_value() ||
            range->end_key_.ptr()[i].is_max_value())) {
@@ -2358,7 +2369,7 @@ int ObOptimizerUtil::check_prefix_range_count(const common::ObNewRange *range,
                  range->start_key_.ptr()[i].is_max_value() ||
                  range->end_key_.ptr()[i].is_min_value() ||
                  range->end_key_.ptr()[i].is_max_value() ||
-                 range->start_key_.ptr()[i] != range->end_key_.ptr()[i]) {
+                 !same) {
         range_prefix_count = i + 1;
       } else { /*do nothing*/ }
     }
@@ -4768,14 +4779,14 @@ int ObOptimizerUtil::is_lossless_column_conv(const ObRawExpr *expr, bool &is_los
 
 bool ObOptimizerUtil::is_lossless_type_conv(const ObRawExprResType &child_type, const ObRawExprResType &dst_type) {
   bool is_lossless = false;
-  ObObjTypeClass child_tc = child_type.get_type_class();
-  ObObjTypeClass dst_tc = dst_type.get_type_class();
+  SqlTypeClass child_tc = child_type.get_type_class();
+  SqlTypeClass dst_tc = dst_type.get_type_class();
   ObAccuracy dst_acc = dst_type.get_accuracy();
   if (child_type.get_type() == dst_type.get_type() &&
     (child_type.get_accuracy().get_precision() == dst_acc.get_precision() || -1 == dst_acc.get_precision()) &&
     (child_type.get_accuracy().get_scale() == dst_acc.get_scale() || -1 == dst_acc.get_scale())) {
     if (ob_is_string_type(child_type.get_type())) {
-      if (dst_type.get_obj_meta().get_collation_type() == child_type.get_obj_meta().get_collation_type() &&
+      if (dst_type.get_sql_type_meta().get_collation_type() == child_type.get_sql_type_meta().get_collation_type() &&
          (child_type.get_accuracy().get_length() <= dst_acc.get_length() || -1 == dst_acc.get_length())) {
         is_lossless = true;
       }
@@ -4872,7 +4883,7 @@ bool ObOptimizerUtil::is_lossless_type_conv(const ObRawExprResType &child_type, 
     } else if (ObCharType == child_type.get_type() || ObVarcharType == child_type.get_type()) {
       //in mysql c1 varchar(x) as (func(y)) can not insert data makes length(fun(y)) > x
       if (child_type.get_type() == dst_type.get_type() && 
-            dst_type.get_obj_meta().get_collation_type() == child_type.get_obj_meta().get_collation_type()) {
+            dst_type.get_sql_type_meta().get_collation_type() == child_type.get_sql_type_meta().get_collation_type()) {
         is_lossless = true;
       }
     }
@@ -4900,9 +4911,9 @@ int ObOptimizerUtil::is_lossless_column_cast(const ObRawExpr *expr,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObRawExprResType child_type = child_expr->get_result_type();
-    ObObjTypeClass child_tc = child_type.get_type_class();
+    SqlTypeClass child_tc = child_type.get_type_class();
     ObRawExprResType dst_type = expr->get_result_type();
-    ObObjTypeClass dst_tc = dst_type.get_type_class();
+    SqlTypeClass dst_tc = dst_type.get_type_class();
     ObAccuracy dst_acc = dst_type.get_accuracy();
       // mysql mode allows lossless type conversion, which can be referred to
       if (ObIntTC == child_tc || ObUIntTC == child_tc) {
@@ -4979,7 +4990,7 @@ int ObOptimizerUtil::is_lossless_column_cast(const ObRawExpr *expr,
       } else if (ObCharType == child_type.get_type()) {
         if (child_tc == dst_tc || ObVarcharType == dst_type.get_type()) {
           if (dst_acc.get_length() == child_type.get_accuracy().get_length() &&
-              dst_type.get_obj_meta().get_collation_type() == child_type.get_obj_meta().get_collation_type()) {
+              dst_type.get_sql_type_meta().get_collation_type() == child_type.get_sql_type_meta().get_collation_type()) {
             is_lossless = true;
           }
         }
@@ -6096,7 +6107,7 @@ int ObOptimizerUtil::check_is_null_qual(const ParamStore *params,
   is_null_qual = false;
   const ObRawExpr *left_expr = NULL;
   const ObRawExpr *right_expr = NULL;
-  ObObj result;
+  DatumValue result;
   bool got_result = false;
   if (OB_ISNULL(params) || OB_ISNULL(stmt) || OB_ISNULL(qual)) {
     ret = OB_INVALID_ARGUMENT;
@@ -6709,9 +6720,9 @@ int ObOptimizerUtil::generate_rowkey_expr(ObDMLStmt *stmt,
     dummy_col_item.base_tid_ = rowkey->get_table_id();
     dummy_col_item.base_cid_ = rowkey->get_column_id();
     dummy_col_item.column_name_ = rowkey->get_column_name();
-    dummy_col_item.set_default_value(column_schema.get_cur_default_value());
     dummy_col_item.is_geo_ = column_schema.is_geometry();
-    if (OB_FAIL(stmt->add_column_item(dummy_col_item))) {
+    if (OB_FAIL(dummy_col_item.set_default_value(column_schema.get_cur_default_value()))) {
+    } else if (OB_FAIL(stmt->add_column_item(dummy_col_item))) {
     } else if (FALSE_IT(rowkey->clear_explicited_referece())) {
       /*do nothing*/
     } else if (OB_FAIL(rowkey->formalize(session))) {
@@ -7710,7 +7721,7 @@ int ObOptimizerUtil::check_is_static_false_expr(ObOptimizerContext &opt_ctx, ObR
     return OB_SUCCESS;
   }
   int ret = OB_SUCCESS;
-  ObObj const_value;
+  DatumValue const_value;
   bool got_result = false;
   bool is_result_true = false;
   bool is_error_free = false;
@@ -7726,7 +7737,7 @@ int ObOptimizerUtil::check_is_static_false_expr(ObOptimizerContext &opt_ctx, ObR
                                                                opt_ctx.get_allocator()))) {
   } else if (!got_result) {
     // do nothing
-  } else if (OB_FAIL(ObObjEvaluator::is_true(const_value, is_result_true))) {
+  } else if (OB_FAIL(DatumValueEvaluator::is_true(const_value, is_result_true))) {
   } else {
     is_static_false = !is_result_true;
   }
@@ -8146,8 +8157,8 @@ int ObOptimizerUtil::can_extract_implicit_cast_range(ObItemType cmp_type,
                                                      bool &can_extract)
 {
   int ret = OB_SUCCESS;
-  ObObjTypeClass column_tc = column_expr.get_result_type().get_type_class();
-  ObObjTypeClass const_tc = target_expr.get_result_type().get_type_class();
+  SqlTypeClass column_tc = column_expr.get_result_type().get_type_class();
+  SqlTypeClass const_tc = target_expr.get_result_type().get_type_class();
   can_extract = false;
   if (column_expr.get_result_type().get_type() ==
              target_expr.get_result_type().get_type() &&

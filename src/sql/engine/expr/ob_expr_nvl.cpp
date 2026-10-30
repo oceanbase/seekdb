@@ -77,7 +77,7 @@ ObExprNvl::~ObExprNvl()
 
 void set_calc_type(const ObExprResType &in_type, ObExprResType &out_type)
 {
-  out_type.set_calc_meta(in_type.get_obj_meta());
+  out_type.set_calc_meta(in_type.get_sql_type_meta());
   out_type.set_calc_accuracy(in_type.get_accuracy());
   out_type.set_calc_collation_type(in_type.get_collation_type());
   out_type.set_calc_collation_level(in_type.get_collation_level());
@@ -144,7 +144,7 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
       const bool type1_is_enumset = ob_is_enumset_tc(type1.get_type());
       const bool type2_is_enumset = ob_is_enumset_tc(type2.get_type());
       if (type1_is_enumset || type2_is_enumset) {
-        ObObjType calc_type = get_enumset_calc_type(type.get_type(), OB_INVALID_INDEX);
+        SqlValueType calc_type = get_enumset_calc_type(type.get_type(), OB_INVALID_INDEX);
         if (OB_UNLIKELY(ObMaxType == calc_type)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_ENG_LOG(WARN, "invalid type of parameter ", K(type1), K(type2), K(ret));

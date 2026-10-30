@@ -1475,7 +1475,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/rewrite/ob_equal_analysis.cpp",
             "src/sql/rewrite/ob_expand_aggregate_utils.cpp",
-            "src/sql/rewrite/ob_key_part.cpp",
             "src/sql/rewrite/ob_predicate_deduce.cpp",
             "src/sql/rewrite/ob_expr_range_converter.cpp",
             "src/sql/rewrite/ob_query_range_define.cpp",

@@ -130,7 +130,7 @@ public:
   ~ObSqlArrayExpandGuard();
   int get_errcode() const { return ret_; }
 private:
-  typedef std::pair<common::ObObjParam*, common::ObObjParam> ArrayObjPair;
+  typedef std::pair<common::DatumParameter*, common::DatumParameter> ArrayObjPair;
   common::ObList<ArrayObjPair, common::ObIAllocator> array_obj_list_;
   int ret_;
 };
@@ -149,7 +149,7 @@ class ObSqlPrinter : public ObISqlPrinter
 public:
   ObSqlPrinter(const ObStmt *stmt,
                share::schema::ObSchemaGetterGuard *schema_guard,
-               ObObjPrintParams print_params,
+               ObValuePrintParams print_params,
                const ParamStore *param_store,
                const ObSQLSessionInfo *session) :
     stmt_(stmt),
@@ -163,7 +163,7 @@ public:
 protected:
   const ObStmt *stmt_;
   share::schema::ObSchemaGetterGuard *schema_guard_;
-  ObObjPrintParams print_params_;
+  ObValuePrintParams print_params_;
   const ParamStore *param_store_;
   const ObSQLSessionInfo *session_;
 };
@@ -202,14 +202,14 @@ public:
 
   static int calc_const_or_calculable_expr(ObExecContext *exec_ctx,
                                            const ObRawExpr *raw_expr,
-                                           common::ObObj &result,
+                                           common::DatumValue &result,
                                            bool &is_valid,
                                            common::ObIAllocator &allocator,
                                            bool ignore_failure = true,
                                            ObIArray<ObExprConstraint> *constraints = NULL);
   static int calc_simple_expr_without_row(ObSQLSessionInfo *session,
                                           const ObRawExpr *raw_expr,
-                                          common::ObObj &result,
+                                          common::DatumParameter &result,
                                           const ParamStore *params,
                                           common::ObIAllocator &allocator,
                                           bool force_copy_extend_type = false);
@@ -219,18 +219,18 @@ public:
 
   static int calc_sql_expression_without_row(ObExecContext &exec_ctx,
                                              const ObISqlExpression &expr,
-                                             ObObj &result,
+                                             DatumParameter &result,
                                              ObIAllocator *allocator = NULL);
 
   static int calc_const_expr(const ObRawExpr *expr,
                              const ParamStore *params,
-                             common::ObObj &result,
+                             common::DatumParameter &result,
                              bool &need_check);
 
-  template<class T>
-  static int get_param_value(const common::ObObj &param,
+  template <typename ParameterRef>
+  static int get_param_value(const ParameterRef &param,
                              const ParamStore &params_array,
-                             T &result,
+                             common::DatumParameter &result,
                              bool &need_check)
   {
     int ret = common::OB_SUCCESS;
@@ -244,7 +244,7 @@ public:
       } else {
         need_check = params_array.at(param_idx).need_to_check_bool_value();
         result = params_array.at(param_idx);
-        if (result.is_nop_value()) {
+        if (OB_SUCC(ret) && result.is_nop_value()) {
           ret = common::OB_ERR_NOP_VALUE;
         }
       }
@@ -290,19 +290,14 @@ public:
     // }
   }
 
-  static int calc_calculable_expr(ObSQLSessionInfo *session,
-                                  const ObRawExpr *expr,
-                                  common::ObObj &result,
-                                  common::ObIAllocator *allocator,
-                                  const ParamStore &params_array);
   static int calc_const_expr(ObExecContext &exec_ctx,
                              const ObRawExpr *expr,
-                             common::ObObj &result,
+                             common::DatumParameter &result,
                              common::ObIAllocator &allocator,
                              const ParamStore &params_array);
   static int calc_const_expr(ObSQLSessionInfo *session,
                              const ObRawExpr &expr,
-                             ObObj &result,
+                             DatumParameter &result,
                              ObIAllocator &allocator,
                              const ParamStore &params_array,
                              ObExecContext* exec_ctx = NULL,
@@ -314,8 +309,17 @@ public:
                                 const ParamStore &params,
                                 ObIAllocator &allocator,
                                 ObExecContext *exec_ctx,
-                                common::ObObj &result,
+                                common::DatumParameter &result,
                                 bool force_copy_extend_type = false);
+
+  template <typename Result>
+  static int se_calc_const_expr_impl(ObSQLSessionInfo *session,
+                                     const ObRawExpr *expr,
+                                     const ParamStore &params,
+                                     ObIAllocator &allocator,
+                                     ObExecContext *out_ctx,
+                                     Result &result,
+                                     bool force_copy_extend_type);
 
   static int check_and_convert_db_name(const common::ObCollationType cs_type, const bool preserve_lettercase,
                                        common::ObString &name);
@@ -369,10 +373,6 @@ public:
                                    ObString &dst_str, bool &is_null,
                                    const bool is_strict_mode,
                                    const bool ret_error = false);
-  static int check_well_formed_str(const common::ObObj &src,
-                                   common::ObObj &dest,
-                                   const bool is_strict_mode,
-                                   const bool ret_error = false);
   static int get_cast_mode_for_replace(const ObRawExpr *expr,
                                        const ObRawExprResType &dst_type,
                                        const ObSQLSessionInfo *session,
@@ -406,18 +406,18 @@ public:
 
   static int reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObString &sql,
                              share::schema::ObSchemaGetterGuard *schema_guard,
-                             ObObjPrintParams print_params = ObObjPrintParams(),
+                             ObValuePrintParams print_params = ObValuePrintParams(),
                              const ParamStore *param_store = NULL,
                              const ObSQLSessionInfo *session = NULL);
   static int reconstruct_ps_sql(ObSqlString &reconstruct_sql, const ObString &ps_sql,
-                                const ObIArray<const common::ObObjParam *> &const_tokens);
-  static int append_obj_param(ObSqlString &reconstruct_sql, const common::ObObjParam & obj_param);
+                                const ObIArray<const common::DatumParameter *> &const_tokens);
+  static int append_obj_param(ObSqlString &reconstruct_sql, const common::DatumParameter & obj_param);
   static int print_sql(char *buf,
                        int64_t buf_len,
                        int64_t &pos,
                        const ObStmt *stmt,
                        share::schema::ObSchemaGetterGuard *schema_guard,
-                       ObObjPrintParams print_params,
+                       ObValuePrintParams print_params,
                        const ParamStore *param_store = NULL,
                        const ObSQLSessionInfo *session = NULL);
 
@@ -442,18 +442,18 @@ public:
 
   static bool is_same_type(const ObRawExprResType &type1, const ObRawExprResType &type2);
 
-  static bool is_same_type(const ObObjMeta &meta1,
-                           const ObObjMeta &meta2,
+  static bool is_same_type(const SqlTypeMeta &meta1,
+                           const SqlTypeMeta &meta2,
                            const ObAccuracy &accuracy1,
                            const ObAccuracy &accuracy2);
 
-  static bool is_same_type_for_compare(const ObObjMeta &meta1,
-                                       const ObObjMeta &meta2);
+  static bool is_same_type_for_compare(const SqlTypeMeta &meta1,
+                                       const SqlTypeMeta &meta2);
 
 
-  static int get_partition_range(ObObj *start_row_key,
-                                 ObObj *end_row_key,
-                                 ObObj *function_obj,
+  static int get_partition_range(DatumValue *start_row_key,
+                                 DatumValue *end_row_key,
+                                 DatumValue *function_obj,
                                  const share::schema::ObPartitionFuncType part_type,
                                  const ObExpr *part_expr,
                                  int64_t range_key_count,
@@ -462,7 +462,7 @@ public:
                                  common::ObNewRange &partition_range,
                                  ObArenaAllocator &allocator);
 
-  static int revise_hash_part_object(common::ObObj &obj);
+  static int revise_hash_part_object(common::DatumValue &obj, ObIAllocator &owner);
 
   static int has_global_index(share::schema::ObSchemaGetterGuard *schema_guard,
                               const uint64_t table_id,
@@ -496,7 +496,7 @@ public:
                               const uint64_t ref_table_id,
                               const int64_t rowkey_count,
                               ObNewRange &whole_range);
-  static int get_ext_obj_data_type(const ObObjParam &obj, ObDataType &data_type);
+  static int get_ext_obj_data_type(const DatumParameter &obj, ObDataType &data_type);
 
 
   static int clear_evaluated_flag(const ObExprPtrIArray &calc_exprs, ObEvalCtx &eval_ctx);
@@ -536,8 +536,8 @@ public:
                                  const ObString &in,
                                  ObString &out);
   // Check if the parameter is an empty-string typed null.
-  static bool is_empty_string_typed_null(const common::ObObjParam &param);
-  static bool is_typed_null_with_normal_type(const common::ObObjParam &param);
+  static bool is_empty_string_typed_null(const common::DatumParameter &param);
+  static bool is_typed_null_with_normal_type(const common::DatumParameter &param);
   static int convert_sql_text_from_schema_for_resolve(common::ObIAllocator &allocator,
                                                     const common::ObDataTypeCastParams &dtc_params,
                                                     ObString &sql_text,
@@ -580,12 +580,12 @@ public:
 
   static int get_result_from_ctx(ObExecContext &exec_ctx,
                                  const ObRawExpr *expr,
-                                 ObObj &result,
+                                 common::DatumValue &result,
                                  bool &is_valid,
                                  bool &hit_cache);
   static int store_result_to_ctx(ObExecContext &exec_ctx,
                                  const ObRawExpr *raw_expr,
-                                 const ObObj &result,
+                                 const common::DatumValue &result,
                                  bool is_valid);
   static int add_calc_failure_constraint(const ObRawExpr *raw_expr,
                                          ObIArray<ObExprConstraint> &constraints);
@@ -643,7 +643,7 @@ public:
 
   static int match_ccl_rule(ObIAllocator &alloc, ObSQLSessionInfo &session, ObSqlCtx &context,
                             const ObString &sql, bool is_ps_mode,
-                            const ObIArray<const common::ObObjParam *> &param_store,
+                            const ObIArray<const common::DatumParameter *> &param_store,
                             const ObString &format_sqlid,
                             share::schema::CclRuleContainsInfo contians_info,
                             ParseResult *parse_result = nullptr, ObStmt *stmt = nullptr);
@@ -655,19 +655,19 @@ private:
   static bool check_mysql50_prefix(common::ObString &db_name);
   static bool part_expr_has_virtual_column(const ObExpr *part_expr);
   static int get_range_for_vector(
-                                  ObObj *start_row_key,
-                                  ObObj *end_row_key,
+                                  DatumValue *start_row_key,
+                                  DatumValue *end_row_key,
                                   int64_t range_key_count,
                                   uint64_t table_id,
                                   common::ObNewRange &part_range);
   static int get_partition_range_common(
-                                    ObObj *function_obj,
+                                    DatumValue *function_obj,
                                     const share::schema::ObPartitionFuncType part_type,
                                     const ObExpr *part_expr,
-                                    ObEvalCtx &eval_ctx);
-  static int get_range_for_scalar(ObObj *start_row_key,
-                                  ObObj *end_row_key,
-                                  ObObj *function_obj,
+                                    ObEvalCtx &eval_ctx, ObIAllocator &owner);
+  static int get_range_for_scalar(DatumValue *start_row_key,
+                                  DatumValue *end_row_key,
+                                  DatumValue *function_obj,
                                   const share::schema::ObPartitionFuncType part_type,
                                   const ObExpr *part_expr,
                                   int64_t range_key_count,
@@ -1014,14 +1014,13 @@ public:
 private:
   int convert_key(const ObRowkey &src, ObRowkey &dst, bool is_start_key, int64_t pos);
   int get_all_columns_schema();
-  int init_output_row(int64_t cell_cnt);
   int get_need_convert_key_ranges_pos(ObNewRange &key_range, int64_t &pos);
 public:
   // the memory that allocated must be reset by caller
   ObIAllocator *key_alloc_;
   ObCastCtx key_cast_ctx_;
-  const common::ObIArray<ObObjMeta> *output_row_types_;
-  const common::ObIArray<ObObjMeta> *key_types_;
+  const common::ObIArray<SqlTypeMeta> *output_row_types_;
+  const common::ObIArray<SqlTypeMeta> *key_types_;
   // every row must be reset
   common::ObArenaAllocator output_row_alloc_;
   // for init output row, lifecycle is from open to close(called destroy)
@@ -1101,7 +1100,7 @@ struct ObPreCalcExprConstraint : public common::ObDLinkBase<ObPreCalcExprConstra
     {
     }
     virtual int assign(const ObPreCalcExprConstraint &other, common::ObIAllocator &allocator);
-    virtual int check_is_match(ObDatumObjParam &datum_param, 
+    virtual int check_is_match(DatumParameter &datum_param,
                                ObExecContext &exec_ctx,
                                bool &is_match) const;
     ObPreCalcExprFrameInfo pre_calc_expr_info_;

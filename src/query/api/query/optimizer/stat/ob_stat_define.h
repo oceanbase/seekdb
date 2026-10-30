@@ -20,6 +20,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/string/ob_string.h"
 #include "common/object/ob_object.h"
+#include "common/datum/datum_value.h"
 #include "common/rowkey/ob_rowkey_info.h"
 #include "share/schema/ob_schema_struct.h"
 #include "query/optimizer/stat/ob_opt_table_stat.h"
@@ -488,11 +489,11 @@ struct ObColumnStatParam {
   int64_t column_usage_flag_;
   int64_t gather_flag_;
   ObString index_name_;
-  ObObjType column_type_;
+  SqlValueType column_type_;
 
-  static bool is_valid_opt_col_type(const ObObjType type, bool is_online_stat = false);
-  static bool is_valid_avglen_type(const ObObjType type);
-  static bool is_valid_refine_min_max_type(const ObObjType type);
+  static bool is_valid_opt_col_type(const SqlValueType type, bool is_online_stat = false);
+  static bool is_valid_avglen_type(const SqlValueType type);
+  static bool is_valid_refine_min_max_type(const SqlValueType type);
   static const int64_t DEFAULT_HISTOGRAM_BUCKET_NUM;
 
   TO_STRING_KV(K_(column_name),
@@ -537,7 +538,7 @@ struct PrefixColumnPair {
   uint64_t prefix_column_id_;
   uint64_t related_column_id_;
   int64_t prefix_length_;
-  ObObjMeta related_column_meta_;
+  SqlTypeMeta related_column_meta_;
 };
 
 struct ObTableStatParam {
@@ -856,8 +857,8 @@ struct ObHistogramParam
 {
   ObHistogramParam():
     epc_(0),
-    minval_(NULL),
-    maxval_(NULL),
+    minval_(),
+    maxval_(),
     bkvals_(),
     novals_(),
     chvals_(),
@@ -866,8 +867,8 @@ struct ObHistogramParam
     eavs_(0)
   {}
   int64_t epc_;                       //Number of buckets in histogram
-  const ObObj *minval_;               //Minimum value
-  const ObObj *maxval_;               //Maximum value
+  DatumValue minval_;                 //Minimum value; NULL means unspecified
+  DatumValue maxval_;                 //Maximum value; NULL means unspecified
   ObSEArray<int64_t, 4> bkvals_;      //Array of bucket numbers
   ObSEArray<int64_t, 4> novals_;      //Array of normalized end point values
   ObSEArray<ObString, 4> chvals_;     //Array of dumped end point values
@@ -960,7 +961,7 @@ struct ObSetColumnStatParam
   ObHistogramParam hist_param_;
   int64_t avgclen_;
   int64_t flags_;
-  common::ObObjMeta col_meta_;
+  common::SqlTypeMeta col_meta_;
   common::ObAccuracy col_accuracy_;
   static constexpr int64_t NULLOPT = -1;
 

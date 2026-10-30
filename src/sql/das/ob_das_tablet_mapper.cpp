@@ -231,8 +231,64 @@ int ObDASTabletMapper::get_tablet_and_object_id(const ObPartitionLevel part_leve
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table partition by other than list(svr_ip, svr_port)");
     } else {
-      const ObObj &svr_ip = row.get_cell(0);
-      const ObObj &port_obj = row.get_cell(1);
+      const DatumValue &svr_ip = row.get_cell(0);
+      const DatumValue &port_obj = row.get_cell(1);
+      int64_t port_int = port_obj.get_int();
+      svr_addr.set_ip_addr(svr_ip.get_string(), port_int);
+    }
+    if (OB_SUCC(ret) && svr_addr == GCTX.self_addr()) {
+      object_id = 1;
+      tablet_id = ObTabletID(1);
+    }
+    if (OB_SUCC(ret) && tablet_id.is_valid()
+        && OB_FAIL(mock_vtable_related_tablet_id_map(tablet_id, object_id))) {
+    }
+  }
+  return ret;
+}
+
+int ObDASTabletMapper::get_tablet_and_object_id(const ObPartitionLevel part_level,
+                                                const ObPartID part_id,
+                                                const ObIArray<DatumValue> &row,
+                                                ObTabletID &tablet_id,
+                                                ObObjectID &object_id)
+{
+  int ret = OB_SUCCESS;
+  tablet_id = ObTabletID::INVALID_TABLET_ID;
+  if (OB_NOT_NULL(table_schema_)) {
+    share::schema::RelatedTableInfo *related_info_ptr = nullptr;
+    if (related_info_.related_tids_ != nullptr && !related_info_.related_tids_->empty()) {
+      related_info_ptr = &related_info_;
+    }
+    if (OB_FAIL(ret)) {
+    } else if (PARTITION_LEVEL_ZERO == part_level) {
+      if (OB_FAIL(ObPartitionUtils::get_tablet_and_object_id(
+          *table_schema_, tablet_id, object_id, related_info_ptr))) {
+      }
+    } else if (PARTITION_LEVEL_ONE == part_level) {
+      if (OB_FAIL(ObPartitionUtils::get_tablet_and_part_id(
+          *table_schema_, row, tablet_id, object_id, related_info_ptr))) {
+      }
+    } else if (PARTITION_LEVEL_TWO == part_level) {
+      if (OB_FAIL(ObPartitionUtils::get_tablet_and_subpart_id(
+          *table_schema_, part_id, row, tablet_id, object_id, related_info_ptr))) {
+      } else if (OB_FAIL(set_partition_id_map(part_id, object_id))) {
+      }
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  } else {
+    //virtual table, only supported partition by list(svr_ip, svr_port) ...
+    ObAddr svr_addr;
+    if (part_level == PARTITION_LEVEL_TWO) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table with subpartition table");
+    } else if (row.count() != 2) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table partition by other than list(svr_ip, svr_port)");
+    } else {
+      const DatumValue &svr_ip = row.at(0);
+      const DatumValue &port_obj = row.at(1);
       int64_t port_int = port_obj.get_int();
       svr_addr.set_ip_addr(svr_ip.get_string(), port_int);
     }
@@ -369,26 +425,37 @@ int ObDASTabletMapper::get_tablet_and_object_id(const ObPartitionLevel part_leve
   return ret;
 }
 
-int ObDASTabletMapper::get_tablet_and_object_id(const ObPartitionLevel part_level,
-                                                const ObPartID part_id,
-                                                const ObObj &value,
-                                                ObIArray<ObTabletID> &tablet_ids,
-                                                ObIArray<ObObjectID> &out_part_ids)
+int ObDASTabletMapper::get_tablet_and_object_id(const ObPartitionLevel level,
+    const ObPartID parent, const DatumValue &value,
+    ObIArray<ObTabletID> &tablet_ids, ObIArray<ObObjectID> &part_ids)
 {
   int ret = OB_SUCCESS;
-  uint64_t table_id = NULL == table_schema_ ? virtual_table_id_
-                                            : table_schema_->get_table_id();
-  ObRowkey rowkey(const_cast<ObObj*>(&value), 1);
-  ObNewRange range;
-  ObSEArray<ObTabletID, 4> tmp_tablet_ids;
-  ObSEArray<ObObjectID, 4> tmp_part_ids;
-  if (OB_FAIL(range.build_range(table_id, rowkey))) {
-  } else if (OB_FAIL(get_tablet_and_object_id(part_level, part_id, range, tmp_tablet_ids, tmp_part_ids))) {
+  if (table_schema_ == nullptr) {
+    // The old scalar API used a precise point range, which is unsupported for
+    // virtual tables. This differs from the two-column svr_ip/port row API.
+    ret = OB_NOT_SUPPORTED;
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "virtual table get tablet_id with precise range info");
+  } else if ((((level == PARTITION_LEVEL_ONE && table_schema_->is_hash_like_part())
+               || (level == PARTITION_LEVEL_TWO && table_schema_->is_hash_like_subpart()))
+              && (value.is_null() || !value.is_int()))
+             || (((level == PARTITION_LEVEL_ONE && table_schema_->is_list_part())
+                  || (level == PARTITION_LEVEL_TWO && table_schema_->is_list_subpart()))
+                 && (value.is_min_value() || value.is_max_value()))) {
+    // The old point-range path broadened non-Int (including NULL) hash
+    // scalars and MIN/MAX list scalars. Direct row routing keeps its distinct
+    // behavior: NULL hashes to partition 0 and list rows are matched directly.
+    ret = get_all_tablet_and_object_id(level, parent, tablet_ids, part_ids);
   } else {
-    OZ(append_array_no_dup(tablet_ids, tmp_tablet_ids));
-    OZ(append_array_no_dup(out_part_ids, tmp_part_ids));
+    ObSEArray<DatumValue, 1> row;
+    ObTabletID tablet;
+    ObObjectID object = OB_INVALID_ID;
+    if (OB_FAIL(row.push_back(value))) {
+    } else if (OB_FAIL(get_tablet_and_object_id(level, parent, row, tablet, object))) {
+    } else if (object != OB_INVALID_ID) {
+      if (tablet.is_valid()) { ret = add_var_to_array_no_dup(tablet_ids, tablet); }
+      if (OB_SUCC(ret)) { ret = add_var_to_array_no_dup(part_ids, object); }
+    }
   }
-
   return ret;
 }
 
@@ -730,7 +797,7 @@ int ObDASTabletMapper::get_tablet_and_part_id_for_list_part(const share::schema:
       LOG_WARN("get unexpected part array", KP(part_array), K(part_num));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < part_num; i++) {
-        const ObIArray<common::ObNewRow> &list_row_values = part_array[i]->get_list_row_values();
+        const ObIArray<PartitionBoundRow> &list_row_values = part_array[i]->get_list_row_values();
         bool is_match = false;
         // partition with default value always match
         if (list_row_values.count() == 1 &&
@@ -739,17 +806,22 @@ int ObDASTabletMapper::get_tablet_and_part_id_for_list_part(const share::schema:
           is_match = true;
         }
         for (int64_t j = 0; OB_SUCC(ret) && !is_match && j < list_row_values.count(); j++) {
-          const ObNewRow &list_row = list_row_values.at(j);
+          const PartitionBoundRow &stored_row = list_row_values.at(j);
+          ObArenaAllocator row_owner;
+          ObSEArray<DatumValue, 8> list_row;
+          for (int64_t cell = 0; OB_SUCC(ret) && cell < stored_row.get_count(); ++cell) {
+            ret = list_row.push_back(stored_row.get_cell(cell));
+          }
           bool all_match = true;
           for (int64_t k = 0; OB_SUCC(ret) && all_match && k < vies.count(); ++k) {
-            ObObj res;
+            DatumValue res;
             if (OB_ISNULL(vies.at(k))) {
               ret = OB_ERR_UNEXPECTED;
             } else {
               ObCastCtx cast_ctx(&exec_ctx.get_allocator(), &dtc_params, CM_NONE, vies.at(k)->dst_cs_type_);
               if (OB_FAIL(TableAccessPlan::se_calc_value_item(cast_ctx, exec_ctx, params,
                                                               *vies.at(k), list_row, res))) {
-              } else if (res.get_int() == 0) {
+              } else if (res.is_null() || res.get_int() == 0) {
                 all_match = false;
               }
             }
@@ -824,7 +896,7 @@ int ObDASTabletMapper::get_tablet_and_subpart_id_for_list_part(const ObTableSche
       LOG_WARN("get unexpected subpartition array", KP(subpart_array), K(subpart_num));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < subpart_num; i++) {
-        const ObIArray<common::ObNewRow> &list_row_values = subpart_array[i]->get_list_row_values();
+        const ObIArray<PartitionBoundRow> &list_row_values = subpart_array[i]->get_list_row_values();
         bool is_match = false;
         // partition with default value always match
         if (list_row_values.count() == 1
@@ -833,17 +905,22 @@ int ObDASTabletMapper::get_tablet_and_subpart_id_for_list_part(const ObTableSche
           is_match = true;
         }
         for (int64_t j = 0; OB_SUCC(ret) && !is_match && j < list_row_values.count(); j++) {
-          const ObNewRow &list_row = list_row_values.at(j);
+          const PartitionBoundRow &stored_row = list_row_values.at(j);
+          ObArenaAllocator row_owner;
+          ObSEArray<DatumValue, 8> list_row;
+          for (int64_t cell = 0; OB_SUCC(ret) && cell < stored_row.get_count(); ++cell) {
+            ret = list_row.push_back(stored_row.get_cell(cell));
+          }
           bool all_match = true;
           for (int64_t k = 0; OB_SUCC(ret) && all_match && k < vies.count(); ++k) {
-            ObObj res;
+            DatumValue res;
             if (OB_ISNULL(vies.at(k))) {
               ret = OB_ERR_UNEXPECTED;
             } else {
               ObCastCtx cast_ctx(&exec_ctx.get_allocator(), &dtc_params, CM_NONE, vies.at(k)->dst_cs_type_);
               if (OB_FAIL(TableAccessPlan::se_calc_value_item(cast_ctx, exec_ctx, params,
                                                               *vies.at(k), list_row, res))) {
-              } else if (res.get_int() == 0) {
+              } else if (res.is_null() || res.get_int() == 0) {
                 all_match = false;
               }
             }

@@ -25,6 +25,9 @@
 #include "observer/mysql/obmp_utils.h"
 #include "observer/mysql/ob_query_driver.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
+#include "share/datum/datum_value_cast.h"
+#include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "lib/charset/ob_charset.h"
 void request_finish_callback();
 namespace oceanbase
 {
@@ -424,18 +427,16 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
   } else if (OB_FAIL(ob_write_row(allocator, row, tmp_row))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row.get_count(); ++i) {
-      ObObj &value = tmp_row.get_cell(i); 
+      DatumValue &value = tmp_row.get_cell(i);
       ObCharsetType charset_type = CHARSET_INVALID;
       // need at ps mode
-      if (!is_packed && value.get_type() != fields->at(i).type_.get_type()) {
-        ObCastCtx cast_ctx(&allocator, NULL, CM_WARN_ON_FAIL, fields->at(i).type_.get_collation_type());
-        if (ObDecimalIntType == fields->at(i).type_.get_type()) {
+      if (!is_packed && value.get_type() != fields->at(i).type_meta_.get_type()) {
+        ObCastCtx cast_ctx(&allocator, NULL, CM_WARN_ON_FAIL, fields->at(i).type_meta_.get_collation_type());
+        if (ObDecimalIntType == fields->at(i).type_meta_.get_type()) {
           cast_ctx.res_accuracy_ = const_cast<ObAccuracy*>(&fields->at(i).accuracy_);
         }
-        if (OB_FAIL(common::ObObjCaster::to_type(fields->at(i).type_.get_type(),
-                                          cast_ctx,
-                                          value,
-                                          value))) {
+        if (OB_FAIL(common::DatumValueCaster::to_type(fields->at(i).type_meta_.get_type(),
+                                          cast_ctx, value, allocator, value))) {
         }
       }
       if (OB_FAIL(ret)) {
@@ -444,8 +445,17 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
       } else if (OB_FAIL(session.get_character_set_results(charset_type))) {
       } else {
         if (ob_is_string_tc(value.get_type())
-            && CS_TYPE_INVALID != value.get_collation_type()
-            && OB_FAIL(value.convert_string_value_charset(charset_type, allocator))) {
+            && CS_TYPE_INVALID != value.get_collation_type()) {
+          ObString bytes;
+          ObCollationType collation = value.get_collation_type();
+          if (OB_FAIL(value.get_string(bytes))) {
+          } else if (OB_FAIL(ObCharsetUtils::convert_string_value_charset(
+                         bytes, collation, charset_type, allocator))) {
+          } else if (collation != value.get_collation_type()) {
+            value.datum_.set_string(bytes);
+            value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+            value.set_collation_type(collation);
+          }
         } else if (ob_is_text_tc(value.get_type())
                     && OB_FAIL(ObQueryDriver::convert_text_value_charset(value, charset_type, allocator, &session, exec_ctx))) {
         }

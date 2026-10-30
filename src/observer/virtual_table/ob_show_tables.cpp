@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "observer/virtual_table/rowkey_filter_value.h"
 #include "observer/virtual_table/ob_show_tables.h"
 
 #include "sql/session/ob_sql_session_info.h"
@@ -54,13 +55,13 @@ int ObShowTables::inner_open()
       end_key.reset();
       start_key = key_ranges_.at(i).start_key_;
       end_key = key_ranges_.at(i).end_key_;
-      const ObObj *start_key_obj_ptr = start_key.get_obj_ptr();
-      const ObObj *end_key_obj_ptr = end_key.get_obj_ptr();
-      if (start_key.get_obj_cnt() > 0 && start_key.get_obj_cnt() == end_key.get_obj_cnt()) {
+      const DatumValue *start_key_obj_ptr = start_key.get_values();
+      const DatumValue *end_key_obj_ptr = end_key.get_values();
+      if (start_key.get_value_count() > 0 && start_key.get_value_count() == end_key.get_value_count()) {
         if (OB_UNLIKELY(NULL == start_key_obj_ptr || NULL == end_key_obj_ptr)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(ERROR, "key obj ptr is NULL", K(ret), K(start_key_obj_ptr), K(end_key_obj_ptr));
-        } else if (start_key_obj_ptr[0] == end_key_obj_ptr[0]
+        } else if (key_filter_equal(start_key_obj_ptr[0], end_key_obj_ptr[0])
                    && ObIntType == start_key_obj_ptr[0].get_type()) {
           database_id_ = start_key_obj_ptr[0].get_int();
         }
@@ -114,7 +115,7 @@ int ObShowTables::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   const ObSimpleTableSchemaV2 *table_schema = NULL;
-  ObObj *cells = NULL;
+  DatumValue *cells = NULL;
   const int64_t col_count = output_column_ids_.count();
   if (OB_UNLIKELY(NULL == allocator_
                   || NULL == schema_guard_
@@ -149,20 +150,20 @@ int ObShowTables::inner_get_next_row()
               uint64_t col_id = output_column_ids_.at(j);
               switch(col_id) {
                 case DATABASE_ID: {
-                  cells[cell_idx].set_int(database_id_);
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, database_id_) : ret);
                   break;
                 }
                 case TABLE_NAME: {
-                  cells[cell_idx].set_varchar(table_schema->get_table_name_str());
+                  (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema->get_table_name_str()) : ret);
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                   break;
                 }
                 case TABLE_TYPE: {
                   if (is_mysql_database_id(table_schema->get_database_id())) {
-                    cells[cell_idx].set_varchar(table_schema->is_user_view() ?
-                    ObString::make_string("VIEW") : ObString::make_string("BASE TABLE"));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, table_schema->is_user_view() ?
+                    ObString::make_string("VIEW") : ObString::make_string("BASE TABLE")) : ret);
                   } else {
-                    cells[cell_idx].set_varchar(ObString::make_string(ob_mysql_table_type_str(table_schema->get_table_type())));
+                    (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString::make_string(ob_mysql_table_type_str(table_schema->get_table_type()))) : ret);
                   }
                   cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
                   break;

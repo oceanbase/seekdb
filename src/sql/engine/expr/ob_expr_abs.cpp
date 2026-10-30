@@ -53,7 +53,7 @@ static int check_expr_and_eval(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-template<ObObjType obj_type>
+template<SqlValueType obj_type>
 int eval_datum_abs(const ObExpr &expr,
                           ObEvalCtx &ctx,
                           ObDatum &expr_datum)
@@ -238,7 +238,7 @@ struct AbsFuncIniter
 {
   static bool init_array()
   {
-    abs_funcs[IDX] = &eval_datum_abs<static_cast<ObObjType>(IDX)>;
+    abs_funcs[IDX] = &eval_datum_abs<static_cast<SqlValueType>(IDX)>;
     return true;
   }
 };
@@ -248,8 +248,8 @@ static bool abs_eval_func_init_ret = ObArrayConstIniter<ObMaxType, AbsFuncIniter
 static_assert(ObMaxType == sizeof(abs_funcs) / sizeof(void *), "unexpected size");
 
 ObExprAbs::ObExprAbs(ObIAllocator &alloc)
-    : ObExprOperator(alloc, T_OP_ABS, N_ABS, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
-      func_(NULL) {}
+    : ObExprOperator(alloc, T_OP_ABS, N_ABS, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
+{}
 
 int ObExprAbs::assign(const ObExprOperator &other)
 {
@@ -258,10 +258,7 @@ int ObExprAbs::assign(const ObExprOperator &other)
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_LIKELY(this != tmp_other)) {
-    if (OB_FAIL(ObExprOperator::assign(other))) {
-    } else {
-      this->func_ = tmp_other->func_;
-    }
+    ret = ObExprOperator::assign(other);
   }
   return ret;
 }
@@ -276,7 +273,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
     ret = OB_ERR_UNEXPECTED;
   } else if (NOT_ROW_DIMENSION == row_dimension_) {
     // result type
-    ObObjType itype;
+    SqlValueType itype;
     if (OB_SUCC(ObExprResultTypeUtil::get_abs_result_type(itype, type1.get_type()))) {
       if (ObMaxType == itype) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -299,7 +296,7 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
 
     if (OB_SUCC(ret)) {
       // set calc type for param
-      ObObjType param_calc_type = calc_param_type(type1.get_type());
+      SqlValueType param_calc_type = calc_param_type(type1.get_type());
       if (OB_UNLIKELY(ObMaxType == param_calc_type)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -358,9 +355,9 @@ int ObExprAbs::cg_expr(ObExprCGCtx &ctx,
   return ret;
 }
 
-ObObjType ObExprAbs::calc_param_type(const ObObjType orig_param_type)
+SqlValueType ObExprAbs::calc_param_type(const SqlValueType orig_param_type)
 {
-  ObObjType calc_type = ObMaxType;
+  SqlValueType calc_type = ObMaxType;
   switch (orig_param_type)
   {
   case ObTinyIntType:

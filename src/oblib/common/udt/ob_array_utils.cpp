@@ -60,7 +60,7 @@ int ObArrayUtil::get_type_name(ObNestedType coll_type, const ObDataType &elem_ty
     LOG_WARN("failed to push back value", K(ret));                                                    \
   }
 
-int ObArrayUtil::append(ObIArrayType &array, const ObObjType elem_type, const ObDatum *datum)
+int ObArrayUtil::append(ObIArrayType &array, const SqlValueType elem_type, const ObDatum *datum)
 {
   int ret = OB_SUCCESS;
   if (datum->is_null()) {

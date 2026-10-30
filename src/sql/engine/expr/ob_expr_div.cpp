@@ -43,8 +43,7 @@ ObExprDiv::ObExprDiv(ObIAllocator &alloc, ObExprOperatorType type)
                         2,
                         NOT_ROW_DIMENSION,
                         ObExprResultTypeUtil::get_div_result_type,
-                        ObExprResultTypeUtil::get_div_calc_type,
-                        div_funcs_)
+                        ObExprResultTypeUtil::get_div_calc_type)
 {
   param_lazy_eval_ = false;
 }
@@ -62,7 +61,7 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
 
   OC( (ObArithExprOperator::calc_result_type2)(type, type1, type2, type_ctx));
   if (OB_SUCC(ret)) {
-    const ObObjTypeClass result_tc = type.get_type_class();
+    const SqlTypeClass result_tc = type.get_type_class();
     bool use_decint_as_calc_type = (type1.get_calc_meta().is_decimal_int() && type2.get_calc_meta().is_decimal_int());
     if (ObNumberTC == result_tc || ObDecimalIntTC == result_tc) {
       if (type.has_result_flag(DECIMAL_INT_ADJUST_FLAG)) {
@@ -200,153 +199,8 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprDiv::calc(ObObj &res,
-                    const ObObj &left,
-                    const ObObj &right,
-                    ObIAllocator *allocator,
-                    ObScale calc_scale)
-{
-  ObCalcTypeFunc calc_type_func = ObExprResultTypeUtil::get_div_result_type;
-  return ObArithExprOperator::calc(res, left, right, allocator, calc_scale, calc_type_func,
-                                   div_funcs_);
-}
 
 
-
-ObArithFunc ObExprDiv::div_funcs_[ObMaxTC] =
-{
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    ObExprDiv::div_double,
-    ObExprDiv::div_number,
-    NULL,//datetime
-    NULL,//date
-    NULL,//time
-    NULL,//year
-    NULL,//varchar
-    NULL,//extend
-    NULL,//unknown
-    NULL,//text
-    NULL,//bit
-    NULL,//enumset
-    NULL,//enumsetInner
-    NULL,//otimestamp
-    NULL,//raw
-    NULL, //interval
-};
-
-ObArithFunc ObExprDiv::avg_div_funcs_[ObMaxTC] =
-{
-    NULL,
-    NULL,
-    NULL,
-    NULL,
-    ObExprDiv::div_double_no_overflow,
-    ObExprDiv::div_number,
-    NULL,//datetime
-    NULL,//date
-    NULL,//time
-    NULL,//year
-    NULL,//varchar
-    NULL,//extend
-    NULL,//unknown
-    NULL,//text
-    NULL,//bit
-    NULL,//enumset
-    NULL,//enumsetInner
-    NULL,//otimestamp
-    NULL,//raw
-    NULL, //interval
-};
-
-int ObExprDiv::div_double(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale scale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (fabs(right.get_double()) == 0.0) {
-      res.set_null();
-  } else {
-    res.set_double(left.get_double() / right.get_double());
-    if (OB_UNLIKELY(is_double_out_of_range(res.get_double()))) {
-      ret = OB_OPERATE_OVERFLOW;
-      char expr_str[OB_MAX_TWO_OPERATOR_EXPR_LENGTH];
-      int64_t pos = 0;
-      databuff_printf(expr_str,
-                      OB_MAX_TWO_OPERATOR_EXPR_LENGTH,
-                      pos,
-                      "'(%e / %e)'",
-                      left.get_double(),
-                      right.get_double());
-      LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
-      LOG_WARN("double out of range", K(res), K(left), K(right), K(res));
-      res.set_null();
-    }
-    LOG_DEBUG("succ to div double", K(res.get_double()), K(left.get_double()),
-        K(right.get_double()));
-  }
-  UNUSED(allocator);
-  UNUSED(scale);
-  return ret;
-}
-
-int ObExprDiv::div_double_no_overflow(ObObj &res,
-                                      const ObObj &left,
-                                      const ObObj &right,
-                                      ObIAllocator *,
-                                      ObScale)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(left.get_type_class() != right.get_type_class())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (fabs(right.get_double()) == 0.0) {
-      res.set_null();
-  } else {
-    res.set_double(left.get_double() / right.get_double());
-    LOG_DEBUG("succ to div double", K(res.get_double()), K(left.get_double()),
-              K(right.get_double()));
-  }
-  return ret;
-}
-
-int ObExprDiv::div_number(ObObj &res,
-                          const ObObj &left,
-                          const ObObj &right,
-                          ObIAllocator *allocator,
-                          ObScale calc_scale)
-{
-  int ret = OB_SUCCESS;
-  number::ObNumber res_nmb;
-  if (OB_UNLIKELY(NULL == allocator)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("allocator is null", K(ret));
-  } else if (OB_UNLIKELY(right.get_number().is_zero())) {
-    res.set_null();
-  } else if (OB_FAIL(left.get_number().div_v3(right.get_number(), res_nmb, *allocator))) {
-  } else {
-
-    if (calc_scale >= 0) {
-      //calc_scale is calc_scale ,not res_scale.
-      //trunc with calc_scale and round with res_scale
-      if (OB_FAIL(res_nmb.trunc(calc_scale))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (ObUNumberType == res.get_type()) {
-        res.set_unumber(res_nmb);
-      } else {
-        res.set_number(res_nmb);
-      }
-    }
-  }
-  return ret;
-}
 
 const ObScale ObExprDiv::DIV_MAX_CALC_SCALE = 100;
 
@@ -800,8 +654,8 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   OB_ASSERT(NULL != rt_expr.args_);
   OB_ASSERT(NULL != rt_expr.args_[0]);
   OB_ASSERT(NULL != rt_expr.args_[1]);
-  const common::ObObjType left = rt_expr.args_[0]->datum_meta_.type_;
-  const common::ObObjType right = rt_expr.args_[1]->datum_meta_.type_;
+  const common::SqlValueType left = rt_expr.args_[0]->datum_meta_.type_;
+  const common::SqlValueType right = rt_expr.args_[1]->datum_meta_.type_;
 
   rt_expr.inner_functions_ = NULL;
   rt_expr.may_not_need_raw_check_ = false;

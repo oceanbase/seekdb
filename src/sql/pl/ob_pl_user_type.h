@@ -81,7 +81,7 @@ public:
                                sql::ObExecContext &exec_ctx,
                                const sql::ObSqlExpression *default_expr,
                                bool default_construct,
-                               common::ObObj &obj) const;
+                               common::DatumParameter &obj) const;
 
   virtual int add_package_routine_schema_param(const ObPLResolveCtx &resolve_ctx,
                                                const ObPLBlockNS &block_ns,
@@ -95,7 +95,7 @@ public:
 
   virtual int init_obj(share::schema::ObSchemaGetterGuard &schema_guard,
                        common::ObIAllocator &allocator,
-                       common::ObObj &obj,
+                       common::DatumValue &obj,
                        int64_t &init_size) const;
   virtual int serialize(share::schema::ObSchemaGetterGuard &schema_guard,
                        const sql::ObSQLSessionInfo &session,
@@ -112,18 +112,34 @@ public:
                        const int64_t dst_len,
                        int64_t &dst_pos) const;
 
-  virtual int convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const;
+  virtual int convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue *&dst) const;
 
-  static int deep_copy_obj(
-    ObIAllocator &allocator, const ObObj &src, ObObj &dst, bool need_new_allocator = true, bool ignore_del_element = false);
-  static int destruct_objparam(ObIAllocator &alloc, ObObj &src, sql::ObSQLSessionInfo *session = nullptr, bool direct_use_alloc = false);
-  static int reset_composite(ObObj &value, sql::ObSQLSessionInfo *session);
-  static int reset_record(ObObj &src, sql::ObSQLSessionInfo *session);
-  static int destruct_obj(ObObj &src, sql::ObSQLSessionInfo *session = NULL, bool keep_composite_attr = false);
-  static int alloc_sub_composite(ObObj &dest_element, ObIAllocator &allocator);
-  static int serialize_obj(const ObObj &obj, char* buf, const int64_t len, int64_t& pos);
-  static int deserialize_obj(ObObj &obj, const char* buf, const int64_t len, int64_t& pos);
-  static int64_t get_serialize_obj_size(const ObObj &obj);
+  static int deep_copy_obj(ObIAllocator &allocator,
+    const DatumParameter &src, DatumParameter &dst,
+    bool need_new_allocator = true, bool ignore_del_element = false);
+  // Produce an independent execution snapshot, even when output initially
+  // aliases source. In-place record assignment uses deep_copy_obj instead.
+  static int clone_parameter(ObIAllocator &allocator, const DatumParameter &src,
+                             DatumParameter &dst, bool need_new_allocator = true);
+  // Copy an OUT value across execution arenas. A caller's existing composite
+  // keeps its pointee identity, but its native descriptor must be copied too.
+  // Scalar values retain the caller's declaration/accuracy/parameter flags.
+  static int copy_out_parameter(ObIAllocator &allocator, const DatumParameter &src,
+                                DatumParameter &dst);
+  static int destruct_objparam(ObIAllocator &alloc, DatumValue &src,
+    sql::ObSQLSessionInfo *session = nullptr, bool direct_use_alloc = false);
+  static int destruct_obj(DatumValue &src,
+    sql::ObSQLSessionInfo *session = nullptr, bool keep_composite_attr = false);
+  static int reset_record(DatumValue &src, sql::ObSQLSessionInfo *session);
+  static int reset_composite(DatumValue &src, sql::ObSQLSessionInfo *session);
+  static int deep_copy_obj(ObIAllocator &allocator, const DatumValue &src, DatumValue &dst,
+    bool need_new_allocator = true, bool ignore_del_element = false);
+  static int destruct_objparam(ObIAllocator &alloc, DatumParameter &src,
+    sql::ObSQLSessionInfo *session = nullptr, bool direct_use_alloc = false);
+  static int destruct_obj(DatumParameter &src,
+    sql::ObSQLSessionInfo *session = nullptr, bool keep_composite_attr = false);
+  static int reset_composite(DatumParameter &value, sql::ObSQLSessionInfo *session);
+  static int reset_record(DatumParameter &value, sql::ObSQLSessionInfo *session);
 
 
   VIRTUAL_TO_STRING_KV(K_(type), K_(user_type_id), K_(type_name));
@@ -155,12 +171,12 @@ public:
 
   virtual int init_obj(
     share::schema::ObSchemaGetterGuard &schema_guard,
-    ObIAllocator &allocator, ObObj &obj, int64_t &init_size) const;
+    ObIAllocator &allocator, DatumValue &obj, int64_t &init_size) const;
 
   virtual int init_session_var(
     const ObPLResolveCtx &resolve_ctx, common::ObIAllocator &obj_allocator,
     sql::ObExecContext &exec_ctx, const sql::ObSqlExpression *default_expr,
-    bool default_construct, common::ObObj &obj) const;
+    bool default_construct, common::DatumParameter &obj) const;
 
 
   virtual int get_all_depended_user_type(
@@ -170,8 +186,8 @@ public:
     return OB_SUCCESS;
   }
 
-  static int deep_copy_cursor(
-    common::ObIAllocator &allocator, const ObObj &src, ObObj &dest);
+  static int deep_copy_cursor(common::ObIAllocator &allocator,
+                               const DatumParameter &src, DatumParameter &dest);
 
   TO_STRING_KV(K_(type), K_(user_type_id));
 };
@@ -292,7 +308,7 @@ public:
                                sql::ObExecContext &exec_ctx,
                                const sql::ObSqlExpression *default_expr,
                                bool default_construct,
-                               common::ObObj &obj) const;
+                               common::DatumParameter &obj) const;
 
   virtual int add_package_routine_schema_param(const ObPLResolveCtx &resolve_ctx,
                                                const ObPLBlockNS &block_ns,
@@ -305,7 +321,7 @@ public:
                                          const ObPLBlockNS &current_ns) const;
   virtual int init_obj(share::schema::ObSchemaGetterGuard &schema_guard,
                        common::ObIAllocator &allocator,
-                       common::ObObj &obj,
+                       common::DatumValue &obj,
                        int64_t &init_size) const;
   virtual int serialize(share::schema::ObSchemaGetterGuard &schema_guard,
                        const sql::ObSQLSessionInfo &session,
@@ -321,7 +337,7 @@ public:
                        char *dst,
                        const int64_t dst_len,
                        int64_t &dst_pos) const;
-  virtual int convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const;
+  virtual int convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue *&dst) const;
 
   TO_STRING_KV(K_(type),
                K_(type_from),
@@ -380,7 +396,7 @@ public:
                                sql::ObExecContext &exec_ctx,
                                const sql::ObSqlExpression *default_expr,
                                bool default_construct,
-                               common::ObObj &obj) const;
+                               common::DatumParameter &obj) const;
 
   virtual int add_package_routine_schema_param(const ObPLResolveCtx &resolve_ctx,
                                                const ObPLBlockNS &block_ns,
@@ -393,7 +409,7 @@ public:
                                          const ObPLBlockNS &current_ns) const;
   virtual int init_obj(share::schema::ObSchemaGetterGuard &schema_guard,
                        common::ObIAllocator &allocator,
-                       common::ObObj &obj,
+                       common::DatumValue &obj,
                        int64_t &init_size) const;
   virtual int serialize(share::schema::ObSchemaGetterGuard &schema_guard,
                        const sql::ObSQLSessionInfo &session,
@@ -409,7 +425,7 @@ public:
                        char *dst,
                        const int64_t dst_len,
                        int64_t &dst_pos) const;
-  virtual int convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const;
+  virtual int convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue *&dst) const;
 
   TO_STRING_KV(K_(type),
                K_(user_type_id),
@@ -459,24 +475,17 @@ public:
                        common::ObILobReadService *lob_read_service,
                        bool need_new_allocator,
                        bool ignore_del_element = false);
-  static int assign_element(ObObj &src, ObObj &dest, ObIAllocator &allocator);
-  static int copy_element(const ObObj &src,
-                          ObObj &dest,
-                          ObIAllocator &allocator,
-                          const ObPLINS *ns,
-                          sql::ObSQLSessionInfo *session,
-                          const ObDataType *dest_type,
-                          common::ObISrsProvider *srs_provider,
-                          common::ObILobReadService *lob_read_service,
-                          bool need_new_allocator,
-                          bool ignore_del_element = false);
+  static int assign_element(const DatumValue &src, DatumValue &dst, ObIAllocator &allocator);
+  static int copy_element(const DatumValue &src, DatumValue &dst, ObIAllocator &allocator,
+    const ObPLINS *ns, sql::ObSQLSessionInfo *session, const ObDataType *dest_type,
+    common::ObISrsProvider *srs_provider, common::ObILobReadService *lob_read_service,
+    bool need_new_allocator, bool ignore_del_element = false);
   //NOTICE: Cannot be implemented as a virtual function!!!
   int64_t get_init_size() const;
   int64_t get_serialize_size() const;
   int serialize(char *buf, int64_t len, int64_t &pos) const;
   int deserialize(const char* buf, const int64_t len, int64_t &pos);
   void print() const;
-  static bool obj_is_null(ObObj* obj);
   static uint32_t allocator_offset_bits() { return offsetof(ObPLComposite, allocator_) * 8; }
 
   TO_STRING_KV(K_(type), K_(id), K_(is_null));
@@ -516,13 +525,13 @@ public:
   {
     return reinterpret_cast<ObDataType*>((int64_t)this + ObRecordType::get_meta_offset(get_count()));
   }
-  ObObj *get_element()
+  DatumValue *get_element()
   {
     return data_;
   }
 
-  int get_element(int64_t i, ObObj &obj) const;
-  int get_element(int64_t i, ObObj *&obj);
+  int get_element(int64_t i, DatumValue &obj) const;
+  int get_element(int64_t i, DatumValue *&obj);
 
   int assign(ObPLRecord *src, ObIAllocator *allocator);
   int deep_copy(ObPLRecord &src, ObIAllocator &allocator,
@@ -531,8 +540,8 @@ public:
                 common::ObILobReadService *lob_read_service,
                 bool ignore_del_element = false);
 
-  int set_data(const ObIArray<ObObj> &row);
-  inline void set_data(ObObj* data) { data_ = data; }
+  int set_data(const ObIArray<DatumValue> &row);
+  inline void set_data(DatumValue* data) { data_ = data; }
   int64_t get_init_size() const
   {
     return ObRecordType::get_init_size(count_);
@@ -544,7 +553,7 @@ public:
 
 private:
   int32_t count_; //field count
-  ObObj *data_; // points to the data domain allocated by its own allocator
+  DatumValue *data_; // points to the data domain allocated by its own allocator
   //The type and NOTNULL information of each FIELD, followed by the data of each FIELD, are dynamically generated by CG
 };
 
@@ -639,12 +648,12 @@ public:
   inline int64_t get_pure_last() { return PL_ASSOCIATIVE_ARRAY_TYPE == type_ ? last_ : get_last(); }
   int64_t get_last();
   inline void set_last(int64_t last) { last_ = last; }
-  inline const ObObj *get_data() const { return data_; }
+  inline const DatumValue *get_data() const { return data_; }
   inline void set_not_null(bool not_null) { element_.not_null_ = not_null; }
   inline bool is_not_null() const { return element_.not_null_; }
   inline void set_element_pl_type(ObPLType type) { element_.type_ = type; }
-  inline ObObj *get_data() { return data_; }
-  inline void set_data(ObObj* data, int64_t capacity) { data_ = data; inner_capacity_ = capacity; }
+  inline DatumValue *get_data() { return data_; }
+  inline void set_data(DatumValue* data, int64_t capacity) { data_ = data; inner_capacity_ = capacity; }
   inline bool is_of_composite() { return element_.get_meta_type().is_ext(); }
   inline void set_inited() { count_ = 0; }
   inline bool is_inited() const { return count_ != -1; }
@@ -672,7 +681,7 @@ public:
     return sizeof(ObPLCollection);
   }
   int shrink();
-  int set_row(const ObIArray<ObObj> &row, int64_t idx, bool deep_copy = false);
+  int set_row(const ObIArray<DatumValue> &row, int64_t idx, bool deep_copy = false);
 
   /*serialize functions*/
 
@@ -688,7 +697,7 @@ protected:
   int64_t count_; // -1: The current Collection is not initialized Other: The number of elements in the current Collection
   int64_t first_; //Index of the first element in the Collection, as the user can access this property, it starts from 1
   int64_t last_; //Last element index of Collection
-  ObObj *data_;
+  DatumValue *data_;
   int64_t inner_capacity_;
 };
 

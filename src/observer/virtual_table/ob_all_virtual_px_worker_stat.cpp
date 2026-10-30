@@ -40,7 +40,7 @@ void ObAllPxWorkerStatTable::reset()
 int ObAllPxWorkerStatTable::inner_get_next_row(ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
-  ObObj *cells = cur_row_.cells_;
+  DatumValue *cells = cur_row_.cells_;
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ is null", K_(allocator), K(ret));
@@ -61,44 +61,44 @@ int ObAllPxWorkerStatTable::inner_get_next_row(ObNewRow *&row)
       switch(column_id) {
         case SESSION_ID: {
           int64_t session_id = stat_array_.at(index_).get_session_id();
-          cells[cell_idx].set_int(session_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, session_id) : ret);
           break; 
         }
         case TRACE_ID: {
           int len = stat_array_.at(index_).get_trace_id().to_string(trace_id_, sizeof(trace_id_));
-          cells[cell_idx].set_varchar(trace_id_, len);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObString(len, trace_id_)) : ret);
           cells[cell_idx].set_collation_type(
               ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         }
         case QC_ID: {
           uint64_t qc_id = stat_array_.at(index_).get_qc_id();
-          cells[cell_idx].set_int(qc_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, qc_id) : ret);
           break;
         }
         case SQC_ID: {
           int64_t sqc_id = stat_array_.at(index_).get_sqc_id();
-          cells[cell_idx].set_int(sqc_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, sqc_id) : ret);
           break;
         }
         case WORKER_ID: {
           int64_t worker_id = stat_array_.at(index_).get_worker_id();
-          cells[cell_idx].set_int(worker_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, worker_id) : ret);
           break;
         }
         case DFO_ID: {
           int64_t dfo_id = stat_array_.at(index_).get_dfo_id();
-          cells[cell_idx].set_int(dfo_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, dfo_id) : ret);
           break;
         }        
         case START_TIME: {
           int64_t start_time = stat_array_.at(index_).get_start_time();
-          cells[cell_idx].set_timestamp(start_time);            
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_timestamp(cells, cur_row_.count_, cell_idx, start_time) : ret);
           break;
         }
         case THREAD_ID: {
           int64_t thread_id = stat_array_.at(index_).get_thread_id();
-          cells[cell_idx].set_int(thread_id);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_int(cells, cur_row_.count_, cell_idx, thread_id) : ret);
           break;
         }
         default: {

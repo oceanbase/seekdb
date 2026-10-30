@@ -39,103 +39,103 @@ public:
    * Therefore, the get_relational_cmp_type function is used to calculate the target type
    **/
 
-  static int get_relational_cmp_type(common::ObObjType &type,
-                                     const common::ObObjType &type1,
-                                     const common::ObObjType &type2);
+  static int get_relational_cmp_type(common::SqlValueType &type,
+                                     const common::SqlValueType &type1,
+                                     const common::SqlValueType &type2);
 
-  static int get_relational_equal_type(common::ObObjType &type,
-                                       const common::ObObjType &type1,
-                                       const common::ObObjType &type2);
+  static int get_relational_equal_type(common::SqlValueType &type,
+                                       const common::SqlValueType &type1,
+                                       const common::SqlValueType &type2);
 
-  static int get_relational_result_type(common::ObObjType &type,
-                                        const common::ObObjType &type1,
-                                        const common::ObObjType &type2);
-
-
-  static int get_merge_result_type(common::ObObjType &type,
-                                   const common::ObObjType &type1,
-                                   const common::ObObjType &type2);
+  static int get_relational_result_type(common::SqlValueType &type,
+                                        const common::SqlValueType &type1,
+                                        const common::SqlValueType &type2);
 
 
-  static int get_abs_result_type(common::ObObjType &type,
-                                 const common::ObObjType &type1);
+  static int get_merge_result_type(common::SqlValueType &type,
+                                   const common::SqlValueType &type1,
+                                   const common::SqlValueType &type2);
 
-  static int get_neg_result_type(common::ObObjType &type,
-                                 const common::ObObjType &type1);
 
-  static int get_round_result_type(common::ObObjType &type,
-                                   const common::ObObjType &type1);
+  static int get_abs_result_type(common::SqlValueType &type,
+                                 const common::SqlValueType &type1);
 
-  static int get_div_result_type(common::ObObjType &result_type,
-                                 common::ObObjType &result_ob1_type,
-                                 common::ObObjType &result_ob2_type,
-                                 const common::ObObjType type1,
-                                 const common::ObObjType type2);
+  static int get_neg_result_type(common::SqlValueType &type,
+                                 const common::SqlValueType &type1);
+
+  static int get_round_result_type(common::SqlValueType &type,
+                                   const common::SqlValueType &type1);
+
+  static int get_div_result_type(common::SqlValueType &result_type,
+                                 common::SqlValueType &result_ob1_type,
+                                 common::SqlValueType &result_ob2_type,
+                                 const common::SqlValueType type1,
+                                 const common::SqlValueType type2);
 
   static int get_div_result_type(ObExprResType &res_type,
                                  const ObExprResType &res_type1,
                                  const ObExprResType &res_type2);
 
-  static int get_int_div_result_type(common::ObObjType &result_type,
-                                     common::ObObjType &result_ob1_type,
-                                     common::ObObjType &result_ob2_type,
-                                     const common::ObObjType type1,
-                                     const common::ObObjType type2);
+  static int get_int_div_result_type(common::SqlValueType &result_type,
+                                     common::SqlValueType &result_ob1_type,
+                                     common::SqlValueType &result_ob2_type,
+                                     const common::SqlValueType type1,
+                                     const common::SqlValueType type2);
 
   static int get_int_div_result_type(ObExprResType &res_type,
                                      const ObExprResType &res_type1,
                                      const ObExprResType &res_type2);
 
-  static int get_int_div_calc_type(common::ObObjType &calc_type,
-                                   common::ObObjType &calc_ob1_type,
-                                   common::ObObjType &calc_ob2_type,
-                                   const common::ObObjType type1,
-                                   const common::ObObjType type2);
+  static int get_int_div_calc_type(common::SqlValueType &calc_type,
+                                   common::SqlValueType &calc_ob1_type,
+                                   common::SqlValueType &calc_ob2_type,
+                                   const common::SqlValueType type1,
+                                   const common::SqlValueType type2);
 
-  static int get_mod_result_type(common::ObObjType &result_type,
-                                 common::ObObjType &result_ob1_type,
-                                 common::ObObjType &result_ob2_type,
-                                 const common::ObObjType type1,
-                                 const common::ObObjType type2);
+  static int get_mod_result_type(common::SqlValueType &result_type,
+                                 common::SqlValueType &result_ob1_type,
+                                 common::SqlValueType &result_ob2_type,
+                                 const common::SqlValueType type1,
+                                 const common::SqlValueType type2);
 
   static int get_mod_result_type(ObExprResType &res_type,
                                  const ObExprResType &res_type1,
                                  const ObExprResType &res_type2);
 
-  static int get_remainder_result_type(common::ObObjType &result_type,
-                                 common::ObObjType &result_ob1_type,
-                                 common::ObObjType &result_ob2_type,
-                                 const common::ObObjType type1,
-                                 const common::ObObjType type2);
+  static int get_remainder_result_type(common::SqlValueType &result_type,
+                                 common::SqlValueType &result_ob1_type,
+                                 common::SqlValueType &result_ob2_type,
+                                 const common::SqlValueType type1,
+                                 const common::SqlValueType type2);
 
-  static int get_arith_result_type(common::ObObjType &result_type,
-                                   common::ObObjType &result_ob1_type,
-                                   common::ObObjType &result_ob2_type,
-                                   const common::ObObjType type1,
-                                   const common::ObObjType type2);
+  static int get_arith_result_type(common::SqlValueType &result_type,
+                                   common::SqlValueType &result_ob1_type,
+                                   common::SqlValueType &result_ob2_type,
+                                   const common::SqlValueType type1,
+                                   const common::SqlValueType type2);
 
 
-  static int get_mul_result_type(common::ObObjType &result_type,
-                                 common::ObObjType &result_ob1_type,
-                                 common::ObObjType &result_ob2_type,
-                                 const common::ObObjType type1,
-                                 const common::ObObjType type2);
+  static int get_mul_result_type(common::SqlValueType &result_type,
+                                 common::SqlValueType &result_ob1_type,
+                                 common::SqlValueType &result_ob2_type,
+                                 const common::SqlValueType type1,
+                                 const common::SqlValueType type2);
 
   static int get_mul_result_type(ObExprResType &res_type,
                                  const ObExprResType &res_type1,
                                  const ObExprResType &res_type2);
 
-  static int get_add_result_type(common::ObObjType &result_type,
-                                 common::ObObjType &result_ob1_type,
-                                 common::ObObjType &result_ob2_type,
-                                 const common::ObObjType type1,
-                                 const common::ObObjType type2);
+  static int get_add_result_type(common::SqlValueType &result_type,
+                                 common::SqlValueType &result_ob1_type,
+                                 common::SqlValueType &result_ob2_type,
+                                 const common::SqlValueType type1,
+                                 const common::SqlValueType type2);
 
-  static int get_minus_result_type(common::ObObjType &result_type,
-                                   common::ObObjType &result_ob1_type,
-                                   common::ObObjType &result_ob2_type,
-                                   const common::ObObjType type1,
-                                   const common::ObObjType type2);
+  static int get_minus_result_type(common::SqlValueType &result_type,
+                                   common::SqlValueType &result_ob1_type,
+                                   common::SqlValueType &result_ob2_type,
+                                   const common::SqlValueType type1,
+                                   const common::SqlValueType type2);
 
   static int get_add_result_type(ObExprResType &res_type,
                                  const ObExprResType &res_type1,
@@ -146,57 +146,57 @@ public:
                                    const ObExprResType &res_type2);
 
 
-  static int get_arith_calc_type(common::ObObjType &calc_type,
-                                 common::ObObjType &calc_ob1_type,
-                                 common::ObObjType &calc_ob2_type,
-                                 const common::ObObjType type1,
-                                 const common::ObObjType type2,
+  static int get_arith_calc_type(common::SqlValueType &calc_type,
+                                 common::SqlValueType &calc_ob1_type,
+                                 common::SqlValueType &calc_ob2_type,
+                                 const common::SqlValueType type1,
+                                 const common::SqlValueType type2,
                                  const ObArithResultTypeMap::OP oper);
   static int deduce_max_string_length_extended(const common::ObDataTypeCastParams &dtc_params,
                                                const ObExprResType &orig_type,
                                                const ObExprResType &target_type,
                                                common::ObLength &length,
                                                const int16_t calc_ls = common::LS_INVALIED);
-  OB_INLINE static int get_add_calc_type(common::ObObjType &calc_type,
-                                         common::ObObjType &calc_ob1_type,
-                                         common::ObObjType &calc_ob2_type,
-                                         const common::ObObjType type1,
-                                         const common::ObObjType type2)
+  OB_INLINE static int get_add_calc_type(common::SqlValueType &calc_type,
+                                         common::SqlValueType &calc_ob1_type,
+                                         common::SqlValueType &calc_ob2_type,
+                                         const common::SqlValueType type1,
+                                         const common::SqlValueType type2)
   {
     return get_arith_calc_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2,
                                ObArithResultTypeMap::OP::ADD);
   }
-  OB_INLINE static int get_minus_calc_type(common::ObObjType &calc_type,
-                                           common::ObObjType &calc_ob1_type,
-                                           common::ObObjType &calc_ob2_type,
-                                           const common::ObObjType type1,
-                                           const common::ObObjType type2)
+  OB_INLINE static int get_minus_calc_type(common::SqlValueType &calc_type,
+                                           common::SqlValueType &calc_ob1_type,
+                                           common::SqlValueType &calc_ob2_type,
+                                           const common::SqlValueType type1,
+                                           const common::SqlValueType type2)
   {
     return get_arith_calc_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2,
                                ObArithResultTypeMap::OP::SUB);
   }
-  OB_INLINE static int get_mul_calc_type(common::ObObjType &calc_type,
-                                           common::ObObjType &calc_ob1_type,
-                                           common::ObObjType &calc_ob2_type,
-                                           const common::ObObjType type1,
-                                           const common::ObObjType type2)
+  OB_INLINE static int get_mul_calc_type(common::SqlValueType &calc_type,
+                                           common::SqlValueType &calc_ob1_type,
+                                           common::SqlValueType &calc_ob2_type,
+                                           const common::SqlValueType type1,
+                                           const common::SqlValueType type2)
   {
     return get_arith_calc_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2,
                                ObArithResultTypeMap::OP::MUL);
   }
-  OB_INLINE static int get_div_calc_type(common::ObObjType &calc_type,
-                                           common::ObObjType &calc_ob1_type,
-                                           common::ObObjType &calc_ob2_type,
-                                           const common::ObObjType type1,
-                                           const common::ObObjType type2)
+  OB_INLINE static int get_div_calc_type(common::SqlValueType &calc_type,
+                                           common::SqlValueType &calc_ob1_type,
+                                           common::SqlValueType &calc_ob2_type,
+                                           const common::SqlValueType type1,
+                                           const common::SqlValueType type2)
   {
     return get_div_result_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2);
   }
-  OB_INLINE static int get_mod_calc_type(common::ObObjType &calc_type,
-                                           common::ObObjType &calc_ob1_type,
-                                           common::ObObjType &calc_ob2_type,
-                                           const common::ObObjType type1,
-                                           const common::ObObjType type2)
+  OB_INLINE static int get_mod_calc_type(common::SqlValueType &calc_type,
+                                           common::SqlValueType &calc_ob1_type,
+                                           common::SqlValueType &calc_ob2_type,
+                                           const common::SqlValueType type1,
+                                           const common::SqlValueType type2)
   {
     return get_arith_calc_type(calc_type, calc_ob1_type, calc_ob2_type, type1, type2,
                                ObArithResultTypeMap::OP::MOD);
@@ -210,7 +210,7 @@ public:
                                  const ObDataType &coll_elem2_type,
                                  uint32_t depth,
                                  ObExprResType &calc_type,
-                                 ObObjMeta &element_meta);
+                                 SqlTypeMeta &element_meta);
   static int get_deduce_element_type(ObExprResType &input_type, ObDataType &elem_type);
   static int assign_type_array(const ObIArray<ObRawExprResType> &src, ObIArray<ObExprResType> &dest);
   static int get_collection_calc_type(ObExecContext *exec_ctx,

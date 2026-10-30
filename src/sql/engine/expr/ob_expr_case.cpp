@@ -79,8 +79,8 @@ int ObExprCase::calc_result_typeN(ObExprResType &type,
 
     if (OB_SUCC(ret)) {
       for (int64_t i = 0; i < cond_type_count; ++i) {
-        const ObObjType cond_type = types_stack[i].get_type();
-        const ObObjTypeClass cond_tc = ob_obj_type_class(cond_type);
+        const SqlValueType cond_type = types_stack[i].get_type();
+        const SqlTypeClass cond_tc = sql_type_class(cond_type);
         if (ObIntTC == cond_tc || ObUIntTC == cond_tc
             || ObNumberTC == cond_tc || ObDecimalIntTC == cond_tc
             || ObNullTC == cond_tc) {
@@ -101,12 +101,12 @@ int ObExprCase::calc_result_typeN(ObExprResType &type,
         if ((is_arg_integer_type && is_expr_integer_type) ||
             ObNullType == types_stack[i].get_type()) {
           // see ObExprCoalesce::calc_result_typeN
-          types_stack[i].set_calc_meta(types_stack[i].get_obj_meta());
+          types_stack[i].set_calc_meta(types_stack[i].get_sql_type_meta());
         } else {
-          types_stack[i].set_calc_meta(type.get_obj_meta());
-          if (ObNumberType == type.get_obj_meta().get_type()
-              || ObDecimalIntType == type.get_obj_meta().get_type()
-              || ob_is_double_type(type.get_obj_meta().get_type())) {
+          types_stack[i].set_calc_meta(type.get_sql_type_meta());
+          if (ObNumberType == type.get_sql_type_meta().get_type()
+              || ObDecimalIntType == type.get_sql_type_meta().get_type()
+              || ob_is_double_type(type.get_sql_type_meta().get_type())) {
             types_stack[i].set_calc_accuracy(type.get_accuracy());
           }
         }
@@ -127,7 +127,7 @@ int ObExprCase::cg_expr(ObExprCGCtx &op_cg_ctx,
   // New engine case expression when expr must return int/null, i.e., when expr is always a boolean semantic expression
   for (int64_t i = 0; OB_SUCC(ret) && i < case_expr.get_when_expr_size(); ++i) {
     const ObRawExpr *when_expr = case_expr.get_when_param_expr(i);
-    const ObObjType &when_expr_res_type = when_expr->get_result_type().get_type();
+    const SqlValueType &when_expr_res_type = when_expr->get_result_type().get_type();
     if (OB_UNLIKELY(ObNullType != when_expr_res_type &&
                     !ob_is_integer_type(when_expr_res_type))) {
       ret = OB_ERR_UNEXPECTED;

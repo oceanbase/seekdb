@@ -127,8 +127,8 @@ struct ObParamInfo
   // Store whether to check type and bool value, as well as the expected bool value
   common::ParamFlag flag_;
   common::ObScale scale_;
-  common::ObObjType type_;
-  common::ObObjType ext_real_type_; // use as high 4 bytes of udt id if type is sql udt
+  common::SqlValueType type_;
+  common::SqlValueType ext_real_type_; // use as high 4 bytes of udt id if type is sql udt
   // Process typed null value matching in plan cache.
   bool is_typed_null_value_;
   common::ObCollationType col_type_;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_space.h"
 
 
@@ -39,7 +40,7 @@ inline int ObExprSpace::calc_result_type1(
   ObRawExpr * raw_expr = nullptr;
   ObRawExpr * child_raw_expr = nullptr;
   // space is mysql only expr
-  ObObjType res_type = ObMaxType;
+  SqlValueType res_type = ObMaxType;
   if (type1.is_null()) {
     res_type = ObVarcharType;
   } else if (type1.is_literal()) {
@@ -87,7 +88,7 @@ inline int ObExprSpace::calc_result_type1(
   return ret;
 }
 
-int ObExprSpace::calc_result_type(ObExprTypeCtx &type_ctx, const ObObj &obj, ObObjType &res_type) const
+int ObExprSpace::calc_result_type(ObExprTypeCtx &type_ctx, const DatumValue &obj, SqlValueType &res_type) const
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator alloc(ObModIds::OB_SQL_RES_TYPE);
@@ -100,7 +101,13 @@ int ObExprSpace::calc_result_type(ObExprTypeCtx &type_ctx, const ObObj &obj, ObO
   ObCastCtx cast_ctx(
       &alloc, &dtc_params, cur_time, cast_mode, CS_TYPE_INVALID);
   int64_t count_val = 0;
-  EXPR_GET_INT64_V2(obj, count_val);
+  {
+        DatumValue converted_literal;
+        if (OB_SUCC(ret)) {
+          ret = DatumValueCaster::to_type(ObIntType, cast_ctx, obj, alloc, converted_literal);
+        }
+        if (OB_SUCC(ret)) { ret = converted_literal.get_int(count_val); }
+      }
   if (OB_SUCC(ret)) {
     res_type = get_result_type_mysql(count_val);
   }

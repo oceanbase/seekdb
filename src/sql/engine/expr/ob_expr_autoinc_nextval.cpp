@@ -85,58 +85,16 @@ int ObExprAutoincNextval::calc_result_typeN(ObExprResType &type,
     if (OB_SUCC(ret) && 1 == param_num) {
       // column_conv() is add before nextval() in static tying engine. Parameter 2 is converted
       // to defined type, only int/uint/float/double allowed.
-      ObObjTypeClass tc = ob_obj_type_class(type.get_type());
+      SqlTypeClass tc = sql_type_class(type.get_type());
       if (!(ObNullTC == tc || ObIntTC == tc || ObUIntTC == tc
            || ObFloatTC == tc || ObDoubleTC == tc)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        static_cast<ObObjMeta &>(type) = types_array[0];
+        static_cast<SqlTypeMeta &>(type) = types_array[0];
       }
     }
   }
 
-  return ret;
-}
-
-//check generate auto-inc value or not and cast.
-// This function addresses the issue of: when a user inserts a negative number into a signed int auto-increment column,
-// To allow insertion. A mechanism is needed to determine: whether the user is inserting a negative number. This function addresses this issue
-//
-// Detailed MySQL behavior reference :
-//
-// Output parameter description:
-// casted_value is used to set to the lii_ field of ObPacket, it is an unsigned value
-//    When param is a negative number, casted_value = UINT64_MAX
-// try_sync handles the negative signed-value case. Setting it to false prevents
-// UINT64_MAX from being persisted as the explicit-value high watermark.
-int ObExprAutoincNextval::get_casted_value_by_result_type(ObCastCtx &cast_ctx,
-                                                          ObObjType result_type,
-                                                          const ObObj &param,
-                                                          uint64_t &casted_value,
-                                                          bool &try_sync)
-{
-  int ret = OB_SUCCESS;
-  ObObj tmp_object;
-  const ObObj *res_object = nullptr;
-  if (OB_FAIL(ObObjCaster::to_type(result_type,
-                                   cast_ctx,
-                                   param,
-                                   tmp_object,
-                                   res_object))) {
-  } else if (res_object->is_unsigned()) {
-    // unsigned, cast to uint64_t
-    EXPR_GET_UINT64_V2(*res_object, casted_value);
-  } else {
-    // signed, cast to int64_t
-    int64_t value = 0;
-    EXPR_GET_INT64_V2(*res_object, value);
-    if (value < 0) {
-      try_sync = false;
-      casted_value = UINT64_MAX;
-    } else {
-      casted_value = static_cast<uint64_t>(value);
-    }
-  }
   return ret;
 }
 
@@ -149,7 +107,7 @@ int ObExprAutoincNextval::get_uint_value(const ObExpr &input_expr,
     is_zero = true;
     casted_value = 0;
   } else {
-    ObObjTypeClass tc = ob_obj_type_class(input_expr.datum_meta_.type_);
+    SqlTypeClass tc = sql_type_class(input_expr.datum_meta_.type_);
     switch (tc) {
       case ObIntTC: {
         is_zero = 0 == input_value->get_int();
@@ -352,7 +310,7 @@ int ObExprAutoincNextval::eval_nextval(
       if (!is_to_generate) {
         expr_datum.set_datum(*input_value); // keep the input datum
       } else {
-        ObObjTypeClass tc = ob_obj_type_class(expr.datum_meta_.type_);
+        SqlTypeClass tc = sql_type_class(expr.datum_meta_.type_);
         switch (tc) {
           case ObIntTC:
           case ObUIntTC: {

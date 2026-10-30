@@ -52,7 +52,7 @@ bool ObStorageRowkeyColumnSchema::is_valid() const
 {
   return 0 == reserved_
       && 0 != column_idx_
-      && common::ob_is_valid_obj_type(static_cast<ObObjType>(meta_type_.get_type()));
+      && common::is_valid_sql_value_type(static_cast<SqlValueType>(meta_type_.get_type()));
 }
 
 OB_SERIALIZE_MEMBER_SIMPLE(
@@ -64,70 +64,6 @@ OB_SERIALIZE_MEMBER_SIMPLE(
 /*
  * ObStorageColumnSchema
  * */
-
-ObStorageColumnSchema::ObStorageColumnSchema()
-{
-  reset();
-}
-
-ObStorageColumnSchema::~ObStorageColumnSchema()
-{
-}
-
-void ObStorageColumnSchema::reset()
-{
-  info_ = 0;
-  default_checksum_ = 0;
-  meta_type_.reset();
-  orig_default_value_.reset();
-}
-
-void ObStorageColumnSchema::destroy(ObIAllocator &allocator)
-{
-  if (orig_default_value_.get_deep_copy_size() > 0) {
-    void *ptr = orig_default_value_.get_deep_copy_obj_ptr();
-    if (ptr != nullptr) {
-      orig_default_value_.reset();
-      allocator.free(ptr);
-    }
-  }
-  reset();
-}
-
-bool ObStorageColumnSchema::is_valid() const
-{
-  return 0 == reserved_
-      && common::ob_is_valid_obj_type(static_cast<ObObjType>(meta_type_.get_type()));
-}
-
-int ObStorageColumnSchema::deep_copy_default_val(ObIAllocator &allocator, const ObObj &default_val)
-{
-  int ret = OB_SUCCESS;
-  if (default_val.get_deep_copy_size() > 0) {
-    char *buf = nullptr;
-    int64_t pos = 0;
-    const int64_t alloc_size = default_val.get_deep_copy_size();
-    if (OB_ISNULL(buf = (char *)allocator.alloc(alloc_size))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "failed to alloc memory", K(ret), K(alloc_size));
-    } else if (OB_FAIL(orig_default_value_.deep_copy(default_val, buf, alloc_size, pos))) {
-      orig_default_value_.reset();
-      allocator.free(buf);
-      buf = nullptr;
-      STORAGE_LOG(WARN, "failed to deep copy", K(ret), K(default_val), K(pos));
-    }
-  } else {
-    orig_default_value_ = default_val;
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(
-    ObStorageColumnSchema,
-    info_,
-    default_checksum_,
-    meta_type_,
-    orig_default_value_);
 
 /*
  * ObStorageSchema
@@ -312,6 +248,7 @@ int ObStorageSchema::truncate_column_array(const int64_t stored_column_count)
       STORAGE_LOG(WARN, "failed to locate stored column boundary", K(ret), K(stored_column_count), K_(column_array));
     } else {
       while (column_array_.count() > array_count) {
+        column_array_.at(column_array_.count() - 1).destroy(*allocator_);
         column_array_.pop_back();
       }
       while (!skip_idx_attr_array_.empty()
@@ -575,24 +512,14 @@ int ObStorageSchema::deserialize_column_array(
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
   } else if (OB_FAIL(column_array_.reserve(count))) {
   } else {
-    ObStorageColumnSchema column;
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      column.reset();
-      if (OB_FAIL(column.deserialize(buf, data_len, pos))) {
-      }
-
-      if (OB_SUCC(ret) && column.orig_default_value_.get_deep_copy_size() > 0) {
-        ObStorageColumnSchema deep_copy_column;
-        if (OB_FAIL(deep_copy_column.deep_copy_default_val(allocator, column.get_orig_default_value()))) {
-        } else {
-          column.orig_default_value_ = deep_copy_column.orig_default_value_;
-        }
-      }
-      if (OB_FAIL(ret)) {
+      ObStorageColumnSchema column;
+      if (OB_FAIL(column.deserialize(allocator, buf, data_len, pos))) {
       } else if (OB_FAIL(column_array_.push_back(column))) {
         STORAGE_LOG(WARN, "Fail to add column", K(ret), K(column));
-        column.destroy(allocator);
       }
+      if (OB_FAIL(ret)) { column.destroy(allocator); }
+      else { column.orig_default_value_.reset(); } // descriptor ownership transferred to array
     }
   }
   return ret;
@@ -683,7 +610,7 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
       col_schema.is_rowkey_column_ = col->is_rowkey_column();
       col_schema.is_column_stored_in_sstable_ = col->is_column_stored_in_sstable();
       col_schema.is_generated_column_ = col->is_generated_column();
-      ObObjMeta meta_type = col->get_meta_type();
+      SqlTypeMeta meta_type = col->get_meta_type();
       if (meta_type.is_decimal_int()) {
         meta_type.set_stored_precision(col->get_accuracy().get_precision());
         meta_type.set_scale(col->get_accuracy().get_scale());
@@ -691,23 +618,23 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
         meta_type.set_scale(col->get_accuracy().get_scale());
       }
       col_schema.meta_type_ = meta_type;
-      const ObObj &orig_default_val = col->get_orig_default_value();
-      if (OB_FAIL(datum.from_obj_enhance(orig_default_val))) {
+      const common::DatumValue &orig_default_val = col->get_orig_default_value();
+      if (OB_FAIL(datum.from_value(orig_default_val))) {
       } else if (is_lob_storage(col->get_data_type()) && !datum.has_lob_header()
               && OB_FAIL(data_plane::fill_lob_header(*allocator_, datum))) {
         STORAGE_LOG(WARN, "failed to fill lob header", K(ret), K(datum));
-      } else if (orig_default_val.is_fixed_len_char_type()
+      } else if (orig_default_val.get_meta().is_fixed_len_char_type()
               && OB_FAIL(trim(orig_default_val.get_collation_type(), datum))) {
         STORAGE_LOG(WARN, "failed to trim default value", K(ret), K(orig_default_val), K(datum));
       } else {
         col_schema.default_checksum_ = datum.checksum(0);
 #ifdef ERRSIM
-        if (orig_default_val.is_fixed_len_char_type()) {
+        if (orig_default_val.get_meta().is_fixed_len_char_type()) {
           const int64_t original_checksum = col_schema.default_checksum_;
           const int64_t errsim_code = EN_NOT_TRIM_FOR_DEFALUT_CHECKSUM;
           if (OB_SUCCESS != errsim_code) {
             blocksstable::ObStorageDatum errsim_datum;
-            if (OB_FAIL(errsim_datum.from_obj_enhance(orig_default_val))) {
+            if (OB_FAIL(errsim_datum.from_value(orig_default_val))) {
               STORAGE_LOG(WARN, "Failed to transfer obj to errsim_datum", K(ret));
             } else {
               col_schema.default_checksum_ = errsim_datum.checksum(0);
@@ -765,7 +692,7 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
     } else {
       rowkey_schema.reset();
       rowkey_schema.column_idx_ = common::OB_APP_MIN_COLUMN_ID + find_idx;
-      ObObjMeta meta_type = rowkey_column->type_;
+      SqlTypeMeta meta_type = rowkey_column->type_;
       if (meta_type.is_decimal_int()) {
         meta_type.set_stored_precision(rowkey_col_schema->get_accuracy().get_precision());
         meta_type.set_scale(rowkey_col_schema->get_accuracy().get_scale());
@@ -1006,8 +933,8 @@ int ObStorageSchema::get_orig_default_row(
       if (OB_ISNULL(col_schema = get_column_schema(column_ids.at(i).col_id_))) {
         ret = OB_ERR_SYS;
         STORAGE_LOG(WARN, "column id not found", K(ret), K(column_ids.at(i)));
-      } else if (OB_FAIL(default_row.storage_datums_[i].from_obj_enhance(col_schema->get_orig_default_value()))) {
-      } else if (need_trim && col_schema->get_orig_default_value().is_fixed_len_char_type()) {
+      } else if (OB_FAIL(default_row.storage_datums_[i].from_value(col_schema->get_orig_default_value()))) {
+      } else if (need_trim && col_schema->get_orig_default_value().get_meta().is_fixed_len_char_type()) {
         if (OB_FAIL(trim(col_schema->get_orig_default_value().get_collation_type(), default_row.storage_datums_[i]))) {
         }
       }

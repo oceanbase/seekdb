@@ -33,7 +33,7 @@ private:
 
 private:
   int64_t row_reshape_cells_len_;
-  common::ObObj *row_reshape_cells_;
+  common::DatumValue *row_reshape_cells_;
   bool char_only_;
   int64_t binary_buffer_len_;
   char *binary_buffer_ptr_;

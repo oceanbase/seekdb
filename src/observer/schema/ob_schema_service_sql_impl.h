@@ -814,7 +814,7 @@ private:
                                  common::ObISQLClient &sql_client,
                                  int64_t schema_version,
                                  common::ObString &var_name,
-                                 common::ObObj &var_value);
+                                 common::DatumValue &var_value);
 
   int gen_runtime_new_schema_version_(const int64_t refreshed_schema_version,
       const int64_t version_cnt,

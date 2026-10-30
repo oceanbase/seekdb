@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "share/datum/datum_value_cast.h"
 #include "sql/engine/expr/ob_expr_truncate.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 
@@ -53,7 +54,7 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
   } else {
     bool not_int_flag = true;
     if (type2.is_literal()) {
-      ObObjTypeClass target_tc = type1.get_type_class();
+      SqlTypeClass target_tc = type1.get_type_class();
       switch(target_tc) {
         case ObIntTC: {
           type.set_int();
@@ -90,7 +91,7 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
           break;
         }
       }
-      const ObObj& obj2 = type2.get_param();
+      const DatumValue& obj2 = type2.get_param();
       ObArenaAllocator oballocator(ObModIds::BLOCK_ALLOC);
       ObCastMode cast_mode = CM_NONE;
       ObCollationType cast_coll_type = type_ctx.get_coll_type();
@@ -104,7 +105,13 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
                          cast_mode,
                          cast_coll_type);
       int64_t scale_val = 0;
-      EXPR_GET_INT64_V2(obj2, scale_val);
+      {
+        DatumValue converted_literal;
+        if (OB_SUCC(ret)) {
+          ret = DatumValueCaster::to_type(ObIntType, cast_ctx, obj2, oballocator, converted_literal);
+        }
+        if (OB_SUCC(ret)) { ret = converted_literal.get_int(scale_val); }
+      }
 
       if (0 <= scale_val) {
         if (OB_SUCC(ret)) {
@@ -140,7 +147,7 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
         ret = OB_SUCCESS;
       }
     } else {
-      ObObjType expr1_ty = type1.get_type();
+      SqlValueType expr1_ty = type1.get_type();
       if (ObNumberType == expr1_ty || ObUNumberType == expr1_ty || ObDecimalIntType == expr1_ty) {
         type.set_type(expr1_ty);
       } else if ((expr1_ty >= ObUTinyIntType && expr1_ty <= ObUInt64Type) ||
@@ -165,79 +172,6 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprTruncate::set_trunc_val(common::ObObj &result,
-                                  common::number::ObNumber &nmb,
-                                  ObExprCtx &expr_ctx,
-                                  ObObjType res_type)
-{
-  int ret = OB_SUCCESS;
-  ObObj tmp_obj;
-  tmp_obj.set_number(nmb);
-  EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE)
-  switch(res_type) {
-  case ObIntType: {
-    int64_t ival = 0;
-    EXPR_GET_INT64_V2(tmp_obj, ival);
-    if (OB_SUCC(ret)) {
-      result.set_int(ival);
-    }
-    break;
-  }
-  case ObUInt64Type: {
-    uint64_t uval = 0;
-    EXPR_GET_UINT64_V2(tmp_obj, uval);
-    if (OB_SUCC(ret)) {
-      result.set_uint64(uval);
-    }
-    break;
-  }
-  case ObFloatType: {
-    float fval = 0.0;
-    EXPR_GET_FLOAT_V2(tmp_obj, fval);
-    if (OB_SUCC(ret)) {
-      result.set_float(fval);
-    }
-    break;
-  }
-  case ObUFloatType: {
-    float fval = 0.0;
-    EXPR_GET_FLOAT_V2(tmp_obj, fval);
-    if (OB_SUCC(ret)) {
-      result.set_ufloat(fval);
-    }
-    break;
-  }
-  case ObDoubleType: {
-    double dval = 0.0;
-    EXPR_GET_DOUBLE_V2(tmp_obj, dval);
-    if (OB_SUCC(ret)) {
-      result.set_double(dval);
-    }
-    break;
-  }
-  case ObUDoubleType: {
-    double dval = 0.0;
-    EXPR_GET_DOUBLE_V2(tmp_obj, dval);
-    if (OB_SUCC(ret)) {
-      result.set_udouble(dval);
-    }
-    break;
-  }
-  case ObNumberType: {
-    result.set_number(nmb);
-    break;
-  }
-  case ObUNumberType: {
-    result.set_unumber(nmb);
-    break;
-  }
-  default: {
-    ret = OB_ERR_UNEXPECTED;
-    break;
-  }
-  }
-  return ret;
-}
 
 int ObExprTruncate::do_trunc_decimalint(
     const int16_t in_prec, const int16_t in_scale,
@@ -295,8 +229,8 @@ int ObExprTruncate::calc_trunc_decimalint(
 int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
-  const ObObjType res_type = expr.datum_meta_.type_;
-  const ObObjType arg_type = expr.args_[0]->datum_meta_.type_;
+  const SqlValueType res_type = expr.datum_meta_.type_;
+  const SqlValueType arg_type = expr.args_[0]->datum_meta_.type_;
   // truncate(x, d)
   ObDatum *x_datum = NULL;
   ObDatum *d_datum = NULL;

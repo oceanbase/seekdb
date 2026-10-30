@@ -53,7 +53,7 @@ int ObExprJsonContains::calc_result_typeN(ObExprResType& type,
     type.set_scale(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].scale_);
     
     for (int64_t i = 0; OB_SUCC(ret) && i < 2; i++) {
-      ObObjType in_type = types_stack[i].get_type();
+      SqlValueType in_type = types_stack[i].get_type();
       if (!ob_is_string_type(in_type)) {
       } else if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, i, N_JSON_CONTAINS))) {
       }

@@ -20,6 +20,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/objectpool/ob_pooled_allocator.h"
 #include "common/ob_string_buf.h"
+#include "common/datum/datum_value.h"
 
 namespace oceanbase
 {
@@ -31,9 +32,15 @@ struct ObSessionVariable {
     meta_.reset();
     value_.reset();
   }
+  // Raw session-variable record: independent declaration metadata followed by
+  // the established value wire. Deserialization owns payloads in caller's arena.
+  int serialize(char *buf, int64_t buf_len, int64_t &pos) const;
+  int deserialize(const char *buf, int64_t data_len, int64_t &pos,
+                  common::ObIAllocator &owner);
+  int64_t get_serialize_size() const;
   TO_STRING_KV(K_(meta), K_(value));
-  common::ObObjMeta meta_; // Meta Type of the seseion variable
-  common::ObObj value_; // value of the session variable
+  common::SqlTypeMeta meta_; // Meta Type of the seseion variable
+  common::DatumValue value_; // view; ObSessionValMap owns stored payloads
 };
 class ObSessionValMap
 {
@@ -73,7 +80,9 @@ public:
   NEED_SERIALIZE_AND_DESERIALIZE;
   TO_STRING_KV(K(size()));
 private:
-  int free_mem();
+  int free_mem(common::ObString *pending_name = nullptr,
+               ObSessionVariable *pending_value = nullptr,
+               bool *pending_owned = nullptr);
 
 private:
   static const int64_t SMALL_BLOCK_SIZE = 4 * 1024LL;

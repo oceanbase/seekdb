@@ -56,17 +56,16 @@ private:
                    share::schema::ObSchemaGetterGuard *schema_guard,
                    obmysql::MYSQL_PROTOCOL_TYPE encode_type,
                    common::ObIArray<obmysql::ObMySQLCellValue> &values);
-  static int convert_string_value_charset(common::ObObj &value,
+  static int convert_string_value_charset(common::DatumValue &value,
                                           common::ObIAllocator &alloc,
                                           const ObSQLSessionInfo &my_session);
-  static int convert_text_value_charset(common::ObObj& value,
+  static int convert_text_value_charset(common::DatumValue &value,
                                         bool res_has_lob_header,
                                         common::ObIAllocator &alloc,
                                         const ObSQLSessionInfo &my_session,
                                         sql::ObExecContext &exec_ctx);
-  static int process_lob_locator_results(common::ObObj& value,
+  static int process_lob_locator_results(common::DatumValue &value,
                                          common::ObIAllocator &alloc,
-                                         const ObSQLSessionInfo &my_session,
                                          sql::ObExecContext &exec_ctx);
 
   static int convert_string_charset(const common::ObString &in_str,

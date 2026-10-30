@@ -90,8 +90,8 @@ int ObScheduledJobUtils::check_job_exists(common::ObMySQLProxy *sql_proxy,
         //expected only get one row.
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           int64_t idx = 0;
-          ObObj obj;
-          if (OB_FAIL(client_result->get_obj(idx, obj))) {
+          DatumValue obj;
+          if (OB_FAIL(client_result->get_value(idx, obj))) {
           } else if (OB_FAIL(obj.get_int(row_count))) {
           } else if (OB_UNLIKELY(row_count != 2 && row_count != 0)) {
             ret = OB_ERR_UNEXPECTED;

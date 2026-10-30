@@ -132,7 +132,7 @@ private:
   ObArenaAllocator iter_allocator_;
   ObArenaAllocator rowkey_allocator_;
   blocksstable::ObDatumRange curr_range_;
-  common::ObObj objs_[common::OB_MAX_ROWKEY_COLUMN_NUMBER];
+  common::DatumValue objs_[common::OB_MAX_ROWKEY_COLUMN_NUMBER];
   int64_t block_idx_;
   void *iter_buf_;
   char *io_buf_;

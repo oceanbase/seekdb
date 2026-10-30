@@ -40,7 +40,7 @@ ObRawExprPrinter::ObRawExprPrinter()
 }
 
 ObRawExprPrinter::ObRawExprPrinter(char *buf, int64_t buf_len, int64_t *pos, ObSchemaGetterGuard *schema_guard,
-                                   ObObjPrintParams print_params, const ParamStore *param_store)
+                                   ObValuePrintParams print_params, const ParamStore *param_store)
     : buf_(buf),
       buf_len_(buf_len),
       pos_(pos),
@@ -59,7 +59,7 @@ ObRawExprPrinter::~ObRawExprPrinter()
 }
 
 void ObRawExprPrinter::init(char *buf, int64_t buf_len, int64_t *pos, ObSchemaGetterGuard *schema_guard,
-                            ObObjPrintParams print_params, const ParamStore *param_store)
+                            ObValuePrintParams print_params, const ParamStore *param_store)
 {
   buf_ = buf;
   buf_len_ = buf_len;
@@ -249,15 +249,17 @@ int ObRawExprPrinter::print(ObConstRawExpr *expr)
       }
     } else {
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(param_store_->at(idx).print_sql_literal(buf_, buf_len_, *pos_, print_params_))) {
+        const DatumParameter &parameter = param_store_->at(idx);
+        if (OB_FAIL(parameter.print_sql_literal(buf_, buf_len_, *pos_, print_params_))) {
         }
       }
     }
   } else if (expr->get_literal_prefix().empty()) {
     // Preserve char/nchar metadata when printing an empty string literal.
     if (expr->get_value().is_null() && ObCharType == expr->get_expr_obj_meta().get_type()) {
-      ObObj empty_string = expr->get_value();
+      DatumValue empty_string = expr->get_value();
       empty_string.set_meta_type(expr->get_expr_obj_meta());
+      empty_string.datum_.set_string(ObString());
       if (OB_FAIL(empty_string.print_sql_literal(buf_, buf_len_, *pos_, print_params_))) {
       }
     } else if (expr->get_expr_type() == T_DATE &&
@@ -533,8 +535,8 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
           if (OB_ISNULL(con_expr)) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            ObObj &obj = con_expr->get_value();
-            ObObjType type = obj.get_type();
+            const DatumValue &obj = con_expr->get_value();
+            SqlValueType type = obj.get_type();
             if (ObNullType == type) {
               DATA_PRINTF("null");
             } else if (ObTinyIntType == type) {
@@ -2081,7 +2083,7 @@ int ObRawExprPrinter::print_is_json(ObSysFunRawExpr *expr)
 int ObRawExprPrinter::print_json_object_star(ObSysFunRawExpr *expr)
 {
   INIT_SUCC(ret);
-  ObObj tab_obj = static_cast<ObConstRawExpr*>(expr->get_param_expr(0))->get_value();
+  const DatumValue &tab_obj = static_cast<ObConstRawExpr*>(expr->get_param_expr(0))->get_value();
   ObItemType expr_type = expr->get_param_expr(0)->get_expr_type();
   if (T_VARCHAR != expr_type && T_CHAR != expr_type) {
   } else if (!tab_obj.get_string().empty()) {
