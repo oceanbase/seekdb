@@ -1,0 +1,52 @@
+--echo # NOT IN flattening must preserve three-valued logic and collation
+--echo # See issue #1511: `id NOT IN (1,2,3,4)` and the equivalent `<>` chain have to
+--echo # stay semantically identical after the rewriter flattens the short NOT IN list.
+
+--disable_warnings
+DROP TABLE IF EXISTS t_not_in;
+--enable_warnings
+
+CREATE TABLE t_not_in (c1 INT, c2 VARCHAR(16), c3 VARCHAR(16), PRIMARY KEY(c1));
+INSERT INTO t_not_in VALUES (1, 'a', 'x ');
+INSERT INTO t_not_in VALUES (2, 'b', 'x');
+INSERT INTO t_not_in VALUES (3, 'c', 'x');
+INSERT INTO t_not_in VALUES (4, 'd', 'x');
+INSERT INTO t_not_in VALUES (5, NULL, 'x');
+INSERT INTO t_not_in VALUES (6, 'B', 'x');
+
+--echo # plain int list: NOT IN and the expanded <> chain select the same rows
+--sorted_result
+SELECT c1 FROM t_not_in WHERE c1 NOT IN (1, 2, 3) ORDER BY c1;
+SELECT c1 FROM t_not_in WHERE c1 <> 1 AND c1 <> 2 AND c1 <> 3 ORDER BY c1;
+
+--echo # a NULL inside the list keeps the predicate unknown for every row
+--sorted_result
+SELECT c1 FROM t_not_in WHERE c1 NOT IN (1, NULL) ORDER BY c1;
+SELECT c1 FROM t_not_in WHERE c1 <> 1 AND c1 <> NULL ORDER BY c1;
+
+--echo # a NULL column value is excluded by both spellings, not silently returned
+--sorted_result
+SELECT c1 FROM t_not_in WHERE c2 NOT IN ('a', 'b') ORDER BY c1;
+SELECT c1 FROM t_not_in WHERE c2 <> 'a' AND c2 <> 'b' ORDER BY c1;
+
+--echo # case-insensitive collation: 'B' matches 'b', and 'x ' differs from 'x'
+--sorted_result
+SELECT c1 FROM t_not_in WHERE c2 NOT IN ('b') ORDER BY c1;
+SELECT c1 FROM t_not_in WHERE c3 NOT IN ('x') ORDER BY c1;
+
+--echo # single value list collapses to one <> predicate; mixed type list was already rewritten
+--sorted_result
+SELECT c1 FROM t_not_in WHERE c1 NOT IN (4) ORDER BY c1;
+SELECT c1 FROM t_not_in WHERE c1 NOT IN (1, '2') ORDER BY c1;
+
+--echo # long lists stay on the IN-list hash path and keep the same answers
+--sorted_result
+SELECT c1 FROM t_not_in WHERE c1 NOT IN (1, 2, 3, 4, 5, 6, 7, 8, 9) ORDER BY c1;
+SELECT c1 FROM t_not_in WHERE c1 <> 1 AND c1 <> 2 AND c1 <> 3 AND c1 <> 4 AND c1 <> 5
+  AND c1 <> 6 AND c1 <> 7 AND c1 <> 8 AND c1 <> 9 ORDER BY c1;
+
+--echo # NOT IN over an empty match set returns the whole table
+--sorted_result
+SELECT c1 FROM t_not_in WHERE c1 NOT IN (100, 200) ORDER BY c1;
+
+DROP TABLE t_not_in;

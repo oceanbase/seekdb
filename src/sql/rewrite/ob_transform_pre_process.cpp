@@ -1045,6 +1045,27 @@ int ObTransformPreProcess::transform_expr(ObRawExprFactory &expr_factory,
   return ret;
 }
 
+// Rewriting a short NOT IN list into a `<>` AND chain costs one extra predicate per value but
+// buys the ordinary range merging; past this size the hash set built by ObExprInOrNotIn is the
+// cheaper shape, so the rewrite is deliberately skipped.
+static const int64_t NOT_IN_FLATTEN_MAX_PARAM_COUNT = 8;
+
+static bool can_flatten_not_in_to_ne(ObRawExpr *right_expr)
+{
+  bool can_flatten = false;
+  if (OB_NOT_NULL(right_expr) && T_OP_ROW == right_expr->get_expr_type()) {
+    can_flatten = right_expr->get_param_count() > 1
+                  && right_expr->get_param_count() <= NOT_IN_FLATTEN_MAX_PARAM_COUNT;
+    for (int64_t i = 0; can_flatten && i < right_expr->get_param_count(); ++i) {
+      const ObRawExpr *value_expr = right_expr->get_param_expr(i);
+      can_flatten = OB_NOT_NULL(value_expr)
+                    && value_expr->is_const_expr()
+                    && !value_expr->has_flag(CNT_SUB_QUERY);
+    }
+  }
+  return can_flatten;
+}
+
 int ObTransformPreProcess::transform_in_or_notin_expr_without_row(ObRawExprFactory &expr_factory,
                                                                   const ObSQLSessionInfo &session,
                                                                   const bool is_in_expr,
@@ -1092,6 +1113,33 @@ int ObTransformPreProcess::transform_in_or_notin_expr_without_row(ObRawExprFacto
     ObOpRawExpr *op_raw_expr = dynamic_cast<ObOpRawExpr *>(in_expr);
     if (OB_ISNULL(op_raw_expr)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (!is_in_expr && can_flatten_not_in_to_ne(right_expr)) {
+      // A NOT IN list is the only same-type shape that reaches the range generator as an
+      // `is_not_in_node_`, which blocks the range merging that the equivalent `<>` chain
+      // enjoys.  Flatten it into `x <> v1 AND ...` so both spellings take one access path.
+      ObSEArray<ObRawExpr *, 4> ne_exprs;
+      // transform_in_or_notin_expr() routes every T_OP_ROW left side to the _with_row variant, so
+      // left_expr is scalar here: one node shared by all the `<>` predicates is safe, because a
+      // scalar's implicit cast is added above the operand rather than into its params.
+      for (int64_t i = 0; OB_SUCC(ret) && i < right_expr->get_param_count(); ++i) {
+        ObOpRawExpr *ne_expr = NULL;
+        if (OB_FAIL(expr_factory.create_raw_expr(T_OP_NE, ne_expr))) {
+        } else if (OB_ISNULL(ne_expr) || OB_ISNULL(right_expr->get_param_expr(i))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ne_expr->set_param_exprs(left_expr, right_expr->get_param_expr(i)))) {
+        } else if (OB_FAIL(ne_expr->formalize(&session))) {
+        } else if (OB_FAIL(ne_exprs.push_back(ne_expr))) {
+          // do nothing
+        }
+      }
+      if (OB_FAIL(ret)) {
+        // do nothing
+      } else if (OB_FAIL(get_final_transed_or_and_expr(expr_factory, session, is_in_expr,
+                                                       ne_exprs, in_expr))) {
+        // do nothing
+      } else {
+        trans_happened = true;
+      }
     } else {
       op_raw_expr->set_add_implicit_cast_for_in_param(true);
     }
