@@ -173,6 +173,9 @@ int ObIStreamBuf::do_callback()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cb_(data_, capacity_, capacity_, cb_param_))) {
+  } else if (OB_ISNULL(data_) || capacity_ <= 0) {
+    // A successful callback must make progress. EOF is reported as OB_ITER_END.
+    ret = OB_INVALID_DATA;
   } else {
     setg(data_, data_, data_ + capacity_); // fill the read buffer
   }
