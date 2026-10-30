@@ -2465,6 +2465,26 @@ all_objauth_mysql_def = dict(
 def_table_schema(**all_objauth_mysql_def)
 def_table_schema(**gen_history_table_def(1134, all_objauth_mysql_def))
 
+all_property_graph_def = dict(
+    owner = 'wangyunlai.wyl',
+    table_name = '__all_property_graph',
+    table_id = '1135',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [('graph_id', 'int')],
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('database_id', 'int', 'false'),
+        ('define_user_id', 'int', 'false'),
+        ('name', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+        ('definition', 'longblob', 'false')
+    ]
+)
+def_table_schema(**all_property_graph_def)
+def_table_schema(**gen_history_table_def(1136, all_property_graph_def))
+
+
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
@@ -6162,6 +6182,138 @@ def_local_table(
   primary_key = ['id'],
 )
 
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPHS',
+  table_id = '12565',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = []
+)
+
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENTS',
+  table_id = '12566',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = [('ELEMENT_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('ELEMENT_KIND', 'varchar:6', 'false'),
+    ('OBJECT_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH', 'false'),
+    ('OBJECT_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('OBJECT_TYPE', 'varchar:16', 'false')]
+)
+
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPH_KEYS',
+  table_id = '12567',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = [('ELEMENT_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('ORDINAL_POSITION', 'uint', 'false'),
+    ('COLUMN_NAME', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false')]
+)
+
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPH_EDGE_RELATIONSHIPS',
+  table_id = '12568',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = [('EDGE_ELEMENT_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('ENDPOINT_TYPE', 'varchar:11', 'false'),
+    ('VERTEX_ELEMENT_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('ORDINAL_POSITION', 'uint', 'false'),
+    ('EDGE_COLUMN_NAME', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false'),
+    ('VERTEX_COLUMN_NAME', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false')]
+)
+
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPH_LABELS',
+  table_id = '12569',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = [('LABEL_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false')]
+)
+
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENT_LABELS',
+  table_id = '12570',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = [('ELEMENT_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('LABEL_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false')]
+)
+
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPH_LABEL_PROPERTIES',
+  table_id = '12571',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = [('LABEL_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('PROPERTY_NAME', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false'),
+    ('ORDINAL_POSITION', 'uint', 'false'),
+    ('DATA_TYPE', 'longtext', 'false'),
+    ('COLUMN_TYPE', 'longtext', 'false'),
+    ('CHARACTER_MAXIMUM_LENGTH', 'uint', 'true'),
+    ('CHARACTER_OCTET_LENGTH', 'uint', 'true'),
+    ('NUMERIC_PRECISION', 'uint', 'true'),
+    ('NUMERIC_SCALE', 'uint', 'true'),
+    ('DATETIME_PRECISION', 'uint', 'true'),
+    ('CHARACTER_SET_NAME', 'varchar:MAX_CHARSET_LENGTH', 'true'),
+    ('COLLATION_NAME', 'varchar:MAX_COLLATION_LENGTH', 'true')]
+)
+
+def_table_schema(
+  owner = 'graph',
+  table_name = '__ALL_VIRTUAL_PROPERTY_GRAPH_PROPERTY_DEFINITIONS',
+  table_id = '12572',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('GRAPH_SCHEMA', 'varchar:OB_MAX_DATABASE_NAME_LENGTH'),
+    ('GRAPH_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH')
+  ],
+  normal_columns = [('ELEMENT_NAME', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false'),
+    ('PROPERTY_NAME', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false'),
+    ('COLUMN_NAME', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'true'),
+    ('VALUE_EXPRESSION', 'longtext', 'false'),
+    ('DATA_TYPE', 'longtext', 'false'),
+    ('COLUMN_TYPE', 'longtext', 'false'),
+    ('IS_NULLABLE', 'varchar:3', 'false')]
+)
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
@@ -13567,6 +13719,102 @@ def_table_schema(
       FETCH_SCN
     FROM oceanbase.__all_virtual_change_stream_refresh_stat
   """.replace("\n", " ")
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPHS',
+  table_id = '21669',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPHS'
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPH_ELEMENTS',
+  table_id = '21670',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME, ELEMENT_NAME, ELEMENT_KIND, OBJECT_SCHEMA, OBJECT_NAME, OBJECT_TYPE FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENTS'
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPH_KEYS',
+  table_id = '21671',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME, ELEMENT_NAME, ORDINAL_POSITION, COLUMN_NAME FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPH_KEYS'
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPH_EDGE_RELATIONSHIPS',
+  table_id = '21672',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME, EDGE_ELEMENT_NAME, ENDPOINT_TYPE, VERTEX_ELEMENT_NAME, ORDINAL_POSITION, EDGE_COLUMN_NAME, VERTEX_COLUMN_NAME FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPH_EDGE_RELATIONSHIPS'
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPH_LABELS',
+  table_id = '21673',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME, LABEL_NAME FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPH_LABELS'
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPH_ELEMENT_LABELS',
+  table_id = '21674',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME, ELEMENT_NAME, LABEL_NAME FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPH_ELEMENT_LABELS'
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPH_LABEL_PROPERTIES',
+  table_id = '21675',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME, LABEL_NAME, PROPERTY_NAME, ORDINAL_POSITION, DATA_TYPE, COLUMN_TYPE, CHARACTER_MAXIMUM_LENGTH, CHARACTER_OCTET_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION, CHARACTER_SET_NAME, COLLATION_NAME FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPH_LABEL_PROPERTIES'
+)
+
+def_table_schema(
+  owner = 'graph',
+  database_id = 'OB_INFORMATION_SCHEMA_ID',
+  table_name = 'PROPERTY_GRAPH_PROPERTY_DEFINITIONS',
+  table_id = '21676',
+  table_type = 'SYSTEM_VIEW',
+  gm_columns = [],
+  rowkey_columns = [],
+  normal_columns = [],
+  view_definition = 'SELECT GRAPH_SCHEMA, GRAPH_NAME, ELEMENT_NAME, PROPERTY_NAME, COLUMN_NAME, VALUE_EXPRESSION, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE FROM oceanbase.__ALL_VIRTUAL_PROPERTY_GRAPH_PROPERTY_DEFINITIONS'
 )
 
 # Reserved position (placeholder before this line)

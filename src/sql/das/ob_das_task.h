@@ -304,6 +304,7 @@ public:
   DASOpResultIter() : task_iter_() {}
   explicit DASOpResultIter(const DASTaskIter &task_iter) : task_iter_(task_iter) {}
   int get_next_row();
+  int get_next_rows(int64_t &count, int64_t capacity);
   int next_result();
   const DASRuntimeTabletAccess *get_tablet_access() const { return (*task_iter_)->get_tablet_access(); }
   bool is_end() const { return task_iter_.is_end(); }

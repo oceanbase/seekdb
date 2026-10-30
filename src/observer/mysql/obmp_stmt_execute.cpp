@@ -862,7 +862,8 @@ int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
       }
     } else if (MYSQL_TYPE_OB_RAW == type || MYSQL_TYPE_TINY_BLOB == type ||
                MYSQL_TYPE_MEDIUM_BLOB == type || MYSQL_TYPE_LONG_BLOB == type ||
-               MYSQL_TYPE_BLOB == type || MYSQL_TYPE_NEWDECIMAL == type ||
+               MYSQL_TYPE_BLOB == type || MYSQL_TYPE_DECIMAL == type ||
+               MYSQL_TYPE_NEWDECIMAL == type ||
                MYSQL_TYPE_ORA_BLOB == type) {
       if (OB_FAIL(ob_write_string(allocator, str, dst))) {
       }
@@ -872,9 +873,11 @@ int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
   }
 
   if (OB_SUCC(ret)) {
-    if (MYSQL_TYPE_NEWDECIMAL == type) {
+    if (MYSQL_TYPE_DECIMAL == type || MYSQL_TYPE_NEWDECIMAL == type) {
       number::ObNumber number;
-      if (OB_FAIL(number.from(str.ptr(), str.length(), allocator))) {
+      // Connector/Python sends both plain and scientific Decimal text.
+      if (OB_FAIL(number.from_sci_opt(str.ptr(), str.length(), allocator,
+                                     nullptr, nullptr, true, true))) {
       } else {
         param.set_number(number);
       }
@@ -934,6 +937,7 @@ int ObMPStmtExecute::materialize_standard_long_data(
   switch (type) {
   case MYSQL_TYPE_VARCHAR:
   case MYSQL_TYPE_JSON:
+  case MYSQL_TYPE_DECIMAL:
   case MYSQL_TYPE_NEWDECIMAL:
   case MYSQL_TYPE_TINY_BLOB:
   case MYSQL_TYPE_MEDIUM_BLOB:
@@ -2182,6 +2186,7 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
     case MYSQL_TYPE_STRING:
     case MYSQL_TYPE_VARCHAR:
     case MYSQL_TYPE_VAR_STRING:
+    case MYSQL_TYPE_DECIMAL:
     case MYSQL_TYPE_NEWDECIMAL:
     case MYSQL_TYPE_ORA_BLOB:
     case MYSQL_TYPE_ORA_CLOB:
@@ -2233,9 +2238,10 @@ int ObMPStmtExecute::parse_basic_param_value(ObIAllocator &allocator,
         } else if (OB_FAIL(ob_write_string(allocator, str, dst))) {
         }
         if (OB_SUCC(ret)) {
-          if (MYSQL_TYPE_NEWDECIMAL == type) {
+          if (MYSQL_TYPE_DECIMAL == type || MYSQL_TYPE_NEWDECIMAL == type) {
             number::ObNumber nb;
-            if (OB_FAIL(nb.from(str.ptr(), length, allocator))) {
+            if (OB_FAIL(nb.from_sci_opt(str.ptr(), length, allocator,
+                                       nullptr, nullptr, true, true))) {
             } else {
               param.set_number(nb);
             }

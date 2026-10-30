@@ -477,6 +477,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_entities": struct(
         hdrs = [
+            "schema/graph_schema.h",
             "schema/ob_col_desc.h",
             "schema/ob_column_schema.h",
             "schema/ob_constraint.h",
@@ -498,6 +499,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_persistence": struct(
         hdrs = [
+            "schema/graph_sql_service.h",
             "schema/ob_ai_model_sql_service.h",
             "schema/ob_database_sql_service.h",
             "schema/ob_ddl_sql_service.h",

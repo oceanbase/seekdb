@@ -492,10 +492,8 @@ int ObFreezer::logstream_freeze()
              || ObScnRange::MIN_SCN >= freeze_snapshot_version) {
     ret = OB_MINOR_FREEZE_NOT_ALLOW;
     STORAGE_LOG(WARN, "[Freezer] invalid weak read scn", K(ret), K(freeze_snapshot_version));
-#ifdef ERRSIM
   } else if (OB_FAIL(ret = ERRSIM_FREEZER_FREEZE_FAILURE)) {
     LOG_ERROR("[Freezer] errsim failure during freezer freeze", K(ret));
-#endif
   } else if (OB_FAIL(set_freeze_flag())) {
     FLOG_INFO("[Freezer] freeze is running", K(ret));
   } else {
@@ -695,7 +693,22 @@ bool ObFreezer::acquired_exec_async_task_permission_(const bool is_ls_freeze)
 void ObFreezer::async_ls_freeze_consumer()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ls_->logstream_freeze_task(INT64_MAX))) {
+  const int64_t retry_interval_us = 100 * 1000;
+  const int64_t deadline = ObClockGenerator::getClock() + SYNC_FREEZE_DEFAULT_RETRY_TIME;
+  // A newly opened LS can accept writes before its weak-read SCN is ready for
+  // freezing. Keep ownership of this queued request while retrying admission;
+  // otherwise a successful asynchronous MINOR FREEZE silently loses the work.
+  // Do not retry permanent errors or keep a request worker busy indefinitely.
+  do {
+    ret = ls_->logstream_freeze_task(deadline);
+    if ((OB_EAGAIN != ret && OB_MINOR_FREEZE_NOT_ALLOW != ret)
+        || ObClockGenerator::getClock() >= deadline) {
+      break;
+    }
+    ob_usleep(retry_interval_us);
+  } while (true);
+  if (OB_FAIL(ret)) {
+    STORAGE_LOG(WARN, "async logstream freeze failed", KR(ret), K(deadline));
   }
 
   // reset task existing flag

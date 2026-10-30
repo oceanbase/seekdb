@@ -1,0 +1,64 @@
+--disable_query_log
+CREATE TABLE gsp_v(id INT PRIMARY KEY);
+CREATE TABLE gsp_e(id INT PRIMARY KEY,src INT,dst INT);
+INSERT INTO gsp_v VALUES(1),(2),(3);
+INSERT INTO gsp_e VALUES(10,1,1),(11,1,1),(12,1,1),(13,1,1),
+ (14,1,1),(15,1,1),(16,1,1),(17,1,1),(20,1,2),(21,2,3);
+CREATE PROPERTY GRAPH gsp VERTEX TABLES(gsp_v KEY(id) LABEL v PROPERTIES(id))
+EDGE TABLES(gsp_e KEY(id) SOURCE KEY(src) REFERENCES gsp_v(id)
+ DESTINATION KEY(dst) REFERENCES gsp_v(id) LABEL e PROPERTIES(id));
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='pruned'
+SELECT * FROM GRAPH_TABLE(gsp MATCH ANY SHORTEST
+ (a IS v WHERE a.id=1)-[e IS e]-{2,8}(b IS v)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+EXPLAIN INTO plan_table SET statement_id='volatile'
+SELECT * FROM GRAPH_TABLE(gsp MATCH ANY SHORTEST
+ (a IS v WHERE a.id=1)-[e IS e WHERE RAND()<1]-{2}(b IS v)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+--enable_result_log
+--echo fallback_shortest_prunes_only_safe_witnesses
+SELECT COUNT(*) AS pruned FROM plan_table WHERE statement_id='pruned'
+ AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%states=binding_vertex_hop%';
+SELECT COUNT(*) AS unpruned FROM plan_table WHERE statement_id='volatile'
+ AND operator='GRAPH FEEDBACK LOOP' AND special_predicates LIKE '%states=paths%';
+SELECT endpoint,hops,JSON_LENGTH(edges) AS witness_length
+FROM GRAPH_TABLE(gsp MATCH ANY SHORTEST (a IS v WHERE a.id=1)-[e IS e]-{2,8}(b IS v)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY endpoint;
+--echo step_witness_retains_orientation
+SELECT * FROM GRAPH_TABLE(gsp MATCH ANY SHORTEST
+ (a IS v WHERE a.id=3)-[e IS e]-{0,8}(b IS v WHERE b.id=1)
+ ONE ROW PER STEP(v1,se,v2)
+ COLUMNS(v1.id AS src,se.id AS edge_id,v2.id AS dst,COUNT(e.id) AS hops)) g ORDER BY edge_id DESC;
+--echo duplicate_outer_bindings_survive_rescan
+SELECT s.binding,g.endpoint,g.hops FROM (SELECT 1 AS binding UNION ALL SELECT 2) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(gsp MATCH ANY SHORTEST
+ (a IS v WHERE a.id=s.binding-s.binding+1)-[e IS e]-{2,8}(b IS v)
+ COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY s.binding,g.endpoint;
+--echo ordinary_recursive_cte_keeps_bag
+WITH RECURSIVE r(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM r,
+ (SELECT 1 AS copy UNION ALL SELECT 1) d WHERE n<3)
+SELECT COUNT(*) AS rows_count FROM r;
+--echo prepared_execution_resets_witness_keys
+PREPARE gsp_stmt FROM 'SELECT endpoint,hops FROM GRAPH_TABLE(gsp MATCH ANY SHORTEST (a IS v WHERE a.id=?)-[e IS e]-{2,8}(b IS v) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint';
+SET @seed=1;
+EXECUTE gsp_stmt USING @seed;
+SET @seed=3;
+EXECUTE gsp_stmt USING @seed;
+DEALLOCATE PREPARE gsp_stmt;
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH gsp;
+DROP TABLE gsp_e,gsp_v;
+--echo composite_typed_keys_preserve_distinct_states
+CREATE TABLE gsp_cv(t VARBINARY(4),k DECIMAL(8,2),PRIMARY KEY(t,k));
+CREATE TABLE gsp_ce(id INT PRIMARY KEY,st VARBINARY(4),sk DECIMAL(8,2),dt VARBINARY(4),dk DECIMAL(8,2));
+INSERT INTO gsp_cv VALUES(X'FF00',1.25),(X'FF00',2.50),(X'FF00',3.75);
+INSERT INTO gsp_ce VALUES(1,X'FF00',1.25,X'FF00',2.50),(2,X'FF00',2.50,X'FF00',3.75);
+CREATE PROPERTY GRAPH gsp_c VERTEX TABLES(gsp_cv KEY(t,k) LABEL v PROPERTIES(k))
+EDGE TABLES(gsp_ce KEY(id) SOURCE KEY(st,sk) REFERENCES gsp_cv(t,k)
+ DESTINATION KEY(dt,dk) REFERENCES gsp_cv(t,k) LABEL e PROPERTIES(id));
+SELECT * FROM GRAPH_TABLE(gsp_c MATCH ANY SHORTEST (a IS v)-[e IS e]-{2,8}(b IS v)
+ COLUMNS(a.k AS seed,b.k AS endpoint,COUNT(e.id) AS hops)) g ORDER BY seed,endpoint;
+DROP PROPERTY GRAPH gsp_c;
+DROP TABLE gsp_ce,gsp_cv;

@@ -1,0 +1,46 @@
+SELECT URL_DECODE('a%20b') AS decoded, URL_ENCODE('a b') AS encoded;
+decoded	encoded
+a b	a%20b
+SELECT URL_ENCODE('AZaz09-._~') AS unreserved,
+URL_ENCODE('/?&=+#%') AS reserved,
+URL_DECODE('%2f%3F%26%3d%2B%23%25') AS decoded;
+unreserved	reserved	decoded
+AZaz09-._~	%2F%3F%26%3D%2B%23%25	/?&=+#%
+SELECT URL_ENCODE('中文') AS encoded, URL_DECODE('%E4%B8%AD%E6%96%87') AS decoded;
+encoded	decoded
+%E4%B8%AD%E6%96%87	中文
+SELECT URL_ENCODE(NULL) IS NULL AS null_encode, URL_DECODE(NULL) IS NULL AS null_decode,
+LENGTH(URL_ENCODE('')) AS empty_encode, LENGTH(URL_DECODE('')) AS empty_decode;
+null_encode	null_decode	empty_encode	empty_decode
+1	1	0	0
+SELECT URL_ENCODE(123) AS encoded, URL_DECODE(123) AS decoded,
+HEX(URL_DECODE('%00')) AS nul_byte;
+encoded	decoded	nul_byte
+123	123	00
+SELECT URL_DECODE('%GG');
+ERROR HY000: Incorrect arguments to URL_DECODE, illegal input: %GG
+SELECT URL_DECODE('still%20works') AS decoded;
+decoded
+still works
+SELECT id,CONCAT('[',URL_ENCODE(c),']') AS encoded,
+CONCAT('[',URL_DECODE(URL_ENCODE(c)),']') AS roundtrip
+FROM url_codec_rows ORDER BY id;
+id	encoded	roundtrip
+1	[a%20b]	[a b]
+2	[%E4%B8%AD%E6%96%87]	[中文]
+3	[]	[]
+4	NULL	NULL
+SELECT DISTINCT COLLATION(URL_ENCODE(c))=COLLATION(c) AS encode_preserves_collation,
+COLLATION(URL_DECODE(c))=COLLATION(c) AS decode_preserves_collation FROM url_codec_rows;
+encode_preserves_collation	decode_preserves_collation
+1	1
+PREPARE url_codec_ps FROM 'SELECT URL_DECODE(?) AS decoded';
+SET @url_input='a%20b';
+EXECUTE url_codec_ps USING @url_input;
+decoded
+a b
+SET @url_input=NULL;
+EXECUTE url_codec_ps USING @url_input;
+decoded
+NULL
+DEALLOCATE PREPARE url_codec_ps;

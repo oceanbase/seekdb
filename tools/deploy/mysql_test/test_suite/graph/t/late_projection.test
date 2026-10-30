@@ -1,0 +1,74 @@
+--disable_query_log
+CREATE TABLE gl_v(id INT PRIMARY KEY,body VARCHAR(2048),active INT);
+CREATE TABLE gl_e(id INT PRIMARY KEY,src INT,dst INT);
+CREATE TABLE gl_digit(n INT PRIMARY KEY);
+INSERT INTO gl_digit VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+INSERT INTO gl_v SELECT a.n+10*b.n+100*c.n+1000*d.n+1,REPEAT('x',1024),MOD(a.n,2)
+FROM gl_digit a,gl_digit b,gl_digit c,gl_digit d;
+UPDATE gl_v SET body=NULL WHERE id=9999;
+INSERT INTO gl_e SELECT 2*id,1,id FROM gl_v WHERE id>1;
+INSERT INTO gl_e SELECT 2*id+1,1,id FROM gl_v WHERE id>1;
+INSERT INTO gl_e VALUES(30000,1,20000);
+CREATE PROPERTY GRAPH gl_graph VERTEX TABLES(gl_v KEY(id) LABEL node PROPERTIES(id,body,active))
+EDGE TABLES(gl_e KEY(id) SOURCE KEY(src) REFERENCES gl_v(id) DESTINATION KEY(dst) REFERENCES gl_v(id) LABEL link PROPERTIES(id));
+--source mysql_test/include/create_plan_table.inc
+ALTER TABLE plan_table MODIFY other_xml LONGTEXT;
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX gl_out ON gl_e(src,id,dst);
+  }
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='path_rank'
+  SELECT * FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+  COLUMNS(a.body AS source_body,b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT 20;
+  --enable_result_log
+  --enable_query_log
+  SELECT COUNT(*) AS narrow_topn FROM plan_table WHERE statement_id='path_rank'
+  AND operator='TOP-N SORT' AND projection NOT LIKE '%body%';
+  SELECT COUNT(*) AS native_paths FROM plan_table WHERE statement_id='path_rank'
+  AND special_predicates LIKE '%runtime=native%';
+  SELECT COUNT(*) AS lazy_property_gets FROM plan_table WHERE statement_id='path_rank'
+  AND object_alias LIKE '__g_result_%' AND operator='TABLE GET';
+  SELECT id,LENGTH(source_body) AS source_bytes,LENGTH(body) AS bytes FROM GRAPH_TABLE(gl_graph MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+  COLUMNS(a.body AS source_body,b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT 6;
+  --echo endpoint_filter_runs_before_limit
+  SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{1,2}(b IS node WHERE b.active=0)
+  COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g ORDER BY id DESC LIMIT 6;
+  --echo outer_property_filter_runs_before_limit
+  SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{1,2}(b IS node)
+  COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g WHERE active=0 ORDER BY id DESC LIMIT 6;
+  --echo ranking_property_is_not_deferred
+  SELECT id,active FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=1)
+  -[e IS link]->{1,2}(b IS node)
+  COLUMNS(b.id AS id,b.body AS body,b.active AS active)) g ORDER BY active,id DESC LIMIT 6;
+  --disable_query_log
+  CREATE TABLE gl_expected AS SELECT v.id,v.body,COUNT(*) AS paths FROM gl_e e JOIN gl_v v ON e.dst=v.id
+  WHERE e.src=1 GROUP BY v.id,v.body;
+  CREATE TABLE gl_actual AS SELECT id,body,COUNT(*) AS paths FROM GRAPH_TABLE(gl_graph MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node) COLUMNS(b.id AS id,b.body AS body)) g GROUP BY id,body;
+  --enable_query_log
+  SELECT COUNT(*) AS missing_or_changed FROM gl_expected e LEFT JOIN gl_actual a ON a.id=e.id
+WHERE a.id IS NULL OR NOT(a.body<=>e.body) OR a.paths<>e.paths;
+  SELECT COUNT(*) AS unexpected FROM gl_actual a LEFT JOIN gl_expected e ON a.id=e.id WHERE e.id IS NULL;
+  --disable_query_log
+  DROP TABLE gl_expected,gl_actual;
+  --dec $passes
+}
+--enable_query_log
+PREPARE gl_cached FROM 'SELECT id,LENGTH(body) AS bytes FROM GRAPH_TABLE(gl_graph MATCH (a IS node WHERE a.id=?)-[e IS link]->{0,2}(b IS node) COLUMNS(b.id AS id,b.body AS body)) g ORDER BY id DESC LIMIT ? OFFSET ?';
+SET @seed=1,@lim=3,@off=1;
+EXECUTE gl_cached USING @seed,@lim,@off;
+SET @seed=10000,@off=0;
+EXECUTE gl_cached USING @seed,@lim,@off;
+SET @seed=20000;
+EXECUTE gl_cached USING @seed,@lim,@off;
+DEALLOCATE PREPARE gl_cached;
+DROP PROPERTY GRAPH gl_graph;
+DROP TABLE gl_v,gl_e,gl_digit,plan_table;

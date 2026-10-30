@@ -1,0 +1,295 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_page;
+DROP PROPERTY GRAPH IF EXISTS graph_page_partition;
+--disable_warnings
+DROP TABLE IF EXISTS graph_page_edge,graph_page_vertex,graph_page_digit;
+DROP TABLE IF EXISTS graph_page_string_e,graph_page_string_v,graph_page_partition_e;
+--enable_warnings
+--enable_query_log
+
+CREATE TABLE graph_page_digit (d INT PRIMARY KEY);
+INSERT INTO graph_page_digit VALUES
+  (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE graph_page_vertex (
+  id BIGINT PRIMARY KEY,
+  name VARCHAR(16) NOT NULL
+);
+CREATE TABLE graph_page_edge (
+  id BIGINT PRIMARY KEY,
+  src BIGINT NOT NULL,
+  dst BIGINT NOT NULL,
+  active INT NOT NULL
+);
+INSERT INTO graph_page_vertex VALUES (1,'seed'),(2,'target');
+INSERT INTO graph_page_edge
+SELECT sequence_no + 1,1,2,1
+FROM (
+  SELECT d0.d + 10*d1.d + 100*d2.d + 1000*d3.d AS sequence_no
+  FROM graph_page_digit d0
+  CROSS JOIN graph_page_digit d1
+  CROSS JOIN graph_page_digit d2
+  CROSS JOIN graph_page_digit d3
+) numbers
+WHERE sequence_no < 4105;
+# Add non-frontier rows after the matching primary-key range. A full scan's
+# terminal page must consume these rows without losing the nine matching
+# edges that follow the first 4096-result page.
+INSERT INTO graph_page_edge
+SELECT id + 10000,2,2,active FROM graph_page_edge;
+
+CREATE PROPERTY GRAPH graph_page
+  VERTEX TABLES (
+    graph_page_vertex KEY (id)
+      LABEL node PROPERTIES (id,name)
+  )
+  EDGE TABLES (
+    graph_page_edge KEY (id)
+      SOURCE KEY (src) REFERENCES graph_page_vertex (id)
+      DESTINATION KEY (dst) REFERENCES graph_page_vertex (id)
+      LABEL link PROPERTIES (id,active)
+  );
+
+--echo full_scan_reads_every_edge_page_and_preserves_parallel_edges
+SELECT COUNT(*) AS paths,COUNT(DISTINCT destination) AS destinations,
+       MIN(hops) AS min_hops,MAX(hops) AS max_hops
+FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*) AS paths,SUM(hops=0) AS zero_hop_paths,
+       SUM(hops=1) AS one_hop_paths
+FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{0,1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='page_full_scan'
+SELECT * FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_full_scan
+FROM plan_table
+WHERE statement_id='page_full_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=full-scan%';
+
+CREATE INDEX graph_page_out ON graph_page_edge(src,id);
+
+--echo adjacency_index_matches_full_scan_across_page_boundary
+SELECT COUNT(*) AS paths,COUNT(DISTINCT destination) AS destinations,
+       MIN(hops) AS min_hops,MAX(hops) AS max_hops
+FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='page_index_scan'
+SELECT * FROM GRAPH_TABLE(graph_page MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_adjacency_index
+FROM plan_table
+WHERE statement_id='page_index_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=index-scan%';
+
+DROP PROPERTY GRAPH graph_page;
+
+# Variable-length identities and payloads must survive scanner/lookup reuse,
+# while old edge pages can be reclaimed. Exercise both full and index scans.
+CREATE TABLE graph_page_string_v (id VARCHAR(32) PRIMARY KEY);
+CREATE TABLE graph_page_string_e (
+  id VARCHAR(32) PRIMARY KEY,src VARCHAR(32),dst VARCHAR(32),note VARCHAR(256)
+);
+INSERT INTO graph_page_string_v VALUES ('source'),('target');
+INSERT INTO graph_page_string_e
+SELECT CONCAT('edge-',LPAD(id,8,'0')),'source','target',
+       CONCAT('payload-',LPAD(id,8,'0'),REPEAT('x',200))
+FROM graph_page_edge WHERE src=1;
+CREATE PROPERTY GRAPH graph_page
+VERTEX TABLES(graph_page_string_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(graph_page_string_e KEY(id)
+  SOURCE KEY(src) REFERENCES graph_page_string_v(id)
+  DESTINATION KEY(dst) REFERENCES graph_page_string_v(id)
+  LABEL link PROPERTIES(id,note));
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX graph_page_string_out ON graph_page_string_e(src,id);
+  }
+  SELECT COUNT(*) AS steps,COUNT(DISTINCT edge_key) AS distinct_edges,
+         SUM(src='source' AND dst='target') AS valid_endpoints,
+         SUM(note=CONCAT('payload-',SUBSTRING(edge_key,6),REPEAT('x',200))) AS valid_payloads
+  FROM GRAPH_TABLE(graph_page MATCH
+    (a IS node WHERE a.id='source')-[e IS link]->{1}(b IS node)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(v1.id AS src,se.id AS edge_key,se.note AS note,v2.id AS dst)) g;
+  --dec $passes
+}
+DROP PROPERTY GRAPH graph_page;
+DROP TABLE graph_page_string_e,graph_page_string_v;
+# Each explicitly named partition exceeds the 4096-edge page size. The
+# leading identity id restarts at 1 in every tablet, so neither tablet order
+# can be mistaken for a globally increasing (id,bucket) resume key.
+CREATE TABLE graph_page_partition_e (
+  id BIGINT NOT NULL,bucket INT NOT NULL,
+  src BIGINT NOT NULL,dst BIGINT NOT NULL,note VARCHAR(256),
+  PRIMARY KEY(id,bucket)
+) PARTITION BY LIST(bucket) (
+  PARTITION p_nine VALUES IN (9),
+  PARTITION p_one VALUES IN (1)
+);
+INSERT INTO graph_page_partition_e
+SELECT id,9,1,2,CONCAT('partition-9-edge-',id,REPEAT('x',200))
+FROM graph_page_edge WHERE src=1;
+INSERT INTO graph_page_partition_e
+SELECT id,1,1,2,CONCAT('partition-1-edge-',id,REPEAT('x',200))
+FROM graph_page_edge WHERE src=1;
+CREATE PROPERTY GRAPH graph_page_partition
+VERTEX TABLES(graph_page_vertex KEY(id) LABEL node PROPERTIES(id,name))
+EDGE TABLES(graph_page_partition_e KEY(id,bucket)
+  SOURCE KEY(src) REFERENCES graph_page_vertex(id)
+  DESTINATION KEY(dst) REFERENCES graph_page_vertex(id)
+  LABEL link PROPERTIES(id,bucket,note));
+
+--echo partition_pages_full_scan_preserves_every_identity_and_payload
+SELECT COUNT(*) AS steps,COUNT(DISTINCT edge_id,bucket) AS distinct_edges,
+       SUM(bucket=1) AS p_one_edges,SUM(bucket=9) AS p_nine_edges,
+       SUM(edge_id BETWEEN 1 AND 4105) AS valid_ids,
+       SUM(src=1 AND dst=2 AND src_name='seed' AND dst_name='target') AS valid_endpoints,
+       SUM(note=CONCAT('partition-',bucket,'-edge-',edge_id,REPEAT('x',200))) AS valid_payloads
+FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='partition_page_full'
+SELECT * FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_partitioned_full_scan
+FROM plan_table
+WHERE statement_id='partition_page_full'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=full-scan%';
+# dst and note are deliberately absent: this LOCAL adjacency index must
+# fetch endpoint and variable-length property payloads from the base tablet.
+CREATE INDEX graph_page_partition_out ON graph_page_partition_e(src,id,bucket) LOCAL;
+--echo partition_pages_local_index_back_preserves_every_identity_and_payload
+SELECT COUNT(*) AS steps,COUNT(DISTINCT edge_id,bucket) AS distinct_edges,
+       SUM(bucket=1) AS p_one_edges,SUM(bucket=9) AS p_nine_edges,
+       SUM(edge_id BETWEEN 1 AND 4105) AS valid_ids,
+       SUM(src=1 AND dst=2 AND src_name='seed' AND dst_name='target') AS valid_endpoints,
+       SUM(note=CONCAT('partition-',bucket,'-edge-',edge_id,REPEAT('x',200))) AS valid_payloads
+FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='partition_page_index'
+SELECT * FROM GRAPH_TABLE(graph_page_partition MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS src,v1.name AS src_name,se.id AS edge_id,
+          se.bucket AS bucket,se.note AS note,v2.id AS dst,v2.name AS dst_name)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS uses_local_adjacency_index
+FROM plan_table
+WHERE statement_id='partition_page_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%access=index-scan%';
+DROP PROPERTY GRAPH graph_page_partition;
+DROP TABLE graph_page_partition_e;
+# A page of distinct targets, parallel edges, a self-loop and a missing target.
+# Compare endpoint multiplicities at both depths against ordinary SQL, before
+# and after dropping the adjacency index. Page membership must not deduplicate
+# output paths, retain an orphan, or leak a previous page's existence flags.
+--disable_query_log
+TRUNCATE TABLE graph_page_edge;
+TRUNCATE TABLE graph_page_vertex;
+INSERT INTO graph_page_vertex
+SELECT 1+d0.d+10*d1.d+100*d2.d+1000*d3.d,'vertex'
+FROM graph_page_digit d0,graph_page_digit d1,graph_page_digit d2,graph_page_digit d3
+WHERE d0.d+10*d1.d+100*d2.d+1000*d3.d<4107;
+INSERT INTO graph_page_edge SELECT id-1,1,id,1 FROM graph_page_vertex WHERE id BETWEEN 2 AND 4106;
+INSERT INTO graph_page_edge SELECT id+10000,id,4107,1 FROM graph_page_vertex WHERE id BETWEEN 2 AND 4106;
+INSERT INTO graph_page_edge VALUES (120000,1,50000,1),(120001,1,2,1),(120002,1,1,1);
+CREATE PROPERTY GRAPH graph_page
+VERTEX TABLES(graph_page_vertex KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(graph_page_edge KEY(id) SOURCE KEY(src) REFERENCES graph_page_vertex(id)
+DESTINATION KEY(dst) REFERENCES graph_page_vertex(id) LABEL link PROPERTIES(id));
+--enable_query_log
+--echo distinct_target_pages_preserve_one_and_two_hop_bags
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    DROP INDEX graph_page_out ON graph_page_edge;
+  }
+  --disable_result_log
+  --disable_query_log
+  EXPLAIN INTO plan_table SET statement_id='distinct_targets'
+  SELECT * FROM GRAPH_TABLE(graph_page MATCH
+    (a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+    COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+  --enable_result_log
+  SELECT COUNT(*)=1 AS uses_native_target_pages FROM plan_table
+  WHERE statement_id='distinct_targets' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+  DELETE FROM plan_table WHERE statement_id='distinct_targets';
+  --enable_query_log
+  SELECT COUNT(*) AS mismatched_endpoint_bags FROM (
+    SELECT endpoint,hops,SUM(delta) AS net_delta FROM (
+      SELECT g.endpoint,g.hops,1 AS delta FROM GRAPH_TABLE(graph_page MATCH
+        (a IS node WHERE a.id=1)-[e IS link]->{1,2}(b IS node)
+        COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g
+      UNION ALL
+      SELECT b.id,1,-1 FROM graph_page_vertex a
+      JOIN graph_page_edge e ON e.src=a.id JOIN graph_page_vertex b ON b.id=e.dst WHERE a.id=1
+      UNION ALL
+      SELECT c.id,2,-1 FROM graph_page_vertex a
+      JOIN graph_page_edge e ON e.src=a.id JOIN graph_page_vertex b ON b.id=e.dst
+      JOIN graph_page_edge f ON f.src=b.id JOIN graph_page_vertex c ON c.id=f.dst WHERE a.id=1
+    ) paths GROUP BY endpoint,hops HAVING SUM(delta)<>0
+  ) mismatches;
+  --dec $passes
+}
+--echo endpoint_only_states_keep_seed_and_depth_across_output_batches
+--disable_query_log
+# Include zero hops and three-hop walks, two roots, a self-loop, parallel
+# edges and an orphan. Compact states must preserve complete output bags,
+# even though their output view contains only the root and leaf.
+SELECT COUNT(*) AS mismatched_compact_state_bags FROM (
+  SELECT source,endpoint,hops,SUM(delta) AS net_delta FROM (
+    SELECT g.source,g.endpoint,g.hops,1 AS delta FROM GRAPH_TABLE(graph_page MATCH
+      (a IS node WHERE a.id IN (1,2))-[e IS link]->{0,3}(b IS node)
+      COLUMNS(a.id AS source,b.id AS endpoint,COUNT(e.id) AS hops)) g
+    UNION ALL
+    SELECT a.id,a.id,0,-1 FROM graph_page_vertex a WHERE a.id IN (1,2)
+    UNION ALL
+    SELECT a.id,b.id,1,-1 FROM graph_page_vertex a
+    JOIN graph_page_edge e ON e.src=a.id JOIN graph_page_vertex b ON b.id=e.dst WHERE a.id IN (1,2)
+    UNION ALL
+    SELECT a.id,c.id,2,-1 FROM graph_page_vertex a
+    JOIN graph_page_edge e ON e.src=a.id JOIN graph_page_vertex b ON b.id=e.dst
+    JOIN graph_page_edge f ON f.src=b.id JOIN graph_page_vertex c ON c.id=f.dst WHERE a.id IN (1,2)
+    UNION ALL
+    SELECT a.id,d.id,3,-1 FROM graph_page_vertex a
+    JOIN graph_page_edge e ON e.src=a.id JOIN graph_page_vertex b ON b.id=e.dst
+    JOIN graph_page_edge f ON f.src=b.id JOIN graph_page_vertex c ON c.id=f.dst
+    JOIN graph_page_edge h ON h.src=c.id JOIN graph_page_vertex d ON d.id=h.dst WHERE a.id IN (1,2)
+  ) paths GROUP BY source,endpoint,hops HAVING SUM(delta)<>0
+) mismatches;
+--enable_query_log
+DROP PROPERTY GRAPH graph_page;
+DROP TABLE plan_table;
+DROP TABLE graph_page_edge,graph_page_vertex,graph_page_digit;

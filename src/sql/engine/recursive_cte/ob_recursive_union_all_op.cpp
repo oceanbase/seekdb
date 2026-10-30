@@ -25,31 +25,38 @@ using namespace common;
 namespace sql
 {
 const int64_t ObRecursiveUnionAllSpec::UNUSED_POS = -2;
-int ObRecursiveUnionAllOp::inner_close()
+int RecursivePumpOp::inner_close()
 {
   int ret = OB_SUCCESS;
   inner_data_.destroy();
   return ret;
 }
 
-ObRecursiveUnionAllSpec::ObRecursiveUnionAllSpec(ObIAllocator &alloc, const ObPhyOperatorType type)
+RecursivePumpSpec::RecursivePumpSpec(ObIAllocator &alloc, const ObPhyOperatorType type)
     : ObOpSpec(alloc, type),
-      output_union_exprs_(alloc),
-      pump_operator_id_(OB_INVALID_ID),
-      strategy_(ObRecursiveInnerDataOp::SearchStrategyType::BREADTH_FRIST)
+      output_union_exprs_(alloc)
 {
 }
 
-ObRecursiveUnionAllSpec::~ObRecursiveUnionAllSpec()
+ObRecursiveUnionAllSpec::ObRecursiveUnionAllSpec(ObIAllocator &alloc,
+                                                 const ObPhyOperatorType type)
+    : RecursivePumpSpec(alloc, type)
 {
 }
 
+OB_SERIALIZE_MEMBER((RecursivePumpSpec, ObOpSpec),
+                    output_union_exprs_,
+                    pump_operator_id_,
+                    strategy_);
+
+// Bypass the new implementation base when serializing the CTE spec so its
+// existing ObRecursiveUnionAllSpec -> ObOpSpec wire layout stays unchanged.
 OB_SERIALIZE_MEMBER((ObRecursiveUnionAllSpec, ObOpSpec),
                     output_union_exprs_,
                     pump_operator_id_,
                     strategy_);
 
-int ObRecursiveUnionAllOp::inner_rescan()
+int RecursivePumpOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_data_.rescan())){
@@ -58,27 +65,29 @@ int ObRecursiveUnionAllOp::inner_rescan()
   return ret;
 }
 
-int ObRecursiveUnionAllOp::inner_open()
+int RecursivePumpOp::inner_open()
 {
   int ret = OB_SUCCESS;
   ObOperatorKit *op_kit = nullptr;
+  const RecursivePumpSpec &pump_spec = get_pump_spec();
   if (OB_ISNULL(left_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(inner_data_.init())) {
-  } else if (OB_ISNULL(op_kit = ctx_.get_operator_kit(MY_SPEC.pump_operator_id_))
+  } else if (OB_ISNULL(op_kit = ctx_.get_operator_kit(pump_spec.pump_operator_id_))
               || OB_ISNULL(op_kit->op_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get ObOperator from exec ctx failed", K(MY_SPEC.pump_operator_id_), K(op_kit), K(MY_SPEC.strategy_));
+    LOG_WARN("get ObOperator from exec ctx failed", K(pump_spec.pump_operator_id_),
+             K(op_kit), K(pump_spec.strategy_));
   } else {
     inner_data_.set_left_child(left_);
     inner_data_.set_right_child(right_);
     inner_data_.set_fake_cte_table(static_cast<ObFakeCTETableOp *>(op_kit->op_));
-    inner_data_.set_search_strategy(MY_SPEC.strategy_);
-    if (MY_SPEC.is_vectorized()) {
-      inner_data_.set_batch_size(MY_SPEC.max_batch_size_);
+    inner_data_.set_search_strategy(pump_spec.strategy_);
+    if (pump_spec.is_vectorized()) {
+      inner_data_.set_batch_size(pump_spec.max_batch_size_);
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.get_left()->get_output_count(); i++) {
-      const ObExpr *expr = MY_SPEC.get_left()->output_.at(i);
+    for (int64_t i = 0; OB_SUCC(ret) && i < pump_spec.get_left()->get_output_count(); i++) {
+      const ObExpr *expr = pump_spec.get_left()->output_.at(i);
       if(OB_ISNULL(expr)
         || OB_ISNULL(expr->basic_funcs_)
         || OB_ISNULL(expr->basic_funcs_->null_first_cmp_)
@@ -91,7 +100,7 @@ int ObRecursiveUnionAllOp::inner_open()
   return ret;
 }
 
-int ObRecursiveUnionAllOp::inner_get_next_row()
+int RecursivePumpOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
@@ -103,11 +112,11 @@ int ObRecursiveUnionAllOp::inner_get_next_row()
   return ret;
 }
 
-int ObRecursiveUnionAllOp::inner_get_next_batch(const int64_t max_row_cnt)
+int RecursivePumpOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
-  int64_t batch_size = std::min(max_row_cnt, MY_SPEC.max_batch_size_);
+  int64_t batch_size = std::min(max_row_cnt, get_pump_spec().max_batch_size_);
   if (OB_FAIL(try_check_status())) {
   } else if (OB_FAIL(inner_data_.get_next_batch(batch_size, brs_))) {
   }

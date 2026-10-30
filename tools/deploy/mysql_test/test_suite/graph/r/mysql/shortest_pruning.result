@@ -1,0 +1,44 @@
+fallback_shortest_prunes_only_safe_witnesses
+pruned
+1
+unpruned
+1
+endpoint	hops	witness_length
+1	2	2
+2	2	2
+3	2	2
+step_witness_retains_orientation
+src	edge_id	dst	hops
+3	21	2	2
+2	20	1	2
+duplicate_outer_bindings_survive_rescan
+binding	endpoint	hops
+1	1	2
+1	2	2
+1	3	2
+2	1	2
+2	2	2
+2	3	2
+ordinary_recursive_cte_keeps_bag
+rows_count
+15
+prepared_execution_resets_witness_keys
+endpoint	hops
+1	2
+2	2
+3	2
+endpoint	hops
+1	2
+2	3
+3	2
+composite_typed_keys_preserve_distinct_states
+seed	endpoint	hops
+1.25	1.25	2
+1.25	2.50	3
+1.25	3.75	2
+2.50	1.25	3
+2.50	2.50	2
+2.50	3.75	3
+3.75	1.25	2
+3.75	2.50	3
+3.75	3.75	2

@@ -1,0 +1,142 @@
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='shared_frontier'
+  SELECT COUNT(*) FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint)) g;
+SELECT COUNT(*)=1 AS native_walk FROM plan_table
+WHERE statement_id='shared_frontier' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%states=paths%';
+native_walk
+1
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+SUM(score!=seed*10) AS wrong_score,SUM(endpoint!=10003) AS wrong_endpoint,
+SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint,
+JSON_ARRAYAGG(e.eid) AS edges)) g;
+paths	seeds	wrong_score	wrong_endpoint	wrong_path
+10000	5000	0	0	0
+SELECT MIN(paths) AS min_paths,MAX(paths) AS max_paths FROM (
+SELECT seed,COUNT(*) AS paths FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed)) g GROUP BY seed) p;
+min_paths	max_paths
+2	2
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,SUM(score!=seed*10) AS wrong_score
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id=10003)<-[e IS link]-{2}(b IS node)
+COLUMNS(b.id AS seed,b.score AS score)) g;
+paths	seeds	wrong_score
+10000	5000	0
+SELECT COUNT(*) AS step_rows,COUNT(DISTINCT seed) AS seeds,
+SUM(sn IS NULL) AS zero_hop_rows,SUM(score!=seed*10) AS wrong_score
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{0,2}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(a.id AS seed,a.score AS score,ELEMENT_NUMBER(se) AS sn)) g;
+step_rows	seeds	zero_hop_rows	wrong_score
+30000	5000	5000	0
+PREPARE shared_cached FROM 'SELECT COUNT(*) AS paths,SUM(score) AS score_sum FROM GRAPH_TABLE(graph_shared MATCH (a IS node WHERE a.id<=?)-[e IS link]->{2}(b IS node) COLUMNS(a.id AS seed,a.score AS score)) g';
+SET @seeds=5000;
+EXECUTE shared_cached USING @seeds;
+paths	score_sum
+10000	250050000
+SET @seeds=3;
+EXECUTE shared_cached USING @seeds;
+paths	score_sum
+6	120
+DEALLOCATE PREPARE shared_cached;
+shortest_converged_frontier_preserves_each_seed_binding
+native_shortest_binding_states
+1
+paths	seeds	wrong_score	wrong_endpoint	wrong_length	wrong_first_edge	wrong_second_edge
+5000	5000	0	0	0	0	0
+CREATE INDEX gs_out ON gs_e(src);
+CREATE INDEX gs_in ON gs_e(dst);
+DELETE FROM plan_table;
+EXPLAIN INTO plan_table SET statement_id='shared_frontier'
+  SELECT COUNT(*) FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint)) g;
+SELECT COUNT(*)=1 AS native_walk FROM plan_table
+WHERE statement_id='shared_frontier' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native%states=paths%';
+native_walk
+1
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+SUM(score!=seed*10) AS wrong_score,SUM(endpoint!=10003) AS wrong_endpoint,
+SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,a.score AS score,b.id AS endpoint,
+JSON_ARRAYAGG(e.eid) AS edges)) g;
+paths	seeds	wrong_score	wrong_endpoint	wrong_path
+10000	5000	0	0	0
+SELECT MIN(paths) AS min_paths,MAX(paths) AS max_paths FROM (
+SELECT seed,COUNT(*) AS paths FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed)) g GROUP BY seed) p;
+min_paths	max_paths
+2	2
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,SUM(score!=seed*10) AS wrong_score
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id=10003)<-[e IS link]-{2}(b IS node)
+COLUMNS(b.id AS seed,b.score AS score)) g;
+paths	seeds	wrong_score
+10000	5000	0
+SELECT COUNT(*) AS step_rows,COUNT(DISTINCT seed) AS seeds,
+SUM(sn IS NULL) AS zero_hop_rows,SUM(score!=seed*10) AS wrong_score
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{0,2}(b IS node)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(a.id AS seed,a.score AS score,ELEMENT_NUMBER(se) AS sn)) g;
+step_rows	seeds	zero_hop_rows	wrong_score
+30000	5000	5000	0
+PREPARE shared_cached FROM 'SELECT COUNT(*) AS paths,SUM(score) AS score_sum FROM GRAPH_TABLE(graph_shared MATCH (a IS node WHERE a.id<=?)-[e IS link]->{2}(b IS node) COLUMNS(a.id AS seed,a.score AS score)) g';
+SET @seeds=5000;
+EXECUTE shared_cached USING @seeds;
+paths	score_sum
+10000	250050000
+SET @seeds=3;
+EXECUTE shared_cached USING @seeds;
+paths	score_sum
+6	120
+DEALLOCATE PREPARE shared_cached;
+shortest_converged_frontier_preserves_each_seed_binding
+native_shortest_binding_states
+1
+paths	seeds	wrong_score	wrong_endpoint	wrong_length	wrong_first_edge	wrong_second_edge
+5000	5000	0	0	0	0	0
+floating_sources_preserve_paths_without_hash_grouping_full_scan
+SELECT COUNT(*)=1 AS native_full_scan FROM plan_table
+WHERE statement_id='float_full' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%access=full-scan%runtime=native%';
+native_full_scan
+1
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+SUM(endpoint!=10003) AS wrong_endpoint,
+SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
+paths	seeds	wrong_endpoint	wrong_path
+10000	5000	0	0
+CREATE INDEX gsf_out ON gs_float_e(src);
+floating_sources_preserve_paths_across_input_batches
+SELECT COUNT(*)=1 AS native_index_scan FROM plan_table
+WHERE statement_id='float_index' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%access=index-scan%runtime=native%';
+native_index_scan
+1
+SELECT COUNT(*) AS paths,COUNT(DISTINCT seed) AS seeds,
+SUM(endpoint!=10003) AS wrong_endpoint,
+SUM(CAST(JSON_VALUE(edges,'$[0]') AS SIGNED)!=seed) AS wrong_path
+FROM GRAPH_TABLE(graph_shared MATCH
+(a IS node WHERE a.id<=5000)-[e IS link]->{2}(b IS node)
+COLUMNS(a.id AS seed,b.id AS endpoint,JSON_ARRAYAGG(e.eid) AS edges)) g;
+paths	seeds	wrong_endpoint	wrong_path
+10000	5000	0	0
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_shared;
+DROP TABLE gs_e,gs_v,gs_digit,gs_float_e,gs_float_v;

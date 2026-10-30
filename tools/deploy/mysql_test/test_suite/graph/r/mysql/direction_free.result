@@ -1,0 +1,115 @@
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]-(b IS person)
+COLUMNS(b.id AS endpoint)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '(b IS person)
+COLUMNS(b.id AS endpoint)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[f IS knows]-(b IS person)-[e IS knows]->{1,2}(c IS person)
+COLUMNS(c.id AS endpoint)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '(b IS person)-[e IS knows]->{1,2}(c IS person)
+COLUMNS(c.id AS endpoint)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]-{1,2}(b IS person)-[f IS knows]-(c IS person)
+COLUMNS(c.id AS endpoint)) g;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '(c IS person)
+COLUMNS(c.id AS endpoint)) g' at line 1
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]-{0,2}(b IS person)
+COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+ORDER BY hops,endpoint,CAST(edges AS CHAR);
+seed	endpoint	hops	edges
+1	1	0	NULL
+1	2	1	[10]
+1	2	1	[11]
+1	3	1	[13]
+1	1	2	[10, 10]
+1	1	2	[10, 11]
+1	1	2	[11, 10]
+1	1	2	[11, 11]
+1	1	2	[13, 13]
+1	2	2	[13, 12]
+1	3	2	[10, 12]
+1	3	2	[11, 12]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]-{1,2}(b IS person)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,se.id AS edge_id,v2.id AS dst,
+COUNT(e.id) AS hops)) g ORDER BY m,n;
+m	n	src	edge_id	dst	hops
+1	2	1	10	2	1
+2	2	1	10	2	2
+2	4	2	10	1	2
+3	2	1	11	2	1
+4	2	1	10	2	2
+4	4	2	11	1	2
+5	2	1	13	3	1
+6	2	1	10	2	2
+6	4	2	12	3	2
+8	2	1	11	2	2
+8	4	2	10	1	2
+10	2	1	11	2	2
+10	4	2	11	1	2
+12	2	1	11	2	2
+12	4	2	12	3	2
+14	2	1	13	3	2
+14	4	3	12	2	2
+16	2	1	13	3	2
+16	4	3	13	1	2
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=4)-[e IS knows]-{0,3}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY hops;
+endpoint	hops	edges
+4	0	NULL
+4	1	[14]
+4	2	[14, 14]
+4	3	[14, 14, 14]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=4)-[e IS knows]-{0,3}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g ORDER BY hops;
+endpoint	hops	edges
+4	0	NULL
+4	1	[14]
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+CREATE TABLE direction_expected AS
+WITH RECURSIVE paths(seed,endpoint,hops,edges) AS (
+SELECT id,id,0,JSON_ARRAY() FROM graph_person
+UNION ALL
+SELECT p.seed,v.id,p.hops+1,JSON_ARRAY_APPEND(p.edges,'$',e.id)
+FROM paths p JOIN graph_knows e ON p.endpoint=e.src OR p.endpoint=e.dst
+JOIN graph_person v ON (p.endpoint=e.src AND v.id=e.dst) OR (p.endpoint=e.dst AND v.id=e.src)
+WHERE p.hops<3
+) SELECT seed,endpoint,hops,CAST(edges AS CHAR(4000)) AS edges FROM paths;
+SELECT COUNT(*) AS mismatch_groups FROM (
+SELECT seed,endpoint,hops,edges,SUM(weight) AS balance FROM (
+SELECT seed,endpoint,hops,edges,1 AS weight FROM direction_expected
+UNION ALL
+SELECT seed,endpoint,hops,CAST(COALESCE(edges,JSON_ARRAY()) AS CHAR(4000)),-1
+FROM GRAPH_TABLE(graph_social MATCH (a IS person)-[e IS knows]-{0,3}(b IS person)
+COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+) combined GROUP BY seed,endpoint,hops,edges HAVING balance<>0
+) differences;
+mismatch_groups
+0
+SELECT seed,hops,COUNT(*) AS paths FROM direction_expected GROUP BY seed,hops ORDER BY seed,hops;
+seed	hops	paths
+1	0	1
+1	1	3
+1	2	8
+1	3	22
+2	0	1
+2	1	3
+2	2	8
+2	3	22
+3	0	1
+3	1	2
+3	2	6
+3	3	16
+4	0	1
+4	1	1
+4	2	1
+4	3	1
+5	0	1
+undirected_step_filters_adjacency_before_vertex_join
+no_cartesian_step
+1
+DROP TABLE direction_expected;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

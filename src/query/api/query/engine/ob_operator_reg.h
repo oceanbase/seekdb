@@ -195,6 +195,12 @@ class ObRecursiveUnionAllOp;
 REGISTER_OPERATOR(ObLogSet, PHY_RECURSIVE_UNION_ALL, ObRecursiveUnionAllSpec,
                   ObRecursiveUnionAllOp, NOINPUT, VECTORIZED_OP);
 
+class GraphFeedbackLoopSpec;
+class GraphFeedbackLoopOp;
+class GraphFeedbackLoopLogOp;
+REGISTER_OPERATOR(GraphFeedbackLoopLogOp, PHY_GRAPH_FEEDBACK_LOOP, GraphFeedbackLoopSpec,
+                  GraphFeedbackLoopOp, NOINPUT, VECTORIZED_OP);
+
 class ObLogTableScan;
 class ObFakeCTETableSpec;
 class ObFakeCTETableOp;

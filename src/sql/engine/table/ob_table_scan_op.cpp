@@ -114,6 +114,12 @@ OB_DEF_SERIALIZE(ObTableScanCtDef)
     OB_UNIS_ENCODE(*lookup_ctdef_);
     OB_UNIS_ENCODE(*lookup_access_meta_);
   }
+  bool has_graph_lookup = (graph_lookup_ctdef_ != nullptr);
+  OB_UNIS_ENCODE(has_graph_lookup);
+  if (OB_SUCC(ret) && has_graph_lookup) {
+    OB_UNIS_ENCODE(*graph_lookup_ctdef_);
+    OB_UNIS_ENCODE(*graph_lookup_access_meta_);
+  }
   bool has_dppr_tbl = (das_dppr_tbl_ != nullptr);
   OB_UNIS_ENCODE(has_dppr_tbl);
   if (OB_SUCC(ret) && has_dppr_tbl) {
@@ -141,6 +147,12 @@ OB_DEF_SERIALIZE_SIZE(ObTableScanCtDef)
   if (has_lookup) {
     OB_UNIS_ADD_LEN(*lookup_ctdef_);
     OB_UNIS_ADD_LEN(*lookup_access_meta_);
+  }
+  bool has_graph_lookup = (graph_lookup_ctdef_ != nullptr);
+  OB_UNIS_ADD_LEN(has_graph_lookup);
+  if (has_graph_lookup) {
+    OB_UNIS_ADD_LEN(*graph_lookup_ctdef_);
+    OB_UNIS_ADD_LEN(*graph_lookup_access_meta_);
   }
   bool has_dppr_tbl = (das_dppr_tbl_ != nullptr);
   OB_UNIS_ADD_LEN(has_dppr_tbl);
@@ -182,6 +194,15 @@ OB_DEF_DESERIALIZE(ObTableScanCtDef)
         lookup_access_meta_ = new(access_meta_buf) DASTableAccessMeta(allocator_);
         OB_UNIS_DECODE(*lookup_access_meta_);
       }
+    }
+  }
+  bool has_graph_lookup = false;
+  OB_UNIS_DECODE(has_graph_lookup);
+  if (OB_SUCC(ret) && has_graph_lookup) {
+    if (OB_FAIL(allocate_graph_lookup_ctdef())) {
+    } else {
+      OB_UNIS_DECODE(*graph_lookup_ctdef_);
+      OB_UNIS_DECODE(*graph_lookup_access_meta_);
     }
   }
   bool has_dppr_tbl = (das_dppr_tbl_ != nullptr);
@@ -330,6 +351,28 @@ int ObTableScanCtDef::allocate_dppr_access_plan()
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     das_dppr_tbl_ = new(buf) TableAccessPlan(allocator_);
+  }
+  return ret;
+}
+
+int ObTableScanCtDef::allocate_graph_lookup_ctdef()
+{
+  int ret = OB_SUCCESS;
+  void *ctdef_buf = nullptr;
+  void *access_meta_buf = nullptr;
+  if (graph_lookup_ctdef_ != nullptr || graph_lookup_access_meta_ != nullptr) {
+    ret = OB_INIT_TWICE;
+  } else if (OB_ISNULL(ctdef_buf = allocator_.alloc(
+                           sizeof(ObDASScanCtDef)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate graph lookup ctdef buffer failed", K(ret));
+  } else if (OB_ISNULL(access_meta_buf = allocator_.alloc(
+                           sizeof(DASTableAccessMeta)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate graph lookup access metadata buffer failed", K(ret));
+  } else {
+    graph_lookup_ctdef_ = new(ctdef_buf) ObDASScanCtDef(allocator_);
+    graph_lookup_access_meta_ = new(access_meta_buf) DASTableAccessMeta(allocator_);
   }
   return ret;
 }

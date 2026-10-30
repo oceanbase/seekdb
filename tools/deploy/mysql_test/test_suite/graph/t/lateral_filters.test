@@ -1,0 +1,116 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+CREATE TABLE gl_seeds (binding_id INT PRIMARY KEY,seed BIGINT,score INT,min_since BIGINT,min_age BIGINT);
+INSERT INTO gl_seeds VALUES (1,1,10,2020,25),(2,1,20,2022,0),
+ (3,2,30,2022,0),(4,1,40,NULL,0),(5,1,50,2020,25);
+# The oracle explicitly joins each hop; it does not invoke GRAPH_TABLE.
+CREATE TABLE gl_expected AS
+ SELECT s.binding_id,s.score,a.id AS destination,0 AS hops,
+        CAST(NULL AS CHAR(200)) AS edges
+ FROM gl_seeds s JOIN graph_person a ON a.id=s.seed WHERE a.age>=s.min_age
+ UNION ALL
+ SELECT s.binding_id,s.score,b.id,1,CAST(JSON_ARRAY(e.id) AS CHAR(200))
+ FROM gl_seeds s JOIN graph_person a ON a.id=s.seed
+ JOIN graph_knows e ON e.src=a.id AND e.since>=s.min_since
+ JOIN graph_person b ON b.id=e.dst WHERE b.age>=s.min_age
+ UNION ALL
+ SELECT s.binding_id,s.score,c.id,2,CAST(JSON_ARRAY(e.id,f.id) AS CHAR(200))
+ FROM gl_seeds s JOIN graph_person a ON a.id=s.seed
+ JOIN graph_knows e ON e.src=a.id AND e.since>=s.min_since
+ JOIN graph_person b ON b.id=e.dst
+ JOIN graph_knows f ON f.src=b.id AND f.since>=s.min_since
+ JOIN graph_person c ON c.id=f.dst WHERE c.age>=s.min_age;
+--enable_query_log
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX gl_src ON graph_knows(src,since,dst);
+    CREATE INDEX gl_dst ON graph_knows(dst,since,src);
+  }
+  --disable_query_log
+  CREATE TABLE gl_actual AS
+  SELECT s.binding_id,s.score,g.destination,g.hops,CAST(g.edges AS CHAR(200)) AS edges
+  FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.min_since]->{0,2}
+    (b IS person WHERE b.age>=s.min_age)
+    COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g
+  ) g;
+  --enable_query_log
+  SELECT COUNT(*) AS mismatched_bag_groups FROM (
+   SELECT binding_id,score,destination,hops,edges,SUM(n) AS difference FROM (
+    SELECT binding_id,score,destination,hops,edges,1 AS n FROM gl_expected
+    UNION ALL
+    SELECT binding_id,score,destination,hops,edges,-1 AS n FROM gl_actual
+   ) all_rows GROUP BY binding_id,score,destination,hops,edges HAVING SUM(n)<>0
+  ) differences;
+  SELECT * FROM gl_actual ORDER BY binding_id,hops,destination,edges;
+  DROP TABLE gl_actual;
+  SELECT s.binding_id,g.destination,g.hops FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)<-[e IS knows WHERE e.since>=s.min_since]-{1,2}
+    (b IS person WHERE b.age>=s.min_age)
+    COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+  ) g ORDER BY s.binding_id,g.hops,g.destination;
+  SELECT s.binding_id,g.destination FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.min_since]->{1}
+    (b IS person WHERE b.age>=s.min_age) COLUMNS(b.id AS destination)) g
+  ) g ORDER BY s.binding_id,g.destination;
+  SELECT s.binding_id,g.sn,g.edge_id,g.to_id FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.min_since]->{0,2}
+    (b IS person WHERE b.age>=s.min_age) ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(ELEMENT_NUMBER(se) AS sn,se.id AS edge_id,v2.id AS to_id)) g
+  ) g ORDER BY s.binding_id,g.sn,g.edge_id,g.to_id;
+  PREPARE gl_cached FROM 'SELECT s.binding_id,g.destination,g.hops FROM gl_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=s.seed)-[e IS knows WHERE e.since>=s.min_since AND e.since>=?]->{0,2}(b IS person WHERE b.age>=s.min_age) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g) g ORDER BY s.binding_id,g.hops,g.destination';
+  SET @since=2020;
+  EXECUTE gl_cached USING @since;
+  SET @since=2023;
+  EXECUTE gl_cached USING @since;
+  DEALLOCATE PREPARE gl_cached;
+  # Only the recursive edge predicate is correlated; its column name collides
+  # with a physical edge column, so qualification must preserve the outer scope.
+  SELECT s.binding_id,COUNT(*) AS paths FROM
+   (SELECT binding_id,min_since AS since FROM gl_seeds) s,LATERAL (
+    SELECT * FROM GRAPH_TABLE(graph_social MATCH
+     (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=s.since]->{1,2}
+     (b IS person) COLUMNS(b.id AS destination)) g
+   ) g GROUP BY s.binding_id ORDER BY s.binding_id;
+  SELECT s.binding_id,COUNT(*) AS paths FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person WHERE b.age>=s.score)
+    COLUMNS(b.id AS destination)) g
+  ) g GROUP BY s.binding_id ORDER BY s.binding_id;
+  SELECT s.binding_id,COUNT(*) AS paths FROM gl_seeds s,LATERAL (
+   SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+    (a IS person WHERE a.id=4)-[e IS knows WHERE e.since>=s.min_since]->{0,2}
+    (b IS person) COLUMNS(b.id AS destination)) g
+  ) g GROUP BY s.binding_id ORDER BY s.binding_id;
+  --dec $passes
+}
+# Unqualified names must not be captured by hidden relational table columns.
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM (SELECT min_since AS since FROM gl_seeds) s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=since]->{1,2}(b IS person)
+  COLUMNS(b.id AS destination)) g) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM (SELECT min_age AS age FROM gl_seeds) s,LATERAL (
+ SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person WHERE b.age>=age)
+  COLUMNS(b.id AS destination)) g) g;
+# No implicit correlation without LATERAL, no capture of another graph variable.
+--error ER_BAD_FIELD_ERROR
+SELECT * FROM gl_seeds s,GRAPH_TABLE(graph_social MATCH
+ (a IS person)-[e IS knows WHERE e.since>=s.min_since]->{1,2}(b IS person)
+ COLUMNS(b.id AS destination)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM gl_seeds s,LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH
+ (a IS person)-[e IS knows WHERE e.since>=a.age]->{1,2}(b IS person)
+ COLUMNS(b.id AS destination)) g) g;
+DROP TABLE gl_expected,gl_seeds;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

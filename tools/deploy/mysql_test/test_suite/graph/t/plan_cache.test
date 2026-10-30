@@ -1,0 +1,69 @@
+--disable_query_log
+CREATE TABLE graph_cache_v(id BIGINT PRIMARY KEY);
+CREATE TABLE graph_cache_e(id BIGINT PRIMARY KEY,src BIGINT,dst BIGINT,KEY adj(src,id,dst));
+INSERT INTO graph_cache_v VALUES(1),(2),(3);
+INSERT INTO graph_cache_e VALUES(10,1,2),(11,1,2),(12,2,3);
+CREATE PROPERTY GRAPH graph_cache
+VERTEX TABLES(graph_cache_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(graph_cache_e KEY(id) SOURCE KEY(src) REFERENCES graph_cache_v(id)
+DESTINATION KEY(dst) REFERENCES graph_cache_v(id) LABEL link PROPERTIES(id));
+
+# Text protocol: quantifier literals must participate in cache matching without
+# being replaced by execution parameters. Repeated execution alone is not proof
+# of a cache hit; check the virtual plan-stat counters as well as the results.
+--echo text_queries_reuse_plans_without_reusing_different_bounds_or_seeds
+--let $passes=2
+while ($passes)
+{
+  SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+  FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+  SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+  FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=1)-[e IS link]->{2}(b IS node)
+  COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+  SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+  FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=2)-[e IS link]->{1}(b IS node)
+  COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+  SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+  FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+  COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+  SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+  FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=1)-[e IS link]->{,2}(b IS node)
+  COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+  --dec $passes
+}
+SELECT COALESCE(SUM(IF(query_sql LIKE '%->{1}%',hit_count,0)),0)>0 AS exact_one_hit,
+       COALESCE(SUM(IF(query_sql LIKE '%->{2}%',hit_count,0)),0)>0 AS exact_two_hit,
+       COALESCE(SUM(IF(query_sql LIKE '%->{0,2}%',hit_count,0)),0)>0 AS bounded_range_hit,
+       COALESCE(SUM(IF(query_sql LIKE '%->{,2}%',hit_count,0)),0)>0 AS omitted_lower_hit
+FROM oceanbase.__all_virtual_plan_stat WHERE query_sql LIKE 'SELECT COUNT(*) AS graph_cache_paths%';
+--echo shortest_syntax_marker_does_not_count_as_a_sql_literal
+SELECT COUNT(*) AS graph_cache_shortest_paths
+FROM GRAPH_TABLE(graph_cache MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+SELECT COUNT(*) AS graph_cache_shortest_paths
+FROM GRAPH_TABLE(graph_cache MATCH ANY SHORTEST (a IS node WHERE a.id=1)-[e IS link]->{0,2}(b IS node)
+COLUMNS(b.id AS endpoint)) g;
+SELECT COALESCE(SUM(hit_count),0)>=1 AS shortest_text_cache_hit
+FROM oceanbase.__all_virtual_plan_stat WHERE query_sql LIKE 'SELECT COUNT(*) AS graph_cache_shortest_paths%';
+--error ER_NOT_SUPPORTED_YET
+SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=1)-[e IS link]->{17}(b IS node)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+
+--echo cached_graph_plan_invalidated_by_index_and_graph_ddl
+DROP INDEX adj ON graph_cache_e;
+SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+DROP PROPERTY GRAPH graph_cache;
+CREATE PROPERTY GRAPH graph_cache
+VERTEX TABLES(graph_cache_v KEY(id) LABEL node PROPERTIES(id))
+EDGE TABLES(graph_cache_e KEY(id) SOURCE KEY(dst) REFERENCES graph_cache_v(id)
+DESTINATION KEY(src) REFERENCES graph_cache_v(id) LABEL link PROPERTIES(id));
+SELECT COUNT(*) AS graph_cache_paths,MIN(g.endpoint) AS first_endpoint,MAX(g.hops) AS max_hops
+FROM GRAPH_TABLE(graph_cache MATCH (a IS node WHERE a.id=1)-[e IS link]->{1}(b IS node)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g;
+DROP PROPERTY GRAPH graph_cache;
+DROP TABLE graph_cache_e,graph_cache_v;
+--enable_query_log

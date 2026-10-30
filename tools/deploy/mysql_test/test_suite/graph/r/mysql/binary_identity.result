@@ -1,0 +1,18 @@
+one_hop_identity_roundtrip
+rows_checked	encoded	decoded	tenants
+6	6	6	6
+zero_hop_identity_roundtrip
+rows_checked	encoded
+6	6
+path_array_identity_roundtrip
+rows_checked	first_edge	second_edge
+6	6	6
+step_identity_roundtrip_and_nulls
+rows_checked	encoded	zero_hops	edge_roundtrips
+24	24	6	18
+raw_json_text
+vi
+{"KEY_VALUE": {"k": "FF00"}, "ELEM_TABLE": "gbi_v", "GRAPH_NAME": "gbi", "GRAPH_OWNER": "test"}
+composite_keys_padding_text_and_mapping_identity
+rows_checked	binary_encoded	text_unchanged	edge_roundtrips	same_keys	distinct_mappings
+2	2	2	2	2	2

@@ -167,9 +167,6 @@ int ObLinkedMacroBlockItemWriter::init(const bool need_disk_addr, const ObMemAtt
     ret = OB_INIT_TWICE;
   } else if (FALSE_IT(allocator_.set_attr(mem_attr))) {
   } else if (OB_FAIL(block_writer_.init())) {
-  } else if (OB_ISNULL(io_buf_ = static_cast<char *>(allocator_.alloc(macro_block_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (FALSE_IT(MEMSET(io_buf_, 0, macro_block_size))) {
   } else if (OB_FAIL(common_header_.set_attr(ObMacroBlockCommonHeader::LinkedBlock))) {
   } else {
     need_disk_addr_ = need_disk_addr;
@@ -193,6 +190,11 @@ int ObLinkedMacroBlockItemWriter::write_item(
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(item_buf)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (nullptr == io_buf_
+      && OB_ISNULL(io_buf_ = static_cast<char *>(allocator_.alloc(io_buf_size_)))) {
+    // Most tablets keep their macro IDs inline and never write an item.
+    // Allocation failure leaves the initialized, empty writer retryable.
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     const int64_t real_item_size = sizeof(ObLinkedMacroBlockItemHeader) + item_buf_len;
     int64_t remain_size = io_buf_size_ - io_buf_pos_;
@@ -349,6 +351,9 @@ int ObLinkedMacroBlockItemWriter::write_block()
     static_cast<int32_t>(io_buf_pos_ - common_header_.get_serialize_size()));
   MacroBlockId pre_block_id;
   const int64_t upper_align_size = upper_align(io_buf_pos_, DIO_ALIGN_SIZE);
+  // Headers and items cover the payload; do not persist uninitialized padding
+  // (or bytes from a previous, larger block when this buffer is reused).
+  MEMSET(io_buf_ + io_buf_pos_, 0, upper_align_size - io_buf_pos_);
   if (OB_FAIL(block_writer_.write_block(
         io_buf_, upper_align_size, common_header_, linked_header_, pre_block_id))) {
   } else if (OB_FAIL(set_pre_block_inflight_items_addr(pre_block_id))) {

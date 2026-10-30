@@ -1,0 +1,263 @@
+SELECT shortest FROM (SELECT 7 AS shortest) ordinary_sql;
+shortest
+7
+CREATE TABLE shortest_expected AS
+WITH RECURSIVE paths(seed,endpoint,hops,edges) AS (
+SELECT id,id,0,JSON_ARRAY() FROM graph_person
+UNION ALL
+SELECT p.seed,v.id,p.hops+1,JSON_ARRAY_APPEND(p.edges,'$',e.id)
+FROM paths p JOIN graph_knows e ON e.src=p.endpoint
+JOIN graph_person v ON v.id=e.dst WHERE p.hops<4
+) SELECT seed,endpoint,hops,CAST(edges AS CHAR(4000)) AS edges FROM paths;
+CREATE TABLE shortest_actual AS SELECT seed,endpoint,hops,
+CAST(COALESCE(edges,JSON_ARRAY()) AS CHAR(4000)) AS edges
+FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person)-[e IS knows]->{2,4}(b IS person)
+COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+SELECT COUNT(*) AS missing_or_wrong_distances FROM
+(SELECT seed,endpoint,MIN(hops) AS hops FROM shortest_expected WHERE hops>=2 GROUP BY seed,endpoint) e
+LEFT JOIN shortest_actual a ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops
+WHERE a.seed IS NULL;
+missing_or_wrong_distances
+0
+SELECT COUNT(*) AS invalid_witnesses FROM shortest_actual a LEFT JOIN shortest_expected e
+ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops AND a.edges=e.edges WHERE e.seed IS NULL;
+invalid_witnesses
+0
+SELECT COUNT(*) AS duplicate_pairs FROM
+(SELECT seed,endpoint,COUNT(*) AS n FROM shortest_actual GROUP BY seed,endpoint HAVING n<>1) d;
+duplicate_pairs
+0
+SELECT COUNT(*) AS unexpected_pairs FROM shortest_actual a LEFT JOIN
+(SELECT seed,endpoint,MIN(hops) AS hops FROM shortest_expected WHERE hops>=2 GROUP BY seed,endpoint) e
+ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops WHERE e.seed IS NULL;
+unexpected_pairs
+0
+DROP TABLE shortest_actual;
+EXPLAIN INTO plan_table SET statement_id='shortest_native'
+  SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+SELECT COUNT(*)=1 AS native_witness_pruning FROM plan_table
+WHERE statement_id='shortest_native' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native, states=binding_vertex_hop, search=any_shortest%';
+native_witness_pruning
+1
+DELETE FROM plan_table;
+PREPARE shortest_cached FROM 'SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=?)-[e IS knows WHERE e.since>=?]->{0,4}(b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint';
+SET @seed=1,@since=2021;
+EXECUTE shortest_cached USING @seed,@since;
+endpoint	hops
+1	0
+2	1
+3	2
+SET @seed=3,@since=2023;
+EXECUTE shortest_cached USING @seed,@since;
+endpoint	hops
+1	1
+3	0
+DEALLOCATE PREPARE shortest_cached;
+CREATE INDEX shortest_out ON graph_knows(src,since,dst);
+CREATE INDEX shortest_in ON graph_knows(dst,since,src);
+CREATE TABLE shortest_actual AS SELECT seed,endpoint,hops,
+CAST(COALESCE(edges,JSON_ARRAY()) AS CHAR(4000)) AS edges
+FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person)-[e IS knows]->{2,4}(b IS person)
+COLUMNS(a.id AS seed,b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+SELECT COUNT(*) AS missing_or_wrong_distances FROM
+(SELECT seed,endpoint,MIN(hops) AS hops FROM shortest_expected WHERE hops>=2 GROUP BY seed,endpoint) e
+LEFT JOIN shortest_actual a ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops
+WHERE a.seed IS NULL;
+missing_or_wrong_distances
+0
+SELECT COUNT(*) AS invalid_witnesses FROM shortest_actual a LEFT JOIN shortest_expected e
+ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops AND a.edges=e.edges WHERE e.seed IS NULL;
+invalid_witnesses
+0
+SELECT COUNT(*) AS duplicate_pairs FROM
+(SELECT seed,endpoint,COUNT(*) AS n FROM shortest_actual GROUP BY seed,endpoint HAVING n<>1) d;
+duplicate_pairs
+0
+SELECT COUNT(*) AS unexpected_pairs FROM shortest_actual a LEFT JOIN
+(SELECT seed,endpoint,MIN(hops) AS hops FROM shortest_expected WHERE hops>=2 GROUP BY seed,endpoint) e
+ON a.seed=e.seed AND a.endpoint=e.endpoint AND a.hops=e.hops WHERE e.seed IS NULL;
+unexpected_pairs
+0
+DROP TABLE shortest_actual;
+EXPLAIN INTO plan_table SET statement_id='shortest_native'
+  SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+SELECT COUNT(*)=1 AS native_witness_pruning FROM plan_table
+WHERE statement_id='shortest_native' AND operator='GRAPH FEEDBACK LOOP'
+   AND special_predicates LIKE '%runtime=native, states=binding_vertex_hop, search=any_shortest%';
+native_witness_pruning
+1
+DELETE FROM plan_table;
+PREPARE shortest_cached FROM 'SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=?)-[e IS knows WHERE e.since>=?]->{0,4}(b IS person) COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint';
+SET @seed=1,@since=2021;
+EXECUTE shortest_cached USING @seed,@since;
+endpoint	hops
+1	0
+2	1
+3	2
+SET @seed=3,@since=2023;
+EXECUTE shortest_cached USING @seed,@since;
+endpoint	hops
+1	1
+3	0
+DEALLOCATE PREPARE shortest_cached;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person WHERE b.id=3)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS n,v1.id AS src,v2.id AS dst,COUNT(e.id) AS hops)) g ORDER BY m,n;
+m	n	src	dst	hops
+3	2	1	2	2
+3	4	2	3	2
+SELECT s.binding,g.endpoint,g.hops FROM (SELECT 1 AS binding,1 AS id UNION ALL SELECT 2,2 UNION ALL SELECT 3,1) s,
+LATERAL (SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=s.id)-[e IS knows]->{0,3}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) p) g ORDER BY s.binding,g.endpoint;
+binding	endpoint	hops
+1	1	0
+1	2	1
+1	3	2
+2	1	2
+2	2	0
+2	3	1
+3	1	0
+3	2	1
+3	3	2
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=3)<-[e IS knows]-{0,4}(b IS person)
+COLUMNS(b.id AS endpoint,COUNT(e.id) AS hops)) g ORDER BY endpoint;
+endpoint	hops
+1	2
+2	1
+3	0
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=5)-[e IS knows]->{0}(b IS person)
+ONE ROW PER STEP(v1,se,v2)
+COLUMNS(v1.id AS src,se.id AS eid,v2.id AS dst,ELEMENT_NUMBER(se) AS n,COUNT(e.id) AS hops)) g;
+src	eid	dst	n	hops
+5	NULL	NULL	NULL	0
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person)-[e IS knows]->(b IS person) COLUMNS(b.id AS endpoint)) g;
+ERROR 0A000: ANY SHORTEST without a bounded quantified graph segment not supported
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person)-[e IS knows]->{0,17}(b IS person) COLUMNS(b.id AS endpoint)) g;
+ERROR 0A000: graph path upper bounds greater than 16 not supported
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person)-[e IS knows]->{3,2}(b IS person) COLUMNS(b.id AS endpoint)) g;
+ERROR 0A000: graph path bounds with lower greater than upper not supported
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person)-[e IS knows]->*(b IS person) COLUMNS(b.id AS endpoint)) g;
+ERROR 0A000: unbounded graph path quantifiers (*, + or {n,}) not supported
+shortest_search_avoids_exponential_walk_enumeration
+INSERT INTO graph_knows VALUES (40,4,4,2024),(41,4,4,2024),(42,4,4,2024),(43,4,4,2024),
+(44,4,4,2024),(45,4,4,2024),(46,4,4,2024);
+SELECT hops,JSON_LENGTH(edges) AS edge_count FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=4)-[e IS knows]->{16}(b IS person)
+COLUMNS(COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edges)) g;
+hops	edge_count
+16	16
+SELECT COUNT(*) FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person) COLUMNS(b.id AS endpoint)) g;
+ERROR HY000: Exceed query memory limit
+SELECT COUNT(*) AS recovered FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person) COLUMNS(b.id AS endpoint)) g;
+recovered
+1
+shortest_bound_goal_and_cross_hop_visited
+EXPLAIN INTO plan_table SET statement_id='shortest_goal'
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+EXPLAIN INTO plan_table SET statement_id='shortest_reach'
+SELECT DISTINCT personId FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
+COLUMNS(b.id AS personId)) g WHERE personId<>1 ORDER BY personId;
+EXPLAIN INTO plan_table SET statement_id='shortest_extra_target'
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}
+(b IS person WHERE b.id=2 AND b.age>=18)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+SELECT COUNT(*)=1 AS bound_goal FROM plan_table
+WHERE statement_id='shortest_goal' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%visited=cross_hop, goal=bound_key%';
+bound_goal
+1
+SELECT COUNT(*)=1 AS cross_hop_visited FROM plan_table
+WHERE statement_id='shortest_reach' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%visited=cross_hop, goal=none%';
+cross_hop_visited
+1
+SELECT COUNT(*)=1 AS extra_terminal_filter_disables_goal FROM plan_table
+WHERE statement_id='shortest_extra_target' AND operator='GRAPH FEEDBACK LOOP'
+AND special_predicates LIKE '%goal=none%';
+extra_terminal_filter_disables_goal
+1
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=2)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+1
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=3)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+2
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=5)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=1)
+COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0;
+distance
+3
+SELECT personId FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST
+(a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person)
+COLUMNS(b.id AS personId)) g WHERE personId<>1 ORDER BY personId;
+personId
+2
+3
+PREPARE shortest_goal_cached FROM 'SELECT MIN(hops) AS distance FROM GRAPH_TABLE(graph_social MATCH ANY SHORTEST (a IS person WHERE a.id=1)-[e IS knows]->{1,6}(b IS person WHERE b.id=?) COLUMNS(COUNT(e.id) AS hops)) g HAVING COUNT(*)>0';
+SET @goal=2;
+EXECUTE shortest_goal_cached USING @goal;
+distance
+1
+SET @goal=3;
+EXECUTE shortest_goal_cached USING @goal;
+distance
+2
+DEALLOCATE PREPARE shortest_goal_cached;
+DROP TABLE shortest_expected,plan_table;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+shortest_filter_before_distance_and_terminal_after_expansion
+native_full_scan
+1
+verified_fallback
+1
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL
+shortest_filter_before_distance_and_terminal_after_expansion
+native_index_scan
+1
+verified_fallback
+1
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL
+endpoint	hops	edge_count	first_edge	second_edge
+3	2	2	11	12
+endpoint	hops	edge_count	first_edge	second_edge
+3	1	1	10	NULL

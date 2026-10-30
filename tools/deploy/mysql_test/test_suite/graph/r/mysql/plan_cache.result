@@ -1,0 +1,36 @@
+text_queries_reuse_plans_without_reusing_different_bounds_or_seeds
+graph_cache_paths	first_endpoint	max_hops
+2	2	1
+graph_cache_paths	first_endpoint	max_hops
+2	3	2
+graph_cache_paths	first_endpoint	max_hops
+1	3	1
+graph_cache_paths	first_endpoint	max_hops
+5	1	2
+graph_cache_paths	first_endpoint	max_hops
+5	1	2
+graph_cache_paths	first_endpoint	max_hops
+2	2	1
+graph_cache_paths	first_endpoint	max_hops
+2	3	2
+graph_cache_paths	first_endpoint	max_hops
+1	3	1
+graph_cache_paths	first_endpoint	max_hops
+5	1	2
+graph_cache_paths	first_endpoint	max_hops
+5	1	2
+exact_one_hit	exact_two_hit	bounded_range_hit	omitted_lower_hit
+1	1	1	1
+shortest_syntax_marker_does_not_count_as_a_sql_literal
+graph_cache_shortest_paths
+3
+graph_cache_shortest_paths
+3
+shortest_text_cache_hit
+1
+ERROR 0A000: graph path upper bounds greater than 16 not supported
+cached_graph_plan_invalidated_by_index_and_graph_ddl
+graph_cache_paths	first_endpoint	max_hops
+2	2	1
+graph_cache_paths	first_endpoint	max_hops
+0	NULL	NULL

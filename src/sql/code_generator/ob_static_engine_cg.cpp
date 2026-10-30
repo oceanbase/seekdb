@@ -44,11 +44,13 @@
 #include "sql/optimizer/ob_log_temp_table_transformation.h"
 #include "sql/optimizer/ob_log_stat_collector.h"
 #include "sql/optimizer/ob_log_expand.h"
+#include "sql/optimizer/graph_feedback_loop_log_op.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "sql/engine/basic/ob_limit_op.h"
 #include "sql/engine/basic/ob_values_op.h"
 #include "sql/engine/sort/ob_sort_op.h"
 #include "sql/engine/recursive_cte/ob_recursive_union_all_op.h"
+#include "sql/engine/graph/graph_feedback_loop_op.h"
 #include "sql/engine/set/ob_merge_union_op.h"
 #include "sql/engine/set/ob_merge_intersect_op.h"
 #include "sql/engine/set/ob_merge_except_op.h"
@@ -269,7 +271,18 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
   }
   if (OB_FAIL(ret)) {
   } else if (NULL != partial_frame_gen.dfo_raw_exprs_ && phy_plan_->px_worker_share_plan_enabled()) {
-    if (OB_FAIL(partial_frame_gen.dfo_raw_exprs_->reserve(partial_frame_gen.dfo_raw_exprs_->count() + cur_op_exprs_.count()))) {
+    // GraphExpandScanDesc is serialized with the feedback-loop DFO even when
+    // its original table scan belongs to a child DFO. Register the scan's raw
+    // expressions here so partial-frame serialization keeps every expression
+    // referenced by the copied filters and DAS ctdefs.
+    if (op.get_type() == log_op_def::LOG_GRAPH_FEEDBACK_LOOP
+        && OB_FAIL(static_cast<GraphFeedbackLoopLogOp &>(op)
+                       .get_native_runtime_exprs(*partial_frame_gen.dfo_raw_exprs_))) {
+      LOG_WARN("failed to register graph expand expressions in DFO frame",
+               K(ret), K(op.get_op_id()));
+    } else if (OB_FAIL(partial_frame_gen.dfo_raw_exprs_->reserve(
+                   partial_frame_gen.dfo_raw_exprs_->count()
+                       + cur_op_exprs_.count()))) {
     } else {
       FOREACH_CNT_X(raw_expr, cur_op_exprs_, OB_SUCC(ret)) {
         OZ(partial_frame_gen.dfo_raw_exprs_->push_back(*raw_expr));
@@ -1167,7 +1180,112 @@ int ObStaticEngineCG::generate_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec,
   UNUSED(in_root_job);
   LOG_DEBUG("static engine cg generate recursive union all", K(spec.get_left()->output_),
             K(spec.get_right()->output_), K(op.get_output_exprs()));
-  if (OB_FAIL(generate_recursive_union_all_spec(op, spec))) {
+  if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
+  }
+  return ret;
+}
+
+int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
+                                    GraphFeedbackLoopSpec &spec,
+                                    const bool in_root_job)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObRawExpr *> seed_key_exprs;
+  uint64_t source_scan_op_id = OB_INVALID_ID;
+  uint64_t edge_scan_op_id = OB_INVALID_ID;
+  uint64_t target_scan_op_id = OB_INVALID_ID;
+  bool prune_duplicate_states = false;
+  ObRawExpr *goal_value_expr = nullptr;
+  UNUSED(in_root_job);
+  if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
+  } else if (OB_FAIL(op.get_seed_key_exprs(seed_key_exprs))) {
+    LOG_WARN("failed to get graph feedback seed key expressions", K(ret));
+  } else if (OB_FAIL(generate_rt_exprs(seed_key_exprs,
+                                       spec.get_seed_key_exprs()))) {
+    LOG_WARN("failed to generate graph feedback seed key expressions", K(ret));
+  } else if (OB_FAIL(op.get_expand_scan_op_ids(
+                 source_scan_op_id, edge_scan_op_id, target_scan_op_id))) {
+    LOG_WARN("failed to get graph expand scan operator ids", K(ret));
+  } else if (OB_FAIL(op.can_prune_duplicate_states(prune_duplicate_states))) {
+    LOG_WARN("failed to check graph duplicate-insensitive consumer", K(ret));
+  } else if (prune_duplicate_states
+             && OB_FAIL(op.get_shortest_goal_value_expr(goal_value_expr))) {
+    LOG_WARN("failed to get graph shortest goal expression", K(ret));
+  } else {
+    spec.set_graph_path(op.get_path_desc());
+    spec.set_expand_access(op.get_expand_access_desc());
+    spec.set_native_step_supported(op.is_native_step_supported());
+    spec.set_prune_duplicate_states(prune_duplicate_states);
+    if (goal_value_expr != nullptr) {
+      ObArray<ObRawExpr *> goal_raw_exprs;
+      if (OB_FAIL(goal_raw_exprs.push_back(goal_value_expr))) {
+      } else if (OB_FAIL(generate_rt_exprs(
+                     goal_raw_exprs, spec.get_shortest_goal_value_exprs()))) {
+        LOG_WARN("failed to compile graph shortest goal expression", K(ret));
+      }
+    }
+    ObArray<ObRawExpr *> adjacency_parameters;
+    spec.set_reuse_adjacency(op.can_reuse_adjacency(&adjacency_parameters));
+    ObArray<ObRawExpr *> parameter_raw_exprs;
+    // These values are set by the enclosing join, not calculated by this
+    // operator. Their edge-filter references already retain them in the frame.
+    if (OB_SUCC(ret) && OB_FAIL(spec.get_adjacency_parameters().reserve(adjacency_parameters.count()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < adjacency_parameters.count(); ++i) {
+      ObExpr *expr = nullptr;
+      if (OB_FAIL(ObStaticEngineExprCG::generate_rt_expr(
+              *adjacency_parameters.at(i), parameter_raw_exprs, expr))) {
+      } else if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(spec.get_adjacency_parameters().push_back(expr))) {
+      }
+    }
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to generate graph adjacency parameters", K(ret));
+    } else if (OB_FAIL(spec.init_output_row_desc())) {
+      LOG_WARN("failed to initialize graph feedback output row", K(ret),
+               K(op.get_path_desc()), K(op.get_expand_access_desc()));
+    } else if (OB_FAIL(spec.bind_expand_scans(
+                   source_scan_op_id, edge_scan_op_id, target_scan_op_id))) {
+      LOG_WARN("failed to bind graph expand scan descriptors", K(ret),
+               K(source_scan_op_id), K(edge_scan_op_id),
+               K(target_scan_op_id));
+    }
+  }
+  ObArray<ObRawExpr *> identity_filters;
+  ObArray<ObRawExpr *> identity_raw_exprs;
+  ObArray<ObExpr *> identity_rt_exprs;
+  if (OB_SUCC(ret) && OB_FAIL(op.get_native_edge_identity_filters(identity_filters))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < identity_filters.count(); ++i) {
+    ObExpr *expr = nullptr;
+    if (OB_FAIL(ObStaticEngineExprCG::generate_rt_expr(
+            *identity_filters.at(i), identity_raw_exprs, expr))) {
+    } else if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(identity_rt_exprs.push_back(expr))) {
+    }
+  }
+  if (OB_SUCC(ret)
+      && OB_FAIL(spec.remove_native_edge_identity_filters(identity_rt_exprs))) {
+    LOG_WARN("failed to remove native graph identity filters", K(ret));
+  }
+  // These expressions are also owned by the recursive child. Do not register
+  // them as feedback-loop calc expressions: native DAS evaluates just their
+  // edge-value argument and invalidates that subtree for every scanned edge.
+  // get_native_runtime_exprs() separately retains them in the DFO frame.
+  ObArray<ObRawExpr *> payload_raw_exprs;
+  if (OB_SUCC(ret) && OB_FAIL(spec.get_path_payload_exprs().reserve(
+                                 op.get_path_payload_exprs().count()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < op.get_path_payload_exprs().count(); ++i) {
+    ObExpr *expr = nullptr;
+    if (OB_FAIL(ObStaticEngineExprCG::generate_rt_expr(
+            *op.get_path_payload_exprs().at(i), payload_raw_exprs, expr))) {
+    } else if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(spec.get_path_payload_exprs().push_back(expr))) {
+    }
   }
   return ret;
 }
@@ -1228,7 +1346,8 @@ int ObStaticEngineCG::generate_merge_set_spec(ObLogSet &op, ObMergeSetSpec &spec
   return ret;
 }
 
-int ObStaticEngineCG::generate_recursive_union_all_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec)
+int ObStaticEngineCG::generate_recursive_pump_spec(ObLogicalOperator &op,
+                                                   RecursivePumpSpec &spec)
 {
   int ret = OB_SUCCESS;
   uint64_t last_cte_table_id = OB_INVALID_ID;
@@ -6085,6 +6204,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
         default:
           break;
       }
+      break;
+    }
+    case log_op_def::LOG_GRAPH_FEEDBACK_LOOP: {
+      type = PHY_GRAPH_FEEDBACK_LOOP;
       break;
     }
     case log_op_def::LOG_SUBPLAN_FILTER: {

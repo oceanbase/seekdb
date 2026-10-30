@@ -42,6 +42,7 @@ namespace sql
 {
 class ObIPLSqlRuntime;
 class ObMaintainDepInfoTaskQueue;
+struct GraphPathDesc;
 enum ObStmtScope
 {
   /*
@@ -455,6 +456,10 @@ public:
   common::ObArray<ObStarExpansionInfo> star_expansion_infos_;
   bool is_resolve_fake_cte_table_;
   bool is_in_view_;
+  // Scoped metadata for a generated GRAPH_TABLE feedback-loop parse tree.
+  // resolve_graph_table() owns the pointed descriptor and restores this field
+  // immediately after resolving that generated table.
+  const GraphPathDesc *internal_graph_path_desc_{nullptr};
 };
 } // end namespace sql
 } // end namespace oceanbase

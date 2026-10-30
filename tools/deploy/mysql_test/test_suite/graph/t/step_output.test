@@ -1,0 +1,215 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_steps;
+--disable_warnings
+DROP TABLE IF EXISTS graph_step_e,graph_step_v;
+--enable_warnings
+--enable_query_log
+CREATE TABLE graph_step_v (id INT PRIMARY KEY,name VARCHAR(32));
+CREATE TABLE graph_step_e (
+  tenant INT,code VARCHAR(32) COLLATE utf8mb4_bin,edge_no BIGINT UNSIGNED,
+  src INT,dst INT,weight DECIMAL(12,3),
+  PRIMARY KEY(tenant,code,edge_no)
+);
+INSERT INTO graph_step_v VALUES (1,'source'),(2,'middle'),(3,'terminal');
+INSERT INTO graph_step_e VALUES
+  (1,'first',18446744073709551610,1,2,1.250),
+  (1,'parallel',18446744073709551611,1,2,2.500),
+  (2,'next',18446744073709551612,2,3,3.750),
+  (2,'cycle',18446744073709551613,3,1,4.000),
+  (2,'orphan',18446744073709551614,1,99,9.000);
+CREATE PROPERTY GRAPH graph_steps
+VERTEX TABLES(graph_step_v KEY(id) LABEL node PROPERTIES(id,name))
+EDGE TABLES(graph_step_e KEY(tenant,code,edge_no)
+  SOURCE KEY(src) REFERENCES graph_step_v(id)
+  DESTINATION KEY(dst) REFERENCES graph_step_v(id)
+  LABEL link PROPERTIES(tenant,code,edge_no,weight));
+--source mysql_test/include/create_plan_table.inc
+ALTER TABLE plan_table MODIFY other_xml LONGTEXT;
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX graph_step_out ON graph_step_e(src,tenant,code,edge_no);
+    CREATE INDEX graph_step_in ON graph_step_e(dst,tenant,code,edge_no);
+  }
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='step_output'
+  SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+    (a IS node WHERE a.id=1)-[e IS link]->{0,3}(b IS node)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,
+            v1.id AS src,se.code AS edge_code,v2.id AS dst)) g;
+  --enable_result_log
+  SELECT COUNT(*)=1 AS one_native_traversal FROM plan_table
+  WHERE statement_id='step_output' AND operator='GRAPH FEEDBACK LOOP'
+    AND special_predicates LIKE '%runtime=native%';
+  SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+    (a IS node WHERE a.id=1)-[e IS link]->{0,4}(b IS node)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(v1) AS vn1,
+            ELEMENT_NUMBER(se) AS sn,ELEMENT_NUMBER(v2) AS vn2,
+            v1.name AS src,se.code AS edge_code,se.edge_no AS edge_no,
+            se.weight AS weight,v2.name AS dst,COUNT(e.code) AS hops,
+            JSON_ARRAYAGG(e.code) AS path_edges)) g
+  ORDER BY m,sn;
+  SELECT m,s,JSON_VALUE(vi,'$.KEY_VALUE.id') AS src,
+         JSON_VALUE(ei,'$.KEY_VALUE.tenant') AS tenant,
+         JSON_VALUE(ei,'$.KEY_VALUE.code') AS edge_code,
+         JSON_VALUE(ei,'$.KEY_VALUE.edge_no') AS edge_no,
+         JSON_VALUE(vj,'$.KEY_VALUE.id') AS dst
+  FROM GRAPH_TABLE(graph_steps MATCH
+    (a IS node WHERE a.id=3)<-[e IS link]-{0,3}(b IS node WHERE b.id!=2)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,
+            VERTEX_ID(v1) AS vi,EDGE_ID(se) AS ei,VERTEX_ID(v2) AS vj)) g
+  ORDER BY m,s;
+  PREPARE graph_steps_cached FROM
+    'SELECT * FROM GRAPH_TABLE(graph_steps MATCH (a IS node WHERE a.id=?)-[e IS link WHERE e.weight>=?]->{0,2}(b IS node) ONE ROW PER STEP(v1,se,v2) COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS s,v1.id AS src,se.code AS edge_code,v2.id AS dst)) g ORDER BY m,s';
+  SET @seed=1,@weight=0;
+  EXECUTE graph_steps_cached USING @seed,@weight;
+  SET @seed=3,@weight=3;
+  EXECUTE graph_steps_cached USING @seed,@weight;
+  DEALLOCATE PREPARE graph_steps_cached;
+  SELECT s.seed,s.score,g.m,g.sn,g.edge_code
+  FROM (SELECT 1 AS seed,10 AS score UNION ALL SELECT 1,20 UNION ALL SELECT 3,30) s,
+  LATERAL (
+    SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+      (a IS node WHERE a.id=s.seed)-[e IS link]->{0,2}(b IS node)
+      ONE ROW PER STEP(v1,se,v2)
+      COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS sn,se.code AS edge_code)) g
+  ) g
+  ORDER BY s.score,g.m,g.sn;
+  --dec $passes
+}
+SELECT COUNT(*) AS step_rows,MAX(sn) AS last_element_number
+FROM GRAPH_TABLE(graph_steps MATCH
+  (a IS node WHERE a.id=3)-[e IS link WHERE e.code='cycle']->{0,16}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(ELEMENT_NUMBER(se) AS sn)) g;
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+  (a IS node WHERE a.id=1)-[e IS link]->{0}(b IS node WHERE b.id=1)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(v1) AS vn1,
+          ELEMENT_NUMBER(se) AS sn,ELEMENT_NUMBER(v2) AS vn2,
+          v1.id AS src,se.code AS edge_code,v2.id AS dst)) g;
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH graph_steps;
+DROP TABLE graph_step_e,graph_step_v;
+--echo typed_vertex_keys_and_binary_edge_history
+CREATE TABLE graph_step_v (
+  tenant INT,code VARBINARY(8),revision DECIMAL(10,2),name VARCHAR(32),
+  PRIMARY KEY(tenant,code,revision)
+);
+CREATE TABLE graph_step_e (
+  edge_code VARBINARY(8) PRIMARY KEY,
+  st INT,sc VARBINARY(8),sr DECIMAL(10,2),
+  dt INT,dc VARBINARY(8),dr DECIMAL(10,2)
+);
+INSERT INTO graph_step_v VALUES (1,X'6100',1.25,'A'),(1,X'6200',2.50,'B'),(2,X'6300',3.75,'C');
+INSERT INTO graph_step_e VALUES
+  (X'FF00',1,X'6100',1.25,1,X'6200',2.50),
+  (X'FF01',1,X'6200',2.50,2,X'6300',3.75);
+CREATE PROPERTY GRAPH graph_steps
+VERTEX TABLES(graph_step_v KEY(tenant,code,revision) LABEL node PROPERTIES(tenant,code,revision,name))
+EDGE TABLES(graph_step_e KEY(edge_code)
+  SOURCE KEY(st,sc,sr) REFERENCES graph_step_v(tenant,code,revision)
+  DESTINATION KEY(dt,dc,dr) REFERENCES graph_step_v(tenant,code,revision)
+  LABEL link PROPERTIES(edge_code));
+SELECT * FROM GRAPH_TABLE(graph_steps MATCH
+  (a IS node WHERE a.name='A')-[e IS link]->{0,2}(b IS node)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(MATCHNUM() AS m,ELEMENT_NUMBER(se) AS sn,
+          v1.tenant AS tenant,HEX(v1.code) AS from_code,v1.revision AS revision,
+          HEX(se.edge_code) AS edge_code,HEX(v2.code) AS to_code)) g
+ORDER BY m,sn;
+DROP PROPERTY GRAPH graph_steps;
+DROP TABLE graph_step_e,graph_step_v;
+--disable_query_log
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+--echo incompatible_edge_mapping_preserves_zero_hop
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS works]->{0,1}(b IS person)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS source_id,se.id AS edge_id,v2.id AS target_id)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS company WHERE a.id=1)<-[e IS works]-{0,1}(b IS company)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS source_id,se.id AS edge_id,v2.id AS target_id)) g;
+SELECT COUNT(*) AS positive_paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS works]->{1,2}(b IS person)
+  ONE ROW PER STEP(v1,se,v2)
+  COLUMNS(v1.id AS source_id,se.id AS edge_id,v2.id AS target_id)) g;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
+
+--echo step_output_actual_sixteen_hop_history
+--disable_query_log
+CREATE TABLE history_v(id INT PRIMARY KEY,name VARCHAR(32));
+CREATE TABLE history_e(id INT PRIMARY KEY,src INT,dst INT,weight INT);
+INSERT INTO history_v VALUES (1,'v1'),(2,'v2'),(3,'v3'),(4,'v4'),(5,'v5'),(6,'v6'),(7,'v7'),(8,'v8'),(9,'v9'),(10,'v10'),(11,'v11'),(12,'v12'),(13,'v13'),(14,'v14'),(15,'v15'),(16,'v16'),(17,'v17');
+INSERT INTO history_e VALUES (1,1,2,10),(2,2,3,20),(3,3,4,30),(4,4,5,40),(5,5,6,50),(6,6,7,60),(7,7,8,70),(8,8,9,80),(9,9,10,90),(10,10,11,100),(11,11,12,110),(12,12,13,120),(13,13,14,130),(14,14,15,140),(15,15,16,150),(16,16,17,160);
+CREATE PROPERTY GRAPH history_graph
+VERTEX TABLES(history_v KEY(id) LABEL node PROPERTIES(id,name))
+EDGE TABLES(history_e KEY(id) SOURCE KEY(src) REFERENCES history_v(id)
+ DESTINATION KEY(dst) REFERENCES history_v(id) LABEL link PROPERTIES(id,weight));
+--source mysql_test/include/create_plan_table.inc
+ALTER TABLE plan_table MODIFY other_xml LONGTEXT;
+--let $history_passes=2
+while ($history_passes)
+{
+  if ($history_passes == 1)
+  {
+    CREATE INDEX history_out ON history_e(src,id);
+  }
+  --disable_result_log
+  DELETE FROM plan_table;
+  EXPLAIN INTO plan_table SET statement_id='history16'
+  SELECT * FROM GRAPH_TABLE(history_graph MATCH
+    (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(ELEMENT_NUMBER(v1) AS vn1,ELEMENT_NUMBER(se) AS sn,
+            ELEMENT_NUMBER(v2) AS vn2,v1.id AS src,se.id AS edge_id,
+            se.weight AS weight,v2.id AS dst,v2.name AS target_name,
+            EDGE_ID(se) AS edge_identity,VERTEX_ID(v2) AS target_identity,
+            COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS path_edges)) g;
+  --enable_result_log
+  if ($history_passes == 2)
+  {
+    SELECT COUNT(*)=1 AS full_scan_expected_runtime FROM plan_table
+    WHERE statement_id='history16' AND operator='GRAPH FEEDBACK LOOP'
+      AND special_predicates LIKE '%access=full-scan%'
+      AND special_predicates LIKE '%runtime=native%';
+  }
+  if ($history_passes == 1)
+  {
+    SELECT COUNT(*)=1 AS index_scan_expected_runtime FROM plan_table
+    WHERE statement_id='history16' AND operator='GRAPH FEEDBACK LOOP'
+      AND special_predicates LIKE '%access=index-scan%'
+      AND special_predicates LIKE '%runtime=native%';
+  }
+  CREATE TABLE history_steps AS SELECT * FROM GRAPH_TABLE(history_graph MATCH
+    (a IS node WHERE a.id=1)-[e IS link]->{16}(b IS node)
+    ONE ROW PER STEP(v1,se,v2)
+    COLUMNS(ELEMENT_NUMBER(v1) AS vn1,ELEMENT_NUMBER(se) AS sn,
+            ELEMENT_NUMBER(v2) AS vn2,v1.id AS src,se.id AS edge_id,
+            se.weight AS weight,v2.id AS dst,v2.name AS target_name,
+            EDGE_ID(se) AS edge_identity,VERTEX_ID(v2) AS target_identity,
+            COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS path_edges)) g;
+  SELECT COUNT(*) AS step_rows,MIN(sn) AS first_edge_number,
+         MAX(sn) AS last_edge_number,MAX(vn1) AS last_source_number,
+         MAX(vn2) AS last_target_number FROM history_steps;
+  SELECT vn1,sn,vn2,src,edge_id,weight,dst,target_name,hops
+  FROM history_steps ORDER BY sn;
+  SELECT path_edges,JSON_VALUE(edge_identity,'$.KEY_VALUE.id') AS last_edge_id,
+         JSON_VALUE(target_identity,'$.KEY_VALUE.id') AS last_target_id
+  FROM history_steps WHERE sn=32;
+  DROP TABLE history_steps;
+  --dec $history_passes
+}
+DROP TABLE plan_table;
+DROP PROPERTY GRAPH history_graph;
+DROP TABLE history_e,history_v;
+--enable_query_log

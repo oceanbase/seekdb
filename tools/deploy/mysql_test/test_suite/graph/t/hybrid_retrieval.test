@@ -1,0 +1,76 @@
+--disable_query_log
+--source mysql_test/test_suite/graph/hybrid_retrieval_fixture.sql
+--let $hr_terms=audit
+--let $hr_document_limit=4
+--source mysql_test/test_suite/graph/hybrid_retrieval_seeds.inc
+CREATE TABLE hr_reference_seeds(tenant BIGINT,chunk_id BIGINT,entity_id BIGINT,seed_score DECIMAL(30,20));
+INSERT INTO hr_reference_seeds VALUES
+ (1,100,1,ROUND(CAST(1 AS DECIMAL(24,16))/61,20)),
+ (1,105,6,ROUND(CAST(1 AS DECIMAL(24,16))/61,20)),
+ (1,101,2,ROUND(CAST(1 AS DECIMAL(24,16))/62,20));
+--enable_query_log
+--echo independent_dense_and_lexical_ranks
+eval $hr_seed_ctes SELECT channel,chunk_id,signal_rank FROM ranked_channels ORDER BY channel,signal_rank;
+--echo explicit_seed_budget_and_rank_fusion
+eval $hr_seed_ctes SELECT chunk_id,entity_id,CAST(seed_score AS DECIMAL(18,12)) AS seed_score
+ FROM seeds ORDER BY seed_score DESC,chunk_id;
+--let $passes=2
+while ($passes)
+{
+  if ($passes == 1)
+  {
+    CREATE INDEX hr_adjacency ON hr_facts(tenant,src,kind,valid_from,dst);
+  }
+  --disable_query_log
+  --source mysql_test/test_suite/graph/hybrid_retrieval_query.inc
+  --source mysql_test/test_suite/graph/hybrid_retrieval_expected.inc
+  --enable_query_log
+  SELECT COUNT(*) AS mismatched_evidence_bags FROM (
+   SELECT tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+    document_id,source_version,source_uri,document_score,SUM(n) AS difference FROM (
+    SELECT a.*,1 AS n FROM hr_actual a UNION ALL SELECT e.*,-1 AS n FROM hr_expected e
+   ) bags GROUP BY tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+    document_id,source_version,source_uri,document_score HAVING SUM(n)<>0
+  ) differences;
+  SELECT * FROM hr_actual ORDER BY document_score DESC,document_id,seed_chunk,hops,edges;
+  SELECT COUNT(*) AS wrong_tenant_or_version FROM hr_actual
+   WHERE tenant<>1 OR (document_id=1000 AND source_version<>7)
+    OR source_uri LIKE '%deleted%' OR source_uri LIKE '%legacy%';
+  DROP TABLE hr_actual,hr_expected;
+  --dec $passes
+}
+--echo overlapping_channels_accumulate_rank_scores
+# The overlapping-channel case also reduces the final document budget: the
+# third-ranked rotation document must disappear, not just lose some paths.
+--let $hr_terms=production
+--let $hr_document_limit=2
+--source mysql_test/test_suite/graph/hybrid_retrieval_seeds.inc
+eval $hr_seed_ctes SELECT channel,chunk_id,signal_rank FROM ranked_channels ORDER BY channel,signal_rank;
+eval $hr_seed_ctes SELECT chunk_id,entity_id,CAST(seed_score AS DECIMAL(18,12)) AS seed_score
+ FROM seeds ORDER BY seed_score DESC,chunk_id;
+--disable_query_log
+DELETE FROM hr_reference_seeds;
+INSERT INTO hr_reference_seeds VALUES
+ (1,100,1,ROUND(CAST(2 AS DECIMAL(24,16))/61,20)),
+ (1,101,2,ROUND(CAST(2 AS DECIMAL(24,16))/62,20));
+--source mysql_test/test_suite/graph/hybrid_retrieval_query.inc
+--source mysql_test/test_suite/graph/hybrid_retrieval_expected.inc
+--enable_query_log
+SELECT COUNT(*) AS overlapping_channel_bag_mismatches FROM (
+ SELECT tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+  document_id,source_version,source_uri,document_score,SUM(n) AS difference FROM (
+  SELECT a.*,1 AS n FROM hr_actual a UNION ALL SELECT e.*,-1 AS n FROM hr_expected e
+ ) bags GROUP BY tenant,seed_chunk,seed_entity,seed_score,endpoint,hops,edges,chunk_id,
+  document_id,source_version,source_uri,document_score HAVING SUM(n)<>0
+) differences;
+SELECT document_id,source_version,document_score,COUNT(*) AS evidence_paths FROM hr_actual
+ GROUP BY document_id,source_version,document_score ORDER BY document_score DESC,document_id;
+DROP TABLE hr_actual,hr_expected;
+--disable_query_log
+SET @hr_tenant=3;
+--source mysql_test/test_suite/graph/hybrid_retrieval_query.inc
+--enable_query_log
+SELECT COUNT(*) AS empty_tenant_evidence FROM hr_actual;
+DROP TABLE hr_actual;
+DROP PROPERTY GRAPH hr_graph;
+DROP TABLE hr_reference_seeds,hr_chunks,hr_documents,hr_facts,hr_entities;
