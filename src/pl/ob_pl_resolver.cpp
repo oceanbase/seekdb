@@ -5447,6 +5447,34 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
 
   CK (OB_NOT_NULL(current_block_));
 
+  if (OB_SUCC(ret)) {
+    PLExprResolveContext ctx{resolve_ctx_, expr_factory_, current_block_->get_namespace(), &unit_ast};
+    OZ (finish_resolve_expr(expr, ctx, line_number, need_add, expected_type, is_add_bool));
+  }
+  if (OB_FAIL(ret)) {
+    record_error_line(node, resolve_ctx_.session_info_, unit_ast.get_db_name(),
+                      unit_ast.is_routine() ? static_cast<ObPLFunctionAST&>(unit_ast).get_package_name() : unit_ast.get_name(),
+                      unit_ast.is_routine() ? unit_ast.get_name() : ObString());
+  }
+  return ret;
+}
+
+int ObPLResolver::formalize_expr(ObRawExpr &expr, PLExprResolveContext &ctx)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo &session = ctx.resolve_ctx_.session_info_;
+  stmt::StmtType previous = session.get_stmt_type();
+  session.set_stmt_type(stmt::T_NONE);
+  OZ (expr.formalize(&session));
+  OZ (formalize_expr(expr, &session, ctx.symbols_));
+  session.set_stmt_type(previous);
+  return ret;
+}
+
+int ObPLResolver::finish_resolve_expr(ObRawExpr *&expr, PLExprResolveContext &ctx,
+    uint64_t line_number, bool need_add, const ObPLDataType *expected_type, bool is_add_bool)
+{
+  int ret = OB_SUCCESS;
   // Step 2: process call param raw expr
   ObCallParamRawExpr *call_expr = NULL;
   if (OB_SUCC(ret) && T_SP_CPARAM == expr->get_expr_type()) {
@@ -5455,19 +5483,19 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   }
 
   // Step 3: add pls integer checker
-  OZ (formalize_expr(*expr));
+  OZ (formalize_expr(*expr, ctx));
   bool need_replace = false;
   if (OB_SUCC(ret)) {
     OZ (set_udf_expr_line_number(expr, line_number));
   }
   if (OB_SUCC(ret)) {
-    ObRawExprWrapEnumSet enum_set_wrapper(expr_factory_, &resolve_ctx_.session_info_);
+    ObRawExprWrapEnumSet enum_set_wrapper(ctx.expr_factory_, &ctx.resolve_ctx_.session_info_);
     OZ (enum_set_wrapper.analyze_expr(expr));
   }
-  OZ (formalize_expr(*expr));
+  OZ (formalize_expr(*expr, ctx));
 
   // check expr cast composite
-  OZ (check_composite_cast(current_block_->get_namespace(), expr));
+  OZ (check_composite_cast(ctx.symbols_, expr));
 
   // Step 4: check complex cast legal
   // Originally step2, moved here because result type needs to be deduced to produce the result.
@@ -5488,12 +5516,12 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
                && expected_type->get_user_type_id() != expr->get_result_type().get_udt_id()) {
       bool is_compatible = false;
       if (is_mocked_anonymous_array_id(expr->get_result_type().get_udt_id())) {
-        OZ (check_anonymous_array_compatible(current_block_->get_namespace(),
+        OZ (check_anonymous_array_compatible(ctx.symbols_,
                                              expr->get_result_type().get_udt_id(), 
                                              expected_type->get_user_type_id(), 
                                              is_compatible));
       } else {
-        OZ (check_composite_compatible(current_block_->get_namespace(),
+        OZ (check_composite_compatible(ctx.symbols_,
                                       expr->get_result_type().get_udt_id(),
                                       expected_type->get_user_type_id(),
                                       is_compatible));
@@ -5529,14 +5557,14 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   if (OB_FAIL(ret)) {
   } else if (is_add_bool) {
     ObOpRawExpr *bool_expr = NULL;
-    if (OB_FAIL(expr_factory_.create_raw_expr(T_OP_BOOL, bool_expr))) {
+    if (OB_FAIL(ctx.expr_factory_.create_raw_expr(T_OP_BOOL, bool_expr))) {
     } else if (OB_ISNULL(bool_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       OZ(bool_expr->add_flag(IS_INNER_ADDED_EXPR));
       OZ(bool_expr->set_param_expr(expr));
       OX(expr = bool_expr);
-      OZ (formalize_expr(*expr));
+      OZ (formalize_expr(*expr, ctx));
       OZ (set_cm_warn_on_fail(expr));
     }
   } else if (need_cast) {
@@ -5548,18 +5576,18 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
                                             false));
     if (OB_SUCC(ret) && need_wrap) {
       ObSysFunRawExpr *out_expr = NULL;
-      OZ (ObRawExprUtils::create_type_to_str_expr(expr_factory_,
+      OZ (ObRawExprUtils::create_type_to_str_expr(ctx.expr_factory_,
                                                   expr,
                                                   out_expr,
-                                                  &resolve_ctx_.session_info_,
+                                                  &ctx.resolve_ctx_.session_info_,
                                                   true));
       CK (OB_NOT_NULL(out_expr));
       OX (expr = out_expr);
     }
     common::ObIArray<common::ObString>* type_info = NULL;
     OZ (expected_type->get_type_info(type_info));
-    OZ (ObRawExprUtils::build_column_conv_expr(&resolve_ctx_.session_info_,
-                                               expr_factory_,
+    OZ (ObRawExprUtils::build_column_conv_expr(&ctx.resolve_ctx_.session_info_,
+                                               ctx.expr_factory_,
                                                data_type->get_obj_type(),
                                                data_type->get_collation_type(),
                                                data_type->get_accuracy_value(),
@@ -5576,17 +5604,17 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
      && OB_NOT_NULL(expected_type)
      && expected_type->is_pl_integer_type()
      && is_need_add_checker(expected_type->get_pl_integer_type(), expr)) {
-    OZ (add_pl_integer_checker_expr(expr_factory_,
+    OZ (add_pl_integer_checker_expr(ctx.expr_factory_,
                                     PL_SIMPLE_INTEGER == expected_type->get_pl_integer_type()
                                       ? PL_PLS_INTEGER : expected_type->get_pl_integer_type(),
                                     expected_type->get_lower(),
                                     expected_type->get_upper(),
                                     expr));
-    OZ (formalize_expr(*expr));
+    OZ (formalize_expr(*expr, ctx));
   }
 
   // Step 9: const folding opt.
-  if (OB_SUCC(ret) && OB_FAIL(replace_to_const_expr_if_need(expr))) {
+  if (OB_SUCC(ret) && OB_FAIL(replace_to_const_expr_if_need(expr, ctx.resolve_ctx_, ctx.expr_factory_))) {
     // Defer calculation errors from const folding to execution.
     ret = OB_SUCCESS;
   }
@@ -5597,14 +5625,17 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   //"case a when b xx when c xx" to "case when a == b then xx case when a == c then xx"
   if (OB_SUCC(ret)) {
     bool transformed = false;
-    OZ (ObTransformPreProcess::transform_expr(expr_factory_,
-                                              resolve_ctx_.session_info_, expr,
+    OZ (ObTransformPreProcess::transform_expr(ctx.expr_factory_,
+                                              ctx.resolve_ctx_.session_info_, expr,
                                               transformed));
   }
 
 
   // Step 10: add expr to ast if needed
-  OZ (need_add ? unit_ast.add_expr(expr, simple_pls_integer) : OB_SUCCESS);
+  if (OB_SUCC(ret) && need_add) {
+    CK (OB_NOT_NULL(ctx.compile_unit_));
+    OZ (ctx.compile_unit_->add_expr(expr, simple_pls_integer));
+  }
   // When raw expr calls formalize for type deduce in the new engine, if the src type is
   // inconsistent with the dst type, an implicit cast will be added to ensure that the new engine
   // does not make a mistake in cg. but add_expr calls check_simple_calc_expr to rewrite the
@@ -5612,7 +5643,7 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   // Therefore, we need to call formalize again after add expr to ensure
   // that the types are inconsistent with an implicit cast
   if (OB_SUCC(ret)) {
-    OZ (formalize_expr(*expr));
+    OZ (formalize_expr(*expr, ctx));
   }
 
   // Step 11: process call param raw expr
@@ -5621,11 +5652,6 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
     expr = call_expr;
   }
   OZ (ObRawExprUtils::set_call_in_pl(expr));
-  if (OB_FAIL(ret)) {
-    record_error_line(node, resolve_ctx_.session_info_, unit_ast.get_db_name(),
-                      unit_ast.is_routine() ? static_cast<ObPLFunctionAST&>(unit_ast).get_package_name() : unit_ast.get_name(),
-                      unit_ast.is_routine() ? unit_ast.get_name() : ObString());
-  }
   return ret;
 }
 
@@ -5908,6 +5934,12 @@ int ObPLResolver::check_expr_can_pre_calc(ObRawExpr *expr, bool &pre_calc)
 
 int ObPLResolver::replace_to_const_expr_if_need(ObRawExpr *&expr)
 {
+  return replace_to_const_expr_if_need(expr, resolve_ctx_, expr_factory_);
+}
+
+int ObPLResolver::replace_to_const_expr_if_need(ObRawExpr *&expr,
+    ObPLResolveCtx &resolve_ctx, ObRawExprFactory &expr_factory)
+{
   int ret = OB_SUCCESS;
   bool pre_calc = false;
   CK (OB_NOT_NULL(expr));
@@ -5918,11 +5950,11 @@ int ObPLResolver::replace_to_const_expr_if_need(ObRawExpr *&expr)
   if (OB_SUCC(ret) && pre_calc && !expr->is_const_raw_expr()) {
     ObObj result;
     ObConstRawExpr *const_expr = NULL;
-    OZ (ObSPIService::spi_calc_raw_expr(&(resolve_ctx_.session_info_),
-                                        &(resolve_ctx_.allocator_),
+    OZ (ObSPIService::spi_calc_raw_expr(&(resolve_ctx.session_info_),
+                                        &(resolve_ctx.allocator_),
                                         expr,
                                         &result));
-    OZ (expr_factory_.create_raw_expr(static_cast<ObItemType>(result.get_meta().get_type()),
+    OZ (expr_factory.create_raw_expr(static_cast<ObItemType>(result.get_meta().get_type()),
                                       const_expr));
     CK (OB_NOT_NULL(const_expr));
     OX (const_expr->set_value(result));
@@ -5961,6 +5993,134 @@ int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &co
     }
     if (OB_SUCC(ret) && ref_expr->is_obj_access_expr()) { //ObObjAccessrawExpr needs to store an extra copy
       OZ (unit_ast.add_obj_access_expr(ref_expr), q_name, ref_expr);
+    }
+  }
+  return ret;
+}
+
+CallExprResolver::CallExprResolver(ObResolverParams &params)
+    : params_(params),
+      placeholder_params_(ObWrapperAllocator(*params.allocator_)),
+      resolve_ctx_(*params.allocator_, *params.session_info_,
+          *params.schema_checker_->get_schema_guard(), *params.package_guard_,
+          *params.sql_proxy_, params.is_prepare_protocol_),
+      external_ns_(resolve_ctx_, NULL),
+      symbol_table_(*params.allocator_),
+      routine_table_(*params.allocator_),
+      namespace_(*params.allocator_, NULL, &symbol_table_, NULL, NULL, NULL,
+          &routine_table_, NULL, NULL, &external_ns_),
+      expr_factory_(*params.expr_factory_), inited_(false), enabled_(false)
+{
+  expr_factory_.set_is_called_sql(false);
+  resolve_ctx_.params_.plan_cache_ = params.plan_cache_;
+  resolve_ctx_.params_.pl_sql_runtime_ = params.pl_sql_runtime_;
+  resolve_ctx_.params_.pl_engine_ = params.pl_engine_;
+  resolve_ctx_.params_.srs_provider_ = params.srs_provider_;
+  resolve_ctx_.params_.lob_read_service_ = params.lob_read_service_;
+  resolve_ctx_.enum_set_ctx_ = NULL;
+  namespace_.set_type_table(&type_table_);
+  namespace_.set_explicit_block();
+  namespace_.set_routine_name(ObPLResolver::ANONYMOUS_BLOCK);
+  external_ns_.set_dependency_table(&deps_);
+}
+
+int CallExprResolver::init()
+{
+  int ret = OB_SUCCESS;
+  enabled_ = NULL == params_.secondary_namespace_;
+  const ParamStore *params = params_.param_list_;
+  if (enabled_ && (NULL == params || params->empty())) {
+    CK (OB_NOT_NULL(params_.query_ctx_));
+    for (int64_t i = 0; OB_SUCC(ret) && i < params_.query_ctx_->question_marks_count_; ++i) {
+      ObObjParam param{ObObj(ObNullType)};
+      const_cast<ObObjMeta &>(param.get_param_meta()).reset();
+      OZ (placeholder_params_.push_back(param));
+    }
+    params = &placeholder_params_;
+  }
+  // Complex bind values need the full PL type/dependency expansion.
+  for (int64_t i = 0; OB_SUCC(ret) && enabled_ && i < params->count(); ++i) {
+    const ObObjParam &param = params->at(i);
+    enabled_ = !param.is_ext() && !param.get_param_meta().is_ext()
+        && !ob_is_enumset_tc(param.get_type()) && !ob_is_enumset_inner_tc(param.get_type())
+        && !ob_is_enumset_tc(param.get_param_meta().get_type())
+        && !ob_is_enumset_inner_tc(param.get_param_meta().get_type());
+  }
+  if (OB_SUCC(ret) && enabled_) {
+    resolve_ctx_.params_.param_list_ = params;
+    OZ (resolve_ctx_.package_guard_.is_inited() ? OB_SUCCESS : resolve_ctx_.package_guard_.init());
+    for (int64_t i = 0; OB_SUCC(ret) && i < params->count(); ++i) {
+      ObPLDataType type;
+      OZ (ObPLBuilder::init_anonymous_scalar_type(params->at(i), params_.is_prepare_protocol_, type));
+      if (OB_SUCC(ret)) {
+        ObDataType *data_type = type.get_data_type();
+        CK (OB_NOT_NULL(data_type));
+        if (OB_SUCC(ret)) {
+          ObObjMeta &meta = const_cast<ObObjMeta &>(data_type->get_meta_type());
+          meta.set_scale(meta.is_bit() ? data_type->get_precision() : data_type->get_scale());
+        }
+      }
+      OZ (symbol_table_.add_symbol(ObPLResolver::ANONYMOUS_ARG, type));
+      OZ (namespace_.get_symbols().push_back(i));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    inited_ = true;
+  }
+  return ret;
+}
+
+int CallExprResolver::resolve(const ParseNode &node, ObRawExpr *&expr, ObPLDependencyTable *deps)
+{
+  int ret = OB_SUCCESS;
+  if (!inited_) {
+    OZ (init());
+  }
+  if (OB_SUCC(ret) && !enabled_) {
+    OZ (ObPLResolver::resolve_raw_expr(node, params_, expr, false, NULL, deps));
+  } else if (OB_SUCC(ret)) {
+    // The original resolver creates fresh anonymous symbols for each expression.
+    for (int64_t i = 0; i < symbol_table_.get_count(); ++i) {
+      ObPLVar *var = const_cast<ObPLVar *>(symbol_table_.get_symbol(i));
+      var->set_name(ObPLResolver::ANONYMOUS_ARG);
+      var->set_is_referenced(false);
+    }
+    ObArray<ObQualifiedName> columns;
+    ObArray<ObVarInfo> sys_vars;
+    ObArray<ObAggFunRawExpr *> aggr_exprs;
+    ObArray<ObWinFunRawExpr *> win_exprs;
+    ObArray<ObSubQueryInfo> subqueries;
+    ObArray<ObUDFInfo> udfs;
+    ObArray<ObOpRawExpr *> operators;
+    OZ (ObRawExprUtils::build_raw_expr(expr_factory_, *params_.session_info_,
+        params_.schema_checker_, &namespace_, T_PL_SCOPE, NULL,
+        resolve_ctx_.params_.param_list_, NULL, node, expr, columns, sys_vars,
+        aggr_exprs, win_exprs, subqueries, udfs, operators, params_.is_prepare_protocol_));
+    if (OB_SUCC(ret) && (columns.count() || aggr_exprs.count() || subqueries.count()
+        || win_exprs.count() || udfs.count())) {
+      // Keep qualified names, stored functions and SQL subqueries on the existing
+      // compiler path. Do not reuse namespace mutations from this attempt.
+      enabled_ = false;
+      OZ (ObPLResolver::resolve_raw_expr(node, params_, expr, false, NULL, deps));
+    } else if (OB_SUCC(ret)) {
+      CK (OB_NOT_NULL(expr));
+      if (OB_SUCC(ret) && operators.count()) {
+        OZ (ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(
+            expr_factory_, params_.session_info_, operators));
+      }
+      OZ (ObRawExprUtils::set_call_in_pl(expr));
+      if (OB_SUCC(ret) && (T_OP_EQ == expr->get_expr_type() || T_OP_NE == expr->get_expr_type())) {
+        bool is_obj_access = false;
+        OZ (ObPLResolver::check_collection_expr_illegal(expr, is_obj_access));
+      }
+      if (OB_SUCC(ret)) {
+        PLExprResolveContext ctx{resolve_ctx_, expr_factory_, namespace_, NULL};
+        uint64_t location = ObPLResolver::combine_line_and_col(node.stmt_loc_);
+        OZ (ObPLResolver::finish_resolve_expr(expr, ctx, location, false, NULL, false));
+      }
+      if (OB_SUCC(ret) && NULL != deps) {
+        OZ (ObPLDependencyUtil::add_dependency_objects(deps, deps_));
+      }
     }
   }
   return ret;

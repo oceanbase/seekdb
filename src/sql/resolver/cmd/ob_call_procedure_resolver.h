@@ -32,6 +32,7 @@ namespace schema
 class ObRoutineInfo;
 }
 }
+namespace pl { class CallExprResolver; }
 namespace sql
 {
 class ObCallProcedureStmt;
@@ -39,7 +40,7 @@ class ObCallProcedureInfo;
 class ObCallProcedureResolver: public ObCMDResolver
 {
 public:
-  explicit ObCallProcedureResolver(ObResolverParams &params) : ObCMDResolver(params) {}
+  explicit ObCallProcedureResolver(ObResolverParams &params) : ObCMDResolver(params), expr_resolver_(NULL) {}
   virtual ~ObCallProcedureResolver() {}
 
   virtual int resolve(const ParseNode &parse_tree);
@@ -58,7 +59,8 @@ private:
                       common::ObIArray<ObRawExpr*> &params,
                       pl::ObPLDependencyTable &deps);
   int resolve_param_exprs(const ParseNode *params_node,
-                      ObIArray<ObRawExpr*> &expr_params);
+                      ObIArray<ObRawExpr*> &expr_params,
+                      pl::ObPLDependencyTable &deps);
   int check_param_expr_legal(ObRawExpr *param);
   int find_call_proc_info(ObCallProcedureStmt &stmt);
   int add_call_proc_info(ObCallProcedureInfo *call_info);
@@ -68,7 +70,7 @@ private:
   // function members
 
 private:
-  // data members
+  pl::CallExprResolver *expr_resolver_;
 
 };
 

@@ -158,14 +158,15 @@ int ObPLLabelTable::add_label(const common::ObString &name,
                               ObPLStmt *stmt)
 {
   int ret = OB_SUCCESS;
-  if (count_ < 0 || count_ >= FUNC_MAX_LABELS) {
+  if (get_count() >= FUNC_MAX_LABELS) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "label count greater than 1024");
   } else {
-    labels_[count_].label_ = name;
-    labels_[count_].type_ = type;
-    labels_[count_].next_stmt_ = stmt;
-    count_++;
+    ObPLLabel label;
+    label.label_ = name;
+    label.type_ = type;
+    label.next_stmt_ = stmt;
+    OZ (labels_.push_back(label));
   }
   return ret;
 }
@@ -204,12 +205,13 @@ int ObPLConditionTable::init(ObPLConditionTable &parent_condition_table)
 int ObPLConditionTable::add_condition(const common::ObString &name, const ObPLConditionValue &value)
 {
   int ret = OB_SUCCESS;
-  if (count_ < 0 || count_ >= FUNC_MAX_CONDITIONS) {
+  if (get_count() >= FUNC_MAX_CONDITIONS) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    conditions_[count_].set_name(name);
-    conditions_[count_].set_value(value);
-    count_++;
+    ObPLCondition condition;
+    condition.set_name(name);
+    condition.set_value(value);
+    OZ (conditions_.push_back(condition));
   }
   return ret;
 }
@@ -871,6 +873,7 @@ int ObPLBlockNS::add_label(const ObString &name,
       ret = OB_ERR_REDEFINE_LABEL;
     } else if (OB_FAIL(labels_.push_back(get_label_table()->get_count()))) {
     } else if (OB_FAIL(get_label_table()->add_label(name, type, stmt))) {
+      labels_.pop_back();
     } else { /*do nothing*/ }
   }
   return ret;
@@ -896,6 +899,7 @@ int ObPLBlockNS::add_condition(const common::ObString &name,
   } else {
     if (OB_FAIL(conditions_.push_back(get_condition_table()->get_count()))) {
     } else if (OB_FAIL(get_condition_table()->add_condition(name, value))) {
+      conditions_.pop_back();
     } else { /*do nothing*/ }
   }
   return ret;
@@ -2974,9 +2978,9 @@ const common::ObIArray<ObRawExpr*> *ObPLStmt::get_exprs() const
   return PL_BLOCK == type_ ? static_cast<const ObPLStmtBlock*>(this)->get_exprs() : NULL == get_block() ? NULL : get_block()->get_exprs();
 }
 
-const ObPLCondition *ObPLStmt::get_conditions() const
+const ObPLCondition *ObPLStmt::get_condition(int64_t i) const
 {
-  return NULL == get_condition_table() ? NULL : get_condition_table()->get_conditions();
+  return NULL == get_condition_table() ? NULL : get_condition_table()->get_condition(i);
 }
 
 const ObIArray<ObPLCursor *>* ObPLStmt::get_cursors() const
