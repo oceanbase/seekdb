@@ -223,6 +223,23 @@ pub(crate) struct EventLoop {
     pub(crate) retired: HashMap<Token, Arc<Conn>>,
 }
 
+const MAX_TRANSIENT_TCP_ACCEPT_ERRORS: usize = 64;
+
+#[cfg(windows)]
+fn is_transient_tcp_accept_error(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::Interrupted
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+    )
+}
+
+#[cfg(not(windows))]
+fn is_transient_tcp_accept_error(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::Interrupted
+}
+
 impl EventLoop {
     pub(crate) fn run(mut self) {
         let mut events = Events::with_capacity(512);
@@ -452,15 +469,44 @@ impl EventLoop {
 
     #[cfg(feature = "native-network")]
     pub(crate) fn accept_all(&mut self) {
+        let mut transient_errors = 0;
         loop {
             let listener = match self.listener.as_ref() {
                 Some(listener) => listener,
                 None => return,
             };
             let (sock, _addr) = match listener.accept() {
-                Ok(v) => v,
+                Ok(v) => {
+                    transient_errors = 0;
+                    v
+                }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                Err(_) => break,
+                Err(e) => {
+                    log::warn!(
+                        target: "SQL.ENG",
+                        "sql nio TCP accept failed: kind={:?}, raw_os_error={:?}, error={}",
+                        e.kind(),
+                        e.raw_os_error(),
+                        e
+                    );
+                    if !is_transient_tcp_accept_error(&e) {
+                        log::error!(
+                            target: "SQL.ENG",
+                            "sql nio TCP accept stopped on non-retryable error"
+                        );
+                        break;
+                    }
+                    transient_errors += 1;
+                    if transient_errors >= MAX_TRANSIENT_TCP_ACCEPT_ERRORS {
+                        log::error!(
+                            target: "SQL.ENG",
+                            "sql nio TCP accept stopped after {} consecutive transient errors",
+                            transient_errors
+                        );
+                        break;
+                    }
+                    continue;
+                }
             };
             if sock.set_nodelay(true).is_err() {
                 continue;

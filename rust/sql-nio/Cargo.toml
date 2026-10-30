@@ -25,6 +25,7 @@ memory-transport = []
 
 [dependencies]
 cxx = "1"
+log = "0.4"
 # flate2 = zlib for the compressed MySQL protocol.
 flate2 = "1"
 # Direct-indexed storage for the reactor's mio Token -> connection hot table.
