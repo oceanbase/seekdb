@@ -1055,7 +1055,6 @@ dependencies = [
  "cxx",
  "flate2",
  "libc",
- "log",
  "mio",
  "rustls",
  "rustls-pki-types",

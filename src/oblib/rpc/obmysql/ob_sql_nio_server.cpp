@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RPC_OBMYSQL
 #include "rpc/obmysql/ob_sql_nio_server.h"
+#include "rust/sql-nio/include/callbacks.h"
 #include "lib/ob_running_mode.h"
 #include "lib/string/ob_string.h"
 #include <stdio.h>
@@ -28,6 +29,7 @@
 #else
 #include <unistd.h>
 #endif
+#include <cstring>
 
 namespace oceanbase
 {
@@ -73,6 +75,17 @@ void ob_sql_sock_handler_on_disconnect(ObSqlSockHandler* handler, ObSqlSockSessi
 }
 void ob_sql_sock_handler_on_close(ObSqlSockHandler* handler, ObSqlSockSession* sess, int err) {
   handler->on_close(sess, err);
+}
+void ob_sql_nio_log_accept_state(const char *kind, int32_t raw_error, uint64_t drain_id,
+                                 uint64_t accepted, uint32_t transient_errors,
+                                 uint32_t consecutive_errors, const char *outcome) {
+  if (0 == std::strcmp(outcome, "fatal") || 0 == std::strcmp(outcome, "rearm_failed")) {
+    LOG_ERROR("Rust SQL-NIO TCP accept drain stopped", KPC(kind), K(raw_error), K(drain_id),
+              K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome));
+  } else {
+    LOG_WARN("Rust SQL-NIO TCP accept drain state", KPC(kind), K(raw_error), K(drain_id),
+             K(accepted), K(transient_errors), K(consecutive_errors), KPC(outcome));
+  }
 }
 
 static uint8_t nio_tls_min_version(const char *value)

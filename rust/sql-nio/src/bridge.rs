@@ -389,6 +389,15 @@ pub mod ffi {
             sess: *mut ObSqlSockSession,
             err: i32,
         );
+        unsafe fn ob_sql_nio_log_accept_state(
+            kind: *const c_char,
+            raw_error: i32,
+            drain_id: u64,
+            accepted: u64,
+            transient_errors: u32,
+            consecutive_errors: u32,
+            outcome: *const c_char,
+        );
     }
 
     extern "Rust" {
