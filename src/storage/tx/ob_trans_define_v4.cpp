@@ -466,19 +466,6 @@ ObTxDesc::~ObTxDesc()
 
 void ObTxDesc::reset()
 {
-#ifndef NDEBUG
-  FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
-#else
-  if (state_ == State::IDLE || state_ == State::COMMITTED) {
-    if (finish_ts_ - commit_ts_ > 5 * 1000 * 1000) {
-      FORCE_PRINT_TRACE(&tlog_, "[tx slow commit][tx desc trace]");
-    }
-  } else if (flags_.SHADOW_) { /* skip clone's destory */}
-  else {
-    FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
-  }
-#endif
-
   trace_info_.reset();
   data_version_ = 0;
   seq_base_ = 0;
@@ -527,7 +514,6 @@ void ObTxDesc::reset()
   cb_tid_ = -1;
   exec_info_reap_ts_ = 0;
   commit_task_.reset();
-  tlog_.reset();
 }
 
 void ObTxDesc::set_tx_id(const ObTransID &tx_id)
@@ -560,32 +546,12 @@ const ObString &ObTxDesc::get_tx_state_str() const {
   return TxStateName[state];
 }
 
-void ObTxDesc::print_trace_() const
-{
-  FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
-}
-
-void ObTxDesc::print_trace()
-{
-  int ret = OB_SUCCESS;
-  bool self_locked = lock_.self_locked();
-  if (!self_locked && OB_FAIL(lock_.lock())) {
-    TRANS_LOG(WARN, "lock failed", K(ret));
-  } else {
-    FORCE_PRINT_TRACE(&tlog_, "[tx desc trace]");
-  }
-  if (!self_locked && OB_SUCC(ret)) {
-    lock_.unlock();
-  }
-}
-
 void ObTxDesc::dump_and_print_trace()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(lock_.trylock())) {
   } else {
     TRANS_LOG(INFO, "[tx desc dump]", KPC(this));
-    print_trace_();
     lock_.unlock();
   }
 }
@@ -907,12 +873,6 @@ bool ObTxDesc::execute_commit_cb()
                     KP(this), K(tx_id), KP(cb_tid_));
         }
         ATOMIC_STORE_REL(&cb_tid_, GETTID());
-        // NOTE: it is required add trace event before callback,
-        // because txDesc may be released after callback called
-        REC_TRANS_TRACE_EXT(&tlog_, exec_commit_cb,
-                            OB_ID(arg), (void*)cb,
-                            OB_ID(ref), get_ref(),
-                            OB_ID(thread_id), GETTID());
         commit_cb_lock_.unlock();
         cb->callback(commit_out_);
       } else {
@@ -1453,22 +1413,6 @@ public:
   ObTransService &txs_;
 };
 
-class PrintTxDescFunctor
-{
-public:
-  explicit PrintTxDescFunctor(const int64_t max_print_cnt) : max_print_cnt_(max_print_cnt) {}
-  bool operator()(ObTxDesc *tx_desc)
-  {
-    bool bool_ret = false;
-    if (OB_NOT_NULL(tx_desc) && max_print_cnt_-- > 0) {
-      tx_desc->print_trace();
-      bool_ret = true;
-    }
-    return bool_ret;
-  }
-  int64_t max_print_cnt_;
-};
-
 int ObTxDescMgr::stop()
 {
   int ret = OB_SUCCESS;
@@ -1505,12 +1449,6 @@ int ObTxDescMgr::wait()
     if (!done) {
       ret = OB_TIMEOUT;
       TRANS_LOG(WARN, "txDescMgr.wait timeout", K(ret));
-      PrintTxDescFunctor fn(128);
-#ifdef ENABLE_DEBUG_LOG
-      (void)map_.alloc_handle_.for_each(fn);
-#else
-      (void)map_.for_each(fn);
-#endif
     }
   }
   TRANS_LOG(INFO, "txDescMgr.wait", K(ret), K(inited_), K(stoped_), K(active_cnt));
