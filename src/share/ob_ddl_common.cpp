@@ -541,6 +541,32 @@ int ObDDLUtil::generate_column_name_str(
   return ret;
 }
 
+namespace {
+int append_escaped_backtick_identifier(
+    ObSqlString &sql_string,
+    const ObString &identifier_name,
+    const char *shadow_prefix)
+{
+  int ret = OB_SUCCESS;
+  const char backtick = '`';
+  if (OB_FAIL(sql_string.append(&backtick, 1))) {
+  } else if (OB_NOT_NULL(shadow_prefix) && OB_FAIL(sql_string.append(shadow_prefix))) {
+  } else {
+    const char *ptr = identifier_name.ptr();
+    const int32_t len = identifier_name.length();
+    for (int32_t i = 0; OB_SUCC(ret) && i < len; ++i) {
+      const char ch = (nullptr == ptr) ? '\0' : ptr[i];
+      if (OB_FAIL(sql_string.append(&ch, 1))) {
+      } else if (backtick == ch && OB_FAIL(sql_string.append(&backtick, 1))) {
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(sql_string.append(&backtick, 1))) {
+    }
+  }
+  return ret;
+}
+}
+
 int ObDDLUtil::generate_column_name_str(
     const ObColumnNameInfo &column_name_info,
     const bool with_origin_name,
@@ -549,30 +575,30 @@ int ObDDLUtil::generate_column_name_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  const char *split_char = "`";
-  // append comma
   if (with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
     }
   }
-  // append original column name
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
-      // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append("cast("))) {
+      } else if (OB_FAIL(append_escaped_backtick_identifier(
+          sql_string, column_name_info.column_name_, nullptr))) {
+      } else if (OB_FAIL(sql_string.append(" as unsigned)"))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(append_escaped_backtick_identifier(
+        sql_string, column_name_info.column_name_, nullptr))) {
     }
   }
-  // append AS
   if (OB_SUCC(ret) && with_origin_name && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt(" AS "))) {
     }
   }
-  // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
-    if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    if (OB_FAIL(append_escaped_backtick_identifier(
+        sql_string,
+        column_name_info.column_name_,
+        column_name_info.is_shadow_column_ ? "__SHADOW_" : nullptr))) {
     }
   }
   return ret;
