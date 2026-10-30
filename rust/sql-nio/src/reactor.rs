@@ -262,13 +262,9 @@ const ACCEPT_OUTCOME_WOULD_BLOCK: i32 = 0;
 const ACCEPT_OUTCOME_FATAL: i32 = 1;
 const ACCEPT_OUTCOME_REARMED: i32 = 2;
 const ACCEPT_OUTCOME_REARM_FAILED: i32 = 3;
-#[cfg(feature = "native-network")]
 const REACTOR_POLL_TIMEOUT: i32 = 0;
-#[cfg(feature = "native-network")]
 const REACTOR_POLL_EVENTS: i32 = 1;
-#[cfg(feature = "native-network")]
 const REACTOR_POLL_FAILED: i32 = 2;
-#[cfg(feature = "native-network")]
 const REACTOR_POLL_SKIPPED: i32 = 3;
 
 fn accept_error_kind_code(kind: std::io::ErrorKind) -> i32 {
@@ -355,7 +351,6 @@ impl EventLoop {
                     .poll(&mut events, Some(Duration::from_millis(1000)))
                     .is_err()
             };
-            #[cfg(feature = "native-network")]
             let poll_result = if skip_poll {
                 REACTOR_POLL_SKIPPED
             } else if poll_failed {
@@ -374,17 +369,13 @@ impl EventLoop {
                 stopping = true;
             }
             if poll_failed && !stopping {
-                #[cfg(feature = "native-network")]
                 self.log_reactor_state(poll_result, poll_id, 0, 0);
                 continue;
             }
-            #[cfg(feature = "native-network")]
             let mut event_count: u64 = 0;
-            #[cfg(feature = "native-network")]
             let mut listener_event_flags: u32 = 0;
             if !skip_poll {
                 for event in events.iter() {
-                    #[cfg(feature = "native-network")]
                     event_count += 1;
                     if stopping {
                         continue;
@@ -441,7 +432,6 @@ impl EventLoop {
                 self.drain_ready();
             }
             self.reap_retired();
-            #[cfg(feature = "native-network")]
             self.log_reactor_state(poll_result, poll_id, event_count, listener_event_flags);
         }
     }
@@ -620,6 +610,16 @@ impl EventLoop {
                 listener_event_flags,
             );
         }
+    }
+
+    #[cfg(not(feature = "native-network"))]
+    fn log_reactor_state(
+        &self,
+        _poll_result: i32,
+        _poll_id: u64,
+        _event_count: u64,
+        _listener_event_flags: u32,
+    ) {
     }
 
     #[cfg(feature = "native-network")]
