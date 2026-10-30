@@ -3794,7 +3794,7 @@ int ObTxCtx::replay_rollback_to(const ObTxRollbackToLog &log,
         if (OB_ISNULL(log_service)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "tenant logservice is null", K(ret), K(timestamp), K_(trans_id));
-        } else if (OB_FAIL(log_service->get_log_replay_service()->get_min_unreplayed_scn(min_unreplayed_scn))) {
+        } else if (OB_FAIL(log_service->get_replay_info().get_min_unreplayed_scn(min_unreplayed_scn))) {
         } else if (min_unreplayed_scn == timestamp) {
           // all previous log replayed
           // the txn must not replay from its first log, aka. incomplete-replay

@@ -24,6 +24,7 @@
 #include "share/scn.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/palf/palf_iterator.h"
+#include "logservice/replayservice/replay_info.h"
 #include "logservice/palf/palf_handle.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_spin_rwlock.h"
@@ -59,36 +60,6 @@ enum class ObReplayServiceTaskType
   INVALID_LOG_TASK = 0,
   SUBMIT_LOG_TASK = 1,
   REPLAY_LOG_TASK = 2,
-};
-//Virtual table statistics
-struct LSReplayStat
-{
-  palf::LSN end_lsn_;
-  bool enabled_;
-  palf::LSN unsubmitted_lsn_;
-  share::SCN unsubmitted_scn_;
-  int64_t pending_cnt_;
-
-  TO_STRING_KV(K(end_lsn_),
-               K(enabled_),
-               K(unsubmitted_lsn_),
-               K(unsubmitted_scn_),
-               K(pending_cnt_));
-};
-
-struct ReplayDiagnoseInfo
-{
-  ReplayDiagnoseInfo() { reset(); }
-  ~ReplayDiagnoseInfo() { reset(); }
-  palf::LSN max_replayed_lsn_;
-  share::SCN max_replayed_scn_;
-  ObSqlString diagnose_str_;
-  TO_STRING_KV(K(max_replayed_lsn_),
-               K(max_replayed_scn_));
-  void reset() {
-    max_replayed_lsn_.reset();
-    max_replayed_scn_.reset();
-  }
 };
 //This type is dedicated to forward barrier logs, and is allocated separately from ObLogReplayTask
 //Therefore the memory of this structure needs to be released separately
@@ -287,8 +258,6 @@ public:
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
   // Reset the iterator with the current endpoint as the new starting point
-  int reset_iterator(const palf::LSN &begin_lsn,
-                     const share::SCN &base_scn);
 
   INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask,
                        K(next_to_submit_lsn_),
@@ -460,9 +429,6 @@ public:
     rwlock_.unlock();
   }
 
-  void disable_local_replay();
-  int enable_local_replay(const palf::LSN &begin_lsn,
-                          const share::SCN &base_scn);
   // check whether all logs has finished replaying
   //
   // Before enabling local append, there must be no remaining log to replay.
@@ -473,11 +439,9 @@ public:
   //           OB_NOT_INIT: ObReplayStatus has not been inited
   int is_replay_done(const palf::LSN &lsn, bool &is_done);
 
-  //check whether submit task is in the global queue of ObLogReplayService
-  //@param [out] : true if submit task is not in the global queue
-  //@return : OB_SUCCESS : success
-  //OB_NOT_INIT: ObReplayStatus has not been inited
-  int is_submit_task_clear(bool &is_clear) const;
+  // Completion also waits for queued/handling service tasks to release their leases.
+  bool is_idle() const;
+  int stop_fetching();
   // There are submitted log tasks pending replay
   // update right margin of logs that need to replay
   int update_end_offset(const palf::LSN &lsn);
@@ -514,7 +478,6 @@ public:
                            bool &need_replay,
                            const int64_t replay_queue_idx);
   //check whether can replay log so far
-  int check_can_replay() const;
   void set_post_barrier_submitted(const palf::LSN &lsn);
   int set_post_barrier_finished(const palf::LSN &lsn);
   int trigger_fetch_log();
@@ -556,7 +519,6 @@ public:
 
   TO_STRING_KV(K(is_enabled_),
                K(is_submit_blocked_),
-               K(local_replay_enabled_),
                K(err_info_),
                K(ref_cnt_),
                K(post_barrier_lsn_),
@@ -586,7 +548,6 @@ private:
   bool is_inited_;
   bool is_enabled_;  // forbidden replay and fetch log if false
   bool is_submit_blocked_; // allow replay log if true
-  bool local_replay_enabled_;
   // guarantee the effectiveness of self memory:
   // inc_ref() before push task into replay_service, dec_ref() after replay_service finished handling task
   int64_t ref_cnt_;

@@ -36,7 +36,7 @@ ObLogHandler::ObLogHandler() : self_(),
                                is_inited_(false),
                                apply_status_(NULL),
                                apply_service_(NULL),
-                               replay_service_(NULL),
+                               log_service_(NULL),
                                deps_lock_(),
                                append_cost_stat_("[PALF STAT APPEND COST TIME]", 1 * 1000 * 1000),
                                local_append_enabled_(false),
@@ -52,7 +52,7 @@ ObLogHandler::~ObLogHandler()
 
 int ObLogHandler::init(const common::ObAddr &self,
                        ObLogApplyService *apply_service,
-                       ObLogReplayService *replay_service,
+                       ObLogService *log_service,
                        PalfEnv *palf_env)
 {
   int ret = OB_SUCCESS;
@@ -61,7 +61,7 @@ int ObLogHandler::init(const common::ObAddr &self,
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(palf_env) ||
-             OB_ISNULL(apply_service)) {
+             OB_ISNULL(apply_service) || OB_ISNULL(log_service)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", KP(palf_env));
   } else if (OB_FAIL(apply_service->get_apply_status(guard))) {
@@ -72,7 +72,7 @@ int ObLogHandler::init(const common::ObAddr &self,
   } else {
     get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
     apply_service_ = apply_service;
-    replay_service_ = replay_service;
+    log_service_ = log_service;
     apply_status_->inc_ref();
     append_cost_stat_.set_extra_info("");
     local_append_enabled_.store(false, std::memory_order_release);
@@ -98,7 +98,7 @@ bool ObLogHandler::is_valid() const
          NULL != palf_env_ &&
          NULL != apply_status_ &&
          NULL != apply_service_ &&
-         NULL != replay_service_;
+         NULL != log_service_;
 }
 
 int ObLogHandler::stop()
@@ -137,7 +137,7 @@ void ObLogHandler::destroy()
   }
   apply_status_ = NULL;
   apply_service_ = NULL;
-  replay_service_ = NULL;
+  log_service_ = NULL;
   if (NULL != palf_env_ && true == palf_handle_.is_valid()) {
     palf_env_->close(palf_handle_);
   }
@@ -434,7 +434,7 @@ int ObLogHandler::enable_replay(const palf::LSN &lsn,
   } else if (!lsn.is_valid() || !scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), K(lsn), K(scn));
-  } else if (OB_FAIL(replay_service_->enable(lsn, scn))) {
+  } else if (OB_FAIL(log_service_->enable_replay(lsn, scn))) {
   } else {
     CLOG_LOG(INFO, "enable replay success", K(ret), K(lsn), K(scn));
   }
@@ -447,7 +447,7 @@ int ObLogHandler::disable_replay()
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(replay_service_->disable())) {
+  } else if (OB_FAIL(log_service_->disable_replay())) {
   } else {
     CLOG_LOG(INFO, "disable replay success", K(ret));
   }
@@ -460,7 +460,7 @@ int ObLogHandler::pend_submit_replay_log()
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(replay_service_->block_submit_log())) {
+  } else if (OB_FAIL(log_service_->block_submit_replay())) {
   } else {
     CLOG_LOG(INFO, "block_submit_log success", K(ret));
   }
@@ -473,25 +473,17 @@ int ObLogHandler::restore_submit_replay_log()
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(replay_service_->unblock_submit_log())) {
+  } else if (OB_FAIL(log_service_->unblock_submit_replay())) {
   } else {
     CLOG_LOG(INFO, "unblock_submit_log success", K(ret));
   }
   return ret;
 }
 
-bool ObLogHandler::is_replay_enabled() const
+bool ObLogHandler::is_log_enabled() const
 {
-  bool bool_ret = false;
-  int tmp_ret = OB_SUCCESS;
   RLockGuard guard(lock_);
-  if (IS_NOT_INIT) {
-  } else if (OB_SUCCESS != (tmp_ret = replay_service_->is_enabled(bool_ret))) {
-    CLOG_LOG_RET(WARN, tmp_ret, "check replay service is enabled failed", K(tmp_ret));
-  } else {
-    // do nothing
-  }
-  return bool_ret;
+  return is_inited_ && !is_in_stop_state_ && !is_offline_;
 }
 
 int ObLogHandler::get_max_decided_scn(SCN &scn)
@@ -509,7 +501,7 @@ int ObLogHandler::get_max_decided_scn(SCN &scn)
     ret = OB_STATE_NOT_MATCH;
     CLOG_LOG(WARN, "log handle is offline");
   } else if (OB_FAIL(apply_service_->get_max_applied_scn(max_applied_scn))) {
-  } else if (OB_FAIL(replay_service_->get_max_replayed_scn(max_replayed_scn))) {
+  } else if (OB_FAIL(log_service_->get_replay_info().get_max_replayed_scn(max_replayed_scn))) {
     if (OB_STATE_NOT_MATCH != ret) {
       CLOG_LOG(WARN, "failed to get_max_replayed_scn", K(ret));
     } else if (palf_reach_time_interval(1000 * 1000, get_max_decided_scn_debug_time_)) {
@@ -593,7 +585,7 @@ int ObLogHandler::is_replay_fatal_error(bool &has_fatal_error)
     ret = OB_NOT_RUNNING;
   } else {
     RLockGuard guard(lock_);
-    if (OB_FAIL(replay_service_->has_fatal_error(has_fatal_error))) {
+    if (OB_FAIL(log_service_->get_replay_info().has_fatal_error(has_fatal_error))) {
     }
   }
   return ret;

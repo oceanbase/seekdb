@@ -218,7 +218,6 @@ int ObReplayServiceSubmitTask::need_skip(const SCN &scn, bool &need_skip)
   return ret;
 }
 
-
 int ObReplayServiceSubmitTask::get_log(const char *&buffer, int64_t &nbytes, SCN &scn, palf::LSN &offset)
 {
   return iterator_.get_entry(buffer, nbytes, scn, offset);
@@ -261,34 +260,6 @@ int ObReplayServiceSubmitTask::next_log(const SCN &replayable_point,
     }
   } else {
     // do nothing
-  }
-  return ret;
-}
-
-int ObReplayServiceSubmitTask::reset_iterator(const LSN &begin_lsn,
-                                              const SCN &base_scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!begin_lsn.is_valid() || !base_scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid replay iterator reset point", K(ret), K(begin_lsn), K(base_scn));
-  } else {
-    next_to_submit_lsn_ = std::max(next_to_submit_lsn_, begin_lsn);
-    base_lsn_ = next_to_submit_lsn_;
-    if (base_scn_ < base_scn) {
-      base_scn_ = base_scn;
-    }
-    if (next_to_submit_scn_ < base_scn_) {
-      next_to_submit_scn_ = base_scn_;
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(seek_log_iterator_no_shared_storage(
-          replay_status_->palf_env_, next_to_submit_lsn_, iterator_))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(iterator_.next()) && OB_ITER_END == ret) {
-    ret = OB_SUCCESS;
-  } else if (OB_FAIL(ret)) {
   }
   return ret;
 }
@@ -542,7 +513,6 @@ ObReplayStatus::ObReplayStatus():
     is_inited_(false),
     is_enabled_(false),
     is_submit_blocked_(true),
-    local_replay_enabled_(true),
     ref_cnt_(0),
     post_barrier_lsn_(),
     err_info_(),
@@ -619,7 +589,6 @@ void ObReplayStatus::destroy()
       task_queues_[i].destroy();
     }
     is_submit_blocked_ = true;
-    local_replay_enabled_ = true;
     post_barrier_lsn_.reset();
     err_info_.reset();
     last_check_memstore_lsn_.reset();
@@ -762,54 +731,8 @@ bool ObReplayStatus::is_replay_enabled_() const
 bool ObReplayStatus::need_submit_log() const
 {
   RLockGuard guard(local_replay_lock_);
-  return local_replay_enabled_ && !is_submit_blocked_;
+  return !is_submit_blocked_;
 }
-
-void ObReplayStatus::disable_local_replay()
-{
-  WLockGuard guard(local_replay_lock_);
-  local_replay_enabled_ = false;
-  CLOG_LOG(INFO, "disable local replay", KPC(this));
-}
-
-int ObReplayStatus::enable_local_replay(const palf::LSN &begin_lsn,
-                                        const SCN &base_scn)
-{
-  int ret = OB_SUCCESS;
-  // Reset the iterator before allowing new replay submissions.
-  do {
-    WLockGuardWithRetryInterval wguard(rwlock_, WRLOCK_TRY_THRESHOLD, WRLOCK_RETRY_INTERVAL);
-    if (!is_enabled_) {
-      // do nothing
-    } else if (OB_FAIL(submit_log_task_.reset_iterator(begin_lsn, base_scn))) {
-      CLOG_LOG(WARN, "failed to reset local replay iterator", K(ret), K(begin_lsn), K(base_scn));
-    }
-  } while (0);
-  if (OB_SUCC(ret)) {
-    WLockGuard replay_guard(local_replay_lock_);
-    local_replay_enabled_ = true;
-  }
-
-#ifdef ERRSIM
-int tmp_ret = OB_E(EventTable::EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP) OB_SUCCESS;
-if (OB_SUCCESS != tmp_ret) {
-  CLOG_LOG(INFO, "fake EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP ", KPC(this), K(begin_lsn));
-  share::server_event_sync_add("REPLAYSERVICE", "BEFORE_PUSH_SUBMIT_TASK");
-}
-  DEBUG_SYNC(REPLAY_ENABLE_LOCAL_BEFORE_PUSH_SUBMIT_TASK);
-#endif
-
-  if (OB_SUCC(ret)) {
-    RLockGuard rguard(rwlock_);
-    if (!is_enabled_) {
-      // do nothing
-    } else if (OB_FAIL(submit_task_to_replay_service_(submit_log_task_))) {
-    }
-  }
-  CLOG_LOG(INFO, "enable local replay", K(ret), KPC(this), K(begin_lsn), K(base_scn));
-  return ret;
-}
-
 
 int ObReplayStatus::is_replay_done(const LSN &end_lsn,
                                    bool &is_done)
@@ -843,18 +766,22 @@ int ObReplayStatus::is_replay_done(const LSN &end_lsn,
   return ret;
 }
 
-int ObReplayStatus::is_submit_task_clear(bool &is_clear) const
+bool ObReplayStatus::is_idle() const
 {
-  int ret = OB_SUCCESS;
-  is_clear = false;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(ERROR, "replay status has not been inited", K(ret));
-  } else {
-    RLockGuard rlock_guard(rwlock_);
-    is_clear = submit_log_task_.is_idle();
+  RLockGuard guard(rwlock_);
+  bool idle = ATOMIC_LOAD(&pending_task_count_) == 0 && submit_log_task_.is_idle();
+  for (int64_t i = 0; idle && i < REPLAY_TASK_QUEUE_SIZE; ++i) {
+    idle = task_queues_[i].is_idle();
   }
-  return ret;
+  return idle;
+}
+
+int ObReplayStatus::stop_fetching()
+{
+  block_submit();
+  // PALF dispatch holds its callback lock before entering replay status.
+  // Unregister outside rwlock_ to preserve that lock order.
+  return palf_handle_.unregister_file_size_cb();
 }
 
 int ObReplayStatus::update_end_offset(const LSN &lsn)
@@ -1339,18 +1266,6 @@ int ObReplayStatus::trigger_fetch_log()
     }
   } else {
     // do nothing
-  }
-  return ret;
-}
-
-int ObReplayStatus::check_can_replay() const
-{
-  int ret = OB_SUCCESS;
-  {
-    RLockGuard guard(local_replay_lock_);
-    if (!local_replay_enabled_) {
-      ret = OB_EAGAIN;
-    }
   }
   return ret;
 }

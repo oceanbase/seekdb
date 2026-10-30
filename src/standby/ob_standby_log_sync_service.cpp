@@ -79,7 +79,7 @@ int get_local_position(
   end_lsn.reset();
   end_scn.reset();
   sync_scn.reset();
-  if (OB_ISNULL(log_service) || OB_ISNULL(log_service->get_log_replay_service())) {
+  if (OB_ISNULL(log_service)) {
     ret = OB_NOT_INIT;
     LOG_WARN("log replay service is not initialized", KR(ret), KP(log_service));
   } else if (OB_FAIL(get_log_handler(log_handler))) {
@@ -87,7 +87,7 @@ int get_local_position(
     LOG_WARN("failed to get local log end lsn", KR(ret));
   } else if (OB_FAIL(log_handler->get_end_scn(end_scn))) {
     LOG_WARN("failed to get local log end scn", KR(ret), K(end_lsn));
-  } else if (OB_FAIL(log_service->get_log_replay_service()->get_max_replayed_scn(sync_scn))) {
+  } else if (OB_FAIL(log_service->get_replay_info().get_max_replayed_scn(sync_scn))) {
     LOG_WARN("failed to get local replay progress", KR(ret), K(end_lsn), K(end_scn));
   }
   return ret;

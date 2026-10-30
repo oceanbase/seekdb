@@ -21,6 +21,7 @@ LOGSERVICE_UNITY_GROUPS = [
             "src/logservice/replayservice/ob_log_replay_service.cpp",
             "src/logservice/replayservice/ob_replay_handler.cpp",
             "src/logservice/replayservice/ob_replay_status.cpp",
+            "src/logservice/replayservice/replay_info.cpp",
         ],
     ),
     struct(
