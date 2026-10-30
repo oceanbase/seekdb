@@ -43,7 +43,7 @@
 #undef ERROR
 #undef DELETE
 #endif
-#include "grpc/proto/standbyservice.grpc.pb.h"
+#include "grpc/rpc_transport.h"
 #include "storage/tablet/ob_tablet_common.h"
 #include "ob_standby_restore_storage_struct.h"
 #include "storage/ob_i_table.h"
@@ -94,8 +94,8 @@ public:
   virtual void destroy() override;
   bool ls_meta_fetched_;
   standby::ObStandbyGrpcClient *grpc_client_;
-  grpc::ClientContext *ls_view_context_;
-  std::unique_ptr<grpc::ClientReader<standbyservice::FetchLSViewRes>> ls_view_reader_;
+  rpc::Context *ls_view_context_;
+  std::unique_ptr<rpc::Reader> ls_view_reader_;
 };
 
 struct ObRestoreHelperTabletInfoCtx final : public ObIRestoreHelperCtx
@@ -108,8 +108,8 @@ public:
   virtual void reset() override;
   virtual void destroy() override;
   standby::ObStandbyGrpcClient *grpc_client_;
-  grpc::ClientContext *tablet_info_context_;
-  std::unique_ptr<grpc::ClientReader<standbyservice::FetchTabletInfoRes>> tablet_info_reader_;
+  rpc::Context *tablet_info_context_;
+  std::unique_ptr<rpc::Reader> tablet_info_reader_;
 };
 
 struct ObRestoreHelperSSTableInfoCtx final : public ObIRestoreHelperCtx
@@ -124,8 +124,8 @@ public:
 
   // Stream reader related members
   standby::ObStandbyGrpcClient *grpc_client_;
-  grpc::ClientContext *sstable_info_context_;
-  std::unique_ptr<grpc::ClientReader<standbyservice::FetchTabletSSTableInfoRes>> sstable_info_reader_;
+  rpc::Context *sstable_info_context_;
+  std::unique_ptr<rpc::Reader> sstable_info_reader_;
   int64_t pending_sstable_count_;
   common::ObTabletID cur_tablet_id_;
 };
@@ -141,8 +141,8 @@ public:
   virtual void destroy() override;
 
   standby::ObStandbyGrpcClient *grpc_client_;
-  grpc::ClientContext *macro_info_context_;
-  std::unique_ptr<grpc::ClientReader<standbyservice::FetchSSTableMacroInfoRes>> macro_info_reader_;
+  rpc::Context *macro_info_context_;
+  std::unique_ptr<rpc::Reader> macro_info_reader_;
 };
 
 struct ObRestoreHelperMacroBlockCtx final : public ObIRestoreHelperCtx
@@ -156,8 +156,8 @@ public:
   virtual void destroy() override;
 
   standby::ObStandbyGrpcClient *grpc_client_;
-  grpc::ClientContext *macro_block_context_;
-  std::unique_ptr<grpc::ClientReader<standbyservice::FetchMacroBlockRes>> macro_block_reader_;
+  rpc::Context *macro_block_context_;
+  std::unique_ptr<rpc::Reader> macro_block_reader_;
   int64_t data_version_;
   storage::ObITable::TableKey copy_table_key_;
   blocksstable::ObSelfBufferWriter data_buffer_;
@@ -166,19 +166,18 @@ public:
 class ObRestoreHelperCtxUtil
 {
 public:
-  template <typename T>
-  static int close_reader(std::unique_ptr<grpc::ClientReader<T>> &reader, standby::ObStandbyGrpcClient *grpc_client)
+  static int close_reader(std::unique_ptr<rpc::Reader> &reader, standby::ObStandbyGrpcClient *grpc_client)
   {
     int ret = OB_SUCCESS;
     if (!reader || OB_ISNULL(grpc_client)) {
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "reader or grpc_client is nullptr", KR(ret), KP(grpc_client));
     } else {
-      grpc::Status status = reader->Finish();
+      int status = reader->finish();
       reader.reset();
       if (OB_FAIL(grpc_client->translate_error(status))) {
         STORAGE_LOG(ERROR, "failed to translate grpc stream status", KR(ret),
-            "grpc_code", status.error_code(), "grpc_msg", status.error_message().c_str());
+            K(status));
       }
     }
     return ret;

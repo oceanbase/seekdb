@@ -33,10 +33,10 @@ using storage::ObCopySSTableMacroRangeObProducer;
 using storage::ObICopySSTableMacroRangeObProducer;
 
 int ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
-    grpc::ServerContext *context,
+    rpc::ServerContext *context,
     const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
     storage::ObLS *ls,
-    grpc::ServerWriter<standbyservice::FetchTabletSSTableInfoRes> *writer)
+    const rpc::Writer *writer)
 {
   int ret = OB_SUCCESS;
 
@@ -46,20 +46,20 @@ int ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
   } else {
     ObCopySSTableInfoObProducer producer;
     obcall::ObCopyTabletSSTableHeader header;
-    standbyservice::FetchTabletSSTableInfoRes header_response;
+    rpc::Message header_response;
     if (OB_FAIL(producer.init(tablet_arg, ls))) {
       LOG_WARN("failed to init copy sstable info ob producer", K(ret), K(tablet_arg));
     } else if (OB_FAIL(producer.get_copy_tablet_sstable_header(header))) {
       LOG_WARN("failed to get copy tablet sstable header", K(ret), K(tablet_arg));
-    } else if (OB_FAIL(obgrpc::serialize_ob_to_proto(header, &header_response))) {
+    } else if (OB_FAIL(rpc::serialize_message(header, &header_response))) {
       LOG_WARN("failed to serialize ObCopyTabletSSTableHeader", K(ret));
-    } else if (!writer->Write(header_response)) {
+    } else if (!writer->write(header_response.take_frame())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to write tablet sstable header to stream", K(ret));
     } else {
       int64_t sstable_count = header.sstable_count_;
       for (int64_t i = 0; OB_SUCC(ret) && i < sstable_count; ++i) {
-        if (context->IsCancelled()) {
+        if (context->cancelled()) {
           ret = OB_CANCELED;
           LOG_WARN("client cancelled the request", K(ret));
           break;
@@ -74,10 +74,10 @@ int ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
             LOG_WARN("failed to get next sstable info", K(ret), K(tablet_arg));
           }
         } else {
-          standbyservice::FetchTabletSSTableInfoRes sstable_response;
-          if (OB_FAIL(obgrpc::serialize_ob_to_proto(sstable_info, &sstable_response))) {
+          rpc::Message sstable_response;
+          if (OB_FAIL(rpc::serialize_message(sstable_info, &sstable_response))) {
             LOG_WARN("failed to serialize ObCopyTabletSSTableInfo", K(ret));
-          } else if (!writer->Write(sstable_response)) {
+          } else if (!writer->write(sstable_response.take_frame())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to write sstable info to stream", K(ret));
           }
@@ -89,10 +89,10 @@ int ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
 }
 
 int ObStandbyGrpcStreamUtil::build_sstable_macro_info(
-    grpc::ServerContext *context,
+    rpc::ServerContext *context,
     const obcall::ObCopySSTableMacroRangeInfoHeader &header,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-    grpc::ServerWriter<standbyservice::FetchSSTableMacroInfoRes> *writer)
+    const rpc::Writer *writer)
 {
   int ret = OB_SUCCESS;
 
@@ -103,10 +103,10 @@ int ObStandbyGrpcStreamUtil::build_sstable_macro_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid header", K(ret), K(header));
   } else {
-    standbyservice::FetchSSTableMacroInfoRes header_response;
-    if (OB_FAIL(obgrpc::serialize_ob_to_proto(header, &header_response))) {
+    rpc::Message header_response;
+    if (OB_FAIL(rpc::serialize_message(header, &header_response))) {
       LOG_WARN("failed to serialize ObCopySSTableMacroRangeInfoHeader", K(ret));
-    } else if (!writer->Write(header_response)) {
+    } else if (!writer->write(header_response.take_frame())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to write sstable macro range header to stream", K(ret));
     } else if (header.macro_range_count_ > 0) {
@@ -118,7 +118,7 @@ int ObStandbyGrpcStreamUtil::build_sstable_macro_info(
       if (OB_SUCC(ret)) {
         SMART_VAR(ObCopyMacroRangeInfo, macro_range_info) {
           for (int64_t i = 0; OB_SUCC(ret) && i < header.macro_range_count_; ++i) {
-            if (context->IsCancelled()) {
+            if (context->cancelled()) {
               ret = OB_CANCELED;
               LOG_WARN("client cancelled the request", K(ret));
               break;
@@ -134,10 +134,10 @@ int ObStandbyGrpcStreamUtil::build_sstable_macro_info(
                 LOG_WARN("failed to get next macro range info", K(ret), K(header.copy_table_key_));
               }
             } else {
-              standbyservice::FetchSSTableMacroInfoRes macro_response;
-              if (OB_FAIL(obgrpc::serialize_ob_to_proto(macro_range_info, &macro_response))) {
+              rpc::Message macro_response;
+              if (OB_FAIL(rpc::serialize_message(macro_range_info, &macro_response))) {
                 LOG_WARN("failed to serialize ObCopyMacroRangeInfo", K(ret));
-              } else if (!writer->Write(macro_response)) {
+              } else if (!writer->write(macro_response.take_frame())) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("failed to write macro range info to stream", K(ret));
               }

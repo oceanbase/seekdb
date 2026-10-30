@@ -17,29 +17,12 @@
 #ifndef OCEANBASE_STANDBY_GRPC_SERVICE_H_
 #define OCEANBASE_STANDBY_GRPC_SERVICE_H_
 
-namespace oceanbase
-{
-namespace obgrpc
-{
-class ObGrpcServer;
-}
-namespace standby
-{
-
+#include "grpc/rpc_transport.h"
+namespace oceanbase::standby {
 struct StandbyConfig;
-class StandbyGrpcService;
 class IStandbyHost;
 class StandbyStateStore;
-
-int create_and_register_standby_grpc_service(
-    obgrpc::ObGrpcServer &grpc_server,
-    const StandbyConfig &config,
-    StandbyStateStore &state_store,
-    IStandbyHost &host,
-    StandbyGrpcService *&service);
-void destroy_standby_grpc_service(StandbyGrpcService *&service);
-
-} // namespace standby
-} // namespace oceanbase
-
-#endif // OCEANBASE_STANDBY_GRPC_SERVICE_H_
+int create_and_register_standby_grpc_service(rpc::RpcServer &server,
+    const StandbyConfig &config, StandbyStateStore &state_store, IStandbyHost &host);
+}
+#endif

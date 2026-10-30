@@ -24,8 +24,8 @@
 #include "share/ob_io_device_helper.h"
 #include "common/ob_version_def.h"
 
-using namespace oceanbase::obgrpc;
-using namespace standbyservice;
+using namespace oceanbase::rpc;
+
 using namespace oceanbase::blocksstable;
 
 namespace oceanbase
@@ -280,15 +280,15 @@ int ObStandbyRestoreHelper::fetch_next_tablet_info(obcall::ObCopyTabletInfo &tab
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls view stream is not initialized", K(ret), KP(ls_view_ctx));
     } else {
-      standbyservice::FetchLSViewRes response;
-      if (!ls_view_ctx->ls_view_reader_->Read(&response)) {
+      rpc::Message response;
+      if (!ls_view_ctx->ls_view_reader_->read(response)) {
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(ls_view_ctx->ls_view_reader_, ls_view_ctx->grpc_client_))) {
           LOG_WARN("failed to close reader", K(ret));
         } else {
           ret = OB_ITER_END;
         }
-      } else if (standbyservice::TABLET_INFO == response.entry_type()) {
-        if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, tablet_info))) {
+      } else if (1 == response.entry_type()) {
+        if (OB_FAIL(rpc::deserialize_message(response, tablet_info))) {
           LOG_WARN("failed to deserialize ObCopyTabletInfo", K(ret));
         }
       } else {
@@ -346,15 +346,15 @@ int ObStandbyRestoreHelper::fetch_tablet_meta(obcall::ObCopyTabletInfo &tablet_i
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet info stream is not initialized", K(ret), KP(tablet_info_ctx));
     } else {
-      standbyservice::FetchTabletInfoRes response;
-      if (!tablet_info_ctx->tablet_info_reader_->Read(&response)) {
+      rpc::Message response;
+      if (!tablet_info_ctx->tablet_info_reader_->read(response)) {
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                 tablet_info_ctx->tablet_info_reader_, tablet_info_ctx->grpc_client_))) {
           LOG_WARN("failed to close reader", K(ret));
         } else {
           ret = OB_ITER_END;
         }
-      } else if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, tablet_info))) {
+      } else if (OB_FAIL(rpc::deserialize_message(response, tablet_info))) {
         LOG_WARN("failed to deserialize ObCopyTabletInfo", K(ret));
       }
     }
@@ -544,15 +544,15 @@ int ObStandbyRestoreHelper::fetch_next_tablet_sstable_header(obcall::ObCopyTable
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cannot fetch next header when there are pending sstable metas", K(ret), "pending_count", sstable_info_ctx->pending_sstable_count_);
     } else {
-      standbyservice::FetchTabletSSTableInfoRes response;
-      if (!sstable_info_ctx->sstable_info_reader_->Read(&response)) {
+      rpc::Message response;
+      if (!sstable_info_ctx->sstable_info_reader_->read(response)) {
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                         sstable_info_ctx->sstable_info_reader_, sstable_info_ctx->grpc_client_))) {
           LOG_WARN("failed to close reader", K(ret));
         } else {
           ret = OB_ITER_END;
         }
-      } else if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, copy_header))) {
+      } else if (OB_FAIL(rpc::deserialize_message(response, copy_header))) {
         LOG_WARN("failed to deserialize ObCopyTabletSSTableHeader", K(ret));
       } else if (!copy_header.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
@@ -588,8 +588,8 @@ int ObStandbyRestoreHelper::fetch_next_sstable_meta(obcall::ObCopyTabletSSTableI
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cannot fetch sstable meta when pending count is zero, should fetch header first", K(ret), "pending_count", sstable_info_ctx->pending_sstable_count_);
     } else {
-      standbyservice::FetchTabletSSTableInfoRes response;
-      if (!sstable_info_ctx->sstable_info_reader_->Read(&response)) {
+      rpc::Message response;
+      if (!sstable_info_ctx->sstable_info_reader_->read(response)) {
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                         sstable_info_ctx->sstable_info_reader_, sstable_info_ctx->grpc_client_))) {
           LOG_WARN("failed to close reader", K(ret));
@@ -598,7 +598,7 @@ int ObStandbyRestoreHelper::fetch_next_sstable_meta(obcall::ObCopyTabletSSTableI
           LOG_WARN("unexpected end of stream when expecting sstable meta",
               K(ret), "pending_count", sstable_info_ctx->pending_sstable_count_);
         }
-      } else if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, sstable_info))) {
+      } else if (OB_FAIL(rpc::deserialize_message(response, sstable_info))) {
         LOG_WARN("failed to deserialize ObCopyTabletSSTableInfo", K(ret));
       } else {
         sstable_info_ctx->pending_sstable_count_--;
@@ -674,25 +674,25 @@ int ObStandbyRestoreHelper::fetch_next_sstable_macro_range_info(storage::ObCopyS
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sstable macro info stream is not initialized", K(ret));
     } else {
-      standbyservice::FetchSSTableMacroInfoRes response;
+      rpc::Message response;
       obcall::ObCopySSTableMacroRangeInfoHeader header;
-      if (!macro_range_ctx->macro_info_reader_->Read(&response)) {
+      if (!macro_range_ctx->macro_info_reader_->read(response)) {
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                         macro_range_ctx->macro_info_reader_, macro_range_ctx->grpc_client_))) {
           LOG_WARN("failed to close reader", K(ret));
         } else {
           ret = OB_ITER_END;
         }
-      } else if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, header))) {
+      } else if (OB_FAIL(rpc::deserialize_message(response, header))) {
         LOG_WARN("failed to deserialize ObCopySSTableMacroRangeInfoHeader", K(ret));
       } else {
         sstable_macro_range_info.copy_table_key_ = header.copy_table_key_;
 
         // Read macro range infos
         for (int64_t i = 0; OB_SUCC(ret) && i < header.macro_range_count_; ++i) {
-          standbyservice::FetchSSTableMacroInfoRes response;
+          rpc::Message response;
           macro_range_info.reuse();
-          if (!macro_range_ctx->macro_info_reader_->Read(&response)) {
+          if (!macro_range_ctx->macro_info_reader_->read(response)) {
             if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                             macro_range_ctx->macro_info_reader_, macro_range_ctx->grpc_client_))) {
               LOG_WARN("failed to close reader", K(ret));
@@ -701,7 +701,7 @@ int ObStandbyRestoreHelper::fetch_next_sstable_macro_range_info(storage::ObCopyS
               LOG_WARN("unexpected end of stream when expecting macro range info", K(ret),
                   "expected_count", header.macro_range_count_, "read_count", i);
             }
-          } else if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, macro_range_info))) {
+          } else if (OB_FAIL(rpc::deserialize_message(response, macro_range_info))) {
             LOG_WARN("failed to deserialize ObCopyMacroRangeInfo", K(ret));
           } else if (OB_FAIL(sstable_macro_range_info.copy_macro_range_array_.push_back(macro_range_info))) {
             LOG_WARN("failed to push back macro range info", K(ret), K(macro_range_info));
@@ -815,8 +815,8 @@ int ObStandbyRestoreHelper::fetch_macro_block_header_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(macro_block_ctx));
   } else {
-    standbyservice::FetchMacroBlockRes response;
-    if (!macro_block_ctx->macro_block_reader_->Read(&response)) {
+    rpc::Message response;
+    if (!macro_block_ctx->macro_block_reader_->read(response)) {
       if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                       macro_block_ctx->macro_block_reader_, macro_block_ctx->grpc_client_))) {
         LOG_ERROR("failed to close macro block reader", K(ret), K(macro_block_ctx->copy_table_key_));
@@ -824,7 +824,7 @@ int ObStandbyRestoreHelper::fetch_macro_block_header_(
         ret = OB_ITER_END;
         LOG_INFO("macro block stream reached end", K(macro_block_ctx->copy_table_key_));
       }
-    } else if (OB_FAIL(obgrpc::deserialize_proto_to_ob(response, header))) {
+    } else if (OB_FAIL(rpc::deserialize_message(response, header))) {
       LOG_ERROR("failed to deserialize ObCopyMacroBlockHeader", K(ret),
           "payload_size", response.size(), "buf_size", response.buf().size());
     } else {
@@ -852,8 +852,8 @@ int ObStandbyRestoreHelper::fetch_macro_block_data_(
       LOG_WARN("occupy size exceeds buffer capacity", K(ret),
                K(occupy_size), "buffer_capacity", macro_block_ctx->data_buffer_.capacity());
     } else {
-      standbyservice::FetchMacroBlockRes response;
-      if (!macro_block_ctx->macro_block_reader_->Read(&response)) {
+      rpc::Message response;
+      if (!macro_block_ctx->macro_block_reader_->read(response)) {
         if (OB_FAIL(ObRestoreHelperCtxUtil::close_reader(
                         macro_block_ctx->macro_block_reader_, macro_block_ctx->grpc_client_))) {
           LOG_WARN("failed to close reader", K(ret));

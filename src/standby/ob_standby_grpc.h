@@ -43,8 +43,7 @@
 #undef ERROR
 #undef DELETE
 #endif
-#include "grpc/proto/standbyservice.grpc.pb.h"
-#include "grpc/ob_grpc_context.h"
+#include "grpc/rpc_transport.h"
 #include "lib/container/ob_se_array.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
@@ -53,17 +52,17 @@
 #include "lib/oblog/ob_log_module.h"
 #include <climits>
 #include <string>
+#include <functional>
 
 namespace oceanbase
 {
-namespace obgrpc
+namespace rpc
 {
 
 template <typename ObType, typename ProtoType>
-int serialize_ob_to_proto(const ObType &obj, ProtoType *proto)
+int serialize_message(const ObType &obj, ProtoType *proto)
 {
   int ret = common::OB_SUCCESS;
-  common::ObArenaAllocator allocator("StandbyGrpcSer");
   const int64_t buf_len = serialization::encoded_length(obj);
   char *buf = nullptr;
   int64_t pos = 0;
@@ -74,23 +73,20 @@ int serialize_ob_to_proto(const ObType &obj, ProtoType *proto)
   } else if (buf_len < 0) {
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("invalid encoded length", K(ret), K(buf_len));
-  } else if (0 < buf_len && OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
-    ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate serialize buffer", K(ret), K(buf_len));
+  } else if (FALSE_IT(buf = proto->mutable_buf(buf_len))) {
   } else if (OB_FAIL(serialization::encode(buf, buf_len, pos, obj))) {
     LOG_WARN("failed to encode object for grpc", K(ret), K(buf_len), K(pos));
   } else {
-    proto->set_buf(buf, pos);
     proto->set_size(pos);
   }
   return ret;
 }
 
 template <typename ProtoType, typename ObType>
-int deserialize_proto_to_ob(const ProtoType &proto, ObType &obj)
+int deserialize_message(const ProtoType &proto, ObType &obj)
 {
   int ret = common::OB_SUCCESS;
-  const std::string &buf = proto.buf();
+  const auto buf = proto.buf();
   const uint64_t size = proto.size();
   int64_t pos = 0;
 
@@ -104,7 +100,7 @@ int deserialize_proto_to_ob(const ProtoType &proto, ObType &obj)
   return ret;
 }
 
-} // namespace obgrpc
+} // namespace rpc
 
 namespace restore
 {
@@ -228,24 +224,24 @@ public:
                         std::function<int(const obcall::ObCopyTabletInfo&)> callback);
   int create_tablet_info_stream(
       const obcall::ObCopyTabletInfoArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchTabletInfoRes>> &reader);
+      rpc::Context &context,
+      std::unique_ptr<rpc::Reader> &reader);
   int create_ls_view_stream(
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchLSViewRes>> &reader);
+      rpc::Context &context,
+      std::unique_ptr<rpc::Reader> &reader);
   int create_tablet_sstable_info_stream(
       const obcall::ObCopyTabletsSSTableInfoArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchTabletSSTableInfoRes>> &reader);
+      rpc::Context &context,
+      std::unique_ptr<rpc::Reader> &reader);
   int create_sstable_macro_info_stream(
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchSSTableMacroInfoRes>> &reader);
+      rpc::Context &context,
+      std::unique_ptr<rpc::Reader> &reader);
   int create_macro_block_stream(
       const obcall::ObCopyMacroBlockRangeArg &arg,
-      grpc::ClientContext &context,
-      std::unique_ptr<grpc::ClientReader<standbyservice::FetchMacroBlockRes>> &reader);
-  int translate_error(const grpc::Status &status);
+      rpc::Context &context,
+      std::unique_ptr<rpc::Reader> &reader);
+  int translate_error(const int &status);
   static int init_ls_view_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
@@ -285,7 +281,7 @@ public:
 
 private:
   bool is_inited_;
-  obgrpc::ObGrpcClient<standbyservice::StandbyService> grpc_client_;
+  rpc::Client grpc_client_;
 };
 
 } // namespace standby

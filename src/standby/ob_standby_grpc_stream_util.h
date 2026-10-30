@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STANDBY_GRPC_STREAM_UTIL_H_
 #define OCEANBASE_STANDBY_GRPC_STREAM_UTIL_H_
 
-#include "grpc/proto/standbyservice.grpc.pb.h"
+#include "grpc/rpc_transport.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 
 namespace oceanbase
@@ -33,15 +33,15 @@ class ObStandbyGrpcStreamUtil final
 {
 public:
   static int build_tablet_sstable_info(
-      grpc::ServerContext *context,
+      rpc::ServerContext *context,
       const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
       storage::ObLS *ls,
-      grpc::ServerWriter<standbyservice::FetchTabletSSTableInfoRes> *writer);
+      const rpc::Writer *writer);
   static int build_sstable_macro_info(
-      grpc::ServerContext *context,
+      rpc::ServerContext *context,
       const obcall::ObCopySSTableMacroRangeInfoHeader &header,
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
-      grpc::ServerWriter<standbyservice::FetchSSTableMacroInfoRes> *writer);
+      const rpc::Writer *writer);
 };
 
 } // namespace standby

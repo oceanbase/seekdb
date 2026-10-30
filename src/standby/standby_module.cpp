@@ -16,8 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "standby/standby_module.h"
-#include "grpc/ob_grpc_context.h"
-#include "grpc/ob_grpc_server.h"
+#include "grpc/rpc_transport.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/oblog/ob_log.h"
@@ -36,7 +35,7 @@ namespace oceanbase
 namespace standby
 {
 
-using StandbyGrpcServer = obgrpc::ObGrpcServer;
+using StandbyGrpcServer = rpc::RpcServer;
 
 class StandbyModule::Impl final
 {
@@ -69,7 +68,6 @@ private:
   IStandbyHost *host_;
   StandbyStateStore state_store_;
   StandbyGrpcServer *grpc_server_;
-  StandbyGrpcService *grpc_service_;
   ObStandbySchemaRefreshTrigger schema_refresh_trigger_;
   ObStandbyLogSyncService log_sync_service_;
   ObStandbyRoleTransitionService role_transition_service_;
@@ -85,7 +83,6 @@ StandbyModule::Impl::Impl()
     host_(nullptr),
     state_store_(),
     grpc_server_(nullptr),
-    grpc_service_(nullptr),
     schema_refresh_trigger_(),
     log_sync_service_(),
     role_transition_service_()
@@ -193,7 +190,7 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate standby gRPC server", KR(ret));
   } else if (OB_FAIL(create_and_register_standby_grpc_service(
-      *grpc_server_, config_, state_store_, *host_, grpc_service_))) {
+      *grpc_server_, config_, state_store_, *host_))) {
     LOG_WARN("failed to register standby gRPC service", KR(ret));
   } else if (OB_FAIL(schema_refresh_trigger_.init(config_, *host_))) {
     LOG_WARN("failed to init standby schema refresh trigger", KR(ret));
@@ -215,7 +212,6 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
     grpc_server_ = nullptr;
   }
   if (OB_FAIL(ret)) {
-    destroy_standby_grpc_service(grpc_service_);
     config_ = StandbyConfig();
     state_store_.reset();
     host_ = nullptr;
@@ -283,7 +279,6 @@ void StandbyModule::Impl::destroy()
     OB_DELETE(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK, grpc_server_);
     grpc_server_ = nullptr;
   }
-  destroy_standby_grpc_service(grpc_service_);
   state_store_.reset();
   config_ = StandbyConfig();
   host_ = nullptr;
@@ -510,8 +505,7 @@ int StandbyModule::Impl::start_listener_if_enabled_()
   } else if (OB_FAIL(grpc_server_->start(config_.rpc_port_, config_.rpc_tls_enabled_))) {
     LOG_WARN("failed to start standby gRPC service", KR(ret), K(config_.rpc_port_));
   } else {
-    host_->publish_rpc_cert_expire_time(
-        config_.rpc_tls_enabled_ ? obgrpc::get_rpc_cert_expire_time() : 0);
+    host_->publish_rpc_cert_expire_time(grpc_server_->cert_expire_time());
   }
   return ret;
 }
