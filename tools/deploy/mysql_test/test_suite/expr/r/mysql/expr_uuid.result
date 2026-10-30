@@ -1,0 +1,17 @@
+============ uuid node id ================
+drop table if exists t_uuid;
+create table t_uuid (id int primary key);
+insert into t_uuid values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15),(16),(17),(18),(19),(20);
+select count(distinct substring(uuid(), 25)) as distinct_node_id from t_uuid;
+distinct_node_id
+1
+select count(*) as bad_version from t_uuid where substring(uuid(), 15, 1) <> '1';
+bad_version
+0
+select count(*) as bad_variant from t_uuid where substring(uuid(), 20, 1) not in ('8','9','a','b');
+bad_variant
+0
+select count(distinct uuid()) as distinct_uuid from t_uuid;
+distinct_uuid
+20
+drop table if exists t_uuid;

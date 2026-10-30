@@ -1,0 +1,23 @@
+--disable_query_log
+set @@session.explicit_defaults_for_timestamp=off;
+--enable_query_log
+#### owner: sysylfqmqt
+#### owner group: sql3
+#### description: test uuid node id and format
+--echo ================ uuid node id ================
+--disable_warnings
+drop table if exists t_uuid;
+--enable_warnings
+create table t_uuid (id int primary key);
+insert into t_uuid values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15),(16),(17),(18),(19),(20);
+# The node id is fixed for the whole server process: it is taken from the mac
+# address when one can be read, and it is random when it can not.
+select count(distinct substring(uuid(), 25)) as distinct_node_id from t_uuid;
+# A v1 uuid has the version nibble 1 and the variant nibble 8, 9, a or b.
+select count(*) as bad_version from t_uuid where substring(uuid(), 15, 1) <> '1';
+select count(*) as bad_variant from t_uuid where substring(uuid(), 20, 1) not in ('8','9','a','b');
+# Every generated uuid is unique.
+select count(distinct uuid()) as distinct_uuid from t_uuid;
+--disable_warnings
+drop table if exists t_uuid;
+--enable_warnings
