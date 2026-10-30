@@ -62,6 +62,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (stmt->has_vec_approx()) {
+    // ANN permits boolean WHERE canonicalization only. In particular, do not
+    // remove subqueries or change the shape of the approximate query here.
+    if (OB_FAIL(do_canonicalize(stmt, stmt->get_condition_exprs(), trans_happened))) {
+    } else if (trans_happened && OB_FAIL(add_transform_hint(*stmt))) {
+    }
+    return ret;
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {
