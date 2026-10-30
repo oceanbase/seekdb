@@ -224,7 +224,7 @@ pub(crate) struct EventLoop {
     #[cfg(feature = "native-network")]
     pub(crate) listener_stall_probe_done: bool,
     #[cfg(feature = "native-network")]
-    pub(crate) listener_rearm_used: bool,
+    pub(crate) listener_rearm_attempts: u32,
     pub(crate) cxx_connect_attempts: Arc<AtomicU64>,
     pub(crate) cxx_connect_returns: Arc<AtomicU64>,
     pub(crate) cxx_connect_rejects: Arc<AtomicU64>,
@@ -290,6 +290,11 @@ const REACTOR_POLL_STALL_PROBE_REARMED: i32 = 7;
 const REACTOR_POLL_STALL_PROBE_REARM_FAILED: i32 = 8;
 #[cfg(feature = "native-network")]
 const LISTENER_STALL_POLL_LIMIT: u32 = 2;
+// A quiet listener probe is tied to two consecutive no-event polls and a
+// WouldBlock accept drain. Keep recovery finite for one stall episode so a
+// broken registration cannot turn the reactor into a busy retry loop.
+#[cfg(all(windows, feature = "native-network"))]
+const LISTENER_STALL_REARM_LIMIT: u32 = 64;
 
 #[cfg(feature = "native-network")]
 struct ReactorDiagnostics {
@@ -765,6 +770,7 @@ impl EventLoop {
         if self.listener_event_count != self.last_listener_event_count {
             self.listener_stall_polls = 0;
             self.listener_stall_probe_done = false;
+            self.listener_rearm_attempts = 0;
         } else if !self.listener_stall_probe_done {
             self.listener_stall_polls = self
                 .listener_stall_polls
@@ -790,33 +796,33 @@ impl EventLoop {
                 event_count,
                 listener_event_flags,
             );
-            return;
-        }
-
-        if self.listener_rearm_used {
+            if self.listener_rearm_attempts >= LISTENER_STALL_REARM_LIMIT {
+                return;
+            }
+            self.listener_rearm_attempts += 1;
+            let rearmed = match self.listener.as_mut() {
+                Some(listener) => self
+                    .reg
+                    .reregister(listener, LISTENER, Interest::READABLE)
+                    .is_ok(),
+                None => false,
+            };
             self.log_reactor_state(
-                REACTOR_POLL_STALL_PROBE_PROGRESS,
+                if rearmed {
+                    REACTOR_POLL_STALL_PROBE_REARMED
+                } else {
+                    REACTOR_POLL_STALL_PROBE_REARM_FAILED
+                },
                 poll_id,
                 event_count,
                 listener_event_flags,
             );
+            self.listener_stall_polls = 0;
+            self.listener_stall_probe_done = false;
             return;
         }
-
-        self.listener_rearm_used = true;
-        let rearmed = match self.listener.as_mut() {
-            Some(listener) => self
-                .reg
-                .reregister(listener, LISTENER, Interest::READABLE)
-                .is_ok(),
-            None => false,
-        };
         self.log_reactor_state(
-            if rearmed {
-                REACTOR_POLL_STALL_PROBE_REARMED
-            } else {
-                REACTOR_POLL_STALL_PROBE_REARM_FAILED
-            },
+            REACTOR_POLL_STALL_PROBE_PROGRESS,
             poll_id,
             event_count,
             listener_event_flags,
@@ -1676,7 +1682,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                 #[cfg(feature = "native-network")]
                 listener_stall_probe_done: false,
                 #[cfg(feature = "native-network")]
-                listener_rearm_used: false,
+                listener_rearm_attempts: 0,
                 cxx_connect_attempts: cxx_connect_attempts.clone(),
                 cxx_connect_returns: cxx_connect_returns.clone(),
                 cxx_connect_rejects: cxx_connect_rejects.clone(),
