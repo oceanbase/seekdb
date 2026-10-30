@@ -222,7 +222,9 @@ pub(crate) struct EventLoop {
     #[cfg(feature = "native-network")]
     pub(crate) last_listener_event_count: u64,
     #[cfg(feature = "native-network")]
-    pub(crate) listener_stall_reported: bool,
+    pub(crate) listener_stall_probe_done: bool,
+    #[cfg(feature = "native-network")]
+    pub(crate) listener_rearm_used: bool,
     pub(crate) cxx_connect_attempts: Arc<AtomicU64>,
     pub(crate) cxx_connect_returns: Arc<AtomicU64>,
     pub(crate) cxx_connect_rejects: Arc<AtomicU64>,
@@ -279,9 +281,13 @@ const REACTOR_POLL_SKIPPED: i32 = 3;
 #[cfg(feature = "native-network")]
 const REACTOR_POLL_FINAL: i32 = 4;
 #[cfg(feature = "native-network")]
-const REACTOR_POLL_STALLED_REARMED: i32 = 5;
+const REACTOR_POLL_STALL_PROBE_WOULD_BLOCK: i32 = 5;
 #[cfg(feature = "native-network")]
-const REACTOR_POLL_STALLED_REARM_FAILED: i32 = 6;
+const REACTOR_POLL_STALL_PROBE_PROGRESS: i32 = 6;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_STALL_PROBE_REARMED: i32 = 7;
+#[cfg(feature = "native-network")]
+const REACTOR_POLL_STALL_PROBE_REARM_FAILED: i32 = 8;
 #[cfg(feature = "native-network")]
 const LISTENER_STALL_POLL_LIMIT: u32 = 2;
 
@@ -647,7 +653,10 @@ impl EventLoop {
     ) {
         let forced_stall_sample = matches!(
             poll_result,
-            REACTOR_POLL_STALLED_REARMED | REACTOR_POLL_STALLED_REARM_FAILED
+            REACTOR_POLL_STALL_PROBE_WOULD_BLOCK
+                | REACTOR_POLL_STALL_PROBE_PROGRESS
+                | REACTOR_POLL_STALL_PROBE_REARMED
+                | REACTOR_POLL_STALL_PROBE_REARM_FAILED
         );
         if self.listener.is_none()
             || (!should_log_reactor_sample(poll_id) && !forced_stall_sample)
@@ -685,7 +694,8 @@ impl EventLoop {
 
         if self.listener_event_count != self.last_listener_event_count {
             self.listener_stall_polls = 0;
-        } else if !self.listener_stall_reported {
+            self.listener_stall_probe_done = false;
+        } else if !self.listener_stall_probe_done {
             self.listener_stall_polls = self
                 .listener_stall_polls
                 .saturating_add(1)
@@ -694,12 +704,36 @@ impl EventLoop {
         self.last_listener_event_count = self.listener_event_count;
 
         if self.listener_stall_polls < LISTENER_STALL_POLL_LIMIT
-            || self.listener_stall_reported
+            || self.listener_stall_probe_done
         {
             return;
         }
 
-        self.listener_stall_reported = true;
+        self.listener_stall_probe_done = true;
+        self.accept_calls += 1;
+        let accepted_before_probe = self.accepted_total;
+        self.accept_all();
+        if self.accepted_total == accepted_before_probe {
+            self.log_reactor_state(
+                REACTOR_POLL_STALL_PROBE_WOULD_BLOCK,
+                poll_id,
+                event_count,
+                listener_event_flags,
+            );
+            return;
+        }
+
+        if self.listener_rearm_used {
+            self.log_reactor_state(
+                REACTOR_POLL_STALL_PROBE_PROGRESS,
+                poll_id,
+                event_count,
+                listener_event_flags,
+            );
+            return;
+        }
+
+        self.listener_rearm_used = true;
         let rearmed = match self.listener.as_mut() {
             Some(listener) => self
                 .reg
@@ -709,9 +743,9 @@ impl EventLoop {
         };
         self.log_reactor_state(
             if rearmed {
-                REACTOR_POLL_STALLED_REARMED
+                REACTOR_POLL_STALL_PROBE_REARMED
             } else {
-                REACTOR_POLL_STALLED_REARM_FAILED
+                REACTOR_POLL_STALL_PROBE_REARM_FAILED
             },
             poll_id,
             event_count,
@@ -1545,7 +1579,9 @@ pub(crate) unsafe fn nio_start_in_dir(
                 #[cfg(feature = "native-network")]
                 last_listener_event_count: 0,
                 #[cfg(feature = "native-network")]
-                listener_stall_reported: false,
+                listener_stall_probe_done: false,
+                #[cfg(feature = "native-network")]
+                listener_rearm_used: false,
                 cxx_connect_attempts: cxx_connect_attempts.clone(),
                 cxx_connect_returns: cxx_connect_returns.clone(),
                 cxx_connect_rejects: cxx_connect_rejects.clone(),
