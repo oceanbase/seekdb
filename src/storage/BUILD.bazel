@@ -596,3 +596,14 @@ cc_library(
     tags = ["manual"],
     visibility = ["//unittest/storage/tx:__pkg__"],
 )
+
+cc_library(
+    name = "block_stat_range_test_headers",
+    testonly = True,
+    deps = [
+        ":storage_runtime_interface",
+        "//src/logservice:logservice",
+    ] + _STORAGE_INTERFACE_NATIVE_DEPS,
+    tags = ["manual"],
+    visibility = ["//unittest/storage/retrieval:__pkg__"],
+)

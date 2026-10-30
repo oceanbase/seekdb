@@ -65,6 +65,7 @@ private:
 // "Block" here means a collection of contunious stored data in a specific key range.
 class ObBlockStatIterator
 {
+  friend class BlockStatRangeTest;
 public:
   ObBlockStatIterator();
   virtual ~ObBlockStatIterator() { reset(); }
@@ -170,6 +171,7 @@ private:
   int refresh_scan_table_on_demand();
   int refresh_tablet_iter();
   int prepare_scan_tables();
+  int prepare_memtable_scan_range(ObDatumRange &range);
   int construct_iters();
   void reset_iters();
   int build_merge_heap(const ObITableReadInfo *rowkey_read_info);
