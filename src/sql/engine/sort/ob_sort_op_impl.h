@@ -245,6 +245,7 @@ private:
  */
 class ObSortOpImpl
 {
+  friend class FixedSortCellsTestAccess;
 public:
   static const int64_t EXTEND_MULTIPLE = 2;
   static const int64_t MAX_MERGE_WAYS = 256;
@@ -887,6 +888,7 @@ protected:
 class ObInMemoryTopnSortImpl;
 class ObPrefixSortImpl : public ObSortOpImpl
 {
+  friend class FixedSortCellsTestAccess;
 public:
   explicit ObPrefixSortImpl(ObMonitorNode &op_monitor_info);
   ~ObPrefixSortImpl()
