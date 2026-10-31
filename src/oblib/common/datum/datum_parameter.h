@@ -17,6 +17,7 @@
 #pragma once
 
 #include "common/datum/datum_core.h"
+#include "common/datum/datum_copy_plan.h"
 #include "common/datum/datum_value.h"
 #include "common/datum/datum_sql_print.h"
 #include "common/datum/parameter_flags.h"
@@ -149,7 +150,8 @@ public:
   {
     int ret = OB_SUCCESS;
     ObDatum copy;
-    if (OB_FAIL(copy.deep_copy(source.datum_, allocator))) {
+    const DatumCopyPlan plan(source.type_meta_, source.accuracy_);
+    if (OB_FAIL(plan.deep_copy(source.datum_, copy, allocator))) {
     } else {
       *this = source;
       datum_ = copy;

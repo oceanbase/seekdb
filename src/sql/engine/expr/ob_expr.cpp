@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr.h"
+#include "common/datum/datum_copy_plan.h"
 #include "common/datum/datum_sql_print.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_datum_cast.h"
@@ -428,8 +429,9 @@ int bind_datum_parameter(const DatumParameter &source, DatumParameter &destinati
   return OB_SUCCESS;
 }
 
-int clone_datum_value(const ObDatum &source, const SqlTypeMeta &meta, ObDatum &destination,
-                      ObIAllocator &allocator)
+static int clone_datum_value_with_accuracy(const ObDatum &source, const SqlTypeMeta &meta,
+                                           const ObAccuracy &accuracy, ObDatum &destination,
+                                           ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   ObDatum owned;
@@ -437,12 +439,14 @@ int clone_datum_value(const ObDatum &source, const SqlTypeMeta &meta, ObDatum &d
     DatumParameter input, copy;
     input.set_datum(source);
     input.set_type_meta(meta);
+    input.set_accuracy(accuracy);
     if (OB_FAIL(DatumParameterArray::clone_parameter(input, copy, allocator))) {
     } else {
       owned = copy.datum_;
     }
   } else {
-    ret = owned.deep_copy(source, allocator);
+    const DatumCopyPlan plan(meta, accuracy);
+    ret = plan.deep_copy(source, owned, allocator);
   }
   if (OB_SUCC(ret)) {
     destination = owned;
@@ -450,11 +454,18 @@ int clone_datum_value(const ObDatum &source, const SqlTypeMeta &meta, ObDatum &d
   return ret;
 }
 
+int clone_datum_value(const ObDatum &source, const SqlTypeMeta &meta, ObDatum &destination,
+                      ObIAllocator &allocator)
+{
+  return clone_datum_value_with_accuracy(source, meta, ObAccuracy(), destination, allocator);
+}
+
 int clone_datum_value(const DatumParameter &source, DatumParameter &destination,
                       ObIAllocator &allocator)
 {
   ObDatum owned;
-  const int ret = clone_datum_value(source.datum_, source.get_meta(), owned, allocator);
+  const int ret = clone_datum_value_with_accuracy(source.datum_, source.get_meta(),
+      source.get_accuracy(), owned, allocator);
   if (ret == OB_SUCCESS) {
     destination.datum_ = owned;
     destination.set_type_meta(source.get_meta());
