@@ -70,6 +70,12 @@ public:
 
   ObDATrieHit &operator=(const ObDATrieHit &other)
   {
+    // The dictionary pointer must be copied as well.  Every hit of the range
+    // dictionary points at the sub dictionary that owns its own first
+    // character, so two hits of the same processor may use different
+    // dictionaries.  Leaving dict_ behind turns the hit into a lookup in
+    // the wrong sub dictionary and silently changes the segmentation.
+    dict_ = other.dict_;
     char_cnt_ = other.char_cnt_;
     start_pos_ = other.start_pos_;
     end_pos_ = other.end_pos_;

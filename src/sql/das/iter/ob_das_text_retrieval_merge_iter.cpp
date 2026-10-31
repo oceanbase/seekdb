@@ -721,7 +721,10 @@ int ObDASTextRetrievalMergeIter::do_total_doc_cnt()
     // use estimated document count for relevance estimation
     // Need to note that when total doc count is under estimated too much, the IDF component in BM25
     // would be invalidate and result to token frequence have major influence on final relevance score
-    ObExpr *total_doc_cnt_expr = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+    const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+    ObExpr *total_doc_cnt_expr = OB_ISNULL(doc_agg_ctdef)
+        ? nullptr
+        : doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
     if (OB_ISNULL(total_doc_cnt_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -1050,7 +1053,10 @@ int ObDASTRTaatIter::fill_total_doc_cnt()
   int ret = OB_SUCCESS;
   ObEvalCtx::BatchInfoScopeGuard guard(*ir_rtdef_->eval_ctx_);
   guard.set_batch_idx(0);
-  ObExpr *total_doc_cnt_expr = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+  const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+  ObExpr *total_doc_cnt_expr = OB_ISNULL(doc_agg_ctdef)
+      ? nullptr
+      : doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
   if (OB_ISNULL(total_doc_cnt_expr)) {
       ret = OB_ERR_UNEXPECTED;
   } else {

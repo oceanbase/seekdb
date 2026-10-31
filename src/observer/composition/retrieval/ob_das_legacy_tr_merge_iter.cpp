@@ -476,15 +476,21 @@ int ObDASLegacyTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
   iter_param.function_lookup_mode_ = function_lookup_mode_;
   iter_param.need_calc_relevance_ = ir_ctdef_->need_calc_relevance();
   if (iter_param.need_calc_relevance_) {
-    iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-        = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+    const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+    if (OB_ISNULL(doc_agg_ctdef)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+          = doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+    }
     iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
     iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
     iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
     iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
     iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   }
-  if (query_tokens_.count() == 0) {
+  if (OB_FAIL(ret)) {
+  } else if (query_tokens_.count() == 0) {
     // do nothing
   } else if (!iter_param.need_calc_relevance_) {
     // C7: the relevance score is not required, the total document count is
@@ -533,15 +539,21 @@ int ObDASLegacyTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
   iter_param.function_lookup_mode_ = function_lookup_mode_;
   iter_param.need_calc_relevance_ = ir_ctdef_->need_calc_relevance();
   if (iter_param.need_calc_relevance_) {
-    iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
-        = ir_ctdef_->get_doc_agg_ctdef()->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+    const ObDASScanCtDef *doc_agg_ctdef = ir_ctdef_->get_doc_agg_ctdef();
+    if (OB_ISNULL(doc_agg_ctdef)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      iter_param.bm25_param_est_ctx_.total_doc_cnt_expr_
+          = doc_agg_ctdef->pd_expr_spec_.pd_storage_aggregate_output_.at(0);
+    }
     iter_param.bm25_param_est_ctx_.estimated_total_doc_cnt_ = ir_ctdef_->estimated_total_doc_cnt_;
     iter_param.bm25_param_est_ctx_.need_est_avg_doc_token_cnt_ = ir_ctdef_->need_avg_doc_len_est();
     iter_param.bm25_param_est_ctx_.can_est_by_sum_skip_index_ = ir_ctdef_->avg_doc_len_est_spec_.can_est_by_sum_skip_index_;
     iter_param.bm25_param_est_ctx_.avg_doc_token_cnt_expr_ = ir_ctdef_->avg_doc_token_cnt_expr_;
     iter_param.bm25_param_est_ctx_.doc_length_est_param_ = &doc_length_est_param_;
   }
-  if (OB_ISNULL(iter_param.dim_iter_ = dim_iter_)) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(iter_param.dim_iter_ = dim_iter_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!iter_param.need_calc_relevance_) {
     // C7: the relevance score is not required.
