@@ -1226,6 +1226,11 @@ int ObInnerSQLConnection::set_timeout(int64_t &abs_timeout_us)
     if (0 == abs_timeout_us) {
       timeout = (user_timeout_ > 0) ? user_timeout_ : config::internal_sql_execute_timeout();
       trx_timeout = timeout;
+      const int64_t MIN_INTERNAL_SQL_TIMEOUT = 5LL * 1000 * 1000;
+      if (is_inner_session() && timeout < MIN_INTERNAL_SQL_TIMEOUT) {
+          timeout = MIN_INTERNAL_SQL_TIMEOUT;
+          trx_timeout = MIN_INTERNAL_SQL_TIMEOUT;
+      }
       abs_timeout_us = now + timeout;
     }
   }
