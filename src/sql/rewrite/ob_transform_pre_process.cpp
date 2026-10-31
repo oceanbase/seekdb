@@ -55,7 +55,14 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         trans_happened |= is_happened;
         OPT_TRACE("flatten condition:", is_happened);
       }
-    }  
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(simplify_vector_approx_integer_bounds(stmt, is_happened))) {
+      } else {
+        trans_happened |= is_happened;
+        OPT_TRACE("simplify vector approximate integer bounds:", is_happened);
+      }
+    }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(try_gen_straight_join_leading(stmt, is_happened))) {
       } else {
@@ -190,6 +197,116 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
      if (OB_FAIL(stmt->formalize_stmt(ctx_->session_info_))) {
       }
     }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::simplify_vector_approx_integer_bounds(ObDMLStmt *stmt,
+                                                                  bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  ObSqlBitSet<> redundant;
+  ObSEArray<ObRawExpr *, 8> simplified;
+  if (OB_ISNULL(stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!stmt->has_vec_approx() || stmt->get_condition_exprs().count() < 2) {
+    // The general rewrite rules already simplify ordinary SQL predicates.
+  } else {
+    ObIArray<ObRawExpr *> &conditions = stmt->get_condition_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      for (int64_t j = i + 1; OB_SUCC(ret) && j < conditions.count(); ++j) {
+        bool first_implies_second = false;
+        bool second_implies_first = false;
+        if (redundant.has_member(i) || redundant.has_member(j)) {
+          // One side has already been removed by a stronger bound.
+        } else if (OB_FAIL(check_integer_bound_implies(conditions.at(i),
+                                                       conditions.at(j),
+                                                       first_implies_second))) {
+        } else if (OB_FAIL(check_integer_bound_implies(conditions.at(j),
+                                                       conditions.at(i),
+                                                       second_implies_first))) {
+        } else if (first_implies_second) {
+          if (OB_FAIL(redundant.add_member(j))) {
+          }
+        } else if (second_implies_first && OB_FAIL(redundant.add_member(i))) {
+        }
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      if (!redundant.has_member(i) && OB_FAIL(simplified.push_back(conditions.at(i)))) {
+      }
+    }
+    if (OB_SUCC(ret) && simplified.count() < conditions.count()) {
+      if (OB_FAIL(conditions.assign(simplified))) {
+      } else {
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::check_integer_bound_implies(const ObRawExpr *first,
+                                                       const ObRawExpr *second,
+                                                       bool &implies)
+{
+  int ret = OB_SUCCESS;
+  implies = false;
+  const ObRawExpr *first_column = NULL;
+  const ObRawExpr *second_column = NULL;
+  ObRawExpr *first_bound = NULL;
+  ObRawExpr *second_bound = NULL;
+  bool is_upper_bound = false;
+  bool is_lower_bound = false;
+  bool bound_is_stricter = false;
+  bool bounds_are_equal = false;
+  if (OB_ISNULL(first) || OB_ISNULL(second) ||
+      first->get_param_count() != 2 || second->get_param_count() != 2) {
+    // Unsupported predicates cannot participate in this focused simplification.
+  } else if (OB_ISNULL(first_column = first->get_param_expr(0)) ||
+             OB_ISNULL(second_column = second->get_param_expr(0)) ||
+             OB_ISNULL(first_bound = first->get_param_expr(1)) ||
+             OB_ISNULL(second_bound = second->get_param_expr(1))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!first_column->is_column_ref_expr() ||
+             !second_column->is_column_ref_expr() ||
+             !first_column->same_as(*second_column) ||
+             !ob_is_int_tc(first_column->get_result_type().get_type()) ||
+             !first_bound->is_const_raw_expr() ||
+             !second_bound->is_const_raw_expr() ||
+             T_QUESTIONMARK == first_bound->get_expr_type() ||
+             T_QUESTIONMARK == second_bound->get_expr_type() ||
+             !ob_is_int_tc(first_bound->get_result_type().get_type()) ||
+             !ob_is_int_tc(second_bound->get_result_type().get_type())) {
+    // Keep parameters and non-integer expressions for the regular optimizer.
+  } else if (FALSE_IT(is_upper_bound = (T_OP_LT == first->get_expr_type() ||
+                                        T_OP_LE == first->get_expr_type()) &&
+                                       (T_OP_LT == second->get_expr_type() ||
+                                        T_OP_LE == second->get_expr_type()))) {
+  } else if (FALSE_IT(is_lower_bound = (T_OP_GT == first->get_expr_type() ||
+                                        T_OP_GE == first->get_expr_type()) &&
+                                       (T_OP_GT == second->get_expr_type() ||
+                                        T_OP_GE == second->get_expr_type()))) {
+  } else if (!is_upper_bound && !is_lower_bound) {
+    // Upper and lower bounds do not imply one another.
+  } else if (OB_FAIL(ObTransformUtils::compare_const_expr_result(ctx_,
+                                                                 *first_bound,
+                                                                 is_upper_bound ? T_OP_LT : T_OP_GT,
+                                                                 *second_bound,
+                                                                 bound_is_stricter))) {
+  } else if (OB_FAIL(ObTransformUtils::compare_const_expr_result(ctx_,
+                                                                 *first_bound,
+                                                                 T_OP_EQ,
+                                                                 *second_bound,
+                                                                 bounds_are_equal))) {
+  } else {
+    const bool first_is_strict = T_OP_LT == first->get_expr_type() ||
+                                 T_OP_GT == first->get_expr_type();
+    const bool second_is_strict = T_OP_LT == second->get_expr_type() ||
+                                  T_OP_GT == second->get_expr_type();
+    implies = bound_is_stricter ||
+              (bounds_are_equal && (first_is_strict || !second_is_strict));
   }
   return ret;
 }
