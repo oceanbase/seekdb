@@ -1015,6 +1015,43 @@ int ObFTParserJsonProps::show_parser_properties(const ObFTParserJsonProps &prope
 
 int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const ObString &json_str)
 {
+  struct Entry {
+    ObFTParser parser;
+    char json[2048];
+    int64_t size = 0;
+    ObFTParserProperty value;
+    bool valid = false;
+  };
+  struct Cache { Entry entries[8]; int64_t next = 0; };
+  static thread_local Cache cache;
+  // Only parser-specific fields are assigned by the original parser. Preserve
+  // the remaining fields when the destination object is reused by a caller.
+  auto apply = [&](const ObFTParserProperty &value) {
+    if (parser.is_ik()) {
+      dict_table_ = value.dict_table_;
+      stopword_table_ = value.stopword_table_;
+      quantifier_table_ = value.quantifier_table_;
+      ik_mode_smart_ = value.ik_mode_smart_;
+    } else if (parser.is_space() || parser.is_beng()) {
+      min_token_size_ = value.min_token_size_;
+      max_token_size_ = value.max_token_size_;
+    } else if (parser.is_ngram()) {
+      ngram_token_size_ = value.ngram_token_size_;
+    } else if (parser.is_ngram2()) {
+      min_ngram_token_size_ = value.min_ngram_token_size_;
+      max_ngram_token_size_ = value.max_ngram_token_size_;
+    }
+  };
+  const bool cacheable = json_str.length() <= 2048 && parser.is_builtin();
+  if (cacheable) {
+    for (const auto &entry : cache.entries) {
+      if (entry.valid && entry.parser == parser && entry.size == json_str.length()
+          && (json_str.empty() || 0 == MEMCMP(entry.json, json_str.ptr(), entry.size))) {
+        apply(entry.value);
+        return OB_SUCCESS;
+      }
+    }
+  }
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
   if (OB_FAIL(props.init())) {
@@ -1063,6 +1100,17 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
       } else if (OB_FAIL(props.config_get_max_ngram_token_size(max_ngram_token_size_))) {
       }
     }
+  }
+  if (OB_SUCC(ret) && cacheable) {
+    auto &entry = cache.entries[cache.next];
+    entry.valid = false;
+    entry.parser = parser;
+    entry.size = json_str.length();
+    if (!json_str.empty()) { MEMCPY(entry.json, json_str.ptr(), entry.size); }
+    // IK names above are literal constants, not references to parsed JSON.
+    entry.value = *this;
+    entry.valid = true;
+    cache.next = (cache.next + 1) % 8;
   }
   return ret;
 }

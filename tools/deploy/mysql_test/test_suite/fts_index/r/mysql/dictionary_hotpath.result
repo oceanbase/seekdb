@@ -1,0 +1,39 @@
+SET NAMES utf8mb4;
+Dictionary ranges, quantifiers, mixed scripts and repeated loader acquisition
+SELECT TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上 一二三四五六七八九十 百千万亿', 'ik');
+TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上 一二三四五六七八九十 百千万亿', 'ik')
+["百千万亿", "来自", "海上", "中华人民共和国", "自来水", "上海", "人民大会堂", "一二三四五六七八九十"]
+SELECT TOKENIZE('阿拉伯 北京 南京 重庆 数据库 全文检索 算法 语言 字典 香港 中华 龟龄', 'ik');
+TOKENIZE('阿拉伯 北京 南京 重庆 数据库 全文检索 算法 语言 字典 香港 中华 龟龄', 'ik')
+["重庆", "算法", "北京", "字典", "南京", "全文", "阿拉伯", "语言", "数据库", "中华", "检索", "龟", "龄", "香港"]
+SELECT TOKENIZE('3公斤 20千米 100毫升 一百二十三个 两万亿元', 'ik');
+TOKENIZE('3公斤 20千米 100毫升 一百二十三个 两万亿元', 'ik')
+["个", "20千米", "100毫升", "亿元", "一百二十三", "两万", "3公斤"]
+SELECT TOKENIZE('OceanBase 数据库 café CAFÉ Àà ß İ 你好🙂𠮷𠀀 한국어 日本語', 'ik');
+TOKENIZE('OceanBase 数据库 café CAFÉ Àà ß İ 你好🙂𠮷𠀀 한국어 日本語', 'ik')
+["caf", "국", "oceanbase", "한", "어", "語", "数据库", "日本", "你好"]
+SELECT TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上', 'ik', '[{"additional_args":[{"ik_mode":"smart"}]}]');
+TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上', 'ik', '[{"additional_args":[{"ik_mode":"smart"}]}]')
+["人民大会堂", "来自", "上海", "自来水", "中华人民共和国", "海上"]
+SELECT TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上', 'ik', '[{"additional_args":[{"ik_mode":"max_word"}]}]');
+TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上', 'ik', '[{"additional_args":[{"ik_mode":"max_word"}]}]')
+["大会", "人民大会堂", "大会堂", "共和国", "来自", "人民大会", "人民共和国", "中华人民", "共和", "上海", "会堂", "中华", "自来水", "中华人民共和国", "海上", "自来", "水", "国人", "华人", "人民"]
+SELECT TOKENIZE('a Z 0 空格，标点。\t\n数据库', 'ik');
+TOKENIZE('a Z 0 空格，标点。\t\n数据库', 'ik')
+["空格", "0", "a", "数据库", "z", "标点"]
+SELECT BENCHMARK(100, TOKENIZE('词典并发加载 数据库', 'ik'));
+BENCHMARK(100, TOKENIZE('词典并发加载 数据库', 'ik'))
+0
+In-place counts must keep the latest collation-equivalent spelling
+SELECT TOKENIZE(_utf8mb4'cafe café cafe CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]');
+TOKENIZE(_utf8mb4'cafe café cafe CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]')
+{"tokens": [{"café": 4}], "doc_len": 4}
+SELECT TOKENIZE(_utf8mb4'café cafe CAFÉ cafe' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]');
+TOKENIZE(_utf8mb4'café cafe CAFÉ cafe' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]')
+{"tokens": [{"cafe": 4}], "doc_len": 4}
+SELECT TOKENIZE(_utf8mb4'café cafe café cafe' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"}]');
+TOKENIZE(_utf8mb4'café cafe café cafe' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"}]')
+{"tokens": [{"café": 2}, {"cafe": 2}], "doc_len": 4}
+SELECT TOKENIZE('数据库 数据库 全文检索 数据库', 'ik', '[{"output":"all"}]');
+TOKENIZE('数据库 数据库 全文检索 数据库', 'ik', '[{"output":"all"}]')
+{"tokens": [{"全文": 1}, {"数据库": 3}, {"检索": 1}], "doc_len": 5}

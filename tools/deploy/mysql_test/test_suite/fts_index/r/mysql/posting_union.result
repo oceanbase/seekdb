@@ -1,0 +1,108 @@
+SET NAMES utf8mb4;
+SET ob_query_timeout = 1000000000;
+CREATE DATABASE IF NOT EXISTS fts_union_regression;
+USE fts_union_regression;
+DROP TABLE IF EXISTS docs;
+CREATE TABLE docs(id BIGINT PRIMARY KEY, body TEXT);
+INSERT INTO docs VALUES (1,'alpha beta gamma delta epsilon zeta theta kappa'),
+(2,'alpha'),(3,'beta gamma'),(4,'unrelated'),(5,''),(6,NULL),
+(7,'alpha kappa'),(8,'lambda');
+INSERT INTO docs SELECT id+8,body FROM docs;
+INSERT INTO docs SELECT id+16,body FROM docs;
+INSERT INTO docs SELECT id+32,body FROM docs;
+INSERT INTO docs SELECT id+64,body FROM docs;
+INSERT INTO docs SELECT id+128,body FROM docs;
+INSERT INTO docs SELECT id+256,body FROM docs;
+INSERT INTO docs SELECT id+512,body FROM docs;
+INSERT INTO docs SELECT id+1024,body FROM docs;
+INSERT INTO docs SELECT id+2048,body FROM docs;
+CREATE FULLTEXT INDEX ft ON docs(body) WITH PARSER beng;
+SELECT COUNT(*),MIN(id),MAX(id),SUM(id) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha');
+COUNT(*)	MIN(id)	MAX(id)	SUM(id)
+1536	1	4095	3144704
+SELECT COUNT(*),MIN(id),MAX(id),SUM(id) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(*)	MIN(id)	MAX(id)	SUM(id)
+2048	1	4095	4192768
+SELECT COUNT(*),MIN(id),MAX(id),SUM(id) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta gamma delta epsilon zeta theta kappa');
+COUNT(*)	MIN(id)	MAX(id)	SUM(id)
+2048	1	4095	4192768
+SELECT COUNT(*),MIN(id),MAX(id),SUM(id) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta gamma delta epsilon zeta theta kappa lambda');
+COUNT(*)	MIN(id)	MAX(id)	SUM(id)
+2560	1	4096	5243392
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('missing alpha othermissing beta');
+COUNT(*)
+2048
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('missing othermissing');
+COUNT(*)
+0
+SELECT id FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta') ORDER BY id LIMIT 10 OFFSET 1020;
+id
+2041
+2042
+2043
+2047
+2049
+2050
+2051
+2055
+2057
+2058
+SELECT SUM(id) FROM (SELECT id FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta') ORDER BY id LIMIT 10 OFFSET 1020) t;
+SUM(id)
+20493
+SELECT COUNT(*),SUM(id) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta') AND id BETWEEN 1000 AND 3000;
+COUNT(*)	SUM(id)
+1000	1999250
+PREPARE stmt FROM 'SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST(?)';
+SET @term='alpha beta';
+EXECUTE stmt USING @term;
+COUNT(*)
+2048
+SET @term='lambda';
+EXECUTE stmt USING @term;
+COUNT(*)
+512
+SET @term='alpha beta gamma delta epsilon zeta theta kappa lambda';
+EXECUTE stmt USING @term;
+COUNT(*)
+2560
+SET @term='alpha beta gamma delta epsilon zeta theta kappa';
+EXECUTE stmt USING @term;
+COUNT(*)
+2048
+SET @term='';
+EXECUTE stmt USING @term;
+COUNT(*)
+0
+SET @term='alpha beta';
+EXECUTE stmt USING @term;
+COUNT(*)
+2048
+DEALLOCATE PREPARE stmt;
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta' IN BOOLEAN MODE);
+COUNT(*)
+2048
+START TRANSACTION;
+DELETE FROM docs WHERE id IN (1,2,3);
+UPDATE docs SET body='lambda' WHERE id BETWEEN 8 AND 16;
+INSERT INTO docs VALUES (5000,'alpha beta lambda');
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(*)
+2042
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('lambda');
+COUNT(*)
+520
+ROLLBACK;
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(*)
+2048
+DELETE FROM docs WHERE id IN (1,2,3);
+UPDATE docs SET body='lambda' WHERE id BETWEEN 8 AND 16;
+INSERT INTO docs VALUES (5000,'alpha beta lambda');
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(*)
+2042
+SELECT COUNT(*) FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('lambda');
+COUNT(*)
+520
+DROP DATABASE fts_union_regression;

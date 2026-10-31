@@ -382,15 +382,17 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
 {
   int ret = OB_SUCCESS;
   bool found = false;
+  // These ranges always use UTF8MB4_BIN (see build_dict_from_cache). Its
+  // strnncoll compares unsigned bytes and then lengths, without space padding.
+  // Avoid repeated charset registry lookups for every character in a document.
+  const auto compare = [](const ObString &left, const ObString &right) {
+    const int32_t length = MIN(left.length(), right.length());
+    const int cmp = length > 0 ? MEMCMP(left.ptr(), right.ptr(), length) : 0;
+    return cmp != 0 ? cmp : left.length() - right.length();
+  };
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
+    if (compare(range_dicts_[i].start_.get_word(), single_word) <= 0
+        && compare(range_dicts_[i].end_.get_word(), single_word) >= 0) {
       dict = range_dicts_[i].dict_;
       found = true;
     }

@@ -197,6 +197,12 @@ public:
     TableItem *right_table_;
   };
 
+  static int check_need_calc_match_score(ObExecContext *exec_ctx,
+                                        const ObDMLStmt *stmt,
+                                        ObRawExpr *match_expr,
+                                        bool &need_calc,
+                                        ObIArray<ObExprConstraint> &constraints);
+
   static int decorrelate(ObRawExpr *&expr, ObIArray<ObExecParamRawExpr *> &exec_params);
 
   static int decorrelate(ObIArray<ObRawExpr *> &exprs, ObIArray<ObExecParamRawExpr *> &exec_params);

@@ -23,6 +23,24 @@ namespace oceanbase
 namespace storage
 {
 
+// CS_TYPE_BINARY compares every byte (including trailing spaces) and then
+// lengths. Posting IDs do not need the general charset dispatch on each heap
+// comparison. Keep the same null-first order as the generic comparator.
+static int compare_binary_posting_ids(const ObDatum &left, const ObDatum &right,
+                                     int &result, const common::ObDatumAccessContext *)
+{
+  if (left.is_null() || right.is_null()) {
+    result = left.is_null() ? (right.is_null() ? 0 : -1) : 1;
+  } else {
+    const int64_t length = MIN(left.len_, right.len_);
+    result = length > 0 ? MEMCMP(left.ptr_, right.ptr_, length) : 0;
+    if (result == 0) {
+      result = (left.len_ > right.len_) - (left.len_ < right.len_);
+    }
+  }
+  return OB_SUCCESS;
+}
+
 ObSRMergeCmp::ObSRMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
@@ -40,7 +58,8 @@ int ObSRMergeCmp::init(
   } else {
     iter_ids_ = iter_ids;
     common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
-    cmp_func_ = basic_funcs->null_first_cmp_;
+    cmp_func_ = id_meta.type_ == ObVarcharType && id_meta.cs_type_ == CS_TYPE_BINARY
+        ? compare_binary_posting_ids : basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {

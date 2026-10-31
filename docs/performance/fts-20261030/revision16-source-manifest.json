@@ -1,0 +1,25 @@
+{
+  "files": {
+    "src/sql/optimizer/ob_log_plan.cpp": "ed1ac2540b64871ea43ba67f94792bc3dc8b61f0dccfb3782d1f138b4f5791a8",
+    "src/storage/retrieval/ob_text_taat_iter.cpp": "d6c848a152768990315e681ff3d22ae5acbfca40b27aba83eb9aa3c43fb1981d",
+    "src/sql/rewrite/ob_transformer_impl.cpp": "04e708be271a54e75208210bc07bfd30565fa687eeb07258bbe1edd179663b80",
+    "src/storage/fts/dict/ob_ft_range_dict.cpp": "cb3f314b7b925ade48c6111c09d02d9b45160ddea23dab086e443b7dfbd58a31",
+    "src/storage/retrieval/ob_sparse_taat_iter.cpp": "20f0c1111083187a4c416c454e9a7348e3915e7378e3e8aec89319c3e3782895",
+    "src/sql/optimizer/ob_join_order.cpp": "6f9b14b2d65943fe70564cad070489add216c87cc4e47049a8351a556a53e1dc",
+    "src/sql/rewrite/ob_transform_utils.h": "c64573b6d07e0d6ee33ca6eafa584eae48c4129ce686e79d414853b368704b45",
+    "src/storage/retrieval/ob_text_retrieval_token_iter.cpp": "4630e6ab5b9b0373afeba0de0799d8be682c053caa92d1d2d120a44fc4dd7d6e",
+    "src/sql/das/iter/ob_das_text_retrieval_merge_iter.cpp": "f7e452cb4c20a044b6d00a0547213919b7523b8d152b1f4d18858a724913bf5d",
+    "src/storage/retrieval/ob_text_daat_iter.cpp": "abf1717c69419faaacb5053ad33cb55e431c097ae5d4252be32607315cf11b31",
+    "src/storage/fts/ob_fts_parser_property.cpp": "bcedae26b47ce108fd1c18891337d7ac30d151f9965682707931fc55c3c4c1b7",
+    "src/storage/fts/dict/ob_gen_dic_loader.cpp": "a233a8abf24b5d840a0a4448117a3f52f038b4d50fe39d4c67bf42210c518188",
+    "src/sql/rewrite/ob_transform_utils.cpp": "64ad5188215d2f36a40bfab3121794b71a065533378aa057e9552e39725794e6",
+    "src/storage/fts/ob_fts_stop_word.cpp": "634a76831f09019b01b32e21780a5c38061b660730ed6fd4a26db28010bf6aa5",
+    "src/sql/rewrite/ob_transform_simplify_orderby.cpp": "38dfc3049691f2b275122abc69f3500132ba0fdca780ef03ec935913c716ded1",
+    "src/share/text_analysis/ob_token_stream.cpp": "e5014ae0b27f427a87532faf1f9827fb0df45e40f9d5997bed67bb43c2abfcf7",
+    "src/data_plane/api/data_plane/fts/ob_fts_struct.h": "8ec48c3280a0acc26cd46b1928e70cba1b1a076eb64934038b30446bd3dceff4",
+    "src/storage/retrieval/ob_text_daat_iter.h": "db072a6b81dfa7d8af2400ba368b07d8a69988f51cfb690be76bf78f7aaf87c1",
+    "src/storage/fts/ob_fts_struct.cpp": "ec6a58b69524b759301dd950f08ce91d08d2f153f8be941e06d86e42db3a263e",
+    "src/observer/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp": "688897401df9d6768176d113d5dcfaa274a94376df2481bf8fd6faa70dcdc422"
+  },
+  "normalization": "UTF-8, CRLF normalized to LF"
+}

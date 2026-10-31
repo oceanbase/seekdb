@@ -1,0 +1,70 @@
+SET NAMES utf8mb4;
+SELECT TOKENIZE('alpha beta alpha', 'beng');
+TOKENIZE('alpha beta alpha', 'beng')
+["alpha", "beta"]
+SELECT TOKENIZE('alpha beta alpha', 'beng', '[{"output":"all"}]');
+TOKENIZE('alpha beta alpha', 'beng', '[{"output":"all"}]')
+{"tokens": [{"alpha": 2}, {"beta": 1}], "doc_len": 3}
+SELECT TOKENIZE('alpha beta alpha', 'beng', '[{"additional_args":[{"min_token_size":6}]}]');
+TOKENIZE('alpha beta alpha', 'beng', '[{"additional_args":[{"min_token_size":6}]}]')
+[]
+SELECT TOKENIZE('alpha beta alpha', 'beng');
+TOKENIZE('alpha beta alpha', 'beng')
+["alpha", "beta"]
+SELECT TOKENIZE('abcdef', 'ngram');
+TOKENIZE('abcdef', 'ngram')
+["ab", "ef", "de", "bc", "cd"]
+SELECT TOKENIZE('abcdef', 'ngram', '[{"additional_args":[{"ngram_token_size":3}]}]');
+TOKENIZE('abcdef', 'ngram', '[{"additional_args":[{"ngram_token_size":3}]}]')
+["cde", "bcd", "def", "abc"]
+SELECT TOKENIZE('abcdef', 'ngram');
+TOKENIZE('abcdef', 'ngram')
+["ab", "ef", "de", "bc", "cd"]
+SELECT TOKENIZE('中华人民共和国 人民大会堂', 'ik');
+TOKENIZE('中华人民共和国 人民大会堂', 'ik')
+["人民大会堂", "中华人民共和国"]
+SELECT TOKENIZE('中华人民共和国 人民大会堂', 'ik', '[{"additional_args":[{"ik_mode":"max_word"}]}]');
+TOKENIZE('中华人民共和国 人民大会堂', 'ik', '[{"additional_args":[{"ik_mode":"max_word"}]}]')
+["大会", "人民大会堂", "大会堂", "共和国", "人民大会", "人民共和国", "中华人民", "共和", "国", "会堂", "中华", "中华人民共和国", "华人", "人民"]
+SELECT TOKENIZE('中华人民共和国 人民大会堂', 'ik');
+TOKENIZE('中华人民共和国 人民大会堂', 'ik')
+["人民大会堂", "中华人民共和国"]
+SELECT TOKENIZE('default parser alpha beta');
+TOKENIZE('default parser alpha beta')
+["default", "parser", "alpha", "beta"]
+SELECT TOKENIZE('default parser alpha beta', NULL);
+TOKENIZE('default parser alpha beta', NULL)
+["default", "parser", "alpha", "beta"]
+SELECT TOKENIZE(NULL, 'beng');
+TOKENIZE(NULL, 'beng')
+[]
+SELECT TOKENIZE('CAFÉ cafe CAFÉ', 'beng', '[{"output":"all"}]');
+TOKENIZE('CAFÉ cafe CAFÉ', 'beng', '[{"output":"all"}]')
+{"tokens": [{"café": 3}], "doc_len": 3}
+SELECT TOKENIZE('alpha beta', 'beng', '[{"additional_args":[{"min_token_size":0}]}]');
+ERROR HY000: Incorrect arguments to the min_token_size must be in [1, 16]
+SELECT TOKENIZE('alpha beta', 'beng');
+TOKENIZE('alpha beta', 'beng')
+["alpha", "beta"]
+PREPARE tok FROM 'SELECT TOKENIZE(?, ?, ?)';
+SET @text='alpha beta alpha', @parser='beng', @args='[{"output":"all"}]';
+EXECUTE tok USING @text,@parser,@args;
+TOKENIZE(?, ?, ?)
+{"tokens": [{"alpha": 2}, {"beta": 1}], "doc_len": 3}
+SET @args='[{"additional_args":[{"min_token_size":6}]}]';
+EXECUTE tok USING @text,@parser,@args;
+TOKENIZE(?, ?, ?)
+[]
+SET @args='[{"output":"all"}]';
+EXECUTE tok USING @text,@parser,@args;
+TOKENIZE(?, ?, ?)
+{"tokens": [{"alpha": 2}, {"beta": 1}], "doc_len": 3}
+SET @text='数据库 全文检索', @parser='ik';
+EXECUTE tok USING @text,@parser,@args;
+TOKENIZE(?, ?, ?)
+{"tokens": [{"全文": 1}, {"数据库": 1}, {"检索": 1}], "doc_len": 3}
+SET @text='alpha beta alpha', @parser='beng';
+EXECUTE tok USING @text,@parser,@args;
+TOKENIZE(?, ?, ?)
+{"tokens": [{"alpha": 2}, {"beta": 1}], "doc_len": 3}
+DEALLOCATE PREPARE tok;

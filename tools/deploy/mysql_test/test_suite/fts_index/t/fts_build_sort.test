@@ -1,0 +1,34 @@
+SET NAMES utf8mb4;
+SET ob_query_timeout=1000000000;
+--disable_warnings
+CREATE DATABASE IF NOT EXISTS fts_build_sort_regression;
+USE fts_build_sort_regression;
+DROP TABLE IF EXISTS docs_ci;
+DROP TABLE IF EXISTS docs_bin;
+--enable_warnings
+CREATE TABLE docs_ci(id BIGINT PRIMARY KEY, en TEXT, cn TEXT) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+INSERT INTO docs_ci VALUES
+(-9223372036854775807,'cafe café CAFÉ database','数据库 全文索引'),
+(-1,'café cafe database database','中华人民共和国 人民大会堂'),
+(0,'alpha alphabet alpine alpha','中文数据，混合OceanBase'),
+(1,'İstanbul İstanbul élève eleve','𠮷野家𠀀 数据库'),
+(2,'foo\0bar prefix prefixes prefixed','中文🙂分词'),
+(3,'NULL empty spaces     ','数据库 数据库'),
+(4,NULL,NULL),
+(5,'',''),
+(9223372036854775807,'Ωμέγα омега résumé resume','香港 北京 上海 重庆');
+CREATE FULLTEXT INDEX ft_en ON docs_ci(en) WITH PARSER beng;
+CREATE FULLTEXT INDEX ft_cn ON docs_ci(cn) WITH PARSER ik;
+SELECT id FROM docs_ci FORCE INDEX(ft_en) WHERE MATCH(en) AGAINST('cafe') ORDER BY id;
+SELECT id FROM docs_ci FORCE INDEX(ft_en) WHERE MATCH(en) AGAINST('café database alpha prefix') ORDER BY id;
+SELECT id,ROUND(MATCH(en) AGAINST('database'),6) AS score FROM docs_ci FORCE INDEX(ft_en) WHERE MATCH(en) AGAINST('database') ORDER BY id;
+SELECT id FROM docs_ci FORCE INDEX(ft_en) WHERE MATCH(en) AGAINST('élève résumé') ORDER BY id;
+SELECT id FROM docs_ci FORCE INDEX(ft_cn) WHERE MATCH(cn) AGAINST('数据库 中文') ORDER BY id;
+SELECT id FROM docs_ci FORCE INDEX(ft_cn) WHERE MATCH(cn) AGAINST('中华人民共和国') ORDER BY id;
+CREATE TABLE docs_bin(id BIGINT UNSIGNED PRIMARY KEY, body TEXT) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+INSERT INTO docs_bin VALUES (0,'cafe café CAFÉ'),(1,'alpha alphabet alpine'),(18446744073709551615,'café database');
+CREATE FULLTEXT INDEX ft ON docs_bin(body) WITH PARSER beng;
+SELECT id FROM docs_bin FORCE INDEX(ft) WHERE MATCH(body) AGAINST('cafe') ORDER BY id;
+SELECT id FROM docs_bin FORCE INDEX(ft) WHERE MATCH(body) AGAINST('café') ORDER BY id;
+SELECT id FROM docs_bin FORCE INDEX(ft) WHERE MATCH(body) AGAINST('alpha database') ORDER BY id;
+DROP DATABASE fts_build_sort_regression;

@@ -1,0 +1,13 @@
+SET NAMES utf8mb4;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":1}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":2}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":3}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":4}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":5}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":6}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":7}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":8}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":9}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":10}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":1}]}]')) AS tokens;
+SELECT JSON_LENGTH(TOKENIZE('uvwxyz','ngram','[{"additional_args":[{"ngram_token_size":3}]}]')) AS tokens;

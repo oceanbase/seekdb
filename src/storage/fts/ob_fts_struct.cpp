@@ -40,6 +40,15 @@ int ObFTWord::hash(uint64_t &hash_val) const
 }
 bool ObFTWord::operator==(const ObFTWord &other) const
 {
+  // Identical bytes under the same type and collation are always equal.
+  // Unequal bytes must still use the collation (accent and padding rules).
+  if (meta_.get_type() == other.meta_.get_type()
+      && meta_.get_collation_type() == other.meta_.get_collation_type()
+      && word_.get_string().length() == other.word_.get_string().length()
+      && 0 == MEMCMP(word_.get_string().ptr(), other.word_.get_string().ptr(),
+                     word_.get_string().length())) {
+    return true;
+  }
   bool is_equal = false;
   int ret = OB_SUCCESS;
   int cmp_ret = 0;

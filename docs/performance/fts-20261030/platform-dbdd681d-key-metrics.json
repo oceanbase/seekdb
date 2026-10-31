@@ -1,0 +1,30 @@
+{
+  "commit": "dbdd681d26434d835ab1324bc5beee089f23c7ae",
+  "platform_points": 16.58692203600273,
+  "metrics": {
+    "build_beng_en_sec": 2.926,
+    "query_mixed_avg_ms": 1.1909,
+    "build_ik_all_sec": 6.962,
+    "query_rounds": 200,
+    "select1_avg_ms": 0.0273,
+    "query_beng_avg_ms": 1.5795,
+    "query_beng_hits": 11000,
+    "query_limit_avg_ms": 0.124,
+    "build_total_sec": 16.831,
+    "tokenize_beng_avg_ms": 0.0396,
+    "query_cn_hits": 8001,
+    "batch": 500,
+    "fts_raw_score": 33.17384407200546,
+    "skip_load": 0,
+    "tokenize_ik_avg_ms": 0.0702,
+    "query_limit_hits": 20,
+    "query_cn_avg_ms": 1.006,
+    "fts_mean_improvement": 0.1658692203600273,
+    "rounds": 3000,
+    "warmup": 30,
+    "query_mixed_hits": 7332,
+    "samples": 3,
+    "build_ik_content_sec": 6.937,
+    "rows": 20000
+  }
+}

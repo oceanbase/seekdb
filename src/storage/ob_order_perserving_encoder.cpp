@@ -312,6 +312,7 @@ int ObOrderPerservingEncoder::encode_from_string_varlen(
   int ret = OB_SUCCESS;
   ObCollationType cs = param.cs_type_;
   bool is_valid_uni = false;
+  const bool binary_collation = cs == CS_TYPE_COLLATION_FREE || cs == CS_TYPE_BINARY;
 
   int64_t safty_buf_size = 20;
   // tail is up to 8 byte and [space] will be expand to 10byte, 
@@ -324,10 +325,13 @@ int ObOrderPerservingEncoder::encode_from_string_varlen(
   // therefore src will expand (10+4)/2=>7 times at most when encoding
   if ((to_len + 7 * str.length() + safty_buf_size) > max_buf_len) {
     ret = OB_BUF_NOT_ENOUGH;
-  } else if (str.empty() || (str.length()==1 && *str.ptr()=='\0')) {
+  } else if (str.empty() || (!binary_collation && str.length()==1 && *str.ptr()=='\0')) {
     if (OB_FAIL(encode_tails(to, max_buf_len, to_len, param.is_memcmp_, cs, str.length()==1 && *str.ptr()=='\0'))) {
     }
-  } else if (cs == CS_TYPE_COLLATION_FREE || cs == CS_TYPE_BINARY) {
+  } else if (binary_collation) {
+    // A single NUL must use the normal 00 01 escape, not an extra 00 tail.
+    // Otherwise it shares the empty-string terminator and the following key
+    // can reverse their order when multiple encoded columns are concatenated.
 #if OB_USE_MULTITARGET_CODE
     if (param.is_simdopt_ && common::is_arch_supported(ObTargetArch::AVX2)
       && specific::avx2::check_terminator_simd((unsigned char *)str.ptr(), str.length(), 0x00)) {

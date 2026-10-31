@@ -1,0 +1,37 @@
+SET NAMES utf8mb4;
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":1}]}]')) AS tokens;
+tokens
+12
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":2}]}]')) AS tokens;
+tokens
+11
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":3}]}]')) AS tokens;
+tokens
+10
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":4}]}]')) AS tokens;
+tokens
+9
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":5}]}]')) AS tokens;
+tokens
+8
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":6}]}]')) AS tokens;
+tokens
+7
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":7}]}]')) AS tokens;
+tokens
+6
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":8}]}]')) AS tokens;
+tokens
+5
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":9}]}]')) AS tokens;
+tokens
+4
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":10}]}]')) AS tokens;
+tokens
+3
+SELECT JSON_LENGTH(TOKENIZE('abcdefghijkl','ngram','[{"additional_args":[{"ngram_token_size":1}]}]')) AS tokens;
+tokens
+12
+SELECT JSON_LENGTH(TOKENIZE('uvwxyz','ngram','[{"additional_args":[{"ngram_token_size":3}]}]')) AS tokens;
+tokens
+4

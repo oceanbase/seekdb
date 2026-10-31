@@ -1,0 +1,19 @@
+Query Plan
+=======================================================================
+|ID|OPERATOR               |NAME                |EST.ROWS|EST.TIME(us)|
+-----------------------------------------------------------------------
+|0 |SCALAR GROUP BY        |                    |1       |949         |
+|1 |└─SUBPLAN SCAN         |t                   |20      |948         |
+|2 |  └─TEXT RETRIEVAL SCAN|docs(fti_content_ik)|20      |948         |
+=======================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([T_FUN_COUNT(*)]), filter(nil), rowset=256
+      group(nil), agg_func([T_FUN_COUNT(*)])
+  1 - output(nil), filter(nil), rowset=256
+      access(nil)
+  2 - output([1]), filter(nil), rowset=256
+      access(nil), partitions(p0)
+      limit(20), offset(nil), is_index_back=false, is_global_index=false, 
+      calc_relevance=false, match_expr(MATCH(docs.content) AGAINST('倒排索引 tokenizer')), 
+      pushdown_match_filter(MATCH(docs.content) AGAINST('倒排索引 tokenizer'))
