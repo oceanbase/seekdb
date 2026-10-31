@@ -11,14 +11,12 @@ import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_PACKAGES = ("zlib", "openssl", "curl")
+DEFAULT_PACKAGES = ("openssl", "curl")
 
 PACKAGES = {
 
     "curl": ("8.12.1", "https://curl.se/download/curl-8.12.1.tar.gz",
              "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf"),
-    "zlib": ("1.2.13", "https://codeload.github.com/madler/zlib/tar.gz/refs/tags/v1.2.13",
-             "1525952a0a567581792613a9723333d7f8cc20b87a81f920fb8bc7e3f2251428"),
     "openssl": ("1.1.1u", "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/OpenSSL_1_1_1u",
                 "fafe27202bde4238dce258d82ec8a8592a657842e5431264620a933a0c9436b7"),
 }
@@ -74,22 +72,37 @@ def verify_archive(archive, simulator, environment):
         raise RuntimeError("Unexpected archive platforms: " + repr(platforms))
 
 
-def build_zlib(source, build, prefix, sdk, options, environment):
-    """Compile zlib's static target and install its public headers and archive."""
-    # Modern Apple SDKs define TARGET_OS_MAC even for iOS; this is not classic Mac OS.
-    header = source / "zutil.h"
-    original = "#if defined(MACOS) || defined(TARGET_OS_MAC)"
-    patched = "#if defined(MACOS) && !defined(__APPLE__)"
-    content = header.read_text()
-    if original in content:
-        header.write_text(content.replace(original, patched))
-    elif patched not in content:
-        raise RuntimeError("Unrecognized zlib platform guard")
-    environment = target_environment(sdk, options, environment)
-    run([source / "configure", "--static", "--prefix=" + str(prefix)], build, environment)
-    run(["make", "-j" + str(options.jobs), "libz.a"], build, environment)
-    verify_archive(build / "libz.a", options.simulator, environment)
-    run(["make", "install"], build, environment)
+def build_zlib_rs(build, prefix, options, environment):
+    """Provide curl's zlib ABI from the pure Rust libz-rs-sys static archive."""
+    target = "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios"
+    package = build / "package"
+    (package / "src").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / "rust/zlib-sys/Cargo.toml", package / "Cargo.toml")
+    with (package / "Cargo.toml").open("a") as manifest_file:
+        manifest_file.write("\n[workspace]\n")
+    shutil.copy2(ROOT / "Cargo.lock", package / "Cargo.lock")
+    shutil.copy2(ROOT / "rust/zlib-sys/src/lib.rs", package / "src/lib.rs")
+    manifest = package / "Cargo.toml"
+    metadata = json.loads(subprocess.check_output([
+        "cargo", "metadata", "--format-version", "1", "--manifest-path", str(manifest),
+    ], cwd=ROOT, env=environment, universal_newlines=True))
+    packages = {package["name"]: package for package in metadata["packages"]}
+    libz_source = Path(packages["libz-rs-sys"]["manifest_path"]).parent
+    build.mkdir(parents=True, exist_ok=True)
+    run(["cargo", "build", "--release", "--target", target,
+         "--manifest-path", manifest, "--target-dir", build / "cargo"], ROOT, environment)
+    archive = build / "cargo" / target / "release/libzlib_sys.a"
+    verify_archive(archive, options.simulator, environment)
+    shutil.copy2(archive, prefix / "lib/libz.a")
+    for header in ("zlib.h", "zconf.h"):
+        shutil.copy2(libz_source / "include" / header, prefix / "include" / header)
+    for name in ("zlib-rs", "libz-rs-sys"):
+        source = Path(packages[name]["manifest_path"]).parent
+        destination = prefix / "licenses" / name
+        if destination.exists():
+            shutil.rmtree(destination)
+        destination.mkdir(parents=True)
+        shutil.copy2(source / "LICENSE", destination / "LICENSE")
 
 
 def build_openssl(source, build, prefix, sdk, options, environment):
@@ -112,9 +125,10 @@ def build_openssl(source, build, prefix, sdk, options, environment):
 
 def build_curl(source, build, prefix, sdk, options, environment):
     """Build libcurl against the verified local OpenSSL and zlib archives."""
+    environment = target_environment(sdk, options, environment, prefix)
+    build_zlib_rs(build / "zlib-rs", prefix, options, environment)
     for library in ("libssl.a", "libcrypto.a", "libz.a"):
         verify_archive(prefix / "lib" / library, options.simulator, environment)
-    environment = target_environment(sdk, options, environment, prefix)
     run([source / "configure", "--host=aarch64-apple-darwin", "--disable-shared",
          "--enable-static", "--disable-dependency-tracking", "--disable-ldap",
          "--disable-ldaps", "--without-libpsl", "--without-libssh2", "--without-libssh",
@@ -155,9 +169,8 @@ def target_environment(sdk, options, environment, prefix=None):
 
 
 PACKAGE_OUTPUTS = {
-    "zlib": ("lib/libz.a", "include/zlib.h", "include/zconf.h"),
     "openssl": ("lib/libssl.a", "lib/libcrypto.a", "include/openssl/ssl.h"),
-    "curl": ("lib/libcurl.a", "include/curl/curl.h"),
+    "curl": ("lib/libcurl.a", "include/curl/curl.h", "lib/libz.a", "include/zlib.h", "include/zconf.h"),
 }
 
 
@@ -187,8 +200,6 @@ def publish_metadata(name, source, marker, prefix):
     notices = set()
     for pattern in ("LICENSE*", "COPYING*", "Copyright", "license.html"):
         notices.update(path for path in source.glob(pattern) if path.is_file())
-    if name == "zlib":
-        notices.add(source / "zlib.h")
     if not notices:
         raise RuntimeError("No upstream license notice found: " + name)
     destination = prefix / "licenses" / name
@@ -206,6 +217,11 @@ def builder_identity():
     """Bind cache reuse to tracked dependency recipes and package version definitions."""
     digest = hashlib.sha256()
     digest.update(Path(__file__).read_bytes())
+    for path in sorted((ROOT / "rust/zlib-sys").rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(ROOT)).encode())
+            digest.update(path.read_bytes())
+    digest.update((ROOT / "Cargo.lock").read_bytes())
     return digest.hexdigest()
 
 
@@ -254,7 +270,7 @@ def main():
             shutil.rmtree(build)
         source = source_package(name, environment)
         build.mkdir(parents=True, exist_ok=True)
-        {"zlib": build_zlib, "openssl": build_openssl, "curl": build_curl}[name](source, build, prefix, sdk, options, environment)
+        {"openssl": build_openssl, "curl": build_curl}[name](source, build, prefix, sdk, options, environment)
         outputs = installed_output_hashes(name, prefix)
         if outputs is None:
             raise RuntimeError("Missing installed dependency outputs: " + name)

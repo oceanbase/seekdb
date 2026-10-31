@@ -171,7 +171,7 @@ def main():
         (probe / "main.cpp").write_text("int main() { return 0; }\n")
         subprocess.run([
             "emcc", str(probe / "main.cpp"), "-Oz", "-pthread", "-fexceptions", "-msimd128",
-            "-sUSE_ZLIB=1", "-sWASMFS", "-sASSERTIONS=2", "-sPROXY_TO_PTHREAD=1", "-sEXIT_RUNTIME=1",
+            "-sWASMFS", "-sASSERTIONS=2", "-sPROXY_TO_PTHREAD=1", "-sEXIT_RUNTIME=1",
             "-o", str(probe / "main.mjs"),
         ], check=True)
     rustc = Path(subprocess.check_output(

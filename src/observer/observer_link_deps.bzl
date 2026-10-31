@@ -57,7 +57,6 @@ def observer_third_party_link_files(platform):
     labels += [repository + "//:" + file for file in files]
     labels += [":_roaring_core_link"]
     files = ["lib/" + name for name in [
-        "libz.a",
     ]]
     if not macos and not android:
         files += ["lib/libaio.so"]

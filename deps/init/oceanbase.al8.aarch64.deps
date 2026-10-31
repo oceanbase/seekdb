@@ -14,7 +14,6 @@ devdeps-libcurl-static-8.12.1-132025040210.al8.aarch64.rpm
 devdeps-libaio-0.3.112-42024092715.al8.aarch64.rpm
 devdeps-relaxed-rapidjson-1.0.0-132024092715.al8.aarch64.rpm
 devdeps-openssl-static-1.1.1u-132024092718.al8.aarch64.rpm
-devdeps-zlib-static-1.2.13-82024102414.al8.aarch64.rpm
 devdeps-boost-1.74.0-72024092811.al8.aarch64.rpm
 devdeps-abseil-cpp-20211102.0-82026020911.al8.aarch64.rpm
 devdeps-roaringbitmap-croaring-3.0.0-92024092815.al8.aarch64.rpm
