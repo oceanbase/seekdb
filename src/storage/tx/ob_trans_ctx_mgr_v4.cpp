@@ -250,7 +250,7 @@ void ObLSTxCtxMgr::print_all_tx_ctx_(const int64_t max_print, const bool verbose
 {
   UNUSED(max_print);
   UNUSED(verbose);
-  PrintFunctor print_fn(max_print, verbose);
+  PrintFunctor print_fn(max_print);
   // ignore ret
   ls_tx_ctx_map_.for_each(print_fn);
 }
