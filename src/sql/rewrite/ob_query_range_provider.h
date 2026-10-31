@@ -33,6 +33,7 @@ namespace sql
 {
 struct ColumnItem;
 class ObRawExpr;
+class ObPhysicalPlanCtx;
 typedef common::ObSEArray<common::ObNewRange *, 1> ObQueryRangeArray;
 typedef common::ObSEArray<common::ObNewRange, 4, common::ModulePageAllocator, true> ObRangesArray;
 typedef common::ObSEArray<ColumnItem, 16, common::ModulePageAllocator, true> ColumnArray;
@@ -55,6 +56,10 @@ public:
     supported = false;
     return common::OB_SUCCESS;
   }
+  // The default forwards to the existing parameter-store probe. Providers may
+  // read an explicitly guarded execution owner, retaining the old fallback.
+  virtual int try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                          common::Datum (&values)[3], bool &supported) const;
   virtual int get_tablet_ranges(common::ObIAllocator &allocator,
                                 ObExecContext &exec_ctx,
                                 ObQueryRangeArray &ranges,

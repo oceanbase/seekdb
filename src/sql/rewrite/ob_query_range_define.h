@@ -392,6 +392,8 @@ public:
 
   int try_get_native_bigint_point(const common::DatumParamStore &parameters,
                                   common::Datum (&values)[3], bool &supported) const override;
+  int try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                  common::Datum (&values)[3], bool &supported) const override;
 
   void reset();
   virtual int deep_copy(const ObPreRangeGraph &other);
@@ -555,6 +557,9 @@ public:
   static common::ObDomainOpType get_domain_op_type(ObItemType type);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPreRangeGraph);
+  int try_get_native_bigint_point(const common::DatumParamStore &parameters,
+                                  const ObPhysicalPlanCtx *plan_ctx,
+                                  common::Datum (&values)[3], bool &supported) const;
 private:
   common::ObIAllocator &allocator_;
   uint64_t table_id_;

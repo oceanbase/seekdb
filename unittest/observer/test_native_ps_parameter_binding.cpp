@@ -25,6 +25,8 @@ using oceanbase::sql::ObQueryRetryCtrl;
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/engine/expr/ob_expr.h"
+#include "sql/ob_sql_context.h"
+#include "sql/rewrite/ob_query_range_define.h"
 #include "sql/plan_cache/ob_prepare_stmt_struct.h"
 #include "sql/session/ob_piece_cache.h"
 #include <gtest/gtest.h>
@@ -520,8 +522,14 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
   ASSERT_NO_FATAL_FAILURE(successful({integer(expected[0]), integer(expected[1]), integer(expected[2])}));
   ASSERT_TRUE(Access::active(handler_));
   ObArenaAllocator execution_arena("PsExecOwner");
+  ObSqlCtx sql_ctx;
+  sql_ctx.exec_type_ = MpQuery;
+  sql_ctx.is_prepare_protocol_ = true;
+  sql_ctx.is_dynamic_sql_ = true; // Same flags as ordinary handle_ps_execute.
+  sql_ctx.stmt_type_ = stmt::T_SELECT;
   ObExecContext exec(execution_arena);
   exec.set_my_session(&session_);
+  exec.set_sql_ctx(&sql_ctx);
   ASSERT_EQ(OB_SUCCESS, exec.create_physical_plan_ctx());
   ObPhysicalPlanCtx &plan = *exec.get_physical_plan_ctx();
   ASSERT_EQ(OB_SUCCESS, plan.get_param_store_for_update().assign(params_));
@@ -529,6 +537,8 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
   for (int64_t i = 0; i < 3; ++i) {
     EXPECT_NE(params_.at(i).datum_.ptr_, plan.get_param_store().at(i).datum_.ptr_);
+    ASSERT_NE(nullptr, plan.get_native_bigint_parameter(i));
+    EXPECT_EQ(expected[i], plan.get_native_bigint_parameter(i)->get_int());
   }
   Access::poison_values(handler_);
   EXPECT_EQ(INT64_C(0x5a5a5a5a5a5a5a5a), params_.at(0).get_int());
@@ -544,6 +554,34 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
     const char *slot = plan.get_param_frame_ptrs().at(0) + i * (sizeof(ObDatum) + sizeof(ObEvalInfo));
     EXPECT_EQ(expected[i], reinterpret_cast<const ObDatum *>(slot)->get_int());
   }
+
+  // Feed the unmodified real binder metadata through the actual graph probe.
+  ObPreRangeGraph graph(execution_arena);
+  ObRangeNode node(execution_arena);
+  ObColumnRefRawExpr columns[3];
+  ObSEArray<ColumnItem, 3> items;
+  int64_t start[3] = {0, 1, 2};
+  int64_t end[3] = {0, 1, 2};
+  for (int64_t i = 0; i < 3; ++i) {
+    columns[i].set_ref_id(1001, 16 + i); columns[i].set_data_type(ObIntType);
+    ColumnItem item; item.expr_ = &columns[i]; item.set_ref_id(1001, 16 + i);
+    ASSERT_EQ(OB_SUCCESS, items.push_back(item));
+  }
+  ASSERT_EQ(OB_SUCCESS, graph.fill_column_metas(items));
+  ASSERT_EQ(OB_SUCCESS, graph.get_range_map().expr_final_infos_.prepare_allocate(3));
+  for (int64_t i = 0; i < 3; ++i) {
+    auto &info = graph.get_range_map().expr_final_infos_.at(i);
+    info.is_param_ = true; info.param_idx_ = i;
+  }
+  node.column_cnt_ = 3; node.start_keys_ = start; node.end_keys_ = end;
+  node.min_offset_ = 0; node.max_offset_ = 2;
+  node.include_start_ = true; node.include_end_ = true;
+  graph.set_range_head(&node); graph.set_node_count(1); graph.set_is_precise_get(true);
+  Datum values[3]; bool supported = false;
+  const ObQueryRangeProvider &provider = graph;
+  ASSERT_EQ(OB_SUCCESS, provider.try_get_native_bigint_point(plan, values, supported));
+  ASSERT_TRUE(supported);
+  for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(expected[i], values[i].get_int()); }
 }
 
 TEST_F(NativePsParameterBinding, rebuilding_execution_context_does_not_modify_request_values)

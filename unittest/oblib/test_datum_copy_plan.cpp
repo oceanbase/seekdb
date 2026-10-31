@@ -466,6 +466,63 @@ TEST(DatumCopyPlan, legacy_byte_clone_keeps_old_untyped_cost_and_does_not_build_
   EXPECT_EQ(0, MEMCMP(source.ptr_, output.ptr_, 8));
 }
 
+TEST(DatumCopyPlan, explicit_mutable_signed_int_view_updates_the_same_active_i64)
+{
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(metadata(ObIntType), ObAccuracy(20, 0), type));
+  const DatumCopyPlan plan(type);
+  Datum value; value.set_int(INT64_MIN);
+  ObDatum view;
+  ASSERT_EQ(OB_SUCCESS, plan.borrow_mutable_signed_int(value, view));
+  EXPECT_EQ(8, view.len_); EXPECT_EQ(ObDatumDesc::NONE, view.flag_);
+  EXPECT_EQ(0, reinterpret_cast<uintptr_t>(view.ptr_) % alignof(int64_t));
+  EXPECT_EQ(INT64_MIN, view.get_int());
+  view.set_int(INT64_MAX);
+  EXPECT_EQ(INT64_MAX, value.get_int());
+  ObDatum readonly;
+  ASSERT_EQ(OB_SUCCESS, plan.borrow_legacy(value, readonly));
+  EXPECT_EQ(view.ptr_, readonly.ptr_);
+  EXPECT_EQ(INT64_MAX, readonly.get_int()); // Do not write through borrow_legacy.
+}
+
+TEST(DatumCopyPlan, mutable_signed_int_rejects_other_types_and_invalid_shapes_without_publishing)
+{
+  int64_t sentinel = 91;
+  const ObDatum saved = legacy(&sentinel, sizeof(sentinel));
+  ObDatum output = saved;
+  Datum value; value.set_int(7);
+  const DatumCopyPlan incomplete(metadata(ObIntType), ObAccuracy(20, 0));
+  EXPECT_EQ(OB_NOT_SUPPORTED, incomplete.borrow_mutable_signed_int(value, output));
+  const SqlValueType unsupported[] = {ObInt32Type, ObUInt64Type, ObDoubleType, ObVarcharType};
+  for (SqlValueType kind : unsupported) {
+    SqlType type;
+    SqlTypeMeta meta = metadata(kind);
+    if (kind == ObVarcharType) {
+      meta.set_collation_type(CS_TYPE_UTF8MB4_BIN); meta.set_collation_level(CS_LEVEL_IMPLICIT);
+    }
+    ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(), type));
+    EXPECT_EQ(OB_NOT_SUPPORTED, DatumCopyPlan(type).borrow_mutable_signed_int(value, output));
+    EXPECT_EQ(saved.ptr_, output.ptr_); EXPECT_EQ(saved.pack_, output.pack_);
+  }
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(metadata(ObIntType), ObAccuracy(20, 0), type));
+  const DatumCopyPlan plan(type);
+  for (int state = 0; state < 6; ++state) {
+    if (state == 0) { value.set_null(); }
+    else if (state == 1) { value.set_nop(); }
+    else if (state == 2) { value.set_min(); }
+    else if (state == 3) { value.set_max(); }
+    else if (state == 4) { ASSERT_EQ(OB_SUCCESS, value.set_reference(&sentinel, 8)); }
+    else { ASSERT_EQ(OB_SUCCESS, value.set_reference(nullptr, 0, Datum::OutRow)); }
+    EXPECT_EQ(OB_INVALID_ARGUMENT, plan.borrow_mutable_signed_int(value, output));
+    EXPECT_EQ(saved.ptr_, output.ptr_); EXPECT_EQ(saved.pack_, output.pack_);
+  }
+  // An empty reference with no flags has the same shape as inline data. Calling
+  // the mutable bridge for it would violate the producer/type contract, so this
+  // test does not pretend that shape validation can identify the active member.
+  EXPECT_EQ(91, sentinel);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

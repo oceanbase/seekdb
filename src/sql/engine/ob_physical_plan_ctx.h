@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SQL_OB_PHYSICAL_PLAN_CTX_H
 #define OCEANBASE_SQL_OB_PHYSICAL_PLAN_CTX_H
+#include "common/datum/datum.h"
 #include "share/ob_autoincrement_param.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "common/sql_mode/ob_sql_mode.h"
@@ -79,6 +80,7 @@ public:
   virtual ~ObPhysicalPlanCtx();
   void destroy() 
   {
+    native_parameter_owner_ = nullptr;
     total_memstore_read_row_count_ = 0;
     total_ssstore_read_row_count_ = 0;
     // Member variables that need to request additional memory 
@@ -178,11 +180,18 @@ public:
   const DatumParamStore &get_datum_param_store() const { return param_store_; }
   const ObIArray<char *> &get_param_frame_ptrs() const { return param_frame_ptrs_; }
   int init_datum_param_store();
+  // A read-only native slot is available only while the current descriptor
+  // still borrows its exact execution-owner index with unchanged metadata.
+  // Recheck for every use: mutable store references may escape this context.
+  // Consume/copy the result before another parameter mutation; storage keys
+  // must keep their independent snapshot rather than retaining this binding.
+  const common::Datum *get_native_bigint_parameter(int64_t index) const;
   // Parameters have a single native owner; SQL frames borrow Datum views.
   // The caller owns the value payload for as long as this binding is used.
   int set_runtime_parameter(int64_t index, const DatumParameter &parameter);
   void reset_datum_param_store()
   {
+    native_parameter_owner_ = nullptr;
     param_store_.reuse();
     param_frame_ptrs_.reuse();
     original_param_cnt_ = 0;
@@ -493,6 +502,9 @@ public:
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
   bool is_param_datum_frame_inited() const { return param_frame_ptrs_.count() > 0; }
 private:
+  struct NativeParameterOwner;
+  bool can_use_native_bigint_parameters() const;
+  int init_native_bigint_parameters(NativeParameterOwner *&owner);
   void reset_datum_frame(char *frame, int64_t expr_cnt);
   int extend_param_frame(const int64_t old_size);
   int reserve_param_frame(const int64_t capacity);
@@ -524,6 +536,9 @@ private:
   int64_t ts_timeout_us_;
   common::ObConsistencyLevel consistency_level_;
   ParamStore param_store_;
+  // Process-local only. Older blocks remain in allocator_ until its reset so
+  // existing legacy frame borrows survive store reset/rebuild/replacement.
+  NativeParameterOwner *native_parameter_owner_;
   common::ObSEArray<char *, 1, common::ModulePageAllocator, true> param_frame_ptrs_;
   // Original param cont for input SQL, used in static engine for param frames allocation.
   // Param store can be divided into three continuous part:

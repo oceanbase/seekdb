@@ -22,6 +22,7 @@
 #include "sql/rewrite/ob_range_graph_generator.h"
 #include "sql/rewrite/ob_range_generator.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/optimizer/ob_opt_est_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -638,7 +639,26 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
   return ret;
 }
 
+int ObQueryRangeProvider::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                                     Datum (&values)[3], bool &supported) const
+{
+  return try_get_native_bigint_point(plan_ctx.get_datum_param_store(), values, supported);
+}
+
+int ObPreRangeGraph::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
+                                                Datum (&values)[3], bool &supported) const
+{
+  return try_get_native_bigint_point(plan_ctx.get_datum_param_store(), &plan_ctx, values, supported);
+}
+
 int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &parameters,
+                                                Datum (&values)[3], bool &supported) const
+{
+  return try_get_native_bigint_point(parameters, nullptr, values, supported);
+}
+
+int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &parameters,
+                                                const ObPhysicalPlanCtx *plan_ctx,
                                                 Datum (&values)[3], bool &supported) const
 {
   supported = false;
@@ -658,6 +678,8 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &paramete
   }
 
   const DatumParameter *inputs[3] = {nullptr, nullptr, nullptr};
+  const Datum *native_inputs[3] = {nullptr, nullptr, nullptr};
+  bool all_native = plan_ctx != nullptr;
   for (int64_t i = 0; i < 3; ++i) {
     const ObRangeColumnMeta *meta = column_metas_.at(i);
     const int64_t index = node->start_keys_[i];
@@ -678,13 +700,23 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &paramete
       return OB_SUCCESS;
     }
     inputs[i] = &input;
+    if (plan_ctx != nullptr) {
+      native_inputs[i] = plan_ctx->get_native_bigint_parameter(info.param_idx_);
+      all_native = all_native && native_inputs[i] != nullptr;
+    }
   }
 
   Datum candidate[3];
   for (int64_t i = 0; i < 3; ++i) {
-    int64_t scalar = 0;
-    MEMCPY(&scalar, inputs[i]->datum_.ptr_, sizeof(scalar));
-    candidate[i].set_int(scalar);
+    if (all_native) {
+      candidate[i] = *native_inputs[i];
+    } else {
+      // Metadata or an escaped mutable reference may have rebound any slot.
+      // Preserve the original native point-get admission and fresh-value path.
+      int64_t scalar = 0;
+      MEMCPY(&scalar, inputs[i]->datum_.ptr_, sizeof(scalar));
+      candidate[i].set_int(scalar);
+    }
   }
   for (int64_t i = 0; i < 3; ++i) { values[i] = candidate[i]; }
   supported = true;

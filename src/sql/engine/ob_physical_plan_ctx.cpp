@@ -19,6 +19,7 @@
 #include "share/ob_autoincrement_service.h"
 #include "src/sql/engine/ob_des_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "sql/ob_sql_context.h"
 #include "share/sql_udt_support.h"
 
 namespace oceanbase
@@ -28,12 +29,66 @@ using namespace share;
 using namespace transaction;
 namespace sql
 {
+namespace
+{
+class ExecutionBigintLayout final
+{
+public:
+  ExecutionBigintLayout() : type_(), status_(init_type(type_)), copy_plan_(type_) {}
+  ExecutionBigintLayout(const ExecutionBigintLayout &) = delete;
+  ExecutionBigintLayout &operator=(const ExecutionBigintLayout &) = delete;
+  int status() const { return status_; }
+  const SqlType &type() const { return type_; }
+  const DatumCopyPlan &copy_plan() const { return copy_plan_; }
+
+private:
+  static int init_type(SqlType &type)
+  {
+    SqlTypeMeta meta;
+    meta.set_int();
+    meta.set_collation_level(CS_LEVEL_COERCIBLE);
+    meta.set_scale(0);
+    return SqlType::from_legacy(meta, ObAccuracy(20, 0), type);
+  }
+  SqlType type_;
+  const int status_;
+  const DatumCopyPlan copy_plan_;
+};
+
+const ExecutionBigintLayout &execution_bigint_layout()
+{
+  static const ExecutionBigintLayout layout;
+  return layout;
+}
+
+bool same_execution_parameter_meta(const SqlTypeMeta &left, const SqlTypeMeta &right)
+{
+  // SqlTypeMeta::operator== intentionally omits scale.
+  return left == right && left.get_scale() == right.get_scale();
+}
+} // namespace
+
+// One final arena allocation: this 32-byte header followed by Datum[count_].
+// Metadata is common to the admitted batch; no per-slot metadata/value shadow.
+struct alignas(8) ObPhysicalPlanCtx::NativeParameterOwner
+{
+  NativeParameterOwner(const DatumCopyPlan &copy_plan, int64_t count,
+                       const SqlTypeMeta &meta, const ObAccuracy &accuracy)
+    : copy_plan_(&copy_plan), count_(count), meta_(meta), accuracy_(accuracy) {}
+  Datum *values() { return reinterpret_cast<Datum *>(this + 1); }
+  const DatumCopyPlan *const copy_plan_;
+  const int64_t count_;
+  const SqlTypeMeta meta_;
+  const ObAccuracy accuracy_;
+};
+
 ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
     : allocator_(allocator),
       tsc_snapshot_timestamp_(0),
       ts_timeout_us_(0),
       consistency_level_(INVALID_CONSISTENCY),
       param_store_( (ObWrapperAllocator(&allocator_)) ),
+      native_parameter_owner_(nullptr),
       original_param_cnt_(0),
       param_frame_capacity_(0),
       sql_mode_(SMO_DEFAULT),
@@ -109,19 +164,115 @@ int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
 int ObPhysicalPlanCtx::init_datum_param_store()
 {
   int ret = OB_SUCCESS;
+  native_parameter_owner_ = nullptr;
   param_frame_ptrs_.reuse();
   param_frame_capacity_ = 0;
+  NativeParameterOwner *native_candidate = nullptr;
+  const bool use_native = can_use_native_bigint_parameters();
   // Input producers may use a shorter-lived request arena. Keep execution
   // payloads in this context without maintaining a second descriptor store.
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
-    DatumParameter owned;
-    if (OB_FAIL(DatumParameterArray::clone_parameter(param_store_.at(i), owned, allocator_))) {
-    } else {
-      param_store_.at(i) = owned;
+  if (use_native) {
+    ret = init_native_bigint_parameters(native_candidate);
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
+      DatumParameter owned;
+      if (OB_FAIL(DatumParameterArray::clone_parameter(param_store_.at(i), owned, allocator_))) {
+      } else {
+        param_store_.at(i) = owned;
+      }
     }
   }
   if (OB_SUCC(ret)) { ret = extend_param_frame(0); }
+  if (OB_SUCC(ret)) { native_parameter_owner_ = native_candidate; }
+  else if (use_native) {
+    param_frame_ptrs_.reuse();
+    param_frame_capacity_ = 0;
+  }
   return ret;
+}
+
+bool ObPhysicalPlanCtx::can_use_native_bigint_parameters() const
+{
+  const ObSqlCtx *sql_ctx = exec_ctx_ == nullptr ? nullptr : exec_ctx_->get_sql_ctx();
+  bool supported = param_store_.count() > 0 && sql_ctx != nullptr
+      && sql_ctx->exec_type_ == MpQuery && sql_ctx->is_prepare_protocol_
+      && !sql_ctx->is_prepare_stage_ && !sql_ctx->is_mock_prepare_
+      && !sql_ctx->is_cursor_ && !sql_ctx->is_text_ps_mode_
+      && !sql_ctx->is_execute_call_stmt_ && !sql_ctx->is_batch_params_execute()
+      && sql_ctx->stmt_type_ != stmt::T_CALL_PROCEDURE
+      && sql_ctx->stmt_type_ != stmt::T_ANONYMOUS_BLOCK
+      && !exec_ctx_->has_dynamic_values_table();
+  // Ordinary external PS also sets is_dynamic_sql_; it is not a PL gate.
+  if (supported) {
+    const DatumParameter &first = param_store_.at(0);
+    const SqlTypeMeta &meta = first.get_type_meta();
+    supported = same_execution_parameter_meta(meta, execution_bigint_layout().type().legacy_meta());
+    for (int64_t i = 0; supported && i < param_store_.count(); ++i) {
+      const DatumParameter &parameter = param_store_.at(i);
+      supported = same_execution_parameter_meta(parameter.get_type_meta(), meta)
+          && parameter.get_accuracy() == first.get_accuracy()
+          && !parameter.is_null() && parameter.datum_.flag_ == ObDatumDesc::NONE
+          && parameter.datum_.len_ == sizeof(int64_t) && parameter.datum_.ptr_ != nullptr;
+    }
+  }
+  return supported;
+}
+
+int ObPhysicalPlanCtx::init_native_bigint_parameters(NativeParameterOwner *&owner)
+{
+  static_assert(sizeof(NativeParameterOwner) == 32, "BIGINT owner header byte contract");
+  static_assert(sizeof(NativeParameterOwner) % alignof(Datum) == 0, "aligned native values");
+  int ret = OB_SUCCESS;
+  const int64_t count = param_store_.count();
+  const ExecutionBigintLayout &layout = execution_bigint_layout();
+  if (OB_FAIL(layout.status())) {
+  } else if (count > (INT64_MAX - static_cast<int64_t>(sizeof(NativeParameterOwner)))
+                       / static_cast<int64_t>(sizeof(Datum))) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (OB_FAIL(reserve_param_frame(count))) {
+    // All frame allocations precede publishing new parameter descriptors.
+  } else {
+    char *storage = static_cast<char *>(allocator_.alloc(sizeof(NativeParameterOwner) + count * sizeof(Datum)));
+    if (storage == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      NativeParameterOwner *candidate = new (storage) NativeParameterOwner(
+          layout.copy_plan(), count, param_store_.at(0).get_type_meta(), param_store_.at(0).get_accuracy());
+      for (int64_t i = 0; i < count; ++i) {
+        int64_t value = 0;
+        MEMCPY(&value, param_store_.at(i).datum_.ptr_, sizeof(value));
+        new (&candidate->values()[i]) Datum();
+        candidate->values()[i].set_int(value);
+      }
+      // The prepared type and set_int above establish every bridge precondition.
+      // No old 8-byte scalar clone or allocating setter runs on this path.
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+        ret = layout.copy_plan().borrow_mutable_signed_int(candidate->values()[i], param_store_.at(i).datum_);
+      }
+      if (OB_SUCC(ret)) { owner = candidate; }
+    }
+  }
+  return ret;
+}
+
+const Datum *ObPhysicalPlanCtx::get_native_bigint_parameter(int64_t index) const
+{
+  const Datum *value = nullptr;
+  NativeParameterOwner *owner = native_parameter_owner_;
+  if (owner != nullptr && param_store_.count() == owner->count_
+      && index >= 0 && index < owner->count_) {
+    const DatumParameter &parameter = param_store_.at(index);
+    ObDatum expected;
+    if (same_execution_parameter_meta(parameter.get_type_meta(), owner->meta_)
+        && parameter.get_accuracy() == owner->accuracy_
+        && !parameter.is_null() && parameter.datum_.flag_ == ObDatumDesc::NONE
+        && parameter.datum_.len_ == sizeof(int64_t)
+        && OB_SUCCESS == owner->copy_plan_->borrow_mutable_signed_int(owner->values()[index], expected)
+        && parameter.datum_.ptr_ == expected.ptr_) {
+      value = &owner->values()[index];
+    }
+  }
+  return value;
 }
 
 int ObPhysicalPlanCtx::set_runtime_parameter(int64_t index, const DatumParameter &parameter)

@@ -1392,7 +1392,7 @@ int ObTableScanOp::try_prepare_native_point_get(int64_t group_idx, bool need_sor
     Datum values[3];
     bool supported = false;
     if (OB_FAIL(MY_CTDEF.get_query_range_provider().try_get_native_bigint_point(
-        plan_ctx->get_datum_param_store(), values, supported))) {
+        *plan_ctx, values, supported))) {
     } else if (supported) {
       if (native_point_get_input_ == nullptr) {
         // Use the execution allocator, not the table-rescan scratch arena.

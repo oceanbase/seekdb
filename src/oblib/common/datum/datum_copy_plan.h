@@ -202,6 +202,35 @@ public:
     return ret;
   }
 
+  // Explicit mutable boundary for an owner of signed BIGINT inline values.
+  // The prepared type and producer must establish that i64_ is the active
+  // member (e.g. Datum::set_int); Datum has no representation/member tag.
+  // Shape checks below cannot distinguish an empty reference from an integer.
+  // Until source moves or dies, the view permits only same-representation
+  // signed 8-byte writes such as ObDatum::set_int. It does not authorize a
+  // different scalar/reference setter or changes to the owner's metadata.
+  // No allocation or scratch pointer escapes; failure preserves destination.
+  int borrow_mutable_signed_int(Datum &source, ObDatum &destination) const
+  {
+    int ret = OB_SUCCESS;
+    if (type_ == nullptr || type_->kind() != ObIntType
+        || type_->form() != SqlTypeForm::Scalar
+        || type_->time_semantics() != SqlTimeSemantics::Unspecified
+        || type_->canonical_representation() != DatumRepresentation::Inline64) {
+      ret = OB_NOT_SUPPORTED;
+    } else if (!source.is_present() || source.length() != 0
+        || source.reference_flags() != Datum::NoReferenceFlags
+        || reinterpret_cast<uintptr_t>(&source.payload_.i64_) % alignof(Datum) != 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ObDatum candidate;
+      candidate.ptr_ = reinterpret_cast<const char *>(&source.payload_.i64_);
+      candidate.pack_ = sizeof(int64_t);
+      destination = candidate;
+    }
+    return ret;
+  }
+
   // Validation, scalar narrowing and capacity checks finish before any write.
   // Failure preserves destination, cursor and every byte of the caller buffer.
   int export_legacy(const Datum &source, ObDatum &destination, char *buffer,
