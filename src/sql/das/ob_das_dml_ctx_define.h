@@ -319,7 +319,7 @@ public:
           SqlValueDatumMapType obj_datum_map = ObDatum::get_sql_value_datum_map_type(
               column_types_->at(i).get_type());
           if (OB_LIKELY(OBJ_DATUM_NULL != obj_datum_map)) {
-            store_row_->cells()[i].ptr_ = reserved_buffer_ + reserved_offset;
+            store_row_->stored_cells()[i].ptr_ = reserved_buffer_ + reserved_offset;
             reserved_offset += ObDatum::get_reserved_size(obj_datum_map);
           }
         }

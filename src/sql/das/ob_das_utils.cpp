@@ -169,7 +169,8 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
     if (projector_idx < 0) {
       //this column is not touched by query, only need to be marked as nop
       storage_row.storage_datums_[i].set_nop();
-    } else if (FALSE_IT(storage_row.storage_datums_[i].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
+    } else if (FALSE_IT(storage_row.storage_datums_[i].shallow_copy_from_datum(
+                           StoredDatumCodec::decode_legacy_view(dml_row.stored_cells()[projector_idx])))) {
     } else if (storage_row.storage_datums_[i].is_null()) {
       //nothing to do
     } else if (OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(
