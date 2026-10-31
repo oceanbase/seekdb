@@ -39,7 +39,8 @@ struct NativeBigintType
 
 NativeBigintOutput::NativeBigintOutput()
   : values_(), output_exprs_(), storage_indexes_(), type_(nullptr), count_(0),
-    generation_(0), layout_bound_(false), candidate_(false), ready_(false)
+    generation_(0), layout_bound_(false), candidate_(false), ready_(false),
+    omit_shadow_(false), projection_(Projection::EMPTY)
 {}
 
 void NativeBigintOutput::invalidate()
@@ -47,15 +48,18 @@ void NativeBigintOutput::invalidate()
   ++generation_;
   candidate_ = false;
   ready_ = false;
+  projection_ = Projection::EMPTY;
 }
 
-int NativeBigintOutput::prepare(const common::ObIArray<ObExpr *> &outputs, bool &supported)
+int NativeBigintOutput::prepare(const common::ObIArray<ObExpr *> &outputs, bool &supported,
+                                 bool omit_shadow)
 {
   int ret = common::OB_SUCCESS;
   supported = false;
   invalidate();
   count_ = 0;
   layout_bound_ = false;
+  omit_shadow_ = omit_shadow;
   bool valid = outputs.count() > 0 && outputs.count() <= MAX_COLUMNS;
   for (int64_t i = 0; valid && i < outputs.count(); ++i) {
     const ObExpr *expr = outputs.at(i);
@@ -82,6 +86,16 @@ void NativeBigintOutput::bind_projector(const common::ObIArray<ObExpr *> &access
 {
   invalidate();
   layout_bound_ = count_ > 0 && access_exprs.count() == projector.count();
+  // Every access column must be safe without an Expr frame, including columns
+  // absent from the SELECT list. Defaults are handled per row below.
+  for (int64_t i = 0; layout_bound_ && omit_shadow_ && i < access_exprs.count(); ++i) {
+    const ObExpr *expr = access_exprs.at(i);
+    layout_bound_ = expr != nullptr && expr->type_ == T_REF_COLUMN && expr->arg_cnt_ == 0
+        && expr->is_batch_result() && projector.at(i) >= 0
+        && expr->obj_meta_.get_type() == common::ObIntType
+        && expr->datum_meta_.type_ == common::ObIntType
+        && expr->obj_datum_map_ == common::OBJ_DATUM_8BYTE_DATA;
+  }
   for (int64_t i = 0; layout_bound_ && i < count_; ++i) {
     int32_t storage_index = -1;
     for (int64_t j = 0; layout_bound_ && j < access_exprs.count(); ++j) {
@@ -128,13 +142,24 @@ void NativeBigintOutput::project(const blocksstable::ObStorageDatum *datums, int
   }
 }
 
-void NativeBigintOutput::publish(int result, int64_t row_count, bool end, bool skipped)
+int NativeBigintOutput::publish(int result, int64_t row_count, bool end, bool skipped)
 {
-  if (candidate_ && result == common::OB_SUCCESS && row_count == 1 && !end && !skipped) {
+  int ret = result;
+  if (ret == common::OB_SUCCESS && row_count > 0 && projection_ == Projection::NATIVE_ONLY
+      && (!candidate_ || row_count != 1 || end || skipped)) {
+    // Storage has already consumed this row without an Expr projection. Never
+    // turn a publication failure into a fallback read of that old frame.
+    ret = common::OB_ERR_UNEXPECTED;
+  }
+  if (candidate_ && ret == common::OB_SUCCESS && row_count == 1 && !end && !skipped) {
     ready_ = true;
+  } else if (omit_shadow_ && !candidate_ && ret == common::OB_SUCCESS
+             && row_count > 0 && has_legacy_projection()) {
+    ready_ = false;
   } else {
     invalidate();
   }
+  return ret;
 }
 
 bool NativeBigintOutput::try_get(int64_t batch_idx, const common::Datum *&values,
@@ -308,6 +333,30 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
 {
   // performance critical, no parameter validity check.
   int ret = OB_SUCCESS;
+  if (native_output_ != nullptr && native_output_->omits_shadow()) {
+    native_output_->invalidate();
+    bool valid = op_->is_vectorized() && datums != nullptr
+        && op_->get_eval_ctx().get_batch_idx() == 0;
+    // Preflight ALL mapped access values before writing any native slot. A NOP
+    // anywhere must run this same row through the full projector/default path.
+    for (int64_t i = 0; valid && i < outputs_.count(); ++i) {
+      const Item &item = outputs_.at(i);
+      if (item.obj_idx_ < 0) {
+        valid = false;
+      } else {
+        const blocksstable::ObStorageDatum &datum = datums[item.obj_idx_];
+        valid = datum.flag_ == ObDatum::FlagType::NONE
+            && (datum.is_null() || (datum.len_ == sizeof(int64_t) && datum.ptr_ != nullptr));
+      }
+    }
+    if (valid) {
+      native_output_->project(datums, 0);
+      if (native_output_->has_candidate()) {
+        native_output_->mark_native_only();
+        return ret;
+      }
+    }
+  }
   if (!op_->is_vectorized()) {
     num_.project(outputs_.get_data(), datums, nop_pos, nop_cnt);
     str_.project(outputs_.get_data(), datums, nop_pos, nop_cnt);
@@ -366,7 +415,10 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
 
   if (native_output_ != nullptr) {
     if (OB_SUCC(ret)) {
-      native_output_->project(datums, op_->is_vectorized() ? op_->get_eval_ctx().get_batch_idx() : 0);
+      if (!native_output_->omits_shadow()) {
+        native_output_->project(datums, op_->is_vectorized() ? op_->get_eval_ctx().get_batch_idx() : 0);
+      }
+      native_output_->mark_legacy_projected();
     } else {
       native_output_->invalidate();
     }

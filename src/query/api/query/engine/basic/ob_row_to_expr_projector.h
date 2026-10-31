@@ -60,6 +60,8 @@ public:
   }
   void invalidate_native_output()
   { if (native_output_ != nullptr) { native_output_->invalidate(); } }
+  bool can_read_legacy_projection() const
+  { return native_output_ == nullptr || native_output_->can_read_legacy_projection(); }
   void destroy()
   {
     invalidate_native_output();

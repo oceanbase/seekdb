@@ -32,27 +32,30 @@ class ObPhyOperator;
 class ObOperator;
 class ObOpSpec;
 
-// Borrowed until the next advance/close. Values stay in the expression frame;
-// type information stays in the output expressions. Row-producing callers can
+// Borrowed until the next advance/close. Values stay in an expression frame or
+// explicitly identified inline slots. Row-producing callers can
 // supply an ObNewRow without changing their execution or cursor semantics.
 class ResultRowView
 {
 public:
   ResultRowView() : legacy_(nullptr), exprs_(nullptr), ctx_(nullptr), count_(0), idx_(0), batch_(false),
-    cell_metas_(nullptr), inline_values_(nullptr), inline_type_(nullptr), generation_(nullptr), token_(0) {}
+    cell_metas_(nullptr), inline_values_(nullptr), inline_type_(nullptr), generation_(nullptr), token_(0),
+    legacy_datums_(false) {}
   void set_legacy(const common::ObNewRow *row) { *this = ResultRowView(); legacy_ = row; }
   void set_datums(const ExprFixedArray &exprs, ObEvalCtx &ctx, int64_t idx, bool batch,
                   const common::SqlTypeMeta *cell_metas = nullptr)
   { *this = ResultRowView(); exprs_ = exprs.count() ? &exprs.at(0) : nullptr; ctx_ = &ctx;
-    count_ = exprs.count(); idx_ = idx; batch_ = batch; cell_metas_ = cell_metas; }
-  // The old expression frame remains a real fallback view during migration.
+    count_ = exprs.count(); idx_ = idx; batch_ = batch; cell_metas_ = cell_metas; legacy_datums_ = true; }
+  // Hybrid callers may retain a real fallback frame. Native-only callers must
+  // explicitly deny it; a missing native value never implies a readable frame.
   // Native slots are a separate representation, never reinterpreted as ObDatum.
   void set_inline_datums(const ExprFixedArray &exprs, ObEvalCtx &ctx, int64_t idx, bool batch,
                          const common::Datum *values, const common::SqlType *type,
-                         const uint64_t *generation, uint64_t token)
+                         const uint64_t *generation, uint64_t token, bool has_shadow = true)
   {
     set_datums(exprs, ctx, idx, batch);
     inline_values_ = values; inline_type_ = type; generation_ = generation; token_ = token;
+    legacy_datums_ = has_shadow;
   }
   bool is_inline_datum_row() const { return inline_values_ != nullptr; }
   bool inline_row_valid() const
@@ -73,11 +76,13 @@ public:
                            common::DatumValue &value, bool keep_null_collation = false);
   int get_value(int64_t i, common::DatumValue &value) const;
   bool is_datum_row() const { return nullptr != ctx_; }
+  bool has_legacy_datums() const { return is_datum_row() && legacy_datums_; }
   const common::ObNewRow *legacy_row() const { return legacy_; }
   int64_t count() const { return is_datum_row() ? count_ : (legacy_ ? legacy_->get_count() : 0); }
   const ObExpr &expr(int64_t i) const { return *exprs_[i]; }
   const common::ObDatum &datum(int64_t i) const
   {
+    OB_ASSERT(has_legacy_datums());
     const ObExpr &e = expr(i);
     return batch_ ? e.locate_batch_datums(*ctx_)[e.is_batch_result() ? idx_ : 0]
                   : e.locate_expr_datum(*ctx_);
@@ -94,6 +99,7 @@ private:
   const common::SqlType *inline_type_;
   const uint64_t *generation_;
   uint64_t token_;
+  bool legacy_datums_;
 };
 
 class ObIExecuteResult
@@ -114,6 +120,9 @@ public:
   // overrides this entry and never eagerly materializes an ObNewRow.
   virtual int get_next_native_result_row(ObExecContext &ctx, ResultRowView &view)
   { return get_next_result_row(ctx, view); }
+  // Only a consumer that has checked every result field may request this.
+  virtual int try_enable_native_bigint_output(int64_t field_count, bool &accepted)
+  { UNUSED(field_count); accepted = false; return OB_SUCCESS; }
   virtual int close(ObExecContext &ctx) = 0;
 };
 
@@ -125,13 +134,15 @@ public:
     : err_code_(OB_ERR_UNEXPECTED),
       static_engine_root_(NULL),
       native_cell_metas_(nullptr),
-      native_cell_count_(0) {}
+      native_cell_count_(0),
+      row_iteration_started_(false) {}
   virtual ~ObExecuteResult() {}
 
   virtual int open(ObExecContext &ctx) override;
   virtual int get_next_row(ObExecContext &ctx, const common::ObNewRow *&row) override;
   virtual int get_next_result_row(ObExecContext &ctx, ResultRowView &view) override;
   virtual int get_next_native_result_row(ObExecContext &ctx, ResultRowView &view) override;
+  int try_enable_native_bigint_output(int64_t field_count, bool &accepted) override;
   virtual int close(ObExecContext &ctx) override;
 
   inline int get_err_code() { return err_code_; }
@@ -145,9 +156,11 @@ public:
   {
     static_engine_root_ = op;
     br_it_.set_operator(op);
+    br_it_.rescan();
     row_.reset();
     native_cell_metas_ = nullptr;
     native_cell_count_ = 0;
+    row_iteration_started_ = false;
   }
 
 private:
@@ -155,6 +168,7 @@ private:
   ObOperator *static_engine_root_;
   common::SqlTypeMeta *native_cell_metas_;
   int64_t native_cell_count_;
+  mutable bool row_iteration_started_;
   // Reusable native descriptors and scalar slots for the row iterator interface.
   mutable common::ObNewRow row_;
   mutable ObBatchRowIter br_it_;

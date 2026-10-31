@@ -285,7 +285,8 @@ TEST(NativeMysqlProtocol, result_row_adapter_encodes_native_slots_without_readin
   sql::ResultRowView view;
   // No expression frames exist in this test. Any accidental fallback read is
   // invalid; the real protocol adapter must consume the native slots directly.
-  view.set_inline_datums(exprs, eval, 0, true, values, &type, &generation, generation);
+  view.set_inline_datums(exprs, eval, 0, true, values, &type, &generation, generation, false);
+  ASSERT_FALSE(view.has_legacy_datums());
   ObSEArray<ObField,4> fields;
   ObSEArray<int64_t,4> indexes;
   ObSEArray<DatumValue,4> fallback;
@@ -316,6 +317,47 @@ TEST(NativeMysqlProtocol, result_row_adapter_encodes_native_slots_without_readin
   }
   fields.at(0).type_meta_.set_uint64();
   EXPECT_FALSE(DatumMysqlRow::can_encode_inline(view, 0, fields.at(0)));
+}
+
+TEST(NativeMysqlProtocol, incompatible_native_only_adapter_indexes_fail_before_reading_a_frame)
+{
+  ObArenaAllocator owner;
+  sql::ObExecContext exec(owner);
+  sql::ObEvalCtx eval(exec);
+  sql::ObExpr expr;
+  expr.obj_meta_.set_int();
+  expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+  sql::ExprFixedArray exprs(owner);
+  ASSERT_EQ(OB_SUCCESS, exprs.init(1));
+  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&expr));
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(expr.obj_meta_, ObAccuracy(20,0), type));
+  Datum value;
+  value.set_int(42);
+  uint64_t generation = 1;
+  sql::ResultRowView view;
+  view.set_inline_datums(exprs, eval, 0, true, &value, &type, &generation, generation, false);
+  ObSEArray<ObField, 1> fields;
+  ObField field;
+  field.type_meta_.set_int();
+  ASSERT_EQ(OB_SUCCESS, fields.push_back(field));
+  ObSEArray<int64_t, 1> indexes;
+  ASSERT_EQ(OB_SUCCESS, indexes.push_back(-1));
+  ObSEArray<DatumValue, 1> fallback;
+  sql::ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1,1,nullptr));
+  ObDataTypeCastParams params;
+  for (int64_t index : {int64_t(-1), int64_t(-2)}) {
+    indexes.at(0) = index;
+    DatumMysqlRow row(BINARY, view, indexes, fallback, params, session, fields, CHARSET_UTF8MB4, nullptr);
+    ObMySQLCellValue out;
+    EXPECT_EQ(OB_STATE_NOT_MATCH, row.build_cell_value(0, owner, out));
+  }
+  indexes.at(0) = -3;
+  view.set_datums(exprs, eval, 0, true); // stale native encoding choice on a legacy row
+  DatumMysqlRow row(BINARY, view, indexes, fallback, params, session, fields, CHARSET_UTF8MB4, nullptr);
+  ObMySQLCellValue out;
+  EXPECT_EQ(OB_STATE_NOT_MATCH, row.build_cell_value(0, owner, out));
 }
 
 TEST(NativeMysqlProtocol, all_old_formatter_payloads_and_errors_match_without_object_materialization)

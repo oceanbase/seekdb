@@ -451,6 +451,10 @@ public:
 
   virtual int do_diagnosis(ObExecContext &exec_ctx, ObBitVector &skip)
   { return OB_SUCCESS; };
+  // Only the explicitly enabled root BIGINT point get may return a batch
+  // without expression values. All other operators retain normal output eval.
+  virtual int check_native_batch_output(bool &native_only) const
+  { native_only = false; return common::OB_SUCCESS; }
 
 protected:
   virtual int do_drain_exch();

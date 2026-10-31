@@ -728,7 +728,8 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     rand_scan_processor_(),
     native_point_get_input_(nullptr),
     native_point_get_ready_(false),
-    native_bigint_output_(nullptr)
+    native_bigint_output_(nullptr),
+    native_bigint_consumer_(false)
 {
 }
 
@@ -1417,7 +1418,9 @@ int ObTableScanOp::prepare_native_bigint_output()
   // Native input establishes the complete local single-key lookup. This gate
   // additionally excludes every consumer that can transform/filter the raw
   // projected values after storage captures the candidate.
-  if (!native_point_get_ready_ || MY_SPEC.type_ != PHY_TABLE_SCAN
+  if (!native_bigint_consumer_ || !native_point_get_ready_ || MY_SPEC.type_ != PHY_TABLE_SCAN
+      || !MY_SPEC.is_vectorized() || MY_SPEC.plan_ == nullptr || !MY_SPEC.plan_->is_vectorized()
+      || MY_SPEC.need_check_output_datum_ || ctx_.get_my_session()->is_diagnosis_enabled()
       || MY_SPEC.get_parent() != nullptr || parent_ != nullptr
       || !MY_SPEC.filters_.empty() || !MY_SPEC.startup_filters_.empty()
       || !MY_SPEC.calc_exprs_.empty() || !scan.pd_expr_spec_.calc_exprs_.empty()
@@ -1451,7 +1454,7 @@ int ObTableScanOp::prepare_native_bigint_output()
         if (native_bigint_output_ == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
       }
       bool supported = false;
-      if (OB_SUCC(ret) && OB_FAIL(native_bigint_output_->prepare(MY_SPEC.output_, supported))) {
+      if (OB_SUCC(ret) && OB_FAIL(native_bigint_output_->prepare(MY_SPEC.output_, supported, true))) {
       } else if (OB_SUCC(ret) && supported) {
         runtime.p_row2exprs_projector_->bind_native_bigint_output(native_bigint_output_);
       }
@@ -1465,6 +1468,57 @@ void ObTableScanOp::invalidate_native_output()
   if (native_bigint_output_ != nullptr) { native_bigint_output_->invalidate(); }
 }
 
+bool ObTableScanOp::enable_native_bigint_consumer(int64_t field_count)
+{
+  // The executor accepts this request only before its first advance. Storage
+  // mapping and the remaining scan gates are checked when the scan is prepared.
+  bool valid = need_init_before_get_row_ && MY_SPEC.type_ == PHY_TABLE_SCAN
+      && MY_SPEC.get_parent() == nullptr && parent_ == nullptr
+      && MY_SPEC.is_vectorized() && MY_SPEC.plan_ != nullptr && MY_SPEC.plan_->is_vectorized()
+      && !MY_SPEC.need_check_output_datum_ && ctx_.get_my_session() != nullptr
+      && !ctx_.get_my_session()->is_diagnosis_enabled()
+      && field_count > 0 && field_count <= NativeBigintOutput::MAX_COLUMNS
+      && field_count == MY_SPEC.output_.count();
+  for (int64_t i = 0; valid && i < field_count; ++i) {
+    const ObExpr *expr = MY_SPEC.output_.at(i);
+    valid = expr != nullptr && expr->type_ == T_REF_COLUMN && expr->arg_cnt_ == 0
+        && expr->obj_meta_.get_type() == ObIntType && expr->datum_meta_.type_ == ObIntType
+        && expr->obj_datum_map_ == OBJ_DATUM_8BYTE_DATA && expr->is_batch_result();
+  }
+  native_bigint_consumer_ = valid;
+  return valid;
+}
+
+void ObTableScanOp::reset_native_bigint_consumer()
+{
+  native_bigint_consumer_ = false;
+  invalidate_native_output();
+  if (tsc_rtdef_.scan_rtdef_.p_row2exprs_projector_ != nullptr) {
+    tsc_rtdef_.scan_rtdef_.p_row2exprs_projector_->bind_native_bigint_output(nullptr);
+  }
+}
+
+bool ObTableScanOp::has_legacy_output() const
+{
+  const storage::ObRow2ExprsProjector *projector = tsc_rtdef_.scan_rtdef_.p_row2exprs_projector_;
+  return projector == nullptr || projector->can_read_legacy_projection();
+}
+
+int ObTableScanOp::check_native_batch_output(bool &native_only) const
+{
+  int ret = OB_SUCCESS;
+  native_only = false;
+  if (!has_legacy_output()) {
+    if (brs_.size_ != 1 || brs_.skip_ == nullptr || brs_.skip_->at(0)
+        || !native_bigint_output_->native_only_ready()) {
+      ret = OB_STATE_NOT_MATCH;
+    } else {
+      native_only = true;
+    }
+  }
+  return ret;
+}
+
 bool ObTableScanOp::try_get_native_output(int64_t batch_idx, const common::Datum *&values,
                                          const common::SqlType *&type, int64_t &count,
                                          uint64_t &generation,
@@ -1475,7 +1529,8 @@ bool ObTableScanOp::try_get_native_output(int64_t batch_idx, const common::Datum
   count = 0;
   generation = 0;
   current_generation = nullptr;
-  return native_bigint_output_ != nullptr && native_point_get_ready_
+  return native_bigint_consumer_ && native_bigint_output_ != nullptr && native_point_get_ready_
+      && !has_legacy_output()
       && native_bigint_output_->try_get(batch_idx, values, type, count, generation, current_generation);
 }
 
@@ -1596,7 +1651,7 @@ int ObTableScanOp::set_need_check_outrow_lob()
 int ObTableScanOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  invalidate_native_output();
+  reset_native_bigint_consumer();
   DASRuntimeTableList &table_accesses = ctx_.get_das_ctx().get_table_accesses();
   ObSQLSessionInfo *my_session = NULL;
   cur_trace_id_ = ObCurTraceId::get();
@@ -1676,7 +1731,7 @@ int ObTableScanOp::inner_open()
 int ObTableScanOp::inner_close()
 {
   int ret = OB_SUCCESS;
-  invalidate_native_output();
+  reset_native_bigint_consumer();
   if (OB_NOT_NULL(scan_iter_)) {
     if (scan_iter_->has_task()) {
       int tmp_ret = fill_storage_feedback_info();
@@ -1730,7 +1785,7 @@ int ObTableScanOp::do_init_before_get_row()
 
 void ObTableScanOp::destroy()
 {
-  invalidate_native_output();
+  reset_native_bigint_consumer();
   tsc_rtdef_.~ObTableScanRtDef();
   ObOperator::destroy();
   if (OB_NOT_NULL(iter_tree_)) {
@@ -1831,7 +1886,7 @@ int ObTableScanOp::fill_storage_feedback_info()
 int ObTableScanOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
-  invalidate_native_output();
+  reset_native_bigint_consumer();
   in_rescan_ = true;
   if (OB_FAIL(try_check_status())) {
   } else if (OB_FAIL(ObOperator::inner_rescan())) {
@@ -1972,7 +2027,7 @@ int ObTableScanOp::local_iter_rescan()
 int ObTableScanOp::local_iter_reuse()
 {
   int ret = OB_SUCCESS;
-  invalidate_native_output();
+  reset_native_bigint_consumer();
   int first_fail_ret = OB_SUCCESS;
   for (DASTaskIter task_iter = scan_iter_->begin_task_iter();
       !task_iter.is_end(); ++task_iter) {
@@ -2310,7 +2365,7 @@ int ObTableScanOp::inner_get_next_row_implement()
 int ObTableScanOp::inner_get_next_row_for_tsc()
 {
   int ret = OB_SUCCESS;
-  invalidate_native_output();
+  reset_native_bigint_consumer();
   if (OB_UNLIKELY(0 == limit_param_.limit_)) {
     // The number of involved partitions is 0 or limit is 0, directly return iter end
     ret = OB_ITER_END;
@@ -2381,7 +2436,7 @@ int ObTableScanOp::inner_get_next_row_for_tsc()
     }
   }
   if (native_bigint_output_ != nullptr) {
-    native_bigint_output_->publish(ret, 1, iter_end_, false);
+    ret = native_bigint_output_->publish(ret, 1, iter_end_, false);
   }
   return ret;
 }
@@ -2455,8 +2510,12 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
     if (!MY_SPEC.is_global_index_back()) {
       ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
       guard.set_batch_size(brs_.size_);
-      PRINT_VECTORIZED_ROWS(SQL, DEBUG, eval_ctx_, storage_output, brs_.size_, brs_.skip_,
-                            K(MY_CTDEF.scan_ctdef_.ref_table_id_));
+      if (has_legacy_output()) {
+        PRINT_VECTORIZED_ROWS(SQL, DEBUG, eval_ctx_, storage_output, brs_.size_, brs_.skip_,
+                              K(MY_CTDEF.scan_ctdef_.ref_table_id_));
+      } else {
+        LOG_DEBUG("native BIGINT output has no Expr shadow", K(brs_));
+      }
     }
     if (OB_FAIL(add_ddl_column_checksum_batch(brs_.size_))) {
     } else if (OB_FAIL(check_has_invalid_outrow_lob(true/*is_batch*/))) {
@@ -2491,7 +2550,8 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
 
   if (native_bigint_output_ != nullptr) {
     const bool skipped = brs_.size_ > 0 && brs_.skip_ != nullptr && brs_.skip_->at(0);
-    native_bigint_output_->publish(ret, brs_.size_, brs_.end_ || rand_scan_processor_.use_rand_scan(), skipped);
+    ret = native_bigint_output_->publish(ret, brs_.size_,
+        brs_.end_ || rand_scan_processor_.use_rand_scan(), skipped);
   }
   return ret;
 }

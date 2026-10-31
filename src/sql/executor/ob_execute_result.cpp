@@ -18,6 +18,7 @@
 
 #include "ob_execute_result.h"
 #include "common/datum/datum_value_projection.h"
+#include "common/datum/datum_copy_plan.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/table/ob_table_scan_op.h"
@@ -75,6 +76,20 @@ int ObExecuteResult::get_next_result_row(ObExecContext &ctx, ResultRowView &view
   return get_next_native_result_row(ctx, view);
 }
 
+int ObExecuteResult::try_enable_native_bigint_output(int64_t field_count, bool &accepted)
+{
+  int ret = OB_SUCCESS;
+  accepted = false;
+  if (row_iteration_started_) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (static_engine_root_ != nullptr
+      && static_engine_root_->get_spec().type_ == PHY_TABLE_SCAN) {
+    accepted = static_cast<ObTableScanOp *>(static_engine_root_)
+        ->enable_native_bigint_consumer(field_count);
+  }
+  return ret;
+}
+
 int ResultRowView::project_value(const ObDatum &datum, const SqlTypeMeta &meta,
                                  SqlValueDatumMapType mapping, const SqlTypeMeta &previous_meta,
                                  DatumValue &value, bool keep_null_collation)
@@ -102,6 +117,16 @@ int ResultRowView::get_value(int64_t i, DatumValue &value) const
     }
   } else if (i >= count_) {
     ret = OB_SIZE_OVERFLOW;
+  } else if (!has_legacy_datums()) {
+    const Datum *source = nullptr;
+    const SqlType *type = nullptr;
+    ObDatum borrowed;
+    if (OB_FAIL(get_inline_value(i, source, type))) {
+    } else if (OB_FAIL(DatumCopyPlan(*type).borrow_legacy(*source, borrowed))) {
+    } else {
+      const ObExpr &e = expr(i);
+      ret = project_value(borrowed, e.obj_meta_, e.obj_datum_map_, SqlTypeMeta(), value);
+    }
   } else if (nullptr != cell_metas_) {
     DatumValue candidate(datum(i), cell_metas_[i]);
     if (candidate.meta_.is_null()) {
@@ -144,6 +169,7 @@ int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowVie
     if (OB_FAIL(ret)) {
     } else if (count != native_cell_count_) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (FALSE_IT(row_iteration_started_ = true)) {
     } else if (OB_FAIL(spec.is_vectorized() ? br_it_.get_next_row() : get_next_row())) {
       if (spec.type_ == PHY_TABLE_SCAN) {
         static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
@@ -160,6 +186,11 @@ int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowVie
           && static_cast<ObTableScanOp *>(static_engine_root_)->try_get_native_output(
               idx, inline_values, inline_type, inline_count, generation, current_generation)
           && inline_count == count;
+      const bool has_shadow = spec.type_ != PHY_TABLE_SCAN
+          || static_cast<ObTableScanOp *>(static_engine_root_)->has_legacy_output();
+      if (!inline_ready && !has_shadow) {
+        ret = OB_STATE_NOT_MATCH;
+      }
       for (int64_t i = 0; !inline_ready && OB_SUCC(ret) && i < count; ++i) {
         ObExpr &expr = *spec.output_.at(i);
         ObDatum *datum = nullptr;
@@ -178,12 +209,16 @@ int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowVie
       if (OB_SUCC(ret)) {
         if (inline_ready) {
           view.set_inline_datums(spec.output_, eval_ctx, idx, spec.is_vectorized(),
-                                  inline_values, inline_type, current_generation, generation);
+                                  inline_values, inline_type, current_generation, generation, has_shadow);
         } else {
           view.set_datums(spec.output_, eval_ctx, idx, spec.is_vectorized(), native_cell_metas_);
         }
       }
     }
+  }
+  if (ret != OB_SUCCESS && static_engine_root_ != nullptr
+      && static_engine_root_->get_spec().type_ == PHY_TABLE_SCAN) {
+    static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
   }
   return ret;
 }
@@ -224,8 +259,11 @@ int ObExecuteResult::get_next_row() const
   if (OB_ISNULL(static_engine_root_)) {
     ret = OB_NOT_INIT;
   } else {
+    row_iteration_started_ = true;
     if (static_engine_root_->get_spec().type_ == PHY_TABLE_SCAN) {
-      static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
+      // The scalar adapter saves/restores Expr datums. Do not route it through
+      // the ResultRowView-only capability, even if a caller changes API.
+      static_cast<ObTableScanOp *>(static_engine_root_)->reset_native_bigint_consumer();
     }
     if (OB_FAIL(static_engine_root_->get_next_row())
         && OB_ITER_END != ret && OB_TRY_LOCK_ROW_CONFLICT != ret) {
@@ -240,9 +278,10 @@ int ObExecuteResult::get_next_row() const
 int ObExecuteResult::close() const
 {
   int ret = OB_SUCCESS;
+  row_iteration_started_ = false;
   if (NULL != static_engine_root_) {
     if (static_engine_root_->get_spec().type_ == PHY_TABLE_SCAN) {
-      static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
+      static_cast<ObTableScanOp *>(static_engine_root_)->reset_native_bigint_consumer();
     }
     if (OB_FAIL(static_engine_root_->close())) {
     }

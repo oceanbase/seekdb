@@ -156,6 +156,36 @@ TEST(SessionNativeResult,inline_typed_null_and_fallback_setters_do_not_retain_ol
   EXPECT_FALSE(view.is_datum_row());
   EXPECT_EQ(0, view.count());
 }
+TEST(SessionNativeResult,native_only_get_value_borrows_owner_storage_and_preserves_expression_metadata) {
+  ResultFrame frame;
+  ResultRowView shadow;
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, shadow));
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(frame.expr.obj_meta_, ObAccuracy(20,0), type));
+  Datum native;
+  native.set_int(INT64_MAX);
+  uint64_t generation = 7;
+  ResultRowView view;
+  view.set_inline_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false,
+                         &native, &type, &generation, generation, false);
+  ASSERT_FALSE(view.has_legacy_datums());
+  DatumValue borrowed;
+  frame.owner.fail = true;
+  ASSERT_EQ(OB_SUCCESS, view.get_value(0, borrowed));
+  EXPECT_EQ(INT64_MAX, borrowed.get_int());
+  EXPECT_EQ(7, borrowed.get_scale());
+  const uintptr_t ptr = reinterpret_cast<uintptr_t>(borrowed.datum_.ptr_);
+  const uintptr_t begin = reinterpret_cast<uintptr_t>(&native);
+  EXPECT_GE(ptr, begin);
+  EXPECT_LE(ptr + sizeof(int64_t), begin + sizeof(native));
+  EXPECT_NE(shadow.datum(0).ptr_, borrowed.datum_.ptr_);
+  native.set_int(61);
+  EXPECT_EQ(61, borrowed.get_int()); // descriptor never points into getter scratch
+  EXPECT_EQ(43, shadow.datum(0).get_int());
+  ++generation;
+  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_value(0, borrowed));
+  EXPECT_EQ(61, borrowed.get_int()); // failure does not replace the output
+}
 TEST(SessionNativeResult,invalid_decimal_scale_is_reported_before_publishing_native_row) {
   ResultFrame frame;frame.expr.obj_meta_.set_decimal_int();frame.expr.obj_meta_.set_scale(-1);frame.expr.obj_datum_map_=OBJ_DATUM_DECIMALINT;ResultRowView view;
   EXPECT_EQ(OB_ERR_UNEXPECTED,frame.result.get_next_native_result_row(frame.exec,view));EXPECT_FALSE(view.is_datum_row());EXPECT_EQ(nullptr,(frame.result.*result_member(OldRowTag{})).cells_);

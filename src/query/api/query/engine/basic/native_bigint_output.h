@@ -32,7 +32,8 @@ class ObExpr;
 
 // An execution-owned, fixed-address output for one complete local point get.
 // The storage projector borrows it; only the final TableScan success publishes
-// a readable view. Legacy Expr projection remains independent and unchanged.
+// a readable view. Omitting the legacy projection requires an explicit consumer
+// handshake; unsupported rows still use the complete legacy projector.
 class NativeBigintOutput final
 {
 public:
@@ -44,22 +45,34 @@ public:
   NativeBigintOutput(NativeBigintOutput &&) = delete;
   NativeBigintOutput &operator=(NativeBigintOutput &&) = delete;
 
-  int prepare(const common::ObIArray<ObExpr *> &outputs, bool &supported);
+  int prepare(const common::ObIArray<ObExpr *> &outputs, bool &supported,
+              bool omit_shadow = false);
   // Bind by Expr identity through the actual storage projector. Output order
   // and duplicate expressions need not match the storage row's column order.
   void bind_projector(const common::ObIArray<ObExpr *> &access_exprs,
                       const common::ObIArray<int32_t> &projector);
   void project(const blocksstable::ObStorageDatum *datums, int64_t batch_idx);
+  bool omits_shadow() const { return omit_shadow_; }
+  bool has_candidate() const { return candidate_; }
+  void mark_native_only() { projection_ = Projection::NATIVE_ONLY; }
+  void mark_legacy_projected() { projection_ = Projection::LEGACY; }
+  bool has_legacy_projection() const { return projection_ == Projection::LEGACY; }
+  bool native_only_ready() const
+  { return projection_ == Projection::NATIVE_ONLY && ready_; }
+  // An invalidated candidate does not make a stale expression frame readable.
+  bool can_read_legacy_projection() const
+  { return !omit_shadow_ || has_legacy_projection(); }
 
   // Always advance the token, including failed/end/unsupported operations, so
   // a preceding ResultRowView cannot remain readable merely because slots live.
   void invalidate();
-  void publish(int result, int64_t row_count, bool end, bool skipped);
+  int publish(int result, int64_t row_count, bool end, bool skipped);
   bool try_get(int64_t batch_idx, const common::Datum *&values,
                const common::SqlType *&type, int64_t &count,
                uint64_t &generation, const uint64_t *&current_generation) const;
 
 private:
+  enum class Projection : uint8_t { EMPTY, LEGACY, NATIVE_ONLY };
   common::Datum values_[MAX_COLUMNS];
   const ObExpr *output_exprs_[MAX_COLUMNS];
   int32_t storage_indexes_[MAX_COLUMNS];
@@ -69,6 +82,8 @@ private:
   bool layout_bound_;
   bool candidate_;
   bool ready_;
+  bool omit_shadow_;
+  Projection projection_;
 };
 
 } // namespace sql

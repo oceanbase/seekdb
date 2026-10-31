@@ -149,7 +149,13 @@ int ObDASScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     }
   }
   const ObBitVector *skip = nullptr;
-  PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
+  const bool legacy = scan_param_ == nullptr || scan_param_->row2exprs_projector_ == nullptr
+      || scan_param_->row2exprs_projector_->can_read_legacy_projection();
+  if ((OB_SUCC(ret) || ret == OB_ITER_END) && legacy) {
+    PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
+  } else {
+    LOG_DEBUG("scan result without a readable Expr shadow", K(ret), K(count));
+  }
   return ret;
 }
 

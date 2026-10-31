@@ -361,7 +361,20 @@ int ObDASMergeIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     first_get_row_ = false;
   }
   const ObBitVector *skip = nullptr;
-  PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
+  bool legacy = true;
+  // The native root contract is one local task, sequential merge. No generic
+  // native-row interface is needed for the other DAS iterators.
+  if (das_tasks_arr_.count() == 1) {
+    ObDASScanOp *scan_op = DAS_SCAN_OP(das_tasks_arr_.at(0));
+    if (scan_op != nullptr && scan_op->get_scan_param().row2exprs_projector_ != nullptr) {
+      legacy = scan_op->get_scan_param().row2exprs_projector_->can_read_legacy_projection();
+    }
+  }
+  if ((OB_SUCC(ret) || ret == OB_ITER_END) && legacy) {
+    PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
+  } else {
+    LOG_DEBUG("merged result without a readable Expr shadow", K(ret), K(count));
+  }
   return ret;
 }
 

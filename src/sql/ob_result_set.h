@@ -122,6 +122,7 @@ public:
   int get_next_row(const common::ObNewRow *&row);
   int get_next_result_row(ResultRowView &row);
   int get_next_native_result_row(ResultRowView &row);
+  int try_enable_native_bigint_output(int64_t field_count, bool &accepted);
   /// close the result set after get all the rows
   int close() { return do_close(NULL); }
   // close result set and rewrite the client ret

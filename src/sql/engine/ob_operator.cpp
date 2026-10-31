@@ -1193,9 +1193,13 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
 
       // do project
       if (OB_SUCC(ret) && brs_.size_ > 0) {
-        FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
-          ret = (*e)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_);
-          (*e)->get_eval_info(eval_ctx_).projected_ = true;
+        bool native_only = false;
+        if (OB_FAIL(check_native_batch_output(native_only))) {
+        } else if (!native_only) {
+          FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
+            ret = (*e)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_);
+            (*e)->get_eval_info(eval_ctx_).projected_ = true;
+          }
         }
       }
       

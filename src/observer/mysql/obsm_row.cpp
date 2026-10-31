@@ -70,13 +70,18 @@ bool DatumMysqlRow::can_encode(const oceanbase::sql::ObExpr &expr, const ObField
 
 int64_t DatumMysqlRow::get_cells_cnt() const { return row_.count(); }
 
+bool DatumMysqlRow::can_encode_inline_bigint_field(const ObField &field)
+{
+  return field.type_meta_.get_type() == ObIntType && !(field.flags_ & UNSIGNED_FLAG);
+}
+
 bool DatumMysqlRow::can_encode_inline(const oceanbase::sql::ResultRowView &row,
                                       int64_t idx, const ObField &field)
 {
   const Datum *value = nullptr;
   const SqlType *type = nullptr;
   return OB_SUCCESS == row.get_inline_value(idx, value, type)
-      && type->kind() == ObIntType && field.type_meta_.get_type() == ObIntType
+      && type->kind() == ObIntType && can_encode_inline_bigint_field(field)
       && row.expr(idx).obj_meta_.get_type() == ObIntType
       && row.expr(idx).obj_datum_map_ == OBJ_DATUM_8BYTE_DATA;
 }
@@ -87,7 +92,7 @@ int DatumMysqlRow::build_cell_value(int64_t idx, ObIAllocator &scratch_allocator
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(idx < 0 || idx >= row_.count())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (-3 == obj_indexes_[idx] && row_.is_inline_datum_row()) {
+  } else if (-3 == obj_indexes_[idx]) {
     const Datum *value = nullptr;
     const SqlType *type = nullptr;
     if (OB_FAIL(row_.get_inline_value(idx, value, type))) {
@@ -95,6 +100,8 @@ int DatumMysqlRow::build_cell_value(int64_t idx, ObIAllocator &scratch_allocator
       ret = ObSMUtils::build_inline_bigint_cell_value(
           *value, *type, type_, scratch_allocator, out, &fields_.at(idx));
     }
+  } else if (obj_indexes_[idx] < 0 && !row_.has_legacy_datums()) {
+    ret = OB_STATE_NOT_MATCH;
   } else if (-2 == obj_indexes_[idx]) {
     ret = ObSMUtils::build_converted_string_cell_value(
         row_.datum(idx), row_.expr(idx).obj_meta_, result_charset_, scratch_allocator, out);

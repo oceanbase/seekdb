@@ -109,10 +109,10 @@ struct ProjectorFrame
     EXPECT_EQ(OB_SUCCESS, selected.push_back(&exprs[2]));
   }
 
-  int bind()
+  int bind(bool omit_shadow = false)
   {
     bool supported = false;
-    int ret = native.prepare(selected, supported);
+    int ret = native.prepare(selected, supported, omit_shadow);
     EXPECT_TRUE(supported);
     if (ret == OB_SUCCESS) {
       projector.bind_native_bigint_output(&native);
@@ -158,6 +158,76 @@ TEST(NativeBigintOutput, actual_batch16_projector_preserves_shadow_and_maps_dupl
   frame.exprs[2].locate_batch_datums(frame.eval)[0].set_int(33);
   EXPECT_EQ(INT64_MIN, view.values[0].get_int());
   EXPECT_EQ(INT64_MIN, view.values[2].get_int());
+}
+
+TEST(NativeBigintOutput, native_only_projector_leaves_entire_frame_unchanged)
+{
+  ProjectorFrame frame;
+  ASSERT_EQ(OB_SUCCESS, frame.bind(true));
+  char before[4096];
+  MEMCPY(before, frame.frames[0], sizeof(before));
+  ASSERT_EQ(OB_SUCCESS, frame.project());
+  EXPECT_EQ(0, MEMCMP(before, frame.frames[0], sizeof(before)));
+  EXPECT_FALSE(frame.projector.can_read_legacy_projection());
+  EXPECT_FALSE(frame.native.native_only_ready());
+  ASSERT_EQ(OB_SUCCESS, frame.native.publish(OB_SUCCESS, 1, false, false));
+  EXPECT_TRUE(frame.native.native_only_ready());
+  OutputView view;
+  ASSERT_TRUE(view.get(frame.native));
+  EXPECT_EQ(INT64_MIN, view.values[0].get_int());
+  EXPECT_EQ(19, view.values[1].get_int());
+  frame.native.invalidate();
+  EXPECT_FALSE(view.current());
+  EXPECT_FALSE(frame.projector.can_read_legacy_projection());
+}
+
+TEST(NativeBigintOutput, native_only_publication_failure_cannot_claim_a_legacy_shadow)
+{
+  ProjectorFrame frame;
+  ASSERT_EQ(OB_SUCCESS, frame.bind(true));
+  for (int64_t count : {int64_t(1), int64_t(2)}) {
+    ASSERT_EQ(OB_SUCCESS, frame.project());
+    EXPECT_EQ(OB_ERR_UNEXPECTED, frame.native.publish(OB_SUCCESS, count, count == 1, false));
+    EXPECT_FALSE(frame.native.native_only_ready());
+    EXPECT_FALSE(frame.projector.can_read_legacy_projection());
+    OutputView view;
+    EXPECT_FALSE(view.get(frame.native));
+    EXPECT_EQ(OB_SUCCESS, frame.native.publish(OB_SUCCESS, 1, false, false));
+    EXPECT_FALSE(view.get(frame.native));
+  }
+}
+
+TEST(NativeBigintOutput, unselected_nop_falls_back_before_any_partial_native_only_projection)
+{
+  ProjectorFrame frame;
+  ASSERT_EQ(OB_SUCCESS, frame.bind(true));
+  ASSERT_EQ(OB_SUCCESS, frame.project());
+  ASSERT_EQ(OB_SUCCESS, frame.native.publish(OB_SUCCESS, 1, false, false));
+  OutputView old;
+  ASSERT_TRUE(old.get(frame.native));
+  frame.storage[2].set_nop(); // e1 is not selected but still needs default fusion.
+  int64_t nops = 0;
+  ASSERT_EQ(OB_SUCCESS, frame.project(0, &nops));
+  EXPECT_EQ(1, nops);
+  EXPECT_FALSE(old.current());
+  ASSERT_EQ(OB_SUCCESS, frame.native.publish(OB_SUCCESS, 1, false, false));
+  EXPECT_TRUE(frame.projector.can_read_legacy_projection());
+  EXPECT_FALSE(frame.native.native_only_ready());
+  EXPECT_EQ(INT64_MIN, frame.exprs[2].locate_batch_datums(frame.eval)[0].get_int());
+  EXPECT_EQ(19, frame.exprs[0].locate_batch_datums(frame.eval)[0].get_int());
+}
+
+TEST(NativeBigintOutput, native_only_mapping_requires_every_access_expression_to_be_plain_bigint)
+{
+  ProjectorFrame frame;
+  frame.exprs[1].type_ = T_OP_ADD; // not in the output list
+  ASSERT_EQ(OB_SUCCESS, frame.bind(true));
+  ASSERT_EQ(OB_SUCCESS, frame.project());
+  ASSERT_EQ(OB_SUCCESS, frame.native.publish(OB_SUCCESS, 1, false, false));
+  EXPECT_TRUE(frame.projector.can_read_legacy_projection());
+  OutputView view;
+  EXPECT_FALSE(view.get(frame.native));
+  EXPECT_EQ(INT64_MAX, frame.exprs[1].locate_batch_datums(frame.eval)[0].get_int());
 }
 
 TEST(NativeBigintOutput, actual_scalar_projector_preserves_typed_null_and_integer_extremes)

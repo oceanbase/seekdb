@@ -361,6 +361,17 @@ int ObResultSet::get_next_native_result_row(ResultRowView &view)
   return inner_get_next_row(row, &view, true);
 }
 
+int ObResultSet::try_enable_native_bigint_output(int64_t field_count, bool &accepted)
+{
+  int ret = OB_SUCCESS;
+  accepted = false;
+  const ObPhysicalPlan *plan = get_physical_plan();
+  if (plan != nullptr && !plan->is_packed() && !is_calc_found_rows() && exec_result_ != nullptr) {
+    ret = exec_result_->try_enable_native_bigint_output(field_count, accepted);
+  }
+  return ret;
+}
+
 OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row, ResultRowView *view,
                                             bool native_only)
 {

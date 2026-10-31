@@ -486,6 +486,10 @@ public:
                              const common::SqlType *&type, int64_t &count,
                              uint64_t &generation, const uint64_t *&current_generation) const;
   void invalidate_native_output();
+  bool enable_native_bigint_consumer(int64_t field_count);
+  void reset_native_bigint_consumer();
+  bool has_legacy_output() const;
+  int check_native_batch_output(bool &native_only) const override;
 
   void set_iter_end(bool iter_end) { iter_end_ = iter_end; }
 
@@ -773,6 +777,7 @@ private:
   NativePointGetInput *native_point_get_input_;
   bool native_point_get_ready_;
   NativeBigintOutput *native_bigint_output_;
+  bool native_bigint_consumer_;
  };
 
 } // end namespace sql
