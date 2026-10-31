@@ -36,6 +36,7 @@
 #include "rootserver/ob_partition_creator.h"
 #include "share/ob_version.h" // for get_package_and_svn
 #include "share/ob_server_struct.h" // GCTX
+#include "share/ob_timeout_ctx.h"
 
 namespace oceanbase
 {
@@ -672,6 +673,11 @@ int ObBootstrap::init_global_stat()
   int ret = OB_SUCCESS;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
+#ifdef _WIN32
+  // Fix #1544: 放大 init_global_stat 事务超时，避免 bootstrap 阶段 OB_TIMEOUT
+  ObTimeoutCtx ctx;
+  ctx.set_timeout(600LL * 1000 * 1000);
+#endif
   if (OB_FAIL(check_inner_stat())) {
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1
