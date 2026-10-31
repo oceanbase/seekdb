@@ -18,10 +18,50 @@
 
 #include "lib/string/ob_sql_string.h"
 #include "lib/utility/ob_printf.h"
+#include <limits>
 namespace oceanbase
 {
 namespace common
 {
+
+int escape_mysql_identifier(ObIAllocator &allocator, const ObString &src, ObString &dst)
+{
+  int ret = OB_SUCCESS;
+  const int64_t src_len = src.length();
+  if (OB_ISNULL(src.ptr()) || src_len <= 0) {
+    dst.reset();
+  } else if (nullptr == src.find('`')) {
+    dst = src;
+  } else {
+    int64_t dst_len = src_len;
+    for (int64_t i = 0; i < src_len; ++i) {
+      if ('`' == src[i]) {
+        ++dst_len;
+      }
+    }
+    if (dst_len > std::numeric_limits<ObString::obstr_size_t>::max()) {
+      dst.reset();
+      ret = OB_SIZE_OVERFLOW;
+    } else {
+      char *ptr = static_cast<char *>(allocator.alloc(dst_len + 1));
+      if (OB_ISNULL(ptr)) {
+        dst.reset();
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        int64_t pos = 0;
+        for (int64_t i = 0; i < src_len; ++i) {
+          if ('`' == src[i]) {
+            ptr[pos++] = '`';
+          }
+          ptr[pos++] = src[i];
+        }
+        ptr[dst_len] = '\0';
+        dst.assign_ptr(ptr, static_cast<ObString::obstr_size_t>(dst_len));
+      }
+    }
+  }
+  return ret;
+}
 
 ObSqlString::ObSqlString(const lib::ObLabel &label /* = ObModIds::OB_SQL_STRING */)
     : data_(NULL), data_size_(0), len_(0), allocator_(label)

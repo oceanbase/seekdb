@@ -4,6 +4,22 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "mysql_identifier_cases",
+    srcs = ["test_mysql_identifier.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_unit_test_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_mysql_identifier",
+    linkstatic = True,
+    deps = [":mysql_identifier_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
     name = "malloc_backend_cases",
     srcs = ["test_malloc_backend.cpp"],
     alwayslink = True,
