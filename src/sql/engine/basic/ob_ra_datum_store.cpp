@@ -87,18 +87,6 @@ int validate_ra_copy(const ObRADatumStore::StoredRow &row, int64_t count,
   return OB_SUCCESS;
 }
 
-DatumCopyPlan prepare_ra_copy(const ObExpr &expr)
-{
-  ObAccuracy accuracy;
-  if (expr.obj_meta_.is_string_or_lob_locator_type()) {
-    accuracy.set_length(expr.max_length_);
-    accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
-  } else {
-    accuracy.set_precision(expr.datum_meta_.precision_);
-    accuracy.set_scale(expr.datum_meta_.scale_);
-  }
-  return DatumCopyPlan(expr.obj_meta_, accuracy);
-}
 }
 // Currently only ObIArray<ObExpr> way to write into Store
 // Other based on ObDatum pointer way to write, temporarily not used
@@ -117,7 +105,7 @@ int ObRADatumStore::StoredRow::copy_datums(const common::ObIArray<ObExpr*> &expr
       const ObExpr &expr = *exprs.at(i);
       const ObDatum &in_datum = expr.locate_expr_datum(ctx);
       ret = StoredDatumCodec::encode_legacy_copy(in_datum, stored_cells()[i],
-          prepare_ra_copy(expr), buf, size, pos);
+          expr.prepare_legacy_copy_plan(), buf, size, pos);
     }
     if (OB_SUCC(ret)) {
       readable_ = true;

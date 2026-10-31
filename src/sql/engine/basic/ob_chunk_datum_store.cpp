@@ -29,22 +29,6 @@ using namespace common;
 namespace sql
 {
 
-namespace
-{
-DatumCopyPlan prepare_stored_datum_copy(const ObExpr &expr)
-{
-  ObAccuracy accuracy;
-  if (expr.obj_meta_.is_string_or_lob_locator_type()) {
-    accuracy.set_length(expr.max_length_);
-    accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
-  } else {
-    accuracy.set_precision(expr.datum_meta_.precision_);
-    accuracy.set_scale(expr.datum_meta_.scale_);
-  }
-  return DatumCopyPlan(expr.obj_meta_, accuracy);
-}
-}
-
 int ObChunkDatumStore::BlockBuffer::init(char *buf, const int64_t buf_size)
 {
   int ret = OB_SUCCESS;
@@ -211,7 +195,7 @@ int ObChunkDatumStore::StoredRow::do_build(StoredRow *&sr,
                                                        buf, buf_len, pos, UNSWIZZLING);
           } else {
             ret = StoredDatumCodec::encode_legacy_copy(*in_datum, datums[i],
-                prepare_stored_datum_copy(*expr), buf, buf_len, pos, UNSWIZZLING);
+                expr->prepare_legacy_copy_plan(), buf, buf_len, pos, UNSWIZZLING);
           }
         }
       }
@@ -356,7 +340,7 @@ int ObChunkDatumStore::BlockBufferWrap::append_row(
       // Attension : can't print dst datum after deep_copy_unswizzling
       ObExpr *expr = exprs.at(i);
       ret = StoredDatumCodec::encode_legacy_copy(expr->locate_expr_datum(*ctx), *datum,
-          prepare_stored_datum_copy(*expr), head(), max_size, pos, true);
+          expr->prepare_legacy_copy_plan(), head(), max_size, pos, true);
       if (OB_FAIL(ret)) {
         if (OB_BUF_NOT_ENOUGH != ret) {
         }

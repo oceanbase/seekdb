@@ -21,6 +21,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/oblog/ob_log.h"
 #include "common/datum/ob_datum.h"
+#include "common/datum/datum_copy_plan.h"
 #include "common/datum/datum_parameter.h"
 #include "common/datum/datum_param_store.h"
 #include "share/datum/ob_datum_funcs.h"
@@ -381,6 +382,23 @@ public:
   ObExpr();
   // Rebuild derived function tables after datum_meta_ or obj_meta_ changes.
   int init_runtime_functions();
+
+  // Prepare the existing legacy copy metadata, preserving its accuracy union.
+  // The returned plan owns these metadata bytes and borrows no SqlType. Full
+  // enum/collection/UDT metadata still belongs to resolved or schema owners.
+  common::DatumCopyPlan prepare_legacy_copy_plan() const
+  {
+    common::ObAccuracy accuracy;
+    if (obj_meta_.is_string_or_lob_locator_type()) {
+      accuracy.set_length(max_length_);
+      accuracy.set_length_semantics(datum_meta_.length_semantics_);
+    } else {
+      accuracy.set_precision(datum_meta_.precision_);
+      accuracy.set_scale(datum_meta_.scale_);
+    }
+    return common::DatumCopyPlan(obj_meta_, accuracy);
+  }
+
   OB_INLINE int eval(ObEvalCtx &ctx, common::ObDatum *&datum) const;
   int eval_enumset(ObEvalCtx &ctx,
                    const common::ObIArray<common::ObString> &str_values,
