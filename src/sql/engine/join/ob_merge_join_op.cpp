@@ -1196,15 +1196,18 @@ int ObMergeJoinOp::calc_equal_conds_with_stored_row(const ObRADatumStore::Stored
                                                   : equal_cond.expr_->args_[0];
     ObExpr *r_child_expr = equal_cond.is_opposite_ ? equal_cond.expr_->args_[0]
         : equal_cond.expr_->args_[1];
-    ObDatum *l_table_datum = nullptr;
-    ObDatum *r_table_datum = nullptr;
+    // This descriptor borrows the RA row only for the synchronous comparison.
+    const ObDatum stored_datum = StoredDatumCodec::decode_legacy_view(
+        stored_row->stored_cells()[equal_param_idx.at(i)]);
+    const ObDatum *l_table_datum = nullptr;
+    const ObDatum *r_table_datum = nullptr;
 
     if (is_left_table_stored_row) {
-      l_table_datum = const_cast<ObDatum *>(&stored_row->cells()[equal_param_idx.at(i)]);
+      l_table_datum = &stored_datum;
       r_table_datum = &r_child_expr->locate_expr_datum(eval_ctx_, batch_idx);
     } else {
       l_table_datum = &l_child_expr->locate_expr_datum(eval_ctx_, batch_idx);
-      r_table_datum = const_cast<ObDatum *>(&stored_row->cells()[equal_param_idx.at(i)]);
+      r_table_datum = &stored_datum;
     }
     if (OB_SUCC(ret)) {
     if (l_table_datum->is_null() && r_table_datum->is_null()) {

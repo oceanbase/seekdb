@@ -107,6 +107,7 @@ private:
 
 class ObMergeJoinOp: public ObJoinOp
 {
+  friend class FixedMergeJoinCellsTestAccess;
 private:
   struct JoinRowList
   {
