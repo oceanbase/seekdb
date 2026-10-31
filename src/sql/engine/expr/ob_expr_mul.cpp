@@ -131,7 +131,8 @@ struct ObIntIntBatchMulRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
 {
   static void raw_op(int64_t &res, const int64_t l, const int64_t r)
   {
-    res = l * r;
+    // Keep the wrapped result defined before the existing overflow diagnostic.
+    (void)ObExprMul::is_mul_out_of_range(l, r, res);
   }
 
   static int raw_check(const int64_t, const int64_t l, const int64_t r)
@@ -154,12 +155,12 @@ struct ObIntIntBatchMulRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
 
 int ObExprMul::mul_int_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObSignedIntArithOpWrap<ObIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObSignedIntArithOpWrap<ObIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 

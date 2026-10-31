@@ -299,7 +299,9 @@ struct ObIntIntBatchMinusRaw : public ObArithOpRawType<int64_t, int64_t, int64_t
 {
   static void raw_op(int64_t &res, const int64_t l, const int64_t r)
   {
-    res = l - r;
+    // Produce a defined wrapped value for the unchanged sign-based check,
+    // even when accessor operands/results stay in compiler registers.
+    (void)__builtin_sub_overflow(l, r, &res);
   }
 
   static int raw_check(const int64_t res, const int64_t l, const int64_t r)
@@ -322,12 +324,12 @@ struct ObIntIntBatchMinusRaw : public ObArithOpRawType<int64_t, int64_t, int64_t
 //calc_type is IntTC  left and right has same TC
 int ObExprMinus::minus_int_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObSignedIntArithOpWrap<ObIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObSignedIntArithOpWrap<ObIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
