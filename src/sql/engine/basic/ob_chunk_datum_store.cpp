@@ -161,12 +161,6 @@ void ObChunkDatumStore::StoredRow::unswizzling(char *base/*= NULL*/)
   unswizzling_cells(stored_cells(), cnt_, base);
 }
 
-void ObChunkDatumStore::StoredRow::unswizzling_datum(ObDatum *datum, uint32_t cnt, char *base)
-{
-  // Explicit adapter for callers not yet migrated from legacy_cells().
-  unswizzling_cells(reinterpret_cast<StoredDatumCell *>(datum), cnt, base);
-}
-
 void ObChunkDatumStore::StoredRow::unswizzling_cells(StoredDatumCell *cells, uint32_t cnt, char *base)
 {
   for (int64_t i = 0; i < cnt; ++i) {

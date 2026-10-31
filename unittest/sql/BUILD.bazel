@@ -4,6 +4,24 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "stored_format_consumer_cases",
+    srcs = ["test_stored_format_consumers.cpp", "test_stored_wire_consumers.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:stored_format_consumer_test_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_stored_format_consumers",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":stored_format_consumer_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
     name = "native_point_get_retry_cases",
     srcs = ["test_native_point_get_retry.cpp"],
     alwayslink = True,

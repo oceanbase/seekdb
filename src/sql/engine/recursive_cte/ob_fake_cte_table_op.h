@@ -82,7 +82,7 @@ public:
   int get_next_single_batch(const int64_t max_row_cnt);
   int get_next_bulk_batch(const int64_t max_row_cnt);
   int add_single_row(ObChunkDatumStore::StoredRow *row);
-  int copy_datums(ObChunkDatumStore::StoredRow *row, common::ObDatum *datums,
+  int copy_stored_cells(ObChunkDatumStore::StoredRow *row, const StoredDatumCell *cells,
                   int64_t cnt, const common::ObIArray<int64_t> &chosen_datums,
                   char *buf, const int64_t size, const int64_t row_size,
                   const uint32_t row_extend_size);

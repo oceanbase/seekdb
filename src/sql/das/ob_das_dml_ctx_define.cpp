@@ -550,7 +550,7 @@ OB_INLINE int ObDASWriteBuffer::add_row_to_dlist(const ObChunkDatumStore::Shadow
   } else {
     char *buf = dml_row->payload_;
     int64_t buf_size = lsr->row_size_ + row_extend_size_ - ROW_HEAD_SIZE;
-    if (OB_FAIL(dml_row->copy_shadow_datums(lsr->cells(), lsr->cnt_, buf, buf_size,
+    if (OB_FAIL(dml_row->copy_shadow_cells(lsr->stored_cells(), lsr->cnt_, buf, buf_size,
                                             lsr->row_size_ + row_extend_size_, row_extend_size_/*extra_size*/))) {
     } else {
       row_added = true;
@@ -789,7 +789,7 @@ int ObDASWriteBuffer::serialize_buffer_list(char *buf, const int64_t buf_len, in
       } else {
         DmlRow *tmp_row = reinterpret_cast<DmlRow*>(buf + pos);
         MEMCPY(tmp_row, dml_row, dml_row->row_size_);
-        DmlRow::unswizzling_datum(tmp_row->cells(), dml_row->cnt_, dml_row->payload_);
+        DmlRow::unswizzling_cells(tmp_row->stored_cells(), dml_row->cnt_, dml_row->payload_);
         pos += dml_row->row_size_;
         dml_row = ObDASWriteBuffer::get_next_dml_row(dml_row);
       }

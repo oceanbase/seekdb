@@ -169,7 +169,6 @@ public:
     int assign(const StoredRow *sr);
     int set_null(int64_t nth_col);
     void unswizzling(char *base = NULL);
-    static void unswizzling_datum(common::ObDatum *datum, uint32_t cnt, char *base);
     static void unswizzling_cells(StoredDatumCell *cells, uint32_t cnt, char *base);
     void swizzling(char *base = NULL);
     TO_STRING_KV(K_(cnt), K_(row_size), "cells",
@@ -497,6 +496,16 @@ public:
       const common::ObDatum *datums, const int64_t cnt, uint32_t row_extend_size = 0)
     {
       return ROW_HEAD_SIZE + row_extend_size + ObChunkDatumStore::row_copy_size(datums, cnt);
+    }
+
+    static int64_t inline row_store_size(
+      const StoredDatumCell *cells, const int64_t cnt, uint32_t row_extend_size = 0)
+    {
+      int64_t size = ROW_HEAD_SIZE + row_extend_size + sizeof(StoredDatumCell) * cnt;
+      for (int64_t i = 0; i < cnt; ++i) {
+        size += cells[i].is_null() ? 0 : cells[i].len_;
+      }
+      return size;
     }
 
     int append_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx *ctx,
