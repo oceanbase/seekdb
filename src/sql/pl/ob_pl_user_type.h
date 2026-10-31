@@ -17,6 +17,7 @@
 #ifndef DEV_SRC_PL_OB_PL_USER_TYPE_H_
 #define DEV_SRC_PL_OB_PL_USER_TYPE_H_
 #include "sql/pl/ob_pl_type.h"
+#include "common/datum/sql_type.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_array_index_hash_set.h"
@@ -56,8 +57,8 @@ class ObPLAllocator1;
 class ObUserDefinedType : public ObPLDataType
 {
 public:
-  ObUserDefinedType() : ObPLDataType(), type_name_() {}
-  ObUserDefinedType(ObPLType type) : ObPLDataType(type), type_name_() {}
+  ObUserDefinedType() : ObPLDataType(), type_name_(), sql_declaration_identity_(), sql_nominal_identity_() {}
+  ObUserDefinedType(ObPLType type) : ObPLDataType(type), type_name_(), sql_declaration_identity_(), sql_nominal_identity_() {}
   virtual ~ObUserDefinedType() {}
 
   int deep_copy(common::ObIAllocator &alloc, const ObUserDefinedType &other);
@@ -65,7 +66,22 @@ public:
   ObPLType get_type() const { return type_; }
   inline void set_name(const common::ObString &type_name) { type_name_ = type_name; }
   inline const common::ObString &get_name() const { return type_name_; }
-  void set_user_type_id(uint64_t user_type_id) { user_type_id_ = user_type_id; }
+  void set_user_type_id(uint64_t user_type_id)
+  {
+    if (user_type_id_ != user_type_id) {
+      // Re-numbering creates a declaration in a new actual owner. A table
+      // dependency must never masquerade as that new declaration's origin.
+      sql_declaration_identity_ = common::SqlPLDeclarationIdentity();
+      sql_nominal_identity_ = common::SqlNominalType();
+    }
+    user_type_id_ = user_type_id;
+  }
+  const common::SqlPLDeclarationIdentity &get_sql_declaration_identity() const
+  { return sql_declaration_identity_; }
+  const common::SqlNominalType &get_sql_nominal_identity() const
+  { return sql_nominal_identity_; }
+  int set_sql_declaration_identity(const common::SqlPLDeclarationIdentity &identity,
+                                    const common::SqlNominalType &nominal);
   inline uint64_t get_user_type_id() const { return user_type_id_; }
 
 public:
@@ -145,6 +161,9 @@ public:
   VIRTUAL_TO_STRING_KV(K_(type), K_(user_type_id), K_(type_name));
 protected:
   common::ObString type_name_;
+  // Declaration metadata only; no cost is added to a PL scalar/runtime value.
+  common::SqlPLDeclarationIdentity sql_declaration_identity_;
+  common::SqlNominalType sql_nominal_identity_;
 };
 
 

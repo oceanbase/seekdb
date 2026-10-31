@@ -44,6 +44,61 @@ struct SqlNominalType
   int64_t schema_version;
 };
 
+// A declaration ID is not a schema object ID. Package declarations use the
+// complete combined ID; local declarations additionally need their original
+// compilation scope. Producers bind this provenance to the real declaration,
+// and must preserve it when a parent declaration is imported into another unit.
+enum class SqlPLDeclarationSource : uint8_t {
+  None = 0, Local = 1, TableRow = 2, PackageSpec = 3,
+  PackageBody = 4, Trigger = 5, SchemaType = 6
+};
+
+struct SqlPLCompilationScope
+{
+  SqlPLCompilationScope() : high(0), low(0) {}
+  bool is_valid() const { return high != 0 || low != 0; }
+  bool equals(const SqlPLCompilationScope &other) const
+  { return high == other.high && low == other.low; }
+  uint64_t high;
+  uint64_t low;
+};
+
+struct SqlPLDeclarationIdentity
+{
+  SqlPLDeclarationIdentity()
+    : source(SqlPLDeclarationSource::None), tenant_id(0), declaration_id(0), compilation_scope() {}
+  bool is_specified() const { return source != SqlPLDeclarationSource::None; }
+  bool is_local() const { return source == SqlPLDeclarationSource::Local; }
+  bool equals(const SqlPLDeclarationIdentity &other) const
+  {
+    return source == other.source && tenant_id == other.tenant_id
+        && declaration_id == other.declaration_id && compilation_scope.equals(other.compilation_scope);
+  }
+  // Field consistency only: a producer must still obtain these values from the
+  // actual declaration owner. In particular, zero is not a missing-schema-version fallback.
+  // None is valid for non-PL types; a PL Record producer also requires is_specified().
+  bool valid_with(const SqlNominalType &nominal) const
+  {
+    if (static_cast<uint8_t>(source) > static_cast<uint8_t>(SqlPLDeclarationSource::SchemaType)) {
+      return false;
+    } else if (!is_specified()) {
+      return tenant_id == 0 && declaration_id == 0 && !compilation_scope.is_valid();
+    } else if (tenant_id == 0 || tenant_id == OB_INVALID_ID || declaration_id == OB_INVALID_ID) {
+      return false;
+    } else if (is_local()) {
+      return compilation_scope.is_valid() && !nominal.specified;
+    } else {
+      return !compilation_scope.is_valid() && nominal.specified && nominal.tenant_id == tenant_id
+          && nominal.object_id != 0 && nominal.object_id != OB_INVALID_ID && nominal.schema_version >= 0
+          && (source != SqlPLDeclarationSource::TableRow || declaration_id == nominal.object_id);
+    }
+  }
+  SqlPLDeclarationSource source;
+  uint64_t tenant_id;
+  uint64_t declaration_id;
+  SqlPLCompilationScope compilation_scope;
+};
+
 struct SqlTypeMember
 {
   SqlTypeMember() : name(), type(nullptr), nullable(true) {}
@@ -60,7 +115,7 @@ struct SqlTypeSpec
   enum Attribute : uint8_t { Precision = 1, Scale = 2, Length = 4, LengthSemantics = 8 };
   SqlTypeSpec()
     : attributes(), form(SqlTypeForm::Scalar), specified(0), time(SqlTimeSemantics::Unspecified),
-      nominal(), element(nullptr), key(nullptr), value(nullptr), dimension(0),
+      nominal(), pl_declaration(), element(nullptr), key(nullptr), value(nullptr), dimension(0),
       array_limit(-1), heterogeneous(false), members(nullptr),
       member_count(0), labels(nullptr), label_count(0) {}
   ObDataType attributes;
@@ -68,6 +123,7 @@ struct SqlTypeSpec
   uint8_t specified;
   SqlTimeSemantics time;
   SqlNominalType nominal;
+  SqlPLDeclarationIdentity pl_declaration;
   const SqlType *element;
   const SqlType *key;
   const SqlType *value;
@@ -104,7 +160,11 @@ public:
   int clone_to(ObIAllocator &owner, const SqlType *&output) const
   { return create(specification(), owner, output, 0); }
 
-  // Versioned metadata tree, never an address encoding. As for create(), a
+  // Versioned metadata tree, never an address encoding. Nodes without PL
+  // identity retain the historical v1 bytes. Identity-bearing nodes use v2;
+  // v1 PL Records are rejected because their declaration origin is missing.
+  // This metadata codec does not serialize the PL value/resource itself.
+  // As for create(), a
   // failed decode leaves partial allocations in the caller's bulk-lifetime
   // owner, but publishes neither an output pointer nor an advanced cursor.
   int serialize(char *buffer, int64_t capacity, int64_t &position) const
@@ -171,7 +231,8 @@ public:
     if (ret == OB_SUCCESS) {
       output.attributes_ = spec.attributes;
       output.form_ = spec.form; output.specified_ = spec.specified; output.time_ = spec.time;
-      output.nominal_ = spec.nominal; output.element_ = nullptr; output.array_limit_ = -1;
+      output.nominal_ = spec.nominal; output.pl_declaration_ = spec.pl_declaration;
+      output.element_ = nullptr; output.array_limit_ = -1;
       output.key_ = nullptr; output.value_ = nullptr; output.dimension_ = 0;
       output.heterogeneous_ = false; output.members_ = nullptr; output.member_count_ = 0;
       output.labels_ = nullptr; output.label_count_ = 0;
@@ -193,7 +254,7 @@ private:
     int ret = OB_SUCCESS;
 #define TYPE_WIRE_SIZE(FIELD) \
     if (ret == OB_SUCCESS) { ret = add_wire_size(serialization::encoded_length(FIELD), size); }
-    TYPE_WIRE_SIZE(int64_t(1));
+    TYPE_WIRE_SIZE(int64_t(pl_declaration_.is_specified() ? 2 : 1));
     TYPE_WIRE_SIZE(attributes_.meta_);
     TYPE_WIRE_SIZE(attributes_.accuracy_.get_accuracy());
     TYPE_WIRE_SIZE(attributes_.is_zero_fill_);
@@ -208,6 +269,13 @@ private:
     TYPE_WIRE_SIZE(nominal_.tenant_id);
     TYPE_WIRE_SIZE(nominal_.object_id);
     TYPE_WIRE_SIZE(nominal_.schema_version);
+    if (pl_declaration_.is_specified()) {
+      TYPE_WIRE_SIZE(static_cast<uint8_t>(pl_declaration_.source));
+      TYPE_WIRE_SIZE(pl_declaration_.tenant_id);
+      TYPE_WIRE_SIZE(pl_declaration_.declaration_id);
+      TYPE_WIRE_SIZE(pl_declaration_.compilation_scope.high);
+      TYPE_WIRE_SIZE(pl_declaration_.compilation_scope.low);
+    }
     TYPE_WIRE_SIZE(array_limit_);
     TYPE_WIRE_SIZE(heterogeneous_);
     TYPE_WIRE_SIZE(element_ != nullptr);
@@ -235,7 +303,7 @@ private:
     int ret = OB_SUCCESS;
 #define TYPE_WIRE_WRITE(FIELD) \
     if (ret == OB_SUCCESS) { ret = serialization::encode(buffer, length, position, FIELD); }
-    TYPE_WIRE_WRITE(int64_t(1));
+    TYPE_WIRE_WRITE(int64_t(pl_declaration_.is_specified() ? 2 : 1));
     TYPE_WIRE_WRITE(attributes_.meta_);
     TYPE_WIRE_WRITE(attributes_.accuracy_.get_accuracy());
     TYPE_WIRE_WRITE(attributes_.is_zero_fill_);
@@ -248,6 +316,13 @@ private:
     TYPE_WIRE_WRITE(nominal_.tenant_id);
     TYPE_WIRE_WRITE(nominal_.object_id);
     TYPE_WIRE_WRITE(nominal_.schema_version);
+    if (pl_declaration_.is_specified()) {
+      TYPE_WIRE_WRITE(static_cast<uint8_t>(pl_declaration_.source));
+      TYPE_WIRE_WRITE(pl_declaration_.tenant_id);
+      TYPE_WIRE_WRITE(pl_declaration_.declaration_id);
+      TYPE_WIRE_WRITE(pl_declaration_.compilation_scope.high);
+      TYPE_WIRE_WRITE(pl_declaration_.compilation_scope.low);
+    }
     TYPE_WIRE_WRITE(array_limit_);
     TYPE_WIRE_WRITE(heterogeneous_);
     TYPE_WIRE_WRITE(element_ != nullptr);
@@ -329,7 +404,7 @@ private:
 #define TYPE_WIRE_READ(FIELD) \
     if (ret == OB_SUCCESS) { ret = read_wire_field(buffer, length, position, FIELD); }
     TYPE_WIRE_READ(version);
-    if (ret == OB_SUCCESS && version != 1) { ret = OB_NOT_SUPPORTED; }
+    if (ret == OB_SUCCESS && version != 1 && version != 2) { ret = OB_NOT_SUPPORTED; }
     TYPE_WIRE_READ(spec.attributes.meta_);
     TYPE_WIRE_READ(spec.attributes.accuracy_.accuracy_);
     TYPE_WIRE_READ(spec.attributes.is_zero_fill_);
@@ -342,6 +417,16 @@ private:
     TYPE_WIRE_READ(spec.nominal.tenant_id);
     TYPE_WIRE_READ(spec.nominal.object_id);
     TYPE_WIRE_READ(spec.nominal.schema_version);
+    if (version == 2) {
+      uint8_t source = 0;
+      TYPE_WIRE_READ(source);
+      TYPE_WIRE_READ(spec.pl_declaration.tenant_id);
+      TYPE_WIRE_READ(spec.pl_declaration.declaration_id);
+      TYPE_WIRE_READ(spec.pl_declaration.compilation_scope.high);
+      TYPE_WIRE_READ(spec.pl_declaration.compilation_scope.low);
+      spec.pl_declaration.source = static_cast<SqlPLDeclarationSource>(source);
+      if (ret == OB_SUCCESS && !spec.pl_declaration.is_specified()) { ret = OB_DESERIALIZE_ERROR; }
+    }
     TYPE_WIRE_READ(spec.array_limit);
     TYPE_WIRE_READ(spec.heterogeneous);
     TYPE_WIRE_READ(has_element);
@@ -444,6 +529,7 @@ public:
   ObCollationType collation() const { return attributes_.get_collation_type(); }
   SqlTimeSemantics time_semantics() const { return time_; }
   const SqlNominalType &nominal() const { return nominal_; }
+  const SqlPLDeclarationIdentity &pl_declaration() const { return pl_declaration_; }
   const SqlType *element() const { return element_; }
   const SqlType *key_type() const { return key_; }
   const SqlType *value_type() const { return value_; }
@@ -465,6 +551,10 @@ public:
       "collation", collation(), "time", static_cast<int>(time_),
       "nominal_specified", nominal_.specified, "tenant_id", nominal_.tenant_id,
       "object_id", nominal_.object_id, "schema_version", nominal_.schema_version,
+      "pl_source", static_cast<int>(pl_declaration_.source),
+      "pl_tenant_id", pl_declaration_.tenant_id, "pl_declaration_id", pl_declaration_.declaration_id,
+      "pl_scope_high", pl_declaration_.compilation_scope.high,
+      "pl_scope_low", pl_declaration_.compilation_scope.low,
       "child_count", int(element_ != nullptr) + int(key_ != nullptr) + int(value_ != nullptr),
       "dimension", dimension_, "array_limit", array_limit_, "heterogeneous", heterogeneous_,
       "member_count", member_count_, "label_count", label_count_);
@@ -505,7 +595,7 @@ public:
   {
     if (this == &other) { return true; }
     if (kind() != other.kind() || form_ != other.form_ || specified_ != other.specified_
-        || time_ != other.time_ || !same_nominal(other)
+        || time_ != other.time_ || !same_nominal(other) || !pl_declaration_.equals(other.pl_declaration_)
         || (has_precision() && precision() != other.precision())
         || (has_scale() && scale() != other.scale())
         || (has_length() && length() != other.length())
@@ -541,7 +631,8 @@ public:
   bool physically_compatible(const SqlType &other) const
   {
     if (kind() != other.kind() || form_ != other.form_ || time_ != other.time_
-        || !same_nominal(other) || !same_payload_metadata(other)) { return false; }
+        || !same_nominal(other) || !pl_declaration_.equals(other.pl_declaration_)
+        || !same_payload_metadata(other)) { return false; }
     if (form_ != SqlTypeForm::Scalar) { return equals(other); }
     if (has_collation(kind()) && attributes_.charset_ != other.attributes_.charset_) { return false; }
     if (kind() == ObDecimalIntType) {
@@ -569,7 +660,8 @@ private:
   explicit SqlType(const SqlTypeSpec &spec)
     : attributes_(spec.attributes), form_(spec.form), specified_(spec.specified),
       time_(spec.time == SqlTimeSemantics::Unspecified ? default_time(spec.attributes.get_obj_type()) : spec.time),
-      nominal_(spec.nominal), element_(spec.element), key_(spec.key), value_(spec.value), dimension_(spec.dimension),
+      nominal_(spec.nominal), pl_declaration_(spec.pl_declaration),
+      element_(spec.element), key_(spec.key), value_(spec.value), dimension_(spec.dimension),
       array_limit_(spec.array_limit), heterogeneous_(spec.heterogeneous),
       members_(spec.members), member_count_(spec.member_count), labels_(spec.labels), label_count_(spec.label_count) {}
   SqlType(const SqlType &) = delete;
@@ -672,6 +764,13 @@ private:
     if (spec.form != SqlTypeForm::Enum && spec.form != SqlTypeForm::Set && spec.label_count != 0) { return OB_INVALID_ARGUMENT; }
     if (spec.form == SqlTypeForm::UserDefined && !spec.nominal.specified) { return OB_NOT_SUPPORTED; }
     if (spec.nominal.specified && (spec.nominal.object_id == 0 || spec.nominal.schema_version < 0)) { return OB_INVALID_ARGUMENT; }
+    const bool pl_record = spec.form == SqlTypeForm::Record && spec.attributes.meta_.is_pl_extend_type();
+    if (!spec.pl_declaration.valid_with(spec.nominal)) { return OB_INVALID_ARGUMENT; }
+    if (pl_record && !spec.pl_declaration.is_specified()) { return OB_NOT_SUPPORTED; }
+    if (spec.pl_declaration.is_specified() && (!pl_record || spec.specified != 0
+        || static_cast<uint64_t>(spec.attributes.accuracy_.get_accuracy()) != spec.pl_declaration.declaration_id)) {
+      return OB_INVALID_ARGUMENT;
+    }
     if (spec.time != SqlTimeSemantics::Unspecified && default_time(kind) == SqlTimeSemantics::Unspecified) {
       return OB_INVALID_ARGUMENT;
     }
@@ -698,7 +797,8 @@ private:
   {
     SqlTypeSpec spec;
     spec.attributes = attributes_; spec.form = form_; spec.specified = specified_; spec.time = time_;
-    spec.nominal = nominal_; spec.element = element_; spec.key = key_; spec.value = value_; spec.dimension = dimension_;
+    spec.nominal = nominal_; spec.pl_declaration = pl_declaration_;
+    spec.element = element_; spec.key = key_; spec.value = value_; spec.dimension = dimension_;
     spec.array_limit = array_limit_; spec.heterogeneous = heterogeneous_;
     spec.members = members_; spec.member_count = member_count_; spec.labels = labels_; spec.label_count = label_count_;
     return spec;
@@ -746,6 +846,7 @@ private:
   uint8_t specified_;
   SqlTimeSemantics time_;
   SqlNominalType nominal_;
+  SqlPLDeclarationIdentity pl_declaration_;
   const SqlType *element_;
   const SqlType *key_;
   const SqlType *value_;

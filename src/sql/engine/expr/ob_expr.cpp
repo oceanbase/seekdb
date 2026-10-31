@@ -333,7 +333,9 @@ int ObExpr::prepare_scalar_type(const common::SqlTypeMeta &meta, const common::O
 }
 
 int ObExpr::prepare_resolved_type(const ObRawExprResType &resolved, const ObSQLSessionInfo *session,
-                                 common::ObIAllocator &owner)
+                                 common::ObIAllocator &owner,
+                                 share::schema::ObSchemaGetterGuard *schema_guard,
+                                 const pl::ObPLINS *pl_declarations)
 {
   int ret = OB_SUCCESS;
   if (!resolved.is_enum_or_set() && !resolved.is_enumset_inner_type()
@@ -346,7 +348,7 @@ int ObExpr::prepare_resolved_type(const ObRawExprResType &resolved, const ObSQLS
   } else {
     common::ObArenaAllocator temporary("ExprTypePrep");
     const common::SqlType *type = nullptr;
-    ret = ObExprUtil::resolve_raw_sql_type(resolved, session, nullptr, temporary, type);
+    ret = ObExprUtil::resolve_raw_sql_type(resolved, session, schema_guard, temporary, type, pl_declarations);
     if (OB_SUCC(ret)) { ret = bind_sql_type(*type, owner); }
   }
   return ret;
@@ -705,7 +707,8 @@ void *ObExprStrResAlloc::alloc(const int64_t size)
 
 int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value)
 {
-  const DatumCopyPlan plan = expr.get_datum_copy_plan();
+  const SqlType &type = expr.get_sql_type();
+  const DatumCopyPlan plan(type);
   const Datum &source = expr.locate_expr_datum(ctx);
   common::ObDatum legacy;
   int ret = plan.borrow_legacy(source, legacy);
@@ -728,13 +731,19 @@ int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &
     view.set_datum(legacy);
     SqlTypeMeta meta = expr.obj_meta_;
     ObAccuracy accuracy;
-    accuracy.set_scale(expr.datum_meta_.scale_);
-    accuracy.set_precision(expr.datum_meta_.precision_);
-    accuracy.set_length(expr.max_length_);
-    if (meta.is_string_or_lob_locator_type()) {
-      accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
-    } else if (meta.is_numeric_type() || meta.is_temporal_type()) {
-      meta.set_scale(expr.datum_meta_.scale_);
+    if (type.legacy_meta().is_pl_extend_type()) {
+      // PL accuracy is the complete declaration ID, including for typed NULL.
+      // Numeric/length fields cannot reconstruct it, and payloads do not own it.
+      accuracy = type.accuracy();
+    } else {
+      accuracy.set_scale(expr.datum_meta_.scale_);
+      accuracy.set_precision(expr.datum_meta_.precision_);
+      accuracy.set_length(expr.max_length_);
+      if (meta.is_string_or_lob_locator_type()) {
+        accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
+      } else if (meta.is_numeric_type() || meta.is_temporal_type()) {
+        meta.set_scale(expr.datum_meta_.scale_);
+      }
     }
     view.set_type_meta(meta);
     view.set_accuracy(accuracy);

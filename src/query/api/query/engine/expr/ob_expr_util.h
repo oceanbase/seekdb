@@ -24,6 +24,7 @@
 namespace oceanbase
 {
 namespace share { namespace schema { class ObSchemaGetterGuard; } }
+namespace pl { class ObPLINS; }
 namespace common
 {
 class ObIVector;
@@ -90,13 +91,17 @@ public:
                                    const common::ObAccuracy &accuracy,
                                    const common::ObIArray<common::ObString> &labels,
                                    common::ObIAllocator &owner, const common::SqlType *&out);
+  // A PL declaration source is borrowed only during preparation. Each actual
+  // definition must already own its origin; no current-unit or value fallback.
   static int resolve_raw_sql_type(const ObRawExprResType &resolved,
                                   const ObSQLSessionInfo *session,
                                   share::schema::ObSchemaGetterGuard *schema_guard,
-                                  common::ObIAllocator &owner, const common::SqlType *&out);
+                                  common::ObIAllocator &owner, const common::SqlType *&out,
+                                  const pl::ObPLINS *pl_declarations = nullptr);
   static int resolve_sql_type(ObExecContext &ctx, const common::SqlTypeMeta &meta,
                               const common::ObAccuracy &accuracy, uint16_t subschema_id,
-                              common::ObIAllocator &owner, const common::SqlType *&out);
+                              common::ObIAllocator &owner, const common::SqlType *&out,
+                              const pl::ObPLINS *pl_declarations = nullptr);
 
   static int set_number(const ObExpr &expr, ObEvalCtx &ctx, common::Datum &out,
                         const common::number::ObNumber &value, int64_t index = -1);

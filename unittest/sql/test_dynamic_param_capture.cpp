@@ -15,11 +15,14 @@
  */
 
 #include "query/engine/expr/ob_expr_lob_utils.h"
+#include "query/engine/expr/ob_expr_util.h"
 #include "query/engine/ob_operator.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_spi.h"
 #include "sql/engine/expr/ob_expr_udf.h"
 #include "sql/pl/ob_pl_package_state.h"
+#include "sql/pl/ob_pl.h"
+#include "sql/pl/ob_pl_user_type.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/pl/ob_pl_package_guard.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -960,4 +963,98 @@ TEST(DynamicParamCapture, native_pl_return_sentinel_distinguishes_no_return_from
   bool is_child = true;
   ASSERT_EQ(OB_SUCCESS, ObExprUDF::is_child_of(typed_null, typed_null, is_child));
   EXPECT_FALSE(is_child);
+}
+
+namespace {
+class CaptureRecordDeclaration final : public oceanbase::pl::ObPLINS
+{
+public:
+  explicit CaptureRecordDeclaration(const oceanbase::pl::ObRecordType &declaration)
+      : declaration_(declaration) {}
+  int get_user_type(uint64_t id, const oceanbase::pl::ObUserDefinedType *&out,
+                    ObIAllocator *allocator = nullptr) const override
+  {
+    UNUSED(allocator);
+    if (id != declaration_.get_user_type_id()) { return OB_ENTRY_NOT_EXIST; }
+    out = &declaration_;
+    return OB_SUCCESS;
+  }
+private:
+  const oceanbase::pl::ObRecordType &declaration_;
+};
+} // namespace
+
+TEST(DynamicParamCapture, pl_frame_capture_preserves_complete_declaration_id_for_present_and_typed_null) {
+  using namespace oceanbase::pl;
+  // Both halves matter: neither an ordinal nor the legacy numeric/length
+  // projection describes these actual declaration IDs.
+  for (const uint64_t declaration_id : {UINT64_C(0x1234567890abcdef), UINT64_C(0x6b7c8d9e10293847)}) {
+    SCOPED_TRACE(declaration_id);
+    Frame f;
+    ObEvalCtx ctx(f.exec);
+    ObRecordType declaration;
+    declaration.set_user_type_id(declaration_id);
+    ASSERT_EQ(OB_SUCCESS, declaration.record_members_init(&f.arena, 1));
+    ObPLDataType member(ObIntType);
+    ASSERT_EQ(OB_SUCCESS, declaration.add_record_member(ObString::make_string("value"), member));
+    SqlPLDeclarationIdentity identity;
+    identity.source = SqlPLDeclarationSource::Local;
+    identity.tenant_id = OB_SERVER_RUNTIME_ID;
+    identity.declaration_id = declaration_id;
+    identity.compilation_scope.high = UINT64_C(0x1020304050607080);
+    identity.compilation_scope.low = UINT64_C(0x8877665544332211);
+    ASSERT_EQ(OB_SUCCESS, declaration.set_sql_declaration_identity(identity, SqlNominalType()));
+    CaptureRecordDeclaration declarations(declaration);
+    SqlTypeMeta meta;
+    meta.set_ext(); meta.set_extend_type(PL_RECORD_TYPE);
+    meta.set_collation_type(CS_TYPE_BINARY); meta.set_collation_level(CS_LEVEL_IMPLICIT);
+    ObAccuracy accuracy;
+    accuracy.set_accuracy(declaration_id);
+    const SqlType *type = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObExprUtil::resolve_sql_type(f.exec, meta, accuracy, 0,
+        f.arena, type, &declarations));
+    ASSERT_NE(nullptr, type);
+    f.expr.obj_meta_ = meta;
+    f.expr.datum_meta_.type_ = ObExtendType;
+    f.expr.obj_datum_map_ = OBJ_DATUM_EXTEND;
+    f.expr.datum_meta_.scale_ = 13;
+    f.expr.datum_meta_.precision_ = 17;
+    f.expr.max_length_ = 19;
+    ASSERT_EQ(OB_SUCCESS, f.expr.bind_sql_type(*type, f.arena));
+
+    auto *record = make_parameter_record(f.arena, 57);
+    ASSERT_NE(nullptr, record);
+    record->set_id(declaration_id);
+    DatumParameter source;
+    ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(record),
+        PL_RECORD_TYPE, f.arena, record->get_init_size()));
+    source.set_type_meta(meta); source.set_udt_id(declaration_id);
+    struct RecordCleanup {
+      ObIAllocator &owner_;
+      DatumParameter &value_;
+      ~RecordCleanup() {
+        EXPECT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(owner_, value_));
+      }
+    } cleanup{f.arena, source};
+    ASSERT_EQ(OB_SUCCESS, f.expr.get_datum_copy_plan().import_legacy(
+        source.datum_, f.expr.locate_expr_datum(ctx)));
+    DatumParameter captured;
+    ASSERT_EQ(OB_SUCCESS, capture_datum_parameter(f.expr, ctx, captured));
+    EXPECT_FALSE(captured.is_null());
+    EXPECT_EQ(declaration_id, captured.get_udt_id());
+    EXPECT_EQ(declaration_id, static_cast<uint64_t>(captured.get_accuracy().get_accuracy()));
+    EXPECT_EQ(meta, captured.get_type_meta()); EXPECT_EQ(meta, captured.get_param_meta());
+    EXPECT_EQ(source.datum_.ptr_, captured.datum_.ptr_);
+    EXPECT_EQ(reinterpret_cast<int64_t>(record), captured.get_ext());
+    EXPECT_EQ(57, record->get_element()[0].get_int());
+
+    f.expr.locate_expr_datum(ctx).set_null();
+    ASSERT_EQ(OB_SUCCESS, capture_datum_parameter(f.expr, ctx, captured));
+    EXPECT_TRUE(captured.is_null());
+    EXPECT_EQ(declaration_id, captured.get_udt_id());
+    EXPECT_EQ(declaration_id, static_cast<uint64_t>(captured.get_accuracy().get_accuracy()));
+    EXPECT_EQ(meta, captured.get_type_meta()); EXPECT_EQ(meta, captured.get_param_meta());
+    // A NULL has no payload from which the capture could recover an ID.
+    EXPECT_EQ(nullptr, captured.datum_.ptr_);
+  }
 }

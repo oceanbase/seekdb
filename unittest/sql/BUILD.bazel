@@ -913,3 +913,21 @@ cc_test(
     linkstatic = True,
     deps = [":native_batch_hash_cases", "//src/observer:liboceanbase"],
 )
+
+cc_library(
+    name = "native_pl_value_cases",
+    srcs = ["test_native_pl_value.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_native_pl_value",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_pl_value_cases", "//src/observer:liboceanbase"],
+)

@@ -15,6 +15,7 @@
  */
 
 #include "common/datum/sql_type.h"
+#include "common/datum/datum_copy_plan.h"
 #include <gtest/gtest.h>
 #include <type_traits>
 #include <vector>
@@ -60,6 +61,66 @@ int rejecting_cast_resolver(const SqlType &, const SqlType &, void *, bool &poss
   possible = false;
   return OB_INVALID_ARGUMENT;
 }
+
+SqlTypeSpec local_record_spec(uint64_t declaration_id = 9)
+{
+  SqlTypeSpec spec;
+  spec.attributes.meta_.set_ext();
+  // The stable PL_RECORD_TYPE wire discriminator is 1. oblib must not depend
+  // on the PL declaration headers; actual Record producers validate that type.
+  spec.attributes.meta_.set_extend_type(1);
+  spec.attributes.set_udt_id(declaration_id);
+  spec.attributes.set_charset_type(CHARSET_INVALID);
+  spec.form = SqlTypeForm::Record;
+  spec.pl_declaration.source = SqlPLDeclarationSource::Local;
+  spec.pl_declaration.tenant_id = OB_SERVER_RUNTIME_ID;
+  spec.pl_declaration.declaration_id = declaration_id;
+  spec.pl_declaration.compilation_scope.high = 1;
+  spec.pl_declaration.compilation_scope.low = 2;
+  return spec;
+}
+
+SqlTypeSpec package_record_spec()
+{
+  SqlTypeSpec spec = local_record_spec(combine_pl_type_id(42, 9));
+  spec.pl_declaration.source = SqlPLDeclarationSource::PackageSpec;
+  spec.pl_declaration.compilation_scope = SqlPLCompilationScope();
+  spec.nominal.specified = true;
+  spec.nominal.tenant_id = spec.pl_declaration.tenant_id;
+  spec.nominal.object_id = 42;
+  spec.nominal.schema_version = 7;
+  return spec;
+}
+
+class LimitedTypeAllocator final : public ObIAllocator
+{
+public:
+  explicit LimitedTypeAllocator(int64_t successful_allocations)
+    : remaining_(successful_allocations), owner_() {}
+  void *alloc(int64_t size) override
+  { return remaining_-- > 0 ? owner_.alloc(size) : nullptr; }
+  void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
+  void free(void *) override {} // This test allocator deliberately has arena lifetime.
+private:
+  int64_t remaining_;
+  ObArenaAllocator owner_;
+};
+
+// Independent wire fixtures: v1's four meta bytes, raw accuracy, display /
+// charset fields, form/mask/time, nominal quartet, -1 array bound, and seven
+// zero shape fields. v2 adds only the five explicit identity fields after the
+// nominal quartet. These bytes do not call SqlType's writer to form the oracle.
+const uint8_t V1_SQL_RECORD[] = {
+  1, 38, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0,
+  255, 255, 255, 255, 255, 255, 255, 255, 255, 1,
+  0, 0, 0, 0, 0, 0, 0
+};
+const uint8_t V2_LOCAL_RECORD[] = {
+  2, 25, 7, 0, 1, 9, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0,
+  1, 1, 9, 1, 2, // source, tenant, declaration, scope high, scope low
+  255, 255, 255, 255, 255, 255, 255, 255, 255, 1,
+  0, 0, 0, 0, 0, 0, 0
+};
 }
 
 TEST(SqlType, scalar_legacy_bridge_needs_no_owner_and_publishes_only_on_success)
@@ -557,6 +618,281 @@ TEST(SqlType, map_dense_and_sparse_vectors_keep_real_shape_in_identity_clone_and
   EXPECT_EQ(0, unchanged->vector_dimension());
   dense.element = nullptr; const SqlType *zero_dimension = unchanged;
   EXPECT_EQ(OB_INVALID_ARGUMENT, SqlType::create(dense, owner, unchanged)); EXPECT_EQ(zero_dimension, unchanged);
+}
+
+TEST(SqlType, pl_record_schema_dependency_and_declaration_are_distinct)
+{
+  ObArenaAllocator owner;
+  SqlTypeSpec spec = package_record_spec();
+  const SqlType *type = nullptr;
+  ASSERT_NE(spec.nominal.object_id, spec.pl_declaration.declaration_id);
+  ASSERT_TRUE(spec.pl_declaration.valid_with(spec.nominal));
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, owner, type));
+  EXPECT_EQ(42, type->nominal().object_id);
+  EXPECT_EQ(combine_pl_type_id(42, 9), type->pl_declaration().declaration_id);
+  EXPECT_EQ(type->pl_declaration().declaration_id,
+            static_cast<uint64_t>(type->accuracy().get_accuracy()));
+  EXPECT_EQ(DatumRepresentation::Reference, type->canonical_representation());
+  EXPECT_TRUE(type->requires_resource_clone());
+  for (const SqlPLDeclarationSource source : {SqlPLDeclarationSource::PackageSpec,
+      SqlPLDeclarationSource::PackageBody, SqlPLDeclarationSource::Trigger,
+      SqlPLDeclarationSource::SchemaType}) {
+    SqlTypeSpec schema_spec = spec; schema_spec.pl_declaration.source = source;
+    const SqlType *schema_type = nullptr, *decoded = nullptr;
+    ASSERT_EQ(OB_SUCCESS, SqlType::create(schema_spec, owner, schema_type));
+    std::vector<char> bytes(schema_type->get_serialize_size()); int64_t write = 0, read = 0;
+    ASSERT_EQ(OB_SUCCESS, schema_type->serialize(bytes.data(), bytes.size(), write));
+    ASSERT_EQ(OB_SUCCESS, SqlType::deserialize(bytes.data(), write, read, owner, decoded));
+    EXPECT_EQ(write, read); EXPECT_TRUE(schema_type->equals(*decoded));
+    EXPECT_EQ(source, decoded->pl_declaration().source);
+    EXPECT_EQ(combine_pl_type_id(42, 9), decoded->pl_declaration().declaration_id);
+    EXPECT_EQ(7, decoded->nominal().schema_version);
+  }
+
+  // A true table rowtype uses the table ID as its declaration ID. A trigger
+  // package is a separate origin and must not inherit this equality rule.
+  spec = local_record_spec(42);
+  spec.pl_declaration.source = SqlPLDeclarationSource::TableRow;
+  spec.pl_declaration.compilation_scope = SqlPLCompilationScope();
+  spec.nominal = type->nominal();
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, owner, type));
+  spec.pl_declaration.declaration_id = 43;
+  spec.attributes.set_udt_id(43);
+  const SqlType *unchanged = type;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, SqlType::create(spec, owner, unchanged));
+  EXPECT_EQ(type, unchanged);
+  spec.pl_declaration.source = SqlPLDeclarationSource::Trigger;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, owner, unchanged));
+  EXPECT_EQ(42, unchanged->nominal().object_id);
+  EXPECT_EQ(43, unchanged->pl_declaration().declaration_id);
+}
+
+TEST(SqlType, pl_record_identity_scope_tenant_source_and_version_are_not_interchangeable)
+{
+  ObArenaAllocator owner;
+  const SqlTypeSpec local = local_record_spec(UINT64_C(0xff00000000000009));
+  const SqlType *original = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(local, owner, original));
+  for (int change = 0; change < 4; ++change) {
+    SqlTypeSpec changed = local;
+    if (change == 0) { ++changed.pl_declaration.compilation_scope.high; }
+    else if (change == 1) { ++changed.pl_declaration.compilation_scope.low; }
+    else if (change == 2) { ++changed.pl_declaration.tenant_id; }
+    else {
+      ++changed.pl_declaration.declaration_id;
+      changed.attributes.set_udt_id(changed.pl_declaration.declaration_id);
+    }
+    const SqlType *other = nullptr;
+    ASSERT_EQ(OB_SUCCESS, SqlType::create(changed, owner, other));
+    EXPECT_FALSE(original->equals(*other));
+    EXPECT_FALSE(original->physically_compatible(*other));
+  }
+  const SqlTypeSpec package = package_record_spec();
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(package, owner, original));
+  for (int change = 0; change < 4; ++change) {
+    SqlTypeSpec changed = package;
+    if (change == 0) { changed.pl_declaration.source = SqlPLDeclarationSource::PackageBody; }
+    else if (change == 1) { ++changed.nominal.schema_version; }
+    else if (change == 2) { ++changed.nominal.object_id; }
+    else { ++changed.nominal.tenant_id; ++changed.pl_declaration.tenant_id; }
+    const SqlType *other = nullptr;
+    ASSERT_EQ(OB_SUCCESS, SqlType::create(changed, owner, other));
+    EXPECT_FALSE(original->equals(*other));
+    EXPECT_FALSE(original->physically_compatible(*other));
+  }
+}
+
+TEST(SqlType, local_record_typed_null_clone_and_wire_preserve_imported_origin)
+{
+  ObArenaAllocator source_owner, clone_owner, decoded_owner;
+  SqlTypeSpec child_spec = local_record_spec(10);
+  child_spec.pl_declaration.compilation_scope.high = UINT64_C(0x123456789abcdef0);
+  child_spec.pl_declaration.compilation_scope.low = UINT64_C(0xfedcba9876543210);
+  const SqlType *child = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(child_spec, source_owner, child));
+  char name[] = "parent_type";
+  SqlTypeMember member;
+  member.name = ObString(name); member.type = child; member.nullable = false;
+  SqlTypeSpec outer_spec = local_record_spec();
+  outer_spec.members = &member; outer_spec.member_count = 1;
+  const SqlType *outer = nullptr, *clone = nullptr, *decoded = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(outer_spec, source_owner, outer));
+  ObDatum legacy_null; legacy_null.set_null();
+  Datum null_value; null_value.set_int(77);
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*outer).import_legacy(legacy_null, null_value));
+  EXPECT_TRUE(null_value.is_null());
+  EXPECT_TRUE(outer->pl_declaration().is_local());
+  ASSERT_EQ(OB_SUCCESS, outer->clone_to(clone_owner, clone));
+  ASSERT_TRUE(outer->equals(*clone));
+  ASSERT_TRUE(outer->physically_compatible(*clone));
+  std::vector<char> bytes(outer->get_serialize_size() + 2, '\x5a');
+  int64_t write = 1, read = 1;
+  ASSERT_EQ(OB_SUCCESS, outer->serialize(bytes.data(), bytes.size() - 1, write));
+  EXPECT_EQ(outer->get_serialize_size() + 1, write);
+  ASSERT_EQ(OB_SUCCESS, SqlType::deserialize(bytes.data(), write, read, decoded_owner, decoded));
+  EXPECT_EQ(write, read); EXPECT_EQ('\x5a', bytes.back());
+  source_owner.reset(); name[0] = 'X'; std::memset(bytes.data(), 0, bytes.size());
+  EXPECT_TRUE(clone->equals(*decoded));
+  EXPECT_FALSE(decoded->nominal().specified);
+  EXPECT_EQ(ObString("parent_type"), decoded->member(0).name);
+  EXPECT_FALSE(decoded->member(0).nullable);
+  const auto &imported = decoded->member(0).type->pl_declaration();
+  EXPECT_EQ(10, imported.declaration_id);
+  EXPECT_TRUE(imported.compilation_scope.equals(child_spec.pl_declaration.compilation_scope));
+  EXPECT_FALSE(imported.compilation_scope.equals(decoded->pl_declaration().compilation_scope));
+  // This is metadata import/clone, not a live parent AST or PL resource clone.
+}
+
+TEST(SqlType, pl_record_identity_validation_does_not_publish_invalid_metadata)
+{
+  SqlType sentinel;
+  RejectTypeAllocator reject;
+  for (int change = 0; change < 12; ++change) {
+    SqlTypeSpec spec = local_record_spec();
+    if (change == 0) { spec.pl_declaration = SqlPLDeclarationIdentity(); }
+    else if (change == 1) { spec.pl_declaration.source = static_cast<SqlPLDeclarationSource>(255); }
+    else if (change == 2) { spec.pl_declaration.compilation_scope = SqlPLCompilationScope(); }
+    else if (change == 3) { spec.pl_declaration.tenant_id = 0; }
+    else if (change == 4) { spec.pl_declaration.declaration_id = OB_INVALID_ID; }
+    else if (change == 5) { spec.nominal = package_record_spec().nominal; }
+    else if (change == 6) { spec.attributes.set_udt_id(10); }
+    else if (change == 7) { spec.specified = SqlTypeSpec::Scale; }
+    else if (change == 8) { spec = package_record_spec(); spec.nominal.specified = false; }
+    else if (change == 9) { spec = package_record_spec(); ++spec.nominal.tenant_id; }
+    else if (change == 10) { spec = package_record_spec(); spec.nominal.schema_version = -1; }
+    else { spec = package_record_spec(); spec.pl_declaration.compilation_scope.low = 2; }
+    const SqlType *output = &sentinel;
+    EXPECT_EQ(change == 0 ? OB_NOT_SUPPORTED : OB_INVALID_ARGUMENT,
+              SqlType::create(spec, reject, output));
+    EXPECT_EQ(&sentinel, output);
+  }
+  // Generic SQL Record and UDT must not be relabelled as PL declarations.
+  SqlTypeSpec sql_record = local_record_spec();
+  sql_record.attributes.meta_.set_type(ObUserDefinedSQLType);
+  const SqlType *output = &sentinel;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, SqlType::create(sql_record, reject, output));
+  EXPECT_EQ(&sentinel, output);
+}
+
+TEST(SqlType, pl_record_v2_wire_matches_independent_field_fixture)
+{
+  ObArenaAllocator owner, decoded_owner;
+  const SqlType *type = nullptr, *decoded = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(local_record_spec(), owner, type));
+  ASSERT_EQ(sizeof(V2_LOCAL_RECORD), type->get_serialize_size());
+  std::vector<char> bytes(sizeof(V2_LOCAL_RECORD)); int64_t write = 0, read = 0;
+  ASSERT_EQ(OB_SUCCESS, type->serialize(bytes.data(), bytes.size(), write));
+  EXPECT_EQ(0, std::memcmp(V2_LOCAL_RECORD, bytes.data(), sizeof(V2_LOCAL_RECORD)));
+  ASSERT_EQ(OB_SUCCESS, SqlType::deserialize(reinterpret_cast<const char *>(V2_LOCAL_RECORD),
+      sizeof(V2_LOCAL_RECORD), read, decoded_owner, decoded));
+  EXPECT_EQ(write, read); EXPECT_TRUE(type->equals(*decoded));
+  EXPECT_EQ(SqlPLDeclarationSource::Local, decoded->pl_declaration().source);
+  EXPECT_EQ(1, decoded->pl_declaration().tenant_id);
+  EXPECT_EQ(9, decoded->pl_declaration().declaration_id);
+  EXPECT_EQ(1, decoded->pl_declaration().compilation_scope.high);
+  EXPECT_EQ(2, decoded->pl_declaration().compilation_scope.low);
+}
+
+TEST(SqlType, pl_record_v2_truncation_and_corrupt_identity_leave_output_and_position)
+{
+  SqlType sentinel;
+  for (size_t length = 0; length < sizeof(V2_LOCAL_RECORD); ++length) {
+    ObArenaAllocator owner;
+    const SqlType *output = &sentinel; int64_t read = 0;
+    EXPECT_NE(OB_SUCCESS, SqlType::deserialize(reinterpret_cast<const char *>(V2_LOCAL_RECORD),
+        length, read, owner, output));
+    EXPECT_EQ(&sentinel, output); EXPECT_EQ(0, read);
+  }
+  for (int change = 0; change < 7; ++change) {
+    std::vector<uint8_t> invalid(V2_LOCAL_RECORD, V2_LOCAL_RECORD + sizeof(V2_LOCAL_RECORD));
+    if (change == 0) { invalid[16] = 0; } // v2 may not silently drop its identity
+    else if (change == 1) { invalid[16] = 255; }
+    else if (change == 2) { invalid[17] = 0; } // absent tenant
+    else if (change == 3) { invalid[19] = 0; invalid[20] = 0; }
+    else if (change == 4) { invalid[18] = 10; } // raw accuracy remains declaration 9
+    else if (change == 5) { invalid[16] = 3; } // schema source with no nominal dependency
+    else { invalid[0] = 3; } // unsupported future node version
+    ObArenaAllocator owner;
+    const SqlType *output = &sentinel; int64_t read = 0;
+    EXPECT_NE(OB_SUCCESS, SqlType::deserialize(reinterpret_cast<const char *>(invalid.data()),
+        invalid.size(), read, owner, output));
+    EXPECT_EQ(&sentinel, output); EXPECT_EQ(0, read);
+  }
+  ObArenaAllocator source;
+  const SqlType *type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(local_record_spec(), source, type));
+  std::vector<char> bytes(type->get_serialize_size(), '\x5a'); int64_t position = 1;
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH, type->serialize(bytes.data(), bytes.size(), position));
+  EXPECT_EQ(1, position);
+  for (char byte : bytes) { EXPECT_EQ('\x5a', byte); }
+}
+
+TEST(SqlType, pl_record_clone_and_decode_partial_allocation_failure_do_not_publish)
+{
+  ObArenaAllocator source;
+  const SqlType *child = nullptr, *record = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(local_record_spec(10), source, child));
+  SqlTypeMember member; member.name = ObString("child"); member.type = child;
+  SqlTypeSpec spec = local_record_spec(); spec.members = &member; spec.member_count = 1;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, source, record));
+  std::vector<char> bytes(record->get_serialize_size()); int64_t write = 0;
+  ASSERT_EQ(OB_SUCCESS, record->serialize(bytes.data(), bytes.size(), write));
+  for (int operation = 0; operation < 3; ++operation) {
+    bool completed = false;
+    for (int64_t limit = 0; limit < 16 && !completed; ++limit) {
+      LimitedTypeAllocator owner(limit);
+      const SqlType *output = record; int64_t read = 0;
+      const int ret = operation == 0 ? SqlType::create(spec, owner, output)
+          : operation == 1 ? record->clone_to(owner, output)
+          : SqlType::deserialize(bytes.data(), bytes.size(), read, owner, output);
+      if (ret == OB_SUCCESS) {
+        completed = true;
+        ASSERT_NE(record, output); EXPECT_TRUE(record->equals(*output));
+        if (operation == 2) { EXPECT_EQ(write, read); }
+      } else {
+        EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ret);
+        EXPECT_EQ(record, output); EXPECT_EQ(0, read);
+      }
+    }
+    EXPECT_TRUE(completed);
+  }
+}
+
+TEST(SqlType, historical_v1_nonpl_record_and_udt_keep_exact_wire_bytes)
+{
+  for (bool nominal : {false, true}) {
+    std::vector<uint8_t> fixture(V1_SQL_RECORD, V1_SQL_RECORD + sizeof(V1_SQL_RECORD));
+    if (nominal) {
+      fixture[9] = 5; // UserDefined form
+      fixture[12] = 1; fixture[13] = 1; fixture[14] = 42; fixture[15] = 7;
+    }
+    ObArenaAllocator owner, clone_owner;
+    const SqlType *decoded = nullptr, *clone = nullptr; int64_t read = 0;
+    ASSERT_EQ(OB_SUCCESS, SqlType::deserialize(reinterpret_cast<const char *>(fixture.data()),
+        fixture.size(), read, owner, decoded));
+    EXPECT_EQ(fixture.size(), read);
+    EXPECT_EQ(ObUserDefinedSQLType, decoded->kind());
+    EXPECT_EQ(nominal ? SqlTypeForm::UserDefined : SqlTypeForm::Record, decoded->form());
+    EXPECT_FALSE(decoded->pl_declaration().is_specified());
+    EXPECT_EQ(nominal, decoded->nominal().specified);
+    ASSERT_EQ(OB_SUCCESS, decoded->clone_to(clone_owner, clone));
+    EXPECT_TRUE(decoded->equals(*clone)); EXPECT_TRUE(decoded->physically_compatible(*clone));
+    ASSERT_EQ(fixture.size(), decoded->get_serialize_size());
+    std::vector<char> encoded(fixture.size()); int64_t write = 0;
+    ASSERT_EQ(OB_SUCCESS, decoded->serialize(encoded.data(), encoded.size(), write));
+    EXPECT_EQ(read, write); EXPECT_EQ(0, std::memcmp(fixture.data(), encoded.data(), encoded.size()));
+  }
+}
+
+TEST(SqlType, historical_v1_pl_record_without_origin_is_not_guessed)
+{
+  std::vector<uint8_t> fixture(V1_SQL_RECORD, V1_SQL_RECORD + sizeof(V1_SQL_RECORD));
+  fixture[1] = 25; fixture[2] = 7; fixture[4] = 1; fixture[5] = 9;
+  ObArenaAllocator owner; SqlType sentinel;
+  const SqlType *output = &sentinel; int64_t read = 0;
+  EXPECT_EQ(OB_NOT_SUPPORTED, SqlType::deserialize(reinterpret_cast<const char *>(fixture.data()),
+      fixture.size(), read, owner, output));
+  EXPECT_EQ(&sentinel, output); EXPECT_EQ(0, read);
 }
 
 int main(int argc, char **argv)

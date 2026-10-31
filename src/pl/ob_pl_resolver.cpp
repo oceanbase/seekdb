@@ -1338,6 +1338,21 @@ int ObPLResolver::build_record_type_by_schema(
         resolve_ctx.schema_guard_, resolve_ctx.allocator_, table_schema, record_type, resolve_ctx.enum_set_ctx_, with_rowid));
     }
   }
+  if (OB_SUCC(ret)) {
+    // The definition was built from this exact table/view schema. Its ID is
+    // still the real table ID here. Any later synthetic declaration renumbering
+    // clears this origin in set_user_type_id() before its actual owner binds it.
+    SqlPLDeclarationIdentity identity;
+    SqlNominalType nominal;
+    identity.source = SqlPLDeclarationSource::TableRow;
+    identity.tenant_id = OB_SERVER_RUNTIME_ID;
+    identity.declaration_id = table_schema->get_table_id();
+    nominal.specified = true;
+    nominal.tenant_id = OB_SERVER_RUNTIME_ID;
+    nominal.object_id = table_schema->get_table_id();
+    nominal.schema_version = table_schema->get_schema_version();
+    ret = record_type->set_sql_declaration_identity(identity, nominal);
+  }
   return ret;
 }
 

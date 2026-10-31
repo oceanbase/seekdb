@@ -271,6 +271,15 @@ TEST(NativeFrameValueWire, pl_addresses_are_rejected_while_special_states_remain
   SqlTypeSpec spec;
   spec.attributes.meta_.set_ext(); spec.attributes.meta_.set_extend_type(1);
   spec.form = SqlTypeForm::Record;
+  // This wire fixture carries a complete local declaration identity; it does
+  // not exercise the parser/builder's compilation-scope producer.
+  constexpr uint64_t declaration_id = UINT64_C(0x1234567890abcdef);
+  spec.attributes.set_udt_id(declaration_id);
+  spec.pl_declaration.source = SqlPLDeclarationSource::Local;
+  spec.pl_declaration.tenant_id = OB_SERVER_RUNTIME_ID;
+  spec.pl_declaration.declaration_id = declaration_id;
+  spec.pl_declaration.compilation_scope.high = UINT64_C(0x1020304050607080);
+  spec.pl_declaration.compilation_scope.low = UINT64_C(0x8877665544332211);
   const SqlType *type = nullptr;
   ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, owner, type));
   alignas(8) char wrapper[15];

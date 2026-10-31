@@ -33,6 +33,8 @@
 
 namespace oceanbase
 {
+namespace pl { class ObPLINS; }
+namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace common
 {
  class DatumParameter;
@@ -403,7 +405,9 @@ public:
   int prepare_scalar_type(const common::SqlTypeMeta &meta, const common::ObAccuracy &accuracy,
                            common::ObIAllocator &owner);
   int prepare_resolved_type(const ObRawExprResType &resolved, const ObSQLSessionInfo *session,
-                            common::ObIAllocator &owner);
+                            common::ObIAllocator &owner,
+                            share::schema::ObSchemaGetterGuard *schema_guard = nullptr,
+                            const pl::ObPLINS *pl_declarations = nullptr);
   int clone_prepared_metadata_from(const ObExpr &source, common::ObIAllocator &owner);
   int serialize_native_metadata(char *buffer, int64_t length, int64_t &position) const;
   int deserialize_native_metadata(const char *buffer, int64_t length, int64_t &position,

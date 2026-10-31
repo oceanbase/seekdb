@@ -369,7 +369,8 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
           ret = rt_expr->bind_sql_type(*type, allocator_);
         }
       } else {
-        ret = rt_expr->prepare_resolved_type(raw_expr->get_result_type(), op_cg_ctx_.session_, allocator_);
+        ret = rt_expr->prepare_resolved_type(raw_expr->get_result_type(), op_cg_ctx_.session_, allocator_,
+            op_cg_ctx_.schema_guard_, op_cg_ctx_.pl_declarations_);
       }
     }
   } // for end

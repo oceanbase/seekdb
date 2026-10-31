@@ -1,0 +1,707 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "sql/engine/expr/ob_native_pl_value.h"
+#include "common/datum/datum_copy_plan.h"
+#include "common/datum/datum_parameter_array.h"
+#include "sql/engine/ob_exec_context.h"
+#include "sql/pl/ob_pl.h"
+#include "sql/pl/ob_pl_user_type.h"
+#include "lib/allocator/ob_allocator.h"
+#include <gtest/gtest.h>
+#include <cstdlib>
+#include <unordered_set>
+#include <vector>
+#include <string>
+
+using namespace oceanbase;
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+using namespace oceanbase::pl;
+
+namespace
+{
+class FailingAllocator final : public ObIAllocator
+{
+public:
+  explicit FailingAllocator(int64_t failure = -1) : failure_(failure) {}
+  ~FailingAllocator() { for (void *pointer : live_) { std::free(pointer); } }
+  void *alloc(int64_t size) override
+  {
+    if (++calls_ == failure_) { return nullptr; }
+    void *pointer = std::malloc(size > 0 ? size : 1);
+    if (pointer != nullptr) { live_.insert(pointer); }
+    return pointer;
+  }
+  void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
+  void free(void *pointer) override
+  {
+    if (pointer != nullptr) {
+      const auto found = live_.find(pointer);
+      EXPECT_NE(live_.end(), found); // Never free a borrowed/source descriptor.
+      if (found != live_.end()) { live_.erase(found); std::free(pointer); }
+    }
+  }
+  int64_t failure_;
+  int64_t calls_ = 0;
+  std::unordered_set<void *> live_;
+};
+
+DatumParameter record(ObIAllocator &owner, uint64_t id,
+                      const std::vector<DatumParameter> &fields)
+{
+  DatumParameter result;
+  void *memory = owner.alloc(ObRecordType::get_init_size(fields.size()));
+  EXPECT_NE(nullptr, memory);
+  if (memory != nullptr) {
+    auto *value = new (memory) ObPLRecord(id, fields.size());
+    EXPECT_EQ(OB_SUCCESS, value->init_data(owner, false));
+    for (size_t i = 0; i < fields.size(); ++i) {
+      value->get_element()[i] = fields[i].value_view();
+      value->get_element_type()[i].set_meta_type(fields[i].get_type_meta());
+      value->get_element_type()[i].set_accuracy(fields[i].get_accuracy());
+      value->get_not_null()[i] = false; // Declared nullable, independent of the current value.
+    }
+    EXPECT_EQ(OB_SUCCESS, result.set_extend(reinterpret_cast<int64_t>(value),
+        PL_RECORD_TYPE, owner, value->get_init_size()));
+    result.set_udt_id(id);
+  }
+  return result;
+}
+
+DatumParameter array(ObIAllocator &owner, const std::vector<DatumParameter> &values)
+{
+  DatumParameter result;
+  auto *value = DatumParameterArray::alloc(owner, values.size());
+  EXPECT_NE(nullptr, value);
+  if (value != nullptr) {
+    for (size_t i = 0; i < values.size(); ++i) { value->data_[i] = values[i]; }
+    if (!values.empty()) {
+      value->element_.set_meta_type(values[0].get_type_meta());
+      value->element_.set_accuracy(values[0].get_accuracy());
+    }
+    value->source_value_size_ = 177;
+    EXPECT_EQ(OB_SUCCESS, result.set_extend(reinterpret_cast<int64_t>(value), T_EXT_SQL_ARRAY, owner));
+  }
+  return result;
+}
+
+ObPLRecord *as_record(const DatumParameter &value)
+{ return reinterpret_cast<ObPLRecord *>(value.get_ext()); }
+
+DatumParameter field(const DatumParameter &value, int64_t index)
+{
+  DatumParameter result;
+  result.assign_value(as_record(value)->get_element()[index]);
+  result.set_accuracy(as_record(value)->get_element_type()[index].get_accuracy());
+  return result;
+}
+
+class FixtureDeclarations final : public INativePlTypeResolver, public ObPLINS
+{
+public:
+  explicit FixtureDeclarations(ObIAllocator &owner) : owner_(owner), execution_(owner) {}
+  ~FixtureDeclarations() { for (const Entry &entry : entries_) { entry.definition->~ObRecordType(); } }
+  int add(const SqlType &type)
+  {
+    void *memory = owner_.alloc(sizeof(ObRecordType));
+    if (memory == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+    auto *definition = new (memory) ObRecordType();
+    definition->set_user_type_id(type.pl_declaration().declaration_id);
+    int ret = definition->set_sql_declaration_identity(type.pl_declaration(), type.nominal());
+    if (ret == OB_SUCCESS) { ret = definition->record_members_init(&owner_, type.member_count()); }
+    for (int64_t i = 0; ret == OB_SUCCESS && i < type.member_count(); ++i) {
+      const SqlTypeMember &member = type.member(i);
+      ObPLDataType pl_member(member.type->kind());
+      if (member.type->legacy_meta().is_pl_extend_type()) {
+        pl_member.set_user_type_id(static_cast<ObPLType>(member.type->legacy_meta().get_extend_type()),
+                                   member.type->pl_declaration().declaration_id);
+      } else { pl_member.set_data_type(member.type->attributes()); }
+      pl_member.set_not_null(!member.nullable);
+      // The actual declaration supports NOT NULL members only with a default.
+      ret = definition->add_record_member(member.name, pl_member, member.nullable ? OB_INVALID_INDEX : 0);
+    }
+    if (ret == OB_SUCCESS) { entries_.push_back({&type, definition}); }
+    else { definition->~ObRecordType(); owner_.free(definition); }
+    return ret;
+  }
+  int resolve(const SqlType *requested, const DatumParameter &source,
+              const SqlType *&resolved, const ObRecordType *&declaration) const override
+  {
+    ++calls_;
+    NativePlDeclarationResolver resolver(execution_, *this, owner_);
+    return resolver.resolve(requested, source, resolved, declaration);
+  }
+  int get_user_type(uint64_t id, const ObUserDefinedType *&definition,
+                    ObIAllocator *allocator = nullptr) const override
+  {
+    UNUSED(allocator);
+    // Actual namespace lookup, as consumed by the production resolver. These
+    // synthetic declarations exercise retaining, not real producer provenance.
+    for (const Entry &entry : entries_) {
+      if (entry.definition->get_user_type_id() == id) {
+        definition = entry.definition;
+        return OB_SUCCESS;
+      }
+    }
+    return OB_NOT_SUPPORTED;
+  }
+  struct Entry { const SqlType *type; ObRecordType *definition; };
+  ObIAllocator &owner_;
+  mutable ObExecContext execution_;
+  std::vector<Entry> entries_;
+  mutable int64_t calls_ = 0;
+};
+
+const SqlType *record_type(ObIAllocator &owner, FixtureDeclarations &registry, uint64_t id,
+                          const std::vector<const SqlType *> &fields,
+                          const SqlNominalType &nominal = SqlNominalType(), bool register_definition = true,
+                          uint64_t local_scope = 0x7a001)
+{
+  std::vector<SqlTypeMember> members(fields.size());
+  std::vector<std::string> names;
+  for (size_t i = 0; i < fields.size(); ++i) { names.push_back("f" + std::to_string(i)); }
+  for (size_t i = 0; i < fields.size(); ++i) {
+    members[i].type = fields[i]; members[i].name = ObString(names[i].size(), names[i].data());
+  }
+  SqlTypeSpec declaration;
+  declaration.attributes.meta_.set_ext(); declaration.attributes.meta_.set_extend_type(PL_RECORD_TYPE);
+  declaration.attributes.set_udt_id(id);
+  declaration.form = SqlTypeForm::Record; declaration.nominal = nominal;
+  declaration.pl_declaration.source = nominal.specified
+      ? SqlPLDeclarationSource::PackageSpec : SqlPLDeclarationSource::Local;
+  declaration.pl_declaration.tenant_id = OB_SERVER_RUNTIME_ID;
+  declaration.pl_declaration.declaration_id = id;
+  if (!nominal.specified) { declaration.pl_declaration.compilation_scope.low = local_scope; }
+  declaration.members = members.data(); declaration.member_count = members.size();
+  const SqlType *result = nullptr;
+  EXPECT_EQ(OB_SUCCESS, SqlType::create(declaration, owner, result));
+  if (result != nullptr && register_definition) { EXPECT_EQ(OB_SUCCESS, registry.add(*result)); }
+  return result;
+}
+
+const SqlType *array_type(ObIAllocator &owner, const SqlType &element)
+{
+  SqlTypeSpec declaration;
+  declaration.attributes.meta_.set_ext(); declaration.attributes.meta_.set_extend_type(T_EXT_SQL_ARRAY);
+  declaration.form = SqlTypeForm::Array; declaration.element = &element;
+  const SqlType *result = nullptr;
+  EXPECT_EQ(OB_SUCCESS, SqlType::create(declaration, owner, result));
+  return result;
+}
+
+const SqlType *heterogeneous_array_type(ObIAllocator &owner)
+{
+  SqlTypeSpec declaration;
+  declaration.attributes.meta_.set_ext(); declaration.attributes.meta_.set_extend_type(T_EXT_SQL_ARRAY);
+  declaration.form = SqlTypeForm::Array; declaration.heterogeneous = true;
+  const SqlType *result = nullptr;
+  EXPECT_EQ(OB_SUCCESS, SqlType::create(declaration, owner, result));
+  return result;
+}
+
+DatumParameter view(const SqlType &type, const Datum &value, char (&scratch)[64])
+{
+  DatumParameter result;
+  ObDatum legacy;
+  EXPECT_EQ(OB_SUCCESS, DatumCopyPlan(type).legacy_view(value, legacy, scratch, sizeof(scratch)));
+  result.set_type_meta(type.legacy_meta()); result.set_accuracy(type.accuracy()); result.set_datum(legacy);
+  return result;
+}
+
+TEST(NativePlValue, primitive_values_remain_inline_without_cleanup_token_or_allocation)
+{
+  FailingAllocator allocator;
+  NativeSqlValueOwner owner(allocator);
+  SqlTypeMeta meta; meta.set_int();
+  SqlType type; ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(20, 0), type));
+  Datum source, output; source.set_int(INT64_MIN); output.set_int(71);
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(type, source, owner, output));
+  EXPECT_EQ(INT64_MIN, output.get_int());
+  source.set_null();
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(type, source, owner, output));
+  EXPECT_TRUE(output.is_null());
+  EXPECT_EQ(0, owner.resource_count()); EXPECT_EQ(0, allocator.calls_);
+  EXPECT_EQ(OB_SUCCESS, owner.clear());
+}
+
+TEST(NativePlValue, token_allocation_failure_does_not_publish_or_clone_resources)
+{
+  ObArenaAllocator source_owner, type_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType string_type; SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, string_type));
+  const SqlType *type = record_type(type_owner, registry, 61, {&string_type});
+  DatumParameter text;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("resource leaf"), source_owner));
+  text.set_type_meta(meta); text.set_accuracy(accuracy);
+  DatumParameter source_record = record(source_owner, 61, {text});
+  Datum source, output; output.set_int(91);
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(source_record.datum_, source));
+  FailingAllocator allocator(1);
+  NativeSqlValueOwner owner(allocator, nullptr, &registry);
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, clone_native_owned_value(*type, source, owner, output));
+  EXPECT_EQ(91, output.get_int()); EXPECT_EQ(0, owner.resource_count());
+  EXPECT_EQ(1, allocator.calls_); EXPECT_TRUE(allocator.live_.empty());
+}
+
+TEST(NativePlValue, full_type_mismatch_is_rejected_before_token_or_payload_allocation)
+{
+  ObArenaAllocator source_owner, type_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType string_type; SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, string_type));
+  const SqlType *type = record_type(type_owner, registry, 63, {&string_type});
+  DatumParameter integer; ASSERT_EQ(OB_SUCCESS, integer.set_int(77, source_owner));
+  DatumParameter source_record = record(source_owner, 63, {integer});
+  Datum source, output; output.set_int(93);
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(source_record.datum_, source));
+  FailingAllocator allocator;
+  NativeSqlValueOwner owner(allocator, nullptr, &registry);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, clone_native_owned_value(*type, source, owner, output));
+  EXPECT_EQ(93, output.get_int()); EXPECT_EQ(0, owner.resource_count()); EXPECT_EQ(0, allocator.calls_);
+}
+
+TEST(NativePlValue, record_array_record_graph_keeps_metadata_and_payload_after_source_reset)
+{
+  ObArenaAllocator source_owner, type_owner, target_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType integer_type, string_type;
+  SqlTypeMeta int_meta; int_meta.set_int();
+  SqlTypeMeta text_meta; text_meta.set_varchar(); text_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(int_meta, ObAccuracy(20, 0), integer_type));
+  ObAccuracy text_accuracy; text_accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(text_meta, text_accuracy, string_type));
+  const SqlType *inner_type = record_type(type_owner, registry, 101, {&string_type, &integer_type});
+  // A PL T_EXT_SQL_ARRAY field declares a heterogeneous SQL array. The leaf
+  // Record's complete origin comes from the explicit actual namespace.
+  const SqlType *records_type = heterogeneous_array_type(type_owner);
+  const SqlType *outer_type = record_type(type_owner, registry, 102, {records_type, &string_type});
+  ASSERT_NE(nullptr, outer_type);
+  DatumParameter text, integer;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("independent PL field bytes"), source_owner));
+  text.set_type_meta(text_meta); text.set_accuracy(text_accuracy);
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(INT64_MIN, source_owner));
+  DatumParameter inner = record(source_owner, 101, {text, integer});
+  DatumParameter rows = array(source_owner, {inner});
+  rows.set_result_flags(0x132); rows.set_raw_text_info(3, 4);
+  rows.get_param_flag().need_to_check_type_ = true;
+  DatumParameter source_record = record(source_owner, 102, {rows, text});
+  Datum source, output;
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*outer_type).import_legacy(source_record.datum_, source));
+  NativeSqlValueOwner owner(target_owner, nullptr, &registry);
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*outer_type, source, owner, output));
+  EXPECT_EQ(1, owner.resource_count());
+  alignas(8) char scratch[64];
+  const DatumParameter result = view(*outer_type, output, scratch);
+  DatumParameter cloned_rows = field(result, 0);
+  const auto *cloned_array = cloned_rows.get_array<DatumParameterArray>();
+  ASSERT_NE(nullptr, cloned_array); ASSERT_EQ(1, cloned_array->count_);
+  EXPECT_NE(as_record(source_record), as_record(result));
+  EXPECT_NE(rows.get_array<DatumParameterArray>(), cloned_array);
+  EXPECT_NE(as_record(inner), as_record(cloned_array->data_[0]));
+  EXPECT_NE(text.datum_.ptr_, field(cloned_array->data_[0], 0).datum_.ptr_);
+  EXPECT_NE(text.datum_.ptr_, field(result, 1).datum_.ptr_);
+  MEMSET(const_cast<char *>(text.datum_.ptr_), 'x', text.datum_.len_);
+  MEMSET(const_cast<char *>(integer.datum_.ptr_), 0, integer.datum_.len_);
+  source_owner.reset();
+  EXPECT_EQ(102, as_record(result)->get_id());
+  EXPECT_EQ(177, cloned_array->source_value_size_);
+  EXPECT_EQ(101, cloned_array->element_.get_accuracy().get_accuracy());
+  EXPECT_EQ(101, as_record(cloned_array->data_[0])->get_id());
+  EXPECT_EQ(ObString::make_string("independent PL field bytes"), field(cloned_array->data_[0], 0).get_string());
+  EXPECT_EQ(INT64_MIN, field(cloned_array->data_[0], 1).get_int());
+  EXPECT_EQ(ObString::make_string("independent PL field bytes"), field(result, 1).get_string());
+  EXPECT_FALSE(as_record(result)->get_not_null()[0]);
+  EXPECT_EQ(OB_SUCCESS, owner.clear()); EXPECT_EQ(0, owner.resource_count());
+  EXPECT_EQ(OB_SUCCESS, owner.clear());
+}
+
+TEST(NativePlValue, standalone_array_clone_preserves_parameter_flags_and_rolls_back_allocation_failures)
+{
+  ObArenaAllocator source_owner, type_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType string_type; SqlTypeMeta string_meta; string_meta.set_varchar();
+  string_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(string_meta, ObAccuracy(), string_type));
+  const SqlType *inner_type = record_type(type_owner, registry, 501, {&string_type});
+  const SqlType *type = array_type(type_owner, *inner_type);
+  DatumParameter text; ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("retained nested field"), source_owner));
+  text.set_type_meta(string_meta);
+  DatumParameter inner = record(source_owner, 501, {text});
+  DatumParameter source = array(source_owner, {inner});
+  source.set_result_flags(0x132); source.set_raw_text_info(7, 9);
+  source.get_param_flag().need_to_check_type_ = true;
+  DatumParameter sentinel; ASSERT_EQ(OB_SUCCESS, sentinel.set_int(999, source_owner));
+  bool succeeded = false;
+  for (int64_t failure = 1; failure < 40 && !succeeded; ++failure) {
+    FailingAllocator allocator(failure);
+    DatumParameter output = sentinel;
+    const int ret = clone_owned_parameter_graph(*type, source, output, allocator, &registry, nullptr, false);
+    if (ret == OB_SUCCESS) {
+      succeeded = true;
+      EXPECT_EQ(source.get_result_flag(), output.get_result_flag());
+      EXPECT_EQ(7, output.get_raw_text_pos()); EXPECT_EQ(9, output.get_raw_text_len());
+      EXPECT_TRUE(output.need_to_check_type());
+      EXPECT_EQ(OB_SUCCESS, release_owned_parameter_graph(output, allocator));
+      EXPECT_TRUE(output.is_null());
+    } else {
+      EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ret);
+      EXPECT_EQ(999, output.get_int()); EXPECT_EQ(ObIntType, output.get_type());
+    }
+    EXPECT_TRUE(allocator.live_.empty()) << "failure allocation " << failure;
+    EXPECT_EQ(ObString::make_string("retained nested field"), field(inner, 0).get_string());
+  }
+  EXPECT_TRUE(succeeded);
+}
+
+TEST(NativePlValue, retaining_rejects_cursor_graph_without_publishing_or_touching_session_state)
+{
+  ObArenaAllocator source_owner;
+  ObPLCursorInfo cursor;
+  DatumParameter handle;
+  ASSERT_EQ(OB_SUCCESS, handle.set_extend(reinterpret_cast<int64_t>(&cursor), PL_CURSOR_TYPE, source_owner));
+  DatumParameter source = array(source_owner, {handle});
+  ObArenaAllocator type_owner;
+  SqlTypeSpec declaration;
+  declaration.attributes.meta_.set_ext(); declaration.attributes.meta_.set_extend_type(T_EXT_SQL_ARRAY);
+  declaration.form = SqlTypeForm::Array; declaration.heterogeneous = true;
+  const SqlType *type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(declaration, type_owner, type));
+  DatumParameter output; ASSERT_EQ(OB_SUCCESS, output.set_int(913, source_owner));
+  FailingAllocator allocator;
+  EXPECT_EQ(OB_NOT_SUPPORTED, clone_owned_parameter_graph(*type, source, output, allocator));
+  EXPECT_EQ(913, output.get_int()); EXPECT_EQ(0, allocator.calls_);
+  EXPECT_FALSE(cursor.isopen());
+  // This is a refusal test, not evidence that a closed/open/server cursor has
+  // acquired a new registration, retain count or independently owned handle.
+}
+
+TEST(NativePlValue, clear_keeps_failed_resource_reachable_but_visits_other_tokens)
+{
+  ObArenaAllocator source_owner, type_owner, target_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType string_type; SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, string_type));
+  const SqlType *type = record_type(type_owner, registry, 901, {&string_type, &string_type});
+  DatumParameter text, null;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("owned field"), source_owner));
+  text.set_type_meta(meta); text.set_accuracy(accuracy);
+  DatumParameter source_record = record(source_owner, 901, {text, null});
+  Datum source, first, second;
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(source_record.datum_, source));
+  NativeSqlValueOwner owner(target_owner, nullptr, &registry);
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, source, owner, first));
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, source, owner, second));
+  alignas(8) char scratch[64];
+  DatumParameter second_record = view(*type, second, scratch);
+  ObPLCursorInfo cursor;
+  DatumParameter unsupported;
+  ASSERT_EQ(OB_SUCCESS, unsupported.set_extend(reinterpret_cast<int64_t>(&cursor), PL_CURSOR_TYPE, target_owner));
+  // Simulate a mutable PL field being rebound after it was retained. Cleanup
+  // must retain this unhandled handle rather than silently clearing it.
+  as_record(second_record)->get_element()[1] = unsupported.value_view();
+  EXPECT_EQ(OB_NOT_SUPPORTED, owner.clear());
+  EXPECT_EQ(1, owner.resource_count());
+  EXPECT_TRUE(as_record(second_record)->get_element()[0].is_null());
+  EXPECT_FALSE(as_record(second_record)->get_element()[1].is_null());
+  EXPECT_FALSE(cursor.isopen());
+  as_record(second_record)->get_element()[1].set_null();
+  EXPECT_EQ(OB_SUCCESS, owner.clear()); EXPECT_EQ(0, owner.resource_count());
+}
+TEST(NativePlValue, uninitialized_and_null_record_use_actual_declaration_without_reading_absent_data)
+{
+  ObArenaAllocator type_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType text_type, int_type;
+  SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, text_type));
+  meta.set_int(); ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(20, 0), int_type));
+  const SqlType *type = record_type(type_owner, registry, 121, {&text_type, &int_type});
+  for (bool is_null : {false, true}) {
+    SCOPED_TRACE(is_null);
+    ObArenaAllocator source_owner, target_owner;
+    void *memory = source_owner.alloc(sizeof(ObPLRecord)); ASSERT_NE(nullptr, memory);
+    auto *uninitialized = new (memory) ObPLRecord();
+    uninitialized->set_id(121); uninitialized->set_is_null(is_null);
+    ASSERT_EQ(OB_INVALID_COUNT, uninitialized->get_count());
+    ASSERT_FALSE(uninitialized->is_inited());
+    DatumParameter parameter;
+    ASSERT_EQ(OB_SUCCESS, parameter.set_extend(reinterpret_cast<int64_t>(uninitialized),
+        PL_RECORD_TYPE, source_owner, sizeof(ObPLRecord)));
+    parameter.set_udt_id(121);
+    Datum source, output;
+    ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(parameter.datum_, source));
+    NativeSqlValueOwner owner(target_owner, nullptr, &registry);
+    ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, source, owner, output));
+    source_owner.reset();
+    alignas(8) char scratch[64];
+    const DatumParameter result = view(*type, output, scratch);
+    ASSERT_TRUE(as_record(result)->is_inited());
+    EXPECT_EQ(121, as_record(result)->get_id()); EXPECT_EQ(2, as_record(result)->get_count());
+    EXPECT_EQ(is_null, as_record(result)->is_null());
+    EXPECT_TRUE(field(result, 0).is_null()); EXPECT_TRUE(field(result, 1).is_null());
+    EXPECT_EQ(ObVarcharType, as_record(result)->get_element_type()[0].get_obj_type());
+    EXPECT_EQ(128, as_record(result)->get_element_type()[0].get_length());
+    EXPECT_EQ(ObIntType, as_record(result)->get_element_type()[1].get_obj_type());
+    EXPECT_EQ(20, as_record(result)->get_element_type()[1].get_precision());
+    EXPECT_EQ(OB_SUCCESS, owner.clear()); EXPECT_EQ(0, owner.resource_count());
+    // A native typed NULL requires no pointee or cleanup token.
+    source.set_null();
+    ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, source, owner, output));
+    EXPECT_TRUE(output.is_null()); EXPECT_EQ(0, owner.resource_count());
+  }
+}
+
+TEST(NativePlValue, heterogeneous_resource_leaf_requires_explicit_registry_type_before_publication)
+{
+  ObArenaAllocator source_owner, type_owner, target_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType text_type; SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, text_type));
+  const SqlType *record_declaration = record_type(type_owner, registry, 131, {&text_type});
+  ASSERT_NE(nullptr, record_declaration);
+  SqlTypeSpec spec;
+  spec.attributes.meta_.set_ext(); spec.attributes.meta_.set_extend_type(T_EXT_SQL_ARRAY);
+  spec.form = SqlTypeForm::Array; spec.heterogeneous = true;
+  const SqlType *type = nullptr; ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, type_owner, type));
+  DatumParameter text, integer;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("explicit heterogeneous resource"), source_owner));
+  text.set_type_meta(meta); text.set_accuracy(accuracy);
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(53, source_owner));
+  DatumParameter known = array(source_owner, {record(source_owner, 131, {text}), integer});
+  known.get_array<DatumParameterArray>()->data_[0].set_raw_text_info(4, 8);
+  Datum source, output;
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(known.datum_, source));
+  NativeSqlValueOwner owner(target_owner, nullptr, &registry);
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, source, owner, output));
+
+  DatumParameter unknown = array(source_owner, {record(source_owner, 132, {text})});
+  Datum unknown_source, sentinel; sentinel.set_int(91);
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(unknown.datum_, unknown_source));
+  FailingAllocator rejected_allocator;
+  NativeSqlValueOwner rejected(rejected_allocator, nullptr, &registry);
+  EXPECT_EQ(OB_NOT_SUPPORTED, clone_native_owned_value(*type, unknown_source, rejected, sentinel));
+  EXPECT_EQ(91, sentinel.get_int()); EXPECT_EQ(0, rejected.resource_count());
+  EXPECT_EQ(0, rejected_allocator.calls_);
+  unknown.get_array<DatumParameterArray>()->data_[0].datum_.set_null();
+  EXPECT_EQ(OB_NOT_SUPPORTED, clone_native_owned_value(*type, unknown_source, rejected, sentinel));
+  EXPECT_EQ(91, sentinel.get_int()); EXPECT_EQ(0, rejected_allocator.calls_);
+
+  source_owner.reset();
+  alignas(8) char scratch[64];
+  const DatumParameter result = view(*type, output, scratch);
+  const auto *values = result.get_array<DatumParameterArray>();
+  ASSERT_NE(nullptr, values); ASSERT_EQ(2, values->count_);
+  EXPECT_EQ(ObString::make_string("explicit heterogeneous resource"), field(values->data_[0], 0).get_string());
+  EXPECT_EQ(4, values->data_[0].get_raw_text_pos()); EXPECT_EQ(8, values->data_[0].get_raw_text_len());
+  EXPECT_EQ(53, values->data_[1].get_int());
+  EXPECT_EQ(OB_SUCCESS, owner.clear());
+}
+
+TEST(NativePlValue, schema_object_identity_is_distinct_from_record_declaration_and_must_match_resolver)
+{
+  ObArenaAllocator source_owner, type_owner, target_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType text_type; SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, text_type));
+  SqlNominalType nominal;
+  nominal.specified = true; nominal.tenant_id = OB_SERVER_RUNTIME_ID;
+  nominal.object_id = 7001; nominal.schema_version = 99;
+  const uint64_t declaration_id = combine_pl_type_id(nominal.object_id, 4);
+  ASSERT_NE(nominal.object_id, declaration_id);
+  const SqlType *type = record_type(type_owner, registry, declaration_id, {&text_type}, nominal);
+  DatumParameter text; ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("schema-bound field"), source_owner));
+  text.set_type_meta(meta); text.set_accuracy(accuracy);
+  DatumParameter parameter = record(source_owner, declaration_id, {text});
+  Datum source, output;
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(parameter.datum_, source));
+  NativeSqlValueOwner owner(target_owner, nullptr, &registry);
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, source, owner, output));
+  alignas(8) char scratch[64];
+  EXPECT_EQ(declaration_id, as_record(view(*type, output, scratch))->get_id());
+
+  nominal.schema_version = 100;
+  const SqlType *wrong_version = record_type(type_owner, registry, declaration_id, {&text_type}, nominal, false);
+  FailingAllocator rejected_allocator;
+  NativeSqlValueOwner rejected(rejected_allocator, nullptr, &registry);
+  Datum sentinel; sentinel.set_int(93);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, clone_native_owned_value(*wrong_version, source, rejected, sentinel));
+  EXPECT_EQ(93, sentinel.get_int()); EXPECT_EQ(0, rejected_allocator.calls_);
+
+  // Same payload ID does not allow a different target member nullability.
+  SqlTypeMember member = type->member(0); member.nullable = false;
+  SqlTypeSpec mismatch;
+  mismatch.attributes = type->attributes(); mismatch.form = SqlTypeForm::Record;
+  mismatch.pl_declaration = type->pl_declaration();
+  mismatch.nominal = type->nominal(); mismatch.members = &member; mismatch.member_count = 1;
+  const SqlType *wrong_nullable = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(mismatch, type_owner, wrong_nullable));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, clone_native_owned_value(*wrong_nullable, source, rejected, sentinel));
+  EXPECT_EQ(93, sentinel.get_int()); EXPECT_EQ(0, rejected_allocator.calls_);
+  EXPECT_EQ(OB_SUCCESS, owner.clear());
+}
+
+TEST(NativePlValue, same_local_id_in_another_scope_and_typed_null_require_the_actual_declaration)
+{
+  ObArenaAllocator type_owner, source_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType integer_type; SqlTypeMeta meta; meta.set_int();
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(20, 0), integer_type));
+  const SqlType *actual = record_type(type_owner, registry, 707, {&integer_type},
+      SqlNominalType(), true, 0xabc123);
+  const SqlType *other_scope = record_type(type_owner, registry, 707, {&integer_type},
+      SqlNominalType(), false, 0xabc124);
+  ASSERT_NE(nullptr, actual); ASSERT_NE(nullptr, other_scope);
+  ASSERT_FALSE(actual->equals(*other_scope));
+  DatumParameter integer; ASSERT_EQ(OB_SUCCESS, integer.set_int(53, source_owner));
+  DatumParameter parameter = record(source_owner, 707, {integer});
+  Datum source, output; output.set_int(999);
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*actual).import_legacy(parameter.datum_, source));
+  FailingAllocator allocator;
+  NativeSqlValueOwner owner(allocator, nullptr, &registry);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, clone_native_owned_value(*other_scope, source, owner, output));
+  EXPECT_EQ(999, output.get_int()); EXPECT_EQ(0, allocator.calls_);
+  source.set_null();
+  EXPECT_EQ(OB_INVALID_ARGUMENT, clone_native_owned_value(*other_scope, source, owner, output));
+  EXPECT_EQ(999, output.get_int()); EXPECT_EQ(0, allocator.calls_);
+  ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*actual, source, owner, output));
+  EXPECT_TRUE(output.is_null()); EXPECT_EQ(0, owner.resource_count()); EXPECT_EQ(0, allocator.calls_);
+}
+
+TEST(NativePlValue, unknown_typed_null_resolver_keeps_both_metadata_outputs_and_value_unpublished)
+{
+  ObArenaAllocator type_owner, source_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType integer_type; SqlTypeMeta meta; meta.set_int();
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(20, 0), integer_type));
+  const SqlType *known = record_type(type_owner, registry, 808, {&integer_type});
+  const SqlType *unknown = record_type(type_owner, registry, 809, {&integer_type}, SqlNominalType(), false);
+  DatumParameter typed_null;
+  typed_null.set_type_meta(unknown->legacy_meta()); typed_null.set_accuracy(unknown->accuracy());
+  typed_null.datum_.set_null();
+  const SqlType *resolved = known;
+  const ObRecordType *declaration = registry.entries_[0].definition;
+  EXPECT_EQ(OB_NOT_SUPPORTED, registry.resolve(nullptr, typed_null, resolved, declaration));
+  EXPECT_EQ(known, resolved); EXPECT_EQ(registry.entries_[0].definition, declaration);
+  FailingAllocator allocator;
+  NativeSqlValueOwner owner(allocator, nullptr, &registry);
+  Datum source, output; source.set_null(); output.set_int(901);
+  EXPECT_EQ(OB_NOT_SUPPORTED, clone_native_owned_value(*unknown, source, owner, output));
+  EXPECT_EQ(901, output.get_int()); EXPECT_EQ(0, owner.resource_count()); EXPECT_EQ(0, allocator.calls_);
+}
+
+TEST(NativePlValue, native_owner_rolls_back_each_parent_allocation_before_publication)
+{
+  ObArenaAllocator source_owner, type_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType text_type; SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, text_type));
+  const SqlType *type = record_type(type_owner, registry, 811, {&text_type});
+  DatumParameter text;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("rollback real record fields"), source_owner));
+  text.set_type_meta(meta); text.set_accuracy(accuracy);
+  DatumParameter parameter = record(source_owner, 811, {text});
+  Datum source; ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(parameter.datum_, source));
+  bool succeeded = false;
+  for (int64_t failure = 1; failure < 40 && !succeeded; ++failure) {
+    FailingAllocator allocator(failure);
+    NativeSqlValueOwner owner(allocator, nullptr, &registry);
+    Datum output; output.set_int(313);
+    const int ret = clone_native_owned_value(*type, source, owner, output);
+    if (ret == OB_SUCCESS) {
+      succeeded = true;
+      EXPECT_EQ(1, owner.resource_count());
+      alignas(8) char scratch[64];
+      const DatumParameter result = view(*type, output, scratch);
+      EXPECT_EQ(ObString::make_string("rollback real record fields"), field(result, 0).get_string());
+    } else {
+      EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ret);
+      EXPECT_EQ(313, output.get_int()); EXPECT_EQ(0, owner.resource_count());
+    }
+    EXPECT_EQ(OB_SUCCESS, owner.clear()); EXPECT_EQ(0, owner.resource_count());
+    EXPECT_TRUE(allocator.live_.empty()) << "parent allocation " << failure;
+  }
+  EXPECT_TRUE(succeeded);
+}
+
+TEST(NativePlValue, typed_null_parameter_preserves_declaration_and_flags_without_allocating_a_graph)
+{
+  ObArenaAllocator source_owner, type_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType integer_type; SqlTypeMeta meta; meta.set_int();
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(20, 0), integer_type));
+  const SqlType *type = record_type(type_owner, registry, 812, {&integer_type});
+  DatumParameter source;
+  source.set_type_meta(type->legacy_meta()); source.set_accuracy(type->accuracy());
+  source.set_param_meta(type->legacy_meta()); source.datum_.set_null();
+  source.set_result_flags(0x232); source.set_raw_text_info(17, 19);
+  source.set_need_to_check_type(true);
+  DatumParameter output; ASSERT_EQ(OB_SUCCESS, output.set_int(49, source_owner));
+  FailingAllocator allocator;
+  ASSERT_EQ(OB_SUCCESS, clone_owned_parameter_graph(*type, source, output, allocator, &registry));
+  EXPECT_TRUE(output.is_null()); EXPECT_TRUE(output.get_type_meta().is_pl_extend_type());
+  EXPECT_EQ(812, output.get_accuracy().get_accuracy());
+  EXPECT_EQ(source.get_param_meta(), output.get_param_meta());
+  EXPECT_EQ(source.get_result_flag(), output.get_result_flag());
+  EXPECT_EQ(17, output.get_raw_text_pos()); EXPECT_EQ(19, output.get_raw_text_len());
+  EXPECT_TRUE(output.need_to_check_type()); EXPECT_EQ(0, allocator.calls_);
+  EXPECT_EQ(nullptr, output.datum_.ptr_);
+  EXPECT_EQ(OB_SUCCESS, release_owned_parameter_graph(output, allocator));
+  EXPECT_TRUE(output.is_null()); EXPECT_TRUE(allocator.live_.empty());
+  EXPECT_EQ(812, source.get_accuracy().get_accuracy());
+}
+
+TEST(NativePlValue, clear_releases_real_record_domains_before_reusing_the_outer_arena)
+{
+  ObArenaAllocator source_owner, type_owner, target_owner;
+  FixtureDeclarations registry(type_owner);
+  SqlType text_type; SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(128);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, text_type));
+  const SqlType *type = record_type(type_owner, registry, 813, {&text_type});
+  DatumParameter text;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("repeat owner lifetime"), source_owner));
+  text.set_type_meta(meta); text.set_accuracy(accuracy);
+  DatumParameter parameter = record(source_owner, 813, {text});
+  Datum source; ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(parameter.datum_, source));
+  NativeSqlValueOwner owner(target_owner, nullptr, &registry);
+  for (int i = 0; i < 3; ++i) {
+    Datum output;
+    ASSERT_EQ(OB_SUCCESS, clone_native_owned_value(*type, source, owner, output));
+    EXPECT_EQ(1, owner.resource_count());
+    alignas(8) char scratch[64];
+    const DatumParameter result = view(*type, output, scratch);
+    EXPECT_EQ(ObString::make_string("repeat owner lifetime"), field(result, 0).get_string());
+    ASSERT_EQ(OB_SUCCESS, owner.clear());
+    EXPECT_EQ(0, owner.resource_count());
+    target_owner.reuse(); // No retained resource token may point into this arena.
+  }
+}
+} // namespace
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

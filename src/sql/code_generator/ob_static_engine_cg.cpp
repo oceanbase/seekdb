@@ -18,6 +18,7 @@
 
 #include "rust/config.h"
 #include "ob_static_engine_cg.h"
+#include "sql/pl/ob_pl.h"
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"
@@ -1736,10 +1737,13 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
         DatumValue &value = spec.datum_values_.at(i);
         DatumParameter owned;
         const SqlType *type = nullptr;
-        if (opt_ctx_ == nullptr || opt_ctx_->get_exec_ctx() == nullptr) {
+        ObExecContext *execution = opt_ctx_ == nullptr ? nullptr : opt_ctx_->get_exec_ctx();
+        pl::ObPLContext *stack = execution == nullptr ? nullptr : execution->get_pl_stack_ctx();
+        const pl::ObPLINS *declarations = stack == nullptr ? nullptr : stack->get_current_ctx();
+        if (execution == nullptr) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(ObExprUtil::resolve_sql_type(*opt_ctx_->get_exec_ctx(),
-            source.get_type_meta(), source.get_accuracy(), source.get_subschema_id(), allocator, type))) {
+        } else if (OB_FAIL(ObExprUtil::resolve_sql_type(*execution,
+            source.get_type_meta(), source.get_accuracy(), source.get_subschema_id(), allocator, type, declarations))) {
         } else if (OB_FAIL(DatumParameterArray::clone_parameter(source, owned, allocator))) {
         } else {
           value = owned.value_view();

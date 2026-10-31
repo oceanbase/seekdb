@@ -125,11 +125,38 @@ int ObUserDefinedType::convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue
   return OB_NOT_SUPPORTED;
 }
 
+int ObUserDefinedType::set_sql_declaration_identity(
+    const SqlPLDeclarationIdentity &identity, const SqlNominalType &nominal)
+{
+  int ret = OB_SUCCESS;
+  if (!identity.is_specified() || !identity.valid_with(nominal)
+      || identity.declaration_id != get_user_type_id()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (sql_declaration_identity_.is_specified()
+      && (!sql_declaration_identity_.equals(identity)
+          || sql_nominal_identity_.specified != nominal.specified
+          || sql_nominal_identity_.tenant_id != nominal.tenant_id
+          || sql_nominal_identity_.object_id != nominal.object_id
+          || sql_nominal_identity_.schema_version != nominal.schema_version)) {
+    // Imported declarations retain their originating scope/version. A caller
+    // may repeat the same binding but cannot re-label a published declaration.
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    sql_declaration_identity_ = identity;
+    sql_nominal_identity_ = nominal;
+  }
+  return ret;
+}
+
 int ObUserDefinedType::deep_copy(common::ObIAllocator &alloc, const ObUserDefinedType &other)
 {
   int ret = OB_SUCCESS;
   OZ (ObPLDataType::deep_copy(alloc, other));
   OZ (ob_write_string(alloc, other.get_name(), type_name_));
+  if (OB_SUCC(ret)) {
+    sql_declaration_identity_ = other.sql_declaration_identity_;
+    sql_nominal_identity_ = other.sql_nominal_identity_;
+  }
   return ret;
 }
 

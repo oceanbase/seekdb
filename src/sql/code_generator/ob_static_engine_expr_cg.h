@@ -23,6 +23,7 @@
 
 namespace oceanbase
 {
+namespace pl { class ObPLINS; }
 namespace common
 {
 class ObIAllocator;
@@ -52,7 +53,7 @@ public:
               ObSQLSessionInfo *session,
               share::schema::ObSchemaGetterGuard *schema_guard)
     : allocator_(&allocator), session_(session),
-      schema_guard_(schema_guard)
+      schema_guard_(schema_guard), pl_declarations_(nullptr)
   {}
 
 private:
@@ -62,6 +63,9 @@ public:
   common::ObIAllocator *allocator_;
   ObSQLSessionInfo *session_;
   share::schema::ObSchemaGetterGuard *schema_guard_;
+  // Borrowed only while generating expressions; completed SqlType trees are
+  // cloned into the plan owner and never keep this AST/runtime namespace.
+  const pl::ObPLINS *pl_declarations_;
 };
 
 class ObRawExpr;
@@ -149,6 +153,8 @@ public:
   void set_batch_size(const int64_t v) { batch_size_ = v; }
 
   void set_rt_question_mark_eval(const bool v) { rt_question_mark_eval_ = v; }
+  void set_pl_declarations(const pl::ObPLINS *declarations)
+  { op_cg_ctx_.pl_declarations_ = declarations; }
   void set_contain_dynamic_eval_rt_qm(const bool v) { contain_dynamic_eval_rt_qm_ = v; }
 
   static int generate_partial_expr_frame(const ObPhysicalPlan &plan,

@@ -21,6 +21,7 @@
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/ob_sql_context.h"
+#include "sql/pl/ob_pl.h"
 #include "share/sql_udt_support.h"
 
 namespace oceanbase
@@ -212,8 +213,11 @@ int ObPhysicalPlanCtx::prepare_runtime_parameter(const DatumParameter &source,
       ret = OB_ERR_UNEXPECTED;
     } else {
       // Runtime type resolution may populate this execution context's lazy type cache.
-      ret = ObExprUtil::resolve_sql_type(*const_cast<ObExecContext *>(exec_ctx_), meta, source.get_accuracy(),
-          source.get_subschema_id(), temporary, resolved);
+      ObExecContext &execution = *const_cast<ObExecContext *>(exec_ctx_);
+      pl::ObPLContext *stack = execution.get_pl_stack_ctx();
+      const pl::ObPLINS *declarations = stack == nullptr ? nullptr : stack->get_current_ctx();
+      ret = ObExprUtil::resolve_sql_type(execution, meta, source.get_accuracy(),
+          source.get_subschema_id(), temporary, resolved, declarations);
     }
     if (OB_SUCC(ret)) {
       const SqlType *previous = get_native_parameter_type(index);

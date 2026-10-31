@@ -26,6 +26,8 @@
 #include "common/enumset/ob_enum_set_meta.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/pl/ob_pl.h"
+#include "sql/pl/ob_pl_user_type.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -77,6 +79,141 @@ int resolve_collection_type(const ObCollectionTypeBase &node, const ObDataType &
   if (OB_SUCC(ret)) { out = candidate; }
   return ret;
 }
+
+// These definitions are compile/runtime declarations, never PL payloads. The
+// identity getters are populated at the real declaration producer and copied
+// with that declaration, including parent-local imports and cached versions.
+int check_pl_record_identity(const oceanbase::pl::ObUserDefinedType &definition, uint64_t declaration_id)
+{
+  int ret = OB_SUCCESS;
+  const SqlPLDeclarationIdentity &identity = definition.get_sql_declaration_identity();
+  const SqlNominalType &nominal = definition.get_sql_nominal_identity();
+  if (!identity.is_specified() || !identity.valid_with(nominal)
+      || identity.declaration_id != declaration_id || declaration_id == OB_INVALID_ID) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int resolve_pl_record_type(const ObDataType &attributes, const oceanbase::pl::ObPLINS &declarations,
+                           const ObExecContext *sql_metadata, ObIAllocator &owner,
+                           const SqlType *&out, int64_t depth);
+
+int resolve_pl_member_type(const oceanbase::pl::ObPLDataType &declaration, const oceanbase::pl::ObPLINS &declarations,
+                           const ObExecContext *sql_metadata, ObIAllocator &owner,
+                           const SqlType *&out, int64_t depth)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  if (depth > 64) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (declaration.is_obj_type()) {
+    const ObDataType *attributes = declaration.get_data_type();
+    if (attributes == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (attributes->meta_.is_enum_or_set() || attributes->meta_.is_enumset_inner_type()) {
+      ObIArray<ObString> *labels = nullptr;
+      if (OB_FAIL(declaration.get_type_info(labels))) {
+      } else if (labels == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        SqlTypeSpec spec;
+        spec.attributes = *attributes;
+        spec.form = attributes->get_obj_type() == ObEnumType || attributes->get_obj_type() == ObEnumInnerType
+            ? SqlTypeForm::Enum : SqlTypeForm::Set;
+        ObSEArray<ObString, 16> values;
+        for (int64_t i = 0; OB_SUCC(ret) && i < labels->count(); ++i) { ret = values.push_back(labels->at(i)); }
+        if (OB_SUCC(ret)) {
+          spec.labels = values.empty() ? nullptr : &values.at(0);
+          spec.label_count = values.count();
+          ret = SqlType::create(spec, owner, candidate);
+        }
+      }
+    } else if (attributes->meta_.is_collection_sql_type()) {
+      if (sql_metadata == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else {
+        ret = ObExprUtil::resolve_sql_type(*const_cast<ObExecContext *>(sql_metadata), attributes->meta_, attributes->get_accuracy(),
+            attributes->meta_.get_subschema_id(), owner, candidate, &declarations);
+      }
+    } else if (attributes->meta_.is_ext_sql_array()) {
+      // T_EXT_SQL_ARRAY declares a heterogeneous SQL array, unlike a PL
+      // nested-table/varray whose element declaration lives in the PL namespace.
+      SqlTypeSpec spec;
+      spec.attributes = *attributes;
+      spec.form = SqlTypeForm::Array;
+      spec.heterogeneous = true;
+      ret = SqlType::create(spec, owner, candidate);
+    } else {
+      ret = SqlType::from_legacy(*attributes, owner, candidate);
+    }
+  } else if (declaration.is_record_type()) {
+    ObDataType attributes;
+    attributes.meta_.set_ext();
+    attributes.meta_.set_extend_type(oceanbase::pl::PL_RECORD_TYPE);
+    attributes.set_udt_id(declaration.get_user_type_id());
+    ret = resolve_pl_record_type(attributes, declarations, sql_metadata, owner, candidate, depth);
+  } else {
+    // Cursor and PL collection/opaque domains require their own declaration
+    // and retaining contracts. They are not a SQL Array or an empty Record.
+    ret = OB_NOT_SUPPORTED;
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
+
+int resolve_pl_record_type(const ObDataType &attributes, const oceanbase::pl::ObPLINS &declarations,
+                           const ObExecContext *sql_metadata, ObIAllocator &owner,
+                           const SqlType *&out, int64_t depth)
+{
+  int ret = OB_SUCCESS;
+  const SqlType *candidate = nullptr;
+  const oceanbase::pl::ObUserDefinedType *definition = nullptr;
+  // Ext accuracy is the complete 64-bit declaration ID, not numeric precision
+  // and scale. This path is identical for NULL and non-NULL values.
+  const uint64_t declaration_id = attributes.get_udt_id();
+  if (depth > 64) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (!attributes.meta_.is_pl_extend_type()
+      || attributes.meta_.get_extend_type() != oceanbase::pl::PL_RECORD_TYPE) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(declarations.get_user_type(declaration_id, definition))) {
+  } else if (definition == nullptr || !definition->is_record_type()
+      || definition->get_user_type_id() != declaration_id) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(check_pl_record_identity(*definition, declaration_id))) {
+  } else {
+    const auto &record = static_cast<const oceanbase::pl::ObRecordType &>(*definition);
+    SqlTypeSpec spec;
+    spec.attributes = attributes;
+    spec.form = SqlTypeForm::Record;
+    spec.pl_declaration = definition->get_sql_declaration_identity();
+    spec.nominal = definition->get_sql_nominal_identity();
+    ObSEArray<SqlTypeMember, 16> members;
+    for (int64_t i = 0; OB_SUCC(ret) && i < record.get_record_member_count(); ++i) {
+      const ObString *name = record.get_record_member_name(i);
+      const oceanbase::pl::ObPLDataType *member = record.get_record_member_type(i);
+      SqlTypeMember resolved;
+      if (name == nullptr || member == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(resolve_pl_member_type(*member, declarations, sql_metadata, owner,
+                                               resolved.type, depth + 1))) {
+      } else {
+        resolved.name = *name;
+        resolved.nullable = !member->is_not_null();
+        ret = members.push_back(resolved);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      spec.members = members.empty() ? nullptr : &members.at(0);
+      spec.member_count = members.count();
+      // create() clones all member names and child types into the requested
+      // owner; no namespace or temporary descriptor escapes this preparation.
+      ret = SqlType::create(spec, owner, candidate);
+    }
+  }
+  if (OB_SUCC(ret)) { out = candidate; }
+  return ret;
+}
 } // namespace
 
 int ObExprUtil::resolve_enum_sql_type(const SqlTypeMeta &actual_meta,
@@ -110,12 +247,29 @@ int ObExprUtil::resolve_enum_sql_type(const SqlTypeMeta &actual_meta,
 int ObExprUtil::resolve_raw_sql_type(const ObRawExprResType &resolved,
                                     const ObSQLSessionInfo *session,
                                     share::schema::ObSchemaGetterGuard *schema_guard,
-                                    ObIAllocator &owner, const SqlType *&out)
+                                    ObIAllocator &owner, const SqlType *&out,
+                                    const pl::ObPLINS *pl_declarations)
 {
   int ret = OB_SUCCESS;
   const SqlType *candidate = nullptr;
-  UNUSED(schema_guard); // A bare SubSchema UDT does not contain nominal schema version.
-  if (resolved.is_enum_or_set() || resolved.is_enumset_inner_type()) {
+  UNUSED(schema_guard); // PL origins retain the version of their actual definition.
+  if (resolved.is_pl_extend_type() && resolved.get_extend_type() == pl::PL_RECORD_TYPE) {
+    if (pl_declarations == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      ObDataType attributes;
+      attributes.set_meta_type(resolved.get_sql_type_meta());
+      attributes.set_accuracy(resolved.get_accuracy());
+      const ObExecContext *sql_metadata = session == nullptr ? nullptr : session->get_cur_exec_ctx();
+      ret = resolve_pl_record_type(attributes, *pl_declarations, sql_metadata, owner, candidate, 0);
+    }
+  } else if (resolved.is_ext_sql_array()) {
+    SqlTypeSpec spec;
+    spec.attributes.set_meta_type(resolved.get_sql_type_meta());
+    spec.attributes.set_accuracy(resolved.get_accuracy());
+    spec.form = SqlTypeForm::Array;
+    spec.heterogeneous = true;
+    ret = SqlType::create(spec, owner, candidate);
+  } else if (resolved.is_enum_or_set() || resolved.is_enumset_inner_type()) {
     const ObEnumSetMeta *definition = nullptr;
     if (OB_FAIL(ObRawExprUtils::extract_enum_set_meta(resolved, session, definition))) {
     } else if (definition == nullptr || definition->get_str_values() == nullptr) {
@@ -135,7 +289,7 @@ int ObExprUtil::resolve_raw_sql_type(const ObRawExprResType &resolved,
       // Existing resolver/array CG paths own this same request SubSchema. The
       // resolver below only reads it and copies its complete declaration tree.
       ret = resolve_sql_type(*const_cast<ObExecContext *>(context), resolved.get_sql_type_meta(),
-          resolved.get_accuracy(), resolved.get_subschema_id(), owner, candidate);
+          resolved.get_accuracy(), resolved.get_subschema_id(), owner, candidate, pl_declarations);
     }
   } else {
     ret = SqlType::from_legacy(resolved.get_sql_type_meta(), resolved.get_accuracy(), owner, candidate);
@@ -146,11 +300,27 @@ int ObExprUtil::resolve_raw_sql_type(const ObRawExprResType &resolved,
 
 int ObExprUtil::resolve_sql_type(ObExecContext &ctx, const SqlTypeMeta &meta,
                                 const ObAccuracy &accuracy, const uint16_t subschema_id,
-                                ObIAllocator &owner, const SqlType *&out)
+                                ObIAllocator &owner, const SqlType *&out,
+                                const pl::ObPLINS *pl_declarations)
 {
   int ret = OB_SUCCESS;
   const SqlType *candidate = nullptr;
-  if (meta.is_enum_or_set() || meta.is_enumset_inner_type()) {
+  if (meta.is_pl_extend_type() && meta.get_extend_type() == pl::PL_RECORD_TYPE) {
+    if (pl_declarations == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      ObDataType attributes;
+      attributes.set_meta_type(meta);
+      attributes.set_accuracy(accuracy);
+      ret = resolve_pl_record_type(attributes, *pl_declarations, &ctx, owner, candidate, 0);
+    }
+  } else if (meta.is_ext_sql_array()) {
+    SqlTypeSpec spec;
+    spec.attributes.set_meta_type(meta);
+    spec.attributes.set_accuracy(accuracy);
+    spec.form = SqlTypeForm::Array;
+    spec.heterogeneous = true;
+    ret = SqlType::create(spec, owner, candidate);
+  } else if (meta.is_enum_or_set() || meta.is_enumset_inner_type()) {
     const ObEnumSetMeta *definition = nullptr;
     if (OB_FAIL(ctx.get_enumset_meta_by_subschema_id(subschema_id, false, definition))) {
     } else if (definition == nullptr || definition->get_str_values() == nullptr) {

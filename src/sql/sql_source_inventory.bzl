@@ -387,6 +387,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_usec_to_time.cpp",
             "src/sql/engine/expr/ob_expr_user.cpp",
             "src/sql/engine/expr/ob_expr_util.cpp",
+            "src/sql/engine/expr/ob_native_pl_value.cpp",
             "src/sql/engine/expr/ob_expr_uuid.cpp",
             "src/sql/engine/expr/ob_expr_uuid_short.cpp",
             "src/sql/engine/expr/ob_expr_validate_password_strength.cpp",
