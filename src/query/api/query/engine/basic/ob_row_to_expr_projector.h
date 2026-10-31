@@ -20,6 +20,7 @@
 #include "common/datum/ob_datum.h"
 #include "lib/container/ob_se_array.h"
 #include "query/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/native_bigint_output.h"
 
 namespace oceanbase
 {
@@ -40,6 +41,7 @@ public:
     : other_idx_(0),
       has_virtual_(false),
       op_(nullptr),
+      native_output_(nullptr),
       outputs_(common::OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(allocator))
   {}
   ~ObRow2ExprsProjector() { destroy(); }
@@ -51,7 +53,19 @@ public:
               const blocksstable::ObStorageDatum *datums,
               int16_t *nop_pos,
               int64_t &nop_cnt);
-  void destroy() { outputs_.reset(); }
+  void bind_native_bigint_output(sql::NativeBigintOutput *output)
+  {
+    invalidate_native_output();
+    native_output_ = output;
+  }
+  void invalidate_native_output()
+  { if (native_output_ != nullptr) { native_output_->invalidate(); } }
+  void destroy()
+  {
+    invalidate_native_output();
+    native_output_ = nullptr;
+    outputs_.reset();
+  }
   bool has_virtual() const { return has_virtual_; }
 
 private:
@@ -93,6 +107,7 @@ private:
   int32_t other_idx_;
   bool has_virtual_;
   sql::ObPushdownOperator *op_;
+  sql::NativeBigintOutput *native_output_;
   common::ObSEArray<Item, 4> outputs_;
 };
 

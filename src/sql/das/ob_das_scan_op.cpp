@@ -206,7 +206,9 @@ ObDASScanOp::~ObDASScanOp()
 int ObDASScanOp::init_scan_param()
 {
   int ret = OB_SUCCESS;
-  
+  if (scan_rtdef_->p_row2exprs_projector_ != nullptr) {
+    scan_rtdef_->p_row2exprs_projector_->invalidate_native_output();
+  }
   
   scan_param_.key_ranges_.set_attr(ObMemAttr("ScanParamKR"));
   scan_param_.tx_lock_timeout_ = scan_rtdef_->tx_lock_timeout_;
@@ -385,6 +387,9 @@ int ObDASScanOp::open_op()
 int ObDASScanOp::release_op()
 {
   int ret = OB_SUCCESS;
+  if (scan_rtdef_ != nullptr && scan_rtdef_->p_row2exprs_projector_ != nullptr) {
+    scan_rtdef_->p_row2exprs_projector_->invalidate_native_output();
+  }
   ObDASIterTreeType tree_type = get_iter_tree_type();
   if (SUPPORTED_DAS_ITER_TREE(tree_type)) {
     if (OB_NOT_NULL(result_)) {
@@ -476,6 +481,9 @@ int ObDASScanOp::init_task_info(uint32_t row_extend_size)
 int ObDASScanOp::rescan()
 {
   int &ret = errcode_;
+  if (scan_rtdef_ != nullptr && scan_rtdef_->p_row2exprs_projector_ != nullptr) {
+    scan_rtdef_->p_row2exprs_projector_->invalidate_native_output();
+  }
   reset_access_datums_ptr();
   scan_param_.tablet_id_ = tablet_id_;
 
@@ -498,6 +506,9 @@ int ObDASScanOp::rescan()
 int ObDASScanOp::reuse_iter()
 {
   int &ret = errcode_;
+  if (scan_rtdef_ != nullptr && scan_rtdef_->p_row2exprs_projector_ != nullptr) {
+    scan_rtdef_->p_row2exprs_projector_->invalidate_native_output();
+  }
   //May be retry change to retry alloc.
   //Change back.
   scan_param_.scan_allocator_ = &scan_rtdef_->scan_allocator_;

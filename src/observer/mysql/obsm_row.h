@@ -94,6 +94,7 @@ public:
   static bool can_encode(const sql::ObExpr &expr, const ObField &field,
                           ObCharsetType result_charset, bool need_ps_cast,
                           bool &convert_charset);
+  static bool can_encode_inline(const sql::ResultRowView &row, int64_t idx, const ObField &field);
   int build_cell_value(int64_t idx, ObIAllocator &scratch_allocator,
                        obmysql::ObMySQLCellValue &out) const override;
   int get_packed_row_blob(const char *&data, int64_t &len) const override

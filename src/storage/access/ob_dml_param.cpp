@@ -19,6 +19,145 @@
 
 namespace oceanbase
 {
+namespace sql
+{
+namespace
+{
+// One immutable complete type, with no registry and no per-row construction.
+struct NativeBigintType
+{
+  NativeBigintType() : type_(), result_(common::OB_SUCCESS)
+  {
+    common::SqlTypeMeta meta;
+    meta.set_int();
+    result_ = common::SqlType::from_legacy(meta, common::ObAccuracy(20, 0), type_);
+  }
+  common::SqlType type_;
+  int result_;
+};
+}
+
+NativeBigintOutput::NativeBigintOutput()
+  : values_(), output_exprs_(), storage_indexes_(), type_(nullptr), count_(0),
+    generation_(0), layout_bound_(false), candidate_(false), ready_(false)
+{}
+
+void NativeBigintOutput::invalidate()
+{
+  ++generation_;
+  candidate_ = false;
+  ready_ = false;
+}
+
+int NativeBigintOutput::prepare(const common::ObIArray<ObExpr *> &outputs, bool &supported)
+{
+  int ret = common::OB_SUCCESS;
+  supported = false;
+  invalidate();
+  count_ = 0;
+  layout_bound_ = false;
+  bool valid = outputs.count() > 0 && outputs.count() <= MAX_COLUMNS;
+  for (int64_t i = 0; valid && i < outputs.count(); ++i) {
+    const ObExpr *expr = outputs.at(i);
+    valid = expr != nullptr && expr->type_ == T_REF_COLUMN && expr->arg_cnt_ == 0
+         && expr->obj_meta_.get_type() == common::ObIntType
+         && expr->datum_meta_.type_ == common::ObIntType
+         && expr->obj_datum_map_ == common::OBJ_DATUM_8BYTE_DATA;
+  }
+  if (valid) {
+    static const NativeBigintType bigint;
+    ret = bigint.result_;
+    if (ret == common::OB_SUCCESS) {
+      type_ = &bigint.type_;
+      count_ = outputs.count();
+      for (int64_t i = 0; i < count_; ++i) { output_exprs_[i] = outputs.at(i); }
+      supported = true;
+    }
+  }
+  return ret;
+}
+
+void NativeBigintOutput::bind_projector(const common::ObIArray<ObExpr *> &access_exprs,
+                                       const common::ObIArray<int32_t> &projector)
+{
+  invalidate();
+  layout_bound_ = count_ > 0 && access_exprs.count() == projector.count();
+  for (int64_t i = 0; layout_bound_ && i < count_; ++i) {
+    int32_t storage_index = -1;
+    for (int64_t j = 0; layout_bound_ && j < access_exprs.count(); ++j) {
+      if (access_exprs.at(j) == output_exprs_[i]) {
+        const int32_t next = projector.at(j);
+        // Ambiguous or virtual mappings are a native fallback, not a change to
+        // the existing storage projector's error/virtual-column behavior.
+        if (next < 0 || (storage_index >= 0 && next != storage_index)) {
+          layout_bound_ = false;
+        } else {
+          storage_index = next;
+        }
+      }
+    }
+    if (storage_index < 0) { layout_bound_ = false; }
+    storage_indexes_[i] = storage_index;
+  }
+}
+
+void NativeBigintOutput::project(const blocksstable::ObStorageDatum *datums, int64_t batch_idx)
+{
+  invalidate();
+  bool valid = layout_bound_ && datums != nullptr && batch_idx == 0;
+  // Preflight the entire row before replacing any slot. NOP must continue via
+  // default fusion in the legacy path, never appear as a native NULL/value.
+  for (int64_t i = 0; valid && i < count_; ++i) {
+    const blocksstable::ObStorageDatum &datum = datums[storage_indexes_[i]];
+    valid = datum.flag_ == common::ObDatum::FlagType::NONE
+         && (datum.is_null() || (datum.len_ == sizeof(int64_t) && datum.ptr_ != nullptr));
+  }
+  if (valid) {
+    for (int64_t i = 0; i < count_; ++i) {
+      const blocksstable::ObStorageDatum &datum = datums[storage_indexes_[i]];
+      if (datum.is_null()) {
+        values_[i].set_null();
+      } else {
+        int64_t value;
+        // Storage scalar buffers do not promise 8-byte alignment.
+        MEMCPY(&value, datum.ptr_, sizeof(value));
+        values_[i].set_int(value);
+      }
+    }
+    candidate_ = true;
+  }
+}
+
+void NativeBigintOutput::publish(int result, int64_t row_count, bool end, bool skipped)
+{
+  if (candidate_ && result == common::OB_SUCCESS && row_count == 1 && !end && !skipped) {
+    ready_ = true;
+  } else {
+    invalidate();
+  }
+}
+
+bool NativeBigintOutput::try_get(int64_t batch_idx, const common::Datum *&values,
+                                const common::SqlType *&type, int64_t &count,
+                                uint64_t &generation, const uint64_t *&current_generation) const
+{
+  values = nullptr;
+  type = nullptr;
+  count = 0;
+  generation = 0;
+  current_generation = nullptr;
+  const bool valid = ready_ && batch_idx == 0;
+  if (valid) {
+    values = values_;
+    type = type_;
+    count = count_;
+    generation = generation_;
+    current_generation = &generation_;
+  }
+  return valid;
+}
+
+} // namespace sql
 namespace storage
 {
 using namespace common;
@@ -110,6 +249,10 @@ int ObRow2ExprsProjector::init(const sql::ObExprPtrIArray &exprs,
         item.data_ = item.datum_->ptr_;
       }
     }
+  }
+  if (native_output_ != nullptr) {
+    if (OB_SUCC(ret)) { native_output_->bind_projector(exprs, projector); }
+    else { native_output_->invalidate(); }
   }
   return ret;
 };
@@ -221,6 +364,13 @@ int ObRow2ExprsProjector::project(const sql::ObExprPtrIArray &exprs,
     }
   }
 
+  if (native_output_ != nullptr) {
+    if (OB_SUCC(ret)) {
+      native_output_->project(datums, op_->is_vectorized() ? op_->get_eval_ctx().get_batch_idx() : 0);
+    } else {
+      native_output_->invalidate();
+    }
+  }
   return ret;
 }
 

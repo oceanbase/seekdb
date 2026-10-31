@@ -102,6 +102,60 @@ TEST(SessionNativeResult,metadata_oom_does_not_advance_or_publish_a_row) {
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,frame.result.get_next_native_result_row(frame.exec,view));EXPECT_EQ(0,frame.producer.calls);EXPECT_FALSE(view.is_datum_row());
   frame.owner.fail=false;EXPECT_EQ(OB_SUCCESS,frame.result.get_next_native_result_row(frame.exec,view));EXPECT_EQ(1,frame.producer.calls);
 }
+TEST(SessionNativeResult,inline_view_borrows_native_slots_and_rejects_an_advanced_generation) {
+  ResultFrame frame;
+  ResultRowView shadow;
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, shadow));
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(frame.expr.obj_meta_, ObAccuracy(20,0), type));
+  Datum native;
+  native.set_int(INT64_MIN);
+  uint64_t generation = 1;
+  ResultRowView view;
+  view.set_inline_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false,
+                         &native, &type, &generation, generation);
+  ASSERT_TRUE(view.is_datum_row());
+  ASSERT_TRUE(view.is_inline_datum_row());
+  const Datum *value = nullptr;
+  const SqlType *value_type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
+  EXPECT_EQ(&native, value);
+  EXPECT_EQ(&type, value_type);
+  EXPECT_EQ(INT64_MIN, value->get_int());
+  // The compatibility frame is distinct; native access never reinterprets it.
+  EXPECT_EQ(43, view.datum(0).get_int());
+  DatumValue old_view;
+  ASSERT_EQ(OB_SUCCESS, view.get_value(0, old_view));
+  EXPECT_EQ(43, old_view.get_int());
+  EXPECT_EQ(OB_SIZE_OVERFLOW, view.get_inline_value(1, value, value_type));
+  ++generation;
+  native.set_int(99);
+  EXPECT_FALSE(view.inline_row_valid());
+  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_inline_value(0, value, value_type));
+  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_value(0, old_view));
+  EXPECT_EQ(43, old_view.get_int());
+}
+TEST(SessionNativeResult,inline_typed_null_and_fallback_setters_do_not_retain_old_slots) {
+  ResultFrame frame;
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(frame.expr.obj_meta_, ObAccuracy(20,0), type));
+  Datum native;
+  uint64_t generation = 7;
+  ResultRowView view;
+  view.set_inline_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false,
+                         &native, &type, &generation, generation);
+  const Datum *value = nullptr;
+  const SqlType *value_type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
+  EXPECT_TRUE(value->is_null());
+  EXPECT_EQ(ObIntType, value_type->kind());
+  view.set_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false);
+  EXPECT_FALSE(view.is_inline_datum_row());
+  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_inline_value(0, value, value_type));
+  view.set_legacy(nullptr);
+  EXPECT_FALSE(view.is_datum_row());
+  EXPECT_EQ(0, view.count());
+}
 TEST(SessionNativeResult,invalid_decimal_scale_is_reported_before_publishing_native_row) {
   ResultFrame frame;frame.expr.obj_meta_.set_decimal_int();frame.expr.obj_meta_.set_scale(-1);frame.expr.obj_datum_map_=OBJ_DATUM_DECIMALINT;ResultRowView view;
   EXPECT_EQ(OB_ERR_UNEXPECTED,frame.result.get_next_native_result_row(frame.exec,view));EXPECT_FALSE(view.is_datum_row());EXPECT_EQ(nullptr,(frame.result.*result_member(OldRowTag{})).cells_);

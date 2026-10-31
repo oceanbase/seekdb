@@ -20,6 +20,7 @@
 #include "common/datum/datum_value_projection.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "sql/engine/table/ob_table_scan_op.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -84,7 +85,9 @@ int ResultRowView::project_value(const ObDatum &datum, const SqlTypeMeta &meta,
 int ResultRowView::get_value(int64_t i, DatumValue &value) const
 {
   int ret = OB_SUCCESS;
-  if (!is_datum_row() && legacy_ == nullptr) {
+  if (is_inline_datum_row() && !inline_row_valid()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (!is_datum_row() && legacy_ == nullptr) {
     ret = OB_NOT_INIT;
   } else if (i < 0 || i >= count()) {
     ret = OB_SIZE_OVERFLOW;
@@ -124,6 +127,11 @@ int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowVie
   } else {
     const ObOpSpec &spec = static_engine_root_->get_spec();
     const int64_t count = spec.output_.count();
+    if (spec.type_ == PHY_TABLE_SCAN) {
+      // Outer operator checks may fail before entering TableScan's inner next.
+      // Invalidate the preceding borrowed view for every advance attempt.
+      static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
+    }
     if (count > 0 && nullptr == native_cell_metas_) {
       if (OB_ISNULL(native_cell_metas_ = static_cast<SqlTypeMeta *>(
                        ctx.get_allocator().alloc(sizeof(SqlTypeMeta) * count)))) {
@@ -137,10 +145,22 @@ int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowVie
     } else if (count != native_cell_count_) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(spec.is_vectorized() ? br_it_.get_next_row() : get_next_row())) {
+      if (spec.type_ == PHY_TABLE_SCAN) {
+        static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
+      }
     } else {
       ObEvalCtx &eval_ctx = static_engine_root_->get_eval_ctx();
       const int64_t idx = spec.is_vectorized() ? br_it_.cur_idx() : 0;
-      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      const Datum *inline_values = nullptr;
+      const SqlType *inline_type = nullptr;
+      int64_t inline_count = 0;
+      uint64_t generation = 0;
+      const uint64_t *current_generation = nullptr;
+      const bool inline_ready = spec.type_ == PHY_TABLE_SCAN
+          && static_cast<ObTableScanOp *>(static_engine_root_)->try_get_native_output(
+              idx, inline_values, inline_type, inline_count, generation, current_generation)
+          && inline_count == count;
+      for (int64_t i = 0; !inline_ready && OB_SUCC(ret) && i < count; ++i) {
         ObExpr &expr = *spec.output_.at(i);
         ObDatum *datum = nullptr;
         if (!spec.is_vectorized()) {
@@ -156,7 +176,12 @@ int ObExecuteResult::get_next_native_result_row(ObExecContext &ctx, ResultRowVie
         }
       }
       if (OB_SUCC(ret)) {
-        view.set_datums(spec.output_, eval_ctx, idx, spec.is_vectorized(), native_cell_metas_);
+        if (inline_ready) {
+          view.set_inline_datums(spec.output_, eval_ctx, idx, spec.is_vectorized(),
+                                  inline_values, inline_type, current_generation, generation);
+        } else {
+          view.set_datums(spec.output_, eval_ctx, idx, spec.is_vectorized(), native_cell_metas_);
+        }
       }
     }
   }
@@ -198,9 +223,16 @@ int ObExecuteResult::get_next_row() const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(static_engine_root_)) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(static_engine_root_->get_next_row())
-             && OB_ITER_END != ret
-             && OB_TRY_LOCK_ROW_CONFLICT != ret) {
+  } else {
+    if (static_engine_root_->get_spec().type_ == PHY_TABLE_SCAN) {
+      static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
+    }
+    if (OB_FAIL(static_engine_root_->get_next_row())
+        && OB_ITER_END != ret && OB_TRY_LOCK_ROW_CONFLICT != ret) {
+    }
+    if (ret != OB_SUCCESS && static_engine_root_->get_spec().type_ == PHY_TABLE_SCAN) {
+      static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
+    }
   }
   return ret;
 }
@@ -209,6 +241,9 @@ int ObExecuteResult::close() const
 {
   int ret = OB_SUCCESS;
   if (NULL != static_engine_root_) {
+    if (static_engine_root_->get_spec().type_ == PHY_TABLE_SCAN) {
+      static_cast<ObTableScanOp *>(static_engine_root_)->invalidate_native_output();
+    }
     if (OB_FAIL(static_engine_root_->close())) {
     }
   }

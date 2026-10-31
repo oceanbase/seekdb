@@ -180,7 +180,8 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
             bool convert_charset = false;
             // Negative entries select raw Datum bytes or charset conversion;
             // nonnegative entries address converted native value views.
-            obj_indexes.at(i) = DatumMysqlRow::can_encode(
+            obj_indexes.at(i) = DatumMysqlRow::can_encode_inline(result_view, i, fields->at(i))
+                                    ? -3 : DatumMysqlRow::can_encode(
                 result_view.expr(i), fields->at(i), charset_type, result.is_ps_protocol(), convert_charset)
                                     ? (convert_charset ? -2 : -1) : obj_count++;
           }

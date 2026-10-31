@@ -1,7 +1,12 @@
 #include "query/protocol/ob_mysql_protocol_util.h"
 #include "observer/mysql/ob_mysql_result_set.h"
+#include "observer/mysql/obsm_row.h"
+#include "sql/executor/ob_execute_result.h"
+#include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "common/datum/datum_parameter_codec.h"
+#include "common/datum/datum.h"
+#include "common/datum/sql_type.h"
 #include "common/ob_field.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -186,6 +191,131 @@ double median(std::vector<double> values)
       ? (values[middle - 1] + values[middle]) / 2.0
       : values[middle];
 }
+}
+
+TEST(NativeMysqlProtocol, inline_bigint_extremes_null_and_zerofill_match_existing_wire_cells)
+{
+  ObArenaAllocator owner;
+  SqlTypeMeta meta;
+  meta.set_int();
+  ObAccuracy accuracy;
+  accuracy.set_precision(20);
+  accuracy.set_scale(0);
+  SqlType sql_type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, sql_type));
+  const int64_t values[] = {INT64_MIN, -1, 0, 1, INT64_MAX};
+  for (const auto protocol : {TEXT, BINARY}) {
+    for (const bool zerofill : {false, true}) {
+      ObField field;
+      field.type_meta_ = meta;
+      field.flags_ = zerofill ? ZEROFILL_FLAG : 0;
+      field.length_ = 24;
+      for (const int64_t value : values) {
+        Datum native;
+        native.set_int(value);
+        DatumValue legacy;
+        ASSERT_EQ(OB_SUCCESS, legacy.set_int(value, owner));
+        ObMySQLCellValue old_out, new_out;
+        ObDataTypeCastParams cast_params;
+        ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_datum_cell_value(
+            legacy.datum_, meta, protocol, owner, old_out, &field, cast_params));
+        ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_inline_bigint_cell_value(
+            native, sql_type, protocol, owner, new_out, &field));
+        EXPECT_EQ(neutral(OB_SUCCESS, old_out), neutral(OB_SUCCESS, new_out));
+      }
+      Datum null;
+      ObMySQLCellValue out;
+      ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_inline_bigint_cell_value(
+          null, sql_type, protocol, owner, out, &field));
+      EXPECT_EQ(ObMySQLCellValueKind::NULL_VALUE, out.kind_);
+    }
+  }
+}
+
+TEST(NativeMysqlProtocol, inline_bigint_rejects_non_values_and_incompatible_fields)
+{
+  RejectOwner owner;
+  SqlTypeMeta meta;
+  meta.set_int();
+  ObAccuracy accuracy;
+  accuracy.set_precision(20);
+  accuracy.set_scale(0);
+  SqlType sql_type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, sql_type));
+  ObMySQLCellValue out;
+  Datum input;
+  input.set_nop();
+  EXPECT_EQ(OB_INVALID_ARGUMENT, ObSMUtils::build_inline_bigint_cell_value(
+      input, sql_type, TEXT, owner, out, nullptr));
+  input.set_min();
+  EXPECT_EQ(OB_INVALID_ARGUMENT, ObSMUtils::build_inline_bigint_cell_value(
+      input, sql_type, BINARY, owner, out, nullptr));
+  int64_t bytes = 42;
+  ASSERT_EQ(OB_SUCCESS, input.set_reference(&bytes, sizeof(bytes)));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, ObSMUtils::build_inline_bigint_cell_value(
+      input, sql_type, TEXT, owner, out, nullptr));
+  input.set_int(42);
+  ObField field;
+  field.type_meta_.set_uint64();
+  EXPECT_EQ(OB_NOT_SUPPORTED, ObSMUtils::build_inline_bigint_cell_value(
+      input, sql_type, BINARY, owner, out, &field));
+  // Ordinary native integers need no scratch allocation for either protocol.
+  ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_inline_bigint_cell_value(
+      input, sql_type, TEXT, owner, out, nullptr));
+  EXPECT_EQ("42", std::string(out.get_bytes(), out.get_bytes_len()));
+}
+
+TEST(NativeMysqlProtocol, result_row_adapter_encodes_native_slots_without_reading_a_shadow_frame)
+{
+  ObArenaAllocator owner;
+  sql::ObExecContext exec(owner);
+  sql::ObEvalCtx eval(exec);
+  sql::ObExpr expr;
+  expr.obj_meta_.set_int();
+  expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+  sql::ExprFixedArray exprs(owner);
+  ASSERT_EQ(OB_SUCCESS, exprs.init(3));
+  for (int i = 0; i < 3; ++i) { ASSERT_EQ(OB_SUCCESS, exprs.push_back(&expr)); }
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(expr.obj_meta_, ObAccuracy(20,0), type));
+  Datum values[3];
+  values[0].set_int(INT64_MIN);
+  values[2].set_int(INT64_MAX);
+  uint64_t generation = 1;
+  sql::ResultRowView view;
+  // No expression frames exist in this test. Any accidental fallback read is
+  // invalid; the real protocol adapter must consume the native slots directly.
+  view.set_inline_datums(exprs, eval, 0, true, values, &type, &generation, generation);
+  ObSEArray<ObField,4> fields;
+  ObSEArray<int64_t,4> indexes;
+  ObSEArray<DatumValue,4> fallback;
+  for (int i = 0; i < 3; ++i) {
+    ObField field;
+    field.type_meta_.set_int();
+    ASSERT_EQ(OB_SUCCESS, fields.push_back(field));
+    ASSERT_TRUE(DatumMysqlRow::can_encode_inline(view, i, fields.at(i)));
+    ASSERT_EQ(OB_SUCCESS, indexes.push_back(-3));
+  }
+  sql::ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1,1,nullptr));
+  ObDataTypeCastParams cast_params;
+  for (const auto protocol : {TEXT, BINARY}) {
+    DatumMysqlRow row(protocol, view, indexes, fallback, cast_params, session, fields,
+                       CHARSET_UTF8MB4, nullptr);
+    for (int i = 0; i < 3; ++i) {
+      ObMySQLCellValue actual, expected;
+      ASSERT_EQ(OB_SUCCESS, row.build_cell_value(i, owner, actual));
+      ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_inline_bigint_cell_value(
+          values[i], type, protocol, owner, expected, &fields.at(i)));
+      EXPECT_EQ(neutral(OB_SUCCESS, expected), neutral(OB_SUCCESS, actual));
+    }
+    ++generation;
+    ObMySQLCellValue invalid;
+    EXPECT_EQ(OB_STATE_NOT_MATCH, row.build_cell_value(0, owner, invalid));
+    --generation;
+  }
+  fields.at(0).type_meta_.set_uint64();
+  EXPECT_FALSE(DatumMysqlRow::can_encode_inline(view, 0, fields.at(0)));
 }
 
 TEST(NativeMysqlProtocol, all_old_formatter_payloads_and_errors_match_without_object_materialization)

@@ -19,6 +19,8 @@
 
 #include "common/row/ob_row.h"
 #include "common/datum/datum_value.h"
+#include "common/datum/datum.h"
+#include "common/datum/sql_type.h"
 #include "sql/engine/ob_operator.h"
 
 namespace oceanbase
@@ -36,12 +38,33 @@ class ObOpSpec;
 class ResultRowView
 {
 public:
-  ResultRowView() : legacy_(nullptr), exprs_(nullptr), ctx_(nullptr), count_(0), idx_(0), batch_(false), cell_metas_(nullptr) {}
+  ResultRowView() : legacy_(nullptr), exprs_(nullptr), ctx_(nullptr), count_(0), idx_(0), batch_(false),
+    cell_metas_(nullptr), inline_values_(nullptr), inline_type_(nullptr), generation_(nullptr), token_(0) {}
   void set_legacy(const common::ObNewRow *row) { *this = ResultRowView(); legacy_ = row; }
   void set_datums(const ExprFixedArray &exprs, ObEvalCtx &ctx, int64_t idx, bool batch,
                   const common::SqlTypeMeta *cell_metas = nullptr)
-  { legacy_ = nullptr; exprs_ = exprs.count() ? &exprs.at(0) : nullptr; ctx_ = &ctx;
+  { *this = ResultRowView(); exprs_ = exprs.count() ? &exprs.at(0) : nullptr; ctx_ = &ctx;
     count_ = exprs.count(); idx_ = idx; batch_ = batch; cell_metas_ = cell_metas; }
+  // The old expression frame remains a real fallback view during migration.
+  // Native slots are a separate representation, never reinterpreted as ObDatum.
+  void set_inline_datums(const ExprFixedArray &exprs, ObEvalCtx &ctx, int64_t idx, bool batch,
+                         const common::Datum *values, const common::SqlType *type,
+                         const uint64_t *generation, uint64_t token)
+  {
+    set_datums(exprs, ctx, idx, batch);
+    inline_values_ = values; inline_type_ = type; generation_ = generation; token_ = token;
+  }
+  bool is_inline_datum_row() const { return inline_values_ != nullptr; }
+  bool inline_row_valid() const
+  { return is_inline_datum_row() && inline_type_ != nullptr && generation_ != nullptr && *generation_ == token_; }
+  int get_inline_value(int64_t i, const common::Datum *&value, const common::SqlType *&type) const
+  {
+    int ret = OB_SUCCESS;
+    if (!inline_row_valid()) { ret = OB_STATE_NOT_MATCH; }
+    else if (i < 0 || i >= count_) { ret = OB_SIZE_OVERFLOW; }
+    else { value = inline_values_ + i; type = inline_type_; }
+    return ret;
+  }
   // Project expression metadata without allocating or constructing a value object.
   // previous_meta is the per-column metadata left by the preceding result row.
   static int project_value(const common::ObDatum &datum, const common::SqlTypeMeta &meta,
@@ -67,6 +90,10 @@ private:
   int64_t idx_;
   bool batch_;
   const common::SqlTypeMeta *cell_metas_;
+  const common::Datum *inline_values_;
+  const common::SqlType *inline_type_;
+  const uint64_t *generation_;
+  uint64_t token_;
 };
 
 class ObIExecuteResult

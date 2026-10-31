@@ -20,6 +20,7 @@
 
 #include "ob_table_scan_op.h"
 #include "sql/engine/table/native_point_get_input.h"
+#include "query/engine/basic/native_bigint_output.h"
 #include "common/json_type/ob_json_bin.h"
 #include "common/datum/datum_parameter_codec.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
@@ -726,7 +727,8 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     need_check_outrow_lob_(false),
     rand_scan_processor_(),
     native_point_get_input_(nullptr),
-    native_point_get_ready_(false)
+    native_point_get_ready_(false),
+    native_bigint_output_(nullptr)
 {
 }
 
@@ -1365,6 +1367,10 @@ int ObTableScanOp::try_prepare_native_point_get(int64_t group_idx, bool need_sor
   int ret = OB_SUCCESS;
   handled = false;
   native_point_get_ready_ = false;
+  invalidate_native_output();
+  if (tsc_rtdef_.scan_rtdef_.p_row2exprs_projector_ != nullptr) {
+    tsc_rtdef_.scan_rtdef_.p_row2exprs_projector_->bind_native_bigint_output(nullptr);
+  }
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   DASRuntimeTableAccess *access = tsc_rtdef_.scan_rtdef_.table_access_;
   // Start with one local, unpartitioned base-table point lookup. Other shapes
@@ -1396,10 +1402,81 @@ int ObTableScanOp::try_prepare_native_point_get(int64_t group_idx, bool need_sor
       } else if (OB_SUCC(ret)) {
         native_point_get_ready_ = true;
         handled = true;
+        ret = prepare_native_bigint_output();
       }
     }
   }
   return ret;
+}
+
+int ObTableScanOp::prepare_native_bigint_output()
+{
+  int ret = OB_SUCCESS;
+  const ObDASScanCtDef &scan = MY_CTDEF.scan_ctdef_;
+  const ObDASScanRtDef &runtime = tsc_rtdef_.scan_rtdef_;
+  // Native input establishes the complete local single-key lookup. This gate
+  // additionally excludes every consumer that can transform/filter the raw
+  // projected values after storage captures the candidate.
+  if (!native_point_get_ready_ || MY_SPEC.type_ != PHY_TABLE_SCAN
+      || MY_SPEC.get_parent() != nullptr || parent_ != nullptr
+      || !MY_SPEC.filters_.empty() || !MY_SPEC.startup_filters_.empty()
+      || !MY_SPEC.calc_exprs_.empty() || !scan.pd_expr_spec_.calc_exprs_.empty()
+      || !scan.pd_expr_spec_.pushdown_filters_.empty()
+      || !scan.pd_expr_spec_.pd_storage_aggregate_output_.empty()
+      || !scan.aggregate_column_ids_.empty() || !scan.group_by_column_ids_.empty()
+      || !scan.pd_expr_spec_.ext_file_column_exprs_.empty()
+      || !scan.pd_expr_spec_.ext_column_convert_exprs_.empty()
+      || scan.group_id_expr_ != nullptr || scan.trans_info_expr_ != nullptr
+      || scan.pd_expr_spec_.trans_info_expr_ != nullptr
+      || runtime.need_scn_ || runtime.sample_info_ != nullptr
+      || runtime.p_row2exprs_projector_ == nullptr
+      || need_final_limit_ || MY_SPEC.limit_ != nullptr || MY_SPEC.offset_ != nullptr
+      || MY_SPEC.report_col_checksum_ || report_checksum_ || need_check_outrow_lob_
+      || MY_SPEC.is_fts_ddl_ || MY_SPEC.is_spatial_ddl() || MY_SPEC.is_multivalue_ddl()
+      || MY_SPEC.is_spiv_ddl() || rand_scan_processor_.use_rand_scan()) {
+    // Keep the legacy Expr projection, including its existing error behavior.
+  } else {
+    bool result_columns = true;
+    for (int64_t i = 0; result_columns && i < MY_SPEC.output_.count(); ++i) {
+      bool found = false;
+      for (int64_t j = 0; !found && j < scan.result_output_.count(); ++j) {
+        found = MY_SPEC.output_.at(i) == scan.result_output_.at(j);
+      }
+      result_columns = found;
+    }
+    if (result_columns && MY_SPEC.output_.count() > 0
+        && MY_SPEC.output_.count() <= NativeBigintOutput::MAX_COLUMNS) {
+      if (native_bigint_output_ == nullptr) {
+        native_bigint_output_ = OB_NEWx(NativeBigintOutput, &ctx_.get_allocator());
+        if (native_bigint_output_ == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      }
+      bool supported = false;
+      if (OB_SUCC(ret) && OB_FAIL(native_bigint_output_->prepare(MY_SPEC.output_, supported))) {
+      } else if (OB_SUCC(ret) && supported) {
+        runtime.p_row2exprs_projector_->bind_native_bigint_output(native_bigint_output_);
+      }
+    }
+  }
+  return ret;
+}
+
+void ObTableScanOp::invalidate_native_output()
+{
+  if (native_bigint_output_ != nullptr) { native_bigint_output_->invalidate(); }
+}
+
+bool ObTableScanOp::try_get_native_output(int64_t batch_idx, const common::Datum *&values,
+                                         const common::SqlType *&type, int64_t &count,
+                                         uint64_t &generation,
+                                         const uint64_t *&current_generation) const
+{
+  values = nullptr;
+  type = nullptr;
+  count = 0;
+  generation = 0;
+  current_generation = nullptr;
+  return native_bigint_output_ != nullptr && native_point_get_ready_
+      && native_bigint_output_->try_get(batch_idx, values, type, count, generation, current_generation);
 }
 
 // for index merge, disable equal range optimization
@@ -1519,6 +1596,7 @@ int ObTableScanOp::set_need_check_outrow_lob()
 int ObTableScanOp::inner_open()
 {
   int ret = OB_SUCCESS;
+  invalidate_native_output();
   DASRuntimeTableList &table_accesses = ctx_.get_das_ctx().get_table_accesses();
   ObSQLSessionInfo *my_session = NULL;
   cur_trace_id_ = ObCurTraceId::get();
@@ -1598,6 +1676,7 @@ int ObTableScanOp::inner_open()
 int ObTableScanOp::inner_close()
 {
   int ret = OB_SUCCESS;
+  invalidate_native_output();
   if (OB_NOT_NULL(scan_iter_)) {
     if (scan_iter_->has_task()) {
       int tmp_ret = fill_storage_feedback_info();
@@ -1651,6 +1730,7 @@ int ObTableScanOp::do_init_before_get_row()
 
 void ObTableScanOp::destroy()
 {
+  invalidate_native_output();
   tsc_rtdef_.~ObTableScanRtDef();
   ObOperator::destroy();
   if (OB_NOT_NULL(iter_tree_)) {
@@ -1666,6 +1746,10 @@ void ObTableScanOp::destroy()
     native_point_get_input_ = nullptr;
   }
   native_point_get_ready_ = false;
+  if (native_bigint_output_ != nullptr) {
+    native_bigint_output_->~NativeBigintOutput();
+    native_bigint_output_ = nullptr;
+  }
   output_ = nullptr;
   scan_iter_ = nullptr;
   domain_index_.~ObDomainIndexCache();
@@ -1747,6 +1831,7 @@ int ObTableScanOp::fill_storage_feedback_info()
 int ObTableScanOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
+  invalidate_native_output();
   in_rescan_ = true;
   if (OB_FAIL(try_check_status())) {
   } else if (OB_FAIL(ObOperator::inner_rescan())) {
@@ -1887,6 +1972,7 @@ int ObTableScanOp::local_iter_rescan()
 int ObTableScanOp::local_iter_reuse()
 {
   int ret = OB_SUCCESS;
+  invalidate_native_output();
   int first_fail_ret = OB_SUCCESS;
   for (DASTaskIter task_iter = scan_iter_->begin_task_iter();
       !task_iter.is_end(); ++task_iter) {
@@ -2224,6 +2310,7 @@ int ObTableScanOp::inner_get_next_row_implement()
 int ObTableScanOp::inner_get_next_row_for_tsc()
 {
   int ret = OB_SUCCESS;
+  invalidate_native_output();
   if (OB_UNLIKELY(0 == limit_param_.limit_)) {
     // The number of involved partitions is 0 or limit is 0, directly return iter end
     ret = OB_ITER_END;
@@ -2293,6 +2380,9 @@ int ObTableScanOp::inner_get_next_row_for_tsc()
       }
     }
   }
+  if (native_bigint_output_ != nullptr) {
+    native_bigint_output_->publish(ret, 1, iter_end_, false);
+  }
   return ret;
 }
 ERRSIM_POINT_DEF(EN_TABLE_SCAN_RETRY_WAIT_EVENT_ERRSIM);
@@ -2311,6 +2401,7 @@ int ObTableScanOp::inner_get_next_batch(const int64_t max_row_cnt)
 int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;
+  invalidate_native_output();
   clear_evaluated_flag();
   int64_t batch_size = min(max_row_cnt, MY_SPEC.max_batch_size_);
   if (OB_UNLIKELY(0 == limit_param_.limit_)) {
@@ -2398,6 +2489,10 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
     }
   }
 
+  if (native_bigint_output_ != nullptr) {
+    const bool skipped = brs_.size_ > 0 && brs_.skip_ != nullptr && brs_.skip_->at(0);
+    native_bigint_output_->publish(ret, brs_.size_, brs_.end_ || rand_scan_processor_.use_rand_scan(), skipped);
+  }
   return ret;
 }
 

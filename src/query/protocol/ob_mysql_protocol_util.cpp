@@ -16,6 +16,8 @@
 
 #include "query/protocol/ob_mysql_protocol_util.h"
 #include "common/datum/ob_datum.h"
+#include "common/datum/datum.h"
+#include "common/datum/sql_type.h"
 
 #include <algorithm>
 #include <cstring>
@@ -545,6 +547,27 @@ int build_mysql_date_cell_value(ObMySQLDate value, MYSQL_PROTOCOL_TYPE type, ObM
 }
 
 } // namespace
+
+int ObSMUtils::build_inline_bigint_cell_value(const Datum &datum, const SqlType &sql_type,
+                                              MYSQL_PROTOCOL_TYPE type,
+                                              ObIAllocator &scratch_allocator,
+                                              ObMySQLCellValue &out, const ObField *field)
+{
+  int ret = OB_SUCCESS;
+  out.reset();
+  if (sql_type.kind() != ObIntType || (field && field->type_meta_.get_type() != ObIntType)) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (datum.is_null()) {
+    out.kind_ = ObMySQLCellValueKind::NULL_VALUE;
+  } else if (!datum.is_present() || datum.length() != 0 || datum.reference_flags() != 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ret = build_integer_cell_value(ObIntType, datum.get_int(), type, scratch_allocator,
+                                    field && (field->flags_ & ZEROFILL_FLAG),
+                                    field ? field->length_ : 0, out);
+  }
+  return ret;
+}
 
 int ObSMUtils::build_datum_cell_value(const ObDatum &datum, const SqlTypeMeta &meta,
                                       MYSQL_PROTOCOL_TYPE type,

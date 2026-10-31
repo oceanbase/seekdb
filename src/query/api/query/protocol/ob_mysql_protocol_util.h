@@ -54,8 +54,15 @@ class ObField;
 class ObIAllocator;
 struct ObDatum;
 struct DatumValue;
+class Datum;
+class SqlType;
 class ObSMUtils {
 public:
+  // Native signed BIGINT execution slots. No legacy value/Datum is created;
+  // result fields still control display width and protocol metadata.
+  static int build_inline_bigint_cell_value(const Datum &datum, const SqlType &sql_type,
+                   obmysql::MYSQL_PROTOCOL_TYPE type, ObIAllocator &scratch_allocator,
+                   obmysql::ObMySQLCellValue &out, const ObField *field);
   // Scalar numeric, temporal, BIT, NULL and CHAR/VARCHAR/hex values.
   // The caller retains the Datum payload through synchronous encoding and
   // handles casts; string conversion uses the packet scratch allocator.

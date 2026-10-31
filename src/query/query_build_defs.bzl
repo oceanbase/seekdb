@@ -11,6 +11,7 @@ QUERY_API_INTERFACE_HEADERS = [
     "api/query/engine/basic/ob_external_pushdown_filter.h",
     "api/query/engine/basic/ob_pushdown_filter.h",
     "api/query/engine/basic/ob_row_to_expr_projector.h",
+    "api/query/engine/basic/native_bigint_output.h",
     "api/query/engine/basic/ob_spill_batch_spool.h",
     "api/query/engine/basic/ob_spill_row_store.h",
     "api/query/engine/cmd/ob_ddl_execution.h",
