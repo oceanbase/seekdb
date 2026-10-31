@@ -1,0 +1,86 @@
+compact plan
+Query Plan
+=============================================
+|ID|OPERATOR       |NAME                    |
+---------------------------------------------
+|0 |TABLE FULL SCAN|inlist_duplicate_integer|
+=============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicate_integer.id]), filter([inlist_duplicate_integer.n IN (1, 2, 3)]), rowset=16
+      access([inlist_duplicate_integer.id], [inlist_duplicate_integer.n]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([inlist_duplicate_integer.id]), range(MIN ; MAX)always true
+duplicate plan
+Query Plan
+=============================================
+|ID|OPERATOR       |NAME                    |
+---------------------------------------------
+|0 |TABLE FULL SCAN|inlist_duplicate_integer|
+=============================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicate_integer.id]), filter([inlist_duplicate_integer.n IN (1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3)]), rowset=16
+      access([inlist_duplicate_integer.id], [inlist_duplicate_integer.n]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false], 
+      range_key([inlist_duplicate_integer.id]), range(MIN ; MAX)always true
+distinct list still rewritten
+Query Plan
+=======================================================
+|ID|OPERATOR                 |NAME                    |
+-------------------------------------------------------
+|0 |HASH JOIN                |                        |
+|1 |├─SUBPLAN SCAN           |VIEW2                   |
+|2 |│ └─HASH DISTINCT        |                        |
+|3 |│   └─VALUES TABLE ACCESS|VALUES_TABLE1           |
+|4 |└─TABLE FULL SCAN        |inlist_duplicate_integer|
+=======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([inlist_duplicate_integer.id]), filter(nil), rowset=16
+      equal_conds([inlist_duplicate_integer.n = VIEW2.column_0]), other_conds(nil)
+  1 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  2 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  3 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+  4 - output([inlist_duplicate_integer.id], [inlist_duplicate_integer.n]), filter(nil), rowset=16
+      access([inlist_duplicate_integer.id], [inlist_duplicate_integer.n]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([inlist_duplicate_integer.id]), range(MIN ; MAX)always true
+integer membership and negative values
+id
+1
+2
+id
+3
+4
+5
+id
+1
+2
+6
+NULL and mixed-type fallbacks
+id
+3
+4
+id
+id
+3
+4
+5
+id
+3
+cached statements must retain all parameter positions
+id
+3
+id
+3
+6
+prepared statements and changing parameter values
+id
+3
+id
+3
+6
