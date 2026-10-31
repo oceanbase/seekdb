@@ -194,6 +194,7 @@ SQL_INTERFACE_CLOSURE_HEADERS = [
     "engine/basic/chunk_store/ob_compact_store.h",
     "engine/basic/ob_batch_result_holder.h",
     "engine/basic/ob_chunk_datum_store.h",
+    "engine/basic/stored_datum_cell.h",
     "engine/basic/ob_chunk_row_store.h",
     "engine/basic/ob_pushdown_filter.h",
     "engine/basic/ob_ra_row_store.h",
