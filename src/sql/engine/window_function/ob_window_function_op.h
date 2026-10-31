@@ -896,6 +896,8 @@ protected:
   int parallel_winbuf_process();
   int get_whole_msg(bool is_end, ObWinbufWholeMsg &whole,
       const ObRADatumStore::StoredRow *row = NULL);
+  // Copy the readable RA body to an owned Chunk row. Publish the row and its
+  // message sizes together after preflight; the RA block-tail index is excluded.
   int copy_datum_row(const ObRADatumStore::StoredRow &row, ObWinbufPieceMsg &piece,
       int64_t buf_len, char *buf);
   void restore_all_expr_datums();
@@ -1092,8 +1094,11 @@ int ObWindowFunctionSpec::rd_sort_cmp(const STORE_ROW_L *l,
     cmp_ret = -1;
   } else {
     for (int64_t i = begin; 0 == cmp_ret && i < end && OB_SUCC(ret); i++) {
-      if (OB_FAIL(rd_sort_cmp_funcs_.at(i).cmp_func_(
-              l->cells()[i], r->cells()[i], cmp_ret, access_ctx))) {
+      // Chunk partial rows and RA input rows have distinct headers, but
+      // both expose the same fixed stored-cell representation here.
+      const ObDatum left = StoredDatumCodec::decode_legacy_view(l->stored_cells()[i]);
+      const ObDatum right = StoredDatumCodec::decode_legacy_view(r->stored_cells()[i]);
+      if (OB_FAIL(rd_sort_cmp_funcs_.at(i).cmp_func_(left, right, cmp_ret, access_ctx))) {
       } else if (!rd_sort_collations_.at(i).is_ascending_) {
         cmp_ret = cmp_ret * (-1);
       }

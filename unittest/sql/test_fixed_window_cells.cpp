@@ -1,0 +1,374 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "sql/engine/window_function/ob_window_function_op.h"
+#include "sql/engine/px/datahub/components/ob_dh_range_dist_wf.h"
+#include "lib/charset/ob_charset.h"
+#include <gtest/gtest.h>
+#include <array>
+#include <cstring>
+#include <string>
+#include <vector>
+#include <sys/mman.h>
+#include <unistd.h>
+
+using namespace oceanbase;
+using namespace oceanbase::common;
+using namespace oceanbase::sql;
+
+namespace
+{
+using Row = ObChunkDatumStore::StoredRow;
+using RARow = ObRADatumStore::StoredRow;
+using Op = ObWindowFunctionOp;
+template <typename Tag, typename Tag::Type Member>
+struct PrivateMember { friend typename Tag::Type member(Tag) { return Member; } };
+struct SameTag {
+  using Type = int (Op::*)(Op::WinFuncCell &, bool &);
+  friend Type member(SameTag);
+};
+template struct PrivateMember<SameTag, &Op::check_same_partition>;
+struct HashTag {
+  using Type = int (Op::*)(const ObIArray<ObExpr *> *, const Row *, uint64_t &);
+  friend Type member(HashTag);
+};
+template struct PrivateMember<HashTag, &Op::calc_part_exprs_hash>;
+struct CopyTag {
+  using Type = int (Op::*)(const RARow &, ObWinbufPieceMsg &, int64_t, char *);
+  friend Type member(CopyTag);
+};
+template struct PrivateMember<CopyTag, &Op::copy_datum_row>;
+
+ObDatum integer(const int64_t &n)
+{ return ObDatum(reinterpret_cast<const char *>(&n), sizeof(n), false); }
+ObDatum bytes(const void *p, uint32_t size)
+{ return ObDatum(static_cast<const char *>(p), size, false); }
+ObDatum text(const std::string &s) { return bytes(s.data(), s.size()); }
+ObDatum null_value() { ObDatum d; d.set_null(); return d; }
+std::vector<ObDatum> partial_values(const std::string &partition,
+    const std::array<char, 16> &coefficient, const int64_t &key, const int64_t &result)
+{
+  return {text(partition), bytes(coefficient.data(), coefficient.size()), integer(key), integer(result)};
+}
+int64_t number(const StoredDatumCell &cell)
+{
+  int64_t n = 0;
+  EXPECT_FALSE(cell.is_null()); EXPECT_EQ(sizeof(n), cell.len_);
+  if (!cell.is_null() && cell.len_ == sizeof(n)) { MEMCPY(&n, cell.ptr_, sizeof(n)); }
+  return n;
+}
+struct OwnedRow
+{
+  explicit OwnedRow(const std::vector<ObDatum> &values, uint32_t extra = 0)
+  {
+    const int64_t size = ObChunkDatumStore::Block::row_store_size(values.data(), values.size(), extra);
+    memory_.resize(size);
+    row_ = new (memory_.data()) Row;
+    EXPECT_EQ(OB_SUCCESS, row_->copy_shadow_datums(values.data(), values.size(), row_->payload_,
+        size - sizeof(Row), size, extra));
+  }
+  void poison() { MEMSET(memory_.data(), 0xA5, memory_.size()); }
+  std::vector<char> memory_;
+  Row *row_ = nullptr;
+};
+struct OwnedRARow
+{
+  explicit OwnedRARow(const std::vector<ObDatum> &values, uint32_t extra = 0)
+  {
+    for (const auto &value : values) { EXPECT_EQ(OB_SUCCESS, values_.push_back(value)); }
+    int64_t quota = 0;
+    EXPECT_EQ(OB_SUCCESS, ObRADatumStore::Block::row_store_size(values_, quota, extra));
+    memory_.resize(quota - sizeof(uint32_t));
+    row_ = new (memory_.data()) RARow;
+    EXPECT_EQ(OB_SUCCESS, row_->copy_datums(values_, row_->payload_,
+        memory_.size() - sizeof(RARow), quota, extra));
+  }
+  ObSEArray<ObDatum, 8> values_;
+  std::vector<char> memory_;
+  RARow *row_ = nullptr;
+};
+// The protected page makes a four-byte read beyond a valid RA body fail,
+// independently of the destination canary that detects an oversized write.
+class GuardedBody
+{
+public:
+  explicit GuardedBody(int64_t bytes) : page_(sysconf(_SC_PAGESIZE)), mapped_(MAP_FAILED), body_(nullptr)
+  {
+    if (bytes > 0 && bytes <= page_) {
+      mapped_ = mmap(nullptr, 2 * page_, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      if (mapped_ != MAP_FAILED) {
+        if (mprotect(static_cast<char *>(mapped_) + page_, page_, PROT_NONE) == 0) {
+          body_ = static_cast<char *>(mapped_) + page_ - bytes;
+        }
+      }
+    }
+  }
+  ~GuardedBody() { if (mapped_ != MAP_FAILED) { munmap(mapped_, 2 * page_); } }
+  char *get() const { return body_; }
+private:
+  int64_t page_;
+  void *mapped_;
+  char *body_;
+};
+
+class FixedWindowCells : public ::testing::Test
+{
+protected:
+  FixedWindowCells() : arena_(), exec_(arena_), spec_(arena_, PHY_WINDOW_FUNCTION),
+      op_(exec_, spec_, nullptr), frame_{}, frames_{frame_.data()},
+      eval_(op_.get_eval_ctx()), guard_(eval_), exprs_{} {}
+  void SetUp() override
+  {
+    exec_.set_frames(frames_); eval_.frames_ = frames_;
+    guard_.set_batch_size(1); guard_.set_batch_idx(0);
+    for (int64_t i = 0; i < 4; ++i) {
+      ObExpr &e = exprs_[i];
+      e.type_ = T_REF_COLUMN; e.frame_idx_ = 0; e.datum_off_ = i * 512;
+      e.eval_info_off_ = i * 512 + 64; e.res_buf_off_ = i * 512 + 192; e.res_buf_len_ = 128;
+      set_type(i, ObIntType);
+      new (frame_.data() + e.datum_off_) ObDatum;
+      new (frame_.data() + e.eval_info_off_) ObEvalInfo;
+      e.get_eval_info(eval_).evaluated_ = true;
+    }
+  }
+  void set_type(int64_t i, SqlValueType type, ObCollationType cs = CS_TYPE_BINARY)
+  {
+    auto &e = exprs_[i];
+    e.obj_meta_.set_type(type); e.obj_meta_.set_collation_type(cs);
+    if (type == ObDecimalIntType) { e.obj_meta_.set_scale(2); }
+    e.datum_meta_ = ObDatumMeta(type, cs, type == ObDecimalIntType ? 2 : 0);
+    e.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(type);
+    e.basic_funcs_ = ObDatumFuncs::get_basic_func(type, cs, e.datum_meta_.scale_,
+        e.obj_meta_.has_lob_header(), e.datum_meta_.precision_);
+  }
+  ObDatum &datum(int64_t i) { return exprs_[i].locate_expr_datum(eval_); }
+  int same(Op::WinFuncCell &cell, bool &result) { return (op_.*member(SameTag{}))(cell, result); }
+  int copy(const RARow &row, ObWinbufPieceMsg &piece, int64_t capacity, char *buffer)
+  { return (op_.*member(CopyTag{}))(row, piece, capacity, buffer); }
+  void sort_keys()
+  {
+    set_type(0, ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI);
+    set_type(1, ObDecimalIntType);
+    ASSERT_EQ(OB_SUCCESS, spec_.rd_sort_collations_.init(3));
+    ASSERT_EQ(OB_SUCCESS, spec_.rd_sort_cmp_funcs_.init(3));
+    for (int64_t i = 0; i < 3; ++i) {
+      ASSERT_EQ(OB_SUCCESS, spec_.rd_sort_collations_.push_back(
+          ObSortFieldCollation(i, exprs_[i].datum_meta_.cs_type_, true, NULL_FIRST)));
+      ObCmpFunc function; function.cmp_func_ = exprs_[i].basic_funcs_->null_first_cmp_;
+      ASSERT_EQ(OB_SUCCESS, spec_.rd_sort_cmp_funcs_.push_back(function));
+    }
+    spec_.rd_pby_sort_cnt_ = 2;
+  }
+  void patch_function(ObItemType function, WindowType window = WINDOW_ROWS)
+  {
+    ASSERT_EQ(OB_SUCCESS, spec_.wf_infos_.init(1));
+    WinFuncInfo info; info.set_allocator(&arena_); info.func_type_ = function;
+    info.expr_ = &exprs_[3]; info.win_type_ = window;
+    ASSERT_EQ(OB_SUCCESS, spec_.wf_infos_.push_back(info));
+    ASSERT_EQ(OB_SUCCESS, spec_.rd_wfs_.init(1)); ASSERT_EQ(OB_SUCCESS, spec_.rd_wfs_.push_back(0));
+  }
+  void partial(ObRDWFPartialInfo &info, Row &first, Row &last, int64_t thread, int64_t last_offset)
+  {
+    info.first_row_ = &first; info.last_row_ = &last; info.thread_id_ = thread;
+    first.extra_payload<int64_t>() = 0; last.extra_payload<int64_t>() = last_offset;
+  }
+  ObArenaAllocator arena_;
+  ObExecContext exec_;
+  ObWindowFunctionSpec spec_;
+  Op op_;
+  alignas(8) std::array<char, 4096> frame_;
+  char *frames_[1];
+  ObEvalCtx &eval_;
+  ObEvalCtx::BatchInfoScopeGuard guard_;
+  ObExpr exprs_[4];
+};
+
+TEST_F(FixedWindowCells, partition_boundary_compares_owned_mixed_keys_and_typed_nulls)
+{
+  set_type(1, ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI); set_type(2, ObDecimalIntType);
+  WinFuncInfo info; info.set_allocator(&arena_); ASSERT_EQ(OB_SUCCESS, info.init(0, 3, 0));
+  for (int i = 0; i < 3; ++i) { ASSERT_EQ(OB_SUCCESS, info.partition_exprs_.push_back(&exprs_[i])); }
+  Op::NonAggrCellRowNumber cell(info, op_);
+  int64_t key = INT64_MIN; std::string name = "customer";
+  std::array<char, 16> coefficient{}; coefficient.fill(0x12);
+  OwnedRow original({integer(key), text(name), bytes(coefficient.data(), coefficient.size())});
+  ASSERT_EQ(OB_SUCCESS, cell.part_values_.save_store_row(*original.row_)); original.poison();
+  const int64_t current_key = INT64_MIN; const std::string current_name = "CUSTOMER";
+  std::array<char, 16> current_coefficient = coefficient;
+  key = 0; name.assign(name.size(), 'x'); coefficient.fill(0);
+  datum(0) = integer(current_key); datum(1) = text(current_name);
+  datum(2) = bytes(current_coefficient.data(), current_coefficient.size());
+  bool equal = false; ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_TRUE(equal);
+  current_coefficient[0] += 1;
+  ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_FALSE(equal);
+  OwnedRow nulls({null_value(), null_value(), null_value()});
+  ASSERT_EQ(OB_SUCCESS, cell.part_values_.save_store_row(*nulls.row_)); nulls.poison();
+  datum(0).set_null(); datum(1).set_null(); datum(2).set_null();
+  ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_TRUE(equal);
+  datum(0) = integer(current_key);
+  ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_FALSE(equal);
+}
+
+TEST_F(FixedWindowCells, partition_hash_reads_fixed_cells_after_source_overwrite)
+{
+  set_type(1, ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI); set_type(2, ObDecimalIntType);
+  ObSEArray<ObExpr *, 3> exprs;
+  for (auto &e : {&exprs_[0], &exprs_[1], &exprs_[2]}) { ASSERT_EQ(OB_SUCCESS, exprs.push_back(e)); }
+  int64_t key = INT64_MAX; std::string name("a\0b", 3);
+  std::array<char, 16> coefficient{}; coefficient.fill(0x11);
+  std::array<ObDatum, 3> values{{integer(key), text(name), bytes(coefficient.data(), coefficient.size())}};
+  uint64_t expected = 99194853094755497L;
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_EQ(OB_SUCCESS, exprs_[i].basic_funcs_->murmur_hash_v2_(values[i], expected, expected, nullptr));
+  }
+  OwnedRow owned({values[0], values[1], values[2]});
+  key = 0; name.assign(name.size(), 'x'); coefficient.fill(0);
+  uint64_t actual = 0;
+  ASSERT_EQ(OB_SUCCESS, (op_.*member(HashTag{}))(&exprs, owned.row_, actual));
+  EXPECT_EQ(expected, actual);
+  OwnedRow nulls({null_value(), null_value(), null_value()}); expected = 99194853094755497L;
+  for (int i = 0; i < 3; ++i) {
+    ASSERT_EQ(OB_SUCCESS, exprs_[i].basic_funcs_->murmur_hash_v2_(null_value(), expected, expected, nullptr));
+  }
+  ASSERT_EQ(OB_SUCCESS, (op_.*member(HashTag{}))(&exprs, nulls.row_, actual)); EXPECT_EQ(expected, actual);
+}
+
+TEST_F(FixedWindowCells, partial_key_comparison_handles_chunk_ra_headers_nulls_and_direction)
+{
+  sort_keys();
+  const std::string lower = "customer", upper = "CUSTOMER";
+  std::array<char, 16> coefficient{}; coefficient.fill(0x11);
+  int64_t first = 3, second = 4;
+  OwnedRow chunk({text(lower), bytes(coefficient.data(), coefficient.size()), integer(first)});
+  OwnedRARow ra({text(upper), bytes(coefficient.data(), coefficient.size()), integer(second)});
+  int cmp = 9;
+  ASSERT_EQ(OB_SUCCESS, spec_.rd_pby_cmp(chunk.row_, ra.row_, cmp, nullptr)); EXPECT_EQ(0, cmp);
+  ASSERT_EQ(OB_SUCCESS, spec_.rd_oby_cmp(chunk.row_, ra.row_, cmp, nullptr)); EXPECT_LT(cmp, 0);
+  spec_.rd_sort_collations_.at(2).is_ascending_ = false;
+  ASSERT_EQ(OB_SUCCESS, spec_.rd_oby_cmp(ra.row_, chunk.row_, cmp, nullptr)); EXPECT_LT(cmp, 0);
+  OwnedRow nulls({null_value(), null_value(), null_value()});
+  ASSERT_EQ(OB_SUCCESS, spec_.rd_pby_cmp(nulls.row_, ra.row_, cmp, nullptr)); EXPECT_LT(cmp, 0);
+  ASSERT_EQ(OB_SUCCESS, spec_.rd_pby_cmp(static_cast<const Row *>(nullptr), ra.row_, cmp, nullptr)); EXPECT_GT(cmp, 0);
+}
+
+TEST_F(FixedWindowCells, real_rows_patch_keeps_prefix_results_and_partition_boundaries)
+{
+  sort_keys(); patch_function(T_FUN_SUM);
+  const std::string name = "customer", next = "other___";
+  std::array<char, 16> coefficient{}; coefficient.fill(0x11);
+  // Integers passed to OwnedRow must outlive its synchronous deep copy.
+  int64_t k1=1,k2=2,k3=3,k4=4,k5=5,k6=6,k7=7,k8=8,s1=10,s2=20,s3=30,s4=40,s5=50,s6=60,s7=70,s8=80;
+  OwnedRow a(partial_values(name, coefficient, k1, s1), 8), b(partial_values(name, coefficient, k2, s2), 8);
+  OwnedRow c(partial_values(name, coefficient, k3, s3), 8), d(partial_values(name, coefficient, k4, s4), 8);
+  OwnedRow e(partial_values(name, coefficient, k5, s5), 8), f(partial_values(name, coefficient, k6, s6), 8);
+  OwnedRow g(partial_values(next, coefficient, k7, s7), 8), h(partial_values(next, coefficient, k8, s8), 8);
+  ObRDWFPartialInfo p1(arena_),p2(arena_),p3(arena_),p4(arena_);
+  partial(p1,*a.row_,*b.row_,1,1); partial(p2,*c.row_,*d.row_,2,1);
+  partial(p3,*e.row_,*f.row_,3,1); partial(p4,*g.row_,*h.row_,4,1);
+  ObRDWFPieceMsgCtx context(1,4,0,exec_);
+  for (auto *p : {&p4,&p2,&p1,&p3}) { ASSERT_EQ(OB_SUCCESS, context.infos_.push_back(p)); }
+  s2=s4=s6=0; coefficient.fill(0);
+  ASSERT_EQ(OB_SUCCESS, spec_.rd_generate_patch(context));
+  EXPECT_TRUE(a.row_->stored_cells()[3].is_null()); EXPECT_EQ(20,number(c.row_->stored_cells()[3]));
+  EXPECT_EQ(60,number(e.row_->stored_cells()[3])); EXPECT_TRUE(g.row_->stored_cells()[3].is_null());
+  EXPECT_TRUE(f.row_->stored_cells()[3].is_null()); EXPECT_TRUE(h.row_->stored_cells()[3].is_null());
+  EXPECT_EQ(2,c.row_->extra_payload<int64_t>()); EXPECT_EQ(4,e.row_->extra_payload<int64_t>());
+}
+
+TEST_F(FixedWindowCells, real_range_patch_merges_following_equal_order_partial_values)
+{
+  sort_keys(); patch_function(T_FUN_SUM, WINDOW_RANGE);
+  const std::string name="customer"; std::array<char,16> coefficient{}; coefficient.fill(0x11);
+  int64_t key=1,one=1,two=2,three=3;
+  OwnedRow a(partial_values(name, coefficient, key, one), 8), b(partial_values(name, coefficient, key, one), 8);
+  OwnedRow c(partial_values(name, coefficient, key, two), 8), d(partial_values(name, coefficient, key, two), 8);
+  OwnedRow e(partial_values(name, coefficient, key, three), 8), f(partial_values(name, coefficient, key, three), 8);
+  ObRDWFPartialInfo p1(arena_),p2(arena_),p3(arena_);
+  partial(p1,*a.row_,*b.row_,1,0);partial(p2,*c.row_,*d.row_,2,0);partial(p3,*e.row_,*f.row_,3,0);
+  ObRDWFPieceMsgCtx context(1,3,0,exec_);
+  for(auto *p:{&p3,&p1,&p2}){ASSERT_EQ(OB_SUCCESS,context.infos_.push_back(p));}
+  ASSERT_EQ(OB_SUCCESS,spec_.rd_generate_patch(context));
+  EXPECT_EQ(5,number(b.row_->stored_cells()[3]));EXPECT_EQ(1,number(c.row_->stored_cells()[3]));
+  EXPECT_EQ(3,number(d.row_->stored_cells()[3]));EXPECT_EQ(3,number(e.row_->stored_cells()[3]));
+  EXPECT_TRUE(a.row_->stored_cells()[3].is_null());EXPECT_TRUE(f.row_->stored_cells()[3].is_null());
+}
+
+TEST_F(FixedWindowCells, real_rank_patch_publishes_arena_result_and_frame_offset)
+{
+  sort_keys(); set_type(3,ObUInt64Type); patch_function(T_WIN_FUN_RANK);
+  const std::string name="customer";std::array<char,16> coefficient{};coefficient.fill(0x11);
+  int64_t k1=1,k2=2,k3=3,one=1,five=5,two=2;
+  OwnedRow a(partial_values(name, coefficient, k1, one), 8), b(partial_values(name, coefficient, k2, five), 8);
+  OwnedRow c(partial_values(name, coefficient, k2, one), 8), d(partial_values(name, coefficient, k3, two), 8);
+  ObRDWFPartialInfo p1(arena_),p2(arena_);partial(p1,*a.row_,*b.row_,1,4);partial(p2,*c.row_,*d.row_,2,1);
+  ObRDWFPieceMsgCtx context(1,2,0,exec_);
+  ASSERT_EQ(OB_SUCCESS,context.infos_.push_back(&p2));ASSERT_EQ(OB_SUCCESS,context.infos_.push_back(&p1));
+  ASSERT_EQ(OB_SUCCESS,spec_.rd_generate_patch(context));
+  EXPECT_EQ(4,number(c.row_->stored_cells()[3]));EXPECT_EQ(5,c.row_->extra_payload<int64_t>());
+  EXPECT_TRUE(a.row_->stored_cells()[3].is_null());EXPECT_TRUE(b.row_->stored_cells()[3].is_null());EXPECT_TRUE(d.row_->stored_cells()[3].is_null());
+}
+
+TEST_F(FixedWindowCells, ra_to_chunk_uses_exact_body_capacity_and_relocates_payload_and_extra)
+{
+  int64_t n=17;const std::string s("a\0b",3);std::array<char,16> decimal{};decimal.fill(0x35);
+  ObDatum flagged=bytes(decimal.data(),decimal.size());flagged.set_has_lob_header();
+  OwnedRARow source({integer(n),text(s),null_value(),flagged},8);
+  for(int i=0;i<8;++i){static_cast<char *>(source.row_->get_extra_payload())[i]=char(0x20+i);}
+  const int64_t size=source.row_->body_size();
+  GuardedBody guarded(size);ASSERT_NE(nullptr,guarded.get());
+  auto *ra=new(guarded.get()) RARow;ASSERT_EQ(OB_SUCCESS,ra->assign(source.row_));
+  std::vector<char> destination(size+16,0x61);ObWinbufPieceMsg piece;
+  ASSERT_EQ(OB_SUCCESS,copy(*ra,piece,size,destination.data()));
+  ASSERT_NE(nullptr,piece.datum_row_);EXPECT_EQ(4,piece.datum_row_->cnt_);EXPECT_EQ(size,piece.row_size_);
+  EXPECT_EQ(size-int64_t(sizeof(Row)),piece.payload_len_);EXPECT_EQ(4,piece.col_count_);
+  EXPECT_EQ(size,piece.datum_row_->row_size_);EXPECT_EQ(source.row_->row_size_-4,piece.row_size_);
+  EXPECT_EQ(17,number(piece.datum_row_->stored_cells()[0]));EXPECT_TRUE(piece.datum_row_->stored_cells()[2].is_null());
+  EXPECT_EQ(flagged.flag_,piece.datum_row_->stored_cells()[3].flag_);
+  for(int i=0;i<8;++i){EXPECT_EQ(char(0x20+i),static_cast<char *>(piece.datum_row_->get_extra_payload())[i]);}
+  MEMSET(guarded.get(),0xA5,size);MEMSET(source.memory_.data(),0xA5,source.memory_.size());
+  const auto *cells=piece.datum_row_->stored_cells();
+  EXPECT_EQ(17,number(cells[0]));EXPECT_EQ(s,std::string(cells[1].ptr_,cells[1].len_));
+  EXPECT_EQ(0,MEMCMP(decimal.data(),cells[3].ptr_,decimal.size()));
+  const uintptr_t base=reinterpret_cast<uintptr_t>(destination.data()),end=base+size;
+  for(int i:{0,1,3}){const uintptr_t p=reinterpret_cast<uintptr_t>(cells[i].ptr_);EXPECT_GE(p,base);EXPECT_LE(p+cells[i].len_,end);}
+  for(int64_t i=size;i<int64_t(destination.size());++i){EXPECT_EQ(char(0x61),destination[i]);}
+}
+
+TEST_F(FixedWindowCells, ra_to_chunk_preflight_errors_do_not_publish_or_modify_destination)
+{
+  int64_t n=17;OwnedRARow source({integer(n)});const int64_t size=source.row_->body_size();
+  std::vector<char> destination(size+16,0x62);const auto original=destination;
+  Row sentinel;ObWinbufPieceMsg piece;piece.datum_row_=&sentinel;piece.row_size_=7;piece.payload_len_=9;piece.col_count_=11;
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH,copy(*source.row_,piece,size-1,destination.data()));
+  EXPECT_EQ(OB_INVALID_ARGUMENT,copy(*source.row_,piece,size,nullptr));
+  source.row_->readable_=false;EXPECT_EQ(OB_INVALID_ARGUMENT,copy(*source.row_,piece,size,destination.data()));source.row_->readable_=true;
+  const auto old_count=source.row_->cnt_;source.row_->cnt_+=2;
+  EXPECT_EQ(OB_INVALID_ARGUMENT,copy(*source.row_,piece,size,destination.data()));source.row_->cnt_=old_count;
+  const StoredDatumCell valid=source.row_->stored_cells()[0];source.row_->stored_cells()[0].ptr_=destination.data();
+  EXPECT_EQ(OB_INVALID_ARGUMENT,copy(*source.row_,piece,size,destination.data()));source.row_->stored_cells()[0]=valid;
+  const auto quota=source.row_->row_size_;source.row_->row_size_=4;
+  EXPECT_EQ(OB_INVALID_ARGUMENT,copy(*source.row_,piece,size,destination.data()));source.row_->row_size_=quota;
+  EXPECT_EQ(&sentinel,piece.datum_row_);EXPECT_EQ(7,piece.row_size_);EXPECT_EQ(9,piece.payload_len_);EXPECT_EQ(11,piece.col_count_);
+  EXPECT_EQ(original,destination);
+}
+} // namespace
+
+int main(int argc,char **argv)
+{
+  ::testing::InitGoogleTest(&argc,argv);
+  if(ObCharset::init_charset()!=OB_SUCCESS){return 1;}
+  return RUN_ALL_TESTS();
+}

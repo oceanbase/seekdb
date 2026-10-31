@@ -192,13 +192,31 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
     const bool is_rank = T_WIN_FUN_RANK == info.func_type_;
     const bool is_dense_rank = T_WIN_FUN_DENSE_RANK == info.func_type_;
     int64_t res_idx = idx + rd_sort_collations_.count();
-    auto res_datum = [&res_idx](ObStoredDatumRow *r)->ObDatum & { return r->cells()[res_idx]; };
+    auto res_cell = [res_idx](ObStoredDatumRow *r)->StoredDatumCell & {
+      return r->stored_cells()[res_idx];
+    };
+    auto res_datum = [&res_cell](ObStoredDatumRow *r)->ObDatum {
+      return StoredDatumCodec::decode_legacy_view(res_cell(r));
+    };
+    auto rank_result = [&](ObStoredDatumRow *row, const ObDatum &rank, int64_t offset) {
+      ObDatum result = res_datum(row);
+      const int rank_ret = OP::rank_add(result, info, ctx.arena_alloc_, rank, offset);
+      if (OB_SUCCESS == rank_ret) { res_cell(row) = StoredDatumCodec::encode_legacy_view(result); }
+      return rank_ret;
+    };
+    auto merge_result = [&](ObStoredDatumRow *row, const ObDatum &left, const ObDatum &right) {
+      ObDatum result = res_datum(row);
+      const int merge_ret = OP::merge_aggregated_result(result, info, ctx.arena_alloc_,
+                                                        left, right, access_ctx);
+      if (OB_SUCCESS == merge_ret) { res_cell(row) = StoredDatumCodec::encode_legacy_view(result); }
+      return merge_ret;
+    };
     prev = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx.infos_.count(); i++) {
       ObRDWFPartialInfo *cur = ctx.infos_.at(i);
       if (NULL == cur->first_row_) {
         if (NULL != prev) {
-          res_datum(prev->last_row_).set_null();
+          res_cell(prev->last_row_).set_null();
         }
         break;
       }
@@ -211,9 +229,9 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
       }
       if (OB_FAIL(ret)) {
       } else if (!prev_same_part) {
-        res_datum(cur->first_row_).set_null();
+        res_cell(cur->first_row_).set_null();
         if (NULL != prev) {
-          res_datum(prev->last_row_).set_null();
+          res_cell(prev->last_row_).set_null();
         }
       } else {
         ObDatum prev_last;
@@ -247,24 +265,22 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
         if (OB_SUCC(ret)) {
           if (is_rank || is_dense_rank) {
             if (prev_same_order) {
-              OZ(OP::rank_add(res_datum(cur->first_row_), info, ctx.arena_alloc_,
-                              res_datum(prev->last_row_), -1));
+              OZ(rank_result(cur->first_row_, res_datum(prev->last_row_), -1));
             } else {
               if (is_rank) {
                 ObDatum null_datum;
                 null_datum.set_null();
-                OZ(OP::rank_add(res_datum(cur->first_row_), info, ctx.arena_alloc_,
-                                null_datum, frame_offset(cur->first_row_)));
+                OZ(rank_result(cur->first_row_, null_datum, frame_offset(cur->first_row_)));
               } else {
-                res_datum(cur->first_row_) = res_datum(prev->last_row_);
+                res_cell(cur->first_row_) = res_cell(prev->last_row_);
               }
             }
           } else {
-            res_datum(cur->first_row_) = res_datum(prev->last_row_);
+            res_cell(cur->first_row_) = res_cell(prev->last_row_);
           }
         }
         if (OB_SUCC(ret)) {
-          res_datum(prev->last_row_) = prev_last;
+          res_cell(prev->last_row_) = StoredDatumCodec::encode_legacy_view(prev_last);
         }
       }
 
@@ -280,12 +296,9 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
           }
           if (OB_FAIL(ret)) {
           } else if (do_rank_add) {
-            OZ(OP::rank_add(res_datum(cur->last_row_), info, ctx.arena_alloc_,
-                            res_datum(cur->last_row_), frame_offset(cur->first_row_)));
+            OZ(rank_result(cur->last_row_, res_datum(cur->last_row_), frame_offset(cur->first_row_)));
           } else {
-            OZ(OP::merge_aggregated_result(res_datum(cur->last_row_), info, ctx.arena_alloc_,
-                                          res_datum(cur->last_row_), res_datum(cur->first_row_),
-                                          access_ctx));
+            OZ(merge_result(cur->last_row_, res_datum(cur->last_row_), res_datum(cur->first_row_)));
           }
         }
       }
@@ -295,7 +308,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
     if (OB_SUCC(ret)) {
       auto last_info = ctx.infos_.at(ctx.infos_.count() - 1);
       if (NULL != last_info->last_row_) {
-        res_datum(last_info->last_row_).set_null();
+        res_cell(last_info->last_row_).set_null();
       }
     }
   }
@@ -994,7 +1007,7 @@ int ObWindowFunctionOp::check_same_partition(WinFuncCell &cell, bool &same)
       for (int64_t i = 0; OB_SUCC(ret) && same && i < exprs.count(); i++) {
         if (OB_FAIL(exprs.at(i)->eval(eval_ctx_, val))) {
         } else if (OB_FAIL(exprs.at(i)->basic_funcs_->null_first_cmp_(
-                       *val, cell.part_values_.store_row_->cells()[i],
+                       *val, StoredDatumCodec::decode_legacy_view(cell.part_values_.store_row_->stored_cells()[i]),
                        cmp_ret, access_ctx))) {
         } else if (0 != cmp_ret) {
           same = false;
@@ -2215,8 +2228,8 @@ int ObWindowFunctionOp::rd_output_final_row(const int64_t idx,
       reset_first_row_same_order_cache();
       for (int64_t wf_idx = 0; OB_SUCC(ret) && wf_idx < MY_SPEC.rd_wfs_.count(); wf_idx++) {
         const WinFuncInfo &info = MY_SPEC.wf_infos_.at(MY_SPEC.rd_wfs_.at(wf_idx));
-        const ObDatum &patch_datum = rd_patch_->first_row_->cells()[
-            MY_SPEC.rd_sort_collations_.count() + wf_idx];
+        const ObDatum patch_datum = StoredDatumCodec::decode_legacy_view(rd_patch_->first_row_->stored_cells()[
+            MY_SPEC.rd_sort_collations_.count() + wf_idx]);
         if (!patch_datum.is_null()) {
           ObDatum &res = info.expr_->locate_expr_datum(eval_ctx_);
           if (T_WIN_FUN_RANK == info.func_type_ && !first_row_same_order(cur_row)) {
@@ -2236,8 +2249,8 @@ int ObWindowFunctionOp::rd_output_final_row(const int64_t idx,
       reset_last_row_same_order_cache();
       for (int64_t wf_idx = 0; OB_SUCC(ret) && wf_idx < MY_SPEC.rd_wfs_.count(); wf_idx++) {
         const WinFuncInfo &info = MY_SPEC.wf_infos_.at(MY_SPEC.rd_wfs_.at(wf_idx));
-        const ObDatum &patch_datum = rd_patch_->last_row_->cells()[
-            MY_SPEC.rd_sort_collations_.count() + wf_idx];
+        const ObDatum patch_datum = StoredDatumCodec::decode_legacy_view(rd_patch_->last_row_->stored_cells()[
+            MY_SPEC.rd_sort_collations_.count() + wf_idx]);
         if (!patch_datum.is_null() && last_row_same_order(cur_row)) {
           ObDatum &res = info.expr_->locate_expr_datum(eval_ctx_);
           OZ(merge_aggregated_result(
@@ -2384,18 +2397,39 @@ int ObWindowFunctionOp::copy_datum_row(const ObRADatumStore::StoredRow &row, ObW
   int64_t buf_len, char *buf)
 {
   int ret = OB_SUCCESS;
-  CK(OB_NOT_NULL(buf));
-  CK(buf_len > 0);
-  CK(row.row_size_ > sizeof(ObRADatumStore::StoredRow));
-  if (OB_SUCC(ret)) {
-    piece.datum_row_ = new(buf) ObChunkDatumStore::StoredRow();
-    piece.datum_row_->row_size_ = row.row_size_;
-    piece.datum_row_->cnt_ = row.cnt_;
-    MEMCPY(piece.datum_row_->payload_, row.payload_,
-        row.row_size_ - sizeof(ObRADatumStore::StoredRow));
-    char *base = const_cast<char *>(row.payload_);
-    piece.datum_row_->unswizzling(base);
-    piece.datum_row_->swizzling(piece.datum_row_->payload_);
+  // RA row_size_ includes the separate block-tail row index. Only its body is
+  // a contiguous row, and the Chunk header must not copy RA's readable bit.
+  const int64_t source_body = row.body_size();
+  const int64_t payload_size = source_body - int64_t(sizeof(ObRADatumStore::StoredRow));
+  const int64_t chunk_size = int64_t(sizeof(ObChunkDatumStore::StoredRow)) + payload_size;
+  if (OB_ISNULL(buf) || !row.readable_
+      || payload_size < int64_t(sizeof(StoredDatumCell)) * row.cnt_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (buf_len < chunk_size) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else {
+    const uintptr_t base = reinterpret_cast<uintptr_t>(row.payload_);
+    const uint64_t capacity = static_cast<uint64_t>(payload_size);
+    for (uint32_t i = 0; OB_SUCC(ret) && i < row.cnt_; ++i) {
+      const StoredDatumCell &cell = row.stored_cells()[i];
+      const uintptr_t address = reinterpret_cast<uintptr_t>(cell.ptr_);
+      if (!cell.is_null() && (address < base || address - base > capacity
+          || cell.len_ > capacity - (address - base))) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      auto *copy = new(buf) ObChunkDatumStore::StoredRow();
+      copy->row_size_ = static_cast<uint32_t>(chunk_size);
+      copy->cnt_ = row.cnt_;
+      MEMCPY(copy->payload_, row.payload_, payload_size);
+      copy->unswizzling(const_cast<char *>(row.payload_));
+      copy->swizzling(copy->payload_);
+      piece.row_size_ = static_cast<uint32_t>(chunk_size);
+      piece.payload_len_ = payload_size;
+      piece.col_count_ = row.cnt_;
+      piece.datum_row_ = copy;
+    }
   }
   return ret;
 }
@@ -2426,12 +2460,13 @@ int ObWindowFunctionOp::get_whole_msg(bool is_end,
     } else if (OB_ISNULL(res_row)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      piece.row_size_ = res_row->row_size_;
+      const int64_t len = int64_t(sizeof(ObChunkDatumStore::StoredRow))
+          + res_row->body_size() - int64_t(sizeof(ObRADatumStore::StoredRow));
       piece.is_end_ = false;
-      piece.payload_len_ = res_row->row_size_ - sizeof(ObChunkDatumStore::StoredRow);
-      int64_t len = res_row->row_size_;
       char *buf = NULL;
-      if (OB_ISNULL(buf = (char *)ctx_.get_allocator().alloc(len))) {
+      if (!res_row->readable_ || len < int64_t(sizeof(ObChunkDatumStore::StoredRow))) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_ISNULL(buf = (char *)ctx_.get_allocator().alloc(len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else if (OB_FAIL(copy_datum_row(*res_row, piece, len, buf))) {
       }
@@ -2481,18 +2516,19 @@ int ObWindowFunctionOp::parallel_winbuf_process()
         } else if (is_first) {
           is_first = false;
           for (int i = 0; i < new_row->cnt_; ++i) {
-            new_row->cells()[i] = row->cells()[i];
+            new_row->stored_cells()[i] = row->stored_cells()[i];
           }
         } else {
           int idx = 0;
           int64_t cmp_index = 0;
           DLIST_FOREACH_X(wf_node, wf_list_, OB_SUCC(ret)) {
-            ObDatum &l_datum = new_row->cells()[idx];
-            const ObDatum &r_datum = row->cells()[idx];
+            ObDatum l_datum = StoredDatumCodec::decode_legacy_view(new_row->stored_cells()[idx]);
+            const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(row->stored_cells()[idx]);
             if (OB_FAIL(merge_aggregated_result(
                         l_datum, wf_node->wf_info_, ctx_.get_allocator(), l_datum, r_datum,
                         datum_access_ctx_))) {
             } else {
+              new_row->stored_cells()[idx] = StoredDatumCodec::encode_legacy_view(l_datum);
               idx += 1;
             }
           }
@@ -2501,7 +2537,11 @@ int ObWindowFunctionOp::parallel_winbuf_process()
       if (ret == OB_ITER_END) {
         ret = OB_SUCCESS;
         for (int i = 0; i < new_row->cnt_ && OB_SUCC(ret); ++i) {
-          OZ(new_row->cells()[i].deep_copy(new_row->cells()[i], ctx_.get_allocator()));
+          ObDatum owned = StoredDatumCodec::decode_legacy_view(new_row->stored_cells()[i]);
+          if (OB_FAIL(owned.deep_copy(owned, ctx_.get_allocator()))) {
+          } else {
+            new_row->stored_cells()[i] = StoredDatumCodec::encode_legacy_view(owned);
+          }
         }
       }
     }
@@ -3065,6 +3105,7 @@ int ObWindowFunctionOp::calc_part_exprs_hash(
   } else {
     ObExpr *expr = NULL;
     ObDatum *datum = NULL;
+    ObDatum stored_datum;
     for (int64_t i = 0; i < exprs_->count(); i++) {
       if (OB_ISNULL(expr = exprs_->at(i)) || OB_ISNULL(expr->basic_funcs_)) {
       } else {
@@ -3072,7 +3113,8 @@ int ObWindowFunctionOp::calc_part_exprs_hash(
           if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
           }
         } else {
-          datum = const_cast<ObDatum *>(&row_->cells()[i]);
+          stored_datum = StoredDatumCodec::decode_legacy_view(row_->stored_cells()[i]);
+          datum = &stored_datum;
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(expr->basic_funcs_->murmur_hash_v2_(
