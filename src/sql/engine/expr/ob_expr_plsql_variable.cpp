@@ -18,6 +18,7 @@
 
 #include "ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/session/ob_system_variable.h"
 #include "sql/pl/ob_pl.h"
 
 namespace oceanbase
@@ -69,26 +70,28 @@ int ObExprPLSQLVariable::calc_result_type0(
     type.set_length_semantics(LS_BYTE);
   } else {
     const sql::ObSQLSessionInfo *session_info = type_ctx.get_session();
-    DatumValue value;
+    Datum value;
+    SqlTypeMeta value_meta;
     CK (OB_NOT_NULL(session_info));
     // may plsql relative system variables, try it.
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(session_info->get_sys_variable_by_name(plsql_variable_, value))) {
+    } else if (OB_FAIL(session_info->get_sys_variable_by_name(plsql_variable_, value, value_meta))) {
       // not system variable
       if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
         ret = OB_SUCCESS;
         value.set_null();
-        OX (type.set_meta(value.get_meta()));
+        value_meta.set_null();
+        OX (type.set_meta(value_meta));
         OX (type.set_collation_type(ObCharset::get_system_collation()));
-        if (OB_SUCC(ret) && value.is_string_type()) {
+        if (OB_SUCC(ret) && value_meta.is_string_type()) {
           type.set_length(value.get_string().length());
           type.set_length_semantics(LS_BYTE);
         }
       } else {
       }
     } else {
-      type.set_meta(value.get_meta());
-      if (value.is_string_type()) {
+      type.set_meta(value_meta);
+      if (value_meta.is_string_type()) {
         type.set_length(value.get_string().length());
         type.set_length_semantics(LS_BYTE);
       }
@@ -167,14 +170,20 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
   } else {
     // may plsql relative system variables, try it.
     DatumValue value;
+    alignas(8) char value_scratch[64];
+    ObBasicSysVar *sys_var = nullptr;
     if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_sys_variable_by_name(
-            info->plsql_variable_, value))) {
+            info->plsql_variable_, sys_var))) {
       // not system variable
       if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
         ret = OB_SUCCESS;
         value.set_null();
       } else {
       }
+    } else if (OB_ISNULL(sys_var)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      OZ(sys_var->export_value(value, value_scratch, sizeof(value_scratch)));
     }
     common::ObDatum legacy_result;
     OZ(value.to_row_datum(legacy_result, extended_payload));

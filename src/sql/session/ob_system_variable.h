@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #define OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #include "common/timezone/ob_time_convert.h"
+#include "common/datum/datum.h"
 #include "common/datum/datum_value.h"
 #include "share/system_variable/ob_system_variable_init.h"
 
@@ -190,6 +191,10 @@ public:
       inc_value_(),
       min_val_(),
       max_val_(),
+      base_meta_(),
+      inc_meta_(),
+      min_meta_(),
+      max_meta_(),
       type_(common::ObUnknownType),
       flags_(share::ObSysVarFlag::NONE),
       on_check_and_convert_(on_check_and_convert),
@@ -204,7 +209,9 @@ public:
   virtual ~ObBasicSysVar() {}
 
   virtual share::ObSysVarClassType get_type() const = 0;
-  virtual const common::DatumValue &get_global_default_value() const = 0;
+  virtual const common::Datum &get_global_default_datum() const = 0;
+  virtual const common::SqlTypeMeta &get_global_default_meta() const = 0;
+  int export_global_default_value(common::DatumValue &out, void *scratch, int64_t capacity) const;
 
   virtual int init(const common::DatumValue &value,
                    const common::DatumValue &min_val,
@@ -234,9 +241,16 @@ public:
                                 common::ObString &show_str) const;
 
   common::SqlValueType get_meta_type() const;
-  const common::DatumValue &get_value() const;
-  const common::DatumValue &get_max_val() const;
+  const common::Datum &get_value_datum() const;
+  const common::SqlTypeMeta &get_value_meta() const;
+  const common::Datum &get_max_val_datum() const { return max_val_; }
+  const common::SqlTypeMeta &get_max_val_meta() const { return max_meta_; }
+  // Scalar exports borrow scratch; references borrow this owner's bytes.
+  int export_value(common::DatumValue &out, void *scratch, int64_t capacity) const;
+  int copy_value(common::DatumValue &out, common::ObIAllocator &owner) const;
   int set_value(const common::DatumValue &value, common::ObIAllocator &owner);
+  int set_native_value(const common::Datum &value, const common::SqlTypeMeta &meta,
+                       common::ObIAllocator &owner);
   common::SqlValueType get_data_type() const;
   void set_data_type(common::SqlValueType type);
   void set_flags(int64_t flags);
@@ -277,10 +291,14 @@ protected:
   // 2. Only inc_value will be set individually, and inc_value may be validated based on min_value/max_value.
   //    Currently only the set_value interface.
   int64_t base_version_;
-  common::DatumValue base_value_;
-  common::DatumValue inc_value_;
-  common::DatumValue min_val_;
-  common::DatumValue max_val_;
+  common::Datum base_value_;
+  common::Datum inc_value_;
+  common::Datum min_val_;
+  common::Datum max_val_;
+  common::SqlTypeMeta base_meta_;
+  common::SqlTypeMeta inc_meta_;
+  common::SqlTypeMeta min_meta_;
+  common::SqlTypeMeta max_meta_;
   common::SqlValueType type_;
   int64_t flags_;
 protected:

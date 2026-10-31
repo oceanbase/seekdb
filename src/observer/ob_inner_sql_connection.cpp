@@ -1280,8 +1280,9 @@ int ObInnerSQLConnection::get_session_variable(const ObString &name, int64_t &va
     ret = OB_NOT_INIT;
   } else if (0 == name.case_compare("tx_isolation")) {
     // Isolation level is a varchar value
-    DatumValue obj;
-    if (OB_FAIL(get_session().get_sys_variable_by_name(name, obj))) {
+    Datum obj;
+    SqlTypeMeta meta;
+    if (OB_FAIL(get_session().get_sys_variable_by_name(name, obj, meta))) {
     } else {
       // varchar conversion to int
       val = transaction::ObTransIsolation::get_level(obj.get_string());

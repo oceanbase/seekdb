@@ -36,6 +36,7 @@
 #include "common/number/ob_number_v2.h"
 #include "share/datum/datum_value_cast.h"
 #include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
 
 
 using namespace oceanbase::common;
@@ -485,13 +486,14 @@ int ObBasicSessionInfo::reset_timezone()
 {
   int ret = OB_SUCCESS;
   DatumValue tmp_obj1;
-  if (OB_FAIL(get_sys_variable(SYS_VAR_TIME_ZONE, tmp_obj1))) {
+  alignas(8) char scratch1[64], scratch2[64];
+  if (OB_FAIL(export_sys_variable(SYS_VAR_TIME_ZONE, tmp_obj1, scratch1, sizeof(scratch1)))) {
   } else if (OB_FAIL(process_session_time_zone_value(tmp_obj1, false))) {
   }
 
   DatumValue tmp_obj2;
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(get_sys_variable(SYS_VAR_ERROR_ON_OVERLAP_TIME, tmp_obj2))) {
+  } else if (OB_FAIL(export_sys_variable(SYS_VAR_ERROR_ON_OVERLAP_TIME, tmp_obj2, scratch2, sizeof(scratch2)))) {
   } else if (OB_FAIL(process_session_overlap_time_value(tmp_obj2))) {
   }
   return ret;
@@ -682,9 +684,10 @@ int ObBasicSessionInfo::update_database_variables(ObSchemaGetterGuard *schema_gu
     if ('\0' == thread_data_.database_name_[0]) {
       // no default database
       DatumValue val;
-      if (OB_FAIL(get_sys_variable(SYS_VAR_CHARACTER_SET_SERVER, val))) {
+      alignas(8) char scratch[64];
+      if (OB_FAIL(export_sys_variable(SYS_VAR_CHARACTER_SET_SERVER, val, scratch, sizeof(scratch)))) {
       } else if (OB_FAIL(update_sys_variable(SYS_VAR_CHARACTER_SET_DATABASE, val))) {
-      } else if (OB_FAIL(get_sys_variable(SYS_VAR_COLLATION_SERVER, val))) {
+      } else if (OB_FAIL(export_sys_variable(SYS_VAR_COLLATION_SERVER, val, scratch, sizeof(scratch)))) {
       } else if (OB_FAIL(update_sys_variable(SYS_VAR_COLLATION_DATABASE, val))) {
       } else {}
     } else {
@@ -789,7 +792,7 @@ int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
     ret = OB_SCHEMA_ERROR;
   } else if (OB_FAIL(ObSysVarUtils::get_schema_value(*sysvar_schema, dtc_params, calc_buf, val))) {
   } else if (OB_FAIL(ObBasicSessionInfo::change_value_for_special_sys_var(
-                         var_id, val, val))) {
+                         var_id, val, val, calc_buf))) {
   } else {
   }
   return ret;
@@ -820,7 +823,7 @@ int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
     ret = OB_SCHEMA_ERROR;
   } else if (OB_FAIL(ObSysVarUtils::get_schema_value(*sysvar_schema, dtc_params, calc_buf, val))) {
   } else if (OB_FAIL(ObBasicSessionInfo::change_value_for_special_sys_var(
-                         var_name, val, val))) {
+                         var_name, val, val, calc_buf))) {
   } else {
   }
   return ret;
@@ -1146,20 +1149,20 @@ int ObBasicSessionInfo::inner_get_sys_var(const ObSysVarClassType sys_var_id,
 
 int ObBasicSessionInfo::change_value_for_special_sys_var(const ObString &sys_var_name,
                                                          const DatumValue &ori_val,
-                                                         DatumValue &new_val)
+                                                         DatumValue &new_val, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   ObSysVarClassType sys_var_id = share::ObSysVarMeta::find_sys_var_id_by_name(sys_var_name);
   if (OB_UNLIKELY(SYS_VAR_INVALID == sys_var_id)) {
   } else if (OB_FAIL(ObBasicSessionInfo::change_value_for_special_sys_var(
-              sys_var_id, ori_val, new_val))) {
+              sys_var_id, ori_val, new_val, owner))) {
   }
   return ret;
 }
 
 int ObBasicSessionInfo::change_value_for_special_sys_var(const ObSysVarClassType sys_var_id,
                                                          const DatumValue &ori_val,
-                                                         DatumValue &new_val)
+                                                         DatumValue &new_val, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   int64_t sys_var_store_idx = -1;
@@ -1171,7 +1174,10 @@ int ObBasicSessionInfo::change_value_for_special_sys_var(const ObSysVarClassType
       new_val.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
       new_val.set_collation_level(CS_LEVEL_SYSCONST);
     } else {
-      new_val = ObSysVariables::get_default_value(sys_var_store_idx);
+      alignas(8) char scratch[64];
+      DatumValue value;
+      OZ(ObSysVariables::export_default_value(sys_var_store_idx, value, scratch, sizeof(scratch)));
+      OZ(clone_typed_value(value, new_val, owner));
     }
   } else {
     new_val = ori_val;
@@ -1223,7 +1229,7 @@ int ObBasicSessionInfo::load_sys_variable(ObIAllocator &calc_buf,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("sys var is NULL", K(name), K(value), K(ret));
   } else if (OB_FAIL(ObBasicSessionInfo::change_value_for_special_sys_var(
-              var_id, val_ptr, real_val))) {
+              var_id, val_ptr, real_val, calc_buf))) {
   } else if (OB_FAIL(sys_var->init(real_val, min_ptr, max_ptr, val_type.get_type(), flags, base_owner))) {
   } else if (OB_FAIL(process_session_variable(var_id, real_val,
                                               false /*check_timezone_valid*/,
@@ -1282,8 +1288,7 @@ int ObBasicSessionInfo::cast_sys_variable(ObIAllocator &calc_buf,
     } else {
       ObDataTypeCastParams dtc_params = get_dtc_params();
       ObCastCtx cast_ctx(&calc_buf, &dtc_params, CM_NONE, ObCharset::get_system_collation());
-      SystemVarValueAllocator owner(base_sys_var_alloc_);
-      OZ(DatumValueCaster::to_type(type.get_type(), cast_ctx, value, owner, candidate));
+      OZ(DatumValueCaster::to_type(type.get_type(), cast_ctx, value, calc_buf, candidate));
       if (OB_SUCC(ret) && candidate.is_string_type()) {
         candidate.set_collation_level(CS_LEVEL_SYSCONST);
         if (candidate.get_collation_type() == CS_TYPE_INVALID) {
@@ -1332,7 +1337,7 @@ int ObBasicSessionInfo::load_sys_variable_fast(ObIAllocator &calc_buf,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("sys var is NULL", K(var_id), K(value), K(ret));
   } else if (OB_FAIL(ObBasicSessionInfo::change_value_for_special_sys_var(
-              var_id, val_ptr, real_val))) {
+              var_id, val_ptr, real_val, calc_buf))) {
   } else if (OB_FAIL(sys_var->init(real_val, min_ptr, max_ptr, val_type.get_type(), flags, base_owner))) {
   } else if (OB_FAIL(process_session_variable(var_id, real_val,
                                               false /*check_timezone_valid*/,
@@ -1368,7 +1373,7 @@ int ObBasicSessionInfo::load_sys_variable_fast(ObIAllocator &calc_buf,
  */
 // Internal connection and external connection get sys_val in different orders, internal connection and external connection executing the same sql cannot hit the same plan,
 // Temporarily does not affect the plan cache hit rate online
-int ObBasicSessionInfo::get_influence_plan_sys_var(ObSysVarInPC &sys_vars) const
+int ObBasicSessionInfo::get_influence_plan_sys_var(ObSysVarInPC &sys_vars, ObIAllocator &owner) const
 {
   int ret = OB_SUCCESS;
   //get influence_plan_sys_var from sys_var_val_map
@@ -1382,7 +1387,10 @@ int ObBasicSessionInfo::get_influence_plan_sys_var(ObSysVarInPC &sys_vars) const
     } else if (NULL == sys_vars_[index]) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("influence plan system var is NULL", K(i), K(ret));
-    } else if (OB_FAIL(sys_vars.push_back(sys_vars_[index]->get_value()))) {
+    } else {
+      DatumValue value;
+      OZ(sys_vars_[index]->copy_value(value, owner));
+      OZ(sys_vars.push_back(value));
     }
   }
   return ret;
@@ -1423,6 +1431,7 @@ int ObBasicSessionInfo::gen_sys_var_in_pc_str()
 {
   int ret = OB_SUCCESS;
   const int64_t MAX_SYS_VARS_STR_SIZE = 1024;
+  ObArenaAllocator value_owner(ObModIds::OB_SQL_SESSION);
   ObSysVarInPC sys_vars;
   char *buf = NULL;
   int64_t pos = 0;
@@ -1441,7 +1450,7 @@ int ObBasicSessionInfo::gen_sys_var_in_pc_str()
   }
   int64_t sys_var_encode_max_size = get_sys_vars_encode_max_size();
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(get_influence_plan_sys_var(sys_vars))) {
+  } else if (OB_FAIL(get_influence_plan_sys_var(sys_vars, value_owner))) {
   } else if (OB_FAIL(sys_vars.serialize_sys_vars(buf, sys_var_encode_max_size, pos))) {
     if (OB_BUF_NOT_ENOUGH == ret || OB_SIZE_OVERFLOW ==ret) {
       ret = OB_SUCCESS;
@@ -1567,6 +1576,7 @@ int ObBasicSessionInfo::update_sys_variable(const ObSysVarClassType sys_var_id, 
 {
   int ret = OB_SUCCESS;
   DatumValue obj;
+  alignas(8) char scratch[64];
   ObBasicSysVar *sys_var = NULL;
   int64_t sys_var_idx = 0;
   // First track the modification of the variable, so that if the variable modification fails, it will not cause inconsistency between the client and the server
@@ -1576,10 +1586,11 @@ int ObBasicSessionInfo::update_sys_variable(const ObSysVarClassType sys_var_id, 
   } else if (OB_ISNULL(sys_var)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (is_track_session_info()) {
-    if (OB_FAIL(track_sys_var(sys_var_id, sys_var->get_value()))) {
+    if (OB_FAIL(sys_var->export_value(obj, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(track_sys_var(sys_var_id, obj))) {
     } else {
       LOG_DEBUG("succ to track system variable",
-                K(ret), K(sys_var_id), K(val), K(sys_var->get_value()));
+                K(ret), K(sys_var_id), K(val), K(obj));
     }
   }
   // Update variable
@@ -1662,39 +1673,66 @@ int ObBasicSessionInfo::deep_copy_sys_variable(ObBasicSysVar &sys_var,
                                                const DatumValue &src_val)
 {
   int ret = OB_SUCCESS;
-  DatumValue source = src_val, pending;
-  if (source.is_string_type()) {
-    source.set_collation_level(CS_LEVEL_SYSCONST);
-    if (source.get_collation_type() == CS_TYPE_INVALID) {
-      source.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+  SqlTypeMeta meta = src_val.meta_;
+  if (meta.is_string_type()) {
+    meta.set_collation_level(CS_LEVEL_SYSCONST);
+    if (meta.get_collation_type() == CS_TYPE_INVALID) {
+      meta.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
     }
   }
+  Datum pending;
   SystemVarValueAllocator current_owner(*inc_sys_var_alloc_[current_buf_index_]);
-  OZ(clone_typed_value(source, pending, current_owner));
-  if (OB_SUCC(ret)) {
-    if (inc_sys_var_alloc_[current_buf_index_]->used() <= next_frag_mem_point_) {
-      sys_var.inc_value_ = pending;
-    } else {
-      ObArray<std::pair<int64_t, DatumValue>> candidates;
-      const int32_t next = current_buf_index_ == 0 ? 1 : 0;
-      SystemVarValueAllocator next_owner(*inc_sys_var_alloc_[next]);
-      OZ(defragment_sys_variable_from(candidates, sys_var_id, pending, next_owner));
-      if (OB_SUCC(ret)) {
-        const int32_t next = current_buf_index_ == 0 ? 1 : 0;
-        // All allocations succeeded. Publishing these owned views cannot fail.
-        defragment_sys_variable_to(candidates);
-        inc_sys_var_alloc_[current_buf_index_]->reset();
-        current_buf_index_ = next;
-        next_frag_mem_point_ = std::max(2 * inc_sys_var_alloc_[next]->used(), OB_MALLOC_NORMAL_BLOCK_SIZE);
-      }
+  OZ(DatumParameterCodec::import_schema_native_value(src_val.datum_, meta, current_owner, pending));
+  OZ(publish_sys_variable(sys_var, sys_var_id, pending, meta));
+  return ret;
+}
+
+int ObBasicSessionInfo::deep_copy_sys_variable(ObBasicSysVar &sys_var,
+                                               ObSysVarClassType sys_var_id,
+                                               const Datum &value, const SqlTypeMeta &source_meta)
+{
+  int ret = OB_SUCCESS;
+  SqlTypeMeta meta = source_meta;
+  if (meta.is_string_type()) {
+    meta.set_collation_level(CS_LEVEL_SYSCONST);
+    if (meta.get_collation_type() == CS_TYPE_INVALID) {
+      meta.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
+    }
+  }
+  Datum pending;
+  SystemVarValueAllocator current_owner(*inc_sys_var_alloc_[current_buf_index_]);
+  OZ(DatumParameterCodec::clone_schema_native_value(value, meta, current_owner, pending));
+  OZ(publish_sys_variable(sys_var, sys_var_id, pending, meta));
+  return ret;
+}
+
+int ObBasicSessionInfo::publish_sys_variable(ObBasicSysVar &sys_var,
+                                             ObSysVarClassType sys_var_id,
+                                             const Datum &pending, const SqlTypeMeta &meta)
+{
+  int ret = OB_SUCCESS;
+  if (inc_sys_var_alloc_[current_buf_index_]->used() <= next_frag_mem_point_) {
+    sys_var.inc_value_ = pending;
+    sys_var.inc_meta_ = meta;
+  } else {
+    ObArray<SysVarValueCandidate> candidates;
+    const int32_t next = current_buf_index_ == 0 ? 1 : 0;
+    SystemVarValueAllocator next_owner(*inc_sys_var_alloc_[next]);
+    OZ(defragment_sys_variable_from(candidates, sys_var_id, pending, meta, next_owner));
+    if (OB_SUCC(ret)) {
+      // Every candidate owns its reference bytes in next. Publishing cannot fail.
+      defragment_sys_variable_to(candidates);
+      inc_sys_var_alloc_[current_buf_index_]->reset();
+      current_buf_index_ = next;
+      next_frag_mem_point_ = std::max(2 * inc_sys_var_alloc_[next]->used(), OB_MALLOC_NORMAL_BLOCK_SIZE);
     }
   }
   return ret;
 }
 
 int ObBasicSessionInfo::defragment_sys_variable_from(
-    ObArray<std::pair<int64_t, DatumValue>> &candidates,
-    ObSysVarClassType pending_id, const DatumValue &pending, ObIAllocator &owner)
+    ObArray<SysVarValueCandidate> &candidates, ObSysVarClassType pending_id,
+    const Datum &pending, const SqlTypeMeta &pending_meta, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   const SysVarIds &ids = sys_var_inc_info_.get_all_sys_var_ids();
@@ -1705,23 +1743,22 @@ int ObBasicSessionInfo::defragment_sys_variable_from(
     OV(0 <= index && index < share::ObSysVarMeta::ALL_SYS_VARS_COUNT);
     if (OB_SUCC(ret)) { OV(OB_NOT_NULL(sys_vars_[index])); }
     if (OB_SUCC(ret) && (ids.at(i) == pending_id || !sys_vars_[index]->is_inc_value_empty())) {
-      // Integers now have arena-backed native payloads too. Copy all live
-      // incremental values, not only the old string/number subset.
-      const DatumValue &source = ids.at(i) == pending_id ? pending : sys_vars_[index]->get_value();
-      DatumValue candidate;
-      OZ(clone_typed_value(source, candidate, owner));
-      OZ(candidates.push_back(std::make_pair(index, candidate)));
+      const Datum &source = ids.at(i) == pending_id ? pending : sys_vars_[index]->get_value_datum();
+      const SqlTypeMeta &meta = ids.at(i) == pending_id ? pending_meta : sys_vars_[index]->get_value_meta();
+      Datum candidate;
+      OZ(DatumParameterCodec::clone_schema_native_value(source, meta, owner, candidate));
+      OZ(candidates.push_back(std::make_pair(index, std::make_pair(candidate, meta))));
     }
   }
   if (OB_FAIL(ret)) { inc_sys_var_alloc_[next]->reset(); candidates.reset(); }
   return ret;
 }
 
-void ObBasicSessionInfo::defragment_sys_variable_to(
-    ObArray<std::pair<int64_t, DatumValue>> &candidates)
+void ObBasicSessionInfo::defragment_sys_variable_to(ObArray<SysVarValueCandidate> &candidates)
 {
   for (int64_t i = 0; i < candidates.count(); ++i) {
-    sys_vars_[candidates.at(i).first]->inc_value_ = candidates.at(i).second;
+    sys_vars_[candidates.at(i).first]->inc_value_ = candidates.at(i).second.first;
+    sys_vars_[candidates.at(i).first]->inc_meta_ = candidates.at(i).second.second;
   }
 }
 
@@ -1737,7 +1774,7 @@ int ObBasicSessionInfo::get_sys_variable_by_name(const ObString &var, ObBasicSys
   return ret;
 }
 
-int ObBasicSessionInfo::get_sys_variable_by_name(const ObString &var, DatumValue &val) const
+int ObBasicSessionInfo::get_sys_variable_by_name(const ObString &var, Datum &val, SqlTypeMeta &meta) const
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *sys_var = NULL;
@@ -1747,7 +1784,8 @@ int ObBasicSessionInfo::get_sys_variable_by_name(const ObString &var, DatumValue
   } else if (OB_ISNULL(sys_var)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    val = sys_var->get_value();
+    val = sys_var->get_value_datum();
+    meta = sys_var->get_value_meta();
   }
   return ret;
 }
@@ -1756,14 +1794,17 @@ int ObBasicSessionInfo::get_sys_variable_by_name(const common::ObString &var, in
 {
   int ret = OB_SUCCESS;
   DatumValue obj;
-  if (OB_FAIL(get_sys_variable_by_name(var, obj))) {
+  ObBasicSysVar *provider = nullptr;
+  alignas(8) char scratch[64];
+  if (OB_FAIL(get_sys_variable_by_name(var, provider))) {
+  } else if (OB_FAIL(provider->export_value(obj, scratch, sizeof(scratch)))) {
   } else if (OB_FAIL(obj.get_int(val))) {
   } else {}
   return ret;
 }
 
 int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id,
-                                         common::DatumValue &val) const
+                                         common::Datum &val, common::SqlTypeMeta &meta) const
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *var = NULL;
@@ -1773,8 +1814,29 @@ int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id,
   } else if (OB_ISNULL(var)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    val = var->get_value();
+    val = var->get_value_datum();
+    meta = var->get_value_meta();
   }
+  return ret;
+}
+
+int ObBasicSessionInfo::export_sys_variable(ObSysVarClassType id, DatumValue &value,
+                                            void *scratch, int64_t capacity) const
+{
+  int ret = OB_SUCCESS;
+  ObBasicSysVar *sys_var = nullptr;
+  OZ(get_sys_variable(id, sys_var));
+  OZ(sys_var->export_value(value, scratch, capacity));
+  return ret;
+}
+
+int ObBasicSessionInfo::copy_sys_variable(ObSysVarClassType id, DatumValue &value,
+                                          ObIAllocator &owner) const
+{
+  int ret = OB_SUCCESS;
+  ObBasicSysVar *sys_var = nullptr;
+  OZ(get_sys_variable(id, sys_var));
+  OZ(sys_var->copy_value(value, owner));
   return ret;
 }
 
@@ -1797,9 +1859,10 @@ int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id,
 {
   int ret = OB_SUCCESS;
   DatumValue obj;
+  alignas(8) char scratch[64];
   if (SYS_VAR_INVALID == sys_var_id) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(get_sys_variable(sys_var_id, obj))) {
+  } else if (OB_FAIL(export_sys_variable(sys_var_id, obj, scratch, sizeof(scratch)))) {
   } else if (OB_FAIL(obj.get_varchar(val))) {
   } else {}
   return ret;
@@ -1809,7 +1872,8 @@ int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id, int
 {
   int ret = OB_SUCCESS;
   DatumValue obj;
-  if (OB_FAIL(get_sys_variable(sys_var_id, obj))) {
+  alignas(8) char scratch[64];
+  if (OB_FAIL(export_sys_variable(sys_var_id, obj, scratch, sizeof(scratch)))) {
   } else if (OB_FAIL(obj.get_int(val))) {
   } else {}
   return ret;
@@ -1819,7 +1883,8 @@ int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id, uin
 {
   int ret = OB_SUCCESS;
   DatumValue obj;
-  if (OB_FAIL(get_sys_variable(sys_var_id, obj))) {
+  alignas(8) char scratch[64];
+  if (OB_FAIL(export_sys_variable(sys_var_id, obj, scratch, sizeof(scratch)))) {
   } else if (OB_FAIL(obj.get_uint64(val))) {
   } else {}
   return ret;
@@ -2332,12 +2397,16 @@ void ObBasicSessionInfo::trace_all_sys_vars() const
     OV (OB_NOT_NULL(sys_vars_[store_idx]));
     if (OB_SUCC(ret)) {
       int cmp = 0;
-      if (can_compare_datum_values(sys_vars_[store_idx]->get_value(), sys_vars_[store_idx]->get_global_default_value())) {
-        if (OB_FAIL(compare_datum_values(sys_vars_[store_idx]->get_value(), sys_vars_[store_idx]->get_global_default_value(), cmp))) {
+      alignas(8) char scratch[64], default_scratch[64];
+      DatumValue value, default_value;
+      OZ(sys_vars_[store_idx]->export_value(value, scratch, sizeof(scratch)));
+      OZ(sys_vars_[store_idx]->export_global_default_value(default_value, default_scratch, sizeof(default_scratch)));
+      if (OB_SUCC(ret) && can_compare_datum_values(value, default_value)) {
+        if (OB_FAIL(compare_datum_values(value, default_value, cmp))) {
           //ignore fail code
           ret = OB_SUCCESS;
         } else if (0 != cmp) {
-          OPT_TRACE("  ", sys_vars_[store_idx]->get_name(), " = ", sys_vars_[store_idx]->get_value());
+          OPT_TRACE("  ", sys_vars_[store_idx]->get_name(), " = ", value);
         }
       }
     }
@@ -2352,10 +2421,13 @@ int ObBasicSessionInfo::init_sys_vars_cache_base_values()
   int64_t var_amount = ObSysVariables::get_amount();
   for (int64_t i = 0; OB_SUCC(ret) && i < var_amount; ++i) {
     store_idx = ObSysVarsToIdxMap::get_store_idx((int64_t)ObSysVariables::get_sys_var_id(i));
+    alignas(8) char scratch[64];
+    DatumValue value;
+    OZ(ObSysVariables::export_default_value(store_idx, value, scratch, sizeof(scratch)));
     OX (fill_sys_vars_cache_base_value(
             ObSysVariables::get_sys_var_id(i),
             sys_vars_cache,
-            ObSysVariables::get_default_value(store_idx) ));
+            value ));
   }
   return ret;
 }
@@ -2623,27 +2695,33 @@ int ObBasicSessionInfo::process_session_variable_fast()
 {
   int ret = OB_SUCCESS;
   int64_t store_idx = -1;
+  alignas(8) char scratch[64];
+  DatumValue value;
   // SYS_VAR_OB_LOG_LEVEL
   OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_OB_LOG_LEVEL, store_idx));
   OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
-  OZ (process_session_log_level(sys_vars_[store_idx]->get_value()));
+  OZ(sys_vars_[store_idx]->export_value(value, scratch, sizeof(scratch)));
+  OZ (process_session_log_level(value));
   // SYS_VAR_DEBUG_SYNC
   OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_DEBUG_SYNC, store_idx));
   OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
-  OZ (process_session_debug_sync(sys_vars_[store_idx]->get_value(), false, false));
+  OZ(sys_vars_[store_idx]->export_value(value, scratch, sizeof(scratch)));
+  OZ (process_session_debug_sync(value, false, false));
   // SYS_VAR_OB_GLOBAL_DEBUG_SYNC
   OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_OB_GLOBAL_DEBUG_SYNC, store_idx));
   OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
-  OZ (process_session_debug_sync(sys_vars_[store_idx]->get_value(), true, false));
+  OZ(sys_vars_[store_idx]->export_value(value, scratch, sizeof(scratch)));
+  OZ (process_session_debug_sync(value, true, false));
   // SYS_VAR_OB_READ_CONSISTENCY
   // This system variable corresponds to consistency_level_, this attribute can only be modified through regular means, so it is suitable for adding to sys_vars_cache_,
   // But such modifications involve a large amount of changes, so for safety's sake, we retain the existing serialization operation and only execute it in this interface to ensure the main thread is correctly initialized.
   OZ (share::ObSysVarMeta::calc_sys_var_store_idx(SYS_VAR_OB_READ_CONSISTENCY, store_idx));
   OV (share::ObSysVarMeta::is_valid_sys_var_store_idx(store_idx));
   if (OB_SUCC(ret)) {
-    const DatumValue &val = sys_vars_[store_idx]->get_value();
+    DatumValue val;
+    OZ(sys_vars_[store_idx]->export_value(val, scratch, sizeof(scratch)));
     int64_t consistency = 0;
-    PROCESS_SESSION_INT_VARIABLE(consistency);
+    if (OB_SUCC(ret)) { PROCESS_SESSION_INT_VARIABLE(consistency); }
     consistency = consistency == WEAK ? STRONG : consistency;
     OX (consistency_level_ = static_cast<ObConsistencyLevel>(consistency));
   }
@@ -2753,12 +2831,15 @@ int ObBasicSessionInfo::get_int64_sys_var(const ObSysVarClassType sys_var_id,
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *val = NULL;
+  alignas(8) char scratch[64];
+  DatumValue value;
   if (OB_FAIL(inner_get_sys_var(sys_var_id, val))) {
   } else if (OB_ISNULL(val)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(val->export_value(value, scratch, sizeof(scratch)))) {
   } else {
     int64_t int_val = 0;
-    if (OB_FAIL(val->get_value().get_int(int_val))) {
+    if (OB_FAIL(value.get_int(int_val))) {
     } else {
       int64_val = int_val;
     }
@@ -2771,12 +2852,15 @@ int ObBasicSessionInfo::get_uint64_sys_var(const ObSysVarClassType sys_var_id,
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *val = NULL;
+  alignas(8) char scratch[64];
+  DatumValue value;
   if (OB_FAIL(inner_get_sys_var(sys_var_id, val))) {
   } else if (OB_ISNULL(val)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(val->export_value(value, scratch, sizeof(scratch)))) {
   } else {
     uint64_t uint_val = 0;
-    if (OB_FAIL(val->get_value().get_uint64(uint_val))) {
+    if (OB_FAIL(value.get_uint64(uint_val))) {
     } else {
       uint64_val = uint_val;
     }
@@ -2789,12 +2873,15 @@ int ObBasicSessionInfo::get_bool_sys_var(const ObSysVarClassType sys_var_id,
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *val = NULL;
+  alignas(8) char scratch[64];
+  DatumValue value;
   if (OB_FAIL(inner_get_sys_var(sys_var_id, val))) {
   } else if (OB_ISNULL(val)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(val->export_value(value, scratch, sizeof(scratch)))) {
   } else {
     int64_t int_val = 0;
-    if (OB_SUCCESS != (ret = val->get_value().get_int(int_val))) {
+    if (OB_SUCCESS != (ret = value.get_int(int_val))) {
     } else {
       bool_val = (0 != int_val);
     }
@@ -2807,14 +2894,17 @@ int ObBasicSessionInfo::get_charset_sys_var(const ObSysVarClassType sys_var_id,
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *val = NULL;
+  alignas(8) char scratch[64];
+  DatumValue value;
   if (OB_FAIL(inner_get_sys_var(sys_var_id, val))) {
   } else if (OB_ISNULL(val)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(val->export_value(value, scratch, sizeof(scratch)))) {
   } else {
     int64_t coll_int64 = 0;
-    if (val->get_value().is_null()) {
+    if (value.is_null()) {
       cs_type = CHARSET_INVALID;
-    } else if (OB_FAIL(val->get_value().get_int(coll_int64))) {
+    } else if (OB_FAIL(value.get_int(coll_int64))) {
     } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
       LOG_ERROR("invalid collation", K(sys_var_id), K(coll_int64), K(*val));
     } else {
@@ -2829,12 +2919,15 @@ int ObBasicSessionInfo::get_collation_sys_var(ObSysVarClassType sys_var_id,
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *val = NULL;
+  alignas(8) char scratch[64];
+  DatumValue value;
   if (OB_FAIL(inner_get_sys_var(sys_var_id, val))) {
   } else if (OB_ISNULL(val)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(val->export_value(value, scratch, sizeof(scratch)))) {
   } else {
     int64_t coll_int64 = 0;
-    if (OB_FAIL(val->get_value().get_int(coll_int64))) {
+    if (OB_FAIL(value.get_int(coll_int64))) {
     } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
       LOG_ERROR("invalid collation", K(sys_var_id), K(coll_int64), K(*val));
     } else {
@@ -2849,11 +2942,14 @@ int ObBasicSessionInfo::get_string_sys_var(ObSysVarClassType sys_var_id,
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *val = NULL;
+  alignas(8) char scratch[64];
+  DatumValue value;
   if (OB_FAIL(inner_get_sys_var(sys_var_id, val))) {
   } else if (OB_ISNULL(val)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(val->export_value(value, scratch, sizeof(scratch)))) {
   } else {
-    if (OB_FAIL(val->get_value().get_string(str))) {
+    if (OB_FAIL(value.get_string(str))) {
     }
   }
   return ret;
@@ -3353,8 +3449,8 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
         } else {
           LOG_DEBUG("serialize sys vars", K(sys_var_idx),
                     "name", ObSysVariables::get_name(sys_var_idx),
-                    "val", sys_vars_[sys_var_idx]->get_value(),
-                    "def", ObSysVariables::get_default_value(sys_var_idx));
+                    "value_owner", *sys_vars_[sys_var_idx],
+                    "default_meta", ObSysVariables::get_default_meta(sys_var_idx));
         }
       }
     }
@@ -3491,10 +3587,14 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
         if (OB_FAIL(ret)) {
         } else if (OB_ISNULL(sys_var)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(deep_copy_sys_variable(*sys_var, sys_var_id, sys_var->get_value()))) {
-        } else if (OB_FAIL(process_session_variable(sys_var_id, sys_var->get_value(),
-                                                    check_timezone_valid,
-                                                    false /*is_update_sys_var*/))) {
+        } else if (OB_FAIL(deep_copy_sys_variable(*sys_var, sys_var_id,
+                                                   sys_var->get_value_datum(), sys_var->get_value_meta()))) {
+        } else {
+          alignas(8) char scratch[64];
+          DatumValue value;
+          OZ(sys_var->export_value(value, scratch, sizeof(scratch)));
+          OZ(process_session_variable(sys_var_id, value, check_timezone_valid,
+                                      false /*is_update_sys_var*/));
         }
       }
     }
@@ -3706,11 +3806,14 @@ int ObBasicSessionInfo::load_all_sys_vars(const ObSysVariableSchema &sys_var_sch
         OZ (influence_plan_var_indexs_.push_back(i));
       }
       bool same_base = false;
-      OZ(datum_values_equal(ObSysVariables::get_base_value(i), sys_vars_[i]->get_value(), same_base));
+      alignas(8) char base_scratch[64], value_scratch[64];
+      DatumValue base, value;
+      OZ(ObSysVariables::export_base_value(i, base, base_scratch, sizeof(base_scratch)));
+      OZ(sys_vars_[i]->export_value(value, value_scratch, sizeof(value_scratch)));
+      OZ(datum_values_equal(base, value, same_base));
       if (OB_SUCC(ret) && !same_base) {
         OZ (sys_var_inc_info_.add_sys_var_id(sys_var_id));
-        LOG_DEBUG("schema and def not identical", K(sys_var_id), "val", sys_vars_[i]->get_value(),
-                  "def", ObSysVariables::get_base_value(i));
+        LOG_DEBUG("schema and def not identical", K(sys_var_id), "val", value, "def", base);
       }
     }
   }
@@ -3936,7 +4039,7 @@ int ObBasicSessionInfo::is_sys_var_actully_changed(const ObSysVarClassType &sys_
   if (OB_SUCC(ret)) {
     // The provider returns a borrowed native view. The comparison output owns
     // its snapshot in the caller's explicit statement arena.
-    OZ (clone_typed_value(sys_var->get_value(), new_val, owner));
+    OZ (sys_var->copy_value(new_val, owner));
   }
   if (OB_SUCC(ret)) {
     switch (sys_var_id) {
@@ -4854,6 +4957,7 @@ int ObExecEnv::gen_exec_env(const ObBasicSessionInfo &session, char* buf, int64_
 {
   int ret = OB_SUCCESS;
   DatumValue val;
+  alignas(8) char scratch[64];
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     switch (i) {
       case SQL_MODE:
@@ -4862,7 +4966,7 @@ int ObExecEnv::gen_exec_env(const ObBasicSessionInfo &session, char* buf, int64_
       case COLLATION_DATABASE: {
         int64_t size = 0;
         val.reset();
-        OZ (session.get_sys_variable(ExecEnvMap[i], val));
+        OZ (session.export_sys_variable(ExecEnvMap[i], val, scratch, sizeof(scratch)));
         OZ (val.print_plain_str_literal(buf + pos, len - pos, size));
         // Output delimiter
         OX (pos += size);
@@ -4981,10 +5085,11 @@ int ObExecEnv::load(ObBasicSessionInfo &session, ObIAllocator *alloc)
 {
   int ret = OB_SUCCESS;
   DatumValue val;
+  alignas(8) char scratch[64];
   UNUSED(alloc);
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_ENV; ++i) {
     val.reset();
-    if (OB_FAIL(session.get_sys_variable(ExecEnvMap[i], val))) {
+    if (OB_FAIL(session.export_sys_variable(ExecEnvMap[i], val, scratch, sizeof(scratch)))) {
     } else {
       switch (i) {
       case SQL_MODE: {

@@ -683,9 +683,11 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (var_node.is_set_default_
              && var_node.variable_name_ == OB_SV_DEFAULT_STORAGE_ENGINE) {
-    const DatumValue &def_val = sys_var.get_global_default_value();
+    DatumValue def_val;
+    alignas(8) char default_scratch[64];
     DEFINE_CAST_CTX();
-    if (OB_FAIL(DatumValueCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, calc_buf, out_val))) {
+    if (OB_FAIL(sys_var.export_global_default_value(def_val, default_scratch, sizeof(default_scratch)))) {
+    } else if (OB_FAIL(DatumValueCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, calc_buf, out_val))) {
     }
   } else if (var_node.is_set_default_) {
     
@@ -700,9 +702,11 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
       } else if (OB_FAIL(ObSysVarUtils::get_schema_value(*var_schema, dtc_params, calc_buf, out_val))) {
       }
     } else if (ObSetVar::SET_SCOPE_GLOBAL == var_node.set_scope_) {
-      const DatumValue &def_val = sys_var.get_global_default_value();
+      DatumValue def_val;
+      alignas(8) char default_scratch[64];
       DEFINE_CAST_CTX();
-      if (OB_FAIL(DatumValueCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, calc_buf, out_val))) {
+      if (OB_FAIL(sys_var.export_global_default_value(def_val, default_scratch, sizeof(default_scratch)))) {
+      } else if (OB_FAIL(DatumValueCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, calc_buf, out_val))) {
       }
     } else {
       ret = OB_ERR_UNEXPECTED;

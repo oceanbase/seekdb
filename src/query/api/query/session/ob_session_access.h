@@ -56,7 +56,8 @@ public:
       sql::ObSQLSessionInfo *session, const common::ObString &name);
 
   static int get_collation_connection(
-      const sql::ObSQLSessionInfo *session, common::DatumValue &value);
+      const sql::ObSQLSessionInfo *session, common::DatumValue &value,
+      void *scratch, int64_t capacity);
   static int set_collation_connection(
       sql::ObSQLSessionInfo *session, const common::DatumValue &value);
 

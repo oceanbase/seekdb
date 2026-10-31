@@ -4006,17 +4006,20 @@ int ObExprOperator::add_local_var_to_expr(share::ObSysVarClassType var_type,
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(session)) {
     common::DatumValue session_val;
+    alignas(8) char session_scratch[64];
+    uint64_t sql_mode = 0;
     if (share::SYS_VAR_SQL_MODE == var_type) {
       // add_local_var clones the value synchronously; keep the scalar payload
       // alive through that call instead of writing through a null Datum ptr.
-      uint64_t sql_mode = session->get_sql_mode();
+      sql_mode = session->get_sql_mode();
       common::ObDatum datum;
       datum.ptr_ = reinterpret_cast<const char *>(&sql_mode);
       datum.set_uint(sql_mode);
       common::SqlTypeMeta meta;
       meta.set_uint64();
       session_val = common::DatumValue(datum, meta);
-    } else if (OB_FAIL(session->get_sys_variable(var_type, session_val))) {
+    } else if (OB_FAIL(session->export_sys_variable(
+                   var_type, session_val, session_scratch, sizeof(session_scratch)))) {
     }
     if (OB_SUCC(ret) && OB_FAIL(local_vars.add_local_var(var_type, session_val))) {
     }

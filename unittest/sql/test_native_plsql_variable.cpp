@@ -131,14 +131,22 @@ TEST_F(NativePLSQLVariable, unsigned_system_variable_preserves_all_64_bits) {
   DatumValue value;
   ASSERT_EQ(OB_SUCCESS, value.set_uint64(UINT64_MAX, owner));
   ASSERT_EQ(OB_SUCCESS, session.update_sys_variable(SYS_VAR_LAST_INSERT_ID, value));
-  DatumValue stored;
-  ASSERT_EQ(OB_SUCCESS, session.get_sys_variable_by_name(ObString::make_string("last_insert_id"), stored));
-  configure("last_insert_id", stored.get_meta());
+  Datum stored;
+  SqlTypeMeta stored_meta;
+  ASSERT_EQ(OB_SUCCESS, session.get_sys_variable_by_name(
+      ObString::make_string("last_insert_id"), stored, stored_meta));
+  EXPECT_EQ(ObUInt64Type, stored_meta.get_type());
+  EXPECT_EQ(UINT64_MAX, stored.get_uint());
+  configure("last_insert_id", stored_meta);
   Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
   EXPECT_EQ(UINT64_MAX, result.get_uint());
   EXPECT_EQ(0, result.length());
-  std::memset(const_cast<char *>(stored.datum_.ptr_), 0, stored.datum_.len_);
+  ASSERT_EQ(OB_SUCCESS, value.set_uint64(0, owner));
+  ASSERT_EQ(OB_SUCCESS, session.update_sys_variable(SYS_VAR_LAST_INSERT_ID, value));
+  ASSERT_EQ(OB_SUCCESS, session.get_sys_variable_by_name(
+      ObString::make_string("last_insert_id"), stored, stored_meta));
+  EXPECT_EQ(0, stored.get_uint());
   EXPECT_EQ(UINT64_MAX, result.get_uint());
 }
 
@@ -156,7 +164,7 @@ TEST_F(NativePLSQLVariable, borrowed_system_string_survives_replacement_and_sour
     ASSERT_EQ(OB_SUCCESS, variable->set_value(value, source));
     configure("tx_isolation", value.get_meta());
     ASSERT_EQ(OB_SUCCESS, fetch(result));
-    EXPECT_NE(variable->get_value().datum_.ptr_, result.get_string().ptr());
+    EXPECT_NE(variable->get_value_datum().get_reference(), result.get_string().ptr());
     DatumValue replacement;
     ASSERT_EQ(OB_SUCCESS, replacement.set_varchar(ObString::make_string("replacement"), owner));
     replacement.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -199,7 +207,7 @@ TEST_F(NativePLSQLVariable, headerless_and_inrow_lob_system_values_use_native_ad
       ASSERT_EQ(OB_SUCCESS, locator.get_inrow_data(content));
     }
     EXPECT_EQ(ObString::make_string("native-lob"), content);
-    EXPECT_NE(variable->get_value().datum_.ptr_, result.get_string().ptr());
+    EXPECT_NE(variable->get_value_datum().get_reference(), result.get_string().ptr());
   }
 }
 

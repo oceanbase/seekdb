@@ -551,7 +551,7 @@ public:
   const common::ObTimeZoneInfo *get_timezone_info() const { return tz_info_wrap_.get_time_zone_info(); }
   const common::ObTimeZoneInfoWrap &get_tz_info_wrap() const { return tz_info_wrap_; }
   inline int set_tz_info_wrap(const common::ObTimeZoneInfoWrap &other) { return tz_info_wrap_.deep_copy(other); }
-  int get_influence_plan_sys_var(ObSysVarInPC &sys_vars) const;
+  int get_influence_plan_sys_var(ObSysVarInPC &sys_vars, common::ObIAllocator &owner) const;
   int get_sys_var_in_pc_str(common::ObString &str) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(gen_sys_var_in_pc_str_lazy())) {
@@ -801,14 +801,20 @@ public:
   //int update_sys_variable(const char* const var, const common::ObString &v);
   ///@}
   ///@{ Get the value of the system variable
-  int get_sys_variable(const share::ObSysVarClassType sys_var_id, common::DatumValue &val) const;
+  int get_sys_variable(const share::ObSysVarClassType sys_var_id, common::Datum &value,
+                       common::SqlTypeMeta &meta) const;
+  int export_sys_variable(const share::ObSysVarClassType sys_var_id, common::DatumValue &value,
+                          void *scratch, int64_t capacity) const;
+  int copy_sys_variable(const share::ObSysVarClassType sys_var_id, common::DatumValue &value,
+                        common::ObIAllocator &owner) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, common::ObString &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, int64_t &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, uint64_t &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, bool &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, sql::ObBasicSysVar *&val) const;
   /// @note get system variables by id is prefered
-  int get_sys_variable_by_name(const common::ObString &var, common::DatumValue &val) const;
+  int get_sys_variable_by_name(const common::ObString &var, common::Datum &value,
+                               common::SqlTypeMeta &meta) const;
   int get_sys_variable_by_name(const common::ObString &var, sql::ObBasicSysVar *&val) const;
   int get_sys_variable_by_name(const common::ObString &var, int64_t &val) const;
   ///@}
@@ -1173,10 +1179,12 @@ private:
 
   static int change_value_for_special_sys_var(const common::ObString &sys_var_name,
                                               const common::DatumValue &ori_val,
-                                              common::DatumValue &new_val);
+                                              common::DatumValue &new_val,
+                                              common::ObIAllocator &owner);
   static int change_value_for_special_sys_var(const share::ObSysVarClassType sys_var_id,
                                               const common::DatumValue &ori_val,
-                                              common::DatumValue &new_val);
+                                              common::DatumValue &new_val,
+                                              common::ObIAllocator &owner);
   int get_int64_sys_var(const share::ObSysVarClassType sys_var_id, int64_t &int64_val) const;
   int get_uint64_sys_var(const share::ObSysVarClassType sys_var_id, uint64_t &uint64_val) const;
   int get_bool_sys_var(const share::ObSysVarClassType sys_var_id, bool &bool_val) const;
@@ -1202,10 +1210,17 @@ private:
   int deep_copy_sys_variable(sql::ObBasicSysVar &sys_var,
                              const share::ObSysVarClassType sys_var_id,
                              const common::DatumValue &src_val);
-  int defragment_sys_variable_from(ObArray<std::pair<int64_t, DatumValue>> &tmp_value,
-      share::ObSysVarClassType pending_id, const common::DatumValue &pending,
+  int deep_copy_sys_variable(sql::ObBasicSysVar &sys_var,
+                             share::ObSysVarClassType sys_var_id,
+                             const common::Datum &value, const common::SqlTypeMeta &meta);
+  int publish_sys_variable(sql::ObBasicSysVar &sys_var, share::ObSysVarClassType sys_var_id,
+                           const common::Datum &pending, const common::SqlTypeMeta &meta);
+  using SysVarValueCandidate = std::pair<int64_t, std::pair<common::Datum, common::SqlTypeMeta>>;
+  int defragment_sys_variable_from(ObArray<SysVarValueCandidate> &tmp_value,
+      share::ObSysVarClassType pending_id, const common::Datum &pending,
+      const common::SqlTypeMeta &pending_meta,
       common::ObIAllocator &owner);
-  void defragment_sys_variable_to(ObArray<std::pair<int64_t, DatumValue>> &tmp_value);
+  void defragment_sys_variable_to(ObArray<SysVarValueCandidate> &tmp_value);
   inline int store_query_string_(const ObString &stmt);
   inline int store_query_string_(const ObString &stmt, int64_t& buf_len, char *& query, volatile int64_t& query_len);
   inline int set_session_state_(ObSQLSessionState state);

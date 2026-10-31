@@ -1408,8 +1408,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         } else {
         }
       } else {
-        const DatumValue &val = sys_var->get_value();
-        obj_type.set_obj_type(val.get_type());
+        obj_type.set_obj_type(sys_var->get_value_meta().get_type());
         data_type.set_data_type(obj_type);
       }
     }

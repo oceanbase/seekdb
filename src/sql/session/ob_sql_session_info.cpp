@@ -1596,8 +1596,8 @@ int ObSQLSessionInfo::get_tmp_table_size(uint64_t &size) {
   const ObBasicSysVar *tmp_table_size = get_sys_var(SYS_VAR_TMP_TABLE_SIZE);
   CK (OB_NOT_NULL(tmp_table_size));
   if (OB_SUCC(ret) &&
-      tmp_table_size->get_value().get_uint64() != tmp_table_size->get_max_val().get_uint64()) {
-    size = tmp_table_size->get_value().get_uint64();
+      tmp_table_size->get_value_datum().get_uint() != tmp_table_size->get_max_val_datum().get_uint()) {
+    size = tmp_table_size->get_value_datum().get_uint();
   } else {
     size = OB_INVALID_SIZE;
   }
@@ -1843,12 +1843,13 @@ int ObSessionAccess::set_default_database(
 }
 
 int ObSessionAccess::get_collation_connection(
-    const sql::ObSQLSessionInfo *session, common::DatumValue &value)
+    const sql::ObSQLSessionInfo *session, common::DatumValue &value,
+    void *scratch, int64_t capacity)
 {
   return nullptr == session
       ? common::OB_INVALID_ARGUMENT
-      : session->get_sys_variable(
-            share::ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION, value);
+      : session->export_sys_variable(
+            share::ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION, value, scratch, capacity);
 }
 
 int ObSessionAccess::set_collation_connection(

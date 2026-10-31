@@ -108,7 +108,7 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
                       (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, "OFF") : ret);
                     }
                   } else if (share::SYS_VAR_VERSION == sysvar->get_type()
-                             && 0 == sysvar->get_value().get_string_len()) {
+                             && 0 == sysvar->get_value_datum().length()) {
                     (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, ObSpecialSysVarValues::version_) : ret);
                   } else {
                     ObString show_str;

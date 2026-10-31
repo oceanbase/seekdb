@@ -105,6 +105,7 @@ int ObLocalSessionVarHelper::check_var_same_with_session(const ObBasicSessionInf
   int ret = OB_SUCCESS;
   is_same = false;
   DatumValue session_val;
+  alignas(8) char session_scratch[64];
   if (OB_ISNULL(local_var)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (diff_val != nullptr && owner == nullptr) {
@@ -114,7 +115,8 @@ int ObLocalSessionVarHelper::check_var_same_with_session(const ObBasicSessionInf
     if (!is_same && NULL != diff_val) {
       OZ(diff_val->set_uint64(session.get_sql_mode(), *owner));
     }
-  } else if (OB_FAIL(session.get_sys_variable(local_var->type_, session_val))) {
+  } else if (OB_FAIL(session.export_sys_variable(
+                 local_var->type_, session_val, session_scratch, sizeof(session_scratch)))) {
   } else {
     is_same = local_var->is_equal(session_val);
     if (!is_same && NULL != diff_val) {
@@ -137,7 +139,9 @@ int ObLocalSessionVarHelper::load_session_vars(const ObBasicSessionInfo *session
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < var_num; ++i) {
       DatumValue var;
-      if (OB_FAIL(session->get_sys_variable(ALL_LOCAL_VARS[i], var))) {
+      alignas(8) char value_scratch[64];
+      if (OB_FAIL(session->export_sys_variable(
+              ALL_LOCAL_VARS[i], var, value_scratch, sizeof(value_scratch)))) {
       } else if (OB_FAIL(local_vars.add_local_var(ALL_LOCAL_VARS[i], var))) {
       }
     }

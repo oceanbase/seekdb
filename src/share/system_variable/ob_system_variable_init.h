@@ -19,6 +19,7 @@
 #include "share/system_variable/ob_sys_var_class_type.h"
 #include <stdint.h>
 #include "common/datum/datum_value.h"
+#include "common/datum/datum.h"
 namespace oceanbase
 {
 namespace share
@@ -79,8 +80,12 @@ public:
   static bool need_serialize(int64_t i);
   static bool is_mysql_only(int64_t i);
   static common::ObString get_alias(int64_t i);
-  static const common::DatumValue &get_default_value(int64_t i);
-  static const common::DatumValue &get_base_value(int64_t i);
+  static const common::Datum &get_default_datum(int64_t i);
+  static const common::SqlTypeMeta &get_default_meta(int64_t i);
+  static const common::Datum &get_base_datum(int64_t i);
+  static const common::SqlTypeMeta &get_base_meta(int64_t i);
+  static int export_default_value(int64_t i, common::DatumValue &out, void *scratch, int64_t capacity);
+  static int export_base_value(int64_t i, common::DatumValue &out, void *scratch, int64_t capacity);
   static int64_t get_amount();
   static ObCollationType get_default_sysvar_collation();
   static int set_value(const char *name, const char * new_value);

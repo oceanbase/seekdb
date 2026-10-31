@@ -46,22 +46,33 @@ using namespace transaction;
 namespace sql
 {
 namespace {
-// NOP is immutable native storage. Preserve the previous scale metadata exactly
-// as set_nop_value() did, while replacing the old payload without an allocation.
-void set_sys_var_nop(DatumValue &value)
+// Preserve the previous physical scale when replacing a value with NOP.
+void set_sys_var_nop(Datum &value, SqlTypeMeta &meta)
 {
-  struct NopPayload {
-    int64_t value;
-    int32_t size;
-    uint8_t subtype;
-    uint8_t level;
-    uint8_t collation;
-  } __attribute__((packed));
-  static_assert(sizeof(NopPayload) == DATUM_EXTEND_PAYLOAD_SIZE, "Native NOP payload");
-  static const NopPayload payload{ObActionFlag::OP_NOP, 0, 0, CS_LEVEL_INVALID, CS_TYPE_INVALID};
-  value.datum_.ptr_ = reinterpret_cast<const char *>(&payload);
-  value.datum_.set_ext();
-  value.meta_.set_ext();
+  value.set_nop();
+  meta.set_ext();
+}
+bool is_sys_var_nop(const Datum &value)
+{
+  return value.is_nop() || (value.has_ext_value() && value.get_ext() == ObActionFlag::OP_NOP);
+}
+int export_sys_var_value(const Datum &value, const SqlTypeMeta &meta,
+                         DatumValue &output, void *scratch, int64_t capacity)
+{
+  DatumValue candidate;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      value, meta, candidate.datum_, scratch, capacity);
+  if (ret == OB_SUCCESS) { candidate.meta_ = meta; output = candidate; }
+  return ret;
+}
+int copy_sys_var_value(const Datum &value, const SqlTypeMeta &meta,
+                       DatumValue &output, ObIAllocator &owner)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  int ret = export_sys_var_value(value, meta, view, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = clone_typed_value(view, output, owner); }
+  return ret;
 }
 int cast_system_variable_value(SqlValueType type, ObCastCtx &context,
                                const DatumValue &input, DatumValue &output)
@@ -194,14 +205,15 @@ int ObBasicSysVar::init(const DatumValue &value,
   } else if (!is_base_value_empty()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    DatumValue owned_value, owned_min, owned_max;
-    if (OB_FAIL(clone_typed_value(value, owned_value, owner))) {
-    } else if (OB_FAIL(clone_typed_value(min_val, owned_min, owner))) {
-    } else if (OB_FAIL(clone_typed_value(max_val, owned_max, owner))) {
+    Datum owned_value, owned_min, owned_max;
+    if (OB_FAIL(DatumParameterCodec::import_schema_native_value(value.datum_, value.meta_, owner, owned_value))) {
+    } else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(min_val.datum_, min_val.meta_, owner, owned_min))) {
+    } else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(max_val.datum_, max_val.meta_, owner, owned_max))) {
     } else {
       base_value_ = owned_value;
       min_val_ = owned_min;
       max_val_ = owned_max;
+      base_meta_ = value.meta_; min_meta_ = min_val.meta_; max_meta_ = max_val.meta_;
       type_ = type;
       flags_ = flags;
     }
@@ -228,27 +240,29 @@ void ObBasicSysVar::clean_value()
   clean_inc_value();
   min_val_.reset();
   max_val_.reset();
+  min_meta_.reset();
+  max_meta_.reset();
 }
 
 void ObBasicSysVar::clean_base_value()
 {
   base_version_ = OB_INVALID_VERSION;
-  set_sys_var_nop(base_value_);
+  set_sys_var_nop(base_value_, base_meta_);
 }
 
 void ObBasicSysVar::clean_inc_value()
 {
-  set_sys_var_nop(inc_value_);
+  set_sys_var_nop(inc_value_, inc_meta_);
 }
 
 bool ObBasicSysVar::is_base_value_empty() const
 {
-  return base_value_.is_nop_value();
+  return is_sys_var_nop(base_value_);
 }
 
 bool ObBasicSysVar::is_inc_value_empty() const
 {
-  return inc_value_.is_nop_value();
+  return is_sys_var_nop(inc_value_);
 }
 
 const ObString ObBasicSysVar::get_name() const
@@ -483,11 +497,8 @@ int ObBasicSysVar::inner_to_select_obj(ObIAllocator &allocator,
                                        const ObBasicSessionInfo &session,
                                        DatumValue &select_obj) const
 {
-  UNUSED(allocator);
   UNUSED(session);
-  int ret = OB_SUCCESS;
-  select_obj = get_value();
-  return ret;
+  return copy_value(select_obj, allocator);
 }
 
 int ObBasicSysVar::inner_to_show_str(ObIAllocator &allocator,
@@ -495,7 +506,9 @@ int ObBasicSysVar::inner_to_show_str(ObIAllocator &allocator,
                                      ObString &show_str) const
 {
   int ret = OB_SUCCESS;
-  const DatumValue &value = get_value();
+  alignas(8) char scratch[64];
+  DatumValue value;
+  OZ(export_value(value, scratch, sizeof(scratch)));
   DatumValue cast_result;
   const DatumValue *res_obj = &cast_result;
   const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(&session);
@@ -523,24 +536,51 @@ SqlValueType ObBasicSysVar::get_meta_type() const
   return ret_type;
 }
 
-const DatumValue &ObBasicSysVar::get_value() const
+const Datum &ObBasicSysVar::get_value_datum() const
 {
   return is_inc_value_empty() ? base_value_ : inc_value_;
 }
 
-
-
-
-const DatumValue &ObBasicSysVar::get_max_val() const
+const SqlTypeMeta &ObBasicSysVar::get_value_meta() const
 {
-  return max_val_;
+  return is_inc_value_empty() ? base_meta_ : inc_meta_;
+}
+
+int ObBasicSysVar::export_value(DatumValue &out, void *scratch, int64_t capacity) const
+{
+  const bool use_base = is_inc_value_empty();
+  return export_sys_var_value(use_base ? base_value_ : inc_value_,
+      use_base ? base_meta_ : inc_meta_, out, scratch, capacity);
+}
+
+int ObBasicSysVar::copy_value(DatumValue &out, ObIAllocator &owner) const
+{
+  const bool use_base = is_inc_value_empty();
+  return copy_sys_var_value(use_base ? base_value_ : inc_value_,
+      use_base ? base_meta_ : inc_meta_, out, owner);
+}
+
+int ObBasicSysVar::export_global_default_value(DatumValue &out, void *scratch,
+                                              int64_t capacity) const
+{
+  return export_sys_var_value(get_global_default_datum(), get_global_default_meta(),
+                              out, scratch, capacity);
 }
 
 int ObBasicSysVar::set_value(const DatumValue &value, ObIAllocator &owner)
 {
-  DatumValue candidate;
-  int ret = clone_typed_value(value, candidate, owner);
-  if (OB_SUCC(ret)) { inc_value_ = candidate; }
+  Datum candidate;
+  int ret = DatumParameterCodec::import_schema_native_value(value.datum_, value.meta_, owner, candidate);
+  if (OB_SUCC(ret)) { inc_value_ = candidate; inc_meta_ = value.meta_; }
+  return ret;
+}
+
+int ObBasicSysVar::set_native_value(const Datum &value, const SqlTypeMeta &meta,
+                                   ObIAllocator &owner)
+{
+  Datum candidate;
+  int ret = DatumParameterCodec::clone_schema_native_value(value, meta, owner, candidate);
+  if (OB_SUCC(ret)) { inc_value_ = candidate; inc_meta_ = meta; }
   return ret;
 }
 
@@ -704,9 +744,17 @@ int ObBasicSysVar::check_and_convert_uint_tc_value(const common::DatumValue &val
 DEF_TO_STRING(ObBasicSysVar)
 {
   int64_t pos = 0;
+  alignas(8) char base_scratch[64], inc_scratch[64];
+  DatumValue base, inc;
+  const int base_ret = export_sys_var_value(base_value_, base_meta_, base, base_scratch, sizeof(base_scratch));
+  const int inc_ret = export_sys_var_value(inc_value_, inc_meta_, inc, inc_scratch, sizeof(inc_scratch));
   J_OBJ_START();
-  J_KV("sys_var_name", get_name(), "sys_var_id", get_type(),
-       K_(base_value), K_(inc_value), K_(type), K_(flags), K_(is_enum_type));
+  if (base_ret == OB_SUCCESS && inc_ret == OB_SUCCESS) {
+    J_KV("sys_var_name", get_name(), "sys_var_id", get_type(),
+         "base_value", base, "inc_value", inc, K_(type), K_(flags), K_(is_enum_type));
+  } else {
+    J_KV("sys_var_name", get_name(), "sys_var_id", get_type(), K(base_ret), K(inc_ret));
+  }
   J_OBJ_END();
   return pos;
 }
@@ -715,7 +763,8 @@ DEF_TO_STRING(ObBasicSysVar)
 
 OB_DEF_SERIALIZE(ObBasicSysVar)
 {
-  int ret = DatumParameterCodec::encode_value(get_value().datum_, get_value().meta_, buf, buf_len, pos);
+  int ret = DatumParameterCodec::encode_schema_native_value(
+      get_value_datum(), get_value_meta(), buf, buf_len, pos);
   LST_DO_CODE(OB_UNIS_ENCODE, type_, flags_, is_enum_type_);
   return ret;
 }
@@ -731,19 +780,21 @@ int ObBasicSysVar::deserialize(const char *buf, int64_t data_len, int64_t &pos,
   if (OB_SUCC(ret)) {
     const int64_t body_start = pos;
     int64_t body_pos = 0;
-    DatumValue candidate = inc_value_;
+    Datum candidate = inc_value_;
+    SqlTypeMeta meta = inc_meta_;
     SqlValueType type = type_;
     int64_t flags = flags_;
     bool is_enum = is_enum_type_;
     if (body_pos < len) {
-      ret = DatumParameterCodec::decode_unis_value(buf + body_start, len, body_pos,
-                                                  owner, candidate.datum_, candidate.meta_);
+      ret = DatumParameterCodec::decode_unis_native_value(buf + body_start, len, body_pos,
+                                                         owner, candidate, meta);
     }
     if (OB_SUCC(ret) && body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, type); }
     if (OB_SUCC(ret) && body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, flags); }
     if (OB_SUCC(ret) && body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, is_enum); }
     if (OB_SUCC(ret)) {
-      inc_value_ = candidate; type_ = type; flags_ = flags; is_enum_type_ = is_enum;
+      inc_value_ = candidate; inc_meta_ = meta;
+      type_ = type; flags_ = flags; is_enum_type_ = is_enum;
     }
     pos = body_start + len;
   }
@@ -753,7 +804,7 @@ int ObBasicSysVar::deserialize(const char *buf, int64_t data_len, int64_t &pos,
 OB_DEF_SERIALIZE_SIZE(ObBasicSysVar)
 {
   int64_t len = 0;
-  if (DatumParameterCodec::value_size(get_value().datum_, get_value().meta_, len) != OB_SUCCESS) { return 0; }
+  if (DatumParameterCodec::schema_native_value_size(get_value_datum(), get_value_meta(), len) != OB_SUCCESS) { return 0; }
   LST_DO_CODE(OB_UNIS_ADD_LEN, type_, flags_, is_enum_type_);
   return len;
 }
@@ -785,8 +836,11 @@ int ObTypeLibSysVar::inner_to_show_str(ObIAllocator &allocator,
                                        ObString &show_str) const
 {
   int ret = OB_SUCCESS;
-  const DatumValue &value = get_value();
-  if (OB_UNLIKELY(false == ob_is_integer_type(value.get_type()))) {
+  alignas(8) char scratch[64];
+  DatumValue value;
+  OZ(export_value(value, scratch, sizeof(scratch)));
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(false == ob_is_integer_type(value.get_type()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid type of type lib", K(*this), K(value.get_type()));
   } else {
@@ -1154,12 +1208,24 @@ int ObIntSysVar::do_convert(ObExecContext &ctx,
     if (OB_SUCC(ret)) {
       int cmp = 0;
       if (!min_val_.is_null()) {
-        OZ(compare_datum_values(out_val, min_val_, cmp));
-        if (OB_SUCC(ret) && cmp < 0) { out_val = min_val_; is_converted = true; }
+        alignas(8) char bound_scratch[64];
+        DatumValue bound;
+        OZ(export_sys_var_value(min_val_, min_meta_, bound, bound_scratch, sizeof(bound_scratch)));
+        OZ(compare_datum_values(out_val, bound, cmp));
+        if (OB_SUCC(ret) && cmp < 0) {
+          OZ(clone_typed_value(bound, out_val, ctx.get_allocator()));
+          if (OB_SUCC(ret)) { is_converted = true; }
+        }
       }
       if (OB_SUCC(ret) && !max_val_.is_null()) {
-        OZ(compare_datum_values(out_val, max_val_, cmp));
-        if (OB_SUCC(ret) && cmp > 0) { out_val = max_val_; is_converted = true; }
+        alignas(8) char bound_scratch[64];
+        DatumValue bound;
+        OZ(export_sys_var_value(max_val_, max_meta_, bound, bound_scratch, sizeof(bound_scratch)));
+        OZ(compare_datum_values(out_val, bound, cmp));
+        if (OB_SUCC(ret) && cmp > 0) {
+          OZ(clone_typed_value(bound, out_val, ctx.get_allocator()));
+          if (OB_SUCC(ret)) { is_converted = true; }
+        }
       }
     }
   }
@@ -1229,9 +1295,17 @@ int ObStrictRangeIntSysVar::do_check_and_convert(ObExecContext &ctx,
     // check the out_val's range
     if (OB_SUCC(ret)) {
       int cmp_min = 0, cmp_max = 0;
-      if (!min_val_.is_null()) { OZ(compare_datum_values(out_val, min_val_, cmp_min)); }
+      if (!min_val_.is_null()) {
+        alignas(8) char bound_scratch[64];
+        DatumValue bound;
+        OZ(export_sys_var_value(min_val_, min_meta_, bound, bound_scratch, sizeof(bound_scratch)));
+        OZ(compare_datum_values(out_val, bound, cmp_min));
+      }
       if (OB_SUCC(ret) && cmp_min >= 0 && !max_val_.is_null()) {
-        OZ(compare_datum_values(out_val, max_val_, cmp_max));
+        alignas(8) char bound_scratch[64];
+        DatumValue bound;
+        OZ(export_sys_var_value(max_val_, max_meta_, bound, bound_scratch, sizeof(bound_scratch)));
+        OZ(compare_datum_values(out_val, bound, cmp_max));
       }
       if (OB_SUCC(ret) && !min_val_.is_null() && cmp_min < 0) {
         ret = OB_ERR_WRONG_VALUE_FOR_VAR;
@@ -1305,12 +1379,24 @@ int ObNumericSysVar::do_convert(ObExecContext &ctx,
     // adjust the out_val to meet variable's valid range
     int cmp = 0;
     if (!min_val_.is_null()) {
-      OZ(compare_datum_values(out_val, min_val_, cmp));
-      if (OB_SUCC(ret) && cmp < 0) { out_val = min_val_; is_converted = true; }
+      alignas(8) char bound_scratch[64];
+      DatumValue bound;
+      OZ(export_sys_var_value(min_val_, min_meta_, bound, bound_scratch, sizeof(bound_scratch)));
+      OZ(compare_datum_values(out_val, bound, cmp));
+      if (OB_SUCC(ret) && cmp < 0) {
+        OZ(clone_typed_value(bound, out_val, ctx.get_allocator()));
+        if (OB_SUCC(ret)) { is_converted = true; }
+      }
     }
     if (OB_SUCC(ret) && !max_val_.is_null()) {
-      OZ(compare_datum_values(out_val, max_val_, cmp));
-      if (OB_SUCC(ret) && cmp > 0) { out_val = max_val_; is_converted = true; }
+      alignas(8) char bound_scratch[64];
+      DatumValue bound;
+      OZ(export_sys_var_value(max_val_, max_meta_, bound, bound_scratch, sizeof(bound_scratch)));
+      OZ(compare_datum_values(out_val, bound, cmp));
+      if (OB_SUCC(ret) && cmp > 0) {
+        OZ(clone_typed_value(bound, out_val, ctx.get_allocator()));
+        if (OB_SUCC(ret)) { is_converted = true; }
+      }
     }
   }
   return ret;
@@ -2259,13 +2345,13 @@ int ObSysVarToObjFuncs::to_obj_charset(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   ObString result_str;
-  if (ObNullType == sys_var.get_value().get_type()) {
+  if (ObNullType == sys_var.get_value_meta().get_type()) {
     result_obj.set_null();
   } else if (OB_FAIL(ObSysVarToStrFuncs::to_str_charset(allocator, session, sys_var, result_str))) {
   } else {
     OZ(result_obj.set_varchar(result_str, allocator));
     result_obj.set_collation_type(ObCharset::get_system_collation());
-    result_obj.set_collation_level(sys_var.get_value().get_collation_level());
+    result_obj.set_collation_level(sys_var.get_value_meta().get_collation_level());
   }
   return ret;
 }
@@ -2277,14 +2363,14 @@ int ObSysVarToObjFuncs::to_obj_collation(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   ObString result_str;
-  if (ObNullType == sys_var.get_value().get_type()) {
+  if (ObNullType == sys_var.get_value_meta().get_type()) {
     result_obj.set_null();
   } else if (OB_FAIL(ObSysVarToStrFuncs::to_str_collation(
               allocator, session, sys_var, result_str))) {
   } else {
     OZ(result_obj.set_varchar(result_str, allocator));
     result_obj.set_collation_type(ObCharset::get_system_collation());
-    result_obj.set_collation_level(sys_var.get_value().get_collation_level());
+    result_obj.set_collation_level(sys_var.get_value_meta().get_collation_level());
   }
   return ret;
 }
@@ -2296,10 +2382,14 @@ int ObSysVarToObjFuncs::to_obj_sql_mode(ObIAllocator &allocator,
 {
   UNUSED(session);
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ob_sql_mode_to_str(sys_var.get_value(), result_obj, &allocator))) {
+  alignas(8) char scratch[64];
+  DatumValue value;
+  OZ(sys_var.export_value(value, scratch, sizeof(scratch)));
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ob_sql_mode_to_str(value, result_obj, &allocator))) {
   } else {
     result_obj.set_collation_type(ObCharset::get_system_collation());
-    result_obj.set_collation_level(sys_var.get_value().get_collation_level());
+    result_obj.set_collation_level(sys_var.get_value_meta().get_collation_level());
   }
   return ret;
 }
@@ -2327,12 +2417,16 @@ int ObSysVarToStrFuncs::to_str_charset(ObIAllocator &allocator,
   UNUSED(allocator);
   UNUSED(session);
   int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  DatumValue value;
+  OZ(sys_var.export_value(value, scratch, sizeof(scratch)));
   int64_t coll_type_int64 = -1;
-  if (ObNullType == sys_var.get_value().get_type()) {
+  if (OB_FAIL(ret)) {
+  } else if (ObNullType == sys_var.get_value_meta().get_type()) {
     result_str = ObString("");
-  } else if (OB_FAIL(sys_var.get_value().get_int(coll_type_int64))) {
+  } else if (OB_FAIL(value.get_int(coll_type_int64))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid value", K(ret), K(sys_var), K(sys_var.get_value()));
+    LOG_ERROR("invalid value", K(ret), K(sys_var), K(value));
   } else if (coll_type_int64 == 0) {
     result_str = ObString("");
   } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_type_int64))) {
@@ -2352,12 +2446,16 @@ int ObSysVarToStrFuncs::to_str_collation(ObIAllocator &allocator,
   UNUSED(allocator);
   UNUSED(session);
   int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  DatumValue value;
+  OZ(sys_var.export_value(value, scratch, sizeof(scratch)));
   int64_t coll_type_int64 = -1;
-  if (ObNullType == sys_var.get_value().get_type()) {
+  if (OB_FAIL(ret)) {
+  } else if (ObNullType == sys_var.get_value_meta().get_type()) {
     result_str = ObString("");
-  } else if (OB_FAIL(sys_var.get_value().get_int(coll_type_int64))) {
+  } else if (OB_FAIL(value.get_int(coll_type_int64))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("invalid value", K(ret), K(sys_var), K(sys_var.get_value()));
+    LOG_ERROR("invalid value", K(ret), K(sys_var), K(value));
   } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_type_int64))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid collation", K(ret), K(coll_type_int64), K(sys_var));
@@ -2376,8 +2474,12 @@ int ObSysVarToStrFuncs::to_str_sql_mode(ObIAllocator &allocator,
 {
   UNUSED(session);
   int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  DatumValue value;
+  OZ(sys_var.export_value(value, scratch, sizeof(scratch)));
   DatumValue str_obj;
-  if (OB_FAIL(ob_sql_mode_to_str(sys_var.get_value(), str_obj, &allocator))) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ob_sql_mode_to_str(value, str_obj, &allocator))) {
   } else if (OB_FAIL(str_obj.get_varchar(result_str))) {
   }
   return ret;

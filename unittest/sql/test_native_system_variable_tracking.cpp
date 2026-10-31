@@ -93,11 +93,14 @@ TEST_F(NativeSystemVariableTracking, first_snapshot_owns_bytes_and_survives_late
   ObBasicSysVar *provider = nullptr;
   ASSERT_EQ(OB_SUCCESS, session.get_sys_variable(SYS_VAR__OB_ENABLE_ROLE_IDS, provider));
   ASSERT_NE(nullptr, provider);
-  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR__OB_ENABLE_ROLE_IDS, provider->get_value()));
+  alignas(8) char scratch[64];
+  DatumValue current;
+  ASSERT_EQ(OB_SUCCESS, provider->export_value(current, scratch, sizeof(scratch)));
+  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR__OB_ENABLE_ROLE_IDS, current));
   ASSERT_EQ(1, session.get_changed_sys_var().count());
   const DatumValue &snapshot = session.get_changed_sys_var().at(0).old_val_;
   EXPECT_EQ(ObString::make_string("11,22"), snapshot.get_string());
-  const ObString source = provider->get_value().get_string();
+  const ObString source = provider->get_value_datum().get_string();
   EXPECT_NE(source.ptr(), snapshot.datum_.ptr_);
   // The old provider's value is a genuine producer; overwrite its bytes only
   // after tracking, to verify that the tracker owns its payload separately.
@@ -105,7 +108,8 @@ TEST_F(NativeSystemVariableTracking, first_snapshot_owns_bytes_and_survives_late
   EXPECT_EQ(ObString::make_string("11,22"), snapshot.get_string());
   ASSERT_EQ(OB_SUCCESS, session.update_sys_variable(
       SYS_VAR__OB_ENABLE_ROLE_IDS, ObString::make_string("33,44")));
-  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR__OB_ENABLE_ROLE_IDS, provider->get_value()));
+  ASSERT_EQ(OB_SUCCESS, provider->export_value(current, scratch, sizeof(scratch)));
+  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR__OB_ENABLE_ROLE_IDS, current));
   ASSERT_EQ(1, session.get_changed_sys_var().count());
   EXPECT_EQ(ObString::make_string("11,22"), snapshot.get_string());
   session.reset_session_changed_info();
@@ -139,7 +143,10 @@ TEST_F(NativeSystemVariableTracking, failed_current_snapshot_does_not_publish_ou
 {
   ObBasicSysVar *provider = nullptr;
   ASSERT_EQ(OB_SUCCESS, session.get_sys_variable(SYS_VAR_AUTOCOMMIT, provider));
-  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR_AUTOCOMMIT, provider->get_value()));
+  alignas(8) char scratch[64];
+  DatumValue view;
+  ASSERT_EQ(OB_SUCCESS, provider->export_value(view, scratch, sizeof(scratch)));
+  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR_AUTOCOMMIT, view));
   DatumValue output;
   ASSERT_EQ(OB_SUCCESS, output.set_int(99, owner));
   const char *previous = output.datum_.ptr_;
