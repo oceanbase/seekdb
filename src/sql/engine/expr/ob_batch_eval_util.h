@@ -237,6 +237,54 @@ struct ObSignedIntArithOpWrap : public Base
   }
 };
 
+// The prepared arithmetic policy selects each integral representation. Keep
+// unsigned-result arithmetic independent of the carrier's payload address.
+template <typename Base>
+struct ObUnsignedIntArithOpWrap : public Base
+{
+  using Left = typename Base::L_RAW_TYPE;
+  using Right = typename Base::R_RAW_TYPE;
+  static_assert(std::is_same<typename Base::RES_RAW_TYPE, uint64_t>::value
+      && (std::is_same<Left, int64_t>::value || std::is_same<Left, uint64_t>::value)
+      && (std::is_same<Right, int64_t>::value || std::is_same<Right, uint64_t>::value),
+      "Unsigned BIGINT arithmetic requires integral i64/u64 operands");
+  constexpr static bool is_raw_op_supported() { return false; }
+
+  template <typename Integer, typename DatumType>
+  static Integer read(const DatumType &value)
+  {
+    if constexpr (std::is_same<Integer, int64_t>::value) {
+      return value.get_int();
+    } else {
+      return value.get_uint();
+    }
+  }
+
+  template <typename DatumType, typename... Args>
+  int operator()(DatumType &res, const DatumType &l, const DatumType &r, Args &...args) const
+  {
+    const Left left = read<Left>(l);
+    const Right right = read<Right>(r);
+    uint64_t value = 0;
+    Base::raw_op(value, left, right, args...);
+    // Preserve the existing write-before-check contract and policy diagnostics.
+    res.set_uint(value);
+    return Base::raw_check(value, left, right);
+  }
+
+  template <typename DatumType, typename... Args>
+  static int datum_op(DatumType &res, const DatumType &l, const DatumType &r, Args &...args)
+  {
+    int ret = common::OB_SUCCESS;
+    if (l.is_null() || r.is_null()) {
+      res.set_null();
+    } else {
+      ret = ObUnsignedIntArithOpWrap()(res, l, r, args...);
+    }
+    return ret;
+  }
+};
+
 // Other arithmetic policies keep their existing raw payload boundary.
 template <typename Base>
 struct ObArithOpWrap : public Base

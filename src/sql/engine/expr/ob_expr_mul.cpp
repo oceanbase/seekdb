@@ -190,12 +190,12 @@ struct ObIntUIntBatchMulRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_
 
 int ObExprMul::mul_int_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -225,12 +225,12 @@ struct ObUIntIntBatchMulRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_
 
 int ObExprMul::mul_uint_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -260,12 +260,12 @@ struct ObUIntUIntBatchMulRaw : public ObArithOpRawType<uint64_t, uint64_t, uint6
 
 int ObExprMul::mul_uint_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMulRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMul::mul_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMulRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 

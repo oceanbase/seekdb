@@ -362,12 +362,12 @@ struct ObIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, int64_t, uint64_
 // calc_type/left_type is IntTC, right is ObUIntTC, only mysql mode
 int ObExprAdd::add_int_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntUIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObIntUIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprAdd::add_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -398,12 +398,12 @@ struct ObUIntUIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, uint6
 //calc_type is UIntTC  left and right has same TC
 int ObExprAdd::add_uint_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntUIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntUIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprAdd::add_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntUIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -434,12 +434,12 @@ struct ObUIntIntBatchAddRaw : public ObArithOpRawType<uint64_t, uint64_t, int64_
 // calc_type/left_tpee is UIntTC , right is intTC. only mysql mode
 int ObExprAdd::add_uint_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprAdd::add_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 

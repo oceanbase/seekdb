@@ -361,12 +361,12 @@ struct ObIntUIntBatchMinusRaw : public ObArithOpRawType<uint64_t, int64_t, uint6
 // calc_type/left_type is IntTC, right is ObUIntTC, only mysql mode
 int ObExprMinus::minus_int_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -397,12 +397,12 @@ struct ObUIntUIntBatchMinusRaw : public ObArithOpRawType<uint64_t, uint64_t, uin
 //calc_type is UIntTC  left and right has same TC
 int ObExprMinus::minus_uint_uint(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntUIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
@@ -433,12 +433,12 @@ struct ObUIntIntBatchMinusRaw : public ObArithOpRawType<uint64_t, uint64_t, int6
 // calc_type/left_tpee is UIntTC , right is intTC. only mysql mode
 int ObExprMinus::minus_uint_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObUIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObUnsignedIntArithOpWrap<ObUIntIntBatchMinusRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprMinus::minus_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObUIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObUnsignedIntArithOpWrap<ObUIntIntBatchMinusRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
