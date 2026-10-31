@@ -1,0 +1,57 @@
+#owner: OceanBase database competition
+# Regression for issue #1512: duplicate-heavy scalar integer IN lists should
+# not be rewritten to a VALUES subquery when their distinct membership remains
+# below the configured rewrite threshold.
+
+--disable_warnings
+DROP TABLE IF EXISTS t_inlist_duplicate_rewrite;
+--enable_warnings
+CREATE TABLE t_inlist_duplicate_rewrite (
+  id INT PRIMARY KEY,
+  category INT,
+  category2 INT,
+  KEY idx_category(category)
+);
+INSERT INTO t_inlist_duplicate_rewrite VALUES
+  (1, 1, 10), (2, 2, 20), (3, 3, 30), (4, 4, 40), (5, NULL, 50);
+
+# Four operands but only three distinct signed integers: keep ordinary IN.
+--replace_regex /, $/,/
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 1);
+
+# Four distinct values still take the existing VALUES rewrite path.
+--replace_regex /, $/,/
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 4);
+
+# IN and NOT IN retain their SQL semantics.
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 1) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category NOT IN (1, 2, 3, 1) ORDER BY id;
+
+# Reusing the same parameterized statement shape with different values stays
+# correct because removed duplicate parameters have plan-cache equality guards.
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 1, 1, 1) ORDER BY id;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 4) ORDER BY id;
+
+# Unknown formal prepare parameters and row-valued lists preserve the old path.
+PREPARE inlist_stmt FROM
+  'SELECT /*+ opt_param(''inlist_rewrite_threshold'' 4) */ id
+   FROM t_inlist_duplicate_rewrite
+   WHERE category IN (?, ?, ?, ?) ORDER BY id';
+SET @a = 1, @b = 1, @c = 1, @d = 1;
+EXECUTE inlist_stmt USING @a, @b, @c, @d;
+SET @a = 1, @b = 2, @c = 3, @d = 4;
+EXECUTE inlist_stmt USING @a, @b, @c, @d;
+DEALLOCATE PREPARE inlist_stmt;
+
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite
+WHERE (category, category2) IN ((1, 10), (1, 10), (2, 20), (2, 20))
+ORDER BY id;
+
+DROP TABLE t_inlist_duplicate_rewrite;

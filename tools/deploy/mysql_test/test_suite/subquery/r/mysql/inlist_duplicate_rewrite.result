@@ -1,0 +1,99 @@
+DROP TABLE IF EXISTS t_inlist_duplicate_rewrite;
+CREATE TABLE t_inlist_duplicate_rewrite (
+id INT PRIMARY KEY,
+category INT,
+category2 INT,
+KEY idx_category(category)
+);
+INSERT INTO t_inlist_duplicate_rewrite VALUES
+(1, 1, 10), (2, 2, 20), (3, 3, 30), (4, 4, 40), (5, NULL, 50);
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 1);
+Query Plan
+==============================================================
+|ID|OPERATOR        |NAME                                    |
+--------------------------------------------------------------
+|0 |TABLE RANGE SCAN|t_inlist_duplicate_rewrite(idx_category)|
+==============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_inlist_duplicate_rewrite.id]), filter(nil), rowset=16
+      access([t_inlist_duplicate_rewrite.id]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t_inlist_duplicate_rewrite.category], [t_inlist_duplicate_rewrite.id]), range(1,MIN ; 1,MAX), (2,MIN ; 2,MAX), (3,MIN ; 3,MAX),
+      range_cond([t_inlist_duplicate_rewrite.category IN (1, 2, 3)])
+EXPLAIN BASIC SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 4);
+Query Plan
+=========================================================================
+|ID|OPERATOR                   |NAME                                    |
+-------------------------------------------------------------------------
+|0 |MERGE JOIN                 |                                        |
+|1 |├─TABLE FULL SCAN          |t_inlist_duplicate_rewrite(idx_category)|
+|2 |└─SORT                     |                                        |
+|3 |  └─SUBPLAN SCAN           |VIEW2                                   |
+|4 |    └─HASH DISTINCT        |                                        |
+|5 |      └─VALUES TABLE ACCESS|VALUES_TABLE1                           |
+=========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_inlist_duplicate_rewrite.id]), filter(nil), rowset=16
+      equal_conds([t_inlist_duplicate_rewrite.category = VIEW2.column_0]), other_conds(nil)
+      merge_directions([ASC])
+  1 - output([t_inlist_duplicate_rewrite.id], [t_inlist_duplicate_rewrite.category]), filter(nil), rowset=16
+      access([t_inlist_duplicate_rewrite.id], [t_inlist_duplicate_rewrite.category]), partitions(p0)
+      is_index_back=false, is_global_index=false, filter_before_indexback[false],
+      range_key([t_inlist_duplicate_rewrite.category], [t_inlist_duplicate_rewrite.id]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([VIEW2.column_0]), filter(nil), rowset=16
+      sort_keys([VIEW2.column_0, ASC])
+  3 - output([VIEW2.column_0]), filter(nil), rowset=16
+      access([VIEW2.column_0])
+  4 - output([VALUES_TABLE1.column_0]), filter(nil), rowset=16
+      distinct([VALUES_TABLE1.column_0])
+  5 - output([VALUES_TABLE1.column_0]), filter(nil)
+      access([VALUES_TABLE1.column_0])
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 1) ORDER BY id;
+id
+1
+2
+3
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category NOT IN (1, 2, 3, 1) ORDER BY id;
+id
+4
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 1, 1, 1) ORDER BY id;
+id
+1
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite WHERE category IN (1, 2, 3, 4) ORDER BY id;
+id
+1
+2
+3
+4
+PREPARE inlist_stmt FROM
+'SELECT /*+ opt_param(''inlist_rewrite_threshold'' 4) */ id
+   FROM t_inlist_duplicate_rewrite
+   WHERE category IN (?, ?, ?, ?) ORDER BY id';
+SET @a = 1, @b = 1, @c = 1, @d = 1;
+EXECUTE inlist_stmt USING @a, @b, @c, @d;
+id
+1
+SET @a = 1, @b = 2, @c = 3, @d = 4;
+EXECUTE inlist_stmt USING @a, @b, @c, @d;
+id
+1
+2
+3
+4
+DEALLOCATE PREPARE inlist_stmt;
+SELECT /*+ opt_param('inlist_rewrite_threshold' 4) */ id
+FROM t_inlist_duplicate_rewrite
+WHERE (category, category2) IN ((1, 10), (1, 10), (2, 20), (2, 20))
+ORDER BY id;
+id
+1
+2
+DROP TABLE t_inlist_duplicate_rewrite;
