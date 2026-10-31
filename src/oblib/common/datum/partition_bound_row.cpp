@@ -133,11 +133,20 @@ int PartitionBoundRow::deep_copy(const PartitionBoundRow &source, char *buf, int
     else { candidate.cells_ = new (memory) DatumValue[source.count_]; candidate.count_ = source.count_; }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < source.count_; ++i) {
-    DatumParameter input, owned;
-    input.datum_ = source.cells_[i].datum_; input.set_type_meta(source.cells_[i].meta_);
-    ret = bound_payload_size(source.cells_[i]) == INT64_MAX ? OB_INVALID_ARGUMENT
-        : DatumParameterArray::clone_parameter(input, owned, allocator);
-    if (OB_SUCC(ret)) { candidate.cells_[i] = owned.value_view(); }
+    const DatumValue &value = source.cells_[i];
+    if (bound_payload_size(value) == INT64_MAX) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (value.is_ext_sql_array()) {
+      // Arrays retain complete child parameters and recursively owned payloads.
+      DatumParameter input, owned;
+      input.datum_ = value.datum_; input.set_type_meta(value.meta_);
+      ret = DatumParameterArray::clone_parameter(input, owned, allocator);
+      if (OB_SUCC(ret)) { candidate.cells_[i] = owned.value_view(); }
+    } else {
+      // Ordinary key cells need only their native payload and raw metadata.
+      ret = candidate.cells_[i].datum_.deep_copy(value.datum_, allocator);
+      if (OB_SUCC(ret)) { candidate.cells_[i].meta_ = value.meta_; }
+    }
   }
   if (OB_SUCC(ret) && source.projector_size_ > 0) {
     void *memory = allocator.alloc(source.projector_size_ * sizeof(int32_t));
