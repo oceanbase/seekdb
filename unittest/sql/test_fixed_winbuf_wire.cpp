@@ -262,7 +262,7 @@ TEST(FixedWinbufWire, serialize_capacity_and_shape_errors_do_not_copy_payload)
 
 TEST(FixedWinbufWire, deserialize_payload_errors_leave_previous_row_and_metadata_published)
 {
-  Row sentinel;
+  ObChunkDatumStore::StoredRow sentinel;
   for (int bad = 0; bad < 5; ++bad) {
     auto wire = historical_wire();
     if (bad == 0) { wire.pop_back(); set_unis_length(wire, 1, wire.size() - 6); }
