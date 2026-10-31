@@ -92,7 +92,9 @@ int MergeStoreRows::to_expr(bool is_vectorized, int64_t size)
 int64_t MergeStoreRows::get_group_idx(int64_t idx)
 {
   OB_ASSERT(idx < saved_size_);
-  return ObNewRange::get_group_idx(store_rows_[idx].store_row_->cells()[group_id_idx_].get_int());
+  const ObDatum group = StoredDatumCodec::decode_legacy_view(
+      store_rows_[idx].store_row_->stored_cells()[group_id_idx_]);
+  return ObNewRange::get_group_idx(group.get_int());
 }
 
 int64_t MergeStoreRows::cur_group_idx()
@@ -112,10 +114,10 @@ int64_t MergeStoreRows::row_cnt_with_cur_group_idx()
   return end_idx - cur_idx_;
 }
 
-const ObDatum *MergeStoreRows::cur_datums()
+const StoredDatumCell *MergeStoreRows::cur_stored_cells()
 {
   OB_ASSERT(cur_idx_ < saved_size_);
-  return store_rows_[cur_idx_].store_row_->cells();
+  return store_rows_[cur_idx_].store_row_->stored_cells();
 }
 
 void MergeStoreRows::reuse()
@@ -741,16 +743,18 @@ int ObDASMergeIter::compare(int64_t cur_idx, int64_t &output_idx)
   if (OB_INVALID_INDEX == output_idx) {
     output_idx = cur_idx;
   } else {
-    const ObDatum *cur_datums = merge_store_rows_arr_[cur_idx].cur_datums();
-    const ObDatum *output_datums = merge_store_rows_arr_[output_idx].cur_datums();
+    const StoredDatumCell *cur_cells = merge_store_rows_arr_[cur_idx].cur_stored_cells();
+    const StoredDatumCell *output_cells = merge_store_rows_arr_[output_idx].cur_stored_cells();
     if (nullptr != group_id_expr_) {
-      int64_t cur_group_idx = ObNewRange::get_group_idx(cur_datums[group_id_idx_].get_int());
-      int64_t output_group_idx = ObNewRange::get_group_idx(output_datums[group_id_idx_].get_int());
+      const ObDatum cur_group = StoredDatumCodec::decode_legacy_view(cur_cells[group_id_idx_]);
+      const ObDatum output_group = StoredDatumCodec::decode_legacy_view(output_cells[group_id_idx_]);
+      int64_t cur_group_idx = ObNewRange::get_group_idx(cur_group.get_int());
+      int64_t output_group_idx = ObNewRange::get_group_idx(output_group.get_int());
       if (cur_group_idx != output_group_idx) {
         output_idx = cur_group_idx < output_group_idx ? cur_idx : output_idx;
       } else {
-        int64_t cur_order_idx = ObNewRange::get_index_ordered_idx(cur_datums[group_id_idx_].get_int());
-        int64_t output_order_idx = ObNewRange::get_index_ordered_idx(output_datums[group_id_idx_].get_int());
+        int64_t cur_order_idx = ObNewRange::get_index_ordered_idx(cur_group.get_int());
+        int64_t output_order_idx = ObNewRange::get_index_ordered_idx(output_group.get_int());
         if (cur_order_idx != output_order_idx) {
           output_idx = cur_order_idx < output_order_idx ? cur_idx : output_idx;
         }

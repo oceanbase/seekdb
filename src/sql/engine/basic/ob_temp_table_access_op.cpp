@@ -244,7 +244,8 @@ int ObTempTableAccessOp::inner_get_next_row()
       } else if (OB_ISNULL(MY_SPEC.access_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        MY_SPEC.access_exprs_.at(i)->locate_expr_datum(eval_ctx_) = tmp_sr->cells()[col_idx];
+        MY_SPEC.access_exprs_.at(i)->locate_expr_datum(eval_ctx_) =
+            StoredDatumCodec::decode_legacy_view(tmp_sr->stored_cells()[col_idx]);
         MY_SPEC.access_exprs_.at(i)->set_evaluated_projected(eval_ctx_);
       }
     }
@@ -276,10 +277,10 @@ int ObTempTableAccessOp::inner_get_next_batch(const int64_t max_row_cnt)
         ObDatum *datums = expr->locate_batch_datums(eval_ctx_);
         if (expr->is_batch_result()) {
           for (auto j = 0; j < read_rows; j++) {
-            datums[j] = stored_rows_[j]->cells()[col_idx];
+            datums[j] = StoredDatumCodec::decode_legacy_view(stored_rows_[j]->stored_cells()[col_idx]);
           }
         } else {
-          datums[0] = stored_rows_[0]->cells()[col_idx];
+          datums[0] = StoredDatumCodec::decode_legacy_view(stored_rows_[0]->stored_cells()[col_idx]);
         }
       }
       break;

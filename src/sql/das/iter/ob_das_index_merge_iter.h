@@ -19,6 +19,7 @@
 
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/optimizer/ob_join_order.h"
+#include "sql/engine/basic/stored_datum_cell.h"
 
 namespace oceanbase
 {
@@ -105,7 +106,8 @@ public:
     int to_expr();
     inline bool have_data() const { return cur_idx_ != OB_INVALID_INDEX && cur_idx_ < saved_size_; }
     int64_t rows_cnt() const { return have_data() ? saved_size_ - cur_idx_ : 0; }
-    const ObDatum *cur_datums();
+    // Borrows the current fixed row until save/reuse/reset advances its owner.
+    const StoredDatumCell *cur_stored_cells();
     void reuse();
     void reset();
     TO_STRING_KV(K_(exprs),

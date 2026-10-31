@@ -229,7 +229,8 @@ int ObReceiveRowReader::to_expr(const ObChunkDatumStore::StoredRow *srow,
       if (exprs.at(i)->is_static_const_) {
         continue;
       } else {
-        exprs.at(i)->locate_expr_datum(eval_ctx) = srow->cells()[i];
+        exprs.at(i)->locate_expr_datum(eval_ctx) =
+            StoredDatumCodec::decode_legacy_view(srow->stored_cells()[i]);
         exprs.at(i)->set_evaluated_projected(eval_ctx);
       }
     }
@@ -293,10 +294,10 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
         ObExpr *e = exprs.at(col_idx);
         ObDatum *datums = e->locate_batch_datums(eval_ctx);
         if (!e->is_batch_result()) {
-          datums[0] = srows[0]->cells()[col_idx];
+          datums[0] = StoredDatumCodec::decode_legacy_view(srows[0]->stored_cells()[col_idx]);
         } else {
           for (int64_t i = 0; i < read_rows; i++) {
-            datums[i] = srows[i]->cells()[col_idx];
+            datums[i] = StoredDatumCodec::decode_legacy_view(srows[i]->stored_cells()[col_idx]);
           }
         }
         e->set_evaluated_projected(eval_ctx);
