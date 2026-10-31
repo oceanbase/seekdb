@@ -18,6 +18,7 @@ rust_static_library(
         "//rust/in-process:in_process",
         "//rust/local",
         "//rust/logger",
+        "//rust/number-parser:number_parser",
         "//rust/sql-nio:sql_nio",
         "//rust/regex-engine:regex_engine",
         "//rust/spatial-covering:spatial_covering",

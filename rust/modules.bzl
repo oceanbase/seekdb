@@ -19,6 +19,7 @@ MODULES = {
         "deps": [":local_headers"],
     },
     "logger": {"bridge": "src/bridge.rs"},
+    "number-parser": {"bridge": "src/bridge.rs"},
     "sql-nio": {
         "bridge": "src/bridge.rs",
         "headers": ["include/callbacks.h"],

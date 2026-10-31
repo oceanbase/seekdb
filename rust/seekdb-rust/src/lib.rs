@@ -18,6 +18,7 @@ pub use in_process;
 pub use local as local_storage;
 pub use logger::*;
 pub use mvt;
+pub use number_parser;
 pub use regex_engine;
 pub use spatial_covering;
 pub use sql_nio as network;

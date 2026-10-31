@@ -870,7 +870,7 @@ grouped_unity_cc_library(
         ":_oblib_implementation_headers",
         ":oblib_foundation",
         "//rust:logger",
-        "//bazel/third_party:fast_float_headers",
+        "//rust:number_parser",
     ],
     copts = OBLIB_CXX_COPTS + openmp_copts(),
     local_defines = OBLIB_LOCAL_DEFINES,
