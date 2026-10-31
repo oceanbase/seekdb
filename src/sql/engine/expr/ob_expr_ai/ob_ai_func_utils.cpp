@@ -1554,6 +1554,80 @@ bool ObAIFuncJsonUtils::ob_is_json_array_all_str(ObJsonArray* json_array)
   return is_all_str;
 }
 
+namespace
+{
+// Locate the placeholder that starts at `pos`. Returns false when the text at
+// `pos` is not a placeholder and has to be copied verbatim.
+bool find_prompt_placeholder(const char *template_ptr,
+                              int64_t template_len,
+                              int64_t pos,
+                              uint64_t arg_count,
+                              int64_t &end_pos,
+                              int64_t &index)
+{
+  bool found_end = false;
+  end_pos = pos;
+  for (int64_t j = pos + 1; j < template_len && !found_end; j++) {
+    if (template_ptr[j] == '}') {
+      end_pos = j;
+      found_end = true;
+    } else if (template_ptr[j] < '0' || template_ptr[j] > '9') {
+      break;
+    }
+  }
+  if (!found_end || end_pos <= pos + 1) {
+    return false;
+  }
+  index = 0;
+  for (int64_t k = pos + 1; k < end_pos; k++) {
+    if (template_ptr[k] < '0' || template_ptr[k] > '9') {
+      return false;
+    }
+    index = index * 10 + (template_ptr[k] - '0');
+    if (index >= static_cast<int64_t>(arg_count)) {
+      // The index is already out of range. Clamp it so that a long digit
+      // sequence can never overflow, the caller reports the invalid index.
+      index = static_cast<int64_t>(arg_count);
+      break;
+    }
+  }
+  return true;
+}
+
+// Reserve room for the template and for every placeholder occurrence. The
+// same placeholder may appear several times, so each occurrence has to
+// reserve the full length of the argument it is replaced with.
+int calc_prompt_result_capacity(const ObString &template_str,
+                                 uint64_t arg_count,
+                                 ObArray<ObString> &arg_values,
+                                 int64_t &capacity)
+{
+  int ret = OB_SUCCESS;
+  capacity = template_str.length();
+  const char *template_ptr = template_str.ptr();
+  const int64_t template_len = template_str.length();
+  int64_t pos = 0;
+  while (OB_SUCC(ret) && pos < template_len) {
+    if (template_ptr[pos] == '{') {
+      int64_t end_pos = 0;
+      int64_t index = 0;
+      if (find_prompt_placeholder(template_ptr, template_len, pos, arg_count, end_pos, index)) {
+        if (index >= 0 && static_cast<uint64_t>(index) < arg_count) {
+          capacity += arg_values.at(static_cast<uint64_t>(index)).length();
+        } else {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: invalid placeholder index");
+        }
+        pos = end_pos + 1;
+        continue;
+      }
+    }
+    pos++;
+  }
+  return ret;
+}
+} // namespace
+
 int ObAIFuncPromptObjectUtils::construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object)
 {
   INIT_SUCC(ret);
@@ -1614,7 +1688,7 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
     ret = OB_INVALID_ARGUMENT;
   } else {
     uint64_t args_count = args_array->element_count();
-    int64_t max_result_len = template_str.length();
+    int64_t max_result_len = 0;
     char *result_buf = NULL;
     ObArray<ObString> arg_values;
     for (uint64_t i = 0; OB_SUCC(ret) && i < args_count; i++) {
@@ -1626,13 +1700,11 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
         arg_value = static_cast<ObJsonString *>(arg_node)->get_str();
       } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(allocator, arg_node, arg_value))) {
       }
-      if (OB_SUCC(ret)) {
-        max_result_len += arg_value.length();
-        if (OB_FAIL(arg_values.push_back(arg_value))) {
-        }
+      if (OB_SUCC(ret) && OB_FAIL(arg_values.push_back(arg_value))) {
       }
     }
     if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(calc_prompt_result_capacity(template_str, args_count, arg_values, max_result_len))) {
     } else if (OB_ISNULL(result_buf = static_cast<char *>(allocator.alloc(max_result_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
@@ -1642,34 +1714,10 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
       
       for (int64_t i = 0; i < template_len && OB_SUCC(ret); i++) {
         if (template_ptr[i] == '{') {
-          int64_t start_pos = i;
-          int64_t end_pos = start_pos;
-          bool found_end = false;
-          
-          for (int64_t j = start_pos + 1; j < template_len && !found_end; j++) {
-            if (template_ptr[j] == '}') {
-              end_pos = j;
-              found_end = true;
-            } else if (template_ptr[j] < '0' || template_ptr[j] > '9') {
-              break;
-            }
-          }
-          
-          if (found_end && end_pos > start_pos + 1) {
-            ObString index_str;
-            index_str.assign_ptr(template_ptr + start_pos + 1, static_cast<int32_t>(end_pos - start_pos - 1));
-            
-            int64_t index = 0;
-            bool valid_index = true;
-            for (int64_t k = 0; k < index_str.length() && valid_index; k++) {
-              if (index_str.ptr()[k] >= '0' && index_str.ptr()[k] <= '9') {
-                index = index * 10 + (index_str.ptr()[k] - '0');
-              } else {
-                valid_index = false;
-              }
-            }
-            
-            if (valid_index && index >= 0 && static_cast<uint64_t>(index) < args_count) {
+          int64_t end_pos = 0;
+          int64_t index = 0;
+          if (find_prompt_placeholder(template_ptr, template_len, i, args_count, end_pos, index)) {
+            if (index >= 0 && static_cast<uint64_t>(index) < args_count) {
               ObString arg_value = arg_values.at(static_cast<uint64_t>(index));
               if (result_pos + arg_value.length() <= max_result_len) {
                 MEMCPY(result_buf + result_pos, arg_value.ptr(), arg_value.length());
@@ -1677,7 +1725,6 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
               } else {
                 ret = OB_BUF_NOT_ENOUGH;
               }
-              
               i = end_pos;
             } else {
               ret = OB_INVALID_ARGUMENT;

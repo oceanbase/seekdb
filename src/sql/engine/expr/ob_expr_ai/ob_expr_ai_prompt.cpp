@@ -92,7 +92,7 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
 
   if (OB_FAIL(tmp_allocator.eval_arg(arg0, ctx, template_datum))) {
   } else if (template_datum->is_null()) {
-    ret = OB_INVALID_ARGUMENT;
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                ctx.exec_ctx_, tmp_allocator, *template_datum,
                arg0->datum_meta_, arg0->obj_meta_.has_lob_header(), template_str))) {
@@ -107,6 +107,10 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       ObString arg_str;
       ObJsonString *arg_json_str = NULL;
       if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, datum))) {
+      } else if (datum->is_null()) {
+        // A NULL argument cannot be substituted into the template. Reject it
+        // the same way a NULL literal is rejected while deducing the type.
+        ret = OB_ERR_INVALID_TYPE_FOR_OP;
       } else if (ob_is_string_type(arg->datum_meta_.type_)) {
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                      ctx.exec_ctx_, tmp_allocator, *datum, arg->datum_meta_,
@@ -126,8 +130,6 @@ int ObExprAIPrompt::eval_ai_prompt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(args_array->array_append(json_arg))) {
         }
-      } else if (datum->is_null()) {
-        ret = OB_ERR_INVALID_TYPE_FOR_OP;
       }
     }
   }
