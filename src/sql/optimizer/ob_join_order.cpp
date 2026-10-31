@@ -1509,6 +1509,234 @@ int ObJoinOrder::process_vec_index_info(const ObDMLStmt *stmt,
   return ret;
 }
 
+
+// ============ eliminate subsumed redundant conjunct filters (#1534) ============
+// Vector index pre-filter evaluates the whole filter expression for every
+// candidate row while building the pre-filter bitmap. When the WHERE clause
+// carries many redundant conjuncts (e.g. `age < 10 AND age < 20 AND ...`),
+// the deep conjunction tree is re-evaluated per row and dominates the ANN
+// latency even though the qualifying set is identical. Flatten the
+// conjunction, drop structurally identical conjuncts and `column cmp
+// constant` bounds subsumed by a tighter bound or an equality on the same
+// column, then rebuild the conjunction. Three-valued NULL semantics are
+// preserved: every dropped conjunct is logically implied by a kept one.
+
+int flatten_and_conjuncts(ObRawExpr *expr, ObIArray<ObRawExpr *> &conjuncts)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr)) {
+    // do nothing
+  } else if (expr->is_op_raw_expr() && T_OP_AND == expr->get_expr_type()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(flatten_and_conjuncts(expr->get_param_expr(i), conjuncts))) {
+      } else {}
+    }
+  } else if (OB_FAIL(conjuncts.push_back(expr))) {
+  } else {}
+  return ret;
+}
+
+// A single `column cmp constant` bound extracted from one conjunct.
+struct VecFilterBound
+{
+  bool is_valid_;
+  bool is_equal_;
+  bool is_upper_;
+  bool is_inclusive_;
+  double value_;
+  uint64_t table_id_;
+  uint64_t column_id_;
+  int64_t idx_;
+  VecFilterBound() : is_valid_(false), is_equal_(false), is_upper_(false),
+      is_inclusive_(false), value_(0), table_id_(OB_INVALID_ID),
+      column_id_(OB_INVALID_ID), idx_(-1) {}
+};
+
+// Recognize `col cmp const` / `const cmp col` where const is a numeric
+// constant whose magnitude allows lossless double comparison.
+bool extract_vec_filter_bound(ObRawExpr *expr, VecFilterBound &bound)
+{
+  bool bret = false;
+  if (OB_ISNULL(expr) || !expr->is_op_raw_expr()) {
+    // not an operator expression
+  } else {
+    const ObItemType type = expr->get_expr_type();
+    if (T_OP_EQ != type && T_OP_LT != type && T_OP_LE != type
+        && T_OP_GT != type && T_OP_GE != type) {
+      // not a comparison we handle
+    } else if (2 != expr->get_param_count()
+               || OB_ISNULL(expr->get_param_expr(0))
+               || OB_ISNULL(expr->get_param_expr(1))) {
+      // unexpected parameter count
+    } else {
+      ObRawExpr *left = expr->get_param_expr(0);
+      ObRawExpr *right = expr->get_param_expr(1);
+      ObRawExpr *col_expr = nullptr;
+      ObRawExpr *const_expr = nullptr;
+      if (OB_NOT_NULL(left) && left->is_column_ref_expr()
+          && OB_NOT_NULL(right) && right->is_const_raw_expr()) {
+        col_expr = left;
+        const_expr = right;
+      } else if (OB_NOT_NULL(right) && right->is_column_ref_expr()
+                 && OB_NOT_NULL(left) && left->is_const_raw_expr()) {
+        col_expr = right;
+        const_expr = left;
+      } else {
+        // not a `column vs constant` comparison
+      }
+      if (OB_NOT_NULL(col_expr)) {
+        ObColumnRefRawExpr *col = static_cast<ObColumnRefRawExpr *>(col_expr);
+        ObConstRawExpr *con = static_cast<ObConstRawExpr *>(const_expr);
+        const ObObj &val = con->get_value();
+        double v = 0.0;
+        bool numeric = true;
+        switch (val.get_type()) {
+          case ObIntType: {
+            const int64_t iv = val.get_int();
+            if (iv > 9007199254740992LL || iv < -9007199254740992LL) {
+              numeric = false;  // beyond the exact double range
+            } else {
+              v = static_cast<double>(iv);
+            }
+            break;
+          }
+          case ObUInt64Type: {
+            const uint64_t uv = val.get_uint64();
+            if (uv > 9007199254740992ULL) {
+              numeric = false;
+            } else {
+              v = static_cast<double>(uv);
+            }
+            break;
+          }
+          case ObFloatType:
+            v = static_cast<double>(val.get_float());
+            break;
+          case ObDoubleType:
+            v = val.get_double();
+            break;
+          default:
+            numeric = false;
+            break;
+        }
+        if (numeric) {
+          bound.is_valid_ = true;
+          bound.value_ = v;
+          bound.table_id_ = col->get_table_id();
+          bound.column_id_ = col->get_column_id();
+          bound.is_equal_ = (T_OP_EQ == type);
+          bound.is_upper_ = (T_OP_LT == type || T_OP_LE == type);
+          bound.is_inclusive_ = (T_OP_LE == type || T_OP_GE == type || T_OP_EQ == type);
+          bret = true;
+        }
+      }
+    }
+  }
+  return bret;
+}
+
+// True when bound a (same column, same side) logically implies bound b.
+bool vec_bound_subsumes(const VecFilterBound &a, const VecFilterBound &b)
+{
+  if (a.is_equal_ && b.is_equal_) {
+    return a.value_ == b.value_;
+  } else if (a.is_equal_ != b.is_equal_) {
+    // an equality implies an inclusive bound of the same value, nothing else
+    return a.is_equal_ ? b.is_inclusive_ : false;
+  } else if (a.value_ < b.value_) {
+    return a.is_upper_;
+  } else if (a.value_ > b.value_) {
+    return !a.is_upper_;
+  } else {
+    // equal bounds: a strict bound implies the inclusive one, identical
+    // bounds imply each other
+    return !a.is_inclusive_ || b.is_inclusive_;
+  }
+}
+
+// Eliminate conjuncts that are redundant inside the conjunction: structurally
+// identical conjuncts and same-column numeric bounds subsumed by a tighter
+// bound or an equality. Only rewrites filter_expr when at least one conjunct
+// was removed; never leaves filter_expr empty.
+int simplify_redundant_conjunct_filters(ObRawExprFactory &expr_factory,
+                                        ObRawExpr *&filter_expr)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> conjuncts;
+  if (OB_ISNULL(filter_expr)) {
+    // do nothing
+  } else if (OB_FAIL(flatten_and_conjuncts(filter_expr, conjuncts))) {
+  } else if (conjuncts.count() <= 1) {
+    // nothing to simplify
+  } else {
+    const int64_t n = conjuncts.count();
+    ObSEArray<bool, 64> dropped;
+    for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+      if (OB_FAIL(dropped.push_back(false))) {
+      } else {}
+    }
+    // structurally identical conjuncts are idempotent under AND
+    for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+      for (int64_t j = i + 1; OB_SUCC(ret) && j < n; ++j) {
+        if (!dropped.at(i) && !dropped.at(j)
+            && ObRawExprUtils::is_same_raw_expr(conjuncts.at(i), conjuncts.at(j))) {
+          dropped.at(j) = true;
+        }
+      }
+    }
+    // collect same-column numeric bounds and drop subsumed ones; a bound is
+    // dropped when any other bound on the same column implies it, which keeps
+    // the maximal (tightest) bounds and stays order-independent
+    ObSEArray<VecFilterBound, 64> bounds;
+    for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+      VecFilterBound bound;
+      if (extract_vec_filter_bound(conjuncts.at(i), bound)) {
+        bound.idx_ = i;
+        if (OB_FAIL(bounds.push_back(bound))) {
+        } else {}
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < bounds.count(); ++i) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < bounds.count(); ++j) {
+        if (i == j) {
+          // self
+        } else if (bounds.at(i).table_id_ == bounds.at(j).table_id_
+                   && bounds.at(i).column_id_ == bounds.at(j).column_id_
+                   && !dropped.at(bounds.at(i).idx_)
+                   && !dropped.at(bounds.at(j).idx_)
+                   && vec_bound_subsumes(bounds.at(j), bounds.at(i))) {
+          dropped.at(bounds.at(i).idx_) = true;
+        } else {}
+      }
+    }
+    int64_t dropped_cnt = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < dropped.count(); ++i) {
+      dropped_cnt += dropped.at(i) ? 1 : 0;
+    }
+    if (OB_SUCC(ret) && dropped_cnt > 0) {
+      ObSEArray<ObRawExpr *, 16> survivors;
+      for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
+        if (!dropped.at(i)) {
+          if (OB_FAIL(survivors.push_back(conjuncts.at(i)))) {
+          } else {}
+        }
+      }
+      ObRawExpr *new_expr = nullptr;
+      if (OB_FAIL(ObRawExprUtils::build_and_expr(expr_factory, survivors, new_expr))) {
+      } else if (OB_ISNULL(new_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        filter_expr = new_expr;
+        LOG_INFO("simplified redundant conjunct filters for vector index scan",
+                 K(dropped_cnt), K(n), K(survivors.count()));
+      }
+    }
+  }
+  return ret;
+}
+// ============ end of redundant conjunct filter elimination (#1534) ============
+
+
 int ObJoinOrder::create_one_access_path(const uint64_t table_id,
                                         const uint64_t ref_id,
                                         const uint64_t index_id,
@@ -1642,6 +1870,19 @@ int ObJoinOrder::create_one_access_path(const uint64_t table_id,
       } else if (OB_FAIL(ap->compute_access_path_batch_rescan())) {
       } else {
         access_path = ap;
+      }
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(access_path)
+        && access_path->est_cost_info_.index_meta_info_.is_vector_index_
+        && OB_NOT_NULL(access_path->filter_)) {
+      // Best-effort elimination of subsumed redundant conjunct filters for
+      // vector index scans. https://github.com/oceanbase/seekdb/issues/1534
+      int tmp_ret = simplify_redundant_conjunct_filters(
+          get_plan()->get_optimizer_context().get_expr_factory(),
+          access_path->filter_);
+      if (OB_SUCCESS != tmp_ret) {
+        LOG_WARN("simplify redundant conjunct filters failed, keep original filters",
+                 K(tmp_ret));
       }
     }
   }
