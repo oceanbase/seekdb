@@ -15,8 +15,12 @@
  */
 
 #include "sql/engine/table/native_point_get_input.h"
+#include "common/datum/datum_copy_plan.h"
 #include "lib/charset/ob_charset.h"
+#include <array>
+#include <atomic>
 #include <cstring>
+#include <thread>
 #include <type_traits>
 #include <gtest/gtest.h>
 
@@ -74,6 +78,74 @@ void assert_same_key(const NativePointGetInput &owner, const int64_t (&expected)
 }
 }
 
+TEST(NativePointGetInput, concurrent_owners_share_only_immutable_layout_and_keep_independent_values)
+{
+  constexpr int64_t THREAD_COUNT = 8;
+  constexpr int64_t REBINDS = 64;
+  std::array<std::thread, THREAD_COUNT> threads;
+  std::atomic<int64_t> arrived(0);
+  std::atomic<bool> start(false);
+  std::atomic<bool> correct(true);
+  std::array<uintptr_t, THREAD_COUNT> value_addresses{};
+  std::array<uintptr_t, THREAD_COUNT> storage_addresses{};
+  std::array<uintptr_t, THREAD_COUNT> cached_addresses{};
+  // Separate live owners are constructed by their worker threads before the
+  // first init. The barrier also exercises concurrent first layout access.
+  for (int64_t t = 0; t < THREAD_COUNT; ++t) {
+    threads[t] = std::thread([&, t]() {
+      NativePointGetInput owner;
+      arrived.fetch_add(1, std::memory_order_release);
+      while (!start.load(std::memory_order_acquire)) { std::this_thread::yield(); }
+      for (int64_t bind = 0; bind < REBINDS; ++bind) {
+        Datum source[3];
+        const int64_t expected[3] = {t * 1000 + bind, INT64_MIN + t, INT64_MAX - bind};
+        for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
+        const int64_t group = (t + 1) << 32;
+        if (owner.init(source, group) != OB_SUCCESS || owner.lookup_keys().count() != 1) {
+          correct.store(false, std::memory_order_relaxed);
+          break;
+        }
+        for (Datum &value : source) { value.set_null(); }
+        const auto &key = owner.lookup_keys().at(0);
+        if (key.count_ != 3 || key.cached_rowkey_ == nullptr || key.group_id_ != group
+            || key.cached_rowkey_->get_group_idx() != group) {
+          correct.store(false, std::memory_order_relaxed);
+          break;
+        }
+        for (int i = 0; i < 3; ++i) {
+          const auto &legacy = key.cached_rowkey_->get_cell(i);
+          const uintptr_t begin = reinterpret_cast<uintptr_t>(owner.values() + i);
+          const uintptr_t payload = reinterpret_cast<uintptr_t>(key.datums_[i].ptr_);
+          if (owner.values()[i].get_int() != expected[i] || key.datums_[i].get_int() != expected[i]
+              || legacy.get_int() != expected[i] || legacy.get_type() != ObIntType
+              || legacy.datum_.ptr_ != key.datums_[i].ptr_ || payload < begin
+              || payload + sizeof(int64_t) > begin + sizeof(Datum)) {
+            correct.store(false, std::memory_order_relaxed);
+          }
+        }
+        value_addresses[t] = reinterpret_cast<uintptr_t>(owner.values());
+        storage_addresses[t] = reinterpret_cast<uintptr_t>(key.datums_);
+        cached_addresses[t] = reinterpret_cast<uintptr_t>(key.cached_rowkey_);
+      }
+      // Keep every owner alive while all workers finish checking their views.
+      arrived.fetch_sub(1, std::memory_order_release);
+      while (arrived.load(std::memory_order_acquire) != 0) { std::this_thread::yield(); }
+    });
+  }
+  while (arrived.load(std::memory_order_acquire) != THREAD_COUNT) { std::this_thread::yield(); }
+  start.store(true, std::memory_order_release);
+  for (auto &thread : threads) { thread.join(); }
+  ASSERT_TRUE(correct.load(std::memory_order_relaxed));
+  for (int64_t i = 0; i < THREAD_COUNT; ++i) {
+    ASSERT_NE(0U, value_addresses[i]);
+    for (int64_t j = i + 1; j < THREAD_COUNT; ++j) {
+      EXPECT_NE(value_addresses[i], value_addresses[j]);
+      EXPECT_NE(storage_addresses[i], storage_addresses[j]);
+      EXPECT_NE(cached_addresses[i], cached_addresses[j]);
+    }
+  }
+}
+
 TEST(NativePointGetInput, source_overwrite_cannot_change_owned_inline_keys_or_their_cached_views)
 {
   const int64_t expected[] = {INT64_MIN, 0, INT64_MAX};
@@ -112,7 +184,7 @@ TEST(NativePointGetInput, invalid_columns_do_not_publish_or_replace_an_existing_
 {
   const int64_t expected[] = {17, -23, 31};
   for (int column = 0; column < 3; ++column) {
-    for (int state = 0; state < 5; ++state) {
+    for (int state = 0; state < 6; ++state) {
       Datum source[3];
       for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
       NativePointGetInput owner, empty;
@@ -121,8 +193,9 @@ TEST(NativePointGetInput, invalid_columns_do_not_publish_or_replace_an_existing_
       switch (state) {
         case 0: source[column].set_null(); break;
         case 1: source[column].set_min(); break;
-        case 2: source[column].set_nop(); break;
-        case 3: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(bytes, sizeof(bytes))); break;
+        case 2: source[column].set_max(); break;
+        case 3: source[column].set_nop(); break;
+        case 4: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(bytes, sizeof(bytes))); break;
         default: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::OutRow)); break;
       }
       EXPECT_NE(OB_SUCCESS, empty.init(source, 0));

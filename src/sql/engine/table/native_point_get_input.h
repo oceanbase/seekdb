@@ -16,8 +16,7 @@
 
 #pragma once
 
-#include <optional>
-#include "common/datum/datum_copy_plan.h"
+#include "common/datum/datum.h"
 #include "common/datum/datum_value.h"
 #include "common/rowkey/ob_store_rowkey.h"
 #include "data_plane/access/ob_table_scan_param.h"
@@ -34,6 +33,8 @@ namespace sql
 // Datums; storage and Memtable sidecars borrow those members without copying
 // their payloads. Construct in a stable arena and keep it alive until the scan
 // iterator is reused/released. Never write through its legacy storage views.
+// Only the fixed BIGINT type/copy plan is shared; all values and views below
+// belong to this execution owner and cannot be shared between active scans.
 class NativePointGetInput final
 {
 public:
@@ -52,8 +53,6 @@ public:
   const common::Datum *values() const { return values_; }
 
 private:
-  common::SqlType type_;
-  std::optional<common::DatumCopyPlan> copy_plan_;
   common::Datum values_[COLUMN_COUNT];
   blocksstable::ObStorageDatum storage_datums_[COLUMN_COUNT];
   common::DatumValue legacy_values_[COLUMN_COUNT];
