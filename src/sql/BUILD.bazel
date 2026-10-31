@@ -426,6 +426,15 @@ cc_library(
 # The SQL header builds native LOB outputs with the Share LOB buffer writer.
 # Keep its standalone test dependency inside the SQL module boundary.
 cc_library(
+    name = "stored_datum_cells_test_runtime",
+    testonly = True,
+    srcs = ["engine/basic/ob_chunk_datum_store.cpp"],
+    implementation_deps = [":sql_runtime_interface", ":sql_runtime_internal_headers"],
+    tags = ["manual"],
+    visibility = ["//unittest/sql:__pkg__"],
+)
+
+cc_library(
     name = "native_lob_result_test_runtime",
     testonly = True,
     deps = [

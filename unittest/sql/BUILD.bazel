@@ -4,6 +4,28 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "stored_datum_cells_cases",
+    srcs = ["test_stored_datum_cells.cpp", "test_native_stored_datum_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_stored_datum_cells",
+    linkstatic = True,
+    linkopts = ["-Wl,--gc-sections"],
+    deps = [
+        ":stored_datum_cells_cases",
+        "//src/sql:stored_datum_cells_test_runtime",
+        "//src/oblib:oblib_test_runtime",
+    ],
+)
+
+cc_library(
     name = "datum_collection_compare_cases",
     srcs = ["test_datum_collection_compare.cpp"],
     alwayslink = True,
