@@ -17,7 +17,6 @@ SDK_HEADERS = {
     "sanity_headers": {"hdrs": ["devtools/include/sanity/**/*.h"], "includes": ["devtools/include"]},
     "absl_headers": _headers("absl"),
     "boost_headers": _headers("boost"),
-    "curl_headers": _headers("curl"),
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
@@ -44,7 +43,6 @@ SDK_IMPORTS = {
 SDK_IMPORTS.update({
     name: {"static_library": "lib/" + archive}
     for name, archive in {
-        "curl": "libcurl.a",
     }.items()
 })
 
@@ -70,7 +68,6 @@ _WINDOWS_SHARED = {
     "libcrypto": ("openssl/libcrypto.lib", "openssl_bin/libcrypto-3-x64.dll", []),
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
     "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
-    "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
     "pthreads": ("lib/pthreadVC3.lib", "bin/pthreadVC3.dll", []),
@@ -79,7 +76,6 @@ _WINDOWS_SHARED = {
 
 _WINDOWS_HEADER_LIBRARIES = {
     "absl_headers": [":absl"],
-    "curl_headers": [":curl"],
     "openssl_headers": [":libssl"],
     "roaring_headers": [":roaring"],
     "vsag_headers": [":vsag"],
@@ -149,8 +145,7 @@ def sdk_aliases():
         name = "base_libraries",
         deps = [":libcrypto", ":libssl"] + select({
             "@platforms//os:emscripten": [],
-            "@platforms//os:windows": [":curl", ":zlib"],
-            "//conditions:default": [":curl", ":zlib"],
+            "//conditions:default": [":zlib"],
         }),
     )
     for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:

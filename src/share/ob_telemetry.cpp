@@ -27,7 +27,9 @@
 #include "share/inner_table/local_table_schema.h"
 #include "common/ob_version_def.h"
 #include "common/json_type/ob_json_tree.h"
-#include <curl/curl.h>
+#ifndef __EMSCRIPTEN__
+#include "rust/http_client.h"
+#endif
 #include <errno.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
@@ -1239,67 +1241,39 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
   return ret;
 }
 
-static size_t discard(void* ptr, size_t size, size_t nmemb, void* userdata) {
-  return size * nmemb;
-}
-
-int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
+int send_telemetry_by_http(const char *url, const ObString &json_str)
 {
 #ifdef __EMSCRIPTEN__
   return OB_NOT_SUPPORTED;
 #else
   int ret = OB_SUCCESS;
-  CURL *curl = curl_easy_init();
-  if (curl == nullptr) {
-    LOG_WARN("Failed to init curl");
+  oceanbase::http::ClientConfig config;
+  config.timeout_ms = 1000;
+  config.connect_timeout_ms = 1000;
+  config.https_only = true;
+  config.follow_redirects = true;
+  config.max_redirects = 3;
+  // Preserve the existing endpoint authentication policy.
+  config.verify_peer = false;
+  config.verify_host = true;
+  config.discard_body = true;
+  config.accept_gzip = false;
+  auto client = oceanbase::http::new_http_client(rust::Str(url), config);
+  if (oceanbase::http::Code::Ok != oceanbase::http::http_client_add_header(
+          *client, rust::Str("Content-Type: application/json"))) {
     ret = OB_CURL_ERROR;
   } else {
-    CURLcode cc = CURLE_OK;
-    struct curl_slist *list = NULL;
-    // set post options
-    if (NULL == (list = curl_slist_append(list, "Content-Type: application/json"))) {
+    auto reply = oceanbase::http::http_post(
+        *client, rust::Slice<const uint8_t>(
+            reinterpret_cast<const uint8_t *>(json_str.ptr()), json_str.length()));
+    const auto result = oceanbase::http::http_reply_result(*reply);
+    if (oceanbase::http::Code::Ok != result.code) {
+      LOG_WARN("Failed to perform HTTP request", K(result.transport_code));
       ret = OB_CURL_ERROR;
-    } else {
-      curl_easy_setopt(curl, CURLOPT_URL, url);
-      // Skip CA trust verification to avoid depending on distro-specific CA bundle paths.
-      // Hostname verification remains enabled, but this does not authenticate the peer.
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-      curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
-      curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-      curl_easy_setopt(curl, CURLOPT_POST, 1L);
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.length());
-      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_str.ptr());
-      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard);
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
-
-      // set other options
-      const int64_t no_signal = 1;
-      const int64_t timeout_ms = 1000; // 1s
-      const int64_t no_delay = 1;
-      const int64_t max_redirect = 3; // set max redirect
-      const int64_t follow_location = 1; // for http redirect 301 302
-      curl_easy_setopt(curl, CURLOPT_NOSIGNAL, no_signal);
-      curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms);
-      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms);
-      curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, no_delay);
-      curl_easy_setopt(curl, CURLOPT_MAXREDIRS, max_redirect);
-      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, follow_location);
-
-      // Only a successful HTTP response permits persisting sent=true.
-      long http_code = 0;
-      if (CURLE_OK != (cc = curl_easy_perform(curl))) {
-        LOG_WARN("Failed to perform curl", K(cc));
-        ret = OB_CURL_ERROR;
-      } else if (CURLE_OK != (cc = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code))
-          || http_code < 200 || http_code >= 300) {
-        ret = OB_CURL_ERROR;
-        LOG_WARN("Telemetry endpoint rejected report", K(cc), K(http_code));
-      }
-      curl_slist_free_all(list);
+    } else if (result.http_status < 200 || result.http_status >= 300) {
+      ret = OB_CURL_ERROR;
+      LOG_WARN("Telemetry endpoint rejected report", K(result.http_status));
     }
-    curl_easy_cleanup(curl);
   }
   return ret;
 #endif
@@ -1311,7 +1285,7 @@ int send_telemetry(const char *url, const ObString &json_str)
   if (OB_ISNULL(url) || json_str.empty()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ret = send_telemetry_by_libcurl(url, json_str);
+    ret = send_telemetry_by_http(url, json_str);
   }
   return ret;
 }

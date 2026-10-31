@@ -34,3 +34,14 @@ cc_test(
         "//rust:compression",
     ],
 )
+
+cc_test(
+    name = "test_rust_http_client",
+    srcs = ["test_rust_http_client.cpp"],
+    linkstatic = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//rust:http_client",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

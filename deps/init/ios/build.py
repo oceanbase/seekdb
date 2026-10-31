@@ -11,12 +11,10 @@ import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_PACKAGES = ("openssl", "curl")
+DEFAULT_PACKAGES = ("openssl",)
 
 PACKAGES = {
 
-    "curl": ("8.12.1", "https://curl.se/download/curl-8.12.1.tar.gz",
-             "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf"),
     "openssl": ("1.1.1u", "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/OpenSSL_1_1_1u",
                 "fafe27202bde4238dce258d82ec8a8592a657842e5431264620a933a0c9436b7"),
 }
@@ -72,39 +70,6 @@ def verify_archive(archive, simulator, environment):
         raise RuntimeError("Unexpected archive platforms: " + repr(platforms))
 
 
-def build_zlib_rs(build, prefix, options, environment):
-    """Provide curl's zlib ABI from the pure Rust libz-rs-sys static archive."""
-    target = "aarch64-apple-ios-sim" if options.simulator else "aarch64-apple-ios"
-    package = build / "package"
-    (package / "src").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ROOT / "rust/zlib-sys/Cargo.toml", package / "Cargo.toml")
-    with (package / "Cargo.toml").open("a") as manifest_file:
-        manifest_file.write("\n[workspace]\n")
-    shutil.copy2(ROOT / "Cargo.lock", package / "Cargo.lock")
-    shutil.copy2(ROOT / "rust/zlib-sys/src/lib.rs", package / "src/lib.rs")
-    manifest = package / "Cargo.toml"
-    metadata = json.loads(subprocess.check_output([
-        "cargo", "metadata", "--format-version", "1", "--manifest-path", str(manifest),
-    ], cwd=ROOT, env=environment, universal_newlines=True))
-    packages = {package["name"]: package for package in metadata["packages"]}
-    libz_source = Path(packages["libz-rs-sys"]["manifest_path"]).parent
-    build.mkdir(parents=True, exist_ok=True)
-    run(["cargo", "build", "--release", "--target", target,
-         "--manifest-path", manifest, "--target-dir", build / "cargo"], ROOT, environment)
-    archive = build / "cargo" / target / "release/libzlib_sys.a"
-    verify_archive(archive, options.simulator, environment)
-    shutil.copy2(archive, prefix / "lib/libz.a")
-    for header in ("zlib.h", "zconf.h"):
-        shutil.copy2(libz_source / "include" / header, prefix / "include" / header)
-    for name in ("zlib-rs", "libz-rs-sys"):
-        source = Path(packages[name]["manifest_path"]).parent
-        destination = prefix / "licenses" / name
-        if destination.exists():
-            shutil.rmtree(destination)
-        destination.mkdir(parents=True)
-        shutil.copy2(source / "LICENSE", destination / "LICENSE")
-
-
 def build_openssl(source, build, prefix, sdk, options, environment):
     """Build and install OpenSSL with the SDK's iOS target and no dynamic libraries."""
     target = "iossimulator-xcrun" if options.simulator else "ios64-xcrun"
@@ -123,54 +88,10 @@ def build_openssl(source, build, prefix, sdk, options, environment):
     run(["make", "install_dev"], build, environment)
 
 
-def build_curl(source, build, prefix, sdk, options, environment):
-    """Build libcurl against the verified local OpenSSL and zlib archives."""
-    environment = target_environment(sdk, options, environment, prefix)
-    build_zlib_rs(build / "zlib-rs", prefix, options, environment)
-    for library in ("libssl.a", "libcrypto.a", "libz.a"):
-        verify_archive(prefix / "lib" / library, options.simulator, environment)
-    run([source / "configure", "--host=aarch64-apple-darwin", "--disable-shared",
-         "--enable-static", "--disable-dependency-tracking", "--disable-ldap",
-         "--disable-ldaps", "--without-libpsl", "--without-libssh2", "--without-libssh",
-         "--without-wolfssh", "--without-nghttp2", "--without-nghttp3", "--without-ngtcp2",
-         "--without-zstd", "--without-brotli", "--without-libidn2", "--without-librtmp",
-         "--without-gssapi", "--without-apple-idn", "--without-secure-transport",
-         "--without-quiche", "--without-msh3", "--without-libuv", "--without-libgsasl",
-         "--with-openssl=" + str(prefix), "--with-zlib=" + str(prefix),
-         "--prefix=" + str(prefix)], build, environment)
-    run(["make", "-C", "lib", "-j" + str(options.jobs)], build, environment)
-    verify_archive(build / "lib/.libs/libcurl.a", options.simulator, environment)
-    run(["make", "-C", "lib", "install"], build, environment)
-    run(["make", "-C", "include", "install"], build, environment)
-
-
-def target_environment(sdk, options, environment, prefix=None):
-    result = dict(environment)
-    sdk_name = "iphonesimulator" if options.simulator else "iphoneos"
-    triple = "arm64-apple-ios" + options.deployment_target
-    if options.simulator:
-        triple += "-simulator"
-    for variable, tool in (("CC", "clang"), ("CXX", "clang++"), ("AR", "ar"), ("RANLIB", "ranlib")):
-        result[variable] = subprocess.check_output(
-            ["xcrun", "--sdk", sdk_name, "--find", tool], env=environment, universal_newlines=True).strip()
-    flags = "-O2 -fPIC -target " + triple + " -isysroot " + shlex.quote(sdk)
-    result["CFLAGS"] = flags
-    result["CXXFLAGS"] = flags
-    result["LDFLAGS"] = "-target " + triple + " -isysroot " + shlex.quote(sdk)
-    result["PKG_CONFIG"] = "pkg-config"
-    result["PKG_CONFIG_LIBDIR"] = str(prefix / "lib/pkgconfig") if prefix else ""
-    result["PKG_CONFIG_PATH"] = ""
-    if prefix:
-        result["CPPFLAGS"] = "-I" + shlex.quote(str(prefix / "include"))
-        result["LDFLAGS"] += " -L" + shlex.quote(str(prefix / "lib"))
-    return result
-
-
 
 
 PACKAGE_OUTPUTS = {
     "openssl": ("lib/libssl.a", "lib/libcrypto.a", "include/openssl/ssl.h"),
-    "curl": ("lib/libcurl.a", "include/curl/curl.h", "lib/libz.a", "include/zlib.h", "include/zconf.h"),
 }
 
 
@@ -217,10 +138,6 @@ def builder_identity():
     """Bind cache reuse to tracked dependency recipes and package version definitions."""
     digest = hashlib.sha256()
     digest.update(Path(__file__).read_bytes())
-    for path in sorted((ROOT / "rust/zlib-sys").rglob("*")):
-        if path.is_file():
-            digest.update(str(path.relative_to(ROOT)).encode())
-            digest.update(path.read_bytes())
     digest.update((ROOT / "Cargo.lock").read_bytes())
     return digest.hexdigest()
 
@@ -270,7 +187,7 @@ def main():
             shutil.rmtree(build)
         source = source_package(name, environment)
         build.mkdir(parents=True, exist_ok=True)
-        {"openssl": build_openssl, "curl": build_curl}[name](source, build, prefix, sdk, options, environment)
+        build_openssl(source, build, prefix, sdk, options, environment)
         outputs = installed_output_hashes(name, prefix)
         if outputs is None:
             raise RuntimeError("Missing installed dependency outputs: " + name)

@@ -10,7 +10,7 @@ rust_static_library(
     version = "0.1.0",
     crate_features = select({
         "@platforms//os:emscripten": [],
-        "//conditions:default": ["default", "native-network"],
+        "//conditions:default": ["default", "native-network", "native-http"],
     }),
     deps = all_crate_deps(normal = True) + [
         "//rust/mvt",
@@ -27,7 +27,7 @@ rust_static_library(
         "//rust/uuid-generator:uuid_generator",
     ] + ["//rust/zlib-sys:library"] + select({
         "@platforms//os:emscripten": [],
-        "//conditions:default": ["//rust/standby-rpc:standby_rpc"],
+        "//conditions:default": ["//rust/standby-rpc:standby_rpc", "//rust/http-client:http_client"],
     }),
     proc_macro_deps = all_crate_deps(proc_macro = True),
     aliases = aliases(),

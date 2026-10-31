@@ -1,0 +1,108 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "curl_sys_zlib_rs",
+    crate_name = "curl_sys",
+    deps = [
+        ":_bs",
+        "@rust_crates__libc-0.2.189//:libc",
+        "@rust_crates__libz-rs-sys-0.6.8//:libz_rs_sys",
+        "@rust_crates__rustls-ffi-0.15.7//:rustls_ffi",
+    ] + select({
+        "@rules_rust//rust/platform:aarch64-pc-windows-msvc": [
+            "@rust_crates__windows-sys-0.59.0//:windows_sys",
+        ],
+        "@rules_rust//rust/platform:x86_64-pc-windows-msvc": [
+            "@rust_crates__windows-sys-0.59.0//:windows_sys",
+        ],
+        "//conditions:default": [],
+    }),
+    compile_data = glob(
+        allow_empty = True,
+        include = ["**"],
+        exclude = [
+            "**/* *",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ),
+    crate_features = ["rustls", "rustls-ffi", "static-curl"],
+    crate_root = "lib.rs",
+    edition = "2018",
+    rustc_env_files = [":cargo_toml_env_vars"],
+    rustc_flags = ["--cap-lints=allow"],
+    srcs = glob(allow_empty = True, include = ["**/*.rs"]),
+    tags = ["manual", "noclippy", "norustfmt"],
+    version = "0.4.84+curl-8.17.0",
+)
+
+cargo_build_script(
+    name = "_bs",
+    build_script_env = {
+        "DEBUG": "true",
+        "DEP_Z_INCLUDE": "$(execpath @rust_crates__libz-rs-sys-0.6.8//:include/zlib.h)",
+        "PROFILE": "release",
+    },
+    build_script_env_files = [":cargo_toml_env_vars"],
+    compile_data = glob(
+        allow_empty = True,
+        include = ["**"],
+        exclude = [
+            "**/* *",
+            "**/*.rs",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ),
+    crate_features = ["rustls", "rustls-ffi", "static-curl"],
+    crate_name = "build_script_build",
+    crate_root = "build.rs",
+    data = glob(
+        allow_empty = True,
+        include = ["**"],
+        exclude = [
+            "**/* *",
+            "**/*.rs",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ) + [
+        "@rust_crates__libz-rs-sys-0.6.8//:include/zconf.h",
+        "@rust_crates__libz-rs-sys-0.6.8//:include/zlib.h",
+    ],
+    deps = [
+        "@rust_crates__cc-1.5.1//:cc",
+        "@rust_crates__pkg-config-0.3.34//:pkg_config",
+    ] + select({
+        "@rules_rust//rust/platform:aarch64-pc-windows-msvc": [
+            "@rust_crates__vcpkg-0.2.15//:vcpkg",
+        ],
+        "@rules_rust//rust/platform:x86_64-pc-windows-msvc": [
+            "@rust_crates__vcpkg-0.2.15//:vcpkg",
+        ],
+        "//conditions:default": [],
+    }),
+    emit_warnings = False,
+    link_deps = [
+        "@rust_crates__libz-rs-sys-0.6.8//:libz_rs_sys",
+        "@rust_crates__rustls-ffi-0.15.7//:rustls_ffi",
+    ],
+    edition = "2018",
+    links = "curl",
+    pkg_name = "curl-sys",
+    rustc_env_files = [":cargo_toml_env_vars"],
+    rustc_flags = ["--cap-lints=allow"],
+    srcs = glob(allow_empty = True, include = ["**/*.rs"]),
+    tags = ["manual", "noclippy", "norustfmt"],
+    version = "0.4.84+curl-8.17.0",
+)

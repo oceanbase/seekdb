@@ -1671,7 +1671,7 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     ":transaction_id",
     "//bazel/third_party:absl_headers",
     "//bazel/third_party:boost_headers",
-    "//bazel/third_party:curl_headers",
+    "//rust:http_client_headers",
     "//bazel/third_party:libaio_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",

@@ -52,7 +52,7 @@ def observer_third_party_link_files(platform):
     ]]
     if android:
         files += ["lib/libspdlog.a"]
-    files += ["lib/libcurl.a", "lib/libssl.a", "lib/libcrypto.a"]
+    files += ["lib/libssl.a", "lib/libcrypto.a"]
     files += [lib64 + "/" + name for name in _ABSL_ARCHIVE_NAMES]
     labels += [repository + "//:" + file for file in files]
     labels += [":_roaring_core_link"]

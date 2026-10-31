@@ -737,7 +737,6 @@ cc_library(
         ":oblib_restore",
         ":oblib_rpc",
         ":oblib_vector",
-        "//bazel/third_party:curl_headers",
         "//bazel/third_party:libaio_headers",
         "//bazel/third_party:mariadb_headers",
         "//bazel/third_party:openssl_headers",
@@ -1033,7 +1032,6 @@ cc_library(
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":oblib_foundation",
-        "//bazel/third_party:curl_headers",
         "//bazel/third_party:openssl_headers",
     ],
     copts = OBLIB_CXX_COPTS,

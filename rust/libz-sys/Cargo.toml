@@ -1,0 +1,14 @@
+[package]
+name = "libz-sys"
+version = "1.1.31"
+edition = "2021"
+publish = false
+links = "z"
+build = "build.rs"
+
+[features]
+default = ["libc"]
+libc = []
+
+[dependencies]
+libz-rs-sys = { version = "=0.6.8", default-features = false, features = ["std", "rust-allocator", "export-symbols", "gz"] }

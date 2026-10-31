@@ -323,7 +323,6 @@ grouped_unity_cc_library(
         "//src/share:vector",
         "//src/share:worker_runtime",
         "//bazel/third_party:boost_headers",
-        "//bazel/third_party:curl_headers",
         "//rust:regex_engine_headers",
         "//bazel/third_party:openssl_headers",
     ],

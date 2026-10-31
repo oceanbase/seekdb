@@ -1,0 +1,12 @@
+[package]
+name = "http-client"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "=1.0.202"
+
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
+curl = { version = "=0.4.49", default-features = false, features = ["static-curl", "rustls"] }
+curl-sys = { version = "=0.4.84", default-features = false }

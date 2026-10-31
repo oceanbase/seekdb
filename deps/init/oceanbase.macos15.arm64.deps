@@ -11,7 +11,6 @@ repo=https://mirrors.oceanbase.com/oceanbase/development-kit/darwin/15/arm64
 [deps]
 devdeps-abseil-cpp-20211102.0-20251205.tar.gz
 devdeps-boost-1.74.0-20251205.tar.gz
-devdeps-libcurl-8.12.1-20251210.tar.gz
 devdeps-openssl-1.1.1u-20251204.tar.gz
 devdeps-relaxed-rapidjson-1.0.0-20251205.tar.gz
 devdeps-roaringbitmap-croaring-3.0.0-20251208.tar.gz
