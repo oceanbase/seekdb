@@ -46,7 +46,6 @@ public:
 private:
   int execute_local_das_task(ObDasAggregatedTask &task_ops);
   int clear_task_exec_env(ObDASRef &das_ref, ObIDASTaskOp &task_op);
-  int refresh_task_location_info(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int do_local_das_task(ObIArray<ObIDASTaskOp*> &task_list);
   int collect_das_copy_attach_refs(ObDASCopyContext &copy_context,
                                    ObDASBaseRtDef *attach_rtdef);

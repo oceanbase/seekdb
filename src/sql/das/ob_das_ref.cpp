@@ -96,13 +96,13 @@ int DASRefCountContext::acquire_task_execution_resource(int64_t timeout_ts)
 
 bool DasRefKey::operator==(const DasRefKey &other) const
 {
-  return (tablet_loc_ == other.tablet_loc_ && op_type_ == other.op_type_);
+  return (tablet_access_ == other.tablet_access_ && op_type_ == other.op_type_);
 }
 
 uint64_t DasRefKey::hash() const
 {
   uint64_t hash = 0;
-  hash = murmurhash(&tablet_loc_, sizeof(tablet_loc_), hash);
+  hash = murmurhash(&tablet_access_, sizeof(tablet_access_), hash);
   hash = murmurhash(&op_type_, sizeof(op_type_), hash);
   return hash;
 }
@@ -115,7 +115,6 @@ ObDASRef::ObDASRef(ObEvalCtx &eval_ctx, ObExecContext &exec_ctx)
     exec_ctx_(exec_ctx),
     eval_ctx_(eval_ctx),
     expr_frame_info_(nullptr),
-    wild_datum_info_(eval_ctx),
     del_aggregated_tasks_(das_alloc_),
     aggregated_tasks_(das_alloc_),
     lookup_cnt_(0),
@@ -130,16 +129,16 @@ ObDASRef::ObDASRef(ObEvalCtx &eval_ctx, ObExecContext &exec_ctx)
 
 DASOpResultIter ObDASRef::begin_result_iter()
 {
-  return DASOpResultIter(batched_tasks_.begin(), wild_datum_info_);
+  return DASOpResultIter(batched_tasks_.begin());
 }
 
-ObIDASTaskOp* ObDASRef::find_das_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_type)
+ObIDASTaskOp* ObDASRef::find_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASOpType op_type)
 {
   int ret = OB_SUCCESS;
   ObIDASTaskOp *das_task = nullptr;
   lookup_cnt_++;
   if (task_map_.created()) {
-    DasRefKey key(tablet_loc, op_type);
+    DasRefKey key(tablet_access, op_type);
     if (OB_FAIL(task_map_.get_refactored(key, das_task))) {
       if (OB_HASH_NOT_EXIST != ret) {
       }
@@ -154,7 +153,7 @@ ObIDASTaskOp* ObDASRef::find_das_task(const ObDASTabletLoc *tablet_loc, ObDASOpT
     for (; nullptr == das_task && !task_iter.is_end(); ++task_iter) {
       ObIDASTaskOp *tmp_task = *task_iter;
       if (tmp_task != nullptr &&
-          tmp_task->get_tablet_loc() == tablet_loc &&
+          tmp_task->get_tablet_access() == tablet_access &&
           tmp_task->get_type() == op_type &&
           !(tmp_task->is_write_buff_full()) &&
           tmp_task->get_agg_task()->start_status_ == DAS_AGG_TASK_UNSTART) {
@@ -186,7 +185,7 @@ int ObDASRef::create_task_map()
       } else if (task->is_write_buff_full() ||
           task->get_agg_task()->start_status_ != DAS_AGG_TASK_UNSTART) {
       } else {
-        DasRefKey key(task->get_tablet_loc(), task->get_type());
+        DasRefKey key(task->get_tablet_access(), task->get_type());
         if (OB_FAIL(task_map_.set_refactored(key, task))) {
         }
       }
@@ -203,7 +202,7 @@ int ObDASRef::add_batched_task(ObIDASTaskOp *das_task)
   int ret = OB_SUCCESS;
   if (OB_FAIL(batched_tasks_.store_obj(das_task))) {
   } else if (task_map_.created()) {
-    DasRefKey key(das_task->get_tablet_loc(), das_task->get_type());
+    DasRefKey key(das_task->get_tablet_access(), das_task->get_type());
     if (OB_FAIL(task_map_.set_refactored(key, das_task))) {
     }
   }
@@ -260,20 +259,6 @@ int ObDASRef::pick_del_task_to_first()
   print_all_das_task();
 #endif
   return ret;
-}
-
-bool ObDASRef::is_all_local_task() const
-{
-  bool bret = false;
-  if (has_task()) {
-    bret = true;
-    DLIST_FOREACH_X(curr, batched_tasks_.get_obj_list(), bret) {
-      if (!curr->get_obj()->is_local_task()) {
-        bret = false;
-      }
-    }
-  }
-  return bret;
 }
 
 // The worker copy of a DAS task serializes tx_desc while the SQL thread can still modify it.
@@ -444,9 +429,6 @@ void ObDASRef::clear_task_map()
   }
 }
 
-
-
-
 int ObDASRef::close_all_task()
 {
   int ret = OB_SUCCESS;
@@ -494,7 +476,7 @@ int ObDASRef::close_all_task()
   return ret;
 }
 
-int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
+int ObDASRef::create_das_task(const DASRuntimeTabletAccess *tablet_access,
                               ObDASOpType op_type,
                               ObIDASTaskOp *&task_op)
 {
@@ -511,8 +493,8 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
     
     task_op->set_task_id(0);
     task_op->in_stmt_retry_ = session->get_is_in_retry();
-    task_op->set_tablet_id(tablet_loc->tablet_id_);
-    task_op->set_tablet_loc(tablet_loc);
+    task_op->set_tablet_id(tablet_access->tablet_id_);
+    task_op->set_tablet_access(tablet_access);
     if (is_snapshot_opt_enabled() && OB_FAIL(task_op->init_das_snapshot_opt_info(session->get_tx_isolation()))) {
     } else if (OB_FAIL(add_aggregated_task(task_op, op_type))) {
     }

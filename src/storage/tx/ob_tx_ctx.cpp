@@ -433,7 +433,8 @@ int ObTxCtx::handle_timeout(const int64_t delay)
 
       // go to preapre state when recover from redo complete
       if (!is_for_replay()) {
-        if (ObTxState::REDO_COMPLETE == get_downstream_state()) {
+        if (ObTxState::REDO_COMPLETE == get_downstream_state()
+            && get_target_state() != ObTxState::ABORT) {
           if (!is_logging_()) {
             if (OB_FAIL(one_phase_commit_())) {
             } else {
@@ -454,7 +455,7 @@ int ObTxCtx::handle_timeout(const int64_t delay)
       if (!is_for_replay()
           && get_target_state() == ObTxState::ABORT
           && get_target_state() != get_downstream_state()) {
-        if (OB_FAIL(compensate_abort_log_())) {
+        if (OB_FAIL(do_local_tx_end_(TxEndAction::ABORT_TX))) {
         }
       }
 
@@ -984,6 +985,58 @@ int ObTxCtx::gc_ctx_()
   return ret;
 }
 
+int ObTxCtx::takeover_from_replay()
+{
+  int ret = OB_SUCCESS;
+  CtxLockGuard guard(lock_);
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (!is_for_replay() || is_exiting_ || is_decided()) {
+    // Repeated activation must not change live local or finished transactions.
+  } else if (!replay_completeness_.is_complete() || is_logging_() || pending_write_) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "cannot take over an incomplete replay context", K(ret), KPC(this));
+  } else if (get_downstream_state() != ObTxState::INIT
+             && get_downstream_state() != ObTxState::REDO_COMPLETE) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "unexpected undecided replay transaction state", K(ret), KPC(this));
+  } else {
+    // INIT has no durable commit intent and its previous owner has gone away.
+    // As on OceanBase leader takeover, an undecided MDS table-lock transaction
+    // must abort even if its commit-info log has already been replayed.
+    const bool abort_tx = get_downstream_state() == ObTxState::INIT
+                          || is_contain_mds_type_(ObTxDataSourceType::TABLE_LOCK)
+                          || runtime_state_.is_force_abort();
+    commit_retry_timeout_ = get_commit_retry_interval_us_();
+    if (OB_FAIL(mt_ctx_.replay_to_commit(false /*is_resume*/))) {
+      (void)mt_ctx_.commit_to_replay();
+    } else if (OB_FAIL(register_timeout_task_(commit_retry_timeout_))) {
+      // Leave the context replay-only so activation can safely retry.
+      (void)mt_ctx_.commit_to_replay();
+    } else {
+      set_for_replay(false);
+      commit_cb_.disable();
+      if (abort_tx) {
+        part_trans_action_ = ObPartTransAction::ABORT;
+        runtime_state_.set_force_abort();
+        set_target_state(ObTxState::ABORT);
+        // The timeout is armed before the first attempt. It retries both the
+        // MDS TX_END notification and the durable abort if this attempt fails.
+        const int tmp_ret = do_local_tx_end_(TxEndAction::ABORT_TX);
+        if (OB_SUCCESS != tmp_ret) {
+          TRANS_LOG(WARN, "recovered transaction abort will retry", K(tmp_ret), KPC(this));
+        }
+      } else {
+        // Preserve the existing REDO_COMPLETE commit-recovery protocol. The
+        // timer also tolerates timestamp services becoming ready after LS online.
+        part_trans_action_ = ObPartTransAction::COMMIT;
+      }
+      TRANS_LOG(INFO, "replayed transaction taken over for local completion", K(abort_tx), KPC(this));
+    }
+  }
+  return ret;
+}
+
 int ObTxCtx::check_tx_status()
 {
   if (OB_SUCCESS == lock_.try_lock()) {
@@ -1024,7 +1077,6 @@ int ObTxCtx::recover_tx_ctx_table_info(ObTxCtxTableInfo &ctx_info)
       mt_ctx_.set_trans_version(exec_info_.prepare_version_);
     }
     exec_info_.multi_data_source_.reset();
-    exec_info_.mds_buffer_ctx_array_.reset();
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(deep_copy_mds_array_(ctx_info.exec_info_.multi_data_source_, _unused_))) {
@@ -4376,7 +4428,6 @@ int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
              OB_FAIL(mt_ctx_.calc_checksum_before_scn(target_scn,
                  exec_info_.checksum_, exec_info_.checksum_scn_))) {
     TRANS_LOG(ERROR, "calc checksum before log ts failed", K(ret), KPC(this));
-  } else if (OB_FAIL(exec_info_.generate_mds_buffer_ctx_array())) {
   } else if (OB_FAIL(info.exec_info_.assign(exec_info_))) {
   } else {
     info.tx_id_ = trans_id_;
@@ -4385,7 +4436,6 @@ int ObTxCtx::get_tx_ctx_table_info_(ObTxCtxTableInfo &info)
       TRANS_LOG(INFO, "store ctx_info: ", K(ret), K(info), KPC(this));
     }
   }
-  exec_info_.mds_buffer_ctx_array_.reset();
 
   return ret;
 }

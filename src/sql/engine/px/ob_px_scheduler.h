@@ -104,7 +104,7 @@ public:
     interrupt_id_(interrupt_id),
     coord_(coord),
     batch_rescan_ctl_(NULL),
-    pruning_table_location_(NULL),
+    pruning_access_plan_(NULL),
     table_access_type_(TableAccessType::NO_TABLE),
     p2p_dfo_map_(),
     rf_dpd_info_()
@@ -149,7 +149,7 @@ public:
   ObInterruptibleTaskID &interrupt_id_;
   ObPxCoordOp &coord_;
   ObBatchRescanCtl *batch_rescan_ctl_;
-  const common::ObIArray<ObTableLocation> *pruning_table_location_;
+  const common::ObIArray<TableAccessPlan> *pruning_access_plan_;
   TableAccessType table_access_type_;
   // key = p2p datahub id, value = target DFO id
   hash::ObHashMap<int64_t, ObP2PDfoMapNode, hash::NoPthreadDefendMode> p2p_dfo_map_;

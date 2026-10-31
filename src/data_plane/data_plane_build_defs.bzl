@@ -1,15 +1,5 @@
 """Data Plane-owned build topology exposed to its BUILD file."""
 
-DATA_PLANE_TABLET_SCAN_SOURCES = ["ob_tablet_scan.cpp"]
-
-DATA_PLANE_PARALLEL_RANGE_TASK_PLANNER_SOURCES = [
-    "ob_parallel_range_task_planner.cpp",
-]
-
-DATA_PLANE_TABLET_SCAN_INTERFACE_HEADERS = [
-    "api/data_plane/access/ob_tablet_scan.h",
-]
-
 DATA_PLANE_API_INTERFACE_HEADERS = [
     "api/data_plane/access/ob_data_access_retry.h",
     "api/data_plane/access/ob_datum_reshape.h",

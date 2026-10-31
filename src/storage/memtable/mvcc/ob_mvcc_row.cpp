@@ -281,11 +281,9 @@ int ObMvccRowFilter::read_row_and_check(
     } else if (OB_FAIL(mds_filter_.truncate_part_filter_->check_filter_row_complete(datum_row_, complete))) {
     }
     if (OB_FAIL(ret) || !complete) {
-      ObTaskController::get().allow_next_syslog();
        // DEBUG log, remove later
     } else if (OB_FAIL(mds_filter_.truncate_part_filter_->filter(datum_row_, filtered, true/*check_filter*/, true/*check_version*/))) {
     } else {
-      ObTaskController::get().allow_next_syslog();
       TRANS_LOG(INFO, "success to check trans node filtered", KR(ret), K_(datum_row), K(filtered)); // DEBUG log, remove later
     }
   }

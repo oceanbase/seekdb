@@ -34,9 +34,12 @@ struct io_event { void *data; struct iocb *obj; long res; long res2; };
 #endif
 #include "ob_local_device.h"
 #include "config_bridge.h"
+#ifdef __EMSCRIPTEN__
+#include "lib/file/wasm_file.h"
+#endif
 #include "lib/profile/ob_trace_id.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_io_device_helper.h"  // ObIODeviceLocalFileOp/BlockFileAttr, previously hidden behind the storage include chain(free within share)
+#include "share/ob_io_device_helper.h"
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #include <unistd.h>
@@ -329,7 +332,6 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
     int64_t datafile_size = 0;
     int64_t block_size = 0;
     int64_t datafile_disk_percentage = 0;
-    bool is_exist = false;
     int64_t media_id = 0;
 
     for (int64_t i = 0; OB_SUCC(ret) && i < opts.opt_cnt_; ++i) {
@@ -407,7 +409,8 @@ int ObLocalDevice::reconfig(const common::ObIODOpts &opts)
       int64_t new_datafile_size = block_file_size_;
       if (OB_FAIL(ObIODeviceLocalFileOp::get_block_file_size(sstable_dir_, reserved_size, block_size_,
           datafile_size, datafile_disk_percentage, new_datafile_size))) {
-      } else if (OB_FAIL(resize_block_file(new_datafile_size))) {
+      } else {
+        ret = resize_block_file(new_datafile_size);
       }
     }
   }
@@ -420,11 +423,9 @@ int ObLocalDevice::get_config(ObIODOpts &opts)
   return OB_NOT_SUPPORTED;
 }
 
-//bool &need_format_super_block
 int ObLocalDevice::start(const common::ObIODOpts &opts)
 {
   int ret = OB_SUCCESS;
-  bool is_exist = true;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
@@ -440,11 +441,8 @@ int ObLocalDevice::start(const common::ObIODOpts &opts)
     BlockFileAttr block_file_attr(store_path_, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME,
       block_fd_, block_file_size_, block_size_, total_block_cnt_, free_block_array_, block_bitmap_,
       free_block_cnt_, free_block_push_pos_, free_block_pop_pos_, "LDBlockBitMap");
-    if (OB_FAIL(ObIODeviceLocalFileOp::open_block_file(store_dir_, sstable_dir_, block_size_,
-        block_file_size_, disk_percentage_, opts.opts_[0].value_.value_int64, is_exist, block_file_attr))) {
-    } else {
-      opts.opts_[0].set("need_format_super_block", !is_exist);
-    }
+    ret = ObIODeviceLocalFileOp::open_block_file(store_dir_, sstable_dir_, block_size_,
+        block_file_size_, disk_percentage_, opts.opts_[0].value_.value_int64, block_file_attr);
   }
   return ret;
 }
@@ -633,7 +631,7 @@ int ObLocalDevice::mark_blocks(ObIBlockIterator &block_iter)
     while (OB_SUCC(ret)) {
       if (OB_SUCC(block_iter.get_next_block(block_id))) {
         block_idx = block_id.second_id_;
-        if (block_idx >= total_block_cnt_ || block_idx == 0) {
+        if (block_idx >= total_block_cnt_ || block_idx < RESERVED_BLOCK_INDEX) {
           ret = OB_INVALID_DATA;
           SHARE_LOG(WARN, "Invalid block id,", K(block_idx), K_(total_block_cnt));
         } else {
@@ -830,22 +828,14 @@ int ObLocalDevice::pread(
     const int64_t offset,
     const int64_t size,
     void *buf,
-    int64_t &read_size,
-    common::ObIODPreadChecker *checker)
+    int64_t &read_size)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (fd.is_super_block()) {
-    if (OB_UNLIKELY(0 != offset) || OB_ISNULL(checker)) {
-      ret = OB_INVALID_ARGUMENT;
-      SHARE_LOG(WARN, "super block read offset or checker is invalid", K(ret), K(offset), KP(checker));
-    } else if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, 0, read_size))) {
-    } else if (OB_FAIL(checker->do_check(buf, read_size))) {
-    } else if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, block_size_, read_size))) {
-    } else if (OB_FAIL(checker->do_check(buf, read_size))) {
-    }
+  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
@@ -859,10 +849,6 @@ int ObLocalDevice::pread(
     if (read_size < 0) {
       ret = OB_IO_ERROR;
       SHARE_LOG(WARN, "Fail to pread fd, ", K(ret), K(read_size), K(offset), K(size), KP(buf), KERRMSG);
-    }
-    if (OB_SUCC(ret) && nullptr != checker) {
-      if (OB_FAIL(checker->do_check(buf, read_size))) {
-      }
     }
   }
   return ret;
@@ -879,20 +865,8 @@ int ObLocalDevice::pwrite(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
-  } else if (fd.is_super_block()) {
-    // ensure server entry data atomic write
-    if (OB_UNLIKELY(0 != offset)) {
-      ret = OB_INVALID_ARGUMENT;
-      SHARE_LOG(WARN, "super block write offset must be 0", K(ret), K(offset));
-    } else if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 0, write_size))) {
-        SHARE_LOG(ERROR, "Fail to write main superblock, try backup", K(ret), K(write_size), K(offset), K(size), KP(buf));
-        if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_size_, write_size))) {
-          SHARE_LOG(WARN, "Neither main nor backup superblock write success!!!", K(ret), K(write_size), K(offset), K(size), KP(buf));
-        }
-    } else if (OB_UNLIKELY(OB_SUCCESS != ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 1 * block_size_ + offset, write_size))) {
-      // main superblock success, allow backup failure
-      SHARE_LOG(WARN, "Fail to write backup superblock", K(write_size), K(offset), K(size), KP(buf));
-    }
+  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
@@ -1030,9 +1004,8 @@ int ObLocalDevice::io_prepare_pwrite(
   } else if (OB_ISNULL(local_iocb = static_cast<ObLocalIOCB *> (iocb))) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "local iocb is null", K(ret), KP(iocb));
-  } else if (OB_UNLIKELY(fd.is_super_block())) {
-    ret = OB_NOT_SUPPORTED;
-    SHARE_LOG(WARN, "server entry doesn't support AIO", K(ret), K(fd));
+  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
     if (fd.is_block_file()) {
       ::io_prep_pwrite(&(local_iocb->iocb_), block_fd_, buf, count, get_block_file_offset(fd, offset));
@@ -1067,9 +1040,8 @@ int ObLocalDevice::io_prepare_pread(
   } else if (OB_ISNULL(local_iocb = static_cast<ObLocalIOCB *> (iocb))) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "local iocb is null", K(ret), KP(iocb));
-  } else if (OB_UNLIKELY(fd.is_super_block())) {
-    ret = OB_NOT_SUPPORTED;
-    SHARE_LOG(WARN, "server entry doesn't support AIO", K(ret), K(fd));
+  } else if (fd.is_block_file() && fd.second_id_ < RESERVED_BLOCK_INDEX) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
     if (fd.is_block_file()) {
       ::io_prep_pread(&(local_iocb->iocb_), block_fd_, buf, count, get_block_file_offset(fd, offset));
@@ -1264,7 +1236,7 @@ void ObLocalDevice::free_io_events(common::ObIOEvents *io_event)
 
 int64_t ObLocalDevice::get_total_block_size() const
 {
-  return block_file_size_;
+  return ATOMIC_LOAD(&block_file_size_);
 }
 
 int64_t ObLocalDevice::get_free_block_count() const
@@ -1274,7 +1246,7 @@ int64_t ObLocalDevice::get_free_block_count() const
 
 int64_t ObLocalDevice::get_reserved_block_count() const
 {
-  return 2;// reserved only for supper block.
+  return RESERVED_BLOCK_INDEX;
 }
 
 int64_t ObLocalDevice::get_max_block_count(int64_t reserved_size) const
@@ -1285,11 +1257,11 @@ int64_t ObLocalDevice::get_max_block_count(int64_t reserved_size) const
 int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
 {
   int ret = OB_SUCCESS;
-  int64_t ret_size = 0;
   struct statvfs svfs;
 
   const int64_t config_max_file_size = config::datafile_maxsize();
-  int64_t block_file_max_size = block_file_size_;
+  const int64_t current_size = get_total_block_size();
+  int64_t block_file_max_size = current_size;
 
   if (config_max_file_size < block_file_max_size) {
     // auto extend is off
@@ -1301,7 +1273,7 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
     SHARE_LOG(WARN, "Failed to get disk space", K(ret), K(sstable_dir_));
   } else {
     const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(svfs.f_bavail * svfs.f_bsize));
-    const int64_t max_file_size = std::max(block_file_size_, block_file_size_ + free_space - reserved_size);
+    const int64_t max_file_size = std::max(current_size, current_size + free_space - reserved_size);
     /* when datafile_maxsize is large than current datafile_size, we should return
        the Maximun left space that can be extend. */
     if (max_file_size > config_max_file_size) {
@@ -1394,87 +1366,48 @@ int ObLocalDevice::check_write_limited() const
   return ret;
 }
 
-
-
 int ObLocalDevice::resize_block_file(const int64_t new_size)
 {
-  // copy free block info to new_free_block_array
   int ret = OB_SUCCESS;
-  int sys_ret = 0;
-  const ObMemAttr mem_attr = ObMemAttr("LDBlockBitMap");
-  int64_t new_total_block_cnt = new_size / block_size_;
+  const int64_t delta_size = new_size - block_file_size_;
+  if (delta_size <= 0) {
+    if (delta_size < 0) {
+      ret = OB_NOT_SUPPORTED;
+      SHARE_LOG(WARN, "Can not make the block file smaller", K(ret), K(new_size), K(block_file_size_));
+    }
+    return ret;
+  }
+
+  const ObMemAttr mem_attr("LDBlockBitMap");
+  const int64_t new_total_block_cnt = new_size / block_size_;
   int64_t *new_free_block_array = nullptr;
   bool *new_block_bitmap = nullptr;
-  int64_t delta_size = new_size - block_file_size_;
-
-  if (delta_size < 0) {
-    ret = OB_NOT_SUPPORTED;
-    SHARE_LOG(WARN, "Can not make the block file smaller, ", K(ret), K(new_size),
-        K(block_file_size_));
-  } else if (0 == delta_size) {
-    SHARE_LOG(INFO, "The file size is not changed, ", K(new_size), K(block_file_size_));
-  } else {
-#ifdef __APPLE__
-    // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
-    // F_PEOFPOSMODE: offset is relative to the physical end of file
-    // When using F_PEOFPOSMODE, fst_offset should be 0 (start from EOF)
-    fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, delta_size, 0};
-    sys_ret = fcntl(block_fd_, F_PREALLOCATE, &store);
-    if (-1 == sys_ret) {
-      // Try allocating non-contiguous space if contiguous allocation failed
-      store.fst_flags = F_ALLOCATEALL;
-      store.fst_offset = 0;  // Reset offset for retry
-      sys_ret = fcntl(block_fd_, F_PREALLOCATE, &store);
-    }
-    // F_PREALLOCATE only reserves space but doesn't change file size.
-    // We must call ftruncate to actually set the file size.
-    if (0 == sys_ret) {
-      sys_ret = ::ftruncate(block_fd_, new_size);
-    }
-    if (0 != sys_ret) {
-      ret = ObIODeviceLocalFileOp::convert_sys_errno();
-      SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
-          K(delta_size), K(new_size), K(errno), KERRMSG);
-    }
-#elif defined(_WIN32)
-    HANDLE h = (HANDLE)_get_osfhandle(block_fd_);
-    if (h != INVALID_HANDLE_VALUE) {
-      LARGE_INTEGER li;
-      li.QuadPart = block_file_size_ + delta_size;
-      if (!SetFilePointerEx(h, li, NULL, FILE_BEGIN) || !SetEndOfFile(h)) {
-        sys_ret = -1;
-      }
-    } else {
-      sys_ret = -1;
-    }
-    if (0 != sys_ret) {
-      ret = ObIODeviceLocalFileOp::convert_sys_errno();
-      SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
-          K(delta_size), K(errno), KERRMSG);
-    }
-#else
-    if (0 != (sys_ret = ::fallocate(block_fd_, 0, block_file_size_, delta_size))) {
-      ret = ObIODeviceLocalFileOp::convert_sys_errno();
-      SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
-          K(delta_size), K(errno), KERRMSG);
-    }
-#endif
+#ifdef __EMSCRIPTEN__
+  // A retry preserves the old blocks and any already-written tail.
+  if (0 != common::wasm::extend_file_with_zeros(block_fd_, new_size)) {
+    ret = ObIODeviceLocalFileOp::convert_sys_errno();
+    SHARE_LOG(WARN, "write data file extension failed", K(ret), K(new_size), K(errno));
   }
-  
-  if (OB_SUCC(ret)) {
-    if (OB_ISNULL(new_free_block_array
-        = (int64_t *) ob_malloc(sizeof(int64_t) * new_total_block_cnt, mem_attr))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      SHARE_LOG(WARN, "Fail to allocate memory, ", K(ret), K(new_size), K(new_total_block_cnt));
-    } else if (OB_ISNULL(new_block_bitmap
+#else
+  const ObIOFd fd(this, ObIOFd::NORMAL_FILE_ID, block_fd_);
+  ret = ObIODeviceLocalFileOp::fallocate(fd, 0, block_file_size_, delta_size);
+#endif
+  // Publish additional blocks only after the new file length is durable.
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(fsync_block())) {
+  } else if (OB_ISNULL(new_free_block_array
+      = (int64_t *) ob_malloc(sizeof(int64_t) * new_total_block_cnt, mem_attr))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    SHARE_LOG(WARN, "Fail to allocate memory", K(ret), K(new_size), K(new_total_block_cnt));
+  } else if (OB_ISNULL(new_block_bitmap
       = (bool *) ob_malloc(sizeof(bool) * new_total_block_cnt, mem_attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SHARE_LOG(WARN, "Fail to allocate memory, ", K(ret), K(new_size), K(new_total_block_cnt));
+    SHARE_LOG(WARN, "Fail to allocate memory", K(ret), K(new_size), K(new_total_block_cnt));
   } else {
     if (free_block_pop_pos_ > free_block_push_pos_) {
       MEMCPY(new_free_block_array, free_block_array_ + free_block_pop_pos_,
           (total_block_cnt_ - free_block_pop_pos_) * sizeof(int64_t));
-      MEMCPY(new_free_block_array +  total_block_cnt_ - free_block_pop_pos_, free_block_array_,
+      MEMCPY(new_free_block_array + total_block_cnt_ - free_block_pop_pos_, free_block_array_,
           free_block_push_pos_ * sizeof(int64_t));
     } else if (free_block_pop_pos_ < free_block_push_pos_) {
       MEMCPY(new_free_block_array, free_block_array_ + free_block_pop_pos_,
@@ -1492,29 +1425,23 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
     ob_free(block_bitmap_);
     free_block_array_ = new_free_block_array;
     block_bitmap_ = new_block_bitmap;
-    block_file_size_ = new_size;
     for (int64_t i = total_block_cnt_; i < new_total_block_cnt; ++i) {
-      if (!block_bitmap_[i]) {
-        free_block_array_[free_block_push_pos_++] = i;
-        free_block_cnt_++;
-      }
+      free_block_array_[free_block_push_pos_++] = i;
+      ++free_block_cnt_;
     }
     total_block_cnt_ = new_total_block_cnt;
+    ATOMIC_STORE(&block_file_size_, new_size);
     SHARE_LOG(INFO, "succeed to resize file", K(new_size), K(total_block_cnt_), K(free_block_cnt_));
-    }
   }
 
   if (OB_FAIL(ret)) {
     if (nullptr != new_free_block_array) {
       ob_free(new_free_block_array);
-      new_free_block_array = nullptr;
     }
     if (nullptr != new_block_bitmap) {
       ob_free(new_block_bitmap);
-      new_block_bitmap = nullptr;
     }
   }
-
   return ret;
 }
 

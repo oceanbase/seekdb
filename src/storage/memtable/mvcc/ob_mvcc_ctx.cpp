@@ -73,8 +73,6 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "alloc row callback failed", K(ret));
     } else {
-      // not used now, is hotspot in pdml, so comment out
-      // add_trans_mem_total_size(data_size);
 
       cb->set(stored_key,
               node,
@@ -138,8 +136,6 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
         ret = OB_ALLOCATE_MEMORY_FAILED;
         TRANS_LOG(WARN, "alloc row callback failed", K(ret));
       } else {
-        // not used now, is hotspot in pdml, so comment out
-        // add_trans_mem_total_size(data_size);
 
         cb->set(stored_key,
                 node,

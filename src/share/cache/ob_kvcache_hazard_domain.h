@@ -113,8 +113,12 @@ private:
       T obj_;
       Block* block_;
     };
-    constexpr static int64_t SIZEOF_BLOCK = 40;
-    constexpr static int64_t MAX_NUM = (OB_MALLOC_NORMAL_BLOCK_SIZE - SIZEOF_BLOCK) / sizeof(Wrapper);
+    // Compute capacity from the target ABI after Block is complete. In wasm32
+    // the pointer/list fields do not occupy the native LP64 header's 40 bytes.
+    static constexpr int64_t max_num()
+    {
+      return (OB_MALLOC_NORMAL_BLOCK_SIZE - sizeof(Block)) / sizeof(Wrapper);
+    }
 
     static Block& get_block(const T& obj) {
       return *((const Wrapper&)obj).block_;
@@ -128,7 +132,7 @@ private:
     template<typename F>
     int for_each(F& func) {
       int ret = OB_SUCCESS;
-      for (int i = 0; OB_SUCC(ret) && i < MAX_NUM; ++i) {
+      for (int i = 0; OB_SUCC(ret) && i < max_num(); ++i) {
         ret = func(all_objs_[i].obj_);
       }
       return ret;
@@ -139,11 +143,11 @@ private:
     SList<T> list_;
     Wrapper all_objs_[0];
   };
-  static_assert(sizeof(Block) == Block::SIZEOF_BLOCK, "sizeof(Block) is not equal to SIZEOF_BLOCK");
+  static_assert(Block::max_num() > 0, "Block must have room for at least one object");
   using BlockList = SList<Block>;
 
-  constexpr static int64_t RESERVE_THRESHOLD = Block::MAX_NUM / 4 * 3;
-  constexpr static int64_t WASH_THRESHOLD = Block::MAX_NUM * 4;
+  constexpr static int64_t RESERVE_THRESHOLD = Block::max_num() / 4 * 3;
+  constexpr static int64_t WASH_THRESHOLD = Block::max_num() * 4;
 
   int prepare_block();
 
@@ -212,7 +216,7 @@ FixedTinyAllocator<T>::~FixedTinyAllocator()
 {
   while (!blocks_.is_empty()) {
     Block* block = blocks_.pop();
-    // if (Block::MAX_NUM != block->list_.get_size()) {
+    // if (Block::max_num() != block->list_.get_size()) {
     //   COMMON_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "MEMORY LEAK! object is not freed", K(block), K(block->list_.get_size()));
     // }
     ob_free(block);
@@ -294,7 +298,7 @@ void FixedTinyAllocator<T>::wash()
   BlockList blocks = blocks_.pop_all_ts();
   for (typename BlockList::ErasableIterator iter = blocks.begin(); iter != blocks.end();) {
     int64_t list_size = iter->list_.get_size_ts();
-    if (Block::MAX_NUM == list_size) {
+    if (Block::max_num() == list_size) {
       Block* block = blocks.erase(iter);
       // COMMON_LOG(INFO, "free block", KP(block));
       ob_free(block);
@@ -313,7 +317,7 @@ void FixedTinyAllocator<T>::wash()
   int64_t last_wash_time_us_ = ObTimeUtility::current_time_us();
   int64_t wash_time_us = last_wash_time_us_ - start_time_us;
   memory_efficiency_ =
-      (blocks_.get_size_ts() * Block::MAX_NUM - unused_obj_num) / double(blocks_.get_size_ts() * Block::MAX_NUM);
+      (blocks_.get_size_ts() * Block::max_num() - unused_obj_num) / double(blocks_.get_size_ts() * Block::max_num());
   COMMON_LOG(INFO, "allocator wash time ", K(wash_time_us), K(freed_blocks_num), K_(memory_efficiency));
 }
 
@@ -336,7 +340,7 @@ int FixedTinyAllocator<T>::for_each(F& func)
 template<typename T>
 FixedTinyAllocator<T>::Block::Block(): next_(nullptr)
 {
-  for (int i = 0; i < MAX_NUM; ++i) {
+  for (int i = 0; i < max_num(); ++i) {
     new (&all_objs_[i].obj_) T();
     list_.push(&all_objs_[i].obj_);
     all_objs_[i].block_ = this;

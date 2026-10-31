@@ -306,7 +306,7 @@ ObDASIterTreeType ObDASScanOp::get_iter_tree_type() const
 storage::ObTableScanParam* ObDASScanOp::get_local_lookup_param()
 {
   storage::ObTableScanParam* lookup_param = nullptr;
-  if (is_local_task() && ITER_TREE_LOCAL_LOOKUP == get_iter_tree_type() && OB_NOT_NULL(result_)) {
+  if (ITER_TREE_LOCAL_LOOKUP == get_iter_tree_type() && OB_NOT_NULL(result_)) {
     ObDASLocalLookupIter *lookup_iter = static_cast<ObDASLocalLookupIter*>(result_);
     lookup_param = &lookup_iter->get_lookup_param();
   }

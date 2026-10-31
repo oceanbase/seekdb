@@ -5,25 +5,28 @@
 ## 前置条件
 
 - macOS 主机
-- Android NDK 27.x；如果不在 SDK 默认路径，需设置 `ANDROID_NDK_HOME`
+- Android NDK 27.x，设置 `ANDROID_NDK_HOME` 指向实际安装目录
 - API 28 或更高版本的 arm64-v8a 真机或模拟器
 - 已将 `adb` 和 MySQL 兼容客户端加入 `PATH`
 
 ## 构建
 
-使用受支持的 Android 构建入口，一次完成依赖初始化、配置和编译：
+设置实际安装的 NDK 路径，准备 Android 依赖后用 Bazel 编译：
 
 ```bash
-./build.sh release --android --init --make -j16
+export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.3.13750724"
+rustup target add aarch64-linux-android
+python3 build.py init --android
+python3 build.py build --config=android seekdb
 ```
 
 二进制文件位于：
 
 ```text
-build_android_release/src/observer/seekdb
+build/bin/src/observer/seekdb
 ```
 
-Android CMake 构建不提供 `all_tests` 目标。单元测试修改应按照[编写与运行单元测试](unittest.md)中的流程，在受支持的 Linux 主机上验证。
+该配置构建 API 28、支持 16 KiB 内存页的 ARM64 PIE，静态链接 C++ 运行库。单元测试修改应按照[编写与运行单元测试](unittest.md)中的流程，在受支持的 Linux 主机上验证。
 
 ## 移除符号并部署
 
@@ -31,7 +34,7 @@ macOS 自带的 `strip` 无法处理 Android ELF 二进制，必须使用 NDK �
 
 ```bash
 NDK_STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip"
-"$NDK_STRIP" -o /tmp/seekdb build_android_release/src/observer/seekdb
+"$NDK_STRIP" -o /tmp/seekdb build/bin/src/observer/seekdb
 adb push /tmp/seekdb /data/local/tmp/seekdb
 adb shell chmod +x /data/local/tmp/seekdb
 ```

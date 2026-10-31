@@ -32,7 +32,6 @@ void ObRedoLogGenerator::reset()
   redo_sync_fail_cnt_ = 0;
   callback_mgr_ = nullptr;
   mem_ctx_ = NULL;
-  last_logging_blocked_time_ = 0;
 }
 
 void ObRedoLogGenerator::reuse()
@@ -50,7 +49,6 @@ int ObRedoLogGenerator::set(ObTransCallbackMgr *mgr, ObMemtableCtx *mem_ctx)
   int ret = OB_SUCCESS;
   callback_mgr_ = mgr;
   mem_ctx_ = mem_ctx;
-  last_logging_blocked_time_ = 0;
   is_inited_ = true;
 
   return ret;

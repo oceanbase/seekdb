@@ -498,7 +498,6 @@ int ObMultiVersionSchemaService::get_schema(const ObSchemaMgr *mgr,
           precise_version = table_schema->get_schema_version();
           // add debug info
           if (ObSysTableChecker::is_sys_table_has_index(table_schema->get_table_id())) {
-            ObTaskController::get().allow_next_syslog();
             LOG_INFO("fetch sys table schema with index", KR(ret),
                      K(schema_status), K(schema_id),
                      K(schema_version), K(precise_version),
@@ -972,7 +971,6 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
       } else if (schema_version > save_schema_version) {
         // If the specified version is greater than orig_schema_version, the table can be determined to be deleted
         ret = OB_TABLE_IS_DELETED;
-        ObTaskController::get().allow_next_syslog();
         LOG_INFO("table is deleted",K(ret), K(table_id), K(schema_version), K(save_schema_version));
       } else {}
     }
@@ -1504,11 +1502,7 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
     // do nothing
   } else {
     int64_t retry_cnt = 0;
-#if defined(__APPLE__) || defined(_WIN32)
     const useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms
-#else
-    const __useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms
-#endif
     const int64_t MAX_RETRY_CNT = 100 * 1000 * 1000L / RETRY_IDLE_TIME; // 100s at most
     const int64_t SUBMIT_TASK_FREQUENCE = 2 * 1000 * 1000L / RETRY_IDLE_TIME; // each 2s
     while (OB_SUCC(ret)) {

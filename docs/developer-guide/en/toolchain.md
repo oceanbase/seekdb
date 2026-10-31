@@ -1,6 +1,6 @@
 # Install the toolchain
 
-seekdb uses CMake, Rust, and a repository-managed compiler and dependency set. Install Rust and the host tools below, then let `./build.sh release --init` prepare the pinned C/C++ dependencies under `deps/3rd`.
+seekdb uses Bazel, Rust, and a repository-managed compiler and dependency set. Install Rust and the host tools below, then let `./build.py init` prepare the pinned C/C++ dependencies under `deps/3rd`.
 
 ## Rust
 
@@ -13,7 +13,9 @@ source "$HOME/.cargo/env"
 
 On Windows, download and run `rustup-init.exe` from the [official Rust installation page](https://www.rust-lang.org/tools/install), then open a new PowerShell window so `%USERPROFILE%\.cargo\bin` is available in `PATH`.
 
-The repository pins Rust `1.98.1`, includes the `clippy` component, and uses these targets:
+The repository pins Rust `1.98.1` in `rust/rust-toolchain.toml`. Native builds use rustup to locate that version. Rustup installs it automatically if missing, unless `RUSTUP_AUTO_INSTALL=0` is set; no separate installation command is required.
+
+The toolchain file also declares `clippy` and the following targets for Rust checks and cross-compilation. A native build does not require all of them:
 
 ```text
 x86_64-unknown-linux-gnu
@@ -23,7 +25,9 @@ aarch64-apple-ios
 aarch64-apple-ios-sim
 ```
 
-The CMake build invokes Cargo from the Rust workspace when compiling the `sql-nio` library. Rustup then reads `rust/rust-toolchain.toml` and installs the pinned toolchain, components, and targets automatically. The first build may also download the locked Cargo dependencies; configure a crates.io mirror if the host cannot reach the default registry.
+To preinstall the toolchain, components, and targets declared in that file, optionally run `rustup toolchain install --no-self-update` from the `rust/` directory. The `--no-self-update` flag only disables updating rustup itself.
+
+The build script downloads locked Cargo dependencies through the [RsProxy sparse registry](https://rsproxy.cn/), overriding the user's crates.io source selection for this step. No global mirror configuration is needed; downloads still use the existing Cargo cache (`$CARGO_HOME`, or `~/.cargo` by default).
 
 ## Host detection and supported architectures
 
@@ -38,7 +42,7 @@ Do not infer aarch64 support for Fedora, openSUSE/SLES, UOS, or TencentOS from t
 
 The compatibility build also recognizes macOS 13 or later on both `arm64` and `x86_64`. Apple Silicon is the primary tested development platform; accepting an Intel host in the build scripts does not constitute a production-support guarantee.
 
-Windows 11 x64 uses `build.ps1` and a separate dependency flow.
+Windows 11 x64 uses `python build.py`; `init` selects the Windows dependency manifest.
 
 ## Linux host packages
 
@@ -70,50 +74,26 @@ sudo zypper install git wget curl rpm cpio make glibc-devel binutils m4 python3
 ## macOS host packages
 
 ```bash
-brew install git cmake pkg-config openssl@3 ncurses googletest
+brew install git pkg-config openssl@3 ncurses googletest
 brew install zstd lz4 utf8proc thrift re2 brotli
 ```
 
 See [Homebrew optimization](homebrew.md) if a mirror is required.
 
-### macOS 27 (Apple Silicon)
-
-macOS 27 and later select `oceanbase.macos27.arm64.deps`, which does not download
-LLVM. Third-party libraries currently reuse packages from the macOS 15 repository.
-Install Xcode or Command Line Tools with a macOS 27 SDK. CMake checks the active
-developer tools first, then `/Library/Developer/CommandLineTools` if the active
-SDK is too old. It uses the selected tools' Apple Clang by default.
-
-```bash
-bash build.sh release --init
-cmake --build build_release -j8
-```
-
-Select a developer installation with
-`-DOB_MACOS_DEVELOPER_DIR=/path/to/Contents/Developer`, or set `DEVELOPER_DIR` on
-the first configure. An explicitly selected installation must provide SDK 27 or
-newer. The SDK, linker, and Rust/Cargo developer environment are recorded in the
-build rules; subsequent builds do not require the environment variable.
-
-To use Homebrew LLVM compatible with the SDK 27 C++ headers:
-
-```bash
-brew install llvm
-bash build.sh release --init -DOB_MACOS_LLVM_ROOT="$(brew --prefix llvm)"
-```
-
-This selects Homebrew Clang/Clang++; the SDK and linker still come from the Apple
-developer installation. Configuration compiles and links a C++ standard-library
-probe to check LLVM/SDK compatibility. Use a fresh build directory or run
-`bash build.sh clean` before switching compilers in an existing full build.
-
 ## Windows host packages
 
-Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload. Then initialize the repository-managed CMake, Ninja, LLVM, win_flex_bison, OpenSSL, and third-party libraries:
+Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload. The project dependency SDK includes LLVM 18.1.8; no separate LLVM installation is needed.
 
-```powershell
-.\build.ps1 init
+Open **x64 Native Tools Command Prompt for VS 2022** in the repository root and initialize the parser tools and dependency SDK:
+
+```bat
+python build.py init
+python build.py build seekdb
 ```
+
+`build.py` selects clang-cl from `deps\3rd\tools\llvm18`. The executable is `build\bin\src\observer\seekdb\seekdb.exe`. The build retains `_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH` to bypass the compiler version check in newer MSVC standard library headers, for both project C++ and Cargo's C++ bridges.
+
+The DLLs required by the executable are emitted in the same directory, including the MSVC runtime. Packaging consumes this build output; it does not search the dependency SDK for server DLLs.
 
 .NET 8 and WiX v4 are optional and are required only for the configurator and MSI packaging path.
 
@@ -122,7 +102,8 @@ Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop developme
 Return to the repository root and run:
 
 ```bash
-./build.sh release --init
+./build.py init
+./build.py version
 ```
 
 Continue with [Build and run seekdb](build-and-run.md).

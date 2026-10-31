@@ -39,7 +39,7 @@ class ObMetaDiskAddr final
 public:
   enum DiskType : uint8_t {
     NONE = 0,
-    FILE = 1,
+    LOCAL = 1,
     BLOCK = 2,
     MEM = 3,
     RAW_BLOCK = 4, // refer the shared block of storage meta which has no header
@@ -58,15 +58,14 @@ public:
 
   OB_INLINE bool is_block() const { return BLOCK == type_ || RAW_BLOCK == type_; }
   OB_INLINE bool is_raw_block() const { return RAW_BLOCK == type_; }
-  OB_INLINE bool is_disked() const { return BLOCK == type_ || FILE == type_ || RAW_BLOCK == type_; }
-  OB_INLINE bool is_file() const { return FILE == type_; }
+  OB_INLINE bool is_disked() const { return BLOCK == type_ || LOCAL == type_ || RAW_BLOCK == type_; }
+  OB_INLINE bool is_local() const { return LOCAL == type_; }
   OB_INLINE bool is_memory() const { return MEM == type_; }
   OB_INLINE bool is_none() const { return NONE == type_; }
   OB_INLINE void set_none_addr() { type_ = NONE; }
   OB_INLINE void set_seq(const uint64_t seq) { seq_ = seq; }
   OB_INLINE void set_size(const uint64_t size) { size_ = size; }
   OB_INLINE void set_type(const DiskType type) { type_ = type; }
-  OB_INLINE int64_t file_id() const { return file_id_; }
   OB_INLINE uint64_t size() const { return size_; }
   OB_INLINE uint64_t offset() const { return offset_; }
   OB_INLINE uint64_t seq() const { return seq_; }
@@ -90,14 +89,9 @@ public:
       const int64_t offset,
       const int64_t size,
       const DiskType block_type);
-  int get_file_addr(
-      int64_t &file_id,
-      int64_t &offset,
-      int64_t &size) const;
-  int set_file_addr(
-      const int64_t file_id,
-      const int64_t offset,
-      const int64_t size);
+  int set_local_addr(int64_t tablet_id, int64_t size, uint64_t checksum);
+  int64_t local_id() const { return second_id_; }
+  uint64_t local_checksum() const { return first_id_; }
   int get_mem_addr(
       int64_t &offset,
       int64_t &size) const;
@@ -119,7 +113,6 @@ private:
   };
   union {
     int64_t second_id_;
-    int64_t file_id_;
   };
   union {
     int64_t third_id_;
@@ -180,11 +173,7 @@ public:
   VIRTUAL_TO_STRING_KV(KP_(obj), KP_(obj_pool), KP_(allocator), KP_(t3m));
 
 protected:
-#ifndef _WIN32
-  static const int64_t HOLD_OBJ_MAX_TIME = 2 * 60 * 60 * 1000 * 1000L; // 2h
-#else
   static const int64_t HOLD_OBJ_MAX_TIME = INT64_C(2) * 60 * 60 * 1000 * 1000; // 2h
-#endif
   virtual void reset_obj();
 
 protected:

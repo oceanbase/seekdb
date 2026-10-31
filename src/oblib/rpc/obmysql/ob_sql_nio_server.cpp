@@ -187,6 +187,16 @@ void ObSqlNioServer::wait()
   // The Rust io thread is joined in destroy(); nothing to wait on here.
 }
 
+#ifdef __EMSCRIPTEN__
+nio_memory_client *ObSqlNioServer::connect_memory(size_t capacity)
+{
+  // nio_memory_connect requires the reactor to stay live throughout admission.
+  // destroy detaches it under this same mutex before joining Rust workers.
+  lib::ObMutexGuard guard(reactor_lock_);
+  return reactor_ == nullptr ? nullptr : nio_memory_connect(reactor_, capacity);
+}
+#endif
+
 void ObSqlNioServer::destroy()
 {
   NioReactor *reactor = NULL;
@@ -222,6 +232,17 @@ int64_t get_sql_nio_bound_tcp_port()
   return nullptr == global_sql_nio_server
              ? 0
              : global_sql_nio_server->get_bound_tcp_port();
+}
+
+int64_t get_sql_nio_advertised_tcp_port()
+{
+#ifdef __EMSCRIPTEN__
+  return nullptr == global_sql_nio_server
+             ? 0
+             : global_sql_nio_server->get_advertised_tcp_port();
+#else
+  return get_sql_nio_bound_tcp_port();
+#endif
 }
 }; // end namespace obmysql
 }; // end namespace oceanbase

@@ -115,13 +115,6 @@ DEF_TO_STRING(ObLobLocatorV2)
             J_KV(K(*location_info));
             J_COMMA();
           }
-          if (buf_len > pos && extern_header->flags_.has_retry_info_
-              && size_ >= offset + MEM_LOB_EXTERN_RETRYINFO_LEN) {
-            ObMemLobRetryInfo *retry_info = reinterpret_cast<ObMemLobRetryInfo *>(ptr_ + offset);
-            offset += MEM_LOB_EXTERN_RETRYINFO_LEN;
-            J_KV(K(*retry_info));
-            J_COMMA();
-          }
           if (buf_len > pos && extern_header->flags_.has_read_snapshot_
               && size_ >= offset + sizeof(ObMemLobReadSnapshot)) {
             ObMemLobReadSnapshot *read_snapshot = reinterpret_cast<ObMemLobReadSnapshot *>(ptr_ + offset);
@@ -177,13 +170,9 @@ uint32_t ObLobLocatorV2::calc_locator_full_len(const ObMemLobExternFlags &flags,
     if (flags.has_location_info_) {
       loc_len += MEM_LOB_EXTERN_LOCATIONINFO_LEN;
     }
-    if (flags.has_retry_info_) {
-      loc_len += MEM_LOB_EXTERN_RETRYINFO_LEN;
-    }
     if (flags.has_read_snapshot_) {
       loc_len += sizeof(ObMemLobReadSnapshot) + read_snapshot_size;
     }
-    loc_len += MEM_LOB_ADDR_LEN; //ToDo:@gehao server address.
     loc_len += rowkey_size;
   }
   if (is_simple) {
@@ -264,11 +253,6 @@ int ObLobLocatorV2::fill(ObMemLobType type,
           offset += MEM_LOB_EXTERN_LOCATIONINFO_LEN;
           *extern_len += MEM_LOB_EXTERN_LOCATIONINFO_LEN;
         }
-        if (flags.has_retry_info_) {
-          offset += MEM_LOB_EXTERN_RETRYINFO_LEN;
-          *extern_len += MEM_LOB_EXTERN_RETRYINFO_LEN;
-        }
-
         if (flags.has_read_snapshot_) {
           ObMemLobReadSnapshot *read_snapshot = reinterpret_cast<ObMemLobReadSnapshot *>(ptr_ + offset);
           read_snapshot->size_ = read_snapshot_size;
@@ -571,28 +555,6 @@ int ObLobLocatorV2::get_location_info(ObMemLobLocationInfo *&location_info) cons
   return ret;
 }
 
-int ObLobLocatorV2::get_retry_info(ObMemLobRetryInfo *&retry_info) const
-{
-  int ret =  OB_SUCCESS;
-  ObMemLobExternHeader *extern_header = NULL;
-  if (OB_SUCC(get_extern_header(extern_header))) {
-    char *cur_pos = extern_header->data_ + MEM_LOB_EXTERN_SIZE_LEN;
-    if (extern_header->flags_.has_tx_info_) {
-      cur_pos += MEM_LOB_EXTERN_TXINFO_LEN;
-    }
-    if (extern_header->flags_.has_location_info_) {
-      cur_pos += MEM_LOB_EXTERN_LOCATIONINFO_LEN;
-    }
-    if (extern_header->flags_.has_retry_info_) {
-      retry_info = reinterpret_cast<ObMemLobRetryInfo *>(cur_pos);
-    } else {
-      ret = OB_ERR_NULL_VALUE;
-      COMMON_LOG(WARN, "Lob: does not have retry info", K(this), K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObLobLocatorV2::get_read_snapshot_data(ObString &read_snapshot_data) const
 {
   int ret =  OB_SUCCESS;
@@ -604,9 +566,6 @@ int ObLobLocatorV2::get_read_snapshot_data(ObString &read_snapshot_data) const
     }
     if (extern_header->flags_.has_location_info_) {
       cur_pos += MEM_LOB_EXTERN_LOCATIONINFO_LEN;
-    }
-    if (extern_header->flags_.has_retry_info_) {
-      cur_pos += MEM_LOB_EXTERN_RETRYINFO_LEN;
     }
     
     if (extern_header->flags_.has_read_snapshot_) {
@@ -779,17 +738,6 @@ int ObLobLocatorV2::set_location_info(const ObMemLobLocationInfo &location_info)
   ObMemLobLocationInfo *loc_info_ptr = NULL;
   if (OB_SUCC(get_location_info(loc_info_ptr))) {
     *loc_info_ptr = location_info;
-  }
-  return ret;
-}
-
-int ObLobLocatorV2::set_retry_info(const ObMemLobRetryInfo &retry_info)
-{
-  validate_has_lob_header(has_lob_header_);
-  int ret = OB_SUCCESS;
-  ObMemLobRetryInfo *retry_info_ptr = NULL;
-  if (OB_SUCC(get_retry_info(retry_info_ptr))) {
-    *retry_info_ptr = retry_info;
   }
   return ret;
 }

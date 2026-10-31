@@ -59,7 +59,7 @@ static void *roaring_malloc(size_t size) {
       size_t alloc_location = reinterpret_cast<size_t>(alloc_ptr);
       void *tid_ptr = reinterpret_cast<void *>(alloc_location + sizeof(ObRbMemMgr *) );
       size_t tid_location = reinterpret_cast<size_t>(tid_ptr);
-      void *size_ptr = reinterpret_cast<void *>(tid_location + sizeof(size_t));
+      void *size_ptr = reinterpret_cast<void *>(tid_location + sizeof(uint64_t));
       res_ptr = reinterpret_cast<void *>(alloc_location + sizeof(ObRbMemMgr *) + sizeof(uint64_t) + sizeof(size_t));
       MEMCPY(alloc_ptr, &mem_mgr, sizeof(ObRbMemMgr *));
       MEMCPY(tid_ptr, &tid_reserved, sizeof(uint64_t));

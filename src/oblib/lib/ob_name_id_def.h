@@ -625,11 +625,11 @@ DEF_NAME(id, "id")
     DEF_NAME_PAIR(close_plan, "start_close_plan")
     DEF_NAME_PAIR(auto_end_plan, "start_auto_end_plan")
     DEF_NAME_PAIR(storage_table_scan, "table scan")
-    DEF_NAME_PAIR(get_location_cache, "get location cache")
-    DEF_NAME_PAIR(calc_partition_location, "calc partition location")
+    DEF_NAME_PAIR(build_tablet_targets, "build tablet targets")
+    DEF_NAME_PAIR(calculate_partition_targets, "calculate partition targets")
     DEF_NAME_PAIR(sync_end_trans_callback, "sync end trans callback")
     DEF_NAME_PAIR(async_end_trans_callback, "async end trans callback")
-    DEF_NAME_PAIR(calc_tablet_location, "calc tablet location")
+    DEF_NAME_PAIR(calculate_tablet_access, "calculate tablet access")
     // pair events for obperf
     // shorthand:
     // T: transaction
@@ -716,10 +716,6 @@ DEF_NAME(id, "id")
     DEF_NAME(submit_task, "submit task")
     DEF_NAME(drop_schemas, "drop schemas")
 
-    // location cache related
-    DEF_NAME_PAIR(renew_loc_by_sql, "renew loc by sql")
-    DEF_NAME_PAIR(renew_vtable_loc, "renew vtable loc")
-    DEF_NAME_PAIR(renew_loc_by_rpc, "renew loc by rpc")
     DEF_NAME_PAIR(storage_estimation, "storage_row_estimation")
 
     //heartbeat

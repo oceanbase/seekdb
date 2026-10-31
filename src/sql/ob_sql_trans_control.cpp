@@ -564,7 +564,7 @@ bool print_log = false;
  if (print_log) {
     bool auto_commit = false;
     session->get_autocommit(auto_commit);
-    ObPhyPlanType plan_type = plan->get_location_type();
+    ObPhyPlanType plan_type = plan->get_access_shape();
     stmt::StmtType stmt_type = plan->get_stmt_type();
     bool has_for_update = plan->has_for_update();
     bool use_das = plan->use_das();

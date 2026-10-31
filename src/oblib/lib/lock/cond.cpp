@@ -37,9 +37,9 @@ Cond::Cond()
 #endif
     }
     // Set the attribute to use CLOCK_MONOTONIC clock source
-    // Note: pthread_condattr_setclock is Linux-specific, not available on macOS
+    // Note: pthread_condattr_setclock is not available on macOS
     // On macOS, condition variables use the system clock by default
-#ifdef __linux__
+#if defined(__linux__) || defined(__EMSCRIPTEN__)
     rt = pthread_condattr_setclock(&_attr, CLOCK_MONOTONIC);
     if (0 != rt) {
       _OB_LOG_RET(WARN, OB_ERR_SYS, "Failed to set MONOTONIC Clock, err=%d", rt);

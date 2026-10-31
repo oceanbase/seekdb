@@ -42,14 +42,14 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
   bool is_matched = false;
 
   LOG_DEBUG("Get Plan", K(dist_plans_.count()));
-  //need to clear all location info before calculate candi tablet locations
-  //because get_phy_locations will build the related_tablet_map in ObDASCtx
-  //and add candi table location into DASCtx
-  DAS_CTX(pc_ctx.exec_ctx_).clear_all_location_info();
+  //need to clear all access info before calculate candi tablet accesses
+  //because collect_access_targets will build the related_tablet_map in ObDASCtx
+  //and add candi table access into DASCtx
+  DAS_CTX(pc_ctx.exec_ctx_).clear_table_accesses();
   if (OB_ISNULL(plan_set_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if ((plan_set_->is_multi_stmt_plan())) {
-    // If it is a multi stmt plan, it must be a single-table distributed plan, and the physical partition address can be directly calculated based on table location
+    // If it is a multi stmt plan, it must be a single-table distributed plan, and the physical partition address can be directly calculated based on table access
     // single table should just return plan, do not match
     if (0 == dist_plans_.count()) {
       ret = OB_SQL_PC_NOT_EXIST;
@@ -60,41 +60,41 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
       plan = dist_plans_.at(0);
       is_matched = true;
 
-      // fill table location for single plan using px
-      // for single dist plan without px, we already fill the phy locations while calculating plan type
-      // for multi table px plan, physical location is calculated in match step
-      ObArray<ObCandiTableLoc> candi_table_locs;
+      // fill table access for single plan using px
+      // for single dist plan without px, we already fill the phy accesses while calculating plan type
+      // for multi table px plan, physical access is calculated in match step
+      ObArray<TableAccessTargets> table_targets;
       if (OB_ISNULL(plan_set_)) {
         ret = OB_INVALID_ARGUMENT;
       } else if (!plan_set_->enable_inner_part_parallel()) {
         // do nothing
-      } else if (OB_FAIL(ObPhyLocationGetter::get_phy_locations(plan->get_table_locations(),
+      } else if (OB_FAIL(TableAccessTargetBuilder::collect_access_targets(plan->get_table_access_plans(),
                                                                 pc_ctx,
-                                                                candi_table_locs))) {
-      } else if (candi_table_locs.empty()) {
+                                                                table_targets))) {
+      } else if (table_targets.empty()) {
         // do nothing.
-      } else if (OB_FAIL(ObPhyLocationGetter::build_table_locs(
-                   pc_ctx.exec_ctx_.get_das_ctx(), plan->get_table_locations(),
-                   candi_table_locs))) {
+      } else if (OB_FAIL(TableAccessTargetBuilder::build_runtime_accesses(
+                   pc_ctx.exec_ctx_.get_das_ctx(), plan->get_table_access_plans(),
+                   table_targets))) {
       }
     }
   }
 
   ObPlanMatchHelper helper;
-  ObArray<ObCandiTableLoc> phy_tbl_infos;
-  ObArray<ObTableLocation> out_tbl_locations;
+  ObArray<TableAccessTargets> phy_tbl_infos;
+  ObArray<TableAccessPlan> out_access_plans;
   for (int64_t i = 0; OB_SUCC(ret) && !is_matched && i < dist_plans_.count();
        i++) {
     ObPhysicalPlan *tmp_plan = dist_plans_.at(i);
     phy_tbl_infos.reuse();
-    out_tbl_locations.reuse();
+    out_access_plans.reuse();
     if (OB_ISNULL(tmp_plan)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
+    } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_access_plans))) {
     } else if (is_matched) {
       plan = tmp_plan;
-      if (OB_FAIL(ObPhyLocationGetter::build_table_locs(DAS_CTX(pc_ctx.exec_ctx_),
-                                                        out_tbl_locations, phy_tbl_infos))) {
+      if (OB_FAIL(TableAccessTargetBuilder::build_runtime_accesses(DAS_CTX(pc_ctx.exec_ctx_),
+                                                        out_access_plans, phy_tbl_infos))) {
       }
     }
   }
@@ -113,19 +113,19 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
   int ret = OB_SUCCESS;
   bool is_matched = false;
   ObPlanMatchHelper helper;
-  ObArray<ObCandiTableLoc> phy_tbl_infos;
-  ObArray<ObTableLocation> out_tbl_locations;
+  ObArray<TableAccessTargets> phy_tbl_infos;
+  ObArray<TableAccessPlan> out_access_plans;
 
   for (int64_t i = 0; OB_SUCC(ret) && !is_matched && i < dist_plans_.count(); i++) {
     // Check if another thread has successfully added this plan
     phy_tbl_infos.reuse();
-    out_tbl_locations.reuse();
+    out_access_plans.reuse();
     const ObPhysicalPlan *tmp_plan = dist_plans_.at(i);
     if (OB_ISNULL(tmp_plan)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
+    } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_access_plans))) {
     } else {
-      is_matched = is_matched && tmp_plan->has_same_location_constraints(plan);
+      is_matched = is_matched && tmp_plan->has_same_access_constraints(plan);
     }
 
     if (!is_matched) {

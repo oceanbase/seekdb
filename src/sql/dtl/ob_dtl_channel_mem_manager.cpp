@@ -128,7 +128,6 @@ ObDtlLinkedBuffer *ObDtlChannelMemManager::alloc(int64_t chid, int64_t size)
   }
   uint64_t opt = std::abs(EVENT_CALL(EventTable::EN_PX_DTL_TRACE_LOG_ENABLE));
   if (0 != opt) {
-    share::ObTaskController::get().allow_next_syslog();
     LOG_INFO("alloc dtl buffer", KP(allocated_buf));
   }
   LOG_TRACE("channel memory status", K(get_alloc_cnt()), K(get_free_cnt()),

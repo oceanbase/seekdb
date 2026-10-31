@@ -93,7 +93,6 @@ OB_STMT_TYPE_DEF(T_TRUNCATE_TABLE, get_truncate_table_stmt_need_privs, 110, ACTI
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RENAME_TABLE, get_rename_table_stmt_need_privs, 111)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_TABLE_LIKE, get_create_table_like_stmt_need_privs, 112)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SET_NAMES, no_priv_needed, 113)
-OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CLEAR_LOCATION_CACHE, get_server_alter_system_priv, 114)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CLEAR_MERGE_ERROR, get_server_alter_system_priv, 119)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_EMPTY_QUERY, no_priv_needed, 123)
 OB_STMT_TYPE_DEF(T_CREATE_OUTLINE, get_create_outline_stmt_need_privs, 124, ACTION_TYPE_CREATE_OUTLINE)

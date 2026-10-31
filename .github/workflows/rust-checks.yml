@@ -39,11 +39,11 @@ jobs:
 
       - name: clippy (deny warnings)
         working-directory: rust
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Rust workspace tests
         working-directory: rust
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
 
       - name: generated sources are committed
         run: git diff --exit-code -- rust
@@ -53,7 +53,7 @@ jobs:
         working-directory: rust
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
-          cargo check --workspace --target x86_64-pc-windows-gnu
+          cargo check --locked --workspace --target x86_64-pc-windows-gnu
 
       - name: cargo audit
         working-directory: rust

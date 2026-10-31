@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include <inttypes.h>
+
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "storage/ddl/ob_ddl_lock.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
@@ -503,8 +505,8 @@ int ObDDLLock::check_has_dependent_task(const int64_t current_task_id,
   ObISQLClient::ReadResult res;
   sqlclient::ObMySQLResult *result = NULL;
 
-  if (OB_FAIL(sql_string.assign_fmt("SELECT EXISTS(SELECT 1 FROM %s WHERE task_id != %ld AND ddl_type = %d "
-                                    "AND (object_id = %lu OR target_object_id = %lu)) as has",
+  if (OB_FAIL(sql_string.assign_fmt("SELECT EXISTS(SELECT 1 FROM %s WHERE task_id != %" PRId64 " AND ddl_type = %d "
+                                    "AND (object_id = %" PRIu64 " OR target_object_id = %" PRIu64 ")) as has",
       share::OB_ALL_DDL_TASK_STATUS_TNAME, current_task_id, share::ObDDLType::DDL_FORK_TABLE, table_id, table_id))) {
   } else {
     ObISQLConnection *iconn = trans.get_connection();

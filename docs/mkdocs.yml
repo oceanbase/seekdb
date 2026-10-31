@@ -29,6 +29,8 @@ nav:
       - Install the toolchain: toolchain.md
       - Build and run: build-and-run.md
       - Android: android.md
+      - iOS: ios.md
+      - WebAssembly: webassembly.md
       - Homebrew optimization: homebrew.md
   - Development:
       - Coding conventions: coding-convention.md

@@ -78,13 +78,11 @@ public:
            EntryHeaderType &entry_header,
            LSN &lsn);
 
-  int load_manifest_for_meta_storage(block_id_t &expected_next_block_id);
   void destroy();
 
   int writev(const LSNArray &lsn_array, const LogWriteBufArray &write_buf_array, const SCNArray &scn_array);
   int writev(const LSN &lsn, const LogWriteBuf &write_buf, const share::SCN &scn);
 
-  int append_meta(const char *buf, const int64_t buf_len);
 
   // @retval
   //   OB_SUCCESS
@@ -119,7 +117,6 @@ public:
   const LSN get_begin_lsn() const;
   const LSN get_end_lsn() const;
 
-  int update_manifest_used_for_meta_storage(const block_id_t expected_max_block_id);
 
   int get_logical_block_size(int64_t &logical_block_size) const;
 
@@ -150,7 +147,6 @@ private:
   int check_read_out_of_bound_(const block_id_t &block_id,
                                const bool no_such_block) const;
   int inner_switch_block_();
-  int append_block_header_used_for_meta_storage_();
   int append_block_header_(const LSN &block_min_lsn, const share::SCN &block_min_scn);
   int update_block_header_(const block_id_t block_id, const LSN &block_min_lsn, const share::SCN &block_min_scn);
   bool need_switch_block_() const;
@@ -172,7 +168,6 @@ private:
   offset_t get_phy_offset_(const LSN &lsn) const;
   int read_block_header_(const block_id_t block_id, LogBlockHeader &block_header) const;
   bool check_last_block_is_full_(const block_id_t max_block_id) const;
-  int delete_prev_block_for_meta_();
   int inner_pread_(const LSN &read_lsn,
                    const int64_t in_read_size,
                    const bool need_read_block_header,

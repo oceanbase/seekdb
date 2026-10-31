@@ -18,6 +18,8 @@
 #define OCEANBASE_COMMON_OB_TRACE_ID_H
 #include <stdint.h>
 #include <pthread.h>
+#include <type_traits>
+#include "logger.h"
 #include "lib/net/ob_addr.h"
 #include "lib/atomic/ob_atomic.h"
 namespace oceanbase
@@ -35,14 +37,8 @@ struct ObCurTraceId
   {
   public:
     enum { BATCH = 1<<20 };
-    OB_INLINE static uint64_t gen_seq() {
-      RLOCAL_INLINE(uint64_t, thread_seq);
-      if (0 == (thread_seq % BATCH)) {
-        thread_seq = ATOMIC_FAA(&seq_generator_, BATCH);
-      }
-      return ++thread_seq;
-    }
-    static uint64_t seq_generator_;
+    OB_INLINE static uint64_t gen_seq() { return logger::trace_sequence(); }
+    static void seed(uint64_t value) { logger::trace_seed(value); }
   };
   class TraceId
   {
@@ -105,7 +101,7 @@ struct ObCurTraceId
       }
       return addr;
     }
-    inline void get_uval(uint64_t (&uval)[4])
+    inline void get_uval(uint64_t (&uval)[4]) const
     {
       MEMCPY(&uval[0], &uval_[0], sizeof(uval_));
     }
@@ -202,7 +198,7 @@ struct ObCurTraceId
 
     inline int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
 
-    inline bool is_default() { return uval_[0] == 0 && uval_[1] == 0 && uval_[2] == 0 && uval_[3] == 0; }
+    inline bool is_default() const { return uval_[0] == 0 && uval_[1] == 0 && uval_[2] == 0 && uval_[3] == 0; }
 
     inline bool operator == (const TraceId &other) const
     {
@@ -236,106 +232,37 @@ struct ObCurTraceId
     };
   };
 
-  inline static void init(const ObAddr &ip_port)
+  inline static void init(const ObAddr &address)
+  { TraceId id; id.init(address); set(id); }
+  inline static void set(const uint64_t *words) { logger::set_trace_id(words); }
+  inline static void set(const TraceId &id) { set(id.get()); }
+  inline static void set_inner_sql_id(int64_t id) { logger::trace_field(1, id); }
+  inline static void set_sub_id(int32_t id) { logger::trace_field(2, id); }
+  inline static void reset() { logger::set_trace_id(nullptr); }
+  static const char *get_trace_id_str(char *buf, int64_t len)
   {
-    TraceId *trace_id = get_trace_id();
-    if (NULL != trace_id) {
-      trace_id->init(ip_port);
-    }
-  }
-
-  inline static void set(const uint64_t *uval)
-  {
-    TraceId *trace_id = get_trace_id();
-    if (NULL != trace_id) {
-      trace_id->set(uval);
-    }
-  }
-
-  inline static void set(const TraceId &new_trace_id)
-  {
-    TraceId *trace_id = get_trace_id();
-    if (NULL != trace_id) {
-      trace_id->set(new_trace_id);
-    }
-  }
-
-  inline static void set_inner_sql_id(const int64_t execution_id)
-  {
-    TraceId *trace_id = get_trace_id();
-    if (nullptr != trace_id) {
-      trace_id->set_inner_sql_id(execution_id);
-    }
-  }
-
-  inline static void set_sub_id(const int32_t sub_id)
-  {
-    TraceId *trace_id = get_trace_id();
-    if (NULL != trace_id) {
-      trace_id->set_sub_id(sub_id);
-    }
-  }
-
-  inline static void reset()
-  {
-    TraceId *trace_id = get_trace_id();
-    if (NULL != trace_id) {
-      trace_id->reset();
-    }
-  }
-  static const char* get_trace_id_str(char *buf, int64_t buf_len)
-  {
-    if (nullptr != buf && buf_len > 0) {
+    if (buf != nullptr && len > 0) {
       int64_t pos = 0;
-      (void)databuff_printf(buf, buf_len, pos, *get_trace_id());
+      (void)databuff_printf(buf, len, pos, *get_trace_id());
     }
     return buf;
   }
   static const char *get_trace_id_str()
+  { static thread_local char buf[OB_MAX_TRACE_ID_BUFFER_SIZE]; return get_trace_id_str(buf, sizeof(buf)); }
+  inline static const uint64_t *get() { return logger::trace_id(); }
+  inline static uint64_t get_seq() { return get_trace_id()->get_seq(); }
+  inline static const ObAddr get_addr() { return get_trace_id()->get_addr(); }
+  inline static const TraceId *get_trace_id()
   {
-    static __thread char buf[common::OB_MAX_TRACE_ID_BUFFER_SIZE];
-    return get_trace_id_str(buf, sizeof(buf));
+    static_assert(sizeof(TraceId) == 4 * sizeof(uint64_t), "Rust trace ABI");
+    static_assert(std::is_standard_layout<TraceId>::value && std::is_trivially_copyable<TraceId>::value, "Rust trace view layout");
+    return reinterpret_cast<const TraceId *>(logger::trace_id());
   }
-  inline static const uint64_t* get()
-  {
-    TraceId *trace_id = get_trace_id();
-    return trace_id->get();
-  }
-  inline static uint64_t get_seq()
-  {
-    TraceId *trace_id = get_trace_id();
-    return trace_id->get_seq();
-  }
+  inline static void mark_user_request() { logger::trace_field(0, 1); }
+  inline static bool is_user_request() { return get_trace_id()->is_user_request(); }
+  inline static void set(const char *text)
+  { TraceId id; id.set(*get_trace_id()); if (OB_SUCCESS == id.set(text)) set(id); }
 
-  inline static const ObAddr get_addr()
-  {
-    TraceId *trace_id = get_trace_id();
-    return trace_id->get_addr();
-  }
-
-  inline static TraceId *get_trace_id()
-  {
-    static thread_local TraceId TRACE_ID;
-    return &TRACE_ID;
-  }
-
-  inline static void mark_user_request()
-  {
-    get_trace_id()->mark_user_request();
-  }
-
-  inline static bool is_user_request()
-  {
-    return get_trace_id()->is_user_request();
-  }
-
-  inline static void set(const char *buf)
-  {
-    TraceId *trace_id = get_trace_id();
-    if (NULL != trace_id) {
-      trace_id->set(buf);
-    }
-  }
 };
 
 class ObTraceIdGuard final

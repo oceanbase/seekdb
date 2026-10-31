@@ -30,6 +30,7 @@ namespace common
 {
 class ObNewRowIterator;
 class ObISrsProvider;
+struct ObLobReadOptions;
 }  // namespace common
 namespace transaction
 {
@@ -115,7 +116,7 @@ public:
       op_type_(DAS_OP_INVALID),
       task_flag_(0),
       write_branch_id_(0),
-      tablet_loc_(nullptr),
+      tablet_access_(nullptr),
       op_alloc_(op_alloc),
       related_ctdefs_(op_alloc),
       related_rtdefs_(op_alloc),
@@ -144,11 +145,11 @@ public:
   const common::ObTabletID &get_tablet_id() const { return tablet_id_; }
   void set_task_id(const int64_t task_id) { task_id_ = task_id; }
   int64_t get_task_id() const { return task_id_; }
-  void set_tablet_loc(const ObDASTabletLoc *tablet_loc) { tablet_loc_ = tablet_loc; }
-  // tablet_loc_ will not be serialized, therefore it cannot be accessed during the execution phase
+  void set_tablet_access(const DASRuntimeTabletAccess *tablet_access) { tablet_access_ = tablet_access; }
+  // tablet_access_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
-  const ObDASTabletLoc *get_tablet_loc() const { return tablet_loc_; }
-  inline int64_t get_ref_table_id() const { return tablet_loc_->loc_meta_->ref_table_id_; }
+  const DASRuntimeTabletAccess *get_tablet_access() const { return tablet_access_; }
+  inline int64_t get_ref_table_id() const { return tablet_access_->access_meta_->ref_table_id_; }
   virtual int init_task_info(uint32_t row_extend_size) = 0;
   virtual const ObDASBaseCtDef *get_ctdef() const { return nullptr; }
   virtual ObDASBaseRtDef *get_rtdef() { return nullptr; }
@@ -185,7 +186,7 @@ public:
                        "trans_desc", data_plane::ObTxDescLogView(trans_desc_),
                        KPC_(snapshot),
                        K_(tablet_id),
-                       KPC_(tablet_loc),
+                       KPC_(tablet_access),
                        K_(related_ctdefs),
                        K_(related_rtdefs),
                        K_(task_status),
@@ -203,7 +204,6 @@ public:
   transaction::ObTxReadSnapshot *get_snapshot() { return snapshot_; }
   int16_t get_write_branch_id() const { return write_branch_id_; }
   void set_write_branch_id(const int16_t branch_id) { write_branch_id_ = branch_id; }
-  bool is_local_task() const { return true; }
   void set_can_part_retry(const bool flag) { can_part_retry_ = flag; }
   bool can_part_retry() const { return can_part_retry_; }
   bool is_in_retry() const { return in_part_retry_ || in_stmt_retry_; }
@@ -262,9 +262,9 @@ protected:
   };
   int16_t write_branch_id_;  // branch id for parallel write, required for partially rollback
   common::ObTabletID tablet_id_;
-  // tablet_loc_ will not be serialized, therefore it cannot be accessed during the execution phase
+  // tablet_access_ will not be serialized, therefore it cannot be accessed during the execution phase
   // of DASTaskOp. It can only be touched through das_ref and data_access_service layer.
-  const ObDASTabletLoc *tablet_loc_;
+  const DASRuntimeTabletAccess *tablet_access_;
   common::ObIAllocator &op_alloc_;
   //In DML DAS Task,related_ctdefs_ means related local index ctdefs
   //In Scan DAS Task for normal secondary index, related_ctdefs_ have only one element, means the lookup ctdef
@@ -301,41 +301,14 @@ typedef DasTaskList::Iterator DASTaskIter;
 class DASOpResultIter
 {
 public:
-  struct WildDatumPtrInfo
-  {
-    WildDatumPtrInfo(ObEvalCtx &eval_ctx)
-      : exprs_(nullptr),
-        eval_ctx_(eval_ctx),
-        max_output_rows_(0),
-        lookup_iter_(nullptr)
-    { }
-    const ObExprPtrIArray *exprs_;
-    ObEvalCtx &eval_ctx_;
-    int64_t max_output_rows_;
-    // A global index scan and its lookup can share expressions. Associate the
-    // two iterators so resetting either side also restores the shared datums.
-    DASOpResultIter *lookup_iter_;
-  };
-public:
-  DASOpResultIter()
-    : task_iter_(),
-      wild_datum_info_(nullptr)
-  { }
-  DASOpResultIter(const DASTaskIter &task_iter,
-                  WildDatumPtrInfo &wild_datum_info)
-    : task_iter_(task_iter),
-      wild_datum_info_(&wild_datum_info)
-  {
-  }
+  DASOpResultIter() : task_iter_() {}
+  explicit DASOpResultIter(const DASTaskIter &task_iter) : task_iter_(task_iter) {}
   int get_next_row();
   int next_result();
-  const ObDASTabletLoc *get_tablet_loc() const { return (*task_iter_)->get_tablet_loc(); }
+  const DASRuntimeTabletAccess *get_tablet_access() const { return (*task_iter_)->get_tablet_access(); }
   bool is_end() const { return task_iter_.is_end(); }
 private:
-  int reset_wild_datums_ptr();
-private:
   DASTaskIter task_iter_;
-  WildDatumPtrInfo *wild_datum_info_;
 };
 
 template <typename T>

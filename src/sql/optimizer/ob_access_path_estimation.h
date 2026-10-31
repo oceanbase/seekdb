@@ -135,7 +135,7 @@ public:
                                           uint64_t ref_table_id,
                                           bool &can_use);
   static int storage_estimate_range_rowcount(ObOptimizerContext &ctx,
-                                             const ObCandiTabletLocIArray &part_loc_infos,
+                                             const TabletAccessTargetIArray &tablet_accesses,
                                              bool estimate_whole_range,
                                              const ObRangesArray *ranges,
                                              ObTableMetaInfo &meta);
@@ -214,11 +214,11 @@ private:
   static int process_storage_estimation(ObOptimizerContext &ctx,
                                         ObIArray<AccessPath *> &paths,
                                         bool &is_success);
-  static bool get_local_estimation_tablet(const ObCandiTabletLoc &partition,
+  static bool get_local_estimation_tablet(const TabletAccessTarget &partition,
                                           EstimatedTablet &tablet);
   static int get_storage_estimation_task(ObOptimizerContext &ctx,
                                          ObIAllocator &arena,
-                                         const ObCandiTabletLoc &partition,
+                                         const TabletAccessTarget &partition,
                                          const ObTableMetaInfo &table_meta,
                                          ObIArray<ObBatchEstTasks *> &tasks,
                                          EstimatedTablet &local_tablet,
@@ -230,7 +230,7 @@ private:
                                          ObIArray<ObBatchEstTasks *> &tasks,
                                          const int64_t partition_limit,
                                          const int64_t range_limit,
-                                         const ObCandiTabletLocIArray &index_partitions,
+                                         const TabletAccessTargetIArray &index_partitions,
                                          EstResultHelper &result_helper);
   
   static int add_storage_estimation_task_by_ranges(ObOptimizerContext &ctx,
@@ -241,8 +241,8 @@ private:
                                                    ObIArray<ObBatchEstTasks *> &tasks,
                                                    const int64_t partition_limit,
                                                    const int64_t range_limit,
-                                                   const ObCandiTabletLocIArray &ori_partitions,
-                                                   const ObCandiTabletLocIArray &index_partitions,
+                                                   const TabletAccessTargetIArray &ori_partitions,
+                                                   const TabletAccessTargetIArray &index_partitions,
                                                    EstResultHelper &result_helper);
 
   static int process_storage_estimation_result(ObIArray<ObBatchEstTasks *> &tasks,
@@ -254,8 +254,8 @@ private:
                                int64_t &idx);
 
   static int choose_storage_estimation_partitions(const int64_t partition_limit,
-                                                  const ObCandiTabletLocIArray &partitions,
-                                                  ObCandiTabletLocIArray &chosen_partitions);
+                                                  const TabletAccessTargetIArray &partitions,
+                                                  TabletAccessTargetIArray &chosen_partitions);
   static int choose_storage_estimation_ranges(const int64_t range_limit,
                                               const ObRangesArray &ranges,
                                               bool is_geo_index,
@@ -314,7 +314,7 @@ private:
 
 
   static int storage_estimate_full_table_rowcount(ObOptimizerContext &ctx,
-                                                  const ObCandiTabletLoc &part_loc_info,
+                                                  const TabletAccessTarget &tablet_access,
                                                   ObTableMetaInfo &meta);
 
   static int estimate_full_table_rowcount_by_meta_table(ObOptimizerContext &ctx,
@@ -399,7 +399,7 @@ public:
                                        const ObNewRange &scan_range,
                                        const ObIArray<int64_t> &part_projector,
                                        const ObIArray<int64_t> &gen_projector,
-                                       const ObTableLocation &table_location,
+                                       const TableAccessPlan &table_access_plan,
                                        ObIArray<ObTabletID> &tablet_ids,
                                        ObIArray<ObObjectID> &partition_ids,
                                        const ObIArray<ObObjectID> *level_one_part_ids = NULL);

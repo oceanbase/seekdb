@@ -15,10 +15,10 @@
  */
 
 #include "lib/atomic/ob_atomic_reference.h"
+#include "lib/atomic/ob_atomic.h"
 #include "lib/oblog/ob_log.h"
 
 using namespace oceanbase;
-using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
 namespace oceanbase

@@ -987,7 +987,7 @@ int ObTransformRule::check_hint_status(const ObDMLStmt &stmt, bool &need_trans)
       OPT_TRACE("hint reject current transform");
     } else if (OB_FAIL(ObTransformUtils::is_cost_based_trans_enable(ctx_, query_hint->global_hint_,
                                                                     enable_cost_rule))) {
-    } else if ((ALL_COST_BASED_RULES & (1L << get_transformer_type())) && !enable_cost_rule) {
+    } else if ((ALL_COST_BASED_RULES & (1ULL << get_transformer_type())) && !enable_cost_rule) {
       /* disable transform by NO_COST_BASED_QUERY_TRANSFORMATION hint */
     } else {
       need_trans = true;

@@ -196,15 +196,13 @@ public:
   void destroy();
   bool has_stopped() const { return stopped_ != 0; }
 
-  ObServerRuntimeMeta get_runtime_meta();
   bool is_hidden();
 
   int create_modules();
 
   share::ObServerRuntimeConfig get_runtime_config();
-  storage::ObServerRuntimeSuperBlock get_super_block();
   void set_server_resources(const share::ObServerRuntimeConfig &runtime_config);
-  void set_server_super_block(const storage::ObServerRuntimeSuperBlock &super_block);
+  void activate();
 
   void set_max_cpu(double cpu);
   void set_min_cpu(double cpu);

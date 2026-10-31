@@ -644,7 +644,7 @@ int64_t ObPrintIndependentDag::to_string(char *buf, const int64_t buf_len) const
     J_COLON();
     J_OBJ_START();
     if (!dag_.task_list_.is_empty() || !dag_.waiting_task_list_.is_empty()) {
-      ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+      const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
       J_NEWLINE();
       // task_list_name|task_ptr|task_type|task_status|task_priority|dag_ptr
       BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
@@ -699,7 +699,7 @@ void ObPrintIndependentDag::task_to_string(
      int64_t &pos) const
 {
   if (OB_NOT_NULL(task)) {
-    ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+    const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
     const char* task_status_str = ObITask::get_task_status_str(task->get_status());
     BUF_PRINTF("[%ld][%s] [", GETTID(), GETTNAME());
     BUF_PRINTO(PC(trace_id));

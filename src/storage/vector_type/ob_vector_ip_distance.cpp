@@ -24,6 +24,7 @@ template<>
 int ObVectorIpDistance<float>::ip_distance_func(const float *a, const float *b, const int64_t len, double &distance)
 {
   int ret = OB_SUCCESS;
+  distance = 0;
 #if OB_USE_MULTITARGET_CODE
   if (common::is_arch_supported(ObTargetArch::AVX512)) {
     ret = common::specific::avx512::ip_distance(a, b, len, distance);

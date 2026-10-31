@@ -296,7 +296,6 @@ class ObSchemaGetterGuard;
 class ObServerSchemaService
 {
 public:
-  #define ALLOW_NEXT_LOG() share::ObTaskController::get().allow_next_syslog();
   #define SCHEMA_KEY_FUNC(SCHEMA)   \
     struct SCHEMA##_key_hash_func   \
     {                               \

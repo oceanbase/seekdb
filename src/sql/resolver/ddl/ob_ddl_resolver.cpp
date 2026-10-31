@@ -5888,7 +5888,7 @@ int ObDDLResolver::create_fk_cons_name_automatically(ObString &foreign_key_name)
   }
   if (OB_SUCC(ret)) {
     // The purpose of using a timestamp is to ensure the uniqueness of the foreign key name while avoiding conflicts between user-declared foreign key constraint names and system-generated constraint names
-    if (snprintf(temp_str_buf, sizeof(temp_str_buf), "%.*s_OBFK_%ld", tmp_table_name.length(), tmp_table_name.ptr(),
+    if (snprintf(temp_str_buf, sizeof(temp_str_buf), "%.*s_OBFK_%" PRId64, tmp_table_name.length(), tmp_table_name.ptr(),
                  ObTimeUtility::current_time()) < 0) {
       ret = OB_SIZE_OVERFLOW;
       SQL_RESV_LOG(WARN, "failed to generate buffer for temp_str_buf", K(ret));

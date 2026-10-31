@@ -4,15 +4,16 @@ title: 调试
 
 # 调试 seekdb
 
-受支持的 Release 构建使用 `RelWithDebInfo`，在启用生产优化的同时保留调试信息。`build.sh` 不提供 Debug 模式。
+默认 Bazel 构建使用 `-O2` 生产优化，同时保留调试信息。
 
 ## 构建可调试二进制
 
 ```bash
-./build.sh release --init --make
+./build.py init
+./build.py build seekdb
 ```
 
-二进制文件位于 `build_release/src/observer/seekdb`。分析 core dump 或提交调试信息时，应同时记录 `seekdb -V`，以便匹配二进制的 revision 和构建参数。优化构建可能内联函数或将变量显示为 optimized out；遇到这类情况时，日志或范围更小的单元测试通常更有效。
+二进制文件位于 `build/bin/src/observer/seekdb`。分析 core dump 或提交调试信息时，应同时记录 `seekdb -V`，以便匹配二进制的 revision 和构建参数。优化构建可能内联函数或将变量显示为 optimized out；遇到这类情况时，日志或范围更小的单元测试通常更有效。
 
 ## 使用 GDB 或 LLDB
 
@@ -20,7 +21,7 @@ title: 调试
 
 ```bash
 pidof seekdb
-gdb build_release/src/observer/seekdb -p <pid>
+gdb build/bin/src/observer/seekdb -p <pid>
 ```
 
 在 macOS 上使用 LLDB：
@@ -101,7 +102,7 @@ LOG_DEBUG("state before retry", K(state), K(lbt()));
 使用生成该日志的同一二进制解析地址，例如：
 
 ```bash
-addr2line -pCfe build_release/src/observer/seekdb <address> ...
+addr2line -pCfe build/bin/src/observer/seekdb <address> ...
 ```
 
 必须使用包含匹配调试信息的二进制，否则输出可能只有 `??` 栈帧。

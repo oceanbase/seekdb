@@ -18,6 +18,7 @@
 
 #include "ob_ddl_task.h"
 #include "share/rc/ob_server_runtime.h"
+#include <inttypes.h>
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ob_local_management_service.h"
 #include "rootserver/ob_rootserver_local_runtime.h"
@@ -1050,7 +1051,7 @@ void ObDDLTask::check_ddl_task_execute_too_long()
   int ret = OB_SUCCESS;
   const int64_t execute_time = ObTimeUtility::current_time() - start_time_;
   if (execute_time > TASK_EXECUTE_TIME_THRESHOLD) {
-    if (REACH_TIME_INTERVAL(3600 * 1000 * 1000L)) {
+    if (REACH_TIME_INTERVAL(3600LL * 1000 * 1000L)) {
       ret = OB_DDL_TASK_EXECUTE_TOO_MUCH_TIME;
       LOG_DBA_ERROR(OB_DDL_TASK_EXECUTE_TOO_MUCH_TIME, "msg","ddl task executes too much time", K(ret), K(task_id_), K(execute_time));
     }
@@ -1862,7 +1863,7 @@ int ObDDLTaskRecordOperator::update_task_status(
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(task_id <= 0 || task_status <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET status = %ld WHERE task_id = %lu",
+  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET status = %" PRId64 " WHERE task_id = %" PRId64,
           OB_ALL_DDL_TASK_STATUS_TNAME, task_status, task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, UPDATE_TASK_RECORD_ON_TASK_STATUS_FAILED))) {
@@ -1887,7 +1888,7 @@ int ObDDLTaskRecordOperator::update_snapshot_version_if_not_exist(
       sqlclient::ObMySQLResult *result = nullptr;
       if (OB_UNLIKELY(task_id <= 0 || new_fetched_snapshot <= 0)) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(sql_string.assign_fmt("SELECT snapshot_version FROM %s WHERE task_id = %lu FOR UPDATE",
+      } else if (OB_FAIL(sql_string.assign_fmt("SELECT snapshot_version FROM %s WHERE task_id = %" PRId64 " FOR UPDATE",
           OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
       } else if (OB_FAIL(sql_client.read(res, sql_string.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -1916,7 +1917,7 @@ int ObDDLTaskRecordOperator::update_snapshot_version(
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET snapshot_version=%lu WHERE task_id=%lu ",
+  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET snapshot_version=%" PRId64 " WHERE task_id=%" PRId64 " ",
           OB_ALL_DDL_TASK_STATUS_TNAME, new_fetched_snapshot < 0 ? 0 : new_fetched_snapshot, task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, UPDATE_TASK_RECORD_ON_SNAPSHOT_VERSION_FAILED))) {
@@ -1937,7 +1938,7 @@ int ObDDLTaskRecordOperator::update_ret_code(
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET ret_code=%ld WHERE task_id=%lu ",
+  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET ret_code=%" PRId64 " WHERE task_id=%" PRId64 " ",
           OB_ALL_DDL_TASK_STATUS_TNAME, ret_code, task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, UPDATE_TASK_RECORD_ON_RET_CODE_FAILED))) {
@@ -1958,7 +1959,7 @@ int ObDDLTaskRecordOperator::update_execution_id(
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(task_id <= 0 || execution_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET execution_id=%lu WHERE task_id=%lu ",
+  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET execution_id=%" PRId64 " WHERE task_id=%" PRId64 " ",
           OB_ALL_DDL_TASK_STATUS_TNAME, execution_id, task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, UPDATE_TASK_RECORD_ON_EXECUTION_ID_FAILED))) {
@@ -1982,7 +1983,7 @@ int ObDDLTaskRecordOperator::update_message(
         || task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(to_hex_str(message, message_string))) {
-  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET message=\"%.*s\" WHERE task_id=%lu",
+  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET message=\"%.*s\" WHERE task_id=%" PRId64,
           OB_ALL_DDL_TASK_STATUS_TNAME, static_cast<int>(message_string.length()), message_string.ptr(), task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, UPDATE_TASK_RECORD_ON_MESSAGE_FAILED))) {
@@ -2006,7 +2007,7 @@ int ObDDLTaskRecordOperator::update_status_and_message(
   if (OB_UNLIKELY(task_id <= 0 || task_status <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(to_hex_str(message, message_string))) {
-  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET status = %ld, message = \"%.*s\"  WHERE task_id = %lu",
+  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET status = %" PRId64 ", message = \"%.*s\"  WHERE task_id = %" PRId64,
           OB_ALL_DDL_TASK_STATUS_TNAME, task_status, static_cast<int>(message_string.length()), message_string.ptr(), task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, UPDATE_TASK_RECORD_ON_STATUS_AND_MESSAGE_FAILED))) {
@@ -2253,7 +2254,7 @@ int ObDDLTaskRecordOperator::update_ret_code_and_message(
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(to_hex_str(message, message_string))) {
-  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET ret_code = %d, message = \"%.*s\"  WHERE task_id = %lu",
+  } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET ret_code = %d, message = \"%.*s\"  WHERE task_id = %" PRId64,
           OB_ALL_DDL_TASK_STATUS_TNAME, ret_code, static_cast<int>(message_string.length()), message_string.ptr(), task_id))) {
   } else if (OB_FAIL(proxy.write(sql_string.ptr(), affected_rows))) {
   } else if (OB_UNLIKELY(affected_rows < 0)) {
@@ -2273,7 +2274,7 @@ int ObDDLTaskRecordOperator::update_published_schema_version(
   if (OB_UNLIKELY(task_id <= 0
                      || published_schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET published_schema_version=%ld WHERE task_id=%lu ",
+  } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET published_schema_version=%" PRId64 " WHERE task_id=%" PRId64 " ",
           OB_ALL_DDL_TASK_STATUS_TNAME, published_schema_version, task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, UPDATE_TASK_RECORD_ON_RET_CODE_FAILED))) {
@@ -2304,10 +2305,10 @@ int ObDDLTaskRecordOperator::get_schedule_info(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (is_for_update) {
-        if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu FOR UPDATE",
+        if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %" PRId64 " FOR UPDATE",
                 OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
         }
-      } else if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu",
+      } else if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %" PRId64,
                      OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
       }
       if (OB_FAIL(ret)) {
@@ -2367,7 +2368,7 @@ int ObDDLTaskRecordOperator::update_schedule_info(
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(ddl_slice_info.serialize(buf, buf_len, pos))) {
     } else if (OB_FAIL(to_hex_str(ObString(buf_len, buf), schedule_info_hex))) {
-    } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET schedule_info=\"%.*s\" WHERE task_id=%lu",
+    } else if (OB_FAIL(sql_string.assign_fmt(" UPDATE %s SET schedule_info=\"%.*s\" WHERE task_id=%" PRId64,
             OB_ALL_DDL_TASK_STATUS_TNAME, static_cast<int>(schedule_info_hex.length()), schedule_info_hex.ptr(), task_id))) {
     } else if (OB_FAIL(proxy.write(sql_string.ptr(), affected_rows))) {
     } else if (OB_UNLIKELY(affected_rows < 0)) {
@@ -2602,7 +2603,7 @@ int ObDDLTaskRecordOperator::delete_record(common::ObMySQLProxy &proxy, const in
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(!proxy.is_inited() || task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%lu",
+  } else if (OB_FAIL(sql_string.assign_fmt(" DELETE FROM %s WHERE task_id=%" PRId64,
           OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
   } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
   } else if (OB_FAIL(DDL_SIM(task_id, DELETE_TASK_RECORD_FAILED))) {
@@ -2676,7 +2677,7 @@ int ObDDLTaskRecordOperator::check_has_long_running_ddl(
                                        || ObCheckExistedDDLMode::DOUBLE_TABLE_RUNNING_DDL == check_mode) ? 
                                           ObDDLType::DDL_NORMAL_TYPE : ObDDLType::DDL_DOUBLE_TABLE_OFFLINE;
       if (OB_FAIL(sql_string.assign_fmt(" SELECT * FROM %s "
-          "WHERE object_id = %lu AND ddl_type > %d AND ddl_type < %d", OB_ALL_DDL_TASK_STATUS_TNAME,
+          "WHERE object_id = %" PRIu64 " AND ddl_type > %d AND ddl_type < %d", OB_ALL_DDL_TASK_STATUS_TNAME,
           table_id, lower_bound_type, upper_bound_type))) {
       } else if (OB_FAIL(proxy->read(res, sql_string.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -2711,7 +2712,7 @@ int ObDDLTaskRecordOperator::check_has_conflict_ddl(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = nullptr;
       if (OB_FAIL(sql_string.assign_fmt(GET_DDL_TASK_SQL
-                 " WHERE object_id = %lu", OB_ALL_DDL_TASK_STATUS_TNAME, table_id))) {
+                 " WHERE object_id = %" PRIu64, OB_ALL_DDL_TASK_STATUS_TNAME, table_id))) {
       } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
       } else if (OB_FAIL(DDL_SIM(task_id, QUERY_TASK_RECORD_CHECK_CONFLICT_DDL_FAILED))) {
       } else if (OB_FAIL(proxy->read(res, sql_string.ptr()))) {
@@ -2840,7 +2841,7 @@ int ObDDLTaskRecordOperator::check_has_index_task(
       ObSqlString sql_string;
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         sqlclient::ObMySQLResult *result = NULL;
-        if (OB_FAIL(sql_string.assign_fmt("SELECT EXISTS(SELECT 1 FROM %s WHERE object_id = %lu AND target_object_id = %lu AND ddl_type IN (%d, %d, %d)) as has",
+        if (OB_FAIL(sql_string.assign_fmt("SELECT EXISTS(SELECT 1 FROM %s WHERE object_id = %" PRIu64 " AND target_object_id = %" PRIu64 " AND ddl_type IN (%d, %d, %d)) as has",
             OB_ALL_DDL_TASK_STATUS_TNAME, data_table_id, index_table_id, ObDDLType::DDL_CREATE_INDEX,
             ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX, ObDDLType::DDL_DROP_INDEX))) {
         } else if (OB_FAIL(proxy.read(res, sql_string.ptr()))) {
@@ -2868,7 +2869,7 @@ int ObDDLTaskRecordOperator::get_create_index_task_cnt(
     ObSqlString sql_string;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_string.assign_fmt("SELECT COUNT(*) as cnt FROM %s WHERE object_id = %lu AND ddl_type IN (%d, %d, %d, %d, %d)",
+      if (OB_FAIL(sql_string.assign_fmt("SELECT COUNT(*) as cnt FROM %s WHERE object_id = %" PRIu64 " AND ddl_type IN (%d, %d, %d, %d, %d)",
           OB_ALL_DDL_TASK_STATUS_TNAME, data_table_id,
             ObDDLType::DDL_CREATE_INDEX, ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX,
             ObDDLType::DDL_CREATE_VEC_INDEX, ObDDLType::DDL_CREATE_MULTIVALUE_INDEX, ObDDLType::DDL_CREATE_FTS_INDEX))) {
@@ -2932,7 +2933,7 @@ int ObDDLTaskRecordOperator::get_ddl_task_record(const int64_t task_id,
   if (OB_UNLIKELY(!proxy.is_inited())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(sql_string.assign_fmt(GET_DDL_TASK_SQL
-                                           " WHERE task_id=%lu ", OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
+                                           " WHERE task_id=%" PRId64 " ", OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
   } else if (OB_FAIL(get_task_record(sql_string, proxy, allocator, task_records))) {
   } else if (task_records.count() != 1) {
     ret = OB_ENTRY_NOT_EXIST;
@@ -2972,7 +2973,7 @@ int ObDDLTaskRecordOperator::get_ddl_task_record_by_table_id(const uint64_t tabl
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(sql_string.assign_fmt(" SELECT time_to_usec(gmt_create) AS create_time, task_id, object_id, target_object_id, ddl_type, "
       "schema_version, parent_task_id, trace_id, status, snapshot_version, task_version, execution_id, "
-      "UNHEX(ddl_stmt_str) as ddl_stmt_str_unhex, ret_code, UNHEX(message) as message_unhex FROM %s WHERE object_id=%lu", OB_ALL_DDL_TASK_STATUS_TNAME, table_id))) {
+      "UNHEX(ddl_stmt_str) as ddl_stmt_str_unhex, ret_code, UNHEX(message) as message_unhex FROM %s WHERE object_id=%" PRIu64, OB_ALL_DDL_TASK_STATUS_TNAME, table_id))) {
   } else if (OB_FAIL(get_task_record(sql_string, proxy, allocator, records))) {
   }
   return ret;
@@ -2987,7 +2988,7 @@ int ObDDLTaskRecordOperator::check_task_id_exist(common::ObMySQLProxy &proxy, co
     ObSqlString sql_string;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_string.assign_fmt("SELECT count(*) as have FROM %s WHERE task_id=%lu", OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
+      if (OB_FAIL(sql_string.assign_fmt("SELECT count(*) as have FROM %s WHERE task_id=%" PRId64, OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
       } else if (OB_FAIL(proxy.read(res, sql_string.ptr()))) {
       } else if (OB_ISNULL((result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
@@ -3048,7 +3049,7 @@ int ObDDLTaskRecordOperator::insert_record(
         sqlclient::ObMySQLResult *result = NULL;
         // vec index need parent_task_id.
         if (OB_FAIL(query_string.assign_fmt("SELECT task_id FROM %s "
-            "WHERE object_id = %lu and target_object_id = %lu and parent_task_id = %lu", 
+            "WHERE object_id = %" PRIu64 " and target_object_id = %" PRIu64 " and parent_task_id = %" PRId64,
             OB_ALL_DDL_TASK_STATUS_TNAME, record.object_id_, record.target_object_id_, record.parent_task_id_))) {
         } else if (OB_FAIL(proxy.read(res, query_string.ptr()))) {
         } else if (OB_UNLIKELY(nullptr == (result = res.get_result()))) {
@@ -3193,7 +3194,7 @@ int ObDDLTaskRecordOperator::select_for_update(
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_string.assign_fmt("SELECT status, execution_id, ret_code, snapshot_version FROM %s WHERE task_id = %lu FOR UPDATE",
+      if (OB_FAIL(sql_string.assign_fmt("SELECT status, execution_id, ret_code, snapshot_version FROM %s WHERE task_id = %" PRId64 " FOR UPDATE",
           OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
       } else if (OB_FAIL(DDL_SIM(task_id, TASK_STATUS_OPERATOR_SLOW))) {
       } else if (OB_FAIL(DDL_SIM(task_id, SELECT_TASK_RECORD_FOR_UPDATE_FAILED))) {
@@ -3228,7 +3229,7 @@ int ObDDLTaskRecordOperator::kill_inner_sql(
   LOG_INFO("start to kill inner sql", K(session_id));
   if (OB_UNLIKELY(session_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_string.assign_fmt("KILL %ld", session_id))) {
+  } else if (OB_FAIL(sql_string.assign_fmt("KILL %" PRIu64, session_id))) {
   } else if (OB_FAIL(proxy.write(sql_string.ptr(), affected_rows))) {
   } else if (OB_UNLIKELY(affected_rows < 0)) {  // kill session affected_rows is 0
     ret = OB_ERR_UNEXPECTED;
@@ -3258,7 +3259,7 @@ int ObDDLTaskRecordOperator::kill_task_inner_sql(
       } else if (OB_ISNULL(trace_id_like = ObString(trace_id_str).find('-'))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(sql_string.assign_fmt(" SELECT id as session_id FROM %s WHERE trace_id like \"%c%s\" "
-          " and info like \"%cINSERT%c('ddl_task_id', %ld)%cINTO%cSELECT%c%ld%c\" ",
+          " and info like \"%cINSERT%c('ddl_task_id', %" PRId64 ")%cINTO%cSELECT%c%" PRId64 "%c\" ",
           OB_ALL_VIRTUAL_SESSION_INFO_TNAME,
           spec_charater,
           trace_id_like,
@@ -3326,7 +3327,7 @@ int ObDDLTaskRecordOperator::get_running_tasks_inner_sql(
       } else if (OB_ISNULL(trace_id_like = ObString(trace_id_str).find('-'))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(sql_string.assign_fmt(" SELECT info FROM %s WHERE trace_id like \"%c%s\""
-          " and info like \"%cINSERT%c('ddl_task_id', %ld)%cINTO%cSELECT%cPARTITION%c%ld%c\" ",
+          " and info like \"%cINSERT%c('ddl_task_id', %" PRId64 ")%cINTO%cSELECT%cPARTITION%c%" PRId64 "%c\" ",
           OB_ALL_VIRTUAL_SESSION_INFO_TNAME,
           spec_charater,
           trace_id_like,

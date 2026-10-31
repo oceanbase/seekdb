@@ -54,7 +54,7 @@ static int to_string_(const ObDecimalInt *decint, const int32_t int_bytes, char 
   }
   case sizeof(int64_t): {
     int64_t val = *(decint->int64_v_);
-    ret = databuff_printf(buf, buf_len, pos, "%ld", val);
+    ret = databuff_printf(buf, buf_len, pos, "%" PRId64, val);
     break;
   }
   case sizeof(int128_t): {

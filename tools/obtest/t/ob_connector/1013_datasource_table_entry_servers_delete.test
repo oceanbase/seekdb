@@ -35,7 +35,7 @@ if ($leader != $obs)
   --exit
 }
 
-### 找出table location所在所有server
+### 找出表副本所在的所有 server
 let $tenant_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name = 'sys', tenant_id, 1);
 let $database_id = query_get_value(select database_id from oceanbase.__all_virtual_database where database_name='test' and tenant_id = $tenant_id, database_id, 1);
 let $t1_table_id = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name='t1' and database_id=$database_id and tenant_id=$tenant_id,table_id,1);

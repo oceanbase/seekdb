@@ -148,10 +148,10 @@ int ObVirtualWarning::fill_scanner()
           uint64_t col_id = output_column_ids_.at(j);
           switch(col_id) {
             case OB_APP_MIN_COLUMN_ID: {// level
-              if (ObLogger::USER_WARN == item->log_level_) {
+              if (USER_WARN == item->log_level_) {
                 cells[cell_idx].set_varchar(ObString::make_string(SHOW_WARNING_STR));
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-              } else if (ObLogger::USER_NOTE == item->log_level_) {
+              } else if (USER_NOTE == item->log_level_) {
                 cells[cell_idx].set_varchar(ObString::make_string(SHOW_NOTE_STR));
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
               } else {

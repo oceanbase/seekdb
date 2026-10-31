@@ -22,6 +22,8 @@ exports_files(
     visibility = ["//deps/external:__pkg__"],
 )
 exports_files(["exports.json"])
+exports_files(["Cargo.lock"], visibility = ["//src/observer:__pkg__"])
+exports_files(["in-process/include/seekdb.h"], visibility = ["//src/observer:__pkg__"])
 
 # Cargo resolves all Rust dependencies; Bazel tracks build inputs and exposes
 # only the libraries explicitly exported to C++.

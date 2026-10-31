@@ -20,7 +20,7 @@
 #include "lib/literals/ob_literals.h"
 #include "storage/tx_storage/ob_ls_service.h" // ObLSService
 #include "storage/tablet/ob_tablet_iterator.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 
 namespace oceanbase
 {
@@ -47,7 +47,7 @@ void ObEmptyShellTask::runTimerTask()
 
   skip_empty_shell_task = (OB_SUCCESS != (OB_E(EventTable::EN_TABLET_EMPTY_SHELL_TASK_FAILED) OB_SUCCESS));
 
-  if (!SERVER_STORAGE_META_SERVICE.is_started()) {
+  if (!STORAGE_META_SERVICE.is_started()) {
     // do nothing
   } else if (OB_UNLIKELY(skip_empty_shell_task)) {
     // do nothing

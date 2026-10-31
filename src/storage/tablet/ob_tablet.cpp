@@ -38,7 +38,7 @@
 #include "storage/compaction/ob_medium_list_checker.h"
 #include "storage/memtable/ob_row_conflict_handler.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
-#include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
+#include "storage/blockstore/ob_linked_macro_block_writer.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_tablet_binding_info.h"
@@ -1392,19 +1392,6 @@ int ObTablet::release_ref_cnt(
   return ret;
 }
 
-int ObTablet::inc_snapshot_ref_cnt(
-    common::ObArenaAllocator &allocator,
-    const char *buf,
-    const int64_t len,
-    int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(partial_deserialize(allocator, buf, len, pos))) {
-  } else if (OB_FAIL(inner_inc_macro_ref_cnt())) {
-  }
-  return ret;
-}
-
 int ObTablet::partial_deserialize(
     common::ObArenaAllocator &allocator,
     const char *buf,
@@ -1909,7 +1896,6 @@ int ObTablet::parse_meta_addr(const ObMetaDiskAddr &addr, ObIArray<MacroBlockId>
 }
 
 int ObTablet::load_macro_info(
-    const int64_t ls_epoch,
     ObArenaAllocator &allocator,
     ObTabletMacroInfo *&tablet_macro_info,
     bool &in_memory) const
@@ -1918,7 +1904,7 @@ int ObTablet::load_macro_info(
   in_memory = false;
   if (macro_info_addr_.is_none_object()) {
     // return a macro_info with cnt_ = 0;
-    // default construct param: EMPTY_LIST_ENTRY_BLOCK
+    // default construct param: MacroBlockId::EMPTY_LIST_ENTRY
     tablet_macro_info = static_cast<ObTabletMacroInfo*>(allocator.alloc(sizeof(ObTabletMacroInfo)));
     new (tablet_macro_info)ObTabletMacroInfo();
   } else if (macro_info_addr_.is_memory_object()) { // MEM
@@ -1988,7 +1974,7 @@ int ObTablet::inc_ref_with_aggregated_info()
     bool inc_other_ref = false;
     ObMacroInfoIterator info_iter;
 
-    if (OB_FAIL(load_macro_info(0, allocator, macro_info, in_memory))) {
+    if (OB_FAIL(load_macro_info(allocator, macro_info, in_memory))) {
     } else if (OB_FAIL(info_iter.init(ObTabletMacroType::MAX, *macro_info))) {
     } else if (OB_FAIL(inc_addr_ref_cnt(tablet_addr_, inc_tablet_ref))) {
     } else if (OB_FAIL(inc_ref_with_macro_iter(info_iter, inc_other_ref))) {
@@ -2160,7 +2146,7 @@ void ObTablet::dec_ref_with_aggregated_info()
     ObTabletMacroInfo *macro_info = nullptr;
     bool in_memory = true;
     ObMacroInfoIterator info_iter;
-    if (OB_FAIL(load_macro_info(0, allocator, macro_info, in_memory))) {
+    if (OB_FAIL(load_macro_info(allocator, macro_info, in_memory))) {
     } else if (OB_FAIL(info_iter.init(ObTabletMacroType::MAX, *macro_info))) {
     } else {
       dec_addr_ref_cnt(tablet_addr_);
@@ -2515,22 +2501,6 @@ int ObTablet::get_max_column_cnt_on_schema_recorder(int64_t &max_column_cnt)
   } else if (OB_FAIL(get_protected_memtable_mgr_handle(protected_handle))) {
   } else {
     max_column_cnt = protected_handle->get_max_column_cnt_from_storage_schema_recorder();
-  }
-  return ret;
-}
-
-int ObTablet::get_ls_epoch(int64_t &ls_epoch)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!pointer_hdl_.is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    if (is_external_tablet()) {
-      LOG_ERROR("is_external_tablet, and pointer_hdl_ is invalid", K(lbt()));
-    }
-  } else {
-    ls_epoch = static_cast<ObTabletPointer *>(pointer_hdl_.get_resource_ptr())->get_ls()->get_ls_epoch();
   }
   return ret;
 }
@@ -4604,29 +4574,6 @@ int64_t ObTablet::to_string(char *buf, const int64_t buf_len) const
     J_OBJ_END();
   }
   return pos;
-}
-
-int ObTablet::refresh_memtable_and_update_seq(const uint64_t seq)
-{
-  int ret = OB_SUCCESS;
-  if (table_store_addr_.is_memory_object()) {
-    table_store_addr_.get_ptr()->clear_memtables();
-  }
-  reset_memtable();
-  if (OB_FAIL(pull_memtables_without_ddl())) {
-  } else {
-    tablet_addr_.set_seq(seq);
-    table_store_addr_.addr_.set_seq(seq);
-    if (table_store_addr_.is_memory_object()) {
-      ObSEArray<ObITable *, MAX_MEMSTORE_CNT> memtable_array;
-      if (OB_FAIL(inner_get_memtables(memtable_array))) {
-      } else if (OB_FAIL(table_store_addr_.get_ptr()->update_memtables(memtable_array))) {
-      } else {
-       LOG_INFO("table store update memtable success", KPC(table_store_addr_.get_ptr()), KP(this));
-      }
-    }
-  }
-  return ret;
 }
 
 int ObTablet::pull_memtables(ObArenaAllocator &allocator)

@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
+#if defined(__EMSCRIPTEN__)
+#include "common/ob_timeout_ctx.h"
+#endif
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
@@ -33,6 +36,7 @@
 #include "rootserver/ob_partition_creator.h"
 #include "share/ob_version.h" // for get_package_and_svn
 #include "share/ob_server_struct.h" // GCTX
+#include "share/ob_timeout_ctx.h"
 
 namespace oceanbase
 {
@@ -456,6 +460,13 @@ int ObBootstrap::get_core_related_table_ids(common::hash::ObHashSet<uint64_t> &t
 int ObBootstrap::create_sys_table_partitions(const common::ObIArray<share::schema::ObTableSchema> &table_schemas)
 {
   int ret = OB_SUCCESS;
+#if defined(__EMSCRIPTEN__)
+  ObTimeoutCtx startup_timeout;
+  if (!startup_timeout.is_timeout_set()
+      && OB_FAIL(startup_timeout.set_timeout(5LL * 60 * 1000000))) {
+    return ret;
+  }
+#endif
   if (OB_FAIL(check_inner_stat())) {
   } else {
     ObMySQLTransaction trans;
@@ -662,6 +673,11 @@ int ObBootstrap::init_global_stat()
   int ret = OB_SUCCESS;
   ObMySQLProxy &sql_proxy = ddl_service_.get_sql_proxy();
   ObMySQLTransaction trans;
+#ifdef _WIN32
+  // Fix #1544: 放大 init_global_stat 事务超时，避免 bootstrap 阶段 OB_TIMEOUT
+  ObTimeoutCtx ctx;
+  ctx.set_timeout(600LL * 1000 * 1000);
+#endif
   if (OB_FAIL(check_inner_stat())) {
   } else {
     const int64_t baseline_schema_version = OB_INVALID_VERSION; // OB_INVALID_VERSION == -1

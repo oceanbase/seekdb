@@ -12,7 +12,6 @@
 *.orig
 *.patch
 *.pyc
-*.pyc
 *.reject
 *.reject.iep
 *.run.*
@@ -23,13 +22,10 @@
 *my
 *~
 .auth_file
-.auth_file
 .autotools
 .clang_complete
 .configured
-.configured
 .cproject
-.dep_create
 .deps*
 .dirstamp
 .libs
@@ -51,9 +47,7 @@ GPATH
 GRTAGS
 GTAGS
 Makefile
-Makefile
 Makefile.d
-Makefile.in
 Makefile.in
 TAGS
 aclocal.m4
@@ -98,7 +92,6 @@ test-driver
 .dir-locals.el
 compile_commands.json
 *.ccls-cache/
-.cproject
 .cache
 .history/*
 .claude
@@ -110,27 +103,10 @@ compile_commands.json
 
 ############# src #############
 src/.settings/
-src/client/*
-src/election/election
-src/election/election_admin
-src/lib/oberror
-src/lib/profile/obperf
-src/lib/regex/regex/re
-src/lib/regex/strings/conf_to_src
-src/libtable/examples/kvtable_example
-src/libtable/examples/pstore_example
-src/libtable/examples/table_example
-src/libtable/examples/table_example_s
-src/libtable/test/test_table_api
-src/obproxy/iocore/eventsystem/test_event
-src/obproxy/iocore/net/test_net
-src/obproxy/obproxy
-src/obproxy/opsql/*.output
 src/observer/*:*
 src/observer/observer
+# Legacy in-tree parser generation artifacts.
 src/sql/parser/*.output
-src/sql/parser/expr_parser.output
-src/sql/parser/sql_parser.output
 src/sql/parser/ftsblex_lex.c
 src/sql/parser/ftsblex_lex.h
 src/sql/parser/ftsparser_tab.c
@@ -140,24 +116,6 @@ src/sql/parser/sql_parser_mysql_mode_lex.h
 src/sql/parser/sql_parser_mysql_mode_tab.c
 src/sql/parser/sql_parser_mysql_mode_tab.h
 src/sql/parser/type_name.c
-src/sql/parser/sql_parser_oracle_gbk_mode_lex.c
-src/sql/parser/sql_parser_oracle_gbk_mode_lex.h
-src/sql/parser/sql_parser_oracle_gbk_mode_tab.c
-src/sql/parser/sql_parser_oracle_gbk_mode_tab.h
-src/sql/parser/sql_parser_oracle_hkscs_mode_lex.c
-src/sql/parser/sql_parser_oracle_hkscs_mode_lex.h
-src/sql/parser/sql_parser_oracle_hkscs_mode_tab.c
-src/sql/parser/sql_parser_oracle_hkscs_mode_tab.h
-src/sql/parser/non_reserved_keywords_oracle_hkscs_mode.c
-src/sql/parser/sql_parser_oracle_utf8_mode_lex.c
-src/sql/parser/sql_parser_oracle_utf8_mode_lex.h
-src/sql/parser/sql_parser_oracle_utf8_mode_tab.c
-src/sql/parser/sql_parser_oracle_utf8_mode_tab.h
-src/sql/parser/sql_parser_oracle_single_byte_mode_lex.c
-src/sql/parser/sql_parser_oracle_single_byte_mode_lex.h
-src/sql/parser/sql_parser_oracle_single_byte_mode_tab.c
-src/sql/parser/sql_parser_oracle_single_byte_mode_tab.h
-src/sql/parser/non_reserved_keywords_oracle_single_byte_mode.c
 src/sql/parser/_gen_parser.output
 src/sql/parser/_gen_parser.error
 src/sql/parser/_MD5
@@ -186,62 +144,40 @@ src/share/inner_table/table_id_to_name
 src/share/system_variable/standalone_default_system_variable.json
 src/share/system_variable/shared_storage_default_system_variable.json
 
-############# close_modules #############
-close_modules/oracle_pl/pl/parser/*.output
-close_modules/oracle_pl/pl/parser/pl_parser_oracle_mode_lex.c
-close_modules/oracle_pl/pl/parser/pl_parser_oracle_mode_tab.c
-close_modules/oracle_pl/pl/parser/pl_parser_oracle_mode_tab.h
-close_modules/oracle_pl/pl/wrap/pl_wrap_scanner.h
-close_modules/oracle_pl/pl/wrap/pl_wrap_scanner.c
-close_modules/oracle_pl/pl/wrap/pl_wrap_parser.h
-close_modules/oracle_pl/pl/wrap/pl_wrap_parser.c
-close_modules/oracle_pl/pl/wrap/pl_wrap_parser.output
-
 ############# tools #############
-tools/ObRestore/mvn_repository
-tools/agentserver/agentserver
-tools/agentserver/incbackupserver
-tools/agentserver/ob_inc_backup/incbackupserver
-tools/condor/results
+# Legacy packaging artifacts.
+tools/systemd/profile/pre_install.sh
+tools/systemd/profile/post_install.sh
+tools/systemd/profile/pre_uninstall.sh
+tools/systemd/profile/post_uninstall.sh
+tools/systemd/profile/telemetry.sh
+tools/systemd/profile/preinst
+tools/systemd/profile/postinst
+tools/systemd/profile/prerm
+tools/systemd/profile/postrm
+tools/ocp/software_package
 tools/deploy/admin
 tools/deploy/avg_rt_*
-tools/deploy/bin
 tools/deploy/bin/
 tools/deploy/usr
 tools/deploy/usr/
 tools/deploy/collected_log/
-tools/deploy/config*.py
-tools/deploy/config1.py
 tools/deploy/debug/
-tools/deploy/dooba.py
 tools/deploy/etc/
 tools/deploy/focus_*
 tools/deploy/lib
 tools/deploy/lib/
 tools/deploy/list
 tools/deploy/log/
-tools/deploy/usr/
-tools/deploy/mysql_test/java/mytest.jar
 tools/deploy/mysql_test/r/*.reject
-tools/deploy/mysql_test/r/*.reject
-tools/deploy/mytest.down
 tools/deploy/mytest.log*
 tools/deploy/nohup*
 tools/deploy/obclient
-tools/deploy/obclient
-tools/deploy/obclient.down
-tools/deploy/obclient.down
 tools/deploy/oblog/
-tools/deploy/obperf
 tools/deploy/run/
 tools/deploy/server.list
 tools/deploy/server_list
-tools/deploy/sysbench
-tools/deploy/syschecker/gen_sstable.conf
-tools/deploy/syschecker/gen_sstable.schema
 tools/deploy/tools
-tools/deploy/usr/
-tools/deploy/yclean.sh
 tools/deploy/.obd
 tools/deploy/distributed-with-proxy.yaml
 tools/deploy/distributed.yaml
@@ -251,11 +187,6 @@ tools/deploy/single.yaml
 tools/deploy/bmsqlobp_test.yaml
 tools/deploy/oci_test.yaml
 tools/deploy/mirror_create
-tools/log_parser/slog_parser
-tools/log_tool/log_statistics
-tools/log_tool/log_tool
-tools/log_tool/logtool
-tools/ob_admin/ob_admin
 tools/obtest/1.0.6_beta/
 tools/obtest/1.1.1_beta/
 tools/obtest/1_*
@@ -289,93 +220,21 @@ tools/obtest/yclean.sh
 tools/obtest/ycopy.sh
 tools/obtest/admin/
 tools/obtest/.run_test.list
-tools/omtest/client
-tools/omtest/omtest
-tools/storage_perf/generate_conf
-tools/storage_perf/storage_perf
-tools/storage_test/storagetest
-tools/trace/trace_tool
-tools/upgrade/upgrade_post_extract_files*
-tools/upgrade/upgrade_pre_extract_files*
 tools/obtest/sql/backup_restore/meta_db_init.sql
-## Debug bin and configuration
-tools/deploy/bin
-tools/deploy/config2.py
-tools/deploy/.obd
-tools/deploy/distributed-with-proxy.yaml
-tools/deploy/distributed.yaml
-tools/deploy/obd_profile.sh
-tools/deploy/single-with-proxy.yaml
-tools/deploy/single.yaml
-tools/docker/standalone/boot
-tools/docker/standalone/init_store_for_fast_start.py
-tools/systemd/profile/pre_install.sh
-tools/systemd/profile/post_install.sh
-tools/systemd/profile/pre_uninstall.sh
-tools/systemd/profile/post_uninstall.sh
-tools/systemd/profile/telemetry.sh
-tools/systemd/profile/preinst
-tools/systemd/profile/postinst
-tools/systemd/profile/prerm
-tools/systemd/profile/postrm
-tools/ocp/software_package
 
 ############# unittest #############
-unittest/**/test_*		
-unittest/**/*_test		
-unittest/**/**/test_*		
-unittest/**/**/*_test		
-unittest/**/unittest_*		
-!unittest/**/test_*.*		
-!unittest/**/**/test_*.*		
+unittest/**/test_*
+unittest/**/*_test
+unittest/**/**/test_*
+unittest/**/**/*_test
+unittest/**/unittest_*
+!unittest/**/test_*.*
+!unittest/**/**/test_*.*
 !unittest/**/unittest_*.*
 
-unittest/clog/deploy/log_tool
-unittest/clog/deploy/ob_server_main
-unittest/clog/deploy/post_msg_main
-unittest/clog/fake_ilog_dir*
-unittest/common/kv_storecache
-unittest/common/small_allocator
 unittest/oblib/*.log*
 unittest/oblib/hash.data
 unittest/oblib/observer.pfda
-unittest/obproxy/*checker
-unittest/obproxy/.conf/
-unittest/obproxy/etc/
-unittest/obproxy/failed.result
-unittest/obproxy/failed.sql
-unittest/rpc/rpc_bench
-unittest/sql/engine/expr/arithmatic.out
-unittest/sql/executor/rpc_remote_scheduler
-unittest/sql/executor/stress_interm_result_manager
-unittest/sql/executor/stress_scanner_pool
-unittest/sql/optimizer/cost_model_util
-unittest/sql/optimizer/storage_perf/storage_perf_cost
-unittest/sql/resolver/ddl_resolver
-unittest/storage/blocksstable/clog/
-unittest/storage/blocksstable/encoding/data_generator/example
-unittest/storage/blocksstable/libnone.so
-unittest/storage/blocksstable/ob_test_data_file
-unittest/storage/blocksstable/query_speed_tool
-unittest/storage/blocksstable/redo_log_test/
-unittest/storage/blocksstable/scanner/
-unittest/storage/exception_transaction/ob_exception_transaction
-unittest/storage/libnone.so
-unittest/storage/sstable
-unittest/storage/sstable_perf_tool
-unittest/storage/storage_bench
-unittest/storage/tmp
-unittest/storage/transaction/performance
-
-## binary and test logs
-tools/ob-configserver/bin/*
-tools/ob-configserver/tests/*.log
-tools/ob-configserver/tests/*.out
-
-## .NET Configurator build output (rebuilt by dotnet publish)
-tools/windows/seekdbConfigurator/bin/
-tools/windows/seekdbConfigurator/obj/
-tools/windows/seekdbConfigurator/publish/
 
 ############# deps #############
 src/oblib/common/storage/ob_io_selector.h
@@ -390,9 +249,6 @@ deps/3rd
 deps/ios/
 deps/3rd_party
 deps/usr
-win_deps_archives/
-win_deps.zip
-win_deps/
 
 ############# package #############
 package/pkg/*.pkg
@@ -406,5 +262,5 @@ CLAUDE.md
 .omo/
 seekdb_data/
 
-# Local Python bytecode for the iOS build helpers.
-deps/ios-build/__pycache__/
+/deps/android/
+/deps/wasm/

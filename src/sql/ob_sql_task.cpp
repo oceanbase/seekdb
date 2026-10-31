@@ -85,7 +85,7 @@ int ObSqlTask::init(const int msg_type, const ObReqTimestamp &req_ts, const char
     memcpy(buf_, buf, size);
     size_ = size;
     req_ts_ = req_ts;
-    ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
+    const ObCurTraceId::TraceId *trace_id = ObCurTraceId::get_trace_id();
     if (OB_LIKELY(NULL != trace_id)) {
       trace_id_.set(*trace_id);
     }

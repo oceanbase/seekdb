@@ -75,12 +75,7 @@ export OB_DO_GLOBAL_CONFIG=${OB_DO_GLOBAL_CONFIG:-~/.ob_do_global}
 [[ -f $OB_DO_GLOBAL_CONFIG ]] && source $OB_DO_GLOBAL_CONFIG
 export DEPLOY_PATH=$OB_BASE_DIR/tools/deploy
 export OBD_FORCE_UPDATE_PLUGINS=1
-if grep 'dep_create.sh' $OB_BASE_DIR/build.sh 2>&1 >/dev/null
-then
-    export DEP_PATH=$OB_BASE_DIR/deps/3rd
-else
-    export DEP_PATH=$OB_BASE_DIR/rpm/.dep_create/var
-fi
+export DEP_PATH=$OB_BASE_DIR/deps/3rd
 export ARCHITECTURES=$(arch)
 get_os_release || exit 1
 export OBD_DEPS_PATH="$OB_BASE_DIR/deps/init/oceanbase.$RELEASE.$ARCHITECTURES.deps"

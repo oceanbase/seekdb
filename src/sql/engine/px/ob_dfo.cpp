@@ -48,17 +48,17 @@ OB_SERIALIZE_MEMBER(ObPxSqcMeta,
                     recieve_use_interm_result_,
                     serial_receive_channels_,
                     rescan_batch_params_,
-                    partition_pruning_table_locations_,
+                    partition_pruning_access_plans_,
                     ignore_vtable_error_,
                     temp_table_ctx_,
-                    access_table_location_keys_,
+                    tablet_access_keys_,
                     adjoining_root_dfo_,
                     is_single_tsc_leaf_dfo_,
                     sqc_count_,
                     monitoring_info_,
                     branch_id_base_,
                     partition_random_affinitize_,
-                    locations_order_);
+                    tablet_access_order_);
 OB_SERIALIZE_MEMBER(ObPxTask,
                     qc_id_,
                     dfo_id_,
@@ -78,12 +78,12 @@ OB_SERIALIZE_MEMBER(ObPxInitSqcResponse,
                     reserved_thread_count_,
                     partitions_info_,
                     sqc_order_gi_tasks_);
-OB_SERIALIZE_MEMBER(ObSqcTableLocationKey,
-                    table_location_key_,
+OB_SERIALIZE_MEMBER(SqcTabletAccessKey,
+                    table_ref_id_,
                     ref_table_id_,
                     tablet_id_,
                     is_dml_,
-                    is_loc_uncertain_);
+                    has_dynamic_tablets_);
 int ObQCMonitoringInfo::init(const ObDfo &dfo) {
   int ret = OB_SUCCESS;
   qc_tid_ = GETTID();
@@ -111,18 +111,18 @@ int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
   // Note: Non-generic function, cannot be used to save an initialized ObPxSqcMeta.
   if (NULL != qc_channel_) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(access_table_locations_.assign(other.access_table_locations_))) {
-  } else if (OB_FAIL(extra_access_table_locations_.assign(other.extra_access_table_locations_))) {
+  } else if (OB_FAIL(tablet_accesses_.assign(other.tablet_accesses_))) {
+  } else if (OB_FAIL(extra_tablet_accesses_.assign(other.extra_tablet_accesses_))) {
   } else if (OB_FAIL(transmit_channel_.assign(other.transmit_channel_))) {
   } else if (OB_FAIL(receive_channel_.assign(other.receive_channel_))) {
   } else if (OB_FAIL(serial_receive_channels_.assign(other.serial_receive_channels_))) {
   } else if (OB_FAIL(rescan_batch_params_.assign(other.rescan_batch_params_))) {
-  } else if (OB_FAIL(partition_pruning_table_locations_.assign(other.partition_pruning_table_locations_))) {
+  } else if (OB_FAIL(partition_pruning_access_plans_.assign(other.partition_pruning_access_plans_))) {
   } else if (OB_FAIL(temp_table_ctx_.assign(other.temp_table_ctx_))) {
-  } else if (OB_FAIL(access_table_location_keys_.assign(other.access_table_location_keys_))) {
-  } else if (OB_FAIL(access_table_location_indexes_.assign(other.access_table_location_indexes_))) {
+  } else if (OB_FAIL(tablet_access_keys_.assign(other.tablet_access_keys_))) {
+  } else if (OB_FAIL(table_access_ranges_.assign(other.table_access_ranges_))) {
   } else if (OB_FAIL(monitoring_info_.assign(other.monitoring_info_))) {
-  } else if (OB_FAIL(locations_order_.assign(other.locations_order_))) {
+  } else if (OB_FAIL(tablet_access_order_.assign(other.tablet_access_order_))) {
   } else {
     execution_id_ = other.execution_id_;
     qc_id_ = other.qc_id_;

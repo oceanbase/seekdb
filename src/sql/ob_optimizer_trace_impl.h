@@ -52,8 +52,7 @@ class ObSQLSessionInfo;
 struct CandidatePlan;
 class OptSystemStat;
 class ObSkylineDim;
-class ObOptTabletLoc;
-class ObCandiTabletLoc;
+class TabletAccessTarget;
 class ObShardingInfo;
 struct ColumnItem;
 struct ObBatchEstTasks;
@@ -332,7 +331,7 @@ public:
   int append(const double & value);
   int append(const ObObj& value);
   int append(const OpParallelRule& rule);
-  int append(const ObTableLocationType& type);
+  int append(const TableAccessShape& type);
   int append(const ObPhyPlanType& type);
   int append(const OptSystemStat& stat);
 /***********************************************/
@@ -350,8 +349,7 @@ public:
   int append(const ObDSResultItem &ds_result);
   int append(const ObSkylineDim &dim);
   int append(const ObNewRange &range);
-  int append(const ObOptTabletLoc& tablet_loc);
-  int append(const ObCandiTabletLoc& candi_tablet_loc);
+  int append(const TabletAccessTarget& tablet_access);
   int append(const ObBatchEstTasks& task);
   int append(const ObTabletID& id);
   int append(const ObIndexMergeNode *node);

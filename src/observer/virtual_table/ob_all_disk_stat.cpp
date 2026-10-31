@@ -16,7 +16,8 @@
 
 #include "observer/virtual_table/ob_all_disk_stat.h"
 
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
+#include "storage/blocksstable/ob_object_manager.h"
 #include "share/io/ob_io_manager.h"
 
 using namespace oceanbase::blocksstable;
@@ -96,7 +97,7 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
         switch(col_id) {
           case TOTAL_SIZE:{
             int64_t reserved_size = 0;
-            if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
+            if (OB_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
             } else {
               cells[cell_idx].set_int(OB_STORAGE_OBJECT_MGR.get_max_macro_block_count(reserved_size) *OB_STORAGE_OBJECT_MGR.get_macro_block_size());
             }

@@ -852,8 +852,8 @@ _HASH_FUNC_SPEC(int32_t);
 _HASH_FUNC_SPEC(uint32_t);
 _HASH_FUNC_SPEC(int64_t);
 _HASH_FUNC_SPEC(uint64_t);
-#ifdef __APPLE__
-// macOS: uintptr_t is unsigned long, which is different from uint64_t
+#if defined(__APPLE__) || (defined(__EMSCRIPTEN__) && __SIZEOF_LONG__ == 4)
+// These ABIs use long for pointer-sized integers, distinct from int32_t/int64_t.
 _HASH_FUNC_SPEC(unsigned long);
 _HASH_FUNC_SPEC(long);
 #endif

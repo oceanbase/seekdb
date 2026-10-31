@@ -1,4 +1,4 @@
-"""Native public and private header ownership for Rootserver."""
+"""Public headers for Rootserver."""
 
 ROOTSERVER_PUBLIC_HEADERS = [
     "dbms_job/ob_dbms_job_master.h",
@@ -58,67 +58,3 @@ ROOTSERVER_PUBLIC_HEADERS = [
     "ob_local_management_service.h",
     "ob_server_thread_helper.h",
 ]
-
-
-ROOTSERVER_PRIVATE_HEADERS = [
-    "dbms_job/ob_dbms_job_executor.h",
-    "ddl_task/ob_drop_fts_index_task.h",
-    "ddl_task/ob_drop_lob_task.h",
-    "ddl_task/ob_drop_vec_index_task.h",
-    "ddl_task/ob_drop_vec_ivf_index_task.h",
-    "ddl_task/ob_fts_index_build_task.h",
-    "ddl_task/ob_rebuild_index_task.h",
-    "ddl_task/ob_sys_ddl_util.h",
-    "ddl_task/ob_ddl_task_util.h",
-    "ddl_task/ob_vec_index_build_task.h",
-    "ddl_task/ob_vec_ivf_index_build_task.h",
-    "fork_table/ob_fork_table_helper.h",
-    "fork_table/ob_fork_table_info_builder.h",
-    "fork_table/ob_fork_table_task.h",
-    "ob_ai_model_ddl_operator.h",
-    "ob_ai_model_ddl_service.h",
-    "ob_alter_table_constraint_checker.h",
-    "ob_create_index_on_empty_table_helper.h",
-    "ob_ddl_sql_generator.h",
-    "ob_dependency_ddl_helper.h",
-    "ob_domain_index_builder_util.h",
-    "ob_index_builder.h",
-    "ob_load_inner_table_schema_executor.h",
-    "ob_lob_meta_builder.h",
-    "ob_lob_piece_builder.h",
-    "ob_objpriv_mysql_ddl_operator.h",
-    "ob_partition_creator.h",
-    "ob_schema2ddl_sql.h",
-    "ob_table_creator.h",
-    "ob_tablet_drop.h",
-    "parallel_ddl/ob_create_index_helper.h",
-    "parallel_ddl/ob_create_table_helper.h",
-    "parallel_ddl/ob_create_table_like_helper.h",
-    "parallel_ddl/ob_create_view_helper.h",
-    "parallel_ddl/ob_ddl_helper.h",
-    "parallel_ddl/ob_drop_table_helper.h",
-    "parallel_ddl/ob_set_comment_helper.h",
-    "parallel_ddl/ob_table_helper.h",
-    "parallel_ddl/ob_update_index_status_helper.h",
-    "truncate_info/ob_truncate_info_service.h",
-    "freeze/ob_global_merge_manager.h",
-    "freeze/ob_local_major_freeze.h",
-    "freeze/ob_snapshot_gc_scn_renewer.h",
-    "ob_control_event.h",
-    "ob_runtime_event_def.h",
-    "ob_system_bootstrap_service.h",
-]
-
-
-def rootserver_validate_header_inventory(checked_in_headers):
-    owner = {}
-    for category, headers in [("public", ROOTSERVER_PUBLIC_HEADERS), ("private", ROOTSERVER_PRIVATE_HEADERS)]:
-        for path in headers:
-            if path in owner:
-                fail("Rootserver header %s is owned by both %s and %s" % (path, owner[path], category))
-            owner[path] = category
-    checked_in = {path: True for path in checked_in_headers}
-    missing = sorted([path for path in checked_in if path not in owner])
-    stale = sorted([path for path in owner if path not in checked_in])
-    if missing or stale:
-        fail("Rootserver header ownership differs from the tree: missing=%s stale=%s" % (missing, stale))

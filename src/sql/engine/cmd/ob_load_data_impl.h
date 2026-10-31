@@ -27,7 +27,7 @@
 #include "lib/utility/ob_utility.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/printer/ob_raw_expr_printer.h"
-#include "sql/optimizer/ob_table_location.h"
+#include "sql/optimizer/table_access_plan.h"
 #include "sql/engine/cmd/ob_load_data_utils.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
@@ -757,7 +757,7 @@ public:
                     array_allocator_("LoadData"),
 
                     //tools
-                    table_location_(expr_calc_allocator_),
+                    table_access_plan_(expr_calc_allocator_),
                     task_controller_(),
 
                     //runtime variables
@@ -795,7 +795,7 @@ public:
                             const ObLoadDataStmt &load_stmt,
                             ObSQLSessionInfo &session);
   int init_from_load_stmt(const ObLoadDataStmt &load_stmt);
-  int init_table_location_via_fake_insert_stmt(ObExecContext &ctx,
+  int init_access_plan_via_fake_insert(ObExecContext &ctx,
                                                ObPhysicalPlanCtx &plan_ctx,
                                                ObSQLSessionInfo &session_info);
   int init_separator_detectors(common::ObIAllocator &allocator);
@@ -889,7 +889,7 @@ private:
   //tools/modules
   ObFileReader reader_;
   ObRawExprPrinter expr_printer_;
-  ObTableLocation table_location_;
+  TableAccessPlan table_access_plan_;
   ObParallelTaskController task_controller_;
   CompleteTaskArray complete_task_array_;
 

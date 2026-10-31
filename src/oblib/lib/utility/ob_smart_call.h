@@ -63,6 +63,11 @@ inline int call_with_new_stack(void * arg_, int(*func_) (void*), void *stack_add
 #endif
     ret = jump_call(arg_, func_, (char *)stack_addr + stack_size);
   }
+#elif defined(__EMSCRIPTEN__)
+  // A native stack pointer swap cannot extend the Wasm execution stack. Do
+  // not invoke a deep callback on the already exhausted stack. The caller can
+  // report OB_SIZE_OVERFLOW and the host can configure a larger worker stack.
+  ret = OB_SIZE_OVERFLOW;
 #else
   ret = func_(arg_);
 #endif
@@ -71,6 +76,10 @@ inline int call_with_new_stack(void * arg_, int(*func_) (void*), void *stack_add
 
 inline int alloc_stack(const size_t stack_size, void *&stack_addr)
 {
+#ifdef __EMSCRIPTEN__
+  stack_addr = nullptr;
+  return OB_SIZE_OVERFLOW;
+#else
   int ret = OB_SUCCESS;
   void *ori_stack_addr = nullptr;
   size_t ori_stack_size = 0;
@@ -87,6 +96,7 @@ inline int alloc_stack(const size_t stack_size, void *&stack_addr)
     all_stack_size += stack_size;
   }
   return ret;
+#endif
 }
 
 inline void dealloc_stack(void *stack_addr, size_t stack_size)

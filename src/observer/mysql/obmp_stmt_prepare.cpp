@@ -409,7 +409,7 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
     // Retry needs to meet the following conditions:
     // 1. rs.open execution failed
     // 2. No result was returned to the client, this execution has no side effects
-    // 3. need_retry(result, ret): schema or location cache invalidation
+    // 3. need_retry(result, ret): schema invalidation or stale tablet access
     // 4. less than retry count limit
     if (OB_UNLIKELY(retry_ctrl_.need_retry())) {
     } else {

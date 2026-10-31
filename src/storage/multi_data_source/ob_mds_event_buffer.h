@@ -25,7 +25,6 @@
 #include "common/ob_tablet_id.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "util/easy_time.h"
-#include "share/ob_task_define.h"
 #include "storage/tx/ob_tx_seq.h"
 
 namespace oceanbase
@@ -274,7 +273,6 @@ struct ObMdsEventBuffer {
                 const uint32_t line,
                 const char *func) {
       if (OB_NOT_NULL(file) && OB_UNLIKELY(line != 0) && OB_NOT_NULL(func) && OB_NOT_NULL(event.event_)) {
-        share::ObTaskController::get().allow_next_syslog();
         if (OB_UNLIKELY(OB_LOGGER.need_to_print(::oceanbase::common::OB_LOG_ROOT::M_MDS, OB_LOG_LEVEL_INFO))) {
           ::oceanbase::common::OB_PRINT("[MDS.EVENT]", OB_LOG_LEVEL_INFO, file, line, func, OB_SUCCESS,
                                         event.event_, LOG_KVS(K(key), K(event), KPC(mds_table)));

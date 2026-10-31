@@ -232,7 +232,6 @@ void ObTransCallbackMgr::reset()
   serial_final_scn_.set_max();
   serial_final_seq_no_.reset();
   serial_sync_scn_.set_min();
-  callback_main_list_append_count_ = 0;
   callback_remove_for_trans_end_count_ = 0;
   callback_remove_for_remove_memtable_count_ = 0;
   callback_remove_for_fast_commit_count_ = 0;

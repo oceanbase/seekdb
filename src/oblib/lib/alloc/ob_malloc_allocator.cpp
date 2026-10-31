@@ -296,7 +296,6 @@ void ObMallocAllocator::print_memory_usage() const
         }
       }
       buf[std::min(ctx_pos, BUFLEN - 1)] = '\0';
-      allow_next_syslog();
       _LOG_INFO(
 #ifdef _WIN32
                 "[MEMORY] limit: %lu hold: %lu cache_hold: %lu "

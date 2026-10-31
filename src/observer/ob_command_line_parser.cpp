@@ -465,10 +465,15 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
     MPRINT("Failed to convert data dir to absolute path. path='%s', system error=%s", opts.data_dir_.ptr(), strerror(errno));
   }
   if (OB_FAIL(ret) || opts.redo_dir_.empty()) {
+#ifdef _WIN32
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.redo_dir_))) {
+    MPRINT("Failed to convert redo dir to absolute path. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
+#else
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {
     MPRINT("Failed to create redo dir. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
   } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.redo_dir_))) {
     MPRINT("Failed to convert redo dir to absolute path. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
+#endif
   }
   if (OB_FAIL(ret)) {
   } else if (!opts.data_dir_.empty() && opts.base_dir_.string() == opts.data_dir_.string()) {

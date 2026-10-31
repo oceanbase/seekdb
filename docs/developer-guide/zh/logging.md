@@ -295,10 +295,10 @@ seekdb 支持两种日志限速：一个普通系统日志磁盘IO带宽限制�
 
 seekdb 会按照磁盘带宽来限制日志输出。日志带宽限速不会针对不同的日志级别限速。如果日志限速，可能会打印限速日志，关键字 `REACH SYSLOG RATE LIMIT `。
 
-限速日志示例：
+限速日志关键部分示例：
 
 ```txt
-[2023-12-26 09:46:04.621435] INFO  [SHARE.LOCATION] fetch_vtable_location_ (ob_vtable_location_service.cpp:281) [35675][VTblLocAsyncUp0][T0][YB427F000001-00060D52A9614571-0-0] [lt=0]  REACH SYSLOG RATE LIMIT [bandwidth]
+... REACH SYSLOG RATE LIMIT [bandwidth]
 ```
 
 可以通过配置项 `syslog_io_bandwidth_limit` 来调整限速。

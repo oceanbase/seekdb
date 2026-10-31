@@ -22,11 +22,12 @@
 #include "share/ls/ob_restore_status.h"
 #include "logservice/ob_log_service.h"
 #include "storage/tx/ob_trans_service.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tx/ob_trans_service.h"
 #include "share/ob_share_util.h"
 #include "storage/allocator/ob_mds_allocator.h"
+#include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"  // needed by relocated destructor logic in the throttle helper
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"  // relocated-definition owner
@@ -107,8 +108,33 @@ int ObLSService::stop()
 
 int ObLSService::wait()
 {
-  free_ls_(ls_);
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ls_)) {
+    auto *t3m = ::oceanbase::share::server_service<ObStorageMetaMemMgr>();
+    bool released = false;
+    if (OB_ISNULL(t3m)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("storage metadata manager is unavailable while waiting for LS", KR(ret));
+    } else {
+      // stop() removes tablets, but their deferred GC still calls back into
+      // the LS-owned MDS manager. Keep the LS alive until those references
+      // drain; destroying it earlier leaves dangling MDS recorder links.
+      while (OB_SUCC(ret) && !released) {
+        if (OB_FAIL(t3m->check_all_meta_mem_released(released, "ls_wait"))) {
+          LOG_WARN("check metadata release before destroying LS failed", KR(ret));
+        } else if (!released) {
+          bool all_tablet_cleaned = false;
+          const int gc_ret = t3m->gc_tablets_in_queue(all_tablet_cleaned);
+          if (OB_SUCCESS != gc_ret) {
+            LOG_WARN("recycle deferred tablets while waiting for LS failed", K(gc_ret));
+          }
+          ob_usleep(10 * 1000);
+        }
+      }
+      if (OB_SUCC(ret)) free_ls_(ls_);
+    }
+  }
+  return ret;
 }
 
 int ObLSService::server_module_init(ObLSService* &ls_service)
@@ -289,7 +315,7 @@ int ObLSService::post_create_ls_(const bool is_restore, ObLS *ls)
   return ret;
 }
 
-int ObLSService::replay_create_ls(const int64_t ls_epoch, const ObLSMeta &ls_meta)
+int ObLSService::replay_create_ls(const ObLSMeta &ls_meta)
 {
   int ret = OB_SUCCESS;
   lib::ObMutexGuard change_guard(change_lock_);
@@ -297,27 +323,13 @@ int ObLSService::replay_create_ls(const int64_t ls_epoch, const ObLSMeta &ls_met
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!ls_meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(replay_create_ls_(ls_epoch, ls_meta))) {
+  } else if (OB_FAIL(replay_create_ls_(ls_meta))) {
   }
 
   return ret;
 }
 
-int ObLSService::replay_update_ls(const ObLSMeta &ls_meta)
-{
-  int ret = OB_SUCCESS;
-
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!ls_meta.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(replay_update_ls_(ls_meta))) {
-  }
-
-  return ret;
-}
-
-int ObLSService::gc_ls_after_replay_slog()
+int ObLSService::finish_ls_recovery()
 {
   // NOTE: we only gc the ls that not create finished or removed.
   // the migrate failed ls will be gc at ObGarbageCollector.
@@ -385,17 +397,7 @@ int ObLSService::online_ls()
   return ret;
 }
 
-int ObLSService::replay_update_ls_(const ObLSMeta &ls_meta)
-{
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (OB_FAIL(get_ls(ls))) {
-  } else if (OB_FAIL(ls->set_ls_meta(ls_meta))) {
-  }
-  return ret;
-}
-
-int ObLSService::replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_meta)
+int ObLSService::replay_create_ls_(const ObLSMeta &ls_meta)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -404,9 +406,8 @@ int ObLSService::replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_me
   if (OB_SUCCESS == (ret = get_ls(ls))) {
     ObLSLockGuard lock_ls(ls);
     if (OB_FAIL(ls->set_ls_meta(ls_meta))) {
-    } else if (OB_FAIL(ls->set_ls_epoch(ls_epoch))) {
     } else {
-      LOG_INFO("updated existing ls for replay", K(ls_epoch), K(ls_meta));
+      LOG_INFO("updated existing ls for replay", K(ls_meta));
     }
   } else if (OB_LS_NOT_EXIST != ret) {
     LOG_WARN("fail to get ls before replay create", K(ret), K(ls_meta));
@@ -419,7 +420,6 @@ int ObLSService::replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_me
     state = ObLSCreateState::CREATE_STATE_LS_ALLOCATED;
     ObLSLockGuard lock_ls(ls);
     if (OB_FAIL(ls->set_ls_meta(ls_meta))) {
-    } else if (OB_FAIL(ls->set_ls_epoch(ls_epoch))) {
     } else if (OB_FAIL(publish_ls_(ls))) {
     } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PUBLISHED)) {
     } else if (OB_FAIL(ls->load_ls())) {
@@ -597,9 +597,9 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
   int64_t process_point = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_UNLIKELY(!SERVER_STORAGE_META_SERVICE.is_started())) {
+  } else if (OB_UNLIKELY(!STORAGE_META_SERVICE.is_started())) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("ls service does not service before slog replay finished", K(ret));
+    LOG_WARN("ls service does not service before local metadata recovery finishes", K(ret));
   } else if (OB_BREAK_FAIL(ObShareUtil::get_abs_timeout(DEFAULT_LOCK_TIMEOUT /* default timeout */,
                                                   abs_timeout_ts))) {
   } else {
@@ -622,7 +622,6 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       if (OB_BREAK_FAIL(publish_ls_(ls))) {
         LOG_WARN("publish log stream failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PUBLISHED)) {
-      } else if (OB_FAIL(ls->set_ls_epoch(0))) {
       } else if (OB_BREAK_FAIL(ls->create_ls(arg.palf_base_info_))) {
         LOG_WARN("enable ls palf failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PALF_ENABLED)) {
