@@ -8,8 +8,12 @@ def _source_impl(ctx):
         url = source["url"],
     )
     ctx.watch(ctx.path(ctx.attr.prepare))
+    # Windows installs the interpreter as "python"; keep "python3" first elsewhere.
+    python = ctx.which("python3") or ctx.which("python")
+    if not python:
+        fail("Preparing SDK sources requires Python 3")
     result = ctx.execute([
-        "python3",
+        str(python),
         str(ctx.path(ctx.attr.prepare)),
         str(ctx.path(ctx.attr.manifest)),
         ctx.attr.package,
