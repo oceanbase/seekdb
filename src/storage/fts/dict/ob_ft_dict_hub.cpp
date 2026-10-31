@@ -32,8 +32,15 @@ int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
   int ret = OB_SUCCESS;
+  lib::ObMemAttr mem_attr;
+  mem_attr.label_ = "FtParse";
   if (OB_FAIL(dict_map_.create(K_MAX_DICT_BUCKET, "dict_map"))) {
   } else if (OB_FAIL(rw_dict_lock_.init(K_MAX_DICT_BUCKET))) {
+  } else if (OB_FAIL(dict_allocator_.init(lib::ObMallocAllocator::get_instance(),
+                                         common::OB_MALLOC_NORMAL_BLOCK_SIZE,
+                                         mem_attr))) {
+  } else if (OB_FAIL(dict_cache_map_.create(K_MAX_DICT_BUCKET, "dict_cache_map"))) {
+  } else if (OB_FAIL(rw_dict_cache_lock_.init(K_MAX_DICT_BUCKET))) {
   } else {
     is_inited_ = true;
   }
@@ -43,6 +50,26 @@ int ObFTDictHub::init()
 int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
+  // The cached dictionaries are shared by all the parses, so they are
+  // released only when the hub itself is destroyed.
+  for (auto iter = dict_cache_map_.begin(); iter != dict_cache_map_.end(); ++iter) {
+    ObFTCachedDictEntry *entry = iter->second;
+    if (OB_NOT_NULL(entry)) {
+      if (OB_NOT_NULL(entry->dict_)) {
+        entry->dict_->~ObIFTDict();
+        dict_allocator_.free(entry->dict_);
+        entry->dict_ = nullptr;
+      }
+      entry->~ObFTCachedDictEntry();
+      dict_allocator_.free(entry);
+    }
+  }
+  if (dict_cache_map_.created()) {
+    dict_cache_map_.destroy();
+  }
+  if (dict_allocator_.is_inited()) {
+    dict_allocator_.reset();
+  }
   is_inited_ = false;
   return ret;
 }
@@ -114,6 +141,63 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   return ret;
 }
 
+
+int ObFTDictHub::get_or_build_dict(const ObFTDictDesc &desc, ObIFTDict *&dict)
+{
+  int ret = OB_SUCCESS;
+  dict = nullptr;
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else {
+    {
+      ObBucketHashRLockGuard guard(rw_dict_cache_lock_, key.hash());
+      ObFTCachedDictEntry **cached = dict_cache_map_.get(key);
+      if (OB_NOT_NULL(cached) && OB_NOT_NULL(*cached)) {
+        dict = (*cached)->dict_;
+      }
+    }
+    if (OB_ISNULL(dict)) {
+      ObBucketHashWLockGuard guard(rw_dict_cache_lock_, key.hash());
+      ObFTCachedDictEntry **cached = dict_cache_map_.get(key);
+      if (OB_NOT_NULL(cached) && OB_NOT_NULL(*cached)) {
+        dict = (*cached)->dict_;
+      } else {
+        ObFTCachedDictEntry *entry = OB_NEWx(ObFTCachedDictEntry, &dict_allocator_, dict_allocator_);
+        ObIFTDict *new_dict = nullptr;
+        if (OB_ISNULL(entry)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else if (OB_FAIL(build_cache(desc, entry->container_))) {
+          entry->~ObFTCachedDictEntry();
+          dict_allocator_.free(entry);
+        } else if (OB_ISNULL(new_dict =
+                             OB_NEWx(ObFTRangeDict,
+                                     &dict_allocator_,
+                                     dict_allocator_,
+                                     &entry->container_,
+                                     desc))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          entry->~ObFTCachedDictEntry();
+          dict_allocator_.free(entry);
+        } else if (OB_FAIL(new_dict->init())) {
+          new_dict->~ObIFTDict();
+          dict_allocator_.free(new_dict);
+          entry->~ObFTCachedDictEntry();
+          dict_allocator_.free(entry);
+        } else if (OB_FAIL(dict_cache_map_.set_refactored(key, entry, 0))) {
+          new_dict->~ObIFTDict();
+          dict_allocator_.free(new_dict);
+          entry->~ObFTCachedDictEntry();
+          dict_allocator_.free(entry);
+        } else {
+          entry->dict_ = new_dict;
+          dict = new_dict;
+        }
+      }
+    }
+  }
+  return ret;
+}
 
 int ObFTDictHub::get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info)
 {
