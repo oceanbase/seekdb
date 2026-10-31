@@ -1,0 +1,11 @@
+[package]
+name = "zlib-sys"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+libz-rs-sys = { version = "=0.6.8", default-features = false, features = ["std", "rust-allocator", "export-symbols", "gz"] }

@@ -22,3 +22,15 @@ cc_test(
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
+
+cc_test(
+    name = "test_rust_compression",
+    srcs = ["test_rust_compression.cpp"],
+    linkstatic = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//bazel/third_party:zlib",
+        "//bazel/third_party:zlib_headers",
+        "//rust:compression",
+    ],
+)

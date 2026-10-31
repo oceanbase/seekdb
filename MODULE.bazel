@@ -39,6 +39,12 @@ crate.annotation(
     additive_build_file = "//bazel:cxx_runtime.BUILD.bazel",
 )
 crate.annotation(
+    crate = "libz-rs-sys",
+    version = "0.6.8",
+    repositories = ["rust_crates"],
+    additive_build_file = "//bazel:libz_rs_sys_headers.BUILD.bazel",
+)
+crate.annotation(
     crate = "spdlog-rs",
     version = "0.5.3",
     repositories = ["rust_crates"],

@@ -416,7 +416,7 @@ cc_library(
     deps = [
         ":oblib_base",
         ":oblib_foundation",
-        "//bazel/third_party:zlib_headers",
+        "//rust:compression_headers",
     ],
     includes = ["."],
     features = ["layering_check"],
@@ -743,7 +743,6 @@ cc_library(
         "//bazel/third_party:openssl_headers",
         "//bazel/third_party:rapidjson_headers",
         "//bazel/third_party:vsag_headers",
-        "//bazel/third_party:zlib_headers",
         "//src/oblib/easy:easy",
     ],
     includes = ["."],
@@ -1017,7 +1016,7 @@ cc_library(
         ":_oblib_implementation_headers",
         ":_zstd_1_3_8_objects",
         ":oblib_foundation",
-        "//bazel/third_party:zlib_headers",
+        "//rust:compression_headers",
     ],
     copts = OBLIB_CXX_COPTS,
     local_defines = OBLIB_LOCAL_DEFINES,
@@ -1146,7 +1145,6 @@ cc_library(
         "//bazel/third_party:libaio",
         "//bazel/third_party:libcrypto",
         "//bazel/third_party:libssl",
-        "//bazel/third_party:zlib",
     ] + select({
         "@platforms//os:linux": ["//deps/external:jemalloc_library"],
         "@platforms//os:macos": ["//deps/external:jemalloc_library"],

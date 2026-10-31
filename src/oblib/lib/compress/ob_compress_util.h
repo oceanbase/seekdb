@@ -19,7 +19,6 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_template_utils.h"
 #include "lib/allocator/ob_allocator.h"
-#include <zlib.h>
 
 namespace oceanbase
 {
@@ -81,24 +80,6 @@ static void ob_zstd_free(void *opaque, void *address)
 {
   if (NULL != opaque) {
     ObIAllocator *allocator = reinterpret_cast<ObIAllocator*> (opaque);
-    allocator->free(address);
-  }
-}
-
-static void *ob_zlib_alloc(void *opaque, unsigned int items, unsigned int size)
-{
-  void *ret = NULL;
-  ObIAllocator *allocator = static_cast<ObIAllocator *>(opaque);
-  if (OB_NOT_NULL(allocator)) {
-    ret = allocator->alloc(items * size);
-  }
-  return ret;
-}
-
-static void ob_zlib_free(void *opaque, void *address)
-{
-  ObIAllocator *allocator = static_cast<ObIAllocator *>(opaque);
-  if (OB_NOT_NULL(allocator)) {
     allocator->free(address);
   }
 }

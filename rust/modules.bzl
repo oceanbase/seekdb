@@ -27,6 +27,7 @@ MODULES = {
     },
     "regex-engine": {"bridge": "src/bridge.rs"},
     "xml-parser": {"bridge": "src/bridge.rs", "headers": ["include/callbacks.h"]},
+    "compression": {"bridge": "src/bridge.rs"},
     "spatial-covering": {"bridge": "src/bridge.rs"},
     "uuid-generator": {"bridge": "src/bridge.rs"},
     "in-process": {

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! One static library (and one Rust runtime/allocator) for all seekdb components.
+pub use compression;
 pub use config as parameter_config;
 pub use in_process;
 pub use local as local_storage;
@@ -26,3 +27,5 @@ pub use sql_nio as network;
 pub use standby_rpc;
 pub use uuid_generator;
 pub use xml_parser;
+#[cfg(not(target_os = "windows"))]
+pub use zlib_sys;

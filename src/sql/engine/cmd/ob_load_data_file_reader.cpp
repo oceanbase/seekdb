@@ -589,35 +589,16 @@ ObZlibDecompressor::~ObZlibDecompressor()
 
 void ObZlibDecompressor::destroy()
 {
-  if (OB_NOT_NULL(zlib_stream_ptr_)) {
-    z_streamp zstream_ptr = static_cast<z_streamp>(zlib_stream_ptr_);
-    inflateEnd(zstream_ptr);
-    allocator_.free(zlib_stream_ptr_);
-    zlib_stream_ptr_ = nullptr;
-  }
+  decoder_.reset();
 }
 
 int ObZlibDecompressor::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(zlib_stream_ptr_)) {
+  if (decoder_.has_value()) {
     ret = OB_INIT_TWICE;
-  } else if (OB_ISNULL(zlib_stream_ptr_ = allocator_.alloc(sizeof(z_stream)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed: zlib stream object.", K(sizeof(z_stream)));
   } else {
-    z_streamp zstream_ptr = static_cast<z_streamp>(zlib_stream_ptr_);
-    zstream_ptr->zalloc   = ob_zlib_alloc;
-    zstream_ptr->zfree    = ob_zlib_free;
-    zstream_ptr->opaque   = static_cast<voidpf>(&allocator_);
-    zstream_ptr->avail_in = 0;
-    zstream_ptr->next_in  = Z_NULL;
-
-    int zlib_ret = inflateInit2(zstream_ptr, 32 + MAX_WBITS);
-    if (Z_OK != zlib_ret) {
-      ret = OB_ERROR;
-      LIB_LOG(WARN, "failed to inflateInit2", K(zlib_ret));
-    }
+    decoder_.emplace(compression::new_stream_decoder());
   }
   return ret;
 }
@@ -626,46 +607,26 @@ int ObZlibDecompressor::decompress(const char *src, int64_t src_size, int64_t &c
                                    char *dest, int64_t dest_capacity, int64_t &decompressed_size)
 {
   int ret = OB_SUCCESS;
-  int zlib_ret = Z_OK;
-  z_streamp zstream_ptr = nullptr;
 
-  if (OB_ISNULL(zlib_stream_ptr_)) {
+  if (!decoder_.has_value()) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(src) || src_size <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(dest) || dest_capacity <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (FALSE_IT(zstream_ptr = static_cast<z_streamp>(zlib_stream_ptr_))) {
-  } else if (zstream_need_reset_) {
-    if (Z_OK != (zlib_ret = inflateReset(zstream_ptr))) {
-      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LOG_WARN("failed to reset zlib stream", K(zlib_ret));
-    } else {
-      zstream_need_reset_ = false;
-    }
   }
 
   if (OB_SUCC(ret)) {
-    zstream_ptr->avail_in = src_size;
-    zstream_ptr->next_in  = (Bytef *)src;
-
-    int64_t last_avail_in  = zstream_ptr->avail_in;
-    int64_t last_total_out = zstream_ptr->total_out;
-    zstream_ptr->next_out  = reinterpret_cast<Bytef *>(dest);
-    zstream_ptr->avail_out = dest_capacity;
-
-    zlib_ret = inflate(zstream_ptr, Z_NO_FLUSH);
-    if (Z_OK == zlib_ret || Z_STREAM_END == zlib_ret) {
-
-      consumed_size     = last_avail_in - zstream_ptr->avail_in;
-      decompressed_size = zstream_ptr->total_out  - last_total_out;
-
-      if (Z_STREAM_END == zlib_ret) {
-        zstream_need_reset_ = true;
-      }
+    const auto progress = compression::decoder_process(
+        *decoder_.value(),
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(src), src_size),
+        rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(dest), dest_capacity));
+    if (compression::Code::Ok == progress.code) {
+      consumed_size = progress.consumed;
+      decompressed_size = progress.produced;
     } else {
       ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LOG_WARN("failed to decompress", K(zlib_ret));
+      LOG_WARN("failed to decompress");
     }
   }
 

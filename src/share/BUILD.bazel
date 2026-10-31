@@ -1678,7 +1678,6 @@ _SHARE_RUNTIME_DEPS = _SHARE_RUNTIME_GENERATED_DEPS + [
     "//bazel/third_party:rapidjson_headers",
     "//bazel/third_party:roaring_headers",
     "//rust:spatial_covering_headers",
-    "//bazel/third_party:zlib_headers",
 ]
 
 _SHARE_RUNTIME_SEMANTIC_DEPS = [

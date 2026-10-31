@@ -24,7 +24,6 @@ SDK_HEADERS = {
     "rapidjson_headers": _headers("rapidjson"),
     "roaring_headers": _headers("roaring"),
     "vsag_headers": _headers("vsag"),
-    "zlib_headers": {"hdrs": ["include/zconf.h", "include/zlib.h"], "includes": ["include"]},
     "windows_headers": {"hdrs": ["include/pthread*.h", "include/_ptw32.h", "include/sched.h", "include/semaphore.h", "include/dirent.h"], "includes": ["include"]},
 }
 SDK_IMPORTS = {
@@ -40,7 +39,6 @@ SDK_IMPORTS = {
         "includes": ["include"],
     },
     "libssl": {"static_library": "lib/libssl.a"},
-    "zlib": {"static_library": "lib/libz.a"},
 }
 
 SDK_IMPORTS.update({
@@ -147,6 +145,14 @@ _SOURCE_HEADERS = {
 }
 
 def sdk_aliases():
+    native.alias(name = "zlib_headers", actual = "//rust/zlib-sys:headers")
+    native.alias(
+        name = "zlib",
+        actual = select({
+            "@platforms//os:windows": "@third_party_native//:zlib",
+            "//conditions:default": "//rust/zlib-sys:zlib",
+        }),
+    )
     cc_library(
         name = "base_libraries",
         deps = [":libcrypto", ":libssl"] + select({

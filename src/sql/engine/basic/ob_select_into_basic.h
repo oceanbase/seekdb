@@ -20,6 +20,8 @@
 
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "lib/file/ob_file.h"
+#include "rust/compression.h"
+#include <optional>
 
 namespace oceanbase
 {
@@ -66,7 +68,7 @@ class ObOutfileGzipStreamCompressor : public ObOutfileStreamCompressor
 {
 public:
   ObOutfileGzipStreamCompressor(ObIAllocator &allocator)
-      : ObOutfileStreamCompressor(allocator), zstr_(), z_stream_ended_(true) {}
+      : ObOutfileStreamCompressor(allocator) {}
   ~ObOutfileGzipStreamCompressor() { reset(); }
   int compress(const char *src, int64_t src_size, size_t &consumed_size,
                char *dest, int64_t dest_capacity, int64_t &decompressed_size,
@@ -75,8 +77,7 @@ public:
   void reset() override;
   void reuse() override;
 private:
-  z_stream zstr_;
-  bool z_stream_ended_;
+  std::optional<rust::Box<compression::GzipEncoder>> encoder_;
 };
 
 class ObCompressStreamWriter

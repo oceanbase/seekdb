@@ -21,8 +21,12 @@ local = { path = "../local" }
 in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
 xml-parser = { path = "../xml-parser" }
+compression = { path = "../compression" }
 spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 standby-rpc = { path = "../standby-rpc" }
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+zlib-sys = { path = "../zlib-sys" }
