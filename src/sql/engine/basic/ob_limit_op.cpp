@@ -392,11 +392,14 @@ int ObLimitOp::is_row_order_by_item_value_equal(bool &is_equal)
       const ObExpr *expr = MY_SPEC.sort_columns_.at(i);
       ObDatum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
-                 pre_sort_columns_.store_row_->cells()[i], *datum, cmp_ret,
-                 datum_access_ctx_))) {
       } else {
-        is_equal = 0 == cmp_ret;
+        const ObDatum stored_datum = StoredDatumCodec::decode_legacy_view(
+            pre_sort_columns_.store_row_->stored_cells()[i]);
+        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+                   stored_datum, *datum, cmp_ret, datum_access_ctx_))) {
+        } else {
+          is_equal = 0 == cmp_ret;
+        }
       }
     }
   }
@@ -436,8 +439,10 @@ int ObLimitOp::compare_value_in_batch(bool &keep_iterating,
                    ++col_idx) {
         ObExpr *expr = MY_SPEC.sort_columns_.at(col_idx);
         int cmp_ret = 0;
+        const ObDatum stored_datum = StoredDatumCodec::decode_legacy_view(
+            pre_sort_columns_.store_row_->stored_cells()[col_idx]);
         if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
-                    pre_sort_columns_.store_row_->cells()[col_idx],
+                    stored_datum,
                     *(datum_vectors[col_idx].at(row_idx)), cmp_ret,
                     datum_access_ctx_))) {
         } else {

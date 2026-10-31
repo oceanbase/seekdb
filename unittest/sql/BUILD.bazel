@@ -4,6 +4,25 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "fixed_scalar_consumers_cases",
+    srcs = ["test_fixed_scalar_consumers.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_scalar_consumers",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_scalar_consumers_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
     name = "fixed_sort_cells_cases",
     srcs = ["test_fixed_sort_cells.cpp"],
     alwayslink = True,

@@ -101,8 +101,13 @@ int ObGroupResultSaveRows::to_expr(bool is_vectorized, int64_t start_pos, int64_
 
 int64_t ObGroupResultSaveRows::cur_group_idx()
 {
-  return start_pos_ >= saved_size_ ? OB_INVALID_INDEX :
-      ObNewRange::get_group_idx(store_rows_[start_pos_].store_row_->cells()[group_id_idx_].get_int());
+  int64_t group_idx = OB_INVALID_INDEX;
+  if (start_pos_ < saved_size_) {
+    const ObDatum group_id = StoredDatumCodec::decode_legacy_view(
+        store_rows_[start_pos_].store_row_->stored_cells()[group_id_idx_]);
+    group_idx = ObNewRange::get_group_idx(group_id.get_int());
+  }
+  return group_idx;
 }
 
 

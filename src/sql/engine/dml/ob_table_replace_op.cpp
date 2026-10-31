@@ -936,8 +936,8 @@ int ObTableReplaceOp::check_values(bool &is_equal,
       } else if ((type == ObDocIDType::TABLET_SEQUENCE) && (MY_SPEC.doc_id_col_id_ == column_ids[i])) {
         // skip doc id (only for current doc id)
       } else {
-        const ObDatum &insert_datum = replace_row->cells()[i];
-        const ObDatum &del_datum = delete_row->cells()[i];
+        const ObDatum insert_datum = StoredDatumCodec::decode_legacy_view(replace_row->stored_cells()[i]);
+        const ObDatum del_datum = StoredDatumCodec::decode_legacy_view(delete_row->stored_cells()[i]);
         if (OB_FAIL(new_row.at(i)->basic_funcs_->null_first_cmp_(
                 insert_datum, del_datum, cmp_ret, access_ctx))) {
         } else if (0 != cmp_ret) {
