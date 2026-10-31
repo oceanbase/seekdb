@@ -399,7 +399,7 @@ int enum_set_valid_check(const uint64_t val, const int64_t str_values_count, con
     // ENUM type, its value should not exceed str_values_count
     ret = OB_ERR_UNEXPECTED;
   } else if (!is_enum && (str_values_count < OB_MAX_SET_ELEMENT_NUM) &&
-      (val >= (1UL << str_values_count))) {
+      (val >= (1ULL << str_values_count))) {
     // SET type, its value should not be greater than or equal to 2^(str_values_count)
     ret = OB_ERR_UNEXPECTED;
   }
