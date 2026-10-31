@@ -10,3 +10,7 @@
 *.i filter=codeformat
 *.ic filter=codeformat
 *.js filter=codeformat
+
+# cbindgen regenerates this header with LF endings during the build; keep the
+# checked-in copy byte-identical so a build never leaves the tree dirty.
+rust/sql-nio/include/nio.h -text -filter

@@ -251,7 +251,13 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
       } else {
         ++input_cnt_;
         if (input_cnt_ <= offset_) {
-          brs_.skip_->set(i);
+          // mark the row as skipped instead of only setting the bit in the bitmap:
+          // the bitmap of the child batch has been deep copied together with its
+          // all_rows_active_ flag, which lets downstream consumers ignore the
+          // bitmap entirely. Without clearing the flag the OFFSET rows would still
+          // be emitted (LIMIT 10 OFFSET 5 returned 15 rows when the child operator
+          // returned more rows than requested).
+          brs_.set_skip(i);
         } else {
           break;
         }

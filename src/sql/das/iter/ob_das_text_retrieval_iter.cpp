@@ -43,8 +43,11 @@ ObDASTextRetrievalIter::ObDASTextRetrievalIter()
     fwd_range_objs_(nullptr),
     token_weight_expr_(nullptr),
     skip_(nullptr),
+    skip_capacity_(0),
     token_doc_cnt_(0),
     max_batch_size_(0),
+    topk_limit_(0),
+    need_fwd_idx_agg_(false),
     need_inv_idx_agg_(false),
     inv_idx_agg_evaluated_(false),
     need_inv_idx_agg_reset_(false),
@@ -156,6 +159,13 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
     need_inv_idx_agg_ = ir_ctdef_->need_inv_idx_agg();
     need_inv_idx_agg_reset_ = retrieval_param.need_inv_idx_agg_reset_;
     max_batch_size_ = ir_rtdef_->eval_ctx_->max_batch_size_;
+    topk_limit_ = 0;
+    if (ir_ctdef_->has_pushdown_topk() && OB_FAIL(init_topk_limit())) {
+      // failing to resolve the topk limit is not fatal: it only disables the
+      // single-batch promotion below, correctness stays unchanged.
+      LOG_WARN("failed to init topk limit for text retrieval iter", K(ret));
+      ret = OB_SUCCESS;
+    }
   
     if (need_inv_idx_agg_) {
       inverted_idx_agg_iter_ = static_cast<ObDASScanIter *>(retrieval_param.inv_idx_agg_iter_);
@@ -168,14 +178,42 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
       }
     }
 
-    const int64_t default_size = OB_MAX(max_batch_size_, 1);
+    // The skip vector must cover the vectorized batch size *and* the pushed-down
+    // topk limit (limit + offset), because ObDASTRCacheIter::inner_reuse() resets
+    // the vector to OB_MAX(max_batch_size_, topk_limit_). topk_limit_ is user
+    // controlled and may be far larger than max_batch_size_, so allocating only
+    // max_batch_size_ bits made that reset() a heap buffer overflow.
+    const int64_t default_size = OB_MAX(OB_MAX(max_batch_size_, topk_limit_), 1);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_calc_exprs())) {
-    } else if (OB_ISNULL(skip_ = to_bit_vector(allocator_.alloc(ObBitVector::memory_size(default_size))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to init row-wise calc exprs", K(ret));
+    } else if (OB_FAIL(prepare_skip_vector(default_size))) {
+      LOG_WARN("failed to init skip bit vector", K(ret), K(default_size));
     } else {
-      skip_->init(default_size);
       is_inited_ = true;
+    }
+  }
+  return ret;
+}
+
+int ObDASTextRetrievalIter::prepare_skip_vector(const int64_t size)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(size <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid skip vector size", K(ret), K(size));
+  } else if (OB_NOT_NULL(skip_) && skip_capacity_ >= size) {
+    // reuse the existing allocation: declaring a smaller size is always safe
+    skip_->reset(size);
+  } else {
+    sql::ObBitVector *new_skip = to_bit_vector(allocator_.alloc(ObBitVector::memory_size(size)));
+    if (OB_ISNULL(new_skip)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate skip bit vector", K(ret), K(size));
+    } else {
+      new_skip->init(size);
+      skip_ = new_skip;
+      skip_capacity_ = size;
     }
   }
   return ret;
@@ -184,23 +222,22 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
 int ObDASTextRetrievalIter::inner_reuse()
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(skip_)) {
-    skip_->reset(OB_MAX(max_batch_size_, 1));
-  }
   if (nullptr != mem_context_) {
     mem_context_->reset_remain_one_page();
   }
 
-  int64_t old_default_size = OB_MAX(max_batch_size_, 1);
+  const int64_t old_max_batch_size = max_batch_size_;
   max_batch_size_ = ir_rtdef_->eval_ctx_->max_batch_size_;
-  if (old_default_size < OB_MAX(max_batch_size_, 1)) {
-    const int64_t default_size = OB_MAX(max_batch_size_, 1);
+  if (old_max_batch_size < max_batch_size_) {
+    // The batch size grew, so the arena is rebuilt from scratch: drop the cached
+    // skip vector metadata together with its memory and reallocate below.
     allocator_.reuse();
-    if (OB_ISNULL(skip_ = to_bit_vector(allocator_.alloc(ObBitVector::memory_size(default_size))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      skip_->init(default_size); 
-    }
+    skip_ = nullptr;
+    skip_capacity_ = 0;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(prepare_skip_vector(OB_MAX(OB_MAX(max_batch_size_, topk_limit_), 1)))) {
+    LOG_WARN("failed to reuse skip bit vector", K(ret), K(max_batch_size_), K(topk_limit_));
   }
   if (OB_SUCC(ret)) {
     const ObTabletID &old_inv_scan_id = inv_idx_scan_param_.tablet_id_;
@@ -262,6 +299,7 @@ int ObDASTextRetrievalIter::inner_release()
   forward_idx_iter_ = nullptr;
   fwd_range_objs_ = nullptr;
   skip_ = nullptr;
+  skip_capacity_ = 0;
   tx_desc_ = nullptr;
   snapshot_ = nullptr;
   token_doc_cnt_ = 0;
@@ -332,12 +370,48 @@ int ObDASTextRetrievalIter::inner_get_next_row()
     LOG_DEBUG("get one invert index scan row", "row",
         ROWEXPR2STR(*ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_,
         *inv_idx_scan_param_.output_exprs_));
-    if (ir_ctdef_->need_calc_relevance()) {
+    {
+      sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+      sql::ObEvalCtx *outer_ctx = ir_rtdef_->eval_ctx_;
+      sql::ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
+    }
+    if (OB_FAIL(copy_doc_id_to_outer_ctx())) {
+      LOG_WARN("failed to copy doc id to outer ctx", K(ret));
+    } else if (ir_ctdef_->need_calc_relevance()) {
       clear_row_wise_evaluated_flag();
       if (OB_FAIL(fill_token_doc_cnt())) {
       } else if (OB_FAIL(fill_token_weight())) {
       } else if (OB_FAIL(project_relevance_expr())) {
       }
+    }
+  }
+  return ret;
+}
+
+int ObDASTextRetrievalIter::init_topk_limit()
+{
+  int ret = OB_SUCCESS;
+  topk_limit_ = 0;
+  ObExpr *topk_limit_expr = ir_ctdef_->topk_limit_expr_;
+  ObExpr *topk_offset_expr = ir_ctdef_->topk_offset_expr_;
+  if (OB_ISNULL(topk_limit_expr)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("null topk limit expr while pushdown topk", K(ret));
+  } else {
+    int64_t limit = 0;
+    int64_t offset = 0;
+    ObDatum *topk_limit_datum = nullptr;
+    ObDatum *topk_offset_datum = nullptr;
+    if (OB_FAIL(topk_limit_expr->eval(*ir_rtdef_->eval_ctx_, topk_limit_datum))) {
+      LOG_WARN("failed to eval topk limit expr", K(ret));
+    } else if (nullptr != topk_offset_expr && OB_FAIL(topk_offset_expr->eval(*ir_rtdef_->eval_ctx_, topk_offset_datum))) {
+      LOG_WARN("failed to eval topk offset expr", K(ret));
+    } else {
+      limit = (topk_limit_datum->is_null() || topk_limit_datum->get_int() < 0) ? 0 : topk_limit_datum->get_int();
+      if (nullptr != topk_offset_datum) {
+        offset = (topk_offset_datum->is_null() || topk_offset_datum->get_int() < 0) ? 0 : topk_offset_datum->get_int();
+      }
+      topk_limit_ = limit + offset;
     }
   }
   return ret;
@@ -360,6 +434,14 @@ int ObDASTextRetrievalIter::inner_get_next_rows(int64_t &count, int64_t capacity
   }
   count = 0;
   int64_t real_capacity = OB_MIN(max_batch_size_, capacity);
+  if (topk_limit_ > 0) {
+    // topk is pushed down to the inverted index (BMW/DAAT): those iters
+    // overwrite the same datum slots starting from 0 on every batch, so a
+    // multi-batch output with capacity < total results would corrupt the
+    // previously emitted rows (ORDER BY score() LIMIT k mismatch for k>=5).
+    // Force a single batch covering the full topk (clamped by max_batch_size_).
+    real_capacity = OB_MIN(max_batch_size_, OB_MAX(real_capacity, topk_limit_));
+  }
   if (OB_FAIL(ret)) {
   } else if (max_batch_size_ == 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -371,7 +453,9 @@ int ObDASTextRetrievalIter::inner_get_next_rows(int64_t &count, int64_t capacity
   }
 
   if (OB_SUCC(ret)) {
-    if (ir_ctdef_->need_calc_relevance()) {
+    if (OB_FAIL(copy_doc_id_to_outer_ctx_batch(count))) {
+      LOG_WARN("failed to copy doc id to outer ctx batch", K(ret));
+    } else if (ir_ctdef_->need_calc_relevance()) {
       sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
       const ObBitVector *skip = NULL;
       PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count, skip);
@@ -688,14 +772,56 @@ int ObDASTextRetrievalIter::batch_project_relevance_expr(const int64_t &count)
   return ret;
 }
 
+int ObDASTextRetrievalIter::copy_doc_id_to_outer_ctx()
+{
+  int ret = OB_SUCCESS;
+  sql::ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
+  sql::ObEvalCtx *inner_ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+  sql::ObEvalCtx *outer_ctx = ir_rtdef_->eval_ctx_;
+  if (OB_ISNULL(doc_id_expr) || OB_ISNULL(inner_ctx) || OB_ISNULL(outer_ctx)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid doc id copy arg", K(ret), KP(doc_id_expr), KP(inner_ctx), KP(outer_ctx));
+  } else {
+    // The inv idx scan writes the doc id column into the inner ctx; downstream
+    // readers (storage token iters, loser-tree fillers) read it from the outer
+    // ctx. Shallow copy here is safe: datum memory lives in the scan row buffer
+    // of the current inverted index iteration, which stays valid until the next
+    // get_next_row/get_next_rows, and consumers deep-copy immediately.
+    ObDatum &outer_datum = doc_id_expr->locate_datum_for_write(*outer_ctx);
+    const ObDatum &inner_datum = doc_id_expr->locate_expr_datum(*inner_ctx);
+    outer_datum = inner_datum;
+  }
+  return ret;
+}
+
+int ObDASTextRetrievalIter::copy_doc_id_to_outer_ctx_batch(const int64_t &count)
+{
+  int ret = OB_SUCCESS;
+  sql::ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
+  sql::ObEvalCtx *inner_ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+  sql::ObEvalCtx *outer_ctx = ir_rtdef_->eval_ctx_;
+  if (OB_ISNULL(doc_id_expr) || OB_ISNULL(inner_ctx) || OB_ISNULL(outer_ctx)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid doc id copy arg", K(ret), KP(doc_id_expr), KP(inner_ctx), KP(outer_ctx));
+  } else {
+    ObDatum *outer_datums = doc_id_expr->locate_datums_for_update(*outer_ctx, count);
+    const ObDatumVector &inner_datums = doc_id_expr->locate_expr_datumvector(*inner_ctx);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      outer_datums[i] = *inner_datums.at(i);
+    }
+  }
+  return ret;
+}
+
 ObDASTRCacheIter::ObDASTRCacheIter()
   : ObDASTextRetrievalIter(),
     cur_idx_(-1),
     count_(0),
+    total_cnt_(0),
     relevance_(),
-    doc_id_()
-{
-}
+    doc_id_(),
+    cache_iter_end_(false)
+{}
 
 int ObDASTRCacheIter::inner_init(ObDASIterParam &param)
 {
@@ -703,7 +829,7 @@ int ObDASTRCacheIter::inner_init(ObDASIterParam &param)
   if (OB_FAIL(ObDASTextRetrievalIter::inner_init(param))) {
   } else {
     is_inited_ = false;
-    const int64_t default_size = OB_MAX(max_batch_size_, 1);
+    const int64_t default_size = OB_MAX(OB_MAX(max_batch_size_, 1), topk_limit_);
     relevance_.set_allocator(&allocator_);
     if (OB_FAIL(relevance_.init(default_size))) {
     } else if (OB_FAIL(relevance_.prepare_allocate(default_size))) {
@@ -720,28 +846,35 @@ int ObDASTRCacheIter::inner_init(ObDASIterParam &param)
 int ObDASTRCacheIter::inner_reuse()
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(skip_)) {
-    skip_->reset(OB_MAX(max_batch_size_, 1));
-  }
-  int64_t old_default_size = OB_MAX(max_batch_size_, 1);
+  int64_t old_default_size = OB_MAX(OB_MAX(max_batch_size_, 1), topk_limit_);
   max_batch_size_ = ir_rtdef_->eval_ctx_->max_batch_size_;
-  if (old_default_size < OB_MAX(max_batch_size_, 1)) {
+  const int64_t default_size = OB_MAX(OB_MAX(max_batch_size_, 1), topk_limit_);
+  if (old_default_size < default_size) {
     relevance_.reuse();
     doc_id_.reuse();
-    const int64_t default_size = OB_MAX(max_batch_size_, 1);
     allocator_.reuse();
+    // the whole arena is gone, so the cached skip vector is dangling now
+    skip_ = nullptr;
+    skip_capacity_ = 0;
     if (OB_FAIL(relevance_.init(default_size))) {
     } else if (OB_FAIL(relevance_.prepare_allocate(default_size))) {
     } else if (OB_FAIL(doc_id_.init(default_size))) {
     } else if (OB_FAIL(doc_id_.prepare_allocate(default_size))) {
-    } else if (OB_ISNULL(skip_ = to_bit_vector(allocator_.alloc(ObBitVector::memory_size(default_size))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      skip_->init(default_size);
+      LOG_WARN("failed to prepare allocate doc_id_ array", K(ret));
+    } else if (OB_FAIL(prepare_skip_vector(default_size))) {
+      LOG_WARN("failed to init skip bit vector", K(ret), K(default_size));
+    }
+  } else {
+    // topk can change between executions with the same max_batch_size_: only the
+    // declared size has to move, and the allocation is grown when it does not fit.
+    if (OB_FAIL(prepare_skip_vector(default_size))) {
+      LOG_WARN("failed to reset skip bit vector", K(ret), K(default_size));
     }
   }
   cur_idx_ = -1;
   count_ = 0;
+  total_cnt_ = 0;
+  cache_iter_end_ = false;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObDASTextRetrievalIter::inner_reuse())) {
   }
@@ -755,6 +888,8 @@ int ObDASTRCacheIter::inner_release()
   doc_id_.reset();
   cur_idx_ = -1;
   count_ = 0;
+  total_cnt_ = 0;
+  cache_iter_end_ = false;
   if (OB_FAIL(ObDASTextRetrievalIter::inner_release())) {
   }
   return ret;
@@ -777,13 +912,105 @@ int ObDASTRCacheIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   }
   count = 0;
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(get_next_batch_inner())) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+  } else {
+    // Refill the cache until it holds at least `capacity` unread rows, or the
+    // provider is exhausted. Serving a whole batch at once is what keeps the
+    // doc id column and the relevance expr datum in the same slots of the
+    // outer eval ctx: the consumer reads slot i for row i, so a row wise
+    // hand-off would leave the relevance of the last cached batch visible.
+    while (OB_SUCC(ret) && !cache_iter_end_ && (total_cnt_ - (cur_idx_ + 1)) < capacity) {
+      if (OB_FAIL(get_next_batch_inner())) {
+        if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          LOG_WARN("get next rows failed", K(ret));
+        } else {
+          // the underlying inverted index / BMW pipeline has been drained
+          ret = OB_SUCCESS;
+          cache_iter_end_ = true;
+        }
+      }
     }
   }
-  
   if (OB_SUCC(ret)) {
-    count = 1;
+    const int64_t start = cur_idx_ + 1;
+    int64_t real_cnt = total_cnt_ - start;
+    if (real_cnt > capacity) {
+      real_cnt = capacity;
+    }
+    if (real_cnt > 0) {
+      if (OB_FAIL(project_cached_batch(start, real_cnt))) {
+        LOG_WARN("failed to project cached rows into outer ctx", K(ret), K(start), K(real_cnt));
+      } else {
+        cur_idx_ = start + real_cnt - 1;
+        count = real_cnt;
+      }
+    } else {
+      ret = OB_ITER_END;
+    }
+  }
+  return ret;
+}
+
+// Project the cached rows [start, start + count) into the outer eval ctx so the
+// consumer observes the (doc id, relevance) pair of the same cached row. The doc
+// id is shallow copied from the cache (which outlives the outer read) and the
+// cached relevance is written into the relevance expr datum, otherwise the
+// pushed-down topk ordering would be projected together with a stale score.
+int ObDASTRCacheIter::project_cached_batch(const int64_t start, const int64_t count)
+{
+  int ret = OB_SUCCESS;
+  sql::ObEvalCtx *outer_ctx = ir_rtdef_->eval_ctx_;
+  sql::ObExpr *doc_id_expr = ir_ctdef_->inv_scan_domain_id_col_;
+  if (OB_ISNULL(outer_ctx) || OB_ISNULL(doc_id_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null outer ctx or doc id expr", K(ret));
+  } else if (OB_UNLIKELY(start < 0 || count <= 0 || start + count > total_cnt_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected cached row range", K(ret), K(start), K(count), K_(total_cnt));
+  } else {
+    ObDatum *doc_datums = doc_id_expr->locate_datums_for_update(*outer_ctx, count);
+    // A cached doc id is a string datum whose payload lives in the iterator arena,
+    // and inner_reuse() calls allocator_.reuse() when the buffer grows. Handing a
+    // shallow copy to the upper layer therefore leaves a dangling pointer as soon
+    // as the iterator is reused (the consumer may keep the projected batch across
+    // executions). Deep copy string payloads into the projection expr's own result
+    // buffer; numeric doc ids are stored inline in the datum and stay safe.
+    const ObObjTypeClass id_type_class = ob_obj_type_class(doc_id_expr->datum_meta_.get_type());
+    const bool need_deep_copy_id = (ObStringTC == id_type_class || ObTextTC == id_type_class);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      const ObDatum &src_id = doc_id_.at(start + i).get_datum();
+      if (!need_deep_copy_id || OB_ISNULL(src_id.ptr_) || src_id.len_ <= 0) {
+        doc_datums[i] = src_id;
+      } else {
+        char *id_dst = doc_id_expr->get_str_res_mem(*outer_ctx, src_id.len_, i);
+        if (OB_ISNULL(id_dst)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to get result memory for cached doc id", K(ret), K(src_id.len_));
+        } else {
+          MEMCPY(id_dst, src_id.ptr_, src_id.len_);
+          doc_datums[i].set_string(ObString(static_cast<int32_t>(src_id.len_), id_dst));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        doc_id_expr->get_evaluated_flags(*outer_ctx).set(i);
+      }
+    }
+    doc_id_expr->set_evaluated_projected(*outer_ctx);
+    if (ir_ctdef_->need_calc_relevance()) {
+      sql::ObExpr *relevance_expr = ir_ctdef_->relevance_expr_;
+      if (OB_ISNULL(relevance_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null relevance expr", K(ret));
+      } else {
+        ObDatum *rel_datums = relevance_expr->locate_datums_for_update(*outer_ctx, count);
+        for (int64_t i = 0; i < count; ++i) {
+          rel_datums[i].set_double(relevance_.at(start + i));
+          relevance_expr->get_evaluated_flags(*outer_ctx).set(i);
+        }
+        relevance_expr->set_evaluated_projected(*outer_ctx);
+      }
+    }
+    if (OB_SUCC(ret)) {
+    }
   }
   return ret;
 }
@@ -792,8 +1019,7 @@ int ObDASTRCacheIter::get_next_batch_inner()
 {
   int ret = OB_SUCCESS;
   bool need_load = false;
-  if (OB_LIKELY((++cur_idx_) < count_)) {
-  } else if (OB_FAIL(inverted_idx_scan_iter_->get_next_rows(count_, max_batch_size_))) {
+  if (OB_FAIL(inverted_idx_scan_iter_->get_next_rows(count_, max_batch_size_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
     } else if (count_ != 0) {
       ret = OB_SUCCESS;
@@ -803,16 +1029,35 @@ int ObDASTRCacheIter::get_next_batch_inner()
     need_load = true;
   }
   if (OB_SUCC(ret) && need_load) {
-    if (ir_ctdef_->need_calc_relevance()) {
-      sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
-      const ObBitVector *skip = NULL;
-      PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count_, skip);
-      clear_batch_wise_evaluated_flag(count_);
-      if (OB_FAIL(fill_token_doc_cnt())) {
-      } else if (OB_FAIL(fill_token_weight())) {
-      } else if (OB_FAIL(save_relevances_and_docids())) {
+    // The (doc id, relevance) pair of a cached row is only meaningful while the
+    // outer eval ctx geometry agrees with the number of rows actually supplied
+    // by this provider batch. The consumer decides that geometry (e.g. the limit
+    // operator shrinks the request to skip OFFSET rows), so pin it to count_
+    // here; otherwise the relevance evaluation window and the doc id slots the
+    // cache is fed from would be indexed with different origins.
+    sql::ObEvalCtx *outer_ctx = ir_rtdef_->eval_ctx_;
+    if (OB_ISNULL(outer_ctx)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null outer eval ctx", K(ret));
+    } else {
+      sql::ObEvalCtx::BatchInfoScopeGuard batch_info_scope_guard(*outer_ctx);
+      batch_info_scope_guard.set_batch_idx(0);
+      batch_info_scope_guard.set_batch_size(count_);
+      if (OB_FAIL(copy_doc_id_to_outer_ctx_batch(count_))) {
+        LOG_WARN("failed to copy doc id to outer ctx in cache iter", K(ret));
+      } else if (ir_ctdef_->need_calc_relevance()) {
+        sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+        const ObBitVector *skip = NULL;
+        PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count_, skip);
+        clear_batch_wise_evaluated_flag(count_);
+        if (OB_FAIL(fill_token_doc_cnt())) {
+          LOG_WARN("failed to get token doc cnt", K(ret));
+        } else if (OB_FAIL(save_relevances_and_docids())) {
+          LOG_WARN("failed to evaluate simarity expr", K(ret));
+        }
+      } else if (OB_FAIL(save_docids())) {
+          LOG_WARN("failed to save doc ids", K(ret));
       }
-    } else if (OB_FAIL(save_docids())) {
     }
   }
   return ret;
@@ -827,14 +1072,28 @@ int ObDASTRCacheIter::save_relevances_and_docids()
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(relevance_expr->eval_batch(*ir_rtdef_->eval_ctx_, *skip_, count_))) {
   } else {
-    cur_idx_ = 0;
+    const int64_t base = total_cnt_;
     const ObDatumVector &relevance_datum = relevance_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
-    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!skip_->at(i))) {
-        relevance_[i] = relevance_datum.at(i)->get_double();
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+    // The BMW/WAND scan writes the docid into the *inner* ctx (inverted index
+    // scan rtdef), not the outer one. Read it from the inner ctx.
+    ObEvalCtx *inner_ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*inner_ctx);
+    if (base + count_ > relevance_.count() && OB_FAIL(prepare_allocate_cache(base + count_))) {
+      LOG_WARN("failed to expand cache arrays", K(ret), K(base), K_(count));
+    } else {
+      int64_t real_cnt = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+        if (OB_LIKELY(!skip_->at(i))) {
+          relevance_[base + real_cnt] = relevance_datum.at(i)->get_double();
+          if (OB_FAIL(doc_id_[base + real_cnt].from_datum(*doc_id_datum.at(i)))) {
+            LOG_WARN("failed to get doc id", K(ret), K(doc_id_datum.at(i)));
+          } else {
+            ++real_cnt;
+          }
         }
+      }
+      if (OB_SUCC(ret)) {
+        total_cnt_ = base + real_cnt;
       }
     }
   }
@@ -848,14 +1107,39 @@ int ObDASTRCacheIter::save_docids()
   if (OB_ISNULL(doc_id_expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    cur_idx_ = 0;
-    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
-    for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-      if (OB_LIKELY(!skip_->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
-        };
+    // The BMW/WAND scan writes the docid into the *inner* ctx.
+    ObEvalCtx *inner_ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*inner_ctx);
+    const int64_t base = total_cnt_;
+    if (base + count_ > doc_id_.count() && OB_FAIL(prepare_allocate_cache(base + count_))) {
+      LOG_WARN("failed to expand cache arrays", K(ret), K(base), K_(count));
+    } else {
+      int64_t real_cnt = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+        if (OB_LIKELY(!skip_->at(i))) {
+          if (OB_FAIL(doc_id_[base + real_cnt].from_datum(*doc_id_datum.at(i)))) {
+            LOG_WARN("failed to get doc id", K(ret));
+          } else {
+            ++real_cnt;
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        total_cnt_ = base + real_cnt;
       }
     }
+  }
+  return ret;
+}
+
+int ObDASTRCacheIter::prepare_allocate_cache(const int64_t size)
+{
+  int ret = OB_SUCCESS;
+  if (size > relevance_.count() && OB_FAIL(relevance_.prepare_allocate(size))) {
+    LOG_WARN("failed to expand relevance_ array", K(ret), K(size));
+  }
+  if (OB_SUCC(ret) && size > doc_id_.count() && OB_FAIL(doc_id_.prepare_allocate(size))) {
+    LOG_WARN("failed to expand doc_id_ array", K(ret), K(size));
   }
   return ret;
 }
@@ -863,8 +1147,9 @@ int ObDASTRCacheIter::save_docids()
 int ObDASTRCacheIter::get_cur_row(double &relevance, ObDocIdExt &doc_id) const
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(cur_idx_ >= count_)) {
+  if (OB_UNLIKELY(cur_idx_ >= total_cnt_)) {
     ret = OB_ARRAY_OUT_OF_RANGE;
+    LOG_WARN("array index out of bounds", K(ret), K_(cur_idx), K_(total_cnt));
   } else {
     // TODO: deep copy twice here and test once to see if there will be any optimization.
     // once: relevance_[cur_idx_],doc_id_[cur_idx_]=>item{relevance,doc_id}. tiwce: item=>losetree

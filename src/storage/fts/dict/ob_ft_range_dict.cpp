@@ -141,6 +141,13 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
 {
   int ret = OB_SUCCESS;
 
+  // Upper bound on the number of words taken from the dictionary table. The whole
+  // table is copied into memory here, so a user created custom dict table with an
+  // unbounded row count could exhaust tenant memory (repeatedly, since a rebuild
+  // is triggered by every refresh). Reject oversized dictionaries instead.
+  static constexpr int64_t MAX_DICT_WORD_COUNT = 2000000;
+  int64_t total_word_cnt = 0;
+
   // Phase 1: Collect words into tries range by range
   ObArenaAllocator tmp_alloc(lib::ObMemAttr("Tmp Allocator"));
   ObVector<ObFTTrie<void> *, ObArenaAllocator> all_tries(&tmp_alloc);
@@ -163,8 +170,13 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
       if (OB_FAIL(iter.get_key(key))) {
       } else {
         ++count;
+        ++total_word_cnt;
 
-        if (count >= DEFAULT_KEY_PER_RANGE
+        if (OB_UNLIKELY(total_word_cnt > MAX_DICT_WORD_COUNT)) {
+          ret = OB_SIZE_OVERFLOW;
+          LOG_WARN("custom dict table contains too many words, refuse to build dict",
+                   K(ret), K(total_word_cnt), K(MAX_DICT_WORD_COUNT));
+        } else if (count >= DEFAULT_KEY_PER_RANGE
             && OB_FAIL(ObCharset::first_valid_char(desc.coll_type_,
                                                    key.ptr(),
                                                    key.length(),

@@ -90,7 +90,9 @@ private:
   uint32_t token_freq_agg_idx_;
   uint32_t doc_len_data_idx_;
   uint32_t doc_len_agg_idx_;
-  double curr_max_score_;
+  uint64_t curr_max_token_freq_;
+  uint64_t curr_min_doc_length_;
+  bool is_first_;
   blocksstable::ObStorageDatum *token_freq_res_;
   blocksstable::ObStorageDatum *doc_len_res_;
   bool is_inited_;

@@ -24,6 +24,19 @@ namespace oceanbase
 namespace storage
 {
 
+// ObDocId datum layout: [tablet_id(8)][seq_id(8)] (see ObDocId in ob_object.h).
+// datum.get_int() only reads the leading tablet_id which is constant per tablet,
+// so tie-break keys must use the trailing seq_id instead.
+static uint64_t extract_doc_seq_id(const ObDatum &datum)
+{
+  const ObString s = datum.get_string();
+  uint64_t seq_id = 0;
+  if (OB_LIKELY(s.length() >= (int64_t)(sizeof(uint64_t) * 2))) {
+    MEMCPY(&seq_id, s.ptr() + sizeof(uint64_t), sizeof(uint64_t));
+  }
+  return seq_id;
+}
+
 ObSRBMWIterImpl::ObSRBMWIterImpl()
   : ObSRDaaTIterImpl(),
     allocator_("BMWAlloc"),
@@ -56,6 +69,11 @@ int ObSRBMWIterImpl::init(
     if (OB_FAIL(domain_id_cmp_.init(iter_param.id_proj_expr_->obj_meta_))) {
     } else if (OB_FAIL(id_cache_.init(top_k_count_))) {
     } else if (OB_FAIL(id_cache_.prepare_allocate(top_k_count_))) {
+      LOG_WARN("failed to prepare allocate id cache", K(ret));
+    } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(top_k_count_))) {
+      LOG_WARN("failed to expand buffered domain ids to topk", K(ret), K_(top_k_count), K(buffered_domain_ids_.count()));
+    } else if (OB_FAIL(buffered_relevances_.prepare_allocate(top_k_count_))) {
+      LOG_WARN("failed to expand buffered relevances to topk", K(ret), K_(top_k_count), K(buffered_relevances_.count()));
     } else {
       is_inited_ = true;
     }
@@ -220,17 +238,106 @@ int ObSRBMWIterImpl::process_collected_row(const ObDatum &id_datum, const double
   if (OB_UNLIKELY(top_k_heap_.count() > top_k_count_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (top_k_heap_.count() < top_k_count_) {
-    if (OB_FAIL(id_cache_.at(top_k_heap_.count()).from_datum(id_datum))) {
-    } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, top_k_heap_.count())))) {
+    const int64_t new_cache_idx = top_k_heap_.count();
+    if (OB_FAIL(id_cache_.at(new_cache_idx).from_datum(id_datum))) {
+      LOG_WARN("failed to from datum", K(ret));
+    } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, new_cache_idx, extract_doc_seq_id(id_datum))))) {
+      LOG_WARN("failed to push top k item", K(ret));
+    } else {
     }
   } else {
     const int64_t cache_idx = top_k_heap_.top().cache_idx_;
-    const double top_k_threshold = get_top_k_threshold();
-    if (relevance <= top_k_threshold) {
-      // not a new top k candidate
+    const double top_k_threshold = top_k_heap_.top().relevance_;
+    const int64_t top_docid = extract_doc_seq_id(id_cache_.at(cache_idx).get_datum());
+    const int64_t new_docid = extract_doc_seq_id(id_datum);
+    // deterministic tie-break: with equal relevance, keep the smaller docid.
+    if (relevance < top_k_threshold ||
+        (relevance == top_k_threshold && new_docid >= top_docid)) {
     } else if (OB_FAIL(id_cache_.at(cache_idx).from_datum(id_datum))) {
     } else if (OB_FAIL(top_k_heap_.pop())) {
-    } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, cache_idx)))) {
+      LOG_WARN("failed to pop top k heap", K(ret));
+    } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, cache_idx, new_docid)))) {
+      LOG_WARN("failed to push top k item", K(ret));
+    } else {
+    }
+  }
+
+  return ret;
+}
+
+int ObSRBMWIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id)
+{
+  int ret = OB_SUCCESS;
+
+  const ObSRMergeItem *top_item = nullptr;
+  int64_t iter_idx = 0;
+  const ObDatum *base_id = nullptr;
+  relevance = 0.0;
+  got_valid_id = false;
+
+  while (OB_SUCC(ret) && !merge_heap_->empty()) {
+    if (OB_FAIL(merge_heap_->top(top_item))) {
+      LOG_WARN("failed to get top item from merge heap", K(ret));
+      break;
+    } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
+    } else {
+      ObISRDimBlockMaxIter *iter = get_iter(iter_idx);
+      const ObDatum *item_id = iter_domain_ids_[iter_idx];
+      if (OB_ISNULL(iter)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null iter", K(ret));
+        break;
+      } else if (OB_ISNULL(item_id)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null item id", K(ret));
+        break;
+      } else if (top_item->is_shallow_) {
+        // shallow placeholder: skip collecting (relevance=0, id is block-min
+        // aggregated lower bound, not a real docid), but keep the iter in
+        // next_round so it is deepened by the next advance round.
+        if (OB_FAIL(merge_heap_->pop())) {
+          LOG_WARN("failed to pop top item in heap", K(ret));
+          break;
+        }
+        next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+        continue;
+      }
+      // deep item: first one establishes the base docid; following items must
+      // carry the same docid, otherwise the current collect round is finished
+      // and the heap top is preserved for the next round.
+      if (nullptr == base_id) {
+        base_id = item_id;
+      } else {
+        int cmp_ret = 0;
+        if (OB_FAIL(domain_id_cmp_.compare(*item_id, *base_id, cmp_ret))) {
+          LOG_WARN("failed to compare domain id", K(ret));
+          break;
+        } else if (0 != cmp_ret) {
+          break;
+        }
+      }
+      if (OB_FAIL(relevance_collector_->collect_one_dim(iter_idx, top_item->relevance_))) {
+        LOG_WARN("failed to collect one dimension", K(ret));
+        break;
+      } else if (OB_FAIL(merge_heap_->pop())) {
+        LOG_WARN("failed to pop top item in heap", K(ret));
+        break;
+      } else {
+        next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    id_datum = base_id;
+    LOG_DEBUG("collect one dim", KPC(id_datum));
+    if (OB_ISNULL(id_datum)) {
+      // nothing but shallow placeholders collected, no valid id for this round
+      got_valid_id = false;
+    } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
+      LOG_WARN("failed to get result", K(ret));
+    } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
+      LOG_WARN("failed to process collected row", K(ret));
     }
   }
 
@@ -372,18 +479,73 @@ int ObSRBMWIterImpl::evaluate_pivot(const int64_t pivot_iter_idx)
 {
   int ret = OB_SUCCESS;
   ObISRDimBlockMaxIter *iter = get_iter(pivot_iter_idx);
-  const ObDatum *pivot_id = nullptr;
+  const ObMaxScoreTuple *max_score_tuple = nullptr;
+  const ObDatum *block_begin = nullptr;
+  const ObDatum *block_end = nullptr;
   const ObDatum *collected_id = nullptr;
   double pivot_relevance = 0.0;
   bool need_project = false;
   if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(iter->get_curr_id(pivot_id))) {
-  } else if (OB_FAIL(advance_dim_iters_for_next_round(*pivot_id, true))) {
-  } else if (OB_FAIL(collect_dims_by_id(collected_id, pivot_relevance, need_project))) {
-  } else if (OB_FAIL(unify_dim_iters_for_next_round())) {
-  } else if (OB_FAIL(fill_merge_heap())) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
+    LOG_WARN("unexpected null iter", K(ret));
+  } else if (OB_FAIL(iter->get_curr_block_max_info(max_score_tuple))) {
+    LOG_WARN("failed to get block max info", K(ret), K(pivot_iter_idx));
+  } else if (OB_ISNULL(max_score_tuple) || OB_ISNULL(max_score_tuple->min_domain_id_) || OB_ISNULL(max_score_tuple->max_domain_id_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null block bound", K(ret), K(pivot_iter_idx));
+  } else {
+    block_begin = max_score_tuple->min_domain_id_;
+    block_end = max_score_tuple->max_domain_id_;
+  }
+
+  // scan every real docid inside the whole candidate block (from block begin to
+  // block end), instead of only deepening the single pivot doc. This prevents
+  // skipping high-score docs that live in the same block after the pivot.
+  const ObDatum *cur_target = block_begin;
+  while (OB_SUCC(ret) && nullptr != cur_target) {
+    int cmp_ret = 0;
+    if (OB_FAIL(domain_id_cmp_.compare(*cur_target, *block_end, cmp_ret))) {
+      LOG_WARN("failed to compare domain id", K(ret));
+      break;
+    } else if (cmp_ret > 0) {
+      // passed the block end, this candidate block is fully evaluated
+      break;
+    }
+    // deepen all next_round iters to cur_target and collect every dim of this docid
+    if (OB_FAIL(advance_dim_iters_for_next_round(*cur_target, true))) {
+      if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("failed to advance dim iters for next round", K(ret));
+      } else {
+        ret = OB_SUCCESS;
+      }
+      break;
+    } else if (OB_FAIL(collect_dims_by_id(collected_id, pivot_relevance, need_project))) {
+      LOG_WARN("failed to collect dims by id", K(ret));
+      break;
+    }
+    // determine the next docid inside this block from the merge heap top
+    const ObSRMergeItem *top_item = nullptr;
+    int64_t iter_idx = 0;
+    if (merge_heap_->empty()) {
+      cur_target = nullptr;
+    } else if (OB_FAIL(merge_heap_->top(top_item))) {
+      LOG_WARN("failed to get top item from merge heap", K(ret));
+      break;
+    } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
+    } else if (OB_FAIL(get_iter(iter_idx)->get_curr_id(cur_target))) {
+      LOG_WARN("failed to get current id", K(ret), K(iter_idx));
+      break;
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    // unify remaining shallow iters and refill merge heap for next pivot search
+    if (OB_FAIL(unify_dim_iters_for_next_round())) {
+      LOG_WARN("failed to unify dim iters for next round", K(ret));
+    } else if (OB_FAIL(fill_merge_heap())) {
+      if (OB_UNLIKELY(OB_ITER_END != ret)) {
+        LOG_WARN("failed to fill merge heap after evaluate pivot", K(ret));
+      }
     }
   }
 
@@ -455,6 +617,7 @@ int ObSRBMWIterImpl::fill_merge_heap_with_shallow_dims(const ObDatum *last_range
     } else {
       item.iter_idx_ = iter_idx;
       item.relevance_ = 0.0;
+      item.is_shallow_ = true;
       if (OB_FAIL(merge_heap_->push(item))) {
       }
     }
@@ -564,23 +727,90 @@ int ObSRBMWIterImpl::project_rows_from_top_k_heap(const int64_t capacity, int64_
     }
 
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
-    count = 0;
-    for (int64_t i = 0; OB_SUCC(ret) && i < capacity && !top_k_heap_.empty(); ++i) {
-      guard.set_batch_idx(i);
-      const TopKItem &top_k_item = top_k_heap_.top();
-      const ObDocIdExt &id = id_cache_.at(top_k_item.cache_idx_);
-      set_datum_func_(id_datums[i], id);
-      id_evaluated_flags.set(i);
-      id_proj_expr->set_evaluated_projected(*eval_ctx);
+    // With the corrected comparator the heap top() is the worst candidate, so
+    // popping the whole heap yields rows in ascending relevance order. Dump the
+    // heap once, emit the best rows in reverse (ORDER BY score() DESC) and keep
+    // the remaining worse rows in the heap for subsequent batches.
+    const int64_t total = top_k_heap_.count();
+    TopKItem *items = static_cast<TopKItem *>(allocator_.alloc(sizeof(TopKItem) * total));
+    if (OB_ISNULL(items)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc temp items", K(ret), K(total));
+    } else {
+      int64_t n = 0;
+      for (int64_t i = 0; OB_SUCC(ret) && i < total; ++i) {
+        items[n++] = top_k_heap_.top();
+        if (OB_FAIL(top_k_heap_.pop())) {
+          LOG_WARN("failed to pop top k heap", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        const int64_t out_cnt = total < capacity ? total : capacity;
+        count = 0;
+        for (int64_t i = total - 1; i >= total - out_cnt; --i) {
+          const int64_t out_idx = count;
+          guard.set_batch_idx(out_idx);
+          const TopKItem &top_k_item = items[i];
+          const ObDocIdExt &id = id_cache_.at(top_k_item.cache_idx_);
+          // FIX(id-mismatch): the ObDocIdExt objects held in id_cache_ are not a
+          // reliable source for the projected id column (their internal datum may
+          // carry a stale/sentinel value with a bogus length), so both
+          // set_datum_shallow() and set_datum_int() can leak wrong ids and make
+          // the emitted (id, score) pairs mismatch the ORDER BY score() ordering.
+          // The doc seq id extracted into top_k_item.docid_ is already verified
+          // against the expected result, so write it directly per column type.
+          {
+            const ObObjType id_type = id_proj_expr->datum_meta_.type_;
+            const ObDatum &src_id = id.get_datum();
+            const int64_t id_len = static_cast<int64_t>(sizeof(uint64_t) * 2);
+            char *id_dst = NULL;
+            if (OB_ISNULL(src_id.ptr_)) {
+              set_datum_func_(id_datums[out_idx], id);
+            } else if (common::ObUInt64Type == id_type || common::ObIntType == id_type
+                       || common::ObInt32Type == id_type || common::ObUInt32Type == id_type) {
+              id_datums[out_idx].set_int(static_cast<int64_t>(top_k_item.docid_));
+            } else {
+              // The cached ObDocIdExt datum can carry an uninitialized length
+              // (garbage len_ inherited from the source row datum), which makes
+              // downstream rowkey construction read past the 16-byte doc id and
+              // produce wrong doc ids (lookup_rowkey_cnt != lookup_row_cnt).
+              // Rebuild a well-formed doc id datum: [tablet_id(8)][seq_id(8)].
+              // FIX(id-mismatch-v2): copy the 16 bytes into this expr's own
+              // result buffer inside the current eval frame instead of aliasing
+              // src_id.ptr_. The das layer re-reads these datums through
+              // locate_datums_for_update(), which resets ptr_ back to the frame
+              // result buffer; an aliased ptr_ silently loses the written doc id
+              // and yields a stale value (observed id 1915 instead of 2939).
+              // FIX(buf-overflow): the destination must come from the expression
+              // result buffer instead of reusing whatever ptr_ currently holds,
+              // otherwise a column with a shorter result buffer is overflowed.
+              if (OB_ISNULL(id_dst = id_proj_expr->get_str_res_mem(*eval_ctx, id_len, out_idx))) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("failed to get result memory for doc id", K(ret), K(id_len));
+              } else {
+                MEMCPY(id_dst, src_id.ptr_, id_len);
+                id_datums[out_idx].set_string(common::ObString(static_cast<int32_t>(id_len), id_dst));
+              }
+            }
+          }
+          id_evaluated_flags.set(out_idx);
+          id_proj_expr->set_evaluated_projected(*eval_ctx);
 
-      if (iter_param_->need_project_relevance()) {
-        relevance_datums[i].set_double(top_k_item.relevance_);
-        relevance_evaluated_flags->set(i);
-        relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+          if (iter_param_->need_project_relevance()) {
+            relevance_datums[out_idx].set_double(top_k_item.relevance_);
+            relevance_evaluated_flags->set(out_idx);
+            relevance_proj_expr->set_evaluated_projected(*eval_ctx);
+          }
+          ++count;
+        }
+        // keep the remaining (worse) rows for subsequent batches
+        for (int64_t i = 0; i < total - out_cnt; ++i) {
+          if (OB_FAIL(top_k_heap_.push(items[i]))) {
+            LOG_WARN("failed to push back top k item", K(ret));
+          }
+        }
       }
-      ++count;
-      if (OB_FAIL(top_k_heap_.pop())) {
-      }
+      allocator_.free(items);
     }
   }
   return ret;

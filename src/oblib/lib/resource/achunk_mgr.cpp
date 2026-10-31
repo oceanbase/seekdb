@@ -185,6 +185,14 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
   AChunk *chunk = nullptr;
   // Reuse chunk from self-cache
   if (OB_NOT_NULL(chunk = pop_chunk_with_size(all_size))) {
+    // Clear the block bitmap before handing a reused chunk to a BlockSet.
+    // Chunks can be returned to the cache via paths other than
+    // BlockSet::free_chunk (e.g. ObTenantCtxAllocator::push_chunk /
+    // ObTenantMemoryMgr::free_chunk_), and those paths do not clear
+    // blk_bs_. A stale bit makes AChunk::blk_nblocks() return a wrong
+    // count and trips the MEMCHK assertion in add_free_block
+    // (nblocks == expect_nblocks) on the next reuse.
+    chunk->blk_bs_.clear();
     int64_t orig_hold_size = chunk->hold();
     bool need_free = false;
     if (hold_size == orig_hold_size) {

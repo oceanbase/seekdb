@@ -136,8 +136,8 @@ protected:
 protected:
   virtual int check_and_prepare();
   int project_result(const ObDocIdExt &docid, const double relevance);
-  int project_relevance(const ObDocIdExt &docid, const double relevance);
-  int project_docid();
+  int project_relevance(const ObDocIdExt &docid, const double relevance, const int64_t slot_idx);
+  int project_docid(const int64_t count);
   void clear_evaluated_infos();
   int init_iters(
       transaction::ObTxDesc *tx_desc,

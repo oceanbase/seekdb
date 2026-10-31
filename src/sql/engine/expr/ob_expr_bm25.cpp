@@ -88,7 +88,7 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
     const int64_t related_token_cnt = related_token_cnt_datum->get_uint();
     const int64_t doc_token_cnt = doc_length_datum->get_uint();
     const double avg_doc_token_cnt = avg_doc_token_cnt_datum->get_double();
-    const double norm_len = doc_token_cnt / avg_doc_token_cnt;
+    const double norm_len = normalize_length(doc_token_cnt, avg_doc_token_cnt);
     const double token_weight = token_weight_datum->get_double();
     const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
     const double relevance = token_weight * doc_weight;
@@ -132,7 +132,7 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
       } else if (!skip.contain(i) && !eval_flags.at(i)) {
         const int64_t related_token_cnt = related_token_cnt_datum.at(i)->get_uint();
         const uint64_t doc_token_cnt = doc_length_datum.at(i)->get_uint();
-        const double norm_len = doc_token_cnt / avg_doc_token_cnt;
+        const double norm_len = normalize_length(doc_token_cnt, avg_doc_token_cnt);
         const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
         const double relevance = token_weight * doc_weight;
         res_datum[i].set_double(relevance);

@@ -549,7 +549,8 @@ int ObDASTextRetrievalMergeIter::project_result(const ObDocIdExt &docid, const d
   return ret;
 }
 
-int ObDASTextRetrievalMergeIter::project_relevance(const ObDocIdExt &docid, const double relevance)
+int ObDASTextRetrievalMergeIter::project_relevance(
+    const ObDocIdExt &docid, const double relevance, const int64_t slot_idx)
 {
   int ret = OB_SUCCESS;
   // TODO: usage of doc id column is somehow weird here, since in single token retrieval iterators,
@@ -561,18 +562,31 @@ int ObDASTextRetrievalMergeIter::project_relevance(const ObDocIdExt &docid, cons
   ObEvalCtx *eval_ctx = ir_rtdef_->eval_ctx_;
   if (OB_ISNULL(doc_id_col) || OB_ISNULL(eval_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr to relevance proejction column",
+        K(ret), KP(doc_id_col), KP(eval_ctx));
+  } else if (OB_UNLIKELY(slot_idx < 0 || slot_idx >= cache_doc_ids_.count())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected output slot idx", K(ret), K(slot_idx), K(cache_doc_ids_.count()),
+        KP(doc_id_col), KP(eval_ctx));
   } else {
-    cache_doc_ids_[next_written_idx_] = docid;
+    // NOTE: the doc id cache, the relevance cache and the projected relevance column all use the very
+    //       same index, i.e. the output slot index slot_idx. A (doc id, relevance) pair is therefore
+    //       always located by one single index. Do not place or fetch the relevance with the mutable
+    //       write pointer next_written_idx_, otherwise the score may be paired with another row.
+    cache_doc_ids_[slot_idx] = docid;
+    if (slot_idx < cache_relevances_.count()) {
+      cache_relevances_[slot_idx] = relevance;
+    }
     if (ir_ctdef_->need_proj_relevance_score()) {
       ObExpr *relevance_proj_col = ir_ctdef_->relevance_proj_col_;
       if (OB_ISNULL(relevance_proj_col)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
         ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
-        guard.set_batch_idx(next_written_idx_);
+        guard.set_batch_idx(slot_idx);
         ObDatum &relevance_proj_datum = relevance_proj_col->locate_datum_for_write(*eval_ctx);
         relevance_proj_datum.set_double(relevance);
-        relevance_proj_col->get_evaluated_flags(*eval_ctx).set(next_written_idx_);
+        relevance_proj_col->get_evaluated_flags(*eval_ctx).set(slot_idx);
         relevance_proj_col->set_evaluated_projected(*eval_ctx);
       }
     }
@@ -580,13 +594,17 @@ int ObDASTextRetrievalMergeIter::project_relevance(const ObDocIdExt &docid, cons
   return ret;
 }
 
-int ObDASTextRetrievalMergeIter::project_docid()
+int ObDASTextRetrievalMergeIter::project_docid(const int64_t count)
 {
   int ret = OB_SUCCESS;
   ObExpr *doc_id_col = ir_ctdef_->inv_scan_domain_id_col_;
   ObEvalCtx *eval_ctx = ir_rtdef_->eval_ctx_;
   ObDatum *doc_id_proj_datum = doc_id_col->locate_batch_datums(*eval_ctx);
-  for (int64_t i = 0; OB_SUCC(ret) && i < next_written_idx_; ++i) {
+  // NOTE: the doc id is written into the output slot i from cache_doc_ids_[i], i.e. the cache index and
+  //       the output slot index share one single caliber, which is the same caliber used by
+  //       project_relevance() when placing the (doc id, relevance) pair into the caches.
+  const int64_t real_cnt = OB_MIN(count, cache_doc_ids_.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < real_cnt; ++i) {
     set_datum_func_(doc_id_proj_datum[i], cache_doc_ids_[i]);
   }
   return ret;
@@ -1460,7 +1478,9 @@ int ObDASTRTaatLookupIter::fill_output_exprs(int64_t &count, int64_t safe_capaci
         input_row_cnt_ ++;
         count ++;
       } else {
-        cache_relevances_[pos] = cur_relevance;
+        // NOTE: cache the relevance by the rangekey index i, which is exactly the index of
+        //       cache_doc_ids_, so that a cached score is always fetched by the index of its own row.
+        cache_relevances_[i] = cur_relevance;
       }
       next_written_idx_++;
     }
@@ -1585,7 +1605,10 @@ int ObDASTRTaatLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       int64_t pos = reverse_hints_[next_written_idx_];
       ObEvalCtx::BatchInfoScopeGuard guard(*ctx);
       guard.set_batch_idx(count);
-      if (OB_FAIL(project_result(cache_doc_ids_[pos], cache_relevances_[next_written_idx_]))) {
+      // NOTE: the doc id and its relevance are fetched by one single index (pos), instead of taking
+      //       the score with the write pointer next_written_idx_.
+      if (OB_FAIL(project_result(cache_doc_ids_[pos], cache_relevances_[pos]))) {
+        LOG_WARN("failed to project result", K(ret));
       }
       next_written_idx_++;
       count ++;
@@ -1832,7 +1855,8 @@ int ObDASTRDaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
         }
       }
     }
-    if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0 && OB_FAIL(project_docid())) {
+    if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0 && OB_FAIL(project_docid(count))) {
+      LOG_WARN("failed to project docids", K(ret));
     }
   }
   return ret;
@@ -1966,7 +1990,9 @@ int ObDASTRDaatIter::next_disjunctive_document(const bool is_batch, bool &doc_va
   if (OB_SUCC(ret) && doc_valid) {
     const double relevance_score = ir_ctdef_->need_calc_relevance() ? cur_doc_relevance : 1;
     if (!is_batch && OB_FAIL(project_result(iter_doc_ids_[top_item->iter_idx_], relevance_score))) {
-    } else if (is_batch && OB_FAIL(project_relevance(iter_doc_ids_[top_item->iter_idx_], relevance_score))) {
+      LOG_WARN("failed to project result", K(ret));
+    } else if (is_batch && OB_FAIL(project_relevance(iter_doc_ids_[top_item->iter_idx_], relevance_score, next_written_idx_))) {
+      LOG_WARN("failed to project relevance", K(ret));
     }
   }
   return ret;
@@ -2142,7 +2168,10 @@ int ObDASTRDaatLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       int64_t pos = reverse_hints_[next_written_idx_];
       ObEvalCtx::BatchInfoScopeGuard guard(*ctx);
       guard.set_batch_idx(count);
-      if (OB_FAIL(project_result(cache_doc_ids_[pos], cache_relevances_[next_written_idx_]))) {
+      // NOTE: the doc id and its relevance are fetched by one single index (pos), instead of taking
+      //       the score with the write pointer next_written_idx_.
+      if (OB_FAIL(project_result(cache_doc_ids_[pos], cache_relevances_[pos]))) {
+        LOG_WARN("failed to project result", K(ret));
       }
       next_written_idx_++;
       count ++;
@@ -2174,8 +2203,8 @@ int ObDASTRDaatLookupIter::next_disjunctive_document(const int capacity)
         if (OB_FAIL(project_result(cache_doc_ids_[next_written_idx_], 0))) {
         }
       } else {
-        // cache it
-        cache_relevances_[pos] = 0;
+        // cache it, keyed by the same index as cache_doc_ids_ (the rangekey index)
+        cache_relevances_[next_written_idx_] = 0;
       }
     } else {
       int64_t doc_cnt = 0;
@@ -2223,8 +2252,8 @@ int ObDASTRDaatLookupIter::next_disjunctive_document(const int capacity)
           if (OB_FAIL(project_result(iter_doc_ids_[top_item->iter_idx_], relevance_score))) {
           }
         } else {
-          // cache it
-          cache_relevances_[pos] = relevance_score;
+          // cache it, keyed by the same index as cache_doc_ids_ (the rangekey index)
+          cache_relevances_[next_written_idx_] = relevance_score;
         }
       }
     }

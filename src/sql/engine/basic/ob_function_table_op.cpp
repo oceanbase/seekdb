@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/basic/ob_function_table_op.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_split_document.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
@@ -203,12 +204,49 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   ObDatum *value = nullptr;
   clear_evaluated_flag();
+  if (OB_NOT_NULL(MY_SPEC.value_expr_)) {
+    MY_SPEC.value_expr_->clear_evaluated_flag(eval_ctx_);
+  }
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ctx_.check_status())) {
   } else if (OB_FAIL(MY_SPEC.value_expr_->eval(eval_ctx_, value))) {
     if (OB_ITER_END != ret) {
     }
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == MY_SPEC.value_expr_->type_) {
+    // AI_SPLIT_DOCUMENT: the value expr has already filled the current row's four
+    // columns into ObExprAISplitDocumentCtx, copy them out column by column here.
+    ObExprAISplitDocumentCtx *split_ctx = NULL;
+    if (OB_ISNULL(split_ctx = static_cast<ObExprAISplitDocumentCtx *>(
+                    ctx_.get_expr_op_ctx(MY_SPEC.value_expr_->expr_ctx_id_)))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai split ctx not found", K(ret));
+    } else {
+      const int64_t col_cnt = MY_SPEC.column_exprs_.count();
+      for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt; ++i) {
+        ObExpr *col_expr = MY_SPEC.column_exprs_.at(i);
+        if (OB_ISNULL(col_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("column expr of function table is null", K(ret), K(i), K(col_cnt));
+          break;
+        }
+        ObDatum &datum = col_expr->locate_datum_for_write(eval_ctx_);
+        if (0 == i) {
+          datum.set_int(split_ctx->cur_id_);
+        } else if (1 == i) {
+          datum.set_int(split_ctx->cur_offset_);
+        } else if (2 == i) {
+          datum.set_int(split_ctx->cur_length_);
+        } else {
+          datum.set_string(split_ctx->cur_text_);
+        }
+        col_expr->set_evaluated_projected(eval_ctx_);
+      }
+    }
+  } else if (OB_UNLIKELY(MY_SPEC.column_exprs_.empty() || OB_ISNULL(MY_SPEC.column_exprs_.at(0)))) {
+    // Defensive check: an empty column list would make at(0) below read out of bounds.
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("column exprs of function table is empty", K(ret), K(MY_SPEC.column_exprs_.count()));
   } else {
     MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
     MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);

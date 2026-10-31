@@ -951,6 +951,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"validation", VALIDATION},
   {"_st_asmvt", _ST_ASMVT},
   {"optimizer_costs", OPTIMIZER_COSTS},
+  {"ai_split_document", AI_SPLIT_DOCUMENT},
   {"micro_index_clustered", MICRO_INDEX_CLUSTERED},
   {"unnest", UNNEST},
   {"tablets", TABLETS},

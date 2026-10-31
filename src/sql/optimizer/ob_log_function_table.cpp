@@ -37,7 +37,8 @@ int ObLogFunctionTable::generate_access_exprs()
       if (OB_ISNULL(col_item) || OB_ISNULL(col_item->expr_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (col_item->table_id_ == table_id_ &&
-                 col_item->expr_->is_explicited_reference() &&
+                 (col_item->expr_->is_explicited_reference() ||
+                  (NULL != value_expr_ && T_FUN_SYS_AI_SPLIT_DOCUMENT == value_expr_->get_expr_type())) &&
                  OB_FAIL(access_exprs_.push_back(col_item->expr_))) {
       } else { /*do nothing*/ }
     }

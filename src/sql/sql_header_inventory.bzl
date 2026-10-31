@@ -542,6 +542,8 @@ SQL_PRIVATE_HEADERS = [
     "engine/expr/ob_expr_ai/ob_expr_ai_embed.h",
     "engine/expr/ob_expr_ai/ob_expr_ai_prompt.h",
     "engine/expr/ob_expr_ai/ob_expr_ai_rerank.h",
+    "engine/expr/ob_expr_ai/ob_expr_load_file.h",
+    "engine/expr/ob_expr_ai/ob_expr_ai_split_document.h",
     "engine/expr/ob_expr_align_date4cmp.h",
     "engine/expr/ob_expr_and.h",
     "engine/expr/ob_expr_any_value.h",

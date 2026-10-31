@@ -263,7 +263,12 @@ AChunk *ObMemoryMgr::ptr2chunk(void *ptr)
 {
   AChunk *chunk = NULL;
   if (NULL != ptr) {
-    chunk = reinterpret_cast<AChunk *>(reinterpret_cast<char *>(ptr) - ACHUNK_PURE_HEADER_SIZE);
+    // NOTE(seekdb-win): AChunk is __attribute__((aligned(16))), so sizeof(AChunk)
+    // (= ACHUNK_PURE_HEADER_SIZE = 112) is padded 8 bytes beyond the real
+    // offsetof(AChunk, data_) (= 104). Subtracting ACHUNK_PURE_HEADER_SIZE here
+    // would turn a data_ pointer into (chunk - 8) and poison the chunk manager
+    // (ob_abort in add_free_block). Use offsetof(data_) instead.
+    chunk = reinterpret_cast<AChunk *>(reinterpret_cast<char *>(ptr) - offsetof(AChunk, data_));
   }
   return chunk;
 }

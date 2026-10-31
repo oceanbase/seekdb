@@ -29,13 +29,18 @@ namespace storage
 
 struct ObSRMergeItem
 {
-  ObSRMergeItem() : relevance_(0.0), iter_idx_(-1), equal_with_next_(false) {}
+  ObSRMergeItem() : relevance_(0.0), iter_idx_(-1), equal_with_next_(false), is_shallow_(false) {}
   ~ObSRMergeItem() = default;
-  TO_STRING_KV(K_(iter_idx), K_(relevance), K_(equal_with_next));
+  TO_STRING_KV(K_(iter_idx), K_(relevance), K_(equal_with_next), K_(is_shallow));
 
   double relevance_;
   int64_t iter_idx_;
   bool equal_with_next_;
+  // true when this merge item is a block-level placeholder pushed by
+  // fill_merge_heap_with_shallow_dims: its iter_idx_ may belong to a dim that
+  // has already been deepened afterwards, so callers must use this flag
+  // instead of the dim iter's shallow status to tell placeholders apart.
+  bool is_shallow_;
 };
 
 struct ObSRMergeCmp

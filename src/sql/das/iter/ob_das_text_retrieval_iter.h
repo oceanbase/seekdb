@@ -103,11 +103,25 @@ protected:
   int fill_token_weight();
   int project_relevance_expr();
   int batch_project_relevance_expr(const int64_t &count);
+  // copy the doc id column datum from the inverted-index scan eval ctx
+  // (where the inv idx table scan writes it) to the outer eval ctx,
+  // because downstream readers (storage token iters, DAS cache iters and
+  // loser-tree fillers) all read doc id from the outer ctx.
+  int copy_doc_id_to_outer_ctx();
+  int copy_doc_id_to_outer_ctx_batch(const int64_t &count);
+  int reuse_fwd_idx_iter();
   int gen_default_inv_idx_scan_range(const ObString &query_token, ObNewRange &scan_range);
   int gen_inv_idx_scan_range(const ObString &query_token, const ObDocIdExt &doc_id, ObNewRange &scan_range);
 
   inline bool need_calc_relevance() { return true; } // TODO: reduce tsc ops if no need to calc relevance
   int init_calc_exprs();
+  // resolve the pushed-down topk limit from ir_ctdef_ (limit + offset), 0 if absent.
+  int init_topk_limit();
+  // Prepare the skip bit vector with the given declared size. The vector is
+  // reallocated when the request exceeds the current capacity, so that a
+  // reset() never memsets beyond the allocated buffer (topk_limit_ is user
+  // controlled and can be much larger than max_batch_size_).
+  int prepare_skip_vector(const int64_t size);
   void clear_row_wise_evaluated_flag();
   void clear_batch_wise_evaluated_flag(const int64_t &count);
   // TODO: delete this after enable standard vectorized execution
@@ -146,8 +160,11 @@ protected:
   ObObj *fwd_range_objs_;
   sql::ObExpr *token_weight_expr_;
   sql::ObBitVector *skip_;
+  int64_t skip_capacity_; // allocated capacity of skip_ in bits
   int64_t token_doc_cnt_;
   int64_t max_batch_size_;
+  int64_t topk_limit_; // pushed-down topk limit (limit + offset), 0 when absent
+  bool need_fwd_idx_agg_;
   bool need_inv_idx_agg_;
   bool inv_idx_agg_evaluated_;
   bool need_inv_idx_agg_reset_;
@@ -171,11 +188,18 @@ private:
   int get_next_batch_inner();
   int save_relevances_and_docids();
   int save_docids();
+  int prepare_allocate_cache(const int64_t size);
+  // project the cached rows [start, start + count) into the outer eval ctx,
+  // writing both the doc id column and the relevance expr datum so that the
+  // (id, score) pairs observed by the consumer stay consistent.
+  int project_cached_batch(const int64_t start, const int64_t count);
 private:
   int64_t cur_idx_;
   int64_t count_;
+  int64_t total_cnt_;
   ObFixedArray<double, ObIAllocator> relevance_;
   ObFixedArray<ObDocIdExt, ObIAllocator> doc_id_;
+  bool cache_iter_end_;
 };
 
 

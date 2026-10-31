@@ -41,6 +41,11 @@ public:
   virtual int get_next_rows(const int64_t capacity, int64_t &count) override;
 protected:
   virtual int process_collected_row(const ObDatum &id_datum, const double relevance) override;
+  // BMW-specific collect: skip shallow items (block-level placeholder with
+  // relevance=0 and id = block-min aggregated lower bound) and only collect
+  // deep items whose domain id equals the first collected item's id, so that
+  // (id, score) pairs never get mismatched by leftover shallow placeholders.
+  virtual int collect_dims_by_id(const ObDatum *&id_datum, double &relevance, bool &got_valid_id) override;
   virtual int init_before_wand_process() { return OB_SUCCESS; }
 
   int top_k_search();
@@ -80,17 +85,30 @@ protected:
     MAX_STATUS,
   };
   struct TopKItem {
-    TopKItem() : relevance_(0.0), cache_idx_(-1) {}
-    TopKItem(const double &relevance, const int64_t &cache_idx) : relevance_(relevance), cache_idx_(cache_idx) {}
+    TopKItem() : relevance_(0.0), cache_idx_(-1), docid_(0) {}
+    TopKItem(const double &relevance, const int64_t &cache_idx, const int64_t &docid)
+        : relevance_(relevance), cache_idx_(cache_idx), docid_(docid) {}
     ~TopKItem() = default;
-    TO_STRING_KV(K_(relevance), K_(cache_idx));
+    TO_STRING_KV(K_(relevance), K_(cache_idx), K_(docid));
     double relevance_;
     int64_t cache_idx_;
+    int64_t docid_;
   };
 
+  // max-heap semantics on the comparator: ObBinaryHeap keeps the element
+  // that is "largest" according to the comparator at top(). We want top()
+  // to be the worst candidate to evict, so a candidate is "larger" when it
+  // is worse: worst = smallest relevance; among equal relevance, largest docid.
   struct TopKItemCmp {
     bool operator()(const TopKItem &a, const TopKItem &b) const {
-      return a.relevance_ > b.relevance_;
+      // ObBinaryHeap keeps the "greatest" element at top() w.r.t. this less-like
+      // comparator. For top-k we want top() to be the worst candidate: lowest
+      // score, and among equal scores the largest docid (so a better candidate
+      // replaces it).
+      if (a.relevance_ != b.relevance_) {
+        return a.relevance_ > b.relevance_;
+      }
+      return a.docid_ < b.docid_;
     }
     int get_error_code() { return common::OB_SUCCESS; }
   };

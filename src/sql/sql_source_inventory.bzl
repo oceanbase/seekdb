@@ -609,6 +609,8 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.cpp",
+            "src/sql/engine/expr/ob_expr_ai/ob_expr_load_file.cpp",
+            "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_split_document.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

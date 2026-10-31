@@ -29,6 +29,47 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+// A dict table name is a plain identifier, optionally qualified by one database
+// name ("db.table"). It is concatenated into a SQL statement that runs over the
+// internal high-privilege connection, so every character is validated against a
+// whitelist instead of being escaped or quoted.
+const int64_t MAX_DICT_TABLE_NAME_LENGTH = 256;
+
+int check_dict_table_name(const ObString &table_name)
+{
+  int ret = OB_SUCCESS;
+  const int64_t len = table_name.length();
+  const char *ptr = table_name.ptr();
+  int64_t dot_cnt = 0;
+  int64_t cur_seg_len = 0;
+  if (OB_ISNULL(ptr) || OB_UNLIKELY(len <= 0 || len > MAX_DICT_TABLE_NAME_LENGTH)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < len; ++i) {
+    const char c = ptr[i];
+    if ('.' == c) {
+      if (OB_UNLIKELY(0 == cur_seg_len) || OB_UNLIKELY(++dot_cnt > 1)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        cur_seg_len = 0;
+      }
+    } else if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+               || ('0' <= c && c <= '9') || '_' == c || '$' == c) {
+      ++cur_seg_len;
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  if (OB_SUCC(ret) && OB_UNLIKELY(0 == cur_seg_len)) {
+    // empty name or a trailing dot
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+} // anonymous namespace
+
 ObFTDictTableIter::ObFTDictTableIter(ObISQLClient::ReadResult &result)
     : ObIFTDictIterator(), is_inited_(false), res_(result)
 {
@@ -69,6 +110,13 @@ int ObFTDictTableIter::init(const ObString &table_name)
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+    LOG_WARN("Inited twice.", K(ret));
+  } else if (OB_FAIL(check_dict_table_name(table_name))) {
+    LOG_WARN("illegal dict table name, only [A-Za-z0-9_$] and one optional database prefix are allowed",
+             K(ret), K(table_name));
+  } else if (OB_ISNULL(sql_proxy)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", K(ret));
   } else {
     SMART_VAR(ObSqlString, sql_string)
     {

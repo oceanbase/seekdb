@@ -170,6 +170,10 @@ public:
   {
     memset(&bs_[0], 0 , sizeof(bs_));
   }
+  void clear()
+  {
+    memset(&bs_[0], 0, sizeof(bs_));
+  }
   void set(int idx)
   {
     int seg = idx >> SHIFT_PER_SEG;

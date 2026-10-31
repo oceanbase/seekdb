@@ -434,16 +434,24 @@ int ObSPIVBMWIter::process_collected_row(const ObDatum &id_datum, const double r
       ret = OB_ERR_UNEXPECTED;
     } else if (top_k_heap_.count() < top_k_count_) {
       if (OB_FAIL(id_cache_.at(top_k_heap_.count()).from_datum(id_datum))) {
-      } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, top_k_heap_.count())))) {
+        LOG_WARN("failed to from datum", K(ret));
+      } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, top_k_heap_.count(), id_datum.get_int())))) {
+        LOG_WARN("failed to push top k item", K(ret));
       }
     } else {
       const int64_t cache_idx = top_k_heap_.top().cache_idx_;
-      const double top_k_threshold = get_top_k_threshold();
-      if (relevance <= top_k_threshold) {
+      const double top_k_threshold = top_k_heap_.top().relevance_;
+      const int64_t top_docid = id_cache_.at(cache_idx).get_datum().get_int();
+      const int64_t new_docid = id_datum.get_int();
+      // deterministic tie-break: with equal relevance, keep the smaller docid.
+      if (relevance < top_k_threshold ||
+          (relevance == top_k_threshold && new_docid >= top_docid)) {
         // not a new top k candidate
       } else if (OB_FAIL(id_cache_.at(cache_idx).from_datum(id_datum))) {
       } else if (OB_FAIL(top_k_heap_.pop())) {
-      } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, cache_idx)))) {
+        LOG_WARN("failed to pop top k heap", K(ret));
+      } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, cache_idx, new_docid)))) {
+        LOG_WARN("failed to push top k item", K(ret));
       }
     }
   }

@@ -28,6 +28,27 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+uint64_t get_dict_name_hash(const ObFTDictDesc &desc)
+{
+  uint64_t hash = 0;
+  // NOTE: ported from vldb where a DICT_IK_CUSTOM type exists; upstream seekdb only
+  // ships built-in dicts, so any descriptor carrying a name participates in the key.
+  if (desc.name_.length() > 0) {
+    // The dict hub is a process wide singleton, so everything that identifies the
+    // dictionary has to take part in the cache key. The name alone is not enough:
+    // the same custom dict name can be registered with different collations, and a
+    // plain name hash would let those two definitions share (or, on a hash
+    // collision, expose each other's) cache entry and in-memory trie.
+    const int32_t coll_type = static_cast<int32_t>(desc.coll_type_);
+    hash = common::murmurhash(&coll_type, sizeof(coll_type), hash);
+    hash = common::murmurhash(desc.name_.ptr(), desc.name_.length(), hash);
+  }
+  return hash;
+}
+} // namespace
+
 int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.

@@ -17,6 +17,10 @@
 #ifndef OCEANBASE_SQL_RESOLVER_DML_OB_DELETE_RESOLVER_H_
 #define OCEANBASE_SQL_RESOLVER_DML_OB_DELETE_RESOLVER_H_
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
+
+#ifdef IGNORE
+#undef IGNORE
+#endif
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/dml/ob_delete_stmt.h"
 namespace oceanbase

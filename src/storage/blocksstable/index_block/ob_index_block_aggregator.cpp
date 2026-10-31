@@ -916,7 +916,9 @@ int ObBM25ParamAggregator::init(
   } else {
     agg_result_row_ = &agg_result_row;
     allocator_ = &allocator;
-    curr_max_score_ = 0.0;
+    curr_max_token_freq_ = 0;
+    curr_min_doc_length_ = 0;
+    is_first_ = true;
     is_inited_ = true;
   }
 
@@ -928,7 +930,9 @@ void ObBM25ParamAggregator::reset()
   ObIMultiColAggregator::reset();
   agg_result_row_ = nullptr;
   allocator_ = nullptr;
-  curr_max_score_ = 0.0;
+  curr_max_token_freq_ = 0;
+  curr_min_doc_length_ = 0;
+  is_first_ = true;
   is_inited_ = false;
 }
 
@@ -945,7 +949,9 @@ void ObBM25ParamAggregator::reuse()
       agg_result_row_->get_agg_datum_row().storage_datums_[doc_length_result_idx].set_uint(0);
     }
   }
-  curr_max_score_ = 0.0;
+  curr_max_token_freq_ = 0;
+  curr_min_doc_length_ = 0;
+  is_first_ = true;
 }
 
 int ObBM25ParamAggregator::eval(const ObDatumRow &datum_row)
@@ -1045,14 +1051,23 @@ int ObBM25ParamAggregator::do_max_score_agg(const ObDatum &token_freq_datum, con
   } else {
     const uint64_t token_freq = token_freq_datum.get_uint();
     const uint64_t doc_length = doc_length_datum.get_uint();
-    const double tf_score = sql::ObExprBM25::doc_token_weight(token_freq, get_norm_len(doc_length));
-    if (tf_score > curr_max_score_) {
-      curr_max_score_ = tf_score;
-      const int64_t token_freq_result_idx = result_idxes_.at(TOKEN_FREQ_IDX);
-      const int64_t doc_length_result_idx = result_idxes_.at(DOC_LENGTH_IDX);
+    // Aggregate (max token freq, min doc length) independently. This pair is a valid
+    // BM25 upper bound for the block regardless of avg_doc_length, since doc_token_weight
+    // is monotonic increasing in token_freq and monotonic decreasing in doc_length.
+    // Do NOT select the pair by evaluating doc_token_weight with avg=1: the argmax
+    // changes once the real avg_doc_length is applied at query time, which can
+    // underestimate the block max score and wrongly prune blocks in WAND.
+    const int64_t token_freq_result_idx = result_idxes_.at(TOKEN_FREQ_IDX);
+    const int64_t doc_length_result_idx = result_idxes_.at(DOC_LENGTH_IDX);
+    if (is_first_ || token_freq > curr_max_token_freq_) {
+      curr_max_token_freq_ = token_freq;
       agg_result_row_->get_agg_datum_row().storage_datums_[token_freq_result_idx].set_uint(token_freq);
+    }
+    if (is_first_ || doc_length < curr_min_doc_length_) {
+      curr_min_doc_length_ = doc_length;
       agg_result_row_->get_agg_datum_row().storage_datums_[doc_length_result_idx].set_uint(doc_length);
     }
+    is_first_ = false;
   }
   return ret;
 }

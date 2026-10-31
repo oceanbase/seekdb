@@ -299,7 +299,7 @@ static const int32_t MAX_BACKTRACE_LENGTH = 512;
 static const uint32_t ABLOCK_HEADER_SIZE = sizeof(ABlock);
 static const uint32_t ABLOCK_SIZE = INTACT_NORMAL_AOBJECT_SIZE;
 
-static const uint32_t ACHUNK_PURE_HEADER_SIZE = offsetof(AChunk, data_);
+static const uint32_t ACHUNK_PURE_HEADER_SIZE = sizeof(AChunk);
 static const uint32_t ACHUNK_HEADER_SIZE = 16L << 10;
 static const uint32_t ACHUNK_SIZE = INTACT_ACHUNK_SIZE - ACHUNK_HEADER_SIZE;
 static const uint64_t BLOCKS_PER_CHUNK = ACHUNK_SIZE / ABLOCK_SIZE;

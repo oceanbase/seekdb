@@ -241,6 +241,18 @@ void BlockSet::add_free_block(ABlock *block, int nblocks, AChunk *chunk)
 
 #if MEMCHK_LEVEL >= 1
   int expect_nblocks = chunk->blk_nblocks(block);
+  if (nblocks != expect_nblocks) {
+    fprintf(stderr, "[MEMCHK] add_free_block mismatch block=%p chunk=%p offset=%d nblocks=%d expect=%d caller=%p caller2=%p caller3=%p blk_bs_=[",
+            (void*)block, (void*)chunk, offset, nblocks, expect_nblocks,
+            (void*)(uintptr_t)__builtin_return_address(0),
+            (void*)(uintptr_t)__builtin_return_address(1),
+            (void*)(uintptr_t)__builtin_return_address(2));
+    for (int b = 0; b < AChunk::MAX_BLOCKS_CNT; ++b) {
+      if (chunk->blk_bs_.min_bit_ge(b) == b) fprintf(stderr, "%d,", b);
+    }
+    fprintf(stderr, "]\n");
+    fflush(stderr);
+  }
   abort_unless(nblocks == expect_nblocks);
 #endif
   ABlock *&blist = block_list_[nblocks];
@@ -350,6 +362,25 @@ void BlockSet::free_chunk(AChunk *const chunk)
   abort_unless(NULL != chunk->prev_);
   abort_unless(NULL != clist_);
   abort_unless(0 == chunk->using_cnt_);
+  // Remove all residual free blocks of this chunk from the BlockSet free
+  // lists. When a chunk is fully freed and returned to the cache, its free
+  // blocks (including the merged head) stay registered in block_list_ /
+  // avail_bm_; if the same chunk is later reused those stale entries alias
+  // the new incarnation and corrupt subsequent allocations. in_use_ blocks
+  // (e.g. large blocks) are never registered in the free lists, so skip them.
+  {
+    int offset = 0;
+    do {
+      ABlock *unused_block = chunk->offset2blk(offset);
+      int next_offset = -1;
+      bool is_last = chunk->is_last_blk_offset(offset, &next_offset);
+      if (!unused_block->in_use_) {
+        take_off_free_block(unused_block, chunk->blk_nblocks(unused_block), chunk);
+      }
+      if (is_last) break;
+      offset = next_offset;
+    } while (true);
+  }
   if (chunk == clist_) {
     clist_ = clist_->next_;
   }
@@ -370,6 +401,10 @@ void BlockSet::free_chunk(AChunk *const chunk)
     }
     // The chunk manager only caches or frees whole chunks. Cached chunks are
     // outside BlockSet, so they will not receive block-level wash later.
+    // Clear the block bitmap so that a later reuse of this chunk does not see
+    // stale bits from the previous incarnation (a wrong blk_nblocks() trips
+    // the MEMCHK assertion in add_free_block).
+    chunk->blk_bs_.clear();
     chunk_mgr_->free_chunk(chunk, attr_);
   }
 }

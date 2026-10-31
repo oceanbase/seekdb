@@ -239,6 +239,19 @@ AChunk *ObContextAllocator::alloc_chunk(const int64_t size, const ObMemAttr &att
     //}
   } else if (0 != idle_size_) {
     chunk = pop_chunk();
+    // Clear the block bitmap before handing a reused chunk to a BlockSet.
+    // Chunks pushed into the idle freelist (push_chunk) keep their stale
+    // blk_bs_ bits; a stale bit makes AChunk::blk_nblocks() return a wrong
+    // count and trips the MEMCHK assertion in BlockSet::add_free_block
+    // (nblocks == expect_nblocks) on the next reuse.
+    if (OB_NOT_NULL(chunk)) {
+      int dbg_m = chunk->blk_bs_.max_bit_le(AChunk::MAX_BLOCKS_CNT - 1);
+      if (dbg_m >= 0) {
+        fprintf(stderr, "[REUSE-PROBE] TA pop stale_maxbit=%d\n", dbg_m);
+        fflush(stderr);
+      }
+      chunk->blk_bs_.clear();
+    }
   }
   if (nullptr == chunk) {
     chunk = ctx_allocator_.alloc_chunk(size, attr);

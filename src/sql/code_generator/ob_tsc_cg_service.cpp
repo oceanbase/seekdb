@@ -1916,7 +1916,8 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
     }
   }
 
-  if (OB_SUCC(ret) && tr_info.need_sort()) {
+  if (OB_SUCC(ret) && tr_info.need_sort() && !cg_ctx.is_es_match_) {
+    // es match: sort/topk is generated above the es score node in generate_match_ctdef
     ObSEArray<OrderItem, 2> order_items;
     if (OB_FAIL(order_items.push_back(tr_info.sort_key_))) {
     } else if (OB_FAIL(generate_das_sort_ctdef(
@@ -4042,7 +4043,22 @@ int ObTscCgService::generate_das_sort_ctdef(
   for (int64_t i = 0; i < sort_keys.count() && OB_SUCC(ret); ++i) {
     const OrderItem &order_item = sort_keys.at(i);
     ObExpr *expr = nullptr;
-    if (OB_FAIL(cg_.generate_rt_expr(*order_item.expr_, expr))) {
+    if (child_ctdef->op_type_ == DAS_OP_IR_ES_SCORE) {
+      // For ES match topn pushdown: the sort key is the relevance expr already
+      // projected by the ES_SCORE child. Re-generating a fresh column-ref for the
+      // match raw expr would bind to a different eval slot than the one written by
+      // ES_SCORE iter, producing garbage sort keys. Reuse the child's projected expr.
+      const ObDASIREsScoreCtDef *es_score_ctdef = static_cast<ObDASIREsScoreCtDef *>(child_ctdef);
+      if (OB_UNLIKELY(es_score_ctdef->result_output_.count() <= 0)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected empty es score result output", K(ret));
+      } else {
+        expr = es_score_ctdef->result_output_.at(0);
+      }
+    } else if (OB_FAIL(cg_.generate_rt_expr(*order_item.expr_, expr))) {
+      LOG_WARN("failed to generate rt expr", K(ret));
+    }
+    if (OB_FAIL(ret)) {
     } else {
       ObSortFieldCollation field_collation(field_idx,
           expr->datum_meta_.cs_type_,
@@ -4075,6 +4091,10 @@ int ObTscCgService::generate_das_sort_ctdef(
       && OB_FAIL(append_array_no_dup(result_output, static_cast<ObDASAttachCtDef *>(child_ctdef)->result_output_))) {
   } else if (child_ctdef->op_type_ == DAS_OP_TABLE_SCAN
       && OB_FAIL(append_array_no_dup(result_output, static_cast<ObDASScanCtDef *>(child_ctdef)->result_output_))) {
+    LOG_WARN("failed to append child result output", K(ret));
+  } else if (child_ctdef->op_type_ == DAS_OP_IR_ES_SCORE
+      && OB_FAIL(append_array_no_dup(result_output, static_cast<ObDASIREsScoreCtDef *>(child_ctdef)->result_output_))) {
+    LOG_WARN("failed to append child result output", K(ret));
   } else if (OB_FAIL(sort_ctdef->result_output_.assign(result_output))) {
   } else {
   }
@@ -4390,6 +4410,25 @@ int ObTscCgService::generate_match_ctdef(const ObLogTableScan &op,
     } else if (OB_FAIL(match_all_score_ctdef->result_output_.assign(result_output))) {
     } else {
       root_ctdef = match_all_score_ctdef;
+    }
+  }
+
+  // sort ctdef for es match topn pushdown, sort above es score node
+  if (OB_SUCC(ret) && match_tr_infos.count() > 0 && match_tr_infos.at(0).need_sort()) {
+    ObSEArray<OrderItem, 1> order_items;
+    ObDASSortCtDef *match_sort_ctdef = nullptr;
+    if (OB_FAIL(order_items.push_back(match_tr_infos.at(0).sort_key_))) {
+      LOG_WARN("append order item array failed", K(ret));
+    } else if (OB_FAIL(generate_das_sort_ctdef(
+        order_items,
+        false,
+        match_tr_infos.at(0).topk_limit_expr_,
+        match_tr_infos.at(0).topk_offset_expr_,
+        root_ctdef,
+        match_sort_ctdef))) {
+      LOG_WARN("generate es match sort ctdef failed", K(ret));
+    } else {
+      root_ctdef = match_sort_ctdef;
     }
   }
 

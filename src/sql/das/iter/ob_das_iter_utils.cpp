@@ -1352,6 +1352,7 @@ int ObDASIterUtils::create_match_sub_tree(ObTableScanParam &scan_param,
     match_iter_param.max_size_ = match_score_rtdef->eval_ctx_->is_vectorized() ? match_score_rtdef->eval_ctx_->max_batch_size_ : 1;
     match_iter_param.eval_ctx_ = match_score_rtdef->eval_ctx_;
     match_iter_param.exec_ctx_ = &match_score_rtdef->eval_ctx_->exec_ctx_;
+    match_iter_param.output_ = &match_score_ctdef->result_output_;
     match_iter_param.domain_id_expr_ = domain_id_expr;
     ObDASMatchIter *match_iter = nullptr;
     if (OB_FAIL(ret)) {
