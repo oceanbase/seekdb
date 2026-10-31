@@ -86,7 +86,7 @@ int ObExprGetPackageVar::calc_result_typeN(ObExprResType &type,
                                            ObExprTypeCtx &type_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types_stack[2].get_param().get_int());
+  ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types_stack[2].get_param_datum().get_int());
   type.set_type(result_type->get_type());
   if (ob_is_string_tc(result_type->get_type())
       || ob_is_raw_tc(result_type->get_type())) {

@@ -49,7 +49,7 @@ int ObExprGetSysVar::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("session is NULL");
   } else {
-    ObString var_name = type1.get_param().get_varchar();
+    ObString var_name = type1.get_param_datum().get_string();
     bool is_exist = false;
     SqlValueType data_type = ObMaxType;
     if (OB_FAIL(session->sys_variable_exists(var_name, is_exist))) {

@@ -92,7 +92,8 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
           break;
         }
       }
-      const DatumValue& obj2 = type2.get_param();
+      DatumValue obj2;
+      alignas(8) char scale_scratch[64];
       ObArenaAllocator oballocator(ObModIds::BLOCK_ALLOC);
       ObCastMode cast_mode = CM_NONE;
       ObCollationType cast_coll_type = type_ctx.get_coll_type();
@@ -108,6 +109,7 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
       int64_t scale_val = 0;
       {
         DatumValue converted_literal;
+        OZ (type2.export_param(obj2, scale_scratch, sizeof(scale_scratch)));
         if (OB_SUCC(ret)) {
           ret = DatumValueCaster::to_type(ObIntType, cast_ctx, obj2, oballocator, converted_literal);
         }

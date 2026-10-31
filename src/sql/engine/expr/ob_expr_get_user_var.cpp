@@ -42,8 +42,8 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
 {
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
-  const DatumValue &obj = type1.get_param();
-  ObString key = obj.get_varchar();//should NOT use const reference here !
+  const Datum &obj = type1.get_param_datum();
+  ObString key = obj.get_string();//should NOT use const reference here !
   ObSessionVariable session_var;
   CK( OB_NOT_NULL(type_ctx.get_session()) );
   OC( (type_ctx.get_session()->get_user_variable)(key, session_var) );

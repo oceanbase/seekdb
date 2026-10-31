@@ -91,7 +91,8 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
-    const DatumValue &in = type1.get_param();
+    DatumValue in;
+    alignas(8) char literal_scratch[64];
     ObCollationType cast_coll_type = CS_TYPE_INVALID;
     bool nonstring_to_string = false;
     ObCastMode cast_mode = CM_NONE;
@@ -121,7 +122,8 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
                        cast_coll_type,
                        &res_accuracy);
     DatumValue out;
-    if (OB_FAIL(DatumValueCaster::to_type(expect_type_, cast_ctx, in, oballocator, out))) {
+    if (OB_FAIL(type1.export_param(in, literal_scratch, sizeof(literal_scratch)))) {
+    } else if (OB_FAIL(DatumValueCaster::to_type(expect_type_, cast_ctx, in, oballocator, out))) {
     } else {
       type.set_type(expect_type_);
       type.set_accuracy(res_accuracy);

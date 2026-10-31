@@ -501,7 +501,7 @@ int ObExprInnerTypeToEnumSet::calc_result_type2(ObExprResType &type,
   int ret = OB_SUCCESS;
   ObSQLSessionInfo* session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
   const ObEnumSetMeta *enum_set_meta = NULL;
-  int32_t subschema_id = type1.get_param().get_int();
+  int32_t subschema_id = type1.get_param_datum().get_int();
   CK (OB_NOT_NULL(session));
   CK (OB_NOT_NULL(session->get_cur_exec_ctx()));
   OZ (session->get_cur_exec_ctx()->get_enumset_meta_by_subschema_id(subschema_id, true, enum_set_meta));

@@ -393,21 +393,11 @@ int ObRawExprDeduceType::push_back_types(const ObRawExpr *param_expr, ObIExprRes
     // make the result type compatible with orale/mysql
     if (param_expr->is_const_raw_expr()) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(param_expr);
-      // This old type-deduction input retains a descriptor beyond this call.
-      // Reference bytes stay with the Raw owner. Only the visitor-local
-      // ObExprResType (not the published ObRawExprResType) retains this param;
-      // inline bytes therefore live in the deducer's existing scratch owner.
-      alignas(8) char scratch[64];
-      DatumValue value;
-      if (OB_FAIL(const_expr->export_bound_param(value, scratch, sizeof(scratch)))) {
-      } else if (value.datum_.ptr_ == scratch && value.datum_.len_ > 0) {
-        ObDatum owned;
-        if (OB_FAIL(owned.deep_copy(value.datum_, alloc_))) {
-        } else {
-          value.datum_ = owned;
-        }
-      }
-      OX (types.at(idx).set_param(value));
+      // Raw has already validated this physical value/meta pair. Keep its
+      // original domain even when the inferred result type has changed.
+      // Scalars copy inline; references continue to borrow the Raw owner.
+      types.at(idx).set_param_borrowed(const_expr->get_bound_param_datum(),
+                                     const_expr->get_bound_param_value_meta());
     }
     if (ob_is_decimal_int_tc(param_expr->get_result_type().get_type()) &&
         T_FUN_SYS_CAST == param_expr->get_expr_type()) {
@@ -643,11 +633,11 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
          */
         result_type.set_accuracy(expr.get_accuracy());
       }
-      // A type kernel may propagate a literal param backed by the deducer's
-      // scratch owner. Cache metadata only; the input and local result types
+      // A type kernel may propagate a literal param borrowing the Raw owner.
+      // Cache metadata only; the input and local result types
       // retain their params for the remaining type-deduction work.
       ObExprResType cached_result_type = result_type;
-      cached_result_type.set_param(DatumValue());
+      cached_result_type.reset_param();
       op->set_result_type(cached_result_type);
       if (is_lob_param_conversion_exempt(expr.get_expr_type())) {
         // do nothing

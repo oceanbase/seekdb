@@ -110,7 +110,8 @@ int ObExprFuncRound::set_res_scale_prec(ObExprTypeCtx &type_ctx, ObExprResType *
       res_scale = DEFAULT_SCALE_FOR_INTEGER; // compatible with mysql
     } else if (2 == param_num && params[1].is_literal()
                && !params[0].is_integer_type()) {
-      const DatumValue &obj = params[1].get_param();
+      DatumValue obj;
+      alignas(8) char scale_scratch[64];
       ObArenaAllocator oballocator(ObModIds::BLOCK_ALLOC);
       ObCastMode cast_mode = CM_NONE;
       ObCollationType cast_coll_type = type_ctx.get_coll_type();
@@ -121,6 +122,7 @@ int ObExprFuncRound::set_res_scale_prec(ObExprTypeCtx &type_ctx, ObExprResType *
       int64_t scale = 0;
       {
         DatumValue converted_literal;
+        OZ (params[1].export_param(obj, scale_scratch, sizeof(scale_scratch)));
         if (OB_SUCC(ret)) {
           ret = DatumValueCaster::to_type(ObIntType, cast_ctx, obj, oballocator, converted_literal);
         }

@@ -36,7 +36,7 @@ int ObExprGetSubprogramVar::calc_result_typeN(ObExprResType &type,
   CK (OB_NOT_NULL(types));
   CK (OB_LIKELY(4 == param_num));
   if (OB_SUCC(ret)) {
-    ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types[3].get_param().get_int());
+    ObExprResType *result_type = reinterpret_cast<ObExprResType *>(types[3].get_param_datum().get_int());
     type.set_type(result_type->get_type());
     type.set_udt_id(result_type->get_udt_id());
     type.set_extend_type(result_type->get_extend_type());

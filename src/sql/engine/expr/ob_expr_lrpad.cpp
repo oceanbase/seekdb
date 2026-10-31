@@ -145,15 +145,16 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
   CK(OB_NOT_NULL(session));
 
   if (OB_SUCC(ret)) {
-    DatumValue length_obj = len.get_param();
+    DatumValue length_obj;
     alignas(8) char length_scratch[64];
-    DatumValue text_obj = text.get_param();
+    DatumValue text_obj;
+    alignas(8) char text_scratch[64];
     DatumValue pad_obj;
+    alignas(8) char pad_scratch[64];
     ObString default_pad_str = ObString(" "); // default is ' '
     type.set_length(static_cast<ObLength>(max_len));
     len.set_calc_type(len_type);
     {
-      pad_obj = pad_text->get_param();
       ObSEArray<ObExprResType, 2> types;
       OZ(types.push_back(text));
       OZ(types.push_back(*pad_text));
@@ -162,9 +163,12 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
       OX(pad_text->set_calc_collation_type(type.get_collation_type()));
       if (OB_SUCC(ret)) {
         // len expr may add cast, search real len obj
-        if (OB_FAIL(get_origin_len_obj(length_obj, length_scratch, sizeof(length_scratch)))) {
+        if (OB_FAIL(len.export_param(length_obj, length_scratch, sizeof(length_scratch)))) {
+        } else if (OB_FAIL(get_origin_len_obj(length_obj, length_scratch, sizeof(length_scratch)))) {
         } else if (!length_obj.is_null()) {
-          if (OB_FAIL(calc_type_length_mysql(type, text_obj, pad_obj, length_obj, type_ctx, text_len))) {
+          if (OB_FAIL(text.export_param(text_obj, text_scratch, sizeof(text_scratch)))) {
+          } else if (OB_FAIL(pad_text->export_param(pad_obj, pad_scratch, sizeof(pad_scratch)))) {
+          } else if (OB_FAIL(calc_type_length_mysql(type, text_obj, pad_obj, length_obj, type_ctx, text_len))) {
           }
         } else {
           text_len = max_len;
@@ -182,7 +186,8 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
       }
     }
 
-    const int64_t buf_len = pad_obj.is_character_type() ? pad_obj.get_string_len() * 4 : 0;
+    const int64_t buf_len = pad_text->get_param_value_meta().is_character_type()
+        ? static_cast<int32_t>(pad_text->get_param_datum().length()) * 4 : 0;
     char buf[buf_len];
 
     if (OB_SUCC(ret)) {
@@ -192,7 +197,9 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
       text_len = (text_len > max_len)? max_len: text_len;
       type.set_length(static_cast<ObLength>(text_len));
 
-      LOG_DEBUG("ObExprBaseLRpad::calc_type()", K(ret), K(text), K(text_obj), K(pad_obj), K(len), K(length_obj), KP(pad_text),
+      LOG_DEBUG("ObExprBaseLRpad::calc_type()", K(ret), K(text), K(text.get_param_datum()),
+                                K(text.get_param_value_meta()), K(pad_text->get_param_datum()),
+                                K(pad_text->get_param_value_meta()), K(len), K(length_obj), KP(pad_text),
                                 K(type), K(text_len), K(max_len), K(type.get_length_semantics()));
     }
   }

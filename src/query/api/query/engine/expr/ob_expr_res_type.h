@@ -18,6 +18,7 @@
 #define _OB_EXPR_RES_TYPE_H 1
 
 #include "common/object/ob_object.h"
+#include "common/datum/datum.h"
 #include "common/datum/datum_parameter.h"
 #include "common/ob_field.h"
 #include "common/mysqlclient/ob_mysql_global.h"
@@ -271,6 +272,7 @@ public:
     calc_type_(),
     calc_accuracy_(),
     param_(),
+    param_meta_(),
     cast_mode_(0)
   {
   }
@@ -278,6 +280,7 @@ public:
     calc_type_(),
     calc_accuracy_(),
     param_(),
+    param_meta_(),
     cast_mode_(0)
   {
   }
@@ -289,6 +292,7 @@ public:
       this->calc_type_ = other.calc_type_;
       this->calc_accuracy_ = other.calc_accuracy_;
       this->param_ = other.param_;
+      this->param_meta_ = other.param_meta_;
       this->cast_mode_ = other.cast_mode_;
     }
     return ret;
@@ -298,7 +302,7 @@ public:
     ObRawExprResType::reset();
     calc_type_.reset();
     calc_accuracy_.reset();
-    param_.reset();
+    reset_param();
     cast_mode_ = 0;
   }
 
@@ -373,12 +377,27 @@ public:
     return calc_type_.get_collation_level();
   }
 
-  OB_INLINE void set_param(const common::DatumValue &param) { param_ = param; }
-  OB_INLINE void set_param(const common::DatumParameter &param) { param_ = param.value_view(); }
-  OB_INLINE const common::DatumValue &get_param() const { return param_; }
+  // Accept a pair already validated in the Raw constant physical domain.
+  // Scalars copy inline; referenced bytes/resources still borrow their Raw owner.
+  // Inferred result/calc metadata must not replace this value's physical metadata.
+  OB_INLINE void set_param_borrowed(const common::Datum &value, const common::SqlTypeMeta &meta)
+  {
+    param_ = value;
+    param_meta_ = meta;
+  }
+  OB_INLINE const common::Datum &get_param_datum() const { return param_; }
+  OB_INLINE const common::SqlTypeMeta &get_param_value_meta() const { return param_meta_; }
+  OB_INLINE void reset_param()
+  {
+    param_.reset();
+    param_meta_.reset();
+  }
+  // Synchronous legacy view; scratch and borrowed source must outlive consumption.
+  // On failure, output is unchanged. No exported descriptor is retained here.
+  int export_param(common::DatumValue &output, void *scratch, int64_t capacity) const;
   OB_INLINE bool is_column() const { return !is_literal(); }
-  OB_INLINE bool is_literal() const { return get_param().get_type() == get_type()
-                                             && get_param().get_collation_type() == get_collation_type(); }
+  OB_INLINE bool is_literal() const { return param_meta_.get_type() == get_type()
+                                             && param_meta_.get_collation_type() == get_collation_type(); }
   void add_decimal_int_cast_mode(uint64_t cm)
   {
     cast_mode_ = cast_mode_ | (cm & (CM_CONST_TO_DECIMAL_INT_DOWN |
@@ -391,13 +410,15 @@ public:
                        calc_type_,
                        K_(calc_accuracy),
                        K_(param),
+                       K_(param_meta),
                        K_(cast_mode));
 protected:
   ObExprCalcType calc_type_;
   common::ObAccuracy calc_accuracy_; // When it is Extend type, the length field is used to indicate the size of the complex data type
-  // Compile-time literal view; AST/plan owner must outlive type deduction.
-  // Serialization deliberately excludes it, and runtime types use the base metadata.
-  common::DatumValue param_;
+  // The only compile-time value. Reference payloads borrow the AST/plan owner.
+  // Both fields are excluded from serialization and cleared in cached op metadata.
+  common::Datum param_;
+  common::SqlTypeMeta param_meta_;
   uint64_t cast_mode_; // store cast mode for decimal int single side cast
 };
 

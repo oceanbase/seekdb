@@ -88,7 +88,6 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
                                     ObCastMode cast_mode) const
 {
   int ret = OB_SUCCESS;
-  const DatumValue &val = type1.get_param();
   if (!type1.is_literal()) { // column
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
     int16_t prec = type1.get_accuracy().get_precision();
@@ -186,7 +185,10 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
                         cast_coll_type);
       ObString val_str;
       {
+        DatumValue val;
+        alignas(8) char literal_scratch[64];
         DatumValue converted_literal;
+        OZ(type1.export_param(val, literal_scratch, sizeof(literal_scratch)));
         if (OB_SUCC(ret)) {
           ret = DatumValueCaster::to_type(ObVarcharType, cast_ctx, val, oballocator, converted_literal);
         }
@@ -492,7 +494,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
         } else {
           if (ob_is_geometry_tc(dst_type.get_type())) {
             ObCastMode cast_mode = cast_raw_expr->get_cast_mode();
-            const DatumValue &param = type2.get_param();
+            const Datum &param = type2.get_param_datum();
             ParseNode parse_node;
             parse_node.value_ = param.get_int();
             ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
@@ -541,11 +543,11 @@ int ObExprCast::get_cast_type(const bool enable_decimal_int,
                               ObRawExprResType &dst_type)
 {
   int ret = OB_SUCCESS;
-  if (!param_type2.is_int() && !param_type2.get_param().is_int()) {
+  if (!param_type2.is_int() && !param_type2.get_param_value_meta().is_int()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
-    const DatumValue &param = param_type2.get_param();
+    const Datum &param = param_type2.get_param_datum();
     ParseNode parse_node;
     parse_node.value_ = param.get_int();
     SqlValueType obj_type = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);

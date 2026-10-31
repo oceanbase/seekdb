@@ -81,7 +81,7 @@ int ObExprChar::calc_result_type(ObExprResType &type, ObExprResType &type1) cons
   } else {
     type.set_varchar();
     if (type1.is_literal()) {
-      ObString charset_str = type1.get_param().get_string();
+      ObString charset_str = type1.get_param_datum().get_string();
       ObCharsetType charset_type = ObCharset::charset_type(charset_str);
       if (CHARSET_INVALID == charset_type) {
         ret = OB_ERR_UNKNOWN_CHARSET;

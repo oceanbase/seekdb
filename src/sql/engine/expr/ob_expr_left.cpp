@@ -83,13 +83,15 @@ int ObExprLeft::calc_result_type2(ObExprResType &type,
     type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC);
     type.set_varchar();
     int64_t result_len = type1.get_length();
-    const DatumValue &result_len_obj = type2.get_param();
+    DatumValue result_len_obj;
+    alignas(8) char length_scratch[64];
     DatumValue int_obj;
     ObExprCtx tmp_expr_ctx;
     ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC);
     tmp_expr_ctx.calc_buf_ = &allocator;
     tmp_expr_ctx.cast_mode_ = type_ctx.get_cast_mode();
-    if (OB_FAIL(cast_param_type(result_len_obj, tmp_expr_ctx, int_obj))) {
+    if (OB_FAIL(type2.export_param(result_len_obj, length_scratch, sizeof(length_scratch)))) {
+    } else if (OB_FAIL(cast_param_type(result_len_obj, tmp_expr_ctx, int_obj))) {
     } else if (int_obj.get_int() <= 0) {
       type.set_char();
       type.set_length(0);

@@ -83,10 +83,10 @@ int ObExprUnixTimestamp::calc_result_type_literal(ObExprResType &type,
                              ObExprResType &type1) const
 {
   int ret = OB_SUCCESS;
-  DatumValue date_obj = type1.get_param();
+  const Datum &date_obj = type1.get_param_datum();
   bool is_number_res_type = false;
   int64_t utz_value = 0;
-  if (date_obj.is_string_type()) { //string
+  if (ob_is_string_type(type1.get_param_value_meta().get_type())) { //string
     int16_t scale = DEFAULT_SCALE_FOR_INTEGER;
     ObTimeConvertCtx cvrt_ctx(NULL, false);
     if (OB_FAIL(ObTimeConverter::str_to_datetime(
@@ -105,8 +105,11 @@ int ObExprUnixTimestamp::calc_result_type_literal(ObExprResType &type,
                        CS_TYPE_INVALID,
                        NULL);
     DatumValue converted_literal;
+    DatumValue legacy_date;
+    alignas(8) char date_scratch[64];
+    OZ (type1.export_param(legacy_date, date_scratch, sizeof(date_scratch)));
     if (OB_SUCC(ret)) {
-      ret = DatumValueCaster::to_type(ObDateTimeType, cast_ctx, date_obj, oballocator, converted_literal);
+      ret = DatumValueCaster::to_type(ObDateTimeType, cast_ctx, legacy_date, oballocator, converted_literal);
     }
     if (OB_SUCC(ret)) {
       if (converted_literal.is_null() || !converted_literal.is_datetime()) { ret = OB_OBJ_TYPE_ERROR; }

@@ -510,7 +510,8 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
     if (orig_type.is_literal()) {
       ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
       ObCastMode cast_mode = CM_WARN_ON_FAIL;
-      const DatumValue &orig_obj = orig_type.get_param();
+      DatumValue orig_obj;
+      alignas(8) char literal_scratch[64];
       ObAccuracy res_accuracy;
       ObCastCtx cast_ctx(&oballocator,
                       &dtc_params,
@@ -518,7 +519,8 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
                       target_type.get_collation_type(),
                       &res_accuracy);
       DatumValue out;
-      if (OB_FAIL(DatumValueCaster::to_type(target_type.get_type(), cast_ctx, orig_obj, oballocator, out))) {
+      if (OB_FAIL(orig_type.export_param(orig_obj, literal_scratch, sizeof(literal_scratch)))) {
+      } else if (OB_FAIL(DatumValueCaster::to_type(target_type.get_type(), cast_ctx, orig_obj, oballocator, out))) {
       } else {
         if (LS_BYTE == length_semantics) {
           length = out.get_string_len();

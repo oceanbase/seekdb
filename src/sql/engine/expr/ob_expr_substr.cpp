@@ -54,27 +54,31 @@ int ObExprSubstr::calc_result_length(ObExprResType *types_array,
   if (OB_UNLIKELY(2 != param_num && 3 != param_num)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const DatumValue &start_obj = types_array[1].get_param();
+    const Datum &start_obj = types_array[1].get_param_datum();
     if (!start_obj.is_null()) {
-      if (start_obj.is_int()) {
+      if (types_array[1].get_param_value_meta().is_int()) {
         start_pos = start_obj.get_int();
       }
     }
-    if (OB_SUCC(ret) && 3 == param_num && !types_array[2].get_param().is_null()) {
-      const DatumValue &len_obj = types_array[2].get_param();
-      if (len_obj.is_int()) {
+    if (OB_SUCC(ret) && 3 == param_num && !types_array[2].get_param_datum().is_null()) {
+      const Datum &len_obj = types_array[2].get_param_datum();
+      if (types_array[2].get_param_value_meta().is_int()) {
         substr_len = len_obj.get_int();
       }
     }
   }
   if (OB_SUCC(ret)) {
-    LOG_DEBUG("substr calc len", K(result_len), K(substr_len), K(start_pos), K(types_array[0].get_param()));
+    LOG_DEBUG("substr calc len", K(result_len), K(substr_len), K(start_pos), K(types_array[0].get_param_datum()), K(types_array[0].get_param_value_meta()));
     if (0 >= result_len || 0 >= substr_len || start_pos > result_len) {
       res_len = 0;
     } else {
-      const DatumValue &text_obj = types_array[0].get_param();
+      DatumValue text_obj;
+      alignas(8) char text_scratch[64];
       // According to whether parameter 0 is a constant to distinguish the calculation
-      if (ob_is_string_type(text_obj.get_type()) && OB_SUCC(text_obj.get_string(str_text))) {
+      if (ob_is_string_type(types_array[0].get_param_value_meta().get_type())
+          && OB_FAIL(types_array[0].export_param(text_obj, text_scratch, sizeof(text_scratch)))) {
+      } else if (ob_is_string_type(types_array[0].get_param_value_meta().get_type())
+                 && OB_SUCC(text_obj.get_string(str_text))) {
         int64_t mb_len = ObCharset::strlen_char(cs_type, str_text.ptr(), str_text.length());
         start_pos = (start_pos >= 0) ? start_pos - 1 : start_pos + mb_len;
         if (OB_UNLIKELY(start_pos < 0 || start_pos >= mb_len)) {
@@ -138,9 +142,9 @@ int ObExprSubstr::calc_result_typeN(ObExprResType &type,
   if (OB_SUCC(ret)
       && ob_is_text_tc(type.get_type())
       && 3 == param_num
-      && !types_array[2].get_param().is_null()) {
-    const DatumValue &len_obj = types_array[2].get_param();
-    int64_t substr_len = len_obj.is_int() ? len_obj.get_int() : 0;
+      && !types_array[2].get_param_datum().is_null()) {
+    const Datum &len_obj = types_array[2].get_param_datum();
+    int64_t substr_len = types_array[2].get_param_value_meta().is_int() ? len_obj.get_int() : 0;
     if (substr_len > 0 && substr_len <= OB_MAX_CAST_CHAR_VARCHAR_LENGTH) {
       type.set_varchar();
     }

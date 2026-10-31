@@ -203,9 +203,9 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
   if (param_num != 6) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const DatumValue &dest_type = types_stack[3].get_param();
-    const DatumValue &dest_collation = types_stack[4].get_param();
-    const DatumValue &dest_length = types_stack[5].get_param();
+    const Datum &dest_type = types_stack[3].get_param_datum();
+    const Datum &dest_collation = types_stack[4].get_param_datum();
+    const Datum &dest_length = types_stack[5].get_param_datum();
     if (!types_stack[2].is_int() || !types_stack[3].is_int() || !types_stack[4].is_int() || !types_stack[5].is_int()
         || !types_stack[1].is_string_type() || !types_stack[0].is_string_type()) {
       ret = OB_INVALID_ARGUMENT;

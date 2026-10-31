@@ -105,15 +105,15 @@ int ObExprJsonQuery::calc_returning_type(ObExprResType& type,
                                          bool is_json_input)
 {
   INIT_SUCC(ret);
-  bool is_asis = types_stack[JSN_QUE_ASIS].get_param().get_int() > 0;
-  bool is_multivalue = types_stack[JSN_QUE_MULTIVALUE].get_param().get_int() > 0;
+  bool is_asis = types_stack[JSN_QUE_ASIS].get_param_datum().get_int() > 0;
+  bool is_multivalue = types_stack[JSN_QUE_MULTIVALUE].get_param_datum().get_int() > 0;
   
   if (is_asis && is_multivalue) {
       dst_type.set_type(ObJsonType);
       dst_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
       dst_type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
   } else if (types_stack[JSN_QUE_RET].get_type() == ObNullType) {
-    ObString j_path_text(types_stack[JSN_QUE_PATH].get_param().get_string().length(), types_stack[JSN_QUE_PATH].get_param().get_string().ptr());
+    ObString j_path_text(types_stack[JSN_QUE_PATH].get_param_datum().get_string().length(), types_stack[JSN_QUE_PATH].get_param_datum().get_string().ptr());
     ObJsonPath j_path(j_path_text, allocator);
 
     if (j_path_text.length() == 0) {
@@ -153,8 +153,8 @@ int ObExprJsonQuery::calc_returning_type(ObExprResType& type,
 int ObExprJsonQuery::check_data_type_allowed(const ObExprResType* types_stack, const ObExprResType& data_type)
 {
   int ret = OB_SUCCESS;
-  bool is_asis = types_stack[JSN_QUE_ASIS].get_param().get_int() > 0;
-  bool is_multivalue = types_stack[JSN_QUE_MULTIVALUE].get_param().get_int() > 0;
+  bool is_asis = types_stack[JSN_QUE_ASIS].get_param_datum().get_int() > 0;
+  bool is_multivalue = types_stack[JSN_QUE_MULTIVALUE].get_param_datum().get_int() > 0;
 
   // multivalue genreated column __mvi_%ld
   if (!is_asis && data_type.get_type() != ObVarcharType 

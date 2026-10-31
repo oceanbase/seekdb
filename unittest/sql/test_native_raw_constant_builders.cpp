@@ -438,7 +438,13 @@ TEST_F(NativeRawConstantBuilders, name_const_double_cache_keeps_metadata_without
   // the empty descriptor, never bytes from the retired temporary owner.
   ASSERT_NE(nullptr, expression->get_op());
   const ObExprResType &cached = expression->get_op()->get_result_type();
-  EXPECT_TRUE(cached.get_param().is_null());
+  EXPECT_TRUE(cached.get_param_datum().is_null());
+  EXPECT_EQ(ObNullType, cached.get_param_value_meta().get_type());
+  EXPECT_EQ(CS_LEVEL_INVALID, cached.get_param_value_meta().get_collation_level());
+  EXPECT_EQ(CS_TYPE_INVALID, cached.get_param_value_meta().get_collation_type());
+  EXPECT_EQ(-1, cached.get_param_value_meta().get_scale());
+  char diagnostic[2048];
+  EXPECT_GT(expression->get_op()->to_string(diagnostic, sizeof(diagnostic)), 0);
   EXPECT_EQ(ObDoubleType, cached.get_type());
   EXPECT_EQ(18, cached.get_precision()); EXPECT_EQ(4, cached.get_scale());
   EXPECT_EQ(ObDoubleType, cached.get_calc_type());

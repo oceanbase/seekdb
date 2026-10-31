@@ -1466,11 +1466,11 @@ int ObJsonExprHelper::get_cast_type(const ObExprResType param_type2,
                                     ObExprTypeCtx &type_ctx)
 {
   INIT_SUCC(ret);
-    if (!param_type2.is_int() && !param_type2.get_param().is_int()) {
+    if (!param_type2.is_int() && !param_type2.get_param_value_meta().is_int()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
-    const DatumValue &param = param_type2.get_param();
+    const Datum &param = param_type2.get_param_datum();
     ParseNode parse_node;
     parse_node.value_ = param.get_int();
     SqlValueType obj_type = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
@@ -1650,7 +1650,6 @@ int ObJsonExprHelper::get_cast_string_len(ObExprResType &type1,
                         common::ObCollationType conn)
 {
   INIT_SUCC(ret);
-  const DatumValue &val = type1.get_param();
 
   if (!type1.is_literal()) { // column
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
@@ -1730,7 +1729,10 @@ int ObJsonExprHelper::get_cast_string_len(ObExprResType &type1,
                        cast_coll_type);
     ObString val_str;
     {
+        DatumValue val;
+        alignas(8) char literal_scratch[64];
         DatumValue converted_literal;
+        OZ(type1.export_param(val, literal_scratch, sizeof(literal_scratch)));
         if (OB_SUCC(ret)) {
           ret = DatumValueCaster::to_type(ObVarcharType, cast_ctx, val, oballocator, converted_literal);
         }
@@ -1762,7 +1764,7 @@ int ObJsonExprHelper::parse_res_type(ObExprResType& type1,
   INIT_SUCC(ret);
   const int32_t VARCHAR2_DEFAULT_LEN = 4000;
   ObExprResType dst_type;
-  const DatumValue &param = res_type.get_param();
+  const Datum &param = res_type.get_param_datum();
 
   if (param.get_int() == 0) {
     //     result_type.set_type(type1.get_type());
@@ -1878,11 +1880,11 @@ int ObJsonExprHelper::check_item_func_with_return(ObJsonPathNodeType path_type, 
 int ObJsonExprHelper::get_expr_option_value(const ObExprResType param_type2, int8_t &dst_type)
 {
   INIT_SUCC(ret);
-  if (!param_type2.is_int() && !param_type2.get_param().is_int()) {
+  if (!param_type2.is_int() && !param_type2.get_param_value_meta().is_int()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cast param type is unexpected", K(param_type2));
   } else {
-    dst_type = param_type2.get_param().get_int();
+    dst_type = param_type2.get_param_datum().get_int();
   }
   return ret;
 }

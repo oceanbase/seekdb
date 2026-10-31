@@ -49,9 +49,9 @@ int ObExprDemoteCastBase::get_column_res_type(const ObExprResType &param_type,
 {
   int ret = OB_SUCCESS;
   ObDatumMeta column_datum_meta;
-  if (!param_type.is_int() && !param_type.get_param().is_int()) {
+  if (!param_type.is_int() && !param_type.get_param_value_meta().is_int()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_column_datum_meta(param_type.get_param().get_int(), column_datum_meta))) {
+  } else if (OB_FAIL(get_column_datum_meta(param_type.get_param_datum().get_int(), column_datum_meta))) {
   } else {
     column_res_type.set_type(static_cast<SqlValueType>(column_datum_meta.type_));
     column_res_type.set_cs_type(static_cast<ObCollationType>(column_datum_meta.cs_type_));

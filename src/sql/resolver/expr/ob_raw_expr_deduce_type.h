@@ -85,6 +85,7 @@ public:
   static bool skip_cast_expr(const ObRawExpr &parent, const int64_t child_idx);
 
 private:
+  friend class NativeExprResTypeTestPeer;
   // types and constants
 private:
   // disallow copy

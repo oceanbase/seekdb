@@ -44,7 +44,10 @@ inline int ObExprSpace::calc_result_type1(
   if (type1.is_null()) {
     res_type = ObVarcharType;
   } else if (type1.is_literal()) {
-    if (OB_FAIL(calc_result_type(type_ctx, type1.get_param(), res_type))) {
+    alignas(8) char parameter_scratch[64];
+    DatumValue parameter;
+    if (OB_FAIL(type1.export_param(parameter, parameter_scratch, sizeof(parameter_scratch)))) {
+    } else if (OB_FAIL(calc_result_type(type_ctx, parameter, res_type))) {
     }
   } else if (OB_ISNULL(raw_expr = type_ctx.get_raw_expr())) {
     ret = OB_INVALID_ARGUMENT;

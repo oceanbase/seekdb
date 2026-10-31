@@ -302,8 +302,8 @@ int ObExprNeg::calc_param_type(const ObExprResType &param_type,
   case ObYearTC:
   case ObIntTC: {
     if (ObIntType == param_type.get_type() && param_type.is_literal()) {
-      const DatumValue &obj = param_type.get_param();
-      if (OB_UNLIKELY(!obj.is_int())) {
+      const Datum &obj = param_type.get_param_datum();
+      if (OB_UNLIKELY(!param_type.get_param_value_meta().is_int())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (INT64_MIN == obj.get_int()) {
         // select --9223372036854775808;

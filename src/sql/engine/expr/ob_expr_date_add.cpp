@@ -54,7 +54,7 @@ int ObExprDateAdjust::calc_result_type3(ObExprResType &type,
   //literal -> cast to string -> is date or datetime format?
 
   int ret = OB_SUCCESS;
-  ObDateUnitType unit_type = static_cast<ObDateUnitType>(unit.get_param().get_int());
+  ObDateUnitType unit_type = static_cast<ObDateUnitType>(unit.get_param_datum().get_int());
   ObExprResType res_date = date;
   if (OB_UNLIKELY(ObNullType == date.get_type())) {
     type.set_null();

@@ -49,92 +49,93 @@ int ObExprStrToDate::calc_result_type2(ObExprResType &type,
     type.set_scale(MAX_SCALE_FOR_TEMPORAL);
     type.set_precision(DATETIME_MIN_LENGTH + MAX_SCALE_FOR_TEMPORAL);
   } else {
-    DatumValue format_obj = format.get_param();
+    const Datum &format_obj = format.get_param_datum();
+    const SqlTypeMeta &format_meta = format.get_param_value_meta();
     if (OB_UNLIKELY(format_obj.is_null())) {
       type.set_type(res_type);
       type.set_scale(MAX_SCALE_FOR_TEMPORAL);
       type.set_precision(DATETIME_MIN_LENGTH + MAX_SCALE_FOR_TEMPORAL);
-    } else if (!format_obj.is_string_type()) {
+    } else if (!ob_is_string_type(format_meta.get_type())) {
       type.set_type(res_type);
       type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
       type.set_precision(DATETIME_MIN_LENGTH + DEFAULT_SCALE_FOR_INTEGER);
     } else {
-      ObString format_str = format_obj.get_varchar();
+      ObString format_str = format_obj.get_string();
       bool has_date = false;
       bool has_time = false;
       uint32_t pos = 0;
-      pos = ObCharset::locate(format_obj.get_collation_type(),
+      pos = ObCharset::locate(format_meta.get_collation_type(),
                               format_str.ptr(), format_str.length(), "%a", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%b", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%c", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%D", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%d", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%e", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%j", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%M", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%m", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%U", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%u", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%V", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%v", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%W", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%w", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%X", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%x", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%Y", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%y", 2, 1);
       if (pos > 0) {
         has_date = true;
       }
 
       pos = 0;
-      pos = ObCharset::locate(format_obj.get_collation_type(),
+      pos = ObCharset::locate(format_meta.get_collation_type(),
                               format_str.ptr(), format_str.length(), "%f", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%H", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%h", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%I", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%i", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%k", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%l", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%p", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%r", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%S", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%s", 2, 1)
-            + ObCharset::locate(format_obj.get_collation_type(),
+            + ObCharset::locate(format_meta.get_collation_type(),
                                 format_str.ptr(), format_str.length(), "%T", 2, 1);
       if (pos > 0) {
         has_time = true;
       }
 
-      pos = ObCharset::locate(format_obj.get_collation_type(),
+      pos = ObCharset::locate(format_meta.get_collation_type(),
                               format_str.ptr(), format_str.length(), "%f", 2, 1);
 
       if (0 == pos) {

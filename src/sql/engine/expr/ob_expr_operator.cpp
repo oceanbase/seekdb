@@ -29,6 +29,7 @@
 #include "sql/session/ob_sql_session_info.h"
 
 #include "common/object/ob_object.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "common/datum/datum_value_buffer.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "share/ob_lob_access_utils.h"
@@ -64,6 +65,19 @@ static bool is_string_literal_cmp_operand(const ObRawExpr *expr)
 
 OB_SERIALIZE_MEMBER(ObFuncInputType, calc_meta_, max_length_, flag_);
 
+int ObExprResType::export_param(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  int ret = OB_SUCCESS;
+  DatumValue candidate;
+  if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(
+          param_, param_meta_, candidate.datum_, scratch, capacity))) {
+  } else {
+    candidate.meta_ = param_meta_;
+    output = candidate;
+  }
+  return ret;
+}
+
 // TODO: use ObRawExprResType instead of ObExprResType in sql executor
 OB_DEF_SERIALIZE_SIMPLE(ObExprResType)
 {
@@ -78,7 +92,7 @@ OB_DEF_SERIALIZE_SIMPLE(ObExprResType)
 
 OB_DEF_DESERIALIZE_SIMPLE(ObExprResType)
 {
-  param_.reset(); // literal views are compile-time state, absent from the wire
+  reset_param(); // literal value and physical metadata are absent from the wire
   int ret = SqlTypeMeta::deserialize(buf, data_len, pos);
   LST_DO_CODE(OB_UNIS_DECODE,
         accuracy_,

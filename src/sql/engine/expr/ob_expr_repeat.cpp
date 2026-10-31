@@ -62,7 +62,8 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
     if (text.is_null() && !count.is_null()) {
       res_type = ObVarcharType;
     } else if (count.is_literal() && !count.is_null()) {
-      const DatumValue &obj = count.get_param();
+      DatumValue obj;
+      alignas(8) char count_scratch[64];
       ObArenaAllocator alloc(ObModIds::OB_SQL_RES_TYPE);
       const ObDataTypeCastParams dtc_params = type_ctx.get_dtc_params();
       int64_t cur_time = 0;
@@ -75,6 +76,7 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
         int64_t count_val = 0;
         {
         DatumValue converted_literal;
+        OZ (count.export_param(obj, count_scratch, sizeof(count_scratch)));
         if (OB_SUCC(ret)) {
           ret = DatumValueCaster::to_type(ObIntType, cast_ctx, obj, alloc, converted_literal);
         }

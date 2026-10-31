@@ -51,8 +51,9 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
   if (ob_is_string_type(type.get_type())) {
     type.set_length(type1.get_length());
   }
-  const DatumValue &dest_collation = type2.get_param();
-  TYPE_CHECK(dest_collation, ObVarcharType);
+  const Datum &dest_collation = type2.get_param_datum();
+  const SqlTypeMeta &dest_collation_meta = type2.get_param_value_meta();
+  TYPE_CHECK(dest_collation_meta, ObVarcharType);
   if (OB_SUCC(ret)) {
     ObString cs_name = dest_collation.get_string();
     ObCharsetType charset_type = CHARSET_INVALID;
