@@ -152,11 +152,11 @@ protected:
     extra.mat_op_ = OB_NEWx(ObMaterialOpImpl, &arena_, monitor_);
     ASSERT_NE(nullptr, extra.mat_op_);
     lib::ContextParam param;
-    param.set_mem_attr("FixedFilterSample").set_properties(lib::USE_TL_PAGE_OPTIONAL);
+    param.set_mem_attr("FixedFilter").set_properties(lib::USE_TL_PAGE_OPTIONAL);
     ASSERT_EQ(OB_SUCCESS, CURRENT_CONTEXT->CREATE_CONTEXT(extra.mat_op_->*member(MaterialContext{}), param));
     auto &store = extra.mat_op_->*member(MaterialStore{});
     store.set_allocator(arena_);
-    ASSERT_EQ(OB_SUCCESS, store.init(INT64_MAX, ObCtxIds::DEFAULT_CTX_ID, "FixedFilterSample", false));
+    ASSERT_EQ(OB_SUCCESS, store.init(INT64_MAX, ObCtxIds::DEFAULT_CTX_ID, "FixedFilter", false));
     extra.mat_op_->*member(MaterialInited{}) = true;
     extra.mat_op_->*member(MaterialFirst{}) = true;
   }
@@ -342,7 +342,7 @@ TEST_F(FixedFilterSample, sample_append_failure_does_not_publish_to_uninitialize
   ObDynamicSamplePieceMsgCtx::SortDef sort;
   ObDynamicSamplePieceMsgCtx context(1, 1, INT64_MAX, exec_, coordinator, sort);
   SampleShadowCleanup cleanup(context);
-  ObChunkDatumStore store("FixedSampleError");
+  ObChunkDatumStore store("FixedSmplErr");
   ObDynamicSamplePieceMsg piece; ASSERT_EQ(OB_SUCCESS, piece.tablet_ids_.push_back(17));
   int64_t value = 7; add_range(piece, 17, {{integer(value)}});
   EXPECT_EQ(OB_NOT_INIT, (context.*member(SampleAppend{}))(piece, 0, &store));
