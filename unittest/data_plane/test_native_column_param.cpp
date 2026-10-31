@@ -31,7 +31,7 @@
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using oceanbase::blocksstable::ObStorageDatum;
-static_assert(std::is_same<decltype(std::declval<const ObColumnParam &>().get_orig_default_value()),const DatumValue &>::value);
+static_assert(std::is_same<decltype(std::declval<const ObColumnParam &>().get_orig_default_datum()),const Datum &>::value);
 namespace {
 struct Dataset { const char *inputs; const char *oracle; int count; };
 const Dataset datasets[]={
@@ -102,10 +102,10 @@ TEST(NativeStorageValue, old_conversion_bytes_flags_and_checksums_are_preserved)
 TEST(NativeColumnParam, setter_owns_temporary_values_and_replacement_does_not_leak){
  ColumnParamTestAllocator owner;ObColumnParam p(owner);
  {ObArenaAllocator input;DatumValue number,text;ASSERT_EQ(OB_SUCCESS,number.set_int(918,input));ASSERT_EQ(OB_SUCCESS,text.set_varchar(ObString::make_string("customer_客户"),input));text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-  ASSERT_EQ(OB_SUCCESS,p.set_orig_default_value(number));ASSERT_EQ(OB_SUCCESS,p.set_cur_default_value(text));EXPECT_NE(number.datum_.ptr_,p.get_orig_default_value().datum_.ptr_);EXPECT_NE(text.datum_.ptr_,p.get_cur_default_value().datum_.ptr_);
+  ASSERT_EQ(OB_SUCCESS,p.set_orig_default_value(number));ASSERT_EQ(OB_SUCCESS,p.set_cur_default_value(text));EXPECT_EQ(0,p.get_orig_default_datum().length());EXPECT_NE(text.datum_.ptr_,p.get_cur_default_datum().get_reference());
  }
- EXPECT_EQ(918,p.get_orig_default_value().get_int());EXPECT_EQ(ObString::make_string("customer_客户"),p.get_cur_default_value().get_string());
- for(int i=0;i<100;++i){ASSERT_EQ(OB_SUCCESS,p.set_orig_default_value(p.get_orig_default_value()));ASSERT_EQ(OB_SUCCESS,p.set_cur_default_value(p.get_cur_default_value()));EXPECT_EQ(2,owner.live_.size());}
+ EXPECT_EQ(918,p.get_orig_default_datum().get_int());EXPECT_EQ(ObString::make_string("customer_客户"),p.get_cur_default_datum().get_string());
+ for(int i=0;i<100;++i){ASSERT_EQ(OB_SUCCESS,p.set_orig_default_datum(p.get_orig_default_datum(),p.get_orig_default_meta()));ASSERT_EQ(OB_SUCCESS,p.set_cur_default_datum(p.get_cur_default_datum(),p.get_cur_default_meta()));EXPECT_EQ(1,owner.live_.size());}
  p.reset();EXPECT_TRUE(owner.live_.empty());p.destroy();EXPECT_TRUE(owner.live_.empty());
 }
 TEST(NativeColumnParam, failed_setter_and_assign_keep_prior_values_and_metadata){
@@ -128,11 +128,133 @@ TEST(NativeColumnParam, decode_failure_rolls_back_all_allocations_including_larg
  source.destroy();
 }
 TEST(NativeColumnParam, typed_null_defaults_do_not_retain_a_payload_type){
- ColumnParamTestAllocator owner;ObColumnParam p(owner);DatumParameter value;SqlTypeMeta meta;meta.set_enum();value.set_type_meta(meta);ASSERT_TRUE(value.is_null());ASSERT_EQ(OB_SUCCESS,p.set_orig_default_value(value));ASSERT_EQ(OB_SUCCESS,p.set_cur_default_value(value));EXPECT_EQ(ObNullType,p.get_orig_default_value().get_type());EXPECT_EQ(ObNullType,p.get_cur_default_value().get_type());EXPECT_EQ(ObEnumType,value.get_type());EXPECT_TRUE(owner.live_.empty());p.destroy();
+ ColumnParamTestAllocator owner;ObColumnParam p(owner);DatumParameter value;SqlTypeMeta meta;meta.set_enum();value.set_type_meta(meta);ASSERT_TRUE(value.is_null());ASSERT_EQ(OB_SUCCESS,p.set_orig_default_value(value));ASSERT_EQ(OB_SUCCESS,p.set_cur_default_value(value));EXPECT_EQ(ObNullType,p.get_orig_default_meta().get_type());EXPECT_EQ(ObNullType,p.get_cur_default_meta().get_type());EXPECT_EQ(ObEnumType,value.get_type());EXPECT_TRUE(owner.live_.empty());p.destroy();
 }
 TEST(NativeStorageValue, scalar_copy_survives_temporary_owner_and_typed_null_is_safe){
  ObStorageDatum result;
  {ObArenaAllocator source;DatumValue value;ASSERT_EQ(OB_SUCCESS,value.set_int(918,source));ASSERT_EQ(OB_SUCCESS,result.from_value(value));EXPECT_TRUE(result.is_local_buf());EXPECT_NE(value.datum_.ptr_,result.ptr_);}
  EXPECT_EQ(918,result.get_int());DatumValue null_value;null_value.meta_.set_bit();EXPECT_EQ(OB_SUCCESS,result.from_value(null_value));EXPECT_TRUE(result.is_null());
 }
+
+TEST(NativeColumnParam, native_integer_set_assign_and_decode_need_no_payload_allocation)
+{
+  for (const int64_t number : {INT64_MIN, int64_t(0), INT64_MAX}) {
+    SCOPED_TRACE(number);
+    ColumnParamTestAllocator owner, decode_owner;
+    owner.fail_at_=1; decode_owner.fail_at_=1;
+    ObColumnParam column(owner), decoded(decode_owner);
+    metadata(column, 1, 3);
+    {
+      ObArenaAllocator input_owner; DatumValue value;
+      ASSERT_EQ(OB_SUCCESS, value.set_int(number,input_owner));
+      ASSERT_EQ(OB_SUCCESS, column.set_orig_default_value(value));
+      ASSERT_EQ(OB_SUCCESS, column.set_cur_default_value(value));
+    }
+    ASSERT_EQ(OB_SUCCESS,column.set_orig_default_datum(column.get_orig_default_datum(),column.get_orig_default_meta()));
+    EXPECT_EQ(number,column.get_orig_default_datum().get_int());
+    EXPECT_EQ(number,column.get_cur_default_datum().get_int());
+    EXPECT_EQ(0,column.get_orig_default_datum().length());
+    const std::string bytes=wire(column);int64_t position=0;
+    ASSERT_EQ(OB_SUCCESS,decoded.deserialize(bytes.data(),bytes.size(),position));
+    EXPECT_EQ(bytes.size(),position);EXPECT_EQ(bytes,wire(decoded));
+    ASSERT_EQ(OB_SUCCESS,column.assign(decoded));
+    EXPECT_EQ(bytes,wire(column));
+    EXPECT_EQ(0,owner.calls_);EXPECT_EQ(0,decode_owner.calls_);
+    column.destroy();decoded.destroy();
+    EXPECT_TRUE(owner.live_.empty());EXPECT_TRUE(decode_owner.live_.empty());
+  }
+  ColumnParamTestAllocator owner;ObColumnParam column(owner);owner.fail_at_=1;
+  ObArenaAllocator input_owner;DatumValue value;
+  ASSERT_EQ(OB_SUCCESS,value.set_uint(ObUInt64Type,UINT64_MAX,input_owner));
+  ASSERT_EQ(OB_SUCCESS,column.set_cur_default_value(value));
+  EXPECT_EQ(UINT64_MAX,column.get_cur_default_datum().get_uint());
+  EXPECT_EQ(ObUInt64Type,column.get_cur_default_meta().get_type());
+  EXPECT_EQ(0,owner.calls_);column.destroy();EXPECT_TRUE(owner.live_.empty());
+}
+
+TEST(NativeColumnParam, native_reference_and_array_assign_decode_survive_source_and_wire_poison)
+{
+  ColumnParamTestAllocator owner,decode_owner;
+  ObColumnParam copy(owner),decoded(decode_owner);
+  std::string bytes;
+  {
+    ColumnParamTestAllocator source_owner;ObColumnParam source(source_owner);
+    ObArenaAllocator inputs;DatumValue text;
+    ASSERT_EQ(OB_SUCCESS,text.set_varchar(ObString::make_string("independent"),inputs));
+    text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    const DatumParameter array=make_array(inputs,4);
+    ASSERT_EQ(OB_SUCCESS,source.set_orig_default_value(text));
+    ASSERT_EQ(OB_SUCCESS,source.set_cur_default_value(array));
+    ASSERT_EQ(OB_SUCCESS,copy.assign(source));
+    EXPECT_NE(source.get_orig_default_datum().get_reference(),copy.get_orig_default_datum().get_reference());
+    EXPECT_NE(source.get_cur_default_datum().get_reference(),copy.get_cur_default_datum().get_reference());
+    bytes=wire(source);std::string input=bytes;int64_t position=0;
+    ASSERT_EQ(OB_SUCCESS,decoded.deserialize(input.data(),input.size(),position));
+    MEMSET(&input[0],0x5a,input.size());
+    MEMSET(const_cast<void *>(source.get_orig_default_datum().get_reference()),0x5a,11);
+    source.reset();EXPECT_TRUE(source_owner.live_.empty());
+  }
+  for (const ObColumnParam *column : {&copy,&decoded}) {
+    EXPECT_EQ(ObString("independent"),column->get_orig_default_datum().get_string());
+    alignas(8) char scratch[64];DatumValue view;
+    ASSERT_EQ(OB_SUCCESS,column->export_cur_default_value(view,scratch,sizeof(scratch)));
+    const auto *array=reinterpret_cast<const DatumParameterArray *>(view.get_ext());
+    ASSERT_NE(nullptr,array);ASSERT_EQ(4,array->count_);
+    for (int64_t i=0;i<array->count_;++i) {
+      EXPECT_EQ(ObString("native array payload"),array->data_[i].get_string());
+    }
+    EXPECT_EQ(bytes,wire(*column));
+  }
+  copy.destroy();decoded.destroy();
+  EXPECT_TRUE(owner.live_.empty());EXPECT_TRUE(decode_owner.live_.empty());
+}
+
+TEST(NativeColumnParam, native_unis_keeps_missing_string_terminator_and_previous_metadata)
+{
+  ObArenaAllocator inputs;DatumValue text;
+  ASSERT_EQ(OB_SUCCESS,text.set_varchar(ObString("tail"),inputs));
+  text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  int64_t size=0;ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(text.datum_,text.meta_,size));
+  std::string bytes(size,'\0');int64_t position=0;
+  ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(text.datum_,text.meta_,&bytes[0],bytes.size(),position));
+  ASSERT_EQ('\0',bytes.back());bytes.pop_back();
+  ColumnParamTestAllocator owner;Datum value;SqlTypeMeta type;position=0;
+  ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_unis_native_value(bytes.data(),bytes.size(),position,owner,value,type));
+  EXPECT_EQ(size,position); // The old UNIS string reader may end one byte past this body.
+  EXPECT_EQ(ObVarcharType,type.get_type());
+  MEMSET(&bytes[0],0x5a,bytes.size());EXPECT_EQ(ObString("tail"),value.get_string());
+  DatumParameterCodec::release_owned_schema_native_value(value,type,owner);
+  EXPECT_TRUE(value.is_null());EXPECT_TRUE(owner.live_.empty());
+  const int64_t calls_before=owner.calls_;
+  SqlTypeMeta previous;previous.set_int();previous.set_scale(6);
+  Datum scalar;position=0;
+  ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_unis_native_value("",0,position,owner,scalar,previous));
+  EXPECT_EQ(0,position);EXPECT_EQ(0,scalar.get_int());EXPECT_EQ(0,scalar.length());
+  EXPECT_EQ(ObIntType,previous.get_type());EXPECT_EQ(6,previous.get_scale());
+  EXPECT_EQ(calls_before,owner.calls_);
+  DatumParameterCodec::release_owned_schema_native_value(scalar,previous,owner);
+  EXPECT_TRUE(owner.live_.empty());
+}
+
+TEST(NativeColumnParam, lob_physical_flags_and_payload_survive_native_self_replacement)
+{
+  ObArenaAllocator inputs;const auto values=load(datasets[1].inputs,inputs);
+  int checked=0;
+  for (const DatumValue &source : values) {
+    if (source.is_null() || !source.is_lob_storage()) { continue; }
+    ColumnParamTestAllocator owner;ObColumnParam column(owner);
+    ASSERT_EQ(OB_SUCCESS,column.set_orig_default_value(source));
+    ASSERT_EQ(OB_SUCCESS,column.set_cur_default_datum(column.get_orig_default_datum(),column.get_orig_default_meta()));
+    ASSERT_EQ(OB_SUCCESS,column.set_orig_default_datum(column.get_orig_default_datum(),column.get_orig_default_meta()));
+    alignas(8) char scratch[64];DatumValue view;
+    ASSERT_EQ(OB_SUCCESS,column.export_orig_default_value(view,scratch,sizeof(scratch)));
+    EXPECT_EQ(source.meta_,view.meta_);EXPECT_EQ(source.get_scale(),view.get_scale());
+    EXPECT_EQ(source.datum_.pack_,view.datum_.pack_);
+    EXPECT_EQ(source.get_string(),view.get_string());
+    EXPECT_NE(column.get_orig_default_datum().get_reference(),column.get_cur_default_datum().get_reference());
+    column.destroy();EXPECT_TRUE(owner.live_.empty());++checked;
+  }
+  EXPECT_GT(checked,0);
+}
+
 int main(int argc,char **argv){::testing::InitGoogleTest(&argc,argv);if(ObCharset::init_charset()!=OB_SUCCESS)return 1;return RUN_ALL_TESTS();}

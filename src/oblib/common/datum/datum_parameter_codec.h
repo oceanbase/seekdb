@@ -76,6 +76,13 @@ public:
                                        ObIAllocator &allocator, Datum &output);
   static int clone_schema_native_value(const Datum &value, const SqlTypeMeta &meta,
                                       ObIAllocator &allocator, Datum &output);
+  // Only for values owned by successful schema native import/clone/decode in
+  // this allocator (or an explicit ownership transfer). Never release a borrowed
+  // reference/export view. Inline values and bare states allocate nothing;
+  // references include zero-length allocations and recursive SQL-array graphs.
+  // The value is reset; metadata is left to the owning record.
+  static void release_owned_schema_native_value(Datum &value, const SqlTypeMeta &meta,
+                                                ObIAllocator &allocator);
   // Scalar/special-state views borrow caller scratch; reference views borrow
   // value's owner. Neither may outlive that storage. A 64-byte aligned scratch
   // covers every scalar view. No column precision/label normalization occurs.
@@ -91,6 +98,11 @@ public:
   // one byte past the body, as the enclosing UNIS reader historically allowed.
   static int decode_unis_value(const char *buf, int64_t length, int64_t &pos,
                           ObIAllocator &allocator, ObDatum &value, SqlTypeMeta &meta);
+  // The same UNIS omission and metadata-reuse contract with native inline
+  // scalars. Explicit-free owners must retain their decode allocation transaction
+  // so failures also reclaim unpublished nested-array allocations.
+  static int decode_unis_native_value(const char *buf, int64_t length, int64_t &pos,
+                          ObIAllocator &allocator, Datum &output, SqlTypeMeta &meta);
   static int parameter_size(const DatumParameter &value, int64_t &size);
   static int encode_parameter(const DatumParameter &value, char *buf,
                               int64_t length, int64_t &pos);

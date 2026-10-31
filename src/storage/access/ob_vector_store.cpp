@@ -161,9 +161,11 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
         } else {
           const common::SqlTypeMeta &obj_meta = out_cols_param->at(out_cols_projector.at(i))->get_meta_type();
           col_param = out_cols_param->at(out_cols_projector.at(i));
-          const common::DatumValue &def_cell = col_param->get_orig_default_value();
+          common::DatumValue def_cell;
+          alignas(8) char default_scratch[64];
           blocksstable::ObStorageDatum default_datum;
-          if (def_cell.is_nop_value()) {
+          if (OB_FAIL(col_param->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+          } else if (def_cell.is_nop_value()) {
             default_datum.set_nop();
           } else if (OB_FAIL(default_datum.from_value(def_cell))) {
           } else if (obj_meta.is_lob_storage() && !def_cell.is_null()) {

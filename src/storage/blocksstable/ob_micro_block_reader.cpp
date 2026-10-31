@@ -937,9 +937,11 @@ int ObMicroBlockReader::get_row_count(
           col_idx,
           datum))) {
       } else if (datum.is_nop()) {
-        if (OB_UNLIKELY(nullptr == col_param || col_param->get_orig_default_value().is_nop_value())) {
+        if (OB_UNLIKELY(nullptr == col_param || col_param->get_orig_default_datum().is_nop()
+            || (col_param->get_orig_default_datum().has_ext_value()
+                && col_param->get_orig_default_datum().get_ext() == ObActionFlag::OP_NOP))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (col_param->get_orig_default_value().is_null()) {
+        } else if (col_param->get_orig_default_datum().is_null()) {
           datum.set_null();
         }
       }

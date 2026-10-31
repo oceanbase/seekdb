@@ -58,18 +58,16 @@ private:
 ObColumnParam::ObColumnParam(ObIAllocator &allocator) : allocator_(allocator) { reset(); }
 ObColumnParam::~ObColumnParam() {}
 
-void ObColumnParam::release_default_value(DatumValue &value)
+void ObColumnParam::release_default_value(Datum &value, SqlTypeMeta &meta)
 {
-  DatumParameter owned;
-  owned.assign_value(value);
-  DatumParameterArray::release_owned(owned, allocator_);
-  value.reset();
+  DatumParameterCodec::release_owned_schema_native_value(value, meta, allocator_);
+  meta.reset();
 }
 
 void ObColumnParam::reset()
 {
-  release_default_value(orig_default_value_);
-  release_default_value(cur_default_value_);
+  release_default_value(orig_default_value_, orig_default_meta_);
+  release_default_value(cur_default_value_, cur_default_meta_);
   column_id_ = OB_INVALID_ID;
   meta_type_.reset();
   order_ = ObOrderType::ASC;
@@ -85,17 +83,66 @@ void ObColumnParam::reset()
 }
 void ObColumnParam::destroy() { reset(); }
 
-int ObColumnParam::copy_default_value(const DatumValue &source, DatumValue &target)
+int ObColumnParam::copy_default_value(const DatumValue &source, Datum &target, SqlTypeMeta &target_meta)
 {
-  DatumValue input = source, owned;
-  if (input.is_null() && !input.meta_.is_null()) { input.meta_.set_null(); }
-  const int ret = clone_typed_value(input, owned, allocator_);
-  if (ret == OB_SUCCESS) { release_default_value(target); target = owned; }
+  Datum owned;
+  SqlTypeMeta meta = source.meta_;
+  if (source.is_null() && !meta.is_null()) { meta.set_null(); }
+  const int ret = DatumParameterCodec::import_schema_native_value(source.datum_, meta, allocator_, owned);
+  if (ret == OB_SUCCESS) {
+    release_default_value(target, target_meta);
+    target = owned;
+    target_meta = meta;
+  }
   return ret;
 }
-int ObColumnParam::copy_default_value(const DatumParameter &source, DatumValue &target)
+int ObColumnParam::copy_default_value(const DatumParameter &source, Datum &target, SqlTypeMeta &target_meta)
 {
-  return copy_default_value(source.value_view(), target);
+  return copy_default_value(source.value_view(), target, target_meta);
+}
+int ObColumnParam::copy_default_datum(const Datum &source, const SqlTypeMeta &source_meta,
+                                     Datum &target, SqlTypeMeta &target_meta)
+{
+  Datum owned;
+  SqlTypeMeta meta = source_meta;
+  if (source.is_null() && !meta.is_null()) { meta.set_null(); }
+  const int ret = DatumParameterCodec::clone_schema_native_value(source, meta, allocator_, owned);
+  if (ret == OB_SUCCESS) {
+    release_default_value(target, target_meta);
+    target = owned;
+    target_meta = meta;
+  }
+  return ret;
+}
+int ObColumnParam::export_orig_default_value(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      orig_default_value_, orig_default_meta_, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { output = DatumValue(view, orig_default_meta_); }
+  return ret;
+}
+int ObColumnParam::export_cur_default_value(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      cur_default_value_, cur_default_meta_, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { output = DatumValue(view, cur_default_meta_); }
+  return ret;
+}
+int ObColumnParam::copy_orig_default_value(DatumValue &output, ObIAllocator &owner) const
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_orig_default_value(view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? clone_typed_value(view, output, owner) : ret;
+}
+int ObColumnParam::copy_cur_default_value(DatumValue &output, ObIAllocator &owner) const
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_cur_default_value(view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? clone_typed_value(view, output, owner) : ret;
 }
 int32_t ObColumnParam::get_data_length() const
 {
@@ -119,8 +166,12 @@ void ObColumnParam::move_fields_from(ObColumnParam &source)
   is_data_table_rowkey_ = source.is_data_table_rowkey_;
   orig_default_value_ = source.orig_default_value_;
   cur_default_value_ = source.cur_default_value_;
+  orig_default_meta_ = source.orig_default_meta_;
+  cur_default_meta_ = source.cur_default_meta_;
   source.orig_default_value_.reset();
   source.cur_default_value_.reset();
+  source.orig_default_meta_.reset();
+  source.cur_default_meta_.reset();
 }
 int ObColumnParam::assign(const ObColumnParam &other)
 {
@@ -139,8 +190,8 @@ int ObColumnParam::assign(const ObColumnParam &other)
     copy.is_hidden_ = other.is_hidden_;
     copy.lob_chunk_size_ = other.lob_chunk_size_;
     copy.is_data_table_rowkey_ = other.is_data_table_rowkey_;
-    if (OB_FAIL(copy.set_orig_default_value(other.orig_default_value_))) {
-    } else if (OB_FAIL(copy.set_cur_default_value(other.cur_default_value_))) {
+    if (OB_FAIL(copy.set_orig_default_datum(other.orig_default_value_, other.orig_default_meta_))) {
+    } else if (OB_FAIL(copy.set_cur_default_datum(other.cur_default_value_, other.cur_default_meta_))) {
     } else {
       move_fields_from(copy);
     }
@@ -153,8 +204,8 @@ OB_DEF_SERIALIZE(ObColumnParam)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_ENCODE, column_id_, meta_type_, accuracy_);
-  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(orig_default_value_.datum_, orig_default_value_.meta_, buf, buf_len, pos); }
-  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(cur_default_value_.datum_, cur_default_value_.meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_schema_native_value(orig_default_value_, orig_default_meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_schema_native_value(cur_default_value_, cur_default_meta_, buf, buf_len, pos); }
   LST_DO_CODE(OB_UNIS_ENCODE, order_, is_nullable_for_write_, is_gen_col_, is_virtual_gen_col_,
               is_gen_col_udf_expr_, is_nullable_for_read_, is_hidden_, lob_chunk_size_, is_data_table_rowkey_);
   return ret;
@@ -164,10 +215,10 @@ int ObColumnParam::decode_fields(const char *buf, int64_t data_len, int64_t &pos
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, column_id_, meta_type_, accuracy_);
   if (OB_SUCC(ret) && pos < data_len) {
-    ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, allocator_, orig_default_value_.datum_, orig_default_value_.meta_);
+    ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, allocator_, orig_default_value_, orig_default_meta_);
   }
   if (OB_SUCC(ret) && pos < data_len) {
-    ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, allocator_, cur_default_value_.datum_, cur_default_value_.meta_);
+    ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, allocator_, cur_default_value_, cur_default_meta_);
   }
   OB_UNIS_DECODE(order_);
   if (OB_SUCC(ret)) {
@@ -190,9 +241,9 @@ OB_DEF_SERIALIZE_SIZE(ObColumnParam)
 {
   int64_t len = 0, size = 0;
   LST_DO_CODE(OB_UNIS_ADD_LEN, column_id_, meta_type_, accuracy_);
-  if (DatumParameterCodec::value_size(orig_default_value_.datum_, orig_default_value_.meta_, size) != OB_SUCCESS) { return 0; }
+  if (DatumParameterCodec::schema_native_value_size(orig_default_value_, orig_default_meta_, size) != OB_SUCCESS) { return 0; }
   len += size;
-  if (DatumParameterCodec::value_size(cur_default_value_.datum_, cur_default_value_.meta_, size) != OB_SUCCESS) { return 0; }
+  if (DatumParameterCodec::schema_native_value_size(cur_default_value_, cur_default_meta_, size) != OB_SUCCESS) { return 0; }
   len += size;
   LST_DO_CODE(OB_UNIS_ADD_LEN, order_, is_nullable_for_write_, is_nullable_for_read_, is_gen_col_,
               is_virtual_gen_col_, is_gen_col_udf_expr_, is_hidden_, lob_chunk_size_, is_data_table_rowkey_);

@@ -298,8 +298,10 @@ int ObAggCell::prepare_def_datum()
   int ret = OB_SUCCESS;
   if (def_datum_.is_nop()) {
     def_datum_.reuse();
-    const common::DatumValue &def_cell = basic_info_.col_param_->get_orig_default_value();
-    if (!def_cell.is_nop_value()) {
+    common::DatumValue def_cell;
+    alignas(8) char default_scratch[64];
+    if (OB_FAIL(basic_info_.col_param_->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+    } else if (!def_cell.is_nop_value()) {
       if (OB_FAIL(def_datum_.from_value(def_cell))) {
       } else if (OB_FAIL(pad_column_if_need(def_datum_, allocator_, false))) {
       } else if (def_cell.is_lob_storage() && !def_cell.is_null()) {
@@ -1125,7 +1127,9 @@ int ObHyperLogLogAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   }
 
   if (OB_SUCC(ret) && nullptr != basic_info_.col_param_ &&
-        !(basic_info_.col_param_->get_orig_default_value().is_nop_value())) {
+        !(basic_info_.col_param_->get_orig_default_datum().is_nop()
+          || (basic_info_.col_param_->get_orig_default_datum().has_ext_value()
+              && basic_info_.col_param_->get_orig_default_datum().get_ext() == ObActionFlag::OP_NOP))) {
     uint64_t hash_value = 0;
     if (OB_FAIL(prepare_def_datum())) {
     } else if (def_datum_.is_null()) {
@@ -1240,7 +1244,9 @@ int ObSumOpSizeAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
   if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
   } else if (OB_FAIL(set_op_size())) {
   } else if (nullptr != basic_info_.col_param_ &&
-             !(basic_info_.col_param_->get_orig_default_value().is_nop_value())) {
+             !(basic_info_.col_param_->get_orig_default_datum().is_nop()
+               || (basic_info_.col_param_->get_orig_default_datum().has_ext_value()
+                   && basic_info_.col_param_->get_orig_default_datum().get_ext() == ObActionFlag::OP_NOP))) {
     if (OB_FAIL(prepare_def_datum())) {
     } else if (OB_FAIL(get_datum_op_size(def_datum_, def_op_size_))) {
     }

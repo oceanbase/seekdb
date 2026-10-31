@@ -1354,9 +1354,11 @@ int ObPushdownFilterExecutor::init_filter_param(
         } else {
           blocksstable::ObStorageDatum default_datum;
           col_param = col_params.at(idx);
-          const common::DatumValue &def_cell = col_param->get_orig_default_value();
+          common::DatumValue def_cell;
+          alignas(8) char default_scratch[64];
           const common::SqlTypeMeta &obj_meta = col_param->get_meta_type();
           if (OB_FAIL(col_params_.push_back(col_param))) {
+          } else if (OB_FAIL(col_param->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
           } else if (!def_cell.is_nop_value()) {
             if (OB_FAIL(default_datum.from_value(def_cell))) {
             } else if (!def_cell.is_null()) {

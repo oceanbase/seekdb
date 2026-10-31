@@ -136,9 +136,9 @@ TEST(NativeStorageColumnSchema, source_lifetime_and_repeated_self_replacement) {
     value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_val(owner,value));
   }
-  EXPECT_EQ("independent payload",std::string(column.get_orig_default_value().get_string_ptr(),column.get_orig_default_value().get_string_len()));
+  EXPECT_EQ("independent payload",std::string(column.get_orig_default_datum().get_string().ptr(),column.get_orig_default_datum().get_string().length()));
   for(int i=0;i<100;++i) {
-    ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_val(owner,column.get_orig_default_value()));
+    ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_datum(owner,column.get_orig_default_datum(),column.get_orig_default_meta()));
     EXPECT_EQ(1,owner.live.size());
   }
   column.info_=7;column.default_checksum_=918;column.meta_type_.set_int();
@@ -179,9 +179,127 @@ TEST(NativeStorageColumnSchema, decoder_rolls_back_all_nested_payload_allocation
 TEST(NativeStorageColumnSchema, typed_null_keeps_column_declaration_and_no_payload) {
   DatumValue input;input.meta_.set_enum();StorageSchemaTestAllocator owner;ObStorageColumnSchema column;
   column.meta_type_.set_enum();ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_val(owner,input));
-  EXPECT_EQ(ObEnumType,column.get_data_type());EXPECT_TRUE(column.get_orig_default_value().is_null());
-  EXPECT_EQ(ObNullType,column.get_orig_default_value().get_type());EXPECT_TRUE(owner.live.empty());
+  EXPECT_EQ(ObEnumType,column.get_data_type());EXPECT_TRUE(column.get_orig_default_datum().is_null());
+  EXPECT_EQ(ObNullType,column.get_orig_default_meta().get_type());EXPECT_TRUE(owner.live.empty());
   column.destroy(owner);
+}
+
+
+TEST(NativeStorageColumnSchema, native_scalar_import_self_copy_and_decode_are_allocation_free)
+{
+  for (const int64_t number : {INT64_MIN,int64_t(0),INT64_MAX}) {
+    SCOPED_TRACE(number);
+    StorageSchemaTestAllocator owner,decode_owner;
+    owner.fail_at=1;decode_owner.fail_at=1;
+    ObStorageColumnSchema column,decoded;
+    column.info_=3;column.default_checksum_=918;column.meta_type_.set_int();
+    {
+      ObArenaAllocator inputs;DatumValue source;
+      ASSERT_EQ(OB_SUCCESS,source.set_int(number,inputs));
+      ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_val(owner,source));
+    }
+    ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_datum(owner,column.get_orig_default_datum(),column.get_orig_default_meta()));
+    EXPECT_EQ(number,column.get_orig_default_datum().get_int());
+    EXPECT_EQ(0,column.get_orig_default_datum().length());
+    const std::string bytes=wire(column);int64_t position=0;
+    ASSERT_EQ(OB_SUCCESS,decoded.deserialize(decode_owner,bytes.data(),bytes.size(),position));
+    EXPECT_EQ(bytes.size(),position);EXPECT_EQ(bytes,wire(decoded));
+    EXPECT_EQ(number,decoded.get_orig_default_datum().get_int());
+    EXPECT_EQ(0,owner.calls);EXPECT_EQ(0,decode_owner.calls);
+    column.clear_default_value(owner);
+    EXPECT_TRUE(column.get_orig_default_datum().is_null());
+    EXPECT_EQ(3,column.info_);EXPECT_EQ(918,column.default_checksum_);EXPECT_EQ(ObIntType,column.meta_type_.get_type());
+    column.destroy(owner);decoded.destroy(decode_owner);
+    EXPECT_TRUE(owner.live.empty());EXPECT_TRUE(decode_owner.live.empty());
+  }
+}
+
+TEST(NativeStorageColumnSchema, empty_reference_defaults_release_their_real_zero_length_allocations)
+{
+  for (const bool decimal : {false,true}) {
+    SCOPED_TRACE(decimal);
+    StorageSchemaTestAllocator owner;ObStorageColumnSchema column;
+    ObArenaAllocator inputs;DatumValue source;
+    if (decimal) { ASSERT_EQ(OB_SUCCESS,source.set_decimal_int(0,5,nullptr,inputs)); }
+    else {
+      ASSERT_EQ(OB_SUCCESS,source.set_varchar(ObString(""),inputs));
+      source.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    }
+    ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_val(owner,source));
+    EXPECT_TRUE(column.get_orig_default_datum().is_present());
+    EXPECT_EQ(0,column.get_orig_default_datum().length());
+    ASSERT_EQ(1,owner.live.size());
+    EXPECT_NE(nullptr,column.get_orig_default_datum().get_reference());
+    ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_datum(owner,column.get_orig_default_datum(),column.get_orig_default_meta()));
+    EXPECT_EQ(1,owner.live.size());
+    column.clear_default_value(owner);
+    EXPECT_TRUE(owner.live.empty());EXPECT_TRUE(column.get_orig_default_datum().is_null());
+    column.destroy(owner);column.destroy(owner);EXPECT_TRUE(owner.live.empty());
+  }
+}
+
+TEST(NativeStorageColumnSchema, native_array_copy_is_independent_and_failed_copy_keeps_existing_record)
+{
+  StorageSchemaTestAllocator original_owner,copy_owner,decode_owner;
+  ObStorageColumnSchema original,copied,decoded;
+  {
+    ObArenaAllocator inputs;const DatumValue array=array_value(inputs,4);
+    ASSERT_EQ(OB_SUCCESS,original.deep_copy_default_val(original_owner,array));
+  }
+  original.info_=7;original.default_checksum_=918;original.meta_type_.set_int();
+  ASSERT_EQ(OB_SUCCESS,copied.deep_copy_default_datum(copy_owner,original.get_orig_default_datum(),original.get_orig_default_meta()));
+  copied.info_=original.info_;copied.default_checksum_=original.default_checksum_;copied.meta_type_=original.meta_type_;
+  EXPECT_NE(original.get_orig_default_datum().get_reference(),copied.get_orig_default_datum().get_reference());
+  const std::string expected=wire(original);
+  original.destroy(original_owner);EXPECT_TRUE(original_owner.live.empty());
+  std::string input=expected;int64_t position=0;
+  ASSERT_EQ(OB_SUCCESS,decoded.deserialize(decode_owner,input.data(),input.size(),position));
+  MEMSET(&input[0],0x5a,input.size());
+  for (const ObStorageColumnSchema *column : {&copied,&decoded}) {
+    alignas(8) char scratch[64];DatumValue view;
+    ASSERT_EQ(OB_SUCCESS,column->export_orig_default_value(view,scratch,sizeof(scratch)));
+    const auto *array=reinterpret_cast<const DatumParameterArray *>(view.get_ext());
+    ASSERT_NE(nullptr,array);ASSERT_EQ(4,array->count_);
+    for (int64_t i=0;i<4;++i) { EXPECT_EQ(i+100,array->data_[i].get_int()); }
+    EXPECT_EQ(expected,wire(*column));
+  }
+  StorageSchemaTestAllocator failing_owner;ObStorageColumnSchema target;put_old_value(target,failing_owner);
+  const std::string before=wire(target);const size_t blocks=failing_owner.live.size();
+  failing_owner.fail_at=failing_owner.calls+1;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,target.deep_copy_default_datum(failing_owner,copied.get_orig_default_datum(),copied.get_orig_default_meta()));
+  EXPECT_EQ(before,wire(target));EXPECT_EQ(blocks,failing_owner.live.size());
+  target.destroy(failing_owner);copied.destroy(copy_owner);decoded.destroy(decode_owner);
+  EXPECT_TRUE(failing_owner.live.empty());EXPECT_TRUE(copy_owner.live.empty());EXPECT_TRUE(decode_owner.live.empty());
+}
+
+TEST(NativeStorageColumnSchema, canonical_and_wrapped_extended_states_release_without_leaks)
+{
+  for (const int64_t marker : {int64_t(-3),int64_t(-2),int64_t(ObActionFlag::OP_NOP)}) {
+    SCOPED_TRACE(marker);
+    ObArenaAllocator inputs;DatumValue source;
+    ASSERT_EQ(OB_SUCCESS,source.set_extend(marker,0,inputs));
+    StorageSchemaTestAllocator owner,decode_owner;
+    ObStorageColumnSchema column,decoded;
+    ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_val(owner,source));
+    EXPECT_EQ(marker,column.get_orig_default_datum().get_ext());
+    EXPECT_TRUE(owner.live.empty()); // Canonical special states own no wrapper.
+    const std::string bytes=wire(column);int64_t position=0;
+    ASSERT_EQ(OB_SUCCESS,decoded.deserialize(decode_owner,bytes.data(),bytes.size(),position));
+    EXPECT_EQ(marker,decoded.get_orig_default_datum().get_ext());
+    EXPECT_TRUE(decode_owner.live.empty()); // Any temporary legacy decoder wrapper was reclaimed.
+    column.destroy(owner);decoded.destroy(decode_owner);
+    EXPECT_TRUE(owner.live.empty());EXPECT_TRUE(decode_owner.live.empty());
+  }
+  ObArenaAllocator inputs;DatumValue boxed;
+  ASSERT_EQ(OB_SUCCESS,boxed.set_extend(ObActionFlag::OP_NOP,0,inputs));
+  Datum wrapped;
+  ASSERT_EQ(OB_SUCCESS,wrapped.set_reference(boxed.datum_.ptr_,boxed.datum_.len_,Datum::LegacyExtended));
+  ASSERT_TRUE(wrapped.has_ext_value());
+  StorageSchemaTestAllocator owner;ObStorageColumnSchema column;
+  ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_datum(owner,wrapped,boxed.meta_));
+  EXPECT_EQ(int64_t(ObActionFlag::OP_NOP),column.get_orig_default_datum().get_ext());
+  EXPECT_TRUE(column.get_orig_default_datum().is_nop() || column.get_orig_default_datum().has_ext_value());
+  column.destroy(owner);EXPECT_TRUE(owner.live.empty());
 }
 
 int main(int argc,char **argv) {

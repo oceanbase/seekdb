@@ -63,8 +63,10 @@ int ObNewColumnCommonDecoder::decode(
 {
   int ret = OB_SUCCESS;
   // it is sure that col_param can not be nullptr here
-  const DatumValue &def_cell = col_param->get_orig_default_value();
-  if (OB_FAIL(copy_column_default_datum(def_cell, datum))) {
+  DatumValue def_cell;
+  alignas(8) char default_scratch[64];
+  if (OB_FAIL(col_param->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+  } else if (OB_FAIL(copy_column_default_datum(def_cell, datum))) {
   } else if (def_cell.is_lob_storage() && !def_cell.is_null()) {
     // lob def value must have no lob header when not null
     // When do lob decode, should add lob header for default value
@@ -90,7 +92,7 @@ int ObNewColumnCommonDecoder::batch_decode(
     if (OB_FAIL(decode(col_param, allocator, datums[i]))) {
     }
   }
-  LOG_DEBUG("[NEW_COLUMN_DECODE] batch decode", K(col_param->get_orig_default_value()), K(row_cap), K(lbt()));
+  LOG_DEBUG("[NEW_COLUMN_DECODE] batch decode", K(col_param->get_orig_default_datum()), K(col_param->get_orig_default_meta()), K(row_cap), K(lbt()));
   return ret;
 }
 
@@ -132,12 +134,12 @@ int ObNewColumnCommonDecoder::get_null_count(
     int64_t &null_count) const
 {
   int ret = OB_SUCCESS;
-  if (col_param->get_orig_default_value().is_null()) {
+  if (col_param->get_orig_default_datum().is_null()) {
     null_count = row_cap;
   } else {
     null_count = 0;
   }
-  LOG_DEBUG("[NEW_COLUMN_DECODE] get null count", K(col_param->get_orig_default_value()), K(null_count), K(lbt()));
+  LOG_DEBUG("[NEW_COLUMN_DECODE] get null count", K(col_param->get_orig_default_datum()), K(col_param->get_orig_default_meta()), K(null_count), K(lbt()));
   return ret;
 }
 
@@ -147,7 +149,10 @@ int ObNewColumnCommonDecoder::read_distinct(
 {
   int ret = OB_SUCCESS;
   common::ObDatum *datums = group_by_cell.get_group_by_col_datums_to_fill();
-  if (OB_FAIL(copy_column_default_datum(col_param->get_orig_default_value(), datums[0]))) {
+  DatumValue def_cell;
+  alignas(8) char default_scratch[64];
+  if (OB_FAIL(col_param->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+  } else if (OB_FAIL(copy_column_default_datum(def_cell, datums[0]))) {
   } else {
     group_by_cell.set_distinct_cnt(1);
   }

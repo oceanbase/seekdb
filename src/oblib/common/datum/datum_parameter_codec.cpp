@@ -635,6 +635,12 @@ void read_schema_native(Datum &datum, SqlTypeMeta &meta, ReadArchive &archive)
       owned.set_null();
       value(owned, meta, archive, 0, false /* include_metadata */);
       if (archive.ret_ == OB_SUCCESS) { archive.ret_ = borrow_schema_native(owned, meta, datum); }
+      // Normalizing an Extend wrapper to a bare MIN/MAX/NOP state leaves no
+      // reference in the native value. An explicit-free owner must not lose
+      // that temporary codec allocation on a successful decode.
+      if (archive.ret_ == OB_SUCCESS && !datum.is_present() && owned.ptr_ != nullptr) {
+        archive.allocator_.free(const_cast<char *>(owned.ptr_));
+      }
       break;
     }
   }
@@ -936,6 +942,25 @@ int DatumParameterCodec::import_schema_native_value(const ObDatum &source, const
   return ret;
 }
 
+void DatumParameterCodec::release_owned_schema_native_value(Datum &value, const SqlTypeMeta &meta,
+    ObIAllocator &allocator)
+{
+  if (value.is_present() && schema_scalar(meta) == SchemaScalar::Reference) {
+    void *bytes = const_cast<void *>(value.get_reference());
+    if (bytes != nullptr) {
+      if (meta.is_ext_sql_array()) {
+        int64_t address = 0;
+        MEMCPY(&address, bytes, sizeof(address));
+        DatumParameterArray::release_array(reinterpret_cast<DatumParameterArray *>(address), allocator);
+      }
+      // Even a zero-length reference owns its allocation. PL and LOB wrappers
+      // keep their existing byte ownership; their external pointees are not ours.
+      allocator.free(bytes);
+    }
+  }
+  value.reset();
+}
+
 int DatumParameterCodec::schema_native_value_size(const Datum &source, const SqlTypeMeta &meta,
     int64_t &size)
 {
@@ -961,6 +986,19 @@ int DatumParameterCodec::decode_schema_native_value(const char *buf, int64_t len
   Datum candidate;
   SqlTypeMeta type;
   ReadArchive archive(buf, length, pos, allocator, true /* allow_omitted_fields */);
+  read_schema_native(candidate, type, archive);
+  if (archive.ret_ == OB_SUCCESS) { output = candidate; meta = type; pos = archive.pos_; }
+  return archive.ret_;
+}
+
+int DatumParameterCodec::decode_unis_native_value(const char *buf, int64_t length, int64_t &pos,
+    ObIAllocator &allocator, Datum &output, SqlTypeMeta &meta)
+{
+  if (!valid_buffer(buf, length, pos)) { return OB_INVALID_ARGUMENT; }
+  Datum candidate;
+  SqlTypeMeta type = meta;
+  ReadArchive archive(buf, length, pos, allocator, true /* allow_omitted_fields */,
+                      true /* allow_missing_string_terminator */);
   read_schema_native(candidate, type, archive);
   if (archive.ret_ == OB_SUCCESS) { output = candidate; meta = type; pos = archive.pos_; }
   return archive.ret_;

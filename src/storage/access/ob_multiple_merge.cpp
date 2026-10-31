@@ -1165,8 +1165,10 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
     if (OB_FAIL(nop_pos_.get_nop_pos(i, pos))) {
     } else {
       idx = access_param_->iter_param_.out_cols_project_->at(pos);
-      DatumValue def_cell(out_cols_param->at(idx)->get_orig_default_value());
-      if (is_lob_storage(def_cell.get_type())
+      DatumValue def_cell;
+      alignas(8) char default_scratch[64];
+      if (OB_FAIL(out_cols_param->at(idx)->export_orig_default_value(def_cell, default_scratch, sizeof(default_scratch)))) {
+      } else if (is_lob_storage(def_cell.get_type())
           && OB_FAIL(fuse_lob_default(def_cell, out_cols_param->at(idx)->get_column_id()))) {
         STORAGE_LOG(WARN, "Fail to fuse lob default, ", K(ret));
       } else if (NULL == access_param_->output_exprs_) {

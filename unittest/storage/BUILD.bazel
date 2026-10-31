@@ -28,3 +28,17 @@ cc_test(
     env = {"LD_LIBRARY_PATH": "src/observer"},
     deps = [":native_rowkey_consumers_cases", "//src/observer:liboceanbase"],
 )
+
+cc_library(
+    name = "native_storage_defaults_cases",
+    srcs = ["test_native_storage_defaults.cpp"],
+    alwayslink = True,
+    deps = ["//src/storage:storage_rowkey_consumers_test_runtime", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_storage_defaults",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_storage_defaults_cases", "//src/observer:liboceanbase"],
+)

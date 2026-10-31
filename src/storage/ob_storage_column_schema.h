@@ -15,6 +15,7 @@
  */
 
 #pragma once
+#include "common/datum/datum.h"
 #include "common/datum/datum_value.h"
 #include "lib/utility/ob_unify_serialize.h"
 namespace oceanbase { namespace storage {
@@ -27,8 +28,8 @@ public:
   int serialize_(char *buf, const int64_t buf_len, int64_t &pos) const;
   int64_t get_serialize_size() const;
   int64_t get_serialize_size_() const;
-  // The record never borrows the input wire. Every decoded payload is owned
-  // by this explicit allocator, including inline-sized scalars and arrays.
+  // The record never borrows the input wire. Scalars are inline; referenced
+  // bytes and SQL-array graphs belong to this explicit allocator.
   int deserialize(ObIAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos);
 private:
   static const int64_t UNIS_VERSION = 1;
@@ -46,11 +47,17 @@ public:
   inline bool is_generated_column() const { return is_generated_column_; }
   inline bool is_column_stored_in_sstable() const { return is_column_stored_in_sstable_;}
   inline bool is_rowkey_column() const { return is_rowkey_column_; }
-  inline const common::DatumValue &get_orig_default_value()  const { return orig_default_value_; }
+  inline const common::Datum &get_orig_default_datum() const { return orig_default_value_; }
+  inline const common::SqlTypeMeta &get_orig_default_meta() const { return orig_default_meta_; }
+  // Export borrows caller scratch for scalars and this owner for references.
+  int export_orig_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_orig_default_value(common::DatumValue &output, ObIAllocator &owner) const;
   int deep_copy_default_val(ObIAllocator &allocator, const common::DatumValue &default_val);
+  int deep_copy_default_datum(ObIAllocator &allocator, const common::Datum &default_val,
+                              const common::SqlTypeMeta &meta);
 
   TO_STRING_KV(K_(meta_type), K_(is_column_stored_in_sstable), K_(is_rowkey_column),
-      K_(is_generated_column), K_(orig_default_value));
+      K_(is_generated_column), K_(orig_default_value), K_(orig_default_meta));
 
 private:
   static const int32_t SCS_ONE_BIT = 1;
@@ -68,7 +75,8 @@ public:
   };
   int64_t default_checksum_;
   SqlTypeMeta meta_type_;
-  common::DatumValue orig_default_value_;
+  common::Datum orig_default_value_;
+  SqlTypeMeta orig_default_meta_;
 };
 
 } }

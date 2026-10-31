@@ -1073,23 +1073,20 @@ int ObTableParam::convert_column_schema_to_param(const ObColumnSchemaV2 &column_
   column_param.set_lob_chunk_size(column_schema.get_lob_chunk_size());
   LOG_DEBUG("convert_column_schema_to_param", K(column_schema), K(column_param), K(lbt()));
   if (column_schema.is_generated_column()) {
-    DatumValue nop_value;
-    char nop_payload[DATUM_EXTEND_PAYLOAD_SIZE];
-    nop_value.datum_.ptr_ = nop_payload;
-    nop_value.datum_.set_extend(ObActionFlag::OP_NOP, 0);
-    nop_value.meta_.set_ext();
-    ret = column_param.set_orig_default_value(nop_value);
+    Datum nop_value;
+    SqlTypeMeta nop_meta;
+    nop_value.set_nop();
+    nop_meta.set_ext();
+    ret = column_param.set_orig_default_datum(nop_value, nop_meta);
     if (OB_SUCC(ret)) {
-      ret = column_param.set_cur_default_value(nop_value);
+      ret = column_param.set_cur_default_datum(nop_value, nop_meta);
     }
   } else {
-    DatumValue default_value;
-    alignas(8) char default_scratch[64];
-    if (OB_FAIL(column_schema.export_orig_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
-    } else if (OB_FAIL(column_param.set_orig_default_value(default_value))) {
-    } else if (OB_FAIL(column_schema.export_cur_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+    if (OB_FAIL(column_param.set_orig_default_datum(
+            column_schema.get_orig_default_datum(), column_schema.get_orig_default_meta()))) {
     } else {
-      ret = column_param.set_cur_default_value(default_value);
+      ret = column_param.set_cur_default_datum(
+          column_schema.get_cur_default_datum(), column_schema.get_cur_default_meta());
     }
   }
   return ret;

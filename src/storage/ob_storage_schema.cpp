@@ -217,7 +217,8 @@ int ObStorageSchema::deep_copy_column_array(
     col_schema.info_ = src_col_schema.info_;
     col_schema.default_checksum_ = src_col_schema.default_checksum_;
     col_schema.meta_type_ = src_col_schema.meta_type_;
-    if (OB_FAIL(col_schema.deep_copy_default_val(allocator, src_col_schema.orig_default_value_))) {
+    if (OB_FAIL(col_schema.deep_copy_default_datum(
+            allocator, src_col_schema.get_orig_default_datum(), src_col_schema.get_orig_default_meta()))) {
     } else if (OB_FAIL(column_array_.push_back(col_schema))) {
       STORAGE_LOG(WARN, "failed to push back col schema", K(ret), K(i), K(copy_array_cnt),
           K(src_schema.column_array_.count()), K(col_schema));
@@ -519,7 +520,7 @@ int ObStorageSchema::deserialize_column_array(
         STORAGE_LOG(WARN, "Fail to add column", K(ret), K(column));
       }
       if (OB_FAIL(ret)) { column.destroy(allocator); }
-      else { column.orig_default_value_.reset(); } // descriptor ownership transferred to array
+      else { column.reset(); } // value and metadata ownership transferred to array
     }
   }
   return ret;
@@ -647,7 +648,8 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
         }
 #endif
       }
-      if (FAILEDx(col_schema.deep_copy_default_val(*allocator_, orig_default_val))) {
+      if (FAILEDx(col_schema.deep_copy_default_datum(
+              *allocator_, col->get_orig_default_datum(), col->get_orig_default_meta()))) {
       } else if (OB_FAIL(column_array_.push_back(col_schema))) {
         STORAGE_LOG(WARN, "Fail to push into column array", K(ret), K(col_schema));
         col_schema.destroy(*allocator_);
@@ -932,12 +934,16 @@ int ObStorageSchema::get_orig_default_row(
       default_row.storage_datums_[i].set_int(0);
     } else {
       const ObStorageColumnSchema *col_schema = nullptr;
+      DatumValue default_value;
+      blocksstable::ObStorageDatum &storage_datum = default_row.storage_datums_[i];
       if (OB_ISNULL(col_schema = get_column_schema(column_ids.at(i).col_id_))) {
         ret = OB_ERR_SYS;
         STORAGE_LOG(WARN, "column id not found", K(ret), K(column_ids.at(i)));
-      } else if (OB_FAIL(default_row.storage_datums_[i].from_value(col_schema->get_orig_default_value()))) {
-      } else if (need_trim && col_schema->get_orig_default_value().get_meta().is_fixed_len_char_type()) {
-        if (OB_FAIL(trim(col_schema->get_orig_default_value().get_collation_type(), default_row.storage_datums_[i]))) {
+      } else if (OB_FAIL(col_schema->export_orig_default_value(
+          default_value, storage_datum.buf_, sizeof(storage_datum.buf_)))) {
+      } else if (OB_FAIL(storage_datum.from_value(default_value))) {
+      } else if (need_trim && col_schema->get_orig_default_meta().is_fixed_len_char_type()) {
+        if (OB_FAIL(trim(col_schema->get_orig_default_meta().get_collation_type(), storage_datum))) {
         }
       }
     }
