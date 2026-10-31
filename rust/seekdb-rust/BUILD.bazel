@@ -25,12 +25,9 @@ rust_static_library(
         "//rust/compression",
         "//rust/spatial-covering:spatial_covering",
         "//rust/uuid-generator:uuid_generator",
-    ] + select({
+    ] + ["//rust/zlib-sys:library"] + select({
         "@platforms//os:emscripten": [],
         "//conditions:default": ["//rust/standby-rpc:standby_rpc"],
-    }) + select({
-        "@platforms//os:windows": [],
-        "//conditions:default": ["//rust/zlib-sys:library"],
     }),
     proc_macro_deps = all_crate_deps(proc_macro = True),
     aliases = aliases(),

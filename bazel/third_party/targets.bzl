@@ -69,7 +69,6 @@ NATIVE_LINK_FILES = [
 _WINDOWS_SHARED = {
     "libcrypto": ("openssl/libcrypto.lib", "openssl_bin/libcrypto-3-x64.dll", []),
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
-    "zlib": ("lib/zlib.lib", "bin/zlib1.dll", []),
     "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
     "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
@@ -84,7 +83,6 @@ _WINDOWS_HEADER_LIBRARIES = {
     "openssl_headers": [":libssl"],
     "roaring_headers": [":roaring"],
     "vsag_headers": [":vsag"],
-    "zlib_headers": [":zlib"],
     "windows_headers": [":pthreads", ":compiler_runtime"],
 }
 
@@ -146,13 +144,7 @@ _SOURCE_HEADERS = {
 
 def sdk_aliases():
     native.alias(name = "zlib_headers", actual = "//rust/zlib-sys:headers")
-    native.alias(
-        name = "zlib",
-        actual = select({
-            "@platforms//os:windows": "@third_party_native//:zlib",
-            "//conditions:default": "//rust/zlib-sys:zlib",
-        }),
-    )
+    native.alias(name = "zlib", actual = "//rust/zlib-sys:zlib")
     cc_library(
         name = "base_libraries",
         deps = [":libcrypto", ":libssl"] + select({
