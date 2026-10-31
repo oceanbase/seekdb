@@ -662,4 +662,53 @@ order by p.cardinality, p.plan_id;
 
 drop table t_issue1439_or_selectivity;
 
+# issue #1489: wide duplicate filters in approximate vector queries should be simplified
+--disable_warnings
+drop table if exists t_issue1489_ann_filter;
+--enable_warnings
+create table t_issue1489_ann_filter(
+  id bigint not null,
+  embedding vector(3) not null,
+  category int not null,
+  age int not null,
+  primary key(id),
+  key idx_category(category),
+  key idx_age(age),
+  vector key idx_embedding(embedding)
+    with (distance=l2, type=hnsw, lib=vsag, m=16, ef_construction=128, ef_search=64));
+insert into t_issue1489_ann_filter values
+  (1, '[0,0,0]', 1, 10),
+  (2, '[1,0,0]', 2, 20),
+  (3, '[2,0,0]', 1, 30);
+
+--let $duplicate_filter = (category = 1) OR (age > 1000)
+--let $loop = 1
+while ($loop < 128)
+{
+  --let $duplicate_filter = $duplicate_filter OR (age > 1000)
+  --inc $loop
+}
+
+alter system flush plan cache;
+--disable_query_log
+--disable_result_log
+eval select id from t_issue1489_ann_filter
+where $duplicate_filter
+order by l2_distance(embedding, '[0,0,0]') approximate limit 10;
+--enable_result_log
+--enable_query_log
+select (count(*) > 0
+        and
+        coalesce(max((char_length(lower(p.filter_predicates)) -
+                      char_length(replace(lower(p.filter_predicates), 'age', ''))) div 3), 0) <= 1
+        and
+        coalesce(max((char_length(lower(p.access_predicates)) -
+                      char_length(replace(lower(p.access_predicates), 'age', ''))) div 3), 0) <= 1)
+       as predicates_deduplicated
+from oceanbase.`V$OB_PLAN_CACHE_PLAN_STAT` s
+join oceanbase.__all_virtual_sql_plan p on p.plan_id = s.plan_id
+where instr(lower(s.statement), 't_issue1489_ann_filter') > 0;
+
+drop table t_issue1489_ann_filter;
+
 alter system set vector_memory_limit = 0;

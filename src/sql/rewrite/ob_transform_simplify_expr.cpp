@@ -26,6 +26,9 @@ using namespace oceanbase::sql;
 
 namespace
 {
+// Keep pairwise deduplication bounded while covering common generated filters.
+const int64_t MAX_DEDUPLICATE_EXPR_COUNT = 256;
+
 int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
 {
   int ret = OB_SUCCESS;
@@ -2618,7 +2621,7 @@ int ObTransformSimplifyExpr::remove_duplicate_exprs(ObQueryCtx* query_ctx,
     //select * from t1 where c1 > 1 and c1 > 1
     //like above stmt, and expr in level 0 is process here
     ObSEArray<ObRawExpr *, 4> param_conds;
-    if (param_count <= 1 || param_count > 100) {
+    if (param_count <= 1 || param_count > MAX_DEDUPLICATE_EXPR_COUNT) {
       /* use too much resource and need add lots of constraints */
     } else if (OB_FAIL(param_conds.assign(conditions))) {
     } else if (OB_FAIL(do_remove_duplicate_exprs(*query_ctx, param_conds))) {
@@ -2662,7 +2665,7 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
     } else if (expr->get_expr_type() == T_OP_OR || expr->get_expr_type() == T_OP_AND) {
       ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
       ObSEArray<ObRawExpr *, 4> param_conds;
-      if (op_expr->get_param_count() > 100) {
+      if (op_expr->get_param_count() > MAX_DEDUPLICATE_EXPR_COUNT) {
         /* use too much resource and need add lots of constraints */
       } else if (OB_FAIL(param_conds.assign(op_expr->get_param_exprs()))) {
       } else if (OB_FAIL(do_remove_duplicate_exprs(query_ctx, param_conds))) {
