@@ -3748,7 +3748,11 @@ int ObRawExprUtils::build_const_int_expr(ObRawExprFactory &expr_factory, SqlValu
     ObAccuracy int_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[type];
     obj_meta.set_type(type);
     obj_meta.set_collation_level(CS_LEVEL_NUMERIC);
-    obj.set_int(int_value);
+    if (ObNullType == type) {
+      obj.set_null();
+    } else {
+      obj.set_int(int_value);
+    }
     OZ (c_expr->set_value_borrowed(obj, obj_meta));
     c_expr->set_accuracy(int_acc);
     OX (expr = c_expr);

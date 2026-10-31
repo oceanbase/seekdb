@@ -636,3 +636,54 @@ TEST_F(NativeRawConstantBuilders, substr_questionmark_monotonicity_constrains_th
     }
   }
 }
+
+
+TEST_F(NativeRawConstantBuilders, null_typed_integer_builder_reaches_native_null_constant_frame)
+{
+  ObArenaAllocator source, plan;
+  ObRawExprFactory factory(source);
+  ObConstRawExpr *missing_default = nullptr, *ordinary_integer = nullptr;
+  // resolve_udf_param_exprs uses this real builder for an omitted UDF
+  // argument. This is not the separate IS_PL_MOCK_DEFAULT_EXPR CALL path.
+  ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(
+      factory, ObNullType, 0, missing_default));
+  ASSERT_NE(nullptr, missing_default);
+  EXPECT_TRUE(missing_default->get_value_datum().is_null());
+  EXPECT_TRUE(missing_default->get_value_meta().is_null());
+  EXPECT_TRUE(missing_default->get_result_type().is_null());
+  EXPECT_FALSE(missing_default->has_flag(IS_PL_MOCK_DEFAULT_EXPR));
+  ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(
+      factory, ObIntType, 17, ordinary_integer));
+  EXPECT_FALSE(ordinary_integer->get_value_datum().is_null());
+  EXPECT_EQ(17, ordinary_integer->get_value_datum().get_int());
+
+  ObRawExprUniqueSet roots(false); // public generate owns flattening/IS_MARKED.
+  ASSERT_EQ(OB_SUCCESS, roots.append(missing_default));
+  ASSERT_EQ(OB_SUCCESS, roots.append(ordinary_integer));
+  ObExprFrameInfo info(plan);
+  ObStaticEngineExprCG generator(plan, nullptr, nullptr, 0, 0);
+  // Keep the preceding state checks nonfatal: the old producer must still
+  // reach the actual full-CG frame allocation and expose its error.
+  ASSERT_EQ(OB_SUCCESS, generator.generate(roots, info));
+  ASSERT_EQ(2, info.rt_exprs_.count());
+  ASSERT_EQ(1, info.const_frame_ptrs_.count());
+  auto *null_runtime = static_cast<ObExpr *>(
+      generator.get_left_value_rt_expr(*missing_default));
+  auto *integer_runtime = static_cast<ObExpr *>(
+      generator.get_left_value_rt_expr(*ordinary_integer));
+  ASSERT_NE(nullptr, null_runtime); ASSERT_NE(nullptr, integer_runtime);
+  EXPECT_EQ(ObNullType, null_runtime->get_sql_type().kind());
+  factory.destory(); source.reuse();
+
+  ObExecContext execution(plan);
+  execution.set_frames(info.const_frame_ptrs_.get_data());
+  execution.set_frame_cnt(info.const_frame_ptrs_.count());
+  ObEvalCtx context(execution);
+  Datum *value = nullptr;
+  ASSERT_EQ(OB_SUCCESS, null_runtime->eval(context, value));
+  ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
+  EXPECT_EQ(0U, value->length());
+  ASSERT_EQ(OB_SUCCESS, integer_runtime->eval(context, value));
+  ASSERT_NE(nullptr, value); EXPECT_FALSE(value->is_null());
+  EXPECT_EQ(17, value->get_int()); EXPECT_EQ(0U, value->length());
+}
