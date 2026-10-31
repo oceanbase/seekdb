@@ -51,6 +51,67 @@ struct CopyTag {
   friend Type member(CopyTag);
 };
 template struct PrivateMember<CopyTag, &Op::copy_datum_row>;
+struct InputStoresTag {
+  using Type = Op::Stores Op::*;
+  friend Type member(InputStoresTag);
+};
+template struct PrivateMember<InputStoresTag, &Op::input_rows_>;
+struct FunctionsTag {
+  using Type = Op::WinFuncCellList Op::*;
+  friend Type member(FunctionsTag);
+};
+template struct PrivateMember<FunctionsTag, &Op::wf_list_>;
+struct ResultsTag {
+  using Type = DatumFixedArray Op::*;
+  friend Type member(ResultsTag);
+};
+template struct PrivateMember<ResultsTag, &Op::curr_row_collect_values_>;
+struct PositionTag {
+  using Type = int (Op::*)(Op::RowsReader &, Op::WinFuncCell &, int64_t,
+      const RARow &, bool, int64_t &, bool &);
+  friend Type member(PositionTag);
+};
+template struct PrivateMember<PositionTag, &Op::get_pos>;
+struct CollectTag {
+  using Type = int (Op::*)(int64_t, ObDatum &, Op::WinFuncCell &);
+  friend Type member(CollectTag);
+};
+template struct PrivateMember<CollectTag, &Op::collect_result>;
+struct OutputTag {
+  using Type = int (Op::*)(int64_t, Op::StoreMemberPtr, const RARow **);
+  friend Type member(OutputTag);
+};
+template struct PrivateMember<OutputTag, &Op::output_row>;
+struct OutputBatchTag {
+  using Type = int (Op::*)(int64_t, Op::RowsStore &, Op::RowsStore &,
+      ObEvalCtx::BatchInfoScopeGuard &);
+  friend Type member(OutputBatchTag);
+};
+template struct PrivateMember<OutputBatchTag, &Op::output_rows_store_rows>;
+
+// The operator normally owns these stores and cells. Tests borrow stack
+// objects only while the actual consumer runs, and unlink them on every exit.
+struct BorrowedStore
+{
+  BorrowedStore(Op::Stores &stores, Op::RowsStore &row_store)
+      : stores_(stores), prior_(stores.cur_) { stores_.cur_ = &row_store; }
+  ~BorrowedStore() { stores_.cur_ = prior_; }
+  Op::Stores &stores_;
+  Op::RowsStore *prior_;
+};
+struct BorrowedFunctions
+{
+  BorrowedFunctions(Op::WinFuncCellList &list, Op::WinFuncCell &first,
+      Op::WinFuncCell &second) : list_(list), first_(first), second_(second)
+  { EXPECT_TRUE(list_.add_last(&first_)); EXPECT_TRUE(list_.add_last(&second_)); }
+  ~BorrowedFunctions() { list_.remove(&second_); list_.remove(&first_); }
+  Op::WinFuncCellList &list_;
+  Op::WinFuncCell &first_;
+  Op::WinFuncCell &second_;
+};
+int failing_ra_compare(const ObDatum &, const ObDatum &, int &result,
+    const ObDatumAccessContext *)
+{ result = 0; return OB_TIMEOUT; }
 
 ObDatum integer(const int64_t &n)
 { return ObDatum(reinterpret_cast<const char *>(&n), sizeof(n), false); }
@@ -184,6 +245,41 @@ protected:
   {
     info.first_row_ = &first; info.last_row_ = &last; info.thread_id_ = thread;
     first.extra_payload<int64_t>() = 0; last.extra_payload<int64_t>() = last_offset;
+  }
+  void ra_store(Op::RowsStore &store)
+  {
+    store.ra_rs_.set_allocator(arena_);
+    ASSERT_EQ(OB_SUCCESS, store.ra_rs_.init(INT64_MAX, ObCtxIds::DEFAULT_CTX_ID, "WinRaCells"));
+  }
+  void ra_add(Op::RowsStore &store, const std::vector<ObDatum> &values)
+  {
+    ObSEArray<ObDatum, 4> array;
+    for (const auto &value : values) { ASSERT_EQ(OB_SUCCESS, array.push_back(value)); }
+    // Bypass operator workarea admission, while retaining the real RA writer,
+    // reader and payload ownership. These tests make no spill claim.
+    ASSERT_EQ(OB_SUCCESS, store.ra_rs_.add_row(array));
+    ++store.stored_row_cnt_; ++store.row_cnt_;
+  }
+  void ra_order(WinFuncInfo &info, SqlValueType result_type = ObIntType)
+  {
+    set_type(0, ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI);
+    set_type(3, result_type);
+    info.set_allocator(&arena_); ASSERT_EQ(OB_SUCCESS, info.init(0, 0, 1));
+    info.expr_ = &exprs_[3];
+    ASSERT_EQ(OB_SUCCESS, info.sort_exprs_.push_back(&exprs_[0]));
+    ASSERT_EQ(OB_SUCCESS, info.sort_collations_.push_back(
+        ObSortFieldCollation(0, CS_TYPE_UTF8MB4_GENERAL_CI, true, NULL_FIRST)));
+    ObCmpFunc cmp; cmp.cmp_func_ = exprs_[0].basic_funcs_->null_first_cmp_;
+    ASSERT_EQ(OB_SUCCESS, info.sort_cmp_funcs_.push_back(cmp));
+  }
+  void ra_peers(Op::RowsStore &store)
+  {
+    ra_store(store);
+    std::string lower = "alpha", upper = "ALPHA", last = "beta";
+    ra_add(store, {null_value()}); ra_add(store, {text(lower)});
+    ra_add(store, {text(upper)}); ra_add(store, {text(last)});
+    lower.assign(lower.size(), 'x'); upper.assign(upper.size(), 'y'); last.assign(last.size(), 'z');
+    ASSERT_EQ(OB_SUCCESS, store.ra_rs_.finish_add_row());
   }
   ObArenaAllocator arena_;
   ObExecContext exec_;
@@ -363,6 +459,182 @@ TEST_F(FixedWindowCells, ra_to_chunk_preflight_errors_do_not_publish_or_modify_d
   EXPECT_EQ(OB_INVALID_ARGUMENT,copy(*source.row_,piece,size,destination.data()));source.row_->row_size_=quota;
   EXPECT_EQ(&sentinel,piece.datum_row_);EXPECT_EQ(7,piece.row_size_);EXPECT_EQ(9,piece.payload_len_);EXPECT_EQ(11,piece.col_count_);
   EXPECT_EQ(original,destination);
+}
+TEST_F(FixedWindowCells, ra_rank_and_dense_rank_keep_null_and_collation_peers)
+{
+  Op::RowsStore rows(op_); ra_peers(rows);
+  WinFuncInfo info; ra_order(info);
+  const int64_t expected[][4] = {{1, 2, 2, 4}, {1, 2, 2, 3}};
+  int function = 0;
+  for (auto kind : {T_WIN_FUN_RANK, T_WIN_FUN_DENSE_RANK}) {
+    info.func_type_ = kind;
+    Op::NonAggrCellRankLike cell(info, op_);
+    Op::RowsReader reader(rows);
+    for (int64_t idx = 0; idx < 4; ++idx) {
+      const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, rows.get_row(idx, row));
+      ObDatum result;
+      ASSERT_EQ(OB_SUCCESS, cell.eval(reader, idx, *row, Op::Frame(0, 3), result));
+      EXPECT_EQ(expected[function][idx], result.get_int());
+    }
+    ++function;
+  }
+}
+
+TEST_F(FixedWindowCells, ra_percent_rank_and_cume_dist_read_owned_peer_rows)
+{
+  Op::RowsStore rows(op_); ra_peers(rows);
+  WinFuncInfo info; ra_order(info, ObDoubleType); info.func_type_ = T_WIN_FUN_PERCENT_RANK;
+  Op::NonAggrCellRankLike percent(info, op_);
+  Op::NonAggrCellCumeDist cumulative(info, op_);
+  Op::RowsReader reader(rows);
+  const double rank[] = {0, 1.0 / 3, 1.0 / 3, 1};
+  const double cume[] = {.25, .75, .75, 1};
+  for (int64_t idx = 0; idx < 4; ++idx) {
+    const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, rows.get_row(idx, row));
+    ObDatum result;
+    ASSERT_EQ(OB_SUCCESS, percent.eval(reader, idx, *row, Op::Frame(0, 3), result));
+    EXPECT_DOUBLE_EQ(rank[idx], result.get_double());
+    ASSERT_EQ(OB_SUCCESS, cumulative.eval(reader, idx, *row, Op::Frame(0, 3), result));
+    EXPECT_DOUBLE_EQ(cume[idx], result.get_double());
+  }
+}
+
+TEST_F(FixedWindowCells, ra_rank_and_cume_comparison_errors_do_not_publish_results)
+{
+  Op::RowsStore rows(op_); ra_peers(rows);
+  WinFuncInfo info; ra_order(info); info.func_type_ = T_WIN_FUN_RANK;
+  info.sort_cmp_funcs_.at(0).cmp_func_ = failing_ra_compare;
+  Op::NonAggrCellRankLike rank(info, op_);
+  Op::NonAggrCellCumeDist cumulative(info, op_);
+  Op::RowsReader reader(rows);
+  const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, rows.get_row(1, row));
+  int64_t sentinel = 71; ObDatum result = integer(sentinel);
+  EXPECT_EQ(OB_TIMEOUT, rank.eval(reader, 1, *row, Op::Frame(0, 3), result));
+  EXPECT_EQ(71, result.get_int()); EXPECT_EQ(0, rank.rank_of_prev_row_);
+  EXPECT_EQ(OB_TIMEOUT, cumulative.eval(reader, 1, *row, Op::Frame(0, 3), result));
+  EXPECT_EQ(71, result.get_int());
+}
+
+TEST_F(FixedWindowCells, ra_current_range_finds_both_peer_boundaries)
+{
+  Op::RowsStore rows(op_); ra_peers(rows);
+  BorrowedStore input(op_.*member(InputStoresTag{}), rows);
+  WinFuncInfo info; ra_order(info); info.win_type_ = WINDOW_RANGE;
+  info.upper_.is_unbounded_ = false; info.lower_.is_unbounded_ = false;
+  Op::NonAggrCellRowNumber cell(info, op_);
+  Op::RowsReader reader(rows);
+  const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, rows.get_row(2, row));
+  int64_t position = -1; bool got_null = true;
+  ASSERT_EQ(OB_SUCCESS, (op_.*member(PositionTag{}))(reader, cell, 2, *row, true, position, got_null));
+  EXPECT_EQ(1, position); EXPECT_FALSE(got_null);
+  ASSERT_EQ(OB_SUCCESS, (op_.*member(PositionTag{}))(reader, cell, 2, *row, false, position, got_null));
+  EXPECT_EQ(2, position); EXPECT_FALSE(got_null);
+  info.sort_cmp_funcs_.at(0).cmp_func_ = failing_ra_compare;
+  EXPECT_EQ(OB_TIMEOUT, (op_.*member(PositionTag{}))(reader, cell, 2, *row, true, position, got_null));
+}
+
+TEST_F(FixedWindowCells, ra_numeric_range_preserves_bound_comparison_errors)
+{
+  Op::RowsStore rows(op_); ra_store(rows);
+  int64_t first = 1, next = 2, bound = 1;
+  ra_add(rows, {integer(first)}); ra_add(rows, {integer(next)});
+  ASSERT_EQ(OB_SUCCESS, rows.ra_rs_.finish_add_row());
+  BorrowedStore input(op_.*member(InputStoresTag{}), rows);
+  WinFuncInfo info; ra_order(info); set_type(0, ObIntType);
+  info.sort_collations_.at(0).cs_type_ = CS_TYPE_BINARY;
+  info.sort_cmp_funcs_.at(0).cmp_func_ = failing_ra_compare;
+  info.win_type_ = WINDOW_RANGE; info.upper_.is_preceding_ = true;
+  info.upper_.is_nmb_literal_ = true; info.upper_.is_unbounded_ = false;
+  info.upper_.between_value_expr_ = &exprs_[1];
+  info.upper_.range_bound_expr_ = &exprs_[2];
+  datum(1) = integer(bound);
+  datum(2) = integer(bound);
+  Op::NonAggrCellRowNumber cell(info, op_); Op::RowsReader reader(rows);
+  const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, rows.get_row(1, row));
+  int64_t position = -1; bool got_null = false;
+  // Previously tmp_ret was logged but ignored, and the caller got success.
+  EXPECT_EQ(OB_TIMEOUT, (op_.*member(PositionTag{}))(reader, cell, 1, *row, true, position, got_null));
+}
+
+TEST_F(FixedWindowCells, ra_collect_result_owns_previous_payload_before_store_reuse)
+{
+  WinFuncInfo first_info, second_info;
+  first_info.expr_ = &exprs_[2]; second_info.expr_ = &exprs_[3];
+  Op::NonAggrCellRowNumber first(first_info, op_), second(second_info, op_);
+  first.wf_idx_ = 1; second.wf_idx_ = 2;
+  Op::RowsStore previous(op_), output(op_); ra_store(previous); ra_store(output);
+  BorrowedStore first_store(first.res_, previous), second_store(second.res_, output);
+  BorrowedFunctions functions(op_.*member(FunctionsTag{}), first, second);
+  auto &scratch = op_.*member(ResultsTag{});
+  ASSERT_EQ(OB_SUCCESS, scratch.init(2));
+  ASSERT_EQ(OB_SUCCESS, scratch.push_back(null_value()));
+  ASSERT_EQ(OB_SUCCESS, scratch.push_back(null_value()));
+  std::string source = "persist"; ObDatum value = text(source); value.flag_ = 2;
+  ra_add(previous, {value}); source.assign(source.size(), 'x');
+  int64_t number = INT64_MAX; ObDatum current = integer(number);
+  ASSERT_EQ(OB_SUCCESS, (op_.*member(CollectTag{}))(0, current, second));
+  const RARow *before = nullptr, *result = nullptr;
+  ASSERT_EQ(OB_SUCCESS, previous.get_row(0, before));
+  ASSERT_EQ(OB_SUCCESS, output.get_row(0, result));
+  ASSERT_EQ(2, result->cnt_);
+  EXPECT_NE(before->stored_cells()[0].ptr_, result->stored_cells()[0].ptr_);
+  MEMSET(const_cast<char *>(before->stored_cells()[0].ptr_), 'y', before->stored_cells()[0].len_);
+  number = 0;
+  EXPECT_EQ("persist", std::string(result->stored_cells()[0].ptr_, result->stored_cells()[0].len_));
+  EXPECT_EQ(2, result->stored_cells()[0].flag_);
+  EXPECT_EQ(INT64_MAX, StoredDatumCodec::decode_legacy_view(result->stored_cells()[1]).get_int());
+}
+
+TEST_F(FixedWindowCells, ra_scalar_output_borrows_result_payload_and_preserves_null_flags)
+{
+  ASSERT_EQ(OB_SUCCESS, spec_.all_expr_.init(1));
+  ASSERT_EQ(OB_SUCCESS, spec_.all_expr_.push_back(&exprs_[0]));
+  WinFuncInfo first_info, second_info;
+  first_info.expr_ = &exprs_[2]; second_info.expr_ = &exprs_[3];
+  Op::NonAggrCellRowNumber first(first_info, op_), second(second_info, op_);
+  Op::RowsStore input_rows(op_), result_rows(op_); ra_store(input_rows); ra_store(result_rows);
+  BorrowedStore input(op_.*member(InputStoresTag{}), input_rows), result(second.res_, result_rows);
+  BorrowedFunctions functions(op_.*member(FunctionsTag{}), first, second);
+  int64_t key = INT64_MIN;
+  std::string text_value = "result"; ObDatum output_value = text(text_value); output_value.flag_ = 2;
+  ra_add(input_rows, {integer(key)}); ra_add(result_rows, {null_value(), output_value});
+  key = 0; text_value.assign(text_value.size(), 'x');
+  const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, result_rows.get_row(0, row));
+  ASSERT_EQ(OB_SUCCESS, (op_.*member(OutputTag{}))(0, &Op::Stores::cur_, nullptr));
+  EXPECT_EQ(INT64_MIN, datum(0).get_int()); EXPECT_TRUE(datum(2).is_null());
+  EXPECT_EQ(row->stored_cells()[1].ptr_, datum(3).ptr_);
+  EXPECT_EQ(row->stored_cells()[1].pack_, datum(3).pack_);
+  EXPECT_EQ("result", std::string(datum(3).ptr_, datum(3).len_));
+}
+
+TEST_F(FixedWindowCells, ra_batch_output_uses_each_row_index_and_advances_both_cursors)
+{
+  ASSERT_EQ(OB_SUCCESS, spec_.all_expr_.init(1));
+  ASSERT_EQ(OB_SUCCESS, spec_.all_expr_.push_back(&exprs_[0]));
+  for (int64_t col = 0; col < 4; ++col) {
+    exprs_[col].batch_result_ = true; exprs_[col].batch_idx_mask_ = UINT64_MAX;
+    exprs_[col].eval_flags_off_ = col * 512 + 128;
+    new (frame_.data() + exprs_[col].datum_off_ + sizeof(ObDatum)) ObDatum;
+  }
+  WinFuncInfo first_info, second_info;
+  first_info.expr_ = &exprs_[2]; second_info.expr_ = &exprs_[3];
+  Op::NonAggrCellRowNumber first(first_info, op_), second(second_info, op_);
+  BorrowedFunctions functions(op_.*member(FunctionsTag{}), first, second);
+  Op::RowsStore input_rows(op_), result_rows(op_); ra_store(input_rows); ra_store(result_rows);
+  int64_t low = INT64_MIN, high = INT64_MAX;
+  ra_add(input_rows, {integer(low)}); ra_add(input_rows, {integer(high)});
+  ra_add(result_rows, {integer(high), null_value()});
+  ra_add(result_rows, {null_value(), integer(low)});
+  low = high = 0;
+  ObEvalCtx::BatchInfoScopeGuard batch(eval_); batch.set_batch_size(2); batch.set_batch_idx(0);
+  ASSERT_EQ(OB_SUCCESS, (op_.*member(OutputBatchTag{}))(2, input_rows, result_rows, batch));
+  EXPECT_EQ(INT64_MIN, exprs_[0].locate_batch_datums(eval_)[0].get_int());
+  EXPECT_EQ(INT64_MAX, exprs_[0].locate_batch_datums(eval_)[1].get_int());
+  EXPECT_EQ(INT64_MAX, exprs_[2].locate_batch_datums(eval_)[0].get_int());
+  EXPECT_TRUE(exprs_[2].locate_batch_datums(eval_)[1].is_null());
+  EXPECT_TRUE(exprs_[3].locate_batch_datums(eval_)[0].is_null());
+  EXPECT_EQ(INT64_MIN, exprs_[3].locate_batch_datums(eval_)[1].get_int());
+  EXPECT_EQ(2, input_rows.output_row_idx_); EXPECT_EQ(2, result_rows.output_row_idx_);
 }
 } // namespace
 

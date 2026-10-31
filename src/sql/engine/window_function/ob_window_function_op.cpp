@@ -828,8 +828,8 @@ int ObWindowFunctionOp::NonAggrCellRankLike::eval(RowsReader &row_reader,
       for (int64_t i = 0; OB_SUCC(ret) && i < sort_cols.count(); ++i) {
         ObDatumCmpFuncType cmp_func = sort_cmp_funcs.at(i).cmp_func_;
         const int64_t idx = sort_collations.at(i).field_idx_;
-        const ObDatum &l_datum = tmp_row->cells()[idx];
-        const ObDatum &r_datum = row.cells()[idx];
+        const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(tmp_row->stored_cells()[idx]);
+        const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(row.stored_cells()[idx]);
         int match = 0;
         if (OB_FAIL(cmp_func(l_datum, r_datum, match, access_ctx))) {
         } else {
@@ -938,8 +938,8 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
       for (int64_t i = 0; should_continue && OB_SUCC(ret) && i < sort_cols.count(); i++) {
         ObDatumCmpFuncType cmp_func = sort_cmp_funcs.at(i).cmp_func_;
         const int64_t idx = sort_collations.at(i).field_idx_;
-        const ObDatum &l_datum = ref_row.cells()[idx];
-        const ObDatum &r_datum = iter_row.cells()[idx];
+        const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(ref_row.stored_cells()[idx]);
+        const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(iter_row.stored_cells()[idx]);
         int match = 0;
         if (OB_FAIL(cmp_func(l_datum, r_datum, match, access_ctx))) {
         } else {
@@ -1960,7 +1960,7 @@ int ObWindowFunctionOp::found_part_end(const WinFuncCell *end, bool add_row_cnt 
               int64_t i = 0;
               ObArray<common::ObDatum> datums;
               for (; OB_SUCC(ret) && i < MY_SPEC.get_child()->output_.count(); ++i) {
-                if (OB_FAIL(datums.push_back(sr->cells()[i]))) {
+                if (OB_FAIL(datums.push_back(StoredDatumCodec::decode_legacy_view(sr->stored_cells()[i])))) {
                 }
               }
               if (OB_FAIL(ret)) {
@@ -2137,7 +2137,8 @@ int ObWindowFunctionOp::output_row(int64_t idx,
       for (int64_t i = 0;
            i < result_row->cnt_ && tmp_wf_cell != NULL;
            ++i, tmp_wf_cell = tmp_wf_cell->get_next()) {
-        tmp_wf_cell->wf_info_.expr_->locate_expr_datum(eval_ctx_) = result_row->cells()[i];
+        tmp_wf_cell->wf_info_.expr_->locate_expr_datum(eval_ctx_) =
+            StoredDatumCodec::decode_legacy_view(result_row->stored_cells()[i]);
         tmp_wf_cell->wf_info_.expr_->set_evaluated_projected(eval_ctx_);
       }
     }
@@ -2700,8 +2701,8 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
           for (int64_t i = 0; OB_SUCC(ret) && i < sort_collations.count() && !match; i++) {
             ObDatumCmpFuncType cmp_func = sort_cmp_funcs.at(i).cmp_func_;
             const int64_t idx = sort_collations.at(i).field_idx_;
-            const ObDatum &l_datum = a_row->cells()[idx];
-            const ObDatum &r_datum = row.cells()[idx];
+            const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(a_row->stored_cells()[idx]);
+            const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(row.stored_cells()[idx]);
             if (OB_FAIL(cmp_func(l_datum, r_datum, cmp_ret, access_ctx))) {
             } else {
               match = (0 != cmp_ret);
@@ -2817,15 +2818,19 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
         if (overflow) {
           match = true;
         } else if (OB_FAIL(row_reader.get_row(pos, a_row))) {
-        } else if (FALSE_IT(cur_val = a_row->cells()[cell_idx])) {
+        } else if (FALSE_IT(cur_val = StoredDatumCodec::decode_legacy_view(a_row->stored_cells()[cell_idx]))) {
           // will not reach here
         } else {
           int cmp_result = 0;
           int tmp_ret = cmp_func(cur_val, *cmp_val, cmp_result, access_ctx);
-          match = ((cmp_mode & L) && cmp_result < 0)
+          if (OB_SUCCESS != tmp_ret) {
+            ret = tmp_ret;
+          } else {
+            match = ((cmp_mode & L) && cmp_result < 0)
                   || ((cmp_mode & LE) && cmp_result <= 0)
                   || ((cmp_mode & G) && cmp_result > 0)
                   || ((cmp_mode & GE) && cmp_result >= 0);
+          }
 
           ObToStringDatum cur_val1(*bound_expr, cur_val);
           ObToStringDatum cmp_val1(*bound_expr, *cmp_val);
@@ -2884,7 +2889,7 @@ int ObWindowFunctionOp::collect_result(const int64_t idx, ObDatum &in_datum, Win
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < prev_stored_row->cnt_; ++i) {
           ObDatum &last_value = curr_row_collect_values_.at(i);
-          last_value = prev_stored_row->cells()[i];
+          last_value = StoredDatumCodec::decode_legacy_view(prev_stored_row->stored_cells()[i]);
         }
       }
     }
@@ -3488,7 +3493,8 @@ int ObWindowFunctionOp::output_rows_store_rows(const int64_t output_row_cnt,
       for (int64_t j = 0;
             j < result_row->cnt_ && tmp_wf_cell != NULL;
             ++j, tmp_wf_cell = tmp_wf_cell->get_next()) {
-        tmp_wf_cell->wf_info_.expr_->locate_expr_datum(eval_ctx_) = result_row->cells()[j];
+        tmp_wf_cell->wf_info_.expr_->locate_expr_datum(eval_ctx_) =
+            StoredDatumCodec::decode_legacy_view(result_row->stored_cells()[j]);
       }
     }
   }
