@@ -385,11 +385,11 @@ int ObDynamicSamplePieceMsgCtx::append_object_sample_data(
       }
       CK(OB_NOT_NULL(store_row));
       if (OB_SUCC(ret)) {
-        ObDatum *cells = store_row->cells();
+        StoredDatumCell *cells = store_row->stored_cells();
         for (int i = 0; i < piece.part_ranges_.at(m).range_cut_.count() && OB_SUCC(ret); ++i) {
           last_store_row_.reuse();
           for (int j = 0; j < piece.part_ranges_.at(m).range_cut_.at(i).count() && OB_SUCC(ret); ++j) {
-            cells[j] = piece.part_ranges_.at(m).range_cut_.at(i).at(j);
+            cells[j] = StoredDatumCodec::encode_legacy_view(piece.part_ranges_.at(m).range_cut_.at(i).at(j));
             store_row->row_size_ += cells[j].len_;
           }
           OZ(sample_store->add_row(last_store_row_));

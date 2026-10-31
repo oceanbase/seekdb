@@ -295,9 +295,10 @@ bool ObPushDownTopNFilterMsg::check_has_null(ObChunkDatumStore::StoredRow *store
 {
   int ret = OB_SUCCESS;
   bool has_null = false;
-  const common::ObDatum *incomming_datums = store_row->cells();
+  const StoredDatumCell *incomming_cells = store_row->stored_cells();
   for (int64_t i = 0; i < heap_top_datums_.count() && OB_SUCC(ret); ++i) {
-    if (incomming_datums[i].is_null()) {
+    const ObDatum incomming_datum = StoredDatumCodec::decode_legacy_view(incomming_cells[i]);
+    if (incomming_datum.is_null()) {
       has_null = true;
       break;
     }
@@ -402,9 +403,9 @@ int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObIArray<ObDatum> &incomm
 int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObChunkDatumStore::StoredRow *store_row)
 {
   int ret = OB_SUCCESS;
-  const common::ObDatum *incomming_datums = store_row->cells();
+  const StoredDatumCell *incomming_cells = store_row->stored_cells();
   for (int64_t i = 0; i < heap_top_datums_.count() && OB_SUCC(ret); ++i) {
-    const ObDatum &incomming_datum = incomming_datums[i];
+    const ObDatum incomming_datum = StoredDatumCodec::decode_legacy_view(incomming_cells[i]);
     ObDatum &origin_datum = heap_top_datums_.at(i);
     int64_t &cell_size = cells_size_.at(i);
     if (OB_FAIL(dynamic_copy_cell(incomming_datum, origin_datum, cell_size))) {

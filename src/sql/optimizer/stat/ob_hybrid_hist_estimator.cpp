@@ -540,10 +540,11 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
             bucket_rows = 0;
             DatumValue ep_val;
             common::ObArenaAllocator tmp_alloctor("BulidHybridHist", OB_MALLOC_NORMAL_BLOCK_SIZE);
-            ObDatum new_datum = row->cells()[0];
+            const ObDatum stored_datum = StoredDatumCodec::decode_legacy_view(row->stored_cells()[0]);
+            ObDatum new_datum = stored_datum;
             if (obj_meta.is_lob_storage() &&
                 OB_FAIL(build_prefix_str_datum_for_lob(tmp_alloctor,
-                                                       obj_meta, row->cells()[0],
+                                                       obj_meta, stored_datum,
                                                        new_datum,
                                                        datum_access_ctx))) {
             } else if (OB_FAIL(sql::ResultRowView::project_value(new_datum, obj_meta,
