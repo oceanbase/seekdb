@@ -18,7 +18,7 @@
 
 
 #include "share/ob_server_struct.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_runtime_controller.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
@@ -48,7 +48,7 @@
 #include "storage/compaction/ob_compaction_progress.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h" // ObSSTableMergeInfoMgr
@@ -137,13 +137,15 @@ static int init_log_service(
   const auto *runtime = share::server_runtime();
   const share::ObServerModuleInitCtx *module_init_ctx =
       OB_ISNULL(runtime) ? nullptr : runtime->get_module_init_ctx();
-  if (OB_ISNULL(module_init_ctx) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>())) {
+  if (OB_ISNULL(module_init_ctx) || OB_ISNULL(GCTX.local_store_)
+      || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "log service composition is incomplete", KR(ret),
         KP(module_init_ctx), KP(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()));
   } else if (OB_FAIL(ObLogService::server_module_init(
       log_service,
       module_init_ctx->palf_options_,
+      *GCTX.local_store_,
       module_init_ctx->clog_dir_,
       OB_FILE_SYSTEM_ROUTER.get_clog_dir(),
       GCTX.self_addr(),
@@ -263,18 +265,13 @@ int ObServerRuntimeController::construct_bootstrap_meta(ObServerRuntimeMeta &met
 {
   int ret = OB_SUCCESS;
 
-
-  ObServerRuntimeSuperBlock super_block(true/*is_hidden*/);
   share::ObServerRuntimeConfig runtime_config;
-  const bool has_memstore = true;
   share::ObServerResourceConfig resource_config;
   if (OB_ISNULL(log_block_mgr_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(resource_config.generate_default(log_block_mgr_->get_log_disk_size()))) {
-  } else if (OB_FAIL(runtime_config.init(resource_config,
-                        lib::Worker::CompatMode::MYSQL,
-                        has_memstore))) {
-  } else if (OB_FAIL(meta.build(runtime_config, super_block))) {
+  } else if (OB_FAIL(runtime_config.init(resource_config))) {
+  } else if (OB_FAIL(meta.build(runtime_config, true /*is_hidden*/))) {
   }
 
   return ret;
@@ -318,14 +315,9 @@ int ObServerRuntimeController::activate_runtime(const ObServerRuntimeConfig &run
   } else if (!runtime->is_hidden()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    HEAP_VAR(ObServerRuntimeSuperBlock, new_super_block) {
-      new_super_block = runtime->get_super_block();
-      new_super_block.is_hidden_ = false;
-      if (OB_FAIL(update_server_resources_no_lock(runtime_config))) {
-      } else if (OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_runtime_super_block(new_super_block))) {
-      } else {
-        runtime->set_server_super_block(new_super_block);
-      }
+    if (OB_FAIL(update_server_resources_no_lock(runtime_config))) {
+    } else {
+      runtime->activate();
     }
   }
 
@@ -466,9 +458,9 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
                                                    max_cpu, min_cpu,
                                                    runtime_config,
                                                    allowed_runtime_config))) {
-  } else if (FALSE_IT(need_persist_config = !(old_runtime_config == allowed_runtime_config))) {
+  } else if (FALSE_IT(need_persist_config = runtime->is_hidden() || !(old_runtime_config == allowed_runtime_config))) {
   } else if (need_persist_config
-             && OB_FAIL(SERVER_STORAGE_META_PERSISTER.update_server_resources(allowed_runtime_config))) {
+             && OB_FAIL(STORAGE_META_SERVICE.write_resources(allowed_runtime_config))) {
   } else {
     if (runtime->min_cpu() != min_cpu) {
       runtime->set_min_cpu(min_cpu);
@@ -677,31 +669,6 @@ int ObServerRuntimeController::get_server_log_disk_size(int64_t &log_disk_size)
   return ret;
 }
 
-int ObServerRuntimeController::get_runtime_meta_for_ckpt(ObServerRuntimeMeta &meta, bool &exist)
-{
-  int ret = OB_SUCCESS;
-  // The runtime pointer is stable between startup and shutdown.
-  exist = false;
-  if (OB_ISNULL(runtime_) || !runtime_active_) {
-  } else {
-    meta = runtime_->get_runtime_meta();
-    exist = true;
-  }
-
-  return ret;
-}
-
-storage::ObServerRuntimeSuperBlock ObServerRuntimeController::get_super_block()
-{
-  return runtime_->get_super_block();
-}
-
-void ObServerRuntimeController::set_server_super_block(
-    const storage::ObServerRuntimeSuperBlock &super_block)
-{
-  runtime_->set_server_super_block(super_block);
-}
-
 bool ObServerRuntimeController::is_hidden()
 {
   return runtime_->is_hidden();
@@ -843,9 +810,7 @@ int ObServerRuntimeController::build_server_resource_config_(ObServerRuntimeConf
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(resource_config.generate_default(log_disk_size))) {
-  } else if (OB_FAIL(runtime_config.init(resource_config,
-                               lib::Worker::CompatMode::MYSQL/*compat_mode*/,
-                               true/*has_memstore*/))) {
+  } else if (OB_FAIL(runtime_config.init(resource_config))) {
   }
   return ret;
 }
@@ -904,9 +869,9 @@ int ObServerRuntimeController::refresh_server_config_()
   int ret = OB_SUCCESS;
   ObServerRuntimeConfig runtime_config;
   ObCurTraceId::init(GCTX.self_addr());
-  if (!SERVER_STORAGE_META_SERVICE.is_started()) {
-    // do nothing if not finish replaying slog
-    LOG_INFO("server slog not finish replaying, need wait");
+  if (!STORAGE_META_SERVICE.is_started()) {
+    // Wait until local storage recovery completes.
+    LOG_INFO("local storage recovery is not finished");
     ret = OB_NEED_RETRY;
   } else if (OB_FAIL(build_server_resource_config_(runtime_config))) {
   } else if (OB_FAIL(apply_server_resource_config_(runtime_config))) {
@@ -984,7 +949,6 @@ void ObServerRuntimeController::runTimerTask()
   if (REACH_TIME_INTERVAL(10000000L)) {  // every 10s
     ObDIActionGuard ag("dump runtime info");
     if (!OB_ISNULL(runtime_)) {
-      ObTaskController::get().allow_next_syslog();
       LOG_INFO("dump runtime info", "runtime", *runtime_);
     }
   }
@@ -1497,7 +1461,6 @@ int ObServer::obs_start_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_local_storage_meta_service_))) { SERVER_LOG(WARN, "mods_local_storage_meta_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_tmp_file_manager_))) { SERVER_LOG(WARN, "mods_tmp_file_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_lock_wait_mgr_))) { SERVER_LOG(WARN, "mods_lock_wait_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_table_lock_service_))) { SERVER_LOG(WARN, "mods_table_lock_service_ fail", KR(ret)); }
@@ -1556,7 +1519,6 @@ void ObServer::obs_stop_modules()
   server_module_stop_default(mods_lock_wait_mgr_);
   server_module_stop_default(mods_tablet_stat_mgr_);
   server_module_stop_default(mods_tmp_file_manager_);
-  server_module_stop_default(mods_local_storage_meta_service_);
   server_module_stop_default(mods_ls_service_);
   server_module_stop_default(mods_log_service_);
   server_module_stop_default(mods_trans_service_);
@@ -1597,7 +1559,6 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_lock_wait_mgr_);
   server_module_wait_default(mods_tablet_stat_mgr_);
   server_module_wait_default(mods_tmp_file_manager_);
-  server_module_wait_default(mods_local_storage_meta_service_);
   // Deferred memtable GC reads the LS log handler until all metadata is released.
   // Drain it before ObLSService::wait() frees the LS and its log handler.
   server_module_wait_default(mods_storage_meta_mem_mgr_);

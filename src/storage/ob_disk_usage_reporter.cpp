@@ -20,7 +20,7 @@
 
 #include "logservice/ob_log_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "logservice/ob_server_log_block_mgr.h"
@@ -72,15 +72,13 @@ void ObDiskUsageReportTask::destroy()
 int ObDiskUsageReportTask::count_server_data()
 {
   int ret = OB_SUCCESS;
-  common::ObSArray<blocksstable::MacroBlockId> block_list;
   ObDiskUsageReportKey meta_key;
   ObDiskUsageReportKey data_key;
   int64_t meta_size = 0;
   int64_t data_size = 0;
   int64_t occupy_size = 0;
 
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_meta_block_list(block_list))) {
-  } else {
+  {
     ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service) || OB_ISNULL(t3m) ) {
@@ -112,7 +110,6 @@ int ObDiskUsageReportTask::count_server_data()
       }
       if (OB_ITER_END == ret || OB_SUCCESS == ret) {
         ret = OB_SUCCESS;
-        meta_size += block_list.count() * OB_DEFAULT_MACRO_BLOCK_SIZE;
       }
     }
   }

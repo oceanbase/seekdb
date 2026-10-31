@@ -1,0 +1,131 @@
+# KILL checks direct and enabled-role SUPER; rejected KILL must leave the target usable.
+--disable_warnings
+DROP USER IF EXISTS 'kill_authz_owner'@'%';
+DROP USER IF EXISTS 'kill_authz_plain'@'%';
+DROP USER IF EXISTS 'kill_authz_direct'@'%';
+DROP USER IF EXISTS 'kill_authz_role'@'%';
+DROP ROLE IF EXISTS kill_authz_admin;
+--enable_warnings
+CREATE USER 'kill_authz_owner'@'%';
+CREATE USER 'kill_authz_plain'@'%';
+CREATE USER 'kill_authz_direct'@'%';
+CREATE USER 'kill_authz_role'@'%';
+CREATE ROLE kill_authz_admin;
+GRANT SUPER ON *.* TO 'kill_authz_direct'@'%';
+GRANT SUPER ON *.* TO kill_authz_admin;
+GRANT kill_authz_admin TO 'kill_authz_role'@'%';
+connect (kill_victim,$OBMYSQL_MS0,kill_authz_owner,,information_schema,$OBMYSQL_PORT);
+--disable_reconnect
+let $kill_target = query_get_value(SELECT CONNECTION_ID() AS id, id, 1);
+connect (kill_plain,$OBMYSQL_MS0,kill_authz_plain,,information_schema,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+# Only this assignment hides the runtime connection ID; all KILL statements and results remain visible.
+--disable_query_log
+eval SET @kill_target = $kill_target;
+--enable_query_log
+--replace_regex /thread [0-9]+/thread <target_id>/
+--error 1095
+KILL QUERY @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_plain;
+--replace_regex /thread [0-9]+/thread <target_id>/
+--error 1095
+KILL CONNECTION @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_plain;
+connect (kill_direct,$OBMYSQL_MS0,kill_authz_direct,,information_schema,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+# Only this assignment hides the runtime connection ID; all KILL statements and results remain visible.
+--disable_query_log
+eval SET @kill_target = $kill_target;
+--enable_query_log
+KILL QUERY @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_direct;
+KILL CONNECTION @kill_target;
+connection kill_victim;
+# Both client errors mean the killed connection is closed; their wording varies by client version.
+--error 2006,2013
+SELECT 1 AS target_alive;
+connection default;
+disconnect kill_victim;
+connect (kill_victim,$OBMYSQL_MS0,kill_authz_owner,,information_schema,$OBMYSQL_PORT);
+--disable_reconnect
+let $kill_target = query_get_value(SELECT CONNECTION_ID() AS id, id, 1);
+connect (kill_role,$OBMYSQL_MS0,kill_authz_role,,information_schema,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+# Only this assignment hides the runtime connection ID; all KILL statements and results remain visible.
+--disable_query_log
+eval SET @kill_target = $kill_target;
+--enable_query_log
+SET ROLE NONE;
+--replace_regex /thread [0-9]+/thread <target_id>/
+--error 1095
+KILL QUERY @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_role;
+--replace_regex /thread [0-9]+/thread <target_id>/
+--error 1095
+KILL CONNECTION @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_role;
+SET ROLE ALL;
+KILL QUERY @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_role;
+SET ROLE NONE;
+--replace_regex /thread [0-9]+/thread <target_id>/
+--error 1095
+KILL QUERY @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_role;
+--replace_regex /thread [0-9]+/thread <target_id>/
+--error 1095
+KILL CONNECTION @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_role;
+SET ROLE ALL;
+KILL CONNECTION @kill_target;
+connection kill_victim;
+# Both client errors mean the killed connection is closed; their wording varies by client version.
+--error 2006,2013
+SELECT 1 AS target_alive;
+connection default;
+disconnect kill_victim;
+connect (kill_victim,$OBMYSQL_MS0,kill_authz_owner,,information_schema,$OBMYSQL_PORT);
+--disable_reconnect
+let $kill_target = query_get_value(SELECT CONNECTION_ID() AS id, id, 1);
+connect (kill_owner,$OBMYSQL_MS0,kill_authz_owner,,information_schema,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+# Only this assignment hides the runtime connection ID; all KILL statements and results remain visible.
+--disable_query_log
+eval SET @kill_target = $kill_target;
+--enable_query_log
+KILL QUERY @kill_target;
+connection kill_victim;
+SELECT 1 AS target_alive;
+connection kill_owner;
+KILL CONNECTION @kill_target;
+connection kill_victim;
+# Both client errors mean the killed connection is closed; their wording varies by client version.
+--error 2006,2013
+SELECT 1 AS target_alive;
+connection default;
+disconnect kill_victim;
+disconnect kill_plain;
+disconnect kill_direct;
+disconnect kill_role;
+disconnect kill_owner;
+DROP USER 'kill_authz_owner'@'%';
+DROP USER 'kill_authz_plain'@'%';
+DROP USER 'kill_authz_direct'@'%';
+DROP USER 'kill_authz_role'@'%';
+DROP ROLE kill_authz_admin;

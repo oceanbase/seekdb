@@ -17,7 +17,7 @@
 #ifndef _OB_WINDOW_FUNCTION_OP_H
 #define _OB_WINDOW_FUNCTION_OP_H 1
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/lock/ob_scond.h"

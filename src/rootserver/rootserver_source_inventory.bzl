@@ -1,7 +1,3 @@
-"""Generated source inventory for the native Rootserver module."""
-
-ROOTSERVER_IGNORED_SOURCES = []
-
 ROOTSERVER_UNITY_GROUPS = [
     struct(
         name = "ob_rootserver_base_common_0",
@@ -18,8 +14,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/dbms_job/ob_dbms_job_executor.cpp",
             "src/rootserver/dbms_job/ob_dbms_job_utils.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_base_maintenance_0",
@@ -32,8 +26,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/freeze/ob_local_major_freeze.cpp",
             "src/rootserver/freeze/ob_snapshot_gc_scn_renewer.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_query_0",
@@ -46,8 +38,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/ob_runtime_ddl_service.cpp",
             "src/rootserver/ob_server_thread_helper.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_storage_common_0",
@@ -59,8 +49,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/ob_tablet_creator.cpp",
             "src/rootserver/ob_tablet_drop.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_storage_freeze_0",
@@ -75,8 +63,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/freeze/ob_major_freeze_coordinator_adapter.cpp",
             "src/rootserver/freeze/ob_major_freeze_util.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_sql_mixed_0",
@@ -87,8 +73,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/pl_ddl/ob_pl_ddl_operator.cpp",
             "src/rootserver/ddl_task/ob_ddl_local_build_executor.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_runtime_common_0",
@@ -103,8 +87,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/ob_root_inspection.cpp",
             "src/rootserver/ob_system_admin_util.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_runtime_common_1",
@@ -118,8 +100,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/ob_objpriv_mysql_ddl_service.cpp",
             "src/rootserver/ob_create_index_on_empty_table_helper.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_runtime_ddl_0",
@@ -146,8 +126,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/ddl_task/ob_vec_ivf_index_build_task.cpp",
             "src/rootserver/ddl_task/ob_drop_lob_task.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_runtime_fork_freeze_0",
@@ -161,8 +139,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/freeze/ob_freeze_info_detector.cpp",
             "src/rootserver/freeze/ob_major_merge_info_manager.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_rootserver_runtime_services_0",
@@ -181,15 +157,13 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/truncate_info/ob_truncate_info_service.cpp",
             "src/rootserver/dbms_job/ob_dbms_job_master.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
 ]
 
 ROOTSERVER_STANDALONE_SOURCES = [
-    struct(path = "src/rootserver/ddl_task/ob_ddl_redefinition_task.cpp", language = "c++", kind = "source"),
-    struct(path = "src/rootserver/ob_ddl_service.cpp", language = "c++", kind = "source"),
-    struct(path = "src/rootserver/ob_ddl_service_launcher.cpp", language = "c++", kind = "source"),
-    struct(path = "src/rootserver/ob_debug_sync_broadcaster_adapter.cpp", language = "c++", kind = "source"),
-    struct(path = "src/rootserver/ob_lonely_table_cleaner.cpp", language = "c++", kind = "source"),
+    "src/rootserver/ddl_task/ob_ddl_redefinition_task.cpp",
+    "src/rootserver/ob_ddl_service.cpp",
+    "src/rootserver/ob_ddl_service_launcher.cpp",
+    "src/rootserver/ob_debug_sync_broadcaster_adapter.cpp",
+    "src/rootserver/ob_lonely_table_cleaner.cpp",
 ]

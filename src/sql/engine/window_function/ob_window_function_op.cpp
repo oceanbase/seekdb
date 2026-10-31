@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
 #include "sql/engine/expr/ob_expr_truncate.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"

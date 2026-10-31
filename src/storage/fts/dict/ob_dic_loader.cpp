@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_FTS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/ob_timeout_ctx.h"
 #include "data_plane/fts/dict/ob_dic_loader.h"

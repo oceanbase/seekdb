@@ -32,7 +32,7 @@ int IndexDMLInfo::deep_copy(ObIRawExprCopier &expr_copier, const IndexDMLInfo &o
 {
   int ret = OB_SUCCESS;
   table_id_ = other.table_id_;
-  loc_table_id_ = other.loc_table_id_;
+  target_table_ref_id_ = other.target_table_ref_id_;
   ref_table_id_ = other.ref_table_id_;
   index_name_ = other.index_name_;
   spk_cnt_ = other.spk_cnt_;
@@ -68,7 +68,7 @@ int IndexDMLInfo::assign_basic(const IndexDMLInfo &other)
 {
   int ret = OB_SUCCESS;
   table_id_ = other.table_id_;
-  loc_table_id_ = other.loc_table_id_;
+  target_table_ref_id_ = other.target_table_ref_id_;
   ref_table_id_ = other.ref_table_id_;
   index_name_ = other.index_name_;
   spk_cnt_ = other.spk_cnt_;
@@ -94,7 +94,7 @@ int IndexDMLInfo::assign(const ObDmlTableInfo &info)
 {
   int ret = OB_SUCCESS;
   table_id_ = info.table_id_;
-  loc_table_id_ = info.loc_table_id_;
+  target_table_ref_id_ = info.target_table_ref_id_;
   ref_table_id_ = info.ref_table_id_;
   index_name_ = info.table_name_;
   need_filter_null_ = info.need_filter_null_;
@@ -257,7 +257,7 @@ ObLogDelUpd::ObLogDelUpd(ObDelUpdLogPlan &plan)
     is_index_maintenance_(false),
     need_barrier_(false),
     is_first_dml_op_(false),
-    table_location_uncertain_(false),
+    has_dynamic_tablets_(false),
     is_pdml_update_split_(false),
     das_dop_(0),
     pdml_partition_id_expr_(NULL),
@@ -361,7 +361,7 @@ int ObLogDelUpd::generate_pdml_partition_id_expr()
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObLogicalOperator::generate_pseudo_partition_id_expr(partition_id_expr))) {
   } else if (OB_FAIL(find_pdml_part_id_producer(get_child(ObLogicalOperator::first_child),
-                                                index_dml_infos_.at(0)->loc_table_id_,
+                                                index_dml_infos_.at(0)->target_table_ref_id_,
                                                 index_dml_infos_.at(0)->ref_table_id_,
                                                 producer,
                                                 src_tsc))) {
@@ -401,7 +401,7 @@ int ObLogDelUpd::generate_ddl_slice_id_expr()
 }
 
 int ObLogDelUpd::find_pdml_part_id_producer(ObLogicalOperator *op,
-                                            const uint64_t loc_tid,
+                                            const uint64_t target_table_ref_id,
                                             const uint64_t ref_tid,
                                             ObLogExchange *&producer,
                                             ObLogTableScan *&src_tsc)
@@ -430,7 +430,7 @@ int ObLogDelUpd::find_pdml_part_id_producer(ObLogicalOperator *op,
     // Later will be optimized, if insert with subplan is a full partition wise
     // join, then allocate a GI operator on the insert operator, currently implemented by allocating an EX operator on the subplan
     ObLogTableScan *tsc = static_cast<ObLogTableScan*>(op);
-    if (loc_tid == tsc->get_table_id() &&
+    if (target_table_ref_id == tsc->get_table_id() &&
         ref_tid == (tsc->get_is_index_global() ? tsc->get_index_table_id() : tsc->get_ref_table_id())) {
       src_tsc = tsc;
       producer = NULL;
@@ -442,7 +442,7 @@ int ObLogDelUpd::find_pdml_part_id_producer(ObLogicalOperator *op,
       producer = static_cast<ObLogExchange*>(op);
     }
     for (int64_t i = 0; OB_SUCC(ret) && NULL == src_tsc && i < op->get_num_of_child(); i++) {
-      if (OB_FAIL(SMART_CALL(find_pdml_part_id_producer(op->get_child(i), loc_tid, ref_tid, producer, src_tsc)))) {
+      if (OB_FAIL(SMART_CALL(find_pdml_part_id_producer(op->get_child(i), target_table_ref_id, ref_tid, producer, src_tsc)))) {
       }
     }
     if (OB_SUCC(ret) && NULL != src_tsc && op->get_type() == log_op_def::LOG_EXCHANGE
@@ -621,13 +621,13 @@ int ObLogDelUpd::allocate_expr_post(ObAllocExprContext &ctx)
   return ret;
 }
 
-// table id for location lookup.
-uint64_t ObLogDelUpd::get_loc_table_id() const
+// table id for access lookup.
+uint64_t ObLogDelUpd::get_target_table_ref_id() const
 {
   uint64_t tid = common::OB_INVALID_ID;
   if (!get_index_dml_infos().empty() &&
       NULL != get_index_dml_infos().at(0)) {
-    tid = get_index_dml_infos().at(0)->loc_table_id_;
+    tid = get_index_dml_infos().at(0)->target_table_ref_id_;
   }
   return tid;
 }
@@ -671,7 +671,7 @@ int ObLogDelUpd::compute_sharding_info()
   } else if (!(is_pdml() || get_das_dop() > 0)) {
     is_partition_wise_ = !is_multi_part_dml_ && !child->is_exchange_allocated() &&
                          get_sharding()->is_distributed() &&
-                         NULL != get_sharding()->get_phy_table_location_info();
+                         NULL != get_sharding()->get_access_targets();
   }
   return ret;
 }
@@ -690,19 +690,19 @@ int ObLogDelUpd::compute_plan_type()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::compute_plan_type())) {
   } else if (is_multi_part_dml()) {
-    location_type_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
+    access_shape_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;
   } else { /*do nothing*/ }
   return ret;
 }
 
-int ObLogDelUpd::get_table_location_type(ObTableLocationType &type)
+int ObLogDelUpd::get_table_access_shape(TableAccessShape &type)
 {
   int ret = OB_SUCCESS;
-  type = OB_TBL_LOCATION_UNINITIALIZED;
+  type = TABLE_ACCESS_UNINITIALIZED;
   if (OB_ISNULL(table_partition_info_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    type = table_partition_info_->get_location_type();
+    type = table_partition_info_->get_access_shape();
   }
   return ret;
 }
@@ -716,7 +716,7 @@ int ObLogDelUpd::assign_dml_infos(const ObIArray<IndexDMLInfo *> &index_dml_info
     if (OB_ISNULL(index_dml_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (index_dml_infos.at(i)->is_primary_index_ &&
-               OB_FAIL(loc_table_list_.push_back(index_dml_infos.at(i)->loc_table_id_))) {
+               OB_FAIL(target_table_ref_ids_.push_back(index_dml_infos.at(i)->target_table_ref_id_))) {
     }
   }
   return ret;
@@ -729,20 +729,20 @@ int ObLogDelUpd::add_index_dml_info(IndexDMLInfo *index_dml_info)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(index_dml_infos_.push_back(index_dml_info))) {
   } else if (index_dml_info->is_primary_index_ &&
-               OB_FAIL(loc_table_list_.push_back(index_dml_info->loc_table_id_))) {
+               OB_FAIL(target_table_ref_ids_.push_back(index_dml_info->target_table_ref_id_))) {
   }
   return ret;
 }
 
 
-int ObLogDelUpd::get_index_dml_infos(uint64_t loc_table_id,
+int ObLogDelUpd::get_index_dml_infos(uint64_t target_table_ref_id,
                                      ObIArray<IndexDMLInfo *> &index_infos)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < index_dml_infos_.count(); ++i) {
     if (OB_ISNULL(index_dml_infos_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (index_dml_infos_.at(i)->loc_table_id_ != loc_table_id) {
+    } else if (index_dml_infos_.at(i)->target_table_ref_id_ != target_table_ref_id) {
       // do nothing
     } else if (OB_FAIL(index_infos.push_back(index_dml_infos_.at(i)))) {
     }
@@ -754,19 +754,19 @@ int ObLogDelUpd::get_index_dml_infos(uint64_t loc_table_id,
 const IndexDMLInfo* ObLogDelUpd::get_primary_dml_info() const
 {
   const IndexDMLInfo *ret = NULL;
-  if (1 == loc_table_list_.count()) {
-    ret = get_primary_dml_info(loc_table_list_.at(0));
+  if (1 == target_table_ref_ids_.count()) {
+    ret = get_primary_dml_info(target_table_ref_ids_.at(0));
   }
   return ret;
 }
 
-IndexDMLInfo* ObLogDelUpd::get_primary_dml_info(uint64_t loc_table_id)
+IndexDMLInfo* ObLogDelUpd::get_primary_dml_info(uint64_t target_table_ref_id)
 {
   IndexDMLInfo *ret = NULL;
   for (int64_t i = 0; i < index_dml_infos_.count(); ++i) {
     if (NULL == index_dml_infos_.at(i)) {
       // do nothing
-    } else if (index_dml_infos_.at(i)->loc_table_id_ == loc_table_id &&
+    } else if (index_dml_infos_.at(i)->target_table_ref_id_ == target_table_ref_id &&
                index_dml_infos_.at(i)->is_primary_index_) {
       ret = index_dml_infos_.at(i);
       break;
@@ -775,13 +775,13 @@ IndexDMLInfo* ObLogDelUpd::get_primary_dml_info(uint64_t loc_table_id)
   return ret;
 }
 
-const IndexDMLInfo* ObLogDelUpd::get_primary_dml_info(uint64_t loc_table_id) const
+const IndexDMLInfo* ObLogDelUpd::get_primary_dml_info(uint64_t target_table_ref_id) const
 {
   const IndexDMLInfo *ret = NULL;
   for (int64_t i = 0; i < index_dml_infos_.count(); ++i) {
     if (NULL == index_dml_infos_.at(i)) {
       // do nothing
-    } else if (index_dml_infos_.at(i)->loc_table_id_ == loc_table_id &&
+    } else if (index_dml_infos_.at(i)->target_table_ref_id_ == target_table_ref_id &&
                index_dml_infos_.at(i)->is_primary_index_) {
       ret = index_dml_infos_.at(i);
       break;
@@ -792,7 +792,7 @@ const IndexDMLInfo* ObLogDelUpd::get_primary_dml_info(uint64_t loc_table_id) con
 
 const ObIArray<uint64_t>& ObLogDelUpd::get_table_list() const
 {
-  return loc_table_list_;
+  return target_table_ref_ids_;
 }
 
 int ObLogDelUpd::get_table_index_name(const IndexDMLInfo &index_info,
@@ -813,7 +813,7 @@ int ObLogDelUpd::get_table_index_name(const IndexDMLInfo &index_info,
       const ObDmlTableInfo* table_info = table_infos.at(i);
       if (OB_ISNULL(table_info)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (table_info->loc_table_id_ != index_info.loc_table_id_) {
+      } else if (table_info->target_table_ref_id_ != index_info.target_table_ref_id_) {
         // do nothing
       } else if (OB_ISNULL(table_item = stmt->get_table_item_by_id(table_info->table_id_))) {
         ret = OB_ERR_UNEXPECTED;
@@ -858,7 +858,7 @@ int ObLogDelUpd::print_table_infos(const ObString &prefix,
         BUF_PRINTF(": (");
         int64_t j = i + 1;
         for (; j < index_dml_infos.count() &&
-             index_dml_infos.at(j)->loc_table_id_ == dml_info->loc_table_id_; ++j);
+             index_dml_infos.at(j)->target_table_ref_id_ == dml_info->target_table_ref_id_; ++j);
         for (; i < j; ++i) {
           pos += index_dml_infos.at(i)->to_explain_string(buf + pos, buf_len - pos, type);
           BUF_PRINTF(", ");
@@ -933,7 +933,7 @@ int ObLogDelUpd::generate_old_calc_partid_expr(IndexDMLInfo &index_info)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_plan()->gen_calc_part_id_expr(index_info.loc_table_id_,
+  } else if (OB_FAIL(get_plan()->gen_calc_part_id_expr(index_info.target_table_ref_id_,
                                                       index_info.ref_table_id_,
                                                       CALC_PARTITION_TABLET_ID,
                                                       index_info.old_part_id_expr_))) {
@@ -947,7 +947,7 @@ int ObLogDelUpd::generate_lookup_part_id_expr(IndexDMLInfo &index_info)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_plan()->gen_calc_part_id_expr(index_info.loc_table_id_,
+  } else if (OB_FAIL(get_plan()->gen_calc_part_id_expr(index_info.target_table_ref_id_,
                                                       index_info.ref_table_id_,
                                                       CALC_PARTITION_TABLET_ID,
                                                       index_info.lookup_part_id_expr_))) {

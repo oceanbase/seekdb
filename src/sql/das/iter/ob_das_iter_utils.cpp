@@ -2636,8 +2636,6 @@ int ObDASIterUtils::create_global_lookup_iter_tree(const ObTableScanCtDef &tsc_c
     param.need_update_partition_id_ = false;
     param.used_for_keep_order_ = tsc_ctdef.is_das_keep_order_;
     if (OB_FAIL(create_das_iter(exec_ctx.get_allocator(), param, data_table_iter))) {
-    } else {
-      index_table_iter->set_global_lookup_iter(data_table_iter);
     }
   }
 

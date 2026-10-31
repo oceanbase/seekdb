@@ -348,7 +348,7 @@ loop:
   return 0;
 }
 void ob_hash_sort_8bit_bin(const ObCharsetInfo *cs,
-              const uchar *key, size_t len, ulong *nr1, ulong *nr2, const bool calc_end_space, hash_algo hash_algo)
+              const uchar *key, size_t len, uint64_t *nr1, uint64_t *nr2, const bool calc_end_space, hash_algo hash_algo)
 {
   const uchar *pos = key;
   key += len;
@@ -360,7 +360,7 @@ void ob_hash_sort_8bit_bin(const ObCharsetInfo *cs,
   {
     for (; pos < (uchar*) key ; pos++)
     {
-      nr1[0]^=(ulong) ((((uint) nr1[0] & 63)+nr2[0]) *
+      nr1[0]^=(uint64_t) ((((uint) nr1[0] & 63)+nr2[0]) *
         ((uint)*pos)) + (nr1[0] << 8);
       nr2[0]+=3;
     }
@@ -370,7 +370,7 @@ void ob_hash_sort_8bit_bin(const ObCharsetInfo *cs,
 }
 void ob_hash_sort_bin(const ObCharsetInfo *cs __attribute__((unused)),
                       const unsigned char *key, size_t len,
-                      unsigned long int *nr1, unsigned long int *nr2, 
+                      uint64_t *nr1, uint64_t *nr2,
                       const bool calc_end_space,
                       hash_algo hash_algo)
 {
@@ -378,7 +378,7 @@ void ob_hash_sort_bin(const ObCharsetInfo *cs __attribute__((unused)),
   key+= len;
   if (NULL == hash_algo) {
     while (pos < (unsigned char*) key) {
-      nr1[0]^=(unsigned long int) ((((unsigned int) nr1[0] & 63)+nr2[0]) *
+      nr1[0]^=(uint64_t) ((((unsigned int) nr1[0] & 63)+nr2[0]) *
         ((unsigned int)*pos)) + (nr1[0] << 8);
       nr2[0]+=3;
       pos++;

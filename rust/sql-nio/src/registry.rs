@@ -37,7 +37,7 @@ pub(crate) fn insert_conn_mapping(conn: &Arc<Conn>) {
         .insert(key, Arc::downgrade(conn));
 }
 
-pub(crate) fn conn_of_live_or_retired(sess: *mut c_void) -> Option<Arc<Conn>> {
+pub(crate) fn conn_of_live_or_retired(sess: *mut ObSqlSockSession) -> Option<Arc<Conn>> {
     conn_shard(sess as usize)
         .read()
         .unwrap()
@@ -45,7 +45,7 @@ pub(crate) fn conn_of_live_or_retired(sess: *mut c_void) -> Option<Arc<Conn>> {
         .and_then(Weak::upgrade)
 }
 
-pub(crate) fn conn_of(sess: *mut c_void) -> Option<Arc<Conn>> {
+pub(crate) fn conn_of(sess: *mut ObSqlSockSession) -> Option<Arc<Conn>> {
     conn_of_live_or_retired(sess).filter(|conn| !conn.close_notified.load(Ordering::Acquire))
 }
 
@@ -56,9 +56,8 @@ pub struct NioConnectionHandle {
 /// # Safety
 /// `sess` is null or points at a live, fully constructed C++ session registered
 /// with this SQL-NIO instance.
-#[no_mangle]
-pub unsafe extern "C" fn nio_connection_handle_acquire(
-    sess: *mut c_void,
+pub unsafe fn nio_connection_handle_acquire(
+    sess: *mut ObSqlSockSession,
 ) -> *mut NioConnectionHandle {
     match conn_of(sess) {
         Some(conn) => Box::into_raw(Box::new(NioConnectionHandle { conn })),
@@ -69,10 +68,7 @@ pub unsafe extern "C" fn nio_connection_handle_acquire(
 /// # Safety
 /// `connection_handle` is null or is an unreleased value returned by
 /// `nio_connection_handle_acquire`.
-#[no_mangle]
-pub unsafe extern "C" fn nio_connection_handle_release(
-    connection_handle: *mut NioConnectionHandle,
-) {
+pub unsafe fn nio_connection_handle_release(connection_handle: *mut NioConnectionHandle) {
     if !connection_handle.is_null() {
         drop(unsafe { Box::from_raw(connection_handle) });
     }

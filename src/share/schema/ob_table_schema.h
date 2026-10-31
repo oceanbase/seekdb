@@ -18,6 +18,7 @@
 #define OCEANBASE_SCHEMA_TABLE_SCHEMA
 
 #include <string.h>
+#include <inttypes.h>
 #include "share/session/ob_local_session_var.h"
 #include "share/rc/ob_server_runtime.h"  // SERVER_ID
 #include <stdlib.h>
@@ -974,6 +975,11 @@ public:
                                             const common::ObString &table_name,
                                             common::ObIAllocator &allocator,
                                             ObConstraintType cst_type);
+  static int create_cons_name_for_recyclebin(common::ObString &cst_name,
+                                            common::ObIAllocator &allocator,
+                                            ObConstraintType cst_type,
+                                            const uint64_t table_id,
+                                            const uint64_t constraint_id);
   static int create_cons_name_automatically_with_dup_check(common::ObString &cst_name,
                                                   const common::ObString &table_name,
                                                   common::ObIAllocator &allocator,
@@ -2047,7 +2053,7 @@ int ObTableSchema::build_index_table_name(Allocator &allocator,
   int nwrite = 0;
   const int64_t buf_size = 64;
   char buf[buf_size];
-  if ((nwrite = snprintf(buf, buf_size, "%lu", data_table_id)) >= buf_size || nwrite < 0) {
+  if ((nwrite = snprintf(buf, buf_size, "%" PRIu64, data_table_id)) >= buf_size || nwrite < 0) {
     ret = common::OB_BUF_NOT_ENOUGH;
     SHARE_SCHEMA_LOG(WARN, "buf is not large enough", K(buf_size), K(data_table_id), K(ret));
   } else {
@@ -2096,7 +2102,7 @@ int ObSimpleTableSchemaV2::get_index_name(Allocator &allocator, uint64_t table_i
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_SCHEMA_LOG(WARN, "invalid argument", K(ret), K(table_id), K(src));
   } else {
-    int64_t n = snprintf(table_id_buf, BUF_SIZE, "%lu", table_id);
+    int64_t n = snprintf(table_id_buf, BUF_SIZE, "%" PRIu64, table_id);
     if (n < 0 || n >= BUF_SIZE) {
       ret = common::OB_BUF_NOT_ENOUGH;
       SHARE_SCHEMA_LOG(WARN, "buffer not enough", K(ret), K(n), LITERAL_K(BUF_SIZE));

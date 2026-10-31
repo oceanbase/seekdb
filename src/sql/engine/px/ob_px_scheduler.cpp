@@ -322,12 +322,12 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
       pkt.rc_, pkt.err_msg_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(pkt.rc_)) {
-      DAS_CTX(ctx).save_cur_exec_status(pkt.rc_);
+      DAS_CTX(ctx).record_access_error(pkt.rc_);
       log_warn_sqc_fail(ret, pkt, sqc);
     } else {
       // pkt rc_ == OB_SUCCESS
       // Process dml + px framework affected row
-      DAS_CTX(ctx).save_cur_exec_status(pkt.das_retry_rc_);
+      DAS_CTX(ctx).record_access_error(pkt.das_retry_rc_);
       if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
       } else  {

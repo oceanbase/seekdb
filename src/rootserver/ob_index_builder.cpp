@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_index_builder.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 

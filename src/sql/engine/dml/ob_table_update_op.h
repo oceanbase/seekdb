@@ -94,10 +94,10 @@ protected:
   int inner_open_with_das();
   int update_row_to_das();
   int upd_rows_post_proc();
-  int calc_tablet_loc(const ObUpdCtDef &upd_ctdef,
+  int resolve_tablet_access(const ObUpdCtDef &upd_ctdef,
                       ObUpdRtDef &upd_rtdef,
-                      ObDASTabletLoc *&old_tablet_loc,
-                      ObDASTabletLoc *&new_tablet_loc);
+                      DASRuntimeTabletAccess *&old_tablet_access,
+                      DASRuntimeTabletAccess *&new_tablet_access);
   int calc_multi_tablet_id(const ObUpdCtDef &upd_ctdef,
                            ObExpr &part_id_expr,
                            common::ObTabletID &tablet_id,

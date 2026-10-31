@@ -1,0 +1,37 @@
+# Search preserves UTF-8/quote/backslash/NUL values and checks caller SELECT grants.
+connection default;
+--enable_query_log
+--enable_result_log
+--disable_warnings
+DROP DATABASE IF EXISTS hybrid_search_security;
+DROP USER IF EXISTS hybrid_search_reader;
+--enable_warnings
+CREATE DATABASE hybrid_search_security;
+CREATE TABLE hybrid_search_security.docs (body VARCHAR(100));
+SET @needle = CONVERT(X'E4B8AD71756F7465276261636B5C736C61736800656E64' USING utf8mb4);
+INSERT INTO hybrid_search_security.docs VALUES (@needle), ('ordinary');
+SELECT HEX(body) AS stored_literal_hex FROM hybrid_search_security.docs WHERE body = @needle;
+SET @request = JSON_OBJECT('query', JSON_OBJECT('term', JSON_OBJECT('body', @needle)));
+SELECT JSON_LENGTH(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request)) AS matched_rows;
+SELECT HEX(JSON_UNQUOTE(JSON_EXTRACT(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request), '$[0].body'))) AS returned_literal_hex;
+SELECT JSON_UNQUOTE(JSON_EXTRACT(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request), '$[0].body')) = @needle AS literal_roundtrip;
+SET @saved_sql_mode = @@sql_mode;
+SET sql_mode = 'NO_BACKSLASH_ESCAPES';
+SELECT JSON_UNQUOTE(JSON_EXTRACT(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request), '$[0].body')) = @needle AS no_backslash_roundtrip;
+SET sql_mode = @saved_sql_mode;
+CREATE USER hybrid_search_reader;
+GRANT EXECUTE ON oceanbase.* TO hybrid_search_reader;
+# INSERT permits database access without granting the SELECT required by SEARCH.
+GRANT INSERT ON hybrid_search_security.docs TO hybrid_search_reader;
+connect (hybrid_reader,$OBMYSQL_MS0,hybrid_search_reader,,oceanbase,$OBMYSQL_PORT);
+connection hybrid_reader;
+--error 1142
+SELECT DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', '{}');
+connection default;
+GRANT SELECT ON hybrid_search_security.docs TO hybrid_search_reader;
+connection hybrid_reader;
+SELECT JSON_LENGTH(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', '{}')) AS authorized_rows;
+connection default;
+disconnect hybrid_reader;
+DROP USER hybrid_search_reader;
+DROP DATABASE hybrid_search_security;

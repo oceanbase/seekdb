@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/objectpool/ob_resource_pool.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"

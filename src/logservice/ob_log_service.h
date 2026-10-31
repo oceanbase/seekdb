@@ -71,6 +71,7 @@ public:
   static int server_module_init(
       ObLogService *&logservice,
       const palf::PalfOptions &options,
+      share::LocalStore &store,
       const char *runtime_clog_dir,
       const char *clog_dir,
       const common::ObAddr &self,
@@ -88,6 +89,7 @@ public:
   void destroy();
 public:
   int init(const palf::PalfOptions &options,
+           share::LocalStore &store,
            const char *base_dir,
            const common::ObAddr &self,
            common::ObILogAllocator *alloc_mgr,

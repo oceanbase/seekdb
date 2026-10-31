@@ -23,7 +23,7 @@
 #include "lib/allocator/page_arena.h"
 #include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/optimizer/ob_phy_table_location_info.h"
+#include "sql/optimizer/table_access_targets.h"
 
 namespace oceanbase
 {
@@ -44,11 +44,11 @@ public:
     : part_level_(share::schema::PARTITION_LEVEL_MAX),
       part_func_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
       subpart_func_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
-      location_type_(OB_TBL_LOCATION_UNINITIALIZED),
+      access_shape_(TABLE_ACCESS_UNINITIALIZED),
       part_num_(0),
       partition_keys_(),
       sub_partition_keys_(),
-      phy_table_location_info_(NULL),
+      table_access_targets_(NULL),
       partition_array_ (NULL),
       all_tablet_ids_(),
       all_partition_indexes_(),
@@ -56,15 +56,15 @@ public:
       is_partition_single_(false),
       is_subpartition_sinlge_(false)
   {}
-  ObShardingInfo(ObTableLocationType type)
+  ObShardingInfo(TableAccessShape type)
   : part_level_(share::schema::PARTITION_LEVEL_MAX),
     part_func_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
     subpart_func_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
-    location_type_(type),
+    access_shape_(type),
     part_num_(0),
     partition_keys_(),
     sub_partition_keys_(),
-    phy_table_location_info_(NULL),
+    table_access_targets_(NULL),
     partition_array_ (NULL),
     all_tablet_ids_(),
     all_partition_indexes_(),
@@ -82,27 +82,27 @@ public:
                           const ObDMLStmt &stmt,
                           const uint64_t table_id,
                           const uint64_t ref_table_id,
-                          const ObCandiTableLoc &phy_table_location_info);
+                          const TableAccessTargets &table_access_targets);
   const common::ObIArray<ObRawExpr*> &get_partition_keys() const { return partition_keys_; }
   common::ObIArray<ObRawExpr*> &get_partition_keys() { return partition_keys_; }
   const common::ObIArray<ObRawExpr*> &get_sub_partition_keys() const { return sub_partition_keys_; }
   common::ObIArray<ObRawExpr*> &get_sub_partition_keys() { return sub_partition_keys_; }
   const common::ObIArray<ObRawExpr*> &get_partition_func() const { return part_func_exprs_; }
   common::ObIArray<ObRawExpr*> &get_partition_func() { return part_func_exprs_; }
-  inline ObCandiTableLoc *get_phy_table_location_info()
+  inline TableAccessTargets *get_access_targets()
   {
-    return const_cast<ObCandiTableLoc *>
-      (static_cast<const ObShardingInfo&>(*this).get_phy_table_location_info());
+    return const_cast<TableAccessTargets *>
+      (static_cast<const ObShardingInfo&>(*this).get_access_targets());
   }
-  inline const ObCandiTableLoc *get_phy_table_location_info() const
-  { return phy_table_location_info_; }
+  inline const TableAccessTargets *get_access_targets() const
+  { return table_access_targets_; }
 
-  inline void set_phy_table_location_info(ObCandiTableLoc *phy_loc_info)
-  { phy_table_location_info_ = phy_loc_info; }
+  inline void set_access_targets(TableAccessTargets *access_targets)
+  { table_access_targets_ = access_targets; }
 
   inline int64_t get_part_cnt() const
   {
-    return NULL == phy_table_location_info_ ? 0 : phy_table_location_info_->get_partition_cnt();
+    return NULL == table_access_targets_ ? 0 : table_access_targets_->get_tablet_count();
   }
   // Partition-related getter
   inline share::schema::ObPartitionLevel get_part_level() const { return part_level_;}
@@ -200,55 +200,55 @@ public:
   static int extract_partition_key(const common::ObIArray<ObShardingInfo *> &input_shardings,
                                    ObIArray<ObSEArray<ObRawExpr*, 8>> &partition_key_list);
 
-  inline void set_location_type(ObTableLocationType location_type)
+  inline void set_access_shape(TableAccessShape access_shape)
   {
-    location_type_ = location_type;
+    access_shape_ = access_shape;
   }
-  inline ObTableLocationType get_location_type() const
+  inline TableAccessShape get_access_shape() const
   {
-    return location_type_;
+    return access_shape_;
   }
   inline bool is_sharding() const
   {
-    return OB_TBL_LOCATION_DISTRIBUTED == location_type_;
+    return TABLE_ACCESS_MULTI_TABLET == access_shape_;
   }
   inline bool is_distributed() const
   {
-    return OB_TBL_LOCATION_DISTRIBUTED == location_type_;
+    return TABLE_ACCESS_MULTI_TABLET == access_shape_;
   }
   inline void set_distributed()
   {
-    location_type_ = OB_TBL_LOCATION_DISTRIBUTED;
+    access_shape_ = TABLE_ACCESS_MULTI_TABLET;
   }
   inline bool is_match_all() const
   {
-    return (OB_TBL_LOCATION_ALL == location_type_);
+    return (TABLE_ACCESS_ANY == access_shape_);
   }
   inline void set_match_all()
   {
-    location_type_ = OB_TBL_LOCATION_ALL;
+    access_shape_ = TABLE_ACCESS_ANY;
   }
   bool is_local() const
   {
-    return OB_TBL_LOCATION_LOCAL == location_type_;
+    return TABLE_ACCESS_SINGLE_TABLET == access_shape_;
   }
   inline void set_local()
   {
-    location_type_ = OB_TBL_LOCATION_LOCAL;
+    access_shape_ = TABLE_ACCESS_SINGLE_TABLET;
   }
   bool is_single() const
   {
-    return (OB_TBL_LOCATION_LOCAL == location_type_ ||
-            OB_TBL_LOCATION_ALL == location_type_);
+    return (TABLE_ACCESS_SINGLE_TABLET == access_shape_ ||
+            TABLE_ACCESS_ANY == access_shape_);
   }
   bool is_uninitial() const {
-    return OB_TBL_LOCATION_UNINITIALIZED == location_type_;
+    return TABLE_ACCESS_UNINITIALIZED == access_shape_;
   }
-  inline bool is_distributed_without_table_location() const {
-    return is_distributed() && NULL == phy_table_location_info_;
+  inline bool is_multi_tablet_without_targets() const {
+    return is_distributed() && NULL == table_access_targets_;
   }
-  inline bool is_distributed_with_table_location() const {
-    return is_distributed() && NULL != phy_table_location_info_;
+  inline bool is_multi_tablet_with_targets() const {
+    return is_distributed() && NULL != table_access_targets_;
   }
   inline bool is_distributed_without_partitioning() const {
     return is_distributed() && partition_keys_.empty();
@@ -256,13 +256,13 @@ public:
   inline bool is_distributed_with_partitioning() const {
     return is_distributed() && !partition_keys_.empty();
   }
-  inline bool is_distributed_with_table_location_and_partitioning()
+  inline bool is_partitioned_multi_tablet_with_targets()
   {
-    return is_distributed() && NULL != phy_table_location_info_ && !partition_keys_.empty();
+    return is_distributed() && NULL != table_access_targets_ && !partition_keys_.empty();
   }
-  inline bool is_distributed_without_table_location_with_partitioning()
+  inline bool is_partitioned_multi_tablet_without_targets()
   {
-    return is_distributed() && NULL == phy_table_location_info_ && !partition_keys_.empty();
+    return is_distributed() && NULL == table_access_targets_ && !partition_keys_.empty();
   }
   /**
    * Get all partition keys
@@ -283,8 +283,8 @@ public:
                K_(part_func_type),
                K_(subpart_func_type),
                K_(part_num),
-               K_(location_type),
-               K_(phy_table_location_info));
+               K_(access_shape),
+               K_(table_access_targets));
 
 private:
   static int get_partition_key(ObRawExpr *part_expr,
@@ -328,7 +328,7 @@ private:
   share::schema::ObPartitionFuncType part_func_type_;
   // Secondary partition type
   share::schema::ObPartitionFuncType subpart_func_type_;
-  ObTableLocationType location_type_;
+  TableAccessShape access_shape_;
   // First-level partition count
   int64_t part_num_;
   // First-level partition key
@@ -337,18 +337,18 @@ private:
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> sub_partition_keys_;
   // Partition method expr
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> part_func_exprs_;
-  const ObCandiTableLoc *phy_table_location_info_;
+  const TableAccessTargets *table_access_targets_;
   // first-level partition array
   share::schema::ObPartition **partition_array_;
-  // All partition_id (physical partition id) in phy_table_location_info_
+  // All partition_id (physical partition id) in table_access_targets_
   common::ObSEArray<uint64_t, 8, common::ModulePageAllocator, true> all_tablet_ids_;
   // part_id(logical partition id level 1) in part_array offset
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> all_partition_indexes_;
   // subpart_id(sub-secondary logical partition id) in subpart_array offset
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> all_subpartition_indexes_;
-  // Whether only one primary partition is involved in the phy_table_location_info_ of the secondary partition table
+  // Whether only one primary partition is involved in the table_access_targets_ of the secondary partition table
   bool is_partition_single_;
-  // In the phy_table_location_info_ of the secondary partition table, does each primary partition involve only one secondary partition
+  // In the table_access_targets_ of the secondary partition table, does each primary partition involve only one secondary partition
   bool is_subpartition_sinlge_;
   DISALLOW_COPY_AND_ASSIGN(ObShardingInfo);
 };

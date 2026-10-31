@@ -58,7 +58,9 @@ struct LightDataBlock : public IData
   int64_t to_string(char *buf, const int64_t buf_len) const override {
     return ((T *)data_)->to_string(buf, buf_len);
   } 
-  char data_[sizeof(T)];
+  // The preceding vptr may be narrower than T's alignment (e.g. wasm32 with
+  // 64-bit atomics). Placement construction must preserve T's alignment.
+  alignas(T) char data_[sizeof(T)];
 };
 template <typename T>
 struct LightCombinedBlock {

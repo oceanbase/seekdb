@@ -142,7 +142,12 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           ObGeoExprUtils::geo_func_error_handle(ret, N_ST_DISTANCE);
         }
       } else if (expr.arg_cnt_ == max_arg_num) {
-        if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(gis_unit->get_string(), srs, result, result))) {
+        ObString unit_str;
+        const ObExpr *unit_arg = expr.args_[max_arg_num - 1];
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+                ctx.exec_ctx_, temp_allocator, *gis_unit, unit_arg->datum_meta_,
+                unit_arg->obj_meta_.has_lob_header(), unit_str))) {
+        } else if (OB_FAIL(ObGeoExprUtils::length_unit_conversion(unit_str, srs, result, result))) {
         } else if (std::isinf(result)) {
           ret = OB_ERR_GIS_INVALID_DATA;
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_ST_DISTANCE);

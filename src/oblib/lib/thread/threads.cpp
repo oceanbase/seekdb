@@ -25,8 +25,12 @@ using namespace oceanbase::common;
 // Keep the protected stack allocation within the configured stack-size class.
 // This is not a sigaltstack reservation; no alternate signal stack is installed.
 const int64_t THREAD_STACK_RESERVED_SIZE = 16L << 10;
+#ifdef __EMSCRIPTEN__
+int64_t global_thread_stack_size = (1L << 20) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
+#else
 // Use 256KB stack size by default. OB has SMART_CALL mechanism to extend stack when needed.
 int64_t global_thread_stack_size = (1L << 18) - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
+#endif
 thread_local uint64_t ThreadPool::thread_idx_ = 0;
 static IRunWrapper *g_default_run_wrapper = nullptr;
 // Get the thread-local runtime context for thread-pool startup validation.

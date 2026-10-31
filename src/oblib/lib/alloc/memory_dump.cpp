@@ -736,7 +736,7 @@ void ObMemoryDump::handle(void *task)
       ret = databuff_printf(print_buf_, PRINT_BUF_LEN, print_pos,
           "\n###################%04d-%02d-%02d %02d:%02d:%02d.%06ld###################\n",
           tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
-          tm.tm_sec, tv.tv_usec);
+          tm.tm_sec, static_cast<int64_t>(tv.tv_usec));
       print_pos += m_task->to_string(print_buf_ + print_pos, PRINT_BUF_LEN - print_pos);
       ret = databuff_printf(print_buf_, PRINT_BUF_LEN, print_pos, "\n");
       // chunk

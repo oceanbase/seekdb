@@ -808,7 +808,7 @@ static int ob_wildcmp_utf8mb4(const ObCharsetInfo *cs,
 
 
 
-static inline void ob_hash_add(unsigned long int *n1, unsigned long int *n2, unsigned int ch)
+static inline void ob_hash_add(uint64_t *n1, uint64_t *n2, unsigned int ch)
 {
   n1[0]^= (((n1[0] & 63) + n2[0]) * (ch)) + (n1[0] << 8);
   n2[0]+= 3;
@@ -816,7 +816,7 @@ static inline void ob_hash_add(unsigned long int *n1, unsigned long int *n2, uns
 
 
 static void ob_hash_sort_utf8mb4(const ObCharsetInfo *cs, const unsigned char *src, size_t srclen,
-               unsigned long int *n1, unsigned long int *n2, const bool calc_end_space, hash_algo hash_algo)
+               uint64_t *n1, uint64_t *n2, const bool calc_end_space, hash_algo hash_algo)
 {
   ob_wc_t wc;
   int res;
@@ -1081,4 +1081,3 @@ ObCharsetInfo ob_charset_utf8mb4_bin=
   &ob_collation_utf8mb4_bin_handler,
   PAD_SPACE
 };
-

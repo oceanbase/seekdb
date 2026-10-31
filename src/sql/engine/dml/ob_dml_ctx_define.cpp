@@ -106,7 +106,7 @@ OB_SERIALIZE_MEMBER(ObForeignKeyCheckerCtdef,
                     calc_part_id_expr_,
                     part_id_dep_exprs_,
                     das_scan_ctdef_,
-                    loc_meta_,
+                    access_meta_,
                     is_part_table_,
                     tablet_id_,
                     rowkey_count_,
@@ -206,7 +206,7 @@ OB_SERIALIZE_MEMBER(ObDMLBaseCtDef,
 OB_SERIALIZE_MEMBER(ObMultiInsCtDef,
                     calc_part_id_expr_,
                     hint_part_ids_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObInsCtDef)
 {
@@ -268,7 +268,7 @@ OB_DEF_SERIALIZE_SIZE(ObInsCtDef)
 
 OB_SERIALIZE_MEMBER(ObMultiDelCtDef,
                     calc_part_id_expr_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObDelCtDef)
 {
@@ -334,7 +334,7 @@ OB_DEF_SERIALIZE_SIZE(ObDelCtDef)
 OB_SERIALIZE_MEMBER(ObMultiLockCtDef,
                     calc_part_id_expr_,
                     partition_cnt_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObLockCtDef)
 {
@@ -393,7 +393,7 @@ OB_SERIALIZE_MEMBER(ObMultiUpdCtDef,
                     calc_part_id_old_,
                     calc_part_id_new_,
                     is_enable_row_movement_,
-                    loc_meta_);
+                    access_meta_);
 
 OB_DEF_SERIALIZE(ObUpdCtDef)
 {

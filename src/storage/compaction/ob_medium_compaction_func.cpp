@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/tablet/ob_tablet_table_operator.h"

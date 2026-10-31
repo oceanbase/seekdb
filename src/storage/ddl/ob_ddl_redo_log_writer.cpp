@@ -158,7 +158,6 @@ int ObDDLCtrlSpeedItem::do_sleep(
         }
       }
       if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-        ObTaskController::get().allow_next_syslog();
         FLOG_INFO("stop write ddl clog", K(ret),
           K(write_speed_), K(need_stop_write_), K(ref_cnt_),
           K(disk_used_stop_write_threshold_));

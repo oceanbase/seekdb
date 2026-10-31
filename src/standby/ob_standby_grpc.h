@@ -43,7 +43,7 @@
 #undef ERROR
 #undef DELETE
 #endif
-#include "grpc/standbyservice.grpc.pb.h"
+#include "grpc/proto/standbyservice.grpc.pb.h"
 #include "grpc/ob_grpc_context.h"
 #include "lib/container/ob_se_array.h"
 #include "standby/ob_standby_palf_base_info.h"

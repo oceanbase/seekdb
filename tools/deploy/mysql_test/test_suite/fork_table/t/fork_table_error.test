@@ -260,7 +260,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
 'ob_embed_endpoint', '{
     "ai_model_name": "ob_embed",
     "scope": "all",
-    "url": "fork_table_error",
+    "url": "https://example.invalid/fork-table-error",
     "access_key": "fork_table_error",
     "request_model_name": "fork_table_error",
     "provider": "OPENAI"

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_ra_datum_store.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"

@@ -19,8 +19,8 @@
 
 #include "ob_system_admin_util.h"
 #include "ob_local_management_service.h"
-#include "config_bridge.h"
-#include "config_checkers.h"
+#include "rust/config.h"
+#include "rust/config/config_checkers.h"
 namespace oceanbase
 {
 using namespace common;

@@ -1,0 +1,85 @@
+DROP USER IF EXISTS 'kill_authz_owner'@'%';
+DROP USER IF EXISTS 'kill_authz_plain'@'%';
+DROP USER IF EXISTS 'kill_authz_direct'@'%';
+DROP USER IF EXISTS 'kill_authz_role'@'%';
+DROP ROLE IF EXISTS kill_authz_admin;
+CREATE USER 'kill_authz_owner'@'%';
+CREATE USER 'kill_authz_plain'@'%';
+CREATE USER 'kill_authz_direct'@'%';
+CREATE USER 'kill_authz_role'@'%';
+CREATE ROLE kill_authz_admin;
+GRANT SUPER ON *.* TO 'kill_authz_direct'@'%';
+GRANT SUPER ON *.* TO kill_authz_admin;
+GRANT kill_authz_admin TO 'kill_authz_role'@'%';
+SELECT CURRENT_USER() AS actor;
+actor
+kill_authz_plain@%
+KILL QUERY @kill_target;
+ERROR HY000: You are not owner of thread <target_id>
+SELECT 1 AS target_alive;
+target_alive
+1
+KILL CONNECTION @kill_target;
+ERROR HY000: You are not owner of thread <target_id>
+SELECT 1 AS target_alive;
+target_alive
+1
+SELECT CURRENT_USER() AS actor;
+actor
+kill_authz_direct@%
+KILL QUERY @kill_target;
+SELECT 1 AS target_alive;
+target_alive
+1
+KILL CONNECTION @kill_target;
+SELECT 1 AS target_alive;
+Got one of the listed errors
+SELECT CURRENT_USER() AS actor;
+actor
+kill_authz_role@%
+SET ROLE NONE;
+KILL QUERY @kill_target;
+ERROR HY000: You are not owner of thread <target_id>
+SELECT 1 AS target_alive;
+target_alive
+1
+KILL CONNECTION @kill_target;
+ERROR HY000: You are not owner of thread <target_id>
+SELECT 1 AS target_alive;
+target_alive
+1
+SET ROLE ALL;
+KILL QUERY @kill_target;
+SELECT 1 AS target_alive;
+target_alive
+1
+SET ROLE NONE;
+KILL QUERY @kill_target;
+ERROR HY000: You are not owner of thread <target_id>
+SELECT 1 AS target_alive;
+target_alive
+1
+KILL CONNECTION @kill_target;
+ERROR HY000: You are not owner of thread <target_id>
+SELECT 1 AS target_alive;
+target_alive
+1
+SET ROLE ALL;
+KILL CONNECTION @kill_target;
+SELECT 1 AS target_alive;
+Got one of the listed errors
+SELECT CURRENT_USER() AS actor;
+actor
+kill_authz_owner@%
+KILL QUERY @kill_target;
+SELECT 1 AS target_alive;
+target_alive
+1
+KILL CONNECTION @kill_target;
+SELECT 1 AS target_alive;
+Got one of the listed errors
+DROP USER 'kill_authz_owner'@'%';
+DROP USER 'kill_authz_plain'@'%';
+DROP USER 'kill_authz_direct'@'%';
+DROP USER 'kill_authz_role'@'%';
+DROP ROLE kill_authz_admin;

@@ -1,0 +1,66 @@
+# Scheduler ownership and enabled-role SUPER; verify every successful or rejected state change.
+--disable_warnings
+DROP USER IF EXISTS 'scheduler_authz_owner'@'%';
+DROP USER IF EXISTS 'scheduler_authz_caller'@'%';
+DROP ROLE IF EXISTS scheduler_authz_admin;
+DELETE FROM oceanbase.__all_scheduler_job WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+--enable_warnings
+CREATE USER 'scheduler_authz_owner'@'%';
+CREATE USER 'scheduler_authz_caller'@'%';
+CREATE ROLE scheduler_authz_admin;
+GRANT SUPER ON *.* TO scheduler_authz_admin;
+GRANT scheduler_authz_admin TO 'scheduler_authz_caller'@'%';
+# A future-dated synthetic job cannot run during this regression.
+INSERT INTO oceanbase.__all_scheduler_job
+  (job_name, job, lowner, powner, cowner, next_date, `interval#`, flag,
+   job_type, job_action, enabled, auto_drop)
+VALUES ('SCHEDULER_AUTHZ_TEST_JOB', 990000001, 'test',
+        'scheduler_authz_owner@%', 'scheduler_authz_owner@%',
+        '2099-01-01 00:00:00', 'null', 0, 'STORED_PROCEDURE',
+        'DBMS_STATS.GATHER_DATABASE_STATS_JOB_PROC', false, false);
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+connect (scheduler_owner,$OBMYSQL_MS0,scheduler_authz_owner,,information_schema,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+CALL DBMS_SCHEDULER.ENABLE('SCHEDULER_AUTHZ_TEST_JOB');
+connection default;
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+connection scheduler_owner;
+CALL DBMS_SCHEDULER.DISABLE('SCHEDULER_AUTHZ_TEST_JOB');
+connection default;
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+connect (scheduler_caller,$OBMYSQL_MS0,scheduler_authz_caller,,information_schema,$OBMYSQL_PORT);
+SELECT CURRENT_USER() AS actor;
+SET ROLE NONE;
+--error 1227
+CALL DBMS_SCHEDULER.ENABLE('SCHEDULER_AUTHZ_TEST_JOB');
+connection default;
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+connection scheduler_caller;
+SET ROLE ALL;
+CALL DBMS_SCHEDULER.ENABLE('SCHEDULER_AUTHZ_TEST_JOB');
+connection default;
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+connection scheduler_caller;
+SET ROLE NONE;
+--error 1227
+CALL DBMS_SCHEDULER.DISABLE('SCHEDULER_AUTHZ_TEST_JOB');
+connection default;
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+connection scheduler_caller;
+SET ROLE ALL;
+CALL DBMS_SCHEDULER.DISABLE('SCHEDULER_AUTHZ_TEST_JOB');
+connection default;
+SELECT job_name, enabled FROM oceanbase.__all_scheduler_job
+WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+disconnect scheduler_owner;
+disconnect scheduler_caller;
+DELETE FROM oceanbase.__all_scheduler_job WHERE job_name = 'SCHEDULER_AUTHZ_TEST_JOB';
+DROP USER 'scheduler_authz_owner'@'%';
+DROP USER 'scheduler_authz_caller'@'%';
+DROP ROLE scheduler_authz_admin;

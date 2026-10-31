@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/utility/utility.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/string/ob_sql_string.h"
@@ -23,8 +23,9 @@
 #include "share/ob_encryption_util.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_telemetry.h"
+#include "share/inner_table/local_table_schema.h"
 #include "common/ob_version_def.h"
-#include "common/json_type/ob_json_parse.h"
+#include "common/json_type/ob_json_tree.h"
 #include <curl/curl.h>
 #include <errno.h>
 #include <openssl/hmac.h>
@@ -34,8 +35,6 @@
 #include <mutex>
 
 #ifdef _WIN32
-#include <direct.h>
-#include <io.h>
 #include <windows.h>
 #ifdef ERROR
 #undef ERROR
@@ -57,9 +56,8 @@ namespace share
 {
 
 static const char *TELEMETRY_URL = "https://openwebapi.oceanbase.com/api/web/oceanbase/report";
-static const char *TELEMETRY_FILE_NAME = "run/telemetry.json";
 static const char *TELEMETRY_INSTANCE_ID_ENV_NAME = "SEEKDB_TELEMETRY_INSTANCE_ID";
-// v6 persists the telemetry file creation time in createdAtUs.
+// Payload schema version reported to the telemetry endpoint.
 static const int64_t TELEMETRY_VERSION = 6;
 static const int64_t TELEMETRY_MACHINE_ID_BYTE_LENGTH = 16;
 static const int64_t TELEMETRY_MACHINE_ID_HEX_LENGTH = 2 * TELEMETRY_MACHINE_ID_BYTE_LENGTH;
@@ -1225,13 +1223,9 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
 
   // construct root
   ObJsonString component_json(OB_SEEKDB_NAME);
-  ObJsonInt created_at_json(created_at_us);
-  ObJsonBoolean sent_json(false);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(root.add("content", &content))) {
   } else if (OB_FAIL(root.add("component", &component_json))) {
-  } else if (OB_FAIL(root.add("createdAtUs", &created_at_json))) {
-  } else if (OB_FAIL(root.add("sent", &sent_json))) {
   }
 
   ObJsonBuffer j_buf(allocator);
@@ -1244,139 +1238,15 @@ static int generate_telemetry_json(const char* reporter, const char* event_name,
   return ret;
 }
 
-// Publish complete JSON with an atomic replacement. Updating sent must never
-// truncate the only copy of the creation time and instance identity.
-static int write_telemetry_file(const ObString &json_str)
-{
-  int ret = OB_SUCCESS;
-  char temp_path[common::OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  FILE *fp = nullptr;
-#ifdef _WIN32
-  if (0 == GetTempFileNameA("run", "tel", 0, temp_path)) {
-    ret = OB_IO_ERROR;
-  } else if (OB_ISNULL(fp = fopen(temp_path, "wb"))) {
-    ret = OB_IO_ERROR;
-  }
-#else
-  snprintf(temp_path, sizeof(temp_path), "%s.XXXXXX", TELEMETRY_FILE_NAME);
-  const int fd = mkstemp(temp_path);
-  if (fd < 0) {
-    ret = OB_IO_ERROR;
-  } else if (OB_ISNULL(fp = fdopen(fd, "wb"))) {
-    close(fd);
-    ret = OB_IO_ERROR;
-  }
-#endif
-  if (OB_NOT_NULL(fp)) {
-    if (json_str.length() != fwrite(json_str.ptr(), 1, json_str.length(), fp)
-        || 0 != fflush(fp)) {
-      ret = OB_IO_ERROR;
-    }
-#ifdef _WIN32
-    if (OB_SUCC(ret) && 0 != _commit(_fileno(fp))) {
-#else
-    if (OB_SUCC(ret) && 0 != fsync(fileno(fp))) {
-#endif
-      ret = OB_IO_ERROR;
-    }
-    if (0 != fclose(fp)) {
-      ret = OB_IO_ERROR;
-    }
-  }
-  if (OB_SUCC(ret)) {
-#ifdef _WIN32
-    if (!MoveFileExA(temp_path, TELEMETRY_FILE_NAME,
-                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-#else
-    if (0 != rename(temp_path, TELEMETRY_FILE_NAME)) {
-#endif
-      ret = OB_IO_ERROR;
-    }
-  }
-  if (OB_FAIL(ret)) {
-    remove(temp_path);
-    LOG_WARN("Failed to persist telemetry state", K(ret), K(errno));
-  }
-  return ret;
-}
-
-static int read_telemetry_file(ObIAllocator &allocator, ObString &json_str)
-{
-  int ret = OB_SUCCESS;
-  FILE *fp = fopen(TELEMETRY_FILE_NAME, "rb");
-  if (OB_ISNULL(fp)) {
-    ret = ENOENT == errno ? OB_FILE_NOT_EXIST : OB_IO_ERROR;
-  } else {
-    const int64_t max_size = 64 * 1024;
-    char *buf = static_cast<char *>(allocator.alloc(max_size));
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      const size_t size = fread(buf, 1, max_size, fp);
-      if (0 != ferror(fp)) {
-        ret = OB_IO_ERROR;
-      } else if (size == max_size) {
-        ret = OB_SIZE_OVERFLOW;
-      } else if (0 == size) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        json_str.assign_ptr(buf, static_cast<int64_t>(size));
-      }
-    }
-    fclose(fp);
-  }
-  return ret;
-}
-
-static int parse_telemetry_file(ObIAllocator &allocator, const ObString &json_str,
-                              ObJsonObject *&root, ObJsonBoolean *&sent)
-{
-  int ret = OB_SUCCESS;
-  ObJsonNode *node = nullptr;
-  root = nullptr;
-  sent = nullptr;
-  if (OB_FAIL(ObJsonParser::get_tree(&allocator, json_str.ptr(), json_str.length(), node))) {
-  } else if (OB_ISNULL(node) || ObJsonNodeType::J_OBJECT != node->json_type()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    root = static_cast<ObJsonObject *>(node);
-    ObJsonNode *content = root->get_value("content");
-    ObJsonNode *component = root->get_value("component");
-    ObJsonNode *created_at = root->get_value("createdAtUs");
-    ObJsonNode *sent_node = root->get_value("sent");
-    if (OB_ISNULL(content) || ObJsonNodeType::J_OBJECT != content->json_type()
-        || OB_ISNULL(component) || ObJsonNodeType::J_STRING != component->json_type()) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_ISNULL(created_at) && OB_ISNULL(sent_node)) {
-      // Older files were only payload dumps, with no reliable delivery state.
-      ret = OB_ENTRY_NOT_EXIST;
-    } else if (OB_ISNULL(created_at)
-        || !((ObJsonNodeType::J_INT == created_at->json_type() && created_at->get_int() > 0)
-            || (ObJsonNodeType::J_UINT == created_at->json_type()
-                && created_at->get_uint() > 0 && created_at->get_uint() <= INT64_MAX))
-        || OB_ISNULL(sent_node) || ObJsonNodeType::J_BOOLEAN != sent_node->json_type()) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      ObJsonNode *id = static_cast<ObJsonObject *>(content)->get_value("id");
-      unsigned char id_bytes[TELEMETRY_MACHINE_ID_BYTE_LENGTH] = {0};
-      if (OB_ISNULL(id) || ObJsonNodeType::J_STRING != id->json_type()) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(parse_telemetry_uuid_text(
-          id->get_data(), id->get_data_length(), id_bytes, sizeof(id_bytes)))) {
-      } else {
-        sent = static_cast<ObJsonBoolean *>(sent_node);
-      }
-    }
-  }
-  return ret;
-}
-
 static size_t discard(void* ptr, size_t size, size_t nmemb, void* userdata) {
   return size * nmemb;
 }
 
 int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
 {
+#ifdef __EMSCRIPTEN__
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   CURL *curl = curl_easy_init();
   if (curl == nullptr) {
@@ -1393,6 +1263,9 @@ int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
       // Skip CA trust verification to avoid depending on distro-specific CA bundle paths.
       // Hostname verification remains enabled, but this does not authenticate the peer.
       curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+      curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+      curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+      curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
       curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
       curl_easy_setopt(curl, CURLOPT_POST, 1L);
       curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.length());
@@ -1428,6 +1301,7 @@ int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
     curl_easy_cleanup(curl);
   }
   return ret;
+#endif
 }
 
 int send_telemetry(const char *url, const ObString &json_str)
@@ -1443,57 +1317,57 @@ int send_telemetry(const char *url, const ObString &json_str)
 
 bool is_telemetry_enabled()
 {
+#ifdef __EMSCRIPTEN__
+  // The browser host owns optional telemetry and its transport configuration.
+  return false;
+#else
   bool bret = true;
   const char* telemetry_enabled = getenv("TELEMETRY_ENABLED");
   if (NULL != telemetry_enabled && 0 == STRCMP(telemetry_enabled, "false")) {
     bret = false;
   }
   return bret;
+#endif
 }
 
-int report_telemetry(const char *reporter, const char *event_name)
+int report_telemetry(LocalStore &store, const char *reporter, const char *event_name)
 {
+  using namespace telemetry;
   int ret = OB_SUCCESS;
-  // Serialize concurrent callers through the read/send/update transaction.
-  // The server's base-directory process lock excludes other server processes.
+  // Serialize telemetry callers; local transactions never span the HTTP request.
   static std::mutex report_mutex;
   std::lock_guard<std::mutex> guard(report_mutex);
-  common::ObArenaAllocator allocator;
-  ObString json_str;
-  ObJsonObject *root = nullptr;
-  ObJsonBoolean *sent = nullptr;
-  const int read_ret = read_telemetry_file(allocator, json_str);
-  if (OB_SUCCESS == read_ret) {
-    ret = parse_telemetry_file(allocator, json_str, root, sent);
-  } else {
-    ret = read_ret;
-  }
-  if (OB_FILE_NOT_EXIST == read_ret || (OB_SUCCESS == read_ret && OB_ENTRY_NOT_EXIST == ret)) {
-    // The file's logical creation time is immutable, unlike filesystem mtime
-    // or ctime, which change when delivery state is updated or files are copied.
+  ObSqlString payload;
+  bool sent = false;
+  ret = store.query(LocalRequest::select(telemetry::schema(), {Payload, Sent}).eq(Id, int64_t(0)),
+      [&](LocalRowReader &row) {
+        int size = 0;
+        const char *data = row.get_text(0, &size);
+        const int64_t state = row.get_int64(1);
+        sent = state == 1;
+        return data == nullptr || size <= 0 || (state != 0 && state != 1)
+            ? OB_INVALID_DATA : payload.assign(data, size);
+      });
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    common::ObArenaAllocator allocator;
+    ObString json_str;
     const int64_t created_at_us = ObTimeUtility::current_time();
     if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str, created_at_us))) {
-    } else if (OB_FAIL(write_telemetry_file(json_str))) {
-    } else if (OB_FAIL(parse_telemetry_file(allocator, json_str, root, sent))) {
+    } else if (OB_FAIL(payload.assign(json_str))) {
+    } else if (OB_FAIL(store.execute(LocalRequest::insert(telemetry::schema()).set(Id, int64_t(0))
+        .set(Payload, LocalValue::text(payload.ptr(), payload.length())).set(Sent, int64_t(0))))) {
     }
   }
   if (OB_FAIL(ret)) {
     LOG_WARN("Failed to prepare telemetry state", K(ret));
-  } else if (!sent->get_boolean() && is_telemetry_enabled()) {
-    // Keep local delivery metadata out of the endpoint's payload schema.
-    ObJsonObject payload(&allocator);
-    ObJsonBuffer payload_buf(&allocator);
-    ObJsonBuffer state_buf(&allocator);
-    if (OB_FAIL(payload.add("content", root->get_value("content")))) {
-    } else if (OB_FAIL(payload.add("component", root->get_value("component")))) {
-    } else if (OB_FAIL(payload.print(payload_buf, false))) {
-    } else if (OB_FAIL(send_telemetry(TELEMETRY_URL,
-        ObString(payload_buf.length(), payload_buf.ptr())))) {
-    } else {
-      sent->set_value(true);
-      if (OB_FAIL(root->print(state_buf, false))) {
-      } else if (OB_FAIL(write_telemetry_file(ObString(state_buf.length(), state_buf.ptr())))) {
-      }
+  } else if (!sent && is_telemetry_enabled()) {
+    int64_t affected = 0;
+    if (OB_FAIL(send_telemetry(TELEMETRY_URL, ObString(payload.length(), payload.ptr())))) {
+    } else if (OB_FAIL(store.execute(LocalRequest::update(telemetry::schema()).eq(Id, int64_t(0))
+        .set(Sent, int64_t(1)), &affected))) {
+      LOG_WARN("Failed to persist telemetry delivery state", K(ret));
+    } else if (affected != 1) {
+      ret = OB_ERR_UNEXPECTED;
     }
   }
   return ret;

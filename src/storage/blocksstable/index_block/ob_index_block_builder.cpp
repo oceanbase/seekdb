@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_index_block_builder.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
@@ -2735,7 +2735,6 @@ int ObDataIndexBlockBuilder::write_meta_block(
     meta_block_offset_ = data_offset;
     meta_block_size_ = meta_block_desc.get_block_size();
     // ATTENTION! Critical diagnostic log, DO NOT CHANGE!!!
-    share::ObTaskController::get().allow_next_syslog();
     STORAGE_LOG(INFO, "succeed to write macro meta in macro block", K(ret),
                 K(macro_meta_));
   }

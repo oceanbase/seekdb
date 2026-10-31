@@ -283,10 +283,10 @@ seekdb supports two log rate limits: a common system log disk IO bandwidth limit
 
 seekdb will limit log output according to disk bandwidth. The log bandwidth rate limit does not limit the rate for different log levels. If the log rate is limited, the rate limit log may be printed with the keyword `REACH SYSLOG RATE LIMIT`.
 
-Rate limit log example:
+Example of the relevant part of a rate limit log:
 
 ```txt
-[2023-12-26 09:46:04.621435] INFO  [SHARE.LOCATION] fetch_vtable_location_ (ob_vtable_location_service.cpp:281) [35675][VTblLocAsyncUp0][T0][YB427F000001-00060D52A9614571-0-0] [lt=0]  REACH SYSLOG RATE LIMIT [bandwidth]
+... REACH SYSLOG RATE LIMIT [bandwidth]
 ```
 
 The rate limit can be adjusted through the configuration item `syslog_io_bandwidth_limit`.

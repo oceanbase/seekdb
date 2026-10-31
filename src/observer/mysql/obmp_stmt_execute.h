@@ -51,7 +51,7 @@ class ObPSAnalysisChecker
 public:
   ObPSAnalysisChecker()
     : pos_(nullptr), begin_pos_(nullptr), end_pos_(nullptr),
-      data_len_(0), need_check_(true)
+      data_len_(0)
   {}
   void init(const char*& pos, const int64_t len)
   {
@@ -59,7 +59,6 @@ public:
     begin_pos_ = pos;
     end_pos_ = pos + len;
     data_len_ = len;
-    need_check_ = true;
   }
   int detection(const int64_t len);
   inline int64_t remain_len()
@@ -70,7 +69,6 @@ public:
   const char* begin_pos_;
   const char* end_pos_;
   int64_t data_len_;
-  bool need_check_;
 };
 
 #define PS_DEFENSE_CHECK(len)                              \
@@ -249,7 +247,6 @@ protected:
                                 sql::TypeInfo &param_type_info,
                                 ObObjParam &param,
                                 const char *bitmap);
-  int store_params_value_to_str(ObIAllocator &alloc, sql::ObSQLSessionInfo &session);
   int execute_response(sql::ObSQLSessionInfo &session,
                         ObMySQLResultSet &result,
                         bool &need_response_error,
@@ -336,7 +333,6 @@ private:
   int get_pl_type_by_type_info(ObIAllocator &allocator,
                         const sql::TypeInfo *type_info,
                         const pl::ObUserDefinedType *&pl_type);
-  bool is_contain_complex_element(const sql::ParamTypeArray &param_types) const;
 
   virtual int before_process();
   virtual int after_process(int error_code);
@@ -371,8 +367,6 @@ protected:
   int64_t exec_end_timestamp_;
   bool prepare_packet_sent_;
   uint64_t params_num_; 
-  int64_t params_value_len_;
-  char *params_value_;
   int64_t curr_sql_idx_; // only for arraybinding
   ObPSAnalysisChecker analysis_checker_;
 private:

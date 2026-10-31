@@ -17,7 +17,7 @@
 #ifndef OB_DTL_LINKED_BUFFER_H
 #define OB_DTL_LINKED_BUFFER_H
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/queue/ob_link.h"
 #include "sql/dtl/ob_dtl_msg_type.h"
 #include "lib/container/ob_array_serialization.h"

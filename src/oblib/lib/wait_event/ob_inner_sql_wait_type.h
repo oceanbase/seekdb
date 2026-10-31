@@ -52,10 +52,6 @@ DEF_INNER_SQL_WAIT(OMT_FETCH_ALL_SRS, 60001)
 DEF_INNER_SQL_WAIT(SQL_DYNAMIC_SAMPLING_ESTIMATE_ROWCOUNT, 70001)
 //***************  end of sql   ***************
 
-//***************  start of location ***************
-DEF_INNER_SQL_WAIT(RENEW_TABLET_LOCATION, 80001)  // get location
-DEF_INNER_SQL_WAIT(GET_TABLET_LOCATION, 80002)  // refresh location
-//***************  end of location   ***************
 
 //***************  start of schema ***************
 DEF_INNER_SQL_WAIT(WAIT_REFRESH_SCHEMA, 90001)  // synchronous wait for schema refresh to specified version

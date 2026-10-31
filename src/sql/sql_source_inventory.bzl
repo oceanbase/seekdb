@@ -1,5 +1,3 @@
-"""Generated source inventory for SQL."""
-
 SQL_UNITY_GROUPS = [
     struct(
         name = "ob_sql_code_generator_0",
@@ -13,8 +11,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/code_generator/ob_static_engine_expr_cg.cpp",
             "src/sql/code_generator/ob_tsc_cg_service.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_common_0",
@@ -22,7 +18,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/ob_end_trans_callback.cpp",
             "src/sql/ob_end_trans_cb_packet_param.cpp",
-            "src/sql/ob_phy_table_location.cpp",
             "src/sql/ob_query_retry_ctrl.cpp",
             "src/sql/ob_result_set.cpp",
             "src/sql/ob_scanner.cpp",
@@ -37,8 +32,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/ob_optimizer_trace_impl.cpp",
             "src/sql/pl/ob_routine_param_type.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_common_mixed_0",
@@ -47,8 +40,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/privilege_check/ob_privilege_check.cpp",
             "src/sql/privilege_check/ob_ai_model_priv_util.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_das_0",
@@ -80,8 +71,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/das/iter/ob_das_merge_iter.cpp",
             "src/sql/das/ob_das_id_allocator.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_das_1",
@@ -113,8 +102,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/das/iter/sparse_retrieval/ob_das_match_iter.cpp",
             "src/sql/das/ob_das_tablet_mapper.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_dtl_0",
@@ -139,8 +126,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/dtl/ob_op_metric.cpp",
             "src/sql/dtl/ob_dtl_mem_manager.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_0",
@@ -171,8 +156,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/subquery/ob_subplan_scan_op.cpp",
             "src/sql/engine/user_defined_function/ob_pl_user_defined_agg_function.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_1",
@@ -184,8 +167,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/sort/ob_pd_topn_sort_filter.cpp",
             "src/sql/engine/expand/ob_expand_vec_op.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_aggregate_core_0",
@@ -193,8 +174,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/aggregate/ob_pushdown_aggregate_program.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_aggregate_groupby_0",
@@ -210,8 +189,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/aggregate/ob_scalar_aggregate_op.cpp",
             "src/sql/engine/aggregate/ob_adaptive_bypass_ctrl.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_basic_0",
@@ -242,8 +219,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/basic/ob_temp_table_insert_op.cpp",
             "src/sql/engine/basic/ob_temp_table_transformation_op.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_basic_1",
@@ -261,8 +236,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/basic/chunk_store/ob_chunk_block_compressor.cpp",
             "src/sql/engine/basic/ob_values_table_access_op.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_cmd_0",
@@ -292,8 +265,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/cmd/ob_set_password_executor.cpp",
             "src/sql/engine/cmd/ob_ddl_executor_util.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_cmd_1",
@@ -309,8 +280,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/cmd/ob_vector_refresh_index_executor.cpp",
             "src/sql/engine/cmd/ob_recyclebin_executor.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_dml_0",
@@ -329,8 +298,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/dml/ob_trigger_handler.cpp",
             "src/sql/engine/dml/ob_fk_checker.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_0",
@@ -366,8 +333,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_case.cpp",
             "src/sql/engine/expr/ob_expr_char.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_1",
@@ -399,8 +364,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_degrees.cpp",
             "src/sql/engine/expr/ob_expr_des_hex_str.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_10",
@@ -435,8 +398,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_trim.cpp",
             "src/sql/engine/expr/ob_expr_truncate.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_11",
@@ -472,8 +433,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_sys_view_bigint_param.cpp",
             "src/sql/engine/expr/ob_expr_shadow_uk_project.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_12",
@@ -509,8 +468,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_random.cpp",
             "src/sql/engine/expr/ob_expr_randstr.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_13",
@@ -547,8 +504,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_pad.cpp",
             "src/sql/engine/expr/ob_expr_mysql_port.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_14",
@@ -580,8 +535,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_array_difference.cpp",
             "src/sql/engine/expr/ob_expr_array_compact.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_15",
@@ -610,8 +563,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.cpp",
             "src/sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_2",
@@ -646,8 +597,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_get_package_var.cpp",
             "src/sql/engine/expr/ob_expr_get_path.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_3",
@@ -683,8 +632,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_json_contains_path.cpp",
             "src/sql/engine/expr/ob_expr_json_depth.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_4",
@@ -720,8 +667,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_join_filter.cpp",
             "src/sql/engine/expr/ob_expr_last_exec_id.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_5",
@@ -752,8 +697,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_gtid.cpp",
             "src/sql/engine/expr/ob_expr_inner_table_option_printer.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_6",
@@ -782,8 +725,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_vector_similarity.cpp",
             "src/sql/engine/expr/ob_distribution.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_7",
@@ -819,8 +760,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_st_difference.cpp",
             "src/sql/engine/expr/ob_expr_st_asgeojson.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_8",
@@ -856,8 +795,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_st_bestsrid.cpp",
             "src/sql/engine/expr/ob_expr_st_astext.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_expr_9",
@@ -894,8 +831,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/expr/ob_expr_st_transform.cpp",
             "src/sql/engine/expr/ob_expr_word_count.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_join_0",
@@ -910,8 +845,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/join/ob_nested_loop_join_op.cpp",
             "src/sql/engine/join/ob_join_filter_material_control_info.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_pdml_0",
@@ -925,8 +858,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/pdml/static/ob_px_multi_part_update_op.cpp",
             "src/sql/engine/pdml/static/ob_px_sstable_insert_op.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_px_0",
@@ -963,8 +894,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/px/ob_slice_calc.cpp",
             "src/sql/engine/px/datahub/ob_dh_msg.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_px_1",
@@ -997,8 +926,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.cpp",
             "src/sql/engine/px/ob_px_local_sqc_launcher.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_set_0",
@@ -1014,8 +941,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/set/ob_merge_union_op.cpp",
             "src/sql/engine/set/ob_set_op.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_table_0",
@@ -1030,8 +955,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/table/ob_table_scan_with_index_back_op.cpp",
             "src/sql/engine/table/ob_ddl_block_sample_scan_op.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_vector_base_0",
@@ -1039,8 +962,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/expr/ob_expr_char_length.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_vector_cmp_0",
@@ -1048,8 +969,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/expr/ob_expr_sign.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_vector_continuous_0",
@@ -1057,8 +976,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/expr/ob_expr_st_centroid.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_vector_discrete_0",
@@ -1067,8 +984,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/vector/ob_discrete_base.cpp",
             "src/sql/engine/ob_sql_memory_manager.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_vector_fixed_0",
@@ -1076,8 +991,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/vector/ob_fixed_length_base.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_engine_vector_uniform_0",
@@ -1085,8 +998,6 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/vector/ob_uniform_base.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_executor_0",
@@ -1098,8 +1009,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/executor/ob_maintain_dependency_info_task.cpp",
             "src/sql/executor/ob_sql_executor_ctx.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_executor_1",
@@ -1109,8 +1018,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/executor/ob_memory_tracker_wrapper.cpp",
             "src/sql/executor/ob_worker_session_guard.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_hybrid_search_0",
@@ -1122,8 +1029,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/hybrid_search/ob_query_translator.cpp",
             "src/sql/hybrid_search/ob_hybrid_search_executor.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_monitor_0",
@@ -1137,8 +1042,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/monitor/ob_plan_info_manager.cpp",
             "src/sql/monitor/ob_sql_stat_record.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_optimizer_0",
@@ -1152,7 +1055,19 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_fd_item.cpp",
             "src/sql/optimizer/ob_index_info_cache.cpp",
             "src/sql/optimizer/ob_insert_log_plan.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_join_order",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_join_order.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_operators",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_log_del_upd.cpp",
             "src/sql/optimizer/ob_log_delete.cpp",
             "src/sql/optimizer/ob_log_distinct.cpp",
@@ -1170,10 +1085,14 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_material.cpp",
             "src/sql/optimizer/ob_log_monitoring_dump.cpp",
             "src/sql/optimizer/ob_log_operator_factory.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_log_plan",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_log_plan.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_optimizer_1",
@@ -1192,6 +1111,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_topk.cpp",
             "src/sql/optimizer/ob_log_update.cpp",
             "src/sql/optimizer/ob_log_window_function.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_cost",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_logical_operator.cpp",
             "src/sql/optimizer/ob_opt_est_cost.cpp",
             "src/sql/optimizer/ob_opt_est_cost_model.cpp",
@@ -1200,16 +1125,20 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_opt_est_utils.cpp",
             "src/sql/optimizer/ob_opt_selectivity.cpp",
             "src/sql/optimizer/ob_optimizer.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_optimizer_utils",
+        language = "c++",
+        srcs = [
             "src/sql/optimizer/ob_optimizer_util.cpp",
-            "src/sql/optimizer/ob_phy_table_location_info.cpp",
+            "src/sql/optimizer/table_access_targets.cpp",
             "src/sql/optimizer/ob_pwj_comparer.cpp",
             "src/sql/optimizer/ob_px_resource_analyzer.cpp",
             "src/sql/optimizer/ob_raw_expr_add_to_context.cpp",
             "src/sql/optimizer/ob_raw_expr_check_dep.cpp",
             "src/sql/optimizer/ob_raw_expr_get_hash_value.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_optimizer_2",
@@ -1220,7 +1149,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_sharding_info.cpp",
             "src/sql/optimizer/ob_skyline_prunning.cpp",
             "src/sql/optimizer/ob_storage_estimator.cpp",
-            "src/sql/optimizer/ob_table_location.cpp",
+            "src/sql/optimizer/table_access_plan.cpp",
             "src/sql/optimizer/ob_table_partition_info.cpp",
             "src/sql/optimizer/ob_update_log_plan.cpp",
             "src/sql/optimizer/ob_log_stat_collector.cpp",
@@ -1229,8 +1158,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/ob_log_values_table_access.cpp",
             "src/sql/optimizer/ob_log_expand.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_optimizer_stat_0",
@@ -1267,8 +1194,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/stat/ob_stat_define.cpp",
             "src/sql/optimizer/stat/ob_stat_item.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_optimizer_stat_1",
@@ -1277,8 +1202,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/optimizer/stat/ob_stats_estimator.cpp",
             "src/sql/optimizer/stat/ob_topk_hist_estimator.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_plan_cache_0",
@@ -1310,8 +1233,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/plan_cache/ob_values_table_compression.cpp",
             "src/sql/plan_cache/ob_adaptive_auto_dop.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_printer_0",
@@ -1325,8 +1246,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/printer/ob_update_stmt_printer.cpp",
             "src/sql/printer/ob_schema_printer.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_0",
@@ -1343,8 +1262,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/tcl/ob_start_trans_resolver.cpp",
             "src/sql/resolver/tcl/ob_tcl_resolver.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_cmd_0",
@@ -1369,8 +1286,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/cmd/ob_variable_set_resolver.cpp",
             "src/sql/resolver/cmd/ob_variable_set_stmt.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_dcl_0",
@@ -1400,8 +1315,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/dcl/ob_alter_user_role_resolver.cpp",
             "src/sql/resolver/dcl/ob_alter_user_role_stmt.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_ddl_0",
@@ -1426,8 +1339,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/ddl/ob_create_package_resolver.cpp",
             "src/sql/resolver/ddl/ob_create_routine_resolver.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_ddl_1",
@@ -1452,8 +1363,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/ddl/ob_explain_resolver.cpp",
             "src/sql/resolver/ddl/ob_explain_stmt.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_ddl_2",
@@ -1480,8 +1389,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/ddl/ob_use_database_resolver.cpp",
             "src/sql/resolver/ddl/ob_fts_parser_resolver.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_dml_0",
@@ -1496,6 +1403,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/dml/ob_delete_stmt.cpp",
             "src/sql/resolver/dml/ob_dml_resolver.cpp",
             "src/sql/resolver/dml/ob_dml_stmt.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_resolver_dml_statements",
+        language = "c++",
+        srcs = [
             "src/sql/resolver/dml/ob_group_by_checker.cpp",
             "src/sql/resolver/dml/ob_insert_resolver.cpp",
             "src/sql/resolver/dml/ob_insert_stmt.cpp",
@@ -1511,8 +1424,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/dml/ob_view_table_resolver.cpp",
             "src/sql/resolver/dml/ob_inlist_resolver.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_expr_0",
@@ -1528,14 +1439,24 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/expr/ob_raw_expr_part_func_checker.cpp",
             "src/sql/resolver/expr/ob_raw_expr_print_visitor.cpp",
             "src/sql/resolver/expr/ob_raw_expr_replacer.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_resolver_expr_impl",
+        language = "c++",
+        srcs = [
             "src/sql/resolver/expr/ob_raw_expr_resolver_impl.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_resolver_expr_utils",
+        language = "c++",
+        srcs = [
             "src/sql/resolver/expr/ob_raw_expr_util.cpp",
             "src/sql/resolver/expr/ob_raw_expr_wrap_enum_set.cpp",
             "src/sql/resolver/expr/ob_shared_expr_resolver.cpp",
             "src/sql/resolver/expr/ob_raw_expr_type_demotion.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_resolver_prepare_0",
@@ -1548,8 +1469,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/resolver/prepare/ob_prepare_resolver.cpp",
             "src/sql/resolver/prepare/ob_prepare_stmt.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_rewrite_0",
@@ -1564,6 +1483,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_range_generator.cpp",
             "src/sql/rewrite/ob_range_graph_generator.cpp",
             "src/sql/rewrite/ob_stmt_comparer.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_joins",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_count_to_exists.cpp",
             "src/sql/rewrite/ob_transform_aggr_subquery.cpp",
             "src/sql/rewrite/ob_transform_min_max.cpp",
@@ -1575,6 +1500,12 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_transform_left_join_to_anti.cpp",
             "src/sql/rewrite/ob_transform_or_expansion.cpp",
             "src/sql/rewrite/ob_transform_join_limit_pushdown.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_predicates",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_pre_process.cpp",
             "src/sql/rewrite/ob_transform_predicate_move_around.cpp",
             "src/sql/rewrite/ob_transform_project_pruning.cpp",
@@ -1586,8 +1517,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_transform_simplify_groupby.cpp",
             "src/sql/rewrite/ob_transform_simplify_limit.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_rewrite_1",
@@ -1599,7 +1528,19 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_transform_simplify_winfunc.cpp",
             "src/sql/rewrite/ob_transform_subquery_coalesce.cpp",
             "src/sql/rewrite/ob_transform_temp_table.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_utils",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_utils.cpp",
+        ],
+    ),
+    struct(
+        name = "ob_sql_rewrite_subqueries",
+        language = "c++",
+        srcs = [
             "src/sql/rewrite/ob_transform_view_merge.cpp",
             "src/sql/rewrite/ob_transform_where_subquery_pullup.cpp",
             "src/sql/rewrite/ob_transform_win_magic.cpp",
@@ -1611,8 +1552,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/rewrite/ob_transform_late_materialization.cpp",
             "src/sql/rewrite/ob_transform_distinct_aggregate.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_session_0",
@@ -1630,8 +1569,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/session/ob_system_variable_factory.cpp",
             "src/sql/session/ob_session_inner_sql.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
     struct(
         name = "ob_sql_tablelock_0",
@@ -1641,8 +1578,6 @@ SQL_UNITY_GROUPS = [
             "src/sql/tablelock/ob_lock_func_executor.cpp",
             "src/sql/tablelock/ob_mysql_lock_table_executor.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
 ]
 
@@ -1655,41 +1590,39 @@ SQL_SIMD_UNITY_GROUPS = [
             "src/sql/engine/basic/ob_byte_compare_simd.cpp",
             "src/sql/engine/px/ob_px_bloom_filter_simd.cpp",
         ],
-        generated_srcs = [],
-        external_srcs = [],
     ),
 ]
 
 SQL_STANDALONE_SOURCES = [
-    struct(path = "src/sql/engine/aggregate/ob_aggregate_processor.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_add.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_array_sort.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_in.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_mul.cpp", language = "c++", kind = "source"),
+    "src/sql/engine/aggregate/ob_aggregate_processor.cpp",
+    "src/sql/engine/expr/ob_expr_add.cpp",
+    "src/sql/engine/expr/ob_expr_array_sort.cpp",
+    "src/sql/engine/expr/ob_expr_in.cpp",
+    "src/sql/engine/expr/ob_expr_mul.cpp",
 ]
 
 SQL_EXTRA_SOURCES = [
-    struct(path = "src/sql/engine/expr/ob_datum_cast.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_obj_cast_runtime.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_compile_init.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part0.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part1.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part2.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part3.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part4.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part5.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part6.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part7.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_all.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_0.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_1.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_2.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_3.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_4.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_5.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_6.cpp", language = "c++", kind = "source"),
-    struct(path = "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_7.cpp", language = "c++", kind = "source"),
+    "src/sql/engine/expr/ob_datum_cast.cpp",
+    "src/sql/engine/expr/ob_obj_cast_runtime.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_compile_init.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part0.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part1.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part2.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part3.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part4.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part5.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part6.cpp",
+    "src/sql/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part7.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_all.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_0.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_1.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_2.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_3.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_4.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_5.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_6.cpp",
+    "src/sql/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_7.cpp",
 ]
 
 SQL_PARSER_SOURCES = [

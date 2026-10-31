@@ -16,9 +16,12 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "config_bridge.h"
+#include "rust/config.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/compress/ob_compress_util.h"
+#include "lib/string/ob_sql_string.h"
 #include "ob_ddl_common.h"
+#include <inttypes.h>
 #include "common/datum/ob_datum.h"  // ObDatum complete type(previously hidden behind the block_sstable_struct include chain)
 #include "share/ob_rpc_struct.h"
 #include "share/system_variable/ob_system_variable_alias.h"
@@ -549,8 +552,14 @@ int ObDDLUtil::generate_column_name_str(
 {
   int ret = OB_SUCCESS;
   const char *split_char = "`";
+  ObArenaAllocator allocator("DDLIdentifier");
+  ObString column_name = column_name_info.column_name_;
+  if ((with_origin_name || with_alias_name)
+      && OB_FAIL(escape_mysql_identifier(allocator, column_name, column_name))) {
+    LOG_WARN("failed to escape DDL column name", K(ret), K(column_name_info));
+  }
   // append comma
-  if (with_comma) {
+  if (OB_SUCC(ret) && with_comma) {
     if (OB_FAIL(sql_string.append_fmt(", "))) {
     }
   }
@@ -558,9 +567,9 @@ int ObDDLUtil::generate_column_name_str(
   if (OB_SUCC(ret) && with_origin_name) {
     if (column_name_info.is_enum_set_need_cast_) {
       // Enum and set values are cast to unsigned before being appended to a macro block.
-      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+      if (OB_FAIL(sql_string.append_fmt("cast(%s%.*s%s as unsigned)", split_char, column_name.length(), column_name.ptr(), split_char))) {
       }
-    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+    } else if (OB_FAIL(sql_string.append_fmt("%s%.*s%s", split_char, column_name.length(), column_name.ptr(), split_char))) {
     }
   }
   // append AS
@@ -571,7 +580,7 @@ int ObDDLUtil::generate_column_name_str(
   // append alias column name
   if (OB_SUCC(ret) && with_alias_name) {
     if (OB_FAIL(sql_string.append_fmt("%s%s%.*s%s", split_char, column_name_info.is_shadow_column_ ? "__SHADOW_" : "",
-        column_name_info.column_name_.length(), column_name_info.column_name_.ptr(), split_char))) {
+        column_name.length(), column_name.ptr(), split_char))) {
     }
   }
   return ret;
@@ -583,7 +592,7 @@ int ObDDLUtil::generate_ddl_schema_hint_str(
     ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql_string.append_fmt("ob_ddl_schema_version(`%.*s`, %ld)",
+  if (OB_FAIL(sql_string.append_fmt("ob_ddl_schema_version(`%.*s`, %" PRId64 ")",
       static_cast<int>(table_name.length()), table_name.ptr(), schema_version))) {
   }
   return ret;
@@ -1047,7 +1056,7 @@ int ObDDLUtil::get_data_information(
       if (OB_FAIL(query_string.assign_fmt(
           "SELECT snapshot_version, ddl_type, UNHEX(message) AS message_unhex, "
           "status, schema_version, target_object_id "
-          "FROM %s WHERE task_id = %lu",
+          "FROM %s WHERE task_id = %" PRIu64,
           OB_ALL_DDL_TASK_STATUS_TNAME,
           task_id))) {
       } else if (OB_FAIL(sql_client.read(res, query_string.ptr()))) {
@@ -1230,7 +1239,7 @@ int ObDDLUtil::check_table_column_checksum_error(common::ObISQLClient &sql_clien
     ObTimeoutCtx timeout_ctx;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if OB_FAIL(ret) {
-      } else if (OB_FAIL(query_string.append_fmt("SELECT data_table_id FROM %s WHERE data_table_id = %lu LIMIT 1",
+      } else if (OB_FAIL(query_string.append_fmt("SELECT data_table_id FROM %s WHERE data_table_id = %" PRId64 " LIMIT 1",
           OB_ALL_VIRTUAL_COLUMN_CHECKSUM_ERROR_INFO_TNAME, table_id))) {
       } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, config::internal_sql_execute_timeout()))) {
       } else if (OB_FAIL(sql_client.read(res, query_string.ptr()))) {
@@ -1342,7 +1351,7 @@ int ObCheckTabletDataComplementOp::check_task_inner_sql_session_status(
       } else if (OB_ISNULL(trace_id_like = ObString(trace_id_str).find('-'))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(sql_string.assign_fmt(" SELECT id as session_id FROM %s WHERE trace_id like \"%c%s\" "
-            " and info like \"%cINSERT%c('ddl_task_id', %ld)%cINTO%cSELECT%c%ld%c\" ",
+            " and info like \"%cINSERT%c('ddl_task_id', %" PRId64 ")%cINTO%cSELECT%c%" PRId64 "%c\" ",
           OB_ALL_VIRTUAL_SESSION_INFO_TNAME,
           charater,
           trace_id_like,

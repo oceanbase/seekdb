@@ -377,9 +377,8 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
     _OB_LOG(ERROR, "phy_plan not init");
     ret = OB_NOT_INIT;
   }
-  //Save the current execution state to determine whether to refresh location
-  //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).save_cur_exec_status(ret);
+  // Record access errors for retry bookkeeping before statement cleanup.
+  DAS_CTX(get_exec_context()).record_access_error(ret);
 
   return ret;
 }
@@ -395,8 +394,7 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
 // Solution: Check the version number before updating the data, if the version number is inconsistent, then throw OB_TRANSACTION_SET_VIOLATION
 // Error, retried by SQL layer here to ensure consistent read and write version numbers.
 //
-// Note: Since this retry does not involve refreshing Schema or updating Location Cache, so there is no need for a full statement-level retry,
-// Execute level retries are sufficient.
+// This retry preserves the plan and access targets; execution-level retries suffice.
 bool ObResultSet::transaction_set_violation_and_retry(int &err, int64_t &retry_times)
 {
   bool bret = false;
@@ -807,7 +805,7 @@ int ObResultSet::do_close(int *client_ret)
   bool async = false; // for debug purpose
   if (OB_NOT_NULL(physical_plan_)) {
     if (is_end_trans_async()) {
-      ObCurTraceId::TraceId *cur_trace_id = NULL;
+      const ObCurTraceId::TraceId *cur_trace_id = NULL;
       if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
         ret = OB_ERR_UNEXPECTED;
         set_end_trans_async(false);
@@ -838,9 +836,8 @@ int ObResultSet::do_close(int *client_ret)
       && OB_SUCCESS != err && err != errcode_ && close_fail_cb_.is_valid()) {
     close_fail_cb_(err, *client_ret);
   }
-  //Save the current execution state to determine whether to refresh location
-  //and perform other necessary cleanup operations when the statement exits.
-  DAS_CTX(get_exec_context()).save_cur_exec_status(ret);
+  // Record access errors for retry bookkeeping before statement cleanup.
+  DAS_CTX(get_exec_context()).record_access_error(ret);
   //NG_TRACE_EXT(result_set_close, OB_ID(ret), ret, OB_ID(arg1), prev_ret,
                //OB_ID(arg2), ins_ret, OB_ID(arg3), errcode_, OB_ID(async), async);
   return ret;  // All subsequent operations are completed through callback
@@ -1049,16 +1046,6 @@ int ObResultSet::init_cmd_exec_context(ObExecContext &exec_ctx)
     }
   }
   return ret;
-}
-// obmp_query before retrying the entire SQL, it may be necessary to call this interface to refresh Location, to avoid always sending to the wrong server
-void ObResultSet::refresh_location_cache_by_errno(bool is_nonblock, int err)
-{
-  DAS_CTX(get_exec_context()).refresh_location_cache_by_errno(is_nonblock, err);
-}
-
-void ObResultSet::force_refresh_location_cache(bool is_nonblock, int err)
-{
-  DAS_CTX(get_exec_context()).force_refresh_location_cache(is_nonblock, err);
 }
 // Tell mysql whether to pass an EndTransCallback
 bool ObResultSet::need_end_trans_callback() const

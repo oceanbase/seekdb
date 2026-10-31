@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_TRANSACTION_OB_ID_SERVICE_
 #define OCEANBASE_TRANSACTION_OB_ID_SERVICE_
 
-#include "storage/slog/ob_storage_log_struct.h"
 #include "logservice/ob_append_callback.h"
 #include "share/log/ob_log_base_type.h"
 #include "share/scn.h"
@@ -120,7 +119,7 @@ public:
   int replay(const void *buffer, const int64_t buf_size, const palf::LSN &lsn, const share::SCN &log_ts);
   int check_and_fill_ls();
   void update_limited_id(const int64_t limited_id, const share::SCN latest_log_ts);
-  int update_id_meta(const bool write_slog);
+  int update_id_meta(const bool persist_change);
   // vtable
   void get_virtual_info(int64_t &last_id, int64_t &limited_id, share::SCN &rec_log_ts,
                         share::SCN &latest_log_ts, int64_t &pre_allocated_range,

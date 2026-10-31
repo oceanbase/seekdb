@@ -428,7 +428,7 @@ int ObPxTaskProcess::do_process()
   if (NULL != arg_.sqc_task_ptr_) {
     arg_.sqc_task_ptr_->set_result(ret);
     if (OB_NOT_NULL(arg_.exec_ctx_)) {
-      int das_retry_rc = DAS_CTX(*arg_.exec_ctx_).get_last_errno();
+      int das_retry_rc = DAS_CTX(*arg_.exec_ctx_).get_retry_error();
       arg_.sqc_task_ptr_->set_das_retry_rc(das_retry_rc);
     }
     if (OB_SUCC(ret)) {

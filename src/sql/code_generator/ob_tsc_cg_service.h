@@ -51,11 +51,11 @@ public:
                                const log_op_def::ObLogOpType op_type,
                                const bool is_global_index_lookup,
                                ObPushdownExprSpec &pd_spec);
-  int generate_table_loc_meta(uint64_t table_loc_id,
+  int generate_table_access_meta(uint64_t table_ref_id,
                               const ObDMLStmt &stmt,
                               const share::schema::ObTableSchema &table_schema,
                               const ObSQLSessionInfo &session,
-                              ObDASTableLocMeta &loc_meta);
+                              DASTableAccessMeta &access_meta);
   int generate_das_result_output(const common::ObIArray<uint64_t> &output_cids,
                                  common::ObIArray<ObExpr *> &domain_id_expr,
                                  common::ObIArray<uint64_t> &domain_id_col_ids,

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/ai_service/ob_ai_service_proxy.h"
 #include "share/ob_share_util.h"
 #include "share/ob_dml_sql_splicer.h"
@@ -42,7 +42,7 @@ int ObAiServiceProxy::insert_ai_endpoint(ObMySQLTransaction &trans, const int64_
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
-  } else if (OB_FAIL(sql.add_column("endpoint_name", endpoint.name_))) {
+  } else if (OB_FAIL(sql.add_column("endpoint_name", ObHexEscapeSqlStr(endpoint.name_)))) {
   } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(endpoint.ai_model_name_)))) {
   } else if (OB_FAIL(sql.add_column("url", ObHexEscapeSqlStr(endpoint.url_)))) {
   } else if (OB_FAIL(sql.add_column("access_key", ObHexEscapeSqlStr(endpoint.access_key_)))) {
@@ -74,7 +74,7 @@ int ObAiServiceProxy::update_ai_endpoint(ObMySQLTransaction &trans, const int64_
   if (OB_FAIL(sql.add_pk_column("endpoint_id", endpoint.endpoint_id_))) {
   } else if (OB_FAIL(sql.add_pk_column("scope", ObHexEscapeSqlStr(endpoint.scope_)))) {
   } else if (OB_FAIL(sql.add_column("version", new_endpoint_version))) {
-  } else if (OB_FAIL(sql.add_column("endpoint_name", endpoint.name_))) {
+  } else if (OB_FAIL(sql.add_column("endpoint_name", ObHexEscapeSqlStr(endpoint.name_)))) {
   } else if (OB_FAIL(sql.add_column("ai_model_name", ObHexEscapeSqlStr(endpoint.ai_model_name_)))) {
   } else if (OB_FAIL(sql.add_column("url", ObHexEscapeSqlStr(endpoint.url_)))) {
   } else if (OB_FAIL(sql.add_column("access_key", ObHexEscapeSqlStr(endpoint.access_key_)))) {

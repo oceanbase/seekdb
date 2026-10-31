@@ -264,18 +264,18 @@ struct ObDASAttachSpec
   OB_UNIS_VERSION(1);
 public:
   ObDASAttachSpec(common::ObIAllocator &alloc, ObDASBaseCtDef *scan_ctdef)
-    : attach_loc_metas_(alloc),
+    : attach_access_metas_(alloc),
       scan_ctdef_(nullptr),
       allocator_(alloc),
       attach_ctdef_(nullptr)
   {
   }
-  common::ObList<ObDASTableLocMeta*, common::ObIAllocator> attach_loc_metas_;
+  common::ObList<DASTableAccessMeta*, common::ObIAllocator> attach_access_metas_;
   ObDASBaseCtDef *scan_ctdef_; //This ctdef represents the main task information executed by the DAS Task.
   common::ObIAllocator &allocator_;
   ObDASBaseCtDef *attach_ctdef_; //The attach_ctdef represents the task information that is bound to and executed on the DAS Task.
 
-  const ObDASTableLocMeta *get_attach_loc_meta(int64_t table_location_id, int64_t ref_table_id) const;
+  const DASTableAccessMeta *get_attach_access_meta(int64_t table_ref_id, int64_t ref_table_id) const;
   int set_calc_exprs(const ExprFixedArray &calc_exprs, const int64_t max_batch_size);
   const ExprFixedArray &get_result_output() const
   {
@@ -283,7 +283,7 @@ public:
     return static_cast<const ObDASAttachCtDef*>(attach_ctdef_)->result_output_;
   }
 
-  TO_STRING_KV(K_(attach_loc_metas),
+  TO_STRING_KV(K_(attach_access_metas),
                K_(attach_ctdef));
 private:
   int serialize_ctdef_tree(char *buf,

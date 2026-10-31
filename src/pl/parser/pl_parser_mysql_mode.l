@@ -19,7 +19,6 @@
 %option noyyalloc noyyrealloc noyyfree
 %option reentrant bison-bridge bison-locations
 %option prefix="obpl_mysql_yy"
-%option header-file="../../../src/pl/parser/pl_parser_mysql_mode_lex.h"
 %{
 #include "pl/parser/pl_parser_base.h"
 #include "pl_parser_mysql_mode_tab.h"

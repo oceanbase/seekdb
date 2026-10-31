@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "query/engine/basic/ob_spill_row_store.h"
 #include "ob_chunk_datum_store.h"
 #include "sql/engine/ob_exec_context.h"

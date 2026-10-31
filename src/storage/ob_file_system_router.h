@@ -33,7 +33,6 @@ public:
   int init(const char *data_dir, const char *redo_dir);
 
   OB_INLINE const char* get_data_dir() const { return data_dir_; }
-  OB_INLINE const char* get_slog_dir() const { return slog_dir_; }
   OB_INLINE const char* get_clog_dir() const { return clog_dir_; }
   int get_server_clog_dir(
       char (&server_clog_dir)[common::MAX_PATH_SIZE]);
@@ -45,7 +44,6 @@ public:
   OB_INLINE void set_svr_seq(const int64_t svr_seq) { svr_seq_ = svr_seq; }
 
   OB_INLINE const blocksstable::ObLogFileSpec &get_clog_file_spec() const { return clog_file_spec_; }
-  OB_INLINE const blocksstable::ObLogFileSpec &get_slog_file_spec() const { return slog_file_spec_; }
 
 private:
   ObFileSystemRouter();
@@ -57,12 +55,10 @@ private:
 
 private:
   char data_dir_[common::MAX_PATH_SIZE];
-  char slog_dir_[common::MAX_PATH_SIZE];
   char clog_dir_[common::MAX_PATH_SIZE];
   char sstable_dir_[common::MAX_PATH_SIZE];
 
   blocksstable::ObLogFileSpec clog_file_spec_;
-  blocksstable::ObLogFileSpec slog_file_spec_;
   int64_t svr_seq_;
   bool is_inited_;
 

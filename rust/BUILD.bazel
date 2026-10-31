@@ -12,24 +12,119 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@cargo_exports//:exports.bzl", "EXPORTS")
-load("//bazel:cargo.bzl", "cargo_workspace")
+load("//bazel:defs.bzl", "cc_library")
+load("//bazel:cargo.bzl", "cargo_library", "cxxbridge_tool")
+load("//bazel:cxx.bzl", "config_generate", "cxx_bridge", "cxx_generate")
 
 package(default_visibility = ["//visibility:private"])
 
-exports_files(
-    ["rust-toolchain.toml"],
-    visibility = ["//deps/external:__pkg__"],
-)
-exports_files(["exports.json"])
+exports_files(["rust-toolchain.toml"], visibility = ["//deps/external:__pkg__"])
+exports_files(["Cargo.lock"], visibility = ["//src/observer:__pkg__"])
 
-# Cargo resolves all Rust dependencies; Bazel tracks build inputs and exposes
-# only the libraries explicitly exported to C++.
-cargo_workspace(
-    exports = EXPORTS,
+config_generate(
+    name = "_config_sources",
+    script = "config/generate.py",
+    parameters = "config/parameters.yaml",
+    internal_state = "config/internal_state.yaml",
+    default_log_level = select({
+        "//bazel:rpm_logging_enabled": "OB_LOG_LEVEL_DBA_WARN",
+        "//conditions:default": "OB_LOG_LEVEL_ERROR",
+    }),
+    rust = "config/generated_config.rs",
+    checkers = "config/config_checkers.h",
+)
+
+cxxbridge_tool(name = "cxxbridge")
+
+cxx_generate(name = "_cxx_header", header = "cxx.h")
+cc_library(name = "cxx_headers", hdrs = ["cxx.h"])
+
+cxx_bridge(
+    name = "local",
+    src = "local/src/bridge.rs",
+    hdrs = ["local/include/callbacks.h"],
+)
+cxx_bridge(
+    name = "config",
+    src = "config/generated_config.rs",
+    hdrs = ["config/include/check_callback.h", "config/config_checkers.h"],
+    deps = [":local_headers"],
+)
+cxx_bridge(name = "logger", src = "logger/src/bridge.rs")
+cxx_bridge(
+    name = "in_process",
+    src = "in-process/src/bridge.rs",
+    hdrs = ["in-process/include/in_process_server.h"],
+)
+cxx_bridge(
+    name = "sql_nio",
+    src = "sql-nio/src/bridge.rs",
+    hdrs = ["sql-nio/include/callbacks.h"],
+    cfgs = select({
+        "@platforms//os:emscripten": ['feature="memory-transport"'],
+        "//conditions:default": [],
+    }),
+)
+
+filegroup(
+    name = "generated_headers",
+    srcs = [
+        "cxx.h",
+        "local.h",
+        "config.h",
+        "config/config_checkers.h",
+        "logger.h",
+        "in_process.h",
+        "sql_nio.h",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cargo_library(
+    name = "archive",
     srcs = glob(
-        ["**/*.rs", "**/*.h", "**/*.py", "**/*.toml", "**/*.yaml", "**/*.yml", "**/*.json", "*.lock"],
-        exclude = ["target/**"],
+        ["**/*.rs", "**/*.py", "**/*.toml", "*.lock"],
+        exclude = ["target/**", "config/generate.py"],
         allow_empty = True,
     ),
+    config_rs = "config/generated_config.rs",
+    platform_inputs = select({
+        "@platforms//os:emscripten": ["//bazel:wasm_rust_build_tools"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "bridges",
+    deps = [":local_bridge", ":config_bridge", ":logger_bridge", ":sql_nio_bridge"] + select({
+        "@platforms//os:windows": [],
+        "@platforms//os:emscripten": [],
+        "//conditions:default": [":in_process_bridge"],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "_rust_runtime",
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread", "-ldl", "-lm"],
+        "@platforms//os:android": ["-ldl", "-lm"],
+        "@platforms//os:windows": ["ntdll.lib", "userenv.lib", "ws2_32.lib", "bcrypt.lib", "advapi32.lib", "synchronization.lib"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "local",
+    srcs = [":archive"],
+    deps = [":local_bridge", ":_rust_runtime"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "logger",
+    srcs = [":archive"],
+    deps = [":logger_bridge", ":_rust_runtime"],
+    visibility = ["//visibility:public"],
 )

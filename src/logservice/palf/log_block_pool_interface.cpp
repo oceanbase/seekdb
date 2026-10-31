@@ -111,9 +111,12 @@ int remove_directory_rec(const char *path, ILogBlockPool *log_block_pool)
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(path, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
@@ -152,9 +155,12 @@ int remove_tmp_file_or_directory_at(const char *path, ILogBlockPool *log_block_p
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(path, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", path, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));

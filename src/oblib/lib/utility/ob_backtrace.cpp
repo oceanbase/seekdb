@@ -29,6 +29,12 @@
 
 #include "ob_backtrace.h"
 #include "lib/utility/utility.h"
+#ifdef __EMSCRIPTEN__
+// The pinned Emscripten SDK uses these same entry points for sanitizer stack
+// traces (system/lib/libc/emscripten_internal.h). Wasm has no native FP chain.
+extern "C" uintptr_t emscripten_stack_snapshot(void);
+extern "C" uint32_t emscripten_stack_unwind_buffer(uintptr_t pc, uintptr_t *buffer, uint32_t depth);
+#endif
 
 namespace oceanbase
 {
@@ -36,7 +42,9 @@ namespace common
 {
 int light_backtrace(void **buffer, int size)
 {
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+  return _ob_backtrace(buffer, size);
+#elif defined(_WIN32)
   // The frame-pointer walking implementation below assumes the System V
   // x86_64 / AArch64 ABI in which RBP / X29 is a real frame pointer and each
   // frame is laid out as [saved_fp][return_addr][...]. On Windows x64 (MS
@@ -67,7 +75,7 @@ int light_backtrace(void **buffer, int size)
 
 int light_backtrace(void **buffer, int size, int64_t rbp)
 {
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
   // The provided rbp is meaningless under the Windows x64 ABI; fall back to
   // the same unwind-table based capture as the 2-arg overload. This keeps
   // the signal-handler call site (which only fires on POSIX) compiling on
@@ -121,7 +129,15 @@ int64_t get_rel_offset(int64_t addr)
 
 bool g_enable_backtrace = true;
 
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+int _ob_backtrace(void **buffer, int size)
+{
+  if (!g_enable_backtrace || buffer == nullptr || size <= 0) { return 0; }
+  const uintptr_t pc = emscripten_stack_snapshot();
+  return static_cast<int>(emscripten_stack_unwind_buffer(
+      pc, reinterpret_cast<uintptr_t *>(buffer), static_cast<uint32_t>(size)));
+}
+#elif defined(_WIN32)
 // Windows implementation of ob_backtrace using CaptureStackBackTrace
 int _ob_backtrace(void** buffer, int size)
 {
@@ -140,14 +156,18 @@ char *lbt()
 {
   void *addrs[MAX_ADDRS_COUNT];
   int size = ob_backtrace(addrs, MAX_ADDRS_COUNT);
-  return parray(*&buffer, LBT_BUFFER_LENGTH, (int64_t *)addrs, size);
+  int64_t offsets[MAX_ADDRS_COUNT];
+  for (int i = 0; i < size; ++i) { offsets[i] = reinterpret_cast<uintptr_t>(addrs[i]); }
+  return parray(*&buffer, LBT_BUFFER_LENGTH, offsets, size);
 }
 
 char *lbt(char *buf, int32_t len)
 {
   void *addrs[MAX_ADDRS_COUNT];
   int size = ob_backtrace(addrs, MAX_ADDRS_COUNT);
-  return parray(buf, len, (int64_t *)addrs, size);
+  int64_t offsets[MAX_ADDRS_COUNT];
+  for (int i = 0; i < size; ++i) { offsets[i] = reinterpret_cast<uintptr_t>(addrs[i]); }
+  return parray(buf, len, offsets, size);
 }
 
 char *parray(int64_t *array, int size)
@@ -165,9 +185,9 @@ char *parray(char *buf, int64_t len, int64_t *array, int size)
     for (int64_t i = 0; i < size; i++) {
       int64_t addr = get_rel_offset(array[i]);
       if (0 == i) {
-        count = snprintf(buf + pos, len - pos, "0x%lx", addr);
+        count = snprintf(buf + pos, len - pos, "0x%" PRIx64, static_cast<uint64_t>(addr));
       } else {
-        count = snprintf(buf + pos, len - pos, " 0x%lx", addr);
+        count = snprintf(buf + pos, len - pos, " 0x%" PRIx64, static_cast<uint64_t>(addr));
       }
       if (count >= 0 && pos + count < len) {
         pos += count;

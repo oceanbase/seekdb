@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_max_id_fetcher.h"
+#include <inttypes.h>
 
 #include "share/ob_sql_client_decorator.h"
 #include "share/ob_max_id_cache.h"
@@ -310,7 +311,7 @@ int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client,
   } else if (OB_ISNULL(id_name = get_max_id_name(max_id_type))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(sql.append_fmt(
-      "UPDATE %s SET VALUE = '%lu', gmt_modified = now(6) "
+      "UPDATE %s SET VALUE = '%" PRIu64 "', gmt_modified = now(6) "
       "WHERE NAME = '%s'",
       OB_ALL_SYS_STAT_TNAME,
       ObSchemaUtils::get_extract_schema_id(max_id),
@@ -389,7 +390,7 @@ int ObMaxIdFetcher::insert_initial_value(common::ObISQLClient &sql_client,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s "
       "(name, data_type, value, info) VALUES "
-      "('%s', '%d', '%ld', '%s') ON DUPLICATE KEY UPDATE value = value",
+      "('%s', '%d', '%" PRId64 "', '%s') ON DUPLICATE KEY UPDATE value = value",
       OB_ALL_SYS_STAT_TNAME,
       name, obj.get_type(),
       static_cast<int64_t>(value), info))) {

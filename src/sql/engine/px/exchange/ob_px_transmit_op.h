@@ -81,7 +81,7 @@ public:
   ObExpr *random_expr_;
   // saving rows when sampling
   ExprFixedArray sampling_saving_row_;
-  int64_t repartition_table_id_; // for pkey, target table location id
+  int64_t repartition_table_id_; // for pkey, target table access id
   ObExpr *wf_hybrid_aggr_status_expr_;
   common::ObFixedArray<int64_t, common::ObIAllocator> wf_hybrid_pby_exprs_cnt_array_;
   // for calc ddl sice idx

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_dtl_fc_server.h"
 #include "share/rc/ob_server_runtime.h"
 

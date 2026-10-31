@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_tablet_drop.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "share/ob_share_util.h"
@@ -243,12 +243,12 @@ int ObTabletDrop::execute()
                                  transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS,
                                  buf,
                                  buf_len))) {
-            if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NOT_MASTER == ret) {
+            if (OB_LOG_STREAM_ACCESS_NOT_READY == ret || OB_NOT_MASTER == ret) {
               LOG_INFO("fail to find leader, try again", K(arg));
               ob_usleep(SLEEP_INTERVAL);
             }
           }
-        } while (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NOT_MASTER == ret);
+        } while (OB_LOG_STREAM_ACCESS_NOT_READY == ret || OB_NOT_MASTER == ret);
       }
     }
   }

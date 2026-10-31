@@ -81,6 +81,11 @@ int ObTabletGCService::stop()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObTabletGCService is not initialized", KR(ret));
   } else {
+    ObLSService *ls_service = share::server_service<ObLSService>();
+    ObLS *ls = nullptr;
+    if (nullptr != ls_service && OB_SUCCESS == ls_service->get_ls(ls) && nullptr != ls) {
+      ls->get_tablet_gc_handler()->set_stop();
+    }
     timer_for_tablet_change_.stop();
     timer_for_tablet_shell_.stop();
   }

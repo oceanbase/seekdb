@@ -245,7 +245,7 @@ int ObCheckpointExecutor::update_clog_checkpoint()
             STORAGE_LOG(ERROR, "locate lsn by logts failed", K(ret),
                         K(checkpoint_scn), K(checkpoint_scn_in_ls_meta));
           }
-        } else if (OB_FAIL(ls_->set_clog_checkpoint(clog_checkpoint_lsn, checkpoint_scn, true/*write_slog*/))) {
+        } else if (OB_FAIL(ls_->set_clog_checkpoint(clog_checkpoint_lsn, checkpoint_scn, true/*persist_change*/))) {
         } else {
           update_clog_checkpoint_times_++;
           FLOG_INFO("[CHECKPOINT] update clog checkpoint successfully",

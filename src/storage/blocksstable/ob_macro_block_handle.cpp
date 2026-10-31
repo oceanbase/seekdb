@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_macro_block_handle.h"
 #include "storage/blocksstable/ob_block_manager.h"
 #include "share/ob_io_device_helper.h"

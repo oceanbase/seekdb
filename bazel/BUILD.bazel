@@ -1,19 +1,32 @@
-load(":seekdb_build_settings.bzl", "seekdb_bool_flag")
-load(":defs.bzl", cc_library = "seekdb_cc_library")
+load(":build_settings.bzl", "bool_flag")
 
 exports_files([
+    "build_metadata.py",
+    "parser.bzl",
+    "parser_codegen.py",
     "cargo.bzl",
+    "platforms.bzl",
     "defs.bzl",
-    "seekdb_cc_library.bzl",
-    "seekdb_build_config.bzl",
-    "seekdb_build_settings.bzl",
-    "seekdb_final_link.bzl",
-    "seekdb_cc_test.bzl",
-    "seekdb_partial_link.bzl",
-    "third_party_headers_repo.bzl",
+    "cc_library.bzl",
+    "compile_config.bzl",
+    "build_settings.bzl",
+    "final_link.bzl",
+    "localized_partial_link.bzl",
 ])
 
-seekdb_bool_flag(
+config_setting(
+    name = "ios_simulator",
+    constraint_values = ["@platforms//os:ios", "@apple_support//constraints:simulator"],
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "linux_arm64",
+    constraint_values = ["@platforms//os:linux", "@platforms//cpu:aarch64"],
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
     name = "enable_sanity",
     build_setting_default = False,
     visibility = ["//visibility:public"],
@@ -25,9 +38,36 @@ config_setting(
     visibility = ["//visibility:public"],
 )
 
-cc_library(
-    name = "sanity_abort_runtime",
-    srcs = ["sanity_abort.cpp"],
-    tags = ["manual"],
-    visibility = ["//src/oblib:__pkg__"],
+toolchain_type(name = "cargo_toolchain_type", visibility = ["//visibility:public"])
+exports_files(["cargo_toolchain.bzl", "prepare_cargo.py", "cargo_runner.py"])
+
+bool_flag(
+    name = "package_runtime",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "linux_package_runtime",
+    flag_values = {":package_runtime": "true"},
+    constraint_values = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+)
+
+bool_flag(
+    name = "rpm_logging",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "rpm_logging_enabled",
+    flag_values = {":rpm_logging": "true"},
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "wasm_rust_build_tools",
+    srcs = ["prepare_wasm_rust.py", "//deps/init/wasm:dependencies.json"],
+    visibility = ["//rust:__pkg__"],
 )

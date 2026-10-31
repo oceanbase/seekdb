@@ -295,13 +295,6 @@ void ObTxExecInfo::reset()
 
 void ObTxExecInfo::destroy(ObTxMDSCache &mds_cache)
 {
-  if (!mds_buffer_ctx_array_.empty()) {
-    TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "mds_buffer_ctx_array_ is valid when exec_info destroy",
-                        K_(mds_buffer_ctx_array), K(*this));
-    for (int64_t i = 0; i < mds_buffer_ctx_array_.count(); ++i) {
-      mds_buffer_ctx_array_[i].destroy_ctx();
-    }
-  }
   for (int64_t i = 0; i < multi_data_source_.count(); ++i) {
     ObTxBufferNode &node = multi_data_source_.at(i);
     if (nullptr != node.data_.ptr()) {
@@ -313,43 +306,6 @@ void ObTxExecInfo::destroy(ObTxMDSCache &mds_cache)
   reset();
 }
 
-int ObTxExecInfo::generate_mds_buffer_ctx_array()
-{
-  int ret = OB_SUCCESS;
-  mds_buffer_ctx_array_.reset();
-  for (int64_t idx = 0; idx < multi_data_source_.count() && OB_SUCC(ret); ++idx) {
-    const ObTxBufferNode &buffer_node = multi_data_source_.at(idx);
-    if (OB_FAIL(mds_buffer_ctx_array_.push_back(buffer_node.get_buffer_ctx_node()))) {
-    }
-  }
-  if (OB_FAIL(ret)) {
-    mds_buffer_ctx_array_.reset();
-  }
-  TRANS_LOG(INFO, "generate mds buffer ctx array", KR(ret), K(multi_data_source_), K(mds_buffer_ctx_array_));
-  return ret;
-}
-
-int ObTxExecInfo::merge_buffer_ctx_array_to_multi_data_source() const
-{
-  int ret = OB_SUCCESS;
-  ObTxBufferNodeArray &multi_data_source = const_cast<ObTxBufferNodeArray &>(multi_data_source_);
-  ObTxBufferCtxArray &mds_buffer_ctx_array = const_cast<ObTxBufferCtxArray &>(mds_buffer_ctx_array_);
-  TRANS_LOG_RET(INFO, OB_SUCCESS, "merge deserialized buffer ctx to multi_data_source", K(mds_buffer_ctx_array), K(multi_data_source));
-  if (mds_buffer_ctx_array.count() != multi_data_source.count()) {
-    ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "mds buffer ctx array size does not match multi data source array size",
-              K(ret), K(multi_data_source), K(mds_buffer_ctx_array), K(*this));
-    for (int64_t idx = 0; idx < mds_buffer_ctx_array.count(); ++idx) {
-      mds_buffer_ctx_array[idx].destroy_ctx();
-    }
-  } else {
-    for (int64_t idx = 0; idx < multi_data_source.count(); ++idx) {
-      multi_data_source[idx].buffer_ctx_node_ = mds_buffer_ctx_array[idx];
-    }
-  }
-  mds_buffer_ctx_array.reset();
-  return ret;
-}
 
 void ObTxExecInfo::clear_buffer_ctx_in_multi_data_source()
 {
@@ -367,7 +323,6 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     TRANS_LOG(ERROR, "no need to assign the same object", KR(ret), K(exec_info));
   } else if (OB_FAIL(redo_lsns_.assign(exec_info.redo_lsns_))) {
   } else if (OB_FAIL(multi_data_source_.assign(exec_info.multi_data_source_))) {
-  } else if (OB_FAIL(mds_buffer_ctx_array_.assign(exec_info.mds_buffer_ctx_array_))) {
   } else {
     // Prepare version should be initialized before state_
     // for ObTransPartCtx::get_prepare_version_if_preapred();
@@ -392,30 +347,127 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObTxExecInfo,
-                    state_,
-                    has_write_state_,
-                    prev_record_lsn_,
-                    redo_lsns_,
-                    multi_data_source_,
-                    prepare_version_,
-                    next_log_entry_no_,
-                    max_applying_log_ts_,
-                    max_applied_log_ts_,
-                    max_applying_part_log_no_,
-                    max_submitted_seq_no_,
-                    checksum_[0],       // FARM COMPAT WHITELIST
-                    checksum_scn_[0],   // FARM COMPAT WHITELIST
-                    max_durable_lsn_,
-                    data_complete_,
-//                    touched_pkeys_,
-                    need_checksum_,
-                    mds_buffer_ctx_array_,
-                    checksum_,
-                    checksum_scn_,
-                    serial_final_scn_,
-                    serial_final_seq_no_
-                    );
+OB_DEF_SERIALIZE(ObTxExecInfo)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE,
+              state_,
+              has_write_state_,
+              prev_record_lsn_,
+              redo_lsns_,
+              multi_data_source_,
+              prepare_version_,
+              next_log_entry_no_,
+              max_applying_log_ts_,
+              max_applied_log_ts_,
+              max_applying_part_log_no_,
+              max_submitted_seq_no_,
+              checksum_[0],       // FARM COMPAT WHITELIST
+              checksum_scn_[0],   // FARM COMPAT WHITELIST
+              max_durable_lsn_,
+              data_complete_,
+              need_checksum_);
+  // The removed ObSEArray-typed BufferCtx member used to sit at this
+  // position in the field sequence. Encode the same count + BufferCtxNode
+  // elements directly from multi_data_source_ to keep the bytes unchanged.
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, multi_data_source_.count()))) {
+      TRANS_LOG(WARN, "encode mds buffer ctx count fail", K(ret));
+    }
+    for (int64_t idx = 0; OB_SUCC(ret) && idx < multi_data_source_.count(); ++idx) {
+      if (OB_FAIL(serialization::encode(buf, buf_len, pos,
+                                        multi_data_source_.at(idx).get_buffer_ctx_node()))) {
+        TRANS_LOG(WARN, "encode mds buffer ctx node fail", K(idx), K(ret));
+      }
+    }
+  }
+  LST_DO_CODE(OB_UNIS_ENCODE, checksum_, checksum_scn_, serial_final_scn_, serial_final_seq_no_);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObTxExecInfo)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE,
+              state_,
+              has_write_state_,
+              prev_record_lsn_,
+              redo_lsns_,
+              multi_data_source_,
+              prepare_version_,
+              next_log_entry_no_,
+              max_applying_log_ts_,
+              max_applied_log_ts_,
+              max_applying_part_log_no_,
+              max_submitted_seq_no_,
+              checksum_[0],       // FARM COMPAT WHITELIST
+              checksum_scn_[0],   // FARM COMPAT WHITELIST
+              max_durable_lsn_,
+              data_complete_,
+              need_checksum_);
+  // Decode count first, validate it against multi_data_source_, then decode
+  // each BufferCtxNode in place. This preserves the count validation and the
+  // cleanup semantics of the removed array merge-back step.
+  int64_t buffer_ctx_cnt = -1;
+  int64_t decoded_ctx_cnt = 0;
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &buffer_ctx_cnt))) {
+      TRANS_LOG(WARN, "decode mds buffer ctx count fail", K(ret));
+    } else if (buffer_ctx_cnt != multi_data_source_.count()) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(ERROR, "mds buffer ctx count does not match multi data source array size",
+                K(ret), K(buffer_ctx_cnt), K(multi_data_source_.count()));
+    } else {
+      for (int64_t idx = 0; OB_SUCC(ret) && idx < buffer_ctx_cnt; ++idx) {
+        if (OB_FAIL(serialization::decode(buf, data_len, pos,
+                                          multi_data_source_.at(idx).get_buffer_ctx_node()))) {
+          TRANS_LOG(WARN, "decode mds buffer ctx node fail", K(idx), K(ret));
+        } else {
+          ++decoded_ctx_cnt;
+        }
+      }
+    }
+  }
+  LST_DO_CODE(OB_UNIS_DECODE, checksum_, checksum_scn_, serial_final_scn_, serial_final_seq_no_);
+  // A BufferCtx decoded in place is not released by ObTxBufferNode's implicit
+  // destructor: dropping the array afterwards would lose the pointers and leak.
+  // On any failure after in-place decoding, destroy exactly the contexts this
+  // call allocated, so malformed or partially deserialized input cannot leak.
+  if (OB_FAIL(ret) && decoded_ctx_cnt > 0) {
+    for (int64_t idx = 0; idx < decoded_ctx_cnt; ++idx) {
+      multi_data_source_.at(idx).get_buffer_ctx_node().destroy_ctx();
+    }
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObTxExecInfo)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN,
+              state_,
+              has_write_state_,
+              prev_record_lsn_,
+              redo_lsns_,
+              multi_data_source_,
+              prepare_version_,
+              next_log_entry_no_,
+              max_applying_log_ts_,
+              max_applied_log_ts_,
+              max_applying_part_log_no_,
+              max_submitted_seq_no_,
+              checksum_[0],       // FARM COMPAT WHITELIST
+              checksum_scn_[0],   // FARM COMPAT WHITELIST
+              max_durable_lsn_,
+              data_complete_,
+              need_checksum_);
+  len += serialization::encoded_length_vi64(multi_data_source_.count());
+  for (int64_t idx = 0; idx < multi_data_source_.count(); ++idx) {
+    len += serialization::encoded_length(multi_data_source_.at(idx).get_buffer_ctx_node());
+  }
+  LST_DO_CODE(OB_UNIS_ADD_LEN, checksum_, checksum_scn_, serial_final_scn_, serial_final_seq_no_);
+  return len;
+}
 
 void ObMulSourceDataNotifyArg::reset()
 {

@@ -13,23 +13,37 @@
 // limitations under the License.
 
 use super::*;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::AtomicU64;
+use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 thread_local! {
     static FAILURE: Cell<Option<&'static str>> = const { Cell::new(None) };
+    static SKIP_CRASH: Cell<bool> = const { Cell::new(false) };
+    static PAUSE: RefCell<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>> = const { RefCell::new(None) };
 }
 
 pub(super) fn is_crash_stage(stage: &str) -> bool {
-    std::env::var("KV_TEST_CRASH_STAGE").is_ok_and(|selected| selected == stage)
+    !SKIP_CRASH.get()
+        && std::env::var("KV_TEST_CRASH_STAGE").is_ok_and(|selected| selected == stage)
 }
 
 pub(super) fn at(stage: &str) -> Result<()> {
+    if stage == "before-data-sync" {
+        if let Some((entered, resume)) = PAUSE.take() {
+            entered.send(()).unwrap();
+            resume.recv_timeout(Duration::from_secs(10)).unwrap();
+            if FAILURE.get() == Some("panic") {
+                panic!("injected publisher panic");
+            }
+        }
+    }
     if is_crash_stage(stage) {
         std::process::exit(91);
     }
@@ -37,6 +51,256 @@ pub(super) fn at(stage: &str) -> Result<()> {
         return Err(Error::Io(io::Error::other("injected write failure")));
     }
     Ok(())
+}
+
+#[test]
+fn concurrent_commits_prepare_while_another_commit_syncs() {
+    let directory = Directory::new();
+    let store = directory.open();
+    let (entered, syncing) = mpsc::channel();
+    let (resume, proceed) = mpsc::channel();
+    let first_store = store.clone();
+    let first = thread::spawn(move || {
+        PAUSE.set(Some((entered, proceed)));
+        write(&first_store, b"first", b"value")
+    });
+    syncing.recv_timeout(Duration::from_secs(10)).unwrap();
+    let (prepared, preparing) = mpsc::channel();
+    let mut followers = Vec::new();
+    for i in 0..8u8 {
+        let store = store.clone();
+        let prepared = prepared.clone();
+        followers.push(thread::spawn(move || {
+            let mut tx = store.begin().unwrap();
+            tx.put(&[i], &[i]).unwrap();
+            prepared.send(()).unwrap();
+            tx.commit().unwrap()
+        }));
+    }
+    let progressed = (0..8).all(|_| preparing.recv_timeout(Duration::from_secs(1)).is_ok());
+    assert_eq!(store.get(b"first").unwrap(), None);
+    if progressed {
+        wait_staged(&store, 9);
+    }
+    resume.send(()).unwrap();
+    let mut pages = first.join().unwrap().pages_written;
+    for follower in followers {
+        pages += follower.join().unwrap().pages_written;
+    }
+    // Nine leaf writes and only two root publications (first + eight followers).
+    assert_eq!(pages, 11);
+    let writer = store.shared.writer.lock().unwrap();
+    assert_eq!(
+        writer.roots[writer.slot].unwrap().generation
+            - writer.roots[1 - writer.slot].unwrap().generation,
+        8
+    );
+    drop(writer);
+    assert!(
+        progressed,
+        "writers stalled behind another transaction's fsync"
+    );
+    drop(store);
+    let store = directory.open();
+    for i in 0..8u8 {
+        assert_eq!(store.get(&[i]).unwrap(), Some(vec![i]));
+    }
+}
+
+// Wait for staging, not commit completion: the publisher is deliberately paused.
+fn wait_staged(store: &Store, count: u64) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        let writer = store.shared.writer.lock().unwrap();
+        if writer.head.generation - writer.roots[writer.slot].unwrap().generation == count {
+            return;
+        }
+        drop(writer);
+        assert!(
+            std::time::Instant::now() < deadline,
+            "staging did not progress"
+        );
+        thread::yield_now();
+    }
+}
+
+#[test]
+fn failed_publisher_wakes_writers_and_dependent_read_only_commits() {
+    for stage in ["before-data-sync", "after-root-sync", "panic"] {
+        let directory = Directory::new();
+        let store = directory.open();
+        let (entered, syncing) = mpsc::channel();
+        let (resume, proceed) = mpsc::channel();
+        let first_store = store.clone();
+        let first = thread::spawn(move || {
+            PAUSE.set(Some((entered, proceed)));
+            FAILURE.with(|failure| failure.set(Some(stage)));
+            let mut tx = first_store.begin().unwrap();
+            tx.put(b"first", b"value").unwrap();
+            tx.commit()
+        });
+        syncing.recv_timeout(Duration::from_secs(10)).unwrap();
+        let (prepared, preparing) = mpsc::channel();
+        let (finished, finishing) = mpsc::channel();
+        let mut followers = Vec::new();
+        for readonly in [true, false] {
+            let store = store.clone();
+            let prepared = prepared.clone();
+            let finished = finished.clone();
+            followers.push(thread::spawn(move || {
+                let mut tx = store.begin().unwrap();
+                assert_eq!(tx.get(b"first").unwrap(), Some(b"value".to_vec()));
+                if !readonly {
+                    tx.put(b"dependent", b"value").unwrap();
+                }
+                prepared.send(()).unwrap();
+                let result = tx.commit();
+                finished.send(()).unwrap();
+                result
+            }));
+        }
+        for _ in 0..2 {
+            preparing.recv_timeout(Duration::from_secs(5)).unwrap();
+        }
+        wait_staged(&store, 2);
+        assert!(
+            finishing.try_recv().is_err(),
+            "commit returned before durability"
+        );
+        assert_eq!(store.get(b"first").unwrap(), None);
+        // A rolled back modification must not replace the staged head.
+        let mut rollback = store.begin().unwrap();
+        rollback.put(b"first", b"rolled back").unwrap();
+        rollback.rollback();
+        resume.send(()).unwrap();
+        let result = first.join();
+        if stage == "panic" {
+            assert!(result.is_err());
+        } else {
+            assert!(matches!(result.unwrap(), Err(Error::Io(_))));
+        }
+        for follower in followers {
+            finishing.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert!(matches!(follower.join().unwrap(), Err(Error::Poisoned)));
+        }
+        assert!(matches!(store.begin(), Err(Error::Poisoned)));
+        drop(store);
+        let store = directory.open();
+        assert_eq!(store.get(b"dependent").unwrap(), None);
+        assert_eq!(
+            store.get(b"first").unwrap(),
+            if stage == "after-root-sync" {
+                Some(b"value".to_vec())
+            } else {
+                None
+            }
+        );
+    }
+}
+
+#[test]
+fn group_crash_child() {
+    let Ok(directory) = std::env::var("KV_TEST_GROUP_DIRECTORY") else {
+        return;
+    };
+    let store = Store::open(directory).unwrap();
+    let (entered, syncing) = mpsc::channel();
+    let (resume, proceed) = mpsc::channel();
+    let first_store = store.clone();
+    let first = thread::spawn(move || {
+        SKIP_CRASH.set(true);
+        PAUSE.set(Some((entered, proceed)));
+        write(&first_store, b"acknowledged", b"value")
+    });
+    syncing.recv_timeout(Duration::from_secs(10)).unwrap();
+    let mut followers = Vec::new();
+    for i in 0..8u8 {
+        let store = store.clone();
+        followers.push(thread::spawn(move || write(&store, &[i], &vec![2; 65_537])));
+    }
+    wait_staged(&store, 9);
+    resume.send(()).unwrap();
+    first.join().unwrap();
+    for follower in followers {
+        follower.join().unwrap();
+    }
+    panic!("group crash stage was not reached");
+}
+
+#[test]
+fn interrupted_group_preserves_acknowledged_root_and_atomic_batch() {
+    for stage in [
+        "before-data-sync",
+        "after-data-sync",
+        "during-root-write",
+        "after-root-write",
+        "after-root-sync",
+    ] {
+        let directory = Directory::new();
+        let store = directory.open();
+        for i in 0..8u8 {
+            write(&store, &[i], &vec![1; 65_537]);
+        }
+        drop(store);
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::group_crash_child", "--nocapture"])
+            .env("KV_TEST_GROUP_DIRECTORY", &directory.0)
+            .env("KV_TEST_CRASH_STAGE", stage)
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(91),
+            "{stage}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let store = directory.open();
+        assert_eq!(store.get(b"acknowledged").unwrap(), Some(b"value".to_vec()));
+        let value = store.get(&[0]).unwrap().unwrap();
+        for i in 1..8u8 {
+            assert_eq!(store.get(&[i]).unwrap().unwrap(), value);
+        }
+        match stage {
+            "after-root-sync" => assert_eq!(value, vec![2; 65_537]),
+            "after-root-write" => assert!(value == vec![1; 65_537] || value == vec![2; 65_537]),
+            _ => assert_eq!(value, vec![1; 65_537]),
+        }
+    }
+}
+
+#[test]
+fn pending_limit_allows_publisher_to_drain_waiting_writers() {
+    let directory = Directory::new();
+    let store = directory.open();
+    let (entered, syncing) = mpsc::channel();
+    let (resume, proceed) = mpsc::channel();
+    let first_store = store.clone();
+    let first = thread::spawn(move || {
+        PAUSE.set(Some((entered, proceed)));
+        write(&first_store, b"first", b"value")
+    });
+    syncing.recv_timeout(Duration::from_secs(10)).unwrap();
+    let followers: Vec<_> = (0..MAX_PENDING_COMMITS + 8)
+        .map(|i| {
+            let store = store.clone();
+            thread::spawn(move || write(&store, &i.to_be_bytes(), b"value"))
+        })
+        .collect();
+    wait_staged(&store, MAX_PENDING_COMMITS);
+    assert_eq!(store.get(b"first").unwrap(), None);
+    resume.send(()).unwrap();
+    first.join().unwrap();
+    for follower in followers {
+        follower.join().unwrap();
+    }
+    drop(store);
+    let store = directory.open();
+    for i in 0..MAX_PENDING_COMMITS + 8 {
+        assert_eq!(
+            store.get(&i.to_be_bytes()).unwrap(),
+            Some(b"value".to_vec())
+        );
+    }
 }
 
 struct Directory(PathBuf);

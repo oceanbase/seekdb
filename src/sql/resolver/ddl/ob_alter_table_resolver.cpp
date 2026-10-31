@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"

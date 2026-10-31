@@ -201,7 +201,6 @@ int ObServerSchemaUpdater::batch_process_tasks(
 int ObServerSchemaUpdater::process_release_task()
 {
   int ret = OB_SUCCESS;
-  ObTaskController::get().switch_task(share::ObTaskType::SCHEMA);
   THIS_WORKER.set_timeout_ts(INT64_MAX);
   if (OB_ISNULL(schema_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -215,7 +214,6 @@ int ObServerSchemaUpdater::process_async_refresh_tasks(
     const ObIArray<ObServerSchemaTask> &tasks)
 {
   int ret = OB_SUCCESS;
-  ObTaskController::get().switch_task(share::ObTaskType::SCHEMA);
   THIS_WORKER.set_timeout_ts(INT64_MAX);
   if (OB_ISNULL(schema_mgr_)) {
     ret = OB_ERR_UNEXPECTED;

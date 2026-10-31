@@ -51,7 +51,7 @@ int LogIOWorkerWrapper::init(const LogIOWorkerConfig &config,
              || OB_ISNULL(allocator) || OB_ISNULL(palf_env_impl)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(log_io_worker_.init(config, cb_thread_pool, allocator,
-                                         &throttle_, false, palf_env_impl))) {
+                                         &throttle_, palf_env_impl))) {
   } else {
     throttle_.reset();
     is_inited_ = true;

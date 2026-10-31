@@ -16,12 +16,12 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_sstable_meta_info.h"
 #include "storage/blocksstable/ob_macro_block_reader.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_scanner.h"
-#include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
-#include "storage/slog_ckpt/ob_linked_macro_block_reader.h"
+#include "storage/blockstore/ob_linked_macro_block_writer.h"
+#include "storage/blockstore/ob_linked_macro_block_reader.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 
 namespace oceanbase
@@ -587,7 +587,7 @@ int ObSSTableMacroInfo::init_macro_info(
       sizeof(MacroBlockId) * param.other_block_ids_.count())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    entry_id_ = ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK;
+    entry_id_ = MacroBlockId::EMPTY_LIST_ENTRY;
     for (int64_t i = 0; OB_SUCC(ret) && i < param.data_block_ids_.count(); ++i) {
       new (data_block_ids_ + i) MacroBlockId(param.data_block_ids_.at(i));
     }
@@ -673,7 +673,7 @@ int ObSSTableMacroInfo::serialize_(char *buf, const int64_t buf_len, int64_t &po
   int ret = OB_SUCCESS;
   if (OB_FAIL(macro_meta_info_.serialize(buf, buf_len, pos))) {
   } else if (OB_FAIL(entry_id_.serialize(buf, buf_len, pos))) {
-  } else if (ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK == entry_id_){
+  } else if (entry_id_.is_empty_list_entry()) {
     OB_UNIS_ENCODE_ARRAY(data_block_ids_, data_block_count_);
     OB_UNIS_ENCODE_ARRAY(other_block_ids_, other_block_count_);
   }
@@ -697,7 +697,7 @@ int ObSSTableMacroInfo::persist_block_ids(
   } else if (OB_FAIL(save_linked_block_list(block_writer.get_meta_block_list(), allocator))) {
   } else {
     ObMetaDiskAddr addr;
-    addr.set_block_addr(ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK, 
+    addr.set_block_addr(MacroBlockId::EMPTY_LIST_ENTRY,
                         0, /*offset*/
                         1, /*size*/ 
                         ObMetaDiskAddr::DiskType::BLOCK); // unused;
@@ -812,7 +812,7 @@ int ObSSTableMacroInfo::deserialize_(
 
   if (OB_FAIL(macro_meta_info_.deserialize(allocator, des_meta, buf, data_len, pos))) {
   } else if (OB_FAIL(entry_id_.deserialize(buf, data_len, pos))) {
-  } else if (ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK != entry_id_) {
+  } else if (!entry_id_.is_empty_list_entry()) {
     ObLinkedMacroBlockItemReader block_reader;
     ObMetaDiskAddr addr;
     char *reader_buf = nullptr;
@@ -901,7 +901,7 @@ int64_t ObSSTableMacroInfo::get_serialize_size() const
 int ObSSTableMacroInfo::get_data_block_iter(ObMacroIdIterator &iterator) const
 {
   int ret = OB_SUCCESS;
-  if (ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK == entry_id_) {
+  if (entry_id_.is_empty_list_entry()) {
     if (OB_FAIL(iterator.init(data_block_ids_, data_block_count_))) {
     }
   } else if (OB_FAIL(iterator.init(ObMacroIdIterator::DATA_BLOCK, entry_id_))) {
@@ -912,7 +912,7 @@ int ObSSTableMacroInfo::get_data_block_iter(ObMacroIdIterator &iterator) const
 int ObSSTableMacroInfo::get_other_block_iter(ObMacroIdIterator &iterator) const
 {
   int ret = OB_SUCCESS;
-  if (ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK == entry_id_) {
+  if (entry_id_.is_empty_list_entry()) {
     if (OB_FAIL(iterator.init(other_block_ids_, other_block_count_))) {
     }
   } else if (OB_FAIL(iterator.init(ObMacroIdIterator::OTHER_BLOCK, entry_id_))) {
@@ -925,7 +925,7 @@ int64_t ObSSTableMacroInfo::get_serialize_size_() const
   int64_t len = 0;
   len += macro_meta_info_.get_serialize_size();
   len += entry_id_.get_serialize_size();
-  if (ObServerSuperBlock::EMPTY_LIST_ENTRY_BLOCK == entry_id_) {
+  if (entry_id_.is_empty_list_entry()) {
     OB_UNIS_ADD_LEN_ARRAY(data_block_ids_, data_block_count_);
     OB_UNIS_ADD_LEN_ARRAY(other_block_ids_, other_block_count_);
   }

@@ -112,7 +112,7 @@ public:
   virtual ~ObGIOpInput() {}
   virtual void reset() override
   {
-    table_location_keys_.reset();
+    table_ref_ids_.reset();
   }
   virtual void set_deserialize_allocator(common::ObIAllocator *allocator) override;
   inline int64_t get_parallelism() { return parallelism_; }
@@ -122,7 +122,7 @@ public:
   int64_t get_worker_id() { return worker_id_; }
   int64_t get_px_sequence_id() { return px_sequence_id_; }
   void set_px_sequence_id(int64_t id) { px_sequence_id_ = id; }
-  int add_table_location_keys(common::ObIArray<const ObTableScanSpec*> &tscs);
+  int add_tablet_access_keys(common::ObIArray<const ObTableScanSpec*> &tscs);
   int64_t get_rf_max_wait_time() { return rf_max_wait_time_; }
   void set_rf_max_wait_time(int64_t rf_max_wait_time) { rf_max_wait_time_ = rf_max_wait_time; }
   int init_task_rebalancer(ObExecContext *ctx, int64_t parallelism, int64_t split_gi_task_cost,
@@ -138,7 +138,7 @@ public:
 
   ObGranulePump *pump_;
   //for partition pruning
-  common::ObSEArray<uint64_t, 2> table_location_keys_;
+  common::ObSEArray<uint64_t, 2> table_ref_ids_;
   int64_t px_sequence_id_;
   int64_t rf_max_wait_time_;
 
@@ -294,7 +294,7 @@ private:
       int64_t &pos,
       bool &partition_pruned);
   bool repart_partition_pruned(const ObGranuleTaskInfo &info) {
-    return info.tablet_loc_->tablet_id_.id() != ctx_.get_gi_pruning_info().get_part_id();
+    return info.tablet_access_->tablet_id_.id() != ctx_.get_gi_pruning_info().get_part_id();
   }
   // ---end
   // for nlj/sbf param down, dynamic partition pruning
@@ -355,7 +355,7 @@ private:
   // For GI rescan use
   common::ObSEArray<ObGranuleTaskInfo, 2> pwj_rescan_task_infos_;
   // for px batch rescan and dynamic partition pruning
-  common::ObSEArray<uint64_t, 2> table_location_keys_;
+  common::ObSEArray<uint64_t, 2> table_ref_ids_;
   common::ObSEArray<ObTabletID, 16> pruning_tablet_ids_;
    //for partition pruning
   int64_t filter_count_; // filtered part count when part pruning activated

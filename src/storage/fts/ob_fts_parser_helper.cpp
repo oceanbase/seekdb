@@ -19,6 +19,7 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_parser_helper.h"
+#include <cinttypes>
 
 #include "common/json_type/ob_json_tree.h"
 #include "share/ob_force_print_log.h"
@@ -106,7 +107,8 @@ int ObFTParser::serialize_to_str(char *buf, const int64_t buf_len)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_NOT_SUPPORTED;
-  } else if (OB_FAIL(common::databuff_printf(buf, buf_len, pos, "%.*s.%ld", parser_name_.len(), parser_name_.str(),
+  } else if (OB_FAIL(common::databuff_printf(buf, buf_len, pos, "%.*s.%" PRId64,
+          static_cast<int>(parser_name_.len()), parser_name_.str(),
           parser_version_))) {
   }
   return ret;

@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build the Cargo workspace and export the C++ artifacts in exports.json."""
+"""Build the Rust static library from Bazel's prepared configuration source."""
 
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -24,47 +25,32 @@ import subprocess
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cargo", default="cargo")
-    parser.add_argument("--profile", default="release")
     parser.add_argument("--target")
     parser.add_argument("--target-dir", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("cargo_args", nargs="*")
     args = parser.parse_args()
-    workspace = Path(__file__).resolve().parent
-    exports = json.loads((workspace / "exports.json").read_text())
+    workspace = Path(__file__).absolute().parent
     output = Path(args.output).resolve()
-    target_dir = Path(args.target_dir).resolve()
-    command = [args.cargo, "build", "--workspace", "--profile", args.profile,
+    environment = os.environ.copy()
+    environment["CONFIG_RS"] = str(Path(environment["CONFIG_RS"]).resolve())
+    command = [args.cargo, "build", "--locked", "--workspace", "--release",
                "--manifest-path", str(workspace / "Cargo.toml"),
-               "--target-dir", str(target_dir), "--message-format=json-render-diagnostics"]
+               "--target-dir", str(Path(args.target_dir).resolve()),
+               "--message-format=json-render-diagnostics"]
     if args.target:
-        command.extend(["--target", args.target])
-    libraries = {}
-    build_dirs = {}
-    # Preserve inherited GNU Make jobserver descriptors when CMake provides them.
-    with subprocess.Popen(command, cwd=workspace, stdout=subprocess.PIPE,
-                          text=True, close_fds=False) as cargo:
+        command += ["--target", args.target]
+    command += args.cargo_args
+    with subprocess.Popen(command, cwd=workspace, env=environment, stdout=subprocess.PIPE,
+                          universal_newlines=True) as cargo:
         for line in cargo.stdout:
             message = json.loads(line)
-            if message["reason"] == "build-script-executed":
-                build_dirs[message["package_id"]] = Path(message["out_dir"])
-            elif message["reason"] == "compiler-artifact":
-                if "staticlib" in message["target"]["crate_types"]:
-                    archive = next(Path(p) for p in message["filenames"]
-                                   if p.endswith((".a", ".lib")))
-                    libraries[message["target"]["name"]] = (archive, message["package_id"])
+            if (message["reason"] == "compiler-artifact"
+                    and message["target"]["name"] == "seekdb_rust"):
+                archive = next(Path(p) for p in message["filenames"] if p.endswith((".a", ".lib")))
+                shutil.copyfile(archive, output)
         if cargo.wait():
             raise SystemExit(cargo.returncode)
-    output.mkdir(parents=True, exist_ok=True)
-    for name, export in exports.items():
-        archive, package = libraries[name]
-        shutil.copyfile(archive, output / archive.name)
-        for header, source in export["headers"].items():
-            destination = output / "include" / header
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            contents = (build_dirs[package] / source).read_bytes()
-            # Preserve header mtimes when only Rust implementation changed.
-            if not destination.exists() or destination.read_bytes() != contents:
-                destination.write_bytes(contents)
 
 
 if __name__ == "__main__":

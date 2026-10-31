@@ -34,9 +34,6 @@ LogIOWorker::LogIOWorker()
       last_working_time_(OB_INVALID_TIMESTAMP),
       throttle_(NULL),
       log_io_worker_queue_size_stat_("[PALF STAT LOG IO WORKER QUEUE SIZE]", PALF_STAT_PRINT_INTERVAL_US),
-      purge_throttling_task_submitted_seq_(0),
-      purge_throttling_task_handled_seq_(0),
-      need_ignoring_throttling_(false),
       wait_cost_stat_("[PALF STAT IO TASK IN QUEUE TIME]", PALF_STAT_PRINT_INTERVAL_US),
       is_inited_(false)
 {
@@ -51,7 +48,6 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
                       LogIOTaskCbThreadPool *cb_thread_pool,
                       ObIAllocator *allocator,
                       LogWritingThrottle *throttle,
-                      const bool need_igore_throttle,
                       IPalfEnvImpl *palf_env_impl)
 {
   int ret = OB_SUCCESS;
@@ -74,20 +70,8 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
     PALF_REPORT_INFO_KV(KP_(cb_thread_pool));
     throttle_ = throttle;
     log_io_worker_queue_size_stat_.set_extra_info(EXTRA_INFOS);
-    purge_throttling_task_submitted_seq_ = 0;
-    purge_throttling_task_handled_seq_ = 0;
-    need_ignoring_throttling_ = need_igore_throttle;
-    need_purging_throttling_func_ = [this](){
-      return has_purge_throttling_tasks_() > 0;
-    };
-    if (!need_purging_throttling_func_.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      PALF_LOG(ERROR, "generate need_purging_throttling_func_ failed!!!", K(ret), K(config));
-    } else {
-      is_inited_ = true;
-      PALF_LOG(INFO, "LogIOWorker init success", K(ret), K(config), KP(cb_thread_pool),
-               KPC(palf_env_impl));
-    }
+    is_inited_ = true;
+    PALF_LOG(INFO, "LogIOWorker init success", K(config), KP(cb_thread_pool));
   }
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
     destroy();
@@ -100,9 +84,6 @@ void LogIOWorker::destroy()
   (void)stop();
   (void)wait();
   is_inited_ = false;
-  need_ignoring_throttling_ = false;
-  purge_throttling_task_handled_seq_ = 0;
-  purge_throttling_task_submitted_seq_ = 0;
   last_working_time_ = OB_INVALID_TIMESTAMP;
   throttle_ = NULL;
   cb_thread_pool_ = NULL;
@@ -113,50 +94,9 @@ void LogIOWorker::destroy()
 
 int LogIOWorker::submit_io_task(LogIOTask *io_task)
 {
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(io_task)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const bool need_purge_throttling = io_task->need_purge_throttling();
-    // When 'need_ignoring_throttling_' is true, we no need to advance purge_throttling_task_handled_seq_
-    if (!need_ignoring_throttling_ && need_purge_throttling) {
-      // Mush hold lock, otherwise:
-      // 1. At T1 timestamp, alloc sequence 8 to a LogIOTask1;
-      // 2. At T2 timestamp, alloc sequence 9 to a LogIOTask2;
-      // 3. At T3 timestamp, push LogIOTask2 into queue_;
-      // 4. At T4 timestamp, push LogIOTask1 into queue_.
-      //
-      // After handle_io_task_with_throttling_, we need update purge_throttling_task_handled_seq_, and the
-      // value has been reduced in above case.
-      //
-      // If push LogIOTask into queue_ failed, rollback 'purge_throttling_task_submitted_seq_' is incorrect.
-      SpinLockGuard guard(lock_);
-      const int64_t submit_seq = inc_and_fetch_purge_throttling_submitted_seq_();
-      (void)io_task->set_submit_seq(submit_seq);
-      PALF_LOG(INFO, "submit flush meta task success", KPC(io_task));
-      if (OB_FAIL(queue_.push(io_task))) {
-        PALF_LOG(WARN, "fail to push io task into queue", K(ret), KP(io_task));
-        dec_purge_throttling_submitted_seq_();
-      }
-    } else {
-      if (OB_FAIL(queue_.push(io_task))) {
-      }
-    }
-  }
-  return ret;
-}
-
-int LogIOWorker::notify_need_writing_throttling(const bool &need_throttling)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (!need_ignoring_throttling_) {
-    (void)throttle_->notify_need_writing_throttling(need_throttling);
-  }
-  return  ret;
+  if (IS_NOT_INIT) { return OB_NOT_INIT; }
+  if (OB_ISNULL(io_task)) { return OB_INVALID_ARGUMENT; }
+  return queue_.push(io_task);
 }
 
 void LogIOWorker::run1()
@@ -168,29 +108,14 @@ void LogIOWorker::run1()
 int LogIOWorker::handle_io_task_with_throttling_(LogIOTask *io_task)
 {
   int ret = OB_SUCCESS;
-  const int64_t throttling_size = io_task->get_io_size();
+  const int64_t size = io_task->get_io_size();
   int tmp_ret = OB_SUCCESS;
-  if (!need_ignoring_throttling_
-      && OB_SUCCESS != (tmp_ret = throttle_->throttling(throttling_size, need_purging_throttling_func_, palf_env_impl_))) {
-    LOG_ERROR_RET(tmp_ret, "failed to do_throttling", K(throttling_size));
+  if (OB_SUCCESS != (tmp_ret = throttle_->throttling(size, palf_env_impl_))) {
+    LOG_ERROR_RET(tmp_ret, "failed to do throttling");
   }
-  const int64_t submit_seq = io_task->get_submit_seq();
   if (OB_FAIL(io_task->do_task(cb_thread_pool_, palf_env_impl_))) {
-  } else if (!need_ignoring_throttling_) {
-    const int64_t handled_seq = ATOMIC_LOAD(&purge_throttling_task_handled_seq_);
-    const int64_t submitted_seq = ATOMIC_LOAD(&purge_throttling_task_submitted_seq_);
-    // NB: for LogIOFlushLogTask, the submit_seq is always be zero.
-    if (submit_seq > handled_seq && submit_seq <= submitted_seq) {
-      ATOMIC_SET(&purge_throttling_task_handled_seq_, submit_seq);
-    }
-    if (submitted_seq < handled_seq) {
-      PALF_LOG_RET(ERROR, OB_ERR_UNEXPECTED,
-                   "unexpected error, purge_throttling_task_submitted_seq_ is less than purge_throttling_task_handled_seq_",
-                   KPC(this));
-    }
-    if (OB_SUCCESS != (tmp_ret = throttle_->after_append_log(throttling_size))) {
-      LOG_ERROR_RET(tmp_ret, "after_append failed", KP(io_task));
-    }
+  } else if (OB_SUCCESS != (tmp_ret = throttle_->after_append_log(size))) {
+    LOG_ERROR_RET(tmp_ret, "after_append failed");
   }
   return ret;
 }
@@ -257,13 +182,12 @@ bool LogIOWorker::need_reduce_(LogIOTask *io_task)
     case LogIOTaskType::FLUSH_LOG_TYPE:
       bool_ret = true;
       break;
-    case LogIOTaskType::FLUSH_META_TYPE:
     case LogIOTaskType::TRUNCATE_PREFIX_TYPE:
     default:
       break;
   }
-  // NB: when need writing throttling, don't reduce io task.
-  return bool_ret && (need_ignoring_throttling_ || !throttle_->need_writing_throttling_notified());
+  // Consume one write at a time while disk throttling is active.
+  return bool_ret && !throttle_->need_writing_throttling_notified();
 }
 
 int LogIOWorker::reduce_io_task_(ObLink *task)
@@ -314,8 +238,7 @@ int LogIOWorker::reduce_io_task_(ObLink *task)
 int LogIOWorker::update_throttling_options_()
 {
   int ret = OB_SUCCESS;
-  // For sys log stream, no need to update throttling options.
-  if (!need_ignoring_throttling_ && OB_FAIL(throttle_->update_throttling_options(palf_env_impl_))) {
+  if (OB_FAIL(throttle_->update_throttling_options(palf_env_impl_))) {
     LOG_WARN("failed to update_throttling_options");
   }
   return ret;
@@ -381,28 +304,6 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(LogIOTaskCbThreadPool *cb_thr
 bool LogIOWorker::BatchLogIOFlushLogTaskMgr::empty()
 {
   return 0 == batch_io_task_.get_count();
-}
-
-int64_t LogIOWorker::inc_and_fetch_purge_throttling_submitted_seq_()
-{
-  return ATOMIC_AAF(&purge_throttling_task_submitted_seq_, 1);
-}
-
-void LogIOWorker::dec_purge_throttling_submitted_seq_()
-{
-  ATOMIC_DEC(&purge_throttling_task_submitted_seq_);
-}
-
-bool LogIOWorker::has_purge_throttling_tasks_() const
-{
-  const int64_t handled_seq = ATOMIC_LOAD(&purge_throttling_task_handled_seq_);
-  const int64_t submitted_seq = ATOMIC_LOAD(&purge_throttling_task_submitted_seq_);
-  if (submitted_seq < handled_seq) {
-    PALF_LOG_RET(ERROR, OB_ERR_UNEXPECTED,
-                 "unexpected error, purge_throttling_task_submitted_seq_ is less than purge_throttling_task_handled_seq_",
-                 KPC(this));
-  }
-  return submitted_seq != handled_seq;
 }
 
 } // end namespace palf

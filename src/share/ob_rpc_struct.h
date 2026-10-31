@@ -18,6 +18,7 @@
 #define OCEANBASE_RPC_OB_RPC_STRUCT_H_
 
 #include "share/ob_fork_table_info.h"
+#include "share/ob_ls_id.h"
 #include "common/ob_role.h"
 #include "common/ob_role_mgr.h"
 #include "common/ob_common_types.h"

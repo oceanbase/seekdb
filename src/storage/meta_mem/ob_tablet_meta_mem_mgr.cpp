@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_tablet_meta_mem_mgr.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -1392,7 +1392,7 @@ int ObTabletMetaMemMgr::create_tablet(
     ObMetaDiskAddr addr;
     addr.set_none_addr();
     tablet_ptr.set_addr_with_reset_obj(addr);
-    // After restarting and replaying the slog, the tablet will load the pool when it is accessed for the first time.
+    // After loading local storage metadata, the tablet will load the pool when it is accessed for the first time.
     tablet_ptr.obj_.pool_ = &tablet_buffer_pool_;
     if (OB_FAIL(tablet_map_.set(key, tablet_ptr))) {
     } else if (OB_FAIL(tablet_map_.get_attr_for_obj(key, tablet_handle))) {

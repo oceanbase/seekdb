@@ -373,6 +373,8 @@ public:
   bool has_select_into() const { return into_item_ != NULL; }
   bool is_select_into_outfile() const { return has_select_into() &&
                                                into_item_->into_type_ == T_INTO_OUTFILE; }
+  bool is_select_into_dumpfile() const { return has_select_into() &&
+                                                into_item_->into_type_ == T_INTO_DUMPFILE; }
   // check if the stmt is a Select-Project-Join(SPJ) query
   bool is_spj() const;
   // is_spj + normal group by or scalar group by

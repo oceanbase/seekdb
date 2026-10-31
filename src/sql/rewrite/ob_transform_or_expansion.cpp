@@ -1202,7 +1202,7 @@ int ObTransformOrExpansion::disable_pdml_for_upd_del_stmt(ObDMLStmt &stmt)
     if (OB_FAIL(static_cast<ObDelUpdStmt&>(stmt).get_dml_table_infos(table_infos))) {
     } else if (OB_UNLIKELY(table_infos.empty()) || OB_ISNULL(table_infos.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (NULL != stmt.get_part_expr(table_infos.at(0)->loc_table_id_,
+    } else if (NULL != stmt.get_part_expr(table_infos.at(0)->target_table_ref_id_,
                                           table_infos.at(0)->ref_table_id_)) {
       OPT_TRACE("disable parallel dml after or expansion");
       static_cast<ObDelUpdStmt&>(stmt).set_pdml_disabled();

@@ -159,7 +159,6 @@ source t/quick/include/tablet_report.inc;
 # --echo ===============================================================
 # # 注意: alter mysql locality from "F@z1,F@z3" to "FFF" and then to "F@z1,F@z2"
 # --echo test alter locality begin
-# source t/quick/include/alter_locality.inc;
 # --echo test alter locality finish
 
 # # case 17. 验证资源池变更 @wanhong.wwh

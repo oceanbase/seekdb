@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
 #include "storage/blockstore/ob_object_reader_writer.h"
 

@@ -1,0 +1,11 @@
+exports_files(["LICENSE"], visibility = ["//src/observer:__pkg__"])
+
+alias(
+    name = "seekdb",
+    actual = select({
+        "@platforms//os:emscripten": "//src/wasm:database",
+        "@platforms//os:ios": "//src/observer:ios_framework",
+        "//conditions:default": "//src/observer:seekdb",
+    }),
+    visibility = ["//visibility:public"],
+)

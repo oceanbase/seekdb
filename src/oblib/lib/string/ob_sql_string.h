@@ -26,6 +26,10 @@ namespace oceanbase
 namespace common
 {
 
+// Double backticks inside a MySQL identifier, without adding quote delimiters.
+// An unchanged name borrows src; an escaped name is owned by allocator.
+int escape_mysql_identifier(ObIAllocator &allocator, const ObString &src, ObString &dst);
+
 // ObSqlString only used to concatenate SQL strings, for example:
 //
 //   ObSqlString sql;

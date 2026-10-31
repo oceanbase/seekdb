@@ -84,9 +84,9 @@ public:
   int pre_setup_op_input(ObExecContext &ctx,
       ObOpSpec &root,
       ObSqcCtx &sqc_ctx,
-      const DASTabletLocIArray &tsc_locations,
-      const ObIArray<ObSqcTableLocationKey> &tsc_location_keys);
-  int rebuild_sqc_access_table_locations();
+      const DASRuntimeTabletIArray &scan_accesses,
+      const ObIArray<SqcTabletAccessKey> &scan_access_keys);
+  int rebuild_sqc_tablet_accesses();
   void set_is_single_tsc_leaf_dfo(bool flag) { is_single_tsc_leaf_dfo_ = flag; }
   int get_participants(ObPxSqcMeta &sqc,
                        const int64_t table_id,
@@ -97,18 +97,18 @@ private:
   int setup_op_input(ObExecContext &ctx,
                      ObOpSpec &root,
                      ObSqcCtx &sqc_ctx,
-                     const DASTabletLocIArray &tsc_locations,
-                     const ObIArray<ObSqcTableLocationKey> &tsc_location_keys);
+                     const DASRuntimeTabletIArray &scan_accesses,
+                     const ObIArray<SqcTabletAccessKey> &scan_access_keys);
   int setup_gi_op_input(ObExecContext &ctx,
                         ObOpSpec &root,
                         ObSqcCtx &sqc_ctx,
-                        const DASTabletLocIArray &tsc_locations,
-                        const ObIArray<ObSqcTableLocationKey> &tsc_location_keys);
+                        const DASRuntimeTabletIArray &scan_accesses,
+                        const ObIArray<SqcTabletAccessKey> &scan_access_keys);
   int get_tsc_or_dml_op_tablets(ObOpSpec &root,
-                                const DASTabletLocIArray &tsc_locations,
-                                const common::ObIArray<ObSqcTableLocationKey> &tsc_location_keys,
+                                const DASRuntimeTabletIArray &scan_accesses,
+                                const common::ObIArray<SqcTabletAccessKey> &scan_access_keys,
                                 common::ObIArray<const ObTableScanSpec*> &scan_ops,
-                                common::ObIArray<DASTabletLocArray> &tablets_array);
+                                common::ObIArray<DASRuntimeTabletArray> &tablets_array);
   int link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg);
   int dispatch_tasks(ObPxInitSqcArgs &sqc_arg,
                      ObSqcCtx &sqc_ctx,

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "ob_geo_ibin.h"
+#include "lib/utility/ob_common_utility.h"
 #include "share/geo/ob_geo_visitor.h"
 
 namespace oceanbase
@@ -201,7 +202,8 @@ int ObIWkbGeogMultiPolygon::do_visit(ObIGeoVisitor &visitor)
 int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
 {
   INIT_SUCC(ret);
-  if (visitor.prepare(this)) {
+  if (OB_FAIL(check_stack_overflow())) {
+  } else if (visitor.prepare(this)) {
     if (OB_FAIL(visitor.visit(this))) {
     } else if (visitor.is_end(this) || is_empty_inner()) {
       // do nothing
@@ -356,7 +358,8 @@ int ObIWkbGeomMultiPolygon::do_visit(ObIGeoVisitor &visitor)
 int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
 {
   INIT_SUCC(ret);
-  if (visitor.prepare(this)) {
+  if (OB_FAIL(check_stack_overflow())) {
+  } else if (visitor.prepare(this)) {
     if (OB_FAIL(visitor.visit(this))) {
     } else if (visitor.is_end(this) || is_empty_inner()) {
       // do nothing

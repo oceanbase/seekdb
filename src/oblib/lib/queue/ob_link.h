@@ -48,10 +48,10 @@ inline uint64_t clear_last_bit(uint64_t x)
 }
 
 // try until last_bit is set; return value before CAS
-inline uint64_t set_last_bit(uint64_t *addr)
+inline uintptr_t set_last_bit(uintptr_t *addr)
 {
-  uint64_t ov = 0;
-  uint64_t nv  = ATOMIC_LOAD(addr); //newest value before CAS
+  uintptr_t ov = 0;
+  uintptr_t nv  = ATOMIC_LOAD(addr); //newest value before CAS
   while (0 == ((ov = nv) & 1)
          && ov != (nv = ATOMIC_VCAS(addr, ov, ov | 1))) {
     // do nothing
@@ -59,7 +59,7 @@ inline uint64_t set_last_bit(uint64_t *addr)
   return nv;
 }
 
-inline void unset_last_bit(uint64_t *addr)
+inline void unset_last_bit(uintptr_t *addr)
 {
   ATOMIC_STORE(addr, clear_last_bit(ATOMIC_LOAD(addr)));
 }
@@ -82,9 +82,9 @@ inline ObLink *link_insert(ObLink *prev, ObLink *target, ObLink *next)
 inline ObLink *link_del(ObLink *prev, ObLink *target, ObLink *&next)
 {
   ObLink *ret = NULL;
-  if (!is_last_bit_set((uint64_t)(next = (ObLink *)set_last_bit((uint64_t *)(&target->next_))))) {
+  if (!is_last_bit_set((uintptr_t)(next = (ObLink *)set_last_bit((uintptr_t *)(&target->next_))))) {
     if (target != (ret = ATOMIC_VCAS(&prev->next_, target, next))) {
-      unset_last_bit((uint64_t *)(&target->next_));
+      unset_last_bit((uintptr_t *)(&target->next_));
     }
   }
   return ret;
