@@ -78,9 +78,13 @@ int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
   int64_t DEFAULT_TIMEOUT_US = config::rpc_timeout(); // default is 2s
-#ifdef __APPLE__
-  // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
-  // Increase the default timeout to 10s to avoid bootstrap failure.
+#if defined(__APPLE__) || defined(_WIN32)
+  // On Mac and Windows the storage layer is significantly slower: there is no O_DIRECT and
+  // software CRC is used, and on Windows filter drivers (antivirus, indexing, backup agents)
+  // are attached to freshly created data files. A single cold metadata statement issued during
+  // a fresh bootstrap can therefore take several seconds, while the default rpc_timeout is only
+  // 2s. Raise the default timeout floor to 10s so that a slow statement cannot consume the whole
+  // budget and abort the bootstrap with OB_TIMEOUT (-4012) in ObBootstrap::init_global_stat().
   DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL);
 #endif
 
