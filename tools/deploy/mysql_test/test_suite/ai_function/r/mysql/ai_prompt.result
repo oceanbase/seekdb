@@ -2,7 +2,11 @@ select ai_prompt('{0}+{1}={2} 吗？请回答true或false','1');
 ai_prompt('{0}+{1}={2} 吗？请回答true或false','1')
 {"args": ["1"], "template": "{0}+{1}={2} 吗？请回答true或false"}
 select ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"));
-ERROR 0A000: json type is not supported not supported
+ai_prompt('{0}+{1}={2} 吗？请回答true或false',json_object("a","1"))
+{"args": [{"a": "1"}], "template": "{0}+{1}={2} 吗？请回答true或false"}
+select ai_prompt('{0}/{0}/{1}', json_array(1,true), json_object("k",2));
+ai_prompt('{0}/{0}/{1}', json_array(1,true), json_object("k",2))
+{"args": [[1, true], {"k": 2}], "template": "{0}/{0}/{1}"}
 select ai_prompt();
 ERROR 42000: Incorrect parameter count in the call to native function 'ai_prompt'
 select ai_prompt(1);
@@ -49,13 +53,33 @@ insert into t1 values(7, 'AA', 'bb', 'CC', 'dd');
 select ai_prompt(nr) from t1;
 ERROR 22000: Invalid data type for the operation
 select ai_prompt(a) from t1;
-ERROR 22000: Invalid data type for the operation
+ai_prompt(a)
+{"args": [], "template": "a"}
+{"args": [], "template": "aa"}
+{"args": [], "template": "aaa"}
+{"args": [], "template": "aaa"}
+{"args": [], "template": "AA"}
 select ai_prompt(b) from t1;
-ERROR 22000: Invalid data type for the operation
+ai_prompt(b)
+{"args": [], "template": "b"}
+{"args": [], "template": "bb"}
+{"args": [], "template": "bbb"}
+{"args": [], "template": "BBB"}
+{"args": [], "template": "bb"}
 select ai_prompt(c) from t1;
-ERROR 22000: Invalid data type for the operation
+ai_prompt(c)
+{"args": [], "template": "c"}
+{"args": [], "template": "cc"}
+{"args": [], "template": "ccc"}
+{"args": [], "template": "ccc"}
+{"args": [], "template": "CC"}
 select ai_prompt(d) from t1;
-ERROR 22000: Invalid data type for the operation
+ai_prompt(d)
+{"args": [], "template": "d"}
+{"args": [], "template": "dd"}
+{"args": [], "template": "ddd"}
+{"args": [], "template": "DDD"}
+{"args": [], "template": "dd"}
 drop table t1;
 drop table if exists t1;
 create table t1 (nr char(5), a varchar(10), b BINARY(20), c VARBINARY(20));
