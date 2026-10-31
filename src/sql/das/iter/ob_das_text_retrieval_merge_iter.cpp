@@ -880,7 +880,9 @@ int ObDASTRTaatIter::check_and_prepare()
   } else if (limit_param_.limit_ > 0 && output_row_cnt_ >= limit_param_.limit_) {
     ret = OB_ITER_END;
   } else if (!doc_cnt_calculated_) {
-    if (OB_FAIL(do_total_doc_cnt())) {
+    if (!ir_ctdef_->need_calc_relevance()) {
+      doc_cnt_calculated_ = true;
+    } else if (OB_FAIL(do_total_doc_cnt())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
       } else {
         doc_cnt_calculated_ = true;
@@ -1746,7 +1748,9 @@ int ObDASTRDaatIter::inner_get_next_row()
     bool filter_valid = false;
     bool got_valid_document = false;
     bool doc_valid = false;
-    ObExpr *match_filter = ir_ctdef_->need_calc_relevance() ? ir_ctdef_->match_filter_ : nullptr;
+    ObExpr *match_filter = (ir_ctdef_->need_calc_relevance()
+        && !(ir_ctdef_->is_skip_bm25_score() && DISJUNCTIVE == relation_type_))
+        ? ir_ctdef_->match_filter_ : nullptr;
     ObDatum *filter_res = nullptr;
     const bool is_batch = false;
     while (OB_SUCC(ret) && !got_valid_document) {
@@ -1789,7 +1793,9 @@ int ObDASTRDaatIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   } else if (0 == capacity) {
     count = 0;
   } else {
-    ObExpr *match_filter = ir_ctdef_->need_calc_relevance() ? ir_ctdef_->match_filter_ : nullptr;
+    ObExpr *match_filter = (ir_ctdef_->need_calc_relevance()
+        && !(ir_ctdef_->is_skip_bm25_score() && DISJUNCTIVE == relation_type_))
+        ? ir_ctdef_->match_filter_ : nullptr;
     int64_t real_capacity = min(capacity, ir_rtdef_->eval_ctx_->max_batch_size_);
     ObDatum *filter_res = nullptr;
     const bool is_batch = true;

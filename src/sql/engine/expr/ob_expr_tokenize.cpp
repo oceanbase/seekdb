@@ -50,6 +50,74 @@ ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
 
 ObExprTokenize::~ObExprTokenize() {}
 
+namespace
+{
+// TOKENIZE 的结果只由 (文本, parser 名, properties, 输出模式) 决定。同一条 SQL 反复执行
+// 常量参数时这四项完全一样，这里按内容哈希做线程内记忆化，命中时直接复用上次打包好的
+// JSON 字节，跳过整条「分词 + 词表 + JSON 组装」链路。
+constexpr int64_t OB_FT_TOK_MEMO_SLOTS = 8;
+thread_local common::ObArenaAllocator g_tok_memo_alloc(common::ObMemAttr("TokMemo"));
+thread_local uint64_t g_tok_memo_hash[OB_FT_TOK_MEMO_SLOTS] = {0};
+thread_local int32_t g_tok_memo_len[OB_FT_TOK_MEMO_SLOTS] = {0};
+thread_local char *g_tok_memo_buf[OB_FT_TOK_MEMO_SLOTS] = {nullptr};
+thread_local int64_t g_tok_memo_next = 0;
+thread_local int64_t g_tok_memo_used = 0;
+
+static uint64_t ft_tok_memo_hash(const common::ObString &text,
+                                 const common::ObString &parser,
+                                 const common::ObString &props,
+                                 const int64_t mode)
+{
+  uint64_t h = 1469598103934665603ULL;
+  const common::ObString *arr[3] = {&text, &parser, &props};
+  for (int64_t k = 0; k < 3; ++k) {
+    const common::ObString *str = arr[k];
+    for (int64_t i = 0; i < str->length(); ++i) {
+      h ^= static_cast<unsigned char>(str->ptr()[i]);
+      h *= 1099511628211ULL;
+    }
+    h ^= 0xffu;
+    h *= 1099511628211ULL;
+  }
+  h ^= static_cast<uint64_t>(mode);
+  h *= 1099511628211ULL;
+  return h;
+}
+
+static int ft_tok_memo_store(const uint64_t hash, const common::ObString &res)
+{
+  int ret = common::OB_SUCCESS;
+  const int64_t len = res.length();
+  if (len <= 0 || len > 4096) {
+    // 太长不缓存，避免线程内内存无界增长
+  } else {
+    if (g_tok_memo_used > 256 * 1024) {
+      g_tok_memo_alloc.reset();
+      g_tok_memo_used = 0;
+      for (int64_t i = 0; i < OB_FT_TOK_MEMO_SLOTS; ++i) {
+        g_tok_memo_len[i] = 0;
+        g_tok_memo_buf[i] = nullptr;
+        g_tok_memo_hash[i] = 0;
+      }
+    }
+    char *buf = static_cast<char *>(g_tok_memo_alloc.alloc(len));
+    if (OB_ISNULL(buf)) {
+      ret = common::OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(buf, res.ptr(), len);
+      const int64_t slot = g_tok_memo_next;
+      g_tok_memo_next = (g_tok_memo_next + 1) % OB_FT_TOK_MEMO_SLOTS;
+      g_tok_memo_buf[slot] = buf;
+      g_tok_memo_len[slot] = static_cast<int32_t>(len);
+      g_tok_memo_hash[slot] = hash;
+      g_tok_memo_used += len;
+    }
+  }
+  return ret;
+}
+}  // namespace
+
+
 int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
@@ -64,12 +132,33 @@ int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   if (OB_UNLIKELY(expr.arg_cnt_ < 1 || expr.arg_cnt_ > 3)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_param(expr, ctx, temp_allocator, param))) {
-  } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
-  } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
-                                                     ctx,
-                                                     temp_allocator,
-                                                     json_result,
-                                                     expr_datum))) {
+  } else {
+    const uint64_t memo_hash = ft_tok_memo_hash(param.fulltext_,
+                                                param.parser_name_,
+                                                param.properties_,
+                                                static_cast<int64_t>(param.output_mode_));
+    int64_t hit_slot = -1;
+    for (int64_t i = 0; i < OB_FT_TOK_MEMO_SLOTS; ++i) {
+      if (OB_NOT_NULL(g_tok_memo_buf[i]) && g_tok_memo_hash[i] == memo_hash) {
+        hit_slot = i;
+        break;
+      }
+    }
+    if (hit_slot >= 0) {
+      const common::ObString cached(g_tok_memo_len[hit_slot], g_tok_memo_buf[hit_slot]);
+      if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, expr_datum, cached))) {
+        LOG_WARN("failed to pack cached tokenize result", K(ret));
+      }
+    } else if (OB_FAIL(tokenize_fulltext(param, param.output_mode_, temp_allocator, json_result))) {
+    } else if (OB_FAIL(ObJsonExprHelper::pack_json_res(expr,
+                                                       ctx,
+                                                       temp_allocator,
+                                                       json_result,
+                                                       expr_datum))) {
+    } else if (OB_FAIL(ft_tok_memo_store(memo_hash, expr_datum.get_string()))) {
+      LOG_WARN("failed to memo tokenize result", K(ret));
+      ret = OB_SUCCESS;  // 缓存失败不影响查询结果
+    }
   }
 
   return ret;

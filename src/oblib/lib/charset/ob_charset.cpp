@@ -571,6 +571,20 @@ int ObCharset::strcmpsp(ObCollationType collation_type,
                         bool cmp_endspace)
 {
   int result = 0;
+  if (OB_LIKELY(CS_TYPE_UTF8MB4_BIN == collation_type)
+      && OB_NOT_NULL(str1) && OB_NOT_NULL(str2)
+      && str1_len > 0 && str2_len > 0) {
+    // Hot path for the binary collation: validation and the charset lookup are
+    // skipped when the two values already differ inside their common prefix.
+    // Every binary collation handler returns the memcmp result unchanged in that
+    // case, so this is equivalent; the equal-prefix case (where the handlers
+    // differ in trailing space handling) falls through to the original path.
+    const size_t common_len = OB_MIN(static_cast<size_t>(str1_len), static_cast<size_t>(str2_len));
+    const int cmp_ret = MEMCMP(str1, str2, common_len);
+    if (0 != cmp_ret || str1_len == str2_len) {
+      return cmp_ret;
+    }
+  }
   if (is_argument_valid(collation_type, str1, str1_len, str2, str2_len)) {
     const ObCharsetInfo *cs = get_charset(collation_type);
     result = cs->coll->strnncollsp(cs,

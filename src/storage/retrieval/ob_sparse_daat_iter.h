@@ -54,6 +54,7 @@ private:
   }
 private:
   common::ObDatumCmpFuncType cmp_func_;
+  bool binary_cmp_;
   // TODO: if memory lifetime of docid datum is guaranteed by dim_iters, we can use pointer to datum directly
   //       and avoid deep copy into merge heap here
   const ObFixedArray<const ObDatum *, ObIAllocator> *iter_ids_;

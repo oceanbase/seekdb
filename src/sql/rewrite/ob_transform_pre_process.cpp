@@ -179,7 +179,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
     }
     if (OB_SUCC(ret)) {
       if (stmt->get_match_exprs().count() > 0 &&
-          OB_FAIL(preserve_order_for_fulltext_search(stmt, is_happened))) {
+          OB_FAIL(preserve_order_for_fulltext_search(parent_stmts, stmt, is_happened))) {
       } else {
         trans_happened |= is_happened;
       }
@@ -3790,14 +3790,98 @@ int ObTransformPreProcess::do_flatten_conditions(ObDMLStmt *stmt, ObIArray<ObRaw
 
 // full-text index queries on a single base table are processed with order preservation. 
 // (Order is not preserved in multi-table join scenarios.)
-int ObTransformPreProcess::preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened)
+// A limited view whose rows are never read by its parent (e.g. SELECT COUNT(*) FROM (SELECT ...
+// WHERE MATCH(...) AGAINST(...) LIMIT n) v) only exposes how many rows it returns, which does
+// not depend on the order. The relevance order would only force every match to be scored and
+// sorted, so it is not added in that case.
+int ObTransformPreProcess::check_rows_unobserved_by_parent(
+    const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+    const ObDMLStmt &stmt,
+    bool &is_unobserved,
+    ObDMLStmt *&parent,
+    uint64_t &view_table_id)
+{
+  int ret = OB_SUCCESS;
+  const TableItem *view_item = nullptr;
+  parent = parent_stmts.empty() ? nullptr : parent_stmts.at(parent_stmts.count() - 1).stmt_;
+  view_table_id = OB_INVALID_ID;
+  is_unobserved = false;
+  if (nullptr == parent || !stmt.is_select_stmt() || !stmt.has_limit() ||
+      stmt.is_fetch_with_ties() || stmt.has_for_update()) {
+    // the order decides the content of the rows, or the rows are locked
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && nullptr == view_item && i < parent->get_table_size(); ++i) {
+      const TableItem *table_item = parent->get_table_item(i);
+      if (OB_ISNULL(table_item)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (table_item->is_generated_table() && table_item->ref_query_ == &stmt) {
+        view_item = table_item;
+      }
+    }
+    ObSEArray<ColumnItem, 4> column_items;
+    const ObSelectStmt &select_stmt = static_cast<const ObSelectStmt &>(stmt);
+    if (OB_FAIL(ret) || nullptr == view_item) {
+      // not a view of the parent (e.g. a subquery expression)
+    } else if (OB_FAIL(parent->get_column_items(view_item->table_id_, column_items))) {
+    } else if (column_items.empty()) {
+      is_unobserved = true;
+      view_table_id = view_item->table_id_;
+      for (int64_t i = 0; OB_SUCC(ret) && is_unobserved && i < select_stmt.get_select_item_size(); ++i) {
+        const ObRawExpr *expr = select_stmt.get_select_item(i).expr_;
+        if (OB_ISNULL(expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (expr->has_flag(CNT_SUB_QUERY) || expr->has_flag(CNT_PL_UDF)) {
+          // evaluating other rows could raise other errors or side effects
+          is_unobserved = false;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformPreProcess::preserve_order_for_fulltext_search(
+    const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+    ObDMLStmt *stmt,
+    bool& trans_happened)
 {
   int ret = OB_SUCCESS;
   trans_happened = false;
   TableItem *table_item = NULL;
   ObRawExpr *match_expr = nullptr;
+  bool rows_unobserved = false;
+  ObDMLStmt *parent = nullptr;
+  uint64_t view_table_id = OB_INVALID_ID;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(check_rows_unobserved_by_parent(parent_stmts, *stmt, rows_unobserved,
+                                                     parent, view_table_id))) {
+  } else if (rows_unobserved) {
+    // No relevance order is needed. The view columns are not read either: prune them like
+    // projection pruning does (the rewrite rules are disabled for fulltext search), otherwise
+    // every retrieved document would be looked up in the data table only to be discarded.
+    ObSelectStmt *view_stmt = static_cast<ObSelectStmt *>(stmt);
+    ObSqlBitSet<> removed_idxs;
+    bool is_valid = false;
+    if (OB_ISNULL(parent)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ObTransformUtils::check_project_pruning_validity(*view_stmt, is_valid))) {
+    } else if (!is_valid) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < view_stmt->get_select_item_size(); ++i) {
+        bool need_remove = false;
+        if (OB_FAIL(ObTransformUtils::check_select_item_need_remove(view_stmt, i, need_remove))) {
+        } else if (need_remove && OB_FAIL(removed_idxs.add_member(i))) {
+        }
+      }
+      if (OB_SUCC(ret) && !removed_idxs.is_empty()) {
+        if (OB_FAIL(ObTransformUtils::remove_select_items(ctx_, view_table_id, *view_stmt,
+                                                          *parent, removed_idxs))) {
+        } else {
+          trans_happened = true;
+        }
+      }
+    }
   } else if (stmt->get_table_items().count() != 1 || stmt->get_order_item_size() != 0) {
     // do nothing
   } else if (stmt->is_select_stmt() && 

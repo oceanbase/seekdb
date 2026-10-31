@@ -153,7 +153,7 @@ int ObDASTextRetrievalIter::inner_init(ObDASIterParam &param)
     ir_rtdef_ = retrieval_param.ir_rtdef_;
     tx_desc_ = retrieval_param.tx_desc_;
     snapshot_ = retrieval_param.snapshot_;
-    need_inv_idx_agg_ = ir_ctdef_->need_inv_idx_agg();
+    need_inv_idx_agg_ = ir_ctdef_->need_inv_idx_agg() && !ir_ctdef_->is_skip_bm25_score();
     need_inv_idx_agg_reset_ = retrieval_param.need_inv_idx_agg_reset_;
     max_batch_size_ = ir_rtdef_->eval_ctx_->max_batch_size_;
   
@@ -333,10 +333,15 @@ int ObDASTextRetrievalIter::inner_get_next_row()
         ROWEXPR2STR(*ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_,
         *inv_idx_scan_param_.output_exprs_));
     if (ir_ctdef_->need_calc_relevance()) {
-      clear_row_wise_evaluated_flag();
-      if (OB_FAIL(fill_token_doc_cnt())) {
-      } else if (OB_FAIL(fill_token_weight())) {
-      } else if (OB_FAIL(project_relevance_expr())) {
+      if (ir_ctdef_->is_skip_bm25_score()) {
+        if (OB_FAIL(project_relevance_expr())) {
+        }
+      } else {
+        clear_row_wise_evaluated_flag();
+        if (OB_FAIL(fill_token_doc_cnt())) {
+        } else if (OB_FAIL(fill_token_weight())) {
+        } else if (OB_FAIL(project_relevance_expr())) {
+        }
       }
     }
   }
@@ -372,13 +377,18 @@ int ObDASTextRetrievalIter::inner_get_next_rows(int64_t &count, int64_t capacity
 
   if (OB_SUCC(ret)) {
     if (ir_ctdef_->need_calc_relevance()) {
-      sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
-      const ObBitVector *skip = NULL;
-      PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count, skip);
-      clear_batch_wise_evaluated_flag(count);
-      if (OB_FAIL(fill_token_doc_cnt())) {
-      } else if (OB_FAIL(fill_token_weight())) {
-      } else if (OB_FAIL(batch_project_relevance_expr(count))) {
+      if (ir_ctdef_->is_skip_bm25_score()) {
+        if (OB_FAIL(batch_project_relevance_expr(count))) {
+        }
+      } else {
+        sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+        const ObBitVector *skip = NULL;
+        PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count, skip);
+        clear_batch_wise_evaluated_flag(count);
+        if (OB_FAIL(fill_token_doc_cnt())) {
+        } else if (OB_FAIL(fill_token_weight())) {
+        } else if (OB_FAIL(batch_project_relevance_expr(count))) {
+        }
       }
     }
   }
@@ -804,13 +814,18 @@ int ObDASTRCacheIter::get_next_batch_inner()
   }
   if (OB_SUCC(ret) && need_load) {
     if (ir_ctdef_->need_calc_relevance()) {
-      sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
-      const ObBitVector *skip = NULL;
-      PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count_, skip);
-      clear_batch_wise_evaluated_flag(count_);
-      if (OB_FAIL(fill_token_doc_cnt())) {
-      } else if (OB_FAIL(fill_token_weight())) {
-      } else if (OB_FAIL(save_relevances_and_docids())) {
+      if (ir_ctdef_->is_skip_bm25_score()) {
+        if (OB_FAIL(save_relevances_and_docids())) {
+        }
+      } else {
+        sql::ObEvalCtx *ctx = ir_rtdef_->get_inv_idx_scan_rtdef()->eval_ctx_;
+        const ObBitVector *skip = NULL;
+        PRINT_VECTORIZED_ROWS(SQL, DEBUG, *ctx, *inv_idx_scan_param_.output_exprs_, count_, skip);
+        clear_batch_wise_evaluated_flag(count_);
+        if (OB_FAIL(fill_token_doc_cnt())) {
+        } else if (OB_FAIL(fill_token_weight())) {
+        } else if (OB_FAIL(save_relevances_and_docids())) {
+        }
       }
     } else if (OB_FAIL(save_docids())) {
     }

@@ -201,18 +201,25 @@ int ObTextRetrievalTokenIter::eval_relevance_expr()
 int ObTextRetrievalTokenIter::get_next_row()
 {
   int ret = OB_SUCCESS;
+  const bool skip_bm25 = (nullptr != relevance_expr_ && 0 != relevance_expr_->extra_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (!skip_bm25 && !token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_row(inv_idx_scan_iter_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
     }
   } else {
     if (need_calc_relevance()) {
-      clear_row_wise_evaluated_flag();
-      if (OB_FAIL(fill_token_doc_cnt())) {
-      } else if (OB_FAIL(fill_token_weight())) {
-      } else if (OB_FAIL(eval_relevance_expr())) {
+      if (skip_bm25) {
+        token_doc_cnt_calculated_ = true;
+        if (OB_FAIL(eval_relevance_expr())) {
+        }
+      } else {
+        clear_row_wise_evaluated_flag();
+        if (OB_FAIL(fill_token_doc_cnt())) {
+        } else if (OB_FAIL(fill_token_weight())) {
+        } else if (OB_FAIL(eval_relevance_expr())) {
+        }
       }
     }
   }
@@ -239,10 +246,11 @@ int ObTextRetrievalTokenIter::batch_eval_relevance_expr(const int64_t count)
 int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &count)
 {
   int ret = OB_SUCCESS;
+  const bool skip_bm25 = (nullptr != relevance_expr_ && 0 != relevance_expr_->extra_);
   count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (!token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
+  } else if (!skip_bm25 && !token_doc_cnt_calculated_ && OB_FAIL(estimate_token_doc_cnt())) {
   } else if (OB_FAIL(query::das_scan_next_rows(
                  inv_idx_scan_iter_, count, OB_MIN(max_batch_size_, capacity)))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -253,12 +261,18 @@ int ObTextRetrievalTokenIter::get_next_batch(const int64_t capacity, int64_t &co
 
   if (OB_FAIL(ret)) {
   } else if (need_calc_relevance()) {
-    const sql::ObBitVector *skip = NULL;
-    PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *inv_idx_scan_param_->output_exprs_, count, skip);
-    clear_batch_wise_evaluated_flag(count);
-    if (OB_FAIL(fill_token_doc_cnt())) {
-    } else if (OB_FAIL(fill_token_weight())) {
-    } else if (OB_FAIL(batch_eval_relevance_expr(count))) {
+    if (skip_bm25) {
+      token_doc_cnt_calculated_ = true;
+      if (OB_FAIL(batch_eval_relevance_expr(count))) {
+      }
+    } else {
+      const sql::ObBitVector *skip = NULL;
+      PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *inv_idx_scan_param_->output_exprs_, count, skip);
+      clear_batch_wise_evaluated_flag(count);
+      if (OB_FAIL(fill_token_doc_cnt())) {
+      } else if (OB_FAIL(fill_token_weight())) {
+      } else if (OB_FAIL(batch_eval_relevance_expr(count))) {
+      }
     }
   }
   return ret;
@@ -313,7 +327,7 @@ int ObTextRetrievalTokenIter::update_scan_param(const ObString &token, common::O
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_range.start_key_.get_obj_ptr()))) {
     } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, *scan_range.end_key_.get_obj_ptr()))) {
-    } else if (!need_inv_idx_agg()) {
+    } else if (!need_inv_idx_agg() || (nullptr != relevance_expr_ && 0 != relevance_expr_->extra_)) {
       // skip inverted index aggregate iterator
     } else if (OB_FAIL(query::das_scan_reuse(inv_idx_agg_iter_))) {
     } else if (OB_UNLIKELY(!inv_idx_agg_param_->key_ranges_.empty())) {
@@ -501,7 +515,17 @@ int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(relevance_expr_) || OB_ISNULL(inv_scan_domain_id_col_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(relevance_expr_->eval_batch(*eval_ctx_, *token_iter_->get_skip(), count_))) {
+  } else if (0 != relevance_expr_->extra_) {
+    cur_idx_ = 0;
+    const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
+      if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
+        relevance_[i] = 1.0;
+        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        }
+      }
+    }
+  } else if (!eval_ctx_->is_vectorized() && OB_FAIL(relevance_expr_->eval_batch(*eval_ctx_, *token_iter_->get_skip(), count_))) {
   } else {
     cur_idx_ = 0;
     const ObDatumVector &relevance_datum = relevance_expr_->locate_expr_datumvector(*eval_ctx_);

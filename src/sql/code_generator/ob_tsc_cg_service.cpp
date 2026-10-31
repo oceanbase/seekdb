@@ -1906,6 +1906,36 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
         partition_row_cnt = est_cost_info->table_meta_info_->table_row_count_ / est_cost_info->table_meta_info_->part_count_;
       }
       ir_scan_ctdef->estimated_total_doc_cnt_ = partition_row_cnt;
+      bool can_skip_bm25 = (!cg_ctx.is_func_lookup_
+          && !cg_ctx.is_es_match_
+          && !cg_ctx.is_vec_iter_func_lookup_
+          && !tr_info.need_sort()
+          && !tr_info.need_block_max_scan()
+          && nullptr == tr_info.topk_limit_expr_
+          && nullptr != tr_info.pushdown_match_filter_
+          && 1 == tr_info.pushdown_match_filter_->get_param_count());
+      for (int64_t i = 0; can_skip_bm25 && i < op.get_output_exprs().count(); ++i) {
+        if (OB_NOT_NULL(op.get_output_exprs().at(i))
+            && op.get_output_exprs().at(i)->has_flag(CNT_MATCH_EXPR)) {
+          can_skip_bm25 = false;
+        }
+      }
+      for (int64_t i = 0; can_skip_bm25 && i < op.get_filter_exprs().count(); ++i) {
+        if (OB_NOT_NULL(op.get_filter_exprs().at(i))
+            && op.get_filter_exprs().at(i)->has_flag(CNT_MATCH_EXPR)) {
+          can_skip_bm25 = false;
+        }
+      }
+      if (can_skip_bm25) {
+        ir_scan_ctdef->reserved_ir_scan_flag_ = 1;
+        ir_scan_ctdef->has_avg_doc_len_est_ = false;
+        if (0 == ir_scan_ctdef->estimated_total_doc_cnt_) {
+          ir_scan_ctdef->estimated_total_doc_cnt_ = 1;
+        }
+        if (OB_NOT_NULL(ir_scan_ctdef->relevance_expr_)) {
+          ir_scan_ctdef->relevance_expr_->extra_ = 1;
+        }
+      }
       if (tr_info.match_expr_->get_columns_boosts().count() > 0) {
         if (tr_info.column_boost_idx_ < 0 || tr_info.column_boost_idx_ >= tr_info.match_expr_->get_columns_boosts().count()) {
           ret = OB_ERR_UNEXPECTED;

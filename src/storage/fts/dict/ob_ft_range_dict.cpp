@@ -378,19 +378,37 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
   return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
 }
 
+namespace {
+OB_INLINE int fast_utf8mb4_bin_strcmp(const ObString &s1, const ObString &s2)
+{
+  const uint8_t *p1 = reinterpret_cast<const uint8_t *>(s1.ptr());
+  const uint8_t *p2 = reinterpret_cast<const uint8_t *>(s2.ptr());
+  int64_t l1 = s1.length();
+  int64_t l2 = s2.length();
+  while (l1 > 0 && p1[l1 - 1] == ' ') {
+    --l1;
+  }
+  while (l2 > 0 && p2[l2 - 1] == ' ') {
+    --l2;
+  }
+  const int64_t min_len = l1 < l2 ? l1 : l2;
+  for (int64_t i = 0; i < min_len; ++i) {
+    if (p1[i] != p2[i]) {
+      return static_cast<int>(p1[i]) - static_cast<int>(p2[i]);
+    }
+  }
+  return static_cast<int>(l1 - l2);
+}
+} // namespace
+
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
+  const int64_t range_cnt = range_dicts_.size();
+  for (int64_t i = 0; !found && i < range_cnt; ++i) {
+    if (fast_utf8mb4_bin_strcmp(range_dicts_[i].end_.get_word(), single_word) >= 0
+        && fast_utf8mb4_bin_strcmp(range_dicts_[i].start_.get_word(), single_word) <= 0) {
       dict = range_dicts_[i].dict_;
       found = true;
     }

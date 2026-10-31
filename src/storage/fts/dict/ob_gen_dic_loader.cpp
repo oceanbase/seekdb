@@ -125,20 +125,41 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
   } else {
-    TCWLockGuard guard(lock_);
-    if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
-      if (OB_HASH_NOT_EXIST == ret) {
+    // Common case: the loader already exists.  Only the creation path needs the
+    // write lock, so look it up under a read lock first.
+    bool found = false;
+    {
+      TCRLockGuard guard(lock_);
+      if (OB_SUCC(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
+        found = true;
+      } else if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
+        dic_loader = nullptr;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (found) {
+      if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+      }
+    } else {
+      TCWLockGuard guard(lock_);
+      // re-check under the write lock: another thread may have created it
+      if (OB_SUCC(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
+      } else if (OB_HASH_NOT_EXIST == ret) {
+        ret = OB_SUCCESS;
         if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
         } else if (OB_ISNULL(dic_loader)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
         } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
-        } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
       }
-    } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+      if (OB_SUCC(ret) && OB_NOT_NULL(dic_loader)) {
+        if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
+        }
+      }
     }
   }
   return ret;

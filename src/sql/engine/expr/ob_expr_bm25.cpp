@@ -64,6 +64,11 @@ int ObExprBM25::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObE
 int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
+  if (0 != expr.extra_) {
+    UNUSED(ctx);
+    res_datum.set_double(1.0);
+    return OB_SUCCESS;
+  }
   ObDatum *token_doc_cnt_datum = nullptr;
   ObDatum *total_doc_cnt_datum = nullptr;
   ObDatum *doc_length_datum = nullptr;
@@ -100,6 +105,17 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
 int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t size)
 {
   int ret = OB_SUCCESS;
+  if (0 != expr.extra_) {
+    ObDatum *res_datum = expr.locate_batch_datums(ctx);
+    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    for (int64_t i = 0; i < size; ++i) {
+      if (!skip.contain(i)) {
+        res_datum[i].set_double(1.0);
+        eval_flags.set(i);
+      }
+    }
+    return OB_SUCCESS;
+  }
   ObDatumVector token_doc_cnt_datum;
   ObDatumVector total_doc_cnt_datum;
   ObDatumVector doc_length_datum;

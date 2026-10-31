@@ -87,6 +87,7 @@ public:
   bool need_calc_relevance() const { return nullptr != relevance_expr_; }
   bool need_proj_relevance_score() const { return nullptr != relevance_proj_col_; }
   bool need_inv_idx_agg() const { return has_inv_agg_ && need_calc_relevance(); }
+  bool is_skip_bm25_score() const { return 0 != reserved_ir_scan_flag_; }
   bool need_block_max_scan() const { return has_block_max_scan_; }
   bool need_avg_doc_len_est() const { return has_avg_doc_len_est_ && nullptr != avg_doc_token_cnt_expr_; }
   bool has_pushdown_topk() const { return nullptr != topk_limit_expr_; }
