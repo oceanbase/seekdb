@@ -72,6 +72,10 @@ public:
   // are owned on import/clone/decode, including the existing SQL-array graph.
   // PL/LOB wrapper copying retains its old domain meaning, not external-resource
   // ownership. Every output, and decode's position, is published only on success.
+  // Checked physical borrow: scalars become inline, references keep the source
+  // owner. Generic Unknown remains an eight-byte reference, unlike Raw indices.
+  static int borrow_schema_native_value(const ObDatum &value, const SqlTypeMeta &meta,
+                                       Datum &output);
   static int import_schema_native_value(const ObDatum &value, const SqlTypeMeta &meta,
                                        ObIAllocator &allocator, Datum &output);
   static int clone_schema_native_value(const Datum &value, const SqlTypeMeta &meta,

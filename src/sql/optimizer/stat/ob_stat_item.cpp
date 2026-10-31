@@ -18,6 +18,7 @@
 #include "share/datum/datum_value_cast.h"
 #include "share/datum/typed_datum_compare.h"
 #include "ob_stat_item.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "share/datum/typed_datum_compare.h"
 #include "sql/optimizer/stat/ob_hybrid_hist_estimator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -26,6 +27,108 @@ namespace oceanbase
 using namespace sql;
 namespace common
 {
+
+namespace {
+int export_stat_item_value(const Datum &value, const SqlTypeMeta &meta, DatumValue &output,
+                           void *scratch, int64_t capacity)
+{
+  DatumValue candidate;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      value, meta, candidate.datum_, scratch, capacity);
+  if (ret == OB_SUCCESS) { candidate.meta_ = meta; output = candidate; }
+  return ret;
+}
+int copy_stat_item_value(const Datum &value, const SqlTypeMeta &meta,
+                         DatumValue &output, ObIAllocator &owner)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? clone_typed_value(view, output, owner) : ret;
+}
+int clone_stat_item_value(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner,
+                          Datum &output, SqlTypeMeta &output_meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, owner, candidate);
+  if (ret == OB_SUCCESS) { output = candidate; output_meta = meta; }
+  return ret;
+}
+int borrow_stat_item_value(const DatumValue &value, Datum &output, SqlTypeMeta &output_meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, candidate);
+  if (ret == OB_SUCCESS) { output = candidate; output_meta = value.meta_; }
+  return ret;
+}
+int borrow_stat_item_native(const Datum &value, const SqlTypeMeta &meta,
+                            Datum &output, SqlTypeMeta &output_meta)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? borrow_stat_item_value(view, output, output_meta) : ret;
+}
+} // namespace
+
+int ObGlobalColumnStat::set_min_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner)
+{ return clone_stat_item_value(value, meta, owner, min_val_, min_meta_); }
+int ObGlobalColumnStat::export_min_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(min_val_, min_meta_, output, scratch, capacity); }
+int ObGlobalColumnStat::copy_min_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(min_val_, min_meta_, output, owner); }
+int ObHistogramParam::set_min_borrowed(const DatumValue &value)
+{ return borrow_stat_item_value(value, minval_, min_meta_); }
+int ObHistogramParam::set_min_native_borrowed(const Datum &value, const SqlTypeMeta &meta)
+{ return borrow_stat_item_native(value, meta, minval_, min_meta_); }
+int ObHistogramParam::export_min_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(minval_, min_meta_, output, scratch, capacity); }
+
+int ObGlobalColumnStat::set_max_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner)
+{ return clone_stat_item_value(value, meta, owner, max_val_, max_meta_); }
+int ObGlobalColumnStat::export_max_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(max_val_, max_meta_, output, scratch, capacity); }
+int ObGlobalColumnStat::copy_max_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(max_val_, max_meta_, output, owner); }
+int ObHistogramParam::set_max_borrowed(const DatumValue &value)
+{ return borrow_stat_item_value(value, maxval_, max_meta_); }
+int ObHistogramParam::set_max_native_borrowed(const Datum &value, const SqlTypeMeta &meta)
+{ return borrow_stat_item_native(value, meta, maxval_, max_meta_); }
+int ObHistogramParam::export_max_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(maxval_, max_meta_, output, scratch, capacity); }
+
+DEF_TO_STRING(ObGlobalColumnStat)
+{
+  int64_t pos = 0;
+  alignas(8) char min_scratch[64], max_scratch[64];
+  DatumValue minimum, maximum;
+  const int min_ret = export_min_value(minimum, min_scratch, sizeof(min_scratch));
+  const int max_ret = export_max_value(maximum, max_scratch, sizeof(max_scratch));
+  J_OBJ_START();
+  if (min_ret == OB_SUCCESS && max_ret == OB_SUCCESS) { J_KV("min_val_", minimum, "max_val_", maximum); }
+  else { J_KV(K(min_ret), K(max_ret), K_(min_val), K_(min_meta), K_(max_val), K_(max_meta)); }
+  J_COMMA();
+  J_KV(K(null_val_), K(avglen_val_), K(ndv_val_));
+  J_OBJ_END();
+  return pos;
+}
+DEF_TO_STRING(ObHistogramParam)
+{
+  int64_t pos = 0;
+  alignas(8) char min_scratch[64], max_scratch[64];
+  DatumValue minimum, maximum;
+  const int min_ret = export_min_value(minimum, min_scratch, sizeof(min_scratch));
+  const int max_ret = export_max_value(maximum, max_scratch, sizeof(max_scratch));
+  J_OBJ_START();
+  J_KV(K(epc_));
+  J_COMMA();
+  if (min_ret == OB_SUCCESS && max_ret == OB_SUCCESS) { J_KV("minval_", minimum, "maxval_", maximum); }
+  else { J_KV(K(min_ret), K(max_ret), K_(minval), K_(min_meta), K_(maxval), K_(max_meta)); }
+  J_COMMA();
+  J_KV(K(bkvals_), K(novals_), K(chvals_), K(eavals_), K(rpcnts_), K(eavs_));
+  J_OBJ_END();
+  return pos;
+}
 
 int ObStatRowCount::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
 {
@@ -257,7 +360,11 @@ struct ObBucketCompare
       // already fail
     } else {
       int cmp = 0;
-      if (OB_FAIL(compare_datum_values(l.endpoint_value_, r.endpoint_value_, cmp))) {
+      alignas(8) char left_scratch[64], right_scratch[64];
+      DatumValue left, right;
+      if (OB_FAIL(l.export_endpoint_value(left, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(r.export_endpoint_value(right, right_scratch, sizeof(right_scratch)))) {
+      } else if (OB_FAIL(compare_datum_values(left, right, cmp))) {
       } else { bret = cmp < 0; }
     }
     return bret;
@@ -315,10 +422,9 @@ int ObStatTopKHist::build_histogram_from_topk_items(ObIAllocator &allocator,
   histogram.reset();
   int64_t num_cnt = std::min(buckets.count(), max_bucket_num);
   for (int64_t i = 0; OB_SUCC(ret) && i < num_cnt; ++i) {
-    ObHistBucket bkt(buckets.at(i).col_obj_,
-                     buckets.at(i).fre_times_,
-                     buckets.at(i).fre_times_);
-    if (OB_FAIL(tmp.push_back(bkt))) {
+    ObHistBucket bkt(buckets.at(i).fre_times_, buckets.at(i).fre_times_);
+    if (OB_FAIL(bkt.set_endpoint_borrowed(buckets.at(i).col_obj_))) {
+    } else if (OB_FAIL(tmp.push_back(bkt))) {
     }
   }
   if (OB_SUCC(ret) && tmp.count() > 0) {
@@ -613,29 +719,69 @@ void ObGlobalNdvEval::get_llc_bitmap(char *llc_bitmap, const int64_t llc_bitmap_
 
 int ObGlobalMaxEval::add(const DatumValue &value)
 {
-  int ret = OB_SUCCESS, cmp = 0;
-  if (global_max_.is_null()) { global_max_ = value; }
-  else if (OB_FAIL(compare_datum_values(value, global_max_, cmp))) {}
-  else if (cmp > 0) { global_max_ = value; }
+  int ret = OB_SUCCESS;
+  int cmp = 0;
+  Datum candidate;
+  if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, candidate))) {
+  } else if (global_max_.is_null()) {
+    global_max_ = candidate; meta_ = value.meta_;
+  } else {
+    alignas(8) char current_scratch[64];
+    DatumValue current_view;
+    if (OB_FAIL(export_value(current_view, current_scratch, sizeof(current_scratch)))) {
+    } else if (OB_FAIL(compare_datum_values(value, current_view, cmp))) {
+    } else if (cmp > 0) { global_max_ = candidate; meta_ = value.meta_; }
+  }
   return ret;
 }
+int ObGlobalMaxEval::add_native(const Datum &value, const SqlTypeMeta &meta)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? add(view) : ret;
+}
+int ObGlobalMaxEval::export_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(global_max_, meta_, output, scratch, capacity); }
+int ObGlobalMaxEval::copy_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(global_max_, meta_, output, owner); }
 int ObGlobalMaxEval::flush(ObIAllocator *owner)
 {
   return owner == nullptr ? OB_INVALID_ARGUMENT : !is_valid() ? OB_SUCCESS
-      : clone_typed_value(global_max_, global_max_, *owner);
+      : clone_stat_item_value(global_max_, meta_, *owner, global_max_, meta_);
 }
 int ObGlobalMinEval::add(const DatumValue &value)
 {
-  int ret = OB_SUCCESS, cmp = 0;
-  if (global_min_.is_null()) { global_min_ = value; }
-  else if (OB_FAIL(compare_datum_values(global_min_, value, cmp))) {}
-  else if (cmp > 0) { global_min_ = value; }
+  int ret = OB_SUCCESS;
+  int cmp = 0;
+  Datum candidate;
+  if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, candidate))) {
+  } else if (global_min_.is_null()) {
+    global_min_ = candidate; meta_ = value.meta_;
+  } else {
+    alignas(8) char current_scratch[64];
+    DatumValue current_view;
+    if (OB_FAIL(export_value(current_view, current_scratch, sizeof(current_scratch)))) {
+    } else if (OB_FAIL(compare_datum_values(current_view, value, cmp))) {
+    } else if (cmp > 0) { global_min_ = candidate; meta_ = value.meta_; }
+  }
   return ret;
 }
+int ObGlobalMinEval::add_native(const Datum &value, const SqlTypeMeta &meta)
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_stat_item_value(value, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? add(view) : ret;
+}
+int ObGlobalMinEval::export_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_stat_item_value(global_min_, meta_, output, scratch, capacity); }
+int ObGlobalMinEval::copy_value(DatumValue &output, ObIAllocator &owner) const
+{ return copy_stat_item_value(global_min_, meta_, output, owner); }
 int ObGlobalMinEval::flush(ObIAllocator *owner)
 {
   return owner == nullptr ? OB_INVALID_ARGUMENT : !is_valid() ? OB_SUCCESS
-      : clone_typed_value(global_min_, global_min_, *owner);
+      : clone_stat_item_value(global_min_, meta_, *owner, global_min_, meta_);
 }
 
 int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
@@ -708,8 +854,8 @@ int ObGlobalAllColEvals::merge(const ObOptColumnStat &col_stats)
     avglen_eval_.add(col_stats.get_avg_len());
     // a partition has min/max values only when it contains a valid value in the other word, ndv is not zero
     if (col_stats.get_num_distinct() != 0) {
-      if (OB_FAIL(min_eval_.add(col_stats.get_min_value()))) {
-      } else if (OB_FAIL(max_eval_.add(col_stats.get_max_value()))) {
+      if (OB_FAIL(min_eval_.add_native(col_stats.get_min_datum(), col_stats.get_min_meta()))) {
+      } else if (OB_FAIL(max_eval_.add_native(col_stats.get_max_datum(), col_stats.get_max_meta()))) {
       }
     }
   } else {

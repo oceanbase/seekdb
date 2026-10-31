@@ -442,8 +442,8 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
           } else {
             null_eval.add(opt_col_stat->get_num_null());
             if (opt_col_stat->get_num_distinct() != 0) {
-              if (OB_FAIL(min_eval.add(opt_col_stat->get_min_value()))) {
-              } else if (OB_FAIL(max_eval.add(opt_col_stat->get_max_value()))) {
+              if (OB_FAIL(min_eval.add_native(opt_col_stat->get_min_datum(), opt_col_stat->get_min_meta()))) {
+              } else if (OB_FAIL(max_eval.add_native(opt_col_stat->get_max_datum(), opt_col_stat->get_max_meta()))) {
               }
               ndv_eval.add(opt_col_stat->get_num_distinct(), opt_col_stat->get_llc_bitmap());
               not_null_eval.add(opt_tab_stat->get_row_count() - opt_col_stat->get_num_null());
@@ -468,8 +468,8 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
           col_stat->set_llc_bitmap_size(ObOptColumnStat::NUM_LLC_BUCKET);
           col_stat->set_collation_type(param.column_params_.at(i).cs_type_);
           // Copy cache-backed extrema directly into the destination owner.
-          if (OB_FAIL(col_stat->set_min_value(min_eval.get()))) {
-          } else if (OB_FAIL(col_stat->set_max_value(max_eval.get()))) {
+          if (OB_FAIL(col_stat->set_min_native(min_eval.get_datum(), min_eval.get_meta()))) {
+          } else if (OB_FAIL(col_stat->set_max_native(max_eval.get_datum(), max_eval.get_meta()))) {
           } else if (OB_FAIL(col_stats.push_back(col_stat))) {
           } else if (need_derive_hist) {
             if (col_stat->get_num_distinct() > 0 && !all_part_histograms.empty()) {
@@ -586,7 +586,11 @@ int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<const ObHistogr
             all_part_histograms.at(i)->get_type() == ObHistType::HYBIRD) {
           const ObHistogram::Buckets &part_bkts = all_part_histograms.at(i)->get_buckets();
           for (int64_t j = 0; OB_SUCC(ret) && j < part_bkts.count(); ++j) {
-            if (OB_FAIL(top_k_fre_hist->add_top_k_frequency_item(part_bkts.at(j).endpoint_value_,
+            alignas(8) char endpoint_scratch[64];
+            DatumValue endpoint;
+            if (OB_FAIL(part_bkts.at(j).export_endpoint_value(endpoint, endpoint_scratch,
+                                                              sizeof(endpoint_scratch)))) {
+            } else if (OB_FAIL(top_k_fre_hist->add_top_k_frequency_item(endpoint,
                                                                  part_bkts.at(j).endpoint_repeat_count_))) {
             }
           }

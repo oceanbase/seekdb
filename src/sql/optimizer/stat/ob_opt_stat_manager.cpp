@@ -716,9 +716,9 @@ int ObOptStatManager::update_all_eval_to_stats(
         opt_stats.ndv_val_ = ObOptSelectivity::scale_distinct(row_cnt, row_cnt / scale_ratio, opt_stats.ndv_val_);
       }
       if (col_all_evals->min_eval_.is_valid() &&
-          OB_FAIL(clone_typed_value(col_all_evals->min_eval_.get(), opt_stats.min_val_, *alloc))) {
+          OB_FAIL(opt_stats.set_min_native(col_all_evals->min_eval_.get_datum(), col_all_evals->min_eval_.get_meta(), *alloc))) {
       } else if (col_all_evals->max_eval_.is_valid() &&
-                 OB_FAIL(clone_typed_value(col_all_evals->max_eval_.get(), opt_stats.max_val_, *alloc))) {
+                 OB_FAIL(opt_stats.set_max_native(col_all_evals->max_eval_.get_datum(), col_all_evals->max_eval_.get_meta(), *alloc))) {
       }
     } else {
     }

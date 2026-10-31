@@ -918,6 +918,7 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
             break;
           }
           case StatTableColumnName::R3: {//ENDPOINT_ACTUAL_VALUE_RAW('C')
+            DatumValue endpoint;
             if (stat_type != COLUMN_STAT || result_objs.at(i).is_null()) {
               if (OB_UNLIKELY(!result_objs.at(i).is_null())) {
                 ret = OB_ERR_DBMS_STATS_PL;
@@ -926,7 +927,8 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
             } else if (OB_FAIL(convert_bin_hex_text_to_value(ctx,
                                                            *param.allocator_,
                                                            result_objs.at(i),
-                                                           hist_bucket.endpoint_value_))) {
+                                                           endpoint))) {
+            } else if (OB_FAIL(hist_bucket.set_endpoint_borrowed(endpoint))) {
             } else if (OB_UNLIKELY(col_stat->get_histogram().get_bucket_cnt() >=
                                                  col_stat->get_histogram().get_bucket_size())) {
               ret = OB_ERR_DBMS_STATS_PL;

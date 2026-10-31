@@ -38,6 +38,16 @@ std::string value_wire(const DatumValue &v) {
   int64_t n=0,p=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(v.datum_,v.meta_,n));
   std::string b(n+64,'\0');EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(v.datum_,v.meta_,&b[0],b.size(),p));return hex(b.data(),p);
 }
+std::string endpoint_wire(const ObHistBucket &bucket) {
+  alignas(8) char scratch[64]; DatumValue value;
+  EXPECT_EQ(OB_SUCCESS,bucket.export_endpoint_value(value,scratch,sizeof(scratch)));
+  return value_wire(value);
+}
+ObHistBucket hist_bucket(const DatumValue &value,int64_t repeat,int64_t endpoint) {
+  ObHistBucket result(repeat,endpoint);
+  EXPECT_EQ(OB_SUCCESS,result.set_endpoint_borrowed(value));
+  return result;
+}
 DatumValue integer(int64_t n,ObIAllocator &owner) {DatumValue v;EXPECT_EQ(OB_SUCCESS,v.set_int(n,owner));return v;}
 const int64_t freq[]={37,19,13,11,7,5,3,2};
 void init_topk(ObTopKFrequencyHistograms &h,bool merge) {
@@ -63,7 +73,7 @@ void build_topk(ObTopKFrequencyHistograms &h,const std::vector<DatumValue> &valu
 }
 void fill_hist(ObHistogram &h,const std::vector<DatumValue> &values,int group,ObIAllocator &owner) {
   h.set_type(FREQUENCY);h.set_sample_size(97);h.set_density(0.001);ASSERT_EQ(OB_SUCCESS,h.prepare_allocate_buckets(owner,8));
-  int64_t sum=0;for(int i=0;i<8;++i){sum+=freq[i];ASSERT_EQ(OB_SUCCESS,h.add_bucket(ObHistBucket(values.at(group*8+i),freq[i],sum),owner));}
+  int64_t sum=0;for(int i=0;i<8;++i){sum+=freq[i];ASSERT_EQ(OB_SUCCESS,h.add_bucket(hist_bucket(values.at(group*8+i),freq[i],sum),owner));}
 }
 class SwitchAllocator:public ObIAllocator {
 public:
@@ -125,15 +135,15 @@ TEST(NativeHistogramValues, publication_owns_after_hybrid_and_input_owners_are_d
         ASSERT_EQ(OB_SUCCESS,v.set_varchar(ObString(s.size(),s.data()),input));v.set_collation_type(CS_TYPE_UTF8MB4_BIN);
         ASSERT_EQ(OB_SUCCESS,pairs.push_back(BucketNode(v,freq[i])));}
       ASSERT_EQ(OB_SUCCESS,hybrid.build_hybrid_hist(pairs,6,97,8));
-      for(int64_t i=0;i<hybrid.get_buckets().count();++i){expected.push_back(value_wire(hybrid.get_buckets().at(i).endpoint_value_));}
+      for(int64_t i=0;i<hybrid.get_buckets().count();++i){expected.push_back(endpoint_wire(hybrid.get_buckets().at(i)));}
       input.reuse();MEMSET(input.alloc(65536),0x7f,65536);
-      for(int64_t i=0;i<hybrid.get_buckets().count();++i){EXPECT_EQ(expected.at(i),value_wire(hybrid.get_buckets().at(i).endpoint_value_));}
+      for(int64_t i=0;i<hybrid.get_buckets().count();++i){EXPECT_EQ(expected.at(i),endpoint_wire(hybrid.get_buckets().at(i)));}
     }
     ASSERT_EQ(OB_SUCCESS,published.prepare_allocate_buckets(owner,hybrid.get_buckets().count()));
     published.set_bucket_cnt(hybrid.get_buckets().count());ASSERT_EQ(OB_SUCCESS,published.assign_buckets(hybrid.get_buckets(),owner));
   }
   EXPECT_EQ(expected.size(),published.get_bucket_size());
-  for(int64_t i=0;i<published.get_bucket_size();++i){EXPECT_EQ(expected.at(i),value_wire(published.get(i).endpoint_value_));}
+  for(int64_t i=0;i<published.get_bucket_size();++i){EXPECT_EQ(expected.at(i),endpoint_wire(published.get(i)));}
 }
 
 TEST(NativeHistogramValues, topk_clones_inputs_and_alternating_compaction_owners) {
@@ -153,16 +163,17 @@ TEST(NativeHistogramValues, endpoint_add_failure_does_not_publish_and_cache_payl
   ObArenaAllocator input;SwitchAllocator owner;ObOptColumnStat stat(owner);stat.set_table_id(1001);auto &h=stat.get_histogram();
   ASSERT_EQ(OB_SUCCESS,h.prepare_allocate_buckets(owner,2));DatumValue a,b;
   ASSERT_EQ(OB_SUCCESS,a.set_varchar(ObString("odd"),input));ASSERT_EQ(OB_SUCCESS,b.set_int(987654321,input));
-  ASSERT_EQ(OB_SUCCESS,h.add_bucket(ObHistBucket(a,1,1),owner));owner.reject_=true;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,h.add_bucket(ObHistBucket(b,1,2),owner));EXPECT_EQ(1,h.get_bucket_cnt());
-  owner.reject_=false;ASSERT_EQ(OB_SUCCESS,h.add_bucket(ObHistBucket(b,1,2),owner));h.set_type(FREQUENCY);h.set_sample_size(2);
+  ASSERT_EQ(OB_SUCCESS,h.add_bucket(hist_bucket(a,1,1),owner));owner.reject_=true;
+  DatumValue allocating;ASSERT_EQ(OB_SUCCESS,allocating.set_varchar(ObString("allocating endpoint"),input));
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,h.add_bucket(hist_bucket(allocating,1,2),owner));EXPECT_EQ(1,h.get_bucket_cnt());
+  owner.reject_=false;ASSERT_EQ(OB_SUCCESS,h.add_bucket(hist_bucket(b,1,2),owner));h.set_type(FREQUENCY);h.set_sample_size(2);
   std::vector<char> buffer(stat.size()+1);ObIKVCacheValue *value=nullptr;
   ASSERT_EQ(OB_SUCCESS,stat.deep_copy(buffer.data(),buffer.size(),value));auto *copied=static_cast<ObOptColumnStat *>(value);
   EXPECT_EQ(0,reinterpret_cast<uintptr_t>(&copied->get_histogram().get(0))%alignof(ObHistBucket));
-  EXPECT_EQ(0,reinterpret_cast<uintptr_t>(copied->get_histogram().get(1).endpoint_value_.datum_.ptr_)%8);
+  EXPECT_EQ(0,copied->get_histogram().get(1).get_endpoint_datum().length()); // Inline I64 has no payload address.
   owner.arena_.reuse();input.reuse();MEMSET(input.alloc(65536),0x6f,65536);
-  EXPECT_EQ("odd",std::string(copied->get_histogram().get(0).endpoint_value_.get_string().ptr(),3));
-  EXPECT_EQ(987654321,copied->get_histogram().get(1).endpoint_value_.get_int());
+  EXPECT_EQ("odd",std::string(copied->get_histogram().get(0).get_endpoint_datum().get_string().ptr(),3));
+  EXPECT_EQ(987654321,copied->get_histogram().get(1).get_endpoint_datum().get_int());
 }
 
 TEST(NativeHistogramValues, raw_row_projection_validates_meta_and_retains_outrow) {
@@ -196,23 +207,23 @@ TEST(NativeHistogramValues, topk_publication_owns_after_temporary_estimator_is_d
       ASSERT_EQ(OB_SUCCESS,source.add_top_k_frequency_item(v,freq[i]));}
     ASSERT_EQ(OB_SUCCESS,source.create_topk_fre_items());
     ASSERT_EQ(OB_SUCCESS,ObStatTopKHist::build_histogram_from_topk_items(owner,source.get_buckets(),8,97,97,8,published));
-    for(int64_t i=0;i<published.get_bucket_size();++i){expected.push_back(value_wire(published.get(i).endpoint_value_));}
+    for(int64_t i=0;i<published.get_bucket_size();++i){expected.push_back(endpoint_wire(published.get(i)));}
   }
   EXPECT_EQ(8,published.get_bucket_size());
-  for(int64_t i=0;i<published.get_bucket_size();++i){EXPECT_EQ(expected.at(i),value_wire(published.get(i).endpoint_value_));}
+  for(int64_t i=0;i<published.get_bucket_size();++i){EXPECT_EQ(expected.at(i),endpoint_wire(published.get(i)));}
 }
 
 TEST(NativeHistogramValues, histogram_assign_owns_endpoint_and_gather_metadata) {
   ObArenaAllocator owner;ObHistogram target;std::string expected;
   {
     ObArenaAllocator source;ObHistogram h;DatumValue v;ASSERT_EQ(OB_SUCCESS,v.set_varchar(ObString("odd_endpoint"),source));
-    ASSERT_EQ(OB_SUCCESS,h.prepare_allocate_buckets(source,1));ASSERT_EQ(OB_SUCCESS,h.add_bucket(ObHistBucket(v,7,9),source));
+    ASSERT_EQ(OB_SUCCESS,h.prepare_allocate_buckets(source,1));ASSERT_EQ(OB_SUCCESS,h.add_bucket(hist_bucket(v,7,9),source));
     h.set_type(HYBIRD);h.set_sample_size(9);h.set_density(0.125);h.set_pop_frequency(7);h.set_pop_count(1);
     expected=value_wire(v);ASSERT_EQ(OB_SUCCESS,target.assign(h,owner));
     source.reuse();MEMSET(source.alloc(65536),0x4e,65536);
   }
   EXPECT_EQ(HYBIRD,target.get_type());EXPECT_EQ(9,target.get_sample_size());EXPECT_DOUBLE_EQ(0.125,target.get_density());
-  EXPECT_EQ(7,target.get_pop_frequency());EXPECT_EQ(1,target.get_pop_count());EXPECT_EQ(expected,value_wire(target.get(0).endpoint_value_));
+  EXPECT_EQ(7,target.get_pop_frequency());EXPECT_EQ(1,target.get_pop_count());EXPECT_EQ(expected,endpoint_wire(target.get(0)));
   SwitchAllocator rejected;rejected.reject_=true;ObHistogram other;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,other.assign(target,rejected));EXPECT_EQ(0,other.get_bucket_size());
   ObHistogram empty;ASSERT_EQ(OB_SUCCESS,target.assign(empty,owner));EXPECT_EQ(0,target.get_bucket_size());EXPECT_EQ(0,target.get_bucket_cnt());
@@ -243,10 +254,10 @@ TEST(NativeHistogramValues, incremental_merge_borrows_inputs_and_owns_published_
     second.set_type(FREQUENCY); second.set_sample_size(5);
     ASSERT_EQ(OB_SUCCESS, first.prepare_allocate_buckets(source, 2));
     ASSERT_EQ(OB_SUCCESS, second.prepare_allocate_buckets(source, 2));
-    ASSERT_EQ(OB_SUCCESS, first.add_bucket(ObHistBucket(one, 3, 3), source));
-    ASSERT_EQ(OB_SUCCESS, first.add_bucket(ObHistBucket(two, 2, 5), source));
-    ASSERT_EQ(OB_SUCCESS, second.add_bucket(ObHistBucket(one, 1, 1), source));
-    ASSERT_EQ(OB_SUCCESS, second.add_bucket(ObHistBucket(two, 4, 5), source));
+    ASSERT_EQ(OB_SUCCESS, first.add_bucket(hist_bucket(one, 3, 3), source));
+    ASSERT_EQ(OB_SUCCESS, first.add_bucket(hist_bucket(two, 2, 5), source));
+    ASSERT_EQ(OB_SUCCESS, second.add_bucket(hist_bucket(one, 1, 1), source));
+    ASSERT_EQ(OB_SUCCESS, second.add_bucket(hist_bucket(two, 4, 5), source));
     ObSEArray<const ObHistogram *, 4> parts;
     ASSERT_EQ(OB_SUCCESS, parts.push_back(&first));
     ASSERT_EQ(OB_SUCCESS, parts.push_back(&second));
@@ -256,8 +267,8 @@ TEST(NativeHistogramValues, incremental_merge_borrows_inputs_and_owns_published_
   EXPECT_FALSE(need_gather);
   ASSERT_EQ(FREQUENCY, merged.get_type());
   ASSERT_EQ(2, merged.get_bucket_cnt());
-  EXPECT_EQ(1, merged.get(0).endpoint_value_.get_int());
-  EXPECT_EQ(2, merged.get(1).endpoint_value_.get_int());
+  EXPECT_EQ(1, merged.get(0).get_endpoint_datum().get_int());
+  EXPECT_EQ(2, merged.get(1).get_endpoint_datum().get_int());
   EXPECT_EQ(4, merged.get(0).endpoint_repeat_count_);
   EXPECT_EQ(6, merged.get(1).endpoint_repeat_count_);
   EXPECT_EQ(4, merged.get(0).endpoint_num_);

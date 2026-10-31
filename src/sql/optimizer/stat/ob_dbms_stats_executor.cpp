@@ -1011,26 +1011,31 @@ int ObDbmsStatsExecutor::do_set_column_stats(ObIAllocator &allocator,
       column_stat->set_avg_len(param.avgclen_);
     }
     //5.set max/val value
-    if (!param.hist_param_.minval_.datum_.is_null() || !param.hist_param_.maxval_.datum_.is_null()) {
+    if (!param.hist_param_.get_min_datum().is_null() || !param.hist_param_.get_max_datum().is_null()) {
       ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, param.col_meta_.get_collation_type());
       ObAccuracy res_acc;
       if (param.col_meta_.is_decimal_int()) {
         res_acc = param.col_accuracy_;
         cast_ctx.res_accuracy_ = &res_acc;
       }
-      const auto cast_endpoint = [&](const DatumValue &input, bool minimum) {
-        DatumValue converted;
-        int result = DatumValueCaster::to_type(param.col_meta_.get_type(), cast_ctx,
-                                                input, allocator, converted);
+      const auto cast_endpoint = [&](bool minimum) {
+        alignas(8) char input_scratch[64];
+        DatumValue input, converted;
+        int result = minimum ? param.hist_param_.export_min_value(input, input_scratch, sizeof(input_scratch))
+                             : param.hist_param_.export_max_value(input, input_scratch, sizeof(input_scratch));
+        if (result == OB_SUCCESS) {
+          result = DatumValueCaster::to_type(param.col_meta_.get_type(), cast_ctx,
+                                             input, allocator, converted);
+        }
         if (result == OB_SUCCESS) {
           result = minimum ? column_stat->set_min_value(converted) : column_stat->set_max_value(converted);
         }
         return result;
       };
-      if ((!param.hist_param_.minval_.datum_.is_null() &&
-           OB_FAIL(cast_endpoint(param.hist_param_.minval_, true))) ||
-          (!param.hist_param_.maxval_.datum_.is_null() &&
-           OB_FAIL(cast_endpoint(param.hist_param_.maxval_, false)))) {
+      if ((!param.hist_param_.get_min_datum().is_null() &&
+           OB_FAIL(cast_endpoint(true))) ||
+          (!param.hist_param_.get_max_datum().is_null() &&
+           OB_FAIL(cast_endpoint(false)))) {
         ret = OB_ERR_DBMS_STATS_PL;
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,"Invalid or inconsistent input values");
       }

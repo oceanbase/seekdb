@@ -1240,13 +1240,15 @@ int ObDbmsStatsHistoryManager::fill_bucket_stat_histroy(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   ObHistBucket bkt;
+  DatumValue endpoint;
   ObString str;
   EXTRACT_INT_FIELD_MYSQL(result, "endpoint_num", bkt.endpoint_num_, int64_t);
   EXTRACT_INT_FIELD_MYSQL(result, "endpoint_repeat_cnt", bkt.endpoint_repeat_count_, int64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObOptStatSqlService::hex_str_to_value(str.ptr(), str.length(),
-                                                    allocator, bkt.endpoint_value_))) {
+                                                    allocator, endpoint))) {
+    } else if (OB_FAIL(bkt.set_endpoint_borrowed(endpoint))) {
     } else if (OB_FAIL(stat.get_histogram().add_bucket(bkt, allocator))) {
     } else {/*do nothing*/}
   }

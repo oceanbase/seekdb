@@ -2181,8 +2181,8 @@ int ObOptSelectivity::get_column_min_max(const OptTableMetas &table_metas,
                                                                      &ctx.get_allocator()))) {
       } else {
         DatumValue minimum, maximum;
-        if (OB_FAIL(clone_typed_value(stat.min_val_, minimum, ctx.get_allocator()))) {
-        } else if (OB_FAIL(clone_typed_value(stat.max_val_, maximum, ctx.get_allocator()))) {
+        if (OB_FAIL(stat.copy_min_value(minimum, ctx.get_allocator()))) {
+        } else if (OB_FAIL(stat.copy_max_value(maximum, ctx.get_allocator()))) {
         } else {
           column_meta->set_min_value(minimum);
           column_meta->set_max_value(maximum);
@@ -2399,7 +2399,13 @@ int ObOptSelectivity::get_bucket_bound_idx(const ObHistogram &hist,
     while (OB_SUCC(ret) && left <= right) {
       int64_t mid = (right + left) / 2;
       int eq_cmp = 0;
-      ret = compare_datum_values(hist.get(mid).endpoint_value_, value, eq_cmp);
+      alignas(8) char endpoint_scratch[64];
+      DatumValue endpoint;
+      if (OB_FAIL(hist.get(mid).export_endpoint_value(endpoint, endpoint_scratch,
+                                                     sizeof(endpoint_scratch)))) {
+      } else {
+        ret = compare_datum_values(endpoint, value, eq_cmp);
+      }
       // Keep this selectivity API's legacy contract for incompatible types.
       if (ret == OB_NOT_SUPPORTED) { ret = OB_ERR_UNEXPECTED; }
       if (OB_FAIL(ret)) {
@@ -2537,11 +2543,14 @@ int ObOptSelectivity::get_less_pred_sel(const OptSelectivityCtx &ctx,
       // estimate how many elements (smaller than maxv) in bucket[i+1] there are
       ObArenaAllocator owner("HistScalar");
       DatumValue minscalar, maxscalar, startscalar, endscalar;
-      DatumValue minobj(histogram.get(idx).endpoint_value_);
-      DatumValue maxobj(histogram.get(idx+1).endpoint_value_);
-      DatumValue startobj(minobj), endobj(maxv);
+      alignas(8) char min_scratch[64];
+      alignas(8) char max_scratch[64];
+      DatumValue minobj, maxobj, startobj, endobj(maxv);
       bool convert2sortkey = true;
-      if (OB_FAIL(ObOptEstObjToScalar::convert_values_to_scalars(
+      if (OB_FAIL(histogram.get(idx).export_endpoint_value(minobj, min_scratch, sizeof(min_scratch)))) {
+      } else if (OB_FAIL(histogram.get(idx+1).export_endpoint_value(maxobj, max_scratch, sizeof(max_scratch)))) {
+      } else if (OB_FALSE_IT(startobj = minobj)) {
+      } else if (OB_FAIL(ObOptEstObjToScalar::convert_values_to_scalars(
                     &minobj, &maxobj, &startobj, &endobj,
                     &minscalar, &maxscalar, &startscalar, &endscalar,
                     owner, convert2sortkey))) {
@@ -3622,8 +3631,12 @@ int ObOptSelectivity::get_join_pred_rows(const ObHistogram &left_hist,
   int64_t ridx = 0;
   while (OB_SUCC(ret) && lidx < left_hist.get_bucket_size() && ridx < right_hist.get_bucket_size()) {
     int eq_cmp = 0;
-    if (OB_FAIL(compare_datum_values(left_hist.get(lidx).endpoint_value_, right_hist.get(ridx).endpoint_value_,
-                                                            eq_cmp))) {
+    alignas(8) char left_scratch[64];
+    alignas(8) char right_scratch[64];
+    DatumValue left_endpoint, right_endpoint;
+    if (OB_FAIL(left_hist.get(lidx).export_endpoint_value(left_endpoint, left_scratch, sizeof(left_scratch)))) {
+    } else if (OB_FAIL(right_hist.get(ridx).export_endpoint_value(right_endpoint, right_scratch, sizeof(right_scratch)))) {
+    } else if (OB_FAIL(compare_datum_values(left_endpoint, right_endpoint, eq_cmp))) {
     } else if (0 == eq_cmp) {
       if (IS_LEFT_SEMI_ANTI_JOIN(join_type)) {
         rows += left_hist.get(lidx).endpoint_repeat_count_;
@@ -4628,8 +4641,8 @@ int ObHistRangeSelHelper::init(const OptTableMetas &table_metas,
       DatumValue cur_min_value, cur_max_value;
       int cmp_res = 0;
       if (OB_UNLIKELY(cnt < 0)) {
-      } else if (OB_FAIL(clone_typed_value(histogram.get(0).endpoint_value_, cur_min_value, ctx.get_allocator()))) {
-      } else if (OB_FAIL(clone_typed_value(histogram.get(cnt - 1).endpoint_value_, cur_max_value, ctx.get_allocator()))) {
+      } else if (OB_FAIL(histogram.get(0).copy_endpoint_value(cur_min_value, ctx.get_allocator()))) {
+      } else if (OB_FAIL(histogram.get(cnt - 1).copy_endpoint_value(cur_max_value, ctx.get_allocator()))) {
       } else if (OB_FAIL(compare_datum_values(hist_min_value_, cur_min_value, cmp_res))) {
       } else if (cmp_res > 0) {
         hist_min_value_ = cur_min_value;

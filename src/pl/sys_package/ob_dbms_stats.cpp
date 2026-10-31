@@ -4321,8 +4321,8 @@ int ObDbmsStats::parse_set_hist_stats_options(ObExecContext &ctx,
   number::ObNumber num_epc;
   number::ObNumber num_eavs;
   if (!epc.is_null() && OB_FAIL(epc.get_number(num_epc))) {
-  } else if (!minval.is_null() && FALSE_IT(hist_param.minval_ = minval.value_view())) {
-  } else if (!maxval.is_null() && FALSE_IT(hist_param.maxval_ = maxval.value_view())) {
+  } else if (!minval.is_null() && OB_FAIL(hist_param.set_min_borrowed(minval.value_view()))) {
+  } else if (!maxval.is_null() && OB_FAIL(hist_param.set_max_borrowed(maxval.value_view()))) {
   } else if (OB_FAIL(parser_pl_numarray(func_name, bkvals, hist_param.bkvals_))) {
   } else if (OB_FAIL(parser_pl_numarray(func_name, novals, hist_param.novals_))) {
   } else if (OB_FAIL(parser_pl_chararray(func_name, chvals, hist_param.chvals_))) {

@@ -3032,7 +3032,7 @@ int ObLogPlan::get_popular_values_hash(ObIAllocator &allocator,
       int64_t freq = bucket.endpoint_repeat_count_ * 100 / total_cnt;
       if (freq >= min_freq) {
         DatumValue value;
-        if (OB_FAIL(clone_typed_value(bucket.endpoint_value_, value, allocator))) {
+        if (OB_FAIL(bucket.copy_endpoint_value(value, allocator))) {
         } else if (OB_FAIL(popular_values.push_back(value))) {
         }
       }

@@ -265,7 +265,10 @@ int ObHybridHistEstimator::try_build_hybrid_hist(const ObColumnStatParam &param,
 
     for (int64_t i = 0; OB_SUCC(ret) && i < col_stat.get_histogram().get_bucket_size(); ++i) {
       const ObHistBucket &hist_bucket = col_stat.get_histogram().get(i);
-      if (OB_FAIL(pairs.push_back(BucketNode(hist_bucket.endpoint_value_,
+      DatumValue endpoint;
+      // BucketNode keeps the value until build_hybrid_hist finishes below.
+      if (OB_FAIL(hist_bucket.copy_endpoint_value(endpoint, allocator_))) {
+      } else if (OB_FAIL(pairs.push_back(BucketNode(endpoint,
                                              hist_bucket.endpoint_repeat_count_)))) {
       } else {/*do nothing*/}
     }
@@ -455,11 +458,12 @@ int ObHybridHistograms::build_hybrid_hist(ObIArray<BucketNode> &bucket_pairs,
     }
     if (bucket_rows > bucket_size || 0 == i || bucket_pairs.count() - 1 == i) {
       bucket_rows = 0;
-      ObHistBucket bkt(bucket_pairs.at(i).ep_val_, bucket_pairs.at(i).ep_count_, ep_num);
+      ObHistBucket bkt(bucket_pairs.at(i).ep_count_, ep_num);
       if (!bucket_pairs.at(i).is_pop_) {
         ++un_pop_bucket;
       }
-      if (OB_FAIL(add_hist_bucket(bkt))) {
+      if (OB_FAIL(bkt.set_endpoint_borrowed(bucket_pairs.at(i).ep_val_))) {
+      } else if (OB_FAIL(add_hist_bucket(bkt))) {
       }
 
       if (dynamic_size && bucket_num > pop_count + un_pop_bucket) {
@@ -550,11 +554,12 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
             } else if (OB_FAIL(sql::ResultRowView::project_value(new_datum, obj_meta,
                            ObDatum::get_sql_value_datum_map_type(obj_meta.get_type()), SqlTypeMeta(), ep_val, true))) {
             } else {
-              ObHistBucket bkt(ep_val, ep_count, ep_num);
+              ObHistBucket bkt(ep_count, ep_num);
               if (!is_pop) {
                 ++un_pop_bucket;
               }
-              if (OB_FAIL(add_hist_bucket(bkt))) {
+              if (OB_FAIL(bkt.set_endpoint_borrowed(ep_val))) {
+              } else if (OB_FAIL(add_hist_bucket(bkt))) {
               }
             }
 
@@ -641,8 +646,8 @@ OB_DEF_SERIALIZE(ObHybridHistograms)
   OB_UNIS_ENCODE(items_count);
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     const ObHistBucket &hist_bucket = hybrid_buckets_.at(i);
-    if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(hist_bucket.endpoint_value_.datum_,
-        hist_bucket.endpoint_value_.meta_, buf, buf_len, pos); }
+    if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_schema_native_value(hist_bucket.get_endpoint_datum(),
+        hist_bucket.get_endpoint_meta(), buf, buf_len, pos); }
     OB_UNIS_ENCODE(hist_bucket.endpoint_repeat_count_);
     OB_UNIS_ENCODE(hist_bucket.endpoint_num_);
   }
@@ -661,7 +666,7 @@ OB_DEF_SERIALIZE_SIZE(ObHybridHistograms)
   for (int64_t i = 0; i < items_count; ++i) {
     const ObHistBucket &hist_bucket = hybrid_buckets_.at(i);
     int64_t value_size = 0;
-    if (DatumParameterCodec::value_size(hist_bucket.endpoint_value_.datum_, hist_bucket.endpoint_value_.meta_, value_size) != OB_SUCCESS) { return 0; }
+    if (DatumParameterCodec::schema_native_value_size(hist_bucket.get_endpoint_datum(), hist_bucket.get_endpoint_meta(), value_size) != OB_SUCCESS) { return 0; }
     len += value_size;
     OB_UNIS_ADD_LEN(hist_bucket.endpoint_repeat_count_);
     OB_UNIS_ADD_LEN(hist_bucket.endpoint_num_);
@@ -681,8 +686,13 @@ OB_DEF_DESERIALIZE(ObHybridHistograms)
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     ObHistBucket hist_bucket;
     if (OB_SUCC(ret) && pos < data_len) {
-      ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, value_owner_,
-          hist_bucket.endpoint_value_.datum_, hist_bucket.endpoint_value_.meta_);
+      Datum endpoint = hist_bucket.get_endpoint_datum();
+      SqlTypeMeta endpoint_meta = hist_bucket.get_endpoint_meta();
+      if (OB_FAIL(DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, value_owner_,
+                                                               endpoint, endpoint_meta))) {
+      } else {
+        ret = hist_bucket.set_endpoint_native_borrowed(endpoint, endpoint_meta);
+      }
     }
     OB_UNIS_DECODE(hist_bucket.endpoint_repeat_count_);
     OB_UNIS_DECODE(hist_bucket.endpoint_num_);

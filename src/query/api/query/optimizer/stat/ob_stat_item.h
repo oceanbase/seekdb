@@ -421,53 +421,35 @@ private:
 class ObGlobalMaxEval
 {
 public:
-  ObGlobalMaxEval() : global_max_()
-  {
-    global_max_.set_null();
-  }
-
-  int add(const DatumValue &obj);
-
-  bool is_valid() const
-  {
-    return !global_max_.is_null();
-  }
-
-  const DatumValue &get() const
-  {
-    return global_max_;
-  }
-
-  int flush(common::ObIAllocator *alloc);
-
+  ObGlobalMaxEval() : global_max_(), meta_() { meta_.set_null(); }
+  int add(const DatumValue &value);
+  int add_native(const Datum &value, const SqlTypeMeta &meta);
+  bool is_valid() const { return !global_max_.is_null(); }
+  const Datum &get_datum() const { return global_max_; }
+  const SqlTypeMeta &get_meta() const { return meta_; }
+  int export_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_value(DatumValue &output, ObIAllocator &owner) const;
+  int flush(ObIAllocator *owner);
 private:
-  DatumValue global_max_;
+  Datum global_max_;
+  SqlTypeMeta meta_;
 };
 
 class ObGlobalMinEval
 {
 public:
-  ObGlobalMinEval() : global_min_()
-  {
-    global_min_.set_null();
-  }
-
-  int add(const DatumValue &obj);
-
-  bool is_valid() const
-  {
-    return !global_min_.is_null();
-  }
-
-  const DatumValue &get() const
-  {
-    return global_min_;
-  }
-
-  int flush(common::ObIAllocator *alloc);
-
+  ObGlobalMinEval() : global_min_(), meta_() { meta_.set_null(); }
+  int add(const DatumValue &value);
+  int add_native(const Datum &value, const SqlTypeMeta &meta);
+  bool is_valid() const { return !global_min_.is_null(); }
+  const Datum &get_datum() const { return global_min_; }
+  const SqlTypeMeta &get_meta() const { return meta_; }
+  int export_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_value(DatumValue &output, ObIAllocator &owner) const;
+  int flush(ObIAllocator *owner);
 private:
-  DatumValue global_min_;
+  Datum global_min_;
+  SqlTypeMeta meta_;
 };
 
 class ObGlobalAvglenEval
@@ -527,26 +509,33 @@ struct ObGlobalAllColEvals
 
 struct ObGlobalColumnStat
 {
-  ObGlobalColumnStat() :
-    min_val_(),
-    max_val_(),
-    null_val_(0),
-    avglen_val_(0),
-    ndv_val_(0)
+  ObGlobalColumnStat() : null_val_(0), avglen_val_(0), ndv_val_(0),
+      min_val_(), max_val_(), min_meta_(), max_meta_()
   {
-    min_val_.set_min_value();
-    max_val_.set_max_value();
+    min_val_.set_min(); min_meta_.set_ext();
+    max_val_.set_max(); max_meta_.set_ext();
   }
-  TO_STRING_KV(K(min_val_),
-               K(max_val_),
-               K(null_val_),
-               K(avglen_val_),
-               K(ndv_val_));
-  DatumValue min_val_;
-  DatumValue max_val_;
+  const Datum &get_min_datum() const { return min_val_; }
+  const Datum &get_max_datum() const { return max_val_; }
+  const SqlTypeMeta &get_min_meta() const { return min_meta_; }
+  const SqlTypeMeta &get_max_meta() const { return max_meta_; }
+  int set_min_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner);
+  int set_max_native(const Datum &value, const SqlTypeMeta &meta, ObIAllocator &owner);
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_min_value(DatumValue &output, ObIAllocator &owner) const;
+  int copy_max_value(DatumValue &output, ObIAllocator &owner) const;
+  void clear_min_value() { min_val_.set_null(); min_meta_.set_null(); }
+  void clear_max_value() { max_val_.set_null(); max_meta_.set_null(); }
+  DECLARE_TO_STRING;
   int64_t null_val_;
   int64_t avglen_val_;
   int64_t ndv_val_;
+private:
+  Datum min_val_;
+  Datum max_val_;
+  SqlTypeMeta min_meta_;
+  SqlTypeMeta max_meta_;
 };
 
 template <class T>

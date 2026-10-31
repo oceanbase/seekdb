@@ -1754,6 +1754,11 @@ int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
   void *ptr = NULL;
   ObString min_value;
   ObString max_value;
+  alignas(8) char min_scratch[64];
+  alignas(8) char max_scratch[64];
+  DatumValue min_input, max_input, min_lob, max_lob;
+  SqlTypeMeta meta = text_col_meta;
+  meta.set_has_lob_header();
   if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObOptColumnStat)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FALSE_IT(text_col_stat = new (ptr) ObOptColumnStat(allocator))) {
@@ -1761,19 +1766,19 @@ int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
   } else if (OB_FAIL(text_col_stat->deep_copy_histogram(col_stat.get_histogram()))) {
   } else if (OB_FAIL(text_col_stat->deep_copy_llc_bitmap(col_stat.get_llc_bitmap(),
                                                          col_stat.get_llc_bitmap_size()))) {
-  } else if (OB_FAIL(col_stat.get_max_value().get_string(max_value))) {
-  } else if (OB_FAIL(col_stat.get_min_value().get_string(min_value))) {
-  } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator, 
-                                                                     max_value, 
-                                                                     text_col_stat->get_max_value()))) {
-  } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator,
-                                                                     min_value,
-                                                                     text_col_stat->get_min_value()))) {
+  } else if (OB_FAIL(col_stat.export_max_value(max_input, max_scratch, sizeof(max_scratch)))) {
+  } else if (OB_FAIL(max_input.get_string(max_value))) {
+  } else if (OB_FAIL(col_stat.export_min_value(min_input, min_scratch, sizeof(min_scratch)))) {
+  } else if (OB_FAIL(min_input.get_string(min_value))) {
+  } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator, max_value, max_lob))) {
   } else {
-    SqlTypeMeta meta = text_col_meta;
-    meta.set_has_lob_header();
-    text_col_stat->get_max_value().set_meta_type(meta);
-    text_col_stat->get_min_value().set_meta_type(meta);
+    max_lob.set_meta_type(meta);
+    if (OB_FAIL(text_col_stat->set_max_value(max_lob))) {
+    } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator, min_value, min_lob))) {
+    } else {
+      min_lob.set_meta_type(meta);
+      ret = text_col_stat->set_min_value(min_lob);
+    }
   }
   return ret;
 }

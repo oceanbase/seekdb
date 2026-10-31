@@ -508,8 +508,8 @@ int ObStatsEstimator::copy_basic_col_stats(const int64_t cur_row_cnt,
           num_not_null = static_cast<int64_t>(num_not_null * 100 / sample_value_);
           num_null = static_cast<int64_t>(num_null * 100 / sample_value_);
         }
-        if (OB_FAIL(dst_col_stats.at(i)->set_max_value(src_col_stats.at(i)->get_max_value()))) {
-        } else if (OB_FAIL(dst_col_stats.at(i)->set_min_value(src_col_stats.at(i)->get_min_value()))) {
+        if (OB_FAIL(dst_col_stats.at(i)->set_max_native(src_col_stats.at(i)->get_max_datum(), src_col_stats.at(i)->get_max_meta()))) {
+        } else if (OB_FAIL(dst_col_stats.at(i)->set_min_native(src_col_stats.at(i)->get_min_datum(), src_col_stats.at(i)->get_min_meta()))) {
         }
         dst_col_stats.at(i)->set_num_not_null(num_not_null);
         dst_col_stats.at(i)->get_histogram().set_sample_size(src_col_stats.at(i)->get_num_not_null());

@@ -146,17 +146,21 @@ int ObOptOSGColumnStat::publish_min_max_values()
   else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(minimum, allocator_, datum_access_ctx_))) {}
   else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(maximum, allocator_, datum_access_ctx_))) {}
   else {
-    const DatumValue &current_minimum = col_stat_->get_min_value();
-    const DatumValue &current_maximum = col_stat_->get_max_value();
-    if (current_minimum.is_null()) { ret = col_stat_->set_min_value(minimum); }
+    if (col_stat_->get_min_datum().is_null()) { ret = col_stat_->set_min_value(minimum); }
     else if (!minimum.is_null()) {
-      if (OB_FAIL(compare_datum_values(minimum, current_minimum, cmp))) {}
+      alignas(8) char min_scratch[64];
+      DatumValue current_minimum;
+      if (OB_FAIL(col_stat_->export_min_value(current_minimum, min_scratch, sizeof(min_scratch)))) {}
+      else if (OB_FAIL(compare_datum_values(minimum, current_minimum, cmp))) {}
       else if (cmp < 0) { ret = col_stat_->set_min_value(minimum); }
     }
     if (OB_SUCC(ret)) {
-      if (current_maximum.is_null()) { ret = col_stat_->set_max_value(maximum); }
+      if (col_stat_->get_max_datum().is_null()) { ret = col_stat_->set_max_value(maximum); }
       else if (!maximum.is_null()) {
-        if (OB_FAIL(compare_datum_values(maximum, current_maximum, cmp))) {}
+        alignas(8) char max_scratch[64];
+        DatumValue current_maximum;
+        if (OB_FAIL(col_stat_->export_max_value(current_maximum, max_scratch, sizeof(max_scratch)))) {}
+        else if (OB_FAIL(compare_datum_values(maximum, current_maximum, cmp))) {}
         else if (cmp > 0) { ret = col_stat_->set_max_value(maximum); }
       }
     }

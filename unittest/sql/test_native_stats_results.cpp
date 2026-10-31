@@ -2,6 +2,8 @@
 #include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_min_max_estimator.h"
+#include "sql/pl/sys_package/ob_dbms_stats.h"
+#include "sql/engine/ob_exec_context.h"
 #include "common/datum/datum_parameter_codec.h"
 #include "share/datum/typed_datum_compare.h"
 #include <gtest/gtest.h>
@@ -69,8 +71,8 @@ TEST(NativeStatsResults, minmax_subquery_virtual_decode_accepts_null)
     DatumValue null_value;
     null_value.meta_.set_varchar();
     ASSERT_EQ(OB_SUCCESS, dispatch.decode(null_value, scratch, nullptr));
-    EXPECT_TRUE((is_min ? stat.get_min_value() : stat.get_max_value()).is_null());
-    EXPECT_EQ(42, (is_min ? stat.get_max_value() : stat.get_min_value()).get_int());
+    EXPECT_TRUE((is_min ? stat.get_min_datum() : stat.get_max_datum()).is_null());
+    EXPECT_EQ(42, (is_min ? stat.get_max_datum() : stat.get_min_datum()).get_int());
   }
 }
 
@@ -94,12 +96,12 @@ TEST(NativeStatsResults, minmax_subquery_utf8_prefix_is_owned_by_stat)
     ObStatMinMaxSubquery decoder(&column, &stat, empty, empty, empty, is_min);
     ObStatItem &dispatch = decoder;
     ASSERT_EQ(OB_SUCCESS, dispatch.decode(source, scratch, nullptr));
-    const DatumValue &result = is_min ? stat.get_min_value() : stat.get_max_value();
+    const Datum &result = is_min ? stat.get_min_datum() : stat.get_max_datum();
     ASSERT_EQ(OPT_STATS_MAX_VALUE_CHAR_LEN * 3, source.get_string_len());
-    ASSERT_EQ(OPT_STATS_MAX_VALUE_CHAR_LEN * 3, result.get_string_len());
-    ASSERT_NE(source.get_string_ptr(), result.get_string_ptr());
-    EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, result.get_collation_type());
-    EXPECT_EQ(CS_LEVEL_COERCIBLE, result.get_collation_level());
+    ASSERT_EQ(OPT_STATS_MAX_VALUE_CHAR_LEN * 3, result.get_string().length());
+    ASSERT_NE(source.get_string_ptr(), result.get_string().ptr());
+    EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, (is_min ? stat.get_min_meta() : stat.get_max_meta()).get_collation_type());
+    EXPECT_EQ(CS_LEVEL_COERCIBLE, (is_min ? stat.get_min_meta() : stat.get_max_meta()).get_collation_level());
     std::memset(const_cast<char *>(source.get_string_ptr()), 'x', source.get_string_len());
     source_owner.reset();
     EXPECT_EQ(ObString(expected.size(), const_cast<char *>(expected.data())), result.get_string());
@@ -119,15 +121,57 @@ TEST(NativeStatsResults, minmax_subquery_clone_oom_keeps_previous_bound)
     ASSERT_EQ(OB_SUCCESS, stat.set_max_value(previous));
     ASSERT_EQ(OB_SUCCESS, source.set_varchar(ObString::make_string("replacement bound"), source_owner));
     source.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-    const char *old_bytes = (is_min ? stat.get_min_value() : stat.get_max_value()).get_string_ptr();
+    const char *old_bytes = (is_min ? stat.get_min_datum() : stat.get_max_datum()).get_string().ptr();
     ObColumnStatParam column;
     ObString empty;
     ObStatMinMaxSubquery decoder(&column, &stat, empty, empty, empty, is_min);
     ObStatItem &dispatch = decoder;
     stat_owner.reject = true;
     EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, dispatch.decode(source, scratch, nullptr));
-    const DatumValue &result = is_min ? stat.get_min_value() : stat.get_max_value();
-    EXPECT_EQ(old_bytes, result.get_string_ptr());
+    const Datum &result = is_min ? stat.get_min_datum() : stat.get_max_datum();
+    EXPECT_EQ(old_bytes, result.get_string().ptr());
     EXPECT_EQ(ObString::make_string("previous bound"), result.get_string());
   }
+}
+
+
+TEST(NativeStatsResults, histogram_parameter_parser_preserves_borrowed_bounds_and_null_omission)
+{
+  ObArenaAllocator source,owned,context_owner;
+  sql::ObExecContext ctx(context_owner);
+  DatumParameter epc,eavs,minval,maxval,absent;
+  number::ObNumber two,zero;
+  ASSERT_EQ(OB_SUCCESS,two.from(int64_t(2),source));ASSERT_EQ(OB_SUCCESS,zero.from(int64_t(0),source));
+  ASSERT_EQ(OB_SUCCESS,epc.set_number(two,source));ASSERT_EQ(OB_SUCCESS,eavs.set_number(zero,source));
+  ASSERT_EQ(OB_SUCCESS,minval.set_int(-7,source));
+  ASSERT_EQ(OB_SUCCESS,maxval.set_varchar(ObString("parameter bound"),source));
+  maxval.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObHistogramParam param;
+  ASSERT_EQ(OB_SUCCESS,pl::ObDbmsStats::parse_set_hist_stats_options(ctx,epc,minval,maxval,
+      absent,absent,absent,absent,absent,eavs,param));
+  EXPECT_EQ(2,param.epc_);EXPECT_EQ(0,param.eavs_);
+  EXPECT_EQ(-7,param.get_min_datum().get_int());EXPECT_EQ(0,param.get_min_datum().length());
+  EXPECT_EQ(maxval.get_string_ptr(),param.get_max_datum().get_reference());
+  EXPECT_EQ(CS_TYPE_UTF8MB4_BIN,param.get_max_meta().get_collation_type());
+  // NULL options mean unspecified, so existing bounds must not be cleared.
+  ASSERT_EQ(OB_SUCCESS,pl::ObDbmsStats::parse_set_hist_stats_options(ctx,epc,absent,absent,
+      absent,absent,absent,absent,absent,eavs,param));
+  EXPECT_EQ(-7,param.get_min_datum().get_int());
+  EXPECT_EQ(maxval.get_string_ptr(),param.get_max_datum().get_reference());
+  ObOptColumnStat stat(owned);
+  ASSERT_EQ(OB_SUCCESS,stat.set_min_native(param.get_min_datum(),param.get_min_meta()));
+  ASSERT_EQ(OB_SUCCESS,stat.set_max_native(param.get_max_datum(),param.get_max_meta()));
+  EXPECT_NE(maxval.get_string_ptr(),stat.get_max_datum().get_reference());
+  SqlTypeMeta cleared=param.get_max_meta();cleared.set_null();
+  param.clear_max_value();EXPECT_TRUE(param.get_max_datum().is_null());
+  EXPECT_EQ(cleared.get_type(),param.get_max_meta().get_type());
+  EXPECT_EQ(cleared.get_collation_level(),param.get_max_meta().get_collation_level());
+  EXPECT_EQ(cleared.get_collation_type(),param.get_max_meta().get_collation_type());
+  EXPECT_EQ(cleared.get_scale(),param.get_max_meta().get_scale());
+  std::memset(const_cast<char *>(maxval.get_string_ptr()),'x',maxval.get_string_len());
+  source.reuse();std::memset(source.alloc(65536),0x64,65536);
+  // Only the retained stat is read after the parameter arena is reused.
+  EXPECT_EQ(-7,stat.get_min_datum().get_int());
+  EXPECT_EQ(ObString("parameter bound"),stat.get_max_datum().get_string());
+  EXPECT_EQ(CS_TYPE_UTF8MB4_BIN,stat.get_max_meta().get_collation_type());
 }

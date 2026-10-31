@@ -254,9 +254,9 @@ TEST_F(FixedFilterSample, histogram_material_endpoints_outlive_both_source_and_m
     EXPECT_EQ(OB_ITER_END, iterator.get_next_row(material));
   }
   const auto &buckets = histogram.get_buckets();
-  EXPECT_EQ(std::string("a\0b", 3), std::string(buckets.at(0).endpoint_value_.get_string().ptr(), 3));
-  EXPECT_EQ("beta", std::string(buckets.at(1).endpoint_value_.get_string().ptr(), 4));
-  EXPECT_TRUE(buckets.at(2).endpoint_value_.is_null());
+  EXPECT_EQ(std::string("a\0b", 3), std::string(buckets.at(0).get_endpoint_datum().get_string().ptr(), 3));
+  EXPECT_EQ("beta", std::string(buckets.at(1).get_endpoint_datum().get_string().ptr(), 4));
+  EXPECT_TRUE(buckets.at(2).get_endpoint_datum().is_null());
   EXPECT_EQ(2, buckets.at(0).endpoint_repeat_count_); EXPECT_EQ(6, buckets.at(1).endpoint_num_);
   EXPECT_EQ(7, buckets.at(2).endpoint_num_); EXPECT_EQ(7, histogram.get_total_count());
   EXPECT_EQ(3, histogram.get_num_distinct()); EXPECT_EQ(1, histogram.get_pop_count());
@@ -272,7 +272,7 @@ TEST_F(FixedFilterSample, histogram_lob_reuse_reads_the_fixed_endpoint)
   ObHybridHistograms histogram;
   ASSERT_EQ(OB_SUCCESS, histogram.build_hybrid_hist(&extra, &arena_, 1, 1, 1, 0, 0, meta, nullptr));
   ASSERT_EQ(1, histogram.get_bucket_size());
-  EXPECT_EQ(source, std::string(histogram.get_buckets().at(0).endpoint_value_.get_string().ptr(), source.size()));
+  EXPECT_EQ(source, std::string(histogram.get_buckets().at(0).get_endpoint_datum().get_string().ptr(), source.size()));
 }
 
 TEST_F(FixedFilterSample, histogram_first_endpoint_failure_does_not_publish_bucket_or_statistics)

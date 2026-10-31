@@ -862,8 +862,8 @@ int ObBasicStatsEstimator::check_stat_need_re_estimate(const ObOptStatGatherPara
         if (OB_ISNULL(opt_stat.column_stats_.at(i))) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          opt_stat.column_stats_.at(i)->get_max_value().set_null();
-          opt_stat.column_stats_.at(i)->get_min_value().set_null();
+          opt_stat.column_stats_.at(i)->clear_max_value();
+          opt_stat.column_stats_.at(i)->clear_min_value();
           opt_stat.column_stats_.at(i)->set_num_not_null(0);
           opt_stat.column_stats_.at(i)->set_num_null(0);
           opt_stat.column_stats_.at(i)->set_num_distinct(0);

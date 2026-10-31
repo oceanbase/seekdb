@@ -810,6 +810,9 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
   share::ObDMLSqlSplicer dml_splicer;
   ObString min_str, b_min_str;
   ObString max_str, b_max_str;
+  alignas(8) char min_scratch[64];
+  alignas(8) char max_scratch[64];
+  DatumValue minimum, maximum;
   uint64_t table_id = stat.get_table_id();
   
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
@@ -821,11 +824,13 @@ int ObOptStatSqlService::get_column_stat_sql(ObIAllocator &allocator,
                           stat.get_histogram().get_bucket_cnt() == 0) ||
                          stat.get_num_distinct() < 0)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_valid_value_str(stat.get_min_value(), min_meta, allocator, min_str, print_params)) ||
-             OB_FAIL(get_valid_value_str(stat.get_max_value(), max_meta, allocator, max_str, print_params))) {
-    LOG_WARN("failed to get valid obj str", K(stat.get_min_value()), K(stat.get_max_value()));
-  } else if (OB_FAIL(get_value_binary_hex_str(stat.get_min_value(), allocator, b_min_str)) ||
-             OB_FAIL(get_value_binary_hex_str(stat.get_max_value(), allocator, b_max_str))) {
+  } else if (OB_FAIL(stat.export_min_value(minimum, min_scratch, sizeof(min_scratch))) ||
+             OB_FAIL(get_valid_value_str(minimum, min_meta, allocator, min_str, print_params)) ||
+             OB_FAIL(stat.export_max_value(maximum, max_scratch, sizeof(max_scratch))) ||
+             OB_FAIL(get_valid_value_str(maximum, max_meta, allocator, max_str, print_params))) {
+    LOG_WARN("failed to get valid obj str", K(minimum), K(maximum));
+  } else if (OB_FAIL(get_value_binary_hex_str(minimum, allocator, b_min_str)) ||
+             OB_FAIL(get_value_binary_hex_str(maximum, allocator, b_max_str))) {
   } else if (stat.get_llc_bitmap_size() <= 0) {
     // do nothing
   } else if (OB_FAIL(get_compressed_llc_bitmap(allocator,
@@ -881,16 +886,19 @@ int ObOptStatSqlService::get_histogram_stat_sql(const ObOptColumnStat &stat,
   int ret = OB_SUCCESS;
   ObString endpoint_value;
   ObString b_endpoint_value;
+  alignas(8) char endpoint_scratch[64];
+  DatumValue endpoint;
   share::ObDMLSqlSplicer dml_splicer;
   uint64_t table_id = stat.get_table_id();
   
   uint64_t pure_table_id = ObSchemaUtils::get_extract_schema_id(table_id);
-  if (OB_FAIL(get_valid_value_str(bucket.endpoint_value_,
+  if (OB_FAIL(bucket.export_endpoint_value(endpoint, endpoint_scratch, sizeof(endpoint_scratch)))) {
+  } else if (OB_FAIL(get_valid_value_str(endpoint,
                                 endpoint_meta,
                                 allocator,
                                 endpoint_value,
                                 print_params))) {
-  } else if (OB_FAIL(get_value_binary_hex_str(bucket.endpoint_value_, allocator, b_endpoint_value))) {
+  } else if (OB_FAIL(get_value_binary_hex_str(endpoint, allocator, b_endpoint_value))) {
   } else if (OB_FAIL(dml_splicer.add_pk_column("table_id", pure_table_id)) ||
              OB_FAIL(dml_splicer.add_pk_column("partition_id", stat.get_partition_id())) ||
              OB_FAIL(dml_splicer.add_pk_column("column_id", stat.get_column_id())) ||
@@ -1107,7 +1115,9 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
             EXTRACT_INT_FIELD_MYSQL(result, "endpoint_repeat_cnt", bkt.endpoint_repeat_count_, int64_t);
             EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
             if (OB_SUCC(ret)) {
-              if (OB_FAIL(hex_str_to_value(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
+              DatumValue endpoint;
+              if (OB_FAIL(hex_str_to_value(str.ptr(), str.length(), allocator, endpoint))) {
+              } else if (OB_FAIL(bkt.set_endpoint_borrowed(endpoint))) {
               } else if (dst_key_col_stat.stat_->get_histogram().is_valid() &&
                          OB_FAIL(dst_key_col_stat.stat_->get_histogram().add_bucket(bkt, allocator))) {
                 dst_key_col_stat.stat_->get_histogram().reset();
@@ -1213,7 +1223,9 @@ int ObOptStatSqlService::fill_column_stat(ObIAllocator &allocator,
               EXTRACT_INT_FIELD_MYSQL(result, "endpoint_repeat_cnt", bkt.endpoint_repeat_count_, int64_t);
               EXTRACT_VARCHAR_FIELD_MYSQL(result, "b_endpoint_value", str);
               if (OB_SUCC(ret)) {
-                if (OB_FAIL(hex_str_to_value(str.ptr(), str.length(), allocator, bkt.endpoint_value_))) {
+                DatumValue endpoint;
+                if (OB_FAIL(hex_str_to_value(str.ptr(), str.length(), allocator, endpoint))) {
+                } else if (OB_FAIL(bkt.set_endpoint_borrowed(endpoint))) {
                 } else if (hist.is_valid() && OB_FAIL(hist.add_bucket(bkt, allocator))) {
                   hist.reset();
                   ret = OB_SUCCESS;

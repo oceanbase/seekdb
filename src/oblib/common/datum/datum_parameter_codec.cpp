@@ -931,6 +931,13 @@ int DatumParameterCodec::clone_schema_native_value(const Datum &source, const Sq
   return ret;
 }
 
+int DatumParameterCodec::borrow_schema_native_value(const ObDatum &source, const SqlTypeMeta &meta,
+    Datum &output)
+{
+  return valid_schema_legacy(source, meta) ? borrow_schema_native(source, meta, output)
+                                           : OB_INVALID_ARGUMENT;
+}
+
 int DatumParameterCodec::import_schema_native_value(const ObDatum &source, const SqlTypeMeta &meta,
     ObIAllocator &allocator, Datum &output)
 {

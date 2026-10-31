@@ -115,17 +115,20 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
           dst_col_stat->set_last_analyzed(src_col_stat->get_last_analyzed());
           dst_col_stat->set_collation_type(src_col_stat->get_collation_type());
           dst_col_stat->set_total_col_len(src_col_stat->get_total_col_len());
+          alignas(8) char min_scratch[64];
+          alignas(8) char max_scratch[64];
+          DatumValue src_min, src_max, dst_min, dst_max;
           if (OB_FAIL(dst_col_stat->deep_copy_llc_bitmap(src_col_stat->get_llc_bitmap(),
                                                          src_col_stat->get_llc_bitmap_size()))) {
           } else if (0 == dst_col_stat->get_num_distinct()) {
-            dst_col_stat->get_min_value().set_null();
-            dst_col_stat->get_max_value().set_null();
-          } else if (OB_FAIL(copy_min_val(src_col_stat->get_min_value(),
-                                          dst_col_stat->get_min_value(),
-                                          dst_part_info))) {
-          } else if (OB_FAIL(copy_max_val(src_col_stat->get_max_value(),
-                                          dst_col_stat->get_max_value(),
-                                          dst_part_info))) {
+            dst_col_stat->clear_min_value();
+            dst_col_stat->clear_max_value();
+          } else if (OB_FAIL(src_col_stat->export_min_value(src_min, min_scratch, sizeof(min_scratch)))) {
+          } else if (OB_FAIL(copy_min_val(src_min, dst_min, dst_part_info))) {
+          } else if (OB_FAIL(dst_col_stat->set_min_value(dst_min))) {
+          } else if (OB_FAIL(src_col_stat->export_max_value(src_max, max_scratch, sizeof(max_scratch)))) {
+          } else if (OB_FAIL(copy_max_val(src_max, dst_max, dst_part_info))) {
+          } else if (OB_FAIL(dst_col_stat->set_max_value(dst_max))) {
           }
           if (OB_FAIL(ret)) {
           } else if (dst_part_info->is_hash_part_) {
@@ -135,11 +138,17 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
             dst_col_stat->get_histogram().set_sample_size(src_part_stat_->get_row_count() - src_col_stat->get_num_null());
           }
         }
-        int min_max_cmp = 0;
-        if (OB_SUCC(ret) && OB_FAIL(compare_datum_values(dst_col_stat->get_max_value(),
-                                                        dst_col_stat->get_min_value(), min_max_cmp))) {
-        } else if (OB_SUCC(ret) && min_max_cmp != 0 && dst_col_stat->get_num_distinct() <= 1) {
-          dst_col_stat->set_num_distinct(2);
+        if (OB_SUCC(ret)) {
+          alignas(8) char min_scratch[64];
+          alignas(8) char max_scratch[64];
+          DatumValue minimum, maximum;
+          int min_max_cmp = 0;
+          if (OB_FAIL(dst_col_stat->export_max_value(maximum, max_scratch, sizeof(max_scratch)))) {
+          } else if (OB_FAIL(dst_col_stat->export_min_value(minimum, min_scratch, sizeof(min_scratch)))) {
+          } else if (OB_FAIL(compare_datum_values(maximum, minimum, min_max_cmp))) {
+          } else if (min_max_cmp != 0 && dst_col_stat->get_num_distinct() <= 1) {
+            dst_col_stat->set_num_distinct(2);
+          }
         }
         if (OB_SUCC(ret) && OB_FAIL(column_stats.push_back(dst_col_stat))) {
         }
@@ -171,8 +180,13 @@ int CopyTableStatHelper::check_range_part(bool is_subpart,
         ret = OB_ERR_UNEXPECTED;
       } else {
         int min_cmp = 0, max_cmp = 0;
-        if (OB_FAIL(compare_datum_values(src_col_stat->get_min_value(), dst_part_info->src_part_lower_bound_, min_cmp)) ||
-            OB_FAIL(compare_datum_values(src_col_stat->get_max_value(), dst_part_info->src_part_lower_bound_, max_cmp))) {
+        alignas(8) char min_scratch[64];
+        alignas(8) char max_scratch[64];
+        DatumValue minimum, maximum;
+        if (OB_FAIL(src_col_stat->export_min_value(minimum, min_scratch, sizeof(min_scratch)))) {
+        } else if (OB_FAIL(compare_datum_values(minimum, dst_part_info->src_part_lower_bound_, min_cmp))) {
+        } else if (OB_FAIL(src_col_stat->export_max_value(maximum, max_scratch, sizeof(max_scratch)))) {
+        } else if (OB_FAIL(compare_datum_values(maximum, dst_part_info->src_part_lower_bound_, max_cmp))) {
         } else if (min_cmp != 0 || max_cmp != 0 || src_col_stat->get_num_distinct() != 1) {
           flag = false;
         }
