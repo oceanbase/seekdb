@@ -31,6 +31,24 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
 
+namespace
+{
+// Escape the backticks in an identifier, so that the identifier can be safely
+// embedded between backticks in the internally generated SQL.
+int escape_identifier(const ObString &name, ObSqlString &escaped_name)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < name.length(); ++i) {
+    if ('`' == name.ptr()[i]) {
+      ret = escaped_name.append("``");
+    } else {
+      ret = escaped_name.append(name.ptr() + i, 1);
+    }
+  }
+  return ret;
+}
+} // namespace
+
 ObCheckConstraintValidationTask::ObCheckConstraintValidationTask(
     const int64_t data_table_id,
     const int64_t constraint_id,
@@ -74,6 +92,8 @@ int ObCheckConstraintValidationTask::process()
     const ObString &database_name = database_schema->get_database_name_str();
     const ObString &table_name = table_schema->get_table_name_str();
     ObSqlString sql_string;
+    ObSqlString escaped_database_name;
+    ObSqlString escaped_table_name;
     ObSessionParam session_param;
     session_param.sql_mode_ = nullptr;
     session_param.tz_info_wrap_ = nullptr;
@@ -89,18 +109,21 @@ int ObCheckConstraintValidationTask::process()
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(table_name, table_schema->get_schema_version(), ddl_schema_hint_str))) {
+      } else if (OB_FAIL(escape_identifier(database_name, escaped_database_name))) {
+      } else if (OB_FAIL(escape_identifier(table_name, escaped_table_name))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(escaped_table_name.string(), table_schema->get_schema_version(),
+        ddl_schema_hint_str))) {
       } else if (OB_FAIL(ddl_schema_hint_str.append_fmt(
                   " INDEX(`%.*s`.`%.*s` PRIMARY)",
-            static_cast<int>(database_name.length()),
-            database_name.ptr(),
-            static_cast<int>(table_name.length()),
-            table_name.ptr()))) {
+            static_cast<int>(escaped_database_name.length()),
+            escaped_database_name.ptr(),
+            static_cast<int>(escaped_table_name.length()),
+            escaped_table_name.ptr()))) {
       } else if (OB_FAIL(sql_string.assign_fmt(
                 "SELECT /*+ %.*s */ 1 FROM `%.*s`.`%.*s` WHERE NOT (%.*s) LIMIT 1", // for mysql mode
                  static_cast<int>(ddl_schema_hint_str.length()), ddl_schema_hint_str.ptr(),
-                 static_cast<int>(database_name.length()), database_name.ptr(),
-                 static_cast<int>(table_name.length()), table_name.ptr(),
+                 static_cast<int>(escaped_database_name.length()), escaped_database_name.ptr(),
+                 static_cast<int>(escaped_table_name.length()), escaped_table_name.ptr(),
                  static_cast<int>(check_expr_str.length()), check_expr_str.ptr()))) {
       }
 
@@ -317,22 +340,34 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
       common::sqlclient::ObMySQLResult *result = NULL;
       ObSqlString child_ddl_schema_hint_str;
       ObSqlString parent_ddl_schema_hint_str;
+      ObSqlString escaped_child_table_name;
+      ObSqlString escaped_child_database_name;
+      ObSqlString escaped_parent_table_name;
+      ObSqlString escaped_parent_database_name;
+      ObSqlString escaped_child_last_column;
+      ObSqlString escaped_parent_last_column;
       const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
       // print str like "select c1, c2 from db.t2 where c1 is not null and c2 is not null minus select c3, c4 from db.t1"
       if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
       } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(child_table_schema.get_table_name_str(), child_table_schema.get_schema_version(), child_ddl_schema_hint_str))) {
-      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(parent_table_schema.get_table_name_str(), parent_table_schema.get_schema_version(), parent_ddl_schema_hint_str))) {
+      } else if (OB_FAIL(escape_identifier(child_table_schema.get_table_name_str(), escaped_child_table_name))) {
+      } else if (OB_FAIL(escape_identifier(child_database_schema.get_database_name_str(), escaped_child_database_name))) {
+      } else if (OB_FAIL(escape_identifier(parent_table_schema.get_table_name_str(), escaped_parent_table_name))) {
+      } else if (OB_FAIL(escape_identifier(parent_database_schema.get_database_name_str(), escaped_parent_database_name))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(escaped_child_table_name.string(), child_table_schema.get_schema_version(),
+        child_ddl_schema_hint_str))) {
+      } else if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(escaped_parent_table_name.string(), parent_table_schema.get_schema_version(),
+        parent_ddl_schema_hint_str))) {
       } else if (OB_FAIL(child_ddl_schema_hint_str.append_fmt(" INDEX(`%.*s`.`%.*s` PRIMARY)",
-            static_cast<int>(child_database_schema.get_database_name_str().length()),
-            child_database_schema.get_database_name_str().ptr(),
-            static_cast<int>(child_table_schema.get_table_name_str().length()),
-            child_table_schema.get_table_name_str().ptr()))) {
+            static_cast<int>(escaped_child_database_name.length()),
+            escaped_child_database_name.ptr(),
+            static_cast<int>(escaped_child_table_name.length()),
+            escaped_child_table_name.ptr()))) {
       } else if (OB_FAIL(parent_ddl_schema_hint_str.append_fmt(" INDEX(`%.*s`.`%.*s` PRIMARY)",
-            static_cast<int>(parent_database_schema.get_database_name_str().length()),
-            parent_database_schema.get_database_name_str().ptr(),
-            static_cast<int>(parent_table_schema.get_table_name_str().length()),
-            parent_table_schema.get_table_name_str().ptr()))) {
+            static_cast<int>(escaped_parent_database_name.length()),
+            escaped_parent_database_name.ptr(),
+            static_cast<int>(escaped_parent_table_name.length()),
+            escaped_parent_table_name.ptr()))) {
       }
       if (OB_SUCC(ret)) {
         // print "select "
@@ -341,52 +376,60 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
         }
         // print "c1, "
         for (i = 0; OB_SUCC(ret) && i < child_column_names.count() - 1; ++i) {
-          if (OB_FAIL(sql_string.append_fmt("`%.*s`, ",
-                  static_cast<int>(child_column_names.at(i).length()),
-                  child_column_names.at(i).ptr()))) {
+          ObSqlString escaped_column;
+          if (OB_FAIL(escape_identifier(child_column_names.at(i), escaped_column))) {
+          } else if (OB_FAIL(sql_string.append_fmt("`%.*s`, ",
+                  static_cast<int>(escaped_column.length()),
+                  escaped_column.ptr()))) {
           }
         }
         // print "c2 from db.t2 where "
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s` WHERE ",
-                  static_cast<int>(child_column_names.at(i).length()),
-                  child_column_names.at(i).ptr(),
-                  static_cast<int>(child_database_schema.get_database_name_str().length()),
-                  child_database_schema.get_database_name_str().ptr(),
-                  static_cast<int>(child_table_schema.get_table_name_str().length()),
-                  child_table_schema.get_table_name_str().ptr()))) {
+          if (OB_FAIL(escape_identifier(child_column_names.at(i), escaped_child_last_column))) {
+          } else if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s` WHERE ",
+                  static_cast<int>(escaped_child_last_column.length()),
+                  escaped_child_last_column.ptr(),
+                  static_cast<int>(escaped_child_database_name.length()),
+                  escaped_child_database_name.ptr(),
+                  static_cast<int>(escaped_child_table_name.length()),
+                  escaped_child_table_name.ptr()))) {
           }
         }
         // print "c1 is not null and "
         for (i = 0; OB_SUCC(ret) && i < child_column_names.count() - 1; ++i) {
-          if (OB_FAIL(sql_string.append_fmt("`%.*s` IS NOT NULL AND ",
-                  static_cast<int>(child_column_names.at(i).length()),
-                  child_column_names.at(i).ptr()))) {
+          ObSqlString escaped_column;
+          if (OB_FAIL(escape_identifier(child_column_names.at(i), escaped_column))) {
+          } else if (OB_FAIL(sql_string.append_fmt("`%.*s` IS NOT NULL AND ",
+                  static_cast<int>(escaped_column.length()),
+                  escaped_column.ptr()))) {
           }
         }
         // print "c2 is not null minus select "
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql_string.append_fmt("`%.*s` IS NOT NULL MINUS SELECT /*+ %.*s */ ",
-                  static_cast<int>(child_column_names.at(i).length()), child_column_names.at(i).ptr(),
+                  static_cast<int>(escaped_child_last_column.length()), escaped_child_last_column.ptr(),
                   static_cast<int>(parent_ddl_schema_hint_str.length()), parent_ddl_schema_hint_str.ptr()))) {
           }
         }
         // print "c3, "
         for (i = 0; OB_SUCC(ret) && i < parent_column_names.count() - 1; ++i) {
-          if (OB_FAIL(sql_string.append_fmt("`%.*s`, ",
-                  static_cast<int>(parent_column_names.at(i).length()),
-                  parent_column_names.at(i).ptr()))) {
+          ObSqlString escaped_column;
+          if (OB_FAIL(escape_identifier(parent_column_names.at(i), escaped_column))) {
+          } else if (OB_FAIL(sql_string.append_fmt("`%.*s`, ",
+                  static_cast<int>(escaped_column.length()),
+                  escaped_column.ptr()))) {
           }
         }
         // print "c4 from db.t1"
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s`",
-                  static_cast<int>(parent_column_names.at(i).length()),
-                  parent_column_names.at(i).ptr(),
-                  static_cast<int>(parent_database_schema.get_database_name_str().length()),
-                  parent_database_schema.get_database_name_str().ptr(),
-                  static_cast<int>(parent_table_schema.get_table_name_str().length()),
-                  parent_table_schema.get_table_name_str().ptr()))) {
+          if (OB_FAIL(escape_identifier(parent_column_names.at(i), escaped_parent_last_column))) {
+          } else if (OB_FAIL(sql_string.append_fmt("`%.*s` FROM `%.*s`.`%.*s`",
+                  static_cast<int>(escaped_parent_last_column.length()),
+                  escaped_parent_last_column.ptr(),
+                  static_cast<int>(escaped_parent_database_name.length()),
+                  escaped_parent_database_name.ptr(),
+                  static_cast<int>(escaped_parent_table_name.length()),
+                  escaped_parent_table_name.ptr()))) {
           }
         }
       }
