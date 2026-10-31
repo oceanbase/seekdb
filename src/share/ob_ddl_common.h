@@ -625,6 +625,14 @@ public:
       const bool with_alias_name,
       const bool with_comma,
       ObSqlString &sql_string);
+  // Escape an SQL identifier for embedding between backticks: every embedded
+  // backtick is doubled. Share-local replacement for
+  // sql::ObSQLUtils::generate_new_name_with_escape_character so that shared
+  // DDL code does not depend on the SQL upper layer (see issue #1469).
+  static int escape_identifier_for_ddl(
+      common::ObIAllocator &allocator,
+      const common::ObString &src,
+      common::ObString &dst);
   static int reshape_ddl_column_obj(
       common::ObDatum &datum,
       const ObObjMeta &obj_meta);
