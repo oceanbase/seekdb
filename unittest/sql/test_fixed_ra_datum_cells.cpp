@@ -187,8 +187,17 @@ TEST(FixedRaDatumCells, legacy_input_is_owned_with_fixed_cells_extra_null_empty_
   input.overwrite();
   expect_mixed(*row);
   expect_guard(memory, row->body_size(), 0x51);
-  EXPECT_EQ(reinterpret_cast<const char *>(row->stored_cells()),
-            reinterpret_cast<const char *>(row->legacy_cells()));
+  const StoredDatumCell *cells = row->stored_cells();
+  const ObDatum integer = StoredDatumCodec::decode_legacy_view(cells[0]);
+  const ObDatum null = StoredDatumCodec::decode_legacy_view(cells[2]);
+  const ObDatum empty = StoredDatumCodec::decode_legacy_view(cells[3]);
+  const ObDatum flagged = StoredDatumCodec::decode_legacy_view(cells[4]);
+  EXPECT_EQ(-3000000001LL, integer.get_int());
+  EXPECT_TRUE(null.is_null());
+  EXPECT_FALSE(empty.is_null()); EXPECT_EQ(0, empty.len_);
+  EXPECT_EQ(2, flagged.flag_); EXPECT_EQ(16, flagged.len_);
+  EXPECT_EQ(cells[4].ptr_, flagged.ptr_);
+  for (int i = 0; i < 16; ++i) { EXPECT_EQ(i + 1, static_cast<unsigned char>(flagged.ptr_[i])); }
 }
 
 TEST(FixedRaDatumCells, readable_assign_relocates_only_the_body_without_copying_the_block_index_quota)

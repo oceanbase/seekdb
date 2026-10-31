@@ -56,10 +56,10 @@ class StoredDatumCodec
 {
 public:
   // Explicit legacy adapters accept only the old pointer Datum. The native
-  // overloads use a typed codec; the remaining legacy_cells() users still
-  // prevent widening or replacing the old carrier in place.
+  // overloads use a typed codec; these legacy input/output boundaries still
+  // require their carrier contract until execution callers migrate.
   static_assert(sizeof(common::ObDatum) == 12,
-      "Migrate legacy row-store accessors before changing execution Datum");
+      "Legacy pointer adapters require the version-one ObDatum layout");
   static_assert(sizeof(common::ObDatumPtr) == 8 && sizeof(common::ObDatumDesc) == 4,
       "Legacy pointer Datum fields must match the version-one storage boundary");
 

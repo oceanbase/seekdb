@@ -152,18 +152,12 @@ public:
     { return reinterpret_cast<StoredDatumCell *>(payload_); }
     inline const StoredDatumCell *stored_cells() const
     { return reinterpret_cast<const StoredDatumCell *>(payload_); }
-    // External window consumers still use the legacy pointer carrier. Keep
-    // that transition explicit and reject an in-place execution-layout change.
+    // Explicit legacy input adapters still require the pointer carrier layout.
+    // Keep that contract guarded until those execution boundaries migrate.
     static_assert(sizeof(common::ObDatum) == sizeof(StoredDatumCell),
-        "Migrate RA legacy consumers before changing execution Datum");
+        "RA legacy input adapters require the version-one Datum layout");
     static_assert(sizeof(common::ObDatumPtr) == 8 && sizeof(common::ObDatumDesc) == 4,
-        "RA legacy views require the version-one pointer Datum layout");
-    inline common::ObDatum *legacy_cells()
-    { return reinterpret_cast<common::ObDatum *>(payload_); }
-    inline const common::ObDatum *legacy_cells() const
-    { return reinterpret_cast<const common::ObDatum *>(payload_); }
-    inline common::ObDatum *cells() { return legacy_cells(); }
-    inline const common::ObDatum *cells() const { return legacy_cells(); }
+        "RA legacy input adapters require the version-one pointer Datum layout");
     inline void *get_extra_payload() const
     { return static_cast<void*>(const_cast<char*>(payload_ + sizeof(StoredDatumCell) * cnt_)); }
     // Historical RA accounting includes the separate 4B block row-index quota.

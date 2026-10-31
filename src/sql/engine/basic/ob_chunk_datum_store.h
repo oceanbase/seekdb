@@ -154,14 +154,6 @@ public:
     inline StoredDatumCell *stored_cells() { return reinterpret_cast<StoredDatumCell *>(payload_); }
     inline const StoredDatumCell *stored_cells() const
         { return reinterpret_cast<const StoredDatumCell *>(payload_); }
-    // Transitional access for external consumers. The fixed codec guard makes
-    // a wider/inline execution Datum fail to compile instead of corrupting a row.
-    inline common::ObDatum *legacy_cells() { return reinterpret_cast<common::ObDatum *>(payload_); }
-    inline const common::ObDatum *legacy_cells() const
-        { return reinterpret_cast<const common::ObDatum *>(payload_); }
-    inline common::ObDatum *cells() { return legacy_cells(); }
-    inline const common::ObDatum *cells() const
-        { return legacy_cells(); }
     inline void *get_extra_payload() const
     { return static_cast<void*>(const_cast<char*>(payload_ + sizeof(StoredDatumCell) * cnt_)); }
     template <typename T>
