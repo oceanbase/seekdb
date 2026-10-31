@@ -102,9 +102,6 @@ void ObStoreCtx::force_print_trace_log()
   if (NULL != mvcc_acc_ctx_.tx_desc_) {
     mvcc_acc_ctx_.tx_desc_->print_trace();
   }
-  if (NULL != mvcc_acc_ctx_.tx_ctx_) {
-    mvcc_acc_ctx_.tx_ctx_->print_trace_log();
-  }
 }
 
 bool ObStoreCtx::is_uncommitted_data_rollbacked() const
