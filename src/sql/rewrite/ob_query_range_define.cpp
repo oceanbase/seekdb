@@ -709,7 +709,9 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &paramete
   Datum candidate[3];
   for (int64_t i = 0; i < 3; ++i) {
     if (all_native) {
-      candidate[i] = *native_inputs[i];
+      // The current-owner guard established the canonical signed-I64 shape.
+      // Copy its scalar without moving the already-validated state fields.
+      candidate[i].set_int(native_inputs[i]->get_int());
     } else {
       // Metadata or an escaped mutable reference may have rebound any slot.
       // Preserve the original native point-get admission and fresh-value path.
