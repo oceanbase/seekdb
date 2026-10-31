@@ -236,6 +236,8 @@ public:
   ObAIFuncJsonUtils() {}
   virtual ~ObAIFuncJsonUtils() {}
   static bool ob_is_json_array_all_str(ObJsonArray* json_array);
+  static bool ob_is_valid_prompt_arg_type(ObJsonNodeType json_type);
+  static bool ob_is_json_array_valid_prompt_args(ObJsonArray *json_array);
   static int transform_array_to_json_array(ObIAllocator &allocator, ObArray<ObString> &contents, ObJsonArray *&array);
   static int get_json_object(ObIAllocator &allocator, ObJsonObject *&obj_node);
   static int get_json_array(ObIAllocator &allocator, ObJsonArray *&array_node);

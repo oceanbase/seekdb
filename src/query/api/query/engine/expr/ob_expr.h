@@ -220,6 +220,13 @@ private:
 
   OB_INLINE int64_t get_batch_idx() { return batch_idx_; }
   OB_INLINE int64_t get_batch_size() { return batch_size_; }
+  // The skip vector of the batch evaluation which is currently driving the row
+  // by row evaluation. It is published by expr_default_eval_batch_func() so
+  // that an expression which is evaluated row by row can tell which rows of
+  // the batch its parent expression really needs. NULL means that the caller
+  // does not provide such information.
+  OB_INLINE const ObBitVector *get_batch_skip() const { return batch_skip_; }
+  OB_INLINE void set_batch_skip(const ObBitVector *skip) { batch_skip_ = skip; }
   OB_INLINE bool is_vectorized() const { return 0 != max_batch_size_; }
   OB_INLINE ObArenaAllocator &get_expr_res_alloc() { return expr_res_alloc_; }
   OB_INLINE void reuse(const int64_t batch_size)
@@ -284,6 +291,8 @@ public:
 private:
   int64_t batch_idx_;
   int64_t batch_size_;
+  // Skip vector of the batch evaluation which drives the row by row evaluation.
+  const ObBitVector *batch_skip_;
   // Expression result allocator, never reset.
   common::ObArenaAllocator &expr_res_alloc_;
 };

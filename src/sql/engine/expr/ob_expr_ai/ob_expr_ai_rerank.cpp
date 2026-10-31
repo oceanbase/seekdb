@@ -29,6 +29,25 @@ namespace oceanbase
 namespace sql 
 {
 
+namespace
+{
+// 从 json 节点中读取数值，兼容整数与浮点两种返回形态
+static bool get_json_number_value(ObJsonNode *node, double &value)
+{
+  bool bret = false;
+  if (OB_NOT_NULL(node)) {
+    if (node->json_type() == ObJsonNodeType::J_DOUBLE) {
+      value = static_cast<ObJsonDouble *>(node)->value();
+      bret = true;
+    } else if (node->json_type() == ObJsonNodeType::J_INT) {
+      value = static_cast<double>(static_cast<ObJsonInt *>(node)->value());
+      bret = true;
+    }
+  }
+  return bret;
+}
+}
+
 ObExprAIRerank::ObExprAIRerank(common::ObIAllocator &alloc)
 : ObFuncExprOperator(alloc, 
                     T_FUN_SYS_AI_RERANK, 
@@ -124,6 +143,8 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     ObIJsonBase *j_base = nullptr;
     int64_t batch_size = 20; // max batch size for rerank
     bool is_null_result = false;
+    // doc_key 允许显式传 NULL，此时与不传 doc_key 等价，按字符串数组处理
+    const bool has_doc_key = OB_NOT_NULL(arg_doc_key) && !arg_doc_key->is_null();
     if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, DOCUMENTS_IDX,
           j_base, is_null_result))) {
     } else if (OB_ISNULL(j_base)) {
@@ -141,10 +162,10 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
         ObJsonNode *doc_node = document_array->get_value(i);
         if (OB_ISNULL(doc_node)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_NOT_NULL(arg_doc_key) && doc_node->json_type() != ObJsonNodeType::J_OBJECT) {
+        } else if (has_doc_key && doc_node->json_type() != ObJsonNodeType::J_OBJECT) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, document_array element is not object");
-        } else if (OB_ISNULL(arg_doc_key) && doc_node->json_type() != ObJsonNodeType::J_STRING) {
+        } else if (!has_doc_key && doc_node->json_type() != ObJsonNodeType::J_STRING) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_rerank, document_array element is not string");
         }
@@ -160,7 +181,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } 
 
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(arg_doc_key)) {
+    } else if (has_doc_key) {
       ObString doc_key = arg_doc_key->get_string();
       if (OB_FAIL(eval_ai_rerank_with_doc_key(expr, ctx, temp_allocator, model_id,
                   query, document_array, doc_key, *info, *endpoint_info, res))) {
@@ -273,34 +294,83 @@ int ObExprAIRerank::get_doc_array_from_documents_array_with_key(ObIAllocator &al
   return ret;
 }
 
+int ObExprAIRerank::parse_model_result(ObJsonArray *model_result_array, int64_t pos, int64_t &index, double &score)
+{
+  // 模型返回的 index 缺失时退化为按返回顺序映射，score 缺失时按 0 处理
+  index = pos;
+  score = 0.0;
+  ObJsonNode *result_node = model_result_array->get_value(pos);
+  if (OB_ISNULL(result_node) || result_node->json_type() != ObJsonNodeType::J_OBJECT) {
+    return OB_SUCCESS;
+  }
+  ObJsonObject *model_result_obj = static_cast<ObJsonObject *>(result_node);
+  ObJsonNode *index_node = model_result_obj->get_value(INDEX_KEY);
+  if (OB_NOT_NULL(index_node) && index_node->json_type() == ObJsonNodeType::J_INT) {
+    index = static_cast<ObJsonInt *>(index_node)->value();
+  }
+  get_json_number_value(model_result_obj->get_value(SCORE_KEY), score);
+  return OB_SUCCESS;
+}
+
 int ObExprAIRerank::sort_document_array_by_model_result(ObIAllocator &allocator, ObJsonArray *document_array, ObJsonArray *model_result_array, ObJsonArray *&sorted_document_array)
 {
   INIT_SUCC(ret);
   ObJsonArray *sorted_document_array_obj = nullptr;
+  int64_t count = model_result_array->element_count();
+  ObArray<int64_t> order;
+  ObArray<int64_t> indexes;
+  ObArray<double> scores;
   if (OB_FAIL(ObAIFuncJsonUtils::get_json_array(allocator, sorted_document_array_obj))) {
   } else {
-    int64_t count = model_result_array->element_count();
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
-      ObJsonObject *model_result_obj = static_cast<ObJsonObject *>(model_result_array->get_value(i));
-      if (OB_ISNULL(model_result_obj)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ObJsonInt *index_value = static_cast<ObJsonInt *>(model_result_obj->get_value(INDEX_KEY));
-        ObJsonDouble *score_value = static_cast<ObJsonDouble *>(model_result_obj->get_value(SCORE_KEY));
-        if (OB_ISNULL(index_value) || OB_ISNULL(score_value)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          int64_t index = index_value->value();
-          ObJsonObject *origin_obj = static_cast<ObJsonObject *>(document_array->get_value(index));
-          ObJsonObject *new_obj = nullptr;
-          if (OB_ISNULL(origin_obj)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_ISNULL(new_obj = static_cast<ObJsonObject *>(origin_obj->clone(&allocator, true)))) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(new_obj->add(MODEL_SCORE_KEY, score_value))) {
-          } else if (OB_FAIL(sorted_document_array_obj->append(new_obj))) {
+      int64_t index = i;
+      double score = 0.0;
+      if (OB_FAIL(parse_model_result(model_result_array, i, index, score))) {
+      } else if (OB_FAIL(order.push_back(i))) {
+      } else if (OB_FAIL(indexes.push_back(index))) {
+      } else if (OB_FAIL(scores.push_back(score))) {
+      }
+    }
+    if (OB_SUCC(ret) && count > 1) {
+      // 按（相关度降序，文档下标升序）排序，使用插入排序避免依赖 STL 容器的迭代器
+      for (int64_t i = 1; OB_SUCC(ret) && i < count; i++) {
+        int64_t key = order.at(i);
+        double key_score = scores.at(key);
+        int64_t key_index = indexes.at(key);
+        int64_t j = i - 1;
+        while (j >= 0) {
+          int64_t cur = order.at(j);
+          double cur_score = scores.at(cur);
+          int64_t cur_index = indexes.at(cur);
+          if (cur_score > key_score || (cur_score == key_score && cur_index <= key_index)) {
+            break;
           }
+          order.at(j + 1) = cur;
+          j--;
         }
+        order.at(j + 1) = key;
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
+      int64_t pos = order.at(i);
+      int64_t index = indexes.at(pos);
+      if (index < 0 || index >= document_array->element_count()) {
+        // 模型返回的下标越界，丢弃该条结果，避免越界访问
+        continue;
+      }
+      ObJsonNode *result_node = model_result_array->get_value(pos);
+      ObJsonObject *model_result_obj = OB_ISNULL(result_node)
+                                      ? NULL
+                                      : static_cast<ObJsonObject *>(result_node);
+      ObJsonNode *score_node = OB_NOT_NULL(model_result_obj) ? model_result_obj->get_value(SCORE_KEY) : NULL;
+      ObJsonObject *origin_obj = static_cast<ObJsonObject *>(document_array->get_value(index));
+      ObJsonObject *new_obj = nullptr;
+      if (OB_ISNULL(origin_obj)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(new_obj = static_cast<ObJsonObject *>(origin_obj->clone(&allocator, true)))) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_NOT_NULL(score_node) && OB_FAIL(new_obj->add(MODEL_SCORE_KEY, score_node))) {
+      } else if (OB_FAIL(sorted_document_array_obj->append(new_obj))) {
       }
     }
   }
@@ -394,12 +464,13 @@ int ObExprAIRerank::compact_json_array_by_key(ObIAllocator &allocator, ObJsonArr
       if (OB_ISNULL(obj1) || OB_ISNULL(obj2)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObJsonDouble *double1 = static_cast<ObJsonDouble *>(obj1->get_value(score_key));
-        ObJsonDouble *double2 = static_cast<ObJsonDouble *>(obj2->get_value(score_key));
-        if (OB_ISNULL(double1) || OB_ISNULL(double2)) {
+        double score1 = 0.0;
+        double score2 = 0.0;
+        if (!get_json_number_value(obj1->get_value(score_key), score1)
+            || !get_json_number_value(obj2->get_value(score_key), score2)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          if (double1->value() > double2->value()) {
+          if (score1 > score2) {
             if (OB_FAIL(result_array->append(obj1))) {
             }
             i++;
