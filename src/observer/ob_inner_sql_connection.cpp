@@ -1233,6 +1233,14 @@ int ObInnerSQLConnection::set_timeout(int64_t &abs_timeout_us)
   // no need to set session timeout for outer session if no timeout ctx
   if (OB_SUCC(ret)
       && (is_inner_session() || ctx.is_timeout_set() || ctx.is_trx_timeout_set())) {
+    const int64_t MIN_INTERNAL_SQL_TIMEOUT = 5LL * 1000 * 1000;
+    if (is_inner_session() && timeout < MIN_INTERNAL_SQL_TIMEOUT) {
+        timeout = MIN_INTERNAL_SQL_TIMEOUT;
+        if (trx_timeout < MIN_INTERNAL_SQL_TIMEOUT) {
+            trx_timeout = MIN_INTERNAL_SQL_TIMEOUT;
+        }
+    }
+
     if (OB_FAIL(set_session_timeout(timeout, trx_timeout))) {
     } else {
       THIS_WORKER.set_timeout_ts(get_session().get_query_start_time() + timeout);
