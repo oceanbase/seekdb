@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX LIB
 
+#include <cmath>
+#include <limits>
+
 #include "ob_geo_utils.h"
 #include "share/geo/ob_geo_wkb_visitor.h"
 #include "share/geo/ob_geo_wkb_size_visitor.h"
@@ -711,6 +714,11 @@ int ObGeoTypeUtil::check_coordinate_range(const ObSrsItem *srs,
   return ret;
 }
 
+static int mbr_box_to_geometry(uint32_t srid,
+                               ObIAllocator &allocator,
+                               ObCartesianBox &box,
+                               ObGeometry *&geo_bin_out);
+
 int ObGeoTypeUtil::get_buffered_geo(ObArenaAllocator *allocator,
                                     const ObString &wkb_str,
                                     double distance,
@@ -729,14 +737,53 @@ int ObGeoTypeUtil::get_buffered_geo(ObArenaAllocator *allocator,
     if (OB_FAIL(ObGeoTypeUtil::build_geometry(*allocator, wkb_str, geo, srs, log_info, ObGeoBuildFlag::GEO_ALLOW_3D))) {
     } else if (OB_FAIL(gis_context.append_geo_arg(geo))) {
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(gis_context, correct_result))) {
-    } else if (OB_FAIL(gis_context.append_val_arg(&buf_strat))) {
-    } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Buffer>::geo_func::eval(gis_context, res_geo))) {
-    } else if (OB_ISNULL(res_geo)) {
-      ret = OB_ERR_NULL_VALUE;
-    } else if (OB_FAIL(ObGeoTypeUtil::to_wkb(*allocator,
-                                            *res_geo,
-                                            srs,
-                                            res_wkb))) {
+    } else {
+      bool valid = true;
+      if (std::isfinite(distance) && distance >= 0 && !geo->is_empty()) {
+        // IsValid stores its failure reason in the evaluation context. Keep that
+        // value separate from Buffer's strategy argument.
+        ObGeoEvalCtx valid_context(CURRENT_CONTEXT, srs);
+        if (OB_FAIL(valid_context.append_geo_arg(geo))) {
+        } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::IsValid>::geo_func::eval(valid_context, valid))) {
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (!valid) {
+        // This helper builds Cartesian DWithin index candidates, not the public
+        // ST_Buffer result. Buffering an invalid polygon can silently discard
+        // part of a collection while leaving a nonempty result. Use an expanded
+        // envelope so that the exact distance filter cannot lose candidates.
+        ObCartesianBox box;
+        if (OB_FAIL(ObGeoFuncEnvelope::eval(gis_context, box))) {
+        } else if (box.is_empty()
+                   || !std::isfinite(box.min_corner().get<0>())
+                   || !std::isfinite(box.min_corner().get<1>())
+                   || !std::isfinite(box.max_corner().get<0>())
+                   || !std::isfinite(box.max_corner().get<1>())) {
+          ret = OB_ERR_GIS_INVALID_DATA;
+        } else {
+          const double limit = std::numeric_limits<double>::max();
+          const auto lower = [distance, limit](double value) {
+            return std::nextafter(std::max(-limit, value - distance), -limit);
+          };
+          const auto upper = [distance, limit](double value) {
+            return std::nextafter(std::min(limit, value + distance), limit);
+          };
+          box.set_box(lower(box.min_corner().get<0>()),
+                      lower(box.min_corner().get<1>()),
+                      upper(box.max_corner().get<0>()),
+                      upper(box.max_corner().get<1>()));
+          if (OB_FAIL(mbr_box_to_geometry(geo->get_srid(), *allocator, box, res_geo))) {
+          }
+        }
+      } else if (OB_FAIL(gis_context.append_val_arg(&buf_strat))) {
+      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Buffer>::geo_func::eval(gis_context, res_geo))) {
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_ISNULL(res_geo)) {
+        ret = OB_ERR_NULL_VALUE;
+      } else if (OB_FAIL(ObGeoTypeUtil::to_wkb(*allocator, *res_geo, srs, res_wkb))) {
+      }
     }
   }
   return ret;
