@@ -536,7 +536,8 @@ cc_test(
 
 cc_library(
     name = "range_map_datum_cases",
-    srcs = ["test_range_map_datum.cpp", "test_values_datum.cpp", "test_literal_datum.cpp"],
+    srcs = ["test_range_map_datum.cpp", "test_values_datum.cpp", "test_literal_datum.cpp",
+            "test_native_raw_constant_owner.cpp", "test_native_raw_constant_builders.cpp"],
     alwayslink = True,
     deps = ["//src/sql:sql_runtime_interface", "//src/sql:sql_runtime_internal_headers", "//bazel/third_party:gtest"],
 )

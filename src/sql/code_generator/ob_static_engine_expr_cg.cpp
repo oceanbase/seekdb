@@ -336,7 +336,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
           }
           if (is_dyn_qm) {
             int64_t param_idx = 0;
-            ret = static_cast<ObConstRawExpr *>(raw_expr)->get_value().get_unknown(param_idx);
+            ret = static_cast<ObConstRawExpr *>(raw_expr)->get_questionmark_index(param_idx);
             LOG_DEBUG("generate rt expr basic", K(param_idx), K(*gen_questionmarks_.at(param_idx)));
             if (OB_FAIL(ret)) {
             } else if (OB_ISNULL(gen_questionmarks_.at(param_idx))) {
@@ -463,7 +463,7 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
       // if the questionmark is from TABLE_ASSIGN, use eval_assign_question_mark_func
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(raw_expr);
       int64_t param_idx = 0;
-      OZ(c_expr->get_value().get_unknown(param_idx));
+      OZ(c_expr->get_questionmark_index(param_idx));
       if (OB_SUCC(ret)) {
         rt_expr->extra_ = param_idx;
         rt_expr->eval_func_ = raw_expr->has_flag(IS_TABLE_ASSIGN) ?
@@ -473,7 +473,7 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
     } else if (is_dynamic_eval_qm(*raw_expr)) {
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(raw_expr);
       int64_t param_idx = 0;
-      OZ(c_expr->get_value().get_unknown(param_idx));
+      OZ(c_expr->get_questionmark_index(param_idx));
       if (OB_SUCC(ret)) {
         rt_expr->extra_ = param_idx;
         if (OB_UNLIKELY(!ob_is_decimal_int(rt_expr->datum_meta_.type_))) {
@@ -629,7 +629,7 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
     } else {
       ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(param_exprs.at(i));
       int64_t param_idx = 0;
-      if (OB_FAIL(c_expr->get_value().get_unknown(param_idx))) {
+      if (OB_FAIL(c_expr->get_questionmark_index(param_idx))) {
       } else if (param_idx < 0 || param_idx >= param_cnt_ + flying_param_cnt_) {
         ret = OB_INVALID_ARGUMENT;
       } else {
@@ -1093,11 +1093,14 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
       if (!IS_CONST_LITERAL(raw_expr->get_expr_type())) {
         ret = OB_INVALID_ARGUMENT;
       } else {
-        const DatumValue &source = static_cast<ObConstRawExpr *>(raw_expr)->get_value();
+        DatumValue source;
+        alignas(8) char source_scratch[64];
         Datum *datum = new (frame_mem + ScalarFrameLayout::datum_offset(j)) Datum();
         const DatumCopyPlan plan = rt_expr->get_datum_copy_plan();
         Datum imported;
-        if (OB_FAIL(plan.import_legacy(source.datum_, imported))) {
+        if (OB_FAIL(static_cast<ObConstRawExpr *>(raw_expr)->export_value(
+                source, source_scratch, sizeof(source_scratch)))) {
+        } else if (OB_FAIL(plan.import_legacy(source.datum_, imported))) {
         } else if (OB_FAIL(ObExpr::clone_native_value(rt_expr->get_sql_type(), imported,
                                                      allocator_, *datum))) {
         } else if (is_lob_storage(source.get_type())) {
@@ -1823,7 +1826,7 @@ int ObStaticEngineExprCG::generate_extra_questionmarks(ObRawExprUniqueSet &flatt
         ObRawExpr *gen_questionmark = all_exprs.at(i);
         int64_t param_idx = 0;
         ObRawExprResType orig_qm_type = static_cast<const ObConstRawExpr *>(all_exprs.at(i))->get_orig_qm_type();
-        ret = static_cast<ObConstRawExpr *>(all_exprs.at(i))->get_value().get_unknown(param_idx);
+        ret = static_cast<ObConstRawExpr *>(all_exprs.at(i))->get_questionmark_index(param_idx);
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ObRawExprUtils::create_param_expr(expr_factory, param_idx, gen_questionmark))) {
         } else if (OB_UNLIKELY(param_idx >= param_cnt_)) {

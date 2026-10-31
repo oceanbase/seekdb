@@ -1606,7 +1606,7 @@ int ObTransformSimplifySubquery::check_has_limit_1(const ObSelectStmt *stmt,
   } else if (NULL == stmt->get_limit_expr()) {
     // do nothing
   } else if (T_INT != stmt->get_limit_expr()->get_expr_type()
-             || 1 != static_cast<const ObConstRawExpr *>(stmt->get_limit_expr())->get_value().get_int()) {
+             || 1 != static_cast<const ObConstRawExpr *>(stmt->get_limit_expr())->get_value_datum().get_int()) {
     // do nothing
   } else {
     has_limit_1 = true;

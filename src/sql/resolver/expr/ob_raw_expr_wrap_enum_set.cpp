@@ -71,10 +71,13 @@ int ObRawExprWrapEnumSet::wrap_sub_select(ObInsertStmt &stmt)
       ret = OB_ERR_UNEXPECTED;
     } else if (conv_expr->get_param_expr(4)->is_column_ref_expr()) {
       int32_t const_value = -1;
+      DatumValue value;
+      alignas(8) char scratch[64];
       if (OB_UNLIKELY(!conv_expr->get_param_expr(0)->is_const_raw_expr())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(static_cast<ObConstRawExpr *>(conv_expr->get_param_expr(0))
-                         ->get_value().get_int32(const_value))) {
+                         ->export_value(value, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(value.get_int32(const_value))) {
       } else if (conv_expr->get_param_expr(4)->is_enum_set_with_subschema()) {
         ObRawExpr *arg_expr = conv_expr->get_param_expr(4);
         if (arg_expr->get_data_type() == const_value) {

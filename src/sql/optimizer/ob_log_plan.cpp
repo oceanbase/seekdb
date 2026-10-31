@@ -10354,7 +10354,7 @@ int ObLogPlan::allocate_output_expr_for_values_op(ObLogicalOperator &values_op)
       DatumValue v;
       OZ (v.set_varchar(ObString(" "), optimizer_context_.get_expr_factory().get_allocator()));
       v.set_collation_type(ObCharset::get_system_collation());
-      OX (output->set_value(v));
+      OZ (output->set_value_borrowed(v));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(output->formalize(optimizer_context_.get_session_info()))) {
       } else if (OB_FAIL(values_op.get_output_exprs().push_back(output))) {

@@ -995,7 +995,7 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
                                                                         mono,is_strict_inner,
                                                                         param_store, const_param_info)))) {
         } else if (OB_FALSE_IT(const_expr = static_cast<const ObConstRawExpr*>(param_expr_pos))) {
-        } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_value().get_unknown()))) {
+        } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_questionmark_index()))) {
         } else if (OB_FAIL(const_param_info.add_int_constant(1, ctx.get_allocator()))) {
         } else {
           monotonicity = mono;

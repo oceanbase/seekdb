@@ -136,8 +136,8 @@ int ObSetTransactionResolver::build_isolation_expr(ObRawExpr *&expr, int32_t lev
     OZ (val.set_varchar(level_name, params_.expr_factory_->get_allocator()));
     val.set_collation_type(ObCharset::get_system_collation());
     val.set_param_meta();
-    OX (c_expr->set_value(val));
-    c_expr->set_data_type(ObVarcharType);
+    OZ (c_expr->set_value_borrowed(val));
+    OX (c_expr->set_data_type(ObVarcharType));
     OX (expr = c_expr);
   }
   return ret;
@@ -146,18 +146,19 @@ int ObSetTransactionResolver::build_isolation_expr(ObRawExpr *&expr, int32_t lev
 int ObSetTransactionResolver::build_access_expr(ObRawExpr *&expr, const bool is_read_only)
 {
   int ret = OB_SUCCESS;
-  DatumParameter val;
   ObConstRawExpr *c_expr = NULL;
   if (OB_ISNULL(params_.expr_factory_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("invalid stmt", K_(stmt));
   } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_INT, c_expr))) {
   } else {
-    OZ (val.set_int(is_read_only ? 1 : 0, params_.expr_factory_->get_allocator()));
-    val.set_scale(0);
-    val.set_param_meta();
-    OX (c_expr->set_value(val));
-    c_expr->set_data_type(ObIntType);
+    Datum value;
+    SqlTypeMeta meta;
+    value.set_int(is_read_only ? 1 : 0);
+    meta.set_int();
+    meta.set_scale(0);
+    OZ (c_expr->set_value_borrowed(value, meta));
+    OX (c_expr->set_data_type(ObIntType));
     OX (expr = c_expr);
   }
   return ret;

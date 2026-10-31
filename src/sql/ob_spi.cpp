@@ -670,8 +670,12 @@ int ObSPIService::pad_character_impl(ObSQLSessionInfo *session_info,
       const ObConstRawExpr *accuracy_expr =
         static_cast<const ObConstRawExpr*>(expr->get_param_expr(2));
       CK (OB_NOT_NULL(type_expr) && OB_NOT_NULL(accuracy_expr));
-      OX (type_expr->get_value().get_int32(data_type));
-      OX (accuracy_expr->get_value().get_int(accuracy_type));
+      DatumValue type_value, accuracy_value;
+      alignas(8) char type_scratch[64], accuracy_scratch[64];
+      OZ (type_expr->export_value(type_value, type_scratch, sizeof(type_scratch)));
+      OZ (accuracy_expr->export_value(accuracy_value, accuracy_scratch, sizeof(accuracy_scratch)));
+      OX (type_value.get_int32(data_type));
+      OX (accuracy_value.get_int(accuracy_type));
       OX (accuracy.set_accuracy(accuracy_type));
       OZ (pad_character_impl(session_info, static_cast<SqlValueType>(data_type),
           accuracy, allocator, result));
@@ -813,7 +817,7 @@ int ObSPIService::cast_enum_set_to_string(ObExecContext &ctx,
   CK (OB_NOT_NULL(c_expr));
   OZ (ObRawExprUtils::get_subschema_id(src.get_meta(), enum_set_values, *session_info, subschema_id));
   OX (value.set_subschema_id(subschema_id));
-  OX (c_expr->set_value(value));
+  OZ (c_expr->set_value_borrowed(value));
   OX (result_type.set_meta(value.get_meta()));
   OX (result_type.set_accuracy(src.get_accuracy()));
   OX (result_type.mark_pl_enum_set_with_subschema());

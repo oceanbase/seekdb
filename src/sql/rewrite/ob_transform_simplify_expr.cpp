@@ -774,11 +774,13 @@ int ObTransformSimplifyExpr::remove_dummy_filter_exprs(common::ObIArray<ObRawExp
     } else if (transed_expr != NULL) {
       exprs.reset();
       bool is_true = false;
+      DatumValue constant;
+      alignas(8) char scratch[64];
       if (!transed_expr->is_const_raw_expr()) {
         if (OB_FAIL(exprs.push_back(transed_expr))) {
         }
-      } else if (OB_FAIL(DatumValueEvaluator::is_true(
-                           static_cast<ObConstRawExpr*>(transed_expr)->get_value(), is_true))) {
+      } else if (OB_FAIL(static_cast<ObConstRawExpr*>(transed_expr)->export_value(constant, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(DatumValueEvaluator::is_true(constant, is_true))) {
       } else if (is_true) {
       } else if (OB_FAIL(exprs.push_back(transed_expr))) {
       }
@@ -846,6 +848,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
       for (int64_t i = 0; OB_SUCC(ret) && i < op_expr->get_param_count(); ++i) {
         ObRawExpr *temp = op_expr->get_param_expr(i);
         bool is_true = false;
+        DatumValue constant;
+        alignas(8) char scratch[64];
         bool is_error_free = true;
         bool has_in = false;
         if (OB_ISNULL(temp)) {
@@ -864,8 +868,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
           /* do nothing */
         } else if (!temp->is_const_raw_expr()) {
           /* do nothing */
-        } else if (OB_FAIL(DatumValueEvaluator::is_true(
-                   static_cast<ObConstRawExpr*>(temp)->get_value(), is_true))) {
+        } else if (OB_FAIL(static_cast<ObConstRawExpr*>(temp)->export_value(constant, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(DatumValueEvaluator::is_true(constant, is_true))) {
         } else if ((T_OP_AND == expr->get_expr_type() && !is_true)
                    || (T_OP_OR == expr->get_expr_type() && is_true)) {
           has_short_circuit_const = true;
@@ -1866,7 +1870,8 @@ int ObTransformSimplifyExpr::is_filter_exprs_false(common::ObIArray<ObRawExpr*>&
         DatumParameter result;
         bool is_cal_true = false;
         if (OB_FAIL(ObSQLUtils::calc_const_expr(
-          filter_expr, &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(), result, is_cal_true))) {
+          filter_expr, &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(), result,
+          is_cal_true, *ctx_->allocator_))) {
         } else if ((!is_cal_true) || (!result.is_integer_type())) {
         // do nothing if plan cache does not check the bool value, or the result is not integer type
           LOG_TRACE("plan cache does not check this bool value, ignore it", K(is_cal_true), K(result.get_type()));
@@ -2149,7 +2154,7 @@ int ObTransformSimplifyExpr::remove_false_true(ObRawExpr *expr,
              OB_ISNULL(param_right = expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    bool is_true = static_cast<const ObConstRawExpr *>(param_right)->get_value().get_bool();
+    bool is_true = static_cast<const ObConstRawExpr *>(param_right)->get_value_datum().get_bool();
     is_true = (is_true && T_OP_IS == expr->get_expr_type()) ||
               (!is_true && T_OP_IS_NOT == expr->get_expr_type());
     if (is_true) {

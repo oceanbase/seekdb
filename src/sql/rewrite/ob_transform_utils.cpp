@@ -1927,6 +1927,7 @@ int ObTransformUtils::is_const_expr_not_null(ObNotNullContext &ctx,
 {
   int ret = OB_SUCCESS;
   DatumValue result;
+  alignas(8) char constant_scratch[64];
   bool got_result = false;
   bool is_error_free = false;
   is_not_null = false;
@@ -1936,8 +1937,8 @@ int ObTransformUtils::is_const_expr_not_null(ObNotNullContext &ctx,
   } else if (expr->is_const_raw_expr() && 
              expr->get_expr_type() != T_QUESTIONMARK) {
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(expr);
-    result = const_expr->get_value();
-    got_result = true;
+    ret = const_expr->export_value(result, constant_scratch, sizeof(constant_scratch));
+    got_result = OB_SUCC(ret);
   } else if (NULL == ctx.exec_ctx_ || NULL == ctx.allocator_) {
     got_result = false;
   } else if (OB_FAIL(check_error_free_expr(const_cast<ObRawExpr *>(expr), is_error_free))) {
@@ -2280,7 +2281,7 @@ int ObTransformUtils::is_simple_null_reject(const ObRawExpr *condition,
     } else if (T_BOOL == condition->get_param_expr(1)->get_expr_type()) {
       const ObConstRawExpr *b_expr =
         static_cast<const ObConstRawExpr*>(condition->get_param_expr(1));
-      if (b_expr->get_value().is_true()) {
+      if ((!b_expr->get_value_datum().is_null() && ob_is_int_tc(b_expr->get_value_meta().get_type()) && b_expr->get_value_datum().get_int() != 0)) {
         // param is TRUE require param is null reject
         check_expr_is_null_reject = true;
       } else {
@@ -7205,14 +7206,16 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
     } else if (T_QUESTIONMARK != param_expr->get_expr_type()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FALSE_IT(const_expr = static_cast<ObConstRawExpr*>(param_expr))) {
-    } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_value().get_unknown()))) {
+    } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_questionmark_index()))) {
     } else if (OB_FAIL(const_param_info.add_int_constant(limit, *allocator))) {
     } else {
       is_equal = true;
     }
   } else if (limit_expr->is_const_raw_expr()) {
-    const DatumValue &limit_value = static_cast<const ObConstRawExpr*>(limit_expr)->get_value();
-    if (limit_value.is_invalid_type() ||
+    DatumValue limit_value;
+    alignas(8) char scratch[64];
+    if (OB_FAIL(static_cast<const ObConstRawExpr*>(limit_expr)->export_value(limit_value, scratch, sizeof(scratch)))) {
+    } else if (limit_value.is_invalid_type() ||
         target_value.is_invalid_type()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (!can_compare_datum_values(limit_value, target_value)) {
@@ -8229,7 +8232,7 @@ int ObTransformUtils::get_expr_int_value(ObRawExpr *expr,
       OB_ISNULL(exec_ctx) || OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (T_INT == expr->get_expr_type()) {
-    value = static_cast<const ObConstRawExpr *>(expr)->get_value().get_int();
+    value = static_cast<const ObConstRawExpr *>(expr)->get_value_datum().get_int();
   } else if (T_NULL == expr->get_expr_type()) {
     is_null_value = true;
   } else {
@@ -8279,7 +8282,7 @@ int ObTransformUtils::get_percentage_value(ObRawExpr *percent_expr,
   } else if (NULL == percent_expr) {
     /*do nothing*/
   } else if (T_DOUBLE == percent_expr->get_expr_type()) {
-    percent_value = static_cast<const ObConstRawExpr *>(percent_expr)->get_value().get_double();
+    percent_value = static_cast<const ObConstRawExpr *>(percent_expr)->get_value_datum().get_double();
   } else if (T_NULL == percent_expr->get_expr_type()) {
     is_null_value = true;
   } else {
@@ -8333,7 +8336,7 @@ int ObTransformUtils::add_const_param_constraints(ObRawExpr *expr,
       } else {
         ObPCConstParamInfo param_info;
         ObConstRawExpr *const_expr = static_cast<ObConstRawExpr*>(params.at(i));
-        int64_t param_idx = const_expr->get_value().get_unknown();
+        int64_t param_idx = const_expr->get_questionmark_index();
         if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_param_store().count())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
@@ -8530,11 +8533,11 @@ int ObTransformUtils::add_compare_int_constraint(ObTransformerCtx *trans_ctx,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(true_expr->set_param_exprs(expr, int_expr))) {
     } else {
-      DatumValue obj;
-      if (OB_FAIL(obj.set_int(val, expr_factory->get_allocator()))) {
-      } else {
-        int_expr->set_value(obj);
-      }
+      Datum value;
+      SqlTypeMeta meta;
+      value.set_int(val);
+      meta.set_int();
+      ret = int_expr->set_value_borrowed(value, meta);
     }
 
     if (OB_SUCC(ret)) {
@@ -10988,7 +10991,7 @@ int ObTransformUtils::add_dummy_expr_for_json_object_node(ObTransformerCtx *ctx,
     } else {
       key_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       key_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-      key_expr->set_value(key_obj);
+      ret = key_expr->set_value_borrowed(key_obj);
     }
   }
   if (OB_FAIL(ret)) {
@@ -11001,7 +11004,7 @@ int ObTransformUtils::add_dummy_expr_for_json_object_node(ObTransformerCtx *ctx,
     } else {
       val_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       val_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-      value_expr->set_value(val_obj);
+      ret = value_expr->set_value_borrowed(val_obj);
     }
   }
   if (OB_FAIL(ret)) {
@@ -11009,12 +11012,12 @@ int ObTransformUtils::add_dummy_expr_for_json_object_node(ObTransformerCtx *ctx,
   } else if (OB_ISNULL(format_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    DatumValue format_obj;
-    if (OB_FAIL(format_obj.set_int(0, ctx->expr_factory_->get_allocator()))) {
-    } else {
-      format_expr->set_data_type(ObIntType);
-      format_expr->set_value(format_obj);
-    }
+    Datum value;
+    SqlTypeMeta meta;
+    value.set_int(0);
+    meta.set_int();
+    format_expr->set_data_type(ObIntType);
+    ret = format_expr->set_value_borrowed(value, meta);
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(param_array.push_back(key_expr))) {
@@ -11046,7 +11049,7 @@ int ObTransformUtils::add_column_expr_for_json_object_node(ObTransformerCtx *ctx
     } else {
       key_obj.set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
       key_obj.set_collation_level(CS_LEVEL_IMPLICIT);
-      key_expr->set_value(key_obj);
+      ret = key_expr->set_value_borrowed(key_obj);
     }
   }
   if (OB_FAIL(ret)) {
@@ -11057,12 +11060,12 @@ int ObTransformUtils::add_column_expr_for_json_object_node(ObTransformerCtx *ctx
     ret = OB_ERR_UNEXPECTED;
   } else if (check_is_json_constraint(ctx, stmt, col_item, is_json)) {
   } else {
-    DatumValue format_obj;
-    if (OB_FAIL(format_obj.set_int(is_json, ctx->expr_factory_->get_allocator()))) {
-    } else {
-      format_expr->set_data_type(ObIntType);
-      format_expr->set_value(format_obj);
-    }
+    Datum value;
+    SqlTypeMeta meta;
+    value.set_int(is_json);
+    meta.set_int();
+    format_expr->set_data_type(ObIntType);
+    ret = format_expr->set_value_borrowed(value, meta);
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(param_array.push_back(key_expr))) {
@@ -11094,7 +11097,7 @@ int ObTransformUtils::get_expand_node_from_star(ObTransformerCtx *ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (param_expr->get_param_expr(TABLE_NAME_POS)->get_expr_type() == T_VARCHAR) {
     ObConstRawExpr* name_expr = static_cast<ObConstRawExpr*>(param_expr->get_param_expr(TABLE_NAME_POS));
-    tab_name = name_expr->get_value().get_string();
+    tab_name = name_expr->get_value_datum().get_string();
     all_tab = false;
   }
   if (OB_FAIL(ret)) {
@@ -12764,7 +12767,7 @@ bool ObTransformUtils::is_const_null(ObRawExpr &expr)
     bret = true;
   } else if (expr.get_expr_type() == T_QUESTIONMARK) {
     ObConstRawExpr &const_expr = static_cast<ObConstRawExpr&>(expr);
-    bret = const_expr.get_param().is_null();
+    bret = const_expr.get_bound_param_datum().is_null();
   }
   return bret;
 }

@@ -99,7 +99,7 @@ int ObExprBaseLRpad::calc_type_length_mysql(const ObExprResType result_type,
 }
 // Reference ObExprBaseLRpad padding calculation.
 
-int ObExprBaseLRpad::get_origin_len_obj(DatumValue &len_obj) const
+int ObExprBaseLRpad::get_origin_len_obj(DatumValue &len_obj, void *scratch, int64_t capacity) const
 {
   int ret = OB_SUCCESS;
   ObRawExpr *expr = NULL;
@@ -118,7 +118,7 @@ int ObExprBaseLRpad::get_origin_len_obj(DatumValue &len_obj) const
     } else if (!expr->is_const_raw_expr()) {
       len_obj.set_null();
     } else {
-      len_obj = static_cast<ObConstRawExpr *>(expr)->get_param();
+      ret = static_cast<ObConstRawExpr *>(expr)->export_bound_param(len_obj, scratch, capacity);
     }
   }
   return ret;
@@ -146,6 +146,7 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
 
   if (OB_SUCC(ret)) {
     DatumValue length_obj = len.get_param();
+    alignas(8) char length_scratch[64];
     DatumValue text_obj = text.get_param();
     DatumValue pad_obj;
     ObString default_pad_str = ObString(" "); // default is ' '
@@ -161,7 +162,7 @@ int ObExprBaseLRpad::calc_type(ObExprResType &type,
       OX(pad_text->set_calc_collation_type(type.get_collation_type()));
       if (OB_SUCC(ret)) {
         // len expr may add cast, search real len obj
-        if (OB_FAIL(get_origin_len_obj(length_obj))) {
+        if (OB_FAIL(get_origin_len_obj(length_obj, length_scratch, sizeof(length_scratch)))) {
         } else if (!length_obj.is_null()) {
           if (OB_FAIL(calc_type_length_mysql(type, text_obj, pad_obj, length_obj, type_ctx, text_len))) {
           }

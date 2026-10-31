@@ -1124,8 +1124,8 @@ int ObResultSet::ExternalRetrieveInfo::recount_dynamic_param_info(
     ObRawExpr *into = into_exprs_.at(i);
     if (OB_NOT_NULL(into)
         && T_QUESTIONMARK == into->get_expr_type()
-        && static_cast<ObConstRawExpr *>(into)->get_value().get_unknown() < current_position) {
-      current_position = static_cast<ObConstRawExpr *>(into)->get_value().get_unknown();
+        && static_cast<ObConstRawExpr *>(into)->get_questionmark_index() < current_position) {
+      current_position = static_cast<ObConstRawExpr *>(into)->get_questionmark_index();
     }
   }
 
@@ -1136,22 +1136,20 @@ int ObResultSet::ExternalRetrieveInfo::recount_dynamic_param_info(
     ObRawExpr *param = param_info.at(i).element<0>();
     if (OB_NOT_NULL(param)
         && T_QUESTIONMARK == param->get_expr_type()
-        && static_cast<ObConstRawExpr *>(param)->get_value().get_unknown() > current_position) {
+        && static_cast<ObConstRawExpr *>(param)->get_questionmark_index() > current_position) {
       OZ (recount_params.push_back(static_cast<ObConstRawExpr *>(param)));
     }
   }
   if (OB_SUCC(ret) && recount_params.count() >= 2) {
     lib::ob_sort(recount_params.begin(), recount_params.end(),
         [](ObConstRawExpr *a, ObConstRawExpr *b) {
-          return a->get_value().get_unknown() < b->get_value().get_unknown();
+          return a->get_questionmark_index() < b->get_questionmark_index();
         });
   }
 
   for (int64_t i = 0;
       current_position != INT64_MAX && OB_SUCC(ret) && i < recount_params.count(); ++i) {
-    CK (recount_params.at(i)->get_value_allocator() != nullptr);
-    OZ (recount_params.at(i)->get_value().set_unknown(current_position,
-        *recount_params.at(i)->get_value_allocator()));
+    OZ (recount_params.at(i)->set_questionmark_index(current_position));
     OX (current_position ++);
   }
   return ret;
@@ -1210,16 +1208,13 @@ int ObResultSet::ExternalRetrieveInfo::build(
         } else if (OB_FAIL(external_params_.push_back(param_info.at(i).element<0>()))) {
         } else if (T_QUESTIONMARK == param_info.at(i).element<0>()->get_expr_type()) {
           ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(param_info.at(i).element<0>());
-          CK (param_info.at(i).element<1>()->get_value_allocator() != nullptr);
-          OZ (param_info.at(i).element<1>()->get_value().apply(const_expr->get_value(),
-              *param_info.at(i).element<1>()->get_value_allocator()));
+          OZ (param_info.at(i).element<1>()->replace_value_borrowed(
+              const_expr->get_value_datum(), const_expr->get_value_meta()));
         } else {
           // If it is not a local variable of PL, the value of QUESTIONMARK needs to be changed to an invalid value to prevent the proxy from being confused
-          CK (param_info.at(i).element<1>()->get_value_allocator() != nullptr);
-          OZ (param_info.at(i).element<1>()->get_value().set_unknown(OB_INVALID_INDEX,
-              *param_info.at(i).element<1>()->get_value_allocator()));
+          OZ (param_info.at(i).element<1>()->set_questionmark_index(OB_INVALID_INDEX));
           param_info.at(i).element<1>()->set_expr_obj_meta(
-                              param_info.at(i).element<1>()->get_value().get_meta());
+                              param_info.at(i).element<1>()->get_value_meta());
           if (stmt_sql_.empty()) {
             OZ (ob_write_string(allocator_, stmt.get_query_ctx()->get_sql_stmt(), stmt_sql_));
           }

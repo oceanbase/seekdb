@@ -66,7 +66,9 @@ int ObRawExprPartExprChecker::check_args_of_extract(const ObSysFunRawExpr &expr)
       } else if (OB_ISNULL(con_expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        con_expr->get_value().get_int(date_unit_type);
+        if (!con_expr->get_value_datum().is_null() && con_expr->get_value_meta().is_int()) {
+          date_unit_type = con_expr->get_value_datum().get_int();
+        }
         switch(date_unit_type) {
           case DATE_UNIT_YEAR:
           case DATE_UNIT_YEAR_MONTH:

@@ -973,7 +973,7 @@ int ObSelectStmt::check_from_dup_insensitive(bool &is_from_dup_insens) const
              || NULL != limit_percent_expr_) {
     // do nothing
   } else if (T_INT != limit_count_expr_->get_expr_type()
-             || 1 != static_cast<const ObConstRawExpr *>(limit_count_expr_)->get_value().get_int()) {
+             || 1 != static_cast<const ObConstRawExpr *>(limit_count_expr_)->get_value_datum().get_int()) {
     // do nothing
   } else {
     is_from_dup_insens = true;

@@ -120,10 +120,10 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
       if (OB_ISNULL(func_expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_UNLIKELY(!func_expr->get_param_expr(0)->is_const_raw_expr()
-        || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().is_varchar())) {
+        || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value_meta().is_varchar())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        var = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().get_varchar();
+        var = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value_datum().get_string();
       }
 
       DIAG_INFO_TYPE info_type;
@@ -181,7 +181,7 @@ int ObGetDiagnosticsExecutor::assign_condition_val(ObExecContext &ctx, ObGetDiag
         OZ (session_info->get_collation_connection(collation_type));
         DIAG_INFO_TYPE info_type;
         OZ (stmt.get_diag_info_type_by_name(val, info_type));
-        int64_t idx = const_expr->get_value().get_unknown();
+        int64_t idx = const_expr->get_questionmark_index();
         idx = stmt.get_origin_param_index(idx);
         CK (idx != OB_INVALID_INDEX);
         CK (idx < pl_state->get_function().get_variables().count());
@@ -273,7 +273,7 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
           CK (OB_NOT_NULL(pl_context = session_info->get_pl_context()));
           CK (OB_NOT_NULL(pl_state = pl_context->get_current_state()));
           DatumParameter value;
-          int64_t idx = const_expr->get_value().get_unknown();
+          int64_t idx = const_expr->get_questionmark_index();
           idx = stmt.get_origin_param_index(idx);
           CK (idx != OB_INVALID_INDEX);
           OZ (pl_state->get_var(idx, value));
@@ -281,14 +281,14 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
           if (OB_SUCC(ret)) {
             ret = (num <= 0 || num >= MAX_BUFFER_SIZE) ? OB_ERR_INVALID_CONDITION_NUMBER : ret;
           }
-        } else if (T_INT == const_expr->get_expr_type() && const_expr->get_value().is_integer_type()) {
-          num = const_expr->get_value().get_int();
+        } else if (T_INT == const_expr->get_expr_type() && ob_is_integer_type(const_expr->get_value_meta().get_type())) {
+          num = const_expr->get_value_datum().get_int();
           if (OB_SUCC(ret)) {
             ret = (num <= 0 || num >= MAX_BUFFER_SIZE) ? OB_ERR_INVALID_CONDITION_NUMBER : ret;
           }
         } else if (T_VARCHAR == cond_argument->get_expr_type()) {
           //to make '12321' string be a number, 'as2da3' string still be a string.
-          ObString arg_str = const_expr->get_value().get_string();
+          ObString arg_str = const_expr->get_value_datum().get_string();
           if (arg_str.ptr() == NULL) {
             ret = OB_ERR_INVALID_CONDITION_NUMBER;
           } else {
@@ -307,10 +307,10 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
         if (OB_ISNULL(func_expr->get_param_expr(0))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_UNLIKELY(!func_expr->get_param_expr(0)->is_const_raw_expr()
-          || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().is_varchar())) {
+          || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value_meta().is_varchar())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const ObString var_name = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().get_varchar();
+          const ObString var_name = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value_datum().get_string();
           DatumValue value;
           int64_t number = 0;
           if (OB_FAIL(session_info->get_user_variable_value(var_name, value))) {
@@ -480,10 +480,10 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
         if (OB_ISNULL(func_expr->get_param_expr(0))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_UNLIKELY(!func_expr->get_param_expr(0)->is_const_raw_expr()
-          || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().is_varchar())) {
+          || !static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value_meta().is_varchar())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          var = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value().get_varchar();
+          var = static_cast<const ObConstRawExpr*>(func_expr->get_param_expr(0))->get_value_datum().get_string();
         }
         if (OB_FAIL(ret)) {
         } else if (val == "NUMBER") {
@@ -509,7 +509,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
           DatumParameter origin_obj;
           ObCollationType collation_type;
           char str[50] = {0};
-          int64_t idx = const_expr->get_value().get_unknown();
+          int64_t idx = const_expr->get_questionmark_index();
           idx = stmt.get_origin_param_index(idx);
           CK (idx != OB_INVALID_INDEX);
           CK (idx < pl_state->get_function().get_variables().count());

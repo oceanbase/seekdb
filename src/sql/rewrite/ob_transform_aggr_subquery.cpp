@@ -1095,11 +1095,13 @@ int ObTransformAggrSubquery::add_constraints_for_limit(TransformParam &param)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(true_expr->set_param_exprs(value_expr, zero_expr))) {
   } else {
-    DatumValue obj_zero, obj_value;
-    OZ (obj_zero.set_int(ObIntType, 0, ctx_->expr_factory_->get_allocator()));
-    OZ (obj_value.set_int(ObIntType, param.limit_value_, ctx_->expr_factory_->get_allocator()));
-    OX (zero_expr->set_value(obj_zero));
-    OX (value_expr->set_value(obj_value));
+    Datum zero, value;
+    SqlTypeMeta meta;
+    meta.set_int();
+    zero.set_int(0);
+    value.set_int(param.limit_value_);
+    OZ (zero_expr->set_value_borrowed(zero, meta));
+    OZ (value_expr->set_value_borrowed(value, meta));
   }
   if (OB_SUCC(ret) && param.limit_for_exists_) {
     if (OB_FAIL(true_expr->formalize(ctx_->exec_ctx_->get_my_session()))) {
@@ -1401,12 +1403,12 @@ int ObTransformAggrSubquery::check_limit_validity(ObSelectStmt &subquery,
                            && T_QUESTIONMARK != limit_expr->get_expr_type())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (T_INT == limit_expr->get_expr_type() && 
-              0 == static_cast<ObConstRawExpr *>(limit_expr)->get_value().get_int()) {
+              0 == static_cast<ObConstRawExpr *>(limit_expr)->get_value_datum().get_int()) {
     is_valid = false;
   } else if (T_QUESTIONMARK == limit_expr->get_expr_type()) {
     int64_t const_value = 0;
     DatumParameter value;
-    int64_t idx = static_cast<ObConstRawExpr *>(limit_expr)->get_value().get_unknown();
+    int64_t idx = static_cast<ObConstRawExpr *>(limit_expr)->get_questionmark_index();
     const ParamStore &param_store = plan_ctx->get_param_store();
       
     if (idx < 0 || idx >= param_store.count()) {

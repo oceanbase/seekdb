@@ -55,10 +55,10 @@ int ObExprAlignDate4Cmp::calc_result_type3(ObExprResType &type,
       if (OB_ISNULL(const_param)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        if (const_param->get_value().is_null()) {
+        if (const_param->get_value_datum().is_null()) {
           type.set_null();
         } else {
-          SqlValueType res_type = SqlValueType(const_param->get_value().get_int());
+          SqlValueType res_type = SqlValueType(const_param->get_value_datum().get_int());
           switch(res_type) {
             case ObNullType: {
               type.set_null();

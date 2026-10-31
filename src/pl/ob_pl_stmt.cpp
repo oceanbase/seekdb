@@ -2736,7 +2736,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
       // do nothing, %final_type already fetched
     } else if (T_QUESTIONMARK == expr.get_expr_type()) {
       CK (OB_NOT_NULL(ns.get_symbol_table()));
-      int64_t var_index = static_cast<const ObConstRawExpr&>(expr).get_value().get_int();
+      int64_t var_index = static_cast<const ObConstRawExpr&>(expr).get_value_datum().get_int();
       const ObPLVar *var = ns.get_symbol_table()->get_symbol(var_index);
       CK (OB_NOT_NULL(var));
       OX (final_type = var->get_pl_data_type());
@@ -2834,18 +2834,18 @@ int ObPLInto::calc_type_constraint(const sql::ObRawExpr &expr,
 do {  \
   const ObConstRawExpr *c_expr = static_cast<const ObConstRawExpr*>(expr); \
   CK (OB_NOT_NULL(c_expr)); \
-  CK (c_expr->get_value().is_uint64() \
-      || c_expr->get_value().is_int() \
-      || c_expr->get_value().is_unknown()); \
-  OX (val = c_expr->get_value().is_uint64() ? c_expr->get_value().get_uint64() \
-        : c_expr->get_value().is_int() ? c_expr->get_value().get_int() \
-        : c_expr->get_value().get_unknown()); \
+  CK (c_expr->get_value_meta().is_uint64() \
+      || c_expr->get_value_meta().is_int() \
+      || c_expr->get_value_meta().is_unknown()); \
+  OX (val = c_expr->get_value_meta().is_uint64() ? c_expr->get_value_datum().get_uint64() \
+        : c_expr->get_value_meta().is_int() ? c_expr->get_value_datum().get_int() \
+        : c_expr->get_questionmark_index()); \
 } while (0)
 
   if (T_QUESTIONMARK == expr.get_expr_type()) {
     const ObConstRawExpr &const_expr = static_cast<const ObConstRawExpr&>(expr);
     OZ (ObPLResolver::get_local_variable_constraint(
-      ns, const_expr.get_value().get_unknown(), flag, range));
+      ns, const_expr.get_questionmark_index(), flag, range));
   } else if (T_OBJ_ACCESS_REF == expr.get_expr_type()) {
     const ObObjAccessRawExpr &obj_access_expr = static_cast<const ObObjAccessRawExpr&>(expr);
     pl::ObPLDataType final_type;

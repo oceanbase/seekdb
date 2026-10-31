@@ -1004,6 +1004,59 @@ int DatumParameterCodec::decode_unis_native_value(const char *buf, int64_t lengt
   return archive.ret_;
 }
 
+int DatumParameterCodec::borrow_raw_constant_value(const ObDatum &source, const SqlTypeMeta &meta,
+                                                   Datum &output)
+{
+  int ret = OB_SUCCESS;
+  Datum candidate;
+  if (!valid_schema_legacy(source, meta)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (meta.is_unknown() && !source.is_null()) {
+    candidate.set_int(schema_load<int64_t>(source.ptr_));
+  } else {
+    ret = borrow_schema_native(source, meta, candidate);
+  }
+  if (ret == OB_SUCCESS) { output = candidate; }
+  return ret;
+}
+
+int DatumParameterCodec::export_raw_constant_value(const Datum &source, const SqlTypeMeta &meta,
+                                                   ObDatum &output, void *scratch, int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  ObDatum candidate;
+  if (meta.is_unknown() && !source.is_null()) {
+    if (!source.is_present() || source.length() != 0
+        || source.reference_flags() != Datum::NoReferenceFlags || capacity < 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = export_schema_scalar(source.get_int(), candidate, scratch, capacity);
+    }
+  } else {
+    ret = export_schema_legacy_value(source, meta, candidate, scratch, capacity);
+  }
+  if (ret == OB_SUCCESS && !valid_schema_legacy(candidate, meta)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (ret == OB_SUCCESS) { output = candidate; }
+  return ret;
+}
+
+int DatumParameterCodec::clone_raw_constant_value(const Datum &source, const SqlTypeMeta &meta,
+                                                  ObIAllocator &allocator, Datum &output)
+{
+  int ret = OB_SUCCESS;
+  if (meta.is_unknown()) {
+    alignas(8) char scratch[sizeof(int64_t)];
+    ObDatum view;
+    if (OB_FAIL(export_raw_constant_value(source, meta, view, scratch, sizeof(scratch)))) {
+    } else { output = source; }
+  } else {
+    ret = clone_schema_native_value(source, meta, allocator, output);
+  }
+  return ret;
+}
+
 int DatumParameterCodec::parameter_size(const DatumParameter &source, int64_t &size)
 {
   SizeArchive archive;

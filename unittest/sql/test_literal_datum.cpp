@@ -171,6 +171,30 @@ TEST(LiteralDatum, all_literal_branches_preserve_values_metadata_and_flags) {
         ObString prefix;
         const int new_ret = resolve(input, native_arena, native, prefix, ctx);
         ASSERT_EQ(old_ret, new_ret);
+        ObArenaAllocator raw_arena;
+        ObConstRawExpr raw;
+        ASSERT_EQ(OB_SUCCESS, raw.set_value_borrowed(sentinel()));
+        ObString raw_prefix;
+        ASSERT_EQ(old_ret, resolve(input, raw_arena, raw, raw_prefix, ctx));
+        EXPECT_EQ(unhex(expected[3]), std::string(raw_prefix.ptr() ? raw_prefix.ptr() : "", raw_prefix.length()));
+        alignas(8) char raw_scratch[64];
+        DatumValue raw_value;
+        ASSERT_EQ(OB_SUCCESS, raw.export_value(raw_value, raw_scratch, sizeof(raw_scratch)));
+        if (OB_SUCCESS == old_ret) {
+          EXPECT_EQ(bytes(native.get_type_meta()), bytes(raw_value.get_meta()));
+          EXPECT_EQ(bytes(native.get_param_meta()), bytes(raw.get_expr_obj_meta()));
+          EXPECT_EQ(native.datum_.pack_, raw_value.datum_.pack_);
+          EXPECT_EQ(std::string(native.datum_.ptr_ ? native.datum_.ptr_ : "", native.datum_.len_),
+                    std::string(raw_value.datum_.ptr_ ? raw_value.datum_.ptr_ : "", raw_value.datum_.len_));
+          if (!native.is_unknown()) {
+            EXPECT_EQ(native.get_accuracy().get_accuracy(), raw.get_accuracy().get_accuracy());
+            EXPECT_EQ(native.get_result_flag(), raw.get_result_type().get_result_flag());
+          }
+        } else {
+          EXPECT_EQ(31415, raw.get_value_datum().get_int());
+          EXPECT_EQ(bytes(sentinel().get_type_meta()), bytes(raw.get_value_meta()));
+          EXPECT_EQ(31415, raw.get_bound_param_datum().get_int());
+        }
         EXPECT_EQ(unhex(expected[3]), std::string(prefix.ptr() ? prefix.ptr() : "", prefix.length()));
         ++compared;
         if (OB_SUCCESS != old_ret) {

@@ -25,6 +25,7 @@
 #include "lib/rc/context.h"
 #include "common/ob_range.h"
 #include "common/ob_accuracy.h"
+#include "common/datum/datum.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "share/schema/ob_schema_utils.h"
 #include "sql/ob_sql_define.h"
@@ -2580,7 +2581,10 @@ public:
       is_dynamic_eval_questionmark_(false),
       orig_questionmark_type_()
   {
-    set_value(val);
+    // This convenience constructor accepts already valid internal values.
+    // Fallible producers use the factory/default constructor and checked setter.
+    const int ret = set_value_borrowed(val);
+    OB_ASSERT(common::OB_SUCCESS == ret);
     set_expr_class(EXPR_CONST);
     extra_.array_param_group_id_ = -1;
   }
@@ -2589,19 +2593,37 @@ public:
   int inner_deep_copy(ObIRawExprCopier &copier) override;
   virtual int replace_expr(const common::ObIArray<ObRawExpr *> &other_exprs,
                            const common::ObIArray<ObRawExpr *> &new_exprs);
-  // Borrow payloads owned by the expression/plan arena. Producers allocating
-  // scalars must check their explicit-owner setter before publishing this view.
-  void set_value(const oceanbase::common::DatumValue &val);
-  void set_value(const common::DatumParameter &val) { set_value(val.value_view()); }
+  // Values use the Raw historical physical domain, independently of inferred
+  // result_type_. Scalars are copied inline; references borrow the producer.
+  // Only inner_deep_copy owns referenced bytes/the existing SQL-array graph.
+  int set_value_borrowed(const common::Datum &value, const common::SqlTypeMeta &meta);
+  int set_value_borrowed(const common::DatumValue &value);
+  int set_value_borrowed(const common::DatumParameter &value);
+  int set_bound_param_borrowed(const common::Datum &value, const common::SqlTypeMeta &meta);
+  int set_bound_param_borrowed(const common::DatumValue &value);
+  int set_bound_param_borrowed(const common::DatumParameter &value);
+  // Replacement of the former mutable value reference: do not change param,
+  // result_type_ or obj_meta_. A type-changing operation must supply its newly
+  // converted value, not relabel the old union member.
+  int replace_value_borrowed(const common::Datum &value, const common::SqlTypeMeta &meta);
+  int replace_value_borrowed(const common::DatumValue &value);
+  int replace_value_borrowed(const common::DatumParameter &value);
   void set_literal_prefix(const common::ObString &name);
-  void set_obj_param(const oceanbase::common::DatumValue &param);
-  void set_obj_param(const common::DatumParameter &param) { set_obj_param(param.value_view()); }
   void set_expr_obj_meta(const common::SqlTypeMeta &meta) { obj_meta_ = meta; }
-  common::DatumValue &get_value() { return value_; }
-  const common::DatumValue &get_value() const  { return value_; }
+  const common::Datum &get_value_datum() const { return value_; }
+  const common::SqlTypeMeta &get_value_meta() const { return value_meta_; }
+  const common::Datum &get_bound_param_datum() const { return param_; }
+  const common::SqlTypeMeta &get_bound_param_value_meta() const { return param_meta_; }
+  int export_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_bound_param(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  // Question marks are structural inline I64, including the route-only invalid
+  // sentinel. This writer only replaces value/meta; initial creation uses the
+  // full set_value_borrowed() update contract.
+  int set_questionmark_index(int64_t index);
+  int get_questionmark_index(int64_t &index) const;
+  int64_t get_questionmark_index() const;
   const common::SqlTypeMeta &get_expr_obj_meta() const { return obj_meta_; }
   const common::ObString &get_literal_prefix() const { return literal_prefix_; }
-  const common::DatumValue &get_param() const { return param_; }
   void set_is_date_unit();
   bool is_date_unit() {return true == is_date_unit_; }
   virtual void reset();
@@ -2628,11 +2650,13 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 
 protected:
-  common::DatumValue value_;
+  common::Datum value_;
+  common::SqlTypeMeta value_meta_;
 private:
   common::ObString literal_prefix_; // only used at compile time, irrelevant at runtime
   common::SqlTypeMeta obj_meta_;
-  common::DatumValue param_;
+  common::Datum param_;
+  common::SqlTypeMeta param_meta_;
   bool is_date_unit_;
   // for mysql mode to distinguish tinyint and literal bool
   bool is_literal_bool_;

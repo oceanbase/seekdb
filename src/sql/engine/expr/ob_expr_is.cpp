@@ -51,10 +51,10 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
     ObConstRawExpr *const_param2 = static_cast<ObConstRawExpr *>(param2);
     if (OB_ISNULL(const_param2)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (ObDoubleType == const_param2->get_value().get_type()) {
+    } else if (ObDoubleType == const_param2->get_value_meta().get_type()) {
         type1.set_calc_type(ObDoubleType);
         type1.set_calc_accuracy(type1.get_accuracy());
-    } else if (!const_param2->get_value().is_null()) {  // is true/false
+    } else if (!const_param2->get_value_datum().is_null()) {  // is true/false
       if (ob_is_numeric_type(type1.get_type())) {
         type1.set_calc_meta(type1.get_sql_type_meta());
         type1.set_calc_accuracy(type1.get_accuracy());
@@ -202,16 +202,16 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
-  } else if (param2->get_value().is_null()) {  // c1 is null
+  } else if (param2->get_value_datum().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIs::calc_is_null;
-  } else if (param2->get_value().is_true()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() != 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, true))) {
     }
-  } else if (param2->get_value().is_false()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() == 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, false))) {
     }
-  } else if (ObDoubleType == param2->get_value().get_type()) {
-    if (isnan(param2->get_value().get_double())) {
+  } else if (ObDoubleType == param2->get_value_meta().get_type()) {
+    if (isnan(param2->get_value_datum().get_double())) {
       rt_expr.eval_func_ = ObExprIs::calc_is_nan;
     } else {
       rt_expr.eval_func_ = ObExprIs::calc_is_infinite;
@@ -232,17 +232,17 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
-  } else if (param2->get_value().is_null()) {  // c1 is null
+  } else if (param2->get_value_datum().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIsNot::calc_is_not_null;
     rt_expr.eval_batch_func_ = ObExprIsNot::calc_batch_is_not_null;
-  } else if (param2->get_value().is_true()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() != 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, true))) {
     }
-  } else if (param2->get_value().is_false()) {
+  } else if ((!param2->get_value_datum().is_null() && ob_is_int_tc(param2->get_value_meta().get_type()) && param2->get_value_datum().get_int() == 0)) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, false))) {
     }
-  } else if (ObDoubleType == param2->get_value().get_type()) {
-    if (isnan(param2->get_value().get_double())) {
+  } else if (ObDoubleType == param2->get_value_meta().get_type()) {
+    if (isnan(param2->get_value_datum().get_double())) {
       rt_expr.eval_func_ = ObExprIsNot::calc_is_not_nan;
     } else {
       rt_expr.eval_func_ = ObExprIsNot::calc_is_not_infinite;
@@ -416,12 +416,12 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
     OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(!param2->get_value().is_int())) {
+    } else if (OB_UNLIKELY(!param2->get_value_meta().is_int())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("const value is not int type", KPC(param2));
     } else {
       param1_type = rt_expr.args_[0]->datum_meta_.type_;
-      bool is_start = param2->get_value().get_int() > 0;
+      bool is_start = param2->get_value_datum().get_int() > 0;
       switch (param1_type) {
       case ObTinyIntType:
       case ObSmallIntType:

@@ -455,8 +455,8 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
     const ObRawExpr *into = s->get_into_expr(i);
     if (OB_NOT_NULL(into) && into->is_const_raw_expr()) {
       const ObConstRawExpr *c = static_cast<const ObConstRawExpr *>(into);
-      if (c->get_value().is_unknown()) {
-        result_idx = c->get_value().get_unknown();
+      if (c->get_value_meta().is_unknown()) {
+        result_idx = c->get_questionmark_index();
       }
     }
     if (OB_INVALID_INDEX != result_idx) {

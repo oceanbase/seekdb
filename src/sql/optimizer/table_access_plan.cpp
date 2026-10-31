@@ -2252,10 +2252,13 @@ int TableAccessPlan::add_se_value_expr(const ObRawExpr *value_expr,
   } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(value_expr->get_expr_type())) { // is const
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(value_expr);
     if (T_QUESTIONMARK == const_expr->get_expr_type()) {
-      vie.idx_ = const_expr->get_value().get_unknown();
+      vie.idx_ = const_expr->get_questionmark_index();
       OX(vie.type_ = QUESTMARK_TYPE);
     } else {
-      OZ(clone_typed_value(const_expr->get_value(), vie.value_, allocator_));
+      DatumValue view;
+      alignas(8) char scratch[64];
+      OZ(const_expr->export_value(view, scratch, sizeof(scratch)));
+      OZ(clone_typed_value(view, vie.value_, allocator_));
       OX(vie.type_ = CONST_OBJ_TYPE);
     }
   } else { // not const, generate expr
@@ -2654,9 +2657,11 @@ int TableAccessPlan::extract_eq_op(ObExecContext *exec_ctx,
                      || T_QUESTIONMARK == param_pair.expr_->get_expr_type()) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            const DatumValue &expect_val = static_cast<const ObConstRawExpr*>(param_pair.expr_)->get_value();
-            DatumValue dst;
-            if (OB_FAIL(clone_typed_value(expect_val, dst, allocator_))) {
+            DatumValue expect_val, dst;
+            alignas(8) char scratch[64];
+            if (OB_FAIL(static_cast<const ObConstRawExpr*>(param_pair.expr_)->export_value(
+                expect_val, scratch, sizeof(scratch)))) {
+            } else if (OB_FAIL(clone_typed_value(expect_val, dst, allocator_))) {
             } else if (OB_FAIL(node->param_value_.push_back(
                 ObPLFuncValueNode::ParamValuePair(param_pair.param_idx_, dst)))) {
             } else { }//do nothing
@@ -2704,10 +2709,13 @@ int TableAccessPlan::extract_value_item_expr(ObExecContext *exec_ctx,
   } else if (expr->is_const_or_param_expr()) {
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(expr);
     if (T_QUESTIONMARK == const_expr->get_expr_type()) {
-      vie.idx_ = const_expr->get_value().get_unknown();
+      vie.idx_ = const_expr->get_questionmark_index();
       vie.type_ = QUESTMARK_TYPE;
     } else {
-      if (OB_FAIL(clone_typed_value(const_expr->get_value(), vie.value_, allocator_))) {
+      DatumValue view;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(clone_typed_value(view, vie.value_, allocator_))) {
       } else {
         vie.type_ = CONST_OBJ_TYPE;
       }

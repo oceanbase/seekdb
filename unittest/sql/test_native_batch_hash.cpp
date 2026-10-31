@@ -100,7 +100,7 @@ public:
         ASSERT_EQ(OB_SUCCESS, factory_.create_raw_expr(T_INT, constant));
         DatumValue value;
         ASSERT_EQ(OB_SUCCESS, value.set_int(col == 0 ? -11 : 17, owner_));
-        constant->set_value(value);
+        ASSERT_EQ(OB_SUCCESS, constant->set_value_borrowed(value));
         argument_raw_[col] = constant;
       } else {
         ObColumnRefRawExpr *column = nullptr;

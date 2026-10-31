@@ -98,7 +98,7 @@ public:
                               const ObString &str_pad,
                               ObIAllocator &res_alloc,
                               Datum &res);
-  int get_origin_len_obj(common::DatumValue &len_obj) const;
+  int get_origin_len_obj(common::DatumValue &len_obj, void *scratch, int64_t capacity) const;
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprBaseLRpad);

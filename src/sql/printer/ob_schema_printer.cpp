@@ -831,7 +831,7 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
                   column_name,
                   new_col_name))) {
       }else {
-        const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value().get_int();
+        const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value_datum().get_int();
         if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                            is_last ? "(%ld))" : "(%ld), ", const_value))) {
@@ -1728,7 +1728,7 @@ int ObSchemaPrinter::print_index_definition_columns(
                     ret = OB_ERR_UNEXPECTED;
                     OB_LOG(WARN, "expr type is not int", K(ret));
                   } else {
-                    const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value().get_int();
+                    const_value = (static_cast<sql::ObConstRawExpr*>(t_expr2))->get_value_datum().get_int();
                     if (OB_FAIL(print_identifier(buf, buf_len, pos, column_name))) {
                     } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "(%ld)", const_value))) {
                     }

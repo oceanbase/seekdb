@@ -49,14 +49,14 @@ int ObRawExprDeduceType::visit(ObConstRawExpr &expr)
   }
   default: {
     //for testing
-    if (expr.get_expr_obj_meta()!= expr.get_value().get_meta()) {
+    if (expr.get_expr_obj_meta()!= expr.get_value_meta()) {
       LOG_DEBUG("meta is not suited",
-                K(expr.get_value().get_type()),
+                K(expr.get_value_meta().get_type()),
                 K(expr.get_expr_obj_meta().get_type()),
                 K(ret));
     }
     expr.set_meta_type(expr.get_expr_obj_meta());
-    //expr.set_meta_type(expr.get_value().get_meta());
+    //expr.set_meta_type(expr.get_value_meta());
     if (!expr.get_result_type().is_null()) {
       expr.set_result_flag(NOT_NULL_FLAG);
     }
@@ -210,9 +210,14 @@ int ObRawExprDeduceType::calc_result_type_with_const_arg(
   int ret = OB_SUCCESS;
   bool all_const = false;
   ObArray<const DatumValue*> arg_arrs;
-  if (0 <= expr.get_param_count()) {
+  struct LegacyScratch { alignas(8) char bytes_[64]; };
+  ObSEArray<LegacyScratch, 4> scratch;
+  ObSEArray<DatumValue, 4> values;
+  OZ (scratch.prepare_allocate(expr.get_param_count()));
+  OZ (values.prepare_allocate(expr.get_param_count()));
+  if (OB_SUCC(ret) && 0 <= expr.get_param_count()) {
     all_const = true;
-    for (int64_t i = 0; all_const && i < expr.get_param_count(); ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && all_const && i < expr.get_param_count(); ++i) {
       ObRawExpr *arg = expr.get_param_expr(i);
       if (OB_ISNULL(arg)) {
         ret = OB_INVALID_ARGUMENT;
@@ -220,8 +225,10 @@ int ObRawExprDeduceType::calc_result_type_with_const_arg(
         all_const = false;
         ret = OB_INVALID_ARGUMENT;
       } else {
-        const DatumValue &value = static_cast<ObConstRawExpr*>(arg)->get_value();
-        if (value.is_unknown()) {
+        const ObConstRawExpr *constant = static_cast<ObConstRawExpr *>(arg);
+        DatumValue &value = values.at(i);
+        if (OB_FAIL(constant->export_value(value, scratch.at(i).bytes_, sizeof(scratch.at(i).bytes_)))) {
+        } else if (value.is_unknown()) {
           // By const parameter determines type, cannot be parameterized
           ret = OB_INVALID_ARGUMENT;
         } else if (OB_FAIL(arg_arrs.push_back(&value))) {
@@ -386,7 +393,21 @@ int ObRawExprDeduceType::push_back_types(const ObRawExpr *param_expr, ObIExprRes
     // make the result type compatible with orale/mysql
     if (param_expr->is_const_raw_expr()) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(param_expr);
-      types.at(idx).set_param(const_expr->get_param());
+      // This old type-deduction input retains a descriptor beyond this call.
+      // Reference bytes stay with the Raw owner. Only the visitor-local
+      // ObExprResType (not the published ObRawExprResType) retains this param;
+      // inline bytes therefore live in the deducer's existing scratch owner.
+      alignas(8) char scratch[64];
+      DatumValue value;
+      if (OB_FAIL(const_expr->export_bound_param(value, scratch, sizeof(scratch)))) {
+      } else if (value.datum_.ptr_ == scratch && value.datum_.len_ > 0) {
+        ObDatum owned;
+        if (OB_FAIL(owned.deep_copy(value.datum_, alloc_))) {
+        } else {
+          value.datum_ = owned;
+        }
+      }
+      OX (types.at(idx).set_param(value));
     }
     if (ob_is_decimal_int_tc(param_expr->get_result_type().get_type()) &&
         T_FUN_SYS_CAST == param_expr->get_expr_type()) {
@@ -622,9 +643,12 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
          */
         result_type.set_accuracy(expr.get_accuracy());
       }
-      // FIXME (xiaochu.yh) What is the meaning of this sentence?
-      // Where will op be used after this, CG phase will reallocate an op and not use this one.
-      op->set_result_type(result_type);
+      // A type kernel may propagate a literal param backed by the deducer's
+      // scratch owner. Cache metadata only; the input and local result types
+      // retain their params for the remaining type-deduction work.
+      ObExprResType cached_result_type = result_type;
+      cached_result_type.set_param(DatumValue());
+      op->set_result_type(cached_result_type);
       if (is_lob_param_conversion_exempt(expr.get_expr_type())) {
         // do nothing
       }
@@ -1231,7 +1255,7 @@ int ObRawExprDeduceType::set_json_agg_result_type(ObAggFunRawExpr &expr, ObExprR
           LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "CHAR", sql_value_type_to_string(col_type.get_type()));
         } else {
           ParseNode parse_node;
-          parse_node.value_ = static_cast<ObConstRawExpr *>(return_type_expr)->get_value().get_int();
+          parse_node.value_ = static_cast<ObConstRawExpr *>(return_type_expr)->get_value_datum().get_int();
           ObScale scale = static_cast<ObConstRawExpr *>(return_type_expr)->get_accuracy().get_scale();
           bool is_json_type = (scale == 1) && (col_type.get_type_class() == ObJsonTC);
           is_json_type = (is_json_type || parse_node.value_ == 0);
@@ -1848,10 +1872,14 @@ int ObRawExprDeduceType::deduce_type_visit_for_special_func(int64_t param_index,
     LOG_WARN("column conv function other params are const expr", K(expr), K(param_index));
   } else {
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(&expr);
+    alignas(8) char scratch[64];
+    DatumValue value;
+    OZ (const_expr->export_value(value, scratch, sizeof(scratch)));
+    if (OB_FAIL(ret)) { return ret; }
     switch (param_index) {
     case 0: {
       int32_t type_value = -1;
-      if (OB_FAIL(const_expr->get_value().get_int32(type_value))) {
+      if (OB_FAIL(value.get_int32(type_value))) {
       } else {
         dest_type.set_type(static_cast<SqlValueType>(type_value));
         if (ob_is_enumset_tc(dest_type.get_type()) || dest_type.is_collection_sql_type()) {
@@ -1866,7 +1894,7 @@ int ObRawExprDeduceType::deduce_type_visit_for_special_func(int64_t param_index,
     }
     case 1: {
       int32_t collation_value = -1;
-      if (OB_FAIL(const_expr->get_value().get_int32(collation_value))) {
+      if (OB_FAIL(value.get_int32(collation_value))) {
       } else {
         dest_type.set_collation_type(static_cast<ObCollationType>(collation_value));
       }
@@ -1875,7 +1903,7 @@ int ObRawExprDeduceType::deduce_type_visit_for_special_func(int64_t param_index,
     case 2: {
       int64_t accuracy_value = -1;
       ObAccuracy accuracy;
-      if (OB_FAIL(const_expr->get_value().get_int(accuracy_value))) {
+      if (OB_FAIL(value.get_int(accuracy_value))) {
       } else {
         accuracy.set_accuracy(accuracy_value);
         dest_type.set_accuracy(accuracy);
@@ -1884,7 +1912,7 @@ int ObRawExprDeduceType::deduce_type_visit_for_special_func(int64_t param_index,
     }
     case 3: {
       bool is_nullable = false;
-      if (OB_FAIL(const_expr->get_value().get_bool(is_nullable))) {
+      if (OB_FAIL(value.get_bool(is_nullable))) {
       } else if (!is_nullable) {
         dest_type.set_result_flag(NOT_NULL_FLAG);
       }
@@ -1944,7 +1972,7 @@ int ObRawExprDeduceType::adjust_cast_as_signed_unsigned(ObSysFunRawExpr &expr)
     SqlTypeClass src_tc = sql_type_class(src_type);
     ParseNode node;
     ObConstRawExpr *const_expr = static_cast<ObConstRawExpr*>(param_expr2);
-    node.value_ = const_expr->get_param().get_int();
+    node.value_ = const_expr->get_bound_param_datum().get_int();
     const SqlValueType obj_type = static_cast<SqlValueType>(node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
     SqlValueType dst_type = ObMaxType;
     if (ObIntTC == src_tc && ObUInt64Type == obj_type) {
@@ -1957,11 +1985,12 @@ int ObRawExprDeduceType::adjust_cast_as_signed_unsigned(ObSysFunRawExpr &expr)
       dst_type = INT_OPPOSITE_SIGNED_INT_TYPE[src_type];
     }
     if (ObMaxType != dst_type && obj_type != dst_type) {
-      DatumValue val;
+      Datum val;
+      SqlTypeMeta meta;
       node.int16_values_[OB_NODE_CAST_TYPE_IDX] = static_cast<int16_t>(dst_type);
-      CK (const_expr->get_value_allocator() != nullptr);
-      OZ (val.set_int(node.value_, *const_expr->get_value_allocator()));
-      OX (const_expr->set_value(val));
+      meta.set_int();
+      val.set_int(node.value_);
+      OZ (const_expr->set_value_borrowed(val, meta));
     }
   }
   return ret;
@@ -2523,7 +2552,7 @@ int ObRawExprDeduceType::set_agg_json_array_result_type(ObAggFunRawExpr &expr,
     ret = OB_INVALID_ARGUMENT;
   } else {
     ParseNode parse_node;
-    parse_node.value_ = static_cast<ObConstRawExpr *>(returning_type)->get_value().get_int();
+    parse_node.value_ = static_cast<ObConstRawExpr *>(returning_type)->get_value_datum().get_int();
     SqlValueType obj_type = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]);
     result_type.set_collation_type(static_cast<ObCollationType>(parse_node.int16_values_[OB_NODE_CAST_COLL_IDX]));
     result_type.set_type(obj_type);
@@ -3130,11 +3159,11 @@ int ObRawExprDeduceType::try_replace_cast_with_questionmark_ora(ObRawExpr &paren
         int64_t param_idx = 0;
         if (OB_ISNULL(expr_factory_)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(c_expr->get_value().get_unknown(param_idx))) {
+        } else if (OB_FAIL(c_expr->get_questionmark_index(param_idx))) {
         } else if (OB_FAIL(ObRawExprUtils::create_param_expr(*expr_factory_, param_idx, param_expr))) {
         } else if (OB_FAIL(static_cast<ObConstRawExpr *>(param_expr)->set_dynamic_eval_questionmark(res_type))) {
         } else {
-          static_cast<ObConstRawExpr *>(param_expr)->set_obj_param(c_expr->get_param());
+          OZ (static_cast<ObConstRawExpr *>(param_expr)->set_bound_param_borrowed(c_expr->get_bound_param_datum(), c_expr->get_bound_param_value_meta()));
           parent.get_param_expr(child_idx) = param_expr;
         }
       }

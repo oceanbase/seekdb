@@ -2228,9 +2228,9 @@ bool ObJsonExprHelper::check_json_path_can_pushdown(const ObRawExpr &path_expr)
     LOG_INFO("path expr is not const expr, so not support", K(path_expr));
   } else {
     const ObConstRawExpr &const_param = static_cast<const ObConstRawExpr &>(path_expr);
-    const DatumValue &path_value = const_param.get_value();
+    const Datum &path_value = const_param.get_value_datum();
     share::ObSubColumnPath sub_col_path;
-    if (! path_value.is_string_type() || path_value.is_null()) {
+    if (! const_param.get_value_meta().is_string_type() || path_value.is_null()) {
       LOG_INFO("path expr is not string, so not support", K(path_value), K(const_param));
     } else if (OB_SUCCESS != share::ObSubColumnPath::parse_sub_column_path(path_value.get_string(), sub_col_path)) {
     } else {
@@ -2272,18 +2272,18 @@ bool ObJsonExprHelper::check_json_expr_can_pushdown(const ObRawExpr &json_expr)
     } else if (! type_expr->is_const_raw_expr()) {
       LOG_INFO("returning type is not const, so do not pushdown", KPC(type_expr), K(json_expr));
     // check trunc expr
-    } else if (! trunc_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(trunc_expr)->get_value().get_int() != 0) {
+    } else if (! trunc_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(trunc_expr)->get_value_datum().get_int() != 0) {
       LOG_INFO("truncate expr is not default value, so do not support pushdown", KPC(trunc_expr), K(json_expr));
     // check ascii expr
-    } else if (! ascii_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(ascii_expr)->get_value().get_int() != 0) {
+    } else if (! ascii_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(ascii_expr)->get_value_datum().get_int() != 0) {
       LOG_INFO("ascii expr not default value, so do not support pushdown", KPC(ascii_expr), K(json_expr));
-    } else if (! empty_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(empty_expr)->get_value().get_int() != JSN_VALUE_IMPLICIT) {
+    } else if (! empty_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(empty_expr)->get_value_datum().get_int() != JSN_VALUE_IMPLICIT) {
       LOG_INFO("empty clause expr not default value, so do not support pushdown", KPC(empty_expr), K(json_expr));
-    } else if (! empty_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(empty_def_expr)->get_value().is_null()) {
+    } else if (! empty_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(empty_def_expr)->get_value_datum().is_null()) {
       LOG_INFO("empty define clause expr not default value, so do not support pushdown", KPC(empty_def_expr), K(json_expr));
-    } else if (! error_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(error_expr)->get_value().get_int() != JSN_VALUE_IMPLICIT) {
+    } else if (! error_expr->is_const_raw_expr() || static_cast<const ObConstRawExpr *>(error_expr)->get_value_datum().get_int() != JSN_VALUE_IMPLICIT) {
       LOG_INFO("error clause expr not default value, so do not support pushdown", KPC(error_expr), K(json_expr));
-    } else if (! error_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(error_def_expr)->get_value().is_null()) {
+    } else if (! error_def_expr->is_const_raw_expr() || ! static_cast<const ObConstRawExpr *>(error_def_expr)->get_value_datum().is_null()) {
       LOG_INFO("error define clause expr not default value, so do not support pushdown", KPC(error_def_expr), K(json_expr));
     } else {
       res = true;
@@ -2306,8 +2306,8 @@ int ObJsonExprHelper::get_sub_column_path_from_json_expr(ObIAllocator& allocator
       ret = OB_ERR_UNEXPECTED;
     } else {
       const ObConstRawExpr *const_param = static_cast<const ObConstRawExpr *>(path_expr);
-      const DatumValue &path_value = const_param->get_value();
-      if (! path_value.is_string_type() || path_value.is_null()) {
+      const Datum &path_value = const_param->get_value_datum();
+      if (! const_param->get_value_meta().is_string_type() || path_value.is_null()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ob_write_string(allocator, path_value.get_string(), path_str))) {
       } else if (OB_FAIL(share::ObSubColumnPath::parse_sub_column_path(path_str, sub_col_path))) {

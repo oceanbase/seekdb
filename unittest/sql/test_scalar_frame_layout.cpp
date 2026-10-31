@@ -182,7 +182,7 @@ void verify_parameter_layout(int64_t original, int64_t count,
   for (const ExpectedSlot &slot : expected) {
     DatumValue index;
     ASSERT_EQ(OB_SUCCESS, index.set_unknown(slot.parameter_, owner));
-    raw[n].set_value(index);
+    ASSERT_EQ(OB_SUCCESS, raw[n].set_value_borrowed(index));
     raw[n].set_expr_type(T_QUESTIONMARK);
     raw[n].set_rt_expr(&expr[n]);
     expr[n].type_ = T_QUESTIONMARK;
@@ -256,7 +256,8 @@ protected:
     const ObItemType kinds[] = {T_INT, T_VARCHAR, T_NULL};
     ObSEArray<ObRawExpr *, 3> selected;
     for (int64_t i = 0; i < 3; ++i) {
-      raw_[i].set_value(value[i]); raw_[i].set_expr_type(kinds[i]);
+      ASSERT_EQ(OB_SUCCESS, raw_[i].set_value_borrowed(value[i]));
+      raw_[i].set_expr_type(kinds[i]);
       raw_[i].set_rt_expr(&info_.rt_exprs_.at(i));
       ASSERT_EQ(OB_SUCCESS, selected.push_back(&raw_[i]));
     }

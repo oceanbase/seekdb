@@ -249,6 +249,8 @@ int ObExprGeneratorImpl::visit(ObConstRawExpr &expr)
 {
   int ret = OB_SUCCESS;
   ObPostExprItem item;
+  DatumValue constant_value;
+  alignas(8) char constant_scratch[64];
   int64_t idx = OB_INVALID_INDEX;
   item.set_accuracy(expr.get_accuracy());
   if (OB_ISNULL(sql_expr_)) {
@@ -292,7 +294,8 @@ int ObExprGeneratorImpl::visit(ObConstRawExpr &expr)
     if (OB_FAIL(item.set_column(idx))) {
     } else if (OB_FAIL(sql_expr_->add_expr_item(item, &expr))) {
     }
-  } else if (OB_FAIL(item.assign(expr.get_value()))) {
+  } else if (OB_FAIL(expr.export_value(constant_value, constant_scratch, sizeof(constant_scratch)))) {
+  } else if (OB_FAIL(item.assign(constant_value))) {
   } else if (OB_FAIL(sql_expr_->add_expr_item(item, &expr))) {
   }
   return ret;
@@ -1453,7 +1456,10 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
             if (NULL != sep_expr) {
               ObPostExprItem sep_item;
               sep_item.set_accuracy(sep_expr->get_accuracy());
-              if (OB_FAIL(sep_item.assign(sep_expr->get_value()))) {
+              DatumValue separator;
+              alignas(8) char separator_scratch[64];
+              if (OB_FAIL(sep_expr->export_value(separator, separator_scratch, sizeof(separator_scratch)))) {
+              } else if (OB_FAIL(sep_item.assign(separator))) {
               } else if (OB_FAIL(aggr_expr->add_separator_param_expr_item(sep_item, sep_expr))) {
               }
             } else {
@@ -1704,7 +1710,10 @@ int ObExprGeneratorImpl::gen_fast_column_conv_expr(ObRawExpr &raw_expr)
     }
   } else {
     const ObConstRawExpr *const_value_expr = static_cast<const ObConstRawExpr*>(value_expr);
-    if (OB_FAIL(fast_conv_expr->set_const_value(const_value_expr->get_value()))) {
+    DatumValue constant_value;
+    alignas(8) char constant_scratch[64];
+    if (OB_FAIL(const_value_expr->export_value(constant_value, constant_scratch, sizeof(constant_scratch)))) {
+    } else if (OB_FAIL(fast_conv_expr->set_const_value(constant_value))) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -1719,17 +1728,27 @@ int ObExprGeneratorImpl::gen_fast_column_conv_expr(ObRawExpr &raw_expr)
     const ObConstRawExpr *const_coll_type_expr = static_cast<const ObConstRawExpr*>(collaction_type_expr);
     const ObConstRawExpr *const_accuracy_expr = static_cast<const ObConstRawExpr*>(accuracy_expr);
     const ObConstRawExpr *const_not_null_expr = static_cast<const ObConstRawExpr*>(not_null_expr);
-    if (OB_FAIL(const_data_type_expr->get_value().get_int32(data_type))) {
-    } else if (OB_FAIL(const_coll_type_expr->get_value().get_int32(coll_type))) {
-    } else if (OB_FAIL(const_accuracy_expr->get_value().get_int(accuracy_type))) {
-    } else if (OB_FAIL(const_not_null_expr->get_value().get_tinyint(is_nullable))) {
+    DatumValue properties[4];
+    alignas(8) char property_scratch[4][64];
+    if (OB_FAIL(const_data_type_expr->export_value(properties[0], property_scratch[0], sizeof(property_scratch[0])))) {
+    } else if (OB_FAIL(const_coll_type_expr->export_value(properties[1], property_scratch[1], sizeof(property_scratch[1])))) {
+    } else if (OB_FAIL(const_accuracy_expr->export_value(properties[2], property_scratch[2], sizeof(property_scratch[2])))) {
+    } else if (OB_FAIL(const_not_null_expr->export_value(properties[3], property_scratch[3], sizeof(property_scratch[3])))) {
+    } else if (OB_FAIL(properties[0].get_int32(data_type))) {
+    } else if (OB_FAIL(properties[1].get_int32(coll_type))) {
+    } else if (OB_FAIL(properties[2].get_int(accuracy_type))) {
+    } else if (OB_FAIL(properties[3].get_tinyint(is_nullable))) {
     } else if (OB_FAIL(visit_column_conv_expr(raw_expr, fast_conv_expr))) {
     } else {
       if (raw_expr.get_param_count() >= ObExprColumnConv::PARAMS_COUNT_WITH_COLUMN_INFO) {
         ObRawExpr *ci_expr = raw_expr.get_param_expr(5);
         CK(NULL != ci_expr);
         CK(ci_expr->is_const_raw_expr());
-        OZ(static_cast<const ObConstRawExpr *>(ci_expr)->get_value().get_string(column_info));
+        DatumValue column_info_value;
+        alignas(8) char column_info_scratch[64];
+        OZ(static_cast<const ObConstRawExpr *>(ci_expr)->export_value(
+            column_info_value, column_info_scratch, sizeof(column_info_scratch)));
+        OZ(column_info_value.get_string(column_info));
       }
     }
 
@@ -1787,8 +1806,12 @@ int ObExprGeneratorImpl::generate_top_fre_hist_expr_operator(ObAggFunRawExpr &ex
       ObPostExprItem item_size_item;
       window_size_item.set_accuracy(win_s_expr->get_accuracy());
       item_size_item.set_accuracy(item_s_expr->get_accuracy());
-      if (OB_FAIL(window_size_item.assign(win_s_expr->get_value()))) {
-      } else if (OB_FAIL(item_size_item.assign(item_s_expr->get_value()))) {
+      DatumValue sizes[2];
+      alignas(8) char size_scratch[2][64];
+      if (OB_FAIL(win_s_expr->export_value(sizes[0], size_scratch[0], sizeof(size_scratch[0])))) {
+      } else if (OB_FAIL(item_s_expr->export_value(sizes[1], size_scratch[1], sizeof(size_scratch[1])))) {
+      } else if (OB_FAIL(window_size_item.assign(sizes[0]))) {
+      } else if (OB_FAIL(item_size_item.assign(sizes[1]))) {
       } else if (OB_FAIL(aggr_expr->add_window_size_param_expr_item(window_size_item,
                                                                     win_s_expr))) {
       } else if (OB_FAIL(aggr_expr->add_item_size_param_expr_item(item_size_item, item_s_expr))) {
@@ -1815,7 +1838,10 @@ int ObExprGeneratorImpl::generate_hybrid_hist_expr_operator(ObAggFunRawExpr &exp
     } else {
       ObPostExprItem bucket_num_item;
       bucket_num_item.set_accuracy(bucket_num_expr->get_accuracy());
-      if (OB_FAIL(bucket_num_item.assign(bucket_num_expr->get_value()))) {
+      DatumValue buckets;
+      alignas(8) char bucket_scratch[64];
+      if (OB_FAIL(bucket_num_expr->export_value(buckets, bucket_scratch, sizeof(bucket_scratch)))) {
+      } else if (OB_FAIL(bucket_num_item.assign(buckets))) {
       } else if (OB_FAIL(aggr_expr->add_bucket_num_expr_item(bucket_num_item, bucket_num_expr))) {
       } else if (OB_FAIL(expr.add_real_param_expr(param_expr))) {
       } else {/*do nothing*/}

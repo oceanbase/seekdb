@@ -1138,10 +1138,10 @@ int ObObjAccessIdx::get_package_id(const ObIArray<ObObjAccessIdx>& access_idxs,
 do {  \
   const ObConstRawExpr *c_expr = static_cast<const ObConstRawExpr*>(expr); \
   CK (OB_NOT_NULL(c_expr)); \
-  CK (c_expr->get_value().is_uint64() \
-      || c_expr->get_value().is_int()); \
-  OX (val = c_expr->get_value().is_uint64() ? c_expr->get_value().get_uint64() \
-        : c_expr->get_value().get_int()); \
+  CK (c_expr->get_value_meta().is_uint64() \
+      || c_expr->get_value_meta().is_int()); \
+  OX (val = c_expr->get_value_meta().is_uint64() ? c_expr->get_value_datum().get_uint64() \
+        : c_expr->get_value_datum().get_int()); \
 } while (0)
 
   CK (!access_idxs.empty());
@@ -1187,16 +1187,16 @@ int ObObjAccessIdx::get_package_id(
     CK (f_expr->get_param_expr(0)->is_const_raw_expr());
     CK (OB_NOT_NULL(c_expr1 = static_cast<const ObConstRawExpr*>(f_expr->get_param_expr(0))));
     CK (T_UINT64 == c_expr1->get_expr_type());
-    CK (c_expr1->get_value().is_uint64());
-    OX (package_id = c_expr1->get_value().get_uint64());
+    CK (c_expr1->get_value_meta().is_uint64());
+    OX (package_id = c_expr1->get_value_datum().get_uint64());
     if (OB_SUCC(ret) && OB_NOT_NULL(p_var_idx)) {
       const ObConstRawExpr *c_expr2 = NULL;
       CK (OB_NOT_NULL(f_expr->get_param_expr(1)));
       CK (f_expr->get_param_expr(1)->is_const_raw_expr());
       CK (OB_NOT_NULL(c_expr2 = static_cast<const ObConstRawExpr*>(f_expr->get_param_expr(1))));
       CK (T_INT == c_expr2->get_expr_type());
-      CK (c_expr2->get_value().is_int());
-      OX (*p_var_idx = c_expr2->get_value().get_int());;
+      CK (c_expr2->get_value_meta().is_int());
+      OX (*p_var_idx = c_expr2->get_value_datum().get_int());;
     }
   } else if (expr->is_obj_access_expr()) {
     uint64_t var_idx = OB_INVALID_ID;

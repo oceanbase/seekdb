@@ -264,7 +264,7 @@ int ObSQLUtils::calc_const_or_calculable_expr(
   } else if (FALSE_IT(params = &exec_ctx->get_physical_plan_ctx()->get_param_store())) {
   } else if (raw_expr->is_const_raw_expr()) {
     bool need_check = false;
-    if (OB_FAIL(calc_const_expr(raw_expr, params, evaluated, need_check))) {
+    if (OB_FAIL(calc_const_expr(raw_expr, params, evaluated, need_check, allocator))) {
     } else {
       result = evaluated.value_view();
       is_valid = true;
@@ -327,9 +327,10 @@ int ObSQLUtils::calc_simple_expr_without_row(
   if (OB_ISNULL(raw_expr) || OB_ISNULL(params)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (raw_expr->is_const_raw_expr()) {
-    // Constant values borrow the statement/parameter owner, as in calc_const_expr.
+    // Native literal scalars are exported into this caller's durable owner;
+    // bound parameters continue to borrow the existing ParamStore owner.
     bool need_check = false;
-    ret = calc_const_expr(raw_expr, params, result, need_check);
+    ret = calc_const_expr(raw_expr, params, result, need_check, allocator);
   } else {
     ret = calc_const_expr(session, *raw_expr, result, allocator, *params,
                          nullptr, force_copy_extend_type);
@@ -429,7 +430,8 @@ int ObSQLUtils::calc_sql_expression_without_row(
 int ObSQLUtils::calc_const_expr(const ObRawExpr *expr,
                                 const ParamStore *params,
                                 common::DatumParameter &result,
-                                bool &need_check)
+                                bool &need_check,
+                                ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   const ObConstRawExpr *const_expr = NULL;
@@ -443,11 +445,20 @@ int ObSQLUtils::calc_const_expr(const ObRawExpr *expr,
   } else if (T_QUESTIONMARK == const_expr->get_expr_type()) {
     if (OB_ISNULL(params)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(get_param_value(const_expr->get_value(), *params, result, need_check))) {
-    } else {  /*do nothing*/ }
+    } else {
+      DatumValue index;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(const_expr->export_value(index, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(get_param_value(index, *params, result, need_check))) {
+      }
+    }
   } else {
     need_check = true;
-    result.assign_value(const_expr->get_value());
+    alignas(8) char scratch[64];
+    DatumValue view, owned;
+    if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(clone_typed_value(view, owned, allocator))) {
+    } else { result.assign_value(owned); }
   }
   return ret;
 }
@@ -3116,10 +3127,10 @@ int ObSQLUtils::create_encode_sortkey_expr(
     for (int64_t i = start_key; OB_SUCC(ret) && i < order_keys.count(); i++) {
       ObConstRawExpr *nulls_pos_expr = nullptr;
       ObConstRawExpr *order_expr = nullptr;
-      DatumValue null_pos_obj;
-      DatumValue order_obj;
-      null_pos_obj.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-      order_obj.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      Datum null_pos_obj, order_obj;
+      SqlTypeMeta order_meta;
+      order_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      order_meta.set_int();
       if (OB_ISNULL(order_keys.at(i).expr_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(expr_factory.create_raw_expr(T_VARCHAR, nulls_pos_expr))) {
@@ -3127,29 +3138,29 @@ int ObSQLUtils::create_encode_sortkey_expr(
       } else {
         switch (order_keys.at(i).order_type_) {
           case NULLS_LAST_ASC: {
-            OZ (null_pos_obj.set_int(1, expr_factory.get_allocator()));
-            OZ (order_obj.set_int(0, expr_factory.get_allocator()));
+            null_pos_obj.set_int(1);
+            order_obj.set_int(0);
             break;
           }
           case NULLS_FIRST_DESC: {
-            OZ (null_pos_obj.set_int(0, expr_factory.get_allocator()));
-            OZ (order_obj.set_int(1, expr_factory.get_allocator()));
+            null_pos_obj.set_int(0);
+            order_obj.set_int(1);
             break;
           }
           case NULLS_LAST_DESC: {
-            OZ (null_pos_obj.set_int(1, expr_factory.get_allocator()));
-            OZ (order_obj.set_int(1, expr_factory.get_allocator()));
+            null_pos_obj.set_int(1);
+            order_obj.set_int(1);
             break;
           }
           case NULLS_FIRST_ASC:
           default: {
-            OZ (null_pos_obj.set_int(0, expr_factory.get_allocator()));
-            OZ (order_obj.set_int(0, expr_factory.get_allocator()));
+            null_pos_obj.set_int(0);
+            order_obj.set_int(0);
             break;
           }
         }
-        OX (nulls_pos_expr->set_value(null_pos_obj));
-        OX (order_expr->set_value(order_obj));
+        OZ (nulls_pos_expr->set_value_borrowed(null_pos_obj, order_meta));
+        OZ (order_expr->set_value_borrowed(order_obj, order_meta));
         OZ (encode_expr->add_param_expr(order_keys.at(i).expr_));
         OZ (encode_expr->add_param_expr(order_expr));
         OZ (encode_expr->add_param_expr(nulls_pos_expr));

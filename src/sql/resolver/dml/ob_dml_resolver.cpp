@@ -6048,10 +6048,11 @@ int ObDMLResolver::add_additional_function_according_to_type(const ColumnItem *c
           } else {
             ObGeoType geo_type = raw_expr->get_geo_type();
             ObConstRawExpr *type_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(0));
-            DatumValue obj;
-            OZ (obj.set_int(ObInt32Type, static_cast<uint32_t>(geo_type) << 16 | ObGeometryType,
-                           params_.expr_factory_->get_allocator()));
-            OX (type_expr->set_value(obj));
+            Datum value;
+            SqlTypeMeta meta;
+            value.set_int(static_cast<uint32_t>(geo_type) << 16 | ObGeometryType);
+            meta.set_int32();
+            OZ (type_expr->set_value_borrowed(value, meta));
           }
         }
       }
@@ -6384,7 +6385,10 @@ int ObDMLResolver::find_const_params_for_gen_column(const ObRawExpr &expr)
 
             const ObConstRawExpr *c_expr = dynamic_cast<const ObConstRawExpr *>(param_expr.expr_);
             CK( OB_NOT_NULL(c_expr) );
-            if (OB_SUCC(ret)) { ret = const_param_info.add_raw_constant(c_expr->get_value(),
+            DatumValue value;
+            alignas(8) char scratch[64];
+            OZ (c_expr->export_value(value, scratch, sizeof(scratch)));
+            if (OB_SUCC(ret)) { ret = const_param_info.add_raw_constant(value,
                 c_expr->get_result_type(), session_info_,
                 schema_checker_ == nullptr ? nullptr : schema_checker_->get_schema_guard(),
                 *params_.allocator_, params_.secondary_namespace_); }
@@ -11532,7 +11536,7 @@ int ObDMLResolver::compute_values_table_row_count(ObValuesTableDef &table_def)
   } else if (T_QUESTIONMARK == expr1->get_expr_type() && expr1->is_static_scalar_const_expr() &&
              T_QUESTIONMARK == expr2->get_expr_type() && expr2->is_static_scalar_const_expr()) {
     ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(expr1);
-    int64_t param_idx = param_expr->get_value().get_unknown();
+    int64_t param_idx = param_expr->get_questionmark_index();
     bool is_ps_prepare = session_info_->is_varparams_sql_prepare();
     if (OB_ISNULL(params_.param_list_) ||
         OB_UNLIKELY(param_idx < 0 || param_idx >= params_.param_list_->count())) {
@@ -11548,7 +11552,7 @@ int ObDMLResolver::compute_values_table_row_count(ObValuesTableDef &table_def)
         table_def.row_cnt_ = row_cnt;
         table_def.start_param_idx_ = param_idx;
         param_expr = static_cast<ObConstRawExpr *>(expr2);
-        table_def.end_param_idx_ = param_expr->get_value().get_unknown();
+        table_def.end_param_idx_ = param_expr->get_questionmark_index();
         table_def.is_const_ = true;
       }
     }
@@ -11614,7 +11618,7 @@ int ObDMLResolver::estimate_values_table_stats(ObValuesTableDef &table_def)
           ret = OB_ERR_UNEXPECTED;
         } else if (T_QUESTIONMARK == access_expr->get_expr_type()) {
           ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(access_expr);
-          int64_t param_idx = param_expr->get_value().get_unknown();
+          int64_t param_idx = param_expr->get_questionmark_index();
           if (OB_ISNULL(param_store) ||
               OB_UNLIKELY(param_idx < 0 || param_idx >= param_store->count())) {
             if (is_ps_prepare) {

@@ -264,7 +264,7 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
               || params_.is_batch_stmt_) {
               // enum, set, rowid do not support cast
               int64_t param_idx = 0;
-              OZ (c_expr->get_value().get_unknown(param_idx));
+              OZ (c_expr->get_questionmark_index(param_idx));
               CK (OB_NOT_NULL(params_.param_list_));
               CK (param_idx < params_.param_list_->count());
               OX (const_cast<DatumParameter &>(
@@ -1677,7 +1677,7 @@ int ObDelUpdResolver::resolve_check_constraints(const TableItem* table_item,
                  expr->get_param_expr(2)->get_expr_type() == T_INT) {
         const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(expr->get_param_expr(2));
         ObColumnRefRawExpr *col_expr = static_cast<ObColumnRefRawExpr *>(expr->get_param_expr(0));
-        int is_json_opt = const_expr->get_value().get_int();
+        int is_json_opt = const_expr->get_value_datum().get_int();
         if (is_json_opt == 1) {
           col_expr->set_strict_json_column(IS_JSON_CONSTRAINT_STRICT);
         } else {

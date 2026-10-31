@@ -103,6 +103,20 @@ public:
   // so failures also reclaim unpublished nested-array allocations.
   static int decode_unis_native_value(const char *buf, int64_t length, int64_t &pos,
                           ObIAllocator &allocator, Datum &output, SqlTypeMeta &meta);
+  // AST constants retain their historical value metadata independently of the
+  // inferred expression type. This physical domain shares the schema rules,
+  // except that Unknown is an inline structural question-mark index. These
+  // ports never prepare a semantic SqlType or normalize Decimal precision.
+  // Borrow never allocates; clone owns reference bytes/the old SQL-array graph,
+  // while PL/LOB pointees keep their existing borrowed-resource contract.
+  // Scalar/state exports borrow caller scratch; reference exports borrow the
+  // input owner. All outputs are published only on success.
+  static int borrow_raw_constant_value(const ObDatum &value, const SqlTypeMeta &meta,
+                                       Datum &output);
+  static int export_raw_constant_value(const Datum &value, const SqlTypeMeta &meta,
+                                       ObDatum &output, void *scratch, int64_t capacity);
+  static int clone_raw_constant_value(const Datum &value, const SqlTypeMeta &meta,
+                                      ObIAllocator &allocator, Datum &output);
   static int parameter_size(const DatumParameter &value, int64_t &size);
   static int encode_parameter(const DatumParameter &value, char *buf,
                               int64_t length, int64_t &pos);

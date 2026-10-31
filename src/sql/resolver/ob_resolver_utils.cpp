@@ -25,6 +25,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "common/datum/datum_parameter.h"
 #include "share/datum/datum_value_cast.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "share/datum/typed_datum_compare.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/code_generator/ob_column_index_provider.h"
@@ -266,7 +267,7 @@ int ObResolverUtils::collect_schema_version(share::schema::ObSchemaGetterGuard &
     const ObPackageInfo *body_info = NULL;
     ObSchemaObjVersion ver;
     CK (expr->get_param_count() >= 3);
-    OX (package_id = static_cast<const ObConstRawExpr *>(expr->get_param_expr(0))->get_value().get_uint64());
+    OX (package_id = static_cast<const ObConstRawExpr *>(expr->get_param_expr(0))->get_value_datum().get_uint64());
     if (package_id != OB_INVALID_ID) {
       OZ (pl::ObPLPackageManager::get_package_schema_info(schema_guard, package_id, spec_info, body_info));
     }
@@ -907,7 +908,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                is_mocked_anonymous_array_id(src_type_id) &&
                T_QUESTIONMARK == expr->get_expr_type()) { // anonymous array
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(expr);
-      int64_t idx = const_expr->get_value().get_unknown();
+      int64_t idx = const_expr->get_questionmark_index();
       CK (OB_NOT_NULL(resolve_ctx.params_.param_list_));
       CK (idx < resolve_ctx.params_.param_list_->count());
       if (OB_SUCC(ret)) {
@@ -1877,9 +1878,9 @@ int ObResolverUtils::resolve_stmt_type(const ParseResult &result, stmt::StmtType
 
 namespace
 {
-// Literal setters write into native storage. Small scalar scratch bytes are
-// copied into the statement arena before publication; parsed decimal/NUMBER
-// payloads already belong to that arena. This writer is never a stored value.
+// One parser writes transient legacy scratch for both output boundaries. Raw
+// finish publishes inline scalars without cloning an old scalar payload; the
+// DatumParameter boundary retains its existing owning representation.
 class LiteralDatumWriter
 {
 public:
@@ -1987,6 +1988,29 @@ public:
       ret = clone_datum_value(value_.datum_, get_meta(), candidate.datum_, allocator_);
     }
     if (OB_SUCC(ret)) { result = candidate; }
+    return ret;
+  }
+  int finish(ObConstRawExpr &result)
+  {
+    int ret = status_;
+    Datum candidate;
+    if (OB_SUCC(ret)) {
+      ret = DatumParameterCodec::borrow_raw_constant_value(value_.datum_, get_meta(), candidate);
+    }
+    if (OB_SUCC(ret) && !owned_) {
+      Datum owned;
+      if (OB_SUCC(ret = DatumParameterCodec::clone_raw_constant_value(candidate, get_meta(), allocator_, owned))) {
+        candidate = owned;
+      }
+    }
+    if (OB_SUCC(ret) && OB_SUCC(ret = result.set_value_borrowed(candidate, get_meta()))) {
+      result.set_expr_obj_meta(value_.get_param_meta());
+      if (!get_meta().is_unknown()) {
+        result.set_accuracy(value_.get_accuracy());
+        result.unset_result_flag(UINT32_MAX);
+        result.set_result_flag(value_.get_result_flag());
+      }
+    }
     return ret;
   }
   TO_STRING_KV(K_(value));
@@ -2485,6 +2509,37 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
   return ret;
 }
 
+int ObResolverUtils::resolve_const(const ParseNode *node,
+                                   const stmt::StmtType stmt_type,
+                                   ObIAllocator &allocator,
+                                   const ObCollationType connection_collation,
+                                   const ObCollationType nchar_collation,
+                                   const ObTimeZoneInfo *tz_info,
+                                   ObConstRawExpr &result,
+                                   const bool is_paramlize,
+                                   common::ObString &literal_prefix,
+                                   const ObLengthSemantics default_length_semantics,
+                                   const ObCollationType server_collation,
+                                   ObExprInfo *parents_expr_info,
+                                   const ObSQLMode sql_mode,
+                                   bool enable_decimal_int_type,
+                                   const share::ObCompatType compat_type,
+                                   const bool enable_mysql_compatible_dates,
+                                   int8_t min_const_integer_precision,
+                                   bool is_from_pl /* false */,
+                                   bool fmt_int_or_ch_decint /* false */)
+{
+  LiteralDatumWriter val(allocator);
+  int ret = resolve_literal_value<LiteralDatumWriter, &ObResolverUtils::strntod>(node, stmt_type, allocator, connection_collation,
+                               nchar_collation, tz_info, val, is_paramlize, literal_prefix,
+                               default_length_semantics, server_collation, parents_expr_info,
+                               sql_mode, enable_decimal_int_type, compat_type,
+                               enable_mysql_compatible_dates, min_const_integer_precision,
+                               is_from_pl, fmt_int_or_ch_decint);
+  if (OB_SUCC(ret)) { ret = val.finish(result); }
+  return ret;
+}
+
 int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
                                             const bool is_set_default,
                                             const bool is_first_timestamp_column,
@@ -2822,7 +2877,12 @@ int ObResolverUtils::check_partition_range_value_result_type(const ObPartitionFu
   SqlTypeClass expect_value_tc = ObMaxTC;
   SqlValueType part_column_expr_type = part_column_expr.get_data_type();
   const SqlTypeMeta& part_col_meta_type = static_cast<const SqlTypeMeta&>(part_value_expr.get_result_type());
-  DatumValue &result = static_cast<sql::ObConstRawExpr*>(&part_value_expr)->get_value();
+  ObConstRawExpr *constant = static_cast<ObConstRawExpr *>(&part_value_expr);
+  alignas(8) char result_scratch[64];
+  DatumValue result;
+  if (OB_FAIL(constant->export_value(result, result_scratch, sizeof(result_scratch)))) {
+    return ret;
+  }
   if (OB_FAIL(deduce_expect_value_tc(part_column_expr_type,
                                      part_func_type,
                                      part_column_expr.get_collation_type(),
@@ -2835,6 +2895,7 @@ int ObResolverUtils::check_partition_range_value_result_type(const ObPartitionFu
                                                   part_value_expr.is_const_raw_expr(),
                                                   result,
                                                   part_value_expr.get_value_allocator()))) {
+  } else if (OB_FAIL(constant->replace_value_borrowed(result))) {
   }
   return ret;
 }
@@ -5656,7 +5717,7 @@ int ObResolverUtils::revert_external_param_info(ExternalParams &param_infos, ObR
               DatumParameter null_val;
               null_val.set_null();
               null_val.set_param_meta();
-              null_expr->set_value(null_val);
+              OZ (null_expr->set_value_borrowed(null_val));
               param_infos.at(j).element<0>() = null_expr;
             }
           }
@@ -5739,7 +5800,7 @@ int ObResolverUtils::resolve_external_param_info(ExternalParams &param_infos,
         }
       }
       if (OB_INVALID_INDEX != available_idx) {
-        int64_t encode_num = param_infos.at(available_idx).element<1>()->get_value().get_unknown();
+        int64_t encode_num = param_infos.at(available_idx).element<1>()->get_questionmark_index();
         SET_RESULT_TYPE(encode_num);
         if (OB_SUCC(ret)) {
           param_infos.at(available_idx) = ExternalParamInfo(original_ref, param_expr, 1);

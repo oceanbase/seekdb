@@ -1033,7 +1033,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
           if (OB_FAIL(ret)) {
           } else if (T_BOOL == cur_def->empty_expr_->get_expr_type()) { // bool need print 'true' or 'false' int json_table, not 1=1'
             ObConstRawExpr *con_expr = static_cast<ObConstRawExpr*>(cur_def->empty_expr_);
-            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value().get_bool() ? "true" : "false"))) {
+            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value_datum().get_bool() ? "true" : "false"))) {
             }
           } else if (OB_FAIL(expr_printer_.do_print(cur_def->empty_expr_, T_NONE_SCOPE))) {
           }
@@ -1050,7 +1050,7 @@ int ObDMLStmtPrinter::print_json_table_nested_column(const TableItem *table_item
           if (OB_FAIL(ret)) {
           } else if (T_BOOL == cur_def->error_expr_->get_expr_type()) { // bool need print 'true' or 'false' int json_table, not 1=1'
             ObConstRawExpr *con_expr = static_cast<ObConstRawExpr*>(cur_def->error_expr_);
-            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value().get_bool() ? "true" : "false"))) {
+            if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, con_expr->get_value_datum().get_bool() ? "true" : "false"))) {
             }
           } else if (OB_FAIL(expr_printer_.do_print(cur_def->error_expr_, T_NONE_SCOPE))) {
           }

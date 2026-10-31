@@ -1649,7 +1649,7 @@ int ObTransformPredicateMoveAround::check_false_condition(ObSelectStmt *stmt,
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (T_BOOL == expr->get_expr_type() &&
-                !static_cast<const ObConstRawExpr*>(expr)->get_value().get_bool()) {
+                !static_cast<const ObConstRawExpr*>(expr)->get_value_datum().get_bool()) {
         false_cond_exists = true;
       }
     }

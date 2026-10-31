@@ -47,8 +47,11 @@ int64_t ObRawExprPrintVisitor::to_string(char* buf, const int64_t buf_len) const
 int ObRawExprPrintVisitor::visit(ObConstRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(databuff_print_multi_objs(buf_, buf_len_, pos_,
-      get_type_name(expr.get_expr_type()), "(", expr.get_value(), ")"))) {
+  DatumValue value;
+  alignas(8) char scratch[64];
+  if (OB_FAIL(expr.export_value(value, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(databuff_print_multi_objs(buf_, buf_len_, pos_,
+      get_type_name(expr.get_expr_type()), "(", value, ")"))) {
   }
   return ret;
 }

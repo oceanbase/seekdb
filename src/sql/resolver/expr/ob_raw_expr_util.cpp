@@ -30,6 +30,7 @@
 #include "common/enumset/ob_enum_set_meta.h"
 #include "src/sql/resolver/dml/ob_inlist_resolver.h"
 
+#include "common/datum/datum_parameter_codec.h"
 #include "share/datum/typed_datum_compare.h"
 
 #include "share/datum/datum_cast_support.h"
@@ -920,7 +921,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
             const pl::ObPLSymbolTable* symbol_table = params.secondary_namespace_->get_symbol_table();
             if (!params.is_prepare_protocol_ &&
                 OB_NOT_NULL(symbol_table) &&
-                OB_NOT_NULL(var = symbol_table->get_symbol(c_expr->get_value().get_unknown())) &&
+                OB_NOT_NULL(var = symbol_table->get_symbol(c_expr->get_questionmark_index())) &&
                 0 == var->get_name().case_compare(pl::ObPLResolver::ANONYMOUS_ARG)) {
               OX (is_anonymos_const_var = true);
             }
@@ -945,12 +946,12 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
 do {                                                                            \
   const ObConstRawExpr *c_expr = static_cast<const ObConstRawExpr*>(expr);      \
   CK (OB_NOT_NULL(c_expr));                                                     \
-  CK (c_expr->get_value().is_uint64()                                           \
-      || c_expr->get_value().is_int()                                           \
-      || c_expr->get_value().is_unknown());                                     \
-  OX (val = c_expr->get_value().is_uint64() ? c_expr->get_value().get_uint64()  \
-        : c_expr->get_value().is_int() ? c_expr->get_value().get_int()          \
-        : c_expr->get_value().get_unknown());                                   \
+  CK (c_expr->get_value_meta().is_uint64()                                           \
+      || c_expr->get_value_meta().is_int()                                           \
+      || c_expr->get_value_meta().is_unknown());                                     \
+  OX (val = c_expr->get_value_meta().is_uint64() ? c_expr->get_value_datum().get_uint64()  \
+        : c_expr->get_value_meta().is_int() ? c_expr->get_value_datum().get_int()          \
+        : c_expr->get_questionmark_index());                                   \
 } while (0)
           if (OB_FAIL(ret)) {
           } else if (T_QUESTIONMARK != iexpr->get_expr_type()
@@ -981,9 +982,9 @@ do {                                                                            
             ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(iexpr);
             pl::ObPLDataType param_type;
             CK (OB_NOT_NULL(c_expr));
-            CK (c_expr->get_value().is_unknown());
+            CK (c_expr->get_value_meta().is_unknown());
             OZ (udf_raw_expr->add_param_desc(
-              ObUDFParamDesc(ObUDFParamDesc::LOCAL_OUT, c_expr->get_value().get_unknown())));
+              ObUDFParamDesc(ObUDFParamDesc::LOCAL_OUT, c_expr->get_questionmark_index())));
             if (OB_FAIL(ret) || !pl::ObPLResolver::is_question_mark_value(iexpr, params.secondary_namespace_)) {
               // do nothing ...
             } else {
@@ -3432,10 +3433,11 @@ int ObRawExprUtils::create_param_expr(ObRawExprFactory &expr_factory, int64_t pa
   } else if (OB_ISNULL(c_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    DatumParameter val;
-    OZ (val.set_unknown(param_idx, expr_factory.get_allocator()));
-    val.set_param_meta();
-    c_expr->set_value(val);
+    Datum val;
+    SqlTypeMeta meta;
+    val.set_int(param_idx);
+    meta.set_unknown();
+    OZ (c_expr->set_value_borrowed(val, meta));
     c_expr->set_result_type(expr->get_result_type());
     if (expr->is_bool_expr()) {
       c_expr->set_is_literal_bool(true);
@@ -3741,10 +3743,13 @@ int ObRawExprUtils::build_const_int_expr(ObRawExprFactory &expr_factory, SqlValu
   if (OB_FAIL(expr_factory.create_raw_expr(static_cast<ObItemType>(type), c_expr))) {
   } else if (OB_FAIL(c_expr->extract_info())) {
   } else {
-    DatumValue obj;
+    Datum obj;
+    SqlTypeMeta obj_meta;
     ObAccuracy int_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[type];
-    OZ (obj.set_int(type, int_value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    obj_meta.set_type(type);
+    obj_meta.set_collation_level(CS_LEVEL_NUMERIC);
+    obj.set_int(int_value);
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     c_expr->set_accuracy(int_acc);
     OX (expr = c_expr);
   }
@@ -3757,10 +3762,13 @@ int ObRawExprUtils::build_const_uint_expr(ObRawExprFactory &expr_factory, SqlVal
   ObConstRawExpr *c_expr = NULL;
   if (OB_FAIL(expr_factory.create_raw_expr(static_cast<ObItemType>(type), c_expr))) {
   } else {
-    DatumValue obj;
+    Datum obj;
+    SqlTypeMeta obj_meta;
     ObAccuracy int_acc = ObAccuracy::DDL_DEFAULT_ACCURACY[type];
-    OZ (obj.set_uint(type, uint_value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    obj_meta.set_type(type);
+    obj_meta.set_collation_level(CS_LEVEL_NUMERIC);
+    obj.set_uint(uint_value);
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     c_expr->set_accuracy(int_acc);
     OX (expr = c_expr);
   }
@@ -3774,9 +3782,12 @@ int ObRawExprUtils::build_const_double_expr(ObRawExprFactory &expr_factory, SqlV
   ObConstRawExpr *c_expr = NULL;
   if (OB_FAIL(expr_factory.create_raw_expr(static_cast<ObItemType>(type), c_expr))) {
   } else {
-    DatumValue obj;
-    OZ (obj.set_double(type, value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    Datum obj;
+    SqlTypeMeta obj_meta;
+    obj_meta.set_type(type);
+    obj_meta.set_collation_level(CS_LEVEL_NUMERIC);
+    obj.set_double(value);
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     OX (expr = c_expr);
   }
   return ret;
@@ -3793,7 +3804,7 @@ int ObRawExprUtils::build_const_number_expr(ObRawExprFactory &expr_factory,
   } else {
     DatumValue obj;
     OZ (obj.set_number(type, value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    OZ (c_expr->set_value_borrowed(obj));
     OX (expr = c_expr);
   }
   return ret;
@@ -3806,9 +3817,11 @@ int ObRawExprUtils::build_const_datetime_expr(ObRawExprFactory &expr_factory,
   ObConstRawExpr *c_expr = NULL;
   if (OB_FAIL(expr_factory.create_raw_expr(static_cast<ObItemType>(ObDateTimeType), c_expr))) {
   } else {
-    DatumValue obj;
-    OZ (obj.set_datetime(int_value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    Datum obj;
+    SqlTypeMeta obj_meta;
+    obj_meta.set_datetime();
+    obj.set_datetime(int_value);
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     OX (expr = c_expr);
   }
   return ret;
@@ -3821,9 +3834,11 @@ int ObRawExprUtils::build_const_date_expr(ObRawExprFactory &expr_factory,
   ObConstRawExpr *c_expr = NULL;
   if (OB_FAIL(expr_factory.create_raw_expr(static_cast<ObItemType>(ObDateType), c_expr))) {
   } else {
-    DatumValue obj;
-    OZ (obj.set_date(int_value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    Datum obj;
+    SqlTypeMeta obj_meta;
+    obj_meta.set_date();
+    obj.set_date(int_value);
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     OX (expr = c_expr);
   }
   return ret;
@@ -3836,9 +3851,11 @@ int ObRawExprUtils::build_const_mysql_datetime_expr(ObRawExprFactory &expr_facto
   ObConstRawExpr *c_expr = NULL;
   if (OB_FAIL(expr_factory.create_raw_expr(static_cast<ObItemType>(ObMySQLDateTimeType), c_expr))) {
   } else {
-    DatumValue obj;
-    OZ (obj.set_mysql_datetime(int_value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    Datum obj;
+    SqlTypeMeta obj_meta;
+    obj_meta.set_mysql_datetime();
+    obj.set_mysql_datetime(ObMySQLDateTime(int_value));
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     OX (expr = c_expr);
   }
   return ret;
@@ -3851,9 +3868,11 @@ int ObRawExprUtils::build_const_mysql_date_expr(ObRawExprFactory &expr_factory,
   ObConstRawExpr *c_expr = NULL;
   if (OB_FAIL(expr_factory.create_raw_expr(static_cast<ObItemType>(ObMySQLDateType), c_expr))) {
   } else {
-    DatumValue obj;
-    OZ (obj.set_mysql_date(int_value, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    Datum obj;
+    SqlTypeMeta obj_meta;
+    obj_meta.set_mysql_date();
+    obj.set_mysql_date(ObMySQLDate(static_cast<int32_t>(int_value)));
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     OX (expr = c_expr);
   }
   return ret;
@@ -3879,12 +3898,13 @@ int ObRawExprUtils::build_const_obj_expr(ObRawExprFactory &expr_factory,
     const DatumValue &value, ObConstRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
-  DatumValue owned;
+  Datum borrowed, owned;
   ObConstRawExpr *constant = nullptr;
-  OZ (clone_typed_value(value, owned, expr_factory.get_allocator()));
+  OZ (DatumParameterCodec::borrow_raw_constant_value(value.datum_, value.get_meta(), borrowed));
+  OZ (DatumParameterCodec::clone_raw_constant_value(borrowed, value.get_meta(), expr_factory.get_allocator(), owned));
   OZ (expr_factory.create_raw_expr(static_cast<ObItemType>(value.get_type()), constant));
   CK (constant != nullptr);
-  OX (constant->set_value(owned));
+  OZ (constant->set_value_borrowed(owned, value.get_meta()));
   if (OB_SUCC(ret) && (ob_is_extended_temporal_type(value.get_type()) || ob_is_interval_tc(value.get_type()))) {
     constant->set_scale(value.get_scale());
   }
@@ -3912,9 +3932,11 @@ int ObRawExprUtils::build_var_int_expr(ObRawExprFactory &expr_factory,
   ObConstRawExpr *c_expr = NULL;
   if (OB_FAIL(expr_factory.create_raw_expr(T_VAR_INT, c_expr))) {
   } else {
-    DatumValue obj;
-    OZ (obj.set_int(0, expr_factory.get_allocator()));
-    OX (c_expr->set_value(obj));
+    Datum obj;
+    SqlTypeMeta obj_meta;
+    obj_meta.set_int();
+    obj.set_int(0);
+    OZ (c_expr->set_value_borrowed(obj, obj_meta));
     OX (expr = c_expr);
   }
   return ret;
@@ -3931,7 +3953,7 @@ int ObRawExprUtils::build_const_string_expr(ObRawExprFactory &expr_factory, SqlV
     DatumValue obj;
     OZ (obj.set_string(type, string_value, expr_factory.get_allocator()));
     obj.set_collation_type(cs_type);
-    OX (c_expr->set_value(obj));
+    OZ (c_expr->set_value_borrowed(obj));
     OX (expr = c_expr);
   }
   return ret;
@@ -3965,7 +3987,7 @@ int ObRawExprUtils::build_null_expr(ObRawExprFactory &expr_factory, ObRawExpr *&
   } else {
     DatumValue obj;
     obj.set_null();
-    OX (c_expr->set_value(obj));
+    OZ (c_expr->set_value_borrowed(obj));
     OX (expr = c_expr);
   }
   return ret;
@@ -4002,8 +4024,12 @@ int ObRawExprUtils::build_trim_expr(const ObColumnSchemaV2 *column_schema,
   } else if (OB_FAIL(build_const_string_expr(expr_factory, ObCharType, padding_char,
                                              padding_char_cs_type,
                                              pattern_expr))) {
-  } else if (FALSE_IT(static_cast<ObConstRawExpr*>(pattern_expr)->get_value().set_collation_level(
-        CS_LEVEL_IMPLICIT))) {
+  } else if (OB_FAIL([&]() {
+      ObConstRawExpr *constant = static_cast<ObConstRawExpr *>(pattern_expr);
+      SqlTypeMeta meta = constant->get_value_meta();
+      meta.set_collation_level(CS_LEVEL_IMPLICIT);
+      return constant->replace_value_borrowed(constant->get_value_datum(), meta);
+    }())) {
   } else if (OB_FAIL(trim_expr->set_param_exprs(type_expr, pattern_expr, expr))) {
   } else {
     trim_expr->set_data_type(ObCharType);
@@ -4213,7 +4239,7 @@ int ObRawExprUtils::build_get_user_var(ObRawExprFactory &expr_factory,
       if (OB_FAIL(expr_factory.create_raw_expr(T_USER_VARIABLE_IDENTIFIER, var_expr))) {
       } else if (NULL != all_vars && OB_FAIL(all_vars->push_back(var_expr))) {
       } else {
-        var_expr->set_value(val);
+        OZ (var_expr->set_value_borrowed(val));
       }
     }
 
@@ -4256,12 +4282,14 @@ int ObRawExprUtils::build_get_sys_var(ObRawExprFactory &expr_factory,
     OZ (name_obj.set_varchar(var_name, expr_factory.get_allocator()));
     name_obj.set_collation_level(CS_LEVEL_SYSCONST);
     name_obj.set_collation_type(ObCharset::get_system_collation());
-    name_expr->set_value(name_obj);
+    OZ (name_expr->set_value_borrowed(name_obj));
 
-    DatumValue scope_obj;
-    OZ (scope_obj.set_int(static_cast<int64_t>(var_scope), expr_factory.get_allocator()));
-    scope_expr->set_expr_type(static_cast<ObItemType>(scope_obj.get_type()));
-    scope_expr->set_value(scope_obj);
+    Datum scope_obj;
+    SqlTypeMeta scope_obj_meta;
+    scope_obj_meta.set_int();
+    scope_obj.set_int(static_cast<int64_t>(var_scope));
+    scope_expr->set_expr_type(static_cast<ObItemType>(scope_obj_meta.get_type()));
+    OZ (scope_expr->set_value_borrowed(scope_obj, scope_obj_meta));
 
     expr = get_sys_var_expr;
     get_sys_var_expr->set_expr_type(T_OP_GET_SYS_VAR);
@@ -4438,8 +4466,8 @@ int ObRawExprUtils::get_package_var_ids(ObRawExpr *expr, uint64_t &package_id, i
   CK (T_OP_GET_PACKAGE_VAR == expr->get_expr_type());
   CK (OB_NOT_NULL(pkg_id_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(0))));
   CK (OB_NOT_NULL(var_id_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(1))));
-  OX (package_id = pkg_id_expr->get_value().get_uint64());
-  OX (var_idx = var_id_expr->get_value().get_int());
+  OX (package_id = pkg_id_expr->get_value_datum().get_uint64());
+  OX (var_idx = var_id_expr->get_value_datum().get_int());
   return ret;
 }
 
@@ -4452,12 +4480,14 @@ int ObRawExprUtils::set_package_var_ids(ObRawExpr *expr, uint64_t package_id, in
   CK (T_OP_GET_PACKAGE_VAR == expr->get_expr_type());
   CK (OB_NOT_NULL(pkg_id_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(0))));
   CK (OB_NOT_NULL(var_id_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(1))));
-  DatumValue package_value, index_value;
-  CK (pkg_id_expr->get_value_allocator() != nullptr && var_id_expr->get_value_allocator() != nullptr);
-  OZ (package_value.set_uint64(package_id, *pkg_id_expr->get_value_allocator()));
-  OZ (index_value.set_int(var_idx, *var_id_expr->get_value_allocator()));
-  OX (pkg_id_expr->get_value() = package_value);
-  OX (var_id_expr->get_value() = index_value);
+  Datum package_value, index_value;
+  SqlTypeMeta package_meta, index_meta;
+  package_value.set_uint(package_id);
+  index_value.set_int(var_idx);
+  package_meta.set_uint64();
+  index_meta.set_int();
+  OZ (pkg_id_expr->replace_value_borrowed(package_value, package_meta));
+  OZ (var_id_expr->replace_value_borrowed(index_value, index_meta));
   return ret;
 }
 
@@ -4676,9 +4706,9 @@ int ObRawExprUtils::get_array_param_index(const ObRawExpr *expr, int64_t &param_
   if (OB_ISNULL(expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (expr->is_const_raw_expr()) {
-    if (static_cast<const ObConstRawExpr*>(expr)->get_param().is_ext()) {
+    if (static_cast<const ObConstRawExpr*>(expr)->get_bound_param_value_meta().is_ext()) {
       const ObConstRawExpr *c_expr = static_cast<const ObConstRawExpr *>(expr);
-      if (OB_FAIL(c_expr->get_value().get_unknown(param_index))) {
+      if (OB_FAIL(c_expr->get_questionmark_index(param_index))) {
       }
     }
   } else {
@@ -5121,9 +5151,8 @@ int ObRawExprUtils::extract_param_idxs(const ObRawExpr *expr, ObIArray<int64_t> 
     ret = OB_ERR_UNEXPECTED;
   } else if (expr->get_expr_type() == T_QUESTIONMARK) {
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(expr);
-    const DatumValue &val = const_expr->get_value();
     int64_t param_idx = OB_INVALID_INDEX;
-    if (OB_FAIL(val.get_unknown(param_idx))) {
+    if (OB_FAIL(const_expr->get_questionmark_index(param_idx))) {
     } else if (OB_FAIL(param_idxs.push_back(param_idx))) {
     }
   } else if (expr->has_flag(CNT_STATIC_PARAM) || expr->has_flag(CNT_DYNAMIC_PARAM)) {
@@ -5219,8 +5248,8 @@ bool ObRawExprUtils::has_prefix_str_expr(const ObRawExpr &expr,
         bool param3_valid = false;
         if (param_expr2 != NULL && param_expr2->is_const_raw_expr()) {
           const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(param_expr2);
-          if ((const_expr->get_value().is_int() && const_expr->get_value().get_int() == 1)
-              || (const_expr->get_value().is_decimal_or_float()
+          if ((const_expr->get_value_meta().is_int() && const_expr->get_value_datum().get_int() == 1)
+              || (const_expr->get_value_meta().is_decimal_or_float()
                   && OB_SUCCESS == ora_cmp_integer(*const_expr, one, cmp_ret) && cmp_ret == 0))
             {
               param2_valid = true;
@@ -5228,8 +5257,8 @@ bool ObRawExprUtils::has_prefix_str_expr(const ObRawExpr &expr,
         }
         if (param_expr3 != NULL && param_expr3->is_const_raw_expr()) {
           const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(param_expr3);
-          if ((const_expr->get_value().is_int() && const_expr->get_value().get_int() >= 1)
-              || (const_expr->get_value().is_decimal_or_float()
+          if ((const_expr->get_value_meta().is_int() && const_expr->get_value_datum().get_int() >= 1)
+              || (const_expr->get_value_meta().is_decimal_or_float()
                   && OB_SUCCESS == ora_cmp_integer(*const_expr, one, cmp_ret) && cmp_ret >= 0))
             {
               param3_valid = true;
@@ -5289,9 +5318,11 @@ int ObRawExprUtils::build_const_bool_expr(ObRawExprFactory *expr_factory, ObRawE
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(bool_expr->extract_info())) {
   } else {
-    DatumValue val;
-    OZ (val.set_bool(b_value, expr_factory->get_allocator()));
-    OX (bool_expr->set_value(val));
+    Datum val;
+    SqlTypeMeta meta;
+    meta.set_tinyint();
+    val.set_bool(b_value);
+    OZ (bool_expr->set_value_borrowed(val, meta));
     OX (expr = bool_expr);
   }
   return ret;
@@ -5313,15 +5344,13 @@ int ObRawExprUtils::check_composite_cast(ObRawExpr *&expr, ObSchemaChecker &sche
       ret = OB_ERR_UNEXPECTED;
     } else if (T_FUN_SYS_CAST == expr->get_expr_type()) {
       ObConstRawExpr *const_expr = static_cast<ObConstRawExpr *>(expr->get_param_expr(1));
-      DatumValue param;
       ParseNode parse_node;
       SqlValueType obj_type;
       ObRawExpr *src = expr->get_param_expr(0);
       uint64_t udt_id = expr->get_param_expr(1)->get_udt_id();
       CK (OB_NOT_NULL(src), OB_NOT_NULL(const_expr));
       CK (expr->get_param_expr(1)->is_const_raw_expr());
-      OX (param = const_expr->get_value());
-      OX (parse_node.value_ = param.get_int());
+      OX (parse_node.value_ = const_expr->get_value_datum().get_int());
       OX (obj_type = static_cast<SqlValueType>(parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX]));
       if (OB_SUCC(ret) && is_prepare && T_QUESTIONMARK == src->get_expr_type()) { //question mark in prepare phase set skip_check
         skip_check = true;
@@ -6080,7 +6109,8 @@ int ObRawExprUtils::create_type_expr(ObRawExprFactory &expr_factory,
   ObConstRawExpr *dst_expr = NULL;
   ParseNode parse_node;
   memset(&parse_node, 0, sizeof(ParseNode));
-  DatumValue val;
+  Datum val;
+  SqlTypeMeta val_meta;
   if (OB_FAIL(expr_factory.create_raw_expr(T_INT, dst_expr))) {
   } else {
     parse_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = static_cast<int16_t>(dst_type.get_type());
@@ -6116,8 +6146,9 @@ int ObRawExprUtils::create_type_expr(ObRawExprFactory &expr_factory,
       }
     }
 
-    OZ (val.set_int(parse_node.value_, expr_factory.get_allocator()));
-    OX (dst_expr->set_value(val));
+    val_meta.set_int();
+    val.set_int(parse_node.value_);
+    OZ (dst_expr->set_value_borrowed(val, val_meta));
     OX (type_expr = dst_expr);
   }
   return ret;
@@ -6278,7 +6309,7 @@ int ObRawExprUtils::build_is_not_null_expr(ObRawExprFactory &expr_factory,
     DatumParameter null_val;
     null_val.set_null();
     null_val.set_param_meta();
-    null_expr->set_value(null_val);
+    OZ (null_expr->set_value_borrowed(null_val));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(is_not_expr->set_param_exprs(param_expr, null_expr))) {
@@ -6495,10 +6526,12 @@ int ObRawExprUtils::build_pack_expr(ObRawExprFactory &expr_factory,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(out_expr->init_param_exprs(1 + input_exprs.count()))) {
   } else {
-    DatumValue val;
+    Datum val;
+    SqlTypeMeta val_meta;
     //0 for BINARY, 1 for TEXT
-    OZ (val.set_int(is_ps ? 0 : 1, expr_factory.get_allocator()));
-    OX (encode_expr->set_value(val));
+    val_meta.set_int();
+    val.set_int(is_ps ? 0 : 1);
+    OZ (encode_expr->set_value_borrowed(val, val_meta));
     out_expr->set_field_array(reinterpret_cast<uint64_t>(field_array));
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(out_expr->add_param_expr(encode_expr))) {
@@ -7065,10 +7098,12 @@ int ObRawExprUtils::extract_local_vars_for_gencol(ObRawExpr *expr,
 int ObRawExprUtils::ora_cmp_integer(const ObConstRawExpr &const_expr, const int64_t v, int &cmp_ret)
 {
   int ret = OB_SUCCESS;
-  if (const_expr.get_result_type().is_number()) {
-    cmp_ret = const_expr.get_value().get_number().compare(v);
+  alignas(8) char scratch[64];
+  DatumValue obj;
+  if (OB_FAIL(const_expr.export_value(obj, scratch, sizeof(scratch)))) {
+  } else if (const_expr.get_result_type().is_number()) {
+    cmp_ret = obj.get_number().compare(v);
   } else if (const_expr.get_result_type().is_decimal_int()) {
-    const DatumValue &obj = const_expr.get_value();
     ObDatum d;
     d.ptr_ = reinterpret_cast<const char *>(&v);
     d.pack_ = sizeof(int64_t);

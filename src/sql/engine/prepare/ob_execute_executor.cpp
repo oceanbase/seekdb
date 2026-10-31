@@ -137,11 +137,11 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                               if (OB_ISNULL(expr->get_param_expr(0))) {
                                 ret = OB_ERR_UNEXPECTED;
                               } else if (OB_UNLIKELY(!expr->get_param_expr(0)->is_const_raw_expr()
-                                || !static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().is_varchar())) {
+                                || !static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value_meta().is_varchar())) {
                                 ret = OB_ERR_UNEXPECTED;
                               } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_CALL_PROCEDURE, ctx, ctx.get_allocator(), expr_ctx))) {
                               } else {
-                                const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().get_varchar();
+                                const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value_datum().get_string();
                                 const DatumParameter &out = result_set.get_exec_context()
                                     .get_physical_plan_ctx()->get_param_store().at(idx);
                                 if (OB_FAIL(ObVariableSetExecutor::set_user_variable(out.value_view(),

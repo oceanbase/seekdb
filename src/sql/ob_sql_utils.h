@@ -225,7 +225,8 @@ public:
   static int calc_const_expr(const ObRawExpr *expr,
                              const ParamStore *params,
                              common::DatumParameter &result,
-                             bool &need_check);
+                             bool &need_check,
+                             common::ObIAllocator &allocator);
 
   template <typename ParameterRef>
   static int get_param_value(const ParameterRef &param,

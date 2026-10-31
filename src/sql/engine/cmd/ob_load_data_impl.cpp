@@ -248,12 +248,15 @@ int ObInsertValueGenerator::fill_field_expr(ObIArray<ObCSVGeneralParser::FieldVa
   if (OB_UNLIKELY(field_values.count() != field_exprs_.count())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    for (int i = 0; i < field_values.count(); ++i) {
+    for (int i = 0; OB_SUCC(ret) && i < field_values.count(); ++i) {
       auto expr = static_cast<ObConstRawExpr *>(field_exprs_.at(i));
-      ObLoadDataBase::field_to_value(expr->get_value(),
-                                   field_values.at(i),
-                                   cs_type_,
-                                   string_values.has_member(i));
+      DatumValue field;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(expr->export_value(field, scratch, sizeof(scratch)))) {
+      } else {
+        ObLoadDataBase::field_to_value(field, field_values.at(i), cs_type_, string_values.has_member(i));
+        ret = expr->replace_value_borrowed(field);
+      }
     }
   }
   return ret;
@@ -273,9 +276,9 @@ int ObInsertValueGenerator::gen_insert_values(ObIArray<ObString> &insert_values,
     if (expr->get_expr_type() == T_DEFAULT) {
       OZ (str_buf.write_string("DEFAULT", &store_value));
     } else if (expr->is_const_raw_expr()
-               && (const_expr = static_cast<ObConstRawExpr *>(expr))->get_value().is_string_type()) {
-      ObString const_string = const_expr->get_value().get_string();
-      ObCollationType coll_type = const_expr->get_value().get_collation_type();
+               && (const_expr = static_cast<ObConstRawExpr *>(expr))->get_value_meta().is_string_type()) {
+      ObString const_string = const_expr->get_value_datum().get_string();
+      ObCollationType coll_type = const_expr->get_value_meta().get_collation_type();
       uint32_t pos = 0;
       if (ObCharset::charset_type_by_coll(coll_type) != CHARSET_UTF8MB4) {
         if (OB_FAIL(ObCharset::charset_convert(
@@ -413,10 +416,10 @@ public:
           ret = OB_ERR_UNEXPECTED;
         } else {
           ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(func_expr->get_param_expr(0));
-          if (c_expr->get_value().get_type() != ObVarcharType) {
+          if (c_expr->get_value_meta().get_type() != ObVarcharType) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            ref_name = c_expr->get_value().get_string();
+            ref_name = c_expr->get_value_datum().get_string();
           }
         }
       }
@@ -453,8 +456,7 @@ public:
                 // A default-constructed T_INVALID expression has no value
                 // slot even when its declared result type is populated.
                 c_expr->set_expr_type(static_cast<ObItemType>(var_value.get_type()));
-                c_expr->set_value(var_value);
-                new_expr = c_expr;
+                if (OB_SUCC(ret = c_expr->set_value_borrowed(var_value))) { new_expr = c_expr; }
               }
             }
           }
@@ -783,12 +785,18 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
           int64_t idx = task_id % handle->datafrag_mgr.get_tablet_ids().count();
           tablet_id = handle->datafrag_mgr.get_tablet_ids().at(idx);
         } else {
-          for (int i = 0; i < handle->parser.get_fields_per_line().count(); ++i) {
-            handle->row_in_file.at(i) =
-              static_cast<ObConstRawExpr *>(handle->generator.get_field_exprs().at(i))->get_value();
+          for (int i = 0; OB_SUCC(ret) && i < handle->parser.get_fields_per_line().count(); ++i) {
+            const auto *field = static_cast<ObConstRawExpr *>(handle->generator.get_field_exprs().at(i));
+            // fill_field_expr publishes only NULL or parser-owned VARCHAR;
+            // this export therefore cannot retain a scalar scratch pointer.
+            alignas(8) char scratch[64];
+            if (!field->get_value_datum().is_null() && !field->get_value_meta().is_varchar()) {
+              ret = OB_ERR_UNEXPECTED;
+            } else { ret = field->export_value(handle->row_in_file.at(i), scratch, sizeof(scratch)); }
           }
           row_eval_allocator.reuse();
-          if (OB_FAIL(handle->calc_tablet_id_expr->eval_datum(handle->exec_ctx,
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(handle->calc_tablet_id_expr->eval_datum(handle->exec_ctx,
                       handle->row_in_file, row_eval_allocator, result))) {
           } else {
             tablet_id = ObTabletID(result.get_uint64());

@@ -63,9 +63,13 @@ inline int ObExprSpace::calc_result_type1(
     //      select c1 from space_t1;
     const ObConstRawExpr *const_expr =
               static_cast<const ObConstRawExpr*>(child_raw_expr->get_param_expr(0));
+    alignas(8) char parameter_scratch[64];
+    DatumValue parameter;
     if (child_raw_expr->get_param_expr(0)->get_result_type().is_null()) {
       res_type = ObVarcharType;
-    } else if (OB_FAIL(calc_result_type(type_ctx, const_expr->get_param(), res_type))) {
+    } else if (OB_FAIL(const_expr->export_bound_param(parameter, parameter_scratch,
+                                                     sizeof(parameter_scratch)))) {
+    } else if (OB_FAIL(calc_result_type(type_ctx, parameter, res_type))) {
     }
   } else {
     res_type = ObLongTextType;

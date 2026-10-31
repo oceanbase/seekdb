@@ -1162,12 +1162,11 @@ int ObRangeGraphGenerator::generate_expr_final_info()
       ret = OB_ERR_UNEXPECTED;
     } else if (T_QUESTIONMARK == expr->get_expr_type()) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(expr);
-      const DatumValue &val = const_expr->get_value();
-      if (OB_UNLIKELY(!val.is_unknown())) {
+      if (OB_UNLIKELY(!const_expr->get_value_meta().is_unknown())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected value type", K(val));
+        LOG_WARN("get unexpected value type", K(const_expr->get_value_meta()));
       } else {
-        val.get_unknown(expr_info.param_idx_);
+        ret = const_expr->get_questionmark_index(expr_info.param_idx_);
         expr_info.is_param_ = true;
       }
     } else if (expr->has_flag(IS_CONST)) {
@@ -1177,8 +1176,10 @@ int ObRangeGraphGenerator::generate_expr_final_info()
       else {
         expr_info.const_val_ = new(ptr)ObDatum();
         expr_info.is_const_ = true;
-        DatumValue owned;
-        if (OB_FAIL(clone_typed_value(const_expr->get_value(), owned, allocator_))) {
+        DatumValue view, owned;
+        alignas(8) char scratch[64];
+        if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(clone_typed_value(view, owned, allocator_))) {
         } else {
           *expr_info.const_val_ = owned.datum_;
           expr_info.const_meta_ = owned.meta_;

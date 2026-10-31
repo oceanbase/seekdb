@@ -2160,9 +2160,11 @@ int ObTransformPreProcess::create_distance_type_const_expr(
     } else if (OB_ISNULL(const_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      DatumValue obj;
-      OZ (obj.set_int(static_cast<int64_t>(vec_dis_type), ctx_->expr_factory_->get_allocator()));
-      OX (const_expr->set_value(obj));
+      Datum value;
+      SqlTypeMeta meta;
+      value.set_int(vec_dis_type);
+      meta.set_int();
+      OZ (const_expr->set_value_borrowed(value, meta));
       OX (dis_type = const_expr);
     }
   }
@@ -2272,7 +2274,7 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
   // 1. record assignment params
   for (int64_t i = 0; OB_SUCC(ret) && i < assignment_params.count(); ++i) {
     ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(assignment_params.at(i));
-    int64_t param_idx = param_expr->get_value().get_unknown();
+    int64_t param_idx = param_expr->get_questionmark_index();
     if (param_idx < 0 || param_idx >= param_store->count()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (param_store->at(param_idx).is_batch_parameters()
@@ -2297,7 +2299,7 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
       ObPseudoColumnRawExpr *group_id = NULL;
-      int64_t param_idx = param_expr->get_value().get_unknown();
+      int64_t param_idx = param_expr->get_questionmark_index();
       if (param_idx < 0 || param_idx >= param_store.count()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (!param_store.at(param_idx).is_batch_parameters()) {
@@ -2354,7 +2356,7 @@ int ObTransformPreProcess::transform_for_ins_batch_stmt(ObDMLStmt *batch_stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
       ObPseudoColumnRawExpr *group_id = NULL;
-      int64_t param_idx = param_expr->get_value().get_unknown();
+      int64_t param_idx = param_expr->get_questionmark_index();
       if (param_idx < 0 || param_idx >= param_store.count()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (!param_store.at(param_idx).is_batch_parameters()) {
@@ -2658,7 +2660,7 @@ int ObTransformPreProcess::mock_select_list_for_upd_del(ObDMLStmt &batch_stmt,
 
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
-    int64_t param_idx = param_expr->get_value().get_unknown();
+    int64_t param_idx = param_expr->get_questionmark_index();
     if (param_idx < 0 || param_idx >= param_store->count()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (param_store->at(param_idx).is_batch_parameters()

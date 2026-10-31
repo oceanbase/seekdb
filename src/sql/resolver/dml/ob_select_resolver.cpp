@@ -1481,8 +1481,10 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
           } else if (name_expr->is_const_raw_expr() && T_QUESTIONMARK != name_expr->get_expr_type()) {
             char buf[OB_MAX_ALIAS_NAME_LENGTH + 1];
             int64_t pos = 0;
-            const DatumValue &value = static_cast<const ObConstRawExpr*>(name_expr)->get_value();
-            if (value.is_numeric_type() && OB_FAIL(prepare_get_child_at(expr_list_node, 0))) {
+            DatumValue value;
+            alignas(8) char scratch[64];
+            if (OB_FAIL(static_cast<const ObConstRawExpr*>(name_expr)->export_value(value, scratch, sizeof(scratch)))) {
+            } else if (value.is_numeric_type() && OB_FAIL(prepare_get_child_at(expr_list_node, 0))) {
             } else if (value.is_numeric_type()) {
               const ParseNode *alias_node = expr_list_node->children_[0];
               if (OB_ISNULL(alias_node)) {
@@ -1599,13 +1601,13 @@ int ObSelectResolver::add_alias_from_dot_notation(ObRawExpr *sel_expr, SelectIte
   ObConstRawExpr* path_expr = NULL;
   // whether is dot notation
   if (OB_NOT_NULL(sel_expr->get_param_expr(JSN_QUE_MISMATCH))
-      && JSN_QUERY_MISMATCH_DOT == static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_MISMATCH))->get_value().get_int()) {
+      && JSN_QUERY_MISMATCH_DOT == static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_MISMATCH))->get_value_datum().get_int()) {
     if (!select_item.alias_name_.empty()) {
       select_item.is_real_alias_ = true;
     } else if (OB_NOT_NULL(sel_expr->get_param_expr(JSN_QUE_PATH))
                && T_CHAR == sel_expr->get_param_expr(JSN_QUE_PATH)->get_expr_type()) {
       path_expr = static_cast<ObConstRawExpr*>(sel_expr->get_param_expr(JSN_QUE_PATH));
-      path_str = path_expr->get_value().get_string();
+      path_str = path_expr->get_value_datum().get_string();
       pos = path_str.length() - 1;
       len = 0;
       char *buf = NULL;

@@ -2247,7 +2247,7 @@ int ObLogTableScan::extract_bnlj_param_idxs(ObIArray<int64_t> &bnlj_params)
       ObRawExpr *expr = range_param_exprs.at(i);
       if (expr->has_flag(IS_DYNAMIC_PARAM)) {
         ObConstRawExpr *exec_param = static_cast<ObConstRawExpr*>(expr);
-        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_value().get_unknown()))) {
+        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_questionmark_index()))) {
         }
       }
     }
@@ -2255,7 +2255,7 @@ int ObLogTableScan::extract_bnlj_param_idxs(ObIArray<int64_t> &bnlj_params)
       ObRawExpr *expr = filter_param_exprs.at(i);
       if (expr->has_flag(IS_DYNAMIC_PARAM)) {
         ObConstRawExpr *exec_param = static_cast<ObConstRawExpr*>(expr);
-        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_value().get_unknown()))) {
+        if (OB_FAIL(add_var_to_array_no_dup(bnlj_params, exec_param->get_questionmark_index()))) {
         }
       }
     }
