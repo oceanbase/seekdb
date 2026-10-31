@@ -25,6 +25,8 @@
 #include <string>
 #include <sys/stat.h>
 #include <vector>
+#include <cstdint>
+#include <cstdio>
 
 namespace oceanbase {
 namespace sql {
@@ -101,6 +103,160 @@ inline std::string sql_identifier(const std::string &x) {
   out.push_back('`');
   return out;
 }
+
+// SQL-session-bound allowlist. Standalone unit tests keep the historical
+// environment root, but real server parses install a session's secure_file_priv
+// root for the duration of SQL parsing. The parser must reject file SQL before
+// entering this code unless enable_file_sql is explicitly set in its session.
+inline std::string &session_secure_file_root()
+{
+  static thread_local std::string root;
+  return root;
+}
+class ScopedFileSqlSecurity
+{
+public:
+  explicit ScopedFileSqlSecurity(const std::string &allowed_root)
+    : previous_(session_secure_file_root())
+  {
+    session_secure_file_root() = allowed_root;
+  }
+  ~ScopedFileSqlSecurity()
+  {
+    session_secure_file_root() = previous_;
+  }
+private:
+  const std::string previous_;
+  ScopedFileSqlSecurity(const ScopedFileSqlSecurity &) = delete;
+  ScopedFileSqlSecurity &operator=(const ScopedFileSqlSecurity &) = delete;
+};
+inline bool secured_file_path(const std::string &real_path)
+{
+  const std::string &allowed = session_secure_file_root();
+  return allowed.empty() || allowed == "/" ||
+         (real_path.size()>allowed.size() &&
+          real_path.compare(0,allowed.size(),allowed)==0 &&
+          real_path[allowed.size()]=='/');
+}
+// Extract only exact SET SESSION enable_file_sql controls. All other SET
+// statements are passed unchanged. The backing @ variable is session-local:
+// this is an interim compatibility shim, not an actual system variable.
+inline bool file_sql_set_statement(const std::string &input,std::string &out)
+{
+  std::string sql=trim(input);
+  if(!sql.empty() && sql.back()==';')sql=trim(sql.substr(0,sql.size()-1));
+  const std::string low=lower(sql);
+  size_t at=0;
+  auto word=[&](const char *value)->bool{
+    const size_t n=std::strlen(value);
+    while(at<low.size() && space(low[at]))++at;
+    if(low.compare(at,n,value)!=0 ||
+       (at+n<low.size() && id_char(low[at+n])))return false;
+    at+=n;
+    return true;
+  };
+  if(!word("set"))return false;
+  const size_t save=at;
+  if(!word("session"))at=save;
+  if(!word("enable_file_sql"))return false;
+  while(at<low.size() && space(low[at]))++at;
+  if(at>=low.size() || low[at]!='=')return false;
+  ++at;
+  while(at<low.size() && space(low[at]))++at;
+  std::string value=trim(low.substr(at));
+  if(value=="on" || value=="true" || value=="1")
+    out="SET @__seekdb_file_sql_enabled = 1";
+  else if(value=="off" || value=="false" || value=="0")
+    out="SET @__seekdb_file_sql_enabled = 0";
+  else return false;
+  return true;
+}
+// Replace @@session.enable_file_sql only in source text, not in strings,
+// backtick identifiers, or SQL comments. The actual value is read from the
+// same MySQL connection's @__seekdb_file_sql_enabled user variable.
+inline bool file_sql_show_statement(const std::string &sql,std::string &out)
+{
+  const std::string target="@@session.enable_file_sql";
+  out.clear();
+  bool changed=false;
+  enum State { CODE, SQ, DQ, BT, LINE, BLOCK } state=CODE;
+  for(size_t i=0;i<sql.size();) {
+    const char c=sql[i];
+    if(state==LINE) {
+      out.push_back(c);++i;
+      if(c=='\n')state=CODE;
+    } else if(state==BLOCK) {
+      if(c=='*' && i+1<sql.size() && sql[i+1]=='/') {
+        out+="*/";i+=2;state=CODE;
+      }else{out.push_back(c);++i;}
+    } else if(state==SQ || state==DQ || state==BT) {
+      const char end=state==SQ?'\'':(state==DQ?'"':'`');
+      out.push_back(c);++i;
+      if(c=='\\' && i<sql.size()){out.push_back(sql[i]);++i;}
+      else if(c==end && i<sql.size() && sql[i]==end) {
+        out.push_back(sql[i]);++i;
+      } else if(c==end)state=CODE;
+    }else if(c=='\'' || c=='"' || c=='`') {
+      state=c=='\''?SQ:(c=='"'?DQ:BT);
+      out.push_back(c);++i;
+    }else if(c=='#' || (c=='-' && i+2<sql.size() && sql[i+1]=='-' && space(sql[i+2]))) {
+      state=LINE;out.push_back(c);++i;
+    }else if(c=='/' && i+1<sql.size() && sql[i+1]=='*'){
+      state=BLOCK;out+="/*";i+=2;
+    }else if(i+target.size()<=sql.size() &&
+             lower(sql.substr(i,target.size()))==target &&
+             (i+target.size()==sql.size() ||
+             !id_char(sql[i+target.size()]))) {
+      out+="COALESCE(@__seekdb_file_sql_enabled, 0)";
+      i+=target.size();
+      changed=true;
+    }else {
+      out.push_back(c);++i;
+    }
+  }
+  return changed;
+}
+inline bool file_sql_statement_detected(const std::string &sql)
+{
+  const std::string normalized=lower(trim(sql));
+  if(normalized.size()>=4 && normalized.compare(0,4,"copy")==0 &&
+     (normalized.size()==4 || !id_char(normalized[4])))return true;
+  const char *fn[]={"read_csv","read_json","read_ndjson","read_parquet","glob"};
+  enum State { CODE, SQ, DQ, BT, LINE, BLOCK } state=CODE;
+  for(size_t i=0;i<sql.size();) {
+    const char c=sql[i];
+    if(state==LINE) {
+      if(c=='\n')state=CODE;
+      ++i;
+    }else if(state==BLOCK) {
+      if(c=='*' && i+1<sql.size() && sql[i+1]=='/') {
+        i+=2;state=CODE;
+      }else ++i;
+    }else if(state==SQ || state==DQ || state==BT) {
+      const char end=state==SQ?'\'':(state==DQ?'"':'`');
+      ++i;
+      if(c=='\\' && i<sql.size())++i;
+      else if(c==end && i<sql.size() && sql[i]==end)++i;
+      else if(c==end)state=CODE;
+    }else if(c=='\'' || c=='"' || c=='`') {
+      state=c=='\''?SQ:(c=='"'?DQ:BT);++i;
+    }else if(c=='#' || (c=='-' && i+2<sql.size() && sql[i+1]=='-' && space(sql[i+2]))) {
+      state=LINE;++i;
+    }else if(c=='/' && i+1<sql.size() && sql[i+1]=='*') {
+      state=BLOCK;i+=2;
+    }else if(id_start(c)) {
+      const size_t start=i++;
+      while(i<sql.size() && id_char(sql[i]))++i;
+      const std::string token=lower(sql.substr(start,i-start));
+      size_t p=i;
+      while(p<sql.size() && space(sql[p]))++p;
+      for(size_t j=0;j<sizeof(fn)/sizeof(fn[0]);++j)
+        if(token==fn[j] && p<sql.size() && sql[p]=='(')return true;
+    }else ++i;
+  }
+  return false;
+}
+
 inline bool parse_quoted_path(const std::string &sql,size_t &pos,std::string &path) {
   if (pos>=sql.size() || sql[pos]!='\'') return false;
   ++pos;
@@ -125,7 +281,9 @@ inline bool parse_quoted_path(const std::string &sql,size_t &pos,std::string &pa
 }
 inline bool permitted_root(std::string &root,std::string &err) {
   const char *env=std::getenv("SEEKDB_FILE_SQL_ROOT");
-  const char *want=env && *env ? env : "/tmp/seekdb-file-sql";
+  const char *want=env && *env ? env :
+      (session_secure_file_root().empty() ?
+       "/tmp/seekdb-file-sql" : session_secure_file_root().c_str());
   char resolved[PATH_MAX];
   if (::realpath(want,resolved)==nullptr) {
     err=std::string("file_sql_root does not exist: ")+want;
@@ -161,7 +319,8 @@ inline bool resolve_file(const std::string &input,std::string &path,std::string 
   }
   path=resolved;
   struct stat st;
-  if (!under_root(root,path) || ::stat(path.c_str(),&st)!=0 ||
+  if (!under_root(root,path) || !secured_file_path(path) ||
+      ::stat(path.c_str(),&st)!=0 ||
       !S_ISREG(st.st_mode) || st.st_size<0 ||
       static_cast<size_t>(st.st_size)>MAX_FILE_BYTES) {
     err="read requires a regular file smaller than 2 MiB inside file_sql_root";
@@ -369,6 +528,321 @@ inline bool is_number(const std::string &value) {
   const double n=std::strtod(value.c_str(),&end);
   return errno==0 && end==value.c_str()+value.size() && std::isfinite(n);
 }
+
+// Deterministic bounded schema inference for file-backed JSON_TABLE sources.
+// The type lattice makes inference independent of sampling and row order.
+enum FileScalarType {
+  FILE_NULL=0, FILE_BOOL=1, FILE_INT=2, FILE_DOUBLE=3,
+  FILE_DATE=4, FILE_DATETIME=5, FILE_TEXT=6
+};
+inline bool date_digits(const std::string &s,size_t at,size_t count) {
+  if(at+count>s.size())return false;
+  for(size_t i=0;i<count;++i)
+    if(s[at+i]<'0' || s[at+i]>'9')return false;
+  return true;
+}
+inline int date_number(const std::string &s,size_t at,size_t count) {
+  int n=0;
+  for(size_t i=0;i<count;++i)n=n*10+(s[at+i]-'0');
+  return n;
+}
+inline bool valid_date_value(const std::string &s) {
+  if(s.size()!=10 || s[4]!='-' || s[7]!='-' ||
+     !date_digits(s,0,4) || !date_digits(s,5,2) || !date_digits(s,8,2))
+    return false;
+  const int y=date_number(s,0,4),m=date_number(s,5,2),d=date_number(s,8,2);
+  if(y<1 || m<1 || m>12 || d<1)return false;
+  static const int lengths[12]={31,28,31,30,31,30,31,31,30,31,30,31};
+  const bool leap=(y%4==0 && (y%100!=0 || y%400==0));
+  return d<=lengths[m-1]+((m==2 && leap)?1:0);
+}
+inline bool valid_datetime_value(const std::string &s) {
+  if(s.size()<19 || !valid_date_value(s.substr(0,10)) ||
+     (s[10]!='T' && s[10]!=' ') || s[13]!=':' || s[16]!=':' ||
+     !date_digits(s,11,2) || !date_digits(s,14,2) ||
+     !date_digits(s,17,2))
+    return false;
+  const int h=date_number(s,11,2);
+  const int minute=date_number(s,14,2);
+  const int sec=date_number(s,17,2);
+  if(h>23 || minute>59 || sec>59)return false;
+  if(s.size()==19)return true;
+  if(s[19]!='.' || s.size()>26 || s.size()==20)return false;
+  return date_digits(s,20,s.size()-20);
+}
+inline bool integer_value(const std::string &value) {
+  if(!is_number(value) || value.find_first_of(".eE")!=std::string::npos)
+    return false;
+  errno=0;
+  char *end=nullptr;
+  (void)std::strtoll(value.c_str(),&end,10);
+  return errno==0 && end==value.c_str()+value.size();
+}
+inline FileScalarType detect_scalar(const std::string &value,
+                                     bool allow_numeric_and_bool=true) {
+  if(value.empty())return FILE_NULL;
+  const std::string l=lower(value);
+  if(allow_numeric_and_bool && (l=="true" || l=="false"))
+    return FILE_BOOL;
+  if(valid_date_value(value))return FILE_DATE;
+  if(valid_datetime_value(value))return FILE_DATETIME;
+  if(allow_numeric_and_bool && integer_value(value))return FILE_INT;
+  if(allow_numeric_and_bool && is_number(value)) {
+    if(value.find_first_of(".eE")==std::string::npos)return FILE_TEXT;
+    return FILE_DOUBLE;
+  }
+  return FILE_TEXT;
+}
+inline FileScalarType widen_file_type(FileScalarType old_t,FileScalarType new_t) {
+  if(old_t==FILE_NULL)return new_t;
+  if(new_t==FILE_NULL || old_t==new_t)return old_t;
+  if((old_t==FILE_INT && new_t==FILE_DOUBLE) ||
+     (old_t==FILE_DOUBLE && new_t==FILE_INT))return FILE_DOUBLE;
+  if((old_t==FILE_DATE && new_t==FILE_DATETIME) ||
+     (old_t==FILE_DATETIME && new_t==FILE_DATE))return FILE_DATETIME;
+  return FILE_TEXT;
+}
+inline std::string file_sql_type(FileScalarType t) {
+  switch(t) {
+    case FILE_BOOL:return "TINYINT";
+    case FILE_INT:return "BIGINT";
+    case FILE_DOUBLE:return "DOUBLE";
+    case FILE_DATE:return "DATE";
+    case FILE_DATETIME:return "DATETIME";
+    case FILE_NULL:case FILE_TEXT:return "VARCHAR(4096)";
+  }
+  return "VARCHAR(4096)";
+}
+inline void uniquify_file_names(std::vector<std::string> &names) {
+  std::vector<std::string> seen;
+  for(size_t i=0;i<names.size();++i) {
+    std::string base=names[i].empty()?
+      "column_"+std::to_string(i+1):names[i];
+    std::string candidate=base;
+    for(unsigned suffix=2;
+        std::find(seen.begin(),seen.end(),candidate)!=seen.end();++suffix)
+      candidate=base+"__"+std::to_string(suffix);
+    seen.push_back(candidate);
+    names[i]=candidate;
+  }
+}
+inline bool typed_csv_json(const std::string &data,bool has_header,
+                           std::string &doc,std::vector<std::string> &names,
+                           std::vector<std::string> &types,std::string &err) {
+  std::vector<std::vector<std::string> > rows;
+  if(!csv_rows(data,rows,err))return false;
+  if(rows.empty()){err="CSV has no records";return false;}
+  const size_t count=rows[0].size();
+  if(count==0 || count>256){err="CSV column count exceeds limit";return false;}
+  if(has_header)names=rows[0];
+  else for(size_t i=0;i<count;++i)names.push_back("column"+std::to_string(i));
+  uniquify_file_names(names);
+  if(rows.size()>MAX_FILE_ROWS+static_cast<size_t>(has_header)){
+    err="CSV row count exceeds limit";return false;
+  }
+  const size_t start=has_header?1:0;
+  std::vector<FileScalarType> inferred(count,FILE_NULL);
+  for(size_t i=start;i<rows.size();++i) {
+    if(rows[i].size()!=count) {
+      err="CSV row "+std::to_string(i+1)+" has wrong column count";
+      return false;
+    }
+    for(size_t c=0;c<count;++c) {
+      if(rows[i][c].size()>4096) {
+        err="CSV field exceeds VARCHAR(4096) limit";return false;
+      }
+      inferred[c]=widen_file_type(inferred[c],detect_scalar(rows[i][c]));
+    }
+  }
+  for(size_t i=0;i<count;++i)types.push_back(file_sql_type(inferred[i]));
+  doc="[";
+  for(size_t i=start;i<rows.size();++i) {
+    if(i>start)doc+=",";
+    doc+="{";
+    for(size_t c=0;c<count;++c) {
+      if(c)doc+=",";
+      const std::string &value=rows[i][c];
+      doc+=json_quote(names[c])+":";
+      if(value.empty())doc+="null";
+      else if(inferred[c]==FILE_BOOL)doc+=lower(value);
+      else if(inferred[c]==FILE_INT || inferred[c]==FILE_DOUBLE)
+        doc+=value;
+      else if(inferred[c]==FILE_DATETIME && valid_datetime_value(value)
+              && value[10]=='T') {
+        std::string converted=value;
+        converted[10]=' ';
+        doc+=json_quote(converted);
+      } else doc+=json_quote(value);
+    }
+    doc+="}";
+    if(doc.size()>MAX_RESULT_BYTES){err="CSV materialization exceeds 2 MiB";return false;}
+  }
+  doc+="]";
+  return true;
+}
+inline bool append_utf8(uint32_t cp,std::string &out) {
+  if(cp==0 || cp>0x10ffff || (cp>=0xd800 && cp<=0xdfff))return false;
+  if(cp<0x80)out.push_back(static_cast<char>(cp));
+  else if(cp<0x800){
+    out.push_back(static_cast<char>(0xc0|(cp>>6)));
+    out.push_back(static_cast<char>(0x80|(cp&0x3f)));
+  } else if(cp<0x10000){
+    out.push_back(static_cast<char>(0xe0|(cp>>12)));
+    out.push_back(static_cast<char>(0x80|((cp>>6)&0x3f)));
+    out.push_back(static_cast<char>(0x80|(cp&0x3f)));
+  } else {
+    out.push_back(static_cast<char>(0xf0|(cp>>18)));
+    out.push_back(static_cast<char>(0x80|((cp>>12)&0x3f)));
+    out.push_back(static_cast<char>(0x80|((cp>>6)&0x3f)));
+    out.push_back(static_cast<char>(0x80|(cp&0x3f)));
+  }
+  return true;
+}
+inline int hex_digit(char c) {
+  if(c>='0' && c<='9')return c-'0';
+  if(c>='a' && c<='f')return c-'a'+10;
+  if(c>='A' && c<='F')return c-'A'+10;
+  return -1;
+}
+inline bool json_escape_codepoint(const std::string &s,size_t &at,
+                                  uint32_t &cp) {
+  if(at+4>s.size())return false;
+  cp=0;
+  for(size_t i=0;i<4;++i) {
+    const int h=hex_digit(s[at+i]);
+    if(h<0)return false;
+    cp=(cp<<4)|static_cast<uint32_t>(h);
+  }
+  at+=4;
+  return true;
+}
+inline bool strict_json_string(const std::string &s,size_t &p,
+                               std::string &decoded) {
+  if(p>=s.size() || s[p]!='"')return false;
+  ++p;
+  while(p<s.size()) {
+    const unsigned char c=static_cast<unsigned char>(s[p++]);
+    if(c=='"')return true;
+    if(c<0x20)return false;
+    if(c!='\\') {
+      decoded.push_back(static_cast<char>(c));
+      continue;
+    }
+    if(p>=s.size())return false;
+    const char e=s[p++];
+    if(e=='u') {
+      uint32_t cp=0;
+      if(!json_escape_codepoint(s,p,cp))return false;
+      if(cp>=0xd800 && cp<=0xdbff) {
+        if(p+2>s.size() || s[p++]!='\\' || s[p++]!='u')return false;
+        uint32_t low=0;
+        if(!json_escape_codepoint(s,p,low) || low<0xdc00 || low>0xdfff)
+          return false;
+        cp=0x10000+((cp-0xd800)<<10)+(low-0xdc00);
+      }
+      if(!append_utf8(cp,decoded))return false;
+    } else {
+      switch(e) {
+        case '"':decoded.push_back('"');break;
+        case '\\':decoded.push_back('\\');break;
+        case '/':decoded.push_back('/');break;
+        case 'b':decoded.push_back('\b');break;
+        case 'f':decoded.push_back('\f');break;
+        case 'n':decoded.push_back('\n');break;
+        case 'r':decoded.push_back('\r');break;
+        case 't':decoded.push_back('\t');break;
+        default:return false;
+      }
+    }
+  }
+  return false;
+}
+inline bool typed_json_schema(const std::vector<std::string> &objects,
+                              std::vector<std::string> &names,
+                              std::vector<std::string> &types,
+                              std::string &err) {
+  std::vector<FileScalarType> inferred;
+  for(size_t i=0;i<objects.size();++i) {
+    const std::string &row=objects[i];
+    size_t p=0;
+    while(p<row.size() && space(row[p]))++p;
+    if(p>=row.size() || row[p]!='{'){
+      err="JSON object expected at row "+std::to_string(i+1);return false;
+    }
+    ++p;
+    std::vector<std::string> local;
+    bool first=true;
+    for(;;) {
+      while(p<row.size() && space(row[p]))++p;
+      if(p>=row.size()){err="unterminated JSON object";return false;}
+      if(row[p]=='}'){++p;break;}
+      if(!first) {
+        if(row[p]!=','){err="missing JSON comma";return false;}
+        ++p;
+        while(p<row.size() && space(row[p]))++p;
+        if(p>=row.size() || row[p]=='}'){
+          err="JSON trailing comma";return false;
+        }
+      }
+      first=false;
+      std::string name;
+      if(!strict_json_string(row,p,name) || name.empty() || name.size()>256){
+        err="invalid JSON property name at row "+std::to_string(i+1);
+        return false;
+      }
+      if(std::find(local.begin(),local.end(),name)!=local.end()){
+        err="duplicate JSON object key "+name;return false;
+      }
+      local.push_back(name);
+      while(p<row.size() && space(row[p]))++p;
+      if(p>=row.size() || row[p]!=':'){err="missing JSON colon";return false;}
+      ++p;
+      while(p<row.size() && space(row[p]))++p;
+      if(p>=row.size()){err="JSON value missing";return false;}
+      FileScalarType t=FILE_NULL;
+      if(row[p]=='"') {
+        std::string value;
+        if(!strict_json_string(row,p,value)){err="invalid JSON string";return false;}
+        if(value.size()>4096){err="JSON text exceeds 4096";return false;}
+        // JSON quoted numerics and booleans remain text. ISO dates are typed.
+        t=value.empty()?FILE_TEXT:detect_scalar(value,false);
+      } else if(row[p]=='[' || row[p]=='{') {
+        err="nested JSON arrays/objects are not supported at row "+
+            std::to_string(i+1);return false;
+      } else {
+        const size_t start=p;
+        while(p<row.size() && !space(row[p]) &&
+              row[p]!=',' && row[p]!='}')++p;
+        const std::string token=row.substr(start,p-start);
+        if(token=="null")t=FILE_NULL;
+        else if(token=="true" || token=="false")t=FILE_BOOL;
+        else if(integer_value(token))t=FILE_INT;
+        else if(is_number(token))t=FILE_DOUBLE;
+        else {
+          err="invalid JSON scalar at row "+std::to_string(i+1);
+          return false;
+        }
+      }
+      size_t at=0;
+      while(at<names.size() && names[at]!=name)++at;
+      if(at==names.size()) {
+        if(names.size()>=256) {
+          err="JSON schema has too many columns";return false;
+        }
+        names.push_back(name);
+        inferred.push_back(FILE_NULL);
+      }
+      inferred[at]=widen_file_type(inferred[at],t);
+    }
+    while(p<row.size() && space(row[p]))++p;
+    if(p!=row.size()){err="unexpected tokens after JSON object";return false;}
+  }
+  if(names.empty()){err="cannot infer empty JSON schema";return false;}
+  for(size_t i=0;i<names.size();++i)
+    types.push_back(file_sql_type(inferred[i]));
+  return true;
+}
+
 inline bool csv_to_json(const std::string &data,std::string &doc,
                         std::vector<std::string> &names,
                         std::vector<std::string> &types,std::string &err) {
@@ -427,7 +901,8 @@ inline bool glob_to_json(const std::string &input,std::string &doc,std::string &
     err="glob patterns cannot traverse outside file_sql_root";return false;
   }
   const std::string pattern=input.empty()?"":(input[0]=='/'?input:root+"/"+input);
-  if(pattern.empty() || !under_root(root,pattern)) {
+  if(pattern.empty() || !under_root(root,pattern) ||
+     !secured_file_path(pattern)) {
     err="glob pattern is outside file_sql_root";return false;
   }
   glob_t matches={};
@@ -455,7 +930,762 @@ inline bool glob_to_json(const std::string &input,std::string &doc,std::string &
   doc+="]";
   return true;
 }
+
+// Native bounded Parquet data-page decoder. This is an experimental
+// subset of Apache Parquet (TCompactProtocol metadata, flat primitives,
+// PLAIN / RLE_DICTIONARY, page V1/V2, UNCOMPRESSED / SNAPPY). Unsupported
+// codecs/encodings abort with an error, never silently invent results.
+// Data is currently materialized into JSON_TABLE so this does NOT yet
+// satisfy the competition's streaming-scan requirement.
+namespace parquet_native {
+
+struct Reader {
+  const unsigned char *data;
+  size_t len;
+  size_t pos;
+  bool ok;
+  Reader(const char *src,size_t length)
+      :data(reinterpret_cast<const unsigned char *>(src)),
+       len(length),pos(0),ok(true){}
+  bool can(size_t count) const {
+    return count<=len && pos<=len-count;
+  }
+  unsigned char byte() {
+    if(!can(1)){ok=false;return 0;}
+    return data[pos++];
+  }
+  uint64_t uvar() {
+    uint64_t v=0;
+    for(int shift=0;shift<70;shift+=7) {
+      if(!can(1)){ok=false;return 0;}
+      const unsigned char c=byte();
+      if(shift==63 && (c&0x7e)!=0){ok=false;return 0;}
+      if(shift>63 && (c&0x7f)!=0){ok=false;return 0;}
+      v|=uint64_t(c&0x7f)<<shift;
+      if(!(c&0x80))return v;
+    }
+    ok=false;return 0;
+  }
+  int64_t zig() {
+    uint64_t n=uvar();
+    return static_cast<int64_t>((n>>1) ^ (~(n&1)+1));
+  }
+  uint64_t le(size_t width) {
+    if(width>8 || !can(width)){ok=false;return 0;}
+    uint64_t result=0;
+    for(size_t i=0;i<width;++i) result|=uint64_t(byte())<<(i*8);
+    return result;
+  }
+  std::string binary() {
+    const uint64_t n=uvar();
+    if(n>MAX_FILE_BYTES || !can(static_cast<size_t>(n))){
+      ok=false;return std::string();
+    }
+    const std::string result(reinterpret_cast<const char*>(data+pos),
+                             static_cast<size_t>(n));
+    pos+=static_cast<size_t>(n);
+    return result;
+  }
+  bool field(int &last,int &id,int &type) {
+    if(!ok || !can(1)) {ok=false;return false;}
+    const int c=byte();
+    type=c&0x0f;
+    if(type==0)return false;
+    const int delta=c>>4;
+    const int64_t v=delta?last+delta:zig();
+    if(v<1 || v>32767){ok=false;return false;}
+    id=static_cast<int>(v);last=id;
+    return true;
+  }
+  bool list(int &type,size_t &count) {
+    if(!can(1)){ok=false;return false;}
+    const int v=byte();
+    type=v&15;
+    uint64_t n=(v>>4)==15?uvar():static_cast<uint64_t>(v>>4);
+    if(n>MAX_FILE_ROWS*128){ok=false;return false;}
+    count=static_cast<size_t>(n);
+    return ok;
+  }
+  bool skip(int type,int depth=0) {
+    if(depth>32){ok=false;return false;}
+    switch(type) {
+      case 0: case 1: case 2: break;
+      case 3: if(!can(1))ok=false;else ++pos;break;
+      case 4:case 5:case 6: uvar();break;
+      case 7: if(!can(8))ok=false;else pos+=8;break;
+      case 8: binary();break;
+      case 9:case 10: {
+        int subtype;size_t count;
+        if(!list(subtype,count))return false;
+        for(size_t i=0;i<count && ok;++i)skip(subtype,depth+1);
+        break;
+      }
+      case 11: {
+        const uint64_t n=uvar();
+        if(n>MAX_FILE_ROWS*128){ok=false;return false;}
+        if(n>0){
+          const int types=byte();
+          for(size_t i=0;i<n && ok;++i){
+            skip(types>>4,depth+1);
+            skip(types&0xf,depth+1);
+          }
+        }
+        break;
+      }
+      case 12: {
+        int last=0,id=0,subtype=0;
+        while(ok && field(last,id,subtype))skip(subtype,depth+1);
+        break;
+      }
+      default: ok=false;
+    }
+    return ok;
+  }
+};
+
+struct Schema {
+  std::string name;
+  int type;
+  int repetition;
+  int children;
+  int converted;
+  Schema():type(-1),repetition(0),children(0),converted(-1){}
+};
+struct Column {
+  int type;
+  int codec;
+  uint64_t num_values;
+  uint64_t data_offset;
+  uint64_t dictionary_offset;
+  bool has_dictionary;
+  Column():type(-1),codec(-1),num_values(0),data_offset(0),
+           dictionary_offset(0),has_dictionary(false){}
+};
+struct RowGroup {
+  uint64_t rows;
+  std::vector<Column> columns;
+  RowGroup():rows(0){}
+};
+struct FileMeta {
+  std::vector<Schema> schema;
+  std::vector<RowGroup> groups;
+  uint64_t num_rows;
+  FileMeta():num_rows(0){}
+};
+struct Page {
+  int type;
+  uint64_t compressed_size,raw_size;
+  int encoding,level_encoding,rep_encoding;
+  uint64_t values;
+  uint64_t def_length,rep_length;
+  bool values_compressed;
+  Page():type(-1),compressed_size(0),raw_size(0),
+         encoding(-1),level_encoding(3),rep_encoding(3),
+         values(0),def_length(0),rep_length(0),values_compressed(true){}
+};
+
+inline bool parse_schema(Reader &r,Schema &s) {
+  int last=0,id=0,type=0;
+  while(r.ok && r.field(last,id,type)) {
+    if(id==1 && type==5)s.type=static_cast<int>(r.zig());
+    else if(id==3 && type==5)s.repetition=static_cast<int>(r.zig());
+    else if(id==4 && type==8)s.name=r.binary();
+    else if(id==5 && type==5)s.children=static_cast<int>(r.zig());
+    else if(id==6 && type==5)s.converted=static_cast<int>(r.zig());
+    else r.skip(type);
+  }
+  return r.ok && !s.name.empty();
+}
+inline bool parse_colmeta(Reader &r,Column &c) {
+  int last=0,id=0,type=0;
+  while(r.ok && r.field(last,id,type)) {
+    if(id==1 && type==5)c.type=static_cast<int>(r.zig());
+    else if(id==4 && type==5)c.codec=static_cast<int>(r.zig());
+    else if(id==5 && type==6)c.num_values=static_cast<uint64_t>(r.zig());
+    else if(id==9 && type==6)c.data_offset=static_cast<uint64_t>(r.zig());
+    else if(id==11 && type==6) {
+      c.dictionary_offset=static_cast<uint64_t>(r.zig());
+      c.has_dictionary=true;
+    } else r.skip(type);
+  }
+  return r.ok && c.type>=0 && c.codec>=0;
+}
+inline bool parse_column(Reader &r,Column &column) {
+  int last=0,id=0,type=0;
+  bool found=false;
+  while(r.ok && r.field(last,id,type)) {
+    if(id==1 && type==8) {
+      // External column chunks are not supported: paths must stay inside
+      // the single resolved file, not be followed as auxiliary inputs.
+      const std::string other=r.binary();
+      if(!other.empty())return false;
+    } else if(id==3 && type==12) {
+      found=parse_colmeta(r,column);
+      if(!found)return false;
+    }else r.skip(type);
+  }
+  return r.ok && found;
+}
+inline bool parse_rowgroup(Reader &r,RowGroup &group) {
+  int last=0,id=0,type=0;
+  while(r.ok && r.field(last,id,type)) {
+    if(id==1 && type==9) {
+      int child=0;size_t count=0;
+      if(!r.list(child,count) || child!=12 || count>256)return false;
+      for(size_t i=0;i<count;++i) {
+        Column column;
+        if(!parse_column(r,column))return false;
+        group.columns.push_back(column);
+      }
+    } else if(id==3 && type==6)group.rows=static_cast<uint64_t>(r.zig());
+    else r.skip(type);
+  }
+  return r.ok && group.columns.size()>0 && group.rows<=MAX_FILE_ROWS;
+}
+inline bool parse_filemeta(Reader &r,FileMeta &meta) {
+  int last=0,id=0,type=0;
+  while(r.ok && r.field(last,id,type)) {
+    if(id==2 && type==9) {
+      int subtype=0;size_t count=0;
+      if(!r.list(subtype,count) || subtype!=12 || count>257)return false;
+      for(size_t i=0;i<count;++i) {
+        Schema s;
+        if(!parse_schema(r,s))return false;
+        meta.schema.push_back(s);
+      }
+    } else if(id==3 && type==6)meta.num_rows=static_cast<uint64_t>(r.zig());
+    else if(id==4 && type==9) {
+      int subtype=0;size_t count=0;
+      if(!r.list(subtype,count) || subtype!=12 || count>MAX_FILE_ROWS)return false;
+      for(size_t i=0;i<count;++i) {
+        RowGroup g;
+        if(!parse_rowgroup(r,g))return false;
+        meta.groups.push_back(g);
+      }
+    } else r.skip(type);
+  }
+  return r.ok && meta.schema.size()>=2 &&
+         meta.num_rows<=MAX_FILE_ROWS && !meta.groups.empty();
+}
+inline bool parse_page(Reader &r,Page &page) {
+  int last=0,id=0,type=0;
+  while(r.ok && r.field(last,id,type)) {
+    if(id==1 && type==5)page.type=static_cast<int>(r.zig());
+    else if(id==2 && type==5)page.raw_size=static_cast<uint64_t>(r.zig());
+    else if(id==3 && type==5)page.compressed_size=static_cast<uint64_t>(r.zig());
+    else if(id==5 && type==12) {
+      int inner_last=0,inner_id=0,inner_type=0;
+      while(r.ok && r.field(inner_last,inner_id,inner_type)) {
+        if(inner_id==1 && inner_type==5)page.values=static_cast<uint64_t>(r.zig());
+        else if(inner_id==2 && inner_type==5)page.encoding=static_cast<int>(r.zig());
+        else if(inner_id==3 && inner_type==5)page.level_encoding=static_cast<int>(r.zig());
+        else if(inner_id==4 && inner_type==5)page.rep_encoding=static_cast<int>(r.zig());
+        else r.skip(inner_type);
+      }
+    } else if(id==7 && type==12) {
+      int inner_last=0,inner_id=0,inner_type=0;
+      while(r.ok && r.field(inner_last,inner_id,inner_type)) {
+        if(inner_id==1 && inner_type==5)page.values=static_cast<uint64_t>(r.zig());
+        else if(inner_id==2 && inner_type==5)page.encoding=static_cast<int>(r.zig());
+        else r.skip(inner_type);
+      }
+    } else if(id==8 && type==12) {
+      int inner_last=0,inner_id=0,inner_type=0;
+      while(r.ok && r.field(inner_last,inner_id,inner_type)) {
+        if(inner_id==1 && inner_type==5)page.values=static_cast<uint64_t>(r.zig());
+        else if(inner_id==4 && inner_type==5)page.encoding=static_cast<int>(r.zig());
+        else if(inner_id==5 && inner_type==5)page.def_length=static_cast<uint64_t>(r.zig());
+        else if(inner_id==6 && inner_type==5)page.rep_length=static_cast<uint64_t>(r.zig());
+        else if(inner_id==7 && (inner_type==1 || inner_type==2))
+          page.values_compressed=inner_type==1;
+        else r.skip(inner_type);
+      }
+    } else r.skip(type);
+  }
+  return r.ok && page.type>=0 &&
+         page.compressed_size<=MAX_FILE_BYTES &&
+         page.raw_size<=MAX_FILE_BYTES && page.values<=MAX_FILE_ROWS;
+}
+
+inline bool snappy_decode(const std::string &src,
+                          size_t limit,std::string &out) {
+  Reader r(src.data(),src.size());
+  const uint64_t declared=r.uvar();
+  if(!r.ok || declared>limit)return false;
+  out.clear();
+  out.reserve(static_cast<size_t>(declared));
+  while(r.ok && r.pos<r.len && out.size()<declared) {
+    const unsigned char tag=r.byte();
+    const unsigned kind=tag&3;
+    if(kind==0) {
+      size_t n=(tag>>2)+1;
+      if((tag>>2)>=60) {
+        const size_t width=(tag>>2)-59;
+        n=static_cast<size_t>(r.le(width))+1;
+      }
+      if(!r.ok || !r.can(n) || n>declared-out.size())return false;
+      out.append(reinterpret_cast<const char*>(r.data+r.pos),n);
+      r.pos+=n;
+    } else {
+      size_t n=0;
+      size_t offset=0;
+      if(kind==1) {
+        n=4+((tag>>2)&7);
+        offset=(static_cast<size_t>(tag&0xe0)<<3)|r.byte();
+      } else if(kind==2) {
+        n=1+(tag>>2);
+        offset=static_cast<size_t>(r.le(2));
+      } else {
+        n=1+(tag>>2);
+        offset=static_cast<size_t>(r.le(4));
+      }
+      if(!r.ok || offset==0 || offset>out.size() ||
+         n>declared-out.size())return false;
+      for(size_t i=0;i<n;++i)
+        out.push_back(out[out.size()-offset]);
+    }
+  }
+  return r.ok && r.pos==r.len && out.size()==declared;
+}
+inline bool decompressed(const std::string &src,int codec,size_t raw,
+                          std::string &out) {
+  if(raw>MAX_FILE_BYTES || src.size()>MAX_FILE_BYTES)return false;
+  if(codec==0)out=src;
+  else if(codec==1) {
+    if(!snappy_decode(src,MAX_FILE_BYTES,out))return false;
+  }else return false;
+  return out.size()==raw;
+}
+inline bool hybrid_decode(const std::string &src,unsigned width,
+                          size_t count,std::vector<uint32_t> &out) {
+  if(width>32 || count>MAX_FILE_ROWS)return false;
+  Reader r(src.data(),src.size());
+  out.clear();
+  while(r.ok && r.pos<r.len && out.size()<count) {
+    const uint64_t header=r.uvar();
+    if(!r.ok || header==0)return false;
+    if((header&1)==0) {
+      const uint64_t n=header>>1;
+      if(n==0 || n>MAX_FILE_ROWS || n>count-out.size())return false;
+      const uint32_t value=static_cast<uint32_t>(r.le((width+7)/8));
+      if(!r.ok || (width<32 && value >= (uint64_t(1)<<width)))return false;
+      out.insert(out.end(),static_cast<size_t>(n),value);
+    }else {
+      const uint64_t groups=header>>1;
+      if(groups==0 || groups>MAX_FILE_ROWS)return false;
+      const size_t bytes=static_cast<size_t>(groups)*width;
+      if(!r.can(bytes))return false;
+      const size_t n=std::min(static_cast<size_t>(groups)*8,count-out.size());
+      for(size_t k=0;k<n;++k) {
+        const size_t bit=k*width;
+        uint32_t value=0;
+        for(unsigned j=0;j<width;++j) {
+          if((r.data[r.pos+(bit+j)/8]>>((bit+j)%8))&1)
+            value|=(uint32_t(1)<<j);
+        }
+        out.push_back(value);
+      }
+      r.pos+=bytes;
+    }
+  }
+  return r.ok && out.size()==count;
+}
+inline std::string iso_date(int64_t days) {
+  days+=719468;
+  const int64_t era=days>=0?days/146097:(days-146096)/146097;
+  const uint64_t doe=static_cast<uint64_t>(days-era*146097);
+  const uint64_t yoe=(doe-doe/1460+doe/36524-doe/146096)/365;
+  int64_t year=static_cast<int64_t>(yoe)+era*400;
+  const uint64_t doy=doe-(365*yoe+yoe/4-yoe/100);
+  const uint64_t mp=(5*doy+2)/153;
+  const uint64_t day=doy-(153*mp+2)/5+1;
+  const uint64_t month=mp+(mp<10?3:-9);
+  year+=(month<=2);
+  char buffer[50];
+  std::snprintf(buffer,sizeof(buffer),"%04lld-%02llu-%02llu",
+                static_cast<long long>(year),
+                static_cast<unsigned long long>(month),
+                static_cast<unsigned long long>(day));
+  return buffer;
+}
+inline std::string iso_datetime(int64_t millis) {
+  int64_t days=millis/86400000LL;
+  int64_t rem=millis%86400000LL;
+  if(rem<0){rem+=86400000LL;--days;}
+  char buffer[64];
+  std::snprintf(buffer,sizeof(buffer),"%02lld:%02lld:%02lld",
+    static_cast<long long>(rem/3600000),
+    static_cast<long long>((rem/60000)%60),
+    static_cast<long long>((rem/1000)%60));
+  return iso_date(days)+" "+buffer;
+}
+inline std::string parquet_sql_type(const Schema &s) {
+  if(s.converted==6)return "DATE";
+  if(s.converted==9)return "DATETIME";
+  if(s.type==0)return "TINYINT";
+  if(s.type==1 || s.type==2)return "BIGINT";
+  if(s.type==4 || s.type==5)return "DOUBLE";
+  return "VARCHAR(4096)";
+}
+inline bool plain_read(Reader &r,int type,int converted,
+                       uint64_t &bool_position,std::string &value) {
+  if(type==0) {
+    // Plain BOOLEAN uses one bit/value, 8 values per byte.
+    // Bool state is tracked by bit index; byte must be consumed only for
+    // first bit of each octet.
+    if((bool_position%8)==0) {
+      if(!r.can(1))return false;
+    }
+    if(r.pos==0)return false;
+    // Use the next data byte without advancing until all 8 bits consumed.
+    const unsigned char byte=r.data[r.pos];
+    value=((byte>>(bool_position%8))&1)?"1":"0";
+    ++bool_position;
+    if((bool_position%8)==0)++r.pos;
+    return true;
+  } else if(type==1) {
+    value=std::to_string(static_cast<int32_t>(r.le(4)));
+    if(converted==6)value=json_quote(iso_date(static_cast<int32_t>(
+                              std::strtol(value.c_str(),nullptr,10))));
+    return r.ok;
+  } else if(type==2) {
+    const int64_t n=static_cast<int64_t>(r.le(8));
+    value=converted==9?json_quote(iso_datetime(n)):std::to_string(n);
+    return r.ok;
+  } else if(type==4 || type==5) {
+    const uint64_t bits=r.le(type==4?4:8);
+    if(!r.ok)return false;
+    double f=0;
+    if(type==4) {
+      const uint32_t b=static_cast<uint32_t>(bits);
+      float f32=0;std::memcpy(&f32,&b,sizeof(f32));
+      f=f32;
+    } else std::memcpy(&f,&bits,sizeof(f));
+    if(!std::isfinite(f))value="null";
+    else {
+      char buffer[64];
+      std::snprintf(buffer,sizeof(buffer),type==4?"%.9g":"%.17g",f);
+      value=buffer;
+    }
+    return true;
+  } else if(type==6) {
+    const uint64_t len=r.le(4);
+    if(!r.ok || len>MAX_FILE_BYTES || !r.can(static_cast<size_t>(len)))
+      return false;
+    std::string str(reinterpret_cast<const char*>(r.data+r.pos),
+                    static_cast<size_t>(len));
+    r.pos+=static_cast<size_t>(len);
+    value=json_quote(str);
+    return true;
+  }
+  return false;
+}
+inline bool decode_values(const std::string &data,int physical,int converted,
+                          size_t count,std::vector<std::string> &out) {
+  Reader r(data.data(),data.size());
+  uint64_t bool_index=0;
+  for(size_t i=0;i<count;++i) {
+    std::string value;
+    if(physical==0) {
+      // Boolean bit-packed values need per-byte offset handling.
+      if((i%8)==0 && !r.can(1))return false;
+      value=((r.data[r.pos]>>(i%8))&1)?"1":"0";
+      if(i%8==7 || i+1==count)++r.pos;
+    } else if(!plain_read(r,physical,converted,bool_index,value))
+      return false;
+    out.push_back(value);
+  }
+  return r.ok;
+}
+inline bool page_values(const std::string &bytes,const Page &page,
+                        const Column &column,const Schema &schema,
+                        const std::vector<std::string> &dictionary,
+                        std::vector<std::string> &values,
+                        std::string &err) {
+  std::string raw;
+  const bool v2=page.type==3;
+  if(v2 && page.def_length+page.rep_length<=bytes.size()) {
+    const size_t levels_length=static_cast<size_t>(page.def_length+page.rep_length);
+    const std::string initial=bytes.substr(0,levels_length);
+    const std::string encoded=bytes.substr(levels_length);
+    std::string decoded;
+    if(page.values_compressed) {
+      if(!decompressed(encoded,column.codec,
+                       static_cast<size_t>(page.raw_size-levels_length),
+                       decoded)) {
+        err="Parquet v2 page decompression failed";return false;
+      }
+    } else decoded=encoded;
+    raw=initial+decoded;
+  } else if(!decompressed(bytes,column.codec,
+                          static_cast<size_t>(page.raw_size),raw)) {
+    err="Parquet page decompression failed";return false;
+  }
+  if(raw.size()!=page.raw_size){err="Parquet page length mismatch";return false;}
+  size_t offset=0;
+  std::vector<uint32_t> levels;
+  if(schema.repetition==1) {
+    std::string encoded;
+    if(v2) {
+      if(page.rep_length!=0 || page.def_length>raw.size()) {
+        err="unsupported Parquet nested/repeated levels";return false;
+      }
+      encoded=raw.substr(0,static_cast<size_t>(page.def_length));
+      offset=static_cast<size_t>(page.def_length);
+    } else {
+      Reader r(raw.data(),raw.size());
+      const uint64_t length=r.le(4);
+      if(!r.ok || length>raw.size()-r.pos) {
+        err="malformed Parquet definition levels";return false;
+      }
+      encoded=raw.substr(r.pos,static_cast<size_t>(length));
+      offset=r.pos+static_cast<size_t>(length);
+    }
+    if(!hybrid_decode(encoded,1,static_cast<size_t>(page.values),levels)){
+      err="invalid Parquet definition levels";return false;
+    }
+  } else if(v2)offset=static_cast<size_t>(page.def_length+page.rep_length);
+  size_t defined=static_cast<size_t>(page.values);
+  if(schema.repetition==1) {
+    defined=0;
+    for(size_t i=0;i<levels.size();++i)defined+=levels[i]==1;
+  }
+  const std::string body=raw.substr(offset);
+  std::vector<std::string> decoded;
+  if(page.encoding==0) {
+    if(!decode_values(body,column.type,schema.converted,defined,decoded)){
+      err="unsupported or malformed Parquet PLAIN values";return false;
+    }
+  } else if(page.encoding==2 || page.encoding==8) {
+    if(dictionary.empty() && defined>0) {
+      err="Parquet dictionary is missing";return false;
+    }
+    if(body.empty() && defined>0)return false;
+    std::vector<uint32_t> ids;
+    if(defined>0 && !hybrid_decode(body.substr(1),
+           static_cast<unsigned char>(body[0]),defined,ids)){
+      err="Parquet dictionary indexes invalid";return false;
+    }
+    for(size_t i=0;i<ids.size();++i) {
+      if(ids[i]>=dictionary.size()){err="Parquet bad dictionary index";return false;}
+      decoded.push_back(dictionary[ids[i]]);
+    }
+  } else {
+    err="unsupported Parquet page encoding";return false;
+  }
+  size_t j=0;
+  for(size_t i=0;i<page.values;++i){
+    if(schema.repetition==1 && levels[i]==0)values.push_back("null");
+    else {
+      if(j>=decoded.size()){err="Parquet value count mismatch";return false;}
+      values.push_back(decoded[j++]);
+    }
+  }
+  return true;
+}
+inline bool decode_chunk(const std::string &file, const Column &column,
+                         const Schema &schema,size_t expected_rows,
+                         std::vector<std::string> &values,std::string &err) {
+  if(column.num_values!=expected_rows) {
+    err="Parquet repeated/nested columns are not supported";return false;
+  }
+  const uint64_t offset=column.has_dictionary?
+      std::min(column.dictionary_offset,column.data_offset):column.data_offset;
+  if(offset>=file.size() || offset<4) {
+    err="invalid Parquet page offset";return false;
+  }
+  size_t at=static_cast<size_t>(offset),pages=0;
+  std::vector<std::string> dictionary;
+  while(values.size()<expected_rows && at<file.size()-8 && pages++<MAX_FILE_ROWS){
+    Reader r(file.data()+at,file.size()-at);
+    Page page;
+    if(!parse_page(r,page)) {
+      err="invalid Parquet page header";return false;
+    }
+    const size_t payload=at+r.pos;
+    if(page.compressed_size>file.size()-payload) {
+      err="invalid Parquet compressed page size";return false;
+    }
+    const std::string bytes=file.substr(payload,
+                                        static_cast<size_t>(page.compressed_size));
+    at=payload+static_cast<size_t>(page.compressed_size);
+    if(page.type==2) {
+      std::string raw;
+      if(page.encoding!=0 ||
+         !decompressed(bytes,column.codec,static_cast<size_t>(page.raw_size),raw) ||
+         !decode_values(raw,column.type,schema.converted,
+                        static_cast<size_t>(page.values),dictionary)){
+        err="invalid Parquet dictionary page";return false;
+      }
+    } else if(page.type==0 || page.type==3) {
+      if(page.values>expected_rows-values.size()) {
+        err="Parquet page contains excess rows";return false;
+      }
+      if(!page_values(bytes,page,column,schema,dictionary,values,err))
+        return false;
+    } // skip index and other non-data pages
+  }
+  if(values.size()!=expected_rows) {
+    err="Parquet column data is incomplete";return false;
+  }
+  return true;
+}
+inline bool read_parquet(const std::string &file,std::string &doc,
+                         std::vector<std::string> &names,
+                         std::vector<std::string> &types,
+                         std::string &err) {
+  if(file.size()<12 || file.compare(0,4,"PAR1")!=0 ||
+     file.compare(file.size()-4,4,"PAR1")!=0) {
+    err="invalid Parquet magic";return false;
+  }
+  Reader trailer(file.data()+file.size()-8,4);
+  const uint64_t footer=trailer.le(4);
+  if(!trailer.ok || footer>file.size()-12) {
+    err="invalid Parquet footer size";return false;
+  }
+  const size_t start=file.size()-8-static_cast<size_t>(footer);
+  Reader r(file.data()+start,static_cast<size_t>(footer));
+  FileMeta meta;
+  if(!parse_filemeta(r,meta)){
+    err="invalid/unsupported Parquet footer metadata";return false;
+  }
+  const size_t column_count=meta.schema.size()-1;
+  if(meta.schema[0].children!=static_cast<int>(column_count) ||
+     column_count>256){
+    err="only flat Parquet schema is supported";return false;
+  }
+  for(size_t i=1;i<meta.schema.size();++i){
+    const Schema &s=meta.schema[i];
+    if(s.children!=0 || s.repetition>1 || s.type<0 ||
+       s.type==3 || s.type==7 || s.type>6){
+      err="unsupported nested or specialized Parquet column";return false;
+    }
+    names.push_back(s.name);
+    types.push_back(parquet_sql_type(s));
+  }
+  std::vector<std::vector<std::string> > cols(column_count);
+  size_t total_rows=0;
+  for(size_t g=0;g<meta.groups.size();++g) {
+    const RowGroup &group=meta.groups[g];
+    if(group.columns.size()!=column_count ||
+       group.rows>MAX_FILE_ROWS-total_rows) {
+      err="Parquet row group columns/row count mismatch";return false;
+    }
+    total_rows+=static_cast<size_t>(group.rows);
+    for(size_t j=0;j<column_count;++j) {
+      if(group.columns[j].type!=meta.schema[j+1].type) {
+        err="Parquet physical type metadata mismatch";return false;
+      }
+      std::vector<std::string> values;
+      if(!decode_chunk(file,group.columns[j],meta.schema[j+1],
+                       static_cast<size_t>(group.rows),values,err))
+        return false;
+      cols[j].insert(cols[j].end(),values.begin(),values.end());
+    }
+  }
+  if(total_rows!=meta.num_rows) {
+    err="Parquet file/rowgroup row count mismatch";return false;
+  }
+  doc="[";
+  for(size_t row=0;row<total_rows;++row) {
+    if(row)doc+=",";
+    doc+="{";
+    for(size_t col=0;col<column_count;++col) {
+      if(col)doc+=",";
+      doc+=json_quote(names[col])+":"+cols[col][row];
+    }
+    doc+="}";
+    if(doc.size()>MAX_RESULT_BYTES) {
+      err="Parquet result exceeds 2 MiB; streaming scanner required";
+      return false;
+    }
+  }
+  doc+="]";
+  return true;
+}
+
+} // namespace parquet_native
+
+struct FileReadOptions {
+  bool csv_header;
+  bool json_newlines;
+  FileReadOptions():csv_header(true),json_newlines(false){}
+};
+inline bool file_options(const std::string &sql,size_t &at,
+                         const std::string &function,
+                         FileReadOptions &opts,std::string &err) {
+  std::vector<std::string> seen;
+  while(at<sql.size()) {
+    while(at<sql.size() && space(sql[at]))++at;
+    if(at>=sql.size())break;
+    if(sql[at]==')')return true;
+    if(sql[at]!=',') {
+      err="expected comma or closing parenthesis in file table arguments";
+      return false;
+    }
+    ++at;
+    while(at<sql.size() && space(sql[at]))++at;
+    const size_t key_begin=at;
+    if(at>=sql.size() || !id_start(sql[at])){
+      err="file table function options must be named";return false;
+    }
+    while(at<sql.size() && id_char(sql[at]))++at;
+    const std::string key=lower(sql.substr(key_begin,at-key_begin));
+    while(at<sql.size() && space(sql[at]))++at;
+    if(at>=sql.size() || sql[at]!='='){
+      err="file table argument requires key = value";return false;
+    }
+    ++at;
+    while(at<sql.size() && space(sql[at]))++at;
+    std::string value;
+    if(at<sql.size() && sql[at]=='\''){
+      if(!parse_quoted_path(sql,at,value)) {
+        err="invalid quoted file option value";return false;
+      }
+    } else {
+      const size_t start=at;
+      if(at<sql.size() && (sql[at]=='+' || sql[at]=='-'))++at;
+      while(at<sql.size() && id_char(sql[at]))++at;
+      value=sql.substr(start,at-start);
+    }
+    const std::string v=lower(value);
+    if(std::find(seen.begin(),seen.end(),key)!=seen.end()) {
+      err="duplicate file option: "+key;return false;
+    }
+    seen.push_back(key);
+    if(key=="header" && function=="read_csv"){
+      if(v=="true" || v=="on" || v=="1")opts.csv_header=true;
+      else if(v=="false" || v=="off" || v=="0")opts.csv_header=false;
+      else {
+        err="header must be true or false";return false;
+      }
+    } else if(key=="sample_size" &&
+              (function=="read_csv" || function=="read_json" ||
+               function=="read_ndjson")) {
+      if(v!="-1"){
+        err="file schema inference requires sample_size = -1";
+        return false;
+      }
+    } else if(key=="format" && (function=="read_json" ||
+                                function=="read_ndjson")) {
+      if(v=="newline_delimited" || v=="jsonl" || v=="ndjson")
+        opts.json_newlines=true;
+      else if(v=="auto" || v=="json" || v=="array")
+        opts.json_newlines=false;
+      else {
+        err="unsupported JSON file format";return false;
+      }
+    } else {
+      err="unsupported option "+key+" for "+function;
+      return false;
+    }
+  }
+  err="unterminated file table function";
+  return false;
+}
+
 inline bool source_sql(const std::string &type,const std::string &path,
+                       const FileReadOptions &opts,
                        std::string &target,std::string &err) {
   std::string doc;
   std::vector<std::string> names,types;
@@ -467,11 +1697,17 @@ inline bool source_sql(const std::string &type,const std::string &path,
     std::string data;
     if(!read_text(path,data,err))return false;
     if(type=="read_csv") {
-      if(!csv_to_json(data,doc,names,types,err))return false;
+      if(!typed_csv_json(data,opts.csv_header,doc,names,types,err))return false;
     } else if(type=="read_json" || type=="read_ndjson") {
       std::vector<std::string> objects;
-      if(!parse_json_records(data,type=="read_ndjson",objects,names,err))
+      const std::string suffix=lower(path);
+      const bool newline_json=type=="read_ndjson" || opts.json_newlines ||
+          (suffix.size()>=6 && suffix.substr(suffix.size()-6)==".jsonl") ||
+          (suffix.size()>=7 && suffix.substr(suffix.size()-7)==".ndjson");
+      std::vector<std::string> discard;
+      if(!parse_json_records(data,newline_json,objects,discard,err))
         return false;
+      if(!typed_json_schema(objects,names,types,err))return false;
       doc="[";
       for(size_t i=0;i<objects.size();++i) {
         if(i)doc+=",";
@@ -481,10 +1717,10 @@ inline bool source_sql(const std::string &type,const std::string &path,
         }
       }
       doc+="]";
-      types.assign(names.size(),"VARCHAR(4096)");
+    } else if(type=="read_parquet") {
+      if(!parquet_native::read_parquet(data,doc,names,types,err))return false;
     } else {
-      err="read_parquet requires an Arrow/Parquet scan integration (not implemented)";
-      return false;
+      err="unsupported file table function";return false;
     }
   }
   if(doc.size()>MAX_RESULT_BYTES){err="source result exceeds 2 MiB";return false;}
@@ -573,6 +1809,10 @@ inline bool copy_output_path(const std::string &input,std::string &output,
     return false;
   }
   output=resolved_parent+(resolved_parent=="/"?"":"/")+basename;
+  if(!secured_file_path(output)) {
+    err="COPY TO path is outside secure_file_priv";
+    return false;
+  }
   // Reject existing files, including symlinks and special files. The SQL
   // executor must ALSO use an atomic create-without-replacement operation;
   // this preflight check alone cannot eliminate rename races.
@@ -834,14 +2074,15 @@ inline bool rewrite(const std::string &sql,std::string &out,std::string &err) {
           err="file table function requires a constant single-quoted path";
           return false;
         }
-        while(at<sql.size() && space(sql[at]))++at;
+        FileReadOptions opts;
+        if(!file_options(sql,at,word,opts,err))return false;
         if(at>=sql.size() || sql[at]!=')'){
-          err="only one file path argument is supported";
+          err="unbalanced file table function arguments";
           return false;
         }
         ++at;
         std::string replacement;
-        if(!source_sql(word,path,replacement,err))return false;
+        if(!source_sql(word,path,opts,replacement,err))return false;
         if(out.size()+replacement.size()>MAX_RESULT_BYTES*2){
           err="rewritten SQL exceeds size limit";return false;
         }
