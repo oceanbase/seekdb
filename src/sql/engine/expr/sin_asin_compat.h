@@ -27,10 +27,12 @@ namespace math_compat
 #ifdef _WIN32
 double sin(double x);
 double asin(double x);
+double cos(double x);
 #else
 // Preserve the existing system-libm path outside Windows.
 inline double sin(double x) { return ::sin(x); }
 inline double asin(double x) { return ::asin(x); }
+inline double cos(double x) { return ::cos(x); }
 #endif
 } // namespace math_compat
 } // namespace sql

@@ -60,6 +60,12 @@ namespace asin_backend
 #undef MAGIC
 #undef roundeven_finite
 }
+namespace cos_backend
+{
+#include "cos_core_math.ipp"
+#undef U128
+#undef roundeven_finite
+}
 
 uint64_t magnitude_bits(double x)
 {
@@ -105,6 +111,20 @@ double asin(double x)
   }
 #endif
   return ::asin(x);
+}
+
+double cos(double x)
+{
+#if defined(__clang__) && __clang_major__ >= 18 && defined(_M_X64)
+  const uint64_t ax = magnitude_bits(x);
+  // Below 2^-27, cos(x) rounds to 1.0 exactly; keep the CRT handling of signed
+  // zero, tiny-value exception flags, and nonfinite operands.
+  if (ax >= UINT64_C(0x3e40000000000000)
+      && ax < UINT64_C(0x7ff0000000000000) && use_nearest_backend()) {
+    return cos_backend::cr_cos(x);
+  }
+#endif
+  return ::cos(x);
 }
 } // namespace math_compat
 } // namespace sql
