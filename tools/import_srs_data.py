@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 import sys
 import re
 import os
@@ -22,11 +22,11 @@ class SrsDataImporter:
         self.old_result_cnt = [0, 0]
         self.new_result_cnt = [0, 0]
         self.print_srs_sql = False
-        print("host:{0} port:{1} pwd:{2} file:{3}".format(self.host, self.port, self.pwd, self.file_name))
+        print("host:{0} port:{1} pwd:{2} file:{3}".format(self.host, self.port, "***" if self.pwd else "", self.file_name))
 
     def generate_sql(self):
         self.sql_list = []
-        with open(self.file_name) as f_read:
+        with open(self.file_name, encoding="utf-8") as f_read:
             for line in f_read:
                 if not line.isspace():
                     self.sql_list.append(line)
