@@ -117,6 +117,25 @@ cc_test(
 )
 
 cc_library(
+    name = "fixed_winbuf_wire_cases",
+    srcs = ["test_fixed_winbuf_wire.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_fixed_winbuf_wire",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":fixed_winbuf_wire_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
     name = "native_bigint_output_cases",
     srcs = ["test_native_bigint_output.cpp"],
     alwayslink = True,
