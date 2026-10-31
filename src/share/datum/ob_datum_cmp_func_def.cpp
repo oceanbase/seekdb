@@ -107,7 +107,11 @@ int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_r
   } else {
     // only memcmp supported now
     cmp_ret = MEMCMP(l_data.ptr(), r_data.ptr(), std::min(l_data.length(), r_data.length()));
-    if (cmp_ret == 0 && l_data.length() != r_data.length()) {
+    // memcmp guarantees only the sign. DatumCmpFunc consumers such as row_cmp
+    // require exactly -1/0/1; other magnitudes make both '=' and '<>' false.
+    if (cmp_ret != 0) {
+      cmp_ret = cmp_ret > 0 ? 1 : -1;
+    } else if (l_data.length() != r_data.length()) {
       cmp_ret = l_data.length() > r_data.length() ? 1 : -1;
     }
   }
