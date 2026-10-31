@@ -2505,10 +2505,18 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
       ObIAllocator *owner = column.get_allocator();
       if (owner == nullptr) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(column.get_cur_default_value().set_extend(
-                     ObActionFlag::OP_DEFAULT_NOW_FLAG, 0, *owner))) {
       } else {
-        column.set_on_update_current_timestamp(true);
+        DatumValue default_value;
+        alignas(8) char default_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+        default_value.meta_ = column.get_cur_default_meta();
+        default_value.meta_.set_ext();
+        default_value.meta_.set_extend_type(0);
+        default_value.datum_.ptr_ = default_payload;
+        default_value.datum_.set_extend(ObActionFlag::OP_DEFAULT_NOW_FLAG, 0);
+        if (OB_FAIL(column.set_cur_default_value(default_value))) {
+        } else {
+          column.set_on_update_current_timestamp(true);
+        }
       }
     } else if (!is_set_null) {
       //（2）timestamp column default is not null
@@ -2520,10 +2528,19 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
           LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(), column.get_column_name_str().ptr());
         } else {
           ObIAllocator *owner = column.get_allocator();
-          ret = owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED
-              : column.get_cur_default_value().set_timestamp(ObTimeConverter::ZERO_DATETIME, *owner);
+          if (owner == nullptr) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            DatumValue default_value;
+            alignas(8) char default_payload[sizeof(int64_t)];
+            default_value.meta_ = column.get_cur_default_meta();
+            default_value.meta_.set_timestamp();
+            default_value.datum_.ptr_ = default_payload;
+            default_value.datum_.set_timestamp(ObTimeConverter::ZERO_DATETIME);
+            ret = column.set_cur_default_value(default_value);
+          }
         }
-      } else if (column.get_cur_default_value().is_null()) {
+      } else if (column.get_cur_default_datum().is_null()) {
         //(4) timestamp type columns are default NOT NULL, so it is not allowed to set column default NULL
         ret = OB_INVALID_DEFAULT;
         LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(), column.get_column_name_str().ptr());
@@ -2532,7 +2549,10 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
       // If actively set can be NULL
       column.set_nullable(true);
       if (!is_set_default) {
-        column.get_cur_default_value().set_null();
+        DatumValue null_default;
+        null_default.meta_ = column.get_cur_default_meta();
+        null_default.set_null();
+        ret = column.set_cur_default_value(null_default);
       }
     }
   }
@@ -3872,7 +3892,7 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
     } else if (OB_FAIL(ObDDLResolver::print_expr_to_default_value(*expr, generated_column,
                                                                   params.schema_checker_, session_info->get_timezone_info()))) {
     } else if (OB_FAIL(ObRawExprUtils::check_generated_column_expr_str(
-        generated_column.get_cur_default_value().get_string(), *session_info, tbl_schema))) {
+        generated_column.get_cur_default_datum().get_string(), *session_info, tbl_schema))) {
     }
   }
   return ret;
@@ -7440,6 +7460,14 @@ int ObResolverUtils::check_same_column_definition(const ObColumnSchemaV2 &lhs,
                                                   bool &is_same)
 {
   int ret = OB_SUCCESS;
+  DatumValue lhs_orig;
+  alignas(8) char lhs_orig_scratch[64];
+  DatumValue rhs_orig;
+  alignas(8) char rhs_orig_scratch[64];
+  DatumValue lhs_cur;
+  alignas(8) char lhs_cur_scratch[64];
+  DatumValue rhs_cur;
+  alignas(8) char rhs_cur_scratch[64];
   bool is_same_type = false;
   is_same = false;
   if (lhs.get_column_name_str() != rhs.get_column_name_str()) {
@@ -7452,8 +7480,12 @@ int ObResolverUtils::check_same_column_definition(const ObColumnSchemaV2 &lhs,
              || lhs.is_on_update_current_timestamp() != rhs.is_on_update_current_timestamp()) {
   } else if (OB_FAIL(ObTableSchema::check_is_exactly_same_type(lhs, rhs, is_same_type))) {
   } else if (!is_same_type) {
-  } else if (!strict_equal_datum_values(lhs.get_orig_default_value(), rhs.get_orig_default_value())
-             || !strict_equal_datum_values(lhs.get_cur_default_value(), rhs.get_cur_default_value())) {
+  } else if (OB_FAIL(lhs.export_orig_default_value(lhs_orig, lhs_orig_scratch, sizeof(lhs_orig_scratch)))) {
+  } else if (OB_FAIL(rhs.export_orig_default_value(rhs_orig, rhs_orig_scratch, sizeof(rhs_orig_scratch)))) {
+  } else if (OB_FAIL(lhs.export_cur_default_value(lhs_cur, lhs_cur_scratch, sizeof(lhs_cur_scratch)))) {
+  } else if (OB_FAIL(rhs.export_cur_default_value(rhs_cur, rhs_cur_scratch, sizeof(rhs_cur_scratch)))) {
+  } else if (!strict_equal_datum_values(lhs_orig, rhs_orig)
+             || !strict_equal_datum_values(lhs_cur, rhs_cur)) {
   } else {
     is_same = true;
   }

@@ -76,7 +76,9 @@ int ObDefaultValueUtils::resolve_default_function_static(
                         static_cast<ObColumnRefRawExpr*>(fun_expr->get_param_expr(0));
     col_schema = table_schema->get_column_schema(column_expr->get_column_name());
     if (OB_ISNULL(col_schema)) {
-    } else if (IS_DEFAULT_NOW_OBJ(col_schema->get_cur_default_value())) {
+    } else if (ObExtendType == col_schema->get_cur_default_meta().get_type()
+               && !col_schema->get_cur_default_meta().is_ext_sql_array()
+               && ObActionFlag::OP_DEFAULT_NOW_FLAG == col_schema->get_cur_default_datum().get_ext()) {
       ret = OB_ERR_ONLY_PURE_FUNC_CANBE_VIRTUAL_COLUMN_EXPRESSION;
     } else if (ObResolverUtils::DISABLE_CHECK == check_status) {
       if (OB_FAIL(build_type_expr_static(expr_factory, 
@@ -231,20 +233,21 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
   if (OB_ISNULL(column_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguemnt", K(column_schema));
-  } else if (IS_DEFAULT_NOW_OBJ(column_schema->get_cur_default_value())) {
+  } else if (ObExtendType == column_schema->get_cur_default_meta().get_type()
+             && !column_schema->get_cur_default_meta().is_ext_sql_array()
+             && ObActionFlag::OP_DEFAULT_NOW_FLAG == column_schema->get_cur_default_datum().get_ext()) {
   } else if (OB_FAIL(expr_factory.create_raw_expr(
-              static_cast<ObItemType>(column_schema->get_cur_default_value().get_type()), 
+              static_cast<ObItemType>(column_schema->get_cur_default_meta().get_type()),
               c_expr))) {
   } else {
     c_expr->set_accuracy(column_schema->get_accuracy());
     if (column_schema->get_meta_type().is_enum()
         && !column_schema->is_nullable()
-        && column_schema->get_cur_default_value().is_null()) {
+        && column_schema->get_cur_default_datum().is_null()) {
       const uint64_t ENUM_FIRST_VAL = 1;
       ret = default_value.set_enum(ENUM_FIRST_VAL, expr_factory.get_allocator());
     } else {
-      ret = clone_typed_value(column_schema->get_cur_default_value(),
-          default_value, expr_factory.get_allocator());
+      ret = column_schema->copy_cur_default_value(default_value, expr_factory.get_allocator());
     }
     if (OB_SUCC(ret)
         && (ob_is_enumset_tc(default_value.get_type()) || default_value.is_collection_sql_type())) {
@@ -487,9 +490,9 @@ int ObDefaultValueUtils::get_default_type_for_default_function_static(
     op = OB_NOT_STRICT_DEFAULT_OP;
   } else if (column_schema->get_meta_type().is_enum()
              && !column_schema->is_nullable()
-             && column_schema->get_cur_default_value().is_null()) {
+             && column_schema->get_cur_default_datum().is_null()) {
     op = OB_NORMAL_DEFAULT_OP;
-  } else if (!column_schema->is_nullable() && column_schema->get_cur_default_value().is_null()) {
+  } else if (!column_schema->is_nullable() && column_schema->get_cur_default_datum().is_null()) {
     ret = OB_ERR_NO_DEFAULT_FOR_FIELD;
     LOG_USER_ERROR(OB_ERR_NO_DEFAULT_FOR_FIELD, column_schema->get_column_name());
   } else {
@@ -633,9 +636,8 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
   DatumValue default_value;
   if (OB_ISNULL(column_schema)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (!column_schema->get_cur_default_value().is_null()) {
-    ret = clone_typed_value(column_schema->get_cur_default_value(),
-          default_value, expr_factory.get_allocator());
+  } else if (!column_schema->get_cur_default_datum().is_null()) {
+    ret = column_schema->copy_cur_default_value(default_value, expr_factory.get_allocator());
   } else if (column_schema->is_nullable()) {
     default_value.set_null();
   } else {

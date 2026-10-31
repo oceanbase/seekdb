@@ -833,6 +833,8 @@ int ObTransformerImpl::add_all_rowkey_columns_to_stmt(const ObTableSchema &table
                                                       ObDMLStmt &stmt,
                                                       ObIArray<ColumnItem> &column_items)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   const ObRowkeyInfo &rowkey_info = table_schema.get_rowkey_info();
   const ObColumnSchemaV2 *column_schema = NULL;
@@ -865,7 +867,8 @@ int ObTransformerImpl::add_all_rowkey_columns_to_stmt(const ObTableSchema &table
       column_item.base_tid_ = table_item.ref_id_;
       column_item.base_cid_ = rowkey->get_column_id();
       column_item.column_name_ = rowkey->get_column_name();
-      if (OB_FAIL(column_item.set_default_value(column_schema->get_cur_default_value()))) {
+      if ((OB_FAIL(column_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+        || OB_FAIL(column_item.set_default_value(schema_default_value)))) {
       } else if (OB_FAIL(stmt.add_column_item(column_item))) {
       } else if (OB_FAIL(column_items.push_back(column_item))) {
       } else if (FALSE_IT(rowkey->clear_explicited_referece())) {

@@ -1830,6 +1830,8 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
                                              ColumnItem *&col_item,
                                              ObDMLStmt *stmt /* = NULL */)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObColumnRefRawExpr *col_expr = NULL;
   ObSchemaGetterGuard *schema_guard = NULL;
@@ -1905,9 +1907,11 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       col_expr->set_lob_column(is_lob_column);
       column_item.expr_ = col_expr;
       if (session_info_->get_ddl_info().is_ddl()) {
-        ret = column_item.set_default_value(col_schema->get_orig_default_value());
+        ret = col_schema->export_orig_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch));
+        if (OB_SUCC(ret)) { ret = column_item.set_default_value(schema_default_value); }
       } else {
-        ret = column_item.set_default_value(col_schema->get_cur_default_value());
+        ret = col_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch));
+        if (OB_SUCC(ret)) { ret = column_item.set_default_value(schema_default_value); }
       }
     }
     if (OB_SUCC(ret)) {
@@ -1919,7 +1923,8 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       } else if (col_schema->is_generated_column()) {
         // Generated columns have no implicit value, and NULL needs no bytes.
         if (OB_FAIL(column_item.set_default_value(DatumValue()))) {
-        } else if (OB_FAIL(col_schema->get_cur_default_value().get_string(col_def))) {
+        } else if ((OB_FAIL(col_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+            || OB_FAIL(schema_default_value.get_string(col_def)))) {
         } else if (OB_FAIL(ObSQLUtils::convert_sql_text_from_schema_for_resolve(*allocator_,
                                               session_info_->get_dtc_params(), col_def))) {
         } else if (OB_FAIL(resolve_generated_column_expr(col_def, table_item, col_schema,
@@ -1934,7 +1939,8 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
         }
       } else if (col_schema->is_default_expr_v2_column()) {
         const bool used_for_generated_column = false;
-        if (OB_FAIL(col_schema->get_cur_default_value().get_string(col_def))) {
+        if ((OB_FAIL(col_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+            || OB_FAIL(schema_default_value.get_string(col_def)))) {
         } else if (OB_FAIL(ObSQLUtils::convert_sql_text_from_schema_for_resolve(*allocator_,
                                               session_info_->get_dtc_params(), col_def))) {
         } else if (OB_FAIL(resolve_generated_column_expr(col_def, table_item, col_schema, *col_expr,

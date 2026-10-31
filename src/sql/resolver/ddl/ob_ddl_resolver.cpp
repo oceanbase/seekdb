@@ -2377,7 +2377,7 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
       }
       alter_table_stmt->get_alter_table_arg().alter_constraint_type_ = ObAlterTableArg::ADD_CONSTRAINT;
     }
-    if (OB_SUCC(ret) && column.get_cur_default_value().is_null()
+    if (OB_SUCC(ret) && column.get_cur_default_datum().is_null()
         && resolve_stat.is_set_default_value_
         && (!column.is_nullable() || resolve_stat.is_primary_key_)) {
       ret = OB_INVALID_DEFAULT;
@@ -2393,7 +2393,7 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
       LOG_USER_ERROR(OB_ERR_COLUMN_DEFINITION_AMBIGUOUS, column.get_column_name_str().length(), column.get_column_name_str().ptr());
     }
     if (OB_SUCC(ret) && column.is_autoincrement()) {
-      if (column.get_cur_default_value().get_type() != ObNullType) {
+      if (column.get_cur_default_meta().get_type() != ObNullType) {
         ret = OB_INVALID_DEFAULT;
         LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(), column.get_column_name_str().ptr());
         SQL_RESV_LOG(WARN, "can not set default value for auto_increment column", K(ret));
@@ -3727,7 +3727,7 @@ int ObDDLResolver::reformat_generated_column_expr(DatumValue &default_value,
     } else if (OB_FAIL(resolve_generated_column_expr(expr_str, allocator, table_schema, dummy_array, column,
                                           &empty_session, schema_checker, expr, expr_factory))) {
     } else {
-      default_value = column.get_cur_default_value();
+      ret = column.copy_cur_default_value(default_value, allocator);
     }
     exec_ctx.set_physical_plan_ctx(NULL);
   }
@@ -3850,7 +3850,7 @@ int ObDDLResolver::check_default_value(DatumValue &default_value,
         }
         OZ (adjust_string_column_length_within_max(column));
       }
-      if (OB_SUCC(ret)) { default_value = column.get_cur_default_value(); }
+      if (OB_SUCC(ret)) { ret = column.copy_cur_default_value(default_value, allocator); }
     }
   } else if (column.is_default_expr_v2_column()) {
     ObString expr_str;
@@ -3896,7 +3896,7 @@ int ObDDLResolver::check_default_value(DatumValue &default_value,
       }
     } else if (OB_FAIL(print_expr_to_default_value(*expr, column, schema_checker, tz_info_wrap.get_time_zone_info()))) {
     }
-    if (OB_SUCC(ret)) { default_value = column.get_cur_default_value(); }
+    if (OB_SUCC(ret)) { ret = column.copy_cur_default_value(default_value, allocator); }
   } else {
     if (OB_FAIL(cast_default_value(session_info, default_value, tz_info_wrap.get_time_zone_info(),
                                    allocator, column, sql_mode))) {
@@ -4077,7 +4077,7 @@ int ObDDLResolver::check_udt_default_value(DatumValue &default_value,
       column, sql_mode, session_info, schema_checker, srs_provider, lob_read_service,
       extend_result, ddl_arg);
   if (ret == OB_SUCCESS && column.is_default_expr_v2_column()) {
-    default_value = column.get_cur_default_value();
+    ret = column.copy_cur_default_value(default_value, allocator);
   }
   if (extend_result.is_pl_extend()) {
     const int cleanup_ret = pl::ObUserDefinedType::destruct_obj(extend_result, session_info);

@@ -99,7 +99,7 @@ int ObCreateTableResolver::add_primary_key_part(const ObString &column_name,
     } else if (OB_ISNULL(stat)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "fail to find column stat", K(ret), K(column_name));
-    } else if (stat->is_set_null_ || (stat->is_set_default_value_ && col->get_cur_default_value().is_null())) {
+    } else if (stat->is_set_null_ || (stat->is_set_default_value_ && col->get_cur_default_datum().is_null())) {
       ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
     }
   }
@@ -421,6 +421,8 @@ int ObCreateTableResolver::resolve_partition_option(
 
 int ObCreateTableResolver::check_generated_partition_column(ObTableSchema &table_schema)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   const ObPartitionKeyInfo &part_key_info = table_schema.get_partition_key_info();
   const ObPartitionKeyColumn *part_column = NULL;
@@ -433,7 +435,8 @@ int ObCreateTableResolver::check_generated_partition_column(ObTableSchema &table
     } else if (OB_ISNULL(column_schema = table_schema.get_column_schema(part_column->column_id_))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (column_schema->is_generated_column()) {
-      if (OB_FAIL(column_schema->get_cur_default_value().get_string(expr_def))) {
+      if ((OB_FAIL(column_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+          || OB_FAIL(schema_default_value.get_string(expr_def)))) {
       } else if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
                                                                      expr_def,
                                                                      *params_.expr_factory_,
@@ -686,6 +689,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         if (OB_SUCC(ret)) {
           ObColumnSchemaV2 &column = resolved_cols.at(ele_pos);
           DatumValue checked_default;
+          alignas(8) char default_scratch[64];
           ObColumnResolveStat stat;
           common::ObString pk_name;
           // ele_pos + 1, points to the next column_schema
@@ -696,8 +700,9 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                                 table_schema,
                                                 false,
                                                 is_create_table_as))) {
+          } else if (OB_FAIL(column.export_cur_default_value(checked_default, default_scratch, sizeof(default_scratch)))) {
           } else if (OB_FAIL(check_default_value(
-                                          (checked_default = column.get_cur_default_value()),
+                                          checked_default,
                                           session_info_->get_tz_info_wrap(),
                                           NULL,
                                           *allocator_,
@@ -737,7 +742,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           }
 
           if (OB_SUCC(ret) && column.is_generated_column()) {
-            if (OB_FAIL(column.set_orig_default_value(column.get_cur_default_value()))) {
+            if (OB_FAIL(column.export_cur_default_value(checked_default, default_scratch, sizeof(default_scratch)))) {
+            } else if (OB_FAIL(column.set_orig_default_value(checked_default))) {
             }
           }
           if (OB_SUCC(ret)){
@@ -1138,9 +1144,12 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
                 const ObColumnSchemaV2 *org_column = base_table_schema->get_column_schema(select_item.expr_name_);
                 if (NULL != org_column &&
                     !org_column->is_generated_column() &&
-                    !org_column->get_cur_default_value().is_null()) {
-                  if (OB_FAIL(column.set_cur_default_value(
-                          org_column->get_cur_default_value(),
+                    !org_column->get_cur_default_datum().is_null()) {
+                  DatumValue default_value;
+                  alignas(8) char default_scratch[64];
+                  if (OB_FAIL(org_column->export_cur_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+                  } else if (OB_FAIL(column.set_cur_default_value(
+                          default_value,
                           org_column->is_default_expr_v2_column()))) {
                   }
                 }
@@ -2248,7 +2257,7 @@ int ObCreateTableResolver::resolve_primary_key_node_in_heap_table(const ParseNod
           } else if (OB_ISNULL(stat)) {
             ret = OB_ERR_UNEXPECTED;
             SQL_RESV_LOG(WARN, "fail to find column stat", K(ret), K(column_name));
-          } else if (stat->is_set_null_ || (stat->is_set_default_value_ && col->get_cur_default_value().is_null())) {
+          } else if (stat->is_set_null_ || (stat->is_set_default_value_ && col->get_cur_default_datum().is_null())) {
             ret = OB_ERR_PRIMARY_CANT_HAVE_NULL;
           }
         }

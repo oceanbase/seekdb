@@ -94,8 +94,10 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
       } else {
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-        const DatumValue &def_obj = tmp_column_schema->get_cur_default_value();
-        if (IS_DEFAULT_NOW_OBJ(def_obj)) {
+        DatumValue def_obj;
+        alignas(8) char default_scratch[64];
+        if (OB_FAIL(tmp_column_schema->export_cur_default_value(def_obj, default_scratch, sizeof(default_scratch)))) {
+        } else if (IS_DEFAULT_NOW_OBJ(def_obj)) {
           expr_datum.set_string(ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP));
         } else if (def_obj.get_type() == ObBitType || ob_is_enum_or_set_type(def_obj.get_type())) {
           char *buf = NULL;

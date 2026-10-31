@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "common/datum/datum.h"
 #include "common/datum/datum_parameter_array.h"
 #include "common/datum/datum_param_store.h"
 
@@ -64,6 +65,27 @@ public:
   // continues to require complete fields through decode_value().
   static int decode_schema_value(const char *buf, int64_t length, int64_t &pos,
                           ObIAllocator &allocator, ObDatum &value, SqlTypeMeta &meta);
+  // Column defaults have a historical value domain independent of the column
+  // declaration (literal/SQL text/NOW/unknown-precision Decimal). These ports
+  // move that physical domain without inventing a complete SqlType. Ordinary
+  // scalars are inline; Decimal keeps its actual reference width. References
+  // are owned on import/clone/decode, including the existing SQL-array graph.
+  // PL/LOB wrapper copying retains its old domain meaning, not external-resource
+  // ownership. Every output, and decode's position, is published only on success.
+  static int import_schema_native_value(const ObDatum &value, const SqlTypeMeta &meta,
+                                       ObIAllocator &allocator, Datum &output);
+  static int clone_schema_native_value(const Datum &value, const SqlTypeMeta &meta,
+                                      ObIAllocator &allocator, Datum &output);
+  // Scalar/special-state views borrow caller scratch; reference views borrow
+  // value's owner. Neither may outlive that storage. A 64-byte aligned scratch
+  // covers every scalar view. No column precision/label normalization occurs.
+  static int export_schema_legacy_value(const Datum &value, const SqlTypeMeta &meta,
+                                       ObDatum &output, void *scratch, int64_t capacity);
+  static int schema_native_value_size(const Datum &value, const SqlTypeMeta &meta, int64_t &size);
+  static int encode_schema_native_value(const Datum &value, const SqlTypeMeta &meta,
+                                       char *buf, int64_t length, int64_t &pos);
+  static int decode_schema_native_value(const char *buf, int64_t length, int64_t &pos,
+                                       ObIAllocator &allocator, Datum &output, SqlTypeMeta &meta);
   // Old UNIS member records also accepted a final string without its unused
   // terminator. Payload bytes remain bounded; only the record cursor may end
   // one byte past the body, as the enclosing UNIS reader historically allowed.

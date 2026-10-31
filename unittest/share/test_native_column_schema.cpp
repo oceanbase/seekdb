@@ -27,8 +27,10 @@
 #include <type_traits>
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
-static_assert(std::is_same<decltype(std::declval<const ObColumnSchemaV2 &>().get_orig_default_value()),
-    const DatumValue &>::value, "Schema defaults must expose the stored native value");
+static_assert(std::is_same<decltype(std::declval<const ObColumnSchemaV2 &>().get_orig_default_datum()),
+    const Datum &>::value, "Schema defaults must expose the sole native value");
+static_assert(std::is_same<decltype(std::declval<ObColumnSchemaV2 &>().get_cur_default_datum()),
+    const Datum &>::value, "A mutable column must not expose a writable default shadow");
 namespace {
 std::vector<std::string> columns(const std::string &line) {
   std::vector<std::string> out;std::istringstream input(line);std::string field;
@@ -125,18 +127,20 @@ TEST(NativeColumnSchema, copy_and_decode_own_payloads_after_source_is_destroyed)
     text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS,source.set_orig_default_value(number));
     ASSERT_EQ(OB_SUCCESS,source.set_cur_default_value(text,true));
-    ASSERT_NE(number.datum_.ptr_,source.get_orig_default_value().datum_.ptr_);
-    ASSERT_NE(text.datum_.ptr_,source.get_cur_default_value().datum_.ptr_);
+    EXPECT_EQ(0,source.get_orig_default_datum().length());
+    EXPECT_EQ(918,source.get_orig_default_datum().get_int());
+    ASSERT_NE(text.datum_.ptr_,source.get_cur_default_datum().get_reference());
     ASSERT_EQ(OB_SUCCESS,copy.assign(source));
-    ASSERT_NE(source.get_orig_default_value().datum_.ptr_,copy.get_orig_default_value().datum_.ptr_);
+    EXPECT_EQ(0,copy.get_orig_default_datum().length());
+    EXPECT_EQ(918,copy.get_orig_default_datum().get_int());
     const auto bytes=unhex(wire(source));int64_t pos=0;
     ASSERT_EQ(OB_SUCCESS,decoded.deserialize(bytes.data(),bytes.size(),pos));
-    ASSERT_NE(source.get_cur_default_value().datum_.ptr_,decoded.get_cur_default_value().datum_.ptr_);
+    ASSERT_NE(source.get_cur_default_datum().get_reference(),decoded.get_cur_default_datum().get_reference());
   }
-  EXPECT_EQ(918,copy.get_orig_default_value().get_int());
-  EXPECT_EQ(ObString::make_string("customer_客户"),copy.get_cur_default_value().get_string());
+  EXPECT_EQ(918,copy.get_orig_default_datum().get_int());
+  EXPECT_EQ(ObString::make_string("customer_客户"),copy.get_cur_default_datum().get_string());
   EXPECT_EQ(wire(copy),wire(decoded));
-  EXPECT_GE(copy.get_convert_size(),sizeof(copy)+sizeof(int64_t)+copy.get_cur_default_value().get_string_len());
+  EXPECT_GE(copy.get_convert_size(),sizeof(copy)+copy.get_cur_default_datum().length());
 }
 
 TEST(NativeColumnSchema, failed_replacement_keeps_value_and_expression_flag) {
@@ -147,10 +151,12 @@ TEST(NativeColumnSchema, failed_replacement_keeps_value_and_expression_flag) {
   replacement.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   ASSERT_EQ(OB_SUCCESS,column.set_orig_default_value(old_value));
   ASSERT_EQ(OB_SUCCESS,column.set_cur_default_value(old_value,false));
-  const auto before=wire(column);const char *original=column.get_cur_default_value().datum_.ptr_;
+  const auto before=wire(column);const Datum original=column.get_cur_default_datum();
   owner.fail_=true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,column.set_cur_default_value(replacement,true));
-  EXPECT_EQ(original,column.get_cur_default_value().datum_.ptr_);EXPECT_EQ(before,wire(column));
+  EXPECT_EQ(original.get_int(),column.get_cur_default_datum().get_int());
+  EXPECT_EQ(original.state(),column.get_cur_default_datum().state());
+  EXPECT_EQ(original.length(),column.get_cur_default_datum().length());EXPECT_EQ(before,wire(column));
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,column.set_orig_default_value(replacement));
   EXPECT_EQ(before,wire(column));
 }
@@ -169,9 +175,11 @@ TEST(NativeColumnSchema, nested_native_arrays_are_owned_and_counted) {
     DatumParameter value;value.set_type_meta(meta);
     ASSERT_EQ(OB_SUCCESS,value.alloc_datum_reserved_buff(meta,-1,source));value.set_array_address(array);
     ASSERT_EQ(OB_SUCCESS,column.set_orig_default_value(value));
-    EXPECT_NE(value.datum_.ptr_,column.get_orig_default_value().datum_.ptr_);
+    EXPECT_NE(value.datum_.ptr_,column.get_orig_default_datum().get_reference());
   }
-  const auto *array=reinterpret_cast<const DatumParameterArray *>(column.get_orig_default_value().get_ext());
+  alignas(8) char array_scratch[64]; DatumValue array_view;
+  ASSERT_EQ(OB_SUCCESS,column.export_orig_default_value(array_view,array_scratch,sizeof(array_scratch)));
+  const auto *array=reinterpret_cast<const DatumParameterArray *>(array_view.get_ext());
   ASSERT_NE(nullptr,array);ASSERT_EQ(2,array->count_);
   const auto *nested=array->data_[0].get_array<DatumParameterArray>();
   ASSERT_NE(nullptr,nested);ASSERT_EQ(1,nested->count_);EXPECT_EQ(42,nested->data_[0].get_int());
@@ -190,13 +198,13 @@ TEST(NativeColumnSchema, typed_null_defaults_keep_stable_value_metadata_across_s
   ASSERT_TRUE(parameter.is_null());
   ASSERT_EQ(OB_SUCCESS, source.set_orig_default_value(parameter));
   ASSERT_EQ(OB_SUCCESS, source.set_cur_default_value(parameter, false));
-  EXPECT_TRUE(source.get_cur_default_value().is_null());
-  EXPECT_EQ(ObNullType, source.get_orig_default_value().get_type());
-  EXPECT_EQ(ObNullType, source.get_cur_default_value().get_type());
+  EXPECT_TRUE(source.get_cur_default_datum().is_null());
+  EXPECT_EQ(ObNullType, source.get_orig_default_meta().get_type());
+  EXPECT_EQ(ObNullType, source.get_cur_default_meta().get_type());
   const auto bytes = unhex(wire(source)); int64_t pos = 0;
   ASSERT_EQ(OB_SUCCESS, decoded.deserialize(bytes.data(), bytes.size(), pos));
-  EXPECT_EQ(source.get_orig_default_value().get_type(), decoded.get_orig_default_value().get_type());
-  EXPECT_EQ(source.get_cur_default_value().get_type(), decoded.get_cur_default_value().get_type());
+  EXPECT_EQ(source.get_orig_default_meta().get_type(), decoded.get_orig_default_meta().get_type());
+  EXPECT_EQ(source.get_cur_default_meta().get_type(), decoded.get_cur_default_meta().get_type());
   EXPECT_EQ(ObEnumType, parameter.get_type()); // the source declaration is separate
   EXPECT_EQ(ObEnumType, source.get_data_type());
 }
@@ -209,25 +217,25 @@ TEST(NativeColumnSchema, generated_scalar_default_payloads_are_owned_by_schema)
   DatumValue uint_default = make_inner_table_default_uint64(uint_value);
   ASSERT_EQ(OB_SUCCESS, column.set_orig_default_value(uint_default));
   ASSERT_EQ(OB_SUCCESS, column.set_cur_default_value(uint_default, false));
-  EXPECT_EQ(ObUInt64Type, column.get_orig_default_value().get_type());
-  EXPECT_EQ(uint_value, column.get_orig_default_value().datum_.get_uint());
-  EXPECT_EQ(uint_value, column.get_cur_default_value().datum_.get_uint());
-  EXPECT_NE(uint_default.datum_.ptr_, column.get_orig_default_value().datum_.ptr_);
-  EXPECT_NE(uint_default.datum_.ptr_, column.get_cur_default_value().datum_.ptr_);
+  EXPECT_EQ(ObUInt64Type, column.get_orig_default_meta().get_type());
+  EXPECT_EQ(uint_value, column.get_orig_default_datum().get_uint());
+  EXPECT_EQ(uint_value, column.get_cur_default_datum().get_uint());
+  EXPECT_EQ(0, column.get_orig_default_datum().length());
+  EXPECT_EQ(0, column.get_cur_default_datum().length());
 
   DatumValue int_default = make_inner_table_default_int(ObIntType, -918273645);
   ASSERT_EQ(OB_SUCCESS, column.set_orig_default_value(int_default));
   ASSERT_EQ(OB_SUCCESS, column.set_cur_default_value(int_default, false));
-  EXPECT_EQ(-918273645, column.get_orig_default_value().get_int());
-  EXPECT_EQ(-918273645, column.get_cur_default_value().get_int());
-  EXPECT_NE(int_default.datum_.ptr_, column.get_orig_default_value().datum_.ptr_);
+  EXPECT_EQ(-918273645, column.get_orig_default_datum().get_int());
+  EXPECT_EQ(-918273645, column.get_cur_default_datum().get_int());
+  EXPECT_EQ(0, column.get_orig_default_datum().length());
 
   DatumValue timestamp_default = make_inner_table_default_timestamp(1234567890123LL);
   ASSERT_EQ(OB_SUCCESS, column.set_orig_default_value(timestamp_default));
   ASSERT_EQ(OB_SUCCESS, column.set_cur_default_value(timestamp_default, false));
-  EXPECT_EQ(1234567890123LL, column.get_orig_default_value().get_timestamp());
-  EXPECT_EQ(1234567890123LL, column.get_cur_default_value().get_timestamp());
-  EXPECT_NE(timestamp_default.datum_.ptr_, column.get_cur_default_value().datum_.ptr_);
+  EXPECT_EQ(1234567890123LL, column.get_orig_default_datum().get_timestamp());
+  EXPECT_EQ(1234567890123LL, column.get_cur_default_datum().get_timestamp());
+  EXPECT_EQ(0, column.get_cur_default_datum().length());
 }
 
 int main(int argc, char **argv)

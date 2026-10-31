@@ -109,7 +109,10 @@ cc_test(
 
 cc_library(
     name = "native_column_schema_cases",
-    srcs = ["test_native_column_schema.cpp"],
+    srcs = [
+        "test_native_column_schema.cpp",
+        "test_native_schema_default_values.cpp",
+    ],
     alwayslink = True,
     deps = ["//src/share:schema_default_test_runtime", "//src/share:schema_entities", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
 )

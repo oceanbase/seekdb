@@ -537,7 +537,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
           }
         case COLUMN_DEFAULT: {
             cells[cell_idx].reset();
-            const DatumValue &def_obj = column_schema->get_cur_default_value();
+            DatumValue def_obj;
+            alignas(8) char default_scratch[64];
             SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             if (OB_ISNULL(table_schema_) ||
@@ -546,6 +547,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "table or column schema or or allocator is null", KR(ret), KP(table_schema_), KP(tmp_column_schema), KP(allocator_));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
+            } else if (OB_FAIL(column_schema->export_cur_default_value(def_obj, default_scratch, sizeof(default_scratch)))) {
             } else if (IS_DEFAULT_NOW_OBJ(def_obj)) {
               if (OB_FAIL(DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx,
                       column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP)))) {
@@ -907,7 +909,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
               SERVER_LOG(WARN, "table or column schema is null", KR(ret), KP(table_schema_), KP(tmp_column_schema));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else if (column_schema->is_generated_column()) {
-              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, column_schema->get_orig_default_value().get_string()) : ret);
+              (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, column_schema->get_orig_default_datum().get_string()) : ret);
             } else {
               (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString("")) : ret);
             }

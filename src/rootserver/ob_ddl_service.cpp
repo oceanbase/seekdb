@@ -93,8 +93,12 @@ namespace
 template <typename... Args>
 int check_column_default_value(ObColumnSchemaV2 &column, Args &&...args)
 {
-  DatumValue value = column.get_cur_default_value();
-  int ret = sql::ObDDLResolver::check_default_value(value, std::forward<Args>(args)...);
+  DatumValue value;
+  alignas(8) char default_scratch[64];
+  int ret = column.export_cur_default_value(value, default_scratch, sizeof(default_scratch));
+  if (OB_SUCCESS == ret) {
+    ret = sql::ObDDLResolver::check_default_value(value, std::forward<Args>(args)...);
+  }
   if (OB_SUCCESS == ret) {
     ret = column.set_cur_default_value_v2(value);
   }
@@ -104,8 +108,12 @@ int check_column_default_value(ObColumnSchemaV2 &column, Args &&...args)
 template <typename... Args>
 int reformat_column_default_expr(ObColumnSchemaV2 &column, Args &&...args)
 {
-  DatumValue value = column.get_cur_default_value();
-  int ret = sql::ObDDLResolver::reformat_generated_column_expr(value, std::forward<Args>(args)...);
+  DatumValue value;
+  alignas(8) char default_scratch[64];
+  int ret = column.export_cur_default_value(value, default_scratch, sizeof(default_scratch));
+  if (OB_SUCCESS == ret) {
+    ret = sql::ObDDLResolver::reformat_generated_column_expr(value, std::forward<Args>(args)...);
+  }
   if (OB_SUCCESS == ret) {
     ret = column.set_cur_default_value_v2(value);
   }
@@ -6313,8 +6321,10 @@ int ObDDLService::resolve_orig_default_value(ObColumnSchemaV2 &alter_column_sche
     const ObTimeZoneInfoWrap &tz_info_wrap, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  DatumValue orig_default_value = alter_column_schema.get_cur_default_value();
-  if (orig_default_value.is_null() && !alter_column_schema.is_nullable()) {
+  DatumValue orig_default_value;
+  alignas(8) char default_scratch[64];
+  if (OB_FAIL(alter_column_schema.export_cur_default_value(orig_default_value, default_scratch, sizeof(default_scratch)))) {
+  } else if (orig_default_value.is_null() && !alter_column_schema.is_nullable()) {
     orig_default_value.set_type(alter_column_schema.get_data_type());
     if (OB_FAIL(orig_default_value.build_not_strict_default_value(
           alter_column_schema.get_accuracy().get_precision(),
@@ -6397,7 +6407,9 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
           //new_column_schema is orig_column_schema;
           //if default value is now(), on update current timestamp is false;
           if (!new_column_schema.is_nullable()
-              && !IS_DEFAULT_NOW_OBJ(new_column_schema.get_cur_default_value())) {
+              && !(ObExtendType == new_column_schema.get_cur_default_meta().get_type()
+                   && !new_column_schema.get_cur_default_meta().is_ext_sql_array()
+                   && ObActionFlag::OP_DEFAULT_NOW_FLAG == new_column_schema.get_cur_default_datum().get_ext())) {
             new_column_schema.set_on_update_current_timestamp(true);
           } else {
             //do nothing
@@ -6432,7 +6444,7 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
               } else if (OB_FAIL(new_column_schema.set_cur_default_value_v2(default_value))) {
               }
             }
-          } else if (new_column_schema.get_cur_default_value().is_null()) {
+          } else if (new_column_schema.get_cur_default_datum().is_null()) {
             ret = OB_INVALID_DEFAULT;
             LOG_USER_ERROR(OB_INVALID_DEFAULT, new_column_schema.get_column_name_str().length(),
                            new_column_schema.get_column_name_str().ptr());
@@ -6447,8 +6459,10 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
         }
         if(OB_SUCC(ret)
            && OB_DDL_ADD_COLUMN == alter_column_schema->alter_type_) {
-          DatumValue cur_default_value = new_column_schema.get_cur_default_value();
-          if (IS_DEFAULT_NOW_OBJ(cur_default_value) || alter_column_schema->is_default_expr_v2_column()) {
+          DatumValue cur_default_value;
+          alignas(8) char default_scratch[64];
+          if (OB_FAIL(new_column_schema.export_cur_default_value(cur_default_value, default_scratch, sizeof(default_scratch)))) {
+          } else if (IS_DEFAULT_NOW_OBJ(cur_default_value) || alter_column_schema->is_default_expr_v2_column()) {
             if (OB_FAIL(ObDDLResolver::calc_default_value(*alter_column_schema,
                                                           cur_default_value,
                                                           tz_info_wrap,
@@ -6468,13 +6482,16 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
 
 int ObDDLService::deal_default_value_padding(ObColumnSchemaV2 &column_schema, ObIAllocator &allocator)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObString str;
-  if (column_schema.get_orig_default_value().is_null()
+  if (column_schema.get_orig_default_datum().is_null()
       || column_schema.get_data_type() != ObCharType
       || column_schema.get_collation_type() != CS_TYPE_BINARY) {
     //nothing to do;
-  } else if (OB_FAIL(column_schema.get_orig_default_value().get_string(str))) {
+  } else if ((OB_FAIL(column_schema.export_orig_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+      || OB_FAIL(schema_default_value.get_string(str)))) {
   } else {
     int64_t strlen = ObCharset::strlen_char(column_schema.get_collation_type(),
                                             str.ptr(), str.length());
@@ -6532,14 +6549,18 @@ int ObDDLService::pre_check_orig_column_schema(
 int ObDDLService::check_generated_column_modify_authority(
     const ObColumnSchemaV2 &old_column_schema, const AlterColumnSchema &alter_column_schema)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   if (old_column_schema.is_generated_column() && alter_column_schema.is_generated_column()) {
     if ((old_column_schema.is_virtual_generated_column() && alter_column_schema.is_virtual_generated_column())
      || (old_column_schema.is_stored_generated_column() && alter_column_schema.is_stored_generated_column())) {
       ObString old_def;
       ObString alter_def;
-      if (OB_FAIL(old_column_schema.get_cur_default_value().get_string(old_def))) {
-      } else if (OB_FAIL(alter_column_schema.get_cur_default_value().get_string(alter_def))) {
+      if ((OB_FAIL(old_column_schema.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+          || OB_FAIL(schema_default_value.get_string(old_def)))) {
+      } else if ((OB_FAIL(alter_column_schema.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+          || OB_FAIL(schema_default_value.get_string(alter_def)))) {
       } else if (!ObCharset::case_insensitive_equal(old_def, alter_def)) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Modify generated column definition");
@@ -6617,6 +6638,8 @@ int ObDDLService::modify_generated_column_default_value(ObColumnSchemaV2 &genera
                                                          const ObTableSchema &table_schema,
                                                          const ObTimeZoneInfo &tz_info)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   if (generated_column.is_generated_column()) {
     ObString col_def;
@@ -6636,7 +6659,8 @@ int ObDDLService::modify_generated_column_default_value(ObColumnSchemaV2 &genera
       } else if (OB_FAIL(default_session.init_runtime(runtime_schema->get_runtime_name_str()))) {
       } else if (OB_FAIL(default_session.load_all_sys_vars(schema_guard))) {
       } else if (OB_FAIL(default_session.load_default_configs_in_pc())) {
-      } else if (OB_FAIL(generated_column.get_cur_default_value().get_string(col_def))) {
+      } else if ((OB_FAIL(generated_column.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+          || OB_FAIL(schema_default_value.get_string(col_def)))) {
       } else if (FALSE_IT(exec_ctx.set_physical_plan_ctx(&phy_plan_ctx))) {
       } else if (FALSE_IT(exec_ctx.set_my_session(&default_session))) {
       } else if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
@@ -6679,6 +6703,8 @@ int ObDDLService::modify_generated_column_local_vars(ObColumnSchemaV2 &generated
                                                     const AlterColumnSchema &new_column_schema,
                                                     const ObTableSchema &table_schema,
                                                     const share::ObLocalSessionVar *local_session_var) {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   if (generated_column.is_generated_column()
       && origin_type != new_column_schema.get_data_type()) {
@@ -6702,7 +6728,8 @@ int ObDDLService::modify_generated_column_local_vars(ObColumnSchemaV2 &generated
                  && OB_FAIL(sql::ObLocalSessionVarHelper::update_session_vars_with_local(*local_session_var, default_session))) {
       } else if (FALSE_IT(exec_ctx.set_physical_plan_ctx(&phy_plan_ctx))) {
       } else if (FALSE_IT(exec_ctx.set_my_session(&default_session))) {
-      } else if (OB_FAIL(generated_column.get_cur_default_value().get_string(col_def))) {
+      } else if ((OB_FAIL(generated_column.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+          || OB_FAIL(schema_default_value.get_string(col_def)))) {
       } else if (OB_FAIL(ObRawExprUtils::build_generated_column_expr(NULL,
                                                                      col_def,
                                                                      expr_factory,
@@ -7465,8 +7492,11 @@ int ObDDLService::fill_new_column_attributes(
     new_column_schema.set_data_precision(alter_column_schema.get_data_precision());
     new_column_schema.set_data_scale(alter_column_schema.get_data_scale());
     {
-      if (OB_FAIL(new_column_schema.set_cur_default_value(
-              alter_column_schema.get_cur_default_value(),
+      DatumValue default_value;
+      alignas(8) char default_scratch[64];
+      if (OB_FAIL(alter_column_schema.export_cur_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+      } else if (OB_FAIL(new_column_schema.set_cur_default_value(
+              default_value,
               alter_column_schema.is_default_expr_v2_column()))) {
       }
     }
@@ -7930,7 +7960,7 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid column schema", K(column));
       } else if (column->is_generated_column()) {
-        const DatumValue &default_value = column->get_cur_default_value();
+        const Datum &default_value = column->get_cur_default_datum();
         if (OB_FAIL(gen_col_expr_arr.push_back(default_value.get_string()))) {
         }
       }
@@ -8074,9 +8104,11 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
                     new_column_schema.del_column_flag(DEFAULT_EXPR_V2_COLUMN_FLAG);
                   }
                 } else {
-                  default_value = alter_column_schema->get_cur_default_value();
+                  alignas(8) char default_scratch[64];
+                  ret = alter_column_schema->export_cur_default_value(default_value, default_scratch, sizeof(default_scratch));
                   bool is_default_expr_v2 = alter_column_schema->is_default_expr_v2_column();
-                  if (!default_value.is_null() && ob_is_text_tc(new_column_schema.get_data_type())) {
+                  if (OB_FAIL(ret)) {
+                  } else if (!default_value.is_null() && ob_is_text_tc(new_column_schema.get_data_type())) {
                     ret = OB_INVALID_DEFAULT;
                     LOG_USER_ERROR(OB_INVALID_DEFAULT, new_column_schema.get_column_name_str().length(),
                                                        new_column_schema.get_column_name_str().ptr());
@@ -8311,7 +8343,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
         } else if (OB_ISNULL(column)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (column->is_generated_column()) {
-          const DatumValue &default_value = column->get_cur_default_value();
+          const Datum &default_value = column->get_cur_default_datum();
           if (OB_FAIL(gen_col_expr_arr.push_back(default_value.get_string()))) {
           }
         }
@@ -8542,8 +8574,10 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                   }
                 } else {
                   bool is_default_expr_v2 = alter_column_schema->is_default_expr_v2_column();
-                  default_value = alter_column_schema->get_cur_default_value();
-                  if (!default_value.is_null() && ob_is_text_tc(new_column_schema.get_data_type())) {
+                  alignas(8) char default_scratch[64];
+                  ret = alter_column_schema->export_cur_default_value(default_value, default_scratch, sizeof(default_scratch));
+                  if (OB_FAIL(ret)) {
+                  } else if (!default_value.is_null() && ob_is_text_tc(new_column_schema.get_data_type())) {
                     ret = OB_INVALID_DEFAULT;
                     LOG_USER_ERROR(OB_INVALID_DEFAULT, new_column_schema.get_column_name_str().length(),
                                                        new_column_schema.get_column_name_str().ptr());
@@ -11648,7 +11682,7 @@ int ObDDLService::add_not_null_column_to_table_schema(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid column schema", K(column));
     } else if (column->is_generated_column()) {
-      const DatumValue &default_value = column->get_cur_default_value();
+      const Datum &default_value = column->get_cur_default_datum();
       if (OB_FAIL(gen_col_expr_arr.push_back(default_value.get_string()))) {
       }
     }
@@ -22624,6 +22658,8 @@ int ObDDLService::prepare_change_modify_column_offline(AlterColumnSchema &alter_
                            ObColumnSchemaV2 &new_column_schema,
                            bool &is_contain_part_key)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   const common::ObTimeZoneInfoWrap &tz_info_wrap = alter_table_arg.tz_info_wrap_;
   common::ObIAllocator &allocator = alter_table_arg.allocator_;
@@ -22708,8 +22744,8 @@ int ObDDLService::prepare_change_modify_column_offline(AlterColumnSchema &alter_
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(fill_new_column_attributes(alter_column_schema, new_column_schema))) {
-    } else if (OB_FAIL(new_column_schema.set_orig_default_value(
-                 alter_column_schema.get_orig_default_value()))) {
+    } else if (OB_FAIL(alter_column_schema.export_orig_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))) {
+    } else if (OB_FAIL(new_column_schema.set_orig_default_value(schema_default_value))) {
     } else if (OB_FAIL(resolve_timestamp_column(&alter_column_schema, new_table_schema,
                                                 new_column_schema, tz_info_wrap,
                                                 allocator))) {

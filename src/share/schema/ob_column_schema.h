@@ -18,6 +18,7 @@
 #define OCEANBASE_SCHEMA_COLUMN_SCHEMA_H_
 #include "share/ob_define.h"
 #include "share/session/ob_local_session_var.h"
+#include "common/datum/datum.h"
 #include "common/datum/datum_parameter.h"
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
@@ -131,14 +132,17 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline void set_binary_collation(const bool is_binary) { is_binary_collation_ = is_binary; }
   inline bool is_binary_collation() const  { return is_binary_collation_; }
   inline void set_collation_type(const common::ObCollationType type) { meta_type_.set_collation_type(type); }
-  // Default bytes belong to the schema arena, including scalar payloads.
+  // Each default has one native value and its historical wire metadata.
+  // Scalars are inline; reference payloads belong to the schema arena.
   template <typename Value>
-  int set_orig_default_value(const Value &value) { return copy_default_value(value, orig_default_value_); }
+  int set_orig_default_value(const Value &value) {
+    return copy_default_value(value, orig_default_value_, orig_default_meta_);
+  }
   template <typename Value>
   int set_orig_default_value_v2(const Value &value) { return set_orig_default_value(value); }
   template <typename Value>
   int set_cur_default_value(const Value &value, bool is_default_expr_v2) {
-    const int ret = copy_default_value(value, cur_default_value_);
+    const int ret = copy_default_value(value, cur_default_value_, cur_default_meta_);
     if (ret == common::OB_SUCCESS) {
       add_or_del_column_flag(DEFAULT_EXPR_V2_COLUMN_FLAG, is_default_expr_v2);
     }
@@ -149,7 +153,9 @@ int assign(const ObColumnSchemaV2 &src_schema);
     return set_cur_default_value(value, is_default_expr_v2_column());
   }
   template <typename Value>
-  int set_cur_default_value_v2(const Value &value) { return copy_default_value(value, cur_default_value_); }
+  int set_cur_default_value_v2(const Value &value) {
+    return copy_default_value(value, cur_default_value_, cur_default_meta_);
+  }
   inline int set_column_name(const char *col_name) { return deep_copy_str(col_name, column_name_); }
   inline int set_column_name(const common::ObString &col_name) { return deep_copy_str(col_name, column_name_); }
   inline int set_comment(const char *comment) { return deep_copy_str(comment, comment_); }
@@ -218,9 +224,18 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_extend() const { return meta_type_.is_ext(); }
   inline common::ObCharsetType get_charset_type() const { return charset_type_; }
   inline common::ObCollationType get_collation_type() const { return meta_type_.get_collation_type(); }
-  inline const common::DatumValue &get_orig_default_value()  const { return orig_default_value_; }
-  inline const common::DatumValue &get_cur_default_value()  const { return cur_default_value_; }
-  inline common::DatumValue &get_cur_default_value() { return cur_default_value_; }
+  const common::Datum &get_orig_default_datum() const { return orig_default_value_; }
+  const common::Datum &get_cur_default_datum() const { return cur_default_value_; }
+  const common::SqlTypeMeta &get_orig_default_meta() const { return orig_default_meta_; }
+  const common::SqlTypeMeta &get_cur_default_meta() const { return cur_default_meta_; }
+  // Explicit legacy views borrow caller scratch (scalar/state) or this schema
+  // (references). Use copy_* when the consumer must retain an independent value.
+  // All four methods leave output unchanged on failure. No column declaration
+  // is fabricated from the historical value metadata at these boundaries.
+  int export_orig_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_cur_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
+  int copy_orig_default_value(common::DatumValue &output, common::ObIAllocator &owner) const;
+  int copy_cur_default_value(common::DatumValue &output, common::ObIAllocator &owner) const;
   inline const char *get_column_name() const { return extract_str(column_name_); }
   inline const common::ObString &get_column_name_str() const { return column_name_; }
   inline const char *get_comment() const {return extract_str(comment_);}
@@ -389,10 +404,18 @@ private:
   bool is_binary_collation_;
   bool on_update_current_timestamp_;
   //default value
-  int copy_default_value(const common::DatumValue &source, common::DatumValue &target);
-  int copy_default_value(const common::DatumParameter &source, common::DatumValue &target);
-  common::DatumValue orig_default_value_;//first default value, used for alter table add column; collation must be same with the column
-  common::DatumValue cur_default_value_; //collation must be same with the column
+  int copy_default_value(const common::DatumValue &source, common::Datum &target,
+                         common::SqlTypeMeta &target_meta);
+  int copy_default_value(const common::DatumParameter &source, common::Datum &target,
+                         common::SqlTypeMeta &target_meta);
+  int copy_default_value(const common::Datum &source, const common::SqlTypeMeta &meta,
+                         common::Datum &target, common::SqlTypeMeta &target_meta);
+  common::Datum orig_default_value_; // first default, used for ALTER TABLE ADD COLUMN
+  common::Datum cur_default_value_;
+  // Value-domain metadata, distinct from the column's full declaration. These
+  // retain literal/SQL-text/NOW/unknown-precision Decimal wire semantics.
+  common::SqlTypeMeta orig_default_meta_;
+  common::SqlTypeMeta cur_default_meta_;
   common::ObString column_name_;
   common::ObString comment_;
   common::ObArrayHelper<common::ObString> extended_type_info_;//used for enum and set

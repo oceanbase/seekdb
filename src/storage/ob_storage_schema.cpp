@@ -618,8 +618,10 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
         meta_type.set_scale(col->get_accuracy().get_scale());
       }
       col_schema.meta_type_ = meta_type;
-      const common::DatumValue &orig_default_val = col->get_orig_default_value();
-      if (OB_FAIL(datum.from_value(orig_default_val))) {
+      common::DatumValue orig_default_val;
+      alignas(8) char default_scratch[64];
+      if (OB_FAIL(col->export_orig_default_value(orig_default_val, default_scratch, sizeof(default_scratch)))) {
+      } else if (OB_FAIL(datum.from_value(orig_default_val))) {
       } else if (is_lob_storage(col->get_data_type()) && !datum.has_lob_header()
               && OB_FAIL(data_plane::fill_lob_header(*allocator_, datum))) {
         STORAGE_LOG(WARN, "failed to fill lob header", K(ret), K(datum));

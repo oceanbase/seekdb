@@ -6348,6 +6348,8 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
                                                      ObColumnSchemaV2 &column,
                                                      const bool resolve_dependencies)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObString col_def;
   ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
@@ -6355,11 +6357,13 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
   ObArray<ObString> columns_names;
   ObColumnSchemaV2 *col_schema = NULL;
   if (column.is_generated_column()) {
-    if (column.get_cur_default_value().is_null()) {
-      if (OB_FAIL(column.get_orig_default_value().get_string(col_def))) {
+    if (column.get_cur_default_datum().is_null()) {
+      if ((OB_FAIL(column.export_orig_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+          || OB_FAIL(schema_default_value.get_string(col_def)))) {
       }
     } else {
-      if (OB_FAIL(column.get_cur_default_value().get_string(col_def))) {
+      if ((OB_FAIL(column.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+          || OB_FAIL(schema_default_value.get_string(col_def)))) {
       }
     }
 

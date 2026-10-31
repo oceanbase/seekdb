@@ -272,7 +272,8 @@ void scalar(ObDatum &datum, Archive &archive)
 }
 
 template <typename Archive>
-void value(ObDatum &datum, SqlTypeMeta &meta, Archive &archive, int depth)
+void value(ObDatum &datum, SqlTypeMeta &meta, Archive &archive, int depth,
+           bool include_metadata = true)
 {
   if (archive.ret_ != OB_SUCCESS) { return; }
   if (depth > MAX_ARRAY_DEPTH) { archive.ret_ = OB_SIZE_OVERFLOW; return; }
@@ -282,12 +283,14 @@ void value(ObDatum &datum, SqlTypeMeta &meta, Archive &archive, int depth)
   }
   // Protocol readers stay strict. The schema reader explicitly retains the
   // old OB_UNIS_DECODE omission rule for shorter version-1 bodies.
-  if constexpr (Archive::reading) {
-    if (!archive.allow_omitted_fields_) { archive.require(4); }
-  } else {
-    archive.require(4);
+  if (include_metadata) {
+    if constexpr (Archive::reading) {
+      if (!archive.allow_omitted_fields_) { archive.require(4); }
+    } else {
+      archive.require(4);
+    }
+    archive.field(meta);
   }
-  archive.field(meta);
   if (archive.ret_ != OB_SUCCESS) { return; }
   if (meta.is_invalid()) { archive.ret_ = OB_ERR_UNEXPECTED; return; }
   switch (meta.get_type()) {
@@ -474,6 +477,165 @@ void parameter(ParameterView<Archive> &parameter_value, Archive &archive, int de
       parameter_value.set_type_meta(meta);
       parameter_value.set_accuracy(accuracy);
       parameter_value.set_result_flags(flags);
+    }
+  }
+}
+
+// Only the historical schema value domain chooses this representation. It is
+// not a complete SQL type and must never be used to prepare semantic operators.
+enum class SchemaScalar { Reference, Signed, Unsigned, Float, Double };
+SchemaScalar schema_scalar(const SqlTypeMeta &meta)
+{
+  switch (meta.get_type()) {
+    case ObTinyIntType: case ObSmallIntType: case ObMediumIntType:
+    case ObInt32Type: case ObIntType: case ObDateTimeType: case ObTimestampType:
+    case ObDateType: case ObTimeType: case ObMySQLDateType: case ObMySQLDateTimeType:
+      return SchemaScalar::Signed;
+    case ObUTinyIntType: case ObUSmallIntType: case ObUMediumIntType:
+    case ObUInt32Type: case ObUInt64Type: case ObYearType: case ObBitType:
+    case ObEnumType: case ObSetType:
+      return SchemaScalar::Unsigned;
+    case ObFloatType: case ObUFloatType: return SchemaScalar::Float;
+    case ObDoubleType: case ObUDoubleType: return SchemaScalar::Double;
+    default: return SchemaScalar::Reference;
+  }
+}
+
+template <typename T> T schema_load(const void *bytes)
+{
+  T result;
+  MEMCPY(&result, bytes, sizeof(result));
+  return result;
+}
+
+// Match the former schema clone's physical validation. Owning these bytes does
+// not interpret string collation or recover a missing declaration/enum labels.
+bool valid_schema_legacy(const ObDatum &datum, const SqlTypeMeta &meta)
+{
+  const SqlValueType type = meta.get_type();
+  if (type < ObNullType || type >= ObMaxType) { return false; }
+  if (datum.is_null() || meta.is_null()) { return true; }
+  if (datum.ptr_ == nullptr && datum.len_ > 0) { return false; }
+  if (meta.is_ext_sql_array()) { return datum.len_ == sizeof(int64_t); }
+  switch (ObDatum::get_sql_value_datum_map_type(type)) {
+    case OBJ_DATUM_8BYTE_DATA: return datum.len_ == sizeof(int64_t);
+    case OBJ_DATUM_4BYTE_DATA: return datum.len_ == sizeof(int32_t);
+    case OBJ_DATUM_1BYTE_DATA: return datum.len_ == sizeof(uint8_t);
+    case OBJ_DATUM_EXTEND: return datum.ptr_ != nullptr && datum.has_ext_value();
+    case OBJ_DATUM_NUMBER: {
+      if (datum.len_ < sizeof(number::ObNumber::Desc)) { return false; }
+      const auto desc = schema_load<number::ObNumber::Desc>(datum.ptr_);
+      return datum.len_ == sizeof(desc) + sizeof(uint32_t) * desc.len_;
+    }
+    case OBJ_DATUM_DECIMALINT:
+      return datum.len_ == 0 || datum.len_ == 4 || datum.len_ == 8
+          || datum.len_ == 16 || datum.len_ == 32 || datum.len_ == 64;
+    default: return true;
+  }
+}
+
+int borrow_schema_native(const ObDatum &source, const SqlTypeMeta &meta, Datum &output)
+{
+  int ret = OB_SUCCESS;
+  Datum candidate;
+  if (source.is_null()) {
+    candidate.set_null();
+  } else {
+    switch (schema_scalar(meta)) {
+      case SchemaScalar::Signed:
+        candidate.set_int(meta.get_type() == ObDateType || meta.get_type() == ObMySQLDateType
+            ? schema_load<int32_t>(source.ptr_) : schema_load<int64_t>(source.ptr_));
+        break;
+      case SchemaScalar::Unsigned:
+        candidate.set_uint(meta.get_type() == ObYearType
+            ? schema_load<uint8_t>(source.ptr_) : schema_load<uint64_t>(source.ptr_));
+        break;
+      case SchemaScalar::Float: candidate.set_float(schema_load<float>(source.ptr_)); break;
+      case SchemaScalar::Double: candidate.set_double(schema_load<double>(source.ptr_)); break;
+      case SchemaScalar::Reference: {
+        const uint16_t flags = source.is_outrow() ? Datum::OutRow
+            : source.has_lob_header() ? Datum::HasLobHeader
+            : source.is_ext() ? Datum::LegacyExtended : Datum::NoReferenceFlags;
+        // A bare state can discard the wrapper only when all its remaining
+        // bytes can be recovered from the historical metadata. NOW and resource
+        // wrappers retain their actual bytes and explicit Reference layout.
+        if (meta.is_ext() && !meta.is_ext_sql_array() && meta.get_extend_type() == 0
+            && source.ptr_ != nullptr && source.has_ext_value()
+            && source.get_extend_type() == 0 && source.get_extend_size() == 0
+            && source.get_extend_collation_level() == meta.get_cs_level()
+            && source.get_extend_collation() == meta.get_cs_type()
+            && (source.is_min() || source.is_max() || source.is_nop())) {
+          if (source.is_min()) { candidate.set_min(); }
+          else if (source.is_max()) { candidate.set_max(); }
+          else { candidate.set_nop(); }
+        } else {
+          ret = candidate.set_reference(source.ptr_, source.len_, flags);
+        }
+        break;
+      }
+    }
+  }
+  if (ret == OB_SUCCESS) { output = candidate; }
+  return ret;
+}
+
+template <typename T>
+int export_schema_scalar(T value, ObDatum &output, void *scratch, int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  if (capacity < static_cast<int64_t>(sizeof(T))) { ret = OB_BUF_NOT_ENOUGH; }
+  else if (scratch == nullptr) { ret = OB_INVALID_ARGUMENT; }
+  else {
+    MEMCPY(scratch, &value, sizeof(T));
+    output.ptr_ = static_cast<const char *>(scratch);
+    output.pack_ = sizeof(T);
+  }
+  return ret;
+}
+
+template <typename Wire, auto Setter>
+void read_schema_scalar(Datum &datum, ReadArchive &archive)
+{
+  Wire scalar{};
+  archive.field(scalar);
+  if (archive.ret_ == OB_SUCCESS) { (datum.*Setter)(scalar); }
+}
+
+void read_schema_native(Datum &datum, SqlTypeMeta &meta, ReadArchive &archive)
+{
+  archive.field(meta);
+  if (archive.ret_ != OB_SUCCESS) { return; }
+  if (meta.is_invalid()) { archive.ret_ = OB_ERR_UNEXPECTED; return; }
+  // Decode directly into the active inline member. In particular, no old 8B
+  // allocation precedes the native integer. All reference bodies use the same
+  // existing codec (including omission rules and recursive SQL-array values).
+  switch (meta.get_type()) {
+    case ObNullType: datum.set_null(); break;
+    case ObTinyIntType: read_schema_scalar<int8_t, &Datum::set_int>(datum, archive); break;
+    case ObSmallIntType: read_schema_scalar<int16_t, &Datum::set_int>(datum, archive); break;
+    case ObMediumIntType: case ObInt32Type:
+      read_schema_scalar<int32_t, &Datum::set_int>(datum, archive); break;
+    case ObIntType: case ObDateTimeType: case ObTimestampType: case ObTimeType: case ObMySQLDateTimeType:
+      read_schema_scalar<int64_t, &Datum::set_int>(datum, archive); break;
+    case ObDateType: case ObMySQLDateType:
+      read_schema_scalar<int32_t, &Datum::set_int>(datum, archive); break;
+    case ObUTinyIntType: case ObYearType:
+      read_schema_scalar<uint8_t, &Datum::set_uint>(datum, archive); break;
+    case ObUSmallIntType: read_schema_scalar<uint16_t, &Datum::set_uint>(datum, archive); break;
+    case ObUMediumIntType: case ObUInt32Type:
+      read_schema_scalar<uint32_t, &Datum::set_uint>(datum, archive); break;
+    case ObUInt64Type: case ObBitType: case ObEnumType: case ObSetType:
+      read_schema_scalar<uint64_t, &Datum::set_uint>(datum, archive); break;
+    case ObFloatType: case ObUFloatType:
+      read_schema_scalar<float, &Datum::set_float>(datum, archive); break;
+    case ObDoubleType: case ObUDoubleType:
+      read_schema_scalar<double, &Datum::set_double>(datum, archive); break;
+    default: {
+      ObDatum owned;
+      owned.set_null();
+      value(owned, meta, archive, 0, false /* include_metadata */);
+      if (archive.ret_ == OB_SUCCESS) { archive.ret_ = borrow_schema_native(owned, meta, datum); }
+      break;
     }
   }
 }
@@ -671,6 +833,138 @@ int DatumParameterCodec::decode_schema_value(const char *buf, int64_t length, in
 int DatumParameterCodec::decode_unis_value(const char *buf, int64_t length, int64_t &pos,
     ObIAllocator &allocator, ObDatum &datum, SqlTypeMeta &meta)
 { return decode_metadata_value(buf, length, pos, allocator, datum, meta, true, true); }
+
+int DatumParameterCodec::export_schema_legacy_value(const Datum &source, const SqlTypeMeta &meta,
+    ObDatum &output, void *scratch, int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  ObDatum candidate;
+  if (meta.get_type() < ObNullType || meta.get_type() >= ObMaxType || capacity < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (source.is_null()) {
+    candidate.set_null();
+  } else if (!source.is_present()) {
+    if (!meta.is_ext() || meta.is_ext_sql_array() || meta.get_extend_type() != 0
+        || !(source.is_min() || source.is_max() || source.is_nop())) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (capacity < DATUM_EXTEND_PAYLOAD_SIZE) {
+      ret = OB_BUF_NOT_ENOUGH;
+    } else if (scratch == nullptr) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      candidate.ptr_ = static_cast<const char *>(scratch);
+      candidate.set_extend(source.get_ext(), 0, 0, meta.get_cs_level(), meta.get_cs_type());
+    }
+  } else if (schema_scalar(meta) != SchemaScalar::Reference) {
+    if (source.length() != 0 || source.reference_flags() != Datum::NoReferenceFlags) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      switch (schema_scalar(meta)) {
+        case SchemaScalar::Signed:
+          ret = meta.get_type() == ObDateType || meta.get_type() == ObMySQLDateType
+              ? export_schema_scalar(static_cast<int32_t>(source.get_int()), candidate, scratch, capacity)
+              : export_schema_scalar(source.get_int(), candidate, scratch, capacity);
+          break;
+        case SchemaScalar::Unsigned:
+          ret = meta.get_type() == ObYearType
+              ? export_schema_scalar(static_cast<uint8_t>(source.get_uint()), candidate, scratch, capacity)
+              : export_schema_scalar(source.get_uint(), candidate, scratch, capacity);
+          break;
+        case SchemaScalar::Float:
+          ret = export_schema_scalar(source.get_float(), candidate, scratch, capacity); break;
+        case SchemaScalar::Double:
+          ret = export_schema_scalar(source.get_double(), candidate, scratch, capacity); break;
+        default: ret = OB_ERR_UNEXPECTED; break;
+      }
+    }
+  } else if (source.length() > datum_length_limit()
+      || (source.length() > 0 && source.get_reference() == nullptr)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    candidate.ptr_ = static_cast<const char *>(source.get_reference());
+    candidate.pack_ = source.length();
+    switch (source.reference_flags()) {
+      case Datum::NoReferenceFlags: break;
+      case Datum::OutRow: candidate.set_outrow(); break;
+      case Datum::HasLobHeader: candidate.set_has_lob_header(); break;
+      case Datum::LegacyExtended: candidate.set_ext(source.length()); break;
+      default: ret = OB_INVALID_ARGUMENT; break;
+    }
+  }
+  if (ret == OB_SUCCESS) { output = candidate; }
+  return ret;
+}
+
+int DatumParameterCodec::clone_schema_native_value(const Datum &source, const SqlTypeMeta &meta,
+    ObIAllocator &allocator, Datum &output)
+{
+  int ret = OB_SUCCESS;
+  alignas(8) char scratch[64];
+  ObDatum view;
+  Datum candidate;
+  if (OB_FAIL(export_schema_legacy_value(source, meta, view, scratch, sizeof(scratch)))) {
+  } else if (!valid_schema_legacy(view, meta)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (source.is_null() || !source.is_present() || schema_scalar(meta) != SchemaScalar::Reference) {
+    candidate = source;
+  } else if (meta.is_ext_sql_array()) {
+    DatumParameter input, owned;
+    input.set_type_meta(meta);
+    input.set_datum(view);
+    if (OB_FAIL(DatumParameterArray::clone_parameter(input, owned, allocator))) {
+    } else { ret = borrow_schema_native(owned.datum_, meta, candidate); }
+  } else {
+    void *bytes = allocator.alloc(std::max<int64_t>(source.length(), 1));
+    if (bytes == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      if (source.length() > 0) { MEMCPY(bytes, source.get_reference(), source.length()); }
+      ret = candidate.set_reference(bytes, source.length(), source.reference_flags());
+    }
+  }
+  if (ret == OB_SUCCESS) { output = candidate; }
+  return ret;
+}
+
+int DatumParameterCodec::import_schema_native_value(const ObDatum &source, const SqlTypeMeta &meta,
+    ObIAllocator &allocator, Datum &output)
+{
+  int ret = OB_SUCCESS;
+  Datum borrowed;
+  if (!valid_schema_legacy(source, meta)) { ret = OB_INVALID_ARGUMENT; }
+  else if (OB_FAIL(borrow_schema_native(source, meta, borrowed))) {
+  } else { ret = clone_schema_native_value(borrowed, meta, allocator, output); }
+  return ret;
+}
+
+int DatumParameterCodec::schema_native_value_size(const Datum &source, const SqlTypeMeta &meta,
+    int64_t &size)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const int ret = export_schema_legacy_value(source, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? value_size(view, meta, size) : ret;
+}
+
+int DatumParameterCodec::encode_schema_native_value(const Datum &source, const SqlTypeMeta &meta,
+    char *buf, int64_t length, int64_t &pos)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const int ret = export_schema_legacy_value(source, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? encode_value(view, meta, buf, length, pos) : ret;
+}
+
+int DatumParameterCodec::decode_schema_native_value(const char *buf, int64_t length, int64_t &pos,
+    ObIAllocator &allocator, Datum &output, SqlTypeMeta &meta)
+{
+  if (!valid_buffer(buf, length, pos)) { return OB_INVALID_ARGUMENT; }
+  Datum candidate;
+  SqlTypeMeta type;
+  ReadArchive archive(buf, length, pos, allocator, true /* allow_omitted_fields */);
+  read_schema_native(candidate, type, archive);
+  if (archive.ret_ == OB_SUCCESS) { output = candidate; meta = type; pos = archive.pos_; }
+  return archive.ret_;
+}
 
 int DatumParameterCodec::parameter_size(const DatumParameter &source, int64_t &size)
 {

@@ -48,19 +48,71 @@ ObColumnSchemaV2::~ObColumnSchemaV2()
 {
 }
 
-int ObColumnSchemaV2::copy_default_value(const DatumValue &source, DatumValue &target)
+int ObColumnSchemaV2::copy_default_value(const DatumValue &source, Datum &target,
+                                        SqlTypeMeta &target_meta)
 {
   if (error_ret_ != OB_SUCCESS) { return error_ret_; }
-  DatumValue value = source;
+  int ret = OB_SUCCESS;
+  Datum candidate;
+  SqlTypeMeta meta = source.meta_;
   // The column already stores its declaration separately. A NULL default is
   // the NULL value, including before/after its version-1 wire roundtrip.
-  if (value.is_null() && !value.meta_.is_null()) { value.meta_.set_null(); }
+  if (source.is_null() && !meta.is_null()) { meta.set_null(); }
   ObIAllocator *owner = get_allocator();
-  return owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED : clone_typed_value(value, target, *owner);
+  if (owner == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(source.datum_, meta, *owner, candidate))) {
+  } else { target = candidate; target_meta = meta; }
+  return ret;
 }
-int ObColumnSchemaV2::copy_default_value(const DatumParameter &source, DatumValue &target)
+int ObColumnSchemaV2::copy_default_value(const DatumParameter &source, Datum &target,
+                                        SqlTypeMeta &target_meta)
 {
-  return copy_default_value(source.value_view(), target);
+  return copy_default_value(source.value_view(), target, target_meta);
+}
+int ObColumnSchemaV2::copy_default_value(const Datum &source, const SqlTypeMeta &meta,
+                                        Datum &target, SqlTypeMeta &target_meta)
+{
+  if (error_ret_ != OB_SUCCESS) { return error_ret_; }
+  int ret = OB_SUCCESS;
+  Datum candidate;
+  SqlTypeMeta candidate_meta = meta;
+  if (source.is_null() && !candidate_meta.is_null()) { candidate_meta.set_null(); }
+  ObIAllocator *owner = get_allocator();
+  if (owner == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(source, candidate_meta, *owner, candidate))) {
+  } else { target = candidate; target_meta = candidate_meta; }
+  return ret;
+}
+
+int ObColumnSchemaV2::export_orig_default_value(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      orig_default_value_, orig_default_meta_, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { output = DatumValue(view, orig_default_meta_); }
+  return ret;
+}
+int ObColumnSchemaV2::export_cur_default_value(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      cur_default_value_, cur_default_meta_, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { output = DatumValue(view, cur_default_meta_); }
+  return ret;
+}
+int ObColumnSchemaV2::copy_orig_default_value(DatumValue &output, ObIAllocator &owner) const
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_orig_default_value(view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? clone_typed_value(view, output, owner) : ret;
+}
+int ObColumnSchemaV2::copy_cur_default_value(DatumValue &output, ObIAllocator &owner) const
+{
+  alignas(8) char scratch[64];
+  DatumValue view;
+  const int ret = export_cur_default_value(view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? clone_typed_value(view, output, owner) : ret;
 }
 namespace {
 int64_t default_payload_size(const DatumValue &value, int depth = 0)
@@ -73,6 +125,24 @@ int64_t default_payload_size(const DatumValue &value, int depth = 0)
       size += sizeof(DatumParameterArray) + sizeof(DatumParameter) * array->count_;
       for (int64_t i = 0; i < array->count_; ++i) {
         size += default_payload_size(array->data_[i].value_view(), depth + 1);
+      }
+    }
+  }
+  return size;
+}
+
+int64_t default_payload_size(const Datum &value, const SqlTypeMeta &meta)
+{
+  if (!value.is_present()) { return 0; }
+  int64_t size = value.length(); // Inline scalars need no separately owned bytes.
+  if (meta.is_ext_sql_array() && value.length() == sizeof(int64_t)) {
+    int64_t address = 0;
+    MEMCPY(&address, value.get_reference(), sizeof(address));
+    const auto *array = reinterpret_cast<const DatumParameterArray *>(address);
+    if (array != nullptr) {
+      size += sizeof(DatumParameterArray) + sizeof(DatumParameter) * array->count_;
+      for (int64_t i = 0; i < array->count_; ++i) {
+        size += default_payload_size(array->data_[i].value_view(), 1);
       }
     }
   }
@@ -112,8 +182,10 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     skip_index_attr_ = src_schema.skip_index_attr_;
     lob_chunk_size_ = src_schema.lob_chunk_size_;
 
-    if (OB_FAIL(copy_default_value(src_schema.orig_default_value_, orig_default_value_))) {
-    } else if (OB_FAIL(copy_default_value(src_schema.cur_default_value_, cur_default_value_))) {
+    if (OB_FAIL(copy_default_value(src_schema.orig_default_value_, src_schema.orig_default_meta_,
+                                   orig_default_value_, orig_default_meta_))) {
+    } else if (OB_FAIL(copy_default_value(src_schema.cur_default_value_, src_schema.cur_default_meta_,
+                                          cur_default_value_, cur_default_meta_))) {
     } else if (OB_FAIL(deep_copy_str(src_schema.column_name_, column_name_))) {
     } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
     } else if (OB_FAIL(set_extended_type_info(src_schema.extended_type_info_))) {
@@ -150,8 +222,8 @@ int64_t ObColumnSchemaV2::get_convert_size() const
 {
   int64_t convert_size = sizeof(*this);
 
-  convert_size += default_payload_size(orig_default_value_);
-  convert_size += default_payload_size(cur_default_value_);
+  convert_size += default_payload_size(orig_default_value_, orig_default_meta_);
+  convert_size += default_payload_size(cur_default_value_, cur_default_meta_);
   convert_size += column_name_.length() + 1;
   convert_size += comment_.length() + 1;
   if (column_ref_idxs_ != NULL) {
@@ -208,6 +280,8 @@ void ObColumnSchemaV2::reset()
   on_update_current_timestamp_ = false;
   orig_default_value_.reset();
   cur_default_value_.reset();
+  orig_default_meta_.reset();
+  cur_default_meta_.reset();
   column_name_.reset();
   comment_.reset();
   column_flags_ = NON_CASCADE_FLAG;
@@ -247,10 +321,10 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
               is_binary_collation_,
               on_update_current_timestamp_);
   if (OB_SUCC(ret)) {
-    ret = DatumParameterCodec::encode_value(orig_default_value_.datum_, orig_default_value_.meta_, buf, buf_len, pos);
+    ret = DatumParameterCodec::encode_schema_native_value(orig_default_value_, orig_default_meta_, buf, buf_len, pos);
   }
   if (OB_SUCC(ret)) {
-    ret = DatumParameterCodec::encode_value(cur_default_value_.datum_, cur_default_value_.meta_, buf, buf_len, pos);
+    ret = DatumParameterCodec::encode_schema_native_value(cur_default_value_, cur_default_meta_, buf, buf_len, pos);
   }
   LST_DO_CODE(OB_UNIS_ENCODE,
               column_name_,
@@ -283,8 +357,10 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
 OB_DEF_DESERIALIZE(ObColumnSchemaV2)
 {
   int ret = OB_SUCCESS;
-  DatumValue orig_default_value;
-  DatumValue cur_default_value;
+  Datum orig_default_value;
+  Datum cur_default_value;
+  SqlTypeMeta orig_default_meta;
+  SqlTypeMeta cur_default_meta;
   ObString column_name;
   ObString comment;
   bool has_column_ref = false;
@@ -310,14 +386,14 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
   if (OB_SUCC(ret) && pos < data_len) {
     ObIAllocator *owner = get_allocator();
     ret = owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED
-        : DatumParameterCodec::decode_schema_value(buf, data_len, pos, *owner,
-            orig_default_value.datum_, orig_default_value.meta_);
+        : DatumParameterCodec::decode_schema_native_value(buf, data_len, pos, *owner,
+            orig_default_value, orig_default_meta);
   }
   if (OB_SUCC(ret) && pos < data_len) {
     ObIAllocator *owner = get_allocator();
     ret = owner == nullptr ? OB_ALLOCATE_MEMORY_FAILED
-        : DatumParameterCodec::decode_schema_value(buf, data_len, pos, *owner,
-            cur_default_value.datum_, cur_default_value.meta_);
+        : DatumParameterCodec::decode_schema_native_value(buf, data_len, pos, *owner,
+            cur_default_value, cur_default_meta);
   }
   LST_DO_CODE(OB_UNIS_DECODE,
               column_name,
@@ -336,7 +412,9 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
   if (!OB_SUCC(ret)) {
   } else if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
   } else if (FALSE_IT(orig_default_value_ = orig_default_value)) {
+  } else if (FALSE_IT(orig_default_meta_ = orig_default_meta)) {
   } else if (FALSE_IT(cur_default_value_ = cur_default_value)) {
+  } else if (FALSE_IT(cur_default_meta_ = cur_default_meta)) {
   } else if (OB_FAIL(deep_copy_str(column_name, column_name_))) {
   } else if (OB_FAIL(deep_copy_str(comment, comment_))) {
   } else {
@@ -373,11 +451,11 @@ OB_DEF_SERIALIZE_SIZE(ObColumnSchemaV2)
               is_binary_collation_,
               on_update_current_timestamp_);
   int64_t value_size = 0;
-  if (DatumParameterCodec::value_size(orig_default_value_.datum_, orig_default_value_.meta_, value_size) != OB_SUCCESS) {
+  if (DatumParameterCodec::schema_native_value_size(orig_default_value_, orig_default_meta_, value_size) != OB_SUCCESS) {
     return 0;
   }
   len += value_size;
-  if (DatumParameterCodec::value_size(cur_default_value_.datum_, cur_default_value_.meta_, value_size) != OB_SUCCESS) {
+  if (DatumParameterCodec::schema_native_value_size(cur_default_value_, cur_default_meta_, value_size) != OB_SUCCESS) {
     return 0;
   }
   len += value_size;
@@ -455,6 +533,8 @@ int64_t ObColumnSchemaV2::to_string(char *buf, const int64_t buf_len) const
     K_(on_update_current_timestamp),
     K_(orig_default_value),
     K_(cur_default_value),
+    K_(orig_default_meta),
+    K_(cur_default_meta),
     K_(column_name),
     K_(comment),
     K_(column_flags),

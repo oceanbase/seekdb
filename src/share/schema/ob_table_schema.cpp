@@ -4551,10 +4551,12 @@ int ObTableSchema::get_column_default_checksums(
                    && !is_storage_index_table()) {
           ret = OB_ERR_UNEXPECTED;
         } else if (!ob_is_large_text(col_schema->get_data_type())) {
-          const DatumValue &default_value = col_schema->get_orig_default_value();
+          DatumValue default_value;
+          alignas(8) char default_scratch[64];
           ObDatum datum;
           char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
-          if (OB_FAIL(default_value.to_row_datum(datum, extended_payload))) {
+          if (OB_FAIL(col_schema->export_orig_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+          } else if (OB_FAIL(default_value.to_row_datum(datum, extended_payload))) {
           } else {
             default_checksum = datum.checksum(0);
           }
@@ -5195,6 +5197,8 @@ int ObTableSchema::get_generated_column_by_define(const ObString &col_def,
                                                   const bool only_hidden_column,
                                                   ObColumnSchemaV2 *&gen_col)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 8> gen_column_ids;
   if (OB_FAIL(get_generated_column_ids(gen_column_ids))) {
@@ -5206,7 +5210,8 @@ int ObTableSchema::get_generated_column_by_define(const ObString &col_def,
       ret = OB_ERR_COLUMN_NOT_FOUND;
     } else if (!tmp_col->is_hidden() && only_hidden_column) {
       //do nothing, continue
-    } else if (OB_FAIL(tmp_col->get_cur_default_value().get_string(tmp_def))) {
+    } else if ((OB_FAIL(tmp_col->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+        || OB_FAIL(schema_default_value.get_string(tmp_def)))) {
     } else if (ObCharset::case_insensitive_equal(tmp_def, col_def)) {
       gen_col = tmp_col;
     }
@@ -7070,7 +7075,7 @@ int64_t ObPrintableTableSchema::to_string(char *buf, const int64_t buf_len) cons
     const ObColumnSchemaV2 *col = column_array_[i];
     J_KV("column_id", col->get_column_id(), "column_name", col->get_column_name(), "rowkey_pos", col->get_rowkey_position(),
           "index_pos", col->get_index_position(), "meta_type", col->get_meta_type(), "accuracy", col->get_accuracy(),
-          "is_nullable", col->is_nullable(), "is_zero_fill", col->is_zero_fill(), "cur_default_value", col->get_cur_default_value());
+          "is_nullable", col->is_nullable(), "is_zero_fill", col->is_zero_fill(), "cur_default_value", col->get_cur_default_datum(), "cur_default_meta", col->get_cur_default_meta());
     J_COMMA();
   }
   J_KV(K_(rowkey_split_pos),

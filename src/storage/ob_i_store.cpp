@@ -463,7 +463,12 @@ int get_orig_default_row(const share::schema::ObTableSchema &table_schema,
         if (NULL == column) {
           ret = OB_ERR_UNEXPECTED;
         } else if (column->get_column_id() == column_ids.at(i).col_id_) {
-          if (OB_FAIL(default_row.storage_datums_[i].from_value(column->get_orig_default_value()))) {
+          DatumValue default_value;
+          // Materialize inline scalars in the destination cell, so the returned
+          // storage row never borrows a temporary caller scratch buffer.
+          blocksstable::ObStorageDatum &storage_datum = default_row.storage_datums_[i];
+          if (OB_FAIL(column->export_orig_default_value(default_value, storage_datum.buf_, sizeof(storage_datum.buf_)))) {
+          } else if (OB_FAIL(storage_datum.from_value(default_value))) {
           } else {
             found = true;
           }

@@ -469,8 +469,10 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
         break;
       }
     case DEFAULT: {
-        const DatumValue &def_obj = column_schema.get_cur_default_value();
-        if (IS_DEFAULT_NOW_OBJ(def_obj)) {
+        DatumValue def_obj;
+        alignas(8) char default_scratch[64];
+        if (OB_FAIL(column_schema.export_cur_default_value(def_obj, default_scratch, sizeof(default_scratch)))) {
+        } else if (IS_DEFAULT_NOW_OBJ(def_obj)) {
           const int16_t scale = column_schema.get_data_scale();
           if (OB_FAIL(databuff_printf(buf, buf_len, pos, N_UPPERCASE_CUR_TIMESTAMP))) {
           } else if (scale != 0 && OB_FAIL(databuff_printf(buf, buf_len, pos, "(%d)", scale))) {
@@ -497,10 +499,10 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
           }
         } else if (column_schema.is_default_expr_v2_column()) {
-          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, column_schema.get_cur_default_value().get_string()) : ret);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, column_schema.get_cur_default_datum().get_string()) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
         } else if (def_obj.is_varchar()) {
-          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, column_schema.get_cur_default_value().get_string()) : ret);
+          (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cur_row_.cells_, cur_row_.count_, cell_idx, column_schema.get_cur_default_datum().get_string()) : ret);
           cur_row_.cells_[cell_idx].set_collation_type(column_schema.get_collation_type());
         } else {//TODO:Since the print function of obobj is not complete and does not achieve compatibility with MySQL, we use the cast function here to handle it}
           const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
@@ -1050,7 +1052,7 @@ int ObTableColumns::set_col_attrs_according_binary_expr(const ObSelectStmt *sele
         nullable = true;
       } else {/*do nothing*/}
       if (OB_SUCC(ret)) {
-        if (has_default && column_schema->get_cur_default_value().is_null()) {
+        if (has_default && column_schema->get_cur_default_datum().is_null()) {
           has_default = false;
         }
         is_string_lob = column_schema->is_string_lob();

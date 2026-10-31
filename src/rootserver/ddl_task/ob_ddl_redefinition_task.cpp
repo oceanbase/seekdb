@@ -1725,7 +1725,7 @@ int ObDDLRedefinitionTask::check_need_check_table_empty(bool &need_check_table_e
       alter_column_schema = static_cast<AlterColumnSchema *>(*it_begin);
       if (OB_DDL_ADD_COLUMN == alter_column_schema->alter_type_
           && alter_column_schema->has_not_null_constraint()
-          && alter_column_schema->get_orig_default_value().is_null()) {
+          && alter_column_schema->get_orig_default_datum().is_null()) {
         need_check_table_empty = true;
       }
     }

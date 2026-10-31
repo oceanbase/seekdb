@@ -3629,7 +3629,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       } else if (OB_ISNULL(column_schema)) {
         ret = OB_ERR_COLUMN_NOT_FOUND;
       } else if (column_schema->get_meta_type().is_fixed_len_char_type() &&
-        (column_schema->is_virtual_generated_column() || !column_schema->get_orig_default_value().is_null())) {
+        (column_schema->is_virtual_generated_column() || !column_schema->get_orig_default_datum().is_null())) {
         // add flag in ddl_output_cids_ in this special scene.
         uint64_t VIRTUAL_GEN_FIX_LEN_TAG = 1ULL << 63;
         spec.ddl_output_cids_.at(i) = spec.ddl_output_cids_.at(i) | VIRTUAL_GEN_FIX_LEN_TAG;

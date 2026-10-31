@@ -635,7 +635,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
             } else if (OB_FAIL(generate_ordinary_generated_column(
                 *expr, session, data_schema, gen_col, &guard))) {
             } else if (OB_FAIL(ObRawExprUtils::check_generated_column_expr_str(
-                gen_col->get_cur_default_value().get_string(), session, data_schema))) {
+                gen_col->get_cur_default_datum().get_string(), session, data_schema))) {
             } else {
               new_sort_item.column_name_ = gen_col->get_column_name_str();
               new_sort_item.is_func_index_ = false;

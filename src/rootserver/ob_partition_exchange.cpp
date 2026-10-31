@@ -611,6 +611,8 @@ int ObPartitionExchange::check_column_conditions_in_mysql_mode_(const ObColumnSc
 
 int ObPartitionExchange::check_generate_column_conditions_(const ObColumnSchemaV2 *base_table_col_schema, const ObColumnSchemaV2 *inc_table_col_schema, bool &is_equal)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   is_equal = true;
   ObString base_col_expr_str;
@@ -624,8 +626,10 @@ int ObPartitionExchange::check_generate_column_conditions_(const ObColumnSchemaV
     ret = OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN;
     LOG_USER_ERROR(OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN, "Exchanging partitions for non-generated columns");
   } else if (base_table_col_schema->is_stored_generated_column() && inc_table_col_schema->is_stored_generated_column()) {
-    if (OB_FAIL(base_table_col_schema->get_cur_default_value().get_string(base_col_expr_str))) {
-    } else if (OB_FAIL(inc_table_col_schema->get_cur_default_value().get_string(inc_col_expr_str))) {
+    if ((OB_FAIL(base_table_col_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+        || OB_FAIL(schema_default_value.get_string(base_col_expr_str)))) {
+    } else if ((OB_FAIL(inc_table_col_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+        || OB_FAIL(schema_default_value.get_string(inc_col_expr_str)))) {
     } else if (OB_UNLIKELY(0 != base_col_expr_str.compare(inc_col_expr_str))) {
       is_equal = false;
     }
@@ -656,11 +660,19 @@ int ObPartitionExchange::check_column_default_value_(const ObColumnSchemaV2 *bas
   } else {
     ObString base_col_expr_str;
     ObString inc_col_expr_str;
-    const DatumValue &base_orig_default_value = base_table_col_schema->get_orig_default_value();
-    const DatumValue &inc_orig_default_value = inc_table_col_schema->get_orig_default_value();
-    const DatumValue &base_cur_default_value = base_table_col_schema->get_cur_default_value();
-    const DatumValue &inc_cur_default_value = inc_table_col_schema->get_cur_default_value();
-    if (OB_FAIL(compare_default_value_(base_orig_default_value, inc_orig_default_value, is_equal))) {
+    DatumValue base_orig_default_value;
+    alignas(8) char base_orig_default_value_scratch[64];
+    DatumValue inc_orig_default_value;
+    alignas(8) char inc_orig_default_value_scratch[64];
+    DatumValue base_cur_default_value;
+    alignas(8) char base_cur_default_value_scratch[64];
+    DatumValue inc_cur_default_value;
+    alignas(8) char inc_cur_default_value_scratch[64];
+    if (OB_FAIL(base_table_col_schema->export_orig_default_value(base_orig_default_value, base_orig_default_value_scratch, sizeof(base_orig_default_value_scratch)))) {
+    } else if (OB_FAIL(inc_table_col_schema->export_orig_default_value(inc_orig_default_value, inc_orig_default_value_scratch, sizeof(inc_orig_default_value_scratch)))) {
+    } else if (OB_FAIL(base_table_col_schema->export_cur_default_value(base_cur_default_value, base_cur_default_value_scratch, sizeof(base_cur_default_value_scratch)))) {
+    } else if (OB_FAIL(inc_table_col_schema->export_cur_default_value(inc_cur_default_value, inc_cur_default_value_scratch, sizeof(inc_cur_default_value_scratch)))) {
+    } else if (OB_FAIL(compare_default_value_(base_orig_default_value, inc_orig_default_value, is_equal))) {
     } else if (!is_equal) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "exchanging partition tables define different default values in alter table add column ddl operation");

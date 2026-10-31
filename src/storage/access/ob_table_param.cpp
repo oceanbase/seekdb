@@ -1083,9 +1083,13 @@ int ObTableParam::convert_column_schema_to_param(const ObColumnSchemaV2 &column_
       ret = column_param.set_cur_default_value(nop_value);
     }
   } else {
-    ret = column_param.set_orig_default_value(column_schema.get_orig_default_value());
-    if (OB_SUCC(ret)) {
-      ret = column_param.set_cur_default_value(column_schema.get_cur_default_value());
+    DatumValue default_value;
+    alignas(8) char default_scratch[64];
+    if (OB_FAIL(column_schema.export_orig_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+    } else if (OB_FAIL(column_param.set_orig_default_value(default_value))) {
+    } else if (OB_FAIL(column_schema.export_cur_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+    } else {
+      ret = column_param.set_cur_default_value(default_value);
     }
   }
   return ret;

@@ -690,6 +690,8 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
                                           int64_t col_count,
                                           bool &is_end)
 {
+  common::DatumValue schema_default_value;
+  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   if (OB_INVALID_ID == static_cast<uint64_t>(index_column_idx_)) {
     index_column_idx_ = 0;
@@ -869,7 +871,8 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
           case OB_APP_MIN_COLUMN_ID + 17: {
             if (column_schema->is_func_idx_column()) {
               ObString col_def;
-              if (OB_FAIL(column_schema->get_cur_default_value().get_string(col_def))) {
+              if ((OB_FAIL(column_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
+                  || OB_FAIL(schema_default_value.get_string(col_def)))) {
               } else {
                 (OB_SUCC(ret) ? ret = DatumValueBuffer::set_varchar_view(cells, cur_row_.count_, cell_idx, col_def) : ret);
                 cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
