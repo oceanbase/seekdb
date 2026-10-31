@@ -22,6 +22,7 @@
 #include <cstring>
 #include <thread>
 #include <type_traits>
+#include <utility>
 #include <gtest/gtest.h>
 
 using namespace oceanbase::common;
@@ -33,6 +34,10 @@ static_assert(!std::is_copy_constructible<NativePointGetInput>::value, "A publis
 static_assert(!std::is_copy_assignable<NativePointGetInput>::value, "A published owner cannot copy");
 static_assert(!std::is_move_constructible<NativePointGetInput>::value, "Views require a stable address");
 static_assert(!std::is_move_assignable<NativePointGetInput>::value, "Views require a stable address");
+static_assert(std::is_same<decltype(std::declval<const NativePointGetInput &>().values()),
+                           const int64_t *>::value, "The fixed BIGINT layout exposes inline integers");
+static_assert(sizeof(int64_t[NativePointGetInput::COLUMN_COUNT]) == 24,
+              "The three non-NULL keys need exactly 24 value bytes");
 
 void prepare_scalar_type(SqlType &type, SqlValueType kind,
                          ObPrecision precision = PRECISION_UNKNOWN_YET, ObScale scale = -1)
@@ -57,12 +62,13 @@ void assert_same_key(const NativePointGetInput &owner, const int64_t (&expected)
   SqlTypeMeta meta; meta.set_int();
   DatumValue baseline[3];
   for (int i = 0; i < 3; ++i) {
-    const uintptr_t begin = reinterpret_cast<uintptr_t>(owner.values() + i);
     const uintptr_t address = reinterpret_cast<uintptr_t>(key.datums_[i].ptr_);
-    EXPECT_GE(address, begin); EXPECT_LE(address + sizeof(int64_t), begin + sizeof(Datum));
+    EXPECT_EQ(reinterpret_cast<const char *>(owner.values() + i), key.datums_[i].ptr_);
     EXPECT_EQ(0U, address % alignof(int64_t));
     EXPECT_FALSE(key.datums_[i].is_local_buf());
-    EXPECT_EQ(expected[i], owner.values()[i].get_int());
+    EXPECT_FALSE(key.datums_[i].is_null());
+    EXPECT_EQ(sizeof(int64_t), key.datums_[i].pack_);
+    EXPECT_EQ(expected[i], owner.values()[i]);
     EXPECT_EQ(expected[i], key.datums_[i].get_int());
     EXPECT_EQ(expected[i], key.cached_rowkey_->get_cell(i).get_int());
     EXPECT_EQ(key.datums_[i].ptr_, key.cached_rowkey_->get_cell(i).datum_.ptr_);
@@ -75,6 +81,11 @@ void assert_same_key(const NativePointGetInput &owner, const int64_t (&expected)
   const ObRowkey reference(baseline, 3);
   EXPECT_EQ(0, key.cached_rowkey_->get_rowkey().compare(reference));
   EXPECT_EQ(reference.murmurhash(0), key.cached_rowkey_->murmurhash(0));
+  ObStoreRowkey reference_store;
+  ASSERT_EQ(OB_SUCCESS, reference_store.assign(baseline, 3));
+  for (uint64_t seed : {uint64_t(0), uint64_t(37), UINT64_MAX}) {
+    EXPECT_EQ(reference_store.murmurhash(seed), key.cached_rowkey_->murmurhash(seed));
+  }
 }
 }
 
@@ -114,12 +125,10 @@ TEST(NativePointGetInput, concurrent_owners_share_only_immutable_layout_and_keep
         }
         for (int i = 0; i < 3; ++i) {
           const auto &legacy = key.cached_rowkey_->get_cell(i);
-          const uintptr_t begin = reinterpret_cast<uintptr_t>(owner.values() + i);
-          const uintptr_t payload = reinterpret_cast<uintptr_t>(key.datums_[i].ptr_);
-          if (owner.values()[i].get_int() != expected[i] || key.datums_[i].get_int() != expected[i]
+          if (owner.values()[i] != expected[i] || key.datums_[i].get_int() != expected[i]
               || legacy.get_int() != expected[i] || legacy.get_type() != ObIntType
-              || legacy.datum_.ptr_ != key.datums_[i].ptr_ || payload < begin
-              || payload + sizeof(int64_t) > begin + sizeof(Datum)) {
+              || legacy.datum_.ptr_ != key.datums_[i].ptr_
+              || key.datums_[i].ptr_ != reinterpret_cast<const char *>(owner.values() + i)) {
             correct.store(false, std::memory_order_relaxed);
           }
         }
@@ -144,6 +153,30 @@ TEST(NativePointGetInput, concurrent_owners_share_only_immutable_layout_and_keep
       EXPECT_NE(cached_addresses[i], cached_addresses[j]);
     }
   }
+}
+
+TEST(NativePointGetInput, compact_values_survive_the_input_lifetime_and_report_full_owner_cost)
+{
+  NativePointGetInput owner;
+  const int64_t expected[] = {INT64_MIN, -1, INT64_MAX};
+  {
+    Datum source[3];
+    for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
+    ASSERT_EQ(OB_SUCCESS, owner.init(source, 0));
+    EXPECT_NE(reinterpret_cast<const void *>(source), reinterpret_cast<const void *>(owner.values()));
+    memset(static_cast<void *>(source), 0xA5, sizeof(source));
+  }
+  assert_same_key(owner, expected);
+  EXPECT_EQ(24U, sizeof(int64_t) * NativePointGetInput::COLUMN_COUNT);
+  // Keep complete-owner and compatibility-view costs in standard test XML;
+  // 24B describes only the values, not the total owner or its shared type.
+  RecordProperty("owner_bytes", static_cast<int>(sizeof(NativePointGetInput)));
+  RecordProperty("value_bytes", 24);
+  RecordProperty("storage_views_bytes", static_cast<int>(3 * sizeof(oceanbase::blocksstable::ObStorageDatum)));
+  RecordProperty("legacy_views_bytes", static_cast<int>(3 * sizeof(DatumValue)));
+  RecordProperty("cached_rowkey_bytes", static_cast<int>(sizeof(ObStoreRowkey)));
+  RecordProperty("lookup_key_bytes", static_cast<int>(sizeof(oceanbase::storage::DatumLookupKey)));
+  RecordProperty("array_view_bytes", static_cast<int>(sizeof(ObArrayHelper<oceanbase::storage::DatumLookupKey>)));
 }
 
 TEST(NativePointGetInput, source_overwrite_cannot_change_owned_inline_keys_or_their_cached_views)
@@ -184,11 +217,18 @@ TEST(NativePointGetInput, invalid_columns_do_not_publish_or_replace_an_existing_
 {
   const int64_t expected[] = {17, -23, 31};
   for (int column = 0; column < 3; ++column) {
-    for (int state = 0; state < 6; ++state) {
+    for (int state = 0; state < 9; ++state) {
       Datum source[3];
       for (int i = 0; i < 3; ++i) { source[i].set_int(expected[i]); }
       NativePointGetInput owner, empty;
       ASSERT_EQ(OB_SUCCESS, owner.init(source, int64_t(5) << 32));
+      const auto *published_values = owner.values();
+      const auto *published_storage = owner.lookup_keys().at(0).datums_;
+      const auto *published_cached = owner.lookup_keys().at(0).cached_rowkey_;
+      const uint64_t published_hash = published_cached->murmurhash(0);
+      // All otherwise-valid columns now differ. A partial prefix publish
+      // must fail even when the invalid cell is the final column.
+      for (int i = 0; i < 3; ++i) { source[i].set_int(INT64_MIN + i); }
       char bytes[8] = {};
       switch (state) {
         case 0: source[column].set_null(); break;
@@ -196,14 +236,46 @@ TEST(NativePointGetInput, invalid_columns_do_not_publish_or_replace_an_existing_
         case 2: source[column].set_max(); break;
         case 3: source[column].set_nop(); break;
         case 4: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(bytes, sizeof(bytes))); break;
-        default: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::OutRow)); break;
+        case 5: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::OutRow)); break;
+        case 6: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::HasLobHeader)); break;
+        case 7: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0, Datum::LegacyExtended)); break;
+        default: ASSERT_EQ(OB_SUCCESS, source[column].set_reference(nullptr, 0,
+                     Datum::OutRow | Datum::HasLobHeader)); break;
       }
-      EXPECT_NE(OB_SUCCESS, empty.init(source, 0));
+      EXPECT_EQ(OB_INVALID_ARGUMENT, empty.init(source, 0));
       EXPECT_EQ(0, empty.lookup_keys().count());
-      EXPECT_NE(OB_SUCCESS, owner.init(source, 0));
+      EXPECT_EQ(OB_INVALID_ARGUMENT, owner.init(source, 0));
       assert_same_key(owner, expected);
+      EXPECT_EQ(published_values, owner.values());
+      EXPECT_EQ(published_storage, owner.lookup_keys().at(0).datums_);
+      EXPECT_EQ(published_cached, owner.lookup_keys().at(0).cached_rowkey_);
+      EXPECT_EQ(published_hash, published_cached->murmurhash(0));
       EXPECT_EQ(int64_t(5) << 32, owner.lookup_keys().at(0).group_id_);
+      EXPECT_EQ(int64_t(5) << 32, published_cached->get_group_idx());
     }
+  }
+}
+
+TEST(NativePointGetInput, compact_keys_preserve_signed_lexicographic_order_and_hash)
+{
+  const int64_t sorted[][3] = {
+    {INT64_MIN, INT64_MAX, INT64_MAX}, {-1, INT64_MAX, INT64_MAX},
+    {0, INT64_MIN, INT64_MAX}, {0, 0, INT64_MIN}, {0, 0, -1},
+    {0, 0, 0}, {0, 0, INT64_MAX}, {0, 1, INT64_MIN}, {INT64_MAX, INT64_MIN, INT64_MIN}
+  };
+  NativePointGetInput left, right;
+  Datum source[3];
+  for (int i = 0; i < static_cast<int>(sizeof(sorted) / sizeof(sorted[0])) - 1; ++i) {
+    for (int column = 0; column < 3; ++column) { source[column].set_int(sorted[i][column]); }
+    ASSERT_EQ(OB_SUCCESS, left.init(source, int64_t(3) << 32));
+    assert_same_key(left, sorted[i]);
+    for (int column = 0; column < 3; ++column) { source[column].set_int(sorted[i + 1][column]); }
+    ASSERT_EQ(OB_SUCCESS, right.init(source, int64_t(9) << 32));
+    assert_same_key(right, sorted[i + 1]);
+    const auto &a = left.lookup_keys().at(0).cached_rowkey_->get_rowkey();
+    const auto &b = right.lookup_keys().at(0).cached_rowkey_->get_rowkey();
+    EXPECT_LT(a.compare(b), 0);
+    EXPECT_GT(b.compare(a), 0);
   }
 }
 

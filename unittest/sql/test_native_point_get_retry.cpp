@@ -162,7 +162,7 @@ protected:
     ASSERT_EQ(3, key.count_);
     ASSERT_NE(nullptr, key.cached_rowkey_);
     for (int64_t i = 0; i < 3; ++i) {
-      EXPECT_EQ(owner_.values()[i].get_int(), key.datums_[i].get_int());
+      EXPECT_EQ(owner_.values()[i], key.datums_[i].get_int());
       EXPECT_EQ(key.datums_[i].ptr_, key.cached_rowkey_->get_cell(i).datum_.ptr_);
     }
     EXPECT_EQ(int64_t(9) << 32, key.group_id_);

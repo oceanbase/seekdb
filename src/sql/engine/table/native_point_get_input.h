@@ -29,12 +29,13 @@ namespace sql
 {
 
 // Execution-owned input for exactly three signed BIGINT primary-key columns.
-// The producer has already bound/cast their types. Values are real inline
-// Datums; storage and Memtable sidecars borrow those members without copying
-// their payloads. Construct in a stable arena and keep it alive until the scan
+// The producer has already bound/cast their types. This specialized non-NULL
+// layout stores exactly int64_t[3] inline, without per-cell state or pointers.
+// Storage and Memtable sidecars borrow those members without copying their
+// payloads. Construct in a stable arena and keep it alive until the scan
 // iterator is reused/released. Never write through its legacy storage views.
-// Only the fixed BIGINT type/copy plan is shared; all values and views below
-// belong to this execution owner and cannot be shared between active scans.
+// Only the fixed BIGINT type is shared; all values and views below belong to
+// this execution owner and cannot be shared between active scans.
 class NativePointGetInput final
 {
 public:
@@ -50,10 +51,11 @@ public:
   // to have stopped first. Invalid inputs leave a published key unchanged.
   int init(const common::Datum (&values)[COLUMN_COUNT], int64_t group_id);
   const common::ObIArray<storage::DatumLookupKey> &lookup_keys() const { return lookup_keys_; }
-  const common::Datum *values() const { return values_; }
+  // A 24-byte fixed BIGINT layout, not an array of generic execution Datums.
+  const int64_t *values() const { return values_; }
 
 private:
-  common::Datum values_[COLUMN_COUNT];
+  alignas(8) int64_t values_[COLUMN_COUNT];
   blocksstable::ObStorageDatum storage_datums_[COLUMN_COUNT];
   common::DatumValue legacy_values_[COLUMN_COUNT];
   common::ObStoreRowkey cached_rowkey_;
