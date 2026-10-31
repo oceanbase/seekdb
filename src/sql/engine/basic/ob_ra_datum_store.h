@@ -26,6 +26,7 @@
 #include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_sql_mem_callback.h"
+#include "sql/engine/basic/stored_datum_cell.h"
 
 namespace oceanbase
 {
@@ -80,31 +81,61 @@ public:
   {
     int ret = common::OB_SUCCESS;
     common::ObDatum *datum = nullptr;
-    size = DATUM_SIZE * exprs.count();
+    int64_t required = 0;
+    if (exprs.count() > INT32_MAX) {
+      ret = common::OB_SIZE_OVERFLOW;
+    } else {
+      required = int64_t(DATUM_SIZE) * exprs.count();
+      if (required > UINT32_MAX) { ret = common::OB_SIZE_OVERFLOW; }
+    }
     for (int64_t i = 0; i < exprs.count() && OB_SUCC(ret); ++i) {
-      if (NEED_EVAL && OB_FAIL(exprs.at(i)->eval(ctx, datum))) {
+      if (exprs.at(i) == nullptr) {
+        ret = common::OB_INVALID_ARGUMENT;
+      } else if (NEED_EVAL && OB_FAIL(exprs.at(i)->eval(ctx, datum))) {
         SQL_ENG_LOG(WARN, "failed to eval expr datum", K(ret));
       } else if (!NEED_EVAL && FALSE_IT(datum = &exprs.at(i)->locate_expr_datum(ctx))) {
       } else {
-        size += datum->len_;
+        if (!datum->is_null() && datum->len_ > 0 && datum->ptr_ == nullptr) {
+          ret = common::OB_INVALID_ARGUMENT;
+        } else {
+          required += datum->is_null() ? 0 : datum->len_;
+          if (required > UINT32_MAX) { ret = common::OB_SIZE_OVERFLOW; }
+        }
       }
     }
+    if (OB_SUCC(ret)) { size = required; }
     return ret;
   }
   static inline int row_copy_size(
     const common::ObIArray<common::ObDatum> &datums, int64_t &size)
   {
     int ret = common::OB_SUCCESS;
-    size = DATUM_SIZE * datums.count();
-    for (int64_t i = 0; i < datums.count(); ++i) {
-      size += datums.at(i).len_;
+    int64_t required = 0;
+    if (datums.count() > INT32_MAX) {
+      ret = common::OB_SIZE_OVERFLOW;
+    } else {
+      required = int64_t(DATUM_SIZE) * datums.count();
+      if (required > UINT32_MAX) { ret = common::OB_SIZE_OVERFLOW; }
     }
+    for (int64_t i = 0; OB_SUCC(ret) && i < datums.count(); ++i) {
+      const common::ObDatum &datum = datums.at(i);
+      if (!datum.is_null() && datum.len_ > 0 && datum.ptr_ == nullptr) {
+        ret = common::OB_INVALID_ARGUMENT;
+      } else {
+        required += datum.is_null() ? 0 : datum.len_;
+        if (required > UINT32_MAX) { ret = common::OB_SIZE_OVERFLOW; }
+      }
+    }
+    if (OB_SUCC(ret)) { size = required; }
     return ret;
   }
   struct StoredRow
   {
     StoredRow() : readable_(true), cnt_(0), row_size_(0) {}
 
+    // Explicit legacy pointer-Datum input boundaries. Buffer capacity excludes
+    // this header and the block-tail row index; row_size includes both quotas.
+    // Invalid inputs/capacity fail preflight before the row is modified.
     int copy_datums(const common::ObIArray<ObExpr*> &exprs,
                     ObEvalCtx &ctx,
                     char *buf,
@@ -117,17 +148,32 @@ public:
                     const int64_t row_size,
                     const uint32_t row_extend_size);
     int to_expr(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx) const;
-    inline common::ObDatum *cells()
+    inline StoredDatumCell *stored_cells()
+    { return reinterpret_cast<StoredDatumCell *>(payload_); }
+    inline const StoredDatumCell *stored_cells() const
+    { return reinterpret_cast<const StoredDatumCell *>(payload_); }
+    // External window consumers still use the legacy pointer carrier. Keep
+    // that transition explicit and reject an in-place execution-layout change.
+    static_assert(sizeof(common::ObDatum) == sizeof(StoredDatumCell),
+        "Migrate RA legacy consumers before changing execution Datum");
+    static_assert(sizeof(common::ObDatumPtr) == 8 && sizeof(common::ObDatumDesc) == 4,
+        "RA legacy views require the version-one pointer Datum layout");
+    inline common::ObDatum *legacy_cells()
     { return reinterpret_cast<common::ObDatum *>(payload_); }
-    inline const common::ObDatum *cells() const
+    inline const common::ObDatum *legacy_cells() const
     { return reinterpret_cast<const common::ObDatum *>(payload_); }
+    inline common::ObDatum *cells() { return legacy_cells(); }
+    inline const common::ObDatum *cells() const { return legacy_cells(); }
     inline void *get_extra_payload() const
-    { return static_cast<void*>(const_cast<char*>(payload_ + sizeof(common::ObDatum) * cnt_)); }
+    { return static_cast<void*>(const_cast<char*>(payload_ + sizeof(StoredDatumCell) * cnt_)); }
+    // Historical RA accounting includes the separate 4B block row-index quota.
+    // That index lives at the block tail, outside the contiguous row body.
+    int64_t body_size() const { return int64_t(row_size_) - sizeof(uint32_t); }
     int assign(const StoredRow *sr);
 
     int to_copyable();
     int to_readable();
-    TO_STRING_KV(K_(readable), K_(cnt), K_(row_size), "cells", common::ObArrayWrap<common::ObDatum>(cells(), cnt_));
+    TO_STRING_KV(K_(readable), K_(cnt), K_(row_size), "cells", common::ObArrayWrap<StoredDatumCell>(stored_cells(), cnt_));
 
     uint32_t readable_:1;
     uint32_t cnt_:31;
@@ -160,6 +206,7 @@ public:
       if (OB_FAIL(row_copy_size<NEED_EVAL>(exprs, ctx, size))) {
       } else {
         size += ROW_HEAD_SIZE + ROW_INDEX_SIZE + row_extend_size;
+        if (size > UINT32_MAX) { ret = common::OB_SIZE_OVERFLOW; }
       }
       return ret;
     }
@@ -172,6 +219,7 @@ public:
       if (OB_FAIL(row_copy_size(datums, size))) {
       } else {
         size += ROW_HEAD_SIZE + ROW_INDEX_SIZE + row_extend_size;
+        if (size > UINT32_MAX) { ret = common::OB_SIZE_OVERFLOW; }
       }
       return ret;
     }
@@ -338,7 +386,7 @@ public:
   const static int64_t BIG_BLOCK_SIZE = (256L << 10) - sizeof(LinkNode);
   // alloc first index block after store 1MB data.
   const static int64_t DEFAULT_BLOCK_CNT = (1L << 20) / BLOCK_SIZE;
-  static const int32_t DATUM_SIZE = sizeof(common::ObDatum);
+  static const int32_t DATUM_SIZE = sizeof(StoredDatumCell);
 
   explicit ObRADatumStore(common::ObIAllocator *alloc = NULL);
   virtual ~ObRADatumStore() { reset(); }
