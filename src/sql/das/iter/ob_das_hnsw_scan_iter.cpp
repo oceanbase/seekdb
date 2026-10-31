@@ -722,8 +722,13 @@ int ObDASHNSWScanIter::check_pre_filter_need_retry()
 {
   int ret = OB_SUCCESS;
   double pre_selectivity = double(adaptive_ctx_.pre_scan_row_cnt_) / double(adaptive_ctx_.row_count_);
-  if (adaptive_ctx_.pre_scan_row_cnt_ <= MAX_HNSW_BRUTE_FORCE_SIZE) {
-    /*do nothing*/
+  const double pre_rate_limit = adaptive_ctx_.is_primary_index_ ? ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY
+                                                                : ObVecIdxExtraInfo::DEFAULT_PRE_RATE_FILTER_WITH_IDX;
+  if (adaptive_ctx_.pre_scan_row_cnt_ <= MAX_HNSW_BRUTE_FORCE_SIZE
+      && (is_ipivf() || adaptive_ctx_.row_count_ <= 0 || pre_selectivity <= pre_rate_limit)) {
+    // few rows pass a selective filter, keep pre-filter.
+    // if the filter keeps most rows of the table, fall through and retry with iterative filter,
+    // otherwise a tautology-like filter makes an HNSW search scan almost the whole table.
   } else if (is_ipivf() && pre_selectivity > ObVecIdxExtraInfo::DEFAULT_SINDI_SELECTIVITY_RATE) {
     ret = OB_VECTOR_INDEX_ADAPTIVE_NEED_RETRY;
   } else if (is_parallel_with_block_granule()) {
