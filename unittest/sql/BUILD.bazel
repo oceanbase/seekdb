@@ -4,6 +4,25 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "signed_add_accessors_cases",
+    srcs = ["test_signed_add_accessors.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_signed_add_accessors",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":signed_add_accessors_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
     name = "native_execution_parameters_cases",
     srcs = ["test_native_execution_parameters.cpp"],
     alwayslink = True,

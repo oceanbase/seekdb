@@ -198,6 +198,46 @@ int def_batch_arith_op_by_datum_func(BATCH_EVAL_FUNC_ARG_DECL, Args &...args)
 }
 
 // Wrap arith datum operate from raw operate.
+// Signed BIGINT arithmetic uses the carrier's scalar accessors. The prepared
+// expression type selects signed i64; neither a payload pointer nor its stride
+// belongs to this operation. The same functor can be instantiated for the
+// legacy pointer carrier and an inline carrier without changing Expr's ABI.
+template <typename Base>
+struct ObSignedIntArithOpWrap : public Base
+{
+  static_assert(std::is_same<typename Base::RES_RAW_TYPE, int64_t>::value
+      && std::is_same<typename Base::L_RAW_TYPE, int64_t>::value
+      && std::is_same<typename Base::R_RAW_TYPE, int64_t>::value,
+      "Signed BIGINT arithmetic requires signed i64 operands and result");
+  constexpr static bool is_raw_op_supported() { return false; }
+
+  template <typename DatumType, typename... Args>
+  int operator()(DatumType &res, const DatumType &l, const DatumType &r, Args &...args) const
+  {
+    const int64_t left = l.get_int();
+    const int64_t right = r.get_int();
+    int64_t value = 0;
+    Base::raw_op(value, left, right, args...);
+    // Keep the old write-before-check contract; the enclosing evaluator owns
+    // error publication and the arithmetic policy owns overflow diagnostics.
+    res.set_int(value);
+    return Base::raw_check(value, left, right);
+  }
+
+  template <typename DatumType, typename... Args>
+  static int datum_op(DatumType &res, const DatumType &l, const DatumType &r, Args &...args)
+  {
+    int ret = OB_SUCCESS;
+    if (l.is_null() || r.is_null()) {
+      res.set_null();
+    } else {
+      ret = ObSignedIntArithOpWrap()(res, l, r, args...);
+    }
+    return ret;
+  }
+};
+
+// Other arithmetic policies keep their existing raw payload boundary.
 template <typename Base>
 struct ObArithOpWrap : public Base
 {

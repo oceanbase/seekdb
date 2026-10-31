@@ -301,7 +301,9 @@ struct ObIntIntBatchAddRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
 {
   static void raw_op(int64_t &res, const int64_t l, const int64_t r)
   {
-    res = l + r;
+    // Keep a defined wrapped result for the existing sign-based check below,
+    // including when accessor operands/results stay in compiler registers.
+    (void)ObExprAdd::is_add_out_of_range(l, r, res);
   }
 
   static int raw_check(const int64_t res, const int64_t l, const int64_t r)
@@ -324,12 +326,12 @@ struct ObIntIntBatchAddRaw : public ObArithOpRawType<int64_t, int64_t, int64_t>
 //calc_type is IntTC  left and right has same TC
 int ObExprAdd::add_int_int(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObIntIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObSignedIntArithOpWrap<ObIntIntBatchAddRaw>>(EVAL_FUNC_ARG_LIST);
 }
 
 int ObExprAdd::add_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObSignedIntArithOpWrap<ObIntIntBatchAddRaw>>(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 
