@@ -1320,13 +1320,19 @@ int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &mod
 
 int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObString &result)
 {
+  ObString empty_system_prompt;
+  return call_completion_with_system(empty_system_prompt, prompt, config, result);
+}
+
+int ObAIFuncModel::call_completion_with_system(ObString &system_prompt, ObString &content,
+                                               ObJsonObject *config, ObString &result)
+{
   int ret = OB_SUCCESS;
   ObArray<ObString> headers;
   ObJsonObject *body = nullptr;
   ObJsonObject *response = nullptr;
   ObIJsonBase *result_base = nullptr;
   ObAIFuncIComplete *complete_provider = nullptr;
-  ObString prompt_str;
   ObString result_str;
   ObAIFuncClient client;
   ObString unencrypted_access_key;
@@ -1337,7 +1343,7 @@ int ObAIFuncModel::call_completion(ObString &prompt, ObJsonObject *config, ObStr
   } else if (OB_FAIL(ObAIFuncUtils::get_complete_provider(*allocator_, endpoint_info_.get_provider(), complete_provider))) {
   } else if (OB_FAIL(endpoint_info_.get_unencrypted_access_key(*allocator_, unencrypted_access_key))) {
   } else if (OB_FAIL(complete_provider->get_header(*allocator_, unencrypted_access_key, headers))) {
-  } else if (OB_FAIL(complete_provider->get_body(*allocator_, request_model_name, prompt_str, prompt, config, body))) {
+  } else if (OB_FAIL(complete_provider->get_body(*allocator_, request_model_name, system_prompt, content, config, body))) {
   } else if (OB_FAIL(client.send_post(*allocator_, endpoint_info_.get_url(), headers, body, response))) {
   } else if (OB_FAIL(complete_provider->parse_output(*allocator_, response, result_base))) {
   } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(*allocator_, result_base, result_str))) {

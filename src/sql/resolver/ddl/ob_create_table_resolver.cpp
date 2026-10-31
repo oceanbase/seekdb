@@ -305,6 +305,10 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             } else if (OB_FAIL(resolve_table_elements(table_element_list_node, index_node_position_list, foreign_key_node_position_list, table_level_constraint_list, RESOLVE_NON_COL))) {
             }
           }
+          if (OB_SUCC(ret) && ai_column_defs_.count() > 0) {
+            if (OB_FAIL(create_table_stmt->get_ai_column_defs().assign(ai_column_defs_))) {
+            }
+          }
           if (OB_SUCC(ret)) {
             reset();
             // When the user creates a table without specifying a primary key, it is internally implemented as a new table without a primary key, TableOrganizationFormat specified by the user is currently not supported
@@ -830,6 +834,42 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
               if (OB_FAIL(column_name_set_.set_refactored(name_key))) {
               } else {
                 ret = OB_SUCCESS;
+              }
+            }
+          }
+
+          // AI COLUMN: allocate the three hidden bookkeeping columns right after
+          // the user visible result column, so that column ids stay contiguous.
+          if (OB_SUCC(ret) && ai_column_defs_.count() > 0) {
+            int64_t ai_idx = -1;
+            for (int64_t k = 0; k < ai_column_defs_.count(); ++k) {
+              if (0 == ai_column_defs_.at(k).column_name_.compare(column.get_column_name_str())) {
+                ai_idx = k;
+                break;
+              }
+            }
+            if (ai_idx >= 0 && common::OB_INVALID_ID == ai_column_defs_.at(ai_idx).result_column_id_) {
+              ObAiColumnDef &ai_def = ai_column_defs_.at(ai_idx);
+              ai_def.result_column_id_ = column.get_column_id();
+              const char *ai_suffixes[3] = {AI_COLUMN_STATE_SUFFIX,
+                                            AI_COLUMN_REQUEST_SUFFIX,
+                                            AI_COLUMN_SPEC_SUFFIX};
+              uint64_t *ai_ids[3] = {&ai_def.state_column_id_,
+                                     &ai_def.request_column_id_,
+                                     &ai_def.result_spec_column_id_};
+              for (int64_t k = 0; OB_SUCC(ret) && k < 3; ++k) {
+                ObColumnSchemaV2 hidden_column;
+                ObString encoded_def;
+                const uint64_t hidden_id = gen_column_id();
+                const ObString suffix(static_cast<int32_t>(strlen(ai_suffixes[k])), ai_suffixes[k]);
+                if (OB_FAIL(build_ai_hidden_column(column.get_column_name_str(),
+                                                   suffix, hidden_id, hidden_column))) {
+                } else if (0 == k && OB_FAIL(encode_ai_column_def(ai_def, *allocator_, encoded_def))) {
+                } else if (0 == k && OB_FAIL(hidden_column.set_comment(encoded_def))) {
+                } else if (OB_FAIL(resolved_cols.push_back(hidden_column))) {
+                } else {
+                  *ai_ids[k] = hidden_id;
+                }
               }
             }
           }

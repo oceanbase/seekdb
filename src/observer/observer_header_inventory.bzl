@@ -230,6 +230,7 @@ OBSERVER_PRIVATE_HEADERS = [
     "ob_system_package_load_task.h",
     "ob_tablet_runtime_meta_updater.h",
     "omt/ob_ai_service.h",
+    "omt/ob_ai_column_worker.h",
     "omt/ob_server_module_lifecycle.h",
     "omt/ob_server_runtime.h",
     "omt/ob_server_runtime_controller.h",

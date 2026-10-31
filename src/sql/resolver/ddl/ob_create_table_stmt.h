@@ -20,6 +20,7 @@
 #include "sql/resolver/ddl/ob_table_stmt.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
+#include "sql/resolver/ddl/ob_ai_column_def.h"
 
 namespace oceanbase
 {
@@ -77,9 +78,11 @@ public:
   uint64_t get_insert_mode() const { return insert_mode_; }
 
   ObTableType get_table_type() const { return create_table_arg_.schema_.get_table_type(); }
+  common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() { return ai_column_defs_; }
+  const common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() const { return ai_column_defs_; }
   INHERIT_TO_STRING_KV("ObTableStmt", ObTableStmt, K_(stmt_type), K_(create_table_arg), K_(index_arg_list));
 private:
-private:
+  common::ObSEArray<ObAiColumnDef, 4> ai_column_defs_;
   obcall::ObCreateTableArg create_table_arg_;
   bool is_view_stmt_;
   share::schema::ObStmtNeedPrivs::NeedPrivs view_need_privs_;
