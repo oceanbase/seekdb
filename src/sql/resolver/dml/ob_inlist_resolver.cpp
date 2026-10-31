@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
@@ -263,6 +264,63 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+int ObInListResolver::check_small_integer_inlist(const ParseNode &in_list,
+                                               const ObInListsResolverHelper &helper,
+                                               const int64_t threshold,
+                                               bool &is_small)
+{
+  int ret = OB_SUCCESS;
+  is_small = false;
+  hash::ObHashSet<int64_t, hash::NoPthreadDefendMode> distinct_values;
+  bool supported = true;
+  bool has_null = false;
+  if (threshold <= 0 || helper.is_prepare_stmt_) {
+    // Bind values are unavailable during prepare; keep the existing rewrite.
+  } else if (OB_ISNULL(in_list.children_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(distinct_values.create(threshold, ObMemAttr("InListCard")))) {
+  } else {
+    // Stop as soon as the rewrite threshold is reached, bounding memory and work
+    // for high-cardinality lists. NULL contributes one distinct entry.
+    for (int64_t i = 0; OB_SUCC(ret) && supported && i < in_list.num_child_
+         && distinct_values.size() + has_null < threshold; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      int64_t value = 0;
+      bool is_null = false;
+      if (OB_ISNULL(node)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_NULL == node->type_) {
+        is_null = true;
+      } else if (T_QUESTIONMARK == node->type_ && NULL != helper.param_store_
+                 && node->value_ >= 0 && node->value_ < helper.param_store_->count()) {
+        const ObObjParam &param = helper.param_store_->at(node->value_);
+        if (param.is_null()) {
+          is_null = true;
+        } else if (param.is_signed_integer()) {
+          value = param.get_int();
+        } else {
+          supported = false;
+        }
+      } else {
+        // Preserve the original path for unsigned, mixed-type and nonconstant
+        // expressions rather than trying to reproduce SQL comparison semantics.
+        supported = false;
+      }
+      if (OB_SUCC(ret) && supported) {
+        if (is_null) {
+          has_null = true;
+        } else if (OB_HASH_EXIST == (ret = distinct_values.set_refactored(value, 0))) {
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+    is_small = OB_SUCC(ret) && supported && distinct_values.size() + has_null < threshold;
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +408,15 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && 1 == column_cnt) {
+        bool is_small = false;
+        if (OB_FAIL(check_small_integer_inlist(in_list, helper, threshold, is_small))) {
+        } else if (is_small) {
+          // Keep every parse node and bind slot intact. Only the plan choice
+          // changes, so later executions with different parameter values remain valid.
+          is_enable = false;
+        }
+      }
     }
   }
   return ret;
