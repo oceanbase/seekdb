@@ -4,6 +4,45 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "datum_copy_plan_cases",
+    srcs = ["test_datum_copy_plan.cpp"],
+    alwayslink = True,
+    deps = ["//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+
+cc_test(
+    name = "test_datum_copy_plan",
+    linkstatic = True,
+    deps = [":datum_copy_plan_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "sql_type_cases",
+    srcs = ["test_sql_type.cpp"],
+    alwayslink = True,
+    deps = ["//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+
+cc_test(
+    name = "test_sql_type",
+    linkstatic = True,
+    deps = [":sql_type_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
+    name = "inline_datum_cases",
+    srcs = ["test_inline_datum.cpp"],
+    alwayslink = True,
+    deps = ["//src/oblib:oblib_unit_test_internal_headers", "//bazel/third_party:gtest"],
+)
+
+cc_test(
+    name = "test_inline_datum",
+    linkstatic = True,
+    deps = [":inline_datum_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
     name = "jemalloc_hook_cases",
     srcs = ["test_jemalloc_hook.cpp"],
     alwayslink = True,

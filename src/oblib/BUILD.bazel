@@ -314,6 +314,8 @@ cc_library(
         "common/cell/ob_cell_writer.h",
         "common/datum/ob_datum.h",
         "common/datum/datum_core.h",
+        "common/datum/datum.h",
+        "common/datum/sql_type.h",
         "common/datum/datum_copy_plan.h",
         "common/datum/datum_value.h",
         "common/datum/datum_value_buffer.h",
