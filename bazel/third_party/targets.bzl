@@ -19,7 +19,6 @@ SDK_HEADERS = {
     "boost_headers": _headers("boost"),
     "curl_headers": _headers("curl"),
     "libaio_headers": {"hdrs": ["include/libaio.h"], "includes": ["include"]},
-    "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
     "rapidjson_headers": _headers("rapidjson"),
@@ -47,9 +46,7 @@ SDK_IMPORTS = {
 SDK_IMPORTS.update({
     name: {"static_library": "lib/" + archive}
     for name, archive in {
-        "libxml2": "libxml2.a",
         "curl": "libcurl.a",
-        "lzma": "liblzma.a",
     }.items()
 })
 
@@ -76,7 +73,6 @@ _WINDOWS_SHARED = {
     "libssl": ("openssl/libssl.lib", "openssl_bin/libssl-3-x64.dll", [":libcrypto"]),
     "zlib": ("lib/zlib.lib", "bin/zlib1.dll", []),
     "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
-    "libxml2": ("lib/libxml2.lib", "bin/libxml2.dll", [":zlib", ":iconv"]),
     "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "roaring": ("lib/roaring.lib", "bin/roaring.dll", []),
@@ -87,7 +83,6 @@ _WINDOWS_SHARED = {
 _WINDOWS_HEADER_LIBRARIES = {
     "absl_headers": [":absl"],
     "curl_headers": [":curl"],
-    "libxml2_headers": [":libxml2"],
     "openssl_headers": [":libssl"],
     "roaring_headers": [":roaring"],
     "vsag_headers": [":vsag"],
@@ -154,10 +149,10 @@ _SOURCE_HEADERS = {
 def sdk_aliases():
     cc_library(
         name = "base_libraries",
-        deps = [":libcrypto", ":libssl", ":libxml2"] + select({
+        deps = [":libcrypto", ":libssl"] + select({
             "@platforms//os:emscripten": [],
             "@platforms//os:windows": [":curl", ":zlib"],
-            "//conditions:default": [":curl", ":lzma", ":zlib"],
+            "//conditions:default": [":curl", ":zlib"],
         }),
     )
     for name in list(SDK_HEADERS) + list(SDK_IMPORTS) + list(SDK_FILEGROUPS) + HOST_FILES + NATIVE_LINK_FILES:

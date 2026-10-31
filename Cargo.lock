@@ -1329,6 +1329,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.37.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f22f29bdff3987b4d8632ef95fd6424ec7e4e0a57e2f4fc63e489e75357f6a03"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1515,8 +1524,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d68f2ec51b097e4c1a75b681a8bec621909b5e91f15bb7b840c4f2f7b01148b2"
 
 [[package]]
-name = "seekdb-rust"
-version = "0.1.0"
 dependencies = [
  "config",
  "in-process",
@@ -1529,7 +1536,10 @@ dependencies = [
  "sql-nio",
  "standby-rpc",
  "uuid-generator",
+ "xml-parser",
 ]
+name = "seekdb-rust"
+version = "0.1.0"
 
 [[package]]
 name = "semver"
@@ -2432,6 +2442,14 @@ dependencies = [
  "rusticata-macros",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "xml-parser"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "quick-xml",
 ]
 
 [[package]]

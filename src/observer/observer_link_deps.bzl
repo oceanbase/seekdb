@@ -29,7 +29,7 @@ def observer_third_party_link_files(platform):
     macos = platform == "macos"
     lib64 = "lib" if android or macos else "lib64"
     vsag = "lib" if android else "lib/vsag_lib"
-    files = ["lib/libxml2.a", "lib/liblzma.a"]
+    files = []
     files += [vsag + "/" + name for name in [
         "libcpuinfo.a", "libsimd.a", "libvsag_static.a", "libdiskann.a",
     ]]

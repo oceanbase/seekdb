@@ -17,7 +17,6 @@
 
 #include "common/xml/ob_xml_parser.h"
 #include "common/xml/ob_xml_util.h"
-#include "libxml2/libxml/parserInternals.h"
 #include <rapidjson/memorystream.h>
 
 namespace oceanbase {
@@ -549,49 +548,6 @@ ObXmlStandaloneType ObXmlParserUtils::get_standalone_type(const ObString& src_st
   return type;
 }
 
-/*
- * [4NS] NCNameChar ::= Letter | Digit | '.' | '-' | '_' |
- *                      CombiningChar | Extender
- *
- * [5NS] NCName ::= (Letter | '_') (NCNameChar)*
-*/
-int ObXmlParserUtils::check_local_name_legality(const ObString& localname) 
-{
-  INIT_SUCC(ret);
-  uint64_t letter_count = 0;
-  const char* str = localname.ptr();
-  unsigned codepoint = 0;
-  uint64_t last_pos = 0;
-
-  rapidjson::MemoryStream input_stream(str, localname.length());
-  while (OB_SUCC(ret) && input_stream.Tell() < localname.length()) {
-    last_pos = input_stream.Tell();
-    bool first_codepoint = (last_pos == 0);
-    if (!rapidjson::UTF8<char>::Decode(input_stream, &codepoint)) {
-      ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("ns is invalid", K(ret), K(localname), K(input_stream.Tell()));
-    } else {
-      uint64_t curr_pos = input_stream.Tell();
-      if (first_codepoint) {
-        if ((IS_LETTER(codepoint) || (codepoint == 0x5f))) { // '_'
-          // do nothing
-        } else {
-          ret = OB_ERR_PARSER_SYNTAX;
-        }
-      } else if (((IS_LETTER(codepoint)) || (IS_DIGIT(codepoint)) ||
-		             (codepoint == 0x2e) || (codepoint == 0x2d) || // '.', '-'
-                 (codepoint == 0x5f) || // '_'
-                 (IS_COMBINING(codepoint)) ||
-                 (IS_EXTENDER(codepoint)))) {
-        // do nothing
-      } else {
-        ret = OB_ERR_PARSER_SYNTAX;
-      }
-    }
-  }
-  return ret;
-}
-
 int ObXmlParserUtils::get_prefix_and_localname(const ObString& qname, ObString& prefix, ObString& localname) 
 {
   INIT_SUCC(ret);
@@ -611,9 +567,6 @@ int ObXmlParserUtils::get_prefix_and_localname(const ObString& qname, ObString& 
     localname = qname;
   }
 
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(check_local_name_legality(localname))) {
-  }
   return ret;
 }
 

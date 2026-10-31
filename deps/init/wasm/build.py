@@ -50,22 +50,6 @@ def build_openssl(prefix, spec, jobs):
     subprocess.run(["make", "install_dev"], cwd=source, check=True)
 
 
-def build_libxml2(prefix, spec, jobs):
-    source = locked_source(prefix, spec, ".tar.xz", "libxml2 archive checksum mismatch")
-    build = prefix / "build/libxml2"
-    build.mkdir(parents=True, exist_ok=True)
-    subprocess.run([
-        "emconfigure", str(source / "configure"),
-        "--host=wasm32-unknown-emscripten", "--prefix=" + str(prefix),
-        "--disable-shared", "--enable-static", "--with-threads",
-        "--with-iconv", "--without-python", "--without-http", "--without-ftp",
-        "--without-lzma", "--without-zlib", "--without-modules", "CFLAGS=-Oz -pthread",
-    ], cwd=build, check=True)
-    subprocess.run(["emmake", "make", "-j" + str(jobs), "libxml2.la"], cwd=build, check=True)
-    subprocess.run([
-        "emmake", "make", "install-libLTLIBRARIES", "install-nodist_pkgconfigDATA",
-    ], cwd=build, check=True)
-    subprocess.run(["emmake", "make", "-C", "include", "install"], cwd=build, check=True)
 
 
 def header_variant(patch, digest, fields):
@@ -84,14 +68,9 @@ def copy_headers(source, prefix, manifest):
     patched = {patch["path"]: patch for patch in patches}
     trees = [(name, name) for name in (
         "rapidjson", "curl",
-        "boost", "libxml2")]
-    trees += [("libxml2/libxml", "libxml")]
+        "boost")]
     for source_tree, target_tree in trees:
         tree = source / source_tree
-        if source_tree.startswith("libxml2"):
-            # xmlversion.h describes compiled features. Never pair the native
-            # configuration header with the Wasm library.
-            tree = prefix / "include" / source_tree
         if not tree.is_dir():
             raise SystemExit(f"Missing source headers: {tree}")
         for src in tree.rglob("*"):
@@ -184,7 +163,6 @@ def main():
     os.environ["EM_CACHE"] = str(prefix / "em-cache")
     dependencies = json.loads(Path(__file__).with_name("dependencies.json").read_text())
     build_openssl(prefix, dependencies["openssl"], args.jobs)
-    build_libxml2(prefix, dependencies["libxml2"], args.jobs)
     prepare_headers(repo / "deps/3rd/usr/local/oceanbase/deps/devel/include", prefix, dependencies)
 
     # Bazel consumes this prepared thread/exception ABI cache read-only.

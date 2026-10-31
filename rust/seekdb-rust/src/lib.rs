@@ -25,3 +25,4 @@ pub use sql_nio as network;
 #[cfg(not(target_family = "wasm"))]
 pub use standby_rpc;
 pub use uuid_generator;
+pub use xml_parser;

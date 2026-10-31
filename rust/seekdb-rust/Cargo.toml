@@ -20,6 +20,7 @@ config = { path = "../config" }
 local = { path = "../local" }
 in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
+xml-parser = { path = "../xml-parser" }
 spatial-covering = { path = "../spatial-covering" }
 uuid-generator = { path = "../uuid-generator" }
 

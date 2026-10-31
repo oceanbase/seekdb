@@ -127,7 +127,7 @@ OBLIB_UNITY_GROUPS = {
             srcs = [
                 "src/oblib/common/xml/ob_mul_mode_reader.cpp",
                 "src/oblib/common/xml/ob_xml_parser.cpp",
-                "src/oblib/common/xml/ob_libxml2_sax_handler.cpp",
+                "src/oblib/common/xml/ob_rust_xml_parser.cpp",
                 "src/oblib/common/xml/ob_tree_base.cpp",
                 "src/oblib/common/xml/ob_xml_tree.cpp",
                 "src/oblib/common/xml/ob_xml_util.cpp",

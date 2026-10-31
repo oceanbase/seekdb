@@ -149,13 +149,6 @@
       }
     ]
   },
-  "libxml2": {
-    "version": "2.10.4",
-    "url": "https://download.gnome.org/sources/libxml2/2.10/libxml2-2.10.4.tar.xz",
-    "sha256": "ed0c91c5845008f1936739e4eee2035531c1c94742c6541f44ee66d885948d45",
-    "checksum_url": "https://download.gnome.org/sources/libxml2/2.10/libxml2-2.10.4.sha256sum",
-    "source_directory": "libxml2-2.10.4"
-  },
   "rust_std_build": {
     "target": "wasm32-unknown-emscripten",
     "profile": {

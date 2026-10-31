@@ -156,7 +156,6 @@ _OBSERVER_NATIVE_DEPS = [
     "//bazel/third_party:absl_headers",
     "//bazel/third_party:curl_headers",
     "//bazel/third_party:libaio_headers",
-    "//bazel/third_party:libxml2_headers",
     "//bazel/third_party:mariadb_headers",
     "//bazel/third_party:openssl_headers",
     "//bazel/third_party:rapidjson_headers",
