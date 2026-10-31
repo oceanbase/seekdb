@@ -68,7 +68,6 @@ cc_library(
         "//src/share:sql_persistence_support",
         "//src/share:tenant_runtime",
         "//src/share:transaction_id",
-        "//bazel/third_party:openssl_headers",
     ],
     includes = ["api"],
     tags = ["manual"],

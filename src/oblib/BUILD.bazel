@@ -869,6 +869,7 @@ grouped_unity_cc_library(
     implementation_deps = [
         ":_oblib_implementation_headers",
         ":oblib_foundation",
+        "//bazel/third_party:openssl_headers",
         "//rust:logger",
         "//rust:number_parser",
     ],
