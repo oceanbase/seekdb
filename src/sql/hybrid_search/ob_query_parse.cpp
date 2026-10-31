@@ -49,7 +49,7 @@ int ObESQueryParser::parse(const common::ObString &req_str, ObQueryReqFromJson *
   ObString fusion_key = "rank";
   ObIJsonBase *fusion_node = NULL;
   uint64_t err_offset = 0;
-  uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG | ObJsonParser::JSN_UNIQUE_FLAG;
+  uint32_t parse_flag = ObJsonParser::JSN_UNIQUE_FLAG;
   if (OB_FAIL(ObJsonParser::parse_json_text(&alloc_, req_str.ptr(), req_str.length(), syntaxerr, &err_offset, j_node, parse_flag))) {
   } else if (OB_FAIL(init_default_params(*j_node))) {
   } else {

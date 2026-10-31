@@ -23,10 +23,6 @@
 #include "common/number/ob_number_v2.h" // for number::ObNumber
 #include "common/timezone/ob_time_convert.h" // for ObTime
 #include "common/timezone/ob_timezone_info.h"
-#include <rapidjson/error/en.h>
-#include <rapidjson/error/error.h>
-#include <rapidjson/memorystream.h>
-#include <rapidjson/reader.h>
 
 namespace oceanbase {
 namespace common {

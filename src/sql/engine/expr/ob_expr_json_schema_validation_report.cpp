@@ -127,7 +127,7 @@ int ObExprJsonSchemaValidationReport::eval_json_schema_validation_report(const O
 
   if (OB_FAIL(ret)) {
   } else if (!is_null_result && OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 1,
-                                             j_doc, is_null_result, false, false, true))) {
+                                             j_doc, is_null_result, false, true))) {
   } else if (is_null_result) {
     res.set_null();
   } else {

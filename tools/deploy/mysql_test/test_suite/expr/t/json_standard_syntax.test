@@ -1,0 +1,28 @@
+# Standard JSON syntax is identical on every platform.
+select json_valid('{"a":[1,true,null,"雪"]}');
+select json_valid('{a:1}');
+select json_valid('{''a'':1}');
+select json_valid('[1,]');
+select json_valid('{"a":1,}');
+select json_valid('TRUE');
+select json_valid('False');
+select json_valid('NULL');
+select json_valid('+1');
+select json_valid('.5');
+select json_valid('01');
+select json_valid('0x10');
+select json_valid('NaN');
+select json_valid('Infinity');
+select json_valid('1.');
+select json_valid('/* comment */null');
+select json_type(cast('9223372036854775807' as json));
+select json_type(cast('9223372036854775808' as json));
+select json_type(cast('18446744073709551616' as json));
+select json_type(cast('-0' as json));
+select json_type(cast('-0.0' as json));
+select json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x');
+select json_schema_valid('{"type":"object"}', '{"a":1}');
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select json_schema_valid('{"type":"object"}', '{a:1}');
+--error ER_INVALID_JSON_TEXT_IN_PARAM
+select cast('{"a":1,}' as json);

@@ -1563,8 +1563,7 @@ int ObJsonUtil::get_json_doc(ObExpr *expr,
                              ObEvalCtx &ctx,
                              MultimodeAlloctor &allocator,
                              ObIJsonBase*& j_base,
-                             bool &is_null, bool & is_cover_by_error,
-                             bool relax)
+                             bool &is_null, bool & is_cover_by_error)
 {
   INIT_SUCC(ret);
   ObDatum *json_datum = NULL;

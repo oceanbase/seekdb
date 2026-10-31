@@ -6447,7 +6447,7 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
     ObJsonString j_string(j_text.ptr(), j_text.length());
     ObJsonNull j_null;
     ObJsonNode *j_tree = NULL;
-    uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
+    uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
     ObObjType in_type = in.get_type();
     bool is_convert_jstr_type = (in_type == ObTinyTextType
                                  || in_type == ObTextType

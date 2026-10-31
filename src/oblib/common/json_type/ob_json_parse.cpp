@@ -16,571 +16,254 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_json_parse.h"
+#include "rust/json.h"
 
 namespace oceanbase {
 namespace common {
 
-#define RELAXJSON_FLAG rapidjson::kParseObjectKeyNoQuotesFlag \
-                      | rapidjson::kParseIgnoreCaseForKeyword \
-                      | rapidjson::kParseRelaxNumberFlag \
-                      | rapidjson::kParseCommentsFlag \
-                      | rapidjson::kParseTrailingCommasFlag
+using JsonEvent = json::Event;
+using JsonEvents = rust::Vec<JsonEvent>;
 
-#define STRICTJSON_FLAG rapidjson::kParseObjectKeyNoQuotesFlag
+static json::Duplicate duplicate_policy(uint32_t parse_flag)
+{
+  if (HAS_FLAG(parse_flag, ObJsonParser::JSN_SCHEMA_FLAG)) {
+    return json::Duplicate::KeepFirst;
+  } else if (HAS_FLAG(parse_flag, ObJsonParser::JSN_PRESERVE_DUP_FLAG)) {
+    return json::Duplicate::Preserve;
+  } else if (HAS_FLAG(parse_flag, ObJsonParser::JSN_UNIQUE_FLAG)) {
+    return json::Duplicate::Reject;
+  }
+  return json::Duplicate::Overwrite;
+}
+
+static uint32_t depth_limit(uint32_t configured)
+{
+  return configured < JSON_DOCUMENT_MAX_DEPTH ? JSON_DOCUMENT_MAX_DEPTH : configured;
+}
+
+static uint32_t tree_depth_limit(uint32_t configured)
+{
+  const uint32_t limit = depth_limit(configured);
+  return limit == UINT32_MAX ? limit : limit + 1;
+}
+
+static int copy_text(ObIAllocator *allocator, const rust::Vec<uint8_t> &input, ObString &output)
+{
+  int ret = OB_SUCCESS;
+  char *buffer = NULL;
+  const uint64_t length = input.size();
+  if (length == 0) {
+    output.reset();
+  } else if (OB_ISNULL(buffer = static_cast<char *>(allocator->alloc(length)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    MEMCPY(buffer, input.data(), length);
+    output.assign_ptr(buffer, length);
+  }
+  return ret;
+}
+
+template <typename T, typename... Args>
+static int allocate_node(ObIAllocator *allocator, ObJsonNode *&node, Args &&...args)
+{
+  void *buffer = allocator->alloc(sizeof(T));
+  if (OB_ISNULL(buffer)) {
+    return OB_ALLOCATE_MEMORY_FAILED;
+  }
+  node = new (buffer) T(std::forward<Args>(args)...);
+  return OB_SUCCESS;
+}
+
+static int build_node(ObIAllocator *allocator, const JsonEvents &events,
+                      size_t &index, ObJsonNode *&node)
+{
+  int ret = OB_SUCCESS;
+  node = NULL;
+  if (index >= events.size()) {
+    return OB_ERR_UNEXPECTED;
+  }
+  const JsonEvent &event = events[index++];
+  switch (event.kind) {
+    case json::EventKind::Null:
+      ret = allocate_node<ObJsonNull>(allocator, node);
+      break;
+    case json::EventKind::Bool:
+      ret = allocate_node<ObJsonBoolean>(allocator, node, event.bool_value);
+      break;
+    case json::EventKind::I64:
+      ret = allocate_node<ObJsonInt>(allocator, node, event.i64_value);
+      break;
+    case json::EventKind::U64:
+      ret = allocate_node<ObJsonUint>(allocator, node, event.u64_value);
+      break;
+    case json::EventKind::F64:
+      ret = allocate_node<ObJsonDouble>(allocator, node, event.f64_value);
+      break;
+    case json::EventKind::String: {
+      ObString value;
+      if (OB_FAIL(copy_text(allocator, event.bytes, value))) {
+      } else if (value.empty()) {
+        ret = allocate_node<ObJsonString>(allocator, node, "", 0);
+      } else {
+        ret = allocate_node<ObJsonString>(allocator, node, value.ptr(), value.length());
+      }
+      break;
+    }
+    case json::EventKind::StartArray: {
+      ObJsonArray *array = NULL;
+      if (OB_FAIL(allocate_node<ObJsonArray>(allocator, node, allocator))) {
+      } else {
+        array = static_cast<ObJsonArray *>(node);
+      }
+      while (OB_SUCC(ret) && index < events.size()
+             && events[index].kind != json::EventKind::EndArray) {
+        ObJsonNode *child = NULL;
+        if (OB_FAIL(build_node(allocator, events, index, child))) {
+        } else {
+          ret = array->append(child);
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (index >= events.size()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ++index;
+        array->update_serialize_size();
+      }
+      break;
+    }
+    case json::EventKind::StartObject: {
+      ObJsonObject *object = NULL;
+      if (OB_FAIL(allocate_node<ObJsonObject>(allocator, node, allocator))) {
+      } else {
+        object = static_cast<ObJsonObject *>(node);
+      }
+      while (OB_SUCC(ret) && index < events.size()
+             && events[index].kind != json::EventKind::EndObject) {
+        ObString key;
+        ObJsonNode *child = NULL;
+        if (events[index].kind != json::EventKind::Key) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(copy_text(allocator, events[index++].bytes, key))) {
+        } else if (OB_FAIL(build_node(allocator, events, index, child))) {
+        } else {
+          ret = object->add(key, child, false, true, false, false);
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (index >= events.size()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ++index;
+        object->stable_sort();
+        object->update_serialize_size();
+      }
+      break;
+    }
+    default:
+      ret = OB_ERR_UNEXPECTED;
+      break;
+  }
+  return ret;
+}
+
+static int status_error(json::Status status)
+{
+  switch (status) {
+    case json::Status::DuplicateKey: return OB_ERR_DUPLICATE_KEY;
+    case json::Status::Depth: return OB_ERR_JSON_OUT_OF_DEPTH;
+    case json::Status::UnsupportedSchemaRef: return OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA;
+    default: return OB_ERR_INVALID_JSON_TEXT;
+  }
+}
 
 int ObJsonParser::get_tree(ObIAllocator *allocator, const ObString &text, ObJsonNode *&j_tree,
                            uint32_t parse_flag, uint32_t max_depth_config)
 {
-  INIT_SUCC(ret);
-  char buf[PARSE_SYNTAXERR_MESSAGE_LENGTH] = {0};
-  const char *syntaxerr = buf;
-  uint64_t offset = 0;
-
-  if (OB_FAIL(parse_json_text(allocator, text.ptr(), text.length(),
-                              syntaxerr, &offset, j_tree, parse_flag, max_depth_config))) {
-  }
-
-  return ret;
+  return get_tree(allocator, text.ptr(), text.length(), j_tree, parse_flag, max_depth_config);
 }
 
 int ObJsonParser::get_tree(ObIAllocator *allocator, const char *text,
                            uint64_t length, ObJsonNode *&j_tree,
-                           uint32_t parse_flag,
-                           uint32_t max_depth_config)
+                           uint32_t parse_flag, uint32_t max_depth_config)
 {
-  INIT_SUCC(ret);
-  char buf[PARSE_SYNTAXERR_MESSAGE_LENGTH] = {0};
-  const char *syntaxerr = buf;
+  char buffer[PARSE_SYNTAXERR_MESSAGE_LENGTH] = {0};
+  const char *syntaxerr = buffer;
   uint64_t offset = 0;
+  return parse_json_text(allocator, text, length, syntaxerr, &offset, j_tree,
+                         parse_flag, max_depth_config);
+}
 
-  if (OB_FAIL(parse_json_text(allocator, text, length,
-                              syntaxerr, &offset, j_tree,
-                              parse_flag, max_depth_config))) {
-  }
-
-  return ret;
-}                    
-
-// 1. Use 3th libraries rapidjson.
-// 2. Make a copy of the source string.
-// 3. Use in situ resolution mode,
-//    detail:http://rapidjson.org/zh-cn/md_doc_dom_8zh-cn.html#InSituParsing
-int ObJsonParser::parse_json_text(ObIAllocator *allocator, 
+int ObJsonParser::parse_json_text(ObIAllocator *allocator,
                                   const char *text, uint64_t length,
                                   const char *&syntaxerr, uint64_t *offset,
                                   ObJsonNode *&j_tree, uint32_t parse_flag,
                                   uint32_t max_depth_config)
 {
-  INIT_SUCC(ret);
-
-  char *buf = NULL;
+  int ret = OB_SUCCESS;
+  j_tree = NULL;
   if (OB_ISNULL(allocator) || OB_ISNULL(text) || length == 0) {
-    ret = OB_ERR_NULL_VALUE;
-  } else if (OB_ISNULL(buf = reinterpret_cast<char *>(allocator->alloc(length + 1)))) { // for '\0'
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    MEMCPY(buf, text, length);
-    buf[length] = '\0';
-    bool with_unique_key = HAS_FLAG(parse_flag, JSN_UNIQUE_FLAG);
-    bool is_schema = HAS_FLAG(parse_flag, JSN_SCHEMA_FLAG);
-    bool preserve_dup = HAS_FLAG(parse_flag, JSN_PRESERVE_DUP_FLAG);
-    ObRapidJsonHandler handler(allocator, with_unique_key, is_schema, preserve_dup, max_depth_config);
-    ObRapidJsonAllocator parse_allocator(allocator);
-    rapidjson::InsituStringStream ss(static_cast<char *>(buf));
-    ObRapidJsonReader reader(&parse_allocator);
-    rapidjson::ParseResult r;
-    try {
-      if (HAS_FLAG(parse_flag, JSN_RELAXED_FLAG)) {
-        r = reader.Parse<RELAXJSON_FLAG>(ss, handler);
-      } else if (HAS_FLAG(parse_flag, JSN_STRICT_FLAG)) {
-        r = reader.Parse<STRICTJSON_FLAG>(ss, handler);
-      } else {
-        r = reader.Parse<rapidjson::kParseInsituFlag>(ss, handler);
-      }
-    } catch (const std::bad_alloc &e) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (!r.IsError()) {
-      j_tree = handler.get_built_doc();
-      if (OB_ISNULL(j_tree) && OB_NOT_NULL(syntaxerr)) {
-        allocator->free(buf);
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The parsing failed for some other reason than a syntax error.");
-        syntaxerr = NULL;
-      }
-    } else { // parse wrong, fill syntaxerr and offset.
-      allocator->free(buf);
-      if (handler.has_duplicate_key()) {
-        ret = OB_ERR_DUPLICATE_KEY;
-      } else if (is_schema && OB_FAIL(handler.get_error_code())) {
-      } else {
-        ret = OB_ERR_INVALID_JSON_TEXT;
-      }
-      if (offset != NULL) {
-        *offset = reader.GetErrorOffset();
-      }
-      if (syntaxerr != NULL) {
-        syntaxerr = rapidjson::GetParseError_En(reader.GetParseErrorCode());
-      }
-      LOG_WARN("fail to parse json text", K(ret), K(r.Code()));
-    }
+    return OB_ERR_NULL_VALUE;
   }
-
-  if (OB_SUCC(ret) && OB_ISNULL(j_tree->get_allocator())) {
+  const uint8_t *input = reinterpret_cast<const uint8_t *>(text);
+  json::ParseResult result = json::parse(
+      rust::Slice<const uint8_t>(input, length), duplicate_policy(parse_flag),
+      tree_depth_limit(max_depth_config), HAS_FLAG(parse_flag, JSN_SCHEMA_FLAG));
+  if (result.status != json::Status::Ok) {
+    ret = result.status == json::Status::Depth ? OB_ERR_INVALID_JSON_TEXT
+                                               : status_error(result.status);
+    if (offset != NULL) {
+      *offset = result.byte_offset;
+      if (result.status == json::Status::Depth || result.status == json::Status::DuplicateKey) {
+        ++*offset;
+      }
+    }
+    if (syntaxerr != NULL) {
+      static thread_local char message[PARSE_SYNTAXERR_MESSAGE_LENGTH];
+      size_t length = result.message.size();
+      if (length >= sizeof(message)) {
+        length = sizeof(message) - 1;
+      }
+      MEMCPY(message, result.message.data(), length);
+      message[length] = '\0';
+      syntaxerr = message;
+    }
+    LOG_WARN("fail to parse standard JSON text", K(ret), K(result.byte_offset));
+    return ret;
+  }
+  size_t index = 0;
+  if (OB_FAIL(build_node(allocator, result.events, index, j_tree))) {
+    j_tree = NULL;
+  } else if (index != result.events.size() || OB_ISNULL(j_tree)) {
+    ret = OB_ERR_UNEXPECTED;
+    j_tree = NULL;
+  } else if (OB_ISNULL(j_tree->get_allocator())) {
     j_tree->set_allocator(allocator);
   }
-
   return ret;
 }
 
 int ObJsonParser::check_json_syntax(const ObString &j_doc, ObIAllocator *allocator,
                                     uint32_t parse_flag, uint32_t max_depth_config)
 {
-  INIT_SUCC(ret);
-  char syntax_buf[PARSE_SYNTAXERR_MESSAGE_LENGTH] = {0};
-  const char *syntaxerr = syntax_buf;
-  uint64_t offset = 0;
-  int32_t length = j_doc.length();
-  char *alloc_buf = NULL;
-  ObArenaAllocator tmp_allocator;
-  ObIAllocator *allocator_ptr = OB_ISNULL(allocator) ? &tmp_allocator : allocator;
-
-  if (length == 0) {
-    ret = OB_ERR_NULL_VALUE;
-  } else if (OB_ISNULL(alloc_buf = reinterpret_cast<char *>(allocator_ptr->alloc(length + 1)))) { // for '\0'
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    MEMCPY(alloc_buf, j_doc.ptr(), length);
-    alloc_buf[length] = '\0';
-    if (!HAS_FLAG(parse_flag, JSN_UNIQUE_FLAG)) {
-      ObJsonSyntaxCheckHandler handler(allocator, max_depth_config);
-      ObRapidJsonAllocator parse_allocator(allocator);
-      rapidjson::InsituStringStream ss(static_cast<char *>(alloc_buf));
-      ObRapidJsonReader reader(&parse_allocator);
-      rapidjson::ParseResult r;
-      try {
-        if (HAS_FLAG(parse_flag, JSN_RELAXED_FLAG)) {
-          r = reader.Parse<RELAXJSON_FLAG>(ss, handler);
-        } else if (HAS_FLAG(parse_flag, JSN_STRICT_FLAG)) {
-          r = reader.Parse<STRICTJSON_FLAG>(ss, handler);
-        } else {
-          r = reader.Parse<rapidjson::kParseInsituFlag>(ss, handler);
-        }
-      } catch (const std::bad_alloc &e) {
-        allocator->free(alloc_buf);
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (r.IsError()) {
-        allocator->free(alloc_buf);
-        if (handler.is_too_deep()) {
-          ret = OB_ERR_JSON_OUT_OF_DEPTH;
-        } else {
-          ret = OB_ERR_INVALID_JSON_TEXT;
-        }
-        offset = reader.GetErrorOffset();
-        syntaxerr = rapidjson::GetParseError_En(reader.GetParseErrorCode());
-        LOG_DEBUG("fail to parse json text", K(ret), K(r.Code()), KCSTRING(syntaxerr), K(offset));
-      }
-    } else {
-      ObRapidJsonHandler handler(allocator, true, false, false, max_depth_config);
-      ObRapidJsonAllocator parse_allocator(allocator);
-      rapidjson::InsituStringStream ss(static_cast<char *>(alloc_buf));
-      ObRapidJsonReader reader(&parse_allocator);
-      rapidjson::ParseResult r;
-      try {
-        if (HAS_FLAG(parse_flag, JSN_RELAXED_FLAG)) {
-          r = reader.Parse<RELAXJSON_FLAG>(ss, handler);
-        } else if (HAS_FLAG(parse_flag, JSN_STRICT_FLAG)) {
-          r = reader.Parse<STRICTJSON_FLAG>(ss, handler);
-        } else {
-          r = reader.Parse<rapidjson::kParseInsituFlag>(ss, handler);
-        }
-      } catch (const std::bad_alloc &e) {
-        allocator->free(alloc_buf);
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (!r.IsError()) {
-        if (OB_ISNULL(handler.get_built_doc()) && OB_NOT_NULL(syntaxerr)) {
-          allocator->free(alloc_buf);
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("The parsing failed for some other reason than a syntax error.");
-          syntaxerr = NULL;
-        }
-      } else {
-        allocator->free(alloc_buf);
-        ret = OB_ERR_INVALID_JSON_TEXT;
-        if (syntaxerr != NULL) {
-          syntaxerr = rapidjson::GetParseError_En(reader.GetParseErrorCode());
-        }
-        LOG_WARN("fail to parse json text", K(ret), K(r.Code()));
-      }
-    }
+  UNUSED(allocator);
+  if (j_doc.empty() || OB_ISNULL(j_doc.ptr())) {
+    return OB_ERR_NULL_VALUE;
   }
-
-  return ret;
-}
-
-// Function which is called on each value found in the JSON document being parsed.
-bool ObRapidJsonHandler::seeing_value(ObJsonNode *value) 
-{
-  bool is_continue = true;
-
-  if (OB_ISNULL(value)) {
-    is_continue = false;
-  } else {
-    switch (next_state_) {
-      case ObJsonExpectNextState::EXPECT_ANYTHING: {
-        dom_as_built_ = value;
-        next_state_ = ObJsonExpectNextState::EXPECT_EOF;
-        break;
-      }
-
-      case ObJsonExpectNextState::EXPECT_ARRAY_VALUE: {
-        INIT_SUCC(ret);
-        ObJsonArray *array = dynamic_cast<ObJsonArray *>(current_element_);
-        if (OB_FAIL(array->append(value))) {
-          is_continue = false;
-        }
-        break;
-      }
-
-      case ObJsonExpectNextState::EXPECT_OBJECT_VALUE: {
-        INIT_SUCC(ret);
-        next_state_ = ObJsonExpectNextState::EXPECT_OBJECT_KEY;
-        ObJsonObject *object = dynamic_cast<ObJsonObject *>(current_element_);
-        if (OB_FAIL(object->add(key_, value, with_unique_key_, true, false, is_schema_))) {
-          if (ret == OB_ERR_DUPLICATE_KEY) {
-            with_duplicate_key_ = true;
-          }
-          is_continue = false;
-        }
-        break;
-      }
-
-      default: {
-        LOG_WARN_RET(OB_ERR_UNEXPECTED, "unexpected json value", K(next_state_));
-        is_continue = false;
-        break;
-      }
-    }
+  const uint8_t *input = reinterpret_cast<const uint8_t *>(j_doc.ptr());
+  json::ParseResult result = json::validate(
+      rust::Slice<const uint8_t>(input, j_doc.length()), duplicate_policy(parse_flag),
+      depth_limit(max_depth_config), HAS_FLAG(parse_flag, JSN_SCHEMA_FLAG));
+  if (result.status == json::Status::Ok) {
+    return OB_SUCCESS;
   }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::is_start_object_or_array(ObJsonNode *value, ObJsonExpectNextState next_state)
-{
-  bool is_continue = false;
-
-  if (depth_ > config_json_max_depth_) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "current json doc is over depth", K(OB_ERR_JSON_OUT_OF_DEPTH));
-  } else {
-    depth_++;
-    is_continue = seeing_value(value);
-    current_element_ = value;
-    next_state_ = next_state;
+  LOG_DEBUG("fail to validate standard JSON text", K(result.byte_offset));
+  if (HAS_FLAG(parse_flag, JSN_UNIQUE_FLAG)
+      && (result.status == json::Status::DuplicateKey || result.status == json::Status::Depth)) {
+    return OB_ERR_INVALID_JSON_TEXT;
   }
-  
-  return is_continue;
+  return status_error(result.status);
 }
-
-bool ObRapidJsonHandler::is_end_object_or_array() 
-{
-  bool is_continue = true;
-  depth_--;
-
-  ObJsonNode *parent = current_element_->get_parent();
-  if (OB_ISNULL(parent)) { // current is root
-    if (depth_ != 0) {
-      is_continue = false;
-      LOG_WARN_RET(OB_ERR_UNEXPECTED, "unexpected tree depth", K(depth_));
-    } else {
-      next_state_ = ObJsonExpectNextState::EXPECT_EOF;
-    }
-  } else if (parent->json_type() == ObJsonNodeType::J_OBJECT) { // parent is object
-    next_state_ = ObJsonExpectNextState::EXPECT_OBJECT_KEY;
-  } else { // parent is array
-    next_state_ = ObJsonExpectNextState::EXPECT_ARRAY_VALUE;
-  }
-
-  if (is_continue) {
-    if (current_element_->json_type() == ObJsonNodeType::J_OBJECT) { // current is object
-      // Sort the key-value pairs of the ObJsonObject at the current level.
-      ObJsonObject *obj = static_cast<ObJsonObject *>(current_element_);
-      obj->stable_sort();
-      obj->update_serialize_size();
-      int64_t origin_num = obj->element_count();
-      if (!preserve_dup_key_) {
-        obj->unique();
-      }
-      if (with_unique_key_ && obj->element_count() < origin_num) {
-        is_continue = false;
-        with_duplicate_key_ = true;
-      }
-    } else { // current is array
-      current_element_->update_serialize_size();
-    }
-  }
-  current_element_ = parent;
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Null()
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonNull));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for null json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonNull *node = new (buf) ObJsonNull();
-    is_continue = seeing_value(node);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Bool(bool value)
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonBoolean));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for boolean json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonBoolean *node = new (buf) ObJsonBoolean(value);
-    is_continue = seeing_value(node);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Int(int value)
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonInt));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for int json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonInt *node = new (buf) ObJsonInt(value);
-    is_continue = seeing_value(node);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Uint(unsigned value)
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonInt)); // adapt mysql, use ObJsonInt
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for uint json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonInt *node = new (buf) ObJsonInt(value);
-    is_continue = seeing_value(node);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Int64(int64_t value)
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonInt));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for int64 json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonInt *node = new (buf) ObJsonInt(value);
-    is_continue = seeing_value(node);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Uint64(uint64_t value)
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonUint));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for uint64 json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonUint *node = new (buf) ObJsonUint(value);
-    is_continue = seeing_value(node);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Double(double value)
-{
-  bool is_continue = false;
-
-  if (!std::isfinite(value)) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "value is not finite", K(value));
-  } else {
-    void *buf = alloc(sizeof(ObJsonDouble));
-    if (OB_ISNULL(buf)) {
-      LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for double json node", K(OB_ALLOCATE_MEMORY_FAILED));
-    } else {
-      ObJsonDouble *node = new (buf) ObJsonDouble(value);
-      is_continue = seeing_value(node);
-    }
-  }
-
-  return is_continue;
-}
-
-// Never called, since we don't instantiate the parser with kParseNumbersAsStringsFlag.
-bool ObRapidJsonHandler::RawNumber(const char *, rapidjson::SizeType, bool copy)
-{
-  UNUSED(copy);
-
-  return false;
-}
-
-bool ObRapidJsonHandler::String(const char *str, rapidjson::SizeType length, bool copy)
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonString));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for string json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else if (is_schema_ && OB_NOT_NULL(str) && length > 0 
-        && next_state_ == ObJsonExpectNextState::EXPECT_OBJECT_VALUE 
-        && key_.compare("$ref") == 0 && *str != '#') {
-    err_code_ = OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA;
-    LOG_WARN_RET(OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA, "unsupported ref in json schema", K(OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA));
-  } else if (copy) {
-    void *dst_buf = NULL;
-    ObString src_str(length, str);
-    if (length > 0) {
-      if (OB_ISNULL(dst_buf = allocator_->alloc(length))) {
-        LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(length));
-      } else {
-        MEMCPY(dst_buf, src_str.ptr(), src_str.length());
-        ObJsonString *node = new (buf) ObJsonString(static_cast<char *>(dst_buf), length);
-        is_continue = seeing_value(node);
-      }
-    } else {
-      ObJsonString *node = new (buf) ObJsonString(str, length);
-      is_continue = seeing_value(node);
-    }
-  } else {
-    ObJsonString *node = new (buf) ObJsonString(str, length);
-    is_continue = seeing_value(node);
-  } 
-
-  return is_continue;
-}
-
-
-bool ObRapidJsonHandler::StartObject()
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonObject));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for object json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonObject *node= new (buf) ObJsonObject(allocator_);
-    is_continue = is_start_object_or_array(node, ObJsonExpectNextState::EXPECT_OBJECT_KEY);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::EndObject(rapidjson::SizeType length)
-{
-  UNUSED(length);
-  bool is_continue = true;
-
-  if (next_state_ != ObJsonExpectNextState::EXPECT_OBJECT_KEY) {
-    is_continue = false;
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "unexpected next json state", K(next_state_));
-  } else {
-    is_continue = is_end_object_or_array();
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::StartArray()
-{
-  bool is_continue = false;
-
-  void *buf = alloc(sizeof(ObJsonArray));
-  if (OB_ISNULL(buf)) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "fail to alloc memory for array json node", K(OB_ALLOCATE_MEMORY_FAILED));
-  } else {
-    ObJsonArray *node = new (buf) ObJsonArray(allocator_);
-    is_continue = is_start_object_or_array(node, ObJsonExpectNextState::EXPECT_ARRAY_VALUE);
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::EndArray(rapidjson::SizeType length)
-{
-  UNUSED(length);
-  bool is_continue = true;
-
-  if (next_state_ != ObJsonExpectNextState::EXPECT_ARRAY_VALUE) {
-    is_continue = false;
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "unexpected next json state", K(next_state_));
-  } else {
-    is_continue = is_end_object_or_array();
-  }
-
-  return is_continue;
-}
-
-bool ObRapidJsonHandler::Key(const char *str, rapidjson::SizeType length, bool copy)
-{
-  bool is_continue = false;
-
-  if (next_state_ != ObJsonExpectNextState::EXPECT_OBJECT_KEY) {
-    LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "unexpected next json state", K(next_state_));
-  } else {
-    // need deep-copy
-    if (copy) {
-      void *dst_buf = NULL;
-      ObString src_str(length, str);
-      if (length > 0) {
-        if (OB_ISNULL(dst_buf = allocator_->alloc(length))) {
-          LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "allocate memory fail", K(length));
-        } else {
-          MEMCPY(dst_buf, src_str.ptr(), src_str.length());
-          key_.assign_ptr(static_cast<char *>(dst_buf), length);
-          is_continue = true;
-          next_state_ = ObJsonExpectNextState::EXPECT_OBJECT_VALUE;
-        }
-      } else {
-        key_ = ObString();
-        is_continue = true;
-        next_state_ = ObJsonExpectNextState::EXPECT_OBJECT_VALUE;
-      }
-    } else {
-      is_continue = true;
-      next_state_ = ObJsonExpectNextState::EXPECT_OBJECT_VALUE;
-      key_.assign_ptr(str, length);
-    }
-  }
-
-  return is_continue;
-}
-
-#undef TEST_RELAXJSON_FLAG
 
 } // namespace common
 } // namespace oceanbase

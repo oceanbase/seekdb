@@ -359,7 +359,7 @@ private:
       bool& from_end1, bool& from_end2);
   int get_origin_key_name(char* &str, uint64_t& length, bool is_quoted, bool& is_func, bool& with_escape);
   int deal_with_escape(char* &str, uint64_t& length);
-  int parse_name_with_rapidjson(char*& str, uint64_t& len);
+  int parse_json_string(char*& str, uint64_t& len);
   int parse_func_node(char*& name, uint64_t& len);
   int get_char_comparison_type(ObJsonPathFilterNode* filter_comp_node);
   int get_func_comparison_type(ObJsonPathFilterNode* filter_comp_node);

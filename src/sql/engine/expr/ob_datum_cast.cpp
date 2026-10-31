@@ -3267,11 +3267,7 @@ static int common_string_json(const ObExpr &expr,
                         && ((j_text[0] == '\'' && j_text[j_text.length() - 1] == '\'')
                             || (j_text[0] == '\"' && j_text[j_text.length() - 1] == '\"')));
 
-      bool relaxed_json = false;
-      uint32_t parse_flag = ObJsonParser::JSN_STRICT_FLAG;
-
-      ADD_FLAG_IF_NEED(relaxed_json, parse_flag, ObJsonParser::JSN_RELAXED_FLAG);
-      ADD_FLAG_IF_NEED(false, parse_flag, ObJsonParser::JSN_UNIQUE_FLAG);
+      uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
 
       bool is_convert_jstr_type = (in_type == ObTinyTextType
                                  || in_type == ObTextType

@@ -240,7 +240,7 @@ int ObExprJsonQuery::eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObJsonUtil::get_json_doc(expr.args_[JSN_QUE_DOC], ctx, temp_allocator, 
                                               j_base, is_null_result, 
-                                              is_cover_by_error,  true))) {
+                                              is_cover_by_error))) {
   } else if (param_ctx->json_param_.json_path_ == nullptr) { //  do seek
     if (param_ctx->json_param_.is_asis_) {
       if (OB_FAIL(hits.push_node(j_base))) {
@@ -669,7 +669,7 @@ int ObExprJsonQuery::append_binary_node_into_res(ObIJsonBase*& jb_res,
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(bin_agg.serialize())) {
-  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, bin_agg.get_buffer()->string(), ObJsonInType::JSON_BIN, ObJsonInType::JSON_BIN, jb_res, ObJsonParser::JSN_RELAXED_FLAG, ObJsonExprHelper::get_json_max_depth_config()))) {
+  } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, bin_agg.get_buffer()->string(), ObJsonInType::JSON_BIN, ObJsonInType::JSON_BIN, jb_res, ObJsonParser::JSN_DEFAULT_FLAG, ObJsonExprHelper::get_json_max_depth_config()))) {
   }
   return ret;
 }

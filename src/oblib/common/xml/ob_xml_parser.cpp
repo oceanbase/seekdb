@@ -17,7 +17,6 @@
 
 #include "common/xml/ob_xml_parser.h"
 #include "common/xml/ob_xml_util.h"
-#include <rapidjson/memorystream.h>
 
 namespace oceanbase {
 namespace common {

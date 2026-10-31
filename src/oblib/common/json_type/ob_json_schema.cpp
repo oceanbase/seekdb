@@ -3714,8 +3714,7 @@ int ObJsonSchemaCache::find_and_add_cache(ObIJsonBase*& out_schema, ObString& in
   INIT_SUCC(ret);
   if (!is_match(in_str, arg_idx)) {
     ObIJsonBase* in_json = nullptr;
-    // Only lowercase true/false is considered a Boolean value, so use strict mode.
-    uint32_t parse_flag = ObJsonParser::JSN_STRICT_FLAG;
+    uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
     parse_flag |= ObJsonParser::JSN_SCHEMA_FLAG;
 
     if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator_, in_str, in_type, in_type, 

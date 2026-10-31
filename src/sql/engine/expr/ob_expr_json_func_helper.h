@@ -119,7 +119,6 @@ struct ObConv2JsonParam {
   to_bin_(to_bin),
   has_lob_header_(has_lob_header),
   deep_copy_(false),
-  relax_type_(true),
   format_json_(false),
   is_schema_(false)
   {}
@@ -127,47 +126,33 @@ struct ObConv2JsonParam {
   to_bin_(to_bin),
   has_lob_header_(has_lob_header),
   deep_copy_(deep_copy),
-  relax_type_(true),
   format_json_(false),
   is_schema_(false)
   {}
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type) :
+  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool format_json) :
   to_bin_(to_bin),
   has_lob_header_(has_lob_header),
   deep_copy_(deep_copy),
-  relax_type_(relax_type),
-  format_json_(false),
-  is_schema_(false)
-  {}
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type, bool format_json) :
-  to_bin_(to_bin),
-  has_lob_header_(has_lob_header),
-  deep_copy_(deep_copy),
-  relax_type_(relax_type),
   format_json_(format_json),
   is_schema_(false)
   {}
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type, bool format_json, bool is_schema) :
+  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool format_json, bool is_schema) :
   to_bin_(to_bin),
   has_lob_header_(has_lob_header),
   deep_copy_(deep_copy),
-  relax_type_(relax_type),
   format_json_(format_json),
   is_schema_(is_schema)
   {}
-
-  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool relax_type, bool format_json, bool is_schema, bool is_wrap_fail) :
-    to_bin_(to_bin),
-    has_lob_header_(has_lob_header),
-    deep_copy_(deep_copy),
-    relax_type_(relax_type),
-    format_json_(format_json),
-    is_schema_(is_schema),
-    wrap_on_fail_(is_wrap_fail) {}
+  ObConv2JsonParam(bool to_bin, bool has_lob_header, bool deep_copy, bool format_json, bool is_schema, bool is_wrap_fail) :
+  to_bin_(to_bin),
+  has_lob_header_(has_lob_header),
+  deep_copy_(deep_copy),
+  format_json_(format_json),
+  is_schema_(is_schema),
+  wrap_on_fail_(is_wrap_fail) {}
   bool to_bin_;
   bool has_lob_header_;
   bool deep_copy_ = false;
-  bool relax_type_ = true;
   bool format_json_ = false;
   bool is_schema_ = false;
   bool wrap_on_fail_ = false;
@@ -218,7 +203,7 @@ public:
                           MultimodeAlloctor &allocator,
                           uint16_t index, ObIJsonBase*& j_base,
                           bool &is_null, bool need_to_tree=true, 
-                          bool relax = true, bool preserve_dup = false);
+                          bool preserve_dup = false);
   static int get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
                             MultimodeAlloctor &allocator,
                             uint16_t index, ObIJsonBase*& j_base,
@@ -264,7 +249,7 @@ public:
   static int get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
                           common::ObIAllocator *allocator, uint16_t index,
                           ObIJsonBase*& j_base, bool to_bin = false, bool format_json = false, 
-                          uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG);
+                          uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG);
   static int get_const_json_schema(const common::ObObj &data,
                                    const char *func_name,
                                    ObExecContext &exec_ctx,

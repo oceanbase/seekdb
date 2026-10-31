@@ -225,8 +225,7 @@ public:
                           ObEvalCtx &ctx,
                           MultimodeAlloctor &allocator,
                           ObIJsonBase*& j_base,
-                          bool &is_null, bool & is_cover_by_error,
-                          bool relax = false);
+                          bool &is_null, bool & is_cover_by_error);
   static bool is_number_item_method(ObJsonPath* j_path);
   static int bit_length_check(const ObAccuracy &accuracy,
                               uint64_t &value);

@@ -17,10 +17,10 @@
 #ifndef LIB_JSON_OB_JSON_
 #define LIB_JSON_OB_JSON_
 #include <sys/types.h>
+#include <cstddef>
 #ifndef _WIN32
 #include <regex.h>
 #else
-#include <rapidjson/internal/regex.h>
 typedef struct { void *__impl; size_t __data[32]; } regex_t;
 static inline int regcomp(regex_t *, const char *, int) { return -1; }
 static inline int regexec(const regex_t *, const char *, size_t, void *, int) { return -1; }

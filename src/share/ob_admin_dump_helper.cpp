@@ -106,37 +106,6 @@ int ObAdminLogStatDumper::dump_string(const char *str)
   return OB_SUCCESS;
 }
 
-int ObAdminLogJsonDumper::start_object()
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::StartObject() ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::end_object()
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::EndObject() ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_key(const char *arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::Key(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_int64(int64_t arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::Int64(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_uint64(uint64_t arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::Uint64(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-int ObAdminLogJsonDumper::dump_string(const char *arg)
-{
-  return  rapidjson::PrettyWriter<rapidjson::StringBuffer>::String(arg) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-}
-
-
 int ObAdminLogDumpFilter::parse(const char *str)
 {
   int ret = OB_SUCCESS;

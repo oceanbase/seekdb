@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_json_path.h"
 #include "ob_json_parse.h"
+#include "lib/charset/ob_charset.h"
 
 namespace oceanbase {
 namespace common {
@@ -1793,7 +1794,7 @@ int ObJsonPath::add_single_array_node(bool is_cell_type, uint64_t& index1, uint6
   return ret;
 }
 
-int ObJsonPath::parse_name_with_rapidjson(char*& str, uint64_t& len)
+int ObJsonPath::parse_json_string(char*& str, uint64_t& len)
 {
   INIT_SUCC(ret);
   const char *syntaxerr = nullptr;
@@ -1943,10 +1944,10 @@ int ObJsonPath::parse_mysql_member_node()
         bool is_func = false;
         bool with_escape = false;
         // get name 
-        // add double quote for rapidjson requires
+        // Decode the quoted member name as one standard JSON string.
         if (OB_FAIL(get_origin_key_name(name, name_len, is_quoted, is_func, with_escape))) {
         } else {
-          if (OB_FAIL(parse_name_with_rapidjson(name, name_len))) {
+          if (OB_FAIL(parse_json_string(name, name_len))) {
           }
 
           if (OB_SUCC(ret) && !is_quoted) {
@@ -2267,6 +2268,7 @@ bool ObJsonPathUtil::is_connector_punctuation(unsigned codepoint) {
 
 bool ObJsonPathUtil::is_ecmascript_identifier(const char* name, uint64_t length)
 {
+  int ret = OB_SUCCESS;
   bool ret_bool = true;
   // An empty string is not a valid identifier.
   if (OB_ISNULL(name)) ret_bool = false;
@@ -2276,21 +2278,24 @@ bool ObJsonPathUtil::is_ecmascript_identifier(const char* name, uint64_t length)
     been replaced with the corresponding UTF-8 bytes. Now we apply
     the rules here: https://es5.github.io/x7.html#x7.6
   */
-  rapidjson::MemoryStream input_stream(name, length);
-  unsigned codepoint = 0;
-  uint64_t last_pos = 0;
+  uint64_t pos = 0;
 
-  while (ret_bool && (input_stream.Tell() < length)) {
-    last_pos = input_stream.Tell();
+  while (ret_bool && pos < length) {
+    const uint64_t last_pos = pos;
     bool first_codepoint = (last_pos == 0);
-    if (!rapidjson::UTF8<char>::Decode(input_stream, &codepoint)) { 
+    int32_t codepoint = 0;
+    int32_t char_len = 0;
+    if (OB_FAIL(ObCharset::mb_wc(CS_TYPE_UTF8MB4_BIN, name + pos, length - pos,
+                                 char_len, codepoint))) {
       ret_bool = false;
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "fail to decode.", 
-          K(ret_bool), K(codepoint), K(input_stream.Tell()), KCSTRING(name));
+          K(ret_bool), K(codepoint), K(pos), KCSTRING(name));
+      break;
     }
+    pos += char_len;
 
     // a unicode letter
-    uint64_t curr_pos = input_stream.Tell();
+    uint64_t curr_pos = pos;
     if (is_letter(codepoint, name, last_pos, curr_pos - last_pos)
         || codepoint == 0x24 || codepoint == 0x5F ) {
       // $ is ok, _ is ok
@@ -2301,7 +2306,7 @@ bool ObJsonPathUtil::is_ecmascript_identifier(const char* name, uint64_t length)
       */
       ret_bool = false;
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "first character must be $, _ or letter.", 
-          K(ret_bool), K(codepoint), K(input_stream.Tell()), KCSTRING(name));
+          K(ret_bool), K(codepoint), K(pos), KCSTRING(name));
     } else if (unicode_combining_mark(codepoint) || isdigit(codepoint)
               || is_connector_punctuation(codepoint)
               || codepoint == 0x200C || codepoint == 0x200D){
@@ -2313,7 +2318,7 @@ bool ObJsonPathUtil::is_ecmascript_identifier(const char* name, uint64_t length)
       // nope
       ret_bool = false;
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "not ecmascript identifier.",
-          K(ret_bool), K(codepoint), K(input_stream.Tell()), KCSTRING(name));
+          K(ret_bool), K(codepoint), K(pos), KCSTRING(name));
     }
   }
 
@@ -2789,10 +2794,10 @@ int ObJsonPath::parse_sql_json_member_node()
     char* name = nullptr;
     uint64_t name_len = 0;
     // get name 
-    // add double quote for rapidjson requires
+    // Decode the quoted member name as one standard JSON string.
     if (OB_FAIL(get_origin_key_name(name, name_len, is_quoted, is_func, with_escape))) {
     } else if (is_quoted || (!is_func)) {
-      if (OB_FAIL(parse_name_with_rapidjson(name, name_len))) {
+      if (OB_FAIL(parse_json_string(name, name_len))) {
       } else if (!is_quoted) {
         if (!ObJsonPathUtil::is_ecmascript_identifier(name, name_len)) {
         }

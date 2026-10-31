@@ -110,7 +110,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                                     MultimodeAlloctor &allocator,
                                     uint16_t index, ObIJsonBase*& j_base,
                                     bool &is_null, bool need_to_tree, 
-                                    bool relax, bool preserve_dup)
+                                    bool preserve_dup)
 {
   INIT_SUCC(ret);
   ObDatum *json_datum = NULL;
@@ -139,8 +139,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
       ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
 
       ObJsonInType expect_type = need_to_tree ? ObJsonInType::JSON_TREE : j_in_type;
-      bool relax_json = false;
-      uint32_t parse_flag = relax_json ? ObJsonParser::JSN_RELAXED_FLAG : 0;
+      uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
       ADD_FLAG_IF_NEED(preserve_dup, parse_flag, ObJsonParser::JSN_PRESERVE_DUP_FLAG);
       if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type,
                                                   expect_type, j_base, parse_flag))) {
@@ -174,12 +173,10 @@ int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data,
   } else if (ObJsonExprHelper::is_convertible_to_json(val_type)) {
     ObCollationType cs_type = data.get_collation_type();
     ObIJsonBase* j_base = nullptr;
-    // Only lowercase true/false is considered a Boolean value, so use strict
-    // mode.
     if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
                                                                   cs_type, j_base, ObConv2JsonParam(false,
                                                                   data.has_lob_header(), false,
-                                                                  false, true, true),
+                                                                  true, true),
                                                                   lob_options))) {
       if (ret == OB_ERR_NULL_VALUE || ret == OB_ERR_INVALID_JSON_TEXT) { // json_str is null
         ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
@@ -319,7 +316,7 @@ int ObJsonExprHelper::refine_range_json_value_const(
   } else if (OB_FAIL(ctx.get_lob_read_options(lob_options))) {
   } else if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
                                                                 cs_type, j_base, ObConv2JsonParam(to_bin,
-                                                                data.has_lob_header(), false, false, true, true),
+                                                                data.has_lob_header(), false, true, true),
                                                                 lob_options))) {
   }
 
@@ -355,7 +352,7 @@ int ObJsonExprHelper::get_json_val(const common::ObDatum &data,
     if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
                                                                   cs_type, j_base, ObConv2JsonParam(to_bin,
                                                                   expr->obj_meta_.has_lob_header(), 
-                                                                  false, false, true),
+                                                                  false, true),
                                                                   lob_options))) {
     }
   } else {
@@ -524,9 +521,7 @@ int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
                                                                   allocator, cs_type,
                                                                   j_base, ObConv2JsonParam(to_bin,
                                                                   json_arg->obj_meta_.has_lob_header(),
-                                                                  false,
-                                                                  HAS_FLAG(parse_flag, ObJsonParser::JSN_RELAXED_FLAG),
-                                                                  format_json),
+                                                                  false, format_json),
                                                                   lob_options))) {
     }
   } else if (val_type == ObCollectionSQLType) {
@@ -603,7 +598,7 @@ int ObJsonExprHelper::datum_to_json_val(const ObDatum *json_datum,
         || val_type == ObMediumTextType
         || val_type == ObLongTextType) {
       
-      uint32_t parse_flag = ObJsonParser::JSN_RELAXED_FLAG;
+      uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
       ObString j_str = json_datum->get_string();
       ObString out_str;
       bool need_convert = (cs_type != CS_TYPE_INVALID && cs_type != CS_TYPE_BINARY);
@@ -1299,7 +1294,7 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
 
       if (OB_SUCC(ret)) {
         if (flags.format_json_) {
-          uint32_t parse_flag = flags.relax_type_ ? ObJsonParser::JSN_RELAXED_FLAG : ObJsonParser::JSN_STRICT_FLAG;
+          uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
           uint32_t json_depth_config = ObJsonExprHelper::get_json_max_depth_config();
           ADD_FLAG_IF_NEED(flags.is_schema_, parse_flag, ObJsonParser::JSN_SCHEMA_FLAG);
           if(OB_FAIL(ObJsonExprHelper::cast_to_json_tree(j_str, allocator, parse_flag, json_depth_config))) {
@@ -1350,7 +1345,7 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
 
       if (OB_SUCC(ret)) {
         ObJsonInType to_type = flags.to_bin_ ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
-        uint32_t parse_flag = flags.relax_type_ ? ObJsonParser::JSN_RELAXED_FLAG : ObJsonParser::JSN_STRICT_FLAG;
+        uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
         ADD_FLAG_IF_NEED(flags.is_schema_, parse_flag, ObJsonParser::JSN_SCHEMA_FLAG);
         if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_BIN,
                                                      to_type, json_node, parse_flag, 
