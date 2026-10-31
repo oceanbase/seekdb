@@ -244,6 +244,7 @@ public:
   static int get_json_boolean(ObIAllocator &allocator, bool value, ObJsonBoolean *&boolean_node);
   static int get_json_object_form_str(ObIAllocator &allocator, ObString &str, ObJsonObject *&obj_node);
   static int print_json_to_str(ObIAllocator &allocator, ObIJsonBase *base_node, ObString &str);
+  static int get_json_value_as_string(ObIAllocator &allocator, ObIJsonBase *node, ObJsonString *&str_node);
   static int compact_json_object(ObIAllocator &allocator, ObJsonObject *obj_node, ObJsonObject *compact_obj);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncJsonUtils);
