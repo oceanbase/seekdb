@@ -88,12 +88,12 @@ pub(super) const FINISHED: u8 = 3;
 pub(super) const ABORTED: u8 = 4;
 pub(super) struct Cancellation {
     pub id: RequestId,
-    _charge: Arc<Charge>,
+    _cell: Arc<ControlCell>,
 }
 pub(super) struct ControlCell {
     pub id: RequestId,
     pub options: RequestOptions,
-    pub charge: Arc<Charge>,
+    pub charge: Charge,
     pub phase: AtomicU8,
     pub cancelled: Arc<AtomicBool>,
     pub device_open: Arc<AtomicBool>,
@@ -101,7 +101,7 @@ pub(super) struct ControlCell {
     pub wake: Weak<Wake>,
 }
 impl ControlCell {
-    pub fn cancel(&self) -> CancelOutcome {
+    pub fn cancel(self: &Arc<Self>) -> CancelOutcome {
         if self.phase.load(Ordering::Acquire) >= FINISHED {
             return CancelOutcome::NotPending;
         }
@@ -118,11 +118,11 @@ impl ControlCell {
             CancelOutcome::Cancelled
         }
     }
-    pub(super) fn enqueue_cancellation(&self) {
+    pub(super) fn enqueue_cancellation(self: &Arc<Self>) {
         if let Some(cancellations) = self.cancellations.upgrade() {
             cancellations.lock().unwrap().push_back(Cancellation {
                 id: self.id,
-                _charge: Arc::clone(&self.charge),
+                _cell: Arc::clone(self),
             });
         }
     }
@@ -205,14 +205,14 @@ impl Admission {
             device_open: Arc::clone(&gate.devices[&options.device]),
             cancellations: Arc::downgrade(&shared.cancellations),
             options,
-            charge: Arc::new(Charge {
+            charge: Charge {
                 ledger: Arc::clone(&shared.ledger),
                 class,
                 bytes: AtomicUsize::new(0),
                 wake: Arc::downgrade(&shared.wake),
                 #[cfg(any(test, feature = "ownership-test-support"))]
                 drop_witness: crate::drop_witness::DropRegistration::default(),
-            }),
+            },
             phase: AtomicU8::new(WAITING),
             cancelled: Arc::new(AtomicBool::new(false)),
             wake: Arc::downgrade(&shared.wake),
@@ -234,7 +234,7 @@ impl Admission {
         })
     }
     pub(crate) fn lifetime(&self) -> RequestLifetime {
-        RequestLifetime::reserved(Arc::clone(&self.cell.charge))
+        RequestLifetime::reserved(Arc::clone(&self.cell))
     }
     pub(super) fn ready(&mut self) -> io::Result<bool> {
         self.check_open()?;

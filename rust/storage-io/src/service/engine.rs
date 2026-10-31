@@ -480,7 +480,7 @@ impl Driver {
             .limits
             .cost(options.class, options.length);
         let active = Active {
-            stage: Stage::Queued(operation.keep_alive(Arc::clone(&cell.charge))),
+            stage: Stage::Queued(operation.keep_alive(Arc::clone(&cell))),
             transferred: 0,
             error_retries: 0,
             destination: Some(destination),
@@ -736,9 +736,8 @@ impl Driver {
                     active.transferred = 0;
                     match pass.operation() {
                         Ok(operation) => {
-                            active.stage = Stage::Queued(
-                                operation.keep_alive(Arc::clone(&active.cell.charge)),
-                            );
+                            active.stage =
+                                Stage::Queued(operation.keep_alive(Arc::clone(&active.cell)));
                             self.active.insert(id, active);
                             self.queued.push_back(id);
                             return;
@@ -792,7 +791,7 @@ impl Driver {
                         physical_attempts: attempts,
                         operation,
                         window,
-                        _charge: Arc::clone(&cell.charge),
+                        _cell: Arc::clone(&cell),
                     },
                 );
             }
@@ -837,7 +836,7 @@ impl Driver {
                         physical_attempts: active.attempts,
                         operation,
                         window: active.window.clone(),
-                        _charge: Arc::clone(&active.cell.charge),
+                        _cell: Arc::clone(&active.cell),
                     },
                 );
             }

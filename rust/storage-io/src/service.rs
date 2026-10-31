@@ -28,7 +28,7 @@ mod admission;
 mod engine;
 pub(crate) mod health;
 pub(crate) use admission::Admission;
-use admission::{Charge, ControlCell, Ledger, Wake};
+use admission::{ControlCell, Ledger, Wake};
 pub(crate) use engine::Destination;
 use engine::{Driver, Incoming};
 use health::{Diagnosis, DiagnosisStage, HealthIngress, ProbePass};
@@ -311,7 +311,7 @@ pub struct Completion {
     pub physical_attempts: u64,
     operation: Option<Operation>,
     window: Range<usize>,
-    _charge: Arc<Charge>,
+    _cell: Arc<ControlCell>,
 }
 impl Completion {
     pub fn buffer(&self) -> Option<&[u8]> {

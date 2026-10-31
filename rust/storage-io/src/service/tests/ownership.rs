@@ -50,6 +50,26 @@ fn write(owner: &BlockFile, block: BlockIndex) -> RequestSpec {
     )
 }
 
+#[cfg(feature = "cxx")]
+#[test]
+fn lifetime_belongs_only_to_its_own_admission() {
+    let directory = Directory::new();
+    let file = directory.file();
+    let engine = engine();
+    let (options, _) = spec(&file, 4096).split();
+    let admission = Admission::begin(Arc::clone(&engine.shared), options.clone()).unwrap();
+    let other = Admission::begin(Arc::clone(&engine.shared), options).unwrap();
+    let lifetime = admission.lifetime();
+    let other_lifetime = other.lifetime();
+    assert!(lifetime.belongs_to(&admission));
+    assert!(!lifetime.belongs_to(&other));
+    assert!(other_lifetime.belongs_to(&other));
+    assert!(!other_lifetime.belongs_to(&admission));
+    let empty = RequestLifetime::default();
+    assert!(!empty.belongs_to(&admission));
+    assert!(!empty.belongs_to(&other));
+}
+
 #[test]
 fn charge_witness_waits_for_the_final_real_owner() {
     let directory = Directory::new();

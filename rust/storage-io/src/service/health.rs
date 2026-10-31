@@ -150,14 +150,15 @@ impl CapturedTarget {
 pub struct RequestLifetime {
     pub(crate) target: Option<Arc<CapturedTarget>>,
     observer: Option<FinalObserver>,
-    charge: Option<Arc<Charge>>,
+    cell: Option<Arc<ControlCell>>,
 }
 impl RequestLifetime {
     #[cfg(any(test, feature = "ownership-test-support"))]
     pub fn watch_final_charge(&self) -> io::Result<crate::DropWitness> {
-        self.charge
+        self.cell
             .as_ref()
             .ok_or_else(|| invalid("request has no charge"))?
+            .charge
             .drop_witness
             .watch()
     }
@@ -177,15 +178,15 @@ impl RequestLifetime {
         }
     }
 
-    pub(super) fn reserved(charge: Arc<Charge>) -> Self {
+    pub(super) fn reserved(cell: Arc<ControlCell>) -> Self {
         Self {
-            charge: Some(charge),
+            cell: Some(cell),
             ..Self::default()
         }
     }
     #[cfg(feature = "cxx")]
     pub(crate) fn is_empty(&self) -> bool {
-        self.charge.is_none()
+        self.cell.is_none()
     }
     pub(crate) fn capture(&mut self, admission: &Admission, target: Target, eligible: bool) {
         let target = Arc::new(CapturedTarget {
@@ -204,15 +205,15 @@ impl RequestLifetime {
         self.observer = Some(FinalObserver {
             ingress: Arc::clone(ingress),
             target: Arc::clone(self.target.as_ref().unwrap()),
-            _charge: Arc::clone(self.charge.as_ref().unwrap()),
+            _cell: Arc::clone(self.cell.as_ref().unwrap()),
             observed: AtomicBool::new(false),
         });
     }
     #[cfg(feature = "cxx")]
     pub(crate) fn belongs_to(&self, admission: &Admission) -> bool {
-        self.charge
+        self.cell
             .as_ref()
-            .is_some_and(|charge| Arc::ptr_eq(charge, &admission.cell.charge))
+            .is_some_and(|cell| Arc::ptr_eq(cell, &admission.cell))
     }
     pub fn observe(&self, facts: FinalFacts) -> ObservationReceipt {
         self.observer
@@ -229,7 +230,7 @@ impl RequestLifetime {
 pub struct FinalObserver {
     ingress: Arc<HealthIngress>,
     target: Arc<CapturedTarget>,
-    _charge: Arc<Charge>,
+    _cell: Arc<ControlCell>,
     observed: AtomicBool,
 }
 impl FinalObserver {
