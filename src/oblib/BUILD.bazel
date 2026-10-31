@@ -1249,6 +1249,7 @@ cc_library(
     name = "oblib_test_runtime",
     testonly = True,
     deps = [
+        "//rust:sql_nio_test_runtime",
         ":_malloc_hook_impl",
         ":_ob_malloc_impl",
         ":_oblib_bitmap_impl",

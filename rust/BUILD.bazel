@@ -109,6 +109,15 @@ cc_library(
     visibility = ["//visibility:public"],
 )
 
+# OBLib's test runtime includes SQL socket callbacks and the Rust archive;
+# the matching CXX implementation is also required to close that boundary.
+cc_library(
+    name = "sql_nio_test_runtime",
+    testonly = True,
+    deps = [":sql_nio_bridge"],
+    visibility = ["//src/oblib:__pkg__"],
+)
+
 cc_library(
     name = "_rust_runtime",
     linkopts = select({
