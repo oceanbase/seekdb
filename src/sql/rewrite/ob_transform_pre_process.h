@@ -375,7 +375,14 @@ private:
   int check_exec_param_correlated(const ObRawExpr *expr, bool &is_correlated);
   int check_is_correlated_cte(ObSelectStmt *stmt, ObIArray<ObSelectStmt *> &visited_cte, bool &is_correlated);
   int convert_join_preds_vector_to_scalar(JoinedTable &joined_table, bool &trans_happened);
-  int preserve_order_for_fulltext_search(ObDMLStmt *stmt, bool& trans_happened);
+  int preserve_order_for_fulltext_search(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                         ObDMLStmt *stmt,
+                                         bool& trans_happened);
+  int check_rows_unobserved_by_parent(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                      const ObDMLStmt &stmt,
+                                      bool &is_unobserved,
+                                      ObDMLStmt *&parent,
+                                      uint64_t &view_table_id);
 
   int flatten_conditions(ObDMLStmt *stmt, bool &trans_happened);
   int recursive_flatten_join_conditions(ObDMLStmt *stmt, TableItem *table, bool &trans_happened);
