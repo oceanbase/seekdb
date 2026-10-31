@@ -78,8 +78,8 @@ static void assign_datums(const ObDatum **datums, const uint16_t selector[], con
   for (int64_t i = start_pos; i < end_pos; i++) {
     ObChunkDatumStore::StoredRow *srow = stored_rows[i];
     const ObDatum &src = cur_datums[selector[i]];
-    ObDatum &dst = srow->cells()[col_idx];
-    dst.pack_ = src.pack_;
+    StoredDatumCell &dst = srow->stored_cells()[col_idx];
+    dst = StoredDatumCodec::encode_legacy_view(src);
     dst.ptr_ = reinterpret_cast<char *>(srow) + srow->row_size_;
     if (!src.is_null()) {
       T::assign_datum_value((void *)dst.ptr_, src.ptr_, src.len_);
@@ -96,7 +96,7 @@ int ObDefaultBlockWriter::add_batch(const common::ObDatum **datums, const common
   uint32_t *size_array = batch_ctx->row_size_array_;
   int64_t col_cnt = exprs.count();
   const int64_t base_row_size = sizeof(ObChunkDatumStore::StoredRow)
-      + sizeof(ObDatum) * col_cnt;
+      + sizeof(StoredDatumCell) * col_cnt;
   for (int64_t i = 0; i < size; i++) {
     size_array[i] = base_row_size;
   }
@@ -145,7 +145,7 @@ int ObDefaultBlockWriter::add_batch(const common::ObDatum **datums, const common
         for (int64_t col_idx = 0; col_idx < col_cnt; col_idx++) {
           if (OB_ISNULL(exprs.at(col_idx))) {
             for (int64_t i = idx; i < idx + rows; i++) {
-              stored_rows[i]->cells()[col_idx].set_null();
+              stored_rows[i]->stored_cells()[col_idx].set_null();
             }
             continue;
           }
@@ -205,29 +205,31 @@ int ObDefaultBlockWriter::inner_add_row(const blocksstable::ObStorageDatum *stor
 {
   int ret = OB_SUCCESS;
   int64_t head_size = sizeof(ObChunkDatumStore::StoredRow);
-  int64_t datum_size = sizeof(ObDatum) * column_count;
-  int64_t row_size = head_size + datum_size + extra_size;
+  int64_t datum_size = sizeof(StoredDatumCell) * column_count;
+  int64_t pos = head_size + datum_size + extra_size;
   ObChunkDatumStore::StoredRow *sr = static_cast<ObChunkDatumStore::StoredRow *>((void*)get_cur_buf());
   if (OB_ISNULL(sr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     sr->cnt_ = column_count;
-    for (int64_t i = 0; i < column_count; ++i) {
-      const ObDatum *tmp_datum = static_cast<const ObDatum *>(&storage_datums[i]);
-      MEMCPY(sr->payload_ + i * sizeof(ObDatum), tmp_datum, sizeof(ObDatum));
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
+      // ObStorageDatum still embeds the legacy pointer Datum. Adapt only at
+      // this input boundary; its prefix is not the StoredRow's cell format.
+      const ObDatum &legacy = static_cast<const ObDatum &>(storage_datums[i]);
+      const int64_t payload_position = pos;
+      ret = StoredDatumCodec::encode_legacy_copy(legacy, sr->stored_cells()[i],
+                                                get_cur_buf(), get_remain(), pos);
+      if (OB_SUCC(ret)) {
+        // Preserve this writer's row-relative reference even for NULL cells.
+        sr->stored_cells()[i].ptr_ = get_cur_buf() + payload_position;
+      }
     }
-    char* data_start = sr->payload_ + datum_size + extra_size;
-    int64_t pos = 0;
-    for (int64_t i = 0; i < column_count; ++i) {
-      MEMCPY(data_start + pos, storage_datums[i].ptr_, storage_datums[i].len_);
-      sr->cells()[i].ptr_ = data_start + pos;
-      pos += storage_datums[i].len_;
-      row_size += storage_datums[i].len_;
-    }
-    sr->row_size_ = row_size;
-    if (OB_FAIL(advance(row_size))) {
-    } else if (OB_NOT_NULL(dst_sr)) {
-      *dst_sr = sr;
+    if (OB_SUCC(ret)) {
+      sr->row_size_ = pos;
+      if (OB_FAIL(advance(sr->row_size_))) {
+      } else if (OB_NOT_NULL(dst_sr)) {
+        *dst_sr = sr;
+      }
     }
   }
   return ret;
@@ -237,35 +239,14 @@ int ObDefaultBlockWriter::inner_add_row(const blocksstable::ObStorageDatum *stor
 int ObDefaultBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, ObChunkDatumStore::StoredRow **stored_row)
 {
   int ret = OB_SUCCESS;
-  ObChunkDatumStore::StoredRow *sr = static_cast<ObChunkDatumStore::StoredRow *>((void*)get_cur_buf());
-  if (OB_ISNULL(sr)) {
+  ObChunkDatumStore::StoredRow *sr = nullptr;
+  char *buffer = get_cur_buf();
+  if (OB_ISNULL(buffer)) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    int64_t pos = sizeof(*sr) + sizeof(ObDatum) * exprs.count();
-    if (pos > get_remain()) {
-      ret = OB_BUF_NOT_ENOUGH;
-    } else {
-      sr->cnt_ = exprs.count();
-      ObDatum *datums = sr->cells();
-      for (int64_t i = 0; i < exprs.count() && OB_SUCC(ret); i++) {
-        ObExpr *expr = exprs.at(i);
-        ObDatum *in_datum = NULL;
-        if (OB_UNLIKELY(NULL == expr)) {
-          // Set datum to NULL for NULL expr
-          datums[i].set_null();
-        } else if (OB_FAIL(expr->eval(ctx, in_datum))) {
-        } else {
-          datums[i].deep_copy(*in_datum, get_cur_buf(), get_remain(), pos);
-        }
-      }
-      if (OB_SUCC(ret)) {
-        sr->row_size_ = static_cast<int32_t>(pos);
-        if (OB_FAIL(advance(sr->row_size_))) {
-        } else if (OB_NOT_NULL(stored_row)) {
-          *stored_row = sr;
-        }
-      }
-    }
+  } else if (OB_FAIL(ObChunkDatumStore::StoredRow::build(sr, exprs, ctx, buffer, get_remain()))) {
+  } else if (OB_FAIL(advance(sr->row_size_))) {
+  } else if (OB_NOT_NULL(stored_row)) {
+    *stored_row = sr;
   }
   return ret;
 }
@@ -276,7 +257,7 @@ int ObDefaultBlockWriter::get_row_stored_size(const common::ObIArray<ObExpr*> &e
   size = 0;
   ObExpr *expr = nullptr;
   common::ObDatum *datum = nullptr;
-  size = sizeof(ObDatum) * exprs.count() + sizeof(ObChunkDatumStore::StoredRow);
+  size = sizeof(StoredDatumCell) * exprs.count() + sizeof(ObChunkDatumStore::StoredRow);
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     expr = exprs.at(i);
     if (OB_ISNULL(expr)) {
@@ -361,7 +342,7 @@ int ObDefaultBlockWriter::get_row_stored_size(const blocksstable::ObStorageDatum
 {
   int ret = OB_SUCCESS;
   int64_t head_size = sizeof(ObChunkDatumStore::StoredRow);
-  int64_t datum_size = sizeof(ObDatum) * column_count;
+  int64_t datum_size = sizeof(StoredDatumCell) * column_count;
   int64_t data_size = 0;
   for (int64_t i = 0; i < column_count; ++i) {
     data_size += storage_datums[i].len_;

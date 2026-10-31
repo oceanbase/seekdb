@@ -146,6 +146,9 @@ private:
   int inner_process_datum(const ObDatum &src_datum, const int64_t cur_pos, const ChunkRowMeta &row_meta,
                           CurRowInfo &row_info);
   template <typename T>
+  int inner_process_datum(const StoredDatumCell &src_datum, const int64_t cur_pos,
+                          const ChunkRowMeta &row_meta, CurRowInfo &row_info);
+  template <typename T>
   int inner_build_from_stored_row(const ObChunkDatumStore::StoredRow &sr);
   inline uint8_t get_offset_width(const int64_t data_size) {
     return (data_size < (1 << 16)) ? BASE_OFFSET_SIZE : EXTENDED_OFFSET_SIZE;

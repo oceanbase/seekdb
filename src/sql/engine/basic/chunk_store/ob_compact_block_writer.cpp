@@ -154,7 +154,7 @@ int ObCompactBlockWriter::inner_build_from_stored_row(const ObChunkDatumStore::S
   } else {
     T *var_offset_array = reinterpret_cast<T*>(row_info_.buf_ + HEAD_SIZE + row_info_.bitmap_size_);
     for (int64_t i = 0 ; OB_SUCC(ret) && i < sr.cnt_; i++) {
-      if (OB_FAIL(inner_process_datum<T>(sr.cells()[i], i, *row_meta_, row_info_))) {
+      if (OB_FAIL(inner_process_datum<T>(sr.stored_cells()[i], i, *row_meta_, row_info_))) {
       }
     }
 
@@ -225,6 +225,16 @@ int ObCompactBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, 
 
 template <typename T>
 int ObCompactBlockWriter::inner_process_datum(const ObDatum &src_datum, const int64_t cur_pos,
+                                              const ChunkRowMeta &row_meta, CurRowInfo &row_info)
+{
+  // Execution input crosses the explicit legacy pointer boundary once. The
+  // compact-format writer below only consumes payload references and lengths.
+  return inner_process_datum<T>(StoredDatumCodec::encode_legacy_view(src_datum),
+                                cur_pos, row_meta, row_info);
+}
+
+template <typename T>
+int ObCompactBlockWriter::inner_process_datum(const StoredDatumCell &src_datum, const int64_t cur_pos,
                                               const ChunkRowMeta &row_meta, CurRowInfo &row_info)
 {
   int ret = OB_SUCCESS;
@@ -317,8 +327,8 @@ int ObCompactBlockWriter::get_row_stored_size(const ObChunkDatumStore::StoredRow
   for (int64_t i = 0; OB_SUCC(ret) && i < sr.cnt_; ++i) {
     if (row_meta.column_length_[i] != 0) {
       data_size +=  row_meta.column_length_[i];
-    } else if (!sr.cells()[i].is_null()) {
-      data_size += sr.cells()[i].len_;
+    } else if (!sr.stored_cells()[i].is_null()) {
+      data_size += sr.stored_cells()[i].len_;
     }
   }
 
@@ -483,10 +493,10 @@ int ObCompactBlockWriter::convert_to_stored_row(const char *compact_row, ObChunk
     int64_t cur_var_offset_pos = 0;
     const int64_t var_column_cnt = row_meta_->col_cnt_ - row_meta_->fixed_cnt_;
     const int64_t data_offset = HEAD_SIZE + bitmap_size + (var_column_cnt + 1) * offset_width; // the start of fixed data buffer
-    int64_t cur_data_ptr = sizeof(ObDatum) * row_meta_->col_cnt_ + sizeof(ObChunkDatumStore::StoredRow);
+    int64_t cur_data_ptr = sizeof(StoredDatumCell) * row_meta_->col_cnt_ + sizeof(ObChunkDatumStore::StoredRow);
     const T *offset_array = reinterpret_cast<const T *>(compact_row + HEAD_SIZE + bitmap_size);
     for (int64_t i = 0; OB_SUCC(ret) && i < row_meta_->col_cnt_; i++) {
-      ObDatum *cur_datum = reinterpret_cast<ObDatum *>(sr->payload_ + i * sizeof(ObDatum));
+      StoredDatumCell *cur_datum = &sr->stored_cells()[i];
       uint32_t len = 0;
       char *tmp_ptr = reinterpret_cast<char *>(sr) + cur_data_ptr;
       if (bit_vec->at(i)) {
