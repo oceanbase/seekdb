@@ -231,14 +231,38 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
       ret = OB_INVALID_DATA;
     } else {
       ObJsonArray *data_array = static_cast<ObJsonArray *>(data_node);
-      ObJsonNode *embedding_node = nullptr;
-      for (int64_t i = 0; OB_SUCC(ret) && i < data_array->element_count(); i++) {
-        if (OB_ISNULL(embedding_node = data_array->get_value(i))) {
-          ret = OB_INVALID_DATA;
-        } else if (embedding_node->json_type() != ObJsonNodeType::J_OBJECT) {
+      const int64_t count = data_array->element_count();
+      bool has_index = false;
+      for (int64_t i = 0; !has_index && i < count; i++) {
+        ObJsonNode *node = data_array->get_value(i);
+        if (OB_NOT_NULL(node) && node->json_type() == ObJsonNodeType::J_OBJECT &&
+            OB_NOT_NULL(static_cast<ObJsonObject *>(node)->get_value("index"))) {
+          has_index = true;
+        }
+      }
+      // The service may return embeddings out of order; restore the input order.
+      for (int64_t want = 0; OB_SUCC(ret) && want < count; want++) {
+        int64_t found = -1;
+        for (int64_t i = 0; OB_SUCC(ret) && -1 == found && i < count; i++) {
+          ObJsonNode *embedding_node = data_array->get_value(i);
+          if (OB_ISNULL(embedding_node) || embedding_node->json_type() != ObJsonNodeType::J_OBJECT) {
+            ret = OB_INVALID_DATA;
+          } else if (has_index) {
+            ObJsonNode *index_node = static_cast<ObJsonObject *>(embedding_node)->get_value("index");
+            if (OB_ISNULL(index_node) || index_node->json_type() != ObJsonNodeType::J_INT) {
+              ret = OB_INVALID_DATA;
+            } else if (static_cast<ObJsonInt *>(index_node)->value() == want) {
+              found = i;
+            }
+          } else {
+            found = i;
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (-1 == found) {
           ret = OB_INVALID_DATA;
         } else {
-          ObJsonObject *embedding_obj = static_cast<ObJsonObject *>(embedding_node);
+          ObJsonObject *embedding_obj = static_cast<ObJsonObject *>(data_array->get_value(found));
           ObJsonNode *embedding = embedding_obj->get_value("embedding");
           if (OB_ISNULL(embedding)) {
             ret = OB_INVALID_DATA;
@@ -284,11 +308,14 @@ int ObOllamaUtils::ObOllamaComplete::get_body(common::ObIAllocator &allocator,
     ObJsonObject *body_obj = nullptr;
     ObJsonString *model_str = nullptr;
     ObJsonString *content_str = nullptr;
+    ObJsonBoolean *stream_false = nullptr;
     if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
     } else if (OB_FAIL(body_obj->add("model", model_str))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, content, content_str))) {
     } else if (OB_FAIL(body_obj->add("prompt", content_str))) {
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_boolean(allocator, false, stream_false))) {
+    } else if (OB_FAIL(body_obj->add("stream", stream_false))) {
     } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
     } else {
       body = body_obj;
@@ -1061,6 +1088,8 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
       || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
       || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)) {
     complete_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIComplete, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    complete_provider = OB_NEWx(ObOllamaUtils::ObOllamaComplete, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     complete_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeComplete, &allocator);
   } else {
@@ -1084,6 +1113,8 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
       || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
       || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)) {
     embed_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIEmbed, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    embed_provider = OB_NEWx(ObOllamaUtils::ObOllamaEmbed, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     embed_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeEmbed, &allocator);
   } else {
@@ -1591,9 +1622,7 @@ bool ObAIFuncPromptObjectUtils::is_valid_prompt_object(ObJsonObject *prompt_obje
     ObJsonArray *args_array = static_cast<ObJsonArray *>(args_node);
     for (int64_t i = 0; is_valid && i < args_array->element_count(); i++) {
       ObJsonNode *node = args_array->get_value(i);
-      if (OB_ISNULL(node)) {  
-        is_valid = false;
-      } else if (node->json_type() != ObJsonNodeType::J_STRING && node->json_type() != ObJsonNodeType::J_OBJECT) {
+      if (OB_ISNULL(node) || node->json_type() == ObJsonNodeType::J_NULL) {
         is_valid = false;
       }
     }
@@ -1607,100 +1636,104 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
   ObJsonString *template_json_str = NULL;
   ObJsonArray *args_array = NULL;
   ObString template_str;
-  ObString result_str;
+  ObArray<ObString> arg_values;
   if (OB_ISNULL(prompt_object) ||
       OB_ISNULL(template_json_str = static_cast<ObJsonString *>(prompt_object->get_value(ObAIFuncPromptObjectUtils::prompt_template_key))) ||
       OB_ISNULL(args_array = static_cast<ObJsonArray *>(prompt_object->get_value(ObAIFuncPromptObjectUtils::prompt_args_key))) ||
       OB_ISNULL(template_str = template_json_str->get_str()) ||
       (template_str.empty())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(arg_values.reserve(args_array->element_count()))) {
   } else {
-    uint64_t args_count = args_array->element_count();
-    int64_t max_result_len = template_str.length();
-    char *result_buf = NULL;
-    for (uint64_t i = 0; OB_SUCC(ret) && i < args_count; i++) {
+    // Materialize each argument once: plain strings are used as-is, other JSON
+    // values are substituted with their JSON text representation.
+    for (int64_t i = 0; OB_SUCC(ret) && i < args_array->element_count(); i++) {
       ObJsonNode *arg_node = args_array->get_value(i);
-      if (OB_NOT_NULL(arg_node) && arg_node->json_type() == ObJsonNodeType::J_STRING) {
-        ObJsonString *arg_str = static_cast<ObJsonString *>(arg_node);
-        max_result_len += arg_str->get_str().length();
-      } else {
+      ObString arg_value;
+      if (OB_ISNULL(arg_node) || arg_node->json_type() == ObJsonNodeType::J_NULL) {
         ret = OB_INVALID_ARGUMENT;
+      } else if (arg_node->json_type() == ObJsonNodeType::J_STRING) {
+        arg_value = static_cast<ObJsonString *>(arg_node)->get_str();
+      } else if (OB_FAIL(arg_node->get_raw_binary(arg_value, &allocator))) {
+      }
+      if (OB_SUCC(ret) && OB_FAIL(arg_values.push_back(arg_value))) {
       }
     }
+  }
+
+  if (OB_SUCC(ret)) {
+    const char *template_ptr = template_str.ptr();
+    const int64_t template_len = template_str.length();
+    const int64_t args_count = args_array->element_count();
+    int64_t max_result_len = 0;
+    // Size the output for the real replacement, including repeated placeholders.
+    for (int64_t i = 0; i < template_len && OB_SUCC(ret); ) {
+      if (template_ptr[i] == '{' && i + 1 < template_len &&
+          template_ptr[i + 1] >= '0' && template_ptr[i + 1] <= '9') {
+        int64_t j = i + 1;
+        int64_t index = 0;
+        bool valid = true;
+        while (j < template_len && template_ptr[j] >= '0' && template_ptr[j] <= '9') {
+          if (index > (INT64_MAX - 9) / 10) {
+            valid = false;
+          } else {
+            index = index * 10 + (template_ptr[j] - '0');
+          }
+          j++;
+        }
+        if (j < template_len && template_ptr[j] == '}' && valid && index < args_count) {
+          max_result_len += arg_values.at(index).length();
+          i = j + 1;
+        } else if (j < template_len && template_ptr[j] == '}' && valid) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: invalid placeholder index");
+        } else {
+          max_result_len += 1;
+          i++;
+        }
+      } else {
+        max_result_len += 1;
+        i++;
+      }
+    }
+
+    char *result_buf = NULL;
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(result_buf = static_cast<char *>(allocator.alloc(max_result_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       int64_t result_pos = 0;
-      const char *template_ptr = template_str.ptr();
-      int64_t template_len = template_str.length();
-      
-      for (int64_t i = 0; i < template_len && OB_SUCC(ret); i++) {
-        if (template_ptr[i] == '{') {
-          int64_t start_pos = i;
-          int64_t end_pos = start_pos;
-          bool found_end = false;
-          
-          for (int64_t j = start_pos + 1; j < template_len && !found_end; j++) {
-            if (template_ptr[j] == '}') {
-              end_pos = j;
-              found_end = true;
-            } else if (template_ptr[j] < '0' || template_ptr[j] > '9') {
-              break;
-            }
-          }
-          
-          if (found_end && end_pos > start_pos + 1) {
-            ObString index_str;
-            index_str.assign_ptr(template_ptr + start_pos + 1, static_cast<int32_t>(end_pos - start_pos - 1));
-            
-            int64_t index = 0;
-            bool valid_index = true;
-            for (int64_t k = 0; k < index_str.length() && valid_index; k++) {
-              if (index_str.ptr()[k] >= '0' && index_str.ptr()[k] <= '9') {
-                index = index * 10 + (index_str.ptr()[k] - '0');
-              } else {
-                valid_index = false;
-              }
-            }
-            
-            if (valid_index && index >= 0 && static_cast<uint64_t>(index) < args_count) {
-              ObJsonNode *arg_node = args_array->get_value(static_cast<uint64_t>(index));
-              if (OB_NOT_NULL(arg_node) && arg_node->json_type() == ObJsonNodeType::J_STRING) {
-                ObJsonString *arg_str = static_cast<ObJsonString *>(arg_node);
-                ObString arg_value = arg_str->get_str();
-                
-                if (result_pos + arg_value.length() <= max_result_len) {
-                  MEMCPY(result_buf + result_pos, arg_value.ptr(), arg_value.length());
-                  result_pos += arg_value.length();
-                } else {
-                  ret = OB_BUF_NOT_ENOUGH;
-                }
-              } else {
-                //do nothing
-              }
-              
-              i = end_pos;
+      for (int64_t i = 0; i < template_len && OB_SUCC(ret); ) {
+        if (template_ptr[i] == '{' && i + 1 < template_len &&
+            template_ptr[i + 1] >= '0' && template_ptr[i + 1] <= '9') {
+          int64_t j = i + 1;
+          int64_t index = 0;
+          bool valid = true;
+          while (j < template_len && template_ptr[j] >= '0' && template_ptr[j] <= '9') {
+            if (index > (INT64_MAX - 9) / 10) {
+              valid = false;
             } else {
-              ret = OB_INVALID_ARGUMENT;
-              LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: invalid placeholder index");
+              index = index * 10 + (template_ptr[j] - '0');
             }
-          } else {
-            if (result_pos < max_result_len) {
-              result_buf[result_pos++] = template_ptr[i];
+            j++;
+          }
+          if (j < template_len && template_ptr[j] == '}' && valid && index < args_count) {
+            const ObString &arg_value = arg_values.at(index);
+            if (result_pos + arg_value.length() <= max_result_len) {
+              MEMCPY(result_buf + result_pos, arg_value.ptr(), arg_value.length());
+              result_pos += arg_value.length();
             } else {
               ret = OB_BUF_NOT_ENOUGH;
             }
+            i = j + 1;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: invalid placeholder index");
           }
         } else {
-          if (result_pos < max_result_len) {
-            result_buf[result_pos++] = template_ptr[i];
-          } else {
-            ret = OB_BUF_NOT_ENOUGH;
-          }
+          result_buf[result_pos++] = template_ptr[i++];
         }
       }
-      
       if (OB_SUCC(ret)) {
         replaced_prompt_str.assign_ptr(result_buf, static_cast<int32_t>(result_pos));
       }
