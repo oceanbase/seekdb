@@ -110,7 +110,16 @@ int ObSQLParser::parse(const char * str_ptr, const int64_t str_len, ParseResult 
           // secure_file_priv, *and* under SEEKDB_FILE_SQL_ROOT if set.
           native_file_sql::ScopedFileSqlSecurity scope(allowed_root);
           if(!native_file_sql::rewrite(to_rewrite,rewritten,error)) {
-            ret=OB_INVALID_ARGUMENT;
+            // Preserve MySQL-compatible error classes for public File SQL:
+            // positional option syntax -> 1064; unsupported sample_size -> 1235.
+            if(error.find("file table function options must be named")
+               !=std::string::npos) {
+              ret=OB_ERR_PARSE_SQL;
+            } else if(error.find("sample_size")!=std::string::npos) {
+              ret=OB_NOT_SUPPORTED;
+            } else {
+              ret=OB_INVALID_ARGUMENT;
+            }
             valid=false;
             LOG_WARN("file SQL rewrite rejected","detail",error.c_str());
           }

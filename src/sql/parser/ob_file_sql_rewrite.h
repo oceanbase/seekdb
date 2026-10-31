@@ -1686,7 +1686,9 @@ inline bool file_options(const std::string &sql,size_t &at,
 
 inline bool source_sql(const std::string &type,const std::string &path,
                        const FileReadOptions &opts,
-                       std::string &target,std::string &err) {
+                       std::string &target,std::string &err,
+                       std::vector<std::string> *returned_names=nullptr,
+                       std::vector<std::string> *returned_types=nullptr) {
   std::string doc;
   std::vector<std::string> names,types;
   if(type=="glob") {
@@ -1724,6 +1726,8 @@ inline bool source_sql(const std::string &type,const std::string &path,
     }
   }
   if(doc.size()>MAX_RESULT_BYTES){err="source result exceeds 2 MiB";return false;}
+  if(returned_names!=nullptr)*returned_names=names;
+  if(returned_types!=nullptr)*returned_types=types;
   target="JSON_TABLE("+sql_quote(doc)+", '$[*]' COLUMNS (";
   for(size_t i=0;i<names.size();++i) {
     if(i)target+=", ";
@@ -1897,61 +1901,201 @@ inline bool copy_table_name(const std::string &s,size_t &p,
   }
   return true;
 }
-inline bool copy_options(const std::string &s,size_t &p,std::string &err) {
+
+struct CopyCsvOptions {
+  bool header;
+  bool nullstr;
+  std::string null_text;
+  CopyCsvOptions():header(false),nullstr(false),null_text(){}
+};
+inline bool copy_options(const std::string &s,size_t &p,CopyCsvOptions &options,
+                         std::string &err) {
   copy_skip_ws(s,p);
-  if (copy_word(s,p,"with"))copy_skip_ws(s,p);
+  if(copy_word(s,p,"with"))copy_skip_ws(s,p);
   if(p<s.size() && s[p]=='(') {
     ++p;
+    std::vector<std::string> seen;
     for(;;) {
       copy_skip_ws(s,p);
       if(p<s.size() && s[p]==')') {++p;break;}
       const size_t start=p;
       while(p<s.size() && id_char(s[p]))++p;
       const std::string name=lower(s.substr(start,p-start));
+      if(name.empty()) {
+        err="invalid COPY option";return false;
+      }
+      if(std::find(seen.begin(),seen.end(),name)!=seen.end()) {
+        err="duplicate COPY option: "+name;return false;
+      }
+      seen.push_back(name);
       copy_skip_ws(s,p);
       if(p<s.size() && s[p]=='=') {++p;copy_skip_ws(s,p);}
       if(name=="format") {
         if(!copy_word(s,p,"csv")) {
-          err="COPY currently supports CSV format only";
-          return false;
+          err="COPY supports CSV only";return false;
         }
       } else if(name=="header") {
-        if(copy_word(s,p,"false") || copy_word(s,p,"off")) {
-        } else {
-          err="COPY HEADER TRUE is not yet supported by seekdb native exporter";
-          return false;
+        const size_t saved=p;
+        if(copy_word(s,p,"false") || copy_word(s,p,"off") ||
+           copy_word(s,p,"0"))options.header=false;
+        else if(copy_word(s,p,"true") || copy_word(s,p,"on") ||
+                copy_word(s,p,"1"))options.header=true;
+        else {
+          // SQL syntax (FORMAT CSV, HEADER) means HEADER TRUE.
+          p=saved;
+          options.header=true;
         }
+      } else if(name=="nullstr") {
+        if(!parse_quoted_path(s,p,options.null_text) ||
+           options.null_text.size()>256) {
+          err="COPY NULLSTR must be quoted and <= 256 bytes";return false;
+        }
+        options.nullstr=true;
       } else if(name=="delimiter") {
-        std::string delimiter;
-        if(!parse_quoted_path(s,p,delimiter) || delimiter!=",") {
-          err="COPY currently requires comma delimiter";
-          return false;
+        std::string value;
+        if(!parse_quoted_path(s,p,value) || value!=",") {
+          err="COPY currently requires comma delimiter";return false;
         }
       } else {
-        err="unsupported COPY option: "+name;
-        return false;
+        err="unsupported COPY option: "+name;return false;
       }
       copy_skip_ws(s,p);
-      if(p<s.size() && s[p]==',') ++p;
+      if(p<s.size() && s[p]==',')++p;
       else if(p<s.size() && s[p]!=')') {
-        err="invalid COPY option separator";
-        return false;
+        err="invalid COPY option separator";return false;
       }
     }
-  } else if (copy_word(s,p,"format")) {
+  } else if(copy_word(s,p,"format")) {
     if(!copy_word(s,p,"csv")) {
-      err="COPY currently supports CSV format only";
-      return false;
+      err="COPY supports CSV only";return false;
     }
   }
   copy_skip_ws(s,p);
   if(p<s.size() && s[p]==';') {++p;copy_skip_ws(s,p);}
   if(p!=s.size()) {
-    err="unsupported trailing COPY tokens";
-    return false;
+    err="unsupported trailing COPY tokens";return false;
   }
   return true;
 }
+// Bounded projection extractor. Supports plain projected columns and
+// explicit aliases; doesn't invent column names for arbitrary expressions.
+inline bool copy_query_column_names(const std::string &query,
+                                    std::vector<std::string> &names,
+                                    std::string &err) {
+  size_t pos=0;
+  if(!copy_word(query,pos,"select")) {
+    err="COPY with a CSV header requires a SELECT query";return false;
+  }
+  const size_t projection_start=pos;
+  size_t end=query.size(),depth=0;
+  char quote=0;
+  bool is_from=false;
+  for(size_t i=pos;i<query.size();++i) {
+    const char c=query[i];
+    if(quote) {
+      if(c=='\\' && i+1<query.size())++i;
+      else if(c==quote && i+1<query.size() && query[i+1]==quote)++i;
+      else if(c==quote)quote=0;
+    } else if(c=='\'' || c=='"' || c=='`') quote=c;
+    else if(c=='(')++depth;
+    else if(c==')' && depth>0)--depth;
+    else if(depth==0 && i+4<=query.size() &&
+            lower(query.substr(i,4))=="from" &&
+            (i==0 || !id_char(query[i-1])) &&
+            (i+4==query.size() || !id_char(query[i+4]))) {
+      end=i;is_from=true;break;
+    }
+  }
+  if(!is_from){err="COPY needs SELECT ... FROM";return false;}
+  const std::string projected=query.substr(projection_start,end-projection_start);
+  std::vector<std::string> items;
+  size_t start=0;
+  depth=0;quote=0;
+  for(size_t i=0;i<=projected.size();++i) {
+    if(i==projected.size() || (projected[i]==',' && depth==0 && quote==0)){
+      items.push_back(trim(projected.substr(start,i-start)));
+      start=i+1;continue;
+    }
+    const char c=projected[i];
+    if(quote) {
+      if(c=='\\' && i+1<projected.size())++i;
+      else if(c==quote && i+1<projected.size() && projected[i+1]==quote)++i;
+      else if(c==quote)quote=0;
+    }else if(c=='\'' || c=='"' || c=='`')quote=c;
+    else if(c=='(')++depth;
+    else if(c==')' && depth>0)--depth;
+  }
+  if(items.empty() || items.size()>256){
+    err="COPY CSV header projection count is unsupported";return false;
+  }
+  for(size_t i=0;i<items.size();++i) {
+    const std::string field=items[i];
+    std::string name=field;
+    // Alias via a standalone "AS" token; otherwise use last dotted part.
+    size_t as_pos=std::string::npos;
+    const std::string low=lower(field);
+    for(size_t at=0;at+2<=field.size();++at)
+      if(low.compare(at,2,"as")==0 &&
+         (at==0 || space(field[at-1])) &&
+         (at+2==field.size() || space(field[at+2])))
+        as_pos=at;
+    if(as_pos!=std::string::npos)name=trim(field.substr(as_pos+2));
+    else {
+      const size_t dot=field.rfind('.');
+      if(dot!=std::string::npos)name=trim(field.substr(dot+1));
+    }
+    if(name.size()>=2 && name.front()=='`' && name.back()=='`')
+      name=name.substr(1,name.size()-2);
+    if(name.empty() || !id_start(name[0])) {
+      err="COPY CSV HEADER needs named SELECT columns";return false;
+    }
+    for(size_t j=1;j<name.size();++j)
+      if(!id_char(name[j])){
+        err="COPY CSV HEADER requires simple column names or explicit AS";
+        return false;
+      }
+    names.push_back(name);
+  }
+  return true;
+}
+// COPY with CSV headers/NULL text uses the *native* SELECT INTO OUTFILE
+// operator. Header is synthesized by UNION ALL; never writes files here.
+inline bool copy_header_output(const std::string &query,const std::string &target,
+                               const CopyCsvOptions &options,
+                               std::string &rewritten,std::string &err) {
+  std::vector<std::string> names;
+  if(!copy_query_column_names(query,names,err))return false;
+  std::string head="SELECT 0 AS __seekdb_copy_sort";
+  std::string body="SELECT 1 AS __seekdb_copy_sort";
+  std::string output_fields;
+  for(size_t i=0;i<names.size();++i) {
+    const std::string c="__seekdb_copy_c"+std::to_string(i);
+    const std::string col="__seekdb_copy_src."+sql_identifier(names[i]);
+    if(i>0)output_fields+=", ";
+    output_fields+=sql_identifier(c);
+    head+=", "+sql_quote(names[i])+" AS "+sql_identifier(c);
+    // Use explicit NULL text when provided; for header-only mode retain
+    // the native exporter’s default SQL NULL representation.
+    body+=", ";
+    if(options.nullstr)
+      body+="COALESCE(CAST("+col+" AS CHAR),"+
+            sql_quote(options.null_text)+")";
+    else
+      body+=col;
+    body+=" AS "+sql_identifier(c);
+  }
+  body+=" FROM ("+query+") AS __seekdb_copy_src";
+  const std::string inner=options.header?head+" UNION ALL "+body:body;
+  rewritten="SELECT "+output_fields+
+      " INTO OUTFILE "+sql_quote(target)+
+      " FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' "
+      "ESCAPED BY '\"' LINES TERMINATED BY '\\n' "
+      "FROM ("+inner+") AS __seekdb_copy_rows";
+  if(options.header)
+    rewritten+=" ORDER BY __seekdb_copy_sort, __seekdb_copy_c0";
+  return true;
+}
+
 inline bool rewrite_copy(const std::string &sql,std::string &rewritten,
                          std::string &err,bool &matched) {
   matched=false;
@@ -1980,17 +2124,27 @@ inline bool rewrite_copy(const std::string &sql,std::string &rewritten,
     err="COPY requires a single-quoted file path";
     return false;
   }
-  if(!copy_options(sql,p,err))return false;
+  CopyCsvOptions opts;
+  if(!copy_options(sql,p,opts,err))return false;
   if(output) {
     std::string target;
     if(!copy_output_path(path,target,err))return false;
-    const std::string from_expr=source_query?
-        "("+source+") AS __seekdb_copy_src":source;
-    // INTO OUTFILE must occur before FROM in the seekdb MySQL grammar.
-    rewritten="SELECT * INTO OUTFILE "+sql_quote(target)+
-        " FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' "
-        "ESCAPED BY '\"' LINES TERMINATED BY '\\n' FROM "+
-        from_expr;
+    if(opts.header || opts.nullstr) {
+      if(!source_query) {
+        err="COPY HEADER/NULLSTR requires a SELECT query in this implementation";
+        return false;
+      }
+      if(!copy_header_output(source,target,opts,rewritten,err))
+        return false;
+    } else {
+      const std::string from_expr=source_query?
+          "("+source+") AS __seekdb_copy_src":source;
+      // INTO OUTFILE must occur before FROM in the seekdb MySQL grammar.
+      rewritten="SELECT * INTO OUTFILE "+sql_quote(target)+
+          " FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' "
+          "ESCAPED BY '\"' LINES TERMINATED BY '\\n' FROM "+
+          from_expr;
+    }
   } else {
     std::string source_file;
     if(!resolve_file(path,source_file,err))return false;
@@ -2010,9 +2164,84 @@ inline bool rewrite_copy(const std::string &sql,std::string &rewritten,
   return true;
 }
 
+
+// DESCRIBE SELECT * FROM read_*() exposes the file's inferred columns
+// as ordinary SQL rows. It never asks an external SQL engine to run the query.
+inline bool rewrite_describe_file(const std::string &sql,std::string &out,
+                                  std::string &err,bool &matched) {
+  matched=false;
+  size_t p=0;
+  const bool prefix=copy_word(sql,p,"describe") || copy_word(sql,p,"desc");
+  if(!prefix)return true;
+  if(!copy_word(sql,p,"select"))return true; // preserve DESCRIBE table
+  matched=true;
+  copy_skip_ws(sql,p);
+  if(p>=sql.size() || sql[p]!='*'){
+    err="DESCRIBE SELECT supports SELECT * projection only";return false;
+  }
+  ++p;
+  if(!copy_word(sql,p,"from")){
+    err="DESCRIBE SELECT requires FROM";return false;
+  }
+  copy_skip_ws(sql,p);
+  const size_t start=p;
+  while(p<sql.size() && id_char(sql[p]))++p;
+  const std::string function=lower(sql.substr(start,p-start));
+  if(function!="read_csv" && function!="read_json" &&
+     function!="read_ndjson" && function!="read_parquet" &&
+     function!="glob"){
+    err="DESCRIBE SELECT requires a supported file table function";
+    return false;
+  }
+  copy_skip_ws(sql,p);
+  if(p>=sql.size() || sql[p]!='('){
+    err="DESCRIBE SELECT requires a file path";return false;
+  }
+  ++p;copy_skip_ws(sql,p);
+  std::string path;
+  if(!parse_quoted_path(sql,p,path)){
+    err="DESCRIBE SELECT requires a constant local path";return false;
+  }
+  FileReadOptions options;
+  if(!file_options(sql,p,function,options,err))return false;
+  if(p>=sql.size() || sql[p]!=')'){
+    err="DESCRIBE SELECT has unterminated file table function";
+    return false;
+  }
+  ++p;copy_skip_ws(sql,p);
+  if(copy_word(sql,p,"as"))copy_skip_ws(sql,p);
+  // Optionally consume one table alias.
+  if(p<sql.size() && id_start(sql[p])) {
+    while(p<sql.size() && id_char(sql[p]))++p;
+    copy_skip_ws(sql,p);
+  }
+  if(p<sql.size() && sql[p]==';'){++p;copy_skip_ws(sql,p);}
+  if(p!=sql.size()) {
+    err="DESCRIBE SELECT supports only a single file table source";
+    return false;
+  }
+  std::string source;
+  std::vector<std::string> names,types;
+  if(!source_sql(function,path,options,source,err,&names,&types))return false;
+  if(names.empty() || names.size()!=types.size()){
+    err="file table has no describable columns";return false;
+  }
+  out.clear();
+  for(size_t i=0;i<names.size();++i){
+    if(i)out+=" UNION ALL ";
+    out+="SELECT "+sql_quote(names[i])+" AS column_name, "+
+      sql_quote(types[i])+" AS column_type, 'YES' AS `null`, "+
+      "NULL AS `key`, NULL AS `default`, NULL AS `extra`";
+  }
+  return true;
+}
+
 inline bool rewrite(const std::string &sql,std::string &out,std::string &err) {
   out.clear();
   if(sql.size()>MAX_RESULT_BYTES){err="SQL exceeds file scan limit";return false;}
+  bool is_describe=false;
+  if(!rewrite_describe_file(sql,out,err,is_describe))return false;
+  if(is_describe)return true;
   bool is_copy=false;
   std::string copy_sql;
   if(!rewrite_copy(sql,copy_sql,err,is_copy))return false;
