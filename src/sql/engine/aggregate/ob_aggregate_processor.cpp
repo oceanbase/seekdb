@@ -1158,16 +1158,23 @@ int ObAggregateProcessor::HybridHistExtraResult::finish_add_sort_row()
 }
 
 int ObAggregateProcessor::HybridHistExtraResult::add_material_row(
-    const ObDatum *src_datums,
-    const int64_t datum_cnt,
+    const ObChunkDatumStore::StoredRow &src_row,
     const int64_t extra_size,
     const ObChunkDatumStore::StoredRow *&store_row)
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(mat_op_)) {
-    if (OB_FAIL(mat_op_->add_row(src_datums, datum_cnt, extra_size, store_row))) {
+    // Hybrid histogram has exactly one endpoint column. The legacy material
+    // input copies this single local descriptor synchronously; neither the
+    // descriptor nor an array view of packed stored cells can escape.
+    if (OB_UNLIKELY(src_row.cnt_ != 1)) {
+      ret = OB_INVALID_ARGUMENT;
     } else {
-      ++material_row_count_;
+      const ObDatum endpoint = StoredDatumCodec::decode_legacy_view(src_row.stored_cells()[0]);
+      if (OB_FAIL(mat_op_->add_row(&endpoint, 1, extra_size, store_row))) {
+      } else {
+        ++material_row_count_;
+      }
     }
   }
   return ret;
@@ -1248,12 +1255,12 @@ int ObAggrInfo::eval_aggr(ObChunkDatumStore::ShadowStoredRow &curr_row_results,
                   KPC(store_row), K(param_exprs_.count()));
     } else {
       ObDatum *datum = nullptr;
-      ObDatum *cells = store_row->cells();
+      StoredDatumCell *cells = store_row->stored_cells();
       store_row->cnt_ = param_exprs_.count();
       for (int64_t i = 0; OB_SUCC(ret) && i < param_exprs_.count(); i++) {
         if (OB_FAIL(param_exprs_.at(i)->eval(ctx, datum))) {
         } else {
-          cells[i] = *datum;
+          cells[i] = StoredDatumCodec::encode_legacy_view(*datum);
         }
       }
     }
@@ -1623,7 +1630,7 @@ int ObAggregateProcessor::process(GroupRow &group_row, bool is_prepare)
       if (OB_INVALID_INDEX_INT64 == aggr_code_idx_) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        aggr_code = group_row.groupby_store_row_->cells()[aggr_code_idx_].get_int();
+        aggr_code = StoredDatumCodec::decode_legacy_view(group_row.groupby_store_row_->stored_cells()[aggr_code_idx_]).get_int();
       }
     }
     if (OB_SUCC(ret) && -1 != aggr_code) {
@@ -1800,7 +1807,7 @@ int ObAggregateProcessor::inner_process_three_stage_batch(GroupRow &group_row, T
     ret = OB_ERR_UNEXPECTED;
   } else if (ObThreeStageAggrStage::SECOND_STAGE == aggr_stage_) {
     // only process one group and only process one aggregate function
-    aggr_code = group_row.groupby_store_row_->cells()[aggr_code_idx_].get_int();
+    aggr_code = StoredDatumCodec::decode_legacy_view(group_row.groupby_store_row_->stored_cells()[aggr_code_idx_]).get_int();
   }
   if (OB_FAIL(ret)) {
   } else if (aggr_code < distinct_aggr_count_) {
@@ -2216,7 +2223,7 @@ int ObAggregateProcessor::process_aggr_result_from_distinct(
         } else {
         }
         break;
-      } else if (OB_ISNULL(stored_row) || OB_ISNULL(stored_row->cells())) {
+      } else if (OB_ISNULL(stored_row) || OB_ISNULL(stored_row->stored_cells())) {
         ret = OB_ERR_UNEXPECTED;
       } else {
         if (is_first) {
@@ -2977,7 +2984,7 @@ int ObAggregateProcessor::rollup_distinct(const ObAggrInfo &aggr_info,
           } else {
           }
           break;
-        } else if (OB_ISNULL(stored_row) || OB_ISNULL(stored_row->cells())) {
+        } else if (OB_ISNULL(stored_row) || OB_ISNULL(stored_row->stored_cells())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(rollup_result->insert_row(aggr_info.param_exprs_))) {
         }
@@ -2988,7 +2995,7 @@ int ObAggregateProcessor::rollup_distinct(const ObAggrInfo &aggr_info,
           } else {
           }
           break;
-        } else if (OB_ISNULL(stored_row) || OB_ISNULL(stored_row->cells())) {
+        } else if (OB_ISNULL(stored_row) || OB_ISNULL(stored_row->stored_cells())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(rollup_result->unique_sort_op_->add_stored_row(*stored_row))) {
         }
@@ -3024,7 +3031,7 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
       case T_FUN_COUNT: {
         bool has_null = false;
         for (int64_t i = 0; !has_null && i < stored_row.cnt_; ++i) {
-          has_null = stored_row.cells()[i].is_null();
+          has_null = stored_row.stored_cells()[i].is_null();
         }
         if (!has_null) {
           aggr_cell.inc_row_count();
@@ -3037,15 +3044,15 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
         if (OB_UNLIKELY(stored_row.cnt_ != 1)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("curr_row_results count is not 1", K(stored_row));
-        } else if (!stored_row.cells()[0].is_null()) {
+        } else if (!stored_row.stored_cells()[0].is_null()) {
           if (aggr_fun == T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE) {
-            if (OB_UNLIKELY(stored_row.cells()[0].len_ < get_llc_size())) {
+            if (OB_UNLIKELY(stored_row.stored_cells()[0].len_ < get_llc_size())) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("invalid argument length", K(ret), K(stored_row.cells()[0].len_));
+              LOG_WARN("invalid argument length", K(ret), K(stored_row.stored_cells()[0].len_));
             }
           }
           if (OB_SUCC(ret)) {
-            ret = clone_aggr_cell(aggr_cell, stored_row.cells()[0], aggr_info.is_number());
+            ret = clone_aggr_cell(aggr_cell, StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]), aggr_info.is_number());
           }
         }
         break;
@@ -3059,8 +3066,8 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
         if (OB_UNLIKELY(stored_row.cnt_ != 1)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("curr_row_results count is not 1", K(stored_row));
-        } else if (!stored_row.cells()[0].is_null()) {
-          ret = prepare_add_calc(stored_row.cells()[0], aggr_cell, aggr_info);
+        } else if (!stored_row.stored_cells()[0].is_null()) {
+          ret = prepare_add_calc(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]), aggr_cell, aggr_info);
         } else {
           removal_info_.null_cnt_++;
         }
@@ -3209,7 +3216,7 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
       } else if (extra->topk_fre_hist_.is_need_merge_topk_hist()) {
         DatumValue value;
         const SqlTypeMeta &meta = aggr_info.param_exprs_.at(0)->obj_meta_;
-        if (OB_FAIL(ResultRowView::project_value(stored_row.cells()[0], meta,
+        if (OB_FAIL(ResultRowView::project_value(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]), meta,
                 ObDatum::get_sql_value_datum_map_type(meta.get_type()), SqlTypeMeta(), value, true))) {
         } else if (OB_FAIL(extra->topk_fre_hist_.merge_distribute_top_k_fre_items(value))) {
         }
@@ -3218,15 +3225,15 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
         const SqlTypeMeta obj_meta = aggr_info.param_exprs_.at(0)->obj_meta_;
         ObDatum new_prev_datum;
         if (!obj_meta.is_lob_storage() &&
-            OB_FAIL(shadow_truncate_string_for_hist(obj_meta, const_cast<ObDatum &>(stored_row.cells()[0])))) {
+            OB_FAIL(shadow_truncate_stored_string_for_hist(obj_meta, stored_row, 0))) {
         } else if (obj_meta.is_lob_storage() &&
                    OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                               obj_meta,
-                                                                              stored_row.cells()[0],
+                                                                              StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]),
                                                                               new_prev_datum,
                                                                               datum_access_ctx_))) {
         } else {
-          const ObDatum &datum = obj_meta.is_lob_storage() ? new_prev_datum : stored_row.cells()[0];
+          const ObDatum datum = obj_meta.is_lob_storage() ? new_prev_datum : StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]);
           ObExprHashFuncType hash_func = aggr_info.param_exprs_.at(0)->basic_funcs_->murmur_hash_;
           uint64_t datum_value = 0;
           if (OB_FAIL(hash_func(datum, datum_value, datum_value, datum_access_ctx_))) {
@@ -3242,8 +3249,8 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
       if (OB_UNLIKELY(stored_row.cnt_ != 1)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
-      } else if (!stored_row.cells()[0].is_null()) {
-        aggr_cell.set_tiny_num_uint(stored_row.cells()[0].get_uint());
+      } else if (!stored_row.stored_cells()[0].is_null()) {
+        aggr_cell.set_tiny_num_uint(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]).get_uint());
       } else {
         // if first value is null, set agg result to default value
         uint64_t init_val = aggr_fun == T_FUN_SYS_BIT_AND ? UINT_MAX_VAL[ObUInt64Type] : 0;
@@ -3254,12 +3261,14 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
     }
     case T_FUN_SUM_OPNSIZE: {
       int64_t size = 0;
+      ObDatum input;
       if (OB_UNLIKELY(stored_row.cnt_ != 1) ||
           OB_ISNULL(param_exprs) ||
           OB_UNLIKELY(param_exprs->count() != 1)) {
         ret = OB_INVALID_ARGUMENT;
+      } else if (FALSE_IT(input = StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]))) {
       } else if (OB_FAIL(ObExprSysOpOpnsize::calc_sys_op_opnsize(param_exprs->at(0),
-                                                                 &stored_row.cells()[0],
+                                                                 &input,
                                                                  size))) {
       } else {
         aggr_cell.set_tiny_num_int(size);
@@ -3501,7 +3510,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
     case T_FUN_COUNT: {
       bool has_null = false;
       for (int64_t i = 0; !has_null && i < stored_row.cnt_; ++i) {
-        has_null = stored_row.cells()[i].is_null();
+        has_null = stored_row.stored_cells()[i].is_null();
       }
       if (!has_null) {
         if (!removal_info_.is_inv_aggr_) {
@@ -3516,9 +3525,9 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
       if (OB_UNLIKELY(stored_row.cnt_ != 1)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
-      } else if (!stored_row.cells()[0].is_null()) {
+      } else if (!stored_row.stored_cells()[0].is_null()) {
         ret = max_calc(aggr_cell, aggr_cell.get_iter_result(),
-                       stored_row.cells()[0],
+                       StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]),
                        aggr_info.expr_->basic_funcs_->null_first_cmp_,
                        aggr_info.is_number());
       }
@@ -3528,9 +3537,9 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
       if (OB_UNLIKELY(stored_row.cnt_ != 1)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
-      } else if (!stored_row.cells()[0].is_null()) {
+      } else if (!stored_row.stored_cells()[0].is_null()) {
         ret = min_calc(aggr_cell, aggr_cell.get_iter_result(),
-                       stored_row.cells()[0],
+                       StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]),
                        aggr_info.expr_->basic_funcs_->null_first_cmp_,
                        aggr_info.is_number());
       }
@@ -3545,11 +3554,11 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
       if (OB_UNLIKELY(stored_row.cnt_ != 1)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
-      } else if (!stored_row.cells()[0].is_null()) {
+      } else if (!stored_row.stored_cells()[0].is_null()) {
         if (!removal_info_.is_inv_aggr_) {
-          ret = add_calc(stored_row.cells()[0], aggr_cell, aggr_info);
+          ret = add_calc(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]), aggr_cell, aggr_info);
         } else {
-          ret = sub_calc(stored_row.cells()[0], aggr_cell, aggr_info);
+          ret = sub_calc(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]), aggr_cell, aggr_info);
         }
       } else {
         if (!removal_info_.is_inv_aggr_) {
@@ -3589,7 +3598,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
       } else {
-        ret = llc_add(aggr_cell.get_iter_result(), stored_row.cells()[0]);
+        ret = llc_add(aggr_cell.get_iter_result(), StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]));
       }
       break;
     }
@@ -3641,7 +3650,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
       } else if (extra->topk_fre_hist_.is_need_merge_topk_hist()) {
         DatumValue value;
         const SqlTypeMeta &meta = aggr_info.param_exprs_.at(0)->obj_meta_;
-        if (OB_FAIL(ResultRowView::project_value(stored_row.cells()[0], meta,
+        if (OB_FAIL(ResultRowView::project_value(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]), meta,
                 ObDatum::get_sql_value_datum_map_type(meta.get_type()), SqlTypeMeta(), value, true))) {
         } else if (OB_FAIL(extra->topk_fre_hist_.merge_distribute_top_k_fre_items(value))) {
         }
@@ -3650,15 +3659,15 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         const SqlTypeMeta obj_meta = aggr_info.param_exprs_.at(0)->obj_meta_;
         ObDatum new_prev_datum;
         if (!obj_meta.is_lob_storage() &&
-            OB_FAIL(shadow_truncate_string_for_hist(obj_meta, const_cast<ObDatum &>(stored_row.cells()[0])))) {
+            OB_FAIL(shadow_truncate_stored_string_for_hist(obj_meta, stored_row, 0))) {
         } else if (obj_meta.is_lob_storage() &&
                    OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                               obj_meta,
-                                                                              stored_row.cells()[0],
+                                                                              StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]),
                                                                               new_prev_datum,
                                                                               datum_access_ctx_))) {
         } else {
-          const ObDatum &datum = obj_meta.is_lob_storage() ? new_prev_datum : stored_row.cells()[0];
+          const ObDatum datum = obj_meta.is_lob_storage() ? new_prev_datum : StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]);
           ObExprHashFuncType hash_func = aggr_info.param_exprs_.at(0)->basic_funcs_->murmur_hash_;
           uint64_t datum_value = 0;
           if (OB_FAIL(hash_func(datum, datum_value, datum_value, datum_access_ctx_))) {
@@ -3674,9 +3683,9 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
       if (OB_UNLIKELY(stored_row.cnt_ != 1)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
-      } else if (!stored_row.cells()[0].is_null()) {
+      } else if (!stored_row.stored_cells()[0].is_null()) {
         uint64_t left_uint = aggr_cell.get_tiny_num_uint();
-        uint64_t right_uint = stored_row.cells()[0].get_uint();
+        uint64_t right_uint = StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]).get_uint();
         uint64_t res_uint = 0;
         if (aggr_fun == T_FUN_SYS_BIT_AND) {
           res_uint = left_uint & right_uint;
@@ -3692,12 +3701,14 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
     }
     case T_FUN_SUM_OPNSIZE: {
       int64_t size = 0;
+      ObDatum input;
       if (OB_UNLIKELY(stored_row.cnt_ != 1) ||
           OB_ISNULL(param_exprs) ||
           OB_UNLIKELY(param_exprs->count() != 1)) {
         ret = OB_INVALID_ARGUMENT;
+      } else if (FALSE_IT(input = StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]))) {
       } else if (OB_FAIL(ObExprSysOpOpnsize::calc_sys_op_opnsize(param_exprs->at(0),
-                                                                 &stored_row.cells()[0],
+                                                                 &input,
                                                                  size))) {
       } else {
         int64_t origin_size = aggr_cell.get_tiny_num_int();
@@ -3994,7 +4005,7 @@ int ObAggregateProcessor::collect_aggr_result(
           bool should_skip = false;
           for (int64_t i = 0; !should_skip && i < group_concat_param_count; ++i) {
             // As long as one cell is null, the entire item is skipped
-            should_skip = storted_row->cells()[i].is_null();
+            should_skip = storted_row->stored_cells()[i].is_null();
           }
 
 
@@ -4011,7 +4022,7 @@ int ObAggregateProcessor::collect_aggr_result(
               }
             }
             for (int64_t i = 0; OB_SUCC(ret) && !buf_is_full && i < group_concat_param_count; ++i) {
-              const ObString cell_string = storted_row->cells()[i].get_string();
+              const ObString cell_string = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[i]).get_string();
               int64_t append_len = cell_string.length();
               if (OB_FAIL(extend_concat_str_buf(cell_string, cs_type, pos,
                   group_concat_cur_row_num, append_len, buf_is_full))) {
@@ -4080,7 +4091,7 @@ int ObAggregateProcessor::collect_aggr_result(
             ret = OB_ERR_UNEXPECTED;
           } else {
             ++ row_cnt;
-            if (!storted_row->cells()[obj_idx].is_null()) {
+            if (!storted_row->stored_cells()[obj_idx].is_null()) {
               not_null_start_loc = row_cnt;
             }
           }
@@ -4096,7 +4107,7 @@ int ObAggregateProcessor::collect_aggr_result(
               }
             }
             dest_loc = not_null_start_loc + (total_row_count - not_null_start_loc) / 2;
-        } else if (OB_FAIL(get_percentile_param(aggr_info, storted_row->cells()[param_idx],
+        } else if (OB_FAIL(get_percentile_param(aggr_info, StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[param_idx]),
                                                 not_null_start_loc, total_row_count,
                                                 dest_loc, need_linear_inter,
                                                 factor, allocator))) {
@@ -4120,29 +4131,29 @@ int ObAggregateProcessor::collect_aggr_result(
           } else if (OB_ISNULL(storted_row)) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(linear_inter_calc(aggr_info,
-                                               prev_row.store_row_->cells()[obj_idx],
-                                               storted_row->cells()[obj_idx],
+                                               StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[obj_idx]),
+                                               StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[obj_idx]),
                                                factor, tmp_datum))) {
             LOG_WARN("failed to calc linear inter", K(ret),
-                                                    K(prev_row.store_row_->cells()[obj_idx]),
-                                                    K(storted_row->cells()[obj_idx]),
+                                                    K(StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[obj_idx])),
+                                                    K(StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[obj_idx])),
                                                     K(factor));
           } else if (OB_FAIL(aggr_info.expr_->deep_copy_datum(eval_ctx_, tmp_datum))) {
-            LOG_WARN("clone cell failed", K(ret), K(prev_row.store_row_->cells()[obj_idx]));
+            LOG_WARN("clone cell failed", K(ret), K(StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[obj_idx])));
           } else {
             LOG_DEBUG("get median result", K(factor),
-                                           K(prev_row.store_row_->cells()[obj_idx]),
-                                           K(storted_row->cells()[obj_idx]),
+                                           K(StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[obj_idx])),
+                                           K(StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[obj_idx])),
                                            K(not_null_start_loc),
                                            K(dest_loc),
                                            K(need_linear_inter),
                                            K(result));
           }
         } else if (OB_FAIL(aggr_info.expr_->deep_copy_datum(eval_ctx_,
-                                                    prev_row.store_row_->cells()[obj_idx]))) {
-          LOG_WARN("clone cell failed", K(ret), K(prev_row.store_row_->cells()[obj_idx]));
+                                                    StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[obj_idx])))) {
+          LOG_WARN("clone cell failed", K(ret), K(StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[obj_idx])));
         } else {
-          LOG_DEBUG("get median result", K(prev_row.store_row_->cells()[obj_idx]),
+          LOG_DEBUG("get median result", K(StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[obj_idx])),
                                          K(not_null_start_loc),
                                          K(dest_loc),
                                          K(need_linear_inter),
@@ -5762,7 +5773,7 @@ int ObAggregateProcessor::llc_calc_hash_value(const ObChunkDatumStore::StoredRow
   hash_value = 0;
   for (int64_t i = 0; !has_null_cell && i < stored_row.cnt_ && OB_SUCC(ret); ++i) {
     const ObExpr &expr = *param_exprs.at(i);
-    const ObDatum &datum = stored_row.cells()[i];
+    const ObDatum datum = StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[i]);
     if (datum.is_null()) {
       has_null_cell = true;
     } else {
@@ -5797,8 +5808,8 @@ int ObAggregateProcessor::check_rows_equal(const ObChunkDatumStore::LastStoredRo
         ret = OB_ERR_UNEXPECTED;
       } else {
         int cmp_ret = 0;
-        if (OB_FAIL(aggr_info.sort_cmp_funcs_.at(i).cmp_func_(prev_row.store_row_->cells()[index],
-                                                              cur_row.cells()[index],
+        if (OB_FAIL(aggr_info.sort_cmp_funcs_.at(i).cmp_func_(StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[index]),
+                                                              StoredDatumCodec::decode_legacy_view(cur_row.stored_cells()[index]),
                                                               cmp_ret,
                                                               datum_access_ctx_))) {
         } else {
@@ -6045,9 +6056,9 @@ int ObAggregateProcessor::get_wm_concat_result(const ObAggrInfo &aggr_info,
         ret = OB_ERR_UNEXPECTED;
       }
       if (OB_SUCC(ret)) {
-        if (storted_row->cells()[0].is_null()) {
+        if (storted_row->stored_cells()[0].is_null()) {
         } else {
-          const ObDatum &datum = storted_row->cells()[0];
+          const ObDatum datum = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]);
           const ObDatumMeta &datum_meta = aggr_info.expr_->args_[0]->datum_meta_;
           const bool has_lob_header = aggr_info.expr_->args_[0]->obj_meta_.has_lob_header();
           ObString cell_string;
@@ -6190,7 +6201,7 @@ int ObAggregateProcessor::get_pl_agg_udf_result(const ObAggrInfo &aggr_info,
         ret = OB_ERR_UNEXPECTED;
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < stored_row->cnt_; ++i) {
-          const ObDatum &datum = stored_row->cells()[i];
+          const ObDatum datum = StoredDatumCodec::decode_legacy_view(stored_row->stored_cells()[i]);
           SqlTypeMeta meta = aggr_info.param_exprs_.at(i)->obj_meta_;
           DatumParameter param;
           param.set_datum(datum);
@@ -6302,7 +6313,7 @@ int ObAggregateProcessor::convert_datum_to_values(const ObAggrInfo &aggr_info,
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < stored_row.cnt_; ++i) {
-      new (&values[i]) DatumValue(stored_row.cells()[i], aggr_info.param_exprs_.at(i)->obj_meta_);
+      new (&values[i]) DatumValue(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[i]), aggr_info.param_exprs_.at(i)->obj_meta_);
     }
   }
   return ret;
@@ -6347,9 +6358,9 @@ int ObAggregateProcessor::compute_hybrid_hist_result(const ObAggrInfo &aggr_info
     while (OB_SUCC(ret) && OB_SUCC(extra->get_next_row_from_sort(stored_row))) {
       if (OB_ISNULL(stored_row) || OB_UNLIKELY(stored_row->cnt_ != 1)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (stored_row->cells()[0].is_null()) {
+      } else if (stored_row->stored_cells()[0].is_null()) {
         ++ null_count;
-      } else if (OB_FAIL(shadow_truncate_string_for_hist(obj_meta, const_cast<ObDatum &>(stored_row->cells()[0])))) {
+      } else if (OB_FAIL(shadow_truncate_stored_string_for_hist(obj_meta, *stored_row, 0))) {
       } else if (OB_FAIL(prev_row.save_store_row(*stored_row))) {
       } else {
         repeat_count = 1;
@@ -6364,7 +6375,7 @@ int ObAggregateProcessor::compute_hybrid_hist_result(const ObAggrInfo &aggr_info
       bool is_equal = false;
       if (OB_ISNULL(stored_row) || OB_UNLIKELY(stored_row->cnt_ != 1)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(shadow_truncate_string_for_hist(obj_meta, const_cast<ObDatum &>(stored_row->cells()[0])))) {
+      } else if (OB_FAIL(shadow_truncate_stored_string_for_hist(obj_meta, *stored_row, 0))) {
       } else if (!obj_meta.is_lob_storage() &&
                  OB_FAIL(check_rows_equal(prev_row, *stored_row, aggr_info, is_equal))) {
       } else if (obj_meta.is_lob_storage() &&
@@ -6373,8 +6384,7 @@ int ObAggregateProcessor::compute_hybrid_hist_result(const ObAggrInfo &aggr_info
         ++ repeat_count;
       } else if (OB_ISNULL(prev_row.store_row_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(extra->add_material_row(prev_row.store_row_->cells(),
-                                                 prev_row.store_row_->cnt_,
+      } else if (OB_FAIL(extra->add_material_row(*prev_row.store_row_,
                                                  extra_size, mat_stored_row))) {
       } else if (OB_FAIL(prev_row.save_store_row(*stored_row))) {
       } else if (OB_ISNULL(mat_stored_row)) {
@@ -6398,8 +6408,7 @@ int ObAggregateProcessor::compute_hybrid_hist_result(const ObAggrInfo &aggr_info
       if (prev_row.store_row_ != nullptr) {
         if (OB_ISNULL(prev_row.store_row_)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(extra->add_material_row(prev_row.store_row_->cells(),
-                                                   prev_row.store_row_->cnt_,
+        } else if (OB_FAIL(extra->add_material_row(*prev_row.store_row_,
                                                    extra_size, mat_stored_row))) {
         } else if (OB_ISNULL(mat_stored_row)) {
           ret = OB_ERR_UNEXPECTED;
@@ -6421,6 +6430,26 @@ int ObAggregateProcessor::compute_hybrid_hist_result(const ObAggrInfo &aggr_info
                                                        datum_access_ctx_))) {
       } else if (OB_FAIL(get_hybrid_hist_result(&hybrid_hist, has_lob_header, result))) {
       } else {/*do nothing*/}
+    }
+  }
+  return ret;
+}
+
+int ObAggregateProcessor::shadow_truncate_stored_string_for_hist(const SqlTypeMeta obj_meta,
+    const ObChunkDatumStore::StoredRow &row, const int64_t column)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(column < 0 || column >= row.cnt_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ObDatum datum = StoredDatumCodec::decode_legacy_view(row.stored_cells()[column]);
+    if (OB_FAIL(shadow_truncate_string_for_hist(obj_meta, datum))) {
+    } else {
+      // The old path deliberately shortened the stored descriptor. Subsequent
+      // equality, LastStoredRow copies and materialized endpoints must retain
+      // that change; the row's payload/allocated size are not rewritten.
+      const_cast<StoredDatumCell &>(row.stored_cells()[column]) =
+          StoredDatumCodec::encode_legacy_view(datum);
     }
   }
   return ret;
@@ -6511,7 +6540,7 @@ int ObAggregateProcessor::get_json_arrayagg_result(const ObAggrInfo &aggr_info,
           // Keep the old row conversion's error checks for every cell while
           // retaining only the metadata actually needed by JSON aggregation.
           for (int64_t i = 0; OB_SUCC(ret) && i < storted_row->cnt_; ++i) {
-            const ObDatum &cell = storted_row->cells()[i];
+            const ObDatum cell = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[i]);
             const SqlTypeMeta &meta = aggr_info.param_exprs_.at(i)->obj_meta_;
             if (!cell.is_null() && OB_UNLIKELY(!meta.is_valid()
                 || (meta.is_decimal_int() && meta.get_scale() < 0))) {
@@ -6548,7 +6577,7 @@ int ObAggregateProcessor::get_json_arrayagg_result(const ObAggrInfo &aggr_info,
           scale = (val_type == ObBitType) ? aggr_info.param_exprs_.at(0)->datum_meta_.length_semantics_ : scale;
           ObIJsonBase *json_val = NULL;
           ObDatum converted_datum;
-          converted_datum.set_datum(storted_row->cells()[0]);
+          converted_datum.set_datum(StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]));
           bool has_lob_header = value_meta.has_lob_header();
           // convert string charset if needed
           if (ob_is_string_type(val_type) 
@@ -6659,7 +6688,7 @@ int ObAggregateProcessor::get_ora_json_arrayagg_result(const ObAggrInfo &aggr_in
       if (OB_ISNULL(storted_row) || storted_row->cnt_ < 1) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        const ObDatum& datum = storted_row->cells()[0];
+        const ObDatum datum = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]);
         SqlValueType val_type = data_meta.get_type();
         ObScale scale = data_meta.get_scale();
         ObCollationType cs_type = data_meta.get_collation_type();
@@ -6769,8 +6798,8 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
         if (OB_UNLIKELY(storted_row->cnt_ != aggr_info.param_exprs_.count())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          key_value = DatumValue(storted_row->cells()[0], aggr_info.param_exprs_.at(0)->obj_meta_);
-          const ObDatum &value_datum = storted_row->cells()[1];
+          key_value = DatumValue(StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]), aggr_info.param_exprs_.at(0)->obj_meta_);
+          const ObDatum value_datum = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[1]);
           const SqlTypeMeta &meta = aggr_info.param_exprs_.at(1)->obj_meta_;
           if (!value_datum.is_null() && OB_UNLIKELY(!meta.is_valid()
               || (meta.is_decimal_int() && meta.get_scale() < 0))) {
@@ -6835,7 +6864,7 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
           } else if (OB_FAIL(deep_copy_ob_string(tmp_alloc, key_string, key_data))) {
           } else {
             ObDatum converted_datum;
-            converted_datum.set_datum(storted_row->cells()[1]);
+            converted_datum.set_datum(StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[1]));
             if (ob_is_string_type(val_type1) 
             && (ObCharset::charset_type_by_coll(cs_type1) != CHARSET_UTF8MB4)) {
               ObString origin_str = converted_datum.get_string();
@@ -6862,7 +6891,7 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
               if (OB_ISNULL(json_node_buf)) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
               } else {
-                ObJsonBoolean *bool_node = (ObJsonBoolean*)new(json_node_buf)ObJsonBoolean(storted_row->cells()[1].get_bool());
+                ObJsonBoolean *bool_node = (ObJsonBoolean*)new(json_node_buf)ObJsonBoolean(StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[1]).get_bool());
                 json_val = bool_node;
                 if (OB_FAIL(ObJsonBaseFactory::transform(&tmp_alloc, json_val, ObJsonInType::JSON_BIN, json_val))) {
                 }
@@ -6971,8 +7000,8 @@ int ObAggregateProcessor::get_ora_json_objectagg_result(const ObAggrInfo &aggr_i
           ret = OB_ERR_INVALID_JSON_CHARSET;
           LOG_USER_ERROR(OB_ERR_INVALID_JSON_CHARSET);
         } else {
-          const ObDatum& datum_key = storted_row->cells()[0];
-          const ObDatum& datum_value = storted_row->cells()[1];
+          const ObDatum datum_key = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]);
+          const ObDatum datum_value = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[1]);
 
           SqlValueType type_value = meta_value.get_type();
           ObCollationType cs_type_value = meta_value.get_collation_type();
@@ -7558,7 +7587,7 @@ int ObAggregateProcessor::get_array_agg_result(const ObAggrInfo &aggr_info,
       if (OB_ISNULL(storted_row)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        const ObDatum& datum_val = storted_row->cells()[0];
+        const ObDatum datum_val = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]);
         if (datum_val.is_null()) {
           if (OB_FAIL(arr_obj->push_null())) {
           }
@@ -7611,12 +7640,12 @@ int ObAggregateProcessor::check_rows_prefix_str_equal_for_hybrid_hist(const ObCh
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                             obj_meta,
-                                                                            prev_row.store_row_->cells()[index],
+                                                                            StoredDatumCodec::decode_legacy_view(prev_row.store_row_->stored_cells()[index]),
                                                                             new_prev_datum,
                                                                             datum_access_ctx_)) ||
                  OB_FAIL(ObHybridHistograms::build_prefix_str_datum_for_lob(tmp_alloctor,
                                                                             obj_meta,
-                                                                            cur_row.cells()[index],
+                                                                            StoredDatumCodec::decode_legacy_view(cur_row.stored_cells()[index]),
                                                                             new_cur_datum,
                                                                             datum_access_ctx_))) {
       } else {

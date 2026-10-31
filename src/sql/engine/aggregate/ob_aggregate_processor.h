@@ -531,8 +531,7 @@ public:
     int add_sort_row(const ObChunkDatumStore::StoredRow &sr);
     int get_next_row_from_sort(const ObChunkDatumStore::StoredRow *&sr);
     int finish_add_sort_row();
-    int add_material_row(const ObDatum *src_datums,
-                         const int64_t datum_cnt,
+    int add_material_row(const ObChunkDatumStore::StoredRow &src_row,
                          const int64_t extra_size,
                          const ObChunkDatumStore::StoredRow *&store_row);
     int get_next_row_from_material(const ObChunkDatumStore::StoredRow *&sr);
@@ -1089,6 +1088,11 @@ private:
   int shadow_truncate_string_for_hist(const SqlTypeMeta obj_meta,
                                       ObDatum &datum,
                                       int32_t *origin_str_len = NULL);
+  // Histogram comparison/save/materialization must observe the shortened
+  // stored descriptor. Its payload remains borrowed from the same row.
+  int shadow_truncate_stored_string_for_hist(const SqlTypeMeta obj_meta,
+                                             const ObChunkDatumStore::StoredRow &row,
+                                             const int64_t column);
 
   int check_rows_prefix_str_equal_for_hybrid_hist(const ObChunkDatumStore::LastStoredRow &prev_row,
                                                   const ObChunkDatumStore::StoredRow &cur_row,

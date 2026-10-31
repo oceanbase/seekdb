@@ -42,6 +42,24 @@ cc_test(
 )
 
 cc_library(
+    name = "fixed_aggregate_cells_cases",
+    srcs = ["test_fixed_aggregate_cells.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+cc_test(
+    name = "test_fixed_aggregate_cells",
+    linkstatic = True,
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    deps = [":fixed_aggregate_cells_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
     name = "native_bigint_output_cases",
     srcs = ["test_native_bigint_output.cpp"],
     alwayslink = True,
