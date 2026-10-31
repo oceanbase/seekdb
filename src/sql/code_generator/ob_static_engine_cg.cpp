@@ -4203,7 +4203,10 @@ int ObStaticEngineCG::set_partition_range_info(ObLogTableScan &op, ObTableScanSp
   } else if (OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!table_schema->is_partitioned_table()) {
-    /*do nothing*/
+    // MAX means partition pruning metadata was not prepared. Record the
+    // confirmed physical level so local point-get can distinguish this table
+    // from partitioned/special scans that still have the default sentinel.
+    spec.part_level_ = ObPartitionLevel::PARTITION_LEVEL_ZERO;
   } else if (OB_FAIL(index_schema->get_rowkey_info().get_column_ids(rowkey_column_ids))) {
   } else if (OB_ISNULL(part_expr)) {
     ret = OB_ERR_UNEXPECTED;
