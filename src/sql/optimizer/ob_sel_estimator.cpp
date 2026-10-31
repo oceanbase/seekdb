@@ -2639,6 +2639,73 @@ double ObInequalJoinSelEstimator::get_sel_for_point(double point)
   return range_.is_superset(point_range) ? 1.0 : 0.0;
 }
 
+// Only normalize predicates used for estimation. APPROXIMATE queries skip SQL
+// rewrites, and their execution predicates must retain their original types.
+static int normalize_integer_add_zero(const OptSelectivityCtx &ctx,
+                                      const ObRawExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(ctx.get_params()) && OB_NOT_NULL(ctx.get_opt_ctx().get_exec_ctx()) &&
+      IS_RANGE_CMP_OP(expr->get_expr_type()) && expr->get_param_count() == 2) {
+    const ObRawExpr *left = expr->get_param_expr(0);
+    const ObRawExpr *right = expr->get_param_expr(1);
+    if (OB_ISNULL(left) || OB_ISNULL(right)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (ob_is_int_tc(left->get_data_type()) && ob_is_int_tc(right->get_data_type())) {
+      const bool column_on_left = right->is_static_const_expr();
+      const ObRawExpr *column = column_on_left ? left : right;
+      const ObRawExpr *bound = column_on_left ? right : left;
+      const ObRawExpr *original = column;
+      while (OB_SUCC(ret) && bound->is_static_const_expr() &&
+             T_OP_ADD == column->get_expr_type() &&
+             ObIntType == column->get_data_type() && column->get_param_count() == 2) {
+        const ObRawExpr *a = column->get_param_expr(0);
+        const ObRawExpr *b = column->get_param_expr(1);
+        const ObRawExpr *zero = NULL;
+        const ObRawExpr *next = NULL;
+        if (OB_ISNULL(a) || OB_ISNULL(b)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (!ob_is_int_tc(a->get_data_type()) || !ob_is_int_tc(b->get_data_type())) {
+          break;
+        } else if (b->is_const_raw_expr() && b->is_static_const_expr()) {
+          zero = b;
+          next = a;
+        } else if (a->is_const_raw_expr() && a->is_static_const_expr()) {
+          zero = a;
+          next = b;
+        } else {
+          break;
+        }
+        if (OB_SUCC(ret)) {
+          ObObj value;
+          bool got_value = false;
+          if (OB_FAIL(ObOptEstUtils::get_expr_value(ctx.get_params(), *zero,
+                      ctx.get_opt_ctx().get_exec_ctx(), ctx.get_allocator(), got_value, value))) {
+          } else if (!got_value || !ob_is_int_tc(value.get_type()) || value.get_int() != 0) {
+            break;
+          } else {
+            column = next;
+          }
+        }
+      }
+      // INT + signed zero promotes to BIGINT, but preserves every value and
+      // NULL for integer comparisons. Do not unwrap arbitrary expressions.
+      if (OB_SUCC(ret) && column != original && column->is_column_ref_expr() &&
+          ob_is_int_tc(column->get_data_type())) {
+        ObOpRawExpr *normalized = NULL;
+        if (OB_FAIL(ctx.get_opt_ctx().get_expr_factory().create_raw_expr(expr->get_expr_type(), normalized))) {
+        } else if (OB_FAIL(normalized->assign(*expr))) {
+        } else if (OB_FAIL(normalized->replace_param_expr(
+                    column_on_left ? 0 : 1, const_cast<ObRawExpr *>(column)))) {
+        } else {
+          expr = normalized;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSelEstimatorFactory::create_estimator(const OptSelectivityCtx &ctx,
                                             const ObRawExpr *expr,
                                             ObSelEstimator *&new_estimator)
@@ -2670,6 +2737,7 @@ int ObSelEstimatorFactory::create_estimator(const OptSelectivityCtx &ctx,
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(expr, expr))) {
+  } else if (OB_FAIL(normalize_integer_add_zero(ctx, expr))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && NULL == new_estimator && i < func_cnt; i ++) {
     if (OB_FAIL(create_estimator_funcs[i](*this, ctx, *expr, new_estimator))) {

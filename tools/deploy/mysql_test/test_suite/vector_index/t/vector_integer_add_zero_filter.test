@@ -1,0 +1,63 @@
+# Issue #1538: equivalent integer +0 predicates must retain vector scan plans.
+# More than 20,000 rows are needed to avoid the small-set brute-force branch.
+--disable_query_log
+--disable_warnings
+DROP TABLE IF EXISTS issue1538_vector, issue1538_digits;
+--enable_warnings
+SET @issue1538_saved_ef = @@ob_hnsw_ef_search;
+SET ob_hnsw_ef_search = 16;
+CREATE TABLE issue1538_digits (d INT PRIMARY KEY);
+INSERT INTO issue1538_digits VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+CREATE TABLE issue1538_vector (
+  id BIGINT PRIMARY KEY, embedding VECTOR(3), age INT NOT NULL,
+  INDEX idx_age(age)) ORGANIZATION HEAP;
+INSERT INTO issue1538_vector
+SELECT n, CONCAT('[', n, ',0,0]'), MOD(n,1000)+1 FROM (
+  SELECT a.d+10*b.d+100*c.d+1000*d.d+10000*e.d AS n
+  FROM issue1538_digits a CROSS JOIN issue1538_digits b
+  CROSS JOIN issue1538_digits c CROSS JOIN issue1538_digits d
+  CROSS JOIN issue1538_digits e WHERE e.d < 3) numbers;
+DROP TABLE issue1538_digits;
+CREATE VECTOR INDEX idx_embedding ON issue1538_vector(embedding)
+WITH (distance=l2,type=hnsw,lib=vsag,m=16,ef_construction=128,sync_mode=immediate);
+--disable_result_log
+ANALYZE TABLE issue1538_vector;
+--enable_result_log
+
+--echo # Weak, strong and threshold-adjacent filters retain the canonical vector plan
+let $threshold = 10;
+let $cases = 3;
+while ($cases)
+{
+  let $operator = query_get_value("EXPLAIN BASIC SELECT id FROM issue1538_vector WHERE age > $threshold ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+  let $add_operator = query_get_value("EXPLAIN BASIC SELECT id FROM issue1538_vector WHERE ((age + 0) + 0) > $threshold ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+  let $filter = query_get_value("EXPLAIN SELECT id FROM issue1538_vector WHERE age > $threshold ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+  let $add_filter = query_get_value("EXPLAIN SELECT id FROM issue1538_vector WHERE ((age + 0) + 0) > $threshold ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+  # Compare the operator and estimated cardinality, not the executed filter.
+  eval SELECT LOCATE('VECTOR INDEX', '$operator') > 0 AS uses_vector_index;
+  eval SELECT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$operator', '|', 3), '|', -1)) = TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$add_operator', '|', 3), '|', -1)) AS same_operator;
+  # A scalar index may estimate the canonical range separately, rounding by one row.
+  eval SELECT ABS(CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$filter', '|', 5), '|', -1)) AS SIGNED) - CAST(TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$add_filter', '|', 5), '|', -1)) AS SIGNED)) <= 1 AS equivalent_estimated_rows;
+  let $threshold = 990;
+  if ($cases == 2)
+  {
+    let $threshold = 650;
+  }
+  dec $cases;
+}
+--echo # Commuted additions and reversed comparisons retain the same estimate
+let $base = query_get_value("EXPLAIN SELECT id FROM issue1538_vector WHERE age > 10 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+let $commuted = query_get_value("EXPLAIN SELECT id FROM issue1538_vector WHERE (0 + (0 + age)) > 10 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+let $reversed = query_get_value("EXPLAIN SELECT id FROM issue1538_vector WHERE 10 < ((age + 0) + 0) ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 4);
+eval SELECT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$base', '|', 5), '|', -1)) = TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$commuted', '|', 5), '|', -1)) AS same_commuted_estimate;
+eval SELECT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$base', '|', 5), '|', -1)) = TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX('$reversed', '|', 5), '|', -1)) AS same_reversed_estimate;
+--echo # Normalization for estimation preserves the executed arithmetic
+let $filter = query_get_value("EXPLAIN BASIC SELECT id FROM issue1538_vector WHERE ((age + 0) + 0) > 10 ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 10", Query Plan, 8);
+eval SELECT LOCATE('age + 0 + 0 > 10', '$filter') > 0 AS preserves_execution_filter;
+--echo # ANN still fills Top-K with eligible rows
+SELECT COUNT(*) AS returned_rows, SUM(age <= 10) AS invalid_rows FROM (
+  SELECT id, age FROM issue1538_vector WHERE ((age + 0) + 0) > 10
+  ORDER BY l2_distance(embedding,'[0,0,0]') APPROXIMATE LIMIT 3) matches;
+DROP TABLE issue1538_vector;
+SET ob_hnsw_ef_search = @issue1538_saved_ef;
+--echo # vector integer add-zero filter regression finished
