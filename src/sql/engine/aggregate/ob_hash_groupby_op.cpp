@@ -116,13 +116,14 @@ int ObGroupRowHashTable::likely_equal(
   // so the default %result is true
   int ret = OB_SUCCESS;
   result = true;
-  ObDatum *l_cells = nullptr;
+  const StoredDatumCell *l_cells = nullptr;
   if (!left.is_expr_row_) {
-    l_cells = left.groupby_store_row_->cells();
+    l_cells = left.groupby_store_row_->stored_cells();
   }
   const int64_t group_col_count = cmp_funcs_->count();
   for (int64_t i = 0; result && i < group_col_count; ++i) {
-    ObDatum *l = nullptr;
+    ObDatum stored_left;
+    const ObDatum *l = nullptr;
     ObDatum *r = nullptr;
     if (left.is_expr_row_) {
       ObExpr *e = gby_exprs_->at(i);
@@ -130,7 +131,8 @@ int ObGroupRowHashTable::likely_equal(
         l = &e->locate_expr_datum(*eval_ctx_, left.batch_idx_);
       }
     } else {
-      l = &l_cells[i];
+      stored_left = StoredDatumCodec::decode_legacy_view(l_cells[i]);
+      l = &stored_left;
     }
     // already evaluated when calc hash
     ObExpr *e = gby_exprs_->at(i);

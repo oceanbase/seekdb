@@ -668,7 +668,7 @@ int ObMergeGroupByOp::process_batch(const ObBatchRows &brs)
   int ret = OB_SUCCESS;
   uint32_t group_start_idx = 0;
   uint32_t group_end_idx = 0;
-  ObDatum *prev_cells = nullptr;
+  const StoredDatumCell *prev_cells = nullptr;
   bool found_new_group = false;
   int64_t diff_group_idx = -1;
   int64_t group_count = MY_SPEC.group_exprs_.count();
@@ -706,10 +706,10 @@ int ObMergeGroupByOp::process_batch(const ObBatchRows &brs)
       } else if (OB_ISNULL(cur_group_row_)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        prev_cells = cur_group_row_->groupby_store_row_->cells();
+        prev_cells = cur_group_row_->groupby_store_row_->stored_cells();
       }
       for (int64_t i = 0; OB_SUCC(ret) && !found_new_group && i < all_group_cnt; ++i) {
-        const ObDatum &last_datum = prev_cells[i];
+        const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[i]);
         ObExpr *expr = all_groupby_exprs_.at(i);
         // performance critical: use expr directly NO defensive check
         ObDatum &result = expr->locate_expr_datum(eval_ctx_);
@@ -842,13 +842,13 @@ int ObMergeGroupByOp::check_same_group(
   } else if (OB_ISNULL(cur_group_row->groupby_store_row_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObDatum *prev_cells = nullptr;
+    const StoredDatumCell *prev_cells = nullptr;
     int64_t group_count = MY_SPEC.group_exprs_.count();
     bool found_new_group = false;
     ObDatum *result = nullptr;
-    prev_cells = cur_group_row->groupby_store_row_->cells();
+    prev_cells = cur_group_row->groupby_store_row_->stored_cells();
     for (int64_t i = 0; OB_SUCC(ret) && !found_new_group && i < all_group_cnt; ++i) {
-      const ObDatum &last_datum = prev_cells[i];
+      const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[i]);
       ObExpr *expr = all_groupby_exprs_.at(i);
       // performance critical: use expr directly NO defensive check
       if (OB_FAIL(expr->eval(eval_ctx_, result))) {
@@ -872,7 +872,7 @@ int ObMergeGroupByOp::check_unique_distinct_columns(
 {
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
-  ObDatum *prev_cells = nullptr;
+  const StoredDatumCell *prev_cells = nullptr;
   ObDatum *cur_datum = nullptr;
   is_same_before_row = true;
   if (OB_ISNULL(last_child_output_.store_row_)) {
@@ -880,8 +880,9 @@ int ObMergeGroupByOp::check_unique_distinct_columns(
   } else if (OB_INVALID_INDEX_INT64 == MY_SPEC.aggr_code_idx_) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    prev_cells = last_child_output_.store_row_->cells();
-    ObDatum &aggr_code_datum = cur_group_row->groupby_store_row_->cells()[MY_SPEC.aggr_code_idx_];
+    prev_cells = last_child_output_.store_row_->stored_cells();
+    const ObDatum aggr_code_datum = StoredDatumCodec::decode_legacy_view(
+        cur_group_row->groupby_store_row_->stored_cells()[MY_SPEC.aggr_code_idx_]);
     if (aggr_code_datum.get_int() >= MY_SPEC.dist_aggr_group_idxes_.count()) {
       // non-distinct aggregate function
       is_same_before_row = false;
@@ -892,7 +893,7 @@ int ObMergeGroupByOp::check_unique_distinct_columns(
         if (-1 == distinct_col_idx_in_output_.at(i)) {
           continue;
         }
-        const ObDatum &last_datum = prev_cells[distinct_col_idx_in_output_.at(i)];
+        const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[distinct_col_idx_in_output_.at(i)]);
         ObExpr *expr = MY_SPEC.distinct_exprs_.at(i);
         // performance critical: use expr directly NO defensive check
         if (OB_FAIL(expr->eval(eval_ctx_, cur_datum))) {
@@ -931,7 +932,8 @@ int ObMergeGroupByOp::check_unique_distinct_columns_for_batch(
     is_same_before_row = false;
   } else {
     is_same_before_row = true;
-    ObDatum &aggr_code_datum = cur_group_row_->groupby_store_row_->cells()[MY_SPEC.aggr_code_idx_];
+    const ObDatum aggr_code_datum = StoredDatumCodec::decode_legacy_view(
+        cur_group_row_->groupby_store_row_->stored_cells()[MY_SPEC.aggr_code_idx_]);
     if (aggr_code_datum.get_int() >= MY_SPEC.dist_aggr_group_idxes_.count()) {
       // non-distinct aggregate function
       is_same_before_row = false;
@@ -956,13 +958,13 @@ int ObMergeGroupByOp::check_unique_distinct_columns_for_batch(
       LOG_DEBUG("debug non-distinct aggregate function", K(ret), K(aggr_code_datum.get_int()),
         K(MY_SPEC.dist_aggr_group_idxes_.count()));
     } else if (nullptr != last_child_output_.store_row_) {
-      ObDatum *prev_cells = nullptr;
-      prev_cells = last_child_output_.store_row_->cells();
+      const StoredDatumCell *prev_cells = nullptr;
+      prev_cells = last_child_output_.store_row_->stored_cells();
       for (int64_t i = 0; is_same_before_row && i < distinct_col_idx_in_output_.count() && OB_SUCC(ret); ++i) {
         if (-1 == distinct_col_idx_in_output_.at(i)) {
           continue;
         }
-        const ObDatum &last_datum = prev_cells[distinct_col_idx_in_output_.at(i)];
+        const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[distinct_col_idx_in_output_.at(i)]);
         ObExpr *expr = MY_SPEC.distinct_exprs_.at(i);
         ObDatum &result = expr->locate_expr_datum(eval_ctx_);
         if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
@@ -989,7 +991,7 @@ int ObMergeGroupByOp::restore_groupby_datum(
 {
   int ret = OB_SUCCESS;
   UNUSED(diff_pos);
-  ObDatum *groupby_cells = cur_group_row->groupby_store_row_->cells();
+  const StoredDatumCell *groupby_cells = cur_group_row->groupby_store_row_->stored_cells();
   // it must use the groupby datum
   // bug#32738630, if the column is case insensitive
   //  then the different position is not the case insensitive column,
@@ -997,7 +999,7 @@ int ObMergeGroupByOp::restore_groupby_datum(
   // so the case insensitive is not same if the current group use group values of the current row
   // case: merge_gby_return_prev_gby_col_bug.test
   for (int64_t i = 0; OB_SUCC(ret) && i < all_groupby_exprs_.count(); ++i) {
-    ObDatum &last_datum = groupby_cells[i];
+    const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(groupby_cells[i]);
     ObExpr *expr = all_groupby_exprs_.at(i);
     ObDatum &result = expr->locate_expr_datum(eval_ctx_);
     result.set_datum(last_datum);
