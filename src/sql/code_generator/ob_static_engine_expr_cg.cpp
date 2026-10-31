@@ -581,20 +581,7 @@ void ObStaticEngineExprCG::get_param_frame_idx(const int64_t idx,
                                                int64_t &frame_idx,
                                                int64_t &datum_idx)
 {
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-  int64_t cnt_per_frame = common::MAX_FRAME_SIZE / item_size;
-
-  if (idx < original_param_cnt_) {
-    frame_idx = idx / cnt_per_frame;
-    datum_idx = idx % cnt_per_frame;
-  } else {
-    const int64_t base = original_param_cnt_ <= 0
-        ? 0
-        : (original_param_cnt_ + cnt_per_frame - 1) / cnt_per_frame;
-
-    frame_idx = (idx - original_param_cnt_) / cnt_per_frame + base;
-    datum_idx = (idx - original_param_cnt_) % cnt_per_frame;
-  }
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, idx, frame_idx, datum_idx);
 }
 // Initialize param frame memory layout, no need for res_buf_, when generating param frame, always use dynamically allocated memory;
 // 1. According to param_expr, find the index of this expression in param store
@@ -610,7 +597,7 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
   }
   int64_t frame_idx = 0;
   int64_t datum_idx = 0;
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  const int64_t item_size = ScalarFrameLayout::slot_size();
   for (int64_t i = 0; OB_SUCC(ret) && i < param_exprs.count(); i++) {
     ObExpr *rt_expr = get_rt_expr(*param_exprs.at(i));
     if (T_QUESTIONMARK != rt_expr->type_) {
@@ -624,8 +611,8 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
       } else {
         get_param_frame_idx(param_idx, frame_idx, datum_idx);
         rt_expr->frame_idx_ = frame_index_pos + frame_idx;
-        rt_expr->datum_off_ = datum_idx * item_size;
-        rt_expr->eval_info_off_ = rt_expr->datum_off_ + sizeof(ObDatum);
+        rt_expr->datum_off_ = ScalarFrameLayout::datum_offset(datum_idx);
+        rt_expr->eval_info_off_ = ScalarFrameLayout::eval_info_offset(datum_idx);
         rt_expr->res_buf_off_ = 0;
         rt_expr->res_buf_len_ = 0;
         // For the param expression of T_QUESTIONMARK, use extra_ to record its actual value in
@@ -840,13 +827,13 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
 {
   int ret = OB_SUCCESS;
   if (continuous_datum) {
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    const int64_t item_size = ScalarFrameLayout::slot_size();
     int64_t data_off = frame.expr_cnt_ * item_size;
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->frame_idx_ = frame.frame_idx_;
-      e->datum_off_ = i * item_size;
-      e->eval_info_off_ = e->datum_off_ + sizeof(ObDatum);
+      e->datum_off_ = ScalarFrameLayout::datum_offset(i);
+      e->eval_info_off_ = ScalarFrameLayout::eval_info_offset(i);
       const int64_t consume_size = reserve_data_consume(*e);
       if (consume_size > 0) {
         data_off += consume_size;
@@ -1082,8 +1069,7 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
         ret = OB_INVALID_ARGUMENT;
       } else {
         const DatumValue &source = static_cast<ObConstRawExpr *>(raw_expr)->get_value();
-        const int64_t item_size = DATUM_EVAL_INFO_SIZE;
-        ObDatum *datum = reinterpret_cast<ObDatum *>(frame_mem + j * item_size);
+        ObDatum *datum = reinterpret_cast<ObDatum *>(frame_mem + ScalarFrameLayout::datum_offset(j));
         // Fixed-width literals already have reserved frame storage. Keep them
         // in that storage instead of adding an allocation per scalar.
         if (!source.is_ext_sql_array() && source.datum_.len_ <= rt_expr->res_buf_len_) {
@@ -1706,7 +1692,7 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
     OZ(partial.param_frame_.assign(global.param_frame_));
     OZ(partial.dynamic_frame_.assign(global.dynamic_frame_));
     OZ(partial.datum_frame_.assign(global.datum_frame_));
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    const int64_t item_size = ScalarFrameLayout::slot_size();
     FOREACH_CNT_X(f, partial.param_frame_, OB_SUCC(ret)) {
       ObExpr *e = farthest_exprs.at(f->frame_idx_);
       int cnt = NULL == e

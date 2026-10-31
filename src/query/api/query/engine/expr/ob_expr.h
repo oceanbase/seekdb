@@ -158,6 +158,35 @@ struct ObEvalInfo
 	uint16_t cnt_;
 };
 
+// The scalar/parameter frame ABI is a pointer datum followed by its EvalInfo.
+// Batch frames have a different, column-oriented layout and do not use this
+// slot. Keep code generation, runtime parameter pages and frame transport on
+// the same address calculation; this does not change the current 12+4 ABI.
+struct ScalarFrameLayout
+{
+  static constexpr int64_t slot_size() { return sizeof(ObDatum) + sizeof(ObEvalInfo); }
+  static constexpr int64_t datum_offset(int64_t slot) { return slot * slot_size(); }
+  static constexpr int64_t eval_info_offset(int64_t slot)
+  { return datum_offset(slot) + sizeof(ObDatum); }
+  static constexpr int64_t slots_per_frame() { return common::MAX_FRAME_SIZE / slot_size(); }
+  static constexpr int64_t frame_count(int64_t count)
+  { return (count + slots_per_frame() - 1) / slots_per_frame(); }
+
+  // Original parameters and appended parameters occupy separate page ranges,
+  // even when the final original page has unused slots. Indices are validated
+  // by the callers; frame_idx is relative to the parameter-frame prefix.
+  static void locate_parameter(int64_t original_count, int64_t param_idx,
+                               int64_t &frame_idx, int64_t &slot_idx)
+  {
+    const int64_t local_idx = param_idx < original_count ? param_idx : param_idx - original_count;
+    frame_idx = local_idx / slots_per_frame();
+    slot_idx = local_idx % slots_per_frame();
+    if (original_count > 0 && param_idx >= original_count) {
+      frame_idx += frame_count(original_count);
+    }
+  }
+};
+
 // expression evaluate context
 struct ObEvalCtx
 {

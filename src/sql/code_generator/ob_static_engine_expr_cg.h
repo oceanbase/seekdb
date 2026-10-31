@@ -73,8 +73,9 @@ class ObStaticEngineExprCG
 public:
   static const int64_t STACK_OVERFLOW_CHECK_DEPTH = 16;
   static const int64_t SMALL_SCAN_CARDINALITY = 16;
-  static const int64_t DATUM_EVAL_INFO_SIZE = sizeof(ObDatum) + sizeof(ObEvalInfo);
+  static const int64_t DATUM_EVAL_INFO_SIZE = ScalarFrameLayout::slot_size();
   friend class ObRawExpr;
+  friend struct ScalarFrameLayoutTestAccess;
   struct TmpFrameInfo {
     TmpFrameInfo() : expr_start_pos_(0), frame_info_() {}
     TmpFrameInfo(uint64_t start_pos,
@@ -396,7 +397,7 @@ private:
   // - datum instance
   // - EvalInfo instance
   int get_expr_datum_fixed_header_size() {
-    return sizeof(ObDatum) + sizeof(ObEvalInfo);
+    return ScalarFrameLayout::slot_size();
   }
   // Fetch non const exprs
   // @param [in] raw_exprs all raw exprs

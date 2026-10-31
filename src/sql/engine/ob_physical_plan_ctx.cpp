@@ -452,9 +452,8 @@ int ObPhysicalPlanCtx::switch_implicit_cursor()
 
 void ObPhysicalPlanCtx::reset_datum_frame(char *frame, int64_t expr_cnt)
 {
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
   for (int64_t j = 0; j < expr_cnt; ++j) {
-    ObDatum *datum = reinterpret_cast<ObDatum *>(frame + j * item_size);
+    ObDatum *datum = reinterpret_cast<ObDatum *>(frame + ScalarFrameLayout::datum_offset(j));
     datum->set_null();
   }
 }
@@ -463,9 +462,8 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
 {
   int ret = OB_SUCCESS;
   if (input_capacity > param_frame_capacity_) {
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-    int64_t cnt_per_frame = common::MAX_FRAME_SIZE / item_size;
-    auto calc_frame_cnt = [&](int64_t cap) { return (cap + cnt_per_frame - 1) / cnt_per_frame; };
+    const int64_t item_size = ScalarFrameLayout::slot_size();
+    const int64_t cnt_per_frame = ScalarFrameLayout::slots_per_frame();
     // reserve original param frames first
     if (param_frame_capacity_ < original_param_cnt_) {
       if (param_frame_capacity_ > 0) {
@@ -489,7 +487,7 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
     int64_t beyond = input_capacity - original_param_cnt_;
     if (OB_SUCC(ret) && beyond > 0) {
 
-      int64_t frame_cnt = calc_frame_cnt(beyond);
+      int64_t frame_cnt = ScalarFrameLayout::frame_count(beyond);
       int64_t last = beyond - (frame_cnt - 1) * cnt_per_frame;
 
       // align last frame capacity to pow of 2.
@@ -497,11 +495,11 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
       beyond = (frame_cnt - 1) * cnt_per_frame + last;
 
       const int64_t original_frame_cnt = original_param_cnt_ > 0
-          ? calc_frame_cnt(original_param_cnt_)
+          ? ScalarFrameLayout::frame_count(original_param_cnt_)
           : 0;
 
       const int64_t old_capacity = param_frame_capacity_ - original_param_cnt_;
-      const int64_t old_frame_cnt = calc_frame_cnt(old_capacity);
+      const int64_t old_frame_cnt = ScalarFrameLayout::frame_count(old_capacity);
       int64_t frame_idx = old_frame_cnt;
       if (old_capacity % cnt_per_frame != 0) {
         frame_idx--;
@@ -557,17 +555,14 @@ OB_INLINE void ObPhysicalPlanCtx::get_param_frame_info(int64_t param_idx,
                                                        ObDatum *&datum,
                                                        ObEvalInfo *&eval_info)
 {
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
-  int64_t cnt_per_frame = common::MAX_FRAME_SIZE / item_size;
-  int64_t datum_idx = param_idx < original_param_cnt_ ? param_idx : param_idx - original_param_cnt_;
-  int64_t idx = datum_idx / cnt_per_frame;
-  int64_t off = (datum_idx % cnt_per_frame) * item_size;
-  if (original_param_cnt_ > 0 && param_idx >= original_param_cnt_) {
-    idx += (original_param_cnt_ + cnt_per_frame - 1) / cnt_per_frame;
-  }
+  int64_t idx = 0;
+  int64_t slot_idx = 0;
+  ScalarFrameLayout::locate_parameter(original_param_cnt_, param_idx, idx, slot_idx);
+  const int64_t off = ScalarFrameLayout::datum_offset(slot_idx);
   datum = reinterpret_cast<ObDatum*>(param_frame_ptrs_.at(idx) + off);
-  eval_info = reinterpret_cast<ObEvalInfo *>(param_frame_ptrs_.at(idx) + off + sizeof(ObDatum));
-  LOG_DEBUG("get_param_frame_info", K(param_idx), K(off), K(datum), K(item_size), K(lbt()));
+  eval_info = reinterpret_cast<ObEvalInfo *>(param_frame_ptrs_.at(idx)
+      + ScalarFrameLayout::eval_info_offset(slot_idx));
+  LOG_DEBUG("get_param_frame_info", K(param_idx), K(off), K(datum), K(lbt()));
 }
 
 int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,

@@ -426,7 +426,7 @@ public:
         OB_UNIS_ENCODE(all_frames.at(i));
       }
     }
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    const int64_t item_size = ScalarFrameLayout::slot_size();
     for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
       const ObFrameInfo &frame_info = all_frames.at(i);
       //TODO shengle seri can opt, only serialize: sizeof(ObDatum) + sizeof(ObEvalInfo)
@@ -447,7 +447,7 @@ public:
         }
         for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
           ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-            (frame_buf + j * item_size);
+            (frame_buf + ScalarFrameLayout::datum_offset(j));
           need_extra_mem_size += no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
         }
       }
@@ -460,7 +460,7 @@ public:
       char *frame_buf = frames[frame_info.frame_idx_];
       for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
         ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-          (frame_buf + j * item_size);
+          (frame_buf + ScalarFrameLayout::datum_offset(j));
         expr_datum_size = no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
         OB_UNIS_ENCODE(expr_datum_size);
         if (pos + expr_datum_size > buf_len) {
@@ -623,11 +623,10 @@ public:
     }
     for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
       const ObFrameInfo &frame_info = all_frames.at(i);
-      const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
       char *frame_buf = frames[frame_info.frame_idx_];
       for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
         ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-          (frame_buf + j * item_size);
+          (frame_buf + ScalarFrameLayout::datum_offset(j));
         OB_UNIS_DECODE(expr_datum_size);
         if (pos + expr_datum_size > data_len) {
           ret = OB_SIZE_OVERFLOW;
@@ -716,7 +715,7 @@ public:
     int ret = OB_SUCCESS;
     int64_t len = 0;
     int64_t need_extra_mem_size = 0;
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
+    const int64_t item_size = ScalarFrameLayout::slot_size();
     if (SERIALIZE_PLAN_PART) {
       OB_UNIS_ADD_LEN(all_frames.count());
       for (int64_t i = 0; i < all_frames.count() && OB_SUCC(ret); ++i) {
@@ -735,7 +734,7 @@ public:
         char *frame_buf = frames[frame_info.frame_idx_];
         for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
           ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-                                    (frame_buf + j * item_size);
+                                    (frame_buf + ScalarFrameLayout::datum_offset(j));
           need_extra_mem_size += no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
         }
       }
@@ -748,7 +747,7 @@ public:
       char *frame_buf = frames[frame_info.frame_idx_];
       for (int64_t j = 0; j < frame_info.expr_cnt_ && OB_SUCC(ret); ++j) {
         ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-                                  (frame_buf + j * item_size);
+                                  (frame_buf + ScalarFrameLayout::datum_offset(j));
         expr_datum_size = no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
         OB_UNIS_ADD_LEN(expr_datum_size);
         if (0 < expr_datum_size) {

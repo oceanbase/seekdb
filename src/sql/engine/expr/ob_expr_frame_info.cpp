@@ -46,7 +46,6 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
   } else if (OB_FAIL(const_frame_ptrs_.prepare_allocate(other.const_frame_ptrs_.count()))) {
   } else {
     char *frame_mem = NULL;
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
     for (int i = 0; OB_SUCC(ret) && i < other.const_frame_.count(); i++) {
       if (OB_ISNULL(frame_mem = (char *)allocator.alloc(other.const_frame_.at(i).frame_size_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -59,9 +58,9 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
           char *other_frame_mem = other.const_frame_ptrs_.at(i);
           int64_t other_frame_size = other.const_frame_.at(i).frame_size_;
           ObDatum *other_expr_datum = reinterpret_cast<ObDatum *>
-                                      (other_frame_mem + j * item_size);
+                                      (other_frame_mem + ScalarFrameLayout::datum_offset(j));
           ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-                                      (frame_mem + j * item_size);
+                                      (frame_mem + ScalarFrameLayout::datum_offset(j));
           // In mysql mode, empty string len is 0, and ptr = NULL, when ptr is NULL, no need to change ptr value during copy
           if (NULL == other_expr_datum->ptr_) {
             // do nothing
@@ -264,11 +263,10 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
     ALLOC_FRAME_MEM(dynamic_frame_);
     //for subquery core 
     // Preemptively set datum in frame to null
-    const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
     for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_frame_.count(); ++i) {
       char *cur_frame = frames[begin_idx + i];
       for (int64_t j = 0; j < dynamic_frame_.at(i).expr_cnt_; ++j) {
-        ObDatum *datum = reinterpret_cast<ObDatum *>(cur_frame + j * item_size);
+        ObDatum *datum = reinterpret_cast<ObDatum *>(cur_frame + ScalarFrameLayout::datum_offset(j));
         datum->set_null();
       }
     }
@@ -534,12 +532,10 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
 void ObPreCalcExprFrameInfo::clear_datum_evaluted_flags(char **frames)
 {
   int64_t datum_frame_idx = const_frame_ptrs_.count() + param_frame_.count() + dynamic_frame_.count();
-  const int64_t item_size = sizeof(ObDatum) + sizeof(ObEvalInfo);
   for (int64_t i = 0; i < datum_frame_.count(); ++i) {
     char *cur_frame = frames[datum_frame_idx + i];
     for (int64_t j = 0; j < datum_frame_.at(i).expr_cnt_; ++j) {
-      char *datum_ptr = cur_frame + j * item_size;
-      ObEvalInfo *eval_info = reinterpret_cast<ObEvalInfo *>(datum_ptr + sizeof(ObDatum));
+      ObEvalInfo *eval_info = reinterpret_cast<ObEvalInfo *>(cur_frame + ScalarFrameLayout::eval_info_offset(j));
       eval_info->clear_evaluated_flag();
     }
   }

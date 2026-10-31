@@ -68,7 +68,7 @@ struct ObExprFrameInfo
   OB_UNIS_VERSION_V(1);
 public:
   static const int64_t EXPR_CNT_PER_FRAME =
-      common::MAX_FRAME_SIZE / (sizeof(ObDatum) + sizeof(ObEvalInfo));
+      ScalarFrameLayout::slots_per_frame();
 
   ObExprFrameInfo(common::ObIAllocator &allocator) :
       _rt_exprs_(0, common::ModulePageAllocator(allocator)),
