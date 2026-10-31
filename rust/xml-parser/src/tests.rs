@@ -68,12 +68,12 @@ impl crate::EventHandler for Collector {
 }
 
 fn events(
-    input: &str,
+    input: impl AsRef<[u8]>,
     mode: ParseMode,
     options: ParseOptions,
 ) -> Result<Vec<OwnedEvent>, ParseError<()>> {
     let mut collector = Collector::default();
-    parse(input.as_bytes(), mode, options, &mut collector)?;
+    parse(input.as_ref(), mode, options, &mut collector)?;
     Ok(collector.0)
 }
 
@@ -175,6 +175,38 @@ fn retains_declaration_bytes_and_ignores_encoding_for_memory_input() {
 }
 
 #[test]
+fn supports_utf16_bom_input() {
+    for (name, mut input) in [("little", vec![0xff, 0xfe]), ("big", vec![0xfe, 0xff])] {
+        let encoded: Vec<u8> = if name == "little" {
+            "<r>A</r>"
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect()
+        } else {
+            "<r>A</r>"
+                .encode_utf16()
+                .flat_map(u16::to_be_bytes)
+                .collect()
+        };
+        input.extend(encoded);
+        let actual = events(&input, ParseMode::Document, ParseOptions::default()).unwrap();
+        assert_eq!(actual[2], OwnedEvent::Text(b"A".to_vec()));
+    }
+    assert!(events(
+        [0xff, 0xfe, b'<'],
+        ParseMode::Document,
+        ParseOptions::default()
+    )
+    .is_err());
+    assert!(events(
+        [0xff, 0xfe, 0x00, 0xd8],
+        ParseMode::Document,
+        ParseOptions::default()
+    )
+    .is_err());
+}
+
+#[test]
 fn rejects_dtd_unknown_entities_and_document_fragments() {
     for input in [
         "<!DOCTYPE r><r/>",
@@ -209,8 +241,85 @@ fn recover_returns_partial_events_but_does_not_hide_handler_errors() {
 
 #[test]
 fn rejects_forbidden_numeric_references() {
-    let result = events("<r>&#0;</r>", ParseMode::Document, ParseOptions::default());
-    assert!(result.is_err());
+    for input in [
+        "<r>&#0;</r>",
+        "<?xml version='1.0'?><r>&#1;</r>",
+        "<?xml version='1.1'?><r>&#1;</r>",
+    ] {
+        assert!(
+            events(input, ParseMode::Document, ParseOptions::default()).is_err(),
+            "input: {input}"
+        );
+    }
+}
+
+#[test]
+fn rejects_non_xml10_document_versions() {
+    for version in ["1.1", "1.2", "2.0"] {
+        let input = format!("<?xml version='{version}'?><r>A</r>");
+        assert!(events(&input, ParseMode::Document, ParseOptions::default()).is_err());
+        assert!(events(
+            &input,
+            ParseMode::Content,
+            ParseOptions {
+                content_allow_xml_decl: true,
+                ..ParseOptions::default()
+            }
+        )
+        .is_ok());
+    }
+}
+
+#[test]
+fn matches_legacy_xml10_name_character_rules() {
+    for ch in [
+        '\u{c0}', '\u{d8}', '\u{386}', '\u{3007}', '\u{3021}', '\u{4e00}', '\u{9fa5}', '\u{ac00}',
+    ] {
+        let input = format!("<{ch}>x</{ch}>");
+        assert!(
+            events(&input, ParseMode::Document, ParseOptions::default()).is_ok(),
+            "input: {input}"
+        );
+    }
+    for ch in [
+        '\u{d7}',
+        '\u{f7}',
+        '\u{300}',
+        '\u{370}',
+        '\u{37d}',
+        '\u{37f}',
+        '\u{640}',
+        '\u{e46}',
+        '\u{ec6}',
+        '\u{200c}',
+        '\u{2070}',
+        '\u{218f}',
+        '\u{2c00}',
+        '\u{2fef}',
+        '\u{3001}',
+        '\u{3005}',
+        '\u{3031}',
+        '\u{309d}',
+        '\u{30fc}',
+        '\u{f900}',
+        '\u{1f600}',
+    ] {
+        let input = format!("<{ch}>x</{ch}>");
+        assert!(events(&input, ParseMode::Document, ParseOptions::default()).is_err());
+    }
+    for ch in [
+        '\u{b7}', '\u{300}', '\u{387}', '\u{640}', '\u{660}', '\u{3005}', '\u{309d}', '\u{30fc}',
+    ] {
+        let input = format!("<r{ch}>x</r{ch}>");
+        assert!(
+            events(&input, ParseMode::Document, ParseOptions::default()).is_ok(),
+            "input: {input}"
+        );
+    }
+    for ch in ['\u{b2}', '\u{370}', '\u{203f}', '\u{f900}', '\u{1f600}'] {
+        let input = format!("<r{ch}>x</r{ch}>");
+        assert!(events(&input, ParseMode::Document, ParseOptions::default()).is_err());
+    }
 }
 
 #[test]

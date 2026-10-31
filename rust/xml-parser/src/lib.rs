@@ -14,11 +14,13 @@
 
 //! Streaming XML parsing with seekdb's SQL compatibility rules.
 //!
-//! The native API accepts UTF-8 memory input and emits synchronous events.
+//! The native API accepts UTF-8 and BOM-marked UTF-16 memory input and emits
+//! synchronous events.
 //! Entity expansion, XML newline and attribute normalization, fragment rules,
 //! and recover/syntax options live here rather than in the C++ adapter.
 
 mod bridge;
+mod name;
 
 pub use bridge::ffi::XmlAttributeView;
 pub use bridge::xml_parse;
@@ -30,6 +32,8 @@ use std::borrow::Cow;
 use std::fmt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::str::Utf8Error;
+
+use name::{is_name_char, is_name_start_char};
 
 pub const XML_PARSE_RECOVER: u64 = 1 << 1;
 pub const XML_PARSE_NOT_IGNORE_SPACE: u64 = 1 << 2;
@@ -183,7 +187,6 @@ struct Parser<'a, H> {
     root_seen: bool,
     root_closed: bool,
     event_seen: bool,
-    xml11: bool,
 }
 
 impl<'a, H: EventHandler> Parser<'a, H> {
@@ -215,11 +218,7 @@ impl<'a, H: EventHandler> Parser<'a, H> {
         for attribute in element.attributes() {
             let attribute = attribute?;
             validate_qname(attribute.key.0)?;
-            let value = attribute_value(
-                &attribute.value,
-                self.options.preserve_entity_references,
-                self.xml11,
-            )?;
+            let value = attribute_value(&attribute.value, self.options.preserve_entity_references)?;
             attributes.push(Attribute {
                 name: attribute.key.0,
                 value: Cow::Owned(value.into_bytes()),
@@ -249,10 +248,9 @@ impl<'a, H: EventHandler> Parser<'a, H> {
             return Err(Error::Syntax("misplaced XML declaration").into());
         }
         let version = declaration.version()?;
-        if version.as_ref() != b"1.0" && version.as_ref() != b"1.1" {
+        if self.mode == ParseMode::Document && version.as_ref() != b"1.0" {
             return Err(Error::Syntax("unsupported XML version").into());
         }
-        self.xml11 = version.as_ref() == b"1.1";
         if let Some(encoding) = declaration.encoding() {
             encoding?;
         }
@@ -282,7 +280,7 @@ impl<'a, H: EventHandler> Parser<'a, H> {
             return Err(Error::Syntax("text is not allowed outside the document element").into());
         }
         let decoded = unescape(raw)?;
-        validate_decoded_characters(&decoded, self.xml11)?;
+        validate_decoded_characters(&decoded)?;
         self.event_seen = true;
         if self.options.preserve_entity_references {
             self.emit(Event::Text(Cow::Borrowed(raw.as_bytes())))
@@ -365,7 +363,6 @@ pub fn parse<H: EventHandler>(
         root_seen: false,
         root_closed: false,
         event_seen: false,
-        xml11: false,
     };
     parser.emit(Event::StartDocument)?;
     let result = (|| {
@@ -404,14 +401,20 @@ fn normalize_input(input: &[u8], mode: ParseMode) -> Result<Cow<'_, str>, Error>
             input = &input[1..];
         }
     }
-    if input.starts_with(&[0xef, 0xbb, 0xbf]) {
-        input = &input[3..];
-    }
-    let input = std::str::from_utf8(input)?;
-    validate_raw_characters(input)?;
-    if input.contains('\r') {
+    let decoded = if let Some(value) = input.strip_prefix(&[0xff, 0xfe]) {
+        Cow::Owned(decode_utf16(value, true)?)
+    } else if let Some(value) = input.strip_prefix(&[0xfe, 0xff]) {
+        Cow::Owned(decode_utf16(value, false)?)
+    } else {
+        if input.starts_with(&[0xef, 0xbb, 0xbf]) {
+            input = &input[3..];
+        }
+        Cow::Borrowed(std::str::from_utf8(input)?)
+    };
+    validate_raw_characters(&decoded)?;
+    if decoded.contains('\r') {
         let mut normalized = String::with_capacity(input.len());
-        let mut chars = input.chars().peekable();
+        let mut chars = decoded.chars().peekable();
         while let Some(ch) = chars.next() {
             if ch == '\r' {
                 if chars.peek() == Some(&'\n') {
@@ -424,8 +427,28 @@ fn normalize_input(input: &[u8], mode: ParseMode) -> Result<Cow<'_, str>, Error>
         }
         Ok(Cow::Owned(normalized))
     } else {
-        Ok(Cow::Borrowed(input))
+        Ok(decoded)
     }
+}
+
+fn decode_utf16(input: &[u8], little_endian: bool) -> Result<String, Error> {
+    if !input.len().is_multiple_of(2) {
+        return Err(Error::Syntax("UTF-16 XML input has an odd byte length"));
+    }
+    let units = input.as_chunks::<2>().0.iter().map(|pair| {
+        if little_endian {
+            u16::from_le_bytes([pair[0], pair[1]])
+        } else {
+            u16::from_be_bytes([pair[0], pair[1]])
+        }
+    });
+    let mut decoded = String::with_capacity(input.len());
+    for unit in std::char::decode_utf16(units) {
+        let ch =
+            unit.map_err(|_| Error::Syntax("UTF-16 XML input contains an unpaired surrogate"))?;
+        decoded.push(ch);
+    }
+    Ok(decoded)
 }
 
 fn is_xml_space(value: u8) -> bool {
@@ -452,16 +475,12 @@ fn validate_raw_characters(value: &str) -> Result<(), Error> {
     }
 }
 
-fn validate_decoded_characters(value: &str, xml11: bool) -> Result<(), Error> {
+fn validate_decoded_characters(value: &str) -> Result<(), Error> {
     if value.chars().all(|ch| {
         ('\u{20}'..='\u{d7ff}').contains(&ch)
             || ('\u{e000}'..='\u{fffd}').contains(&ch)
             || ('\u{10000}'..='\u{10ffff}').contains(&ch)
             || matches!(ch, '\u{9}' | '\u{a}' | '\u{d}')
-            || (xml11 && ('\u{1}'..='\u{8}').contains(&ch))
-            || (xml11 && ('\u{b}'..='\u{c}').contains(&ch))
-            || (xml11 && ('\u{e}'..='\u{1f}').contains(&ch))
-            || (xml11 && ch == '\u{7f}')
     }) {
         Ok(())
     } else {
@@ -471,7 +490,7 @@ fn validate_decoded_characters(value: &str, xml11: bool) -> Result<(), Error> {
     }
 }
 
-fn attribute_value(value: &[u8], preserve: bool, xml11: bool) -> Result<String, Error> {
+fn attribute_value(value: &[u8], preserve: bool) -> Result<String, Error> {
     if value.contains(&b'<') {
         return Err(Error::Syntax("XML attribute contains a literal '<'"));
     }
@@ -495,7 +514,7 @@ fn attribute_value(value: &[u8], preserve: bool, xml11: bool) -> Result<String, 
     let decoded = unescape(value)
         .map_err(quick_xml::Error::from)
         .map_err(Error::from)?;
-    validate_decoded_characters(&decoded, xml11)?;
+    validate_decoded_characters(&decoded)?;
     if preserve {
         Ok(escape_predefined(&decoded))
     } else {
@@ -542,18 +561,6 @@ fn validate_qname(name: &[u8]) -> Result<(), Error> {
         return Err(Error::Syntax("invalid qualified XML name"));
     }
     Ok(())
-}
-
-fn is_name_start_char(ch: char) -> bool {
-    ch == '_' || (ch <= '\u{ffff}' && ch.is_alphabetic())
-}
-
-fn is_name_char(ch: char) -> bool {
-    is_name_start_char(ch)
-        || matches!(ch, '-' | '.' | '\u{b7}')
-        || (ch <= '\u{ffff}' && ch.is_numeric())
-        || ('\u{300}'..='\u{36f}').contains(&ch)
-        || ('\u{203f}'..='\u{2040}').contains(&ch)
 }
 
 struct BridgeHandler {
