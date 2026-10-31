@@ -26,6 +26,11 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class Datum;
+class SqlType;
+}
 namespace observer
 {
 
@@ -251,6 +256,20 @@ protected:
 
 private:
   friend struct NativeArrayBindingTestAccess;
+  friend struct NativePsParameterBindingTestAccess;
+  // One request arena allocation contains this header followed by Datum[N].
+  // Legacy parameter descriptors borrow those stable inline values until the
+  // request ends. Each execution still clones them into its own context.
+  struct alignas(8) NativeParameterOwner
+  {
+    NativeParameterOwner(const common::SqlType &type, int64_t count, common::Datum *values)
+      : type_(&type), count_(count), values_(values) {}
+    NativeParameterOwner(const NativeParameterOwner &) = delete;
+    NativeParameterOwner &operator=(const NativeParameterOwner &) = delete;
+    const common::SqlType *const type_;
+    const int64_t count_;
+    common::Datum *const values_;
+  };
   // for arraybinding
   int init_arraybinding_field(int64_t column_field_cnt, const ColumnsFieldIArray *column_fields);
 
@@ -357,6 +376,7 @@ protected:
   int64_t curr_sql_idx_; // only for arraybinding
   ObPSAnalysisChecker analysis_checker_;
 private:
+  NativeParameterOwner *native_parameter_owner_;
   DISALLOW_COPY_AND_ASSIGN(ObMPStmtExecute);
 
 }; //end of class
