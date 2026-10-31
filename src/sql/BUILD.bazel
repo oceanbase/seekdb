@@ -195,6 +195,7 @@ cc_library(
         ":sql_retrieval_composition_headers",
         ":sql_runtime_interface",
         "//rust:config_headers",
+        "//src/share:lob_read_service",
         "//src/share:srs_provider_interface",
         "//src/sql/engine/prepare:engine_prepare_internal_headers",
         "//src/sql/optimizer:optimizer_internal_headers",

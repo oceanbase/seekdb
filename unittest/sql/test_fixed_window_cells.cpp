@@ -265,6 +265,8 @@ protected:
     set_type(0, ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI);
     set_type(3, result_type);
     info.set_allocator(&arena_); ASSERT_EQ(OB_SUCCESS, info.init(0, 0, 1));
+    ASSERT_EQ(OB_SUCCESS, info.sort_collations_.init(1));
+    ASSERT_EQ(OB_SUCCESS, info.sort_cmp_funcs_.init(1));
     info.expr_ = &exprs_[3];
     ASSERT_EQ(OB_SUCCESS, info.sort_exprs_.push_back(&exprs_[0]));
     ASSERT_EQ(OB_SUCCESS, info.sort_collations_.push_back(

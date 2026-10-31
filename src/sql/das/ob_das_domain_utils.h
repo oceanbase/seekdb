@@ -28,6 +28,10 @@
 
 namespace oceanbase
 {
+namespace transaction
+{
+class ObTxDesc;
+}
 namespace sql
 {
 

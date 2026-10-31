@@ -26,6 +26,10 @@
 #include "share/ob_batch_selector.h"
 namespace oceanbase
 {
+namespace blocksstable
+{
+struct ObStorageDatum;
+}
 namespace sql
 {
 class ObDASUtils
