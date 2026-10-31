@@ -164,12 +164,49 @@ int ObExprJsonLength::eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   return ret;
 }
 
+int ObExprJsonLength::eval_json_length_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                             const ObBitVector &skip, const int64_t size)
+{
+  int ret = OB_SUCCESS;
+  ObExpr *arg0 = expr.args_[0];
+  ObExpr *arg1 = expr.arg_cnt_ > 1 ? expr.args_[1] : nullptr;
+  if (OB_FAIL(arg0->eval_batch(ctx, skip, size))) {
+  } else if (OB_NOT_NULL(arg1) && OB_FAIL(arg1->eval_batch(ctx, skip, size))) {
+  } else {
+    ObDatum *res_datums = expr.locate_batch_datums(ctx);
+    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    ObDatum *data0 = arg0->locate_batch_datums(ctx);
+    ObDatum *data1 = OB_NOT_NULL(arg1) ? arg1->locate_batch_datums(ctx) : nullptr;
+    const ObDatumMeta meta1 = OB_NOT_NULL(arg1) ? arg1->datum_meta_ : ObDatumMeta();
+    const bool has_lob_header1 = OB_NOT_NULL(arg1) && arg1->obj_meta_.has_lob_header();
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
+    ObJsonPathCache ctx_cache(&tmp_allocator);
+    ObJsonPathCache *path_cache =
+        ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
+    path_cache = (OB_NOT_NULL(path_cache) ? path_cache : &ctx_cache);
+    for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+      if (skip.contain(i) || eval_flags.at(i)) {
+        continue;
+      }
+      if (OB_FAIL(calc(ctx, data0[i], arg0->datum_meta_, arg0->obj_meta_.has_lob_header(),
+                       OB_NOT_NULL(data1) ? &data1[i] : nullptr, meta1, has_lob_header1,
+                       &tmp_allocator, res_datums[i], path_cache))) {
+      } else {
+        eval_flags.set(i);
+      }
+    }
+  }
+  return ret;
+}
+
 int ObExprJsonLength::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                               ObExpr &rt_expr) const
 {
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   rt_expr.eval_func_ = eval_json_length;
+  rt_expr.eval_batch_func_ = eval_json_length_batch;
   return OB_SUCCESS;
 }
 

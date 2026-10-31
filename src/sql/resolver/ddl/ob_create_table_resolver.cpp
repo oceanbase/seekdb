@@ -137,9 +137,53 @@ int ObCreateTableResolver::add_hidden_tablet_seq_col()
   return ret;
 }
 
-// Set additional information for the temporary table
-int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, ParseNode *commit_option_node)
+int ObCreateTableResolver::add_ai_hidden_columns(ObTableSchema &table_schema,
+                                                 const ObAiColumnSpec &spec)
 {
+  int ret = OB_SUCCESS;
+  ObString spec_text;
+  if (OB_FAIL(ObAiColumnUtils::build_spec_text(spec, *allocator_, spec_text))) {
+  } else {
+    for (int64_t kind = 0; OB_SUCC(ret) && kind < 3; ++kind) {
+      ObColumnSchemaV2 column;
+      ObSqlString column_name;
+      const char *prefix = 0 == kind ? ObAiColumnUtils::STATE_PREFIX
+                         : 1 == kind ? ObAiColumnUtils::REQUEST_PREFIX
+                                     : ObAiColumnUtils::SPEC_PREFIX;
+      column.reset();
+      column.set_column_id(gen_column_id());
+      column.set_nullable(true);
+      column.set_is_hidden(true);
+      if (OB_FAIL(column_name.append_fmt("%s%.*s", prefix, spec.result_column_.length(),
+                                         spec.result_column_.ptr()))) {
+      } else if (OB_FAIL(column.set_column_name(column_name.string()))) {
+      } else if (0 == kind || 1 == kind) {
+        column.set_data_type(ObIntType);
+        column.set_charset_type(CHARSET_BINARY);
+        column.set_collation_type(CS_TYPE_BINARY);
+      } else {
+        ObAccuracy accuracy;
+        column.set_data_type(ObVarcharType);
+        accuracy.set_length(1024);
+        column.set_accuracy(accuracy);
+        column.set_charset_type(CHARSET_UTF8MB4);
+        column.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+        if (OB_FAIL(column.set_comment(spec_text))) {
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(table_schema.add_column(column))) {
+      } else if (OB_SUCC(ret)) {
+        ObColumnNameHashWrapper name_key(column.get_column_name_str());
+        if (OB_FAIL(column_name_set_.set_refactored(name_key))) {
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+// Set additional information for the temporary table
+int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, ParseNode *commit_option_node){
   int ret = OB_SUCCESS;
   session_info_->set_has_temp_table_flag();
   if (OB_FAIL(set_table_name(table_name_))) {
@@ -892,6 +936,17 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           ObColumnNameHashWrapper name_key(hidden_col.get_column_name_str());
           if (OB_FAIL(column_name_set_.set_refactored(name_key))) {
           }
+        }
+      }
+    }
+
+    // Every AI column gets three hidden physical columns:
+    //   __ai_state_<result>  : 0 PENDING, 1 READY, 2 FAILED
+    //   __ai_req_<result>    : monotonically increasing request counter
+    //   __ai_spec_<result>   : AI column definition, stored in the comment
+    if (OB_SUCC(ret)) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < ai_column_specs_.count(); ++i) {
+        if (OB_FAIL(add_ai_hidden_columns(table_schema, ai_column_specs_.at(i)))) {
         }
       }
     }

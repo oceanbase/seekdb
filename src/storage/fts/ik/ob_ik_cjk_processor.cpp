@@ -38,10 +38,10 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
 
   if (ObFTCharUtil::CharType::USELESS != type) {
     // handle previous hits_ first and then check from this char
-    for (ObList<ObDATrieHit, ObIAllocator>::iterator iter = hits_.begin();
-         OB_SUCC(ret) && iter != hits_.end();
-         iter++) {
-      ObDATrieHit &hit = *iter;
+    int64_t alive_cnt = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < hits_.count(); ++i) {
+      ObDATrieHit &hit = hits_.at(i);
+      bool keep = true;
       if (OB_FAIL(dict_main_.match_with_hit({char_len, ch}, hit, hit))) {
       } else if (hit.is_match()) {
         if (OB_FAIL(ctx.add_token(ctx.fulltext(),
@@ -55,9 +55,20 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
       } else if (hit.is_prefix()) {
         // nothing
       } else if (hit.is_unmatch()) {
-        hits_.erase(hit);
+        keep = false;
       } else {
         ret = OB_UNEXPECT_INTERNAL_ERROR;
+      }
+      if (OB_SUCC(ret) && keep) {
+        if (alive_cnt != i) {
+          hits_.at(alive_cnt) = hit;
+        }
+        ++alive_cnt;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      while (hits_.count() > alive_cnt) {
+        hits_.pop_back();
       }
     }
     if (OB_SUCC(ret)) {
@@ -81,15 +92,15 @@ int ObIKCJKProcessor::do_process(TokenizeContext &ctx,
     }
   } else {
     // stop previous match
-    hits_.clear();
+    hits_.reuse();
   }
 
   if (OB_SUCC(ret)) {
     if (ctx.is_last()) {
-      hits_.clear();
+      hits_.reuse();
     }
   } else {
-    hits_.clear();
+    hits_.reuse();
   }
 
   return ret;

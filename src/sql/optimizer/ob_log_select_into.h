@@ -44,7 +44,9 @@ public:
         escaped_cht_(),
         cs_type_(CS_TYPE_INVALID),
         is_overwrite_(false),
-        external_properties_()
+        external_properties_(),
+        has_header_(false),
+        null_str_()
   {
   }
   virtual ~ObLogSelectInto() {}
@@ -107,6 +109,29 @@ public:
   inline void set_external_properties(const common::ObString &external_properties)
   {
     external_properties_.assign_ptr(external_properties.ptr(), external_properties.length());
+  }
+  inline void set_has_header(bool has_header)
+  {
+    has_header_ = has_header;
+  }
+  inline bool get_has_header() const
+  {
+    return has_header_;
+  }
+  inline void set_header_columns(const common::ObIArray<common::ObString> &names)
+  {
+    header_columns_.assign(names);
+  }
+  inline const common::ObIArray<common::ObString> &get_header_columns() const
+  {
+    return header_columns_;
+  }  inline void set_null_str(const common::ObString &null_str)
+  {
+    null_str_ = null_str;
+  }
+  inline const common::ObString &get_null_str() const
+  {
+    return null_str_;
   }
   inline ObItemType get_into_type() const
   {
@@ -188,6 +213,10 @@ private:
   common::ObCollationType cs_type_;
   bool is_overwrite_;
   common::ObString external_properties_;
+  bool has_header_;
+  common::ObString null_str_;
+  // Column names in select order, written as the header row when has_header_.
+  common::ObSEArray<common::ObString, 8, common::ModulePageAllocator, true> header_columns_;
 };
 }
 }

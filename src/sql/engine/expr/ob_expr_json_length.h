@@ -42,6 +42,11 @@ public:
                   MultimodeAlloctor *allocator, ObDatum &res,
                   ObJsonPathCache* path_cache);
   static int eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  // Batch entry point. Evaluating the argument per batch is what lets a nested
+  // AI_EMBED fold all rows of the batch into one remote request; without it the
+  // row-at-a-time driver would call the child once per row.
+  static int eval_json_length_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                    const ObBitVector &skip, const int64_t size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }

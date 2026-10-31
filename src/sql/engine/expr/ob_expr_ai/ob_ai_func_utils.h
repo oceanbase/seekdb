@@ -378,6 +378,12 @@ public:
   virtual ~ObAIFuncPromptObjectUtils() {}
   static bool is_valid_prompt_object(ObJsonObject* prompt_object);
   static int replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str);
+  // Parses "{<digits>}" starting at template_ptr[start]. Returns OB_SUCCESS and
+  // fills end_pos (index of '}') and index only when the group is a valid
+  // placeholder; any other brace group is reported as an error so the caller
+  // copies it through verbatim.
+  static int parse_prompt_placeholder(const char *template_ptr, const int64_t template_len,
+                                      const int64_t start, int64_t &end_pos, int64_t &index);
   static int construct_prompt_object(ObIAllocator &allocator, ObString &template_str, ObJsonArray *args_array, ObJsonObject *&prompt_object);
   static constexpr char prompt_template_key[20] = "template";
   static constexpr char prompt_args_key[20] = "args";

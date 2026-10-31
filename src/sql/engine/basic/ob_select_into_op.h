@@ -71,7 +71,10 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc)
+      external_properties_(alloc),
+      has_header_(false),
+      header_columns_(alloc),
+      null_str_()
   {
   }
 
@@ -91,6 +94,11 @@ public:
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
+  // COPY ... TO options: write the column names before the first row, and the
+  // text that stands for a NULL cell.
+  bool has_header_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> header_columns_;
+  common::ObString null_str_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
 };
@@ -126,7 +134,10 @@ public:
       external_properties_(),
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       block_id_(0),
-      need_commit_(true)
+      need_commit_(true),
+      has_header_(false),
+      header_written_(false),
+      null_str_()
   {
   }
 
@@ -203,6 +214,8 @@ private:
   int into_dumpfile(ObExternalFileWriter *data_writer);
   int into_outfile(ObExternalFileWriter *data_writer);
   int into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFileWriter *data_writer);
+  // Writes the column-name row that COPY ... TO (header) asks for.
+  int write_header_row(ObCsvFileWriter &data_writer);
   int extract_fisrt_wchar_from_varhcar(const ObObj &obj, int32_t &wchar);
   int print_wchar_to_buf(char *buf,
                          const int64_t buf_len,
@@ -211,6 +224,7 @@ private:
                          ObString &str,
                          ObCollationType coll_type);
   int print_field(const ObObj &obj, ObCsvFileWriter &data_writer);
+  int write_null_str(ObCsvFileWriter &data_writer);
   int print_lob_field(const ObObj &obj,
                       const ObExpr &expr,
                       const ObDatum &datum,
@@ -292,6 +306,11 @@ private:
   ObExternalFileFormat::FormatType format_type_;
   uint32_t block_id_;
   bool need_commit_;
+  // COPY ... TO outputs a header row once per file, and NULL cells may be
+  // spelled with a caller-supplied string instead of \N.
+  bool has_header_;
+  bool header_written_;
+  ObString null_str_;
   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
 
 };

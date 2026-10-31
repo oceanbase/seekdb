@@ -18,6 +18,8 @@
 #include "sql/resolver/ob_resolver.h"
 #include "lib/utility/ob_smart_call.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "sql/engine/cmd/ob_load_data_parser.h"
+#include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/resolver/cmd/ob_alter_system_resolver.h"
 #include "sql/resolver/dml/ob_insert_resolver.h"
 #include "sql/resolver/dml/ob_update_resolver.h"
@@ -77,6 +79,7 @@
 #include "tcl/ob_savepoint_resolver.h"
 #include "sql/resolver/cmd/ob_variable_set_resolver.h"
 #include "sql/resolver/cmd/ob_show_resolver.h"
+#include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/cmd/ob_diff_table_resolver.h"
 #include "sql/resolver/cmd/ob_merge_table_resolver.h"
 #include "sql/resolver/cmd/ob_kill_resolver.h"
@@ -109,6 +112,246 @@ ObResolver::ObResolver(ObResolverParams &params)
 
 ObResolver::~ObResolver()
 {
+}
+
+namespace
+{
+// True when the subtree mentions a file table function.
+bool has_file_table_expr(const ParseNode *node)
+{
+  bool found = false;
+  if (OB_NOT_NULL(node)) {
+    if (T_FILE_TABLE_EXPRESSION == node->type_) {
+      found = true;
+    } else {
+      for (int32_t i = 0; !found && i < node->num_child_; ++i) {
+        found = has_file_table_expr(node->children_[i]);
+      }
+    }
+  }
+  return found;
+}
+
+} // anonymous namespace
+
+// DESCRIBE over a file table function reports the inferred columns of the file
+// rather than a plan, so it is resolved as the query itself. `stmt` is left
+// untouched for every other statement, which keeps the EXPLAIN path intact.
+int ObResolver::resolve_describe_select(const ParseNode *parse_tree, ObStmt *&stmt)
+{
+  int ret = OB_SUCCESS;
+  const int64_t explain_child_stmt = 4;
+  if (OB_ISNULL(parse_tree) || T_EXPLAIN != parse_tree->type_
+      || 5 != parse_tree->num_child_ || !(parse_tree->param_num_ > 0)) {
+    // Not DESCRIBE: the caller falls back to the EXPLAIN resolver.
+  } else if (OB_ISNULL(parse_tree->children_[explain_child_stmt])
+             || T_SELECT != parse_tree->children_[explain_child_stmt]->type_
+             || !has_file_table_expr(parse_tree->children_[explain_child_stmt])) {
+    // DESCRIBE of an ordinary query keeps the EXPLAIN behaviour.
+  } else {
+    ObStmt *child_stmt = NULL;
+    // Tells the file table resolver to report the inferred schema.
+    params_.is_describe_select_ = true;
+    if (OB_FAIL(stmt_resolver_func<ObSelectResolver>(
+                  params_, *parse_tree->children_[explain_child_stmt], child_stmt))) {
+    } else {
+      stmt = child_stmt;
+    }
+    params_.is_describe_select_ = false;
+  }
+  return ret;
+}
+
+namespace
+{
+// Appends the option list of a COPY statement to the into-item. The grammar
+// leaves the names as plain identifiers, so nothing here depends on a keyword.
+int apply_copy_options(const ParseNode *option_list,
+                       sql::ObSelectIntoItem &into_item,
+                       sql::ObExternalFileFormat &format,
+                       common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  common::ObSEArray<const ParseNode *, 8> options;
+  const ParseNode *node = option_list;
+  while (OB_SUCC(ret) && OB_NOT_NULL(node) && T_LINK_NODE == node->type_) {
+    if (OB_ISNULL(node->children_[1])) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(options.push_back(node->children_[1]))) {
+    } else {
+      node = node->children_[0];
+    }
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(node) && OB_FAIL(options.push_back(node))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < options.count() / 2; ++i) {
+    const ParseNode *tmp = options.at(i);
+    options.at(i) = options.at(options.count() - 1 - i);
+    options.at(options.count() - 1 - i) = tmp;
+  }
+  bool has_format = false;
+  for (int64_t i = 0; OB_SUCC(ret) && i < options.count(); ++i) {
+    const ParseNode *option = options.at(i);
+    const ParseNode *name = NULL;
+    const ParseNode *value = NULL;
+    if (OB_ISNULL(option) || T_COPY_OPTION != option->type_ || 2 != option->num_child_) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_ISNULL(name = option->children_[0])) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FALSE_IT(value = option->children_[1])) {
+    } else {
+      const ObString option_name(name->str_len_, const_cast<char *>(name->str_value_));
+      if (0 == option_name.case_compare("format")) {
+        if (OB_ISNULL(value)) {
+          ret = OB_ERR_PARSER_SYNTAX;
+          LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX);
+        } else {
+          const ObString format_name(value->str_len_, const_cast<char *>(value->str_value_));
+          // CSV is the only writer format, which matches what the resolver
+          // accepts for INTO OUTFILE FORMAT.
+          if (0 != format_name.case_compare("csv")) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "this COPY format");
+          } else {
+            format.format_type_ = ObExternalFileFormat::CSV_FORMAT;
+            has_format = true;
+          }
+        }
+      } else if (0 == option_name.case_compare("header")) {
+        if (OB_NOT_NULL(value)) {
+          ret = OB_ERR_PARSER_SYNTAX;
+          LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX);
+        } else {
+          into_item.has_header_ = true;
+        }
+      } else if (0 == option_name.case_compare("nullstr")) {
+        if (OB_ISNULL(value)) {
+          ret = OB_ERR_PARSER_SYNTAX;
+          LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX);
+        } else if (OB_FAIL(ob_write_string(allocator,
+                                           ObString(value->str_len_,
+                                                    const_cast<char *>(value->str_value_)),
+                                           into_item.null_str_))) {
+        }
+      } else if (0 == option_name.case_compare("delimiter")) {
+        if (OB_ISNULL(value)) {
+          ret = OB_ERR_PARSER_SYNTAX;
+          LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX);
+        } else {
+          // The operative terminator is the one recorded in the format string;
+          // the into-item copy alone would be shadowed by it at execution.
+          ObString delim(value->str_len_, const_cast<char *>(value->str_value_));
+          char *copy = static_cast<char *>(allocator.alloc(delim.length()));
+          if (OB_ISNULL(copy) && !delim.empty()) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            if (!delim.empty()) {
+              MEMCPY(copy, delim.ptr(), delim.length());
+            }
+            format.csv_format_.field_term_str_.assign_ptr(copy, delim.length());
+          }
+        }
+      } else {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "this COPY option");
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !has_format) {
+    // DuckDB writes CSV when no format is named, so the default is the same.
+    format.format_type_ = ObExternalFileFormat::CSV_FORMAT;
+  }
+  return ret;
+}
+// Collects the output column names of the query so they can be written as the
+// header row. The name a client would see is the alias, falling back to the
+// expression text.
+int copy_header_column_names(const ObSelectStmt &select_stmt,
+                             sql::ObSelectIntoItem &into_item,
+                             common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt.get_select_item_size(); ++i) {
+    const SelectItem &item = select_stmt.get_select_item(i);
+    const common::ObString &name = item.alias_name_.empty() ? item.expr_name_
+                                                            : item.alias_name_;
+    common::ObString copied;
+    if (OB_FAIL(ob_write_string(allocator, name, copied))) {
+    } else if (OB_FAIL(into_item.header_columns_.push_back(copied))) {
+    }
+  }
+  return ret;
+}
+
+} // anonymous namespace
+
+// COPY (query) TO 'file' (options) is the export direction of the file SQL
+// suite. Rather than a separate command it becomes the query plus an
+// into-item, so the existing SELECT INTO writer produces the file.
+int ObResolver::resolve_copy_to_stmt(const ParseNode &parse_tree, ObStmt *&stmt)
+{
+  int ret = OB_SUCCESS;
+  const int64_t copy_child_query = 0;
+  const int64_t copy_child_path = 1;
+  const int64_t copy_child_options = 2;
+  if (OB_UNLIKELY(T_COPY_TABLE_STMT != parse_tree.type_ || 3 != parse_tree.num_child_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(parse_tree.children_[copy_child_query])
+             || OB_ISNULL(parse_tree.children_[copy_child_path])
+             || OB_ISNULL(params_.allocator_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObStmt *child_stmt = NULL;
+    ObExternalFileFormat format;
+    ObSelectIntoItem into_item;
+    ObSelectIntoItem *stored_item = NULL;
+    ObSelectStmt *select_stmt = NULL;
+    ObString stored_name;
+    void *buf = NULL;
+    const ParseNode *path = parse_tree.children_[copy_child_path];
+    format.format_type_ = ObExternalFileFormat::CSV_FORMAT;
+    // Seeds the terminators and the collation that the format string records;
+    // the options below override whatever they name.
+    if (OB_FAIL(format.csv_format_.init_format(ObDataInFileStruct(), 0,
+                                               ObCharset::get_system_collation()))) {
+    } else if (OB_FALSE_IT(format.csv_format_.field_term_str_ =
+                               ObString::make_string(","))) {
+    } else if (OB_FAIL(apply_copy_options(parse_tree.children_[copy_child_options],
+                                          into_item, format, *params_.allocator_))) {
+    } else if (OB_FAIL(select_stmt_resolver_func<ObSelectResolver>(
+                         params_, *parse_tree.children_[copy_child_query], child_stmt))) {
+    } else if (OB_ISNULL(select_stmt = dynamic_cast<ObSelectStmt *>(child_stmt))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ob_write_string(*params_.allocator_,
+                                       ObString(path->str_len_,
+                                                const_cast<char *>(path->str_value_)),
+                                       stored_name))) {
+    } else if (OB_ISNULL(buf = params_.allocator_->alloc(sizeof(ObSelectIntoItem)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FALSE_IT(stored_item = new (buf) ObSelectIntoItem())) {
+    } else if (OB_FAIL(stored_item->assign(into_item))) {
+    } else if (OB_FAIL(copy_header_column_names(*select_stmt, *stored_item,
+                                                 *params_.allocator_))) {
+    } else if (!into_item.null_str_.empty()
+               && OB_FAIL(ob_write_string(*params_.allocator_, into_item.null_str_,
+                                          stored_item->null_str_))) {
+    } else {
+      stored_item->into_type_ = T_INTO_OUTFILE;
+      // A single file is what the DuckDB syntax means; splitting would append
+      // a numeric suffix to the name the user gave.
+      stored_item->is_single_ = true;
+      stored_item->outfile_name_.set_varchar(stored_name);
+      stored_item->outfile_name_.set_collation_type(ObCharset::get_system_collation());
+      stored_item->cs_type_ = ObCharset::get_system_collation();
+      if (OB_FAIL(format.to_string_with_alloc(stored_item->external_properties_,
+                                              *params_.allocator_, true))) {
+      } else {
+        select_stmt->set_select_into(stored_item);
+        stmt = child_stmt;
+      }
+    }
+  }
+  return ret;
 }
 
 template <typename ResolverType>
@@ -473,7 +716,15 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         break;
       }
       case T_EXPLAIN: {
-        REGISTER_STMT_RESOLVER(Explain);
+        if (OB_FAIL(resolve_describe_select(real_parse_tree, stmt))) {
+        } else if (OB_NOT_NULL(stmt)) {
+        } else {
+          REGISTER_STMT_RESOLVER(Explain);
+        }
+        break;
+      }
+      case T_COPY_TABLE_STMT: {
+        ret = resolve_copy_to_stmt(*real_parse_tree, stmt);
         break;
       }
       case T_ALTER_SYSTEM_SET: {

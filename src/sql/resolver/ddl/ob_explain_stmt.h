@@ -57,6 +57,10 @@ public:
   virtual bool is_affect_found_rows() const { return is_select_explain(); }
   bool is_explain_extended() const { return EXPLAIN_EXTENDED == format_
                                             || EXPLAIN_EXTENDED_NOADDR == format_; }
+  // DESCRIBE ... SELECT lists the query's columns rather than its plan, so the
+  // plan for this statement is the plan of the described query itself.
+  bool is_describe() const { return is_describe_; }
+  void set_is_describe(bool is_describe) { is_describe_ = is_describe; }
 
   DECLARE_VIRTUAL_TO_STRING;
 private:
@@ -66,6 +70,7 @@ private:
   ObDMLStmt *explain_query_stmt_;
   common::ObString into_table_;
   common::ObString statement_id_;
+  bool is_describe_;
   DISALLOW_COPY_AND_ASSIGN(ObExplainStmt);
 };
 

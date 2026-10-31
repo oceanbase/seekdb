@@ -99,12 +99,37 @@ int ObExplainLogPlan::generate_normal_raw_plan()
     }
     get_optimizer_context().get_all_exprs().reuse();
     if (OB_FAIL(ret)) {
+    } else if (explain_stmt->is_describe()) {
+      // DESCRIBE reports the described query's own rows, so its plan is the
+      // child plan: there is no plan text to render.
+      if (OB_FAIL(adopt_child_plan(child_plan))) {
+      }
     } else if (OB_FAIL(allocate_output_expr_for_values_op(*values_op))) {
     } else {
       get_optimizer_context().set_plan_type(ObPhyPlanType::OB_PHY_PLAN_LOCAL,
                                             ObPhyPlanType::OB_PHY_PLAN_LOCAL,
                                             false);
     }
+  }
+  return ret;
+}
+
+// Moves the root of `child_plan` into this plan, so a DESCRIBE executes the
+// described query instead of rendering a plan for it.
+int ObExplainLogPlan::adopt_child_plan(ObLogPlan *child_plan)
+{
+  int ret = OB_SUCCESS;
+  ObLogicalOperator *root = NULL;
+  if (OB_ISNULL(child_plan) || OB_ISNULL(root = child_plan->get_plan_root())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("described query has no plan root", K(ret));
+  } else {
+    set_plan_root(root);
+    root->mark_is_plan_root();
+    set_max_op_id(child_plan->get_max_op_id());
+    get_optimizer_context().set_plan_type(ObPhyPlanType::OB_PHY_PLAN_LOCAL,
+                                          ObPhyPlanType::OB_PHY_PLAN_LOCAL,
+                                          false);
   }
   return ret;
 }

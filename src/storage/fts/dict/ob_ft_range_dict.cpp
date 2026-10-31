@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <string.h>
+
 #include "storage/fts/dict/ob_ft_range_dict.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -378,19 +380,28 @@ int ObFTRangeDict::match_with_hit(const ObString &single_word,
   return last_hit.dict_->match_with_hit(single_word, last_hit, hit);
 }
 
+namespace {
+// CS_TYPE_UTF8MB4_BIN comparison is a byte-wise comparison followed by a length
+// comparison. Going through ObCharset::strcmp() costs a charset table lookup and
+// argument validation on every call, which dominates the per token lookup here.
+inline int ft_word_bin_cmp(const ObString &lhs, const ObString &rhs)
+{
+  const int64_t min_len = MIN(lhs.length(), rhs.length());
+  int cmp = (0 == min_len) ? 0 : memcmp(lhs.ptr(), rhs.ptr(), min_len);
+  if (0 == cmp && lhs.length() != rhs.length()) {
+    cmp = (lhs.length() < rhs.length()) ? -1 : 1;
+  }
+  return cmp;
+}
+} // namespace
+
 int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict *&dict) const
 {
   int ret = OB_SUCCESS;
   bool found = false;
   for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
+    if (ft_word_bin_cmp(range_dicts_[i].start_.get_word(), single_word) <= 0
+        && ft_word_bin_cmp(range_dicts_[i].end_.get_word(), single_word) >= 0) {
       dict = range_dicts_[i].dict_;
       found = true;
     }

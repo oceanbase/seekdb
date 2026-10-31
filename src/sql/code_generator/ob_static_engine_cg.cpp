@@ -5486,6 +5486,17 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
       spec.cs_type_ = op.get_cs_type();
       spec.parallel_ = op.get_parallel();
       spec.is_overwrite_ = op.get_is_overwrite();
+      spec.has_header_ = op.get_has_header();
+      if (OB_FAIL(ob_write_string(alloc, op.get_null_str(), spec.null_str_))) {
+      }
+      if (OB_SUCC(ret) && OB_FAIL(spec.header_columns_.init(op.get_header_columns().count()))) {
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < op.get_header_columns().count(); ++i) {
+        ObString name;
+        if (OB_FAIL(ob_write_string(alloc, op.get_header_columns().at(i), name))) {
+        } else if (OB_FAIL(spec.header_columns_.push_back(name))) {
+        }
+      }
       spec.plan_->need_drive_dml_query_ = true;
     }
   }

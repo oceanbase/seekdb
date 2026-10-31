@@ -2947,6 +2947,20 @@ int ObBasicSessionInfo::is_select_index_enabled(bool &select_index_enabled) cons
   return get_bool_sys_var(SYS_VAR_OB_ENABLE_INDEX_DIRECT_SELECT, select_index_enabled);
 }
 
+int ObBasicSessionInfo::get_file_table_enabled(bool &enabled) const
+{
+  // Read the value as an integer and decide the flag here. The bool overload
+  // reports a value of unknown provenance for some sessions, which let the
+  // gate pass while @@session.enable_file_sql still read 0.
+  int ret = OB_SUCCESS;
+  int64_t value = 0;
+  if (OB_FAIL(get_sys_variable(SYS_VAR_ENABLE_FILE_SQL, value))) {
+  } else {
+    enabled = (0 != value);
+  }
+  return ret;
+}
+
 int ObBasicSessionInfo::set_autocommit(bool autocommit)
 {
   sys_vars_cache_.set_autocommit(autocommit);

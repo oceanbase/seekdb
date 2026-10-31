@@ -38,7 +38,7 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    external_properties_, has_header_, header_columns_, null_str_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -92,6 +92,9 @@ int ObSelectIntoOp::init_csv_env()
     if (external_properties_.csv_format_.compression_algorithm_ != CsvCompressType::NONE) {
       has_compress_ = true;
     }
+    has_header_ = MY_SPEC.has_header_;
+    null_str_ = MY_SPEC.null_str_;
+    header_written_ = false;
     // setup binary output format for bit/binary
     switch (external_properties_.csv_format_.binary_format_) {
       case ObCSVGeneralFormat::ObCSVBinaryFormat::DEFAULT:
@@ -932,13 +935,57 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
   if (!has_escape_) {
     OZ(write_obj_to_file(obj, data_writer, false));
   } else if (obj.is_null()) {
-    OZ(write_single_char_to_file(&char_escape_, data_writer));
-    OZ(write_single_char_to_file(&char_n, data_writer));
+    if (!null_str_.empty()) {
+      // COPY ... TO (nullstr ...) names the text used for a missing value, so
+      // the default escape-then-N spelling is replaced by it verbatim.
+      OZ(write_null_str(data_writer));
+    } else {
+      OZ(write_single_char_to_file(&char_escape_, data_writer));
+      OZ(write_single_char_to_file(&char_n, data_writer));
+    }
   } else {
     OZ(write_obj_to_file(obj, data_writer, true));
   }
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  }
+  return ret;
+}
+
+// Copies the caller-supplied NULL spelling into the output without escaping:
+// the string stands for the value, so it is written the way it was given.
+int ObSelectIntoOp::write_null_str(ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(null_str_.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(data_writer.flush_shared_buf(shared_buf_))) {
+  } else {
+    ObObj text;
+    text.set_varchar(null_str_);
+    text.set_collation_type(cs_type_);
+    OZ(print_normal_obj_without_escape(text, data_writer));
+  }
+  return ret;
+}
+
+// Writes the column-name row that COPY ... TO (header) asks for. It runs once
+// per file and only when the query actually produced a row, so an empty result
+// leaves the file empty.
+int ObSelectIntoOp::write_header_row(ObCsvFileWriter &data_writer)
+{
+  int ret = OB_SUCCESS;
+  const ObIArray<ObString> &names = MY_SPEC.header_columns_;
+  header_written_ = true;
+  for (int64_t i = 0; OB_SUCC(ret) && i < names.count(); ++i) {
+    ObObj text;
+    text.set_varchar(names.at(i));
+    text.set_collation_type(cs_type_);
+    if (OB_FAIL(print_field(text, data_writer))) {
+    } else if (i != names.count() - 1 && OB_FAIL(write_obj_to_file(field_str_, data_writer))) {
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(write_obj_to_file(line_str_, data_writer))) {
   }
   return ret;
 }
@@ -952,6 +999,7 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
   ObCsvFileWriter *csv_data_writer = NULL;
   if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (has_header_ && !header_written_ && OB_FAIL(write_header_row(*csv_data_writer))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_ISNULL(select_exprs.at(i))) {
@@ -1002,6 +1050,8 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
       // do nothing
     } else if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (has_header_ && !header_written_
+               && OB_FAIL(write_header_row(*csv_data_writer))) {
     } else if (has_compress_ && OB_ISNULL(csv_data_writer->get_compress_stream_writer())
                && OB_FAIL(csv_data_writer->init_compress_writer(ctx_.get_allocator(),
                                                                 external_properties_.csv_format_.compression_algorithm_,
