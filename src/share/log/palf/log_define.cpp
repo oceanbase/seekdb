@@ -16,6 +16,7 @@
 
 #include "share/log/palf/log_define.h"
 #include "share/ob_errno.h"
+#include <inttypes.h>
 
 namespace oceanbase
 {
@@ -64,7 +65,7 @@ int block_id_to_string(const block_id_t block_id, char *str, const int64_t str_l
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t pos = 0;
-    ret = databuff_printf(str, str_len, pos, "%lu", block_id);
+    ret = databuff_printf(str, str_len, pos, "%" PRIu64, block_id);
   }
   return ret;
 }
@@ -76,7 +77,7 @@ int block_id_to_tmp_string(const block_id_t block_id, char *str, const int64_t s
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t pos = 0;
-    ret = databuff_printf(str, str_len, pos, "%lu.tmp", block_id);
+    ret = databuff_printf(str, str_len, pos, "%" PRIu64 ".tmp", block_id);
   }
   return ret;
 }
@@ -88,7 +89,7 @@ int construct_absolute_block_path(const char *dir_path, const block_id_t block_i
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t pos = 0;
-    ret = databuff_printf(absolute_block_path, buf_len, pos, "%s/%lu", dir_path, block_id);
+    ret = databuff_printf(absolute_block_path, buf_len, pos, "%s/%" PRIu64, dir_path, block_id);
   }
   return ret;
 }
@@ -100,7 +101,7 @@ int construct_absolute_tmp_block_path(const char *dir_path, const block_id_t blo
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t pos = 0;
-    ret = databuff_printf(absolute_tmp_block_path, buf_len, pos, "%s/%lu.tmp", dir_path, block_id);
+    ret = databuff_printf(absolute_tmp_block_path, buf_len, pos, "%s/%" PRIu64 ".tmp", dir_path, block_id);
   }
   return ret;
 }

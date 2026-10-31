@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_multiple_merge.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_aggregated_store.h"

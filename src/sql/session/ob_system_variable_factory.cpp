@@ -1270,7 +1270,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarSocket)
         + sizeof(ObSysVarEnableOptimizerRowgoal)
         + sizeof(ObSysVarObIvfNprobes)
-        + sizeof(ObSysVarObHnswExtraInfoMaxSize)
         + sizeof(ObSysVarPushJoinPredicate)
         + sizeof(ObSysVarObSparseDropRatioSearch)
         ;
@@ -7726,15 +7725,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObHnswExtraInfoMaxSize())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarObHnswExtraInfoMaxSize", K(ret));
-      } else {
-        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_OB_HNSW_EXTRA_INFO_MAX_SIZE))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarObHnswExtraInfoMaxSize));
-      }
-    }
-    if (OB_SUCC(ret)) {
       if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarPushJoinPredicate())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarPushJoinPredicate", K(ret));
@@ -10639,10 +10629,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
     }
     case share::SYS_VAR_OB_IVF_NPROBES: {
       ret = create_one_sys_var<ObSysVarObIvfNprobes>(allocator_, sys_var_ptr, "ObSysVarObIvfNprobes");
-      break;
-    }
-    case share::SYS_VAR_OB_HNSW_EXTRA_INFO_MAX_SIZE: {
-      ret = create_one_sys_var<ObSysVarObHnswExtraInfoMaxSize>(allocator_, sys_var_ptr, "ObSysVarObHnswExtraInfoMaxSize");
       break;
     }
     case share::SYS_VAR__PUSH_JOIN_PREDICATE: {

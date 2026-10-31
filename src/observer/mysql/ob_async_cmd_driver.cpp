@@ -52,7 +52,7 @@ int ObAsyncCmdDriver::response_result(ObMySQLResultSet &result)
   ObSqlEndTransCb &sql_end_cb = session_.get_mysql_end_trans_cb();
   ObEndTransCbPacketParam pkt_param;
   result.set_end_trans_async(true);
-  ObCurTraceId::TraceId *cur_trace_id = NULL;
+  const ObCurTraceId::TraceId *cur_trace_id = NULL;
   if (OB_ISNULL(cur_trace_id = ObCurTraceId::get_trace_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("current trace id is NULL", K(ret));

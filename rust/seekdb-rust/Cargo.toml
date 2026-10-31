@@ -1,0 +1,21 @@
+[package]
+name = "seekdb-rust"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[features]
+default = ["native-network"]
+native-network = ["sql-nio/native-network"]
+
+[dependencies]
+sql-nio = { path = "../sql-nio", default-features = false }
+logger = { path = "../logger" }
+config = { path = "../config" }
+local = { path = "../local" }
+in-process = { path = "../in-process" }
+regex-engine = { path = "../regex-engine" }
+uuid-generator = { path = "../uuid-generator" }

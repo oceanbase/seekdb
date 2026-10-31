@@ -151,7 +151,6 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
   }
 
   sm_conn_unlock_runtime(conn);
-  share::ObTaskController::get().allow_next_syslog();
   LOG_INFO("connection close",
            "sessid", conn.sessid_,
            "c/s protocol", get_cs_protocol_type_name(conn.get_cs_protocol_type()),

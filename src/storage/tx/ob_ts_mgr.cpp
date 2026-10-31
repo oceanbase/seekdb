@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_ts_mgr.h"
 #include "ob_timestamp_access.h"
 #include "share/config/ob_server_config.h"

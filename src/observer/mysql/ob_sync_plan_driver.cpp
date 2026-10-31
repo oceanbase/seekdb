@@ -101,7 +101,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
                                               cli_ret);
         ret = cli_ret;
       } else {
-        result.refresh_location_cache_by_errno(true, ret);
+        result.get_exec_context().get_das_ctx().record_access_error(ret);
       }
       if (retry_ctrl_.need_retry()) {
         result.set_will_retry();

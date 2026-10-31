@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "data_plane/vector/ob_vector_refresh_transaction.h"
 
 #include "observer/ob_inner_sql_connection.h"

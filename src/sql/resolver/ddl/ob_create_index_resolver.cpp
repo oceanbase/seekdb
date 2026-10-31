@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"

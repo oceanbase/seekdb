@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_freeze_info_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -25,7 +25,7 @@
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "share/ob_tablet_local_checksum_operator.h"  // verify_column_checksum real user FreezeInfoMgr
 
@@ -532,9 +532,9 @@ int ObFreezeInfoMgr::inner_update_info(
 void ObFreezeInfoMgr::ReloadTask::runTimerTask()
 {
   int tmp_ret = OB_SUCCESS;
-  if (!SERVER_STORAGE_META_SERVICE.is_started()) {
+  if (!STORAGE_META_SERVICE.is_started()) {
     if (REACH_TIME_INTERVAL(10 * 1000 * 1000 /* 10s */)) {
-      LOG_WARN_RET(tmp_ret, "slog replay hasn't finished, this task can't start");
+      LOG_WARN_RET(tmp_ret, "local storage recovery hasn't finished, this task can't start");
     }
   } else {
     if (OB_TMP_FAIL(refresh_merge_info())) {

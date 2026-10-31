@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_PARALLEL_EXTERNAL_SORT_H_
 #define OCEANBASE_STORAGE_OB_PARALLEL_EXTERNAL_SORT_H_
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "blocksstable/ob_block_manager.h"
 #include "share/ob_define.h"
 #include "share/rc/ob_server_runtime.h"

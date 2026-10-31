@@ -1,24 +1,29 @@
+load("//bazel:parser.bzl", "parser", "parser_type_names")
 load(
     "//bazel:defs.bzl",
-    "SEEKDB_C_MIGRATION_COPTS",
-    "SEEKDB_MIGRATION_COPTS",
-    "seekdb_generated_unity_source",
-    cc_library = "seekdb_cc_library",
+    "C_COPTS",
+    "CXX_COPTS",
+    "unity_source",
+    "cc_library",
 )
 load(
-    "//src/sql:sql_build_defs.bzl",
+    "//src/sql:sql_header_inventory.bzl",
     "SQL_COMPOSITION_HEADERS",
     "SQL_INTERFACE_CLOSURE_HEADERS",
-    "SQL_PARSER_SOURCES",
-    "SQL_PRIVATE_HEADERS",
     "SQL_PUBLIC_HEADER_ROOTS",
-    "sql_headers_under",
-    "sql_paths_under",
+)
+load(
+    "//src/sql:sql_source_inventory.bzl",
+    "SQL_PARSER_SOURCES",
+)
+load(
+    "//src/sql:sql_module_sources.bzl",
+    "paths_under",
 )
 
 package(default_visibility = ["//visibility:private"])
 
-_PARSER_SOURCES = sql_paths_under(
+_PARSER_SOURCES = paths_under(
     SQL_PARSER_SOURCES,
     "src/sql/parser/",
 )
@@ -41,44 +46,34 @@ _PARSER_CXX_STANDALONE_SOURCES = [
     ) and source not in _PARSER_DRIVER_UNITY_MEMBERS
 ]
 
-genrule(
+parser(
+    name = "generate_fts_parser",
+    grammar = "ftsparser.y",
+    lexer_source = "ftsblex.l",
+    parser = "bazel_generated/ftsparser_tab.c",
+    parser_header = "bazel_generated/ftsparser_tab.h",
+    lexer = "bazel_generated/ftsblex_lex.c",
+    lexer_header = "bazel_generated/ftsblex_lex.h",
+    flex_options = ["-Cfa", "-B", "-8"],
+    lexer_patch = "fts",
+)
+
+parser(
     name = "generate_sql_parser",
-    srcs = [
-        "ftsblex.l",
-        "ftsparser.y",
-        "gen_type_name.sh",
-        "ob_item_type.h",
-        "//src/query:_sql_item_type_definition",
-        "sql_parser_mysql_mode.l",
-        "sql_parser_mysql_mode.y",
-    ],
-    outs = [
-        "bazel_generated/ftsblex_lex.c",
-        "bazel_generated/ftsblex_lex.h",
-        "bazel_generated/ftsparser_tab.c",
-        "bazel_generated/ftsparser_tab.h",
-        "bazel_generated/sql_parser_mysql_mode_lex.c",
-        "bazel_generated/sql_parser_mysql_mode_lex.h",
-        "bazel_generated/sql_parser_mysql_mode_tab.c",
-        "bazel_generated/sql_parser_mysql_mode_tab.h",
-        "bazel_generated/type_name.c",
-    ],
-    cmd = """
-      bash $(location //tools/bazel_migration:generate_sql_parser.sh) \
-        $(location @seekdb_3rd_headers//:devtools/bin/bison) \
-        $(location @seekdb_3rd_headers//:devtools/bin/flex) \
-        $$(dirname $(location @seekdb_3rd_headers//:devtools/share/bison/README)) \
-        $(@D)/bazel_generated \
-        $$(dirname $(location :ftsparser.y)) \
-        $(location //src/query:_sql_item_type_definition)
-    """,
-    tools = [
-        "//tools/bazel_migration:generate_sql_parser.sh",
-        "@seekdb_3rd_headers//:bison_runtime",
-        "@seekdb_3rd_headers//:devtools/bin/bison",
-        "@seekdb_3rd_headers//:devtools/bin/flex",
-        "@seekdb_3rd_headers//:devtools/share/bison/README",
-    ],
+    grammar = "sql_parser_mysql_mode.y",
+    lexer_source = "sql_parser_mysql_mode.l",
+    parser = "bazel_generated/sql_parser_mysql_mode_tab.c",
+    parser_header = "bazel_generated/sql_parser_mysql_mode_tab.h",
+    lexer = "bazel_generated/sql_parser_mysql_mode_lex.c",
+    lexer_header = "bazel_generated/sql_parser_mysql_mode_lex.h",
+    flex_options = ["-Cfa", "-B", "-8"],
+    lexer_patch = "sql",
+)
+
+parser_type_names(
+    name = "generate_type_names",
+    src = "//src/query:_sql_item_type_definition",
+    out = "bazel_generated/type_name.c",
 )
 
 cc_library(
@@ -95,21 +90,23 @@ cc_library(
     visibility = ["//src/sql:__subpackages__"],
 )
 
-_PARSER_PUBLIC_ROOTS = sql_headers_under(
+_PARSER_PUBLIC_ROOTS = paths_under(
     SQL_PUBLIC_HEADER_ROOTS,
     "parser/",
 )
-_PARSER_INTERFACE_CLOSURE = sql_headers_under(
+_PARSER_INTERFACE_CLOSURE = paths_under(
     SQL_INTERFACE_CLOSURE_HEADERS,
     "parser/",
 )
-_PARSER_PRIVATE_HEADERS = sql_headers_under(
-    SQL_PRIVATE_HEADERS,
-    "parser/",
-)
-_PARSER_COMPOSITION_HEADERS = sql_headers_under(
+_PARSER_COMPOSITION_HEADERS = paths_under(
     SQL_COMPOSITION_HEADERS,
     "parser/",
+)
+
+_PARSER_PRIVATE_HEADERS = glob(
+    ["**/*.h", "**/*.ipp", "**/*.def"],
+    allow_empty = True,
+    exclude = _PARSER_PUBLIC_ROOTS + _PARSER_INTERFACE_CLOSURE + _PARSER_COMPOSITION_HEADERS,
 )
 
 cc_library(
@@ -170,8 +167,11 @@ cc_library(
         ":parser_public_headers",
         "//src/sql:sql_runtime_interface",
         "//src/sql:sql_runtime_internal_headers",
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_foundation",
     ],
-    copts = SEEKDB_C_MIGRATION_COPTS,
+    copts = C_COPTS,
     tags = ["manual"],
 )
 
@@ -180,7 +180,7 @@ cc_library(
     textual_hdrs = _PARSER_DRIVER_UNITY_MEMBERS,
 )
 
-sql_parser_driver_unity = seekdb_generated_unity_source(
+sql_parser_driver_unity = unity_source(
     name = "sql_parser_driver_impl",
     unity_members = _PARSER_DRIVER_UNITY_MEMBERS,
     tags = ["manual"],
@@ -197,8 +197,16 @@ cc_library(
         ":parser_public_headers",
         "//src/sql:sql_runtime_interface",
         "//src/sql:sql_runtime_internal_headers",
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_memory_primitives",
     ],
-    copts = SEEKDB_MIGRATION_COPTS,
+    copts = CXX_COPTS,
     tags = ["manual"],
 )
 
@@ -227,14 +235,4 @@ cc_library(
         "//src/observer:__pkg__",
         "//src/sql:__pkg__",
     ],
-)
-
-filegroup(
-    name = "sql_server_parser_build",
-    srcs = [
-        ":_server_parser_c",
-        ":_server_parser_cxx",
-    ],
-    tags = ["manual"],
-    visibility = ["//src/sql:__pkg__"],
 )

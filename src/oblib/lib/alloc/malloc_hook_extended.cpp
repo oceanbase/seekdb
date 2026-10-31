@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN)
+
 #include <cstdlib>
 #include <new>
 #include <cerrno>
@@ -327,4 +329,6 @@ void operator delete[](void* ptr, std::size_t size, std::align_val_t al) noexcep
 {
   free(ptr);
 }
+#endif
+
 #endif

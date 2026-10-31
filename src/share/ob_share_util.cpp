@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/io/ob_io_manager.h"

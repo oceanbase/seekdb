@@ -28,7 +28,10 @@ using namespace common;
 
 // modify buf size in ob_keybtree.h together, otherwise there may be memory waste or overflow.
 STATIC_ASSERT(sizeof(ObQueryEngine::Iterator<keybtree::BtreeIterator<ObStoreRowkeyWrapper, ObMvccRow *>>) <= 5120, "Iterator size exceeded");
-#if !defined(_WIN32)
+#if defined(__EMSCRIPTEN__)
+// Iterator storage in ob_keybtree.h is sized with sizeof, not the native ABI.
+STATIC_ASSERT(sizeof(keybtree::Iterator<ObStoreRowkeyWrapper, ObMvccRow *>) <= 368, "Iterator size exceeded");
+#elif !defined(_WIN32)
 STATIC_ASSERT(sizeof(keybtree::Iterator<ObStoreRowkeyWrapper, ObMvccRow *>) == 368, "Iterator size changed");
 #endif
 

@@ -16,7 +16,7 @@
 // Storage-owned DDL algorithms operating on tablets, macro blocks and LOBs.
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ob_tablet_autoinc_seq_service.h"
 #include "share/ob_ddl_common.h"

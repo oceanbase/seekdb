@@ -20,7 +20,7 @@
 #include "ob_config_manager.h"
 #include "share/ob_sql_client_decorator.h"
 #include "share/config/ob_config_rpc_types.h"
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/storage/local_store.h"
 
 namespace oceanbase

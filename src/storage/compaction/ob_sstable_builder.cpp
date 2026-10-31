@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_sstable_builder.h"
 #include "storage/compaction/ob_basic_tablet_merge_ctx.h"
 

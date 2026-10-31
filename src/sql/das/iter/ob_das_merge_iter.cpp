@@ -163,11 +163,6 @@ int ObDASMergeIter::set_merge_status(MergeType merge_type)
   return ret;
 }
 
-void ObDASMergeIter::set_global_lookup_iter(ObDASMergeIter *global_lookup_iter)
-{
-  wild_datum_info_.global_lookup_iter_ = global_lookup_iter;
-}
-
 common::ObIAllocator *ObDASMergeIter::get_das_alloc()
 {
   common::ObIAllocator *alloc = nullptr;
@@ -177,7 +172,7 @@ common::ObIAllocator *ObDASMergeIter::get_das_alloc()
   return alloc;
 }
 
-int ObDASMergeIter::create_das_task(const ObDASTabletLoc *tablet_loc, ObDASScanOp *&scan_op, bool &reuse_op)
+int ObDASMergeIter::create_das_task(const DASRuntimeTabletAccess *tablet_access, ObDASScanOp *&scan_op, bool &reuse_op)
 {
   int ret = OB_SUCCESS;
   ObIDASTaskOp *task_op = nullptr;
@@ -185,10 +180,10 @@ int ObDASMergeIter::create_das_task(const ObDASTabletLoc *tablet_loc, ObDASScanO
   reuse_op = false;
   if (OB_ISNULL(das_ref_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_NOT_NULL(task_op = das_ref_->find_das_task(tablet_loc, op_type))) {
+  } else if (OB_NOT_NULL(task_op = das_ref_->find_das_task(tablet_access, op_type))) {
     // reuse scan op
     reuse_op = true;
-  } else if (OB_FAIL(das_ref_->create_das_task(tablet_loc, op_type, task_op))) {
+  } else if (OB_FAIL(das_ref_->create_das_task(tablet_access, op_type, task_op))) {
   }
   if (OB_SUCC(ret)) {
     scan_op = static_cast<ObDASScanOp*>(task_op);
@@ -221,15 +216,6 @@ DASTaskIter ObDASMergeIter::begin_task_iter()
     task_iter = das_ref_->begin_task_iter();
   }
   return task_iter;
-}
-
-bool ObDASMergeIter::is_all_local_task() const
-{
-  bool bret = false;
-  if (OB_NOT_NULL(das_ref_)) {
-    bret = das_ref_->is_all_local_task();
-  }
-  return bret;
 }
 
 int ObDASMergeIter::rescan_das_task(ObDASScanOp *scan_op)
@@ -386,37 +372,7 @@ void ObDASMergeIter::reset_datum_ptr(ObDASScanOp *scan_op, int64_t &capacity)
     int64_t simulate_max_rowsets = - EVENT_CALL(EventTable::EN_DAS_SIMULATE_MAX_ROWSETS);
     capacity = (simulate_max_rowsets > 0 && simulate_max_rowsets < capacity) ? simulate_max_rowsets : capacity;
     scan_op->reset_access_datums_ptr(capacity);
-  } else {
-    reset_wild_datum_ptr();
   }
-}
-
-void ObDASMergeIter::reset_wild_datum_ptr()
-{
-  if (OB_NOT_NULL(wild_datum_info_.exprs_) && wild_datum_info_.max_output_rows_ > 0) {
-    FOREACH_CNT(e, *wild_datum_info_.exprs_)
-    {
-      (*e)->locate_datums_for_update(*eval_ctx_, wild_datum_info_.max_output_rows_);
-      ObEvalInfo &info = (*e)->get_eval_info(*eval_ctx_);
-      info.point_to_frame_ = true;
-    }
-    wild_datum_info_.exprs_ = nullptr;
-    wild_datum_info_.max_output_rows_ = 0;
-  }
-
-  // A global index scan and its lookup may share expressions. A copied lookup
-  // task can change datum pointers also observed by the index scan,
-  // so need to associate the result iterator of scan and lookup
-  // resetting the index scan result datum ptr will also reset the lookup result datum ptr
-  if (OB_NOT_NULL(wild_datum_info_.global_lookup_iter_)) {
-    wild_datum_info_.global_lookup_iter_->reset_wild_datum_ptr();
-  }
-}
-
-void ObDASMergeIter::update_wild_datum_ptr(int64_t rows_count)
-{
-  wild_datum_info_.exprs_ = output_;
-  wild_datum_info_.max_output_rows_ = std::max(wild_datum_info_.max_output_rows_, rows_count);
 }
 
 void ObDASMergeIter::clear_evaluated_flag()
@@ -432,26 +388,26 @@ int ObDASMergeIter::update_output_tablet_id(ObIDASTaskOp *output_das_task)
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(pdml_partition_id_) && OB_NOT_NULL(eval_ctx_) && OB_NOT_NULL(output_das_task)) {
-    const ObDASTabletLoc *tablet_loc = nullptr;
+    const DASRuntimeTabletAccess *tablet_access = nullptr;
     int64_t output_id = OB_INVALID_ID;
     if (partition_id_calc_type_ > 0) {
-      tablet_loc = output_das_task->get_tablet_loc();
+      tablet_access = output_das_task->get_tablet_access();
     } else if (should_scan_index_) {
-      tablet_loc = ObDASUtils::get_related_tablet_loc(*output_das_task->get_tablet_loc(), ref_table_id_);
+      tablet_access = ObDASUtils::get_related_tablet_access(*output_das_task->get_tablet_access(), ref_table_id_);
     } else {
-      tablet_loc = output_das_task->get_tablet_loc();
+      tablet_access = output_das_task->get_tablet_access();
     }
 
-    if (OB_ISNULL(tablet_loc)) {
+    if (OB_ISNULL(tablet_access)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       if (partition_id_calc_type_ == 0) {
-        output_id = tablet_loc->tablet_id_.id();
+        output_id = tablet_access->tablet_id_.id();
       } else if (partition_id_calc_type_ == 1) {
-        output_id = tablet_loc->first_level_part_id_ != OB_INVALID_ID ?
-                    tablet_loc->first_level_part_id_ : tablet_loc->partition_id_;
+        output_id = tablet_access->first_level_part_id_ != OB_INVALID_ID ?
+                    tablet_access->first_level_part_id_ : tablet_access->partition_id_;
       } else if (partition_id_calc_type_ == 2) {
-        output_id = tablet_loc->partition_id_;
+        output_id = tablet_access->partition_id_;
       } else {
         ret = OB_INVALID_ARGUMENT;
       }
@@ -540,9 +496,7 @@ int ObDASMergeIter::get_next_seq_rows(int64_t &count, int64_t capacity)
       if (OB_ISNULL(scan_op)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        if (scan_op->is_local_task()) {
-          reset_datum_ptr(scan_op, capacity);
-        }
+        reset_datum_ptr(scan_op, capacity);
         if (OB_SUCC(ret)) {
           count = 0;
           if (first_get_row_) {
@@ -565,9 +519,6 @@ int ObDASMergeIter::get_next_seq_rows(int64_t &count, int64_t capacity)
         }
         if (OB_SUCC(ret)) {
           got_rows = true;
-          if (!scan_op->is_local_task()) {
-            update_wild_datum_ptr(count);
-          }
         } else if (OB_ITER_END == ret) {
           ++seq_task_idx_;
           if (seq_task_idx_ == das_tasks_arr_.count()) {
@@ -625,7 +576,7 @@ int ObDASMergeIter::get_next_sorted_row()
       ret = OB_ITER_END;
     } else {
       if (need_update_partition_id_) {
-        ObTabletID tablet_id = das_tasks_arr_[output_idx]->get_tablet_loc()->tablet_id_;
+        ObTabletID tablet_id = das_tasks_arr_[output_idx]->get_tablet_access()->tablet_id_;
         if (OB_FAIL(update_output_tablet_id(das_tasks_arr_[output_idx]))) {
         }
       }
@@ -651,18 +602,11 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
     if (OB_ISNULL(scan_op)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      if (scan_op->is_local_task()) {
-        reset_datum_ptr(scan_op, capacity);
-      }
+      reset_datum_ptr(scan_op, capacity);
       count = 0;
       ret = scan_op->get_output_result_iter()->get_next_rows(count, capacity);
       if (OB_ITER_END == ret && count > 0) {
         ret = OB_SUCCESS;
-      }
-      if (OB_SUCC(ret)) {
-        if (!scan_op->is_local_task()) {
-          update_wild_datum_ptr(count);
-        }
       }
     }
   } else {
@@ -677,9 +621,7 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
           if (OB_ISNULL(scan_op)) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            if (scan_op->is_local_task()) {
-              reset_datum_ptr(scan_op, capacity);
-            }
+            reset_datum_ptr(scan_op, capacity);
             count = 0;
             scan_op->get_scan_param().need_update_tablet_param_ = true;
             ret = scan_op->get_output_result_iter()->get_next_rows(count, capacity);
@@ -687,9 +629,6 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
               ret = OB_SUCCESS;
             }
             if (OB_SUCC(ret)) {
-              if (!scan_op->is_local_task()) {
-                update_wild_datum_ptr(count);
-              }
               if (OB_FAIL(merge_store_rows_arr_[i].save(true, count))) {
               } else {
                 merge_state_arr_[i].row_store_have_data_ = true;
@@ -714,10 +653,8 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
         count = 0;
         ret = OB_ITER_END;
       } else {
-        // We need keep the datum points to the frame.
-        reset_wild_datum_ptr();
         if (need_update_partition_id_) {
-          ObTabletID tablet_id = das_tasks_arr_[output_idx]->get_tablet_loc()->tablet_id_;
+          ObTabletID tablet_id = das_tasks_arr_[output_idx]->get_tablet_access()->tablet_id_;
           if (OB_FAIL(update_output_tablet_id(das_tasks_arr_[output_idx]))) {
           }
         }

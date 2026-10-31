@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_STORAGE_LS_RESTORE_HELPER_
 #define OCEANBASE_STORAGE_LS_RESTORE_HELPER_
 
-#include "share/ob_task_define.h"
 #include "ob_storage_restore_struct.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "ob_standby_restore_storage_struct.h"

@@ -1,4 +1,4 @@
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -17,6 +17,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include <inttypes.h>
 #include "rootserver/ob_runtime_ddl_service.h"
 
 #include "rootserver/ob_ddl_service.h"
@@ -68,7 +69,7 @@
         }
 #define VAR_UINT_TO_STRING(buf, value) \
         if (OB_SUCC(ret)) {\
-          if (OB_FAIL(databuff_printf(buf, OB_MAX_SYS_PARAM_VALUE_LENGTH, "%lu", static_cast<uint64_t>(value)))) {\
+          if (OB_FAIL(databuff_printf(buf, OB_MAX_SYS_PARAM_VALUE_LENGTH, "%" PRIu64, static_cast<uint64_t>(value)))) {\
             LOG_WARN("failed to print value in buf", K(value), K(ret));\
           }\
         }
@@ -156,7 +157,7 @@ int ObRuntimeDDLService::replace_sys_stat(ObSysStat &sys_stat,
           uint64_t schema_id = OB_INVALID_ID;
           if (OB_FAIL(ObMaxIdFetcher::str_to_uint(value, schema_id))) {
           } else if (FALSE_IT(schema_id = ObSchemaUtils::get_extract_schema_id(schema_id))) {
-          } else if (OB_FAIL(sql.append_fmt("%s('%s', %d, '%ld', '%s', now())",
+          } else if (OB_FAIL(sql.append_fmt("%s('%s', %d, '%" PRId64 "', '%s', now())",
               (it == sys_stat.item_list_.get_first()) ? "" : ", ",
               it->name_, it->value_.get_type(),
               static_cast<int64_t>(schema_id),

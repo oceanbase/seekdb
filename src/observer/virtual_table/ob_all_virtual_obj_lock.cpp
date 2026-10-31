@@ -19,6 +19,7 @@
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_tx_ctx.h"
+#include <cinttypes>
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -346,8 +347,9 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
         }
         case EXTRA_INFO:
           snprintf(lock_op_extra_info_, sizeof(lock_op_extra_info_),
-                   "count:%ld, position:%s",
-                   ((lock_op.op_type_ == IN_TRANS_DML_LOCK && !is_iter_tx_) ? lock_op.lock_seq_no_.cast_to_int() : 0),
+                   "count:%" PRId64 ", position:%s",
+                   static_cast<int64_t>((lock_op.op_type_ == IN_TRANS_DML_LOCK && !is_iter_tx_)
+                       ? lock_op.lock_seq_no_.cast_to_int() : 0),
                    is_iter_tx_ ? "tx_ctx" : "lock_table");
           lock_op_extra_info_[MAX_LOCK_OP_EXTRA_INFO_LENGTH - 1] = '\0';
           cur_row_.cells_[i].set_varchar(lock_op_extra_info_);

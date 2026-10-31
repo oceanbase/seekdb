@@ -18,7 +18,6 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "share/cache/ob_kv_storecache.h"
-#include "share/ob_task_define.h"
 #include "share/ob_debug_sync.h"             // DEBUG_SYNC
 
 namespace oceanbase
@@ -173,7 +172,6 @@ int ObKVGlobalCache::get_suitable_bucket_num(
     COMMON_LOG(ERROR, "failed to calculate suitable bucket num", K(ret),
                K(cache_memory_limit));
   } else {
-    share::ObTaskController::get().allow_next_syslog();
     COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num),
                K(cache_memory_limit));
   }

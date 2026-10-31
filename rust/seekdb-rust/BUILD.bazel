@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_static_library")
+load("@rust_crates//:crates.bzl", "aliases", "all_crate_deps", "crate_edition")
+
+rust_static_library(
+    name = "archive",
+    crate_name = "seekdb_rust",
+    crate_root = "src/lib.rs",
+    srcs = glob(["src/**/*.rs"]),
+    edition = crate_edition(),
+    version = "0.1.0",
+    crate_features = select({
+        "@platforms//os:emscripten": [],
+        "//conditions:default": ["default", "native-network"],
+    }),
+    deps = all_crate_deps(normal = True) + [
+        "//rust/config",
+        "//rust/in-process:in_process",
+        "//rust/local",
+        "//rust/logger",
+        "//rust/sql-nio:sql_nio",
+        "//rust/regex-engine:regex_engine",
+        "//rust/uuid-generator:uuid_generator",
+    ],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    aliases = aliases(),
+    # The final C++ link owns its runtime and allocator overrides.
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    tags = ["no-remote"],
+    visibility = ["//rust:__pkg__"],
+)

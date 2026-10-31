@@ -15,7 +15,7 @@
  */
 
  #define USING_LOG_PREFIX RS
- #include "config_bridge.h"
+ #include "rust/config.h"
 #include "rootserver/parallel_ddl/ob_create_view_helper.h"
  #include "rootserver/ob_table_creator.h"
  #include "sql/resolver/ddl/ob_create_view_resolver.h"

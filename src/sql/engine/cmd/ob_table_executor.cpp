@@ -15,7 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "config_bridge.h"
+#include "rust/config.h"
+#include <inttypes.h>
 #include "common/ob_timeout_ctx.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_server_struct.h"
@@ -72,7 +73,7 @@ int ObCreateTableExecutor::prepare_stmt(ObCreateTableStmt &stmt,
   const int64_t timestamp = ObTimeUtility::current_time();
   obcall::ObCreateTableArg &create_table_arg = stmt.get_create_table_arg();
   create_table_name = create_table_arg.schema_.get_table_name_str();
-  if (OB_FAIL(databuff_printf(buf, buf_len, pos, "__ctas_%ld_%ld", session_id, timestamp))) {
+  if (OB_FAIL(databuff_printf(buf, buf_len, pos, "__ctas_%" PRId64 "_%" PRId64, session_id, timestamp))) {
   } else {
     ObString tmp_table_name(pos, buf);
     if (OB_FAIL(create_table_arg.schema_.set_table_name(tmp_table_name))) {
@@ -107,7 +108,7 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
       osg_str = do_osg_ ? "GATHER_OPTIMIZER_STATISTICS" : "NO_GATHER_OPTIMIZER_STATISTICS";
       if (stmt_->get_has_parallel_hint() &&
           OB_FAIL(databuff_printf(parallel_str, parallel_str_max_len, parallel_str_pos,
-                                  "PARALLEL(%lu)", stmt_->get_parallelism()))) {
+                                  "PARALLEL(%" PRId64 ")", stmt_->get_parallelism()))) {
       }
     }
     if (OB_FAIL(ret)) {

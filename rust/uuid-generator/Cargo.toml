@@ -1,0 +1,10 @@
+[package]
+name = "uuid-generator"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+cxx = "1"
+uuid = { version = "1.29", features = ["v1"] }
+getrandom = "0.4"

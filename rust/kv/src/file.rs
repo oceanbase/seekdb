@@ -48,10 +48,15 @@ pub(crate) fn open(directory: &Path) -> Result<Files> {
         .create(true)
         .truncate(false)
         .open(directory.join("lock"))?;
-    lock.try_lock().map_err(|error| match error {
-        std::fs::TryLockError::WouldBlock => Error::Busy,
-        std::fs::TryLockError::Error(error) => Error::Io(error),
-    })?;
+    // std has no file locking on Emscripten (try_lock reports Unsupported);
+    // the browser runtime admits one engine per data directory with a Web Lock.
+    #[cfg(not(target_os = "emscripten"))]
+    {
+        lock.try_lock().map_err(|error| match error {
+            std::fs::TryLockError::WouldBlock => Error::Busy,
+            std::fs::TryLockError::Error(error) => Error::Io(error),
+        })?;
+    }
     let lock = FileLock(lock);
     let path = directory.join("data");
     if !path.try_exists()? {

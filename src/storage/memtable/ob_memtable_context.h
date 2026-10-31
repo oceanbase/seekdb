@@ -324,7 +324,6 @@ public:
   virtual void *old_row_alloc(const int64_t size) override;
   virtual void old_row_free(void *row) override;
   virtual common::ObIAllocator &get_query_allocator();
-  virtual void inc_lock_for_read_retry_count();
   virtual int read_lock_yield()
   {
     return ATOMIC_LOAD(&end_code_);
@@ -383,10 +382,7 @@ public:
   void sync_log_fail(const ObCallbackScopeArray &callbacks, const share::SCN &max_applied_scn);
   virtual void set_trans_ctx(transaction::ObTxCtx *ctx);
   virtual transaction::ObTxCtx *get_trans_ctx() const { return ctx_; }
-  virtual void inc_truncate_cnt() override { truncate_cnt_++; }
   int get_memtable_key_arr(transaction::ObMemtableKeyArray &memtable_key_arr);
-  uint64_t get_lock_for_read_retry_count() const { return lock_for_read_retry_count_; }
-  virtual void add_trans_mem_total_size(const int64_t size);
   int64_t get_ref() const { return ATOMIC_LOAD(&ref_); }
   
   inline bool has_row_updated() const { return has_row_updated_; }
@@ -403,9 +399,6 @@ public:
   void set_skip_checksum_calc() {
     trans_mgr_.set_skip_checksum_calc();
   }
-  int64_t get_trans_mem_total_size() const { return trans_mem_total_size_; }
-  void add_lock_for_read_elapse(const int64_t elapse) { lock_for_read_elapse_ += elapse; }
-  int64_t get_lock_for_read_elapse() const { return lock_for_read_elapse_; }
   bool pending_log_size_too_large(const transaction::ObTxSEQ &write_seq_no);
   int clean_unlog_callbacks();
 public:
@@ -566,12 +559,6 @@ private:
   ObRedoLogGenerator log_gen_;
   RetryInfo retry_info_;
   transaction::ObTxCtx *ctx_;
-  int64_t truncate_cnt_;
-  // the retry count of lock for read
-  uint64_t lock_for_read_retry_count_;
-  // Time cost of lock for read
-  int64_t lock_for_read_elapse_;
-  int64_t trans_mem_total_size_;
   // statistics for txn logging
   int64_t unsubmitted_cnt_;
   int64_t callback_mem_used_;

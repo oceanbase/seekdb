@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_COMMON_OB_OBJ_FUNCS_
 #define OCEANBASE_COMMON_OB_OBJ_FUNCS_
 
+#include <inttypes.h>
 #include "common/timezone/ob_timezone_info.h"
 #include "common/timezone/ob_time_convert.h"
 #include "common/json_type/ob_json_parse.h"
@@ -616,7 +617,7 @@ DEF_NUMERIC_FUNCS(ObMediumIntType, mediumint, int32_t, "%d", "'%d'", int64_t);
 // ObInt32Type=4,                 // int32
 DEF_NUMERIC_FUNCS(ObInt32Type, int32, int32_t, "%d", "'%d'", int64_t);
 // ObIntType=5,                    // int64, aka bigint
-DEF_NUMERIC_FUNCS(ObIntType, int, int64_t, "%ld", "'%ld'", int64_t);
+DEF_NUMERIC_FUNCS(ObIntType, int, int64_t, "%" PRId64, "'%" PRId64 "'", int64_t);
 // ObUTinyIntType=6,                // uint8
 DEF_NUMERIC_FUNCS(ObUTinyIntType, utinyint, uint8_t, "%hhu", "'%hhu'", uint64_t);
 // ObUSmallIntType=7,               // uint16
@@ -626,7 +627,7 @@ DEF_NUMERIC_FUNCS(ObUMediumIntType, umediumint, uint32_t, "%u", "'%u'", uint64_t
 // ObUInt32Type=9,                    // uint32
 DEF_NUMERIC_FUNCS(ObUInt32Type, uint32, uint32_t, "%u", "'%u'", uint64_t);
 // ObUInt64Type=10,                 // uint64
-DEF_NUMERIC_FUNCS(ObUInt64Type, uint64, uint64_t, "%lu", "'%lu'", uint64_t);
+DEF_NUMERIC_FUNCS(ObUInt64Type, uint64, uint64_t, "%" PRIu64, "'%" PRIu64 "'", uint64_t);
 // ObFloatType=11,                  // single-precision floating point
 DEF_FLOAT_FUNCS(ObFloatType, float, float, double);
 // ObDoubleType=12,                 // double-precision floating point
@@ -669,7 +670,7 @@ DEF_DOUBLE_FUNCS(ObUDoubleType, udouble, double, double);
                                             int64_t &pos, const ObObjPrintParams &params)   \
   {                                                                                         \
     if (params.binary_string_print_hex_) {                                                  \
-      return databuff_printf(buffer, length, pos, "%lX", obj.get_bit());                    \
+      return databuff_printf(buffer, length, pos, "%" PRIX64, obj.get_bit());                    \
     } else if (params.binary_string_print_base64_) {                                        \
       const uint64_t v = obj.get_bit();                                                     \
       int8_t scale = obj.get_meta().get_scale();                                            \
@@ -682,7 +683,7 @@ DEF_DOUBLE_FUNCS(ObUDoubleType, udouble, double, double);
       const uint8_t bit_bytes = (scale + 8 - 1) / 8;                                         \
       return ObBase64Encoder::encode(reinterpret_cast<const uint8_t*>(&v), bit_bytes, buffer, length, pos); \
     } else {                                                                                 \
-      return databuff_printf(buffer, length, pos, "%lu", obj.get_bit());                     \
+      return databuff_printf(buffer, length, pos, "%" PRIu64, obj.get_bit());                     \
     }                                                                                        \
   }                                                                                          \
   template <>                                                           \
@@ -710,8 +711,8 @@ DEF_BIT_FUNCS(ObBitType, bit, uint64_t);
 //ObEnumType=32
 //ObSetType=33
 //TODO(yts):print function is not accurate
-DEF_NUMERIC_FUNCS(ObEnumType, enum, uint64_t, "%lu", "'%lu'", uint64_t);
-DEF_NUMERIC_FUNCS(ObSetType, set, uint64_t, "%lu", "'%lu'", uint64_t);
+DEF_NUMERIC_FUNCS(ObEnumType, enum, uint64_t, "%" PRIu64, "'%" PRIu64 "'", uint64_t);
+DEF_NUMERIC_FUNCS(ObSetType, set, uint64_t, "%" PRIu64, "'%" PRIu64 "'", uint64_t);
 
 
 ////////////////
@@ -2088,7 +2089,7 @@ template <>
 {
   UNUSED(obj);
   UNUSED(params);
-  return databuff_printf(buffer, length, pos, ":%ld", obj.get_unknown());
+  return databuff_printf(buffer, length, pos, ":%" PRId64, obj.get_unknown());
 }
 template <>
     inline int obj_print_str<ObUnknownType>(const ObObj &obj, char *buffer, int64_t length,

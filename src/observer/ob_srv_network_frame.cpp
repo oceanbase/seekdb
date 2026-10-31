@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "observer/ob_srv_network_frame.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "observer/mysql/obsm_conn_callback.h"

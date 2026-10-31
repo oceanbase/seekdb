@@ -63,7 +63,7 @@ PalfHandleImpl::~PalfHandleImpl()
   destroy();
 }
 
-int PalfHandleImpl::init(const AccessMode &access_mode,
+int PalfHandleImpl::init(share::LocalStore &store, const AccessMode &access_mode,
                          const PalfBaseInfo &palf_base_info,
                          const char *log_dir,
                          ObILogAllocator *alloc_mgr,
@@ -100,8 +100,8 @@ int PalfHandleImpl::init(const AccessMode &access_mode,
   } else if ((pret = snprintf(log_dir_, MAX_PATH_SIZE, "%s", log_dir)) && false) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "error unexpected", K(ret));
-  } else if (OB_FAIL(log_engine_.init(log_dir, log_meta, alloc_mgr, log_block_pool, &log_cache_, \
-          log_io_worker, log_shared_queue_th, &plugins_, palf_epoch, PALF_BLOCK_SIZE, PALF_META_BLOCK_SIZE, io_adapter))) {
+  } else if (OB_FAIL(log_engine_.init(store, log_dir, log_meta, alloc_mgr, log_block_pool, &log_cache_, \
+          log_io_worker, log_shared_queue_th, &plugins_, palf_epoch, PALF_BLOCK_SIZE, io_adapter))) {
   } else if (OB_FAIL(do_init_mem_(palf_base_info, log_meta, log_dir, self,
           alloc_mgr, palf_env_impl))) {
   } else {
@@ -117,7 +117,7 @@ bool PalfHandleImpl::check_can_be_used() const
   return false == ATOMIC_LOAD(&has_set_deleted_);
 }
 
-int PalfHandleImpl::load(const char *log_dir,
+int PalfHandleImpl::load(share::LocalStore &store, const char *log_dir,
                          ObILogAllocator *alloc_mgr,
                          ILogBlockPool *log_block_pool,
                          LogIOWorker *log_io_worker,
@@ -144,9 +144,9 @@ int PalfHandleImpl::load(const char *log_dir,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(log_dir), K(alloc_mgr),
         K(log_io_worker), K(log_shared_queue_th));
-  } else if (OB_FAIL(log_engine_.load(log_dir, alloc_mgr, log_block_pool, &log_cache_,
+  } else if (OB_FAIL(log_engine_.load(store, log_dir, alloc_mgr, log_block_pool, &log_cache_,
         log_io_worker, log_shared_queue_th, &plugins_, last_group_entry_header_lsn, entry_header, palf_epoch, PALF_BLOCK_SIZE,
-        PALF_META_BLOCK_SIZE, io_adapter, is_integrity))) {
+        io_adapter, is_integrity))) {
   } else if (false == is_integrity) {
     PALF_LOG(INFO, "log stream is incomplete", KPC(this));
   } else if (FALSE_IT(snapshot_meta = log_engine_.get_log_meta().get_log_snapshot_meta())) {
@@ -263,7 +263,6 @@ int PalfHandleImpl::get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info)
   return ret;
 }
 
-
 int PalfHandleImpl::submit_log(
     const PalfAppendOptions &opts,
     const char *buf,
@@ -342,55 +341,22 @@ int PalfHandleImpl::submit_imported_group(
   return ret;
 }
 
-int PalfHandleImpl::set_base_lsn(
-    const LSN &lsn)
+int PalfHandleImpl::set_base_lsn(const LSN &lsn)
 {
-  // NB: Guarded by lock is important, otherwise there are some problems concurrent with rebuild or migrate.
-  //
-  // Thread1(assume it's migrate thread)
-  // 1. if the 'base_lsn' of data source is greater than or equal to local, and then
-  // 2. avoid the hole between blocks, delete all blocks before 'base_lsn', submit truncate prefix blocks task
-  // 3. to update base lsn, submit update snpshot meta task.
-  //
-  //
-  // Thread2(checkpoint thread)
-  // 1. the clog disk is not enough, and update it via 'set_base_lsn'
-  //
-  // Consider that:
-  //
-  // Time1: thread1 has executed step1, assume the base lsn of data source is 100, local base lsn is 50,
-  // and then thread2 execute 'set_base_lsn', the local base lsn set to 150
-  //
-  // Time2: thread1 submit truncate prefix blocks, and this task will be failed because the base lsn in this task
-  // is smaller than local base lsn.
-  //
-  // Therefore, we need guarded by lock.
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
-  LSN end_lsn = get_end_lsn();
-  LogSnapshotMeta log_snapshot_meta = log_engine_.get_log_meta().get_log_snapshot_meta();
+  const LSN end_lsn = get_end_lsn();
   const LSN new_base_lsn(lsn_2_block(lsn, PALF_BLOCK_SIZE) * PALF_BLOCK_SIZE);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (!lsn.is_valid() || lsn > end_lsn) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(ret), KPC(this), K(end_lsn), K(lsn));
-  } else if (log_snapshot_meta.base_lsn_ >= new_base_lsn) {
-    PALF_LOG(WARN, "no need to set new base lsn, curr base lsn is greater than or equal to new base lsn",
-        KPC(this), K(log_snapshot_meta), K(new_base_lsn), K(lsn));
+    PALF_LOG(WARN, "invalid checkpoint position", K(ret), K(lsn), K(end_lsn));
+  } else if (log_engine_.get_base_lsn_used_for_block_gc() >= new_base_lsn) {
+    // Already durable; avoid a local transaction when the block boundary is unchanged.
+  } else if (OB_FAIL(log_engine_.advance_base_lsn(new_base_lsn))) {
   } else {
-    FlushMetaCbCtx flush_meta_cb_ctx;
-    flush_meta_cb_ctx.type_ = SNAPSHOT_META;
-    flush_meta_cb_ctx.base_lsn_ = new_base_lsn;
-    if (OB_FAIL(log_snapshot_meta.generate(new_base_lsn,
-                                           log_snapshot_meta.prev_log_info_,
-                                           log_snapshot_meta.prev_log_tail_lsn_))) {
-    } else if (OB_FAIL(log_engine_.submit_flush_snapshot_meta_task(flush_meta_cb_ctx, log_snapshot_meta))) {
-    } else {
-      PALF_EVENT("set_base_lsn success", K(ret), K(self_), K(lsn),
-          K(log_snapshot_meta), K(new_base_lsn), K(flush_meta_cb_ctx));
-      plugins_.record_set_base_lsn_event(new_base_lsn);
-    }
+    plugins_.record_set_base_lsn_event(new_base_lsn);
   }
   return ret;
 }
@@ -673,23 +639,6 @@ int PalfHandleImpl::inner_append_log(const LSNArray &lsn_array,
   return ret;
 }
 
-int PalfHandleImpl::inner_append_meta(const char *buf,
-                                      const int64_t buf_len)
-{
-  int ret = OB_SUCCESS;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    PALF_LOG(ERROR, "PalfHandleImpl not inited");
-  } else if (NULL == buf
-             || 0 >= buf_len) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "Invalid argument", K(ret), KPC(this), K(buf), K(buf_len));
-  } else if (OB_FAIL(log_engine_.append_meta(buf, buf_len))) {
-  } else {
-  }
-  return ret;
-}
-
 int PalfHandleImpl::inner_truncate_prefix_blocks(const LSN &lsn)
 {
   int ret = OB_SUCCESS;
@@ -899,10 +848,6 @@ int PalfHandleImpl::check_and_switch_state()
   return ret;
 }
 
-
-
-
-
 int PalfHandleImpl::do_init_mem_(
     const PalfBaseInfo &palf_base_info,
     const LogMeta &log_meta,
@@ -1002,22 +947,6 @@ int PalfHandleImpl::inner_after_flush_log(const FlushLogCbCtx &flush_log_cb_ctx)
   return ret;
 }
 
-// NB: execute 'inner_after_flush_meta' is serially.
-int PalfHandleImpl::inner_after_flush_meta(const FlushMetaCbCtx &flush_meta_cb_ctx)
-{
-  int ret = OB_SUCCESS;
-  PALF_LOG(INFO, "inner_after_flush_meta", K(flush_meta_cb_ctx));
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-  } else if (SNAPSHOT_META != flush_meta_cb_ctx.type_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    RLockGuard guard(lock_);
-    ret = after_flush_snapshot_meta_(flush_meta_cb_ctx.base_lsn_);
-  }
-  return ret;
-}
-
 int PalfHandleImpl::inner_after_truncate_prefix_blocks(const TruncatePrefixBlocksCbCtx &truncate_prefix_cb_ctx)
 {
   int ret = OB_SUCCESS;
@@ -1025,11 +954,6 @@ int PalfHandleImpl::inner_after_truncate_prefix_blocks(const TruncatePrefixBlock
   if (OB_FAIL(sw_.after_rebuild(truncate_prefix_cb_ctx.lsn_))) {
   }
   return ret;
-}
-
-int PalfHandleImpl::after_flush_snapshot_meta_(const LSN &lsn)
-{
-  return log_engine_.update_base_lsn_used_for_gc(lsn);
 }
 
 int PalfHandleImpl::get_prev_log_info_(const LSN &lsn,
@@ -1271,7 +1195,6 @@ int PalfHandleImpl::raw_read(const LSN &lsn,
   }
   return ret;
 }
-
 
 template<typename LogEntryType>
 int PalfHandleImpl::alloc_iterator_from_scn_(const SCN &scn,

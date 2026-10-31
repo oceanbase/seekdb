@@ -16,7 +16,7 @@
 
 use std::alloc::{alloc_zeroed, dealloc, handle_alloc_error, Layout};
 use std::collections::{HashMap, TryReserveError};
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, CStr};
 use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -26,21 +26,33 @@ use std::sync::{Arc, Condvar, LazyLock, Mutex, RwLock, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "native-network")]
 use mio::net::{TcpListener, TcpStream};
-#[cfg(unix)]
+#[cfg(all(unix, feature = "native-network"))]
 use mio::net::{UnixListener, UnixStream};
-#[cfg(windows)]
+#[cfg(all(windows, feature = "native-network"))]
 use mio::windows::NamedPipe;
+#[cfg(feature = "native-network")]
 use mio::{Events, Interest, Poll, Registry, Token, Waker};
+#[cfg(feature = "memory-transport")]
+mod memory_transport;
+#[cfg(feature = "memory-transport")]
+use memory_transport::{Events, Interest, Poll, Registry, Token, Waker};
+
+#[cfg(any(
+    all(feature = "native-network", feature = "memory-transport"),
+    not(any(feature = "native-network", feature = "memory-transport"))
+))]
+compile_error!("select exactly one of native-network or memory-transport");
 use slab::Slab;
 
+mod bridge;
 mod capability;
 mod cert;
 mod codec;
 mod command;
 mod compress;
 mod conn;
-mod ffi_types;
 mod handshake;
 mod login;
 mod packet;
@@ -54,17 +66,27 @@ mod row_encode;
 mod session_storage;
 mod stmt_execute;
 mod tls;
+#[cfg(feature = "native-network")]
 mod transport;
+#[cfg(feature = "memory-transport")]
+use memory_transport as transport;
 
 use crate::capability::{CLIENT_COMPRESS, CLIENT_SSL};
 use crate::compress::{DeframeStep, COMPRESS_HEADER_SIZE};
-use crate::login::{parse_login, NioLoginAttr, ParsedLogin, MAX_LOGIN_BODY_LEN};
+use crate::login::{parse_login, ParsedLogin, MAX_LOGIN_BODY_LEN};
 use crate::packet::{
     assemble_command_limited_with_scratch, AssembleStep, HEADER_SIZE, MAX_LOGICAL_PAYLOAD,
     MAX_PAYLOAD,
 };
 
-pub(crate) use crate::ffi_types::*;
+pub(crate) use crate::bridge::ffi::{
+    ob_sql_sock_handler_on_close, ob_sql_sock_handler_on_connect,
+    ob_sql_sock_handler_on_disconnect, ob_sql_sock_handler_on_readable, NioGreetingInfo,
+    NioLoginAttr, NioLoginView, NioMysqlCellView, NioMysqlCommandField, NioMysqlCommandView,
+    NioMysqlFieldView, NioMysqlKvView, NioMysqlOkView, NioMysqlRowView, NioTlsConfig,
+    NioTlsSessionInfo, NioTlsStringView, ObSqlSockHandler, ObSqlSockSession,
+};
+pub(crate) use crate::bridge::*;
 
 pub(crate) use crate::conn::*;
 pub(crate) use crate::pump::*;
@@ -76,9 +98,11 @@ pub(crate) use crate::session_storage::*;
 pub(crate) use crate::tls::*;
 pub(crate) use crate::transport::*;
 
+#[cfg(feature = "native-network")]
 const LISTENER: Token = Token(0);
 const WAKER: Token = Token(1);
 #[cfg_attr(not(unix), allow(dead_code))]
+#[cfg(feature = "native-network")]
 const LOCAL_LISTENER: Token = Token(2);
 const FIRST_CONN: usize = 3;
 const MAX_IO_THREADS: usize = 128;
@@ -96,13 +120,3 @@ const PACKED_ROW_BLOB_VERSION: u8 = 1;
 const PACKED_ROW_BLOB_HEADER_LEN: usize = 16;
 
 static NEXT_REQUEST_TICKET: AtomicU64 = AtomicU64::new(1);
-
-pub const NIO_PACKET_LOGIN: c_int = 1;
-pub const NIO_PACKET_COMMAND: c_int = 2;
-pub const NIO_PACKET_AUTH_SWITCH_RESPONSE: c_int = 3;
-
-pub const NIO_TLS_MIN_NONE: u8 = 0;
-pub const NIO_TLS_MIN_TLSV1: u8 = 1;
-pub const NIO_TLS_MIN_TLSV1_1: u8 = 2;
-pub const NIO_TLS_MIN_TLSV1_2: u8 = 3;
-pub const NIO_TLS_MIN_TLSV1_3: u8 = 4;

@@ -67,12 +67,13 @@
 #include "observer/ob_srv_network_frame.h"
 #include "observer/ob_service.h"
 #include "observer/ob_server_reload_config.h"
-#include "storage/slog_ckpt/ob_startup_accel_task_handler.h"
+#include "storage/meta_store/ob_startup_accel_task_handler.h"
 #include "storage/ddl/ob_ddl_heart_beat_task.h"
 
 #include "storage/ob_disk_usage_reporter.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "logservice/ob_server_log_block_mgr.h"
+#include "logservice/palf/log_io_adapter.h"
 
 
 
@@ -250,7 +251,7 @@ public:
   static ObServer &get_instance();
 
 public:
-  int init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg);
+  int init(const ObServerOptions &opts);
   void destroy();
 
   // Start OceanBase server, this function is blocked after invoking
@@ -395,7 +396,6 @@ private:
   void deinit_fts();
 
 public:
-  static int get_network_speed_from_config_file(int64_t &network_speed);
 public:
   volatile bool need_ctas_cleanup_; //true: ObCTASCleanUpTask should traverse all table schemas to find the one need be dropped
 private:
@@ -483,7 +483,6 @@ private:
   common::ObTimer server_gtimer_;
   common::ObTimer sql_mem_timer_;
   common::ObTimer ctas_clean_up_timer_;
-  ObServerDutyTask duty_task_;
   ObSqlMemoryTimerTask sql_mem_task_;
   ObCTASCleanUpTask ctas_clean_up_task_;     // repeat & no retry
   ObRedefTableHeartBeatTask redef_table_heart_beat_task_;
@@ -495,6 +494,8 @@ private:
   sql::ObConnectResourceMgr conn_res_mgr_;
   ObDiskUsageReportTask disk_usage_report_task_;
 
+  palf::LogIODeviceWrapper log_device_;
+  share::StartupResult startup_result_;
   logservice::ObServerLogBlockMgr log_block_mgr_;
 
   // This handler is used to process tasks during startup. it can speed up the startup process.

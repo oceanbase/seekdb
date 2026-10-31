@@ -33,7 +33,7 @@ class ObLogPlan;
 //Do not allocate a PwjTable on the heap. If it is necessary to allocate a PwjTable on the heap, manually free it after its lifecycle ends.
 struct PwjTable {
   PwjTable()
-    : phy_table_loc_info_(NULL),
+    : table_access_targets_(NULL),
       part_level_(share::schema::PARTITION_LEVEL_ZERO),
       part_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
       subpart_type_(share::schema::PARTITION_FUNC_TYPE_MAX),
@@ -49,29 +49,29 @@ struct PwjTable {
 
   int init(const ObShardingInfo &info);
   int init(const share::schema::ObTableSchema &table_schema,
-           const ObCandiTableLoc &phy_tbl_info);
+           const TableAccessTargets &phy_tbl_info);
 
   TO_STRING_KV(K_(part_level), K_(part_type), K_(subpart_type),
                K_(part_number),
                K_(is_partition_single), K_(is_subpartition_single),
                K_(all_partition_indexes), K_(all_subpartition_indexes));
 
-  const ObCandiTableLoc *phy_table_loc_info_;
+  const TableAccessTargets *table_access_targets_;
   // Partition level
   share::schema::ObPartitionLevel part_level_;
   // First-level partition type
   share::schema::ObPartitionFuncType part_type_;
   // Secondary partition type
   share::schema::ObPartitionFuncType subpart_type_;
-  // Whether only one primary partition is involved in the phy_table_location_info_ of the secondary partition table
+  // Whether only one primary partition is involved in the table_access_targets_ of the secondary partition table
   bool is_partition_single_;
-  // In phy_table_location_info_ of the secondary partition table, does each primary partition involve only one secondary partition
+  // In table_access_targets_ of the secondary partition table, does each primary partition involve only one secondary partition
   bool is_subpartition_single_;
   // first-level partition array
   share::schema::ObPartition **partition_array_;
   // First-level partition count
   int64_t part_number_;
-  // All partition_id (physical partition id) in phy_table_location_info_
+  // All partition_id (physical partition id) in table_access_targets_
   // ObPwjComparer generates the _id mapping relationship according to the order of partition_id in this array on the left table
   common::ObSEArray<uint64_t, 8> ordered_tablet_ids_;
   // part_id(logical partition id level 1) in part_array offset
@@ -107,21 +107,21 @@ public:
   virtual int add_table(PwjTable &table, bool &is_match_pwj);
 
   /**
-   * Extract the following partition-related information from phy_table_location_info
+   * Extract the following partition-related information from table_access_targets
    * @param all_partition_ids:
-   *    all partition_id (physical partition id) in phy_table_location_info
+   *    all partition_id (physical partition id) in table_access_targets
    * @param all_partition_indexes:
    *    the offset of part_id (first-level logical partition id) of each partition_id (physical partition id)
-   *    in part_array in phy_table_location_info
+   *    in part_array in table_access_targets
    * @param all_subpartition_indexes:
    *    the offset of subpart_id (second-level logical partition id) of each partition_id (physical partition id)
-   *    in subpart_array in phy_table_location_info
+   *    in subpart_array in table_access_targets
    * @param is_partition_single:
-   *    whether only one first-level partition is involved in phy_table_location_info_ of a secondary partition table
+   *    whether only one first-level partition is involved in table_access_targets_ of a secondary partition table
    * @param is_subpartition_single:
-   *    whether each first-level partition involves only one second-level partition in phy_table_location_info_ of a secondary partition table
+   *    whether each first-level partition involves only one second-level partition in table_access_targets_ of a secondary partition table
    */
-  static int extract_all_partition_indexes(const ObCandiTableLoc &phy_table_location_info,
+  static int extract_all_partition_indexes(const TableAccessTargets &table_access_targets,
                                            const share::schema::ObTableSchema &table_schema,
                                            ObIArray<uint64_t> &all_tablet_ids,
                                            ObIArray<int64_t> &all_partition_indexes,

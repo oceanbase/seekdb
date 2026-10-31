@@ -16,13 +16,10 @@ devdeps-abseil-20260506.tar.gz
 devdeps-boost-geometry-20260506.tar.gz
 devdeps-protobuf-c-20260506.tar.gz
 devdeps-roaring-20260506.tar.gz
-devdeps-icu-20260506.tar.gz
 devdeps-grpc-20260506.tar.gz
 devdeps-openssl-20260414.tar.gz
 devdeps-vsag-20260416.tar.gz
 
 [tools]
-obdevtools-cmake-20260414.tar.gz
-obdevtools-ninja-20260414.tar.gz
 obdevtools-llvm-18.1.8-20260414.tar.gz
 obdevtools-win-flex-bison-20260414.tar.gz

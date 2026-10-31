@@ -119,7 +119,8 @@ int ObMemtableMutatorMeta::deserialize(const char *buf, const int64_t data_len, 
 {
   int ret = OB_SUCCESS;
   const int32_t min_meta_size = MIN_META_SIZE;
-  if (OB_ISNULL(buf) || data_len < 0 || pos + min_meta_size > data_len) {
+  if (OB_ISNULL(buf) || data_len < 0 || pos < 0 || pos > data_len
+      || data_len - pos < min_meta_size) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid param", K(ret), KP(buf), K(data_len), K(pos));
   } else {
@@ -127,12 +128,15 @@ int ObMemtableMutatorMeta::deserialize(const char *buf, const int64_t data_len, 
     if (!check_magic()) {
       ret = OB_INVALID_LOG;
       TRANS_LOG(WARN, "invalid log: check_magic fail", K(*this));
+    } else if (meta_size_ < min_meta_size) {
+      ret = OB_INVALID_LOG;
+      TRANS_LOG(WARN, "invalid log: meta size is too small", K(ret), K(meta_size_));
+    } else if (meta_size_ > data_len - pos) {
+      ret = OB_BUF_NOT_ENOUGH;
+      TRANS_LOG(WARN, "buf not enough", K(pos), K(meta_size_), K(data_len));
     } else if (calc_meta_crc(buf + pos) != meta_crc_) {
       ret = OB_INVALID_LOG;
       TRANS_LOG(WARN, "invalid log: check_meta_crc fail", K(*this));
-    } else if (pos + meta_size_ > data_len) {
-      ret = OB_BUF_NOT_ENOUGH;
-      TRANS_LOG(WARN, "buf not enough", K(pos), K(meta_size_), K(data_len));
     } else {
       MEMCPY(this, buf + pos, min(sizeof(*this), static_cast<uint64_t>(meta_size_)));
       pos += meta_size_;
@@ -861,14 +865,18 @@ int ObMemtableMutatorIterator::deserialize(const char *buf, const int64_t data_l
   int64_t data_pos = pos;
   int64_t end_pos = pos;
 
-  if (OB_ISNULL(buf) || (data_len - pos) <= 0 || data_len < 0) {
+  if (OB_ISNULL(buf) || data_len < 0 || pos < 0 || pos >= data_len) {
     TRANS_LOG(WARN, "invalid argument", KP(buf), K(data_len), K(pos));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(meta_.deserialize(buf, data_len, data_pos))) {
     TRANS_LOG(WARN, "decode meta fail", K(ret), KP(buf), K(data_len), K(data_pos));
     ret = (OB_SUCCESS == ret) ? OB_INVALID_DATA : ret;
+  } else if (meta_.get_total_size() > data_len - pos) {
+    ret = OB_BUF_NOT_ENOUGH;
+    TRANS_LOG(WARN, "buf not enough", K(ret), K(pos), K(data_len), K(meta_));
   } else if (!buf_.set_data(const_cast<char *>(buf + pos), meta_.get_total_size())) {
-    TRANS_LOG(WARN, "set_data fail", KP(buf), K(pos), K(meta_.get_total_size()));
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "set_data fail", K(ret), KP(buf), K(pos), K(meta_.get_total_size()));
   } else if (FALSE_IT(end_pos += meta_.get_total_size())) {
   } else {
     pos = end_pos;

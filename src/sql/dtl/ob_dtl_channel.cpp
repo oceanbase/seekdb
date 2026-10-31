@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_flow_control.h"
 

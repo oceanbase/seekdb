@@ -1,0 +1,14 @@
+# Cargo workspace for the Rust components that link into the seekdb
+# (OceanBase-lite) C++ server. In-tree path dependencies are members automatically.
+[workspace]
+resolver = "2"
+members = ["rust/seekdb-rust"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = true
+# Abort instead of unwinding: a Rust panic must never unwind into C++.
+# Only set on named profiles so the default `cargo test` harness still works.
+panic = "abort"

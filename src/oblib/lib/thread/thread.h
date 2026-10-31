@@ -140,7 +140,7 @@ private:
 OB_INLINE bool Thread::has_set_stop() const
 {
   IGNORE_RETURN update_loop_ts();
-  return stop_;
+  return ATOMIC_LOAD(&stop_);
 }
 
 extern int get_max_thread_num();

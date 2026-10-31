@@ -35,7 +35,6 @@ namespace common
 class ObISQLClient;
 const char* const MERGER_CHECK_INTERVAL = "merger_check_interval";
 const char* const ENABLE_MAJOR_FREEZE = "enable_major_freeze";
-const char* const ENABLE_DDL = "enable_ddl";
 const char* const ENABLE_AUTO_LEADER_SWITCH = "enable_auto_leader_switch";
 const char* const MAJOR_COMPACT_TRIGGER = "major_compact_trigger";
 const char* const ENABLE_PERF_EVENT = "enable_perf_event";
@@ -43,7 +42,6 @@ const char* const CONFIG_TRUE_VALUE_BOOL = "1";
 const char* const CONFIG_FALSE_VALUE_BOOL = "0";
 const char* const CONFIG_TRUE_VALUE_STRING = "true";
 const char* const CONFIG_FALSE_VALUE_STRING = "false";
-const char* const SCHEMA_HISTORY_RECYCLE_INTERVAL = "schema_history_recycle_interval";
 const char* const _RECYCLEBIN_OBJECT_PURGE_FREQUENCY = "_recyclebin_object_purge_frequency";
 const char* const FREEZE_TRIGGER_PERCENTAGE = "freeze_trigger_percentage";
 const char* const WRITING_THROTTLEIUNG_TRIGGER_PERCENTAGE = "writing_throttling_trigger_percentage";

@@ -52,6 +52,7 @@ class ObTransService;
 typedef ObTxCtx ReplayTxCtx;
 
 class ObTxReplayExecutor {
+  friend class TestTxReplayExecutor;
 public:
   static int execute(storage::ObLS *ls,
                      storage::ObLSTxService *ls_tx_srv,

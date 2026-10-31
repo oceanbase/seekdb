@@ -49,11 +49,11 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
   }
   while (OB_SUCC(ret) && cur_parent_ctx != nullptr) {
     ObDASCtx &parent_das_ctx = cur_parent_ctx->get_das_ctx();
-    FOREACH_X(node, parent_das_ctx.get_table_loc_list(), OB_SUCC(ret)) {
-      ObDASTableLoc *table_loc = *node;
-      if (table_loc->loc_meta_->ref_table_id_ == ref_table_id 
-          && (table_loc->is_writing_ || !is_reading)
-          && !table_loc->is_fk_check_ ) {
+    FOREACH_X(node, parent_das_ctx.get_table_accesses(), OB_SUCC(ret)) {
+      DASRuntimeTableAccess *table_access = *node;
+      if (table_access->access_meta_->ref_table_id_ == ref_table_id
+          && (table_access->is_writing_ || !is_reading)
+          && !table_access->is_fk_check_ ) {
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
         
@@ -79,36 +79,36 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
   return ret;
 }
 
-ObDASTabletLoc *ObDASUtils::get_related_tablet_loc(const ObDASTabletLoc &tablet_loc,
+DASRuntimeTabletAccess *ObDASUtils::get_related_tablet_access(const DASRuntimeTabletAccess &tablet_access,
                                                    ObTableID related_table_id)
 {
-  ObDASTabletLoc *ret_tablet_loc = nullptr;
-  if (related_table_id == tablet_loc.loc_meta_->ref_table_id_) {
-    ret_tablet_loc = const_cast<ObDASTabletLoc*>(&tablet_loc);
+  DASRuntimeTabletAccess *ret_tablet_access = nullptr;
+  if (related_table_id == tablet_access.access_meta_->ref_table_id_) {
+    ret_tablet_access = const_cast<DASRuntimeTabletAccess*>(&tablet_access);
   } else {
-    for (ObDASTabletLoc *cur_node = tablet_loc.next_;
-        cur_node != nullptr && cur_node != &tablet_loc;
+    for (DASRuntimeTabletAccess *cur_node = tablet_access.next_;
+        cur_node != nullptr && cur_node != &tablet_access;
         cur_node = cur_node->next_) {
-      if (cur_node->loc_meta_->ref_table_id_ == related_table_id) {
-        ret_tablet_loc = cur_node;
+      if (cur_node->access_meta_->ref_table_id_ == related_table_id) {
+        ret_tablet_access = cur_node;
         break;
       }
     }
   }
-  return ret_tablet_loc;
+  return ret_tablet_access;
 }
 
-int ObDASUtils::build_table_loc_meta(ObIAllocator &allocator,
-                                     const ObDASTableLocMeta &src,
-                                     ObDASTableLocMeta *&dst)
+int ObDASUtils::build_table_access_meta(ObIAllocator &allocator,
+                                     const DASTableAccessMeta &src,
+                                     DASTableAccessMeta *&dst)
 {
   int ret = OB_SUCCESS;
   dst = nullptr;
-  void *buf = allocator.alloc(sizeof(ObDASTableLocMeta));
+  void *buf = allocator.alloc(sizeof(DASTableAccessMeta));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    dst = new(buf) ObDASTableLocMeta(allocator);
+    dst = new(buf) DASTableAccessMeta(allocator);
     if (OB_FAIL(dst->assign(src))) {
     }
   }

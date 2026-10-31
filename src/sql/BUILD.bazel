@@ -1,52 +1,37 @@
 load(
     "//bazel:defs.bzl",
-    "SEEKDB_SEMANTIC_MODULE_COPTS",
-    "SEEKDB_X86_SIMD_COPTS",
-    "seekdb_semantic_unity_cc_library",
-    "seekdb_test_interface",
-    cc_library = "seekdb_cc_library",
+    "MODULE_CXX_COPTS",
+    "X86_SIMD_COPTS",
+    "grouped_unity_cc_library",
+    "cc_library",
 )
 load(
-    ":sql_build_defs.bzl",
+    "//src/sql:sql_header_inventory.bzl",
     "SQL_COMPOSITION_HEADERS",
-    "SQL_EXTRA_SOURCES",
     "SQL_INTERFACE_CLOSURE_HEADERS",
-    "SQL_OPTIMIZER_GROUP_NAMES",
-    "SQL_PARSER_SOURCES",
-    "SQL_PREPARE_SOURCES",
-    "SQL_PRIVATE_HEADERS",
     "SQL_PUBLIC_HEADER_ROOTS",
-    "SQL_RUNTIME_NATIVE_DEPS",
-    "SQL_SANITY_WITHOUT_PASS_STANDALONE_PATHS",
+)
+load(
+    "//src/sql:sql_source_inventory.bzl",
+    "SQL_EXTRA_SOURCES",
     "SQL_SIMD_UNITY_GROUPS",
     "SQL_STANDALONE_SOURCES",
     "SQL_UNITY_GROUPS",
-    "sql_groups_without",
-    "sql_headers_outside",
-    "sql_partition_sources",
-    "sql_singleton_unity_groups",
-    "sql_validate_source_inventory",
 )
 load(
-    ":sql_runtime_group_deps.bzl",
-    "sql_runtime_group_share_deps",
-    "sql_runtime_simd_group_share_deps",
-    "sql_runtime_without_pass_group_share_deps",
+    "//src/sql:sql_module_sources.bzl",
+    "OPTIMIZER_GROUP_NAMES",
+    "PREPARE_SOURCES",
+    "groups_without",
+    "headers_outside",
 )
 load(
-    ":sql_runtime_group_oblib_deps.bzl",
-    "sql_runtime_group_oblib_deps",
-    "sql_runtime_test_oblib_deps",
+    "//src/sql:sql_runtime_deps.bzl",
+    "SQL_RUNTIME_NATIVE_DEPS",
 )
 load(
-    ":sql_runtime_simd_group_oblib_deps.bzl",
-    "sql_runtime_simd_group_oblib_deps",
-    "sql_runtime_simd_test_oblib_deps",
-)
-load(
-    ":sql_runtime_without_pass_group_oblib_deps.bzl",
-    "sql_runtime_without_pass_group_oblib_deps",
-    "sql_runtime_without_pass_test_oblib_deps",
+    "//bazel:module_sources.bzl",
+    "singleton_unity_groups",
 )
 
 package(default_visibility = ["//visibility:private"])
@@ -104,12 +89,12 @@ _SQL_PUBLIC_CLOSURE_SHARE_DEPS = [
     "//src/share:autoincrement_runtime",
     "//src/share:est_row_count_record",
     "//src/share:interrupt_runtime",
-    "//src/share:seekdb_runtime_foundation",
+    "//src/share:runtime_foundation",
     "//src/share:timezone_runtime",
 ]
 
 _SQL_PUBLIC_CLOSURE_OBLIB_DEPS = [
-    "//src/oblib:oblib_concurrency_model",
+    "//src/oblib:oblib_base",
 ]
 
 _SQL_INTERFACE_NON_SHARE_DEPS = [
@@ -117,7 +102,7 @@ _SQL_INTERFACE_NON_SHARE_DEPS = [
     for dep in _SQL_INTERFACE_NATIVE_DEPS
     if not dep.startswith("//src/share:") and
        not dep.startswith("//src/oblib:") and
-       not dep.startswith("@seekdb_3rd_headers//:")
+       not dep.startswith("//bazel/third_party:")
 ]
 
 _SQL_RUNTIME_NON_SHARE_DEPS = [
@@ -125,7 +110,7 @@ _SQL_RUNTIME_NON_SHARE_DEPS = [
     for dep in SQL_RUNTIME_NATIVE_DEPS
     if not dep.startswith("//src/share:") and
        not dep.startswith("//src/oblib:") and
-       not dep.startswith("@seekdb_3rd_headers//:")
+       not dep.startswith("//bazel/third_party:")
 ]
 
 _SQL_SEMANTIC_HEADER_PREFIXES = [
@@ -135,31 +120,12 @@ _SQL_SEMANTIC_HEADER_PREFIXES = [
     "resolver/prepare/",
 ]
 
-_SQL_SEPARATELY_OWNED_SOURCES = [
-    # Upstream checked-in prototype duplicates ob_dtl_mem_manager and is not
-    # referenced by the production DTL runtime.
-    "src/sql/dtl/ob_dtl_memory_manager.cpp",
-    "src/sql/bazel_pilot/optimizer_private_header_probe.cpp",
-    "src/sql/bazel_pilot/optimizer_public_interface_probe.cpp",
-    "src/sql/bazel_pilot/prepare_public_interface_probe.cpp",
-    "src/sql/bazel_pilot/sql_parser_driver_private_header_probe.cpp",
-    "src/sql/bazel_pilot/sql_parser_driver_public_interface_probe.cpp",
-    "src/sql/bazel_pilot/undeclared_resolver_header_probe.cpp",
-]
 
-_SQL_RETRIEVAL_COMPOSITION_HEADERS = sql_headers_outside(
+_SQL_RETRIEVAL_COMPOSITION_HEADERS = headers_outside(
     SQL_COMPOSITION_HEADERS,
     ["parser/"],
 )
 
-sql_validate_source_inventory(
-    SQL_UNITY_GROUPS,
-    SQL_SIMD_UNITY_GROUPS,
-    SQL_STANDALONE_SOURCES,
-    SQL_EXTRA_SOURCES,
-    SQL_PARSER_SOURCES,
-    _SQL_SEPARATELY_OWNED_SOURCES,
-)
 
 # C++ sources include these table files textually. Their non-header extension
 # requires an explicit CcInfo owner.
@@ -169,27 +135,16 @@ cc_library(
     visibility = ["//src/sql:__subpackages__"],
 )
 
-# Narrow internal seam for the relation-map invariant test. It exposes only
-# the SQL-owned textual tables and the OBLib type vocabulary they encode.
-cc_library(
-    name = "sql_relation_map_test_interface",
-    testonly = True,
-    deps = [
-        ":_textual_sql_map_inputs",
-    ],
-    visibility = ["//unittest/sql/engine/expr:__pkg__"],
-)
-
 # SQL's external seam owns only headers actually reached from outside SQL.
 # Semantic subpackages own their physical files and contribute header-only
 # targets; no implementation target is pulled into this interface.
 cc_library(
     name = "sql_runtime_interface",
-    hdrs = sql_headers_outside(
+    hdrs = headers_outside(
         SQL_PUBLIC_HEADER_ROOTS,
         _SQL_SEMANTIC_HEADER_PREFIXES,
     ),
-    textual_hdrs = sql_headers_outside(
+    textual_hdrs = headers_outside(
         SQL_INTERFACE_CLOSURE_HEADERS,
         _SQL_SEMANTIC_HEADER_PREFIXES,
     ),
@@ -231,14 +186,11 @@ cc_library(
 # Submodule header owners are visible only through this SQL-internal seam.
 cc_library(
     name = "sql_runtime_internal_headers",
-    hdrs = [
-        header
-        for header in sql_headers_outside(
-            SQL_PRIVATE_HEADERS,
-            _SQL_SEMANTIC_HEADER_PREFIXES,
-        )
-        if header not in _SQL_RETRIEVAL_COMPOSITION_HEADERS
-    ],
+    hdrs = glob(
+        ["**/*.h", "**/*.ipp", "**/*.def"],
+        allow_empty = True,
+        exclude = SQL_PUBLIC_HEADER_ROOTS + SQL_INTERFACE_CLOSURE_HEADERS + SQL_COMPOSITION_HEADERS,
+    ),
     deps = [
         ":sql_retrieval_composition_headers",
         ":sql_runtime_interface",
@@ -253,57 +205,22 @@ cc_library(
     visibility = ["//src/sql:__subpackages__"],
 )
 
-# Unit tests exercise the same external SQL seam as production callers while
-# receiving implementation symbols only from liboceanbase.so.  This forwards
-# compilation inputs and deliberately discards the interface's link inputs.
-seekdb_test_interface(
-    name = "sql_public_test_interface",
-    deps = [":sql_runtime_interface"],
-    visibility = ["//unittest/sql:__subpackages__"],
-)
-
-# SQL-owned unit tests may compile against the Module's private implementation
-# headers, but receive all implementation symbols from liboceanbase.so.
-seekdb_test_interface(
-    name = "sql_unit_test_interface",
-    deps = [
-        ":_textual_sql_map_inputs",
-        ":sql_runtime_internal_headers",
-    ] + sorted({
-        dep: True
-        for dep in (
-            SQL_RUNTIME_NATIVE_DEPS +
-            sql_runtime_test_oblib_deps() +
-            sql_runtime_simd_test_oblib_deps() +
-            sql_runtime_without_pass_test_oblib_deps()
-        )
-    }.keys()),
-    visibility = ["//unittest/sql:__pkg__"],
-)
-
-_SQL_STANDALONE_SANITY_PARTITION = sql_partition_sources(
-    SQL_STANDALONE_SOURCES,
-    SQL_SANITY_WITHOUT_PASS_STANDALONE_PATHS,
-)
-
-_SQL_RUNTIME_UNITY_GROUPS = sql_groups_without(
+_SQL_RUNTIME_UNITY_GROUPS = groups_without(
     SQL_UNITY_GROUPS,
-    SQL_OPTIMIZER_GROUP_NAMES,
-    SQL_PREPARE_SOURCES,
-) + sql_singleton_unity_groups(
-    _SQL_STANDALONE_SANITY_PARTITION.remaining,
+    OPTIMIZER_GROUP_NAMES,
+    PREPARE_SOURCES,
+) + singleton_unity_groups(
+    SQL_STANDALONE_SOURCES,
     "sql_runtime_standalone",
 )
 
-_SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = sql_singleton_unity_groups(
-    _SQL_STANDALONE_SANITY_PARTITION.selected,
-    "sql_runtime_heavy_without_pass",
-) + sql_singleton_unity_groups(
+_SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS = singleton_unity_groups(
     SQL_EXTRA_SOURCES,
     "sql_runtime_extra",
 )
 
 _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
+    "//rust:uuid_generator_headers",
     "//rust:config_headers",
     ":_textual_sql_map_inputs",
     ":sql_runtime_interface",
@@ -316,49 +233,178 @@ _SQL_RUNTIME_IMPLEMENTATION_DEPS = [
 
 # One SQL module/library with the existing release Unity translation units.
 # Standalone sources remain singleton groups, preserving compile granularity.
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "sql_runtime",
-    owner_package = "src/sql",
     unity_groups = _SQL_RUNTIME_UNITY_GROUPS,
-    group_implementation_deps = sql_runtime_group_oblib_deps(
-        _SQL_RUNTIME_UNITY_GROUPS,
-        sql_runtime_group_share_deps(_SQL_RUNTIME_UNITY_GROUPS),
-    ),
-    implementation_deps = _SQL_RUNTIME_IMPLEMENTATION_DEPS,
+    split_unity_groups = True,
+    implementation_deps = _SQL_RUNTIME_IMPLEMENTATION_DEPS + [
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_db_meta",
+        "//src/oblib:oblib_encoding_primitives",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_io_primitives",
+        "//src/oblib:oblib_memory_primitives",
+        "//src/oblib:oblib_mysql_protocol",
+        "//src/oblib:oblib_restore",
+        "//src/oblib:oblib_rpc",
+        "//src/oblib:oblib_vector",
+    ] + [
+        "//src/share:_generated_inner_table_headers",
+        "//src/share:ai_endpoint_interface",
+        "//src/share:autoincrement_runtime",
+        "//src/share:cache",
+        "//src/share:catalog_access",
+        "//src/share:cluster_topology",
+        "//src/share:cluster_version_interface",
+        "//src/share:collection_types",
+        "//src/share:config",
+        "//src/share:config_parser_interface",
+        "//src/share:core_types",
+        "//src/share:datum",
+        "//src/share:ddl_coordination",
+        "//src/share:ddl_protocol",
+        "//src/share:debug_sync_interface",
+        "//src/share:device_manager_interface",
+        "//src/share:diagnostics",
+        "//src/share:error_codes",
+        "//src/share:est_row_count_record",
+        "//src/share:execution_contracts",
+        "//src/share:external_storage",
+        "//src/share:geo_algorithms",
+        "//src/share:geo_cast_interface",
+        "//src/share:geo_serialization",
+        "//src/share:geo_types",
+        "//src/share:geo_visitors",
+        "//src/share:interrupt_runtime",
+        "//src/share:io",
+        "//src/share:json_access",
+        "//src/share:lob_runtime",
+        "//src/share:memory_support",
+        "//src/share:module_data_protocol",
+        "//src/share:object_cast",
+        "//src/share:object_cast_runtime_interface",
+        "//src/share:pl_integer_type",
+        "//src/share:roaringbitmap",
+        "//src/share:rpc_dispatch",
+        "//src/share:rpc_message_types",
+        "//src/share:runtime_context",
+        "//src/share:schema_access",
+        "//src/share:schema_entities",
+        "//src/share:schema_foundation_types",
+        "//src/share:schema_model_interface",
+        "//src/share:schema_persistence",
+        "//src/share:schema_registry",
+        "//src/share:scn_interface",
+        "//src/share:runtime_foundation",
+        "//src/share:sequence_option",
+        "//src/share:sequence_runtime",
+        "//src/share:sql_persistence_support",
+        "//src/share:srs_provider_interface",
+        "//src/share:statement_type",
+        "//src/share:storage_cache_policy",
+        "//src/share:system_variable_metadata",
+        "//src/share:table_access_runtime",
+        "//src/share:table_load_protocol",
+        "//src/share:table_runtime",
+        "//src/share:tablet_autoincrement_interface",
+        "//src/share:tablet_autoincrement_types",
+        "//src/share:tenant_role_transition_interface",
+        "//src/share:tenant_runtime",
+        "//src/share:timezone_runtime",
+        "//src/share:unit_topology",
+        "//src/share:utility_types",
+        "//src/share:vector",
+        "//src/share:worker_runtime",
+        "//bazel/third_party:boost_headers",
+        "//bazel/third_party:curl_headers",
+        "//bazel/third_party:fast_float_headers",
+        "//rust:regex_engine_headers",
+        "//bazel/third_party:openssl_headers",
+    ],
     tags = ["manual"],
 )
 
-# Restore the former ob_sql_extra -> ob_base_without_pass boundary and extend
-# it to the measured vector-comparison template family. These sources still
-# compile with ENABLE_SANITY but deliberately do not load the LLVM pass.
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "sql_runtime_without_pass",
-    owner_package = "src/sql",
     unity_groups = _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS,
-    group_implementation_deps = sql_runtime_without_pass_group_oblib_deps(
-        _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS,
-        sql_runtime_without_pass_group_share_deps(
-            _SQL_RUNTIME_WITHOUT_PASS_UNITY_GROUPS,
-        ),
-    ),
-    implementation_deps = _SQL_RUNTIME_IMPLEMENTATION_DEPS,
+    split_unity_groups = True,
+    implementation_deps = _SQL_RUNTIME_IMPLEMENTATION_DEPS + [
+        "//src/oblib:common_sql_mode",
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_db_meta",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_memory_primitives",
+        "//src/oblib:oblib_mysql_protocol",
+        "//src/oblib:oblib_restore",
+        "//src/oblib:oblib_rpc",
+    ] + [
+        "//src/share:autoincrement_runtime",
+        "//src/share:catalog_access",
+        "//src/share:cluster_version_interface",
+        "//src/share:collection_types",
+        "//src/share:config",
+        "//src/share:core_types",
+        "//src/share:datum",
+        "//src/share:ddl_protocol",
+        "//src/share:debug_sync_interface",
+        "//src/share:error_codes",
+        "//src/share:execution_contracts",
+        "//src/share:geo_cast_interface",
+        "//src/share:geo_types",
+        "//src/share:interrupt_runtime",
+        "//src/share:json_access",
+        "//src/share:lob_runtime",
+        "//src/share:memory_support",
+        "//src/share:object_cast",
+        "//src/share:object_cast_runtime_interface",
+        "//src/share:pl_integer_type",
+        "//src/share:rpc_dispatch",
+        "//src/share:runtime_context",
+        "//src/share:schema_access",
+        "//src/share:schema_entities",
+        "//src/share:schema_model_interface",
+        "//src/share:schema_registry",
+        "//src/share:scn_interface",
+        "//src/share:srs_provider_interface",
+        "//src/share:statement_type",
+        "//src/share:system_variable_metadata",
+        "//src/share:tablet_autoincrement_types",
+        "//src/share:tenant_runtime",
+        "//src/share:timezone_runtime",
+    ],
     sanity_instrumentation = False,
     tags = ["manual"],
 )
 
-seekdb_semantic_unity_cc_library(
+grouped_unity_cc_library(
     name = "sql_runtime_simd",
-    owner_package = "src/sql",
     unity_groups = SQL_SIMD_UNITY_GROUPS,
-    group_implementation_deps = sql_runtime_simd_group_oblib_deps(
-        SQL_SIMD_UNITY_GROUPS,
-        sql_runtime_simd_group_share_deps(SQL_SIMD_UNITY_GROUPS),
-    ),
-    implementation_deps = _SQL_RUNTIME_IMPLEMENTATION_DEPS,
+    split_unity_groups = True,
+    implementation_deps = _SQL_RUNTIME_IMPLEMENTATION_DEPS + [
+        "//src/oblib:oblib_base",
+        "//src/oblib:oblib_collections_primitives",
+        "//src/oblib:oblib_common",
+        "//src/oblib:oblib_compression",
+        "//src/oblib:oblib_concurrency_primitives",
+        "//src/oblib:oblib_db_meta",
+        "//src/oblib:oblib_foundation",
+    ] + [
+        "//src/share:config",
+        "//src/share:runtime_context",
+    ],
     copts = select({
-        "@platforms//cpu:x86_64": SEEKDB_X86_SIMD_COPTS,
+        "@platforms//cpu:x86_64": X86_SIMD_COPTS,
         "//conditions:default": [],
-    }) + SEEKDB_SEMANTIC_MODULE_COPTS,
+    }) + MODULE_CXX_COPTS,
     tags = ["manual"],
     # Observer's composition root names this archive directly in the final
     # ordered link; it remains unavailable to every other module.
@@ -375,25 +421,4 @@ cc_library(
     ],
     tags = ["manual"],
     visibility = ["//src/observer:__pkg__"],
-)
-
-cc_library(
-    name = "sql_static",
-    implementation_deps = [
-        ":sql_objects",
-        "//src/sql/parser:sql_server_parser",
-    ],
-    tags = ["manual"],
-    visibility = ["//src/observer:__pkg__"],
-)
-
-filegroup(
-    name = "sql_static_build",
-    srcs = [
-        ":sql_runtime",
-        ":sql_runtime_without_pass",
-        ":sql_runtime_simd",
-        "//src/sql/parser:sql_server_parser_build",
-    ],
-    tags = ["manual"],
 )

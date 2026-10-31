@@ -56,7 +56,7 @@ int print_human_tstamp(char *buf, const int64_t buf_len, int64_t &pos,
                                   tm.tm_hour,
                                   tm.tm_min,
                                   tm.tm_sec,
-                                  tv.tv_usec);
+                                  static_cast<int64_t>(tv.tv_usec));
   }
   return ret;
 }
@@ -90,7 +90,7 @@ int print_human_timeval(char *buf,
                                   hr,
                                   min,
                                   sec,
-                                  tv.tv_usec);
+                                  static_cast<int64_t>(tv.tv_usec));
   }
   return ret;
 }

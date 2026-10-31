@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "lib/container/ob_se_array.h"
 #include "common/json_type/ob_json_bin.h"
 #include "share/ob_errno.h"

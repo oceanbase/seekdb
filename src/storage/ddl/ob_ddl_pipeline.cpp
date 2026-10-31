@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_ddl_pipeline.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/api/storage/vector/ob_i_vector_index_runtime.h"

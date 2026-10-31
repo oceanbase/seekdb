@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_macro_block_writer.h"
 #include "ob_imacro_block_flush_callback.h"
 #include "share/rc/ob_server_runtime.h"

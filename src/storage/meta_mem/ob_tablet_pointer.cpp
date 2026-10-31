@@ -293,7 +293,7 @@ int ObTabletPointer::dump_meta_obj(ObMetaObjGuard<ObTablet> &guard, void *&free_
     const ObTabletID tablet_id = obj_.ptr_->tablet_meta_.tablet_id_;
     const int64_t wash_score = obj_.ptr_->get_wash_score();
     guard.get_obj(meta_obj);
-    const ObTabletPersisterParam param(ls_->get_ls_epoch(), tablet_id);
+    const ObTabletPersisterParam param(tablet_id);
     ObTablet *tmp_obj = obj_.ptr_;
     if (OB_NOT_NULL(meta_obj.ptr_) && obj_.ptr_->get_try_cache_size() <= ObStorageMetaMemMgr::NORMAL_TABLET_POOL_SIZE) {
       char *buf = reinterpret_cast<char*>(meta_obj.ptr_);

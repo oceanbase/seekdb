@@ -153,15 +153,6 @@ private:
   MergeType merge_type_;
 };
 
-class ObRefreshMemStatStmt : public ObSystemCmdStmt
-{
-public:
-  ObRefreshMemStatStmt() : ObSystemCmdStmt(stmt::T_REFRESH_MEMORY_STAT) {}
-  virtual ~ObRefreshMemStatStmt() {}
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
-};
-
 class ObRefreshIOCalibraitonStmt : public ObSystemCmdStmt
 {
 public:

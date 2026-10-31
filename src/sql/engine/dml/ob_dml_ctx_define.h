@@ -270,7 +270,7 @@ public:
     : calc_part_id_expr_(nullptr),
       part_id_dep_exprs_(alloc),
       das_scan_ctdef_(alloc),
-      loc_meta_(alloc),
+      access_meta_(alloc),
       is_part_table_(false),
       tablet_id_(),
       rowkey_count_(0),
@@ -281,7 +281,7 @@ public:
   TO_STRING_KV(KPC_(calc_part_id_expr),
                K_(part_id_dep_exprs),
                K_(das_scan_ctdef),
-               K_(loc_meta),
+               K_(access_meta),
                K_(is_part_table),
                K_(tablet_id),
                K_(rowkey_count));
@@ -290,7 +290,7 @@ public:
   ExprFixedArray part_id_dep_exprs_;
   // Back-table query, to maintain structural consistency, the main table also needs a back-table query, the first insert returns the primary key of the main table
   ObDASScanCtDef das_scan_ctdef_;
-  ObDASTableLocMeta loc_meta_;
+  DASTableAccessMeta access_meta_;
   bool is_part_table_;
   ObTabletID tablet_id_;
   int64_t rowkey_count_;
@@ -468,7 +468,7 @@ struct ObDMLBaseRtDef
                        K_(cur_row_num));
   ObTrigDMLRtDef trig_rtdef_;
   int64_t cur_row_num_;
-  ObTableLocation *check_location_;
+  TableAccessPlan *check_access_plan_;
   ObNewRow *check_row_; //only used for tablet defensive check
   //reference the das base ctdef to facilitate
   //some modules to access the das rtdef
@@ -478,7 +478,7 @@ protected:
   ObDMLBaseRtDef(ObDASDMLBaseRtDef &das_base_rtdef)
     : trig_rtdef_(),
       cur_row_num_(0),
-      check_location_(nullptr),
+      check_access_plan_(nullptr),
       check_row_(nullptr),
       das_base_rtdef_(das_base_rtdef)
   { }
@@ -491,15 +491,15 @@ public:
   ObMultiInsCtDef(common::ObIAllocator &alloc)
     : calc_part_id_expr_(nullptr),
       hint_part_ids_(alloc),
-      loc_meta_(alloc)
+      access_meta_(alloc)
   {
   }
   TO_STRING_KV(KPC_(calc_part_id_expr),
                K_(hint_part_ids),
-               K_(loc_meta));
+               K_(access_meta));
   ObExpr *calc_part_id_expr_;
   ObjectIDFixedArray hint_part_ids_;
-  ObDASTableLocMeta loc_meta_;
+  DASTableAccessMeta access_meta_;
 };
 
 //insert compile info definition
@@ -553,18 +553,18 @@ public:
       calc_part_id_new_(nullptr),
       hint_part_ids_(alloc),
       is_enable_row_movement_(false),
-      loc_meta_(alloc)
+      access_meta_(alloc)
   {
   }
   TO_STRING_KV(KPC_(calc_part_id_old),
                KPC_(calc_part_id_new),
                K_(is_enable_row_movement),
-               K_(loc_meta));
+               K_(access_meta));
   ObExpr *calc_part_id_old_; //calc partition id for old_row
   ObExpr *calc_part_id_new_; //calc partition id for new_row
   ObjectIDFixedArray hint_part_ids_;
   bool is_enable_row_movement_;
-  ObDASTableLocMeta loc_meta_;
+  DASTableAccessMeta access_meta_;
 };
 
 struct ObUpdCtDef : ObDMLBaseCtDef
@@ -696,16 +696,16 @@ public:
   ObMultiLockCtDef(common::ObIAllocator &alloc)
     : calc_part_id_expr_(nullptr),
       partition_cnt_(0),
-      loc_meta_(alloc)
+      access_meta_(alloc)
   {
     UNUSED(alloc);
   }
   TO_STRING_KV(KPC_(calc_part_id_expr),
                K_(partition_cnt),
-               K_(loc_meta));
+               K_(access_meta));
   ObExpr *calc_part_id_expr_; //used to calc the partition id of the target row
   int64_t partition_cnt_; //the target table partition_cnt_
-  ObDASTableLocMeta loc_meta_;
+  DASTableAccessMeta access_meta_;
 };
 
 struct ObLockCtDef : ObDMLBaseCtDef
@@ -750,14 +750,14 @@ struct ObMultiDelCtDef
 public:
   ObMultiDelCtDef(common::ObIAllocator &alloc)
     : calc_part_id_expr_(nullptr),
-      loc_meta_(alloc)
+      access_meta_(alloc)
   {
     UNUSED(alloc);
   }
   TO_STRING_KV(KPC_(calc_part_id_expr),
-               K_(loc_meta));
+               K_(access_meta));
   ObExpr *calc_part_id_expr_; //used to calc the partition id of the target row
-  ObDASTableLocMeta loc_meta_;
+  DASTableAccessMeta access_meta_;
 };
 
 struct ObDelCtDef : ObDMLBaseCtDef

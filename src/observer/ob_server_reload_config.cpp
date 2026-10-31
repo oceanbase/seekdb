@@ -16,16 +16,16 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "ob_server_reload_config.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
 #include "share/rc/ob_server_runtime.h"
-#include "lib/alloc/ob_malloc_sample_struct.h"
+#include "lib/utility/ob_backtrace.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
-#include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/meta_store/storage_meta_service.h"
 
 #include <string>
 
@@ -67,12 +67,6 @@ int ObServerReloadConfig::operator()()
     // Reload log configuration after applying the latest configuration values.
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
     }
-    const int64_t reserved_memory = config::cache_wash_threshold();
-    LOG_INFO("set reserved memory", K(reserved_memory));
-    ob_set_reserved_memory(reserved_memory);
-    ObMallocSampleLimiter::set_interval(config::_max_malloc_sample_interval(),
-                                     config::_min_malloc_sample_interval());
-    enable_memleak_light_backtrace(config::_enable_memleak_light_backtrace());
       ObIOConfig io_config;
       int64_t cpu_cnt = config::cpu_count();
       if (cpu_cnt <= 0) {
@@ -98,18 +92,6 @@ int ObServerReloadConfig::operator()()
       }
   }
 
-  int64_t cache_size = config::memory_chunk_cache_size();
-  bool use_large_chunk_cache = false;
-  if (0 == cache_size || 1 == cache_size) {
-    cache_size = lib::AChunkMgr::get_default_max_chunk_cache_size();
-  }
-  lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
-
-  // syslog bandwidth limitation
-  share::ObTaskController::get().set_log_rate_limit(
-      config::syslog_io_bandwidth_limit());
-  share::ObTaskController::get().set_diag_per_error_limit(
-      config::diag_syslog_per_error_limit());
 
   lib::g_runtime_enabled = true;
 
@@ -122,7 +104,7 @@ int ObServerReloadConfig::operator()()
     int64_t reserved_size = 0;
     if (OB_TMP_FAIL(ObServerUtils::get_data_disk_info_in_config(data_disk_size,
                                                                 data_disk_percentage))) {
-    } else if (OB_TMP_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
+    } else if (OB_TMP_FAIL(STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
     } else if (OB_TMP_FAIL(OB_STORAGE_OBJECT_MGR.resize_local_device(
         OB_STORAGE_OBJECT_MGR.get_total_macro_block_count()
             * OB_STORAGE_OBJECT_MGR.get_macro_block_size(),

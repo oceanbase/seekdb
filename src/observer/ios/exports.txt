@@ -1,0 +1,4 @@
+_seekdb_close
+_seekdb_connection_options
+_seekdb_last_open_error
+_seekdb_open

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "share/config/ob_config_helper.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 
@@ -6063,8 +6063,7 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
     MEMCPY(buf, secure_file_priv.ptr(), secure_file_priv.length());
 
     struct stat path_stat;
-    stat(buf, &path_stat);
-    if (0 == S_ISDIR(path_stat.st_mode)) {
+    if (0 != stat(buf, &path_stat) || 0 == S_ISDIR(path_stat.st_mode)) {
       ret = OB_ERR_NO_PRIVILEGE;
     } else {
       MEMSET(buf, 0, sizeof(buf));
@@ -6076,7 +6075,7 @@ int ObResolverUtils::check_secure_path(const common::ObString &secure_file_priv,
       ObCStringHelper helper;
       if (NULL == (real_secure_file = ::realpath(helper.convert(secure_file_priv), buf))) {
 #endif
-        // pass
+        ret = OB_ERR_NO_PRIVILEGE;
       } else {
         ObString secure_file_priv_tmp(real_secure_file);
         const int64_t pos = secure_file_priv_tmp.length();

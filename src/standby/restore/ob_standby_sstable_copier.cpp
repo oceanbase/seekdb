@@ -281,13 +281,10 @@ int ObStandbySSTableCopier::create_or_update_tablet_(
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid tablet create argument", K(ret), KP(ls), K(tablet_info));
   } else if (ObCopyTabletStatus::TABLET_NOT_EXIST == tablet_info.status_) {
-    common::ObArray<common::ObTabletID> tablet_ids;
     if (tablet_info.tablet_id_.is_ls_inner_tablet()) {
       ret = OB_TABLET_NOT_EXIST;
       LOG_ERROR("src ls inner tablet is not exist", K(ret), K(tablet_info));
-    } else if (OB_FAIL(tablet_ids.push_back(tablet_info.tablet_id_))) {
-      LOG_WARN("failed to collect deleted source tablet", K(ret), K(tablet_info));
-    } else if (OB_FAIL(ls->remove_tablets(tablet_ids))) {
+    } else if (OB_FAIL(ls->remove_tablet(tablet_info.tablet_id_))) {
       LOG_WARN("failed to remove tablet deleted on source", K(ret), K(tablet_info));
     }
   } else if (!tablet_info.param_.is_empty_shell()

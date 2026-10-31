@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/ob_sstable_meta.h"
 #include "share/ob_server_struct.h"
@@ -425,7 +425,6 @@ int ObDataStoreDesc::get_emergency_row_store_type()
           endptr++;
           (void)(std::strtoull(endptr, &endptr, 0));
           if (OB_SUCC(ret)) {
-            oceanbase::share::ObTaskController::get().allow_next_syslog();
             if (get_tablet_id() == emergency_tablet_id) {
               STORAGE_LOG(INFO, "Succ to find specified emergency partition to skip encoding",
                   K(emergency_tablet_id), K(*this));

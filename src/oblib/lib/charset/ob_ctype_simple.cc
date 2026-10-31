@@ -763,7 +763,7 @@ int64_t ob_strntoull(const char *ptr, size_t len, int base, char **end, int *err
 
 void ob_hash_sort_simple(const ObCharsetInfo *cs,
                          const unsigned char *key, size_t len,
-                         unsigned long int *nr1, unsigned long int *nr2,
+                         uint64_t *nr1, uint64_t *nr2,
                          const bool calc_end_space, hash_algo hash_algo)
 {
   unsigned char *sort_order=cs->sort_order;
@@ -774,7 +774,7 @@ void ob_hash_sort_simple(const ObCharsetInfo *cs,
 
   if (NULL == hash_algo) {
     for (; key < (unsigned char*) end ; key++) {
-      nr1[0]^=(unsigned long int) ((((unsigned int) nr1[0] & 63)+nr2[0]) *
+      nr1[0]^=(uint64_t) ((((unsigned int) nr1[0] & 63)+nr2[0]) *
         ((unsigned int) sort_order[(unsigned int) *key])) + (nr1[0] << 8);
       nr2[0]+=3;
     }

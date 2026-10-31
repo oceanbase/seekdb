@@ -7,7 +7,6 @@ repo=https://mirrors.oceanbase.com/oceanbase/development-kit/android/26/arm64
 devdeps-abseil-cpp-20211102.0-20260309.tar.gz
 devdeps-boost-1.74.0-20260309.tar.gz
 devdeps-fast-float-6.1.3-20260309.tar.gz
-devdeps-icu-69.1-20260309.tar.gz
 devdeps-libcurl-8.2.1-20260309.tar.gz
 devdeps-libxml2-2.10.4-20260309.tar.gz
 devdeps-llvm-17.0.6-20260309.tar.gz
@@ -20,5 +19,3 @@ devdeps-vsag-0.18.0-20260407.tar.gz
 devdeps-xz-5.2.2-20260309.tar.gz
 devdeps-zlib-1.2.13-20260309.tar.gz
 devdeps-grpc-1.46.7-20260402.tar.gz
-obdevtools-bison-2.4.1-20251219.tar.gz
-obdevtools-flex-2.5.35-20251219.tar.gz

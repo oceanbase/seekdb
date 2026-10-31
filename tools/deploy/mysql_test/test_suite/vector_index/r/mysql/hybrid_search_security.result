@@ -1,0 +1,36 @@
+DROP DATABASE IF EXISTS hybrid_search_security;
+DROP USER IF EXISTS hybrid_search_reader;
+CREATE DATABASE hybrid_search_security;
+CREATE TABLE hybrid_search_security.docs (body VARCHAR(100));
+SET @needle = CONVERT(X'E4B8AD71756F7465276261636B5C736C61736800656E64' USING utf8mb4);
+INSERT INTO hybrid_search_security.docs VALUES (@needle), ('ordinary');
+SELECT HEX(body) AS stored_literal_hex FROM hybrid_search_security.docs WHERE body = @needle;
+stored_literal_hex
+E4B8AD71756F7465276261636B5C736C61736800656E64
+SET @request = JSON_OBJECT('query', JSON_OBJECT('term', JSON_OBJECT('body', @needle)));
+SELECT JSON_LENGTH(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request)) AS matched_rows;
+matched_rows
+1
+SELECT HEX(JSON_UNQUOTE(JSON_EXTRACT(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request), '$[0].body'))) AS returned_literal_hex;
+returned_literal_hex
+E4B8AD71756F7465276261636B5C736C61736800656E64
+SELECT JSON_UNQUOTE(JSON_EXTRACT(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request), '$[0].body')) = @needle AS literal_roundtrip;
+literal_roundtrip
+1
+SET @saved_sql_mode = @@sql_mode;
+SET sql_mode = 'NO_BACKSLASH_ESCAPES';
+SELECT JSON_UNQUOTE(JSON_EXTRACT(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', @request), '$[0].body')) = @needle AS no_backslash_roundtrip;
+no_backslash_roundtrip
+1
+SET sql_mode = @saved_sql_mode;
+CREATE USER hybrid_search_reader;
+GRANT EXECUTE ON oceanbase.* TO hybrid_search_reader;
+GRANT INSERT ON hybrid_search_security.docs TO hybrid_search_reader;
+SELECT DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', '{}');
+ERROR 42000: SELECT command denied to user 'hybrid_search_reader'@'%' for table 'docs'
+GRANT SELECT ON hybrid_search_security.docs TO hybrid_search_reader;
+SELECT JSON_LENGTH(DBMS_HYBRID_SEARCH.SEARCH('hybrid_search_security.docs', '{}')) AS authorized_rows;
+authorized_rows
+2
+DROP USER hybrid_search_reader;
+DROP DATABASE hybrid_search_security;

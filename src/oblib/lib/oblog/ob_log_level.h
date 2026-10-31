@@ -49,6 +49,14 @@ namespace common
 #define OB_LOG_LEVEL_DEBUG 6
 #define OB_LOG_LEVEL_MAX 7
 
+enum ObPLogFDType {
+  FD_SVR_FILE = 0,
+  FD_TRACE_FILE,
+  FD_AUDIT_FILE,
+  FD_ALERT_FILE,
+  MAX_FD_FILE,
+};
+
 struct ObLogIdLevelMap;
 //@class ObThreadLogLevel
 //@brief Deliver the id_level_map of the session which set the session variable

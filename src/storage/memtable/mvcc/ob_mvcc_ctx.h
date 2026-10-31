@@ -108,8 +108,6 @@ public: // for mvcc engine invoke
                             const transaction::ObTransID &conflict_tx_id) = 0;
   virtual void on_wlock_retry(const ObMemtableKey& key,
                               const transaction::ObTransID &conflict_tx_id) = 0;
-  virtual void inc_truncate_cnt() = 0;
-  virtual void add_trans_mem_total_size(const int64_t size) = 0;
   virtual void inc_pending_log_size(const int64_t size) = 0;
   virtual transaction::ObTransID get_tx_id() const = 0;
   virtual transaction::ObTxCtx *get_trans_ctx() const = 0;

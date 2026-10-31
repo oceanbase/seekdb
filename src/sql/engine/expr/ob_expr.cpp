@@ -53,6 +53,7 @@ ObEvalCtx::ObEvalCtx(ObExecContext &exec_ctx, ObIAllocator *allocator)
     tmp_alloc_used_(exec_ctx.get_tmp_alloc_used()),
     batch_idx_(0),
     batch_size_(0),
+    batch_skip_(nullptr),
     expr_res_alloc_((dynamic_cast<ObArenaAllocator*>(allocator) != NULL) ?
                       (*(dynamic_cast<ObArenaAllocator*>(allocator))) : exec_ctx.get_eval_res_allocator())
 {
@@ -67,6 +68,7 @@ ObEvalCtx::ObEvalCtx(ObEvalCtx &eval_ctx)
     tmp_alloc_used_(eval_ctx.tmp_alloc_used_),
     batch_idx_(eval_ctx.get_batch_idx()),
     batch_size_(eval_ctx.get_batch_size()),
+    batch_skip_(eval_ctx.get_batch_skip()),
     expr_res_alloc_(eval_ctx.expr_res_alloc_)
 {
 }
@@ -720,6 +722,9 @@ int expr_default_eval_batch_func(const ObExpr &expr,
   ObDatum *datum = reinterpret_cast<ObDatum *>(frame + expr.datum_off_);
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
   batch_info_guard.set_batch_size(bound.batch_size());
+  // Nested AI_EMBED must not send rows skipped by its parent expression.
+  const ObBitVector *previous_batch_skip = ctx.get_batch_skip();
+  ctx.set_batch_skip(&skip);
   bool got_null = false;
   for (int64_t i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
     if (!skip.contain(i) && !evaluated_flags->contain(i)) {
@@ -745,6 +750,7 @@ int expr_default_eval_batch_func(const ObExpr &expr,
       }
     }
   }
+  ctx.set_batch_skip(previous_batch_skip);
   // reset evaluate index
   if (got_null) {
     expr.get_eval_info(ctx).notnull_ = false;

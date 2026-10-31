@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_SHARE_OB_SHARE_UTIL_H_
 #define OCEANBASE_SHARE_OB_SHARE_UTIL_H_
-#include "config_bridge.h"
+#include "rust/config.h"
 #include "common/ob_timeout_ctx.h"
 #include "share/ob_define.h"
 #include "share/ob_id_generator.h"
