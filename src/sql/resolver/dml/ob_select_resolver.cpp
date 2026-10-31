@@ -572,7 +572,8 @@ int ObSelectResolver::check_group_by()
                                                  select_stmt,
                                                  having_has_self_column_,
                                                  has_group_by_clause(),
-                                                 only_need_constraints))) {
+                                                 only_need_constraints,
+                                                 params_.allocator_, session_info_->get_cur_exec_ctx()))) {
     }
   }
 

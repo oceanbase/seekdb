@@ -540,6 +540,7 @@ private:
   int get_reconstructed_batch_stmt(ObPlanCacheCtx &pc_ctx, ObString& stmt_sql);
   void rollback_implicit_trans_when_fail(ObResultSet &result, int &ret);
   friend class ::test::TestOptimizerUtils;
+  friend struct NativePcConstValuesTestPeer;
 
 public:
   static int add_param_to_param_store(const DatumParameter &param,

@@ -7206,7 +7206,7 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FALSE_IT(const_expr = static_cast<ObConstRawExpr*>(param_expr))) {
     } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_value().get_unknown()))) {
-    } else if (OB_FAIL(const_param_info.add_constant(target_value, *allocator))) {
+    } else if (OB_FAIL(const_param_info.add_int_constant(limit, *allocator))) {
     } else {
       is_equal = true;
     }
@@ -8337,8 +8337,8 @@ int ObTransformUtils::add_const_param_constraints(ObRawExpr *expr,
         if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_param_store().count())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-        } else if (OB_FAIL(param_info.const_params_.push_back(
-                                                      plan_ctx->get_param_store().at(param_idx).value_view()))) {
+        } else if (OB_FAIL(param_info.add_parameter(
+                          plan_ctx->get_param_store().at(param_idx), ctx->exec_ctx_, *ctx->allocator_))) {
         } else if (OB_FAIL(ctx->plan_const_param_constraints_.push_back(param_info))) {
         } else {/*do nothing*/}
       }

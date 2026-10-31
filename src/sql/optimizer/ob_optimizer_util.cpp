@@ -980,7 +980,6 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
       bool is_one = false;
       ObRawExpr* param_expr = NULL;
       const ObConstRawExpr *const_expr = NULL;
-      DatumValue target_value;
       if (OB_ISNULL(param_expr_str) || OB_ISNULL(param_expr_pos)) {
         ret = OB_ERR_UNEXPECTED;
       } else if ((ObCharset::is_bin_sort(param_expr_str->get_result_type().get_collation_type()) ||
@@ -997,8 +996,7 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
                                                                         param_store, const_param_info)))) {
         } else if (OB_FALSE_IT(const_expr = static_cast<const ObConstRawExpr*>(param_expr_pos))) {
         } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_value().get_unknown()))) {
-        } else if (OB_FAIL(target_value.set_int(1, ctx.get_allocator()))) {
-        } else if (OB_FAIL(const_param_info.add_constant(target_value, ctx.get_allocator()))) {
+        } else if (OB_FAIL(const_param_info.add_int_constant(1, ctx.get_allocator()))) {
         } else {
           monotonicity = mono;
           is_strict = false;

@@ -268,6 +268,7 @@ private:
 
   DISALLOW_COPY_AND_ASSIGN(ObPlanSet);
   friend class ::test::TestPlanSet_basic_Test;
+  friend struct NativePcConstValuesTestPeer;
 protected:
   common::ObArenaAllocator alloc_;
   ObPlanCacheValue *plan_cache_value_;

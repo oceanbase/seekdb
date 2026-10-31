@@ -6517,7 +6517,9 @@ int ObRawExprResolverImpl::process_odbc_time_literals(const ObItemType dst_time_
         if (OB_ISNULL(ctx_.query_ctx_)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(const_param_info.const_idx_.push_back(expr_node->value_))) {
-        } else if (OB_FAIL(const_param_info.const_params_.push_back(ctx_.param_list_->at(expr_node->value_).value_view()))) {
+        } else if (OB_FAIL(const_param_info.add_parameter(ctx_.param_list_->at(expr_node->value_),
+                            ctx_.session_info_ == nullptr ? nullptr : ctx_.session_info_->get_cur_exec_ctx(),
+                            ctx_.expr_factory_.get_allocator(), ctx_.secondary_namespace_))) {
         } else if (OB_FAIL(ctx_.query_ctx_->all_plan_const_param_constraints_.push_back(const_param_info))) {
         } else {/* do nothing */}
       }

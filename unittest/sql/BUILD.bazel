@@ -481,7 +481,11 @@ cc_test(
 
 cc_library(
     name = "datum_parameter_constraint_cases",
-    srcs = ["test_datum_parameter_constraints.cpp", "test_context_datum_parameters.cpp"],
+    srcs = [
+        "test_datum_parameter_constraints.cpp",
+        "test_context_datum_parameters.cpp",
+        "test_native_pc_const_values.cpp",
+    ],
     alwayslink = True,
     deps = [
         "//src/sql:sql_runtime_interface",

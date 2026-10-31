@@ -315,6 +315,7 @@ cc_library(
         "common/datum/ob_datum.h",
         "common/datum/datum_core.h",
         "common/datum/datum.h",
+        "common/datum/native_typed_datum.h",
         "common/datum/sql_type.h",
         "common/datum/datum_copy_plan.h",
         "common/datum/datum_value.h",

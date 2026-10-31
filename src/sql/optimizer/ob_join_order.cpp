@@ -17614,7 +17614,8 @@ int ObJoinOrder::check_simple_gen_col_cmp_expr(ObRawExpr *expr,
         if (OB_UNLIKELY(param_idx < 0 || param_idx >= phy_plan_ctx->get_param_store().count())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-        } else if (OB_FAIL(param_info.const_params_.push_back(phy_plan_ctx->get_param_store().at(param_idx).value_view()))) {
+        } else if (OB_FAIL(param_info.add_parameter(phy_plan_ctx->get_param_store().at(param_idx),
+                          OPT_CTX.get_exec_ctx(), OPT_CTX.get_allocator()))) {
         } else if (OB_FAIL(param_infos.push_back(param_info))) {
         }
       }

@@ -286,6 +286,21 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
         }
       }
     } else if (left.is_param_expr() || right.is_param_expr()) {
+      const ObConstRawExpr &parameter = left.is_param_expr() ? left : right;
+      const ObRawExprResType &original_type = parameter.is_dynamic_eval_questionmark()
+          ? parameter.get_orig_qm_type() : parameter.get_result_type();
+      const common::SqlTypeMeta &meta = original_type.get_sql_type_meta();
+      const common::SqlTypeMeta &value_meta = parameter.get_param().get_meta();
+      // This structural-comparison context has no session/SubSchema/PL
+      // declarations. Decline the rewrite instead of dropping its constraint
+      // or inventing a scalar declaration for a complex/typed-NULL parameter.
+      if (meta.is_enum_or_set() || meta.is_enumset_inner_type() || meta.is_collection_sql_type()
+          || meta.is_ext_sql_array() || meta.is_pl_extend_type() || meta.get_type() == ObUserDefinedSQLType
+          || value_meta.is_enum_or_set() || value_meta.is_enumset_inner_type()
+          || value_meta.is_collection_sql_type() || value_meta.is_ext_sql_array()
+          || value_meta.is_pl_extend_type() || value_meta.get_type() == ObUserDefinedSQLType) {
+        return false;
+      }
       bret = ObExprEqualCheckContext::compare_const(left, right);
       if (bret && (left.get_value().is_unknown() || right.get_value().is_unknown())) {
         const ObConstRawExpr &unkonwn_expr = left.get_value().is_unknown() ? left : right;
@@ -293,8 +308,10 @@ bool ObStmtCompareContext::compare_const(const ObConstRawExpr &left, const ObCon
         if (OB_FAIL(const_param_info.const_idx_.push_back(unkonwn_expr.get_value().get_unknown()))) {
         } else if (OB_ISNULL(unkonwn_expr.get_expr_factory())) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(const_param_info.add_constant(
-                     unkonwn_expr.get_param(), unkonwn_expr.get_expr_factory()->get_allocator()))) {
+        } else if (OB_FAIL(const_param_info.add_raw_constant(unkonwn_expr.get_param(),
+                     unkonwn_expr.is_dynamic_eval_questionmark() ? unkonwn_expr.get_orig_qm_type()
+                                                                 : unkonwn_expr.get_result_type(),
+                     nullptr, nullptr, unkonwn_expr.get_expr_factory()->get_allocator()))) {
         } else if (OB_FAIL(const_param_info_.push_back(const_param_info))) {
         }
       }

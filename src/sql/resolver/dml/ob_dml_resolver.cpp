@@ -6378,7 +6378,10 @@ int ObDMLResolver::find_const_params_for_gen_column(const ObRawExpr &expr)
 
             const ObConstRawExpr *c_expr = dynamic_cast<const ObConstRawExpr *>(param_expr.expr_);
             CK( OB_NOT_NULL(c_expr) );
-            if (OB_SUCC(ret)) { ret = const_param_info.add_constant(c_expr->get_value(), *params_.allocator_); }
+            if (OB_SUCC(ret)) { ret = const_param_info.add_raw_constant(c_expr->get_value(),
+                c_expr->get_result_type(), session_info_,
+                schema_checker_ == nullptr ? nullptr : schema_checker_->get_schema_guard(),
+                *params_.allocator_, params_.secondary_namespace_); }
           }
         }
         OC( (params_.query_ctx_->all_possible_const_param_constraints_.push_back)(const_param_info) );
@@ -12214,7 +12217,9 @@ int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
               if (OB_UNLIKELY(param_idx < 0 || param_idx >= param_store->count())) {
                 ret = OB_ERR_UNEXPECTED;
               } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-              } else if (OB_FAIL(param_info.const_params_.push_back(param_store->at(param_idx).value_view()))) {
+              } else if (OB_FAIL(param_info.add_parameter(param_store->at(param_idx),
+                               session_info_->get_cur_exec_ctx(), *params_.allocator_,
+                               params_.secondary_namespace_))) {
               } else if (OB_FAIL(param_constraints.push_back(param_info))) {
               }
             }

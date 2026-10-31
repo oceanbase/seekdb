@@ -904,14 +904,21 @@ int ObSqlPlan::print_constraint_info(char *buf,
                                     const ObPCConstParamInfo &info)
 {
   int ret = OB_SUCCESS;
+  if (!info.cache_eligible_) {
+    if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
+    } else if (OB_FAIL(BUF_PRINTF("plan cache disabled for constant constraint"))) {
+    } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
+    }
+    return ret;
+  }
   if (info.const_idx_.count() != info.const_params_.count()) {
     ret = OB_ERR_UNEXPECTED;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < info.const_idx_.count(); ++i) {
-    const DatumValue &value = info.const_params_.at(i);
+    const common::NativeTypedDatum &value = info.const_params_.at(i);
     if (OB_FAIL(BUF_PRINTF(OUTPUT_PREFIX))) {
     } else if (OB_FAIL(BUF_PRINTF(":%ld = ", info.const_idx_.at(i)))) {
-    } else if (OB_FAIL(value.print_sql_literal(buf, buf_len, pos))) {
+    } else if (OB_FAIL(ObPCConstParamInfo::print_constant(value, buf, buf_len, pos))) {
     } else if (OB_FAIL(BUF_PRINTF(NEW_LINE))) {
     } else { /* Do nothing */ }
   }

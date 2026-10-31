@@ -3541,6 +3541,23 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
   } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
     need_add_plan = false;
   }
+  if (OB_SUCC(ret) && need_add_plan) {
+    // A constraint without an owned complete declaration must never disappear
+    // from the cache decision, including the inverted all-possible constraints.
+    const ObIArray<ObPCConstParamInfo> *constraints[] = {
+      pc_ctx.sql_ctx_.all_plan_const_param_constraints_,
+      pc_ctx.sql_ctx_.all_possible_const_param_constraints_
+    };
+    for (int64_t group = 0; need_add_plan && group < 2; ++group) {
+      if (constraints[group] != nullptr) {
+        for (int64_t i = 0; need_add_plan && i < constraints[group]->count(); ++i) {
+          if (!constraints[group]->at(i).cache_eligible_) {
+            need_add_plan = false;
+          }
+        }
+      }
+    }
+  }
   return ret;
 }
 
