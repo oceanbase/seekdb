@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include <zlib-rs/zlib.h>
+#include <zlib.h>
 #include <cstdint>
 #include <cstring>
 #include <vector>

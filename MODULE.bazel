@@ -39,28 +39,13 @@ crate.annotation(
     additive_build_file = "//bazel:cxx_runtime.BUILD.bazel",
 )
 crate.annotation(
-    crate = "libz-rs-sys",
-    version = "0.6.8",
+    crate = "libz-sys",
+    version = "1.1.31",
     repositories = ["rust_crates"],
-    additive_build_file = "//bazel:libz_rs_sys_headers.BUILD.bazel",
-)
-crate.annotation(
-    crate = "curl-sys",
-    version = "0.4.84+curl-8.17.0",
-    repositories = ["rust_crates"],
-    additive_build_file = "//bazel:curl_sys_zlib_rs.BUILD.bazel",
-    override_target_lib = "@@rules_rust++crate+rust_crates__curl-sys-0.4.84-curl-8.17.0//:curl_sys_zlib_rs",
-    override_target_build_script = "@@rules_rust++crate+rust_crates__curl-sys-0.4.84-curl-8.17.0//:_bs",
-    patches = ["//bazel:curl-sys-zlib-rs.diff"],
+    additive_build_file = "//bazel:libz_sys_headers.BUILD.bazel",
+    patches = ["//bazel:libz-sys-static.diff"],
     patch_args = ["-p1"],
-    build_script_data = [
-        "@rust_crates__libz-rs-sys-0.6.8//:include/zconf.h",
-        "@rust_crates__libz-rs-sys-0.6.8//:include/zlib.h",
-    ],
-    build_script_env = {
-        "DEP_Z_INCLUDE": "$(execpath @rust_crates__libz-rs-sys-0.6.8//:include/zlib.h)",
-    },
-    label_injections = {"@@rules_rust++crate+rust_crates__libz-rs-sys-0.6.8//:include/zlib.h": "@rust_crates__libz-rs-sys-0.6.8"},
+    build_script_env = {"LIBZ_SYS_STATIC": "1"},
 )
 crate.annotation(
     crate = "spdlog-rs",

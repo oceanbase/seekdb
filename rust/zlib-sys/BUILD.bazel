@@ -7,11 +7,10 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "headers",
     hdrs = [
-        "@@rules_rust++crate+rust_crates__libz-rs-sys-0.6.8//:include/zconf.h",
-        "@@rules_rust++crate+rust_crates__libz-rs-sys-0.6.8//:include/zlib.h",
+        "@@rules_rust++crate+rust_crates__libz-sys-1.1.31//:src/zlib/zconf.h",
+        "@@rules_rust++crate+rust_crates__libz-sys-1.1.31//:src/zlib/zlib.h",
     ],
-    include_prefix = "zlib-rs",
-    strip_include_prefix = "/include",
+    strip_include_prefix = "/src/zlib",
 )
 
 rust_library(

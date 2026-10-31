@@ -1,0 +1,4 @@
+exports_files([
+    "src/zlib/zconf.h",
+    "src/zlib/zlib.h",
+])

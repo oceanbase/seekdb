@@ -1,0 +1,13 @@
+diff --git a/build.rs b/build.rs
+--- a/build.rs
++++ b/build.rs
+@@ -15,0 +16 @@
++    let want_static = should_link_static();
+@@ -28 +29 @@
+-    if target.contains("android") || target.contains("haiku") || target.ends_with("-ohos") {
++    if !want_static && (target.contains("android") || target.contains("haiku") || target.ends_with("-ohos")) {
+@@ -33 +33,0 @@
+-    let want_static = should_link_static();
+@@ -71 +71 @@
+-    if target.contains("windows") && try_vcpkg() {
++    if !want_static && target.contains("windows") && try_vcpkg() {

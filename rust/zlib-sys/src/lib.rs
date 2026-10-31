@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Standard zlib ABI exported by the memory-safe zlib-rs implementation.
+//! Standard zlib ABI exported by the statically built libz-sys implementation.
 //!
 //! This target is only for prebuilt native third-party libraries. Seekdb's
 //! own C++ callers use the CXX interface in `rust/compression` instead.
 
-pub use libz_rs_sys::*;
+pub use libz_sys::*;

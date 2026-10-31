@@ -50,7 +50,7 @@ int ObZlibCompressor::compress(const char *src_buffer,
         static_cast<int32_t>(compress_level_));
     if (compression::Code::Ok != result.code) {
       ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LIB_LOG(WARN, "fail to compress data by zlib-rs, ",
+      LIB_LOG(WARN, "fail to compress data by libz-sys, ",
           K(ret), KP(src_buffer), K(src_data_size), K_(compress_level));
     } else {
       dst_data_size = result.size;
@@ -79,7 +79,7 @@ int ObZlibCompressor::decompress(const char *src_buffer,
         rust::Slice<uint8_t>(reinterpret_cast<uint8_t *>(dst_buffer), dst_buffer_size));
     if (compression::Code::Ok != result.code) {
       ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LIB_LOG(WARN, "fail to decompress data by zlib-rs, ",
+      LIB_LOG(WARN, "fail to decompress data by libz-sys, ",
           K(ret), KP(src_buffer), K(src_data_size));
     } else {
       dst_data_size = result.size;
