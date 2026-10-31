@@ -132,6 +132,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
       OPT_TRACE("canonicalize condition:", is_happened);
     }
   }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(fold_dense_or_equalities_into_in(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+      OPT_TRACE("fold dense or equalities into in:", is_happened);
+    }
+  }
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
     }
@@ -3381,6 +3388,206 @@ int ObTransformSimplifyExpr::add_constraint_for_convert_case_when_by_then(ObIArr
       ObExprConstraint true_cons(true_exprs.at(i), PreCalcExprExpectResult::PRE_CALC_RESULT_TRUE);
       if (OB_FAIL(ctx_->expr_constraints_.push_back(true_cons))) {
       }
+    }
+  }
+  return ret;
+}
+
+namespace
+{
+
+// The rewrite trades a long OR chain for a single membership predicate, so it
+// only pays off when the chain has enough branches while still being cheap to
+// inspect.
+static const int64_t DENSE_OR_MIN_BRANCH_COUNT = 4;
+static const int64_t DENSE_OR_MAX_BRANCH_COUNT = 512;
+
+// Skip implicit casts so that the expression below them can be inspected.
+void skip_implicit_casts(ObRawExpr *&expr)
+{
+  while (OB_NOT_NULL(expr)
+         && T_FUN_SYS_CAST == expr->get_expr_type()
+         && 1 == expr->get_param_count()
+         && OB_NOT_NULL(expr->get_param_expr(0))) {
+    expr = expr->get_param_expr(0);
+  }
+}
+
+// Collect the branches of a disjunction, flattening nested OR nodes only. An AND
+// branch is kept as one branch on purpose: splitting it would turn a term such as
+// "(age = 2 AND age = 3)" into independent equality branches and change the
+// meaning of the predicate.
+int collect_or_branches(ObRawExpr *expr, oceanbase::common::ObIArray<ObRawExpr *> &branches)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 8> pending;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null expr", K(ret));
+  } else if (OB_FAIL(pending.push_back(expr))) {
+    LOG_WARN("failed to push back or branch", K(ret));
+  } else {
+    while (OB_SUCC(ret) && pending.count() > 0) {
+      ObRawExpr *current = pending.at(pending.count() - 1);
+      pending.pop_back();
+      if (OB_ISNULL(current)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null expr", K(ret));
+      } else if (T_OP_OR == current->get_expr_type()) {
+        // push the params in reverse order so that they are visited from left to right
+        for (int64_t i = current->get_param_count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+          if (OB_FAIL(pending.push_back(current->get_param_expr(i)))) {
+            LOG_WARN("failed to push back or branch", K(ret));
+          }
+        }
+      } else if (OB_FAIL(branches.push_back(current))) {
+        LOG_WARN("failed to push back or branch", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace
+
+/**
+ * Rewrite a dense OR chain of equality predicates on the same column into the
+ * equivalent membership predicate.
+ *
+ *   c = 1 OR c = 2 OR c = 3   ==>   c IN (1, 2, 3)
+ *
+ * Both representations select exactly the same rows, but the membership predicate
+ * is evaluated as one search over the value list instead of one comparison per
+ * branch, so a filter does not become more expensive just because it is written
+ * as a disjunction (see issue #1501).
+ *
+ * Only branches of the form "column = constant" on one and the same column take
+ * part; anything else (mixed columns, non-equality branches, AND branches) keeps
+ * the original predicate.
+ */
+int ObTransformSimplifyExpr::fold_dense_or_equalities_into_in(ObDMLStmt *stmt, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), KP(stmt));
+  } else {
+    ObIArray<ObRawExpr *> &conditions = stmt->get_condition_exprs();
+    for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+      bool happened = false;
+      if (OB_FAIL(try_fold_dense_or_equalities_into_in(conditions.at(i), happened))) {
+        LOG_WARN("failed to fold or equalities into in", K(ret));
+      } else {
+        trans_happened |= happened;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyExpr::try_fold_dense_or_equalities_into_in(ObRawExpr *&expr, bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  ObSEArray<ObRawExpr *, 16> or_branches;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null expr", K(ret));
+  } else if (T_OP_OR != expr->get_expr_type()) {
+    // not a disjunctive predicate, nothing to do
+  } else if (OB_FAIL(collect_or_branches(expr, or_branches))) {
+    LOG_WARN("failed to collect the branches of an or predicate", K(ret));
+  } else if (or_branches.count() < DENSE_OR_MIN_BRANCH_COUNT
+             || or_branches.count() > DENSE_OR_MAX_BRANCH_COUNT) {
+    // the OR chain is either too short to be worth the rewrite, or too long to
+    // be inspected here
+  } else {
+    bool all_equalities = true;
+    ObRawExpr *same_column = NULL;
+    ObSEArray<ObRawExpr *, 16> const_values;
+    for (int64_t i = 0; OB_SUCC(ret) && all_equalities && i < or_branches.count(); ++i) {
+      ObRawExpr *column_side = NULL;
+      ObRawExpr *const_side = NULL;
+      if (OB_FAIL(extract_equality_operands(or_branches.at(i), column_side, const_side))) {
+        LOG_WARN("failed to extract the operands of an equality branch", K(ret));
+      } else if (OB_ISNULL(column_side) || OB_ISNULL(const_side)) {
+        all_equalities = false;
+      } else if (0 == i) {
+        same_column = column_side;
+        if (OB_FAIL(const_values.push_back(const_side))) {
+          LOG_WARN("failed to push back const side", K(ret));
+        }
+      } else if (!same_column->same_as(*column_side)) {
+        // branches compare different columns, they cannot be folded into one list
+        all_equalities = false;
+      } else if (OB_FAIL(const_values.push_back(const_side))) {
+        LOG_WARN("failed to push back const side", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && all_equalities) {
+      ObOpRawExpr *in_expr = NULL;
+      ObOpRawExpr *row_expr = NULL;
+      if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_IN, in_expr))
+          || OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_ROW, row_expr))) {
+        LOG_WARN("failed to create the membership predicate", K(ret));
+      } else if (OB_ISNULL(in_expr) || OB_ISNULL(row_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null expr", K(ret));
+      } else if (OB_FAIL(in_expr->set_param_exprs(same_column, row_expr))) {
+        LOG_WARN("failed to set the params of the membership predicate", K(ret));
+      } else if (OB_FAIL(row_expr->init_param_exprs(const_values.count()))) {
+        LOG_WARN("failed to init the value list", K(ret));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < const_values.count(); ++i) {
+          if (OB_FAIL(row_expr->add_param_expr(const_values.at(i)))) {
+            LOG_WARN("failed to append a value to the value list", K(ret));
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(in_expr->formalize(ctx_->session_info_))) {
+            LOG_WARN("failed to formalize the membership predicate", K(ret));
+          } else {
+            expr = in_expr;
+            trans_happened = true;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+/**
+ * Extract "column = constant" out of one branch of an OR chain.
+ * Returns null sides when the branch has a different shape.
+ */
+int ObTransformSimplifyExpr::extract_equality_operands(ObRawExpr *branch,
+                                                       ObRawExpr *&column_side,
+                                                       ObRawExpr *&const_side)
+{
+  int ret = OB_SUCCESS;
+  column_side = NULL;
+  const_side = NULL;
+  if (OB_ISNULL(branch) || T_OP_EQ != branch->get_expr_type() || 2 != branch->get_param_count()) {
+    // not an equality predicate
+  } else {
+    ObRawExpr *left = branch->get_param_expr(0);
+    ObRawExpr *right = branch->get_param_expr(1);
+    ObRawExpr *left_base = left;
+    ObRawExpr *right_base = right;
+    skip_implicit_casts(left_base);
+    skip_implicit_casts(right_base);
+    const bool left_is_column = OB_NOT_NULL(left_base) && left_base->is_column_ref_expr();
+    const bool right_is_column = OB_NOT_NULL(right_base) && right_base->is_column_ref_expr();
+    const bool left_is_const = OB_NOT_NULL(left_base) && left_base->is_static_const_expr();
+    const bool right_is_const = OB_NOT_NULL(right_base) && right_base->is_static_const_expr();
+    if (left_is_column && right_is_const) {
+      column_side = left;
+      const_side = right;
+    } else if (right_is_column && left_is_const) {
+      column_side = right;
+      const_side = left;
     }
   }
   return ret;
