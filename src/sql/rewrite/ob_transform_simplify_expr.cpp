@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_simplify_expr.h"
+#include "sql/rewrite/ob_predicate_deduce.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -26,6 +27,205 @@ using namespace oceanbase::sql;
 
 namespace
 {
+struct SimpleRangeCondition
+{
+  ObRawExpr *column_;
+  ObRawExpr *const_;
+  ObObj value_;
+  bool is_upper_bound_;
+  bool is_inclusive_;
+  bool is_removed_;
+};
+
+int get_simple_range_condition(ObTransformerCtx *ctx,
+                               ObRawExpr *expr,
+                               SimpleRangeCondition &condition)
+{
+  int ret = OB_SUCCESS;
+  ObRawExpr *left_expr = nullptr;
+  ObRawExpr *right_expr = nullptr;
+  ObRawExpr *column_expr = nullptr;
+  ObRawExpr *const_expr = nullptr;
+  bool is_upper_bound = false;
+  bool is_inclusive = false;
+  bool got_result = false;
+  bool has_warning = false;
+  condition.column_ = nullptr;
+  condition.const_ = nullptr;
+  condition.is_upper_bound_ = false;
+  condition.is_inclusive_ = false;
+  condition.is_removed_ = false;
+  if (OB_ISNULL(expr) || expr->get_param_count() != 2 ||
+      OB_ISNULL(left_expr = expr->get_param_expr(0)) ||
+      OB_ISNULL(right_expr = expr->get_param_expr(1))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!ObPredicateDeduce::is_simple_condition(expr->get_expr_type()) ||
+             ObPredicateDeduce::contain_special_expr(*expr) ||
+             T_OP_EQ == expr->get_expr_type()) {
+    // Only inequalities can be redundant without changing the equality plan.
+  } else if (left_expr->is_column_ref_expr() &&
+             right_expr->is_const_raw_expr()) {
+    column_expr = left_expr;
+    const_expr = static_cast<ObConstRawExpr *>(right_expr);
+    is_upper_bound = T_OP_LT == expr->get_expr_type() ||
+                     T_OP_LE == expr->get_expr_type();
+    is_inclusive = T_OP_LE == expr->get_expr_type() ||
+                   T_OP_GE == expr->get_expr_type();
+  } else if (right_expr->is_column_ref_expr() &&
+             left_expr->is_const_raw_expr()) {
+    column_expr = right_expr;
+    const_expr = static_cast<ObConstRawExpr *>(left_expr);
+    is_upper_bound = T_OP_GT == expr->get_expr_type() ||
+                     T_OP_GE == expr->get_expr_type();
+    is_inclusive = T_OP_LE == expr->get_expr_type() ||
+                   T_OP_GE == expr->get_expr_type();
+  }
+  if (OB_SUCC(ret) && nullptr != const_expr) {
+    const ObColumnRefRawExpr *column =
+        static_cast<const ObColumnRefRawExpr *>(column_expr);
+    if (OB_ISNULL(ctx) ||
+        !column->get_result_type().is_integer_type() ||
+        static_cast<const ObConstRawExpr *>(const_expr)->is_dynamic_eval_questionmark()) {
+      column_expr = nullptr;
+      const_expr = nullptr;
+    } else if (OB_FAIL(ObTransformUtils::calc_const_expr_result(
+                         const_expr, ctx, condition.value_, got_result, &has_warning))) {
+      LOG_WARN("failed to calculate range bound", K(ret));
+    } else if (!got_result || has_warning ||
+               condition.value_.is_null() ||
+               !condition.value_.is_integer_type()) {
+      column_expr = nullptr;
+      const_expr = nullptr;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    condition.column_ = column_expr;
+    condition.const_ = const_expr;
+    condition.is_upper_bound_ = is_upper_bound;
+    condition.is_inclusive_ = is_inclusive;
+  }
+  return ret;
+}
+
+int check_simple_range_implies(const SimpleRangeCondition &stronger,
+                               const SimpleRangeCondition &weaker,
+                               bool &implies)
+{
+  int ret = OB_SUCCESS;
+  int cmp = 0;
+  implies = false;
+  if (OB_ISNULL(stronger.column_) || OB_ISNULL(stronger.const_) ||
+      OB_ISNULL(weaker.column_) || OB_ISNULL(weaker.const_)) {
+    // Not a pair of integer range conditions.
+  } else if (!stronger.column_->same_as(*weaker.column_) ||
+             stronger.is_upper_bound_ != weaker.is_upper_bound_) {
+    // Different expressions or opposite bounds.
+  } else if (OB_FAIL(stronger.value_.compare(
+                       weaker.value_, CS_TYPE_INVALID, cmp))) {
+    LOG_WARN("failed to compare range constants", K(ret));
+  } else if (stronger.is_upper_bound_) {
+    implies = cmp < 0 ||
+              (0 == cmp && !stronger.is_inclusive_ && weaker.is_inclusive_);
+  } else {
+    implies = cmp > 0 ||
+              (0 == cmp && !stronger.is_inclusive_ && weaker.is_inclusive_);
+  }
+  return ret;
+}
+
+int add_range_bound_constraint(ObTransformerCtx *ctx,
+                               const SimpleRangeCondition &stronger,
+                               const SimpleRangeCondition &weaker)
+{
+  int ret = OB_SUCCESS;
+  ObRawExpr *constraint = nullptr;
+  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->expr_factory_) ||
+      OB_ISNULL(ctx->session_info_) || OB_ISNULL(stronger.const_) ||
+      OB_ISNULL(weaker.const_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const bool allow_equal = !stronger.is_inclusive_ || weaker.is_inclusive_;
+    const ObItemType compare_type =
+        stronger.is_upper_bound_
+            ? (allow_equal ? T_OP_LE : T_OP_LT)
+            : (allow_equal ? T_OP_GE : T_OP_GT);
+    if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(
+                  *ctx->expr_factory_, compare_type,
+                  stronger.const_, weaker.const_, constraint))) {
+      LOG_WARN("failed to build range bound constraint", K(ret));
+    } else if (OB_FAIL(constraint->formalize(ctx->session_info_))) {
+      LOG_WARN("failed to formalize range bound constraint", K(ret));
+    } else if (OB_FAIL(ObTransformUtils::add_param_bool_constraint(
+                         ctx, constraint, true))) {
+      LOG_WARN("failed to add range bound constraint", K(ret));
+    }
+  }
+  return ret;
+}
+
+int remove_implied_range_predicates(ObTransformerCtx *ctx,
+                                    ObIArray<ObRawExpr *> &exprs,
+                                    bool &trans_happened)
+{
+  int ret = OB_SUCCESS;
+  trans_happened = false;
+  const int64_t count = exprs.count();
+  ObArray<SimpleRangeCondition> conditions;
+  // Exact duplicate detection is intentionally limited for large expression
+  // lists. This pass is pair-wise but uses a much cheaper range-only check.
+  const int64_t max_condition_count = 1024;
+  if (count <= 1 || count > max_condition_count) {
+    // At most 1024 range predicates need 1M constant comparisons.
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      SimpleRangeCondition condition;
+      if (OB_FAIL(get_simple_range_condition(ctx, exprs.at(i), condition))) {
+      } else if (OB_FAIL(conditions.push_back(condition))) {
+      }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
+    if (conditions.at(i).is_removed_ || OB_ISNULL(conditions.at(i).column_)) {
+      continue;
+    }
+    for (int64_t j = i + 1; OB_SUCC(ret) && !conditions.at(i).is_removed_ &&
+         j < conditions.count(); ++j) {
+      bool i_implies_j = false;
+      bool j_implies_i = false;
+      if (conditions.at(j).is_removed_ || OB_ISNULL(conditions.at(j).column_)) {
+        continue;
+      } else if (OB_FAIL(check_simple_range_implies(
+                           conditions.at(i), conditions.at(j), i_implies_j)) ||
+                 OB_FAIL(check_simple_range_implies(
+                           conditions.at(j), conditions.at(i), j_implies_i))) {
+      } else if (i_implies_j) {
+        // A cached plan may reuse the surviving bound, so require the
+        // ordering that makes the removed bound redundant at execution time.
+        if (OB_FAIL(add_range_bound_constraint(
+                      ctx, conditions.at(i), conditions.at(j)))) {
+        } else {
+          conditions.at(j).is_removed_ = true;
+        }
+      } else if (j_implies_i) {
+        if (OB_FAIL(add_range_bound_constraint(
+                      ctx, conditions.at(j), conditions.at(i)))) {
+        } else {
+          conditions.at(i).is_removed_ = true;
+        }
+      }
+    }
+  }
+  for (int64_t i = conditions.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+    if (conditions.at(i).is_removed_) {
+      if (OB_FAIL(exprs.remove(i))) {
+      } else {
+        trans_happened = true;
+      }
+    }
+  }
+  return ret;
+}
+
 int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
 {
   int ret = OB_SUCCESS;
@@ -62,6 +262,22 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
+  }
+  if (OB_SUCC(ret) && stmt->has_vec_approx()) {
+    // Keep the ANN rewrite narrow: only remove range predicates that are
+    // implied by another range predicate on the same integer column.
+    bool flatten_happened = false;
+    bool ann_happened = false;
+    if (OB_FAIL(flatten_stmt_exprs(stmt, flatten_happened))) {
+    } else if (OB_FAIL(remove_implied_range_predicates(
+                         ctx_, stmt->get_condition_exprs(), ann_happened))) {
+      LOG_WARN("failed to simplify approximate vector search filters", K(ret));
+    } else {
+      trans_happened |= flatten_happened || ann_happened;
+      if (trans_happened && OB_FAIL(add_transform_hint(*stmt))) {
+      }
+    }
+    return ret;
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {

@@ -1,0 +1,64 @@
+drop table if exists t_issue1534;
+create table t_issue1534(
+id bigint primary key,
+embedding vector(3) not null,
+age int,
+key idx_age(age),
+vector key idx_embedding(embedding)
+with (distance=l2, type=hnsw, lib=vsag, m=16,
+ef_construction=128, ef_search=64, sync_mode=immediate));
+insert into t_issue1534 values
+(1, '[0,0,0]', 1),
+(2, '[0,2,0]', 5),
+(3, '[0,0,3]', 10),
+(4, '[4,0,0]', 50),
+(5, '[5,0,0]', 1000);
+analyze table t_issue1534;
+select count(*) from t_issue1534 where age < 10 AND age < 20 AND age < 21 AND age < 22 AND age < 23 AND age < 24 AND age < 25 AND age < 26 AND age < 27 AND age < 28 AND age < 29 AND age < 30 AND age < 31 AND age < 32 AND age < 33 AND age < 34 AND age < 35 AND age < 36 AND age < 37 AND age < 38 AND age < 39 AND age < 40 AND age < 41 AND age < 42 AND age < 43 AND age < 44 AND age < 45 AND age < 46 AND age < 47 AND age < 48 AND age < 49 AND age < 50 AND age < 51 AND age < 52 AND age < 53 AND age < 54 AND age < 55 AND age < 56 AND age < 57 AND age < 58 AND age < 59 AND age < 60 AND age < 61 AND age < 62 AND age < 63 AND age < 64 AND age < 65 AND age < 66 AND age < 67 AND age < 68 AND age < 69 AND age < 70 AND age < 71 AND age < 72 AND age < 73 AND age < 74 AND age < 75 AND age < 76 AND age < 77 AND age < 78 AND age < 79 AND age < 80 AND age < 81 AND age < 82 AND age < 83 AND age < 84 AND age < 85 AND age < 86 AND age < 87 AND age < 88 AND age < 89 AND age < 90 AND age < 91 AND age < 92 AND age < 93 AND age < 94 AND age < 95 AND age < 96 AND age < 97 AND age < 98 AND age < 99 AND age < 100 AND age < 101 AND age < 102 AND age < 103 AND age < 104 AND age < 105 AND age < 106 AND age < 107 AND age < 108 AND age < 109 AND age < 110 AND age < 111 AND age < 112 AND age < 113 AND age < 114 AND age < 115 AND age < 116 AND age < 117 AND age < 118 AND age < 119 AND age < 120 AND age < 121 AND age < 122 AND age < 123 AND age < 124 AND age < 125 AND age < 126 AND age < 127 AND age < 128 AND age < 129 AND age < 130 AND age < 131 AND age < 132 AND age < 133 AND age < 134 AND age < 135 AND age < 136 AND age < 137 AND age < 138 AND age < 139 AND age < 140 AND age < 141 AND age < 142 AND age < 143 AND age < 144 AND age < 145 AND age < 146 AND age < 147;
+count(*)
+2
+select count(*) from t_issue1534 where age < 10;
+count(*)
+2
+explain basic select id from t_issue1534
+where age < 10 AND age < 20 AND age < 21 AND age < 22 AND age < 23 AND age < 24 AND age < 25 AND age < 26 AND age < 27 AND age < 28 AND age < 29 AND age < 30 AND age < 31 AND age < 32 AND age < 33 AND age < 34 AND age < 35 AND age < 36 AND age < 37 AND age < 38 AND age < 39 AND age < 40 AND age < 41 AND age < 42 AND age < 43 AND age < 44 AND age < 45 AND age < 46 AND age < 47 AND age < 48 AND age < 49 AND age < 50 AND age < 51 AND age < 52 AND age < 53 AND age < 54 AND age < 55 AND age < 56 AND age < 57 AND age < 58 AND age < 59 AND age < 60 AND age < 61 AND age < 62 AND age < 63 AND age < 64 AND age < 65 AND age < 66 AND age < 67 AND age < 68 AND age < 69 AND age < 70 AND age < 71 AND age < 72 AND age < 73 AND age < 74 AND age < 75 AND age < 76 AND age < 77 AND age < 78 AND age < 79 AND age < 80 AND age < 81 AND age < 82 AND age < 83 AND age < 84 AND age < 85 AND age < 86 AND age < 87 AND age < 88 AND age < 89 AND age < 90 AND age < 91 AND age < 92 AND age < 93 AND age < 94 AND age < 95 AND age < 96 AND age < 97 AND age < 98 AND age < 99 AND age < 100 AND age < 101 AND age < 102 AND age < 103 AND age < 104 AND age < 105 AND age < 106 AND age < 107 AND age < 108 AND age < 109 AND age < 110 AND age < 111 AND age < 112 AND age < 113 AND age < 114 AND age < 115 AND age < 116 AND age < 117 AND age < 118 AND age < 119 AND age < 120 AND age < 121 AND age < 122 AND age < 123 AND age < 124 AND age < 125 AND age < 126 AND age < 127 AND age < 128 AND age < 129 AND age < 130 AND age < 131 AND age < 132 AND age < 133 AND age < 134 AND age < 135 AND age < 136 AND age < 137 AND age < 138 AND age < 139 AND age < 140 AND age < 141 AND age < 142 AND age < 143 AND age < 144 AND age < 145 AND age < 146 AND age < 147
+order by l2_distance(embedding, '[1,0,0]') approximate
+limit 2;
+Query Plan
+=================================================================
+|ID|OPERATOR                               |NAME                |
+-----------------------------------------------------------------
+|0 |VECTOR INDEX ADAPTIVE SCAN (PRE-FILTER)|t_issue1534(idx_age)|
+=================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([t_issue1534.id]), filter([t_issue1534.age < 10]), rowset=16
+      access([t_issue1534.id], [t_issue1534.age]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[true],
+      range_key([t_issue1534.age], [t_issue1534.id]), range(NULL,MAX ; 10,MIN)
+select count(*) from t_issue1534 where 20 > age and 10 > age;
+count(*)
+2
+select count(*) from t_issue1534 where age > 5 and age > 1;
+count(*)
+3
+select count(*) from t_issue1534 where age <= 10 and age < 10;
+count(*)
+2
+prepare ann_bounds_stmt from
+'select id from t_issue1534 where age < ? and age < ?
+   order by l2_distance(embedding, ''[1,0,0]'') approximate limit 10';
+set @a = 20, @b = 10;
+execute ann_bounds_stmt using @a, @b;
+id
+1
+2
+set @a = 10, @b = 5;
+execute ann_bounds_stmt using @a, @b;
+id
+1
+set @a = null, @b = 30;
+execute ann_bounds_stmt using @a, @b;
+id
+deallocate prepare ann_bounds_stmt;
+drop table t_issue1534;
