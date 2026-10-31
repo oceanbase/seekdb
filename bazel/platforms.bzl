@@ -46,6 +46,7 @@ def platform_local_defines():
             "WIN32_LEAN_AND_MEAN", "NOMINMAX", "_ITERATOR_DEBUG_LEVEL=0",
             "_USE_MATH_DEFINES", "YY_NO_UNISTD_H",
             "strncasecmp=_strnicmp", "strcasecmp=_stricmp",
+            "OB_HAVE_BUNDLED_JEMALLOC=1",
         ],
         "@platforms//os:emscripten": [
             "_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION",
@@ -53,7 +54,10 @@ def platform_local_defines():
             "VSAG_DISABLE_STATIC_HNSW",
             "HAVE_LIBAIO=0",
         ],
-        "@platforms//os:android": ["_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION"],
+        "@platforms//os:android": [
+            "_LIBCPP_ENABLE_CXX17_REMOVED_UNARY_BINARY_FUNCTION",
+            "OB_HAVE_BUNDLED_JEMALLOC=1",
+        ],
         "@platforms//os:linux": ["OB_HAVE_BUNDLED_JEMALLOC=1"],
         "@platforms//os:macos": ["_DARWIN_C_SOURCE", "OB_HAVE_BUNDLED_JEMALLOC=1"],
         "@platforms//os:ios": [

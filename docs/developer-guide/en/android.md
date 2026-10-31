@@ -31,6 +31,30 @@ build/bin/src/observer/seekdb
 
 This configuration produces an API 28 ARM64 PIE with 16 KiB page alignment and a statically linked C++ runtime. Validate affected unit tests on a supported Linux host by following [Write and run unit tests](unittest.md).
 
+## Allocator
+
+Android builds use the bundled, statically linked jemalloc through SeekDB's
+explicit allocator interfaces. The build sets jemalloc's page size to 16 KiB
+and disables initial-exec TLS so the allocator can also be used in a loaded
+library. Host libc allocations keep their own allocation and release APIs.
+Background workers are enabled after server initialization reaches the logger,
+rather than during allocator bootstrap.
+
+Build the allocator test with the same Android toolchain, then run the resulting
+binary on the device:
+
+```bash
+python3 build.py build --config=android //unittest/oblib:test_jemalloc_backend
+adb push build/bin/unittest/oblib/test_jemalloc_backend /data/local/tmp/
+adb shell chmod +x /data/local/tmp/test_jemalloc_backend
+adb shell /data/local/tmp/test_jemalloc_backend
+```
+
+Validate on both 4 KiB and 16 KiB devices (`adb shell getconf PAGE_SIZE`). The
+test covers realloc, alignment, cross-thread release, background reclamation
+and worker restart. ELF alignment and allocator page size must both support the
+device page size.
+
 ## Strip and deploy
 
 Use the NDK strip tool because the macOS `strip` command cannot process Android ELF binaries:

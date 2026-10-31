@@ -1,0 +1,27 @@
+diff --git a/build.rs b/build.rs
+--- a/build.rs
++++ b/build.rs
+@@ -123,8 +123,11 @@
+     let library_dir = build_dir.join("lib");
+     let pic_library = library_dir.join(format!("{library_stem}_pic.{archive_extension}"));
+     let regular_library = library_dir.join(format!("{library_stem}.{archive_extension}"));
++    let static_library = library_dir.join(format!("{library_stem}_s.{archive_extension}"));
+     let library = if pic_library.is_file() {
+         pic_library
++    } else if static_library.is_file() {
++        static_library
+     } else {
+         regular_library
+     };
+diff --git a/vendor/jemalloc/src/jemalloc.c b/vendor/jemalloc/src/jemalloc.c
+--- a/vendor/jemalloc/src/jemalloc.c
++++ b/vendor/jemalloc/src/jemalloc.c
+@@ -34,6 +34,8 @@
+ const char *je_malloc_conf
+ #ifndef _WIN32
+     JEMALLOC_ATTR(weak)
++#elif defined(__clang__)
++    __attribute__((weak))
+ #endif
+         ;
+ /*

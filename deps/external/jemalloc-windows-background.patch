@@ -1,0 +1,433 @@
+diff --git a/vendor/jemalloc/configure.ac b/vendor/jemalloc/configure.ac
+--- a/vendor/jemalloc/configure.ac
++++ b/vendor/jemalloc/configure.ac
+@@ -2832,8 +2832,36 @@
+ dnl ============================================================================
+ dnl Enable background threads if possible.
+ 
++if test "x${abi}" = "xpecoff" ; then
++  JE_COMPILABLE([Windows background threads], [
++#include <stdint.h>
++#include <windows.h>
++#include <process.h>
++#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0600
++#error "Windows background threads require Vista or later"
++#endif
++static unsigned __stdcall background_thread_probe(void *arg) {
++  (void)arg;
++  return 0;
++}
++], [
++  CONDITION_VARIABLE cond;
++  SRWLOCK lock;
++  InitializeConditionVariable(&cond);
++  InitializeSRWLock(&lock);
++  AcquireSRWLockExclusive(&lock);
++  SleepConditionVariableSRW(&cond, &lock, 0, 0);
++  ReleaseSRWLockExclusive(&lock);
++  WakeConditionVariable(&cond);
++  uintptr_t thread = _beginthreadex(NULL, 0, background_thread_probe, NULL,
++      0, NULL);
++  WaitForSingleObject((HANDLE)thread, INFINITE);
++  CloseHandle((HANDLE)thread);
++], [je_cv_windows_background_thread])
++fi
++
+ if test "x${have_pthread}" = "x1" -a "x${je_cv_os_unfair_lock}" != "xyes" -a \
+-       "x${abi}" != "xmacho" ; then
++       "x${abi}" != "xmacho" -o "x${je_cv_windows_background_thread}" = "xyes" ; then
+   AC_DEFINE([JEMALLOC_BACKGROUND_THREAD], [ ], [ ])
+ fi
+ 
+diff --git a/vendor/jemalloc/configure b/vendor/jemalloc/configure
+--- a/vendor/jemalloc/configure
++++ b/vendor/jemalloc/configure
+@@ -15189,8 +15189,62 @@
+ fi
+ 
+ 
++if test "x${abi}" = "xpecoff" ; then
++
++{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether Windows background threads is compilable" >&5
++$as_echo_n "checking whether Windows background threads is compilable... " >&6; }
++if ${je_cv_windows_background_thread+:} false; then :
++  $as_echo_n "(cached) " >&6
++else
++  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++/* end confdefs.h.  */
++
++#include <stdint.h>
++#include <windows.h>
++#include <process.h>
++#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0600
++#error "Windows background threads require Vista or later"
++#endif
++static unsigned __stdcall background_thread_probe(void *arg) {
++  (void)arg;
++  return 0;
++}
++
++int
++main ()
++{
++  CONDITION_VARIABLE cond;
++  SRWLOCK lock;
++  InitializeConditionVariable(&cond);
++  InitializeSRWLock(&lock);
++  AcquireSRWLockExclusive(&lock);
++  SleepConditionVariableSRW(&cond, &lock, 0, 0);
++  ReleaseSRWLockExclusive(&lock);
++  WakeConditionVariable(&cond);
++  uintptr_t thread = _beginthreadex(NULL, 0, background_thread_probe, NULL,
++      0, NULL);
++  WaitForSingleObject((HANDLE)thread, INFINITE);
++  CloseHandle((HANDLE)thread);
++
++  ;
++  return 0;
++}
++_ACEOF
++if ac_fn_c_try_link "$LINENO"; then :
++  je_cv_windows_background_thread=yes
++else
++  je_cv_windows_background_thread=no
++fi
++rm -f core conftest.err conftest.$ac_objext \
++    conftest$ac_exeext conftest.$ac_ext
++fi
++{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $je_cv_windows_background_thread" >&5
++$as_echo "$je_cv_windows_background_thread" >&6; }
++
++fi
++
+ if test "x${have_pthread}" = "x1" -a "x${je_cv_os_unfair_lock}" != "xyes" -a \
+-       "x${abi}" != "xmacho" ; then
++       "x${abi}" != "xmacho" -o "x${je_cv_windows_background_thread}" = "xyes" ; then
+ 
+ $as_echo "#define JEMALLOC_BACKGROUND_THREAD  " >>confdefs.h
+ 
+diff --git a/vendor/jemalloc/include/jemalloc/internal/background_thread_structs.h b/vendor/jemalloc/include/jemalloc/internal/background_thread_structs.h
+--- a/vendor/jemalloc/include/jemalloc/internal/background_thread_structs.h
++++ b/vendor/jemalloc/include/jemalloc/internal/background_thread_structs.h
+@@ -6,7 +6,8 @@
+ 
+ /* This file really combines "structs" and "types", but only transitionally. */
+ 
+-#if defined(JEMALLOC_BACKGROUND_THREAD) || defined(JEMALLOC_LAZY_LOCK)
++#if !defined(_WIN32) && (defined(JEMALLOC_BACKGROUND_THREAD) || \
++    defined(JEMALLOC_LAZY_LOCK))
+ #	define JEMALLOC_PTHREAD_CREATE_WRAPPER
+ #endif
+ 
+@@ -34,9 +35,14 @@
+ 
+ struct background_thread_info_s {
+ #ifdef JEMALLOC_BACKGROUND_THREAD
+-	/* Background thread is pthread specific. */
++#  ifdef _WIN32
++	HANDLE             thread;
++	unsigned           thread_id;
++	CONDITION_VARIABLE cond;
++#  else
+ 	pthread_t      thread;
+ 	pthread_cond_t cond;
++#  endif
+ #endif
+ 	malloc_mutex_t            mtx;
+ 	background_thread_state_t state;
+diff --git a/vendor/jemalloc/src/background_thread.c b/vendor/jemalloc/src/background_thread.c
+--- a/vendor/jemalloc/src/background_thread.c
++++ b/vendor/jemalloc/src/background_thread.c
+@@ -2,6 +2,10 @@
+ #include "jemalloc/internal/jemalloc_internal_includes.h"
+ 
+ #include "jemalloc/internal/assert.h"
++
++#ifdef _WIN32
++#  include <process.h>
++#endif
+ 
+ JEMALLOC_DIAGNOSTIC_DISABLE_SPURIOUS
+ 
+@@ -109,6 +113,25 @@
+ static bool background_thread_enabled_at_fork;
+ 
+ static void
++background_thread_cond_signal(background_thread_info_t *info) {
++#  ifdef _WIN32
++	WakeConditionVariable(&info->cond);
++#  else
++	pthread_cond_signal(&info->cond);
++#  endif
++}
++
++static int
++background_thread_cond_init(background_thread_info_t *info) {
++#  ifdef _WIN32
++	InitializeConditionVariable(&info->cond);
++	return 0;
++#  else
++	return pthread_cond_init(&info->cond, NULL);
++#  endif
++}
++
++static void
+ background_thread_info_init(tsdn_t *tsdn, background_thread_info_t *info) {
+ 	background_thread_wakeup_time_set(tsdn, info, 0);
+ 	info->npages_to_purge_new = 0;
+@@ -163,19 +186,39 @@
+ 
+ static int
+ background_thread_cond_wait(
+-    background_thread_info_t *info, struct timespec *ts) {
++    background_thread_info_t *info, const nstime_t *deadline) {
+ 	int ret;
+ 
+-	/*
+-	 * pthread_cond_wait drops and re-acquires the mutex internally, w/o
+-	 * going through our wrapper.  Update the locked state explicitly.
+-	 */
++	/* The native wait releases and reacquires the lock without our wrapper. */
+ 	atomic_store_b(&info->mtx.locked, false, ATOMIC_RELAXED);
+-	if (ts == NULL) {
++#  ifdef _WIN32
++	DWORD timeout_ms = INFINITE;
++	if (deadline != NULL) {
++		nstime_t now;
++		nstime_init_update(&now);
++		uint64_t remaining_ns = nstime_compare(deadline, &now) > 0
++		    ? nstime_ns(deadline) - nstime_ns(&now) : 0;
++		/* Round up, and never turn a finite deadline into INFINITE. */
++		uint64_t ms = remaining_ns / 1000000 +
++		    (remaining_ns % 1000000 != 0);
++		timeout_ms = ms >= INFINITE ? INFINITE - 1 : (DWORD)ms;
++	}
++	if (SleepConditionVariableSRW(&info->cond, &info->mtx.lock,
++	    timeout_ms, 0)) {
++		ret = 0;
++	} else {
++		ret = GetLastError() == ERROR_TIMEOUT ? ETIMEDOUT : EINVAL;
++	}
++#  else
++	if (deadline == NULL) {
+ 		ret = pthread_cond_wait(&info->cond, &info->mtx.lock);
+ 	} else {
+-		ret = pthread_cond_timedwait(&info->cond, &info->mtx.lock, ts);
+-	}
++		struct timespec ts;
++		ts.tv_sec = (size_t)nstime_sec(deadline);
++		ts.tv_nsec = (size_t)nstime_nsec(deadline);
++		ret = pthread_cond_timedwait(&info->cond, &info->mtx.lock, &ts);
++	}
++#  endif
+ 	atomic_store_b(&info->mtx.locked, true, ATOMIC_RELAXED);
+ 
+ 	return ret;
+@@ -189,11 +232,16 @@
+ 	}
+ 	info->npages_to_purge_new = 0;
+ 
++	nstime_t before_sleep;
++#  ifdef _WIN32
++	/* Windows waits use a relative timeout derived from this same clock. */
++	nstime_init_update(&before_sleep);
++#  else
+ 	struct timeval tv;
+-	/* Specific clock required by timedwait. */
++	/* Specific clock required by pthread_cond_timedwait. */
+ 	gettimeofday(&tv, NULL);
+-	nstime_t before_sleep;
+ 	nstime_init2(&before_sleep, tv.tv_sec, tv.tv_usec * 1000);
++#  endif
+ 
+ 	int ret;
+ 	if (interval == BACKGROUND_THREAD_INDEFINITE_SLEEP) {
+@@ -216,18 +264,19 @@
+ 		nstime_t ts_wakeup;
+ 		nstime_copy(&ts_wakeup, &before_sleep);
+ 		nstime_iadd(&ts_wakeup, interval);
+-		struct timespec ts;
+-		ts.tv_sec = (size_t)nstime_sec(&ts_wakeup);
+-		ts.tv_nsec = (size_t)nstime_nsec(&ts_wakeup);
+ 
+ 		assert(!background_thread_indefinite_sleep(info));
+-		ret = background_thread_cond_wait(info, &ts);
++		ret = background_thread_cond_wait(info, &ts_wakeup);
+ 		assert(ret == ETIMEDOUT || ret == 0);
+ 	}
+ 	if (config_stats) {
++		nstime_t after_sleep;
++#  ifdef _WIN32
++		nstime_init_update(&after_sleep);
++#  else
+ 		gettimeofday(&tv, NULL);
+-		nstime_t after_sleep;
+ 		nstime_init2(&after_sleep, tv.tv_sec, tv.tv_usec * 1000);
++#  endif
+ 		if (nstime_compare(&after_sleep, &before_sleep) > 0) {
+ 			nstime_subtract(&after_sleep, &before_sleep);
+ 			nstime_add(&info->tot_sleep_time, &after_sleep);
+@@ -310,7 +359,7 @@
+ 	if (info->state == background_thread_started) {
+ 		has_thread = true;
+ 		info->state = background_thread_stopped;
+-		pthread_cond_signal(&info->cond);
++		background_thread_cond_signal(info);
+ 	} else {
+ 		has_thread = false;
+ 	}
+@@ -320,12 +369,25 @@
+ 		post_reentrancy(tsd);
+ 		return false;
+ 	}
++#  ifdef _WIN32
++	if (WaitForSingleObject(info->thread, INFINITE) != WAIT_OBJECT_0) {
++		post_reentrancy(tsd);
++		return true;
++	}
++	bool close_failed = !CloseHandle(info->thread);
++	info->thread = NULL;
++	if (close_failed) {
++		post_reentrancy(tsd);
++		return true;
++	}
++#  else
+ 	void *ret;
+ 	if (pthread_join(info->thread, &ret)) {
+ 		post_reentrancy(tsd);
+ 		return true;
+ 	}
+ 	assert(ret == NULL);
++#  endif
+ 	n_background_threads--;
+ 	post_reentrancy(tsd);
+ 
+@@ -334,9 +396,26 @@
+ 
+ static void *background_thread_entry(void *ind_arg);
+ 
++#  ifdef _WIN32
++static unsigned __stdcall
++background_thread_windows_entry(void *arg) {
++	background_thread_entry(arg);
++	return 0;
++}
++#  endif
++
+ static int
+-background_thread_create_signals_masked(pthread_t *thread,
+-    const pthread_attr_t *attr, void *(*start_routine)(void *), void *arg) {
++background_thread_create_signals_masked(
++    background_thread_info_t *info, unsigned thread_ind) {
++#  ifdef _WIN32
++	uintptr_t handle = _beginthreadex(NULL, 0, background_thread_windows_entry,
++	    (void *)(uintptr_t)thread_ind, 0, &info->thread_id);
++	if (handle == 0) {
++		return errno != 0 ? errno : EAGAIN;
++	}
++	info->thread = (HANDLE)handle;
++	return 0;
++#  else
+ 	/*
+ 	 * Mask signals during thread creation so that the thread inherits
+ 	 * an empty signal set.
+@@ -348,8 +427,8 @@
+ 	if (mask_err != 0) {
+ 		return mask_err;
+ 	}
+-	int create_err = pthread_create_wrapper(
+-	    thread, attr, start_routine, arg);
++	int create_err = pthread_create_wrapper(&info->thread, NULL,
++	    background_thread_entry, (void *)(uintptr_t)thread_ind);
+ 	/*
+ 	 * Restore the signal mask.  Failure to restore the signal mask here
+ 	 * changes program behavior.
+@@ -366,6 +445,7 @@
+ 		}
+ 	}
+ 	return create_err;
++#  endif
+ }
+ 
+ static bool
+@@ -396,9 +476,7 @@
+ 		}
+ 
+ 		pre_reentrancy(tsd, NULL);
+-		int err = background_thread_create_signals_masked(&info->thread,
+-		    /* NOLINTNEXTLINE(performance-no-int-to-ptr) */
+-		    NULL, background_thread_entry, (void *)(uintptr_t)i);
++		int err = background_thread_create_signals_masked(info, i);
+ 		post_reentrancy(tsd);
+ 
+ 		if (err == 0) {
+@@ -522,8 +600,13 @@
+ 	 * turn triggers another background thread creation).
+ 	 */
+ 	background_work(tsd_internal_fetch(), thread_ind);
++#  ifdef _WIN32
++	assert(GetCurrentThreadId() ==
++	    background_thread_info[thread_ind].thread_id);
++#  else
+ 	assert(pthread_equal(
+ 	    pthread_self(), background_thread_info[thread_ind].thread));
++#  endif
+ 
+ 	return NULL;
+ }
+@@ -565,7 +648,7 @@
+ 		/* Threads are created asynchronously by Thread 0. */
+ 		background_thread_info_t *t0 = &background_thread_info[0];
+ 		malloc_mutex_lock(tsd_tsdn(tsd), &t0->mtx);
+-		pthread_cond_signal(&t0->cond);
++		background_thread_cond_signal(t0);
+ 		malloc_mutex_unlock(tsd_tsdn(tsd), &t0->mtx);
+ 
+ 		return false;
+@@ -576,9 +659,7 @@
+ 	 * To avoid complications (besides reentrancy), create internal
+ 	 * background threads with the underlying pthread_create.
+ 	 */
+-	int err = background_thread_create_signals_masked(&info->thread, NULL,
+-	    /* NOLINTNEXTLINE(performance-no-int-to-ptr) */
+-	    background_thread_entry, (void *)thread_ind);
++	int err = background_thread_create_signals_masked(info, (unsigned)thread_ind);
+ 	post_reentrancy(tsd);
+ 
+ 	if (err != 0) {
+@@ -697,7 +778,7 @@
+ 	    && nstime_ns(remaining_sleep) < BACKGROUND_THREAD_MIN_INTERVAL_NS) {
+ 		return;
+ 	}
+-	pthread_cond_signal(&info->cond);
++	background_thread_cond_signal(info);
+ }
+ 
+ void
+@@ -741,7 +822,7 @@
+ 		background_thread_info_t *info = &background_thread_info[i];
+ 		malloc_mutex_lock(tsdn, &info->mtx);
+ 		info->state = background_thread_stopped;
+-		int ret = pthread_cond_init(&info->cond, NULL);
++		int ret = background_thread_cond_init(info);
+ 		assert(ret == 0);
+ 		background_thread_info_init(tsdn, info);
+ 		malloc_mutex_unlock(tsdn, &info->mtx);
+@@ -814,7 +895,7 @@
+ 	if (!have_background_thread && opt_background_thread) {
+ 		malloc_printf(
+ 		    "<jemalloc>: option background_thread currently "
+-		    "supports pthread only\n");
++		    "is not available in this build\n");
+ 		return true;
+ 	}
+ #ifdef JEMALLOC_PTHREAD_CREATE_WRAPPER
+@@ -859,7 +940,7 @@
+ 		        malloc_mutex_address_ordered)) {
+ 			return true;
+ 		}
+-		if (pthread_cond_init(&info->cond, NULL)) {
++		if (background_thread_cond_init(info)) {
+ 			return true;
+ 		}
+ 		malloc_mutex_lock(tsdn, &info->mtx);

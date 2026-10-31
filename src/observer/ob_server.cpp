@@ -32,6 +32,7 @@
 #include <cstdio>
 #include "observer/ob_server.h"
 #include "lib/alloc/alloc_func.h"
+#include "lib/allocator/ob_jemalloc.h"
 #include "observer/ob_system_package_load_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "share/ob_autoincrement_service.h"
@@ -734,6 +735,12 @@ int ObServer::init(const ObServerOptions &opts)
   if (OB_FAIL(OB_LOGGER.init())) {
     LOG_ERROR("async log init error", KR(ret));
   }
+#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN) \
+    && (defined(_WIN32) || defined(__ANDROID__))
+  if (OB_SUCC(ret) && !jemalloc_enable_background_threads()) {
+    LOG_WARN("failed to enable jemalloc background threads");
+  }
+#endif
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
   }

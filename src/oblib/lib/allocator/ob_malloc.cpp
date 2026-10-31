@@ -36,6 +36,12 @@ extern "C" {
 const char *je_malloc_conf =
     "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
 }
+#elif defined(OB_HAVE_BUNDLED_JEMALLOC) && (defined(_WIN32) || defined(__ANDROID__))
+// Start workers from ObServer::init, after allocator/CRT bootstrap is complete.
+extern "C" {
+const char *je_malloc_conf =
+    "background_thread:false,dirty_decay_ms:1000,muzzy_decay_ms:0";
+}
 #elif defined(OB_HAVE_BUNDLED_JEMALLOC)
 extern "C" {
 const char *je_malloc_conf =
@@ -114,7 +120,8 @@ bool promote_malloc_zone(malloc_zone_t *target)
 
 bool restore_allocator_after_fork()
 {
-#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN) && !defined(__APPLE__)
+#if defined(OB_HAVE_BUNDLED_JEMALLOC) && !defined(OB_USE_ASAN) \
+    && !defined(__APPLE__) && !defined(_WIN32)
   // Forked children do not inherit background threads, so jemalloc resets the
   // state to disabled; re-enable it after returning to normal child execution.
   return jemalloc_enable_background_threads();

@@ -1,6 +1,7 @@
 load(":build_settings.bzl", "bool_flag")
 
 exports_files([
+    "rules-rust-windows-build-script-path.diff",
     "build_metadata.py",
     "parser.bzl",
     "parser_codegen.py",

@@ -27,7 +27,7 @@ namespace lib
 
 // Process allocator façade.  The concrete allocator is selected at build time:
 // bundled jemalloc for supported production builds and the platform allocator
-// for sanitizer/Windows/Android builds.
+// for sanitizer builds and targets without bundled jemalloc.
 class ObMallocAllocator
     : public common::ObIAllocator
 {

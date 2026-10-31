@@ -1144,13 +1144,12 @@ cc_library(
 cc_library(
     name = "_malloc_hook_impl",
     srcs = select({
-        # The hook interposes glibc allocation symbols and has never been part
-        # of the native macOS build.
-        "@platforms//os:macos": [],
-        "//conditions:default": standalone_sources(
+        # Only glibc builds interpose process-wide allocation symbols.
+        "@platforms//os:linux": standalone_sources(
             OBLIB_STANDALONE_CXX_SOURCES,
             "src/oblib/lib:malloc_hook",
         ),
+        "//conditions:default": [],
     }),
     implementation_deps = [
         ":_oblib_implementation_headers",
@@ -1254,6 +1253,8 @@ cc_library(
     ] + select({
         "@platforms//os:linux": ["//deps/external:jemalloc_library"],
         "@platforms//os:macos": ["//deps/external:jemalloc_library"],
+        "@platforms//os:windows": ["//deps/external:jemalloc_library"],
+        "@platforms//os:android": ["//deps/external:jemalloc_library"],
         "//conditions:default": [],
     }),
     linkopts = sanity_linkopts(),

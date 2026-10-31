@@ -1,5 +1,6 @@
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("//bazel:defs.bzl", "cc_library")
+load("//bazel:platforms.bzl", "platform_local_defines")
 
 package(default_testonly = True)
 
@@ -21,4 +22,33 @@ cc_test(
     name = "test_jemalloc_hook",
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+# Verify the explicit allocation domain without requiring glibc interposition.
+cc_test(
+    name = "test_jemalloc_backend",
+    srcs = ["test_jemalloc_backend.cpp"],
+    local_defines = platform_local_defines(),
+    linkstatic = True,
+    features = select({
+        "@platforms//os:android": ["static_link_cpp_runtimes"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//src/oblib:oblib_base",
+        "//deps/external:jemalloc_library",
+    ],
+    linkopts = select({
+        "@platforms//os:linux": ["-pthread", "-ldl", "-lm"],
+        "//conditions:default": [],
+    }),
+    target_compatible_with = select({
+        "//bazel:sanity_enabled": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }) + select({
+        "@platforms//os:linux": [],
+        "@platforms//os:windows": [],
+        "@platforms//os:android": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
 )

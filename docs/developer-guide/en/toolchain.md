@@ -69,14 +69,27 @@ See [Homebrew optimization](homebrew.md) if a mirror is required.
 
 Install Python 3 and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload. The project dependency SDK includes LLVM 18.1.8; no separate LLVM installation is needed.
 
-Open **x64 Native Tools Command Prompt for VS 2022** in the repository root and initialize the parser tools and dependency SDK:
+The bundled jemalloc build also requires a POSIX shell, core utilities (including `chmod`), `awk`, `grep`, `sed`, and GNU Make. A full Git for Windows installation provides the shell and most utilities; minimal Git distributions may omit required commands. MSYS2 can supply the build tools with `pacman -S make coreutils gawk grep sed`. Add the required tool directories to the build process's `PATH`, keeping Visual Studio's compiler and linker directories first. These utilities run the build scripts; the library is compiled with clang-cl and the MSVC runtime.
+
+Open **x64 Native Tools Command Prompt for VS 2022** in the repository root, check that the build utilities are available, then initialize the parser tools and dependency SDK:
 
 ```bat
+where sh
+where make
+where chmod
+where lib
 python build.py init
 python build.py build seekdb
 ```
 
 `build.py` selects clang-cl from `deps\3rd\tools\llvm18`. The executable is `build\bin\src\observer\seekdb\seekdb.exe`. The build retains `_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH` to bypass the compiler version check in newer MSVC standard library headers, for both project C++ and Cargo's C++ bridges.
+
+The Windows allocator uses the bundled jemalloc `je_` APIs and enables its native background workers after allocator initialization. Build and run the allocation and background reclamation check with:
+
+```bat
+python build.py build //unittest/oblib:test_jemalloc_backend
+build\bin\unittest\oblib\test_jemalloc_backend.exe
+```
 
 The DLLs required by the executable are emitted in the same directory, including the MSVC runtime. Packaging consumes this build output; it does not search the dependency SDK for server DLLs.
 

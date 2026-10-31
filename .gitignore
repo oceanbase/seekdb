@@ -12,6 +12,8 @@
 *.o
 *.orig
 *.patch
+!/deps/external/jemalloc-windows-build.patch
+!/deps/external/jemalloc-windows-background.patch
 *.pyc
 *.reject
 *.reject.iep

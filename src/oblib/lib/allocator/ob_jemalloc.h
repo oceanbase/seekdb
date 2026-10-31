@@ -88,7 +88,7 @@ inline void *jemalloc_memalign(const size_t alignment, const size_t size)
 #if defined(ENABLE_SANITY)
   return jemalloc_sanity_memalign(alignment, size);
 #elif defined(OB_HAVE_BUNDLED_JEMALLOC)
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(_WIN32)
   void *ptr = nullptr;
   return 0 == je_posix_memalign(&ptr, alignment, size) ? ptr : nullptr;
 #else
@@ -119,8 +119,14 @@ inline bool jemalloc_enable_background_threads()
   return jemalloc_sanity_enable_background_threads();
 #elif defined(OB_HAVE_BUNDLED_JEMALLOC)
   bool enabled = true;
-  return 0 == je_mallctl("background_thread", nullptr, nullptr,
-                         &enabled, sizeof(enabled));
+  if (0 != je_mallctl("background_thread", nullptr, nullptr,
+                       &enabled, sizeof(enabled))) {
+    return false;
+  }
+  enabled = false;
+  size_t size = sizeof(enabled);
+  return 0 == je_mallctl("background_thread", &enabled, &size, nullptr, 0)
+      && enabled;
 #else
   return true;
 #endif

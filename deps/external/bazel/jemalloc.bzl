@@ -17,17 +17,22 @@
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_rust//rust:rust_common.bzl", "BuildInfo")
+load("//bazel:platforms.bzl", "PLATFORM_ATTRS", "target_platform")
 
 def _jemalloc_build_impl(ctx):
-    archive = ctx.actions.declare_file("jemalloc/lib/libjemalloc_pic.a")
+    windows = target_platform(ctx).os == "windows"
+    archive_name = "jemalloc.lib" if windows else "libjemalloc_pic.a"
+    built_archive = "jemalloc_s.lib" if windows else "libjemalloc_pic.a"
+    archive = ctx.actions.declare_file("jemalloc/lib/" + archive_name)
     public_header = ctx.actions.declare_file("jemalloc/include/jemalloc/jemalloc.h")
     output = ctx.attr.build_script[BuildInfo].out_dir
     ctx.actions.run_shell(
         inputs = [output],
         outputs = [archive, public_header],
-        arguments = [output.path, archive.path, public_header.path],
-        command = 'cp "$1/jemalloc-build/lib/libjemalloc_pic.a" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
+        arguments = [output.path, archive.path, public_header.path, built_archive],
+        command = 'cp "$1/jemalloc-build/lib/$4" "$2" && cp "$1/jemalloc-build/include/jemalloc/jemalloc.h" "$3"',
         mnemonic = "JemallocArtifacts",
+        use_default_shell_env = windows,
     )
     return [
         DefaultInfo(files = depset([archive, public_header])),
@@ -41,7 +46,7 @@ _jemalloc_build = rule(
     implementation = _jemalloc_build_impl,
     attrs = {
         "build_script": attr.label(default = "@external_crates//:jemalloc_build", providers = [BuildInfo]),
-    },
+    } | PLATFORM_ATTRS,
 )
 
 def jemalloc(name):
@@ -55,6 +60,8 @@ def jemalloc(name):
             "@platforms//os:linux": [],
             "@platforms//os:macos": [],
             "@platforms//os:ios": [],
+            "@platforms//os:windows": [],
+            "@platforms//os:android": [],
             "//conditions:default": ["@platforms//:incompatible"],
         }),
     )
@@ -82,5 +89,5 @@ def jemalloc(name):
     cc_import(
         name = "%s_library" % name,
         static_library = ":%s_archive" % name,
-        visibility = ["//src/oblib:__pkg__"],
+        visibility = ["//src/oblib:__pkg__", "//unittest/oblib:__pkg__"],
     )
