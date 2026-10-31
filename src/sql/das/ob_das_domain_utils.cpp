@@ -231,7 +231,8 @@ int ObDASDomainUtils::generate_spatial_index_rows(
             const SqlTypeMeta &col_type = das_ctdef.column_types_.at(j);
             const ObAccuracy &col_accuracy = das_ctdef.column_accuracys_.at(j);
             int64_t projector_idx = row_projector.at(j);
-            if (FALSE_IT(rows[i].storage_datums_[j].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
+            const ObDatum source = StoredDatumCodec::decode_legacy_view(dml_row.stored_cells()[projector_idx]);
+            if (FALSE_IT(rows[i].storage_datums_[j].shallow_copy_from_datum(source))) {
             } else if (rows[i].storage_datums_[j].is_null()) {
             } else if (OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(col_type, col_accuracy, allocator, rows[i].storage_datums_[j]))) {
             }
@@ -458,13 +459,14 @@ int ObDASDomainUtils::calc_save_rowkey_policy(
       int64_t wire_size = 0;
       if (das_ctdef.column_ids_.at(j) == multivalue_arr_col_id) {
          // do nothing
-      } else if (!dml_row.cells()[projector_idx].is_null()
-                 && col_type.is_decimal_int() && col_type.get_scale() < 0) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(DatumParameterCodec::value_size(
-                   dml_row.cells()[projector_idx], col_type, wire_size))) {
       } else {
-        pure_data_size += wire_size;
+        const ObDatum source = StoredDatumCodec::decode_legacy_view(dml_row.stored_cells()[projector_idx]);
+        if (!source.is_null() && col_type.is_decimal_int() && col_type.get_scale() < 0) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(DatumParameterCodec::value_size(source, col_type, wire_size))) {
+        } else {
+          pure_data_size += wire_size;
+        }
       }
     }
 
@@ -550,7 +552,8 @@ int ObDASDomainUtils::generate_multivalue_index_rows(ObIAllocator &allocator,
             } else if (multivalue_arr_idx == projector_idx) {
               rows[i].storage_datums_[j].set_null();
             } else {
-              rows[i].storage_datums_[j].shallow_copy_from_datum(dml_row.cells()[projector_idx]);
+              const ObDatum source = StoredDatumCodec::decode_legacy_view(dml_row.stored_cells()[projector_idx]);
+              rows[i].storage_datums_[j].shallow_copy_from_datum(source);
             }
 
             if (rows[i].storage_datums_[j].is_null()) {  // do nothing
@@ -846,7 +849,8 @@ int ObSpatialDMLIterator::get_geo_wkb(
   if (geo_idx >= store_row->cnt_) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    geo_wkb = store_row->cells()[geo_idx].get_string();
+    const ObDatum geo_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[geo_idx]);
+    geo_wkb = geo_datum.get_string();
     bool found = false;
     uint64_t geo_col_id = das_ctdef_->table_param_.get_data_table().get_spatial_geo_col_id();
     for (int64_t i = 0; OB_SUCC(ret) && i < main_ctdef_->column_ids_.count() && !found; ++i) {
@@ -875,7 +879,8 @@ int ObSpatialDMLIterator::get_geo_wkb_for_update(
   } else {
     // get full row successfully
     geo_idx = row_projector_->at(rowkey_num);
-    geo_wkb = store_row->cells()[geo_idx].get_string();
+    const ObDatum geo_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[geo_idx]);
+    geo_wkb = geo_datum.get_string();
     geo_meta.set_type(ObGeometryType);
     geo_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   }
@@ -1095,7 +1100,8 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     const bool is_fts_index_aux = das_ctdef_->table_param_.get_data_table().is_fts_index_aux();
     const int64_t doc_id_idx = !is_fts_index_aux ? 0 : 1;
 
-    ObDatum doc_id_datum = store_row->cells()[row_projector_->at(doc_id_idx)];
+    const ObDatum doc_id_datum = StoredDatumCodec::decode_legacy_view(
+        store_row->stored_cells()[row_projector_->at(doc_id_idx)]);
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(data_plane::scan_ft_doc_words(
@@ -1239,9 +1245,10 @@ int ObFTDMLIterator::get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store
     const int64_t doc_id_idx = !is_fts_index_aux ? 0 : 1;
     const int64_t ft_idx = !is_fts_index_aux ? 1 : 0;
 
-    ft = store_row->cells()[row_projector_->at(ft_idx)].get_string();
+    const ObDatum ft_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(ft_idx)]);
+    ft = ft_datum.get_string();
     ft_meta = das_ctdef_->column_types_.at(ft_idx);
-    doc_id_datum = store_row->cells()[row_projector_->at(doc_id_idx)];
+    doc_id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(doc_id_idx)]);
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                                                           *lob_read_options_,
@@ -1272,9 +1279,10 @@ int ObFTDMLIterator::get_ft_and_doc_id_for_update(const ObChunkDatumStore::Store
     const int64_t doc_id_idx = !is_fts_index_aux ? 0 : 1;
     const int64_t ft_idx = !is_fts_index_aux ? 1 : 0;
 
-    doc_id_datum = store_row->cells()[row_projector_->at(doc_id_idx)];
+    doc_id_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(doc_id_idx)]);
 
-    ft = store_row->cells()[row_projector_->at(ft_idx)].get_string();
+    const ObDatum ft_datum = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[row_projector_->at(ft_idx)]);
+    ft = ft_datum.get_string();
     ft_meta = das_ctdef_->column_types_.at(ft_idx);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
@@ -1340,7 +1348,8 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data(
         found = true;
         multivalue_idx = projector_idx;
         multivalue_arr_idx = multivalue_idx + 1;
-        multivalue_data = store_row->cells()[multivalue_arr_idx].get_string();
+        const ObDatum source = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[multivalue_arr_idx]);
+        multivalue_data = source.get_string();
 
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                                                             *lob_read_options_,
@@ -1387,7 +1396,8 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data_for_update(
           ret = OB_ERR_UNEXPECTED;
         } else {
           multivalue_arr_idx = projector_idx + 1;
-          multivalue_data = store_row->cells()[multivalue_arr_idx].get_string();
+          const ObDatum source = StoredDatumCodec::decode_legacy_view(store_row->stored_cells()[multivalue_arr_idx]);
+          multivalue_data = source.get_string();
 
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                                                               *lob_read_options_,
