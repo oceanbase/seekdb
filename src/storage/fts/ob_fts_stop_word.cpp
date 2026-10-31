@@ -17,6 +17,7 @@
 #include "object/ob_object.h"
 #define USING_LOG_PREFIX STORAGE_FTS
 
+#include "lib/charset/ob_charset.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/fts/ob_fts_stop_word.h"
 #include "storage/fts/ob_fts_parser_helper.h"
@@ -76,21 +77,27 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
   int ret = OB_SUCCESS;
   
   
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
+    const ObString &word_str = word.get_word().get_string();
+    if (ObCharset::charset_type_by_coll(word.get_collation_type()) == CHARSET_UTF8MB4) {
+      // UTF8MB4 collations share the same encoding; only collation semantics differ.
+      cmp_str = word_str;
     } else {
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      if (OB_FAIL(common::ObCharset::charset_convert(
+                                             allocator,
+                                             word_str,
+                                             word.get_collation_type(),
+                                             stopword_type_.get_collation_type(),
+                                             cmp_str))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
       ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
       ret = stopword_set_.exist_refactored(converted);
       if (OB_HASH_NOT_EXIST == ret) {
@@ -101,7 +108,6 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
         ret = OB_SUCCESS;
       } else if (OB_SUCC(ret)) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
       }
     }
   }

@@ -21,6 +21,7 @@
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+#include "storage/fts/ik/ob_ik_arbitrator.h"
 #include "storage/fts/ik/ob_ik_processor.h"
 #include "data_plane/fts/ob_fts_parser.h"
 
@@ -41,12 +42,9 @@ public:
         ctx_(nullptr),
         hub_(hub),
         segmenters_(allocator_),
-        cache_main_(allocator),
-        cache_quan_(allocator),
-        cache_stop_(allocator),
         dict_main_(nullptr),
         dict_quan_(nullptr),
-        dict_stop_(nullptr)
+        arb_()
   {
   }
 
@@ -74,8 +72,6 @@ private:
 private:
   int init_dict(const ObFTParserParam &param);
 
-  int init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &container);
-
   int init_segmenter(const ObFTParserParam &param);
 
   int init_ctx(const ObFTParserParam &param);
@@ -83,10 +79,6 @@ private:
   void reset();
 
   bool should_read_newest_table() const;
-
-  int build_dict_from_cache(const ObFTDictDesc &desc,
-                            ObFTCacheRangeContainer &container,
-                            ObIFTDict *&dict);
 
 private:
   static constexpr int SEGMENT_LIMIT = 1000;
@@ -98,14 +90,16 @@ private:
   ObFTDictHub *hub_;
   ObList<ObIIKProcessor *, ObIAllocator> segmenters_;
 
-  // For now there's no change of dict in one query, so we can pin dict this level.
-  ObFTCacheRangeContainer cache_main_;
-  ObFTCacheRangeContainer cache_quan_;
-  ObFTCacheRangeContainer cache_stop_;
+  // The dictionaries are built once and owned by the dict hub, so they are
+  // shared by all the parsers and stay valid for the whole lifetime of the
+  // process. For now there's no change of dict in one query, so we can pin
+  // dict this level.
+  const ObIFTDict *dict_main_;
+  const ObIFTDict *dict_quan_;
 
-  ObIFTDict *dict_main_;
-  ObIFTDict *dict_quan_;
-  ObIFTDict *dict_stop_;
+  // Reused across batches of the same document; reset() (same cleanup as the
+  // destructor) prepares it for the next batch.
+  ObIKArbitrator arb_;
 
   DISABLE_COPY_ASSIGN(ObIKFTParser);
 };

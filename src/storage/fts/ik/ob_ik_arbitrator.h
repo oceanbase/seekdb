@@ -34,6 +34,11 @@ public:
   ObIKArbitrator();
   ~ObIKArbitrator();
 
+  // Reset to a pristine state so the arbitrator can be reused as a parser member
+  // across batches. Performs exactly the same cleanup as the destructor
+  // (chains_.destroy() + alloc_.reset()); no new container semantics.
+  void reset();
+
   int process(TokenizeContext &ctx);
 
   int output_result(TokenizeContext &ctx);

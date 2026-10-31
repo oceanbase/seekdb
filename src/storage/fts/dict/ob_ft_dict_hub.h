@@ -93,10 +93,17 @@ private:
 };
 
 class ObFTCacheRangeContainer;
+class ObIFTDict;
+
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), shared_dict_lock_()
+  {
+    for (int64_t i = 0; i < MAX_DICT_TYPE_NUM; ++i) {
+      shared_dicts_[i] = nullptr;
+    }
+  }
   ~ObFTDictHub() {}
 
   int init();
@@ -107,17 +114,41 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  /**
+   * @brief Get the dictionary shared by all the parsers of the given descriptor.
+   *
+   * Building a dictionary is expensive: the KV cache blocks holding the
+   * double array tries have to be pinned and one range dictionary object is
+   * created for every range of the dictionary. The content of a dictionary
+   * never changes during the lifetime of the process, so the dictionary is
+   * built once and then shared by every parser instead of being rebuilt for
+   * every tokenize call and for every row of the fulltext index build.
+   *
+   * The returned dictionary is read-only and stays valid until destroy() is
+   * called on the hub.
+   */
+  int get_shared_dict(const ObFTDictDesc &desc, ObIFTDict *&dict);
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
   int put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &info);
 
+  // Holds one built dictionary together with the KV cache handles that keep
+  // the dictionary blocks alive. The definition lives in the cpp file.
+  class ObFTSharedDict;
 
 private:
+  static constexpr int64_t MAX_DICT_TYPE_NUM = 4;
+
   bool is_inited_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  // Guards the shared dictionary table below. It is a separate lock from
+  // rw_dict_lock_ because building a dictionary takes rw_dict_lock_ itself.
+  ObBucketLock shared_dict_lock_;
+  ObFTSharedDict *shared_dicts_[MAX_DICT_TYPE_NUM];
 };
 
 } //  namespace storage

@@ -328,5 +328,13 @@ ObIKArbitrator::~ObIKArbitrator()
   chains_.destroy();
   alloc_.reset();
 }
+
+void ObIKArbitrator::reset()
+{
+  // Same cleanup as the destructor; lets the parser reuse this arbitrator
+  // instance across batches instead of constructing a new one per batch.
+  chains_.destroy();
+  alloc_.reset();
+}
 } // namespace storage
 } // namespace oceanbase

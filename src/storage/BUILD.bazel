@@ -2530,3 +2530,19 @@ alias(
     actual = "//src/sql/parser:sql_parser_driver",
     tags = ["manual"],
 )
+
+# Fulltext parser headers used by the fulltext regression tests.
+cc_library(
+    name = "fts_test_headers",
+    testonly = True,
+    hdrs = [
+        "fts/ik/ob_ik_char_util.h",
+        "fts/ob_fts_parser_property.h",
+        "fts/utils/unicode_utils.h",
+    ],
+    deps = [
+        ":storage_runtime_interface",
+    ] + _STORAGE_INTERFACE_NATIVE_DEPS,
+    tags = ["manual"],
+    visibility = ["//unittest/storage/fts:__pkg__"],
+)

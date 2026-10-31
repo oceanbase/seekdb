@@ -31,6 +31,77 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+class ObArrayHashLookupCache
+{
+public:
+  static constexpr int64_t CACHE_SIZE = 256;
+
+  bool get(const ObArrayHashMap::Header *map,
+           const ObFTSingleWord &word,
+           ObFTWordCode &code) const
+  {
+    const ObString word_str = word.get_word();
+    if (word_str.length() <= 0 || word_str.length() > MAX_KEY_LEN) {
+      return false;
+    }
+    const Entry &entry = entries_[hash(map, word_str)];
+    if (entry.map_ == map && entry.len_ == word_str.length()
+        && 0 == MEMCMP(entry.word_, word_str.ptr(), entry.len_)) {
+      code = entry.code_;
+      return true;
+    }
+    return false;
+  }
+
+  void put(const ObArrayHashMap::Header *map,
+           const ObFTSingleWord &word,
+           const ObFTWordCode code)
+  {
+    const ObString word_str = word.get_word();
+    if (word_str.length() <= 0 || word_str.length() > MAX_KEY_LEN) {
+      return;
+    }
+    Entry &entry = entries_[hash(map, word_str)];
+    entry.map_ = map;
+    entry.len_ = static_cast<uint8_t>(word_str.length());
+    MEMCPY(entry.word_, word_str.ptr(), word_str.length());
+    entry.code_ = code;
+  }
+
+private:
+  static constexpr int64_t MAX_KEY_LEN = 4;
+
+  struct Entry
+  {
+    Entry() : map_(nullptr), len_(0), code_(0), word_() {}
+
+    const ObArrayHashMap::Header *map_;
+    uint8_t len_;
+    ObFTWordCode code_;
+    char word_[MAX_KEY_LEN];
+  };
+
+  static uint64_t hash(const ObArrayHashMap::Header *map, const ObString &word)
+  {
+    uint64_t hash_val = reinterpret_cast<uintptr_t>(map) >> 4;
+    for (int64_t i = 0; i < word.length(); ++i) {
+      hash_val = hash_val * 131 + static_cast<uint8_t>(word.ptr()[i]);
+    }
+    return hash_val & (CACHE_SIZE - 1);
+  }
+
+  Entry entries_[CACHE_SIZE];
+};
+
+ObArrayHashLookupCache &array_hash_lookup_cache()
+{
+  static thread_local ObArrayHashLookupCache cache;
+  return cache;
+}
+} // namespace
+
 template <typename DATA_TYPE>
 int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
 {
@@ -302,11 +373,15 @@ ObArrayHashMap *ObFTDAT::get_map() { return reinterpret_cast<ObArrayHashMap *>(b
 int ObArrayHashMap::find(const ObFTSingleWord &word, ObFTWordCode &code) const
 {
   int ret = OB_ENTRY_NOT_EXIST;
+  if (array_hash_lookup_cache().get(&header_, word, code)) {
+    return OB_SUCCESS;
+  }
   uint64_t hash = word.get_word().hash();
   uint64_t index = hash % header_.capacity_;
   while (header_.data[index].used) {
     if (header_.data[index].word == word) {
       code = header_.data[index].code;
+      array_hash_lookup_cache().put(&header_, word, code);
       ret = OB_SUCCESS;
       break;
     } else {
