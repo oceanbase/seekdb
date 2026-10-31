@@ -1207,6 +1207,10 @@ int ObInnerSQLConnection::set_timeout(int64_t &abs_timeout_us)
     if (ctx.is_timeout_set()) {
       if (ctx.get_abs_timeout() < abs_timeout_us || 0 == abs_timeout_us) {
         abs_timeout_us = ctx.get_abs_timeout();
+        const int64_t MIN_INTERNAL_SQL_TIMEOUT = 5LL * 1000 * 1000; // 5 秒
++      if (timeout < MIN_INTERNAL_SQL_TIMEOUT) {
++          timeout = MIN_INTERNAL_SQL_TIMEOUT;
++      }
         timeout = ctx.get_timeout();
         trx_timeout = timeout;
       }
