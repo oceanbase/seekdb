@@ -1,0 +1,26 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("//bazel:defs.bzl", "cc_library")
+
+package(default_testonly = True)
+
+cc_library(
+    name = "ddl_common_cases",
+    srcs = ["test_ddl_common.cpp"],
+    alwayslink = True,
+    deps = [
+        "//bazel/third_party:gtest",
+        "//src/share:ddl_common_test_headers",
+    ],
+)
+
+cc_test(
+    name = "test_ddl_common",
+    size = "small",
+    linkstatic = True,
+    features = ["-static_cpp_runtime", "-static_link_cpp_runtimes"],
+    deps = [
+        ":ddl_common_cases",
+        "//src/observer:liboceanbase",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)
