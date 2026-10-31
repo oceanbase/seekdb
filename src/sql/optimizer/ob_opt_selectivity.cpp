@@ -3979,14 +3979,139 @@ int ObOptSelectivity::calculate_expr_nns(const OptTableMetas &table_metas,
                                          double &nns)
 {
   int ret = OB_SUCCESS;
+  nns = 1.0;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (expr->is_column_ref_expr()) {
     if (OB_FAIL(get_column_ndv_and_nns(table_metas, ctx, *expr, NULL, &nns))) {
     }
+  } else if (expr->is_static_scalar_const_expr()) {
+    ObObj value;
+    bool got_result = false;
+    if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
+                    ctx.get_opt_ctx().get_exec_ctx(), expr, value, got_result, ctx.get_allocator()))) {
+    } else if (got_result) {
+      nns = value.is_null() ? 0.0 : 1.0;
+    }
+  } else if (T_FUN_SYS_CAST == expr->get_expr_type() &&
+             expr->get_param_count() >= 1 &&
+             NULL != expr->get_param_expr(0) &&
+             ob_is_numeric_type(expr->get_data_type()) &&
+             ob_is_numeric_type(expr->get_param_expr(0)->get_data_type())) {
+    if (OB_FAIL(SMART_CALL(calculate_expr_nns(table_metas, ctx, expr->get_param_expr(0), nns)))) {
+    }
+  } else if ((T_FUN_SYS_DATE == expr->get_expr_type() || is_dense_time_expr_type(expr->get_expr_type())) &&
+             expr->get_param_count() == 1) {
+    if (OB_FAIL(SMART_CALL(calculate_expr_nns(table_metas, ctx, expr->get_param_expr(0), nns)))) {
+    }
+  } else if (T_FUN_SYS_EXTRACT == expr->get_expr_type() && expr->get_param_count() == 2) {
+    if (OB_FAIL(SMART_CALL(calculate_expr_nns(table_metas, ctx, expr->get_param_expr(1), nns)))) {
+    }
+  } else if ((T_OP_ADD == expr->get_expr_type() || T_OP_MINUS == expr->get_expr_type() ||
+              T_OP_MUL == expr->get_expr_type() || T_OP_DIV == expr->get_expr_type()) &&
+             expr->get_param_count() == 2) {
+    const ObRawExpr *left = expr->get_param_expr(0);
+    const ObRawExpr *right = expr->get_param_expr(1);
+    if (OB_ISNULL(left) || OB_ISNULL(right)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (left->is_static_scalar_const_expr() != right->is_static_scalar_const_expr()) {
+      const bool left_const = left->is_static_scalar_const_expr();
+      const ObRawExpr *constant = left_const ? left : right;
+      const ObRawExpr *variable = left_const ? right : left;
+      ObObj value;
+      bool got_result = false;
+      if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
+                      ctx.get_opt_ctx().get_exec_ctx(), constant, value, got_result, ctx.get_allocator()))) {
+      } else if (!got_result) {
+        // Keep the fallback when the constant is unavailable.
+      } else if (value.is_null()) {
+        nns = 0.0;
+      } else if (!value.is_numeric_type() || !ob_is_numeric_type(variable->get_data_type()) ||
+                 (T_OP_DIV == expr->get_expr_type() && (left_const || value.is_zero()))) {
+        // Only propagate through the arithmetic supported by range estimation.
+      } else if (OB_FAIL(SMART_CALL(calculate_expr_nns(table_metas, ctx, variable, nns)))) {
+      }
+    }
   } else {
     // todo: wuyuming.wym null propagate expr
-    nns = 1.0;
+  }
+  return ret;
+}
+
+// A numeric expression with one constant operand is monotonic for these operators.
+// Evaluate its endpoints with SQL arithmetic so precision, unsignedness and SQL mode
+// remain consistent with the original expression. This only estimates statistics;
+// it does not replace the expression executed by the query.
+static int calc_arithmetic_expr_min_max(const OptTableMetas &table_metas,
+                                        const OptSelectivityCtx &ctx,
+                                        const ObRawExpr &expr,
+                                        ObObj &min_value,
+                                        ObObj &max_value)
+{
+  int ret = OB_SUCCESS;
+  ObObj left_min;
+  ObObj left_max;
+  ObObj right_min;
+  ObObj right_max;
+  const ObRawExpr *left = expr.get_param_expr(0);
+  const ObRawExpr *right = expr.get_param_expr(1);
+  const bool left_const = NULL != left && left->is_static_scalar_const_expr();
+  const bool right_const = NULL != right && right->is_static_scalar_const_expr();
+  bool valid = false;
+  if (OB_ISNULL(left) || OB_ISNULL(right) || OB_ISNULL(ctx.get_session_info())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!ob_is_numeric_type(expr.get_data_type()) ||
+             !ob_is_numeric_type(left->get_data_type()) ||
+             !ob_is_numeric_type(right->get_data_type()) ||
+             left_const == right_const ||
+             (T_OP_DIV == expr.get_expr_type() && !right_const)) {
+    // Do not infer endpoint bounds for two varying operands or a varying divisor.
+  } else if (OB_FAIL(SMART_CALL(ObOptSelectivity::calc_expr_min_max(
+                 table_metas, ctx, left, left_min, left_max)))) {
+  } else if (OB_FAIL(SMART_CALL(ObOptSelectivity::calc_expr_min_max(
+                 table_metas, ctx, right, right_min, right_max)))) {
+  } else if (!left_min.is_numeric_type() || !left_max.is_numeric_type() ||
+             !right_min.is_numeric_type() || !right_max.is_numeric_type() ||
+             (T_OP_DIV == expr.get_expr_type() && right_min.is_zero())) {
+    // Missing statistics, NULL constants and division by zero keep the fallback.
+  } else {
+    // Constant-evaluation caching retains expression pointers for this query.
+    ObRawExprFactory &expr_factory = ctx.get_opt_ctx().get_expr_factory();
+    ObObj bounds[2];
+    valid = true;
+    for (int64_t i = 0; OB_SUCC(ret) && valid && i < 2; ++i) {
+      ObConstRawExpr *left_bound = NULL;
+      ObConstRawExpr *right_bound = NULL;
+      ObOpRawExpr *bound_expr = NULL;
+      bool got_result = false;
+      if (OB_FAIL(ObRawExprUtils::build_const_obj_expr(
+                      expr_factory, i == 0 ? left_min : left_max, left_bound))) {
+      } else if (OB_FAIL(ObRawExprUtils::build_const_obj_expr(
+                             expr_factory, i == 0 ? right_min : right_max, right_bound))) {
+      } else if (OB_FAIL(expr_factory.create_raw_expr(expr.get_expr_type(), bound_expr))) {
+      } else if (OB_FAIL(bound_expr->set_param_exprs(left_bound, right_bound))) {
+      } else {
+        left_bound->set_result_type(left->get_result_type());
+        right_bound->set_result_type(right->get_result_type());
+        if (OB_FAIL(bound_expr->formalize(ctx.get_session_info()))) {
+        } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
+                               ctx.get_opt_ctx().get_exec_ctx(), bound_expr, bounds[i],
+                               got_result, ctx.get_allocator()))) {
+        } else {
+          // Arithmetic failures (for example, overflow of stale endpoints) are
+          // reported as an invalid result by constant evaluation.
+          valid = got_result && bounds[i].is_numeric_type();
+        }
+      }
+    }
+    if (OB_SUCC(ret) && valid) {
+      int cmp = 0;
+      if (OB_FAIL(bounds[0].compare(bounds[1], cmp))) {
+      } else {
+        min_value = bounds[cmp <= 0 ? 0 : 1];
+        max_value = bounds[cmp <= 0 ? 1 : 0];
+      }
+    }
   }
   return ret;
 }
@@ -4021,6 +4146,11 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
     } else {
       min_value = result;
       max_value = result;
+    }
+  } else if ((T_OP_ADD == expr->get_expr_type() || T_OP_MINUS == expr->get_expr_type() ||
+              T_OP_MUL == expr->get_expr_type() || T_OP_DIV == expr->get_expr_type()) &&
+             expr->get_param_count() == 2) {
+    if (OB_FAIL(calc_arithmetic_expr_min_max(table_metas, ctx, *expr, min_value, max_value))) {
     }
   } else if (expr->get_param_count() < 1) {
     // do nothing
