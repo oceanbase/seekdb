@@ -20,6 +20,13 @@
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
+#include "sql/pl/ob_pl_user_type.h"
+#include <functional>
+#include <vector>
+#include <string>
+#include <csignal>
+#include <unistd.h>
+#include <sys/resource.h>
 #include <gtest/gtest.h>
 #include <array>
 #include <cstring>
@@ -27,6 +34,24 @@
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
+
+namespace oceanbase
+{
+namespace sql
+{
+// Test peer only prepares the actual store's nonspill environment. Retaining,
+// writing, iteration and restoration all execute the production methods.
+class NativeSubqueryCacheTestPeer
+{
+public:
+  static int init_memory_store(ObSubQueryIterator &iterator, ObIAllocator &allocator)
+  {
+    iterator.store_.set_allocator(allocator);
+    return iterator.store_.init(1L << 20, ObCtxIds::DEFAULT_CTX_ID, "SQRetainTest", false);
+  }
+};
+}
+}
 
 namespace
 {
@@ -39,6 +64,7 @@ public:
   int get_next_row() override
   {
     ++calls_;
+    if (resource_step_) { return resource_step_(calls_); }
     if (calls_ > 1 && string_result_) { MEMSET(string_bytes_, 'x', sizeof(string_bytes_) - 1); }
     if (calls_ > 1 && second_result_ != OB_SUCCESS) { return second_result_; }
     ObExpr &expr = *get_spec().output_.at(0);
@@ -51,11 +77,75 @@ public:
     return OB_SUCCESS;
   }
   int inner_get_next_row() override { return get_next_row(); }
+  int get_next_batch(int64_t maximum, const ObBatchRows *&rows) override
+  {
+    return batch_step_ ? batch_step_(maximum, rows) : ObOperator::get_next_batch(maximum, rows);
+  }
+  std::function<int(int)> resource_step_;
+  std::function<int(int64_t, const ObBatchRows *&)> batch_step_;
   int calls_ = 0;
   int second_result_ = OB_ITER_END;
   bool string_result_ = false;
   char string_bytes_[sizeof("retained first row")]{};
 };
+
+const SqlType *scalar_record_type(ObIAllocator &metadata, uint64_t id = 801)
+{
+  SqlType integer; SqlTypeMeta meta; meta.set_int();
+  EXPECT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(20, 0), integer));
+  SqlTypeMember member;
+  member.name = ObString::make_string("value"); member.type = &integer; member.nullable = true;
+  SqlTypeSpec definition;
+  definition.attributes.meta_.set_ext(); definition.attributes.meta_.set_extend_type(pl::PL_RECORD_TYPE);
+  definition.attributes.set_udt_id(id); definition.form = SqlTypeForm::Record;
+  definition.pl_declaration.source = SqlPLDeclarationSource::Local;
+  definition.pl_declaration.tenant_id = OB_SERVER_RUNTIME_ID;
+  definition.pl_declaration.declaration_id = id;
+  definition.pl_declaration.compilation_scope.high = 0x725;
+  definition.pl_declaration.compilation_scope.low = 0x339;
+  definition.members = &member; definition.member_count = 1;
+  const SqlType *type = nullptr;
+  EXPECT_EQ(OB_SUCCESS, SqlType::create(definition, metadata, type));
+  return type;
+}
+
+int scalar_record(ObIAllocator &allocator, const SqlType &type, int64_t number, Datum &output)
+{
+  const int64_t size = pl::ObRecordType::get_init_size(1);
+  void *memory = allocator.alloc(size);
+  int ret = memory == nullptr ? OB_ALLOCATE_MEMORY_FAILED : OB_SUCCESS;
+  pl::ObPLRecord *record = nullptr;
+  DatumParameter parameter;
+  if (ret == OB_SUCCESS) {
+    record = new (memory) pl::ObPLRecord(type.pl_declaration().declaration_id, 1);
+    ret = record->init_data(allocator, false);
+  }
+  if (ret == OB_SUCCESS) {
+    record->get_not_null()[0] = false;
+    record->get_element_type()[0] = type.member(0).type->attributes();
+    ret = record->get_element()[0].set_int(number, *record->get_allocator());
+  }
+  if (ret == OB_SUCCESS) {
+    ret = parameter.set_extend(reinterpret_cast<int64_t>(record), pl::PL_RECORD_TYPE, allocator, size);
+  }
+  if (ret == OB_SUCCESS) { ret = DatumCopyPlan(type).import_legacy(parameter.datum_, output); }
+  return ret;
+}
+
+pl::ObPLRecord *record_payload(const SqlType &type, const Datum &value)
+{
+  alignas(8) char scratch[64];
+  ObDatum legacy;
+  EXPECT_EQ(OB_SUCCESS, DatumCopyPlan(type).legacy_view(value, legacy, scratch, sizeof(scratch)));
+  return reinterpret_cast<pl::ObPLRecord *>(legacy.get_ext());
+}
+
+int64_t record_number(const SqlType &type, const Datum &value)
+{
+  pl::ObPLRecord *record = record_payload(type, value);
+  EXPECT_NE(nullptr, record);
+  return record == nullptr ? 0 : record->get_element()[0].get_int();
+}
 
 class NativeSubqueryCache : public ::testing::Test
 {
@@ -260,6 +350,250 @@ TEST_F(NativeSubqueryCache, pending_resource_clone_retains_sql_array_leaves_befo
   EXPECT_EQ(ObString::make_string("resource leaf independently owned by the pending cache"),
             owned->data_[0].get_string());
 }
+
+TEST_F(NativeSubqueryCache, actual_record_first_advance_and_cache_hit_survive_their_source_owners)
+{
+  const SqlType *type = scalar_record_type(owner_); ASSERT_NE(nullptr, type);
+  ASSERT_EQ(OB_SUCCESS, child_expr_.bind_sql_type(*type, owner_));
+  ASSERT_EQ(OB_SUCCESS, result_expr_.bind_sql_type(*type, owner_));
+  ObArenaAllocator source_owner;
+  child_.resource_step_ = [&](int call) {
+    if (call > 1) { source_owner.reset(); return OB_ITER_END; }
+    const int ret = scalar_record(source_owner, *type, INT64_MIN,
+                                  child_expr_.locate_expr_datum(child_.get_eval_ctx()));
+    child_expr_.set_evaluated_projected(child_.get_eval_ctx());
+    return ret;
+  };
+  ASSERT_EQ(OB_SUCCESS, ObExprSubQueryRef::expr_eval(result_expr_, child_.get_eval_ctx(), result()));
+  EXPECT_EQ(2, child_.calls_); EXPECT_EQ(INT64_MIN, record_number(*type, result()));
+  ASSERT_EQ(OB_SUCCESS, ObExprSubQueryRef::expr_eval(result_expr_, child_.get_eval_ctx(), result()));
+  EXPECT_EQ(0, child_.calls_); // The callback rewound, then used the cache.
+  EXPECT_EQ(INT64_MIN, record_number(*type, result()));
+  ASSERT_EQ(OB_SUCCESS, iterator_.reset_hash_map());
+  EXPECT_EQ(INT64_MIN, record_number(*type, result())); // Execution snapshot is independent of cache clear.
+  ASSERT_EQ(OB_SUCCESS, parent_.close_owned_values());
+}
+
+TEST_F(NativeSubqueryCache, actual_record_cardinality_or_child_failure_never_publishes_pending_cache)
+{
+  const SqlType *type = scalar_record_type(owner_); ASSERT_NE(nullptr, type);
+  ASSERT_EQ(OB_SUCCESS, child_expr_.bind_sql_type(*type, owner_));
+  ASSERT_EQ(OB_SUCCESS, result_expr_.bind_sql_type(*type, owner_));
+  for (int second : {OB_SUCCESS, OB_ERR_UNEXPECTED}) {
+    ASSERT_EQ(OB_SUCCESS, iterator_.reset_hash_map());
+    ObArenaAllocator source_owner;
+    child_.resource_step_ = [&](int call) {
+      if (call > 1) { source_owner.reset(); return second; }
+      return scalar_record(source_owner, *type, 81, child_expr_.locate_expr_datum(child_.get_eval_ctx()));
+    };
+    EXPECT_EQ(second == OB_SUCCESS ? OB_SUBQUERY_TOO_MANY_ROW : second,
+              ObExprSubQueryRef::expr_eval(result_expr_, child_.get_eval_ctx(), result()));
+    EXPECT_EQ(2, child_.calls_);
+    Datum out; EXPECT_EQ(OB_HASH_NOT_EXIST, lookup(out));
+    EXPECT_EQ(81, record_number(*type, result()));
+    ASSERT_EQ(OB_SUCCESS, parent_.close_owned_values());
+  }
+  child_.resource_step_ = nullptr; // No callback retains the last local source allocator.
+}
+
+TEST_F(NativeSubqueryCache, resource_correlation_keys_bypass_lookup_and_insertion_without_changing_values)
+{
+  const SqlType *type = scalar_record_type(owner_); ASSERT_NE(nullptr, type);
+  ASSERT_EQ(OB_SUCCESS, key_expr_.bind_sql_type(*type, owner_));
+  ObArenaAllocator source_owner;
+  ASSERT_EQ(OB_SUCCESS, scalar_record(source_owner, *type, 91, key()));
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_EQ(OB_SUCCESS, ObExprSubQueryRef::expr_eval(result_expr_, child_.get_eval_ctx(), result()));
+    EXPECT_EQ(2, child_.calls_); EXPECT_EQ(72, result().get_int());
+    ASSERT_EQ(OB_SUCCESS, iterator_.get_curr_probe_row());
+    Datum out; out.set_int(994);
+    EXPECT_EQ(OB_HASH_NOT_EXIST, lookup(out)); EXPECT_EQ(994, out.get_int());
+    ObSubQueryIterator::PendingCacheEntry pending;
+    ASSERT_EQ(OB_SUCCESS, iterator_.prepare_cache_result(result(), result_expr_, pending));
+    EXPECT_FALSE(pending.ready_);
+  }
+}
+
+TEST_F(NativeSubqueryCache, cache_resource_clear_failure_preserves_arena_and_retries_before_reuse)
+{
+  const SqlType *type = scalar_record_type(owner_); ASSERT_NE(nullptr, type);
+  ASSERT_EQ(OB_SUCCESS, result_expr_.bind_sql_type(*type, owner_));
+  ObArenaAllocator source_owner;
+  Datum source; ASSERT_EQ(OB_SUCCESS, scalar_record(source_owner, *type, 101, source));
+  ObSubQueryIterator::PendingCacheEntry pending;
+  ASSERT_EQ(OB_SUCCESS, iterator_.prepare_cache_result(source, result_expr_, pending));
+  ASSERT_TRUE(pending.ready_);
+  ASSERT_EQ(OB_SUCCESS, iterator_.publish_cache_result(pending));
+  source_owner.reset();
+  auto *owned = record_payload(*pending.result_type_, pending.value_);
+  ASSERT_NE(nullptr, owned);
+  ObIAllocator *arena = nullptr;
+  ASSERT_EQ(OB_SUCCESS, iterator_.get_arena_allocator(arena));
+  auto &cache_arena = static_cast<ObArenaAllocator &>(*arena);
+  const int64_t used = cache_arena.used();
+  owned->set_count(-1); // Safe structural error: release rejects before dereferencing fields.
+  EXPECT_EQ(OB_INVALID_ARGUMENT, iterator_.reset_hash_map());
+  EXPECT_EQ(used, cache_arena.used());
+  owned->set_count(1);
+  ASSERT_EQ(OB_SUCCESS, iterator_.reset_hash_map());
+  EXPECT_LT(cache_arena.used(), used);
+  ASSERT_EQ(OB_SUCCESS, parent_.close_owned_values());
+}
+
+TEST_F(NativeSubqueryCache, actual_spf_terminal_destroy_aborts_before_discarding_an_uncleared_graph)
+{
+  const SqlType *type = scalar_record_type(owner_); ASSERT_NE(nullptr, type);
+  ObArenaAllocator source_owner;
+  Datum source, retained;
+  ASSERT_EQ(OB_SUCCESS, scalar_record(source_owner, *type, 111, source));
+  ASSERT_EQ(OB_SUCCESS, parent_.retain_scalar_result(source, *type, retained));
+  auto *owned = record_payload(*type, retained); ASSERT_NE(nullptr, owned);
+  EXPECT_EXIT({
+    rlimit no_core; no_core.rlim_cur = 0; no_core.rlim_max = 0;
+    setrlimit(RLIMIT_CORE, &no_core);
+    signal(SIGALRM, SIG_DFL); alarm(3);
+    owned->set_count(-1);
+    parent_.destroy();
+    _exit(99);
+  }, ::testing::KilledBySignal(SIGABRT), "OB_ABORT");
+  // Death-test mutation was child-local; the parent graph can close normally.
+  EXPECT_EQ(1, owned->get_count());
+  ASSERT_EQ(OB_SUCCESS, parent_.close_owned_values());
+}
+
+
+TEST_F(NativeSubqueryCache, init_plan_nonspill_scalar_retains_resources_before_next_child_and_checks_type_rebind)
+{
+  const SqlType *type = scalar_record_type(owner_); ASSERT_NE(nullptr, type);
+  ASSERT_EQ(OB_SUCCESS, child_expr_.bind_sql_type(*type, owner_));
+  child_spec_.output_.reset();
+  ASSERT_EQ(OB_SUCCESS, child_spec_.output_.init(2));
+  ASSERT_EQ(OB_SUCCESS, child_spec_.output_.push_back(&child_expr_));
+  ASSERT_EQ(OB_SUCCESS, child_spec_.output_.push_back(&key_expr_));
+  ASSERT_EQ(OB_SUCCESS, NativeSubqueryCacheTestPeer::init_memory_store(iterator_, owner_));
+  iterator_.set_init_plan();
+  ObArenaAllocator source_owner;
+  child_.resource_step_ = [&](int call) {
+    source_owner.reset();
+    return call > 2 ? OB_ITER_END : scalar_record(source_owner, *type, 200 + call,
+        child_expr_.locate_expr_datum(child_.get_eval_ctx()));
+  };
+  ASSERT_EQ(OB_SUCCESS, iterator_.prepare_init_plan()); EXPECT_EQ(3, child_.calls_);
+  ASSERT_EQ(OB_SUCCESS, iterator_.get_next_row());
+  EXPECT_EQ(201, record_number(*type, child_expr_.locate_expr_datum(child_.get_eval_ctx())));
+  EXPECT_EQ(17, key().get_int());
+  const SqlType *different = scalar_record_type(owner_, 802); ASSERT_NE(nullptr, different);
+  ASSERT_EQ(OB_SUCCESS, child_expr_.bind_sql_type(*different, owner_));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, iterator_.get_next_row());
+  ASSERT_EQ(OB_SUCCESS, child_expr_.bind_sql_type(*type, owner_));
+  ASSERT_EQ(OB_SUCCESS, iterator_.get_next_row()); // Rejected restoration did not advance the store.
+  EXPECT_EQ(202, record_number(*type, child_expr_.locate_expr_datum(child_.get_eval_ctx())));
+  EXPECT_EQ(OB_ITER_END, iterator_.get_next_row());
+  ASSERT_EQ(OB_SUCCESS, parent_.close_owned_values());
+  child_.resource_step_ = nullptr;
+}
+
+TEST_F(NativeSubqueryCache, init_plan_nonspill_batch_retains_only_unskipped_resource_rows)
+{
+  const SqlType *type = scalar_record_type(owner_); ASSERT_NE(nullptr, type);
+  ASSERT_EQ(OB_SUCCESS, child_expr_.bind_sql_type(*type, owner_));
+  child_spec_.output_.reset();
+  ASSERT_EQ(OB_SUCCESS, child_spec_.output_.init(2));
+  ASSERT_EQ(OB_SUCCESS, child_spec_.output_.push_back(&child_expr_));
+  ASSERT_EQ(OB_SUCCESS, child_spec_.output_.push_back(&key_expr_));
+  child_spec_.max_batch_size_ = 3;
+  child_.get_eval_ctx().set_max_batch_size(3);
+  child_expr_.datum_off_ = 256; child_expr_.eval_info_off_ = 384; child_expr_.eval_flags_off_ = 416;
+  child_expr_.batch_result_ = true; child_expr_.batch_idx_mask_ = UINT64_MAX;
+  for (int64_t i = 0; i < 3; ++i) { new (frame_.data() + 256 + i * sizeof(Datum)) Datum; }
+  new (frame_.data() + 384) ObEvalInfo;
+  ASSERT_EQ(OB_SUCCESS, NativeSubqueryCacheTestPeer::init_memory_store(iterator_, owner_));
+  iterator_.set_init_plan();
+  alignas(8) uint64_t skip_bits = 0;
+  ObBitVector *skip = to_bit_vector(&skip_bits); skip->set(1);
+  ObBatchRows rows(*skip, 3, false);
+  ObArenaAllocator source_owner;
+  int batch_calls = 0;
+  child_.batch_step_ = [&](int64_t, const ObBatchRows *&output) {
+    ++batch_calls;
+    source_owner.reset();
+    int ret = OB_SUCCESS;
+    if (batch_calls == 1) {
+      for (int64_t i = 0; ret == OB_SUCCESS && i < 3; ++i) {
+        ret = scalar_record(source_owner, *type, 301 + i,
+            child_expr_.locate_batch_datums(child_.get_eval_ctx())[i]);
+      }
+      child_expr_.set_evaluated_projected(child_.get_eval_ctx());
+    } else { rows.size_ = 0; rows.end_ = true; }
+    output = &rows;
+    return ret;
+  };
+  ASSERT_EQ(OB_SUCCESS, iterator_.prepare_init_plan()); EXPECT_EQ(2, batch_calls);
+  ObEvalCtx::BatchInfoScopeGuard output_guard(child_.get_eval_ctx());
+  output_guard.set_batch_idx(0);
+  for (int64_t expected : {301, 303}) {
+    ASSERT_EQ(OB_SUCCESS, iterator_.get_next_row());
+    EXPECT_EQ(expected, record_number(*type, child_expr_.locate_expr_datum(child_.get_eval_ctx())));
+    EXPECT_EQ(17, key().get_int());
+  }
+  EXPECT_EQ(OB_ITER_END, iterator_.get_next_row());
+  ASSERT_EQ(OB_SUCCESS, parent_.close_owned_values());
+  child_.batch_step_ = nullptr;
+}
+
+
+TEST_F(NativeSubqueryCache, cached_record_children_are_accounted_in_the_arena_soft_limit)
+{
+  constexpr int64_t columns = 18;
+  constexpr int64_t text_bytes = 60000; // Each VARCHAR fits its actual declared length.
+  SqlType text;
+  SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObAccuracy accuracy; accuracy.set_length(text_bytes);
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, accuracy, text));
+  std::vector<SqlTypeMember> members(columns);
+  std::vector<std::string> names(columns);
+  for (int64_t i = 0; i < columns; ++i) {
+    names[i] = "v" + std::to_string(i);
+    members[i].name = ObString(names[i].size(), names[i].data()); members[i].type = &text;
+  }
+  SqlTypeSpec definition;
+  definition.attributes.meta_.set_ext(); definition.attributes.meta_.set_extend_type(pl::PL_RECORD_TYPE);
+  definition.attributes.set_udt_id(803); definition.form = SqlTypeForm::Record;
+  definition.pl_declaration.source = SqlPLDeclarationSource::Local;
+  definition.pl_declaration.tenant_id = OB_SERVER_RUNTIME_ID;
+  definition.pl_declaration.declaration_id = 803;
+  definition.pl_declaration.compilation_scope.low = 0x4405;
+  definition.members = members.data(); definition.member_count = columns;
+  const SqlType *type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(definition, owner_, type));
+  ASSERT_EQ(OB_SUCCESS, result_expr_.bind_sql_type(*type, owner_));
+  ObArenaAllocator source_owner;
+  void *memory = source_owner.alloc(pl::ObRecordType::get_init_size(columns)); ASSERT_NE(nullptr, memory);
+  auto *record = new (memory) pl::ObPLRecord(803, columns);
+  ASSERT_EQ(OB_SUCCESS, record->init_data(source_owner, false));
+  const std::string bytes(text_bytes, 'v');
+  for (int64_t i = 0; i < columns; ++i) {
+    record->get_not_null()[i] = false;
+    record->get_element_type()[i] = type->member(i).type->attributes();
+    ASSERT_EQ(OB_SUCCESS, record->get_element()[i].set_varchar(
+        ObString(bytes.size(), bytes.data()), *record->get_allocator()));
+  }
+  DatumParameter parameter;
+  ASSERT_EQ(OB_SUCCESS, parameter.set_extend(reinterpret_cast<int64_t>(record), pl::PL_RECORD_TYPE,
+      source_owner, pl::ObRecordType::get_init_size(columns)));
+  Datum source;
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(parameter.datum_, source));
+  ObSubQueryIterator::PendingCacheEntry first;
+  ASSERT_EQ(OB_SUCCESS, iterator_.prepare_cache_result(source, result_expr_, first));
+  ASSERT_TRUE(first.ready_); // The historical insertion estimate only sees the root carrier span.
+  EXPECT_FALSE(iterator_.check_can_insert(1)); // Recursive children counted by actual cache-arena used().
+  ObSubQueryIterator::PendingCacheEntry second;
+  ASSERT_EQ(OB_SUCCESS, iterator_.prepare_cache_result(source, result_expr_, second));
+  EXPECT_FALSE(second.ready_);
+  ASSERT_EQ(OB_SUCCESS, iterator_.reset_hash_map());
+  EXPECT_TRUE(iterator_.check_can_insert(1));
+}
+
 } // namespace
 
 int main(int argc, char **argv)

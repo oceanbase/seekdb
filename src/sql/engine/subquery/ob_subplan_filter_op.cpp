@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_subplan_filter_op.h"
+#include "lib/ob_abort.h"
 
 namespace oceanbase
 {
@@ -69,6 +70,7 @@ ObSubQueryIterator::ObSubQueryIterator(ObOperator &op)
     inited_(false),
     store_("SpfIter"),
     mem_entity_(nullptr),
+    cache_value_owner_(nullptr),
     id_(-1),
     parent_(nullptr),
     memory_used_(0),
@@ -81,12 +83,126 @@ ObSubQueryIterator::ObSubQueryIterator(ObOperator &op)
 {
 }
 
+ObSubQueryIterator::~ObSubQueryIterator()
+{
+  const int ret = close_cache_values();
+  if (ret != OB_SUCCESS) {
+    LOG_ERROR("SPF iterator resource cleanup failed before arena destroy", K(ret));
+    ob_abort();
+  }
+  if (cache_value_owner_ != nullptr) {
+    cache_value_owner_->~NativeSqlValueOwner();
+    op_.get_exec_ctx().get_allocator().free(cache_value_owner_);
+    cache_value_owner_ = nullptr;
+  }
+  if (hashmap_.created()) { hashmap_.destroy(); }
+  if (mem_entity_ != nullptr) { DESTROY_CONTEXT(mem_entity_); mem_entity_ = nullptr; }
+}
+
+int ObSubQueryIterator::retain_scalar_result(const Datum &source, const SqlType &type, Datum &output)
+{
+  return parent_ == nullptr ? OB_NOT_INIT : parent_->retain_scalar_result(source, type, output);
+}
+
+int ObSubQueryIterator::cache_key_eligible(bool &eligible) const
+{
+  int ret = OB_SUCCESS;
+  bool candidate = true;
+  if (probe_row_.cnt_ < 0 || probe_row_.types_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  for (int64_t i = 0; ret == OB_SUCCESS && i < probe_row_.cnt_; ++i) {
+    if (probe_row_.types_[i] == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (probe_row_.types_[i]->requires_resource_clone()) { candidate = false; }
+  }
+  if (ret == OB_SUCCESS) { eligible = candidate; }
+  return ret;
+}
+
+int ObSubQueryIterator::get_cache_value_owner(NativeSqlValueOwner *&owner)
+{
+  int ret = OB_SUCCESS;
+  if (mem_entity_ == nullptr) { ret = OB_NOT_INIT; }
+  else if (cache_value_owner_ == nullptr) {
+    void *memory = op_.get_exec_ctx().get_allocator().alloc(sizeof(NativeSqlValueOwner));
+    if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      cache_value_owner_ = new (memory) NativeSqlValueOwner(
+          mem_entity_->get_arena_allocator(), op_.get_exec_ctx().get_my_session());
+    }
+  }
+  if (ret == OB_SUCCESS) { owner = cache_value_owner_; }
+  return ret;
+}
+
+int ObSubQueryIterator::close_cache_values()
+{
+  int ret = OB_SUCCESS;
+  // The map must stop borrowing resource values before any pointee is released.
+  if (hashmap_.created()) { ret = hashmap_.reuse(); }
+  if (ret == OB_SUCCESS && cache_value_owner_ != nullptr) {
+    ret = cache_value_owner_->enforce_empty_before_destroy();
+  }
+  return ret;
+}
+
+int ObSubQueryIterator::store_retained_resource_row()
+{
+  struct LegacyScratch { alignas(8) char bytes_[64]; };
+  ObSEArray<ObDatum, 8> views;
+  ObSEArray<LegacyScratch, 8> scratches;
+  const auto &expressions = get_output();
+  int ret = OB_SUCCESS;
+  if (stored_output_types_.empty()) {
+    for (int64_t i = 0; ret == OB_SUCCESS && i < expressions.count(); ++i) {
+      const SqlType *type = nullptr;
+      if (expressions.at(i) == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else if (OB_FAIL(expressions.at(i)->get_sql_type().clone_to(
+          op_.get_exec_ctx().get_allocator(), type))) {}
+      else { ret = stored_output_types_.push_back(type); }
+    }
+  }
+  if (ret == OB_SUCCESS) { ret = validate_stored_output_types(); }
+  if (ret == OB_SUCCESS) { ret = views.prepare_allocate(expressions.count()); }
+  if (ret == OB_SUCCESS) { ret = scratches.prepare_allocate(expressions.count()); }
+  for (int64_t i = 0; ret == OB_SUCCESS && i < expressions.count(); ++i) {
+    const ObExpr *expr = expressions.at(i);
+    Datum *source = nullptr;
+    Datum retained;
+    if (expr == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(expr->eval(op_.get_eval_ctx(), source))) {}
+    else if (expr->get_sql_type().requires_resource_clone()
+        && OB_FAIL(retain_scalar_result(*source, expr->get_sql_type(), retained))) {}
+    else {
+      const Datum &value = expr->get_sql_type().requires_resource_clone() ? retained : *source;
+      ret = expr->get_datum_copy_plan().legacy_view(value, views.at(i), scratches.at(i).bytes_, 64);
+    }
+  }
+  // The writer owns descriptor bytes; the execution owner retains pointees.
+  if (ret == OB_SUCCESS) { ret = store_.add_row(views.get_data(), views.count(), 0, nullptr); }
+  return ret;
+}
+
+int ObSubQueryIterator::validate_stored_output_types() const
+{
+  int ret = OB_SUCCESS;
+  if (!stored_output_types_.empty()) {
+    if (stored_output_types_.count() != get_output().count()) { ret = OB_ERR_UNEXPECTED; }
+    for (int64_t i = 0; ret == OB_SUCCESS && i < stored_output_types_.count(); ++i) {
+      if (get_output().at(i) == nullptr || stored_output_types_.at(i) == nullptr
+          || !stored_output_types_.at(i)->equals(get_output().at(i)->get_sql_type())) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSubQueryIterator::get_next_row()
 {
   int ret = OB_SUCCESS;
   bool is_from_store = init_plan_ && inited_;
   if (is_from_store) {
-    ret = store_it_.get_next_row(get_output(), op_.get_eval_ctx());
+    ret = validate_stored_output_types();
+    if (ret == OB_SUCCESS) { ret = store_it_.get_next_row(get_output(), op_.get_eval_ctx()); }
   } else if (parent_->enable_left_das_batch()) {
     uint64_t parent_spf_group = 0;
     int64_t parent_group_rescan_cnt = 0;
@@ -234,6 +350,7 @@ void ObSubQueryIterator::reuse()
   inited_ = false;
   store_it_.reset();
   store_.reset();
+  stored_output_types_.reuse();
   iter_brs_ = NULL;
   batch_size_ = 0;
   batch_row_pos_ = 0;
@@ -245,16 +362,31 @@ int ObSubQueryIterator::prepare_init_plan()
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
-    if (!store_.is_inited()) {
+    bool resource_output = false;
+    for (int64_t i = 0; OB_SUCC(ret) && i < get_output().count(); ++i) {
+      if (get_output().at(i) == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else { resource_output |= get_output().at(i)->get_sql_type().requires_resource_clone(); }
+    }
+    if (OB_SUCC(ret) && !store_.is_inited()) {
       // TODO bin.lb: use auto memory management
       OZ(store_.init(1L << 20));
       OZ(store_.alloc_dir_id());
     }
-    if (op_.is_vectorized()) {
+    if (OB_FAIL(ret)) {
+    } else if (op_.is_vectorized()) {
       const ObBatchRows *iter_brs = NULL;
       do {
         int64_t stored_rows_count = 0;
         if (OB_FAIL(op_.get_next_batch(op_.get_spec().max_batch_size_, iter_brs))) {
+        } else if (resource_output) {
+          ObEvalCtx::BatchInfoScopeGuard guard(op_.get_eval_ctx());
+          guard.set_batch_size(iter_brs->size_);
+          for (int64_t i = 0; OB_SUCC(ret) && i < iter_brs->size_; ++i) {
+            if (!iter_brs->skip_->at(i)) {
+              guard.set_batch_idx(i);
+              ret = store_retained_resource_row();
+            }
+          }
         } else if (OB_FAIL(store_.add_batch(get_output(), op_.get_eval_ctx(), *iter_brs->skip_,
                                             iter_brs->size_, stored_rows_count))) {
         }
@@ -266,7 +398,8 @@ int ObSubQueryIterator::prepare_init_plan()
       }
     } else {
       while (OB_SUCC(ret) && OB_SUCC(get_next_row())) {
-        OZ(store_.add_row(get_output(), &op_.get_eval_ctx()));
+        if (resource_output) { OZ(store_retained_resource_row()); }
+        else { OZ(store_.add_row(get_output(), &op_.get_eval_ctx())); }
       }
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
@@ -343,11 +476,16 @@ int ObSubQueryIterator::get_curr_probe_row()
 int ObSubQueryIterator::get_refactored(Datum &out, const ObExpr &result_expr)
 {
   CachedResult cached;
-  int ret = hashmap_.get_refactored(probe_row_, cached);
+  bool eligible = false;
+  int ret = cache_key_eligible(eligible);
+  if (ret == OB_SUCCESS && !eligible) { ret = OB_HASH_NOT_EXIST; }
+  if (ret == OB_SUCCESS) { ret = hashmap_.get_refactored(probe_row_, cached); }
   if (OB_SUCC(ret)) {
     if (cached.type_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
     else if (!cached.type_->equals(result_expr.get_sql_type())) { ret = OB_HASH_NOT_EXIST; }
-    else { out = cached.value_; }
+    else if (cached.type_->requires_resource_clone()) {
+      ret = retain_scalar_result(cached.value_, *cached.type_, out);
+    } else { out = cached.value_; }
   }
   return ret;
 }
@@ -355,7 +493,10 @@ int ObSubQueryIterator::get_refactored(Datum &out, const ObExpr &result_expr)
 int ObSubQueryIterator::prepare_cache_result(const Datum &result, const ObExpr &result_expr,
                                              PendingCacheEntry &pending)
 {
-  int ret = OB_SUCCESS;
+  bool eligible = false;
+  int ret = cache_key_eligible(eligible);
+  if (ret != OB_SUCCESS) { return ret; }
+  if (!eligible) { pending = PendingCacheEntry(); return OB_SUCCESS; }
   int64_t bytes = sizeof(Datum) * (probe_row_.cnt_ + 1)
       + sizeof(SqlType *) * probe_row_.cnt_;
   int64_t span = 0;
@@ -395,6 +536,14 @@ int ObSubQueryIterator::prepare_cache_result(const Datum &result, const ObExpr &
       // A cache entry outlives the input frame. Resources must use the real
       // domain cloner; copying only their wrapper would retain stale pointees.
       if (OB_FAIL(result_expr.get_sql_type().clone_to(*allocator, result_type))) {
+      } else if (result_type->requires_resource_clone()) {
+        NativeSqlValueOwner *owner = nullptr;
+        if (OB_FAIL(get_cache_value_owner(owner))) {
+        } else {
+          // Complete native Type is authoritative; unknown resource leaves
+          // have no implicit runtime namespace and fail before publication.
+          ret = clone_native_owned_value(*result_type, result, *owner, value, nullptr, false);
+        }
       } else if (OB_FAIL(ObExpr::clone_native_value(*result_type, result, *allocator, value))) {
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < key.cnt_; ++i) {
@@ -443,12 +592,10 @@ int ObSubQueryIterator::cache_result(const Datum &result, const ObExpr &result_e
 
 int ObSubQueryIterator::reset_hash_map()
 {
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(mem_entity_)) {
-    mem_entity_->reuse();
-  }
-  memory_used_ = 0;
-  if (hashmap_.created() && OB_FAIL(hashmap_.reuse())) {
+  const int ret = close_cache_values();
+  if (ret == OB_SUCCESS) {
+    if (mem_entity_ != nullptr) { mem_entity_->reuse(); }
+    memory_used_ = 0;
   }
   return ret;
 }
@@ -525,6 +672,7 @@ ObSubPlanFilterOp::ObSubPlanFilterOp(
   : ObOperator(exec_ctx, spec, input),
     iter_end_(false),
     max_group_size_(0),
+    execution_value_owner_(nullptr),
     update_set_mem_(NULL),
     enable_left_px_batch_(false),
     current_group_(0),
@@ -542,6 +690,49 @@ ObSubPlanFilterOp::ObSubPlanFilterOp(
 {
 }
 
+int ObSubPlanFilterOp::retain_scalar_result(const Datum &source, const SqlType &type, Datum &output)
+{
+  int ret = OB_SUCCESS;
+  if (!type.requires_resource_clone()) {
+    ret = ObExpr::clone_native_value(type, source, ctx_.get_allocator(), output);
+  } else {
+    if (execution_value_owner_ == nullptr) {
+      void *memory = ctx_.get_allocator().alloc(sizeof(NativeSqlValueOwner));
+      if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { execution_value_owner_ = new (memory) NativeSqlValueOwner(ctx_.get_allocator(), ctx_.get_my_session()); }
+    }
+    if (ret == OB_SUCCESS) {
+      ret = clone_native_owned_value(type, source, *execution_value_owner_, output, nullptr, true);
+    }
+  }
+  return ret;
+}
+
+int ObSubPlanFilterOp::close_owned_values()
+{
+  int first_error = OB_SUCCESS;
+  FOREACH_CNT(it, subplan_iters_) {
+    if (*it != nullptr) {
+      const int ret = (*it)->close_cache_values();
+      if (first_error == OB_SUCCESS && ret != OB_SUCCESS) { first_error = ret; }
+    }
+  }
+  if (execution_value_owner_ != nullptr) {
+    const int ret = execution_value_owner_->enforce_empty_before_destroy();
+    if (first_error == OB_SUCCESS && ret != OB_SUCCESS) { first_error = ret; }
+  }
+  return first_error;
+}
+
+void ObSubPlanFilterOp::enforce_empty_before_destroy()
+{
+  const int ret = close_owned_values();
+  if (ret != OB_SUCCESS) {
+    LOG_ERROR("SPF resource cleanup failed before arena destroy", K(ret));
+    ob_abort();
+  }
+}
+
 ObSubPlanFilterOp::~ObSubPlanFilterOp()
 {
   destroy_subplan_iters();
@@ -551,6 +742,7 @@ ObSubPlanFilterOp::~ObSubPlanFilterOp()
 
 void ObSubPlanFilterOp::destroy_subplan_iters()
 {
+  enforce_empty_before_destroy();
   FOREACH_CNT(it, subplan_iters_) {
     if (NULL != *it) {
       (*it)->~Iterator();
@@ -558,6 +750,11 @@ void ObSubPlanFilterOp::destroy_subplan_iters()
     }
   }
   subplan_iters_.reset();
+  if (execution_value_owner_ != nullptr) {
+    execution_value_owner_->~NativeSqlValueOwner();
+    ctx_.get_allocator().free(execution_value_owner_);
+    execution_value_owner_ = nullptr;
+  }
 }
 
 void ObSubPlanFilterOp::destroy_px_batch_rescan_status()
@@ -783,6 +980,8 @@ int ObSubPlanFilterOp::inner_open()
 
 int ObSubPlanFilterOp::inner_close()
 {
+  const int ret = close_owned_values();
+  if (ret != OB_SUCCESS) { return ret; }
   destroy_subplan_iters();
   destroy_update_set_mem();
   if (MY_SPEC.enable_das_group_rescan_) {

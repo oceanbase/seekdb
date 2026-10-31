@@ -83,6 +83,8 @@ public:
   // Must succeed before arena reuse. Failed tokens remain reachable; clear
   // still visits the other tokens and returns the first error.
   int clear();
+  // Checked terminal gate; callers must not destroy an arena on failure.
+  int enforce_empty_before_destroy();
   int64_t resource_count() const { return count_; }
   common::ObIAllocator &allocator() { return allocator_; }
   ObSQLSessionInfo *session() const { return session_; }
@@ -98,6 +100,10 @@ private:
   NativeSqlValueOwner &operator=(const NativeSqlValueOwner &) = delete;
   friend int clone_native_owned_value(const common::SqlType &, const common::Datum &,
                                       NativeSqlValueOwner &, common::Datum &);
+  friend int clone_native_owned_value(const common::SqlType &, const common::Datum &,
+      NativeSqlValueOwner &, common::Datum &, const INativePlTypeResolver *, bool);
+  int clone(const common::SqlType &, const common::Datum &, common::Datum &,
+            const INativePlTypeResolver *, bool need_new_allocator, bool prepared_native_type);
   void keep(Resource *resource)
   { resource->next_ = resources_; resources_ = resource; ++count_; }
   common::ObIAllocator &allocator_;
@@ -113,6 +119,13 @@ private:
 // closed. No existing PL callback is removed, redirected or weakened here.
 int clone_native_owned_value(const common::SqlType &type, const common::Datum &source,
                              NativeSqlValueOwner &owner, common::Datum &output);
+
+// Native producer already paired source with this complete Type. The resolver
+// is borrowed only for unknown heterogeneous leaves; no current namespace is
+// inferred and no borrowed resolver is saved in the owner.
+int clone_native_owned_value(const common::SqlType &type, const common::Datum &source,
+    NativeSqlValueOwner &owner, common::Datum &output,
+    const INativePlTypeResolver *call_resolver, bool need_new_allocator);
 
 } // namespace sql
 } // namespace oceanbase

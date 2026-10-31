@@ -239,7 +239,8 @@ int ObExprSubQueryRef::expr_eval(
           }
         } else {
           found_in_hash_map = true;
-          if (OB_FAIL(expr.deep_copy_datum(ctx, out))) {
+          if (expr.get_sql_type().requires_resource_clone()) { expr_datum = out; }
+          else if (OB_FAIL(expr.deep_copy_datum(ctx, out))) {
           }
         }
       }
@@ -252,10 +253,16 @@ int ObExprSubQueryRef::expr_eval(
         } else {
         }
       } else if (OB_FAIL(iter->get_output().at(0)->eval(iter->get_eval_ctx(), datum))) {
+      } else if (expr.get_sql_type().requires_resource_clone()) {
+        if (!iter->get_output().at(0)->get_sql_type().equals(expr.get_sql_type())) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          // Retain before the second advance can reset the producer's owner.
+          ret = iter->retain_scalar_result(*datum, expr.get_sql_type(), expr_datum);
+        }
       } else if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), *datum,
                          ctx.exec_ctx_.get_allocator(), expr_datum))) {
-        // The second child advance may reset both payload bytes and a complex
-        // resource owner. A same-statement descriptor copy is insufficient.
+        // Ordinary values retain the existing copy path and allocation policy.
       }
       if (OB_SUCC(ret) && is_hash_enabled
                        && iter->probe_row_.cnt_ > 0

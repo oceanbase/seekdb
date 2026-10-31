@@ -64,7 +64,7 @@ bool same_full_declaration(const SqlType &left, const SqlType &right, int depth 
 
 int resolve_node(const SqlType *requested, const DatumParameter &source,
                  const INativePlTypeResolver *resolver, SqlType &scalar,
-                 const SqlType *&type, const ObRecordType *&declaration)
+                 const SqlType *&type, const ObRecordType *&declaration, bool prepared_native_type)
 {
   int ret = OB_SUCCESS;
   type = requested;
@@ -78,7 +78,8 @@ int resolve_node(const SqlType *requested, const DatumParameter &source,
   const uint8_t subtype = meta.is_pl_extend_type() ? meta.get_extend_type()
       : requested == nullptr ? 0 : requested->legacy_meta().get_extend_type();
   if (record && subtype != PL_RECORD_TYPE) { return OB_NOT_SUPPORTED; }
-  if (record || (type == nullptr && complex)) {
+  if ((record && !(prepared_native_type && requested != nullptr))
+      || (type == nullptr && complex)) {
     const SqlType *resolved = nullptr;
     if (resolver == nullptr) { ret = OB_NOT_SUPPORTED; }
     else if (OB_FAIL(resolver->resolve(requested, source, resolved, declaration))) {}
@@ -93,9 +94,42 @@ int resolve_node(const SqlType *requested, const DatumParameter &source,
   return ret;
 }
 
-int record_declaration(const SqlType &type, const DatumParameter &source,
-                       const ObRecordType *declaration, ObPLRecord *&record)
+int prepared_record_shape(const SqlType &type, const DatumParameter &source,
+                            ObPLRecord *&record)
 {
+  const uint64_t id = type.pl_declaration().declaration_id;
+  int ret = OB_SUCCESS;
+  if (type.legacy_meta().get_extend_type() != PL_RECORD_TYPE
+      || (type.form() != SqlTypeForm::Record && type.form() != SqlTypeForm::UserDefined)
+      || !same_full_declaration(type, type) || !type.pl_declaration().is_specified()
+      || type.member_count() > INT32_MAX
+      || source.get_accuracy().get_accuracy() != id) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!source.is_null()) {
+    if (!source.datum_.has_ext_value() || source.get_ext() == 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      record = reinterpret_cast<ObPLRecord *>(source.get_ext());
+      if (record->get_type() != PL_RECORD_TYPE || record->get_id() != id
+          || (record->get_count() != OB_INVALID_COUNT && record->get_count() != type.member_count())
+          || (!record->is_inited() && record->get_allocator() != nullptr)) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+  }
+  for (int64_t i = 0; ret == OB_SUCCESS && record != nullptr && record->is_inited()
+                     && i < type.member_count(); ++i) {
+    if (record->get_not_null()[i] == type.member(i).nullable) { ret = OB_INVALID_ARGUMENT; }
+  }
+  return ret;
+}
+
+int record_declaration(const SqlType &type, const DatumParameter &source,
+                       const ObRecordType *declaration, ObPLRecord *&record, bool prepared_native_type)
+{
+  if (prepared_native_type && declaration == nullptr) {
+    return prepared_record_shape(type, source, record);
+  }
   int ret = OB_SUCCESS;
   const uint64_t declaration_id = declaration == nullptr ? OB_INVALID_ID : declaration->get_user_type_id();
   const bool source_has_declaration = source.get_type_meta().is_pl_extend_type()
@@ -141,7 +175,7 @@ int record_declaration(const SqlType &type, const DatumParameter &source,
 }
 
 int check_typed_graph(const SqlType *requested, const DatumParameter &source,
-                      const INativePlTypeResolver *resolver, int depth)
+                      const INativePlTypeResolver *resolver, int depth, bool prepared_native_type)
 {
   if (depth > MAX_GRAPH_DEPTH) { return OB_SIZE_OVERFLOW; }
   const SqlTypeMeta &declared_meta = source.is_null() && source.get_type_meta().is_null()
@@ -153,12 +187,12 @@ int check_typed_graph(const SqlType *requested, const DatumParameter &source,
   const SqlType *type = nullptr;
   const ObRecordType *declaration = nullptr;
   Datum imported;
-  int ret = resolve_node(requested, source, resolver, scalar, type, declaration);
+  int ret = resolve_node(requested, source, resolver, scalar, type, declaration, prepared_native_type);
   if (ret != OB_SUCCESS) {}
   else if (source.is_null()) {
     if (type->legacy_meta().is_pl_extend_type()) {
       ObPLRecord *unused = nullptr;
-      ret = record_declaration(*type, source, declaration, unused);
+      ret = record_declaration(*type, source, declaration, unused, prepared_native_type && requested != nullptr);
     }
   } else if (type->kind() != source.get_type()
       || (type->kind() == ObExtendType && type->legacy_meta().get_extend_type() != source.get_extend_type())) {
@@ -171,19 +205,19 @@ int check_typed_graph(const SqlType *requested, const DatumParameter &source,
         || (type->array_limit() >= 0 && array->count_ > type->array_limit())) { ret = OB_INVALID_ARGUMENT; }
     else {
       for (int64_t i = 0; ret == OB_SUCCESS && i < array->count_; ++i) {
-        ret = check_typed_graph(type->element(), array->data_[i], resolver, depth + 1);
+        ret = check_typed_graph(type->element(), array->data_[i], resolver, depth + 1, prepared_native_type);
       }
     }
   } else if (source.get_type_meta().is_pl_extend_type()) {
     ObPLRecord *record = nullptr;
-    ret = record_declaration(*type, source, declaration, record);
+    ret = record_declaration(*type, source, declaration, record, prepared_native_type && requested != nullptr);
     // A declared but uninitialized record has no source data to inspect. Its
     // result gets NULL fields and metadata from the complete declaration.
     for (int64_t i = 0; ret == OB_SUCCESS && record->is_inited() && i < type->member_count(); ++i) {
       DatumParameter field;
       field.assign_value(record->get_element()[i]);
       field.set_accuracy(record->get_element_type()[i].get_accuracy());
-      ret = check_typed_graph(type->member(i).type, field, resolver, depth + 1);
+      ret = check_typed_graph(type->member(i).type, field, resolver, depth + 1, prepared_native_type);
     }
   }
   return ret;
@@ -192,7 +226,7 @@ int check_typed_graph(const SqlType *requested, const DatumParameter &source,
 int release_graph(DatumParameter &value, ObIAllocator &allocator, ObSQLSessionInfo *session, int depth);
 int clone_graph(const SqlType *requested, const DatumParameter &source, DatumParameter &output,
     ObIAllocator &allocator, const INativePlTypeResolver *resolver,
-    ObSQLSessionInfo *session, bool need_new_allocator, int depth);
+    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type);
 
 int release_array(DatumParameterArray *array, ObIAllocator &allocator,
                   ObSQLSessionInfo *session, int depth)
@@ -259,8 +293,8 @@ int release_record(ObPLRecord *record, ObIAllocator &allocator,
 int release_graph(DatumParameter &value, ObIAllocator &allocator, ObSQLSessionInfo *session, int depth)
 {
   int ret = OB_SUCCESS;
-  if (depth > MAX_GRAPH_DEPTH) { ret = OB_SIZE_OVERFLOW; }
-  else if (value.is_null()) { value.reset(); }
+  if (value.is_null()) { value.reset(); }
+  else if (depth > MAX_GRAPH_DEPTH) { ret = OB_SIZE_OVERFLOW; }
   else {
     if (value.is_ext_sql_array()) {
       ret = release_array(value.get_array<DatumParameterArray>(), allocator, session, depth);
@@ -282,7 +316,7 @@ int release_graph(DatumParameter &value, ObIAllocator &allocator, ObSQLSessionIn
 
 int clone_array(const SqlType &type, const DatumParameter &source, DatumParameter &output,
     ObIAllocator &allocator, const INativePlTypeResolver *resolver,
-    ObSQLSessionInfo *session, bool need_new_allocator, int depth)
+    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type)
 {
   const auto *array = source.get_array<DatumParameterArray>();
   auto *copy = DatumParameterArray::alloc(allocator, array->count_);
@@ -292,7 +326,7 @@ int clone_array(const SqlType &type, const DatumParameter &source, DatumParamete
     copy->source_value_size_ = array->source_value_size_;
     for (int64_t i = 0; ret == OB_SUCCESS && i < array->count_; ++i) {
       ret = clone_graph(type.element(), array->data_[i], copy->data_[i], allocator,
-                        resolver, session, need_new_allocator, depth + 1);
+                        resolver, session, need_new_allocator, depth + 1, prepared_native_type);
     }
     DatumParameter candidate = source;
     candidate.datum_.ptr_ = nullptr; candidate.datum_.set_null();
@@ -308,13 +342,13 @@ int clone_array(const SqlType &type, const DatumParameter &source, DatumParamete
   return ret;
 }
 
-int clone_record(const SqlType &type, const ObRecordType &declaration,
+int clone_record(const SqlType &type,
     const DatumParameter &source, DatumParameter &output, ObIAllocator &allocator,
     const INativePlTypeResolver *resolver, ObSQLSessionInfo *session,
-    bool need_new_allocator, int depth)
+    bool need_new_allocator, int depth, bool prepared_native_type)
 {
   const auto *record = reinterpret_cast<const ObPLRecord *>(source.get_ext());
-  const int64_t count = declaration.get_record_member_count();
+  const int64_t count = type.member_count();
   const int64_t init_size = ObRecordType::get_init_size(count);
   DatumParameter candidate = source;
   candidate.datum_.ptr_ = nullptr; candidate.datum_.set_null();
@@ -324,7 +358,7 @@ int clone_record(const SqlType &type, const ObRecordType &declaration,
     void *memory = allocator.alloc(init_size);
     if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
     else {
-      copy = new (memory) ObPLRecord(declaration.get_user_type_id(), count);
+      copy = new (memory) ObPLRecord(type.pl_declaration().declaration_id, count);
       candidate.datum_.set_extend(reinterpret_cast<int64_t>(copy), PL_RECORD_TYPE, init_size);
       ret = copy->init_data(allocator, need_new_allocator);
     }
@@ -332,15 +366,14 @@ int clone_record(const SqlType &type, const ObRecordType &declaration,
   if (ret == OB_SUCCESS) {
     copy->set_is_null(record->is_null());
     for (int64_t i = 0; ret == OB_SUCCESS && i < count; ++i) {
-      const ObPLDataType &member = *declaration.get_record_member_type(i);
-      copy->get_not_null()[i] = member.is_not_null();
+      copy->get_not_null()[i] = !type.member(i).nullable;
       copy->get_element_type()[i] = type.member(i).type->attributes();
       if (record->is_inited()) {
         DatumParameter field, owned;
         field.assign_value(const_cast<ObPLRecord *>(record)->get_element()[i]);
         field.set_accuracy(const_cast<ObPLRecord *>(record)->get_element_type()[i].get_accuracy());
         ret = clone_graph(type.member(i).type, field, owned, *copy->get_allocator(),
-                          resolver, session, false, depth + 1);
+                          resolver, session, false, depth + 1, prepared_native_type);
         if (ret == OB_SUCCESS) { copy->get_element()[i] = owned.value_view(); }
       }
     }
@@ -358,7 +391,7 @@ int clone_record(const SqlType &type, const ObRecordType &declaration,
 
 int clone_graph(const SqlType *requested, const DatumParameter &source, DatumParameter &output,
     ObIAllocator &allocator, const INativePlTypeResolver *resolver,
-    ObSQLSessionInfo *session, bool need_new_allocator, int depth)
+    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type)
 {
   if (depth > MAX_GRAPH_DEPTH) { return OB_SIZE_OVERFLOW; }
   if (source.is_null()) {
@@ -370,16 +403,16 @@ int clone_graph(const SqlType *requested, const DatumParameter &source, DatumPar
   SqlType scalar;
   const SqlType *type = nullptr;
   const ObRecordType *declaration = nullptr;
-  int ret = resolve_node(requested, source, resolver, scalar, type, declaration);
+  int ret = resolve_node(requested, source, resolver, scalar, type, declaration, prepared_native_type);
   if (ret != OB_SUCCESS) {}
   else if (source.is_ext_sql_array()) {
-    ret = clone_array(*type, source, output, allocator, resolver, session, need_new_allocator, depth);
+    ret = clone_array(*type, source, output, allocator, resolver, session, need_new_allocator, depth, prepared_native_type);
   } else if (source.get_type_meta().is_pl_extend_type()) {
     ObPLRecord *record = nullptr;
-    if (OB_FAIL(record_declaration(*type, source, declaration, record))) {}
+    if (OB_FAIL(record_declaration(*type, source, declaration, record, prepared_native_type && requested != nullptr))) {}
     else {
-      ret = clone_record(*type, *declaration, source, output, allocator,
-                          resolver, session, need_new_allocator, depth);
+      ret = clone_record(*type, source, output, allocator,
+                          resolver, session, need_new_allocator, depth, prepared_native_type);
     }
   } else { ret = output.deep_copy(source, allocator); }
   return ret;
@@ -427,9 +460,9 @@ int clone_owned_parameter_graph(const SqlType &type, const DatumParameter &sourc
     DatumParameter &output, ObIAllocator &allocator, const INativePlTypeResolver *resolver,
     ObSQLSessionInfo *session, bool need_new_allocator)
 {
-  const int ret = check_typed_graph(&type, source, resolver, 0);
+  const int ret = check_typed_graph(&type, source, resolver, 0, false);
   return ret == OB_SUCCESS
-      ? clone_graph(&type, source, output, allocator, resolver, session, need_new_allocator, 0) : ret;
+      ? clone_graph(&type, source, output, allocator, resolver, session, need_new_allocator, 0, false) : ret;
 }
 
 int release_owned_parameter_graph(DatumParameter &value, ObIAllocator &allocator,
@@ -462,8 +495,8 @@ int NativeSqlValueOwner::clear()
   return first_error;
 }
 
-int clone_native_owned_value(const SqlType &type, const Datum &source,
-                             NativeSqlValueOwner &owner, Datum &output)
+int NativeSqlValueOwner::clone(const SqlType &type, const Datum &source, Datum &output,
+    const INativePlTypeResolver *resolver, bool need_new_allocator, bool prepared_native_type)
 {
   const DatumCopyPlan plan(type);
   int ret = OB_SUCCESS;
@@ -475,10 +508,10 @@ int clone_native_owned_value(const SqlType &type, const Datum &source,
     parameter.set_type_meta(type.legacy_meta());
     parameter.set_accuracy(type.accuracy());
     parameter.datum_.set_null();
-    ret = check_typed_graph(&type, parameter, owner.resolver_, 0);
-    if (OB_SUCC(ret)) { ret = plan.deep_copy(source, output, owner.allocator_); }
+    ret = check_typed_graph(&type, parameter, resolver, 0, prepared_native_type);
+    if (OB_SUCC(ret)) { ret = plan.deep_copy(source, output, allocator_); }
   } else if (!source.is_present() || !type.requires_resource_clone()) {
-    ret = plan.deep_copy(source, output, owner.allocator_);
+    ret = plan.deep_copy(source, output, allocator_);
   } else {
     alignas(8) char scratch[64];
     ObDatum legacy;
@@ -488,33 +521,52 @@ int clone_native_owned_value(const SqlType &type, const Datum &source,
       parameter.set_type_meta(type.legacy_meta());
       parameter.set_accuracy(type.accuracy());
       parameter.set_datum(legacy);
-      if (OB_FAIL(check_typed_graph(&type, parameter, owner.resolver_, 0))) {}
+      if (OB_FAIL(check_typed_graph(&type, parameter, resolver, 0, prepared_native_type))) {}
       else {
-        void *memory = owner.allocator_.alloc(sizeof(NativeSqlValueOwner::Resource));
+        void *memory = allocator_.alloc(sizeof(NativeSqlValueOwner::Resource));
         if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
         else {
           auto *resource = new (memory) NativeSqlValueOwner::Resource;
           Datum candidate;
-          ret = clone_owned_parameter_graph(type, parameter, resource->value_, owner.allocator_,
-                                             owner.resolver_, owner.session_);
+          ret = clone_graph(&type, parameter, resource->value_, allocator_, resolver,
+                            session_, need_new_allocator, 0, prepared_native_type);
           if (ret == OB_SUCCESS) { ret = plan.import_legacy(resource->value_.datum_, candidate); }
           if (ret == OB_SUCCESS) {
-            owner.keep(resource);
+            keep(resource);
             output = candidate;
           } else {
-            const int cleanup_ret = release_owned_parameter_graph(resource->value_, owner.allocator_, owner.session_);
+            const int cleanup_ret = release_owned_parameter_graph(resource->value_, allocator_, session_);
             if (cleanup_ret != OB_SUCCESS) {
               // No output was published, but a failed cleanup must remain
               // reachable so clear() can retry before the arena is reused.
-              owner.keep(resource);
+              keep(resource);
               LOG_ERROR("failed to rollback native PL clone", K(cleanup_ret), K(ret));
-            } else { resource->~Resource(); owner.allocator_.free(resource); }
+            } else { resource->~Resource(); allocator_.free(resource); }
           }
         }
       }
     }
   }
   return ret;
+}
+
+int NativeSqlValueOwner::enforce_empty_before_destroy()
+{
+  const int ret = clear();
+  return ret != OB_SUCCESS ? ret : count_ == 0 ? OB_SUCCESS : OB_ERR_UNEXPECTED;
+}
+
+int clone_native_owned_value(const SqlType &type, const Datum &source,
+                             NativeSqlValueOwner &owner, Datum &output)
+{
+  return owner.clone(type, source, output, owner.resolver_, true, false);
+}
+
+int clone_native_owned_value(const SqlType &type, const Datum &source,
+    NativeSqlValueOwner &owner, Datum &output, const INativePlTypeResolver *call_resolver,
+    bool need_new_allocator)
+{
+  return owner.clone(type, source, output, call_resolver, need_new_allocator, true);
 }
 
 } // namespace sql
