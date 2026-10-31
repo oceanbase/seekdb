@@ -25,3 +25,14 @@ cc_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )
+
+cc_test(
+    name = "test_tx_ctx_layout",
+    size = "small",
+    srcs = ["test_tx_ctx_layout.cpp"],
+    deps = [
+        "//bazel/third_party:gtest",
+        "//src/storage:tx_replay_test_headers",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+)

@@ -637,12 +637,6 @@ typedef lib::ObLockGuardWithTimeout<ObSpinLock> ObSpinLockGuardWithTimeout;
   }                                                                    \
 } while (0)
 
-#define REC_TRANS_TRACE_EXT2(recorder_ptr, trace_event, pairs...) do { \
-  if (NULL != recorder_ptr) {                                          \
-    REC_TRACE_EXT(*recorder_ptr, trace_event, ##pairs, OB_ID(opid), opid_);\
-  }                                                                    \
-} while (0)
-
 inline ObTxSEQ ObTxDesc::get_tx_seq(int64_t seq_abs) const
 {
   int64_t seq = seq_abs > 0 ? seq_abs : ObSequence::get_max_seq_no();
