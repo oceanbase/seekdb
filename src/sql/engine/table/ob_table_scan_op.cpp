@@ -19,6 +19,7 @@
 
 
 #include "ob_table_scan_op.h"
+#include "sql/engine/table/native_point_get_input.h"
 #include "common/json_type/ob_json_bin.h"
 #include "common/datum/datum_parameter_codec.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
@@ -723,7 +724,9 @@ ObTableScanOp::ObTableScanOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOp
     group_id_(0),
     tsc_monitor_info_(),
     need_check_outrow_lob_(false),
-    rand_scan_processor_()
+    rand_scan_processor_(),
+    native_point_get_input_(nullptr),
+    native_point_get_ready_(false)
 {
 }
 
@@ -1299,6 +1302,12 @@ int ObTableScanOp::build_bnlj_params()
 int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
 {
   int ret = OB_SUCCESS;
+  bool native_handled = false;
+  if (OB_FAIL(try_prepare_native_point_get(group_idx, need_sort, native_handled))) {
+    return ret;
+  } else if (native_handled) {
+    return ret;
+  }
   ObQueryRangeArray key_ranges;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   ObIAllocator &range_allocator = (table_rescan_allocator_ != nullptr ?
@@ -1345,6 +1354,48 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
       key_range->table_id_ = MY_CTDEF.scan_ctdef_.ref_table_id_;
       key_range->group_idx_ = group_idx;
       if (OB_FAIL(MY_INPUT.key_ranges_.push_back(*key_range))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableScanOp::try_prepare_native_point_get(int64_t group_idx, bool need_sort, bool &handled)
+{
+  int ret = OB_SUCCESS;
+  handled = false;
+  native_point_get_ready_ = false;
+  ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
+  DASRuntimeTableAccess *access = tsc_rtdef_.scan_rtdef_.table_access_;
+  // Start with one local, unpartitioned base-table point lookup. Other shapes
+  // keep their existing range generation and lifecycle (including rescan).
+  if (!need_extract_range() || need_sort || group_idx != 0 || in_rescan_
+      || MY_SPEC.use_dist_das_ || MY_SPEC.gi_above_ || MY_SPEC.batch_scan_flag_
+      || MY_SPEC.part_level_ != ObPartitionLevel::PARTITION_LEVEL_ZERO
+      || MY_SPEC.should_scan_index() || MY_CTDEF.lookup_ctdef_ != nullptr
+      || MY_CTDEF.attach_spec_.attach_ctdef_ != nullptr || MY_CTDEF.use_index_merge_
+      || MY_CTDEF.das_dppr_tbl_ != nullptr || MY_CTDEF.ordering_used_by_parent_
+      || !MY_CTDEF.scan_ctdef_.is_get_ || is_virtual_table(MY_SPEC.ref_table_id_)
+      || !MY_INPUT.key_ranges_.empty() || !MY_INPUT.mbr_filters_.empty()
+      || access == nullptr || access->get_tablet_accesses().size() != 1
+      || plan_ctx == nullptr || plan_ctx->has_for_update()
+      || MY_CTDEF.scan_ctdef_.table_param_.get_read_info().get_schema_rowkey_count() != 3) {
+    // Fall back before allocating or publishing any native input.
+  } else {
+    Datum values[3];
+    bool supported = false;
+    if (OB_FAIL(MY_CTDEF.get_query_range_provider().try_get_native_bigint_point(
+        plan_ctx->get_datum_param_store(), values, supported))) {
+    } else if (supported) {
+      if (native_point_get_input_ == nullptr) {
+        // Use the execution allocator, not the table-rescan scratch arena.
+        native_point_get_input_ = OB_NEWx(NativePointGetInput, &ctx_.get_allocator());
+        if (native_point_get_input_ == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(native_point_get_input_->init(values, group_idx))) {
+      } else if (OB_SUCC(ret)) {
+        native_point_get_ready_ = true;
+        handled = true;
       }
     }
   }
@@ -1561,6 +1612,7 @@ int ObTableScanOp::inner_close()
     iter_end_ = false;
     need_init_before_get_row_ = true;
     rand_scan_processor_.reset();
+    native_point_get_ready_ = false;
   }
   return ret;
 }
@@ -1609,6 +1661,11 @@ void ObTableScanOp::destroy()
     fold_iter_->release();
     fold_iter_ = nullptr;
   }
+  if (native_point_get_input_ != nullptr) {
+    native_point_get_input_->~NativePointGetInput();
+    native_point_get_input_ = nullptr;
+  }
+  native_point_get_ready_ = false;
   output_ = nullptr;
   scan_iter_ = nullptr;
   domain_index_.~ObDomainIndexCache();
@@ -2380,6 +2437,18 @@ OB_INLINE int ObTableScanOp::do_table_scan()
 int ObTableScanOp::cherry_pick_range_by_tablet_id(ObDASScanOp *scan_op)
 {
   int ret = OB_SUCCESS;
+  storage::ObTableScanParam &scan_param = scan_op->get_scan_param();
+  if (native_point_get_ready_) {
+    if (native_point_get_input_ == nullptr || !scan_param.key_ranges_.empty()
+        || !MY_INPUT.key_ranges_.empty()) {
+      return OB_ERR_UNEXPECTED;
+    }
+    scan_op->set_native_point_get_keys(&native_point_get_input_->lookup_keys());
+    return OB_SUCCESS;
+  }
+  // DAS reuse completes before the next range is prepared. Clear the prior
+  // native view when a rebind/rescan selects an existing range path.
+  scan_op->set_native_point_get_keys(nullptr);
   ObIArray<ObNewRange> &scan_ranges = scan_op->get_scan_param().key_ranges_;
   ObIArray<ObSpatialMBR> &mbr_filters = scan_op->get_scan_param().mbr_filters_;
   const ObIArray<ObNewRange> &input_ranges = MY_INPUT.key_ranges_;

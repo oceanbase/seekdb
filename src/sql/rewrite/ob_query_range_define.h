@@ -390,6 +390,9 @@ public:
 
   virtual ~ObPreRangeGraph() { reset(); }
 
+  int try_get_native_bigint_point(const common::DatumParamStore &parameters,
+                                  common::Datum (&values)[3], bool &supported) const override;
+
   void reset();
   virtual int deep_copy(const ObPreRangeGraph &other);
 

@@ -25,6 +25,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObStoreRowkey;
+}
 namespace transaction
 {
 class ObTxDesc;
@@ -91,6 +95,9 @@ struct DatumLookupKey
   blocksstable::ObStorageDatum *datums_ = nullptr;
   int64_t count_ = 0;
   int64_t group_id_ = 0;
+  // Optional producer-owned view for Memtable lookup. Its descriptors and
+  // payloads have the same lifetime as datums_; no storage-side cloning needed.
+  const common::ObStoreRowkey *cached_rowkey_ = nullptr;
   bool is_valid() const { return nullptr != datums_ && count_ > 0; }
   TO_STRING_KV(K_(count), K_(group_id), KP_(datums));
 };

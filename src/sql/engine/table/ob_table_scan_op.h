@@ -52,6 +52,7 @@ namespace sql
 class ObTableScanOp;
 class ObDASScanOp;
 class ObGlobalIndexLookupOpImpl;
+class NativePointGetInput;
 
 struct SnapshotScanItem
 {
@@ -516,6 +517,7 @@ protected:
   int build_bnlj_params();
   bool need_extract_range() const { return MY_SPEC.tsc_ctdef_.get_query_range_provider().has_range(); }
   int prepare_single_scan_range(int64_t group_idx = 0, bool need_sort = false);
+  int try_prepare_native_point_get(int64_t group_idx, bool need_sort, bool &handled);
   int prepare_index_merge_scan_range(int64_t group_idx = 0, bool need_sort = false);
   int prepare_range_for_each_index(int64_t group_idx, bool need_sort, ObIAllocator &allocator, ObDASBaseRtDef *rtdef);
   int reuse_table_rescan_allocator();
@@ -759,6 +761,10 @@ protected:
   bool need_check_outrow_lob_;
 private:
   ObRandScanProcessor rand_scan_processor_;
+  // Execution-owned, fixed-address input. Its borrowed storage views remain
+  // valid until DAS has reused/released the scan iterator.
+  NativePointGetInput *native_point_get_input_;
+  bool native_point_get_ready_;
  };
 
 } // end namespace sql

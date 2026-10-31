@@ -155,6 +155,53 @@ public:
     return ret;
   }
 
+  // Read-only view of source's actual bytes, valid only until source is
+  // modified, moved or destroyed (or referenced bytes are reused). No scratch
+  // address escapes: representations needing a wrapper/normalization cannot
+  // be borrowed. The caller must not write through legacy scalar setters.
+  int borrow_legacy(const Datum &source, ObDatum &destination) const
+  {
+    ObDatum candidate;
+    char scratch[64];
+    bool reference = false;
+    // Without coefficient materialization this performs the same state,
+    // flags, scalar narrowing and reference-shape preflight as export_legacy.
+    // A referenced Decimal requiring that final normalization is rejected below.
+    int ret = prepare_legacy(source, candidate, scratch, reference, false);
+    if (OB_FAIL(ret)) {
+    } else if (source.is_null()) {
+    } else if (!source.is_present()) {
+      ret = OB_NOT_SUPPORTED;
+    } else if (reference) {
+      if (meta_.get_type() == ObDecimalIntType) {
+        const bool known_precision = type_ != nullptr ? type_->has_precision()
+            : accuracy_.get_precision() != PRECISION_UNKNOWN_YET;
+        const ObPrecision precision = type_ != nullptr ? type_->precision() : accuracy_.get_precision();
+        if (known_precision && source.length() != coefficient_width(precision)) {
+          ret = OB_NOT_SUPPORTED;
+        }
+      }
+      if (OB_SUCC(ret)) { candidate.ptr_ = static_cast<const char *>(source.get_reference()); }
+    } else {
+      const SqlValueType kind = meta_.get_type();
+      if (kind == ObFloatType || kind == ObUFloatType) {
+        candidate.ptr_ = reinterpret_cast<const char *>(&source.payload_.f32_);
+      } else if (kind == ObDoubleType || kind == ObUDoubleType) {
+        candidate.ptr_ = reinterpret_cast<const char *>(&source.payload_.f64_);
+      } else {
+        candidate.ptr_ = (kind >= ObUTinyIntType && kind <= ObUInt64Type)
+            || kind == ObYearType || kind == ObBitType || kind == ObEnumType || kind == ObSetType
+            ? reinterpret_cast<const char *>(&source.payload_.u64_)
+            : reinterpret_cast<const char *>(&source.payload_.i64_);
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        candidate.ptr_ += sizeof(uint64_t) - candidate.len_;
+#endif
+      }
+    }
+    if (OB_SUCC(ret)) { destination = candidate; }
+    return ret;
+  }
+
   // Validation, scalar narrowing and capacity checks finish before any write.
   // Failure preserves destination, cursor and every byte of the caller buffer.
   int export_legacy(const Datum &source, ObDatum &destination, char *buffer,

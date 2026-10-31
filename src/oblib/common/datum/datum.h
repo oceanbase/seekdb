@@ -85,6 +85,8 @@ public:
   }
 
 private:
+  friend class DatumCopyPlan;
+
   union Payload
   {
     int64_t i64_;

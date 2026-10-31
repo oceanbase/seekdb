@@ -949,6 +949,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/table/ob_row_sample_scan_op.cpp",
             "src/sql/engine/table/ob_table_partition_ranges.cpp",
             "src/sql/engine/table/ob_table_row_store_op.cpp",
+            "src/sql/engine/table/native_point_get_input.cpp",
             "src/sql/engine/table/ob_table_scan_op.cpp",
             "src/sql/engine/table/ob_index_lookup_op_impl.cpp",
             "src/sql/engine/table/ob_table_scan_with_index_back_op.cpp",

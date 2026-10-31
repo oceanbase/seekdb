@@ -638,6 +638,59 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
   return ret;
 }
 
+int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &parameters,
+                                                Datum (&values)[3], bool &supported) const
+{
+  supported = false;
+  const ObRangeNode *node = node_head_;
+  if (!is_precise_get_ || column_count_ != 3 || column_metas_.count() != 3
+      || node_count_ != 1 || contain_exec_param_ || contain_geo_filters_
+      || fast_nlj_range_ || general_nlj_range_ || range_map_.in_params_.count() != 0
+      || node == nullptr || node->column_cnt_ != 3
+      || node->and_next_ != nullptr || node->or_next_ != nullptr
+      || node->start_keys_ == nullptr || node->end_keys_ == nullptr
+      || node->min_offset_ != 0 || node->max_offset_ != 2
+      || !node->include_start_ || !node->include_end_
+      || node->always_true_ || node->always_false_ || node->contain_in_
+      || node->is_domain_node_ || node->is_not_in_node_ || node->is_like_node_
+      || node->reserved_ != 0 || node->in_param_count_ != 0) {
+    return OB_SUCCESS;
+  }
+
+  const DatumParameter *inputs[3] = {nullptr, nullptr, nullptr};
+  for (int64_t i = 0; i < 3; ++i) {
+    const ObRangeColumnMeta *meta = column_metas_.at(i);
+    const int64_t index = node->start_keys_[i];
+    if (meta == nullptr || meta->column_type_.get_type() != ObIntType
+        || index != node->end_keys_[i] || index < 0 || index >= range_map_.expr_final_infos_.count()) {
+      return OB_SUCCESS;
+    }
+    const ObRangeMap::ExprFinalInfo &info = range_map_.expr_final_infos_.at(index);
+    // A single param bit excludes constants, casts, NULL-safe comparisons,
+    // row-expression modifiers and execution parameters in this first pilot.
+    if (info.flags_ != 1 || info.param_idx_ < 0 || info.param_idx_ >= parameters.count()) {
+      return OB_SUCCESS;
+    }
+    const DatumParameter &input = parameters.at(info.param_idx_);
+    if (input.get_type() != ObIntType || input.is_null() || input.datum_.is_ext()
+        || input.datum_.flag_ != ObDatumDesc::NONE || input.datum_.len_ != sizeof(int64_t)
+        || input.datum_.ptr_ == nullptr) {
+      return OB_SUCCESS;
+    }
+    inputs[i] = &input;
+  }
+
+  Datum candidate[3];
+  for (int64_t i = 0; i < 3; ++i) {
+    int64_t scalar = 0;
+    MEMCPY(&scalar, inputs[i]->datum_.ptr_, sizeof(scalar));
+    candidate[i].set_int(scalar);
+  }
+  for (int64_t i = 0; i < 3; ++i) { values[i] = candidate[i]; }
+  supported = true;
+  return OB_SUCCESS;
+}
+
 int ObPreRangeGraph::get_tablet_ranges(common::ObIAllocator &allocator,
                                        ObExecContext &exec_ctx,
                                        ObQueryRangeArray &ranges,

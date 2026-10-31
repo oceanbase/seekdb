@@ -183,6 +183,7 @@ int ObDASScanRtDef::init_pd_op(ObExecContext &exec_ctx,
 ObDASScanOp::ObDASScanOp(ObIAllocator &op_alloc)
   : ObIDASTaskOp(op_alloc),
     scan_param_(),
+    native_point_get_keys_(nullptr),
     scan_ctdef_(nullptr),
     scan_rtdef_(nullptr),
     result_(nullptr),
@@ -211,6 +212,7 @@ int ObDASScanOp::init_scan_param()
   scan_param_.tx_lock_timeout_ = scan_rtdef_->tx_lock_timeout_;
   scan_param_.index_id_ = scan_ctdef_->ref_table_id_;
   scan_param_.is_get_ = scan_ctdef_->is_get_;
+  scan_param_.datum_lookup_keys_ = native_point_get_keys_;
   scan_param_.is_for_foreign_check_ = scan_rtdef_->is_for_foreign_check_;
   scan_param_.timeout_ = scan_rtdef_->timeout_ts_;
   scan_param_.scan_flag_ = scan_rtdef_->scan_flag_;
@@ -576,6 +578,11 @@ int ObDASScanOp::reuse_iter()
     ret = OB_INVALID_ARGUMENT;
   }
 
+  if (OB_SUCC(ret)) {
+    // Unlike release_op(), reuse finishes the preceding input generation.
+    // Do not clear it until storage has stopped borrowing its cells.
+    set_native_point_get_keys(nullptr);
+  }
   return ret;
 }
 
@@ -1072,10 +1079,35 @@ int ObDASScanOp::get_index_merge_tablet_ids(common::ObIArray<common::ObTabletID>
   return ret;
 }
 
-OB_SERIALIZE_MEMBER((ObDASScanOp, ObIDASTaskOp),
-                    scan_param_.key_ranges_,
-                    scan_ctdef_,
-                    scan_rtdef_);
+OB_DEF_SERIALIZE(ObDASScanOp)
+{
+  int ret = OB_SUCCESS;
+  if (native_point_get_keys_ != nullptr) {
+    // A local-only key must not become an empty GET in a copied DAS task.
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(ObIDASTaskOp::serialize(buf, buf_len, pos))) {
+  } else {
+    LST_DO_CODE(OB_UNIS_ENCODE, scan_param_.key_ranges_, scan_ctdef_, scan_rtdef_);
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObDASScanOp)
+{
+  int ret = ObIDASTaskOp::deserialize(buf, data_len, pos);
+  if (OB_SUCC(ret)) {
+    set_native_point_get_keys(nullptr);
+    LST_DO_CODE(OB_UNIS_DECODE, scan_param_.key_ranges_, scan_ctdef_, scan_rtdef_);
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObDASScanOp)
+{
+  int64_t len = ObIDASTaskOp::get_serialize_size();
+  LST_DO_CODE(OB_UNIS_ADD_LEN, scan_param_.key_ranges_, scan_ctdef_, scan_rtdef_);
+  return len;
+}
 
 ObLocalIndexLookupOp::~ObLocalIndexLookupOp()
 {

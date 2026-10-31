@@ -199,11 +199,14 @@ int ObTableScanRange::init_datum_rowkeys(
   owns_rowkey_datums_ = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < keys.count(); ++i) {
     const DatumLookupKey &key = keys.at(i);
-    if (OB_UNLIKELY(!key.is_valid())) {
+    if (OB_UNLIKELY(!key.is_valid())
+        || (key.cached_rowkey_ != nullptr && (!key.cached_rowkey_->is_valid()
+            || key.cached_rowkey_->get_value_count() != key.count_))) {
       ret = OB_INVALID_ARGUMENT;
     } else {
       ObDatumRowkey rowkey(key.datums_, key.count_);
       rowkey.set_group_idx(key.group_id_);
+      if (key.cached_rowkey_ != nullptr) { rowkey.store_rowkey_ = *key.cached_rowkey_; }
       if (OB_FAIL(rowkeys_.push_back(rowkey))) {
       }
     }
