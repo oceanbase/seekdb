@@ -62,7 +62,7 @@ int ObExprSpivDim::cg_expr(
 int ObExprSpivDim::generate_spiv_dim(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSEDx(raw_ctx, eval_ctx);

@@ -576,7 +576,7 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
     // if exact mode is on, not needs to do fast parser
     bool enable_exact_mode = pc_ctx.sql_ctx_.session_info_->get_enable_exact_mode();
     fp_result.cache_params_ =
-        &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update());
+        &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store());
     if (OB_FAIL(construct_plan_cache_key(*pc_ctx.sql_ctx_.session_info_,
                                          ObLibCacheNameSpace::NS_CRSR,
                                          fp_result.pc_key_))) {
@@ -1790,7 +1790,7 @@ template int ObPlanCache::add_ps_plan<ObPLFunction>(ObPLFunction *plan, ObPlanCa
 //                K(pc_ctx.exec_ctx_.get_physical_plan_ctx()),
 //                K(ret));
 //   } else if (FALSE_IT(pc_ctx.fp_result_.cache_params_ =
-//     &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update()))) {
+//     &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store()))) {
 //     //do nothing
 //   } else if (FALSE_IT(original_param_cnt = pc_ctx.fp_result_.cache_params_->count())) {
 //     // do nothing
@@ -1881,7 +1881,7 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
                K(pc_ctx.exec_ctx_.get_physical_plan_ctx()),
                K(ret));
   } else if (FALSE_IT(pc_ctx.fp_result_.cache_params_ =
-    &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store_for_update()))) {
+    &(pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store()))) {
     //do nothing
   } else if (OB_FAIL(construct_plan_cache_key(pc_ctx, ObLibCacheNameSpace::NS_CRSR))) {
   } else {

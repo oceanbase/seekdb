@@ -38,7 +38,7 @@ public:
                                const override;
   static int set_value(ObJsonSeekResult &hit, ObIJsonBase *&json_doc, ObIJsonBase* json_val,
                        ObJsonPath *json_path, ObIAllocator *allocator);
-  static int eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                      ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }

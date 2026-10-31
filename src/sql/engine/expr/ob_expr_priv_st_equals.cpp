@@ -57,7 +57,7 @@ int ObExprPrivSTEquals::calc_result_type2(ObExprResType &type, ObExprResType &ty
   return ret;
 }
 
-int ObExprPrivSTEquals::get_input_geometry(common::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &allocator, ObEvalCtx &ctx, ObExpr *gis_arg, ObDatum *gis_datum,
+int ObExprPrivSTEquals::get_input_geometry(common::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &allocator, ObEvalCtx &ctx, ObExpr *gis_arg, Datum *gis_datum,
     const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty)
 {
   int ret = OB_SUCCESS;
@@ -86,7 +86,7 @@ int ObExprPrivSTEquals::get_input_geometry(common::ObSrsCacheGuard &srs_guard, M
   return ret;
 }
 
-int ObExprPrivSTEquals::eval_priv_st_equals(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTEquals::eval_priv_st_equals(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObExpr *gis_arg1 = expr.args_[0];
@@ -103,8 +103,8 @@ int ObExprPrivSTEquals::eval_priv_st_equals(const ObExpr &expr, ObEvalCtx &ctx, 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *gis_datum1 = nullptr;
-  ObDatum *gis_datum2 = nullptr;
+  Datum *gis_datum1 = nullptr;
+  Datum *gis_datum2 = nullptr;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {
     res.set_null();

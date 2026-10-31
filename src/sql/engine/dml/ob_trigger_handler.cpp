@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "common/datum/datum_parameter_array.h"
+#include "common/datum/datum_value_projection.h"
 #include "share/datum/typed_datum_compare.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -68,6 +69,13 @@ int copy_trigger_value(const DatumValue &source, DatumValue &destination, ObIAll
     else { DatumParameterArray::release_owned(owned, owner); }
   }
   return ret;
+}
+
+int trigger_value_view(const Datum &source, const ObExpr &expr,
+                       ObIAllocator &wrapper_owner, DatumValue &value)
+{
+  return project_native_datum_value_view(source, expr.get_sql_type(), expr.obj_meta_,
+      expr.obj_datum_map_, value.meta_, value, wrapper_owner);
 }
 
 bool is_delta_temp_lob(const DatumValue &value)
@@ -244,14 +252,16 @@ int TriggerHandle::init_param_old_row(
       destruct_trigger_record(trig_rtdef.old_record_, true);
     }
     for (int64_t i = 0; i < trig_ctdef.old_row_exprs_.count() && OB_SUCC(ret); ++i) {
-      ObDatum *datum;
+      Datum *datum;
       ObExpr *expr = trig_ctdef.old_row_exprs_.at(i);
       const bool is_udt = ob_is_geometry(expr->obj_meta_.get_type());
+      DatumValue source;
       if (OB_FAIL(trig_ctdef.old_row_exprs_.at(i)->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(trigger_value_view(*datum, *expr,
+                     eval_ctx.exec_ctx_.get_allocator(), source))) {
       } else if (is_udt) {
-        DatumValue source(*datum, expr->obj_meta_);
         DatumValue converted;
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
@@ -263,7 +273,7 @@ int TriggerHandle::init_param_old_row(
                        converted, cells[i], *trig_rtdef.old_record_->get_allocator()))) {
         }
       } else if (OB_FAIL(copy_trigger_value(
-                     DatumValue(*datum, expr->obj_meta_), cells[i],
+                     source, cells[i],
                      *trig_rtdef.old_record_->get_allocator()))) {
       }
       LOG_DEBUG("debug init param old expr", K(ret), K(i),
@@ -271,7 +281,7 @@ int TriggerHandle::init_param_old_row(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(trig_ctdef.rowid_old_expr_)) {
-      ObDatum *datum;
+      Datum *datum;
       if (OB_FAIL(trig_ctdef.rowid_old_expr_->eval(eval_ctx, datum))) {
       }
       LOG_DEBUG("debug init param rowid old expr", K(ret),
@@ -298,14 +308,16 @@ int TriggerHandle::init_param_new_row(
       destruct_trigger_record(trig_rtdef.new_record_, true);
     }
     for (int64_t i = 0; i < trig_ctdef.new_row_exprs_.count() && OB_SUCC(ret); ++i) {
-      ObDatum *datum;
+      Datum *datum;
       ObExpr *expr = trig_ctdef.new_row_exprs_.at(i);
       const bool is_udt = ob_is_geometry(expr->obj_meta_.get_type());
+      DatumValue source;
       if (OB_FAIL(trig_ctdef.new_row_exprs_.at(i)->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(trigger_value_view(*datum, *expr,
+                     eval_ctx.exec_ctx_.get_allocator(), source))) {
       } else if (is_udt) {
-        DatumValue source(*datum, expr->obj_meta_);
         DatumValue converted;
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
@@ -320,8 +332,8 @@ int TriggerHandle::init_param_new_row(
       } else if (!trig_ctdef.trig_col_info_.get_flags()[i].is_rowid_
           && expr->obj_meta_.get_type() == ObCharType) {
         DatumParameter padded;
-        padded.datum_ = *datum;
-        padded.set_type_meta(expr->obj_meta_);
+        padded.datum_ = source.datum_;
+        padded.set_type_meta(source.get_meta());
         // Pad fixed CHAR values according to session SQL mode and the
         // expression's character/byte length semantics.
         const common::SqlValueType &col_type = expr->obj_meta_.get_type();
@@ -338,7 +350,7 @@ int TriggerHandle::init_param_new_row(
                                  *trig_rtdef.new_record_->get_allocator()));
         }
       } else {
-        OZ (copy_trigger_value(DatumValue(*datum, expr->obj_meta_), cells[i],
+        OZ (copy_trigger_value(source, cells[i],
                                *trig_rtdef.new_record_->get_allocator()));
       }
       LOG_DEBUG("debug init param new expr", K(ret), K(i),
@@ -346,7 +358,7 @@ int TriggerHandle::init_param_new_row(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(trig_ctdef.rowid_new_expr_)) {
-      ObDatum *datum;
+      Datum *datum;
       if (OB_FAIL(trig_ctdef.rowid_new_expr_->eval(eval_ctx, datum))) {
       }
       LOG_DEBUG("debug init param rowid new expr", K(ret),
@@ -375,12 +387,14 @@ int TriggerHandle::set_rowid_into_row(
   // because the trigger rowid column mock in optimizer
   for (int64_t i = cols.get_count() - 1; OB_SUCC(ret) && i >= 0; ++i) {
     if (cols.get_flags()[i].is_rowid_) {
-      ObDatum *datum;
+      Datum *datum;
+      DatumValue source;
       if (OB_FAIL(src_expr->eval(eval_ctx, datum))) {
       } else if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(copy_trigger_value(DatumValue(*datum, src_expr->obj_meta_),
-                                            cells[i], *record->get_allocator()))) {
+      } else if (OB_FAIL(trigger_value_view(*datum, *src_expr,
+                     eval_ctx.exec_ctx_.get_allocator(), source))) {
+      } else if (OB_FAIL(copy_trigger_value(source, cells[i], *record->get_allocator()))) {
       } else {
         LOG_DEBUG("set_rowid_into_row done", K(ret), K(ObToStringExpr(eval_ctx, *src_expr)));
       }
@@ -592,14 +606,15 @@ int TriggerHandle::check_and_update_new_row(
     for (int64_t i = 0; OB_SUCC(ret) && i < columns.get_count(); i++) {
       if (columns.get_flags()[i].is_rowid_) {
       } else if (check) {
-        ObDatum *datum;
+        Datum *datum;
         DatumValue new_value;
         DatumValue current_value = new_cells[i];
         if (OB_FAIL(new_row_exprs.at(i)->eval(eval_ctx, datum))) {
         } else if (OB_ISNULL(datum))  {
           ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(trigger_value_view(*datum, *new_row_exprs.at(i),
+                       eval_ctx.exec_ctx_.get_allocator(), new_value))) {
         } else {
-          new_value = DatumValue(*datum, new_row_exprs.at(i)->obj_meta_);
           bool is_strict_equal = false;
           if (new_value.get_type() == current_value.get_type()
               && new_value.is_lob_storage()) {
@@ -643,7 +658,7 @@ int TriggerHandle::check_and_update_new_row(
           ret = OB_ERR_UNEXPECTED;
         } else {
           DatumValue current_cell;
-          ObDatum &write_datum = expr->locate_datum_for_write(eval_ctx);
+          Datum &write_datum = expr->locate_datum_for_write(eval_ctx);
           if (ob_is_geometry(expr->obj_meta_.get_type())) {
             DatumValue converted;
             if (OB_FAIL(convert_pl_type_to_sql_type(new_cells[i], converted,
@@ -655,8 +670,8 @@ int TriggerHandle::check_and_update_new_row(
                                                 eval_ctx.exec_ctx_.get_allocator()))) {
           }
           if (OB_FAIL(ret)) {
-          } else {
-            write_datum = current_cell.datum_;
+          } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(
+                         current_cell.datum_, write_datum))) {
           }
           if (OB_SUCC(ret) && current_cell.is_lob_storage()
               && OB_FAIL(ob_adjust_lob_datum(eval_ctx.exec_ctx_, write_datum,
@@ -675,7 +690,7 @@ int TriggerHandle::check_and_update_new_row(
       if (columns.get_flags()[i].is_gen_col_) {
         // for generated column, the dependent column is already evaluated
         // so the generated column can evalate by eval_function
-        ObDatum *datum;
+        Datum *datum;
         if (OB_FAIL(new_row_exprs.at(i)->eval(eval_ctx, datum))) {
         } else {
           LOG_DEBUG("trigger write new datum", K(new_cells[i]), K(i),

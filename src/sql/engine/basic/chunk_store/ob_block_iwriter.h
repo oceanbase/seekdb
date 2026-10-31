@@ -25,7 +25,6 @@
 #include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/chunk_store/ob_chunk_block.h"
-#include "sql/engine/basic/chunk_store/ob_chunk_block.h"
 
 namespace oceanbase
 {
@@ -54,7 +53,7 @@ public:
   virtual int add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
               const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row) = 0;
 
-  virtual int add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
+  virtual int add_batch(const common::Datum **datums, const common::ObIArray<ObExpr *> &exprs,
                         const uint16_t selector[], const int64_t size,
                         ObChunkDatumStore::StoredRow **stored_rows, BatchCtx *batch_ctx) = 0;
   virtual int close() = 0;

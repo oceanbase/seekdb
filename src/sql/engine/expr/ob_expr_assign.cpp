@@ -83,11 +83,11 @@ int ObExprAssign::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *key_res = NULL;
-  ObDatum *val_res = NULL;
+  Datum *key_res = NULL;
+  Datum *val_res = NULL;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
@@ -97,6 +97,8 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     DatumValue value;
     SqlTypeMeta obj_meta;
     ObSessionVariable sess_var;
+    alignas(8) char value_scratch[64];
+    common::ObDatum legacy_value;
     if (val_res->is_null()) {
       value.set_null();
       obj_meta.set_null();
@@ -115,7 +117,8 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       }
       // The session map takes its own recursive snapshot before publishing.
       // The expression frame remains alive until replace_user_variable returns.
-      value = DatumValue(*val_res, obj_meta);
+      OZ(expr.args_[1]->get_datum_copy_plan().legacy_view(*val_res, legacy_value, value_scratch, sizeof(value_scratch)));
+      value = DatumValue(legacy_value, obj_meta);
       if (OB_UNLIKELY(obj_meta.is_decimal_int() && obj_meta.get_scale() < 0)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (obj_meta.is_ext()) {
@@ -126,7 +129,7 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
           value.meta_.set_cs_level(val_res->get_extend_collation_level());
           value.meta_.set_cs_type(val_res->get_extend_collation());
         }
-      } else if (ObDatum::get_sql_value_datum_map_type(obj_meta.get_type()) == OBJ_DATUM_STRING
+      } else if (common::ObDatum::get_sql_value_datum_map_type(obj_meta.get_type()) == OBJ_DATUM_STRING
                  && val_res->is_outrow()) {
         value.meta_.set_outrow();
       }

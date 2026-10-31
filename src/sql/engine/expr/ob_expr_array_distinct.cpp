@@ -74,7 +74,7 @@ int ObExprArrayDistinct::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayDistinct::eval_array_distinct(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayDistinct::eval_array_distinct(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -82,7 +82,7 @@ int ObExprArrayDistinct::eval_array_distinct(const ObExpr &expr, ObEvalCtx &ctx,
   const uint16_t meta_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *arr_obj = NULL;
   ObIArrayType *arr_res = NULL;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
   } else if (datum->is_null()) {
@@ -104,7 +104,7 @@ int ObExprArrayDistinct::eval_array_distinct_batch(const ObExpr &expr, ObEvalCtx
                                                    const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -113,7 +113,7 @@ int ObExprArrayDistinct::eval_array_distinct_batch(const ObExpr &expr, ObEvalCtx
   ObIArrayType *arr_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector in_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector in_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

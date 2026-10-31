@@ -39,7 +39,7 @@ public:
   static int generate_meta_vector(
       const ObExpr &expr,
       ObEvalCtx &eval_ctx,
-      ObDatum &expr_datum);
+      Datum &expr_datum);
 private :
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprVecIVFMetaVector);

@@ -37,11 +37,11 @@ public:
                                 int64_t param_num,
                                 ObExprTypeCtx& type_ctx) const override;
 
-  static int calc(ObEvalCtx &ctx, const ObDatum &data1, ObDatumMeta meta1, bool has_lob_header1,
-                  const ObDatum *data2, ObDatumMeta meta2, bool has_lob_header2,
-                  MultimodeAlloctor *allocator, ObDatum &res,
+  static int calc(ObEvalCtx &ctx, const Datum &data1, ObDatumMeta meta1, bool has_lob_header1,
+                  const Datum *data2, ObDatumMeta meta2, bool has_lob_header2,
+                  MultimodeAlloctor *allocator, Datum &res,
                   ObJsonPathCache* path_cache);
-  static int eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_json_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
   virtual bool need_rt_ctx() const override { return true; }

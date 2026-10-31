@@ -70,11 +70,11 @@ int ObExprSTDistance::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum1 = NULL;
-  ObDatum *gis_datum2 = NULL;
+  Datum *gis_datum1 = NULL;
+  Datum *gis_datum2 = NULL;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
   SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
@@ -84,7 +84,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   const int max_arg_num = 3;
-  ObDatum *gis_unit = NULL;
+  Datum *gis_unit = NULL;
   double factor = 0.0;
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))) {
   } else if (gis_datum1->is_null() || gis_datum2->is_null()) {

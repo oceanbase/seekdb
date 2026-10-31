@@ -35,7 +35,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const;
-  static int eval_to_base64(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_to_base64(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_to_base64_batch(const ObExpr &expr,
                                   ObEvalCtx &ctx,
                                   const ObBitVector &skip,

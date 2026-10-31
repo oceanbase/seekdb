@@ -35,7 +35,7 @@ public:
 
 
 
-  static int eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                   const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

@@ -159,14 +159,16 @@ struct ExprFrame
       expr.obj_datum_map_ = i == 0 ? OBJ_DATUM_8BYTE_DATA : OBJ_DATUM_STRING;
       if (i == 0) { expr.obj_meta_.set_int(); } else { expr.obj_meta_.set_varchar(); }
       expr.datum_meta_.type_ = i == 0 ? ObIntType : ObVarcharType;
-      for (int j = 0; j < 2; ++j) { new (bytes_.data() + expr.datum_off_ + sizeof(ObDatum) * j) ObDatum; }
+      expr.obj_meta_.set_collation_type(CS_TYPE_BINARY);
+      EXPECT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(), arena_));
+      for (int j = 0; j < 2; ++j) { new (bytes_.data() + expr.datum_off_ + sizeof(Datum) * j) Datum; }
       EXPECT_EQ(OB_SUCCESS, expressions_.push_back(&expr));
     }
   }
 
-  ObDatum *datums(int64_t index)
+  Datum *datums(int64_t index)
   {
-    return reinterpret_cast<ObDatum *>(bytes_.data() + exprs_[index].datum_off_);
+    return reinterpret_cast<Datum *>(bytes_.data() + exprs_[index].datum_off_);
   }
 
   ObArenaAllocator arena_;
@@ -344,10 +346,21 @@ TEST(FixedRaDatumCells, expression_copy_and_output_decode_honor_batch_index_and_
 {
   MixedInput input;
   ExprFrame frame;
+  // The fixed-only cases preserve arbitrary descriptor bits. Here the fifth
+  // column is a VARCHAR Expr, so opaque bytes cannot carry the EXT flag.
+  Datum unchanged;
+  unchanged.set_int(73);
+  ASSERT_TRUE(input.values_.at(4).is_ext());
+  EXPECT_EQ(OB_INVALID_ARGUMENT,
+      frame.exprs_[4].get_datum_copy_plan().import_legacy(input.values_.at(4), unchanged));
+  EXPECT_EQ(73, unchanged.get_int());
+  input.values_.at(4).set_outrow();
   ObEvalCtx::BatchInfoScopeGuard batch(frame.eval_);
   batch.set_batch_size(2);
   batch.set_batch_idx(1);
-  for (int i = 0; i < 5; ++i) { frame.datums(i)[1] = input.values_.at(i); }
+  for (int i = 0; i < 5; ++i) {
+    ASSERT_EQ(OB_SUCCESS, frame.exprs_[i].get_datum_copy_plan().import_legacy(input.values_.at(i), frame.datums(i)[1]));
+  }
   int64_t quota = 0;
   ASSERT_EQ(OB_SUCCESS, Block::row_store_size<false>(frame.expressions_, frame.eval_, quota, EXTRA_SIZE));
   const int64_t body_size = quota - Block::ROW_INDEX_SIZE;
@@ -356,6 +369,7 @@ TEST(FixedRaDatumCells, expression_copy_and_output_decode_honor_batch_index_and_
   StoredRow *row = new (bytes.data()) StoredRow;
   ASSERT_EQ(OB_SUCCESS, row->copy_datums(frame.expressions_, frame.eval_, row->payload_,
       body_size - sizeof(StoredRow), quota, EXTRA_SIZE));
+  EXPECT_EQ(ObDatumDesc::OUTROW, row->stored_cells()[4].flag_);
   input.overwrite();
   for (int i = 0; i < 5; ++i) {
     frame.datums(i)[0].set_null();
@@ -365,8 +379,11 @@ TEST(FixedRaDatumCells, expression_copy_and_output_decode_honor_batch_index_and_
   ASSERT_EQ(OB_SUCCESS, row->to_expr(frame.expressions_, frame.eval_));
   for (int i = 0; i < 4; ++i) {
     EXPECT_TRUE(frame.datums(i)[0].is_null());
-    EXPECT_EQ(row->stored_cells()[i].ptr_, frame.datums(i)[1].ptr_);
-    EXPECT_EQ(row->stored_cells()[i].pack_, frame.datums(i)[1].pack_);
+    alignas(8) char scratch[64]; ObDatum legacy;
+    ASSERT_EQ(OB_SUCCESS, frame.exprs_[i].get_datum_copy_plan().legacy_view(frame.datums(i)[1], legacy, scratch, 64));
+    if (!legacy.is_null() && i != 0) { EXPECT_EQ(row->stored_cells()[i].ptr_, legacy.ptr_); }
+    if (i == 0) { EXPECT_EQ(-3000000001LL, frame.datums(i)[1].get_int()); }
+    EXPECT_EQ(row->stored_cells()[i].pack_, legacy.pack_);
     EXPECT_TRUE(frame.exprs_[i].get_eval_info(frame.eval_).projected_);
   }
   EXPECT_TRUE(frame.datums(4)[1].is_null());

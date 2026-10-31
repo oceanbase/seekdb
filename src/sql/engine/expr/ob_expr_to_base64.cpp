@@ -73,10 +73,10 @@ int ObExprToBase64::calc_result_type1(ObExprResType &type,
 
 int ObExprToBase64::eval_to_base64(const ObExpr &expr,
                                    ObEvalCtx &ctx,
-                                   ObDatum &res)
+                                   Datum &res)
 {
     int ret = OB_SUCCESS;
-    ObDatum *arg = nullptr;
+    Datum *arg = nullptr;
 
     if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
     } else if (OB_UNLIKELY(arg->is_null())) {
@@ -118,12 +118,12 @@ int ObExprToBase64::eval_to_base64_batch(const ObExpr &expr,
                          const ObBitVector &skip,
                          const int64_t batch_size) {
   int ret = OB_SUCCESS;
-  ObDatum *res = expr.locate_batch_datums(ctx);
+  Datum *res = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector args = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector args = expr.args_[0]->locate_expr_datumvector(ctx);
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
     batch_info_guard.set_batch_size(batch_size);
@@ -132,7 +132,7 @@ int ObExprToBase64::eval_to_base64_batch(const ObExpr &expr,
         continue;
       }
       batch_info_guard.set_batch_idx(j);
-      ObDatum *arg = args.at(j);
+      Datum *arg = args.at(j);
       const ObString &in_raw = arg->get_string();
       ObLength in_raw_len = in_raw.length();
       const char *buf = in_raw.ptr();

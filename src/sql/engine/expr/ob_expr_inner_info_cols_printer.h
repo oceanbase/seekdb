@@ -39,7 +39,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_def(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_def(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy
@@ -59,7 +59,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_char_len(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_char_len(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy
@@ -78,7 +78,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_char_name(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_char_name(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy
@@ -98,7 +98,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_collation_name(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_collation_name(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy
@@ -117,7 +117,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_priv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_priv(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int fill_col_privs(share::schema::ObSchemaGetterGuard &schema_guard,
                             const share::schema::ObSessionPrivInfo &session_priv,
                             const common::ObIArray<uint64_t> &enable_role_id_array,
@@ -145,7 +145,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_extra(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_extra(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy
@@ -164,7 +164,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_data_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_data_type(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy
@@ -183,7 +183,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_column_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_column_type(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy
@@ -202,7 +202,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_column_column_key(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_column_column_key(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   // disallow copy

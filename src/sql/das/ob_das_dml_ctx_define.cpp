@@ -324,17 +324,10 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const ObIArray<ObExpr*> &exprs, 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL datums or count mismatch", K(ret), KPC(store_row_), K(exprs.count()));
   } else {
-    ObDatum *datum = nullptr;
-    StoredDatumCell *cells = store_row_->stored_cells();
-    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
-      if (OB_FAIL(exprs.at(i)->eval(ctx, datum))) {
-      } else {
-        cells[i] = StoredDatumCodec::encode_legacy_view(*datum);
-      }
-      if (OB_SUCC(ret)) {
-        store_row_->row_size_ += cells[i].len_;
-      }
-    }
+    // The base shadow owner now materializes inline scalar representations in
+    // stable per-column scratch while preserving reference borrowing semantics.
+    ret = DatumShadowStoredRow::shadow_copy(exprs, ctx);
+    // DML shadows retain their completed prefix even if a later column fails.
     saved_ = true;
   }
   return ret;
@@ -361,6 +354,7 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const blocksstable::ObDatumRow &
         store_row_->row_size_ += cells[i].len_;
       }
     }
+    // Preserve the completed prefix until the caller explicitly reuses it.
     saved_ = true;
   }
   return ret;

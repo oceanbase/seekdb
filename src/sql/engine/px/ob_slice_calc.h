@@ -704,7 +704,7 @@ public:
                      ObBitVector *skip = NULL);
   int get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                               SliceIdxArray &slice_idx_array, ObBitVector *skip = NULL);
-  virtual void set_calc_hash_keys(int64_t n_keys) { n_keys_ = n_keys; }
+  virtual void set_calc_hash_keys(int64_t n_keys) { n_keys_ = n_keys; native_hash_funcs_.reuse(); }
   int get_slice_idx_batch_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                         ObBitVector &skip, const int64_t batch_size,
                         int64_t *&indexes);
@@ -740,6 +740,9 @@ public:
   ObBitVector *null_bitmap_;
   ObIAllocator *malloc_alloc_;
   bool fast_calc_hash_slice_;
+  int prepare_native_hash_functions();
+  common::ObSEArray<common::DatumHashOp, 4> native_hash_funcs_;
+
 };
 
 class ObHybridHashSliceIdCalcBase

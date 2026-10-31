@@ -130,7 +130,7 @@ int ObExprOpSubQueryInPl::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
                                         ObEvalCtx &ctx,
-                                        ObDatum &res)
+                                        Datum &res)
 {
   int ret = OB_SUCCESS;
 
@@ -247,9 +247,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    OX (res = result.datum_);
+    OZ(expr.get_datum_copy_plan().import_legacy(result.datum_, res));
     if (is_lob_storage(result.get_type())) {
-      OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result.datum_, result.get_meta(), expr.obj_meta_,
+      OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res, result.get_meta(), expr.obj_meta_,
                              ctx.exec_ctx_.get_allocator(), res));
     }
     OZ(expr.deep_copy_datum(ctx, res));
@@ -313,7 +313,7 @@ int ObExprOpSubQueryInPl::fill_param_store(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     DatumParameter view, owned;
-    capture_datum_parameter(*expr.args_[i], ctx, view);
+    OZ(capture_datum_parameter(*expr.args_[i], ctx, view));
     OZ (clone_datum_parameter(view, owned, owner));
     OZ (params.push_back(owned));
   }

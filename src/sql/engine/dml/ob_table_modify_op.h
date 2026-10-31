@@ -41,7 +41,7 @@ public:
   struct ObFkRowResInfo
   {
     ObExpr* rt_expr_;
-    ObDatum ori_datum_;
+    Datum ori_datum_;
     TO_STRING_KV(K_(rt_expr), K_(ori_datum));
   };
   static int do_handle(ObTableModifyOp &op,

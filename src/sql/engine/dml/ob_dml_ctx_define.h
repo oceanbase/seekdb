@@ -390,7 +390,7 @@ struct SeRowkeyItem
   SeRowkeyItem() : row_(NULL), datums_(NULL), cnt_(0) {}
 
   const ObExpr *const* row_;
-  ObDatum *datums_;
+  Datum *datums_;
   int64_t cnt_;
 };
 typedef common::hash::ObHashSet<ObRowkey, common::hash::NoPthreadDefendMode> SeRowkeyDistCtx;

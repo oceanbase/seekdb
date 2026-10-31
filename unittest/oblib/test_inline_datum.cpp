@@ -15,6 +15,7 @@
  */
 
 #include "common/datum/datum.h"
+#include "lib/allocator/ob_allocator.h"
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -105,6 +106,65 @@ TEST(InlineDatum, state_changes_do_not_need_a_type_or_reference_payload)
   EXPECT_EQ(0U, value.reference_flags());
   value.set_null();
   EXPECT_TRUE(value.is_null());
+}
+
+TEST(InlineDatum, number_write_owns_caller_buffer_and_failed_write_does_not_publish)
+{
+  ObArenaAllocator source_owner;
+  number::ObNumber input_number;
+  ASSERT_EQ(OB_SUCCESS, input_number.from(INT64_MIN, source_owner));
+  alignas(8) char owned[64]; MEMSET(owned, 0x5a, sizeof(owned));
+  Datum result; result.set_int(91);
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH, result.set_number(input_number, owned, 1));
+  EXPECT_EQ(91, result.get_int());
+  for (char byte : owned) { EXPECT_EQ(char(0x5a), byte); }
+  ASSERT_EQ(OB_SUCCESS, result.set_number(input_number, owned, sizeof(owned)));
+  EXPECT_EQ(owned, result.get_reference());
+  EXPECT_EQ(0, number::ObNumber(result.get_number()).compare(INT64_MIN));
+  MEMSET(const_cast<uint32_t *>(input_number.get_digits()), 0, input_number.get_length() * sizeof(uint32_t));
+  EXPECT_EQ(0, number::ObNumber(result.get_number()).compare(INT64_MIN));
+  // The compact overload accepts exact source/destination overlap.
+  ASSERT_EQ(OB_SUCCESS, result.set_number(result.get_number(), owned, sizeof(owned)));
+  EXPECT_EQ(0, number::ObNumber(result.get_number()).compare(INT64_MIN));
+  Datum borrowed;
+  ASSERT_EQ(OB_SUCCESS, borrowed.set_number_shallow(result.get_number()));
+  EXPECT_EQ(result.get_reference(), borrowed.get_reference());
+  number::ObNumber zero;
+  zero.set_zero();
+  ASSERT_EQ(OB_SUCCESS, result.set_number(zero, owned, sizeof(owned)));
+  EXPECT_TRUE(result.get_number().is_zero());
+  EXPECT_EQ(sizeof(number::ObNumber::Desc), result.length());
+}
+
+TEST(InlineDatum, timestamp_bytes_are_copied_before_local_value_dies)
+{
+  ObOTimestampData source;
+  source.time_us_ = -123456789; source.time_ctx_.time_desc_ = 999; source.time_ctx_.tz_desc_ = 0;
+  char owned[32]; MEMSET(owned, 0x3c, sizeof(owned));
+  Datum value; value.set_int(71);
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH, value.set_otimestamp_tiny(source, owned, 9));
+  EXPECT_EQ(71, value.get_int()); EXPECT_EQ(char(0x3c), owned[0]);
+  ASSERT_EQ(OB_SUCCESS, value.set_otimestamp_tiny(source, owned, sizeof(owned)));
+  source.time_us_ = 0; source.time_ctx_.time_desc_ = 0;
+  EXPECT_EQ(-123456789, value.get_otimestamp_tiny().time_us_);
+  EXPECT_EQ(999, value.get_otimestamp_tiny().time_ctx_.time_desc_);
+  EXPECT_EQ(10, value.length());
+}
+
+TEST(InlineDatum, scalar_aliases_keep_inline_members_and_reference_flags_are_explicit)
+{
+  Datum value;
+  value.set_bool(true); EXPECT_EQ(1, value.get_int()); EXPECT_EQ(0, value.length());
+  value.set_year(UINT8_MAX); EXPECT_EQ(UINT8_MAX, value.get_year());
+  value.set_mysql_date(ObMySQLDate(INT32_MIN)); EXPECT_EQ(INT32_MIN, value.get_date());
+  value.set_mysql_datetime(ObMySQLDateTime(INT64_MIN)); EXPECT_EQ(INT64_MIN, value.get_datetime());
+  value.set_enum(UINT64_MAX); EXPECT_EQ(UINT64_MAX, value.get_enumset());
+  char bytes[] = "abc";
+  ASSERT_EQ(OB_SUCCESS, value.set_string(bytes, 3));
+  EXPECT_EQ(bytes, value.get_string().ptr());
+  value.set_has_lob_header(); EXPECT_TRUE(value.has_lob_header());
+  value.clear_lob_header(); EXPECT_FALSE(value.has_lob_header());
+  value.set_int(7); EXPECT_EQ(0, value.reference_flags());
 }
 
 int main(int argc, char **argv)

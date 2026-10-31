@@ -168,7 +168,7 @@ static void clear_arith_eval_flag(const ObExpr &expr, ObEvalCtx &ctx)
   }
 }
 
-int ObRTDatumArith::inner_eval(ObDatum *&res, const ObDatum **args, int64_t arg_cnt)
+int ObRTDatumArith::inner_eval(Datum *&res, const Datum **args, int64_t arg_cnt)
 {
   int ret = OB_SUCCESS;
   CK(NULL != eval_ctx_);

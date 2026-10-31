@@ -51,10 +51,10 @@ int ObExprSqrt::calc_result_type1(ObExprResType &type,
 }
 
 int calc_sqrt_expr_mysql(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else if (arg->is_null()) {
     res_datum.set_null();
@@ -78,8 +78,8 @@ int calc_sqrt_expr_mysql_in_batch(const ObExpr &expr,
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
     ObBitVector &eval_flag = expr.get_evaluated_flags(ctx);
-    ObDatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatum *res_datums = expr.locate_batch_datums(ctx);
+    DatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);
+    Datum *res_datums = expr.locate_batch_datums(ctx);
     for (int64_t i = 0; i < batch_size; ++i) {
       if (!eval_flag.contain(i) && !skip.contain(i)) {
         if (arg_datums.at(i)->is_null() || arg_datums.at(i)->get_double() < 0) {

@@ -122,7 +122,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_udf(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
   static int build_udf_ctx(int64_t udf_ctx_id,
                            int64_t param_num,

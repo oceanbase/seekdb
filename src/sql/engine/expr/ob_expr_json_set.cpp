@@ -126,7 +126,7 @@ int ObExprJsonSet::set_value(ObJsonSeekResult &hit, ObIJsonBase *&json_doc, ObIJ
   return ret;
 }
 
-int ObExprJsonSet::eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonSet::eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObIJsonBase *json_doc = NULL;
@@ -149,7 +149,7 @@ int ObExprJsonSet::eval_json_set(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   
   for (int64_t i = 1; OB_SUCC(ret) && !is_null_result && i < expr.arg_cnt_; i+=2) {
     ObJsonSeekResult hit;
-    ObDatum *path_data = NULL;
+    Datum *path_data = NULL;
     ObJsonPath *json_path = NULL;
     if (expr.args_[i]->datum_meta_.type_ == ObNullType) {
       is_null_result = true;

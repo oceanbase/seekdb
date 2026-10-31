@@ -118,7 +118,7 @@ int ObFunctionTableOp::inner_get_next_row_udf()
   } else if (FALSE_IT(plan_ctx->set_autoinc_id_tmp(0))) {
   } else if (OB_FAIL(ctx_.check_status())) {
   } else {
-    ObDatum *value = nullptr;
+    Datum *value = nullptr;
     if (!already_calc_) {
       if (OB_FAIL(MY_SPEC.value_expr_->eval(eval_ctx_, value))) {
       } else if (value->is_null()) {
@@ -179,14 +179,15 @@ int ObFunctionTableOp::inner_get_next_row_udf()
           MY_SPEC.column_exprs_.at(i)->locate_datum_for_write(eval_ctx_).set_null();
         } else {
           ObExpr * const &expr = MY_SPEC.column_exprs_.at(i);
-          ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
-          // Collection/record members already carry native payloads; the
-          // owning collection remains live while this row is projected.
-          datum = obj_stack[i].datum_;
-          if (is_lob_storage(obj_stack[i].get_type())) {
-            OZ (ob_adjust_lob_datum(get_exec_ctx(), obj_stack[i].datum_, obj_stack[i].meta_,
-                                   expr->obj_meta_, get_exec_ctx().get_allocator(), datum));
+          Datum value;
+          OZ (expr->get_datum_copy_plan().import_legacy(obj_stack[i].datum_, value));
+          if (OB_SUCC(ret) && is_lob_storage(obj_stack[i].get_type())) {
+            OZ (ob_adjust_lob_datum(get_exec_ctx(), static_cast<const Datum &>(value), obj_stack[i].meta_,
+                                   expr->obj_meta_, get_exec_ctx().get_allocator(), value));
           }
+          // Own the carrier span; PL/collection pointees retain the existing
+          // collection owner, which remains live for the projected row.
+          OZ (expr->deep_copy_datum(eval_ctx_, value));
         }
         if (OB_SUCC(ret)) {
           MY_SPEC.column_exprs_.at(i)->set_evaluated_projected(eval_ctx_);
@@ -201,7 +202,7 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = nullptr;
-  ObDatum *value = nullptr;
+  Datum *value = nullptr;
   clear_evaluated_flag();
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;

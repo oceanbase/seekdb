@@ -32,8 +32,8 @@ public:
   struct TypeDemotionRes
   {
   public:
-    explicit TypeDemotionRes(ObDatum &val)
-      : val_(val), rp_(ObRawExprTypeDemotion::RangePlacement::RP_OUTSIDE) {}
+    explicit TypeDemotionRes(Datum &val, bool publish_value = true)
+      : val_(val), publish_value_(publish_value), rp_(ObRawExprTypeDemotion::RangePlacement::RP_OUTSIDE) {}
     inline void set_outside() { rp_ = ObRawExprTypeDemotion::RangePlacement::RP_OUTSIDE; }
     inline void set_inside() { rp_ = ObRawExprTypeDemotion::RangePlacement::RP_INSIDE; }
     inline bool is_outside() const
@@ -41,7 +41,8 @@ public:
 
     TO_STRING_KV(K_(val), K_(rp));
 
-    ObDatum &val_; // demoted value from constant
+    Datum &val_; // demoted value from constant
+    bool publish_value_; // RangePlacement only needs the classification.
     ObRawExprTypeDemotion::RangePlacement rp_; // range placement of constant in the field
   };
 
@@ -56,31 +57,33 @@ public:
                                     common::ObExprTypeCtx &type_ctx) const;
   static int demote_cast(const ObExpr &expr, ObEvalCtx &ctx, TypeDemotionRes &res);
 private:
-  static int demote_field_constant(const ObDatum &constant,
+  static int demote_field_constant(const ObExpr &expr, ObEvalCtx &ctx,
+                                   const Datum &constant,
                                    const ObDatumMeta &src_meta,
                                    const ObDatumMeta &dst_meta,
                                    TypeDemotionRes &res);
-  static int demote_int_field_constant(const ObDatum &constant,
+  static int demote_int_field_constant(const Datum &constant,
                                        const ObDatumMeta &src_meta,
                                        const ObDatumMeta &dst_meta,
                                        TypeDemotionRes &res);
-  static int demote_decimal_field_constant(const ObDatum &constant,
+  static int demote_decimal_field_constant(const ObExpr &expr, ObEvalCtx &ctx,
+                                           const Datum &constant,
                                            const ObDatumMeta &src_meta,
                                            const ObDatumMeta &dst_meta,
                                            TypeDemotionRes &res);
-  static int demote_year_field_constant(const ObDatum &constant,
+  static int demote_year_field_constant(const Datum &constant,
                                         const ObDatumMeta &src_meta,
                                         const ObDatumMeta &dst_meta,
                                         TypeDemotionRes &res);
-  static int demote_date_field_constant(const ObDatum &constant,
+  static int demote_date_field_constant(const Datum &constant,
                                         const ObDatumMeta &src_meta,
                                         const ObDatumMeta &dst_meta,
                                         TypeDemotionRes &res);
-  static int demote_datetime_timestamp_field_constant(const ObDatum &constant,
+  static int demote_datetime_timestamp_field_constant(const Datum &constant,
                                                       const ObDatumMeta &src_meta,
                                                       const ObDatumMeta &dst_meta,
                                                       TypeDemotionRes &res);
-  static int demote_time_field_constant(const ObDatum &constant,
+  static int demote_time_field_constant(const Datum &constant,
                                         const ObDatumMeta &src_meta,
                                         const ObDatumMeta &dst_meta,
                                         TypeDemotionRes &res);
@@ -106,7 +109,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_demoted_val(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &demoted_val);
+  static int eval_demoted_val(const ObExpr &expr, ObEvalCtx &ctx, Datum &demoted_val);
 private:
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprDemoteCast);
@@ -131,7 +134,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_range_placement(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &range_placement);
+  static int eval_range_placement(const ObExpr &expr, ObEvalCtx &ctx, Datum &range_placement);
 private:
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprRangePlacement);

@@ -363,19 +363,8 @@ int ObDASMergeIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     first_get_row_ = false;
   }
   const ObBitVector *skip = nullptr;
-  bool legacy = true;
-  // The native root contract is one local task, sequential merge. No generic
-  // native-row interface is needed for the other DAS iterators.
-  if (das_tasks_arr_.count() == 1) {
-    ObDASScanOp *scan_op = DAS_SCAN_OP(das_tasks_arr_.at(0));
-    if (scan_op != nullptr && scan_op->get_scan_param().row2exprs_projector_ != nullptr) {
-      legacy = scan_op->get_scan_param().row2exprs_projector_->can_read_legacy_projection();
-    }
-  }
-  if ((OB_SUCC(ret) || ret == OB_ITER_END) && legacy) {
+  if (OB_SUCC(ret) || ret == OB_ITER_END) {
     PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
-  } else {
-    LOG_DEBUG("merged result without a readable Expr shadow", K(ret), K(count));
   }
   return ret;
 }
@@ -431,7 +420,7 @@ int ObDASMergeIter::update_output_tablet_id(ObIDASTaskOp *output_das_task)
     if (OB_SUCC(ret)) {
       const ObExpr *expr = pdml_partition_id_;
       if (is_vectorized_) {
-        ObDatum *datums = expr->locate_datums_for_update(*eval_ctx_, max_size_);
+        Datum *datums = expr->locate_datums_for_update(*eval_ctx_, max_size_);
         for (int64_t i = 0; i < max_size_; i++) {
           datums[i].set_int(output_id);
         }

@@ -178,8 +178,8 @@ struct JtScanCtx {
   bool is_const_input_;
   int error_code_; 
   int32_t ord_val_;
-  ObDatum* res_obj_;
-  ObDatum** data_;
+  Datum* res_obj_;
+  Datum** data_;
   char buf[OB_MAX_DECIMAL_PRECISION];
 
 };
@@ -511,7 +511,7 @@ public:
                                              ObIJsonBase* j_base);
   static int parse_default_value_2json(ObExpr* default_expr, 
                                        JtScanCtx* ctx,
-                                       ObDatum*& tmp_datum,
+                                       Datum*& tmp_datum,
                                        ObIJsonBase *&res);
   static int check_default_value_mysql(ObRegCol &col_node, JtScanCtx* ctx, ObExpr* expr);
 };

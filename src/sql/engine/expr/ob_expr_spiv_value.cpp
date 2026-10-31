@@ -62,7 +62,7 @@ int ObExprSpivValue::cg_expr(
 int ObExprSpivValue::generate_spiv_value(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSEDx(raw_ctx, eval_ctx);

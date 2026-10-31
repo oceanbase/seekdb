@@ -104,7 +104,7 @@ int pad_column(const SqlTypeMeta &obj_meta, const ObAccuracy accuracy, common::O
 int pad_column(const common::ObAccuracy accuracy, sql::ObEvalCtx &ctx, sql::ObExpr &expr)
 {
   int ret = OB_SUCCESS;
-  sql::ObDatum &datum = expr.locate_expr_datum(ctx);
+  common::Datum &datum = expr.locate_expr_datum(ctx);
   if (datum.is_null()) {
     // do nothing.
   } else if (expr.obj_meta_.is_fixed_len_char_type()) {
@@ -112,25 +112,24 @@ int pad_column(const common::ObAccuracy accuracy, sql::ObEvalCtx &ctx, sql::ObEx
     const common::ObCollationType cs_type = expr.datum_meta_.cs_type_;
     const ObString space_pattern = get_padding_str(cs_type);
     int32_t cur_len = 0; // byte or char length
-    bool is_ascii = can_do_ascii_optimize(cs_type) && is_ascii_str(datum.ptr_, datum.pack_);
+    bool is_ascii = can_do_ascii_optimize(cs_type) && is_ascii_str(static_cast<const char *>(datum.get_reference()), datum.length());
     if (is_ascii) {
-      cur_len = datum.pack_;
+      cur_len = datum.length();
     } else {
-      cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, datum.ptr_, datum.pack_));
+      cur_len = static_cast<int32_t>(ObCharset::strlen_char(cs_type, static_cast<const char *>(datum.get_reference()), datum.length()));
     }
     if (cur_len < length) {
       char *ptr = nullptr;
-      const int32_t pad_len = datum.pack_ + (length - cur_len) * space_pattern.length();
+      const int32_t pad_len = datum.length() + (length - cur_len) * space_pattern.length();
       const int64_t buf_len = pad_len;
       if (OB_ISNULL(ptr = expr.get_str_res_mem(ctx, buf_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "no memory", K(ret));
       } else {
         int32_t true_len = 0;
-        MEMMOVE(ptr, datum.ptr_, datum.pack_);
-        append_padding_pattern(space_pattern, datum.pack_, buf_len, ptr, true_len);
-        datum.ptr_ = ptr;
-        datum.pack_ = true_len;
+        MEMMOVE(ptr, static_cast<const char *>(datum.get_reference()), datum.length());
+        append_padding_pattern(space_pattern, datum.length(), buf_len, ptr, true_len);
+        datum.set_reference(ptr, true_len, datum.reference_flags());
       }
     }
   }

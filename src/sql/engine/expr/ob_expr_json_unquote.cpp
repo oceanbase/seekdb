@@ -62,7 +62,7 @@ int ObExprJsonUnquote::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, bool has_lob_header,
+int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta, bool has_lob_header,
                             MultimodeAlloctor *allocator, ObJsonBuffer &j_buf, bool &is_null)
 {
   INIT_SUCC(ret);
@@ -111,11 +111,11 @@ int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta met
   return ret;
 }
 
-int ObExprJsonUnquote::eval_json_unquote(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonUnquote::eval_json_unquote(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObExpr *arg = expr.args_[0];
-  ObDatum* json_datum = NULL;
+  Datum* json_datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

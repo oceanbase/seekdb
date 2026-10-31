@@ -31,17 +31,20 @@ using namespace share;
 template<typename LVal, typename RVal>
 struct ObDecintMySQLDivDatumFunc
 {
-  OB_INLINE int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+  OB_INLINE int operator()(Datum &res, const Datum &l, const Datum &r,
                            const bool is_err_div_by_zero, const ObScale round_up_scale,
-                           const ObScale decint_res_scale) const
+                           const ObScale decint_res_scale, const ObExpr &expr,
+                           ObEvalCtx &ctx, const int64_t index = -1) const
   {
     int ret = OB_SUCCESS;
-    const LVal &numerator = *reinterpret_cast<const LVal *>(l.get_decimal_int());
-    const RVal &denominator = *reinterpret_cast<const RVal *>(r.get_decimal_int());
+    LVal numerator;
+    RVal denominator;
     LVal quo;
     number::ObNumber res_nmb;
     ObNumStackOnceAlloc tmp_alloc;
-    if (OB_UNLIKELY(denominator == 0)) {
+    if (OB_FAIL(ObExprUtil::get_decimal_int(l, numerator))) {
+    } else if (OB_FAIL(ObExprUtil::get_decimal_int(r, denominator))) {
+    } else if (OB_UNLIKELY(denominator == 0)) {
       if (is_err_div_by_zero) {
         ret = OB_DIVISION_BY_ZERO;
       } else {
@@ -53,7 +56,7 @@ struct ObDecintMySQLDivDatumFunc
       if (OB_FAIL(wide::to_number(quo, decint_res_scale, tmp_alloc, res_nmb))) {
       } else if (round_scale < decint_res_scale && OB_FAIL(res_nmb.trunc(round_scale))) {
       } else {
-        res.set_number(res_nmb);
+        ret = ObExprUtil::set_number(expr, ctx, res, res_nmb, index);
       }
     }
     return ret;
@@ -62,7 +65,7 @@ struct ObDecintMySQLDivDatumFunc
 
 
 template<typename ltype, typename rtype>
-int ObExprDiv::decint_div_mysql_fn(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDiv::decint_div_mysql_fn(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   int64_t div_inc = 0;
@@ -70,7 +73,7 @@ int ObExprDiv::decint_div_mysql_fn(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   } else {
     ObScale round_up_scale = decint_res_round_up_scale(expr, div_inc);
     ret = def_arith_eval_func<ObDecintMySQLDivDatumFunc<ltype, rtype>>(
-      expr, ctx, expr_datum, expr.is_error_div_by_zero_, round_up_scale, expr.div_calc_scale_);
+      expr, ctx, expr_datum, expr.is_error_div_by_zero_, round_up_scale, expr.div_calc_scale_, expr, ctx);
   }
   return ret;
 }
@@ -83,9 +86,9 @@ int ObExprDiv::decint_div_mysql_batch_fn(BATCH_EVAL_FUNC_ARG_DECL)
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) {
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_div_precision_increment(div_inc))) {
   } else {
-    ObDatumVector l_vec = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector r_vec = expr.args_[1]->locate_expr_datumvector(ctx);
-    ObDatum *res_datums = expr.locate_datums_for_update(ctx, size);
+    DatumVector l_vec = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector r_vec = expr.args_[1]->locate_expr_datumvector(ctx);
+    Datum *res_datums = expr.locate_datums_for_update(ctx, size);
     ObDecintMySQLDivDatumFunc<ltype, rtype> div_fn;
     // ObScale res_scale = expr.datum_meta_.scale_;
     ObScale round_up_scale = decint_res_round_up_scale(expr, div_inc);
@@ -97,7 +100,7 @@ int ObExprDiv::decint_div_mysql_batch_fn(BATCH_EVAL_FUNC_ARG_DECL)
         eval_flags.set(i);
       } else {
         ret = div_fn(res_datums[i], *l_vec.at(i), *r_vec.at(i), expr.is_error_div_by_zero_,
-                     round_up_scale, expr.div_calc_scale_);
+                     round_up_scale, expr.div_calc_scale_, expr, ctx, i);
         if (OB_SUCC(ret)) {
           eval_flags.set(i);
         }

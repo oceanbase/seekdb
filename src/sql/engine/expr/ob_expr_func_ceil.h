@@ -43,9 +43,9 @@ public:
                         ObExpr &rt_expr) const override;
 
   static int ceil_floor_decint(
-      const bool is_floor, const ObDatum *arg_datum,
+    const ObExpr &expr, ObEvalCtx &ctx,       const bool is_floor, const Datum *arg_datum,
       const ObDatumMeta &in_meta, const ObDatumMeta &out_meta,
-      ObDatum &res_datum);
+      Datum &res_datum, int64_t index = -1);
       
   template <typename T, bool IS_FLOOR, bool NEG>
   static T ceil_floor_trival(T in, const T in_scale_power, const T in_scale_power_minus_one);

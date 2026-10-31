@@ -105,7 +105,7 @@ int ObBasicNestedLoopJoinOp::prepare_rescan_params(bool is_group)
   }
   // After each row comes out from the left side, notify the right-side GI to implement part id filtering, avoid unnecessary partition scanning in PKEY NLJ scenario
   if (OB_SUCC(ret) && !get_spec().enable_px_batch_rescan_ && get_spec().enable_gi_partition_pruning_) {
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(get_spec().gi_partition_id_expr_->eval(eval_ctx_, datum))) {
     } else {
       // NOTE: If the right side corresponds to multiple tables, the logic here is also correct

@@ -184,11 +184,11 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   return ret;
 }
 
-int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum1 = NULL;
-  ObDatum *gis_datum2 = NULL;
+  Datum *gis_datum1 = NULL;
+  Datum *gis_datum2 = NULL;
   ObString wkb1;
   ObString wkb2;
   ObExpr *gis_arg1 = expr.args_[0];

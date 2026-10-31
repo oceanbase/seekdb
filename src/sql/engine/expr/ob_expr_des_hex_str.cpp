@@ -275,19 +275,19 @@ int ObExprDesHexStr::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &expr) con
 }
 
 int ObExprDesHexStr::eval_des_hex_str(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *in= NULL;
+  Datum *in= NULL;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &alloc = alloc_guard.get_allocator();
   DatumValue value;
   if (OB_FAIL(expr.eval_param_value(ctx, in))) {
   } else if (in->is_null()) {
     expr_datum.set_null();
-  } else if (OB_FAIL(deserialize_hex_cstr(in->ptr_, in->len_, alloc, value))) {
+  } else if (OB_FAIL(deserialize_hex_cstr(in->get_string().ptr(), in->length(), alloc, value))) {
   } else {
-    const int64_t len = std::max(128, in->len_ * 2);
+    const int64_t len = std::max<int64_t>(128, static_cast<int64_t>(in->length()) * 2);
     char *buf = expr.get_str_res_mem(ctx, len);
     int64_t pos = 0;
     if (OB_ISNULL(buf)) {

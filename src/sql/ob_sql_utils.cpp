@@ -399,7 +399,7 @@ int ObSQLUtils::calc_sql_expression_without_row(
     if (NULL == new_expr) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       ObEvalCtx eval_ctx(exec_ctx, allocator);
       OZ (clear_expr_eval_flags_norecursive(*new_expr, eval_ctx));
       OZ (new_expr->eval(eval_ctx, datum)); // sql exprs called here
@@ -408,7 +408,13 @@ int ObSQLUtils::calc_sql_expression_without_row(
       if (OB_SUCC(ret) && !datum->is_null() && meta.is_decimal_int() && meta.get_scale() < 0) {
         ret = OB_ERR_UNEXPECTED;
       }
-      OZ (clone_datum_value(*datum, meta, owned,
+      // The result still belongs to the legacy parameter domain. Keep this
+      // typed view local and clone its bytes into the selected result owner.
+      alignas(8) char scratch[64];
+      ObDatum legacy;
+      const DatumCopyPlan plan(new_expr->get_sql_type());
+      OZ (plan.legacy_view(*datum, legacy, scratch, sizeof(scratch)));
+      OZ (clone_datum_value(legacy, meta, owned,
                             allocator != nullptr ? *allocator : exec_ctx.get_allocator()));
       if (OB_SUCC(ret)) {
         if (datum->is_null()) { meta.set_null(); }
@@ -485,14 +491,19 @@ int ObSQLUtils::calc_const_expr(ObSQLSessionInfo *session,
 }
 
 namespace {
-int save_evaluated_value(const ObDatum &res_datum, const SqlTypeMeta &meta,
+int save_evaluated_value(const Datum &value, const ObExpr &expression,
                          ObIAllocator &allocator, ObExecContext *out_ctx,
                          DatumParameter &result, bool force_copy_extend_type)
 {
   int ret = OB_SUCCESS;
+  const SqlTypeMeta &meta = expression.obj_meta_;
+  const DatumCopyPlan plan(expression.get_sql_type());
+  alignas(8) char scratch[64];
+  ObDatum res_datum;
   ObDatum owned;
   SqlTypeMeta output_meta = meta;
-  if (!res_datum.is_null() && meta.is_ext() && !meta.is_ext_sql_array()) {
+  if (OB_FAIL(plan.legacy_view(value, res_datum, scratch, sizeof(scratch)))) {
+  } else if (!res_datum.is_null() && meta.is_ext() && !meta.is_ext_sql_array()) {
     DatumParameter source, snapshot;
     source.datum_ = res_datum;
     source.set_type_meta(meta);
@@ -579,7 +590,7 @@ int ObSQLUtils::se_calc_const_expr_impl(ObSQLSessionInfo *session,
     } else {
       phy_plan_ctx = &tmp_phy_plan_ctx;
       for (int i = 0; OB_SUCC(ret) && i < params.count(); i++) {
-        if (OB_FAIL(phy_plan_ctx->get_param_store_for_update().push_back(params.at(i)))) {
+        if (OB_FAIL(phy_plan_ctx->append_parameter_input(params.at(i)))) {
         }
       } // end for
       if (OB_FAIL(ret)) {
@@ -660,7 +671,7 @@ int ObSQLUtils::se_calc_const_expr_impl(ObSQLSessionInfo *session,
           } else {
             ObEvalCtx eval_ctx(exec_ctx);
             ret = save_evaluated_value(calc_expr->locate_expr_datum(eval_ctx),
-                                       calc_expr->obj_meta_, allocator, out_ctx,
+                                       *calc_expr, allocator, out_ctx,
                                        result, force_copy_extend_type);
           }
         }
@@ -2193,10 +2204,11 @@ int ObSQLUtils::get_partition_range_common(
                                     ObEvalCtx &eval_ctx, ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   DatumValue candidate;
   if (OB_FAIL(part_expr->eval(eval_ctx, datum))) {
-  } else if (OB_FAIL(project_datum_value_view(*datum, part_expr->obj_meta_, part_expr->obj_datum_map_, function_obj->meta_, candidate))) {
+  } else if (OB_FAIL(project_native_datum_value_view(*datum, part_expr->get_sql_type(),
+      part_expr->obj_meta_, part_expr->obj_datum_map_, function_obj->meta_, candidate, owner))) {
   } else if (part_type == share::schema::ObPartitionFuncType::PARTITION_FUNC_TYPE_HASH &&
       OB_FAIL(ObSQLUtils::revise_hash_part_object(candidate, owner))) {
   }
@@ -2208,8 +2220,14 @@ int ObSQLUtils::revise_hash_part_object(common::DatumValue &obj, ObIAllocator &o
 {
   int ret = OB_SUCCESS;
   DatumValue result;
-  if (OB_FAIL(result.set_int(0, owner))) {}
-  else { ret = ObExprFuncPartHash::calc_value_for_mysql(obj.datum_, result.datum_, obj.get_type()); }
+  SqlType type;
+  Datum input, output;
+  if (OB_FAIL(SqlType::from_legacy(obj.get_meta(), ObAccuracy(), type))) {
+  } else if (OB_FAIL(DatumCopyPlan(type).import_legacy(obj.datum_, input))) {
+  } else if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(input, output, obj.get_type()))) {
+  } else {
+    ret = result.set_int(output.get_int(), owner);
+  }
   if (OB_SUCC(ret)) {
     obj = result;
   }

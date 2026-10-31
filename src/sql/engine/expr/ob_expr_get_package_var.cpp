@@ -112,14 +112,14 @@ int ObExprGetPackageVar::calc_result_typeN(ObExprResType &type,
 
 int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
                                               ObEvalCtx &ctx,
-                                              ObDatum &res)
+                                              Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *package_id = NULL;
-  ObDatum *var_idx = NULL;
-  ObDatum *result_type = NULL;
-  ObDatum *spec_version = NULL;
-  ObDatum *body_version = NULL;
+  Datum *package_id = NULL;
+  Datum *var_idx = NULL;
+  Datum *result_type = NULL;
+  Datum *spec_version = NULL;
+  Datum *body_version = NULL;
   if (OB_FAIL(expr.eval_param_value(
       ctx, package_id, var_idx, result_type, spec_version, body_version))) {
   } else if (package_id->is_null()
@@ -159,23 +159,14 @@ int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
           }
         }
       } else {
-        ObDatum adjusted = res_obj.datum_;
+        Datum adjusted;
+        OZ(expr.get_datum_copy_plan().import_legacy(res_obj.datum_, adjusted));
         if (is_lob_storage(res_obj.get_type())) {
-          OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res_obj.datum_, res_obj.get_meta(), expr.obj_meta_,
-                                 ctx.exec_ctx_.get_allocator(), adjusted));
+          OZ(ob_adjust_lob_datum(ctx.exec_ctx_, adjusted, res_obj.get_meta(), expr.obj_meta_,
+                                ctx.exec_ctx_.get_allocator(), adjusted));
         }
-        if (OB_SUCC(ret)) {
-          const auto map = expr.obj_datum_map_;
-          if (!adjusted.is_null() && res.ptr_ != nullptr
-              && (map == OBJ_DATUM_8BYTE_DATA || map == OBJ_DATUM_4BYTE_DATA || map == OBJ_DATUM_1BYTE_DATA)
-              && adjusted.len_ == ObDatum::get_reserved_size(map, PRECISION_UNKNOWN_YET)) {
-            MEMCPY(const_cast<char *>(res.ptr_), adjusted.ptr_, adjusted.len_);
-            res.pack_ = adjusted.pack_;
-          } else {
-            ObExprStrResAlloc result_allocator(expr, ctx);
-            OZ(res.deep_copy(adjusted, result_allocator));
-          }
-        }
+        OZ(expr.deep_copy_datum(ctx, adjusted));
+        if (OB_SUCC(ret)) { res = expr.locate_expr_datum(ctx); }
       }
     }
   }

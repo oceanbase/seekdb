@@ -58,7 +58,7 @@ int ObExprSpatialMbr::calc_result_type1(ObExprResType &type,
 
 int ObExprSpatialMbr::eval_spatial_mbr(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &res)
+                                       Datum &res)
 {
   UNUSED(expr);
   UNUSED(ctx);

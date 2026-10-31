@@ -33,34 +33,22 @@ OB_SERIALIZE_MEMBER(ObDynamicParamSetter, param_idx_, src_, dst_);
 OB_SERIALIZE_MEMBER(ObOpSchemaObj, obj_type_, is_not_null_, order_type_);
 
 int assign_parameter_to_expr(ObEvalCtx &ctx, const ObExpr &expr,
-                             const ObDatum &source, const SqlTypeMeta &meta)
+                             const common::ObDatum &source, const SqlTypeMeta &meta)
 {
-  int ret = OB_SUCCESS;
-  // source may alias the destination; save its pointer before resetting the
-  // expression's result pointer to its reserved buffer.
-  ObDatum value(source);
-  ObDatum &output = expr.locate_datum_for_write(ctx);
-  if (!value.is_null() && meta.is_ext_sql_array() && value.len_ == sizeof(int64_t) &&
-      expr.obj_datum_map_ == OBJ_DATUM_EXTEND) {
-    alignas(8) char payload[DATUM_EXTEND_PAYLOAD_SIZE];
-    ObDatum extended;
-    extended.ptr_ = payload;
-    extended.set_extend(value.get_int(), T_EXT_SQL_ARRAY, 0, meta.get_cs_level(), meta.get_cs_type());
-    if (expr.res_buf_off_ == 0) {
-      ObDatum owned;
-      if (OB_FAIL(owned.deep_copy(extended, ctx.exec_ctx_.get_allocator()))) {
-      } else { output = owned; }
-    } else { ret = expr.deep_copy_datum(ctx, extended); }
-  } else if (expr.res_buf_off_ == 0) {
-    output = value;
-  } else { ret = expr.deep_copy_datum(ctx, value); }
+  // This is the construction/compatibility input boundary, not an execution
+  // frame alias. Inline scalars are loaded once; same-statement resources keep
+  // their existing owner while any wrapper bytes live in the expression arena.
+  UNUSED(meta);
+  Datum value;
+  int ret = expr.get_datum_copy_plan().import_legacy(source, value);
+  if (OB_SUCC(ret)) { ret = expr.deep_copy_datum(ctx, value); }
   return ret;
 }
 
 int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx) const
 {
   int ret = OB_SUCCESS;
-  ObDatum *res = NULL;
+  Datum *res = NULL;
   if (OB_ISNULL(src_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(src_->eval(eval_ctx, res))) {
@@ -81,29 +69,14 @@ int ObDynamicParamSetter::set_dynamic_param(ObEvalCtx &eval_ctx, DatumParameter 
 int ObDynamicParamSetter::capture_dynamic_param(ObEvalCtx &eval_ctx, DatumParameter &param) const
 {
   int ret = OB_SUCCESS;
-  ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
-  if (OB_ISNULL(plan_ctx) || OB_ISNULL(dst_) || param_idx_ < 0 ||
-      param_idx_ >= plan_ctx->get_datum_param_store().count()) {
+  const ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
+  if (plan_ctx == nullptr || dst_ == nullptr || param_idx_ < 0
+      || param_idx_ >= plan_ctx->get_param_store().count()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    DatumParameter view = plan_ctx->get_datum_param_store().at(param_idx_);
-    const ObDatum stored_value(view.datum_);
-    view.set_datum(dst_->locate_expr_datum(eval_ctx));
-    if (!view.is_null() && view.is_ext_sql_array()) {
-      if (view.datum_.len_ != sizeof(int64_t)) {
-        if (!view.datum_.has_ext_value() || view.datum_.get_extend_type() != T_EXT_SQL_ARRAY) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          const int64_t address = view.datum_.get_ext();
-          if (!stored_value.is_null() && stored_value.len_ == sizeof(int64_t) && stored_value.get_int() == address) {
-            view.set_datum(stored_value);
-          } else if (OB_FAIL(view.alloc_datum_reserved_buff(view.get_type_meta(), view.get_precision(), eval_ctx.exec_ctx_.get_allocator()))) {
-          } else { view.set_array_address(reinterpret_cast<const DatumParameterArray *>(address)); }
-        }
-      }
-      if (OB_SUCC(ret) && view.datum_.get_int() == 0) { ret = OB_ERR_UNEXPECTED; }
-    }
-    if (OB_SUCC(ret)) { param = view; }
+    // The compatibility descriptor borrows the same authoritative native slot.
+    // A retaining consumer must clone it before a subsequent parameter write.
+    param = plan_ctx->get_param_store().at(param_idx_);
   }
   return ret;
 }
@@ -112,79 +85,66 @@ int ObDynamicParamSetter::restore_dynamic_param(ObEvalCtx &eval_ctx, const Datum
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
-  if (OB_ISNULL(plan_ctx) || OB_ISNULL(dst_) || param_idx_ < 0 ||
-      param_idx_ >= plan_ctx->get_datum_param_store().count()) {
+  if (plan_ctx == nullptr || dst_ == nullptr) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, param))) {
   } else {
-    DatumParameter &slot = plan_ctx->get_datum_param_store().at(param_idx_);
-    const DatumParameter saved(slot);
-    const DatumParameter input(param);
-    slot = input;
-    ObDatum value(input.datum_);
-    if (OB_FAIL(update_dynamic_param(eval_ctx, value))) {
-      slot = saved;
+    const Datum *value = plan_ctx->get_native_parameter(param_idx_);
+    if (value == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      clear_parent_evaluated_flag(eval_ctx, *dst_);
+      dst_->locate_datum_for_write(eval_ctx) = *value;
+      dst_->get_eval_info(eval_ctx).evaluated_ = true;
     }
   }
   return ret;
 }
 
-int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, ObDatum &datum) const
+int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, const Datum &datum) const
 {
   int ret = OB_SUCCESS;
-  ObPhysicalPlanCtx *phy_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
-  if (OB_ISNULL(phy_ctx) || OB_ISNULL(dst_)) {
+  ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
+  if (plan_ctx == nullptr || dst_ == nullptr || param_idx_ < 0
+      || param_idx_ >= plan_ctx->get_param_store().count()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (param_idx_ < 0 || param_idx_ >= phy_ctx->get_datum_param_store().count()) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    clear_parent_evaluated_flag(eval_ctx, *dst_);
-    dst_->get_eval_info(eval_ctx).evaluated_ = true;
-    if (OB_FAIL(assign_parameter_to_expr(eval_ctx, *dst_, datum, dst_->obj_meta_))) {
+    const DatumCopyPlan plan = dst_->get_datum_copy_plan();
+    int64_t checked_size = 0;
+    // The generator has already cast the source to the target declaration.
+    // Validate its canonical shape before publishing either destination.
+    Datum candidate = datum;
+    if (OB_FAIL(plan.carrier_span_size(candidate, checked_size))) {
     } else {
-      const ObDatum &frame = dst_->locate_expr_datum(eval_ctx);
-      DatumParameter updated = phy_ctx->get_datum_param_store().at(param_idx_);
-      updated.set_datum(frame);
-      if (frame.is_null()) {
-        updated.set_null();
-      } else if (dst_->obj_datum_map_ == OBJ_DATUM_NULL) {
-        updated.set_type_meta(dst_->obj_meta_);
-        updated.set_null();
-      } else if ((dst_->obj_meta_.is_decimal_int() && dst_->obj_meta_.get_scale() < 0) ||
-                 dst_->obj_datum_map_ == OBJ_DATUM_MAPPING_MAX) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (dst_->obj_datum_map_ == OBJ_DATUM_EXTEND) {
-        SqlTypeMeta meta;
-        if (frame.is_native_extend()) {
-          meta.set_ext();
-          meta.set_extend_type(frame.get_extend_type());
-          meta.set_cs_level(frame.get_extend_collation_level());
-          meta.set_cs_type(frame.get_extend_collation());
-        } else if (frame.len_ == DATUM_LEGACY_EXTEND_SIZE && frame.is_ext()) {
-          MEMCPY(&meta, frame.ptr_, sizeof(meta));
-        } else {
-          ret = OB_ERR_UNEXPECTED;
-        }
+      DatumParameter updated = plan_ctx->get_param_store().at(param_idx_);
+      common::ObDatum legacy;
+      ret = plan.borrow_legacy(candidate, legacy);
+      if (ret == OB_NOT_SUPPORTED) {
+        int64_t bytes = 0;
+        ret = plan.legacy_payload_size(candidate, bytes);
         if (OB_SUCC(ret)) {
-          updated.set_type_meta(meta);
-          if (meta.is_null()) {
-            updated.datum_.set_null();
-          } else if (meta.is_ext_sql_array()) {
-            const int64_t address = frame.get_ext();
-            if (OB_FAIL(updated.alloc_datum_reserved_buff(meta, updated.get_precision(), eval_ctx.exec_ctx_.get_allocator()))) {
-            } else { updated.set_array_address(reinterpret_cast<const DatumParameterArray *>(address)); }
+          char *buffer = bytes == 0 ? nullptr
+              : static_cast<char *>(eval_ctx.exec_ctx_.get_allocator().alloc(bytes));
+          if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+          else {
+            int64_t position = 0;
+            ret = plan.export_legacy(candidate, legacy, buffer, bytes, position);
           }
         }
-      } else {
-        updated.set_type_meta(dst_->obj_meta_);
       }
       if (OB_SUCC(ret)) {
+        updated.set_datum(legacy);
+        if (candidate.is_null()) { updated.set_null(); }
+        else { updated.set_type_meta(dst_->obj_meta_); }
         if (dst_->obj_meta_.is_decimal_int()) {
+          updated.set_accuracy(dst_->get_sql_type().accuracy());
           updated.set_param_meta(dst_->obj_meta_);
-          updated.set_accuracy(ObAccuracy(dst_->datum_meta_.precision_, dst_->datum_meta_.scale_));
+        } else { updated.set_param_meta(); }
+        if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, updated))) {
         } else {
-          updated.set_param_meta();
+          clear_parent_evaluated_flag(eval_ctx, *dst_);
+          dst_->locate_datum_for_write(eval_ctx) = *plan_ctx->get_native_parameter(param_idx_);
+          dst_->get_eval_info(eval_ctx).evaluated_ = true;
         }
-        ret = phy_ctx->set_runtime_parameter(param_idx_, updated);
       }
     }
   }
@@ -624,7 +584,7 @@ int ObOperator::output_expr_decint_datum_len_check()
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < spec_.output_.count(); ++i) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     const ObExpr *expr = spec_.output_[i];
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
@@ -634,9 +594,9 @@ int ObOperator::output_expr_decint_datum_len_check()
     } else {
       const int16_t precision = expr->datum_meta_.precision_;
       if (OB_UNLIKELY(precision < 0)) {
-      } else if (!datum->is_null() && datum->len_ != 0) {
-        const int len = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(precision);
-        OB_ASSERT (len == datum->len_);
+      } else {
+        int64_t bytes = 0;
+        ret = expr->get_datum_copy_plan().legacy_payload_size(*datum, bytes);
       }
     }
   }
@@ -660,15 +620,15 @@ int ObOperator::output_expr_decint_datum_len_check_batch()
       } else if (GET_MY_SESSION(eval_ctx_.exec_ctx_)->is_diagnosis_enabled() &&
                 OB_FAIL(do_diagnosis(eval_ctx_.exec_ctx_, *brs_.skip_))) {
       } else if (!expr->is_batch_result()) {
-        const ObDatum &datum = expr->locate_expr_datum(eval_ctx_);
-        if (!datum.is_null() && datum.len_ != 0) {
-          OB_ASSERT (len == datum.len_);
-        }
+        const Datum &datum = expr->locate_expr_datum(eval_ctx_);
+        int64_t bytes = 0;
+        ret = expr->get_datum_copy_plan().legacy_payload_size(datum, bytes);
       } else {
-        const ObDatum *datums = expr->locate_batch_datums(eval_ctx_);
+        const Datum *datums = expr->locate_batch_datums(eval_ctx_);
         for (int64_t j = 0; j < brs_.size_; j++) {
           if (!brs_.skip_->at(j) && !datums[j].is_null()) {
-            OB_ASSERT (len == datums[j].len_);
+            int64_t bytes = 0;
+            ret = expr->get_datum_copy_plan().legacy_payload_size(datums[j], bytes);
           }
         }
       }
@@ -1048,7 +1008,7 @@ int ObOperator::get_next_row()
     } else if (OB_SUCC(ret)) {
       if (spec_.get_phy_plan()->is_vectorized()
           || spec_.get_phy_plan()->is_contains_assignment()) {
-        ObDatum *res = NULL;
+        Datum *res = NULL;
         FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
           if (OB_FAIL((*e)->eval(eval_ctx_, res))) {
           } else {
@@ -1193,13 +1153,9 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
 
       // do project
       if (OB_SUCC(ret) && brs_.size_ > 0) {
-        bool native_only = false;
-        if (OB_FAIL(check_native_batch_output(native_only))) {
-        } else if (!native_only) {
-          FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
-            ret = (*e)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_);
-            (*e)->get_eval_info(eval_ctx_).projected_ = true;
-          }
+        FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
+          ret = (*e)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_);
+          (*e)->get_eval_info(eval_ctx_).projected_ = true;
         }
       }
       
@@ -1257,7 +1213,7 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
 
 int ObOperator::filter_row(ObEvalCtx &eval_ctx, const ObIArray<ObExpr *> &exprs, bool &filtered)
 {
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int ret = OB_SUCCESS;
   filtered = false;
   FOREACH_CNT_X(e, exprs, OB_SUCC(ret)) {
@@ -1265,7 +1221,7 @@ int ObOperator::filter_row(ObEvalCtx &eval_ctx, const ObIArray<ObExpr *> &exprs,
     if (OB_FAIL((*e)->eval(eval_ctx, datum))) {
     } else {
       OB_ASSERT(ob_is_int_tc((*e)->datum_meta_.type_));
-      if (datum->null_ || 0 == *datum->int_) {
+      if (datum->is_null() || 0 == datum->get_int()) {
         filtered = true;
         break;
       }
@@ -1302,18 +1258,18 @@ int ObOperator::filter_batch_rows(const ObExprPtrIArray &exprs,
     OB_ASSERT(ob_is_int_tc((*e)->datum_meta_.type_));
     if (OB_FAIL((*e)->eval_batch(eval_ctx_, skip, bsize))) {
     } else if (!(*e)->is_batch_result()) {
-      const ObDatum &d = (*e)->locate_expr_datum(eval_ctx_);
-      if (d.null_ || 0 == *d.int_) {
+      const Datum &d = (*e)->locate_expr_datum(eval_ctx_);
+      if (d.is_null() || 0 == d.get_int()) {
         all_filtered = true;
         skip.set_all(bsize);
         tmp_all_active = false;
       }
     } else {
       int64_t output_rows = 0;
-      const ObDatum *datums = (*e)->locate_batch_datums(eval_ctx_);
+      const Datum *datums = (*e)->locate_batch_datums(eval_ctx_);
       for (int64_t i = 0; i < bsize; i++) {
         if (!skip.at(i)) {
-          if (datums[i].null_ || 0 == *datums[i].int_) {
+          if (datums[i].is_null() || 0 == datums[i].get_int()) {
             skip.set(i);
             tmp_all_active = false;
           } else {
@@ -1535,7 +1491,7 @@ int ObBatchRowIter::get_next_row(ObEvalCtx &eval_ctx, const ObOpSpec &spec)
   for (auto i = 0; OB_SUCC(ret) && i < spec.output_.count(); i++) {
     ObExpr *expr = spec.output_.at(i);
     if (expr->is_batch_result() && 0 != cur_idx()) {
-      ObDatum *datums = expr->locate_batch_datums(eval_ctx);
+      Datum *datums = expr->locate_batch_datums(eval_ctx);
       datums[0] = datums[cur_idx()];
       LOG_DEBUG("copy datum to datum[0], details: ", K(cur_idx()), K(datums[0]),
                K(expr->locate_batch_datums(eval_ctx)),

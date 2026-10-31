@@ -210,6 +210,7 @@ SQL_INTERFACE_CLOSURE_HEADERS = [
     "engine/expr/ob_expr_ai/ob_ai_func.h",
     "engine/expr/ob_expr_calc_partition_id.h",
     "engine/expr/ob_expr_extra_info_factory.h",
+    "engine/expr/native_frame_value_codec.h",
     "engine/expr/ob_expr_frame_info.h",
     "engine/expr/ob_expr_interval.h",
     "engine/expr/ob_expr_join_filter.h",

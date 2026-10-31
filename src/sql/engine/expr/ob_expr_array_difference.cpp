@@ -105,8 +105,8 @@ int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *
   int ret = OB_SUCCESS;
   alignas(int512_t) char this_buf[sizeof(int512_t)] = {};
   alignas(int512_t) char last_buf[sizeof(int512_t)] = {};
-  ObDatum this_elem;
-  ObDatum last_elem;
+  common::ObDatum this_elem;
+  common::ObDatum last_elem;
   this_elem.ptr_ = this_buf;
   last_elem.ptr_ = last_buf;
   ObCollectionBasicType *elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(src_arr->get_array_type())->element_type_);
@@ -154,14 +154,14 @@ int ObExprArrayDifference::calc_difference(ObIArrayType *src_arr, ObIArrayType *
   } // end for
   return ret;
 }
-int ObExprArrayDifference::eval_array_difference(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayDifference::eval_array_difference(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   const uint16_t res_subschema_id = expr.obj_meta_.get_subschema_id();
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
 
@@ -188,7 +188,7 @@ int ObExprArrayDifference::eval_array_difference_batch(const ObExpr &expr, ObEva
                                                        const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -199,7 +199,7 @@ int ObExprArrayDifference::eval_array_difference_batch(const ObExpr &expr, ObEva
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

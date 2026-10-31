@@ -29,7 +29,7 @@ class ObExprGreatest : public ObExprLeastGreatest
 public:
   explicit  ObExprGreatest(common::ObIAllocator &alloc);
   virtual ~ObExprGreatest() {}
-  static int calc_greatest(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_greatest(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprGreatest);

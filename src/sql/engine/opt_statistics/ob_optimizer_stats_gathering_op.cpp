@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "ob_optimizer_stats_gathering_op.h"
 
 namespace oceanbase
@@ -305,7 +307,7 @@ int ObOptimizerStatsGatheringOp::get_col_stat_by_key(ObOptColumnStat::Key &key, 
 int ObOptimizerStatsGatheringOp::calc_column_stats(ObExpr *expr, uint64_t column_id, int64_t &row_len)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int64_t col_len  = 0;
   ObOptOSGColumnStat *global_col_stat = NULL;
   ObOptColumnStat::Key global_col_stats_key(MY_SPEC.table_id_, MY_SPEC.table_id_, column_id);
@@ -324,10 +326,15 @@ int ObOptimizerStatsGatheringOp::calc_column_stats(ObExpr *expr, uint64_t column
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObExprSysOpOpnsize::calc_sys_op_opnsize(expr, datum, col_len))) {
   } else if (OB_FALSE_IT(global_col_stat->col_stat_->set_stat_level(StatLevel::TABLE_LEVEL))) {
-  } else if (OB_FAIL(global_col_stat->update_column_stat_info(datum, expr->obj_meta_,
-                                                              expr->basic_funcs_->null_first_cmp_))) {
   } else {
-    row_len += col_len;
+    alignas(8) char scratch[64];
+    ObDatum legacy;
+    const ObDatumBasicFuncs *functions = storage_predicate_functions(*expr);
+    if (functions == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(global_col_stat->update_column_stat_info(&legacy, expr->obj_meta_,
+                                                               functions->null_first_cmp_))) {
+    } else { row_len += col_len; }
   }
   return ret;
 }

@@ -34,8 +34,8 @@ public:
 																common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const;
-  static int calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  static int calc_text(const ObExpr &expr, ObEvalCtx &ctx, const ObDatum &input_bits_dat, ObDatum &res);
+  static int calc_make_set_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int calc_text(const ObExpr &expr, ObEvalCtx &ctx, const Datum &input_bits_dat, Datum &res);
   DECLARE_SET_LOCAL_SESSION_VARS;
   
 private:

@@ -57,7 +57,7 @@ int ObExprEncodeSortkey::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprEncodeSortkey::eval_encode_sortkey(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprEncodeSortkey::eval_encode_sortkey(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
 
@@ -82,8 +82,8 @@ int ObExprEncodeSortkey::eval_encode_sortkey(const ObExpr &expr, ObEvalCtx &ctx,
       } else {
         encode_ctx->max_len_ = expr.res_buf_len_;
         for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i += 3) {
-          ObDatum *order = NULL;
-          ObDatum *nulls_pos = NULL;
+          Datum *order = NULL;
+          Datum *nulls_pos = NULL;
           if (OB_FAIL(expr.args_[i + 1]->eval(ctx, order))) {
           } else if (OB_FAIL(expr.args_[i + 2]->eval(ctx, nulls_pos))) {
           } else if (OB_ISNULL(order)) {
@@ -146,12 +146,15 @@ int ObExprEncodeSortkey::eval_encode_sortkey(const ObExpr &expr, ObEvalCtx &ctx,
       // encode
       bool has_invalid_uni = false;
       for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i += 3) {
-        ObDatum *data = NULL;
+        Datum *data = NULL;
         if (OB_FAIL(expr.args_[i]->eval(ctx, data))) {
         } else {
           int64_t tmp_data_len = 0;
-          if (OB_FAIL(share::ObSortkeyConditioner::process_key_conditioning(
-                       *data, buf + data_len, encode_ctx->max_len_ - data_len,
+          common::ObDatum legacy;
+          alignas(8) char scratch[64];
+          if (OB_FAIL(expr.args_[i]->get_datum_copy_plan().legacy_view(*data, legacy, scratch, sizeof(scratch)))) {
+          } else if (OB_FAIL(share::ObSortkeyConditioner::process_key_conditioning(
+                       legacy, buf + data_len, encode_ctx->max_len_ - data_len,
                        tmp_data_len, params[i / 3]))) {
             if (ret != OB_BUF_NOT_ENOUGH) {
             }
@@ -212,8 +215,8 @@ int ObExprEncodeSortkey::eval_encode_sortkey_batch(const ObExpr &expr,
           if (OB_FAIL(expr.args_[i + 1]->eval_batch(ctx, skip, batch_size))) {
           } else if (OB_FAIL(expr.args_[i + 2]->eval_batch(ctx, skip, batch_size))) {
           } else {
-            ObDatum order = expr.args_[i + 1]->locate_expr_datum(ctx);
-            ObDatum nulls_pos = expr.args_[i + 2]->locate_expr_datum(ctx);
+            Datum order = expr.args_[i + 1]->locate_expr_datum(ctx);
+            Datum nulls_pos = expr.args_[i + 2]->locate_expr_datum(ctx);
             share::ObEncParam *param = new (buf + i / 3) share::ObEncParam();
             param->type_ = expr.args_[i]->datum_meta_.type_;
             param->cs_type_ = expr.args_[i]->datum_meta_.cs_type_;
@@ -279,10 +282,13 @@ int ObExprEncodeSortkey::eval_encode_sortkey_batch(const ObExpr &expr,
         }
         bool has_invalid_uni = false;
         for (int64_t j = 0; !has_invalid_uni && OB_SUCC(ret) && j < expr.arg_cnt_; j += 3) {
-          ObDatum &data = expr.args_[j]->locate_expr_datum(ctx, i);
+          Datum &data = expr.args_[j]->locate_expr_datum(ctx, i);
           int64_t tmp_data_len = 0;
-          if (OB_FAIL(share::ObSortkeyConditioner::process_key_conditioning(
-                      data, buf + encode_len, encode_ctx->max_len_ - encode_len, tmp_data_len,
+          common::ObDatum legacy;
+          alignas(8) char scratch[64];
+          if (OB_FAIL(expr.args_[j]->get_datum_copy_plan().legacy_view(data, legacy, scratch, sizeof(scratch)))) {
+          } else if (OB_FAIL(share::ObSortkeyConditioner::process_key_conditioning(
+                      legacy, buf + encode_len, encode_ctx->max_len_ - encode_len, tmp_data_len,
                       params[j / 3]))) {
             if (ret != OB_BUF_NOT_ENOUGH) {
             }

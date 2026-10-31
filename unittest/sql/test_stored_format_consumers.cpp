@@ -149,6 +149,7 @@ protected:
     expr.frame_idx_ = 0;
     expr.datum_off_ = base + 16;
     expr.eval_info_off_ = base + 96;
+    expr.eval_flags_off_ = base + 128;
     expr.res_buf_off_ = base + 160;
     expr.res_buf_len_ = 64;
     expr.type_ = T_COLUMN_REF;
@@ -156,13 +157,16 @@ protected:
     expr.batch_idx_mask_ = batch ? UINT64_MAX : 0;
     expr.obj_datum_map_ = text ? OBJ_DATUM_STRING : OBJ_DATUM_8BYTE_DATA;
     if (text) { expr.obj_meta_.set_varchar(); } else { expr.obj_meta_.set_int(); }
-    expr.datum_meta_.type_ = text ? ObVarcharType : ObIntType;
-    for (int i = 0; i < 2; ++i) { new (frame_.data() + expr.datum_off_ + i * sizeof(ObDatum)) ObDatum; }
+    expr.obj_meta_.set_collation_type(CS_TYPE_BINARY);
+    expr.datum_meta_ = ObDatumMeta(text ? ObVarcharType : ObIntType, CS_TYPE_BINARY, 0);
+    ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(), arena_));
+    for (int i = 0; i < 2; ++i) { new (frame_.data() + expr.datum_off_ + i * sizeof(Datum)) Datum; }
+    new (frame_.data() + expr.eval_info_off_) ObEvalInfo;
   }
 
-  ObDatum *output(int64_t index)
+  Datum *output(int64_t index)
   {
-    return reinterpret_cast<ObDatum *>(frame_.data() + exprs_[index].datum_off_);
+    return reinterpret_cast<Datum *>(frame_.data() + exprs_[index].datum_off_);
   }
 
   ObArenaAllocator arena_;
@@ -284,14 +288,45 @@ TEST_F(StoredFormatConsumers, cte_scalar_decode_preserves_fixed_buffers_variable
   for (int64_t index : {1, 0, 2, -1}) { ASSERT_EQ(OB_SUCCESS, chosen.push_back(index)); }
   exprs_[3].is_static_const_ = true;
   output(3)->set_null();
-  const uint32_t constant_descriptor = output(3)->pack_;
+  const Datum constant_descriptor = *output(3);
+
+  // An invalid fixed integer must leave both its native slot and publication
+  // flags untouched. The following valid call can then recompute that slot.
+  ObSEArray<ObExpr *, 1> integer_expr;
+  ObSEArray<int64_t, 1> integer_index;
+  ASSERT_EQ(OB_SUCCESS, integer_expr.push_back(&exprs_[1]));
+  ASSERT_EQ(OB_SUCCESS, integer_index.push_back(0));
+  output(1)->set_int(91);
+  source.row_->stored_cells()[0].len_ = sizeof(int64_t) - 1;
+  EXPECT_EQ(OB_INVALID_ARGUMENT,
+      op_.to_expr(integer_expr, integer_index, source.row_, op_.get_eval_ctx()));
+  EXPECT_EQ(91, output(1)->get_int());
+  EXPECT_FALSE(exprs_[1].get_eval_info(op_.get_eval_ctx()).evaluated_);
+  EXPECT_FALSE(exprs_[1].get_eval_info(op_.get_eval_ctx()).projected_);
+  source.row_->stored_cells()[0].len_ = sizeof(int64_t);
+
   ASSERT_EQ(OB_SUCCESS, op_.to_expr(exprs, chosen, source.row_, op_.get_eval_ctx()));
-  EXPECT_EQ(source.row_->stored_cells()[1].ptr_, output(0)->ptr_);
-  EXPECT_EQ(-3000000001LL, integer_value(*output(1)));
-  EXPECT_NE(source.row_->stored_cells()[0].ptr_, output(1)->ptr_);
+  EXPECT_EQ(source.row_->stored_cells()[1].ptr_, output(0)->get_reference());
+  EXPECT_EQ(3, output(0)->length());
+  EXPECT_EQ(0, MEMCMP("a\0b", output(0)->get_reference(), 3));
+  EXPECT_EQ(-3000000001LL, output(1)->get_int());
+  // The integer is now inline. Its explicit old ABI view borrows only this
+  // caller's scratch, never the StoredRow payload.
+  ObDatum integer_view;
+  char integer_scratch[64];
+  ASSERT_EQ(OB_SUCCESS, exprs_[1].get_datum_copy_plan().legacy_view(
+      *output(1), integer_view, integer_scratch, sizeof(integer_scratch)));
+  EXPECT_NE(source.row_->stored_cells()[0].ptr_, integer_view.ptr_);
+  EXPECT_EQ(-3000000001LL, integer_value(integer_view));
   EXPECT_TRUE(output(2)->is_null());
-  EXPECT_EQ(constant_descriptor, output(3)->pack_);
+  EXPECT_EQ(0, MEMCMP(&constant_descriptor, output(3), sizeof(constant_descriptor)));
   EXPECT_FALSE(exprs_[3].get_eval_info(op_.get_eval_ctx()).projected_);
+  EXPECT_TRUE(exprs_[1].get_eval_info(op_.get_eval_ctx()).evaluated_);
+  EXPECT_TRUE(exprs_[1].get_eval_info(op_.get_eval_ctx()).projected_);
+  // Reference strings remain borrowed while inline integers survive reuse of
+  // their source bytes; the fixed StoredRow descriptor is still a 12B cell.
+  MEMSET(const_cast<char *>(source.row_->stored_cells()[0].ptr_), 0, sizeof(int64_t));
+  EXPECT_EQ(-3000000001LL, output(1)->get_int());
 }
 
 TEST_F(StoredFormatConsumers, cte_batch_decode_uses_the_requested_offset_for_batch_and_nonbatch_results)
@@ -312,12 +347,12 @@ TEST_F(StoredFormatConsumers, cte_batch_decode_uses_the_requested_offset_for_bat
   output(4)->set_null();
   op_.get_eval_ctx().set_max_batch_size(2);
   ASSERT_EQ(OB_SUCCESS, op_.attach_rows(exprs, chosen, rows, 1, op_.get_eval_ctx(), 2));
-  EXPECT_EQ(second.row_->stored_cells()[1].ptr_, output(0)[0].ptr_);
-  EXPECT_EQ(third.row_->stored_cells()[1].ptr_, output(0)[1].ptr_);
-  EXPECT_EQ(20, integer_value(output(1)[0]));
-  EXPECT_EQ(30, integer_value(output(1)[1]));
-  EXPECT_EQ(second.row_->stored_cells()[1].ptr_, output(2)[0].ptr_);
-  EXPECT_EQ(20, integer_value(output(3)[0]));
+  EXPECT_EQ(second.row_->stored_cells()[1].ptr_, output(0)[0].get_reference());
+  EXPECT_EQ(third.row_->stored_cells()[1].ptr_, output(0)[1].get_reference());
+  EXPECT_EQ(20, output(1)[0].get_int());
+  EXPECT_EQ(30, output(1)[1].get_int());
+  EXPECT_EQ(second.row_->stored_cells()[1].ptr_, output(2)[0].get_reference());
+  EXPECT_EQ(20, output(3)[0].get_int());
   EXPECT_TRUE(output(4)->is_null());
   EXPECT_FALSE(exprs_[4].get_eval_info(op_.get_eval_ctx()).projected_);
 }

@@ -41,12 +41,12 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
   static int calc_concat_ws_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res);
+                                 Datum &res);
   static int calc(const common::ObString &sep_str, const common::ObIArray<common::ObString> &words,
                         common::ObIAllocator &alloc, common::ObString &res_str);
-  static int calc_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int calc_text(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int calc_text(const ObExpr &expr, ObEvalCtx &ctx, const ObString &sep_str,
-                       const ObIArray<ObExpr *> &words, ObIAllocator &temp_allocator, ObDatum &res);
+                       const ObIArray<ObExpr *> &words, ObIAllocator &temp_allocator, Datum &res);
   DECLARE_SET_LOCAL_SESSION_VARS;
   
 private:

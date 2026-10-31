@@ -91,10 +91,10 @@ int ObExprTimestamp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   return ret;
 }
 
-int ObExprTimestamp::calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprTimestamp::calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param))) {
   } else if (param->is_null()) {
     result.set_null();
@@ -104,11 +104,11 @@ int ObExprTimestamp::calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   return ret;
 }
 
-int ObExprTimestamp::calc_timestamp2(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprTimestamp::calc_timestamp2(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datetime = NULL;
-  ObDatum *time = NULL;
+  Datum *datetime = NULL;
+  Datum *time = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, datetime, time))) {
   } else if (datetime->is_null() || time->is_null()) {
     result.set_null();

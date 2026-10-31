@@ -111,8 +111,8 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
     int32_t &extent, int32_t &buffer, bool &clip_geom)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum1 = nullptr;
-  ObDatum *datum2 = nullptr;
+  Datum *datum1 = nullptr;
+  Datum *datum2 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   ObExpr *arg2 = expr.args_[1];
   SqlValueType type1 = arg1->datum_meta_.type_;
@@ -174,7 +174,7 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
   uint32_t num_args = expr.arg_cnt_;
   extent = 4096;  // default
   if (OB_SUCC(ret) && num_args >= 3) {
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(allocator.eval_arg(expr.args_[2], ctx, datum))) {
     } else if (datum->is_null()) {
       // use default value
@@ -188,7 +188,7 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
   // process buffer
   buffer = 256;  // default
   if (OB_SUCC(ret) && num_args >= 4) {
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(allocator.eval_arg(expr.args_[3], ctx, datum))) {
     } else if (datum->is_null()) {
       // use default value
@@ -203,7 +203,7 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
   clip_geom = true;  // default
   int8_t clip_num = 0;
   if (OB_SUCC(ret) && num_args >= 5) {
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     if (OB_FAIL(allocator.eval_arg(expr.args_[4], ctx, datum))) {
     } else if (datum->is_null()) {
       // use default value
@@ -376,7 +376,7 @@ int ObExprPrivSTAsMVTGeom::clip_geometry(ObGeometry *geo, lib::MemoryContext &me
   return ret;
 }
 
-int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;

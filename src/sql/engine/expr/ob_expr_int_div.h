@@ -31,11 +31,11 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int div_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int div_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int div_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int div_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int div_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int div_int_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int div_int_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int div_uint_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int div_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int div_number(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   // temporary used, remove after all expr converted
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,

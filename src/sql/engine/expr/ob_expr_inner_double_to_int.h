@@ -38,7 +38,7 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_inner_double_to_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_inner_double_to_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   static int convert_double_to_int64_range(double d, int64_t &start, int64_t &end);
 

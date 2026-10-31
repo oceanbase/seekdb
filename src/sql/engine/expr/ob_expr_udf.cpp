@@ -633,7 +633,7 @@ int ObExprUDF::build_udf_ctx(int64_t udf_ctx_id,
   return ret;
 }
 
-int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   DatumParameter tmp_result;
@@ -786,9 +786,9 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       if (!result.is_null() && result.get_type() != expr.datum_meta_.type_) {
         ret = OB_INVALID_ARGUMENT;
       }
-      OX (res = result.datum_);
+      OZ(expr.get_datum_copy_plan().import_legacy(result.datum_, res));
       if (is_lob_storage(result.get_type())) {
-        OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result.datum_, result.get_meta(), expr.obj_meta_,
+        OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res, result.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), res));
       }
       OZ(expr.deep_copy_datum(ctx, res));
@@ -814,7 +814,7 @@ int ObExprUDF::fill_datum_stack(const ObExpr &expr, ObEvalCtx &ctx, DatumParamet
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     new (objs + i) DatumParameter();
-    capture_datum_parameter(*expr.args_[i], ctx, objs[i]);
+    OZ(capture_datum_parameter(*expr.args_[i], ctx, objs[i]));
   }
   return ret;
 }

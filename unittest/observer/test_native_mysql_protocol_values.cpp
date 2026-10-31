@@ -265,34 +265,36 @@ TEST(NativeMysqlProtocol, inline_bigint_rejects_non_values_and_incompatible_fiel
   EXPECT_EQ("42", std::string(out.get_bytes(), out.get_bytes_len()));
 }
 
-TEST(NativeMysqlProtocol, result_row_adapter_encodes_native_slots_without_reading_a_shadow_frame)
+TEST(NativeMysqlProtocol, result_row_adapter_encodes_authoritative_native_expression_slots)
 {
   ObArenaAllocator owner;
   sql::ObExecContext exec(owner);
+  alignas(8) char frame[1024]{};
+  char *frames[] = {frame};
+  exec.set_frames(frames);
   sql::ObEvalCtx eval(exec);
-  sql::ObExpr expr;
-  expr.obj_meta_.set_int();
-  expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+  sql::ObExpr expr[3];
   sql::ExprFixedArray exprs(owner);
   ASSERT_EQ(OB_SUCCESS, exprs.init(3));
-  for (int i = 0; i < 3; ++i) { ASSERT_EQ(OB_SUCCESS, exprs.push_back(&expr)); }
-  SqlType type;
-  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(expr.obj_meta_, ObAccuracy(20,0), type));
-  Datum values[3];
-  values[0].set_int(INT64_MIN);
-  values[2].set_int(INT64_MAX);
-  uint64_t generation = 1;
+  for (int i = 0; i < 3; ++i) {
+    expr[i].obj_meta_.set_int(); expr[i].obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+    expr[i].frame_idx_ = 0; expr[i].datum_off_ = i * 64;
+    ASSERT_EQ(OB_SUCCESS, expr[i].prepare_scalar_type(expr[i].obj_meta_, ObAccuracy(20,0), owner));
+    new (frame + expr[i].datum_off_) Datum();
+    ASSERT_EQ(OB_SUCCESS, exprs.push_back(&expr[i]));
+  }
+  expr[0].locate_expr_datum(eval).set_int(INT64_MIN);
+  expr[2].locate_expr_datum(eval).set_int(INT64_MAX);
   sql::ResultRowView view;
-  // No expression frames exist in this test. Any accidental fallback read is
-  // invalid; the real protocol adapter must consume the native slots directly.
-  view.set_inline_datums(exprs, eval, 0, true, values, &type, &generation, generation, false);
+  // The ordinary native row needs no compatibility scratch for the direct
+  // integer encoder, while each column still has its real full Type owner.
+  view.set_datums(exprs, eval, 0, false, nullptr);
   ASSERT_FALSE(view.has_legacy_datums());
   ObSEArray<ObField,4> fields;
   ObSEArray<int64_t,4> indexes;
   ObSEArray<DatumValue,4> fallback;
   for (int i = 0; i < 3; ++i) {
-    ObField field;
-    field.type_meta_.set_int();
+    ObField field; field.type_meta_.set_int();
     ASSERT_EQ(OB_SUCCESS, fields.push_back(field));
     ASSERT_TRUE(DatumMysqlRow::can_encode_inline(view, i, fields.at(i)));
     ASSERT_EQ(OB_SUCCESS, indexes.push_back(-3));
@@ -307,57 +309,47 @@ TEST(NativeMysqlProtocol, result_row_adapter_encodes_native_slots_without_readin
       ObMySQLCellValue actual, expected;
       ASSERT_EQ(OB_SUCCESS, row.build_cell_value(i, owner, actual));
       ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_inline_bigint_cell_value(
-          values[i], type, protocol, owner, expected, &fields.at(i)));
+          expr[i].locate_expr_datum(eval), expr[i].get_sql_type(), protocol, owner, expected, &fields.at(i)));
       EXPECT_EQ(neutral(OB_SUCCESS, expected), neutral(OB_SUCCESS, actual));
     }
-    ++generation;
+    view.set_legacy(nullptr);
     ObMySQLCellValue invalid;
-    EXPECT_EQ(OB_STATE_NOT_MATCH, row.build_cell_value(0, owner, invalid));
-    --generation;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, row.build_cell_value(0, owner, invalid));
+    view.set_datums(exprs, eval, 0, false, nullptr);
   }
   fields.at(0).type_meta_.set_uint64();
   EXPECT_FALSE(DatumMysqlRow::can_encode_inline(view, 0, fields.at(0)));
 }
 
-TEST(NativeMysqlProtocol, incompatible_native_only_adapter_indexes_fail_before_reading_a_frame)
+TEST(NativeMysqlProtocol, incompatible_native_adapter_indexes_fail_without_legacy_scratch)
 {
   ObArenaAllocator owner;
   sql::ObExecContext exec(owner);
+  alignas(8) char frame[64]{}; char *frames[] = {frame}; exec.set_frames(frames);
   sql::ObEvalCtx eval(exec);
   sql::ObExpr expr;
-  expr.obj_meta_.set_int();
-  expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+  expr.obj_meta_.set_int(); expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+  expr.frame_idx_ = 0; expr.datum_off_ = 0;
+  ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(20,0), owner));
+  new (frame) Datum(); expr.locate_expr_datum(eval).set_int(42);
   sql::ExprFixedArray exprs(owner);
-  ASSERT_EQ(OB_SUCCESS, exprs.init(1));
-  ASSERT_EQ(OB_SUCCESS, exprs.push_back(&expr));
-  SqlType type;
-  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(expr.obj_meta_, ObAccuracy(20,0), type));
-  Datum value;
-  value.set_int(42);
-  uint64_t generation = 1;
-  sql::ResultRowView view;
-  view.set_inline_datums(exprs, eval, 0, true, &value, &type, &generation, generation, false);
+  ASSERT_EQ(OB_SUCCESS, exprs.init(1)); ASSERT_EQ(OB_SUCCESS, exprs.push_back(&expr));
+  sql::ResultRowView view; view.set_datums(exprs, eval, 0, false, nullptr);
   ObSEArray<ObField, 1> fields;
-  ObField field;
-  field.type_meta_.set_int();
-  ASSERT_EQ(OB_SUCCESS, fields.push_back(field));
-  ObSEArray<int64_t, 1> indexes;
-  ASSERT_EQ(OB_SUCCESS, indexes.push_back(-1));
+  ObField field; field.type_meta_.set_int(); ASSERT_EQ(OB_SUCCESS, fields.push_back(field));
+  ObSEArray<int64_t, 1> indexes; ASSERT_EQ(OB_SUCCESS, indexes.push_back(-1));
   ObSEArray<DatumValue, 1> fallback;
-  sql::ObSQLSessionInfo session;
-  ASSERT_EQ(OB_SUCCESS, session.test_init(1,1,nullptr));
+  sql::ObSQLSessionInfo session; ASSERT_EQ(OB_SUCCESS, session.test_init(1,1,nullptr));
   ObDataTypeCastParams params;
   for (int64_t index : {int64_t(-1), int64_t(-2)}) {
     indexes.at(0) = index;
     DatumMysqlRow row(BINARY, view, indexes, fallback, params, session, fields, CHARSET_UTF8MB4, nullptr);
-    ObMySQLCellValue out;
-    EXPECT_EQ(OB_STATE_NOT_MATCH, row.build_cell_value(0, owner, out));
+    ObMySQLCellValue out; EXPECT_EQ(OB_STATE_NOT_MATCH, row.build_cell_value(0, owner, out));
   }
   indexes.at(0) = -3;
-  view.set_datums(exprs, eval, 0, true); // stale native encoding choice on a legacy row
+  view.set_legacy(nullptr); // a stale native encoding choice must not read a frame
   DatumMysqlRow row(BINARY, view, indexes, fallback, params, session, fields, CHARSET_UTF8MB4, nullptr);
-  ObMySQLCellValue out;
-  EXPECT_EQ(OB_STATE_NOT_MATCH, row.build_cell_value(0, owner, out));
+  ObMySQLCellValue out; EXPECT_EQ(OB_INVALID_ARGUMENT, row.build_cell_value(0, owner, out));
 }
 
 TEST(NativeMysqlProtocol, all_old_formatter_payloads_and_errors_match_without_object_materialization)

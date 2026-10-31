@@ -63,8 +63,8 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(common::ObSrsCacheGuard &srs
     const ObSrsItem *&srs2)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum1 = nullptr;
-  ObDatum *datum2 = nullptr;
+  Datum *datum1 = nullptr;
+  Datum *datum2 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   ObExpr *arg2 = expr.args_[1];
   SqlValueType type1 = arg1->datum_meta_.type_;
@@ -108,7 +108,7 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(common::ObSrsCacheGuard &srs
 }
 
 int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;

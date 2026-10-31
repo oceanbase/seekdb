@@ -127,12 +127,12 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprIfNull::calc_ifnull_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprIfNull::calc_ifnull_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // ifnull(arg0, arg1);
-  ObDatum *arg0 = NULL;
-  ObDatum *arg1 = NULL;
+  Datum *arg0 = NULL;
+  Datum *arg1 = NULL;
   // MySQL ifnull is short-circuiting
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg0))) {
   } else if (!arg0->is_null()) {

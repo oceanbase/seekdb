@@ -27,6 +27,32 @@ using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::share;
 
+namespace
+{
+int hash_native_filter_value(const ObExpr &expr, const Datum &value,
+                              common::ObDatumHashFuncType function, uint64_t seed,
+                              uint64_t &result, const ObDatumAccessContext *access)
+{
+  alignas(8) char scratch[64];
+  ObDatum legacy;
+  int ret = expr.get_datum_copy_plan().legacy_view(value, legacy, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = function(legacy, seed, result, access); }
+  return ret;
+}
+int hash_native_filter_batch(const ObExpr &expr, common::ObDatumHashFuncType function,
+                             uint64_t *results, const Datum *values,
+                             const ObBitVector &skip, int64_t count,
+                             const uint64_t *seeds, bool batch_seeds,
+                             const ObDatumAccessContext *access)
+{
+  common::DatumHashOp operation;
+  int ret = common::ObDatumFuncs::bind_legacy_hash(expr.get_sql_type(), function, operation);
+  if (OB_SUCC(ret)) { ret = operation(results, values, expr.is_batch_result(), skip,
+                                      count, seeds, batch_seeds, access); }
+  return ret;
+}
+}
+
 OB_SERIALIZE_MEMBER(ObRFRangeFilterMsg::MinMaxCellSize, min_datum_buf_size_, max_datum_buf_size_);
 
 OB_DEF_SERIALIZE(ObRFBloomFilterMsg)
@@ -151,6 +177,7 @@ OB_DEF_DESERIALIZE(ObRFInFilterMsg)
         "RFDEInFilter",
         "RFDEInFilter"))) {
     } else if (OB_FAIL(cur_row_.prepare_allocate(col_cnt_))) {
+    } else if (OB_FAIL(insert_scratch_.prepare_allocate(col_cnt_))) {
     }
     for (int i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
       new_row = nullptr;
@@ -259,7 +286,7 @@ int ObRFBloomFilterMsg::destroy()
 int ObRFBloomFilterMsg::might_contain(const ObExpr &expr,
     ObEvalCtx &ctx,
     ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
-    ObDatum &res)
+    Datum &res)
 {
   int ret = OB_SUCCESS;
   uint64_t hash_val = ObExprJoinFilter::JOIN_FILTER_SEED;
@@ -277,7 +304,7 @@ int ObRFBloomFilterMsg::might_contain(const ObExpr &expr,
     // the highest bit of hash values is not used in bloom filter
     hash_val = ObExprHash::HASH_SEED;
   }
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObHashFunc hash_func;
   if (!is_active_) {
     res.set_int(1);
@@ -291,8 +318,7 @@ int ObRFBloomFilterMsg::might_contain(const ObExpr &expr,
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
       } else {
         hash_func.hash_func_ = filter_ctx.hash_funcs_.at(i).hash_func_;
-        if (OB_FAIL(hash_func.hash_func_(
-                *datum, hash_val, hash_val, access_ctx))) {
+        if (OB_FAIL(hash_native_filter_value(*expr.args_[i], *datum, hash_func.hash_func_, hash_val, hash_val, access_ctx))) {
         }
       }
     }
@@ -322,10 +348,10 @@ int ObRFBloomFilterMsg::might_contain_batch(
   int ret = OB_SUCCESS;
   bool is_match = true;
   uint64_t seed = ObExprJoinFilter::JOIN_FILTER_SEED;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  uint64_t *hash_values = reinterpret_cast<uint64_t *>(
-                                ctx.frames_[expr.frame_idx_] + expr.res_buf_off_);
+  if (filter_ctx.native_hash_values_.count() < batch_size) { return OB_ERR_UNEXPECTED; }
+  uint64_t *hash_values = filter_ctx.native_hash_values_.get_data();
   int64_t total_count = 0;
   int64_t filter_count = 0;
   const ObDatumAccessContext *access_ctx = nullptr;
@@ -351,13 +377,9 @@ int ObRFBloomFilterMsg::might_contain_batch(
       if (OB_FAIL(e->eval_batch(ctx, skip, batch_size))) {
       } else {
         const bool is_batch_seed = (i > 0);
-        ObBatchDatumHashFunc hash_func_batch = filter_ctx.hash_funcs_.at(i).batch_hash_func_;
-        hash_func_batch(hash_values,
-                        e->locate_batch_datums(ctx), e->is_batch_result(),
-                        skip, batch_size,
-                        is_batch_seed ? hash_values : &seed,
-                        is_batch_seed,
-                        access_ctx);
+        ret = hash_native_filter_batch(*e, filter_ctx.hash_funcs_.at(i).hash_func_, hash_values,
+            e->locate_batch_datums(ctx), skip, batch_size,
+            is_batch_seed ? hash_values : &seed, is_batch_seed, access_ctx);
       }
     }
     if (OB_FAIL(ret)) {
@@ -405,34 +427,25 @@ int ObRFBloomFilterMsg::insert_by_row_batch(
       } else if (OB_FAIL(calc_tablet_id_expr->eval_batch(eval_ctx,
         *(child_brs->skip_), child_brs->size_))) {
       } else {
-        ObBatchDatumHashFunc hash_func_batch = hash_funcs.at(0).batch_hash_func_;
-        hash_func_batch(batch_hash_values,
-                        calc_tablet_id_expr->locate_batch_datums(eval_ctx),
-                        calc_tablet_id_expr->is_batch_result(),
-                        *child_brs->skip_, child_brs->size_,
-                        &seed,
-                        false,
-                        access_ctx);
+        ret = hash_native_filter_batch(*calc_tablet_id_expr, hash_funcs.at(0).hash_func_,
+            batch_hash_values, calc_tablet_id_expr->locate_batch_datums(eval_ctx),
+            *child_brs->skip_, child_brs->size_, &seed, false, access_ctx);
       }
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
         ObExpr *expr = expr_array.at(i); // expr ptr check in cg, not check here
         if (OB_FAIL(expr->eval_batch(eval_ctx, *(child_brs->skip_), child_brs->size_))) {
         } else {
-          ObBatchDatumHashFunc hash_func_batch = hash_funcs.at(i).batch_hash_func_;
           const bool is_batch_seed = (i > 0);
-          hash_func_batch(batch_hash_values,
-                          expr->locate_batch_datums(eval_ctx), expr->is_batch_result(),
-                          *child_brs->skip_, child_brs->size_,
-                          is_batch_seed ? batch_hash_values : &seed,
-                          is_batch_seed,
-                          access_ctx);
+          ret = hash_native_filter_batch(*expr, hash_funcs.at(i).hash_func_, batch_hash_values,
+              expr->locate_batch_datums(eval_ctx), *child_brs->skip_, child_brs->size_,
+              is_batch_seed ? batch_hash_values : &seed, is_batch_seed, access_ctx);
         }
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < child_brs->size_; ++i) {
       if (OB_NOT_NULL(calc_tablet_id_expr)) {
-        ObDatum &datum = calc_tablet_id_expr->locate_expr_datum(eval_ctx, i);
+        Datum &datum = calc_tablet_id_expr->locate_expr_datum(eval_ctx, i);
         if (ObExprCalcPartitionId::NONE_PARTITION_ID == datum.get_int()) {
           continue;
         }
@@ -480,7 +493,7 @@ int ObRFBloomFilterMsg::calc_hash_value(
   int ret = OB_SUCCESS;
   hash_value = ObExprJoinFilter::JOIN_FILTER_SEED;
   ignore = false;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
   } else if (OB_NOT_NULL(calc_tablet_id_expr)) {
@@ -491,13 +504,13 @@ int ObRFBloomFilterMsg::calc_hash_value(
     } else if (ObExprCalcPartitionId::NONE_PARTITION_ID == (partition_id = datum->get_int())) {
       ignore = true;
     } else if (OB_FAIL(
-                   hash_funcs.at(0).hash_func_(*datum, hash_value, hash_value, access_ctx))) {
+                   hash_native_filter_value(*calc_tablet_id_expr, *datum, hash_funcs.at(0).hash_func_, hash_value, hash_value, access_ctx))) {
     }
   } else {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < expr_array.count() ; ++idx) {
       if (OB_FAIL(expr_array.at(idx)->eval(eval_ctx, datum))) {
       } else if (OB_FAIL(
-                     hash_funcs.at(idx).hash_func_(*datum, hash_value, hash_value, access_ctx))) {
+                     hash_native_filter_value(*expr_array.at(idx), *datum, hash_funcs.at(idx).hash_func_, hash_value, hash_value, access_ctx))) {
       }
     }
   }
@@ -812,33 +825,39 @@ int ObRFRangeFilterMsg::insert_by_row(
 {
   int ret = OB_SUCCESS;
   UNUSED(hash_funcs);
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
   } else if (is_empty_) {
     bool ignore_null = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
       ObExpr *expr = expr_array.at(i);
+      alignas(8) char scratch[64];
+      ObDatum legacy;
       if (OB_FAIL(expr->eval(eval_ctx, datum))) {
+      } else if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, sizeof(scratch)))) {
       } else if (datum->is_null() && !need_null_cmp_flags_.at(i)) {
         ignore_null = true;
         break;
-      } else if (OB_FAIL(dynamic_copy_cell(*datum, lower_bounds_.at(i), cells_size_.at(i).min_datum_buf_size_))) {
-      } else if (OB_FAIL(dynamic_copy_cell(*datum, upper_bounds_.at(i), cells_size_.at(i).max_datum_buf_size_))) {
+      } else if (OB_FAIL(dynamic_copy_cell(legacy, lower_bounds_.at(i), cells_size_.at(i).min_datum_buf_size_))) {
+      } else if (OB_FAIL(dynamic_copy_cell(legacy, upper_bounds_.at(i), cells_size_.at(i).max_datum_buf_size_))) {
       }
     }
-    if (!ignore_null) {
+    if (OB_SUCC(ret) && !ignore_null) {
       is_empty_ = false;
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
       ObExpr *expr = expr_array.at(i);
+      alignas(8) char scratch[64];
+      ObDatum legacy;
       if (OB_FAIL(expr->eval(eval_ctx, datum))) {
+      } else if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, sizeof(scratch)))) {
       } else if (datum->is_null() && !need_null_cmp_flags_.at(i)) {
         /*do nothing*/
         break;
-      } else if (OB_FAIL(get_min(cmp_funcs_.at(i), lower_bounds_.at(i), *datum,
+      } else if (OB_FAIL(get_min(cmp_funcs_.at(i), lower_bounds_.at(i), legacy,
                                  cells_size_.at(i).min_datum_buf_size_, datum_access_ctx_))) {
-      } else if (OB_FAIL(get_max(cmp_funcs_.at(i), upper_bounds_.at(i), *datum,
+      } else if (OB_FAIL(get_max(cmp_funcs_.at(i), upper_bounds_.at(i), legacy,
                                  cells_size_.at(i).max_datum_buf_size_, datum_access_ctx_))) {
       }
     }
@@ -877,10 +896,10 @@ int ObRFRangeFilterMsg::insert_by_row_batch(
 int ObRFRangeFilterMsg::might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
-      ObDatum &res)
+      Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObCmpFunc cmp_func;
   int cmp_min = 0;
   int cmp_max = 0;
@@ -894,16 +913,19 @@ int ObRFRangeFilterMsg::might_contain(const ObExpr &expr,
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
       } else {
+        alignas(8) char scratch[64];
+        ObDatum legacy;
         cmp_min = 0;
         cmp_max = 0;
         cmp_func.cmp_func_ = filter_ctx.cmp_funcs_.at(i).cmp_func_;
-        if (OB_FAIL(cmp_func.cmp_func_(
-                *datum, lower_bounds_.at(i), cmp_min, datum_access_ctx_))) {
+        if (OB_FAIL(expr.args_[i]->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(cmp_func.cmp_func_(
+                legacy, lower_bounds_.at(i), cmp_min, datum_access_ctx_))) {
         } else if (cmp_min < 0) {
           is_match = false;
           break;
         } else if (OB_FAIL(cmp_func.cmp_func_(
-                       *datum, upper_bounds_.at(i), cmp_max, datum_access_ctx_))) {
+                       legacy, upper_bounds_.at(i), cmp_max, datum_access_ctx_))) {
         } else if (cmp_max > 0) {
           is_match = false;
           break;
@@ -930,7 +952,7 @@ int ObRFRangeFilterMsg::do_might_contain_batch(const ObExpr &expr,
   int ret = OB_SUCCESS;
   int64_t filter_count = 0;
   int64_t total_count = 0;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
     if (OB_FAIL(expr.args_[idx]->eval_batch(ctx, skip, batch_size))) {
     }
@@ -938,7 +960,7 @@ int ObRFRangeFilterMsg::do_might_contain_batch(const ObExpr &expr,
   if (OB_SUCC(ret)) {
     int cmp_min = 0;
     int cmp_max = 0;
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     bool is_match = true;
     for (int64_t batch_i = 0; OB_SUCC(ret) && batch_i < batch_size; ++batch_i) {
       if (skip.at(batch_i)) {
@@ -950,14 +972,17 @@ int ObRFRangeFilterMsg::do_might_contain_batch(const ObExpr &expr,
       total_count++;
       for (int arg_i = 0; OB_SUCC(ret) && arg_i < expr.arg_cnt_; ++arg_i) {
         datum = &expr.args_[arg_i]->locate_expr_datum(ctx, batch_i);
-        if (OB_FAIL(filter_ctx.cmp_funcs_.at(arg_i).cmp_func_(
-                *datum, lower_bounds_.at(arg_i), cmp_min, datum_access_ctx_))) {
+        alignas(8) char scratch[64];
+        ObDatum legacy;
+        if (OB_FAIL(expr.args_[arg_i]->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(filter_ctx.cmp_funcs_.at(arg_i).cmp_func_(
+                legacy, lower_bounds_.at(arg_i), cmp_min, datum_access_ctx_))) {
         } else if (cmp_min < 0) {
           filter_count++;
           is_match = false;
           break;
         } else if (OB_FAIL(filter_ctx.cmp_funcs_.at(arg_i).cmp_func_(
-                       *datum, upper_bounds_.at(arg_i), cmp_max, datum_access_ctx_))) {
+                       legacy, upper_bounds_.at(arg_i), cmp_max, datum_access_ctx_))) {
         } else if (cmp_max > 0) {
           filter_count++;
           is_match = false;
@@ -984,7 +1009,7 @@ int ObRFRangeFilterMsg::might_contain_batch(
     ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
   batch_info_guard.set_batch_size(batch_size);
@@ -1032,6 +1057,7 @@ int ObRFInFilterMsg::assign(const ObP2PDatahubMsgBase &msg)
   } else if (OB_FAIL(cmp_funcs_.assign(other_msg.cmp_funcs_))) {
   } else if (OB_FAIL(hash_funcs_for_insert_.assign(other_msg.hash_funcs_for_insert_))) {
   } else if (OB_FAIL(cur_row_.assign(other_msg.cur_row_))) {
+  } else if (OB_FAIL(insert_scratch_.prepare_allocate(other_msg.cur_row_.count()))) {
   } else if (OB_FAIL(need_null_cmp_flags_.assign(other_msg.need_null_cmp_flags_))) {
   } else if (OB_FAIL(query_range_info_.assign(other_msg.query_range_info_))) {
   } else if (OB_FAIL(build_obj_metas_.assign(other_msg.build_obj_metas_))) {
@@ -1100,7 +1126,7 @@ int ObRFInFilterMsg::insert_by_row_batch(
         continue;
       } else {
         batch_info_guard.set_batch_idx(idx);
-        ObDatum *datum = nullptr;
+        Datum *datum = nullptr;
         bool ignore_null_row = false;
         for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
           ObExpr *expr = expr_array.at(i);
@@ -1109,7 +1135,8 @@ int ObRFInFilterMsg::insert_by_row_batch(
             ignore_null_row = true;
             break;
           } else {
-            cur_row_.at(i) = (*datum);
+            ret = expr->get_datum_copy_plan().legacy_view(*datum, cur_row_.at(i),
+                insert_scratch_.at(i).bytes_, 64);
           }
         }
         if (OB_SUCC(ret) && !ignore_null_row) {
@@ -1151,7 +1178,7 @@ int ObRFInFilterMsg::insert_by_row(
     ObEvalCtx &eval_ctx)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   if (is_active_ && OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
   } else if (is_active_) {
     bool ignore_null_row = false;
@@ -1162,7 +1189,8 @@ int ObRFInFilterMsg::insert_by_row(
         ignore_null_row = true;
         break;
       } else {
-        cur_row_.at(idx) = (*datum);
+        ret = expr_array.at(idx)->get_datum_copy_plan().legacy_view(*datum, cur_row_.at(idx),
+            insert_scratch_.at(idx).bytes_, 64);
       }
     }
     if (OB_SUCC(ret) && !ignore_null_row) {
@@ -1274,10 +1302,10 @@ int ObRFInFilterMsg::merge(ObP2PDatahubMsgBase &msg)
 int ObRFInFilterMsg::might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
-      ObDatum &res)
+      Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   bool is_match = true;
   uint64_t hash_val = ObExprJoinFilter::JOIN_FILTER_SEED;
   ObIArray<ObDatum> &cur_row = filter_ctx.cur_row_;
@@ -1292,11 +1320,12 @@ int ObRFInFilterMsg::might_contain(const ObExpr &expr,
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
       } else {
-        cur_row.at(i) = *datum;
+        ret = expr.args_[i]->get_datum_copy_plan().legacy_view(*datum, cur_row.at(i),
+            filter_ctx.legacy_cell_scratch_.at(i).bytes_, 64);
         ObHashFunc hash_func;
         hash_func.hash_func_ = filter_ctx.hash_funcs_.at(i).hash_func_;
-        if (OB_FAIL(hash_func.hash_func_(
-                *datum, hash_val, hash_val, datum_access_ctx_))) {
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(hash_native_filter_value(*expr.args_[i], *datum, hash_func.hash_func_, hash_val, hash_val, datum_access_ctx_))) {
         }
       }
     }
@@ -1345,26 +1374,22 @@ int ObRFInFilterMsg::do_might_contain_batch(const ObExpr &expr,
   int ret = OB_SUCCESS;
   int64_t filter_count = 0;
   int64_t total_count = 0;
-  uint64_t *right_hash_vals = reinterpret_cast<uint64_t *>(
-                                ctx.frames_[expr.frame_idx_] + expr.res_buf_off_);
+  if (filter_ctx.native_hash_values_.count() < batch_size) { return OB_ERR_UNEXPECTED; }
+  uint64_t *right_hash_vals = filter_ctx.native_hash_values_.get_data();
   uint64_t seed = ObExprJoinFilter::JOIN_FILTER_SEED;
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
     if (OB_FAIL(expr.args_[idx]->eval_batch(ctx, skip, batch_size))) {
     } else {
       const bool is_batch_seed = (idx > 0);
-      ObBatchDatumHashFunc hash_func = filter_ctx.hash_funcs_.at(idx).batch_hash_func_;
-      hash_func(right_hash_vals,
-                expr.args_[idx]->locate_batch_datums(ctx), expr.args_[idx]->is_batch_result(),
-                skip, batch_size,
-                is_batch_seed ? right_hash_vals : &seed,
-                is_batch_seed,
-                datum_access_ctx_);
+      ret = hash_native_filter_batch(*expr.args_[idx], filter_ctx.hash_funcs_.at(idx).hash_func_,
+          right_hash_vals, expr.args_[idx]->locate_batch_datums(ctx), skip, batch_size,
+          is_batch_seed ? right_hash_vals : &seed, is_batch_seed, datum_access_ctx_);
     }
   }
   ObIArray<ObDatum> &cur_row = filter_ctx.cur_row_;
   ObRFInFilterNode node(
       &filter_ctx.cmp_funcs_, nullptr, &cur_row, datum_access_ctx_, 0);
-  ObDatum *res_datums = expr.locate_batch_datums(ctx);
+  Datum *res_datums = expr.locate_batch_datums(ctx);
   for (int64_t batch_i = 0; OB_SUCC(ret) && batch_i < batch_size; ++batch_i) {
     if (skip.at(batch_i)) {
       continue;
@@ -1372,7 +1397,9 @@ int ObRFInFilterMsg::do_might_contain_batch(const ObExpr &expr,
     total_count++;
     node.hash_val_ = right_hash_vals[batch_i];
     for (int64_t arg_i = 0; OB_SUCC(ret) && arg_i < expr.arg_cnt_; ++arg_i) {
-      cur_row.at(arg_i) = expr.args_[arg_i]->locate_expr_datum(ctx, batch_i);
+      ret = expr.args_[arg_i]->get_datum_copy_plan().legacy_view(
+          expr.args_[arg_i]->locate_expr_datum(ctx, batch_i), cur_row.at(arg_i),
+          filter_ctx.legacy_cell_scratch_.at(arg_i).bytes_, 64);
     } 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(rows_set_.exist_refactored(node))) {
@@ -1404,7 +1431,7 @@ int ObRFInFilterMsg::might_contain_batch(
     ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
   batch_info_guard.set_batch_size(batch_size);
@@ -1460,6 +1487,7 @@ int ObRFInFilterMsg::destroy()
   need_null_cmp_flags_.reset();
   build_obj_metas_.reset();
   cur_row_.reset();
+  insert_scratch_.reset();
   for (int i = 0; i < serial_rows_.count(); ++i) {
     if (OB_NOT_NULL(serial_rows_.at(i))) {
       serial_rows_.at(i)->reset();

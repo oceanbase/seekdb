@@ -35,10 +35,10 @@ template <typename VectorType>
 class ObTextStringVectorResult : public common::ObTextStringResult
 {
 public:
-  ObTextStringVectorResult(const SqlValueType type, const ObExpr* expr, ObEvalCtx *ctx, ObDatum *res_datum) :
+  ObTextStringVectorResult(const SqlValueType type, const ObExpr* expr, ObEvalCtx *ctx, Datum *res_datum) :
     common::ObTextStringResult(type, expr->obj_meta_.has_lob_header(), NULL), expr_(expr), ctx_(ctx), res_datum_(res_datum), res_vec_(NULL), batch_idx_(0)
   {}
-  ObTextStringVectorResult(const SqlValueType type, bool has_header, ObDatum *res_datum) :
+  ObTextStringVectorResult(const SqlValueType type, bool has_header, Datum *res_datum) :
     common::ObTextStringResult(type, has_header, NULL), expr_(NULL), ctx_(NULL), res_datum_(res_datum), res_vec_(NULL), batch_idx_(0)
   {}
   ObTextStringVectorResult(const SqlValueType type, const ObExpr* expr, ObEvalCtx *ctx, VectorType *res_vec, int64_t batch_idx) :
@@ -60,7 +60,7 @@ private:
   // for exprs
   const ObExpr *expr_;
   ObEvalCtx *ctx_;
-  ObDatum *res_datum_;
+  Datum *res_datum_;
   VectorType *res_vec_;
   int64_t batch_idx_;
 };
@@ -122,9 +122,17 @@ int ObTextStringVectorResult<VectorType>::init_with_batch_idx(int64_t res_len, i
 template <typename VectorType>
 void ObTextStringVectorResult<VectorType>::set_result()
 {
-  NULL == res_datum_
-      ? res_vec_->set_string(batch_idx_, buffer_, pos_)
-          : res_datum_->set_string(buffer_, pos_);
+  if (NULL == res_datum_) {
+    res_vec_->set_string(batch_idx_, buffer_, pos_);
+  } else {
+    // Successful init owns every nonempty buffer; append/lseek bound pos_.
+    // Thus set_string can fail only if that internal buffer invariant was broken.
+    const int ret = res_datum_->set_string(buffer_, pos_);
+    if (OB_UNLIKELY(OB_SUCCESS != ret)) {
+      SQL_LOG(ERROR, "invalid prepared LOB result buffer", K(ret), KP(buffer_), K(pos_), K(buff_len_));
+      OB_ASSERT(OB_SUCCESS == ret);
+    }
+  }
 }
 
 template <typename VectorType>
@@ -181,7 +189,7 @@ public:
                         const ObExpr &expr,
                         ObIAllocator &allocator,
                         int64_t idx,
-                        ObDatum *datum, ObString &str)
+                        Datum *datum, ObString &str)
   {
     int ret = OB_SUCCESS;
     if (datum == NULL) {
@@ -222,7 +230,7 @@ public:
 
   static int read_real_string_data(ObExecContext &exec_ctx,
                                    ObIAllocator &allocator,
-                                   const ObDatum &datum,
+                                   const Datum &datum,
                                    const ObDatumMeta &meta,
                                    bool has_lob_header,
                                    ObString &str)
@@ -233,7 +241,7 @@ public:
 
   static int read_real_string_data(const common::ObLobReadOptions &options,
                                    ObIAllocator &allocator,
-                                   const ObDatum &datum,
+                                   const Datum &datum,
                                    const ObDatumMeta &meta,
                                    bool has_lob_header,
                                    ObString &str)
@@ -293,7 +301,7 @@ public:
   // return str is copy of inrow/outrow lob
   static int read_real_string_data_with_copy(ObExecContext &exec_ctx,
                                              ObIAllocator &allocator,
-                                             const ObDatum &datum,
+                                             const Datum &datum,
                                              const ObDatumMeta &meta,
                                              bool has_lob_header,
                                              ObString &str)
@@ -305,7 +313,7 @@ public:
   static int read_real_string_data_with_copy(
       const common::ObLobReadOptions &options,
       ObIAllocator &allocator,
-      const ObDatum &datum,
+      const Datum &datum,
       const ObDatumMeta &meta,
       bool has_lob_header,
       ObString &str)
@@ -316,7 +324,7 @@ public:
 
   // get outrow lob prefix or inrow/string tc full data
   static int read_prefix_string_data(ObEvalCtx &ctx,
-                                     const ObDatum &datum,
+                                     const Datum &datum,
                                      const ObDatumMeta &meta,
                                      const bool has_lob_header,
                                      ObIAllocator *allocator,
@@ -373,7 +381,7 @@ public:
     return ret;
   };
 
-  static int get_char_len(ObEvalCtx &ctx, const ObDatum & datum, const ObDatumMeta &meta,
+  static int get_char_len(ObEvalCtx &ctx, const Datum & datum, const ObDatumMeta &meta,
                           const bool has_lob_header, int64_t &char_len)
   {
     int ret = OB_SUCCESS;
@@ -389,7 +397,7 @@ private:
   template <typename LobReadContext>
   static int read_real_string_data_impl(LobReadContext &lob_read_context,
                                         ObIAllocator &allocator,
-                                        const ObDatum &datum,
+                                        const Datum &datum,
                                         const ObDatumMeta &meta,
                                         bool has_lob_header,
                                         ObString &str)
@@ -400,22 +408,22 @@ private:
       str.reset();
     } else if (is_lob_storage(meta.type_)) {
       const ObLobCommon& lob = datum.get_lob_data();
-      if (datum.len_ != 0 && !lob.is_mem_loc_ && lob.in_row_) {
-        str.assign_ptr(lob.get_inrow_data_ptr(), static_cast<int32_t>(lob.get_byte_size(datum.len_)));
+      if (datum.length() != 0 && !lob.is_mem_loc_ && lob.in_row_) {
+        str.assign_ptr(lob.get_inrow_data_ptr(), static_cast<int32_t>(lob.get_byte_size(datum.length())));
       } else {
-        const ObMemLobCommon *memlob = reinterpret_cast<const ObMemLobCommon*>(datum.ptr_);
-        if (datum.len_ != 0 && memlob->has_inrow_data_ && memlob->has_extern_ == 0 && (memlob->type_ != ObMemLobType::TEMP_DELTA_LOB)) {
+        const ObMemLobCommon *memlob = reinterpret_cast<const ObMemLobCommon*>(datum.get_string().ptr());
+        if (datum.length() != 0 && memlob->has_inrow_data_ && memlob->has_extern_ == 0 && (memlob->type_ != ObMemLobType::TEMP_DELTA_LOB)) {
           if (memlob->is_simple_) {
-            str.assign_ptr(memlob->data_, static_cast<int32_t>(datum.len_ - sizeof(ObMemLobCommon)));
+            str.assign_ptr(memlob->data_, static_cast<int32_t>(datum.length() - sizeof(ObMemLobCommon)));
           } else {
             const ObLobCommon *disklob = reinterpret_cast<const ObLobCommon*>(memlob->data_);
             if (disklob->in_row_) {
               str.assign_ptr(disklob->get_inrow_data_ptr(),
-                 static_cast<int32_t>(disklob->get_byte_size(datum.len_ - sizeof(ObMemLobCommon))));
+                 static_cast<int32_t>(disklob->get_byte_size(datum.length() - sizeof(ObMemLobCommon))));
             } else {
               int64_t disk_lob_handle_size = disklob->get_handle_size(0);
               str.assign_ptr(memlob->data_ + disk_lob_handle_size,
-                 static_cast<int32_t>(datum.len_ - sizeof(ObMemLobCommon) - disk_lob_handle_size));
+                 static_cast<int32_t>(datum.length() - sizeof(ObMemLobCommon) - disk_lob_handle_size));
             }
           }
         } else {
@@ -492,7 +500,7 @@ private:
   static int read_real_string_data_with_copy_impl(
       LobReadContext &lob_read_context,
       ObIAllocator &allocator,
-      const ObDatum &datum,
+      const Datum &datum,
       const ObDatumMeta &meta,
       bool has_lob_header,
       ObString &str)
@@ -552,7 +560,7 @@ private:
   }
 
 public:
-  static int string_to_templob_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const ObString &str)
+  static int string_to_templob_result(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, const ObString &str)
   {
     int ret = OB_SUCCESS;
     ObTextStringDatumResult tmp_lob_res(expr.datum_meta_.type_, &expr, &ctx, &res);
@@ -591,7 +599,7 @@ public:
   }
 
   template <typename Allocator>
-  static int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, ObDatum &res_datum)
+  static int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, Datum &res_datum)
   {
     int ret = OB_SUCCESS;
     ObString result;
@@ -620,7 +628,7 @@ public:
     return ret;
   }
 
-  static int pack_to_disk_inrow_lob(const ObExpr &expr, ObEvalCtx &ctx, const ObString data, ObDatum &res)
+  static int pack_to_disk_inrow_lob(const ObExpr &expr, ObEvalCtx &ctx, const ObString data, Datum &res)
   {
     int ret = OB_SUCCESS;
     int64_t total_len = data.length() + sizeof(ObLobCommon);
@@ -640,14 +648,14 @@ public:
 };
 
 int ob_adjust_lob_datum(ObExecContext &exec_ctx,
-                        const ObDatum &origin_datum,
+                        const Datum &origin_datum,
                         const common::SqlTypeMeta &origin_meta,
                         const common::SqlTypeMeta &result_meta,
                         ObIAllocator &allocator,
-                        ObDatum &out_datum);
+                        Datum &out_datum);
 
 int ob_adjust_lob_datum(ObExecContext &exec_ctx,
-                        ObDatum &datum,
+                        Datum &datum,
                         const common::SqlTypeMeta &in_obj_meta,
                         const common::SqlTypeMeta &out_obj_meta,
                         ObIAllocator &allocator);
@@ -658,7 +666,7 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
 int ob_adjust_in_memory_lob_datum(const common::DatumValue &source,
                                   const common::SqlTypeMeta &result_meta,
                                   ObIAllocator &allocator,
-                                  ObDatum *out_datum);
+                                  Datum *out_datum);
 
 } // sql
 } // oceanbase

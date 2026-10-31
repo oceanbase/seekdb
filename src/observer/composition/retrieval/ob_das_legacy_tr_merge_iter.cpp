@@ -386,7 +386,7 @@ int ObDASLegacyTRMergeIter::create_sparse_retrieval_iter()
   sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
   if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
-    ObDatum *boost_datum = nullptr;
+    common::Datum *boost_datum = nullptr;
     if (OB_FAIL(ir_ctdef_->field_boost_expr_->eval(*ir_rtdef_->eval_ctx_, boost_datum))) {
     } else if (OB_ISNULL(boost_datum) || OB_UNLIKELY(boost_datum->is_null())) {
       ret = OB_NOT_SUPPORTED;
@@ -1020,13 +1020,13 @@ int ObDASLegacyTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
   has_duplicate_boolean_tokens = false;
   ObExpr *search_text = ir_ctdef->search_text_;
   ObEvalCtx *eval_ctx = ir_rtdef->eval_ctx_;
-  ObDatum *search_text_datum = nullptr;
+  common::Datum *search_text_datum = nullptr;
   if (OB_ISNULL(search_text) || OB_ISNULL(eval_ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (query_tokens.count() != 0 || boost_values.count() != 0) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(search_text->eval(*eval_ctx, search_text_datum))) {
-  } else if (0 == search_text_datum->len_) {
+  } else if (0 == search_text_datum->length()) {
     // empty query text
   } else if (OB_NOT_NULL(ir_ctdef->field_boost_expr_)) {
     const ObString &search_text_string = search_text_datum->get_string();
@@ -1150,8 +1150,8 @@ int ObDASLegacyTRMergeIter::init_topk_limit()
   } else {
     int64_t limit = 0;
     int64_t offset = 0;
-    ObDatum *topk_limit_datum = nullptr;
-    ObDatum *topk_offset_datum = nullptr;
+    common::Datum *topk_limit_datum = nullptr;
+    common::Datum *topk_offset_datum = nullptr;
     if (OB_FAIL(topk_limit_expr->eval(*ir_rtdef_->eval_ctx_, topk_limit_datum))) {
     } else if (nullptr != topk_offset_expr && OB_FAIL(topk_offset_expr->eval(*ir_rtdef_->eval_ctx_, topk_offset_datum))) {
     } else {

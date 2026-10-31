@@ -709,11 +709,14 @@ int ObMergeGroupByOp::process_batch(const ObBatchRows &brs)
         prev_cells = cur_group_row_->groupby_store_row_->stored_cells();
       }
       for (int64_t i = 0; OB_SUCC(ret) && !found_new_group && i < all_group_cnt; ++i) {
-        const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[i]);
+        const ObDatum saved_datum = StoredDatumCodec::decode_legacy_view(prev_cells[i]);
+        Datum last_datum;
         ObExpr *expr = all_groupby_exprs_.at(i);
+        OZ(expr->get_datum_copy_plan().import_legacy(saved_datum, last_datum));
         // performance critical: use expr directly NO defensive check
-        ObDatum &result = expr->locate_expr_datum(eval_ctx_);
-        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+        Datum &result = expr->locate_expr_datum(eval_ctx_);
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
                 last_datum, result, cmp_ret, datum_access_ctx_))) {
         } else if (0 != cmp_ret) {
           found_new_group = true;
@@ -845,15 +848,19 @@ int ObMergeGroupByOp::check_same_group(
     const StoredDatumCell *prev_cells = nullptr;
     int64_t group_count = MY_SPEC.group_exprs_.count();
     bool found_new_group = false;
-    ObDatum *result = nullptr;
+    Datum *result = nullptr;
     prev_cells = cur_group_row->groupby_store_row_->stored_cells();
     for (int64_t i = 0; OB_SUCC(ret) && !found_new_group && i < all_group_cnt; ++i) {
-      const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[i]);
+      const ObDatum saved_datum = StoredDatumCodec::decode_legacy_view(prev_cells[i]);
+        Datum last_datum;
       ObExpr *expr = all_groupby_exprs_.at(i);
+        OZ(expr->get_datum_copy_plan().import_legacy(saved_datum, last_datum));
       // performance critical: use expr directly NO defensive check
-      if (OB_FAIL(expr->eval(eval_ctx_, result))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(expr->eval(eval_ctx_, result))) {
       } else {
-        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
                 last_datum, *result, cmp_ret, datum_access_ctx_))) {
         } else if (0 != cmp_ret) {
           found_new_group = true;
@@ -873,7 +880,7 @@ int ObMergeGroupByOp::check_unique_distinct_columns(
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
   const StoredDatumCell *prev_cells = nullptr;
-  ObDatum *cur_datum = nullptr;
+  Datum *cur_datum = nullptr;
   is_same_before_row = true;
   if (OB_ISNULL(last_child_output_.store_row_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -893,12 +900,16 @@ int ObMergeGroupByOp::check_unique_distinct_columns(
         if (-1 == distinct_col_idx_in_output_.at(i)) {
           continue;
         }
-        const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[distinct_col_idx_in_output_.at(i)]);
+        const ObDatum saved_datum = StoredDatumCodec::decode_legacy_view(prev_cells[distinct_col_idx_in_output_.at(i)]);
+        Datum last_datum;
         ObExpr *expr = MY_SPEC.distinct_exprs_.at(i);
+        OZ(expr->get_datum_copy_plan().import_legacy(saved_datum, last_datum));
         // performance critical: use expr directly NO defensive check
-        if (OB_FAIL(expr->eval(eval_ctx_, cur_datum))) {
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(expr->eval(eval_ctx_, cur_datum))) {
         } else {
-          if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+          if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
                   last_datum, *cur_datum, cmp_ret, datum_access_ctx_))) {
           } else if (0 != cmp_ret) {
             is_same_before_row = false;
@@ -946,8 +957,9 @@ int ObMergeGroupByOp::check_unique_distinct_columns_for_batch(
           continue;
         }
         ObExpr *expr = MY_SPEC.distinct_exprs_.at(i);
-        ObDatumVector datums = expr->locate_expr_datumvector(eval_ctx_);
-        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(*datums.at(cur_group_last_row_idx_),
+        DatumVector datums = expr->locate_expr_datumvector(eval_ctx_);
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(*datums.at(cur_group_last_row_idx_),
                                                         *datums.at(cur_row_idx),
                                                         cmp_ret,
                                                         datum_access_ctx_))) {
@@ -964,10 +976,13 @@ int ObMergeGroupByOp::check_unique_distinct_columns_for_batch(
         if (-1 == distinct_col_idx_in_output_.at(i)) {
           continue;
         }
-        const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(prev_cells[distinct_col_idx_in_output_.at(i)]);
+        const ObDatum saved_datum = StoredDatumCodec::decode_legacy_view(prev_cells[distinct_col_idx_in_output_.at(i)]);
+        Datum last_datum;
         ObExpr *expr = MY_SPEC.distinct_exprs_.at(i);
-        ObDatum &result = expr->locate_expr_datum(eval_ctx_);
-        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+        OZ(expr->get_datum_copy_plan().import_legacy(saved_datum, last_datum));
+        Datum &result = expr->locate_expr_datum(eval_ctx_);
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
                 last_datum, result, cmp_ret, datum_access_ctx_))) {
         } else if (0 != cmp_ret) {
           is_same_before_row = false;
@@ -1001,9 +1016,9 @@ int ObMergeGroupByOp::restore_groupby_datum(
   for (int64_t i = 0; OB_SUCC(ret) && i < all_groupby_exprs_.count(); ++i) {
     const ObDatum last_datum = StoredDatumCodec::decode_legacy_view(groupby_cells[i]);
     ObExpr *expr = all_groupby_exprs_.at(i);
-    ObDatum &result = expr->locate_expr_datum(eval_ctx_);
-    result.set_datum(last_datum);
-    expr->set_evaluated_projected(eval_ctx_);
+    Datum &result = expr->locate_expr_datum(eval_ctx_);
+    OZ(expr->get_datum_copy_plan().import_legacy(last_datum, result));
+    if (OB_SUCC(ret)) { expr->set_evaluated_projected(eval_ctx_); }
   }
   return ret;
 }

@@ -72,10 +72,10 @@ int ObExprVecIVFCenterVector::cg_expr(
 int ObExprVecIVFCenterVector::generate_center_vector(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(eval_ctx, datum))) {
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;

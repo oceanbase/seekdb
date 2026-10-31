@@ -340,16 +340,8 @@ int ObFakeCTETableOp::to_expr(
       if (expr->is_const_expr()) {
         continue;
       } else {
-        const ObDatum src = StoredDatumCodec::decode_legacy_view(row->stored_cells()[chosen_index.at(i)]);
-        if (OB_LIKELY(expr->is_variable_res_buf())) {
-          ObDatum &dst = expr->locate_expr_datum(ctx);
-          dst = src;
-        } else {
-          ObDatum &dst = expr->locate_datum_for_write(ctx);
-          dst.pack_ = src.pack_;
-          if (!src.is_null() && src.len_ > 0) { MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_); }
-        }
-        expr->set_evaluated_projected(ctx);
+        ret = restore_expr_cell(row->stored_cells()[chosen_index.at(i)], *expr, ctx, true);
+        if (OB_SUCC(ret)) { expr->set_evaluated_projected(ctx); }
       }
     } 
   }
@@ -387,30 +379,12 @@ int ObFakeCTETableOp::attach_rows(
     int64_t idx = chosen_index.at(col_idx);
     if (e->is_const_expr()) {
       continue;
-    } else if (OB_LIKELY(e->is_variable_res_buf())) {
-      ObDatum *datums = e->locate_batch_datums(ctx);
-      if (!e->is_batch_result()) {
-        datums[0] = StoredDatumCodec::decode_legacy_view(srows.at(rows_offset)->stored_cells()[idx]);
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < read_rows; i++) {
-          datums[i] = StoredDatumCodec::decode_legacy_view(srows.at(rows_offset+i)->stored_cells()[idx]);
-        }
-      }
     } else {
-      if (!e->is_batch_result()) {
-        ObDatum *datums = e->locate_datums_for_update(ctx, 1);
-        const ObDatum src = StoredDatumCodec::decode_legacy_view(srows.at(rows_offset)->stored_cells()[idx]);
-        ObDatum &dst = datums[0];
-        dst.pack_ = src.pack_;
-        if (!src.is_null() && src.len_ > 0) { MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_); }
-      } else {
-        ObDatum *datums = e->locate_datums_for_update(ctx, read_rows);
-        for (int64_t i = 0; OB_SUCC(ret) && i < read_rows; i++) {
-          const ObDatum src = StoredDatumCodec::decode_legacy_view(srows.at(rows_offset+i)->stored_cells()[idx]);
-          ObDatum &dst = datums[i];
-          dst.pack_ = src.pack_;
-          if (!src.is_null() && src.len_ > 0) { MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_); }
-        }
+      ObEvalCtx::BatchInfoScopeGuard guard(ctx);
+      const int64_t count = e->is_batch_result() ? read_rows : 1;
+      for (int64_t row = 0; OB_SUCC(ret) && row < count; ++row) {
+        guard.set_batch_idx(row);
+        ret = restore_expr_cell(srows.at(rows_offset + row)->stored_cells()[idx], *e, ctx, true);
       }
     }
     if (OB_SUCC(ret)) {

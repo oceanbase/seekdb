@@ -30,7 +30,7 @@ class ObExprArrayIntersect : public ObExprArraySetOperation
 public:
   explicit ObExprArrayIntersect(common::ObIAllocator &alloc);
   virtual ~ObExprArrayIntersect();
-  static int eval_array_intersect(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_intersect(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_intersect_batch(const ObExpr &expr, 
                 ObEvalCtx &ctx,
                 const ObBitVector &skip, 

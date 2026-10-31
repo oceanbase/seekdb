@@ -226,10 +226,10 @@ int ObExprJsonSearch::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonSearch::eval_json_search(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[0];
   SqlValueType val_type = json_arg->datum_meta_.type_;
   ObIJsonBase *j_base = NULL;

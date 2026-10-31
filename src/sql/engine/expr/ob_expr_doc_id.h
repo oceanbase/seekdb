@@ -42,7 +42,7 @@ public:
   static int generate_doc_id(
       const ObExpr &raw_ctx,
       ObEvalCtx &eval_ctx,
-      ObDatum &expr_datum);
+      Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDocID);
 };

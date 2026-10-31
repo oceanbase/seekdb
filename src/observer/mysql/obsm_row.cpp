@@ -102,12 +102,16 @@ int DatumMysqlRow::build_cell_value(int64_t idx, ObIAllocator &scratch_allocator
     }
   } else if (obj_indexes_[idx] < 0 && !row_.has_legacy_datums()) {
     ret = OB_STATE_NOT_MATCH;
-  } else if (-2 == obj_indexes_[idx]) {
-    ret = ObSMUtils::build_converted_string_cell_value(
-        row_.datum(idx), row_.expr(idx).obj_meta_, result_charset_, scratch_allocator, out);
   } else if (obj_indexes_[idx] < 0) {
-    ret = ObSMUtils::build_datum_cell_value(row_.datum(idx), row_.expr(idx).obj_meta_,
-                                           type_, scratch_allocator, out, &fields_.at(idx), dtc_params_);
+    ObDatum legacy;
+    if (OB_FAIL(row_.get_legacy_value(idx, legacy))) {
+    } else if (-2 == obj_indexes_[idx]) {
+      ret = ObSMUtils::build_converted_string_cell_value(legacy,
+          row_.expr(idx).get_sql_type().legacy_meta(), result_charset_, scratch_allocator, out);
+    } else {
+      ret = ObSMUtils::build_datum_cell_value(legacy, row_.expr(idx).get_sql_type().legacy_meta(),
+          type_, scratch_allocator, out, &fields_.at(idx), dtc_params_);
+    }
   } else {
     ret = ObSMUtils::build_cell_value(objects_[obj_indexes_[idx]], type_,
                                      scratch_allocator, out, dtc_params_, &fields_.at(idx),

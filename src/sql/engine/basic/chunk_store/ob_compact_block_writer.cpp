@@ -190,7 +190,7 @@ int ObCompactBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, 
     T *var_offset_array = reinterpret_cast<T*>(row_info_.buf_ + HEAD_SIZE + row_info_.bitmap_size_);
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *expr = exprs.at(i);
-      ObDatum *in_datum = NULL;
+      Datum *in_datum = NULL;
       if (OB_UNLIKELY(NULL == expr)) {
         // Set datum to NULL for NULL expr
         row_info_.bit_vec_->set(i);
@@ -201,7 +201,10 @@ int ObCompactBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, 
         }
       } else if (OB_FAIL(expr->eval(ctx, in_datum))) {
       } else if (OB_NOT_NULL(in_datum)) {
-        if (OB_FAIL(inner_process_datum<T>(*in_datum, i, *row_meta_, row_info_))) {
+        ObDatum legacy;
+        alignas(8) char scratch[64];
+        if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(*in_datum, legacy, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(inner_process_datum<T>(legacy, i, *row_meta_, row_info_))) {
         }
       }
     }
@@ -284,7 +287,7 @@ int ObCompactBlockWriter::get_row_stored_size(const common::ObIArray<ObExpr*> &e
   size = 0;
 
   ObExpr *expr = nullptr;
-  common::ObDatum *datum = nullptr;
+  common::Datum *datum = nullptr;
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     if (row_meta.column_length_[i] != 0) {
       data_size += row_meta.column_length_[i];
@@ -296,7 +299,9 @@ int ObCompactBlockWriter::get_row_stored_size(const common::ObIArray<ObExpr*> &e
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "the datum is null", K(ret), KP(datum));
       } else if (!datum->is_null()) {
-        data_size += datum->len_;
+        int64_t payload = 0;
+        if (OB_FAIL(expr->get_datum_copy_plan().legacy_payload_size(*datum, payload))) {
+        } else { data_size += payload; }
       }
     }
   }
@@ -323,7 +328,7 @@ int ObCompactBlockWriter::get_row_stored_size(const ObChunkDatumStore::StoredRow
   size = 0;
 
   ObExpr *expr = nullptr;
-  common::ObDatum *datum = nullptr;
+  common::Datum *datum = nullptr;
   for (int64_t i = 0; OB_SUCC(ret) && i < sr.cnt_; ++i) {
     if (row_meta.column_length_[i] != 0) {
       data_size +=  row_meta.column_length_[i];

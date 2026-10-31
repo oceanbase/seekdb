@@ -33,8 +33,8 @@ public:
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual common::ObCastMode get_cast_mode() const { return CM_NULL_ON_WARN;}
-  static int calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
-  static int calc_timestamp2(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int calc_timestamp1(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
+  static int calc_timestamp2(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 private :

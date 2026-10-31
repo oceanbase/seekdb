@@ -61,8 +61,8 @@ int ObExprSTOverlaps::process_input_geometry(common::ObSrsCacheGuard &srs_guard,
     const ObSrsItem *&srs)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum1 = NULL;
-  ObDatum *gis_datum2 = NULL;
+  Datum *gis_datum1 = NULL;
+  Datum *gis_datum2 = NULL;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
   SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
@@ -116,7 +116,7 @@ int ObExprSTOverlaps::process_input_geometry(common::ObSrsCacheGuard &srs_guard,
   return ret;
 }
 
-int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_geo1_empty = false;

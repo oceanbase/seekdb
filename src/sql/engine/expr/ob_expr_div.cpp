@@ -206,7 +206,7 @@ const ObScale ObExprDiv::DIV_MAX_CALC_SCALE = 100;
 
 struct ObFloatDivFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r) const
   {
     int ret = OB_SUCCESS;
     const float left_f = l.get_float();
@@ -244,7 +244,7 @@ int ObExprDiv::div_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 struct ObDoubleDivFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+  int operator()(Datum &res, const Datum &l, const Datum &r,
                  const ObExpr &expr) const
   {
     int ret = OB_SUCCESS;
@@ -302,7 +302,7 @@ int ObExprDiv::div_vec_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 struct ObNumberDivFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr,
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr,
                  ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
@@ -334,7 +334,7 @@ struct ObNumberDivFunc
             //calc_scale is calc_scale ,not res_scale.
             //trunc with calc_scale and round with res_scale
           } else {
-            res.set_number(result_num);
+            ret = ObExprUtil::set_number(expr, ctx, res, result_num);
           }
         }
       }
@@ -460,24 +460,28 @@ template <typename Base>
 struct ObDecintDivWrap : public ObArithOpWrap<Base>
 {
   constexpr static bool is_raw_op_supported() { return false; }
-  static int datum_op(ObDatum &res, const ObDatum &l, const ObDatum &r,
+  static int datum_op(Datum &res, const Datum &l, const Datum &r,
+                      const ObExpr &expr, ObEvalCtx &ctx,
                       const bool is_error_div_by_zero)
   {
     int ret = OB_SUCCESS;
     if (l.is_null() || r.is_null()) {
       res.set_null();
-    } else if (*reinterpret_cast<const typename Base::R_RAW_TYPE *>(r.ptr_) == 0) {
-      if (is_error_div_by_zero) {
-        ret = OB_DIVISION_BY_ZERO;
-      } else {
-        res.set_null();
-      }
-    } else if (*reinterpret_cast<const typename Base::L_RAW_TYPE *>(l.ptr_) == 0) {
-      *const_cast<typename Base::RES_RAW_TYPE *>(
-        reinterpret_cast<const typename Base::RES_RAW_TYPE *>(res.ptr_)) = 0;
-      res.pack_ = sizeof(typename Base::RES_RAW_TYPE);
     } else {
-      ret = ObArithOpWrap<Base>()(res, l, r, is_error_div_by_zero);
+      typename Base::L_RAW_TYPE left;
+      typename Base::R_RAW_TYPE right;
+      if (OB_FAIL(ObExprUtil::get_decimal_int(l, left))) {
+      } else if (OB_FAIL(ObExprUtil::get_decimal_int(r, right))) {
+      } else if (right == 0) {
+        if (is_error_div_by_zero) { ret = OB_DIVISION_BY_ZERO; }
+        else { res.set_null(); }
+      } else if (left == 0) {
+        const typename Base::RES_RAW_TYPE zero = 0;
+        ret = ObExprUtil::set_decimal_int(expr, ctx, res,
+            reinterpret_cast<const ObDecimalInt *>(&zero), sizeof(zero));
+      } else {
+        ret = ObArithOpWrap<Base>()(res, l, r, expr, ctx, is_error_div_by_zero);
+      }
     }
     return ret;
   }
@@ -486,11 +490,11 @@ struct ObDecintDivWrap : public ObArithOpWrap<Base>
 #define DECINC_DIV_EVAL_FUNC_BASIC_DECL(L, R) \
 int ObExprDiv::div_decimalint_##L##_##R(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }                                            \
 int ObExprDiv::div_decimalint_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRaw<int##L##_t, int##R##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }
 
 #define DECINC_DIV_EVAL_FUNC_DECL(TYPE)                \
@@ -503,11 +507,11 @@ int ObExprDiv::div_decimalint_##L##_##R##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 #define DECINC_DIV_EVAL_FUNC_WITH_CHECK_DECL(TYPE)                             \
 int ObExprDiv::div_decimalint_512_##TYPE##_with_check(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_arith_eval_func<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }                                            \
 int ObExprDiv::div_decimalint_512_##TYPE##_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr.is_error_div_by_zero_); \
+  return def_batch_arith_op<ObDecintDivWrap<ObDecimalIntBatchDivRawWithCheck<int##TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx, expr.is_error_div_by_zero_); \
 }
 
 

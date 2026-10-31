@@ -84,14 +84,14 @@ int ObExprMapComponents::calc_map_components_result_type(ObExprResType &type,
   return ret;
 }
 
-int ObExprMapComponents::eval_map_components(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, bool is_key) {
+int ObExprMapComponents::eval_map_components(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, bool is_key) {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   uint16_t res_subschema_id = expr.obj_meta_.get_subschema_id();
   ObIArrayType *arr_res = NULL;
   uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
-  ObDatum *map_datum = NULL;
+  Datum *map_datum = NULL;
 
   if (ob_is_null(expr.obj_meta_.get_type())) {
     res.set_null();
@@ -170,7 +170,7 @@ int ObExprMapKeys::calc_result_type1(ObExprResType &type,
   return ObExprMapComponents::calc_map_components_result_type(type, type1, type_ctx, true);
 }
 
-int ObExprMapKeys::eval_map_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprMapKeys::eval_map_keys(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObExprMapComponents::eval_map_components(expr, ctx, res, true);
 }
@@ -201,7 +201,7 @@ int ObExprMapValues::calc_result_type1(ObExprResType &type,
   return ObExprMapComponents::calc_map_components_result_type(type, type1, type_ctx, false);
 }
 
-int ObExprMapValues::eval_map_values(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprMapValues::eval_map_values(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return ObExprMapComponents::eval_map_components(expr, ctx, res, false);
 }

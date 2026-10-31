@@ -109,12 +109,12 @@ int ObExprVectorDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
   return ret;
 }
 
-int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObVecDisType dis_type = ObVecDisType::EUCLIDEAN; // default metric
   if (3 == expr.arg_cnt_) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
     } else if (datum->is_null()) {
       ret = OB_INVALID_ARGUMENT;
@@ -127,7 +127,7 @@ int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDa
   return ret;
 }
 
-int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum, ObVecDisType dis_type)
+int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum, ObVecDisType dis_type)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -194,7 +194,7 @@ int ObExprVectorL1Distance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &r
     return ret;
 }
 
-int ObExprVectorL1Distance::calc_l1_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorL1Distance::calc_l1_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorDistance::calc_distance(expr, ctx, res_datum, ObVecDisType::MANHATTAN);
 }
@@ -210,7 +210,7 @@ int ObExprVectorL2Distance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &r
     return ret;
 }
 
-int ObExprVectorL2Distance::calc_l2_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorL2Distance::calc_l2_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorDistance::calc_distance(expr, ctx, res_datum, ObVecDisType::EUCLIDEAN);
 }
@@ -226,7 +226,7 @@ int ObExprVectorL2Squared::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &ra
     return ret;
 }
 
-int ObExprVectorL2Squared::calc_l2_squared(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorL2Squared::calc_l2_squared(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorDistance::calc_distance(expr, ctx, res_datum, ObVecDisType::EUCLIDEAN_SQUARED);
 }
@@ -242,7 +242,7 @@ int ObExprVectorCosineDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExp
     return ret;
 }
 
-int ObExprVectorCosineDistance::calc_cosine_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorCosineDistance::calc_cosine_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorDistance::calc_distance(expr, ctx, res_datum, ObVecDisType::COSINE);
 }
@@ -258,7 +258,7 @@ int ObExprVectorIPDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &r
     return ret;
 }
 
-int ObExprVectorIPDistance::calc_inner_product(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorIPDistance::calc_inner_product(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   return ObExprVectorDistance::calc_distance(expr, ctx, res_datum, ObVecDisType::DOT);
 }
@@ -274,7 +274,7 @@ int ObExprVectorNegativeIPDistance::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRa
     return ret;
 }
 
-int ObExprVectorNegativeIPDistance::calc_negative_inner_product(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorNegativeIPDistance::calc_negative_inner_product(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprVectorDistance::calc_distance(expr, ctx, res_datum, ObVecDisType::DOT))) {
@@ -317,7 +317,7 @@ int ObExprVectorDims::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
     return ret;
 }
 
-int ObExprVectorDims::calc_dims(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorDims::calc_dims(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -354,7 +354,7 @@ int ObExprVectorNorm::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
     return ret;
 }
 
-int ObExprVectorNorm::calc_norm(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprVectorNorm::calc_norm(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

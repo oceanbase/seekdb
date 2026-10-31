@@ -43,10 +43,10 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;
 
-  static int ns_equal_eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datm);
-  static int row_ns_equal_eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datm);
+  static int ns_equal_eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datm);
+  static int row_ns_equal_eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datm);
 
-  static int ns_equal(const ObExpr &expr, ObDatum &res,
+  static int ns_equal(const ObExpr &expr, Datum &res,
                       ObExpr **left, ObEvalCtx &lctx, ObExpr **right, ObEvalCtx &rctx);
 
 private:

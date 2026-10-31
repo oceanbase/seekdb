@@ -472,7 +472,7 @@ public:
                          common::ObISrsProvider *srs_provider,
                          common::ObILobReadService *lob_read_service,
                          const ObIArray<ObString> *type_info = nullptr);
-  static int spi_convert_objparam(pl::ObPLExecCtx *ctx, DatumParameter *src, const int64_t result_idx, DatumParameter *result, bool need_set);
+  static int spi_convert_objparam(pl::ObPLExecCtx *ctx, const DatumParameter *src, const int64_t result_idx, DatumParameter *result, bool need_set);
   static int spi_convert_anonymous_array(pl::ObPLExecCtx *ctx, DatumParameter *param, uint64_t user_type_id);
   static int spi_set_package_variable(pl::ObPLExecCtx *ctx,
                              uint64_t package_id,

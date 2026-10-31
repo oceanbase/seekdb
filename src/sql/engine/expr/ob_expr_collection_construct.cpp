@@ -104,7 +104,7 @@ int ObExprCollectionConstruct::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 int ObExprCollectionConstruct::eval_collection_construct(const ObExpr &expr,
                                                          ObEvalCtx &ctx,
-                                                         ObDatum &expr_datum)
+                                                         Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
     ret = OB_NOT_SUPPORTED;

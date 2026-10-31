@@ -45,7 +45,7 @@ namespace oceanbase
 namespace sql
 {
 // Existing production evaluator; the test uses its real parameter read path.
-int eval_question_mark_func(const ObExpr &, ObEvalCtx &, ObDatum &);
+int eval_question_mark_func(const ObExpr &, ObEvalCtx &, Datum &);
 }
 namespace observer
 {
@@ -532,13 +532,13 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
   exec.set_sql_ctx(&sql_ctx);
   ASSERT_EQ(OB_SUCCESS, exec.create_physical_plan_ctx());
   ObPhysicalPlanCtx &plan = *exec.get_physical_plan_ctx();
-  ASSERT_EQ(OB_SUCCESS, plan.get_param_store_for_update().assign(params_));
+  ASSERT_EQ(OB_SUCCESS, plan.assign_parameter_inputs(params_));
   plan.set_original_param_cnt(3);
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
   for (int64_t i = 0; i < 3; ++i) {
     EXPECT_NE(params_.at(i).datum_.ptr_, plan.get_param_store().at(i).datum_.ptr_);
-    ASSERT_NE(nullptr, plan.get_native_bigint_parameter(i));
-    EXPECT_EQ(expected[i], plan.get_native_bigint_parameter(i)->get_int());
+    ASSERT_NE(nullptr, plan.get_native_parameter(i));
+    EXPECT_EQ(expected[i], plan.get_native_parameter(i)->get_int());
   }
   Access::poison_values(handler_);
   EXPECT_EQ(INT64_C(0x5a5a5a5a5a5a5a5a), params_.at(0).get_int());
@@ -547,12 +547,12 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
     ObExpr expr;
     expr.extra_ = i;
     expr.datum_meta_.type_ = ObIntType;
-    ObDatum result;
+    Datum result;
     ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(expr, eval, result));
     EXPECT_EQ(expected[i], result.get_int());
     ASSERT_EQ(1, plan.get_param_frame_ptrs().count());
-    const char *slot = plan.get_param_frame_ptrs().at(0) + i * (sizeof(ObDatum) + sizeof(ObEvalInfo));
-    EXPECT_EQ(expected[i], reinterpret_cast<const ObDatum *>(slot)->get_int());
+    const char *slot = plan.get_param_frame_ptrs().at(0) + i * 24;
+    EXPECT_EQ(expected[i], reinterpret_cast<const Datum *>(slot)->get_int());
   }
 
   // Feed the unmodified real binder metadata through the actual graph probe.
@@ -592,12 +592,14 @@ TEST_F(NativePsParameterBinding, rebuilding_execution_context_does_not_modify_re
   for (int attempt = 0; attempt < 2; ++attempt) {
     ObArenaAllocator execution_arena("PsRetryOwner");
     ObPhysicalPlanCtx plan(execution_arena);
-    ASSERT_EQ(OB_SUCCESS, plan.get_param_store_for_update().assign(params_));
+    ASSERT_EQ(OB_SUCCESS, plan.assign_parameter_inputs(params_));
     plan.set_original_param_cnt(3);
     ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
     EXPECT_EQ(1, plan.get_param_store().at(0).get_int());
     EXPECT_EQ(7, plan.get_param_store().at(1).get_int());
-    plan.get_param_store_for_update().at(0).datum_.set_int(1000 + attempt);
+    DatumParameter replacement = plan.get_param_store().at(0);
+    ASSERT_EQ(OB_SUCCESS, replacement.set_int(1000 + attempt, execution_arena));
+    ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, replacement));
     EXPECT_EQ(1, request_values[0].get_int());
   }
   // This exercises real context cloning/destruction, not a forced SQL retry.

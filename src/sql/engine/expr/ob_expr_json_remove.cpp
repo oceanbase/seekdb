@@ -80,7 +80,7 @@ static int remove_from_json(ObJsonPath *path_node, ObIJsonBase *child)
   return ret;
 }
 
-int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObIJsonBase *json_doc = NULL;
@@ -105,7 +105,7 @@ int ObExprJsonRemove::eval_json_remove(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObJsonSeekResult hits;
   for (int64_t i = 1; OB_SUCC(ret) && !is_null_result && i < expr.arg_cnt_; i++) {
     hits.clear();
-    ObDatum *path_data = NULL;
+    Datum *path_data = NULL;
     if (expr.args_[i]->datum_meta_.type_ == ObNullType) {
       is_null_result = true;
     } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, path_data))) {

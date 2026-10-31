@@ -547,7 +547,7 @@ public:
     result_(result),
     ctx_(&allocator,
          &ctx,
-         &phy_plan_ctx_.get_param_store_for_update(),
+         &phy_plan_ctx_.pl_variable_store(),
          &result,
          &status,
          &func_,
@@ -583,7 +583,7 @@ public:
   inline const sql::ObPhysicalPlanCtx &get_physical_plan_ctx() const { return phy_plan_ctx_; }
   inline sql::ObPhysicalPlanCtx &get_physical_plan_ctx() { return phy_plan_ctx_; }
   inline const ParamStore &get_params() const { return phy_plan_ctx_.get_param_store(); }
-  inline ParamStore &get_params() { return phy_plan_ctx_.get_param_store_for_update(); }
+  inline ParamStore &get_params() { return phy_plan_ctx_.pl_variable_store(); }
   ObPLFunction &get_function() { return func_; }
   int get_var(int64_t var_idx, DatumParameter& result);
   int set_var(int64_t var_idx, const DatumParameter& value);

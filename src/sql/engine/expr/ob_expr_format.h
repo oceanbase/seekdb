@@ -49,12 +49,13 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   int get_origin_param_type(ObExprResType &ori_type) const;
   static int64_t get_format_scale(int64_t scale);
   static int convert_num_to_str(const ObDatumMeta &x_meta,
-                                const ObDatum &x_datum,
+                                const common::SqlType &input_type,
+                                const Datum &x_datum,
                                 char *buf,
                                 int64_t buf_len,
                                 int64_t scale,

@@ -76,10 +76,10 @@ int ObExprJsonArray::calc_result_typeN(ObExprResType& type,
 }
 
 // for new sql engine
-int ObExprJsonArray::eval_json_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonArray::eval_json_array(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

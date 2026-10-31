@@ -81,21 +81,21 @@ int ObExprSTGeomFromText::calc_result_typeN(ObExprResType& type,
 
 int ObExprSTGeomFromText::eval_st_geomfromtext(const ObExpr &expr,
                                                ObEvalCtx &ctx,
-                                               ObDatum &res)
+                                               Datum &res)
 {
   return eval_st_geomfromtext_common(expr, ctx, res, N_ST_GEOMFROMTEXT);
 }
 
 int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
                                                       ObEvalCtx &ctx,
-                                                      ObDatum &res,
+                                                      Datum &res,
                                                       const char *func_name)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   uint32_t srid = 0;

@@ -269,9 +269,12 @@ int ObSPIResultSet::destruct_exec_params(ObSQLSessionInfo &session)
   int ret = OB_SUCCESS;
   if (NULL != get_result_set()
       && NULL != get_result_set()->get_exec_context().get_physical_plan_ctx()) {
-    ParamStore &params = get_result_set()->get_exec_context().get_physical_plan_ctx()->get_param_store_for_update();
+    ObPhysicalPlanCtx *plan_ctx = get_result_set()->get_exec_context().get_physical_plan_ctx();
+    const ParamStore &params = plan_ctx->get_param_store();
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
-      OZ (ObUserDefinedType::destruct_obj(params.at(i), &session));
+      DatumParameter retiring = params.at(i);
+      OZ (ObUserDefinedType::destruct_obj(retiring, &session));
+      OZ (plan_ctx->set_runtime_parameter(i, retiring));
     }
   }
   return ret;
@@ -898,7 +901,7 @@ int ObSPIService::spi_convert(ObSQLSessionInfo *session, ObIAllocator *allocator
 }
 
 int ObSPIService::spi_convert_objparam(ObPLExecCtx *ctx,
-                                       DatumParameter *src,
+                                       const DatumParameter *src,
                                        const int64_t result_idx,
                                        DatumParameter *result,
                                        bool need_set)
@@ -4337,10 +4340,10 @@ int ObSPIService::process_function_out_result(ObPLExecCtx *ctx,
   int ret = OB_SUCCESS;
   ObExecContext *exec_ctx = NULL;
   ObPhysicalPlanCtx *pctx = NULL;
-  ParamStore *exec_params = NULL;
+  const ParamStore *exec_params = NULL;
   CK (OB_NOT_NULL(exec_ctx = &(result_set.get_exec_context())));
   CK (OB_NOT_NULL(pctx = exec_ctx->get_physical_plan_ctx()));
-  CK (OB_NOT_NULL(exec_params = &(pctx->get_param_store_for_update())));
+  CK (OB_NOT_NULL(exec_params = &(pctx->get_param_store())));
 
   CK (OB_NOT_NULL(ctx));
   CK (OB_NOT_NULL(ctx->allocator_));
@@ -5545,11 +5548,20 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
       if (OB_SUCC(ret) && value.is_lob_storage() && value.is_outrow_lob()) {
         ObString bytes;
         OZ (ObTextStringHelper::read_real_string_data(*ctx->exec_ctx_, cast_ctx.allocator_v2_, value, bytes));
-        ObDatum inrow;
+        Datum inrow;
         ObTextStringDatumResult text(value.get_type(), value.has_lob_header(), &inrow);
         OZ (text.init(bytes.length(), cast_ctx.allocator_v2_));
         OZ (text.append(bytes));
-        if (OB_SUCC(ret)) { text.set_result(); value.datum_ = inrow; }
+        if (OB_SUCC(ret)) {
+          text.set_result();
+          SqlType type;
+          common::ObDatum legacy;
+          OZ (SqlType::from_legacy(value.get_type_meta(), value.get_accuracy(), type));
+          OZ (DatumCopyPlan(type).borrow_legacy(inrow, legacy));
+          // The reference bytes belong to cast_ctx's allocator; the local
+          // native descriptor is not retained by this PL/session boundary.
+          OX (value.datum_ = legacy);
+        }
       }
 
       CK (!value.is_pl_extend());

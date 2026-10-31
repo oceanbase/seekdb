@@ -46,15 +46,15 @@ int ObExprInnerDecodeLike::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum) {
+int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum) {
   int ret = OB_SUCCESS;
-  ObDatum *pattern = NULL;
-  ObDatum *escape = NULL;
-  ObDatum *is_start = NULL;
-  ObDatum *col_type = NULL;
-  ObDatum *col_collation = NULL;
-  ObDatum *col_length = NULL;
-  ObDatum *pattern_val = NULL;
+  Datum *pattern = NULL;
+  Datum *escape = NULL;
+  Datum *is_start = NULL;
+  Datum *col_type = NULL;
+  Datum *col_collation = NULL;
+  Datum *col_length = NULL;
+  Datum *pattern_val = NULL;
   const ObDataTypeCastParams &dtc_params = ctx.exec_ctx_.get_my_session()->get_dtc_params();
   if (OB_ISNULL(expr.args_[0]) ||OB_ISNULL(expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
@@ -238,8 +238,8 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprInnerDecodeLike::cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr &pattern_expr, ObDatum *pattern_datum,
-                                                   const ObExpr &dst_expr, ObDatum * &cast_datum) {
+int ObExprInnerDecodeLike::cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr &pattern_expr, Datum *pattern_datum,
+                                                   const ObExpr &dst_expr, Datum * &cast_datum) {
   int ret = OB_SUCCESS;
   ObCastMode cm = CM_NONE;
   if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false /*is_explicit_cast*/,

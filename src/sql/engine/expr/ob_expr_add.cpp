@@ -475,12 +475,12 @@ struct ObFloatBatchAddRawWithCheck: public ObFloatBatchAddRawNoCheck
 //calc type is floatTC, left and right has same TC
 int ObExprAdd::add_float_float(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObFloatBatchAddRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObArithOpWrap<ObFloatBatchAddRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprAdd::add_float_float_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  return def_batch_arith_op<ObArithOpWrap<ObFloatBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
+  return def_batch_arith_op<ObArithOpWrap<ObFloatBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
@@ -521,21 +521,21 @@ struct ObDoubleBatchAddRawWithCheck: public ObDoubleBatchAddRawNoCheck
 int ObExprAdd::add_double_double(EVAL_FUNC_ARG_DECL)
 {
   return T_OP_AGG_ADD == expr.type_
-      ? def_arith_eval_func<ObArithOpWrap<ObDoubleBatchAddRawNoCheck>>(EVAL_FUNC_ARG_LIST)
-      : def_arith_eval_func<ObArithOpWrap<ObDoubleBatchAddRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+      ? def_arith_eval_func<ObArithOpWrap<ObDoubleBatchAddRawNoCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx)
+      : def_arith_eval_func<ObArithOpWrap<ObDoubleBatchAddRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprAdd::add_double_double_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   return T_OP_AGG_ADD == expr.type_
-      ? def_batch_arith_op<ObArithOpWrap<ObDoubleBatchAddRawNoCheck>>(BATCH_EVAL_FUNC_ARG_LIST)
-      : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST);
+      ? def_batch_arith_op<ObArithOpWrap<ObDoubleBatchAddRawNoCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx)
+      : def_batch_arith_op<ObArithOpWrap<ObDoubleBatchAddRawWithCheck>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
 struct ObNumberAddFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
     char local_buff[ObNumber::MAX_BYTE_LEN];
@@ -545,7 +545,7 @@ struct ObNumberAddFunc
     number::ObNumber res_num;
     if (OB_FAIL(l_num.add_v3(r_num, res_num, local_alloc))) {
     } else {
-      res.set_number(res_num);
+      ret = ObExprUtil::set_number(expr, ctx, res, res_num);
     }
     return ret;
   }
@@ -554,14 +554,14 @@ struct ObNumberAddFunc
 //calc type TC is ObNumberTC
 int ObExprAdd::add_number_number(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObNumberAddFunc>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObNumberAddFunc>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprAdd::add_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector l_datums;
-  ObDatumVector r_datums;
+  DatumVector l_datums;
+  DatumVector r_datums;
   const ObExpr &left = *expr.args_[0];
   const ObExpr &right = *expr.args_[1];
 
@@ -575,7 +575,7 @@ int ObExprAdd::add_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
   if (OB_SUCC(ret)) {
     char local_buff[ObNumber::MAX_BYTE_LEN];
     ObDataBuffer local_alloc(local_buff, ObNumber::MAX_BYTE_LEN);
-    ObDatumVector results = expr.locate_expr_datumvector(ctx);
+    DatumVector results = expr.locate_expr_datumvector(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
     for (auto i = 0; OB_SUCC(ret) && i < size; i++) {
@@ -590,24 +590,23 @@ int ObExprAdd::add_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       ObNumber res_num;
       ObNumber l_num(l_datums.at(i)->get_number());
       ObNumber r_num(r_datums.at(i)->get_number());
-      uint32_t *res_digits = const_cast<uint32_t *> (results.at(i)->get_number_digits());
-      ObNumber::Desc &desc_buf = const_cast<ObNumber::Desc &> (results.at(i)->get_number_desc());
-      // Notice that, space of tmp is allocated in frame but without memset operation, which causes random memory content.
-      // And the reserved in storage layer should be 0, thus you must replacement new here to avoid checksum error, etc.
-      ObNumber::Desc *res_desc = new (&desc_buf) ObNumber::Desc();
+      char *number_buffer = expr.get_reference_res_mem(ctx, ObNumber::MAX_BYTE_LEN, i);
+      if (number_buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; break; }
+      uint32_t *res_digits = reinterpret_cast<uint32_t *>(number_buffer + sizeof(number::ObCompactNumber));
+      ObNumber::Desc *res_desc = new (number_buffer) ObNumber::Desc();
       // speedup detection
       if (ObNumber::try_fast_add(l_num, r_num, res_digits, *res_desc)) {
-        results.at(i)->set_pack(sizeof(number::ObCompactNumber) +
-                                res_desc->len_ * sizeof(*res_digits));
-        eval_flags.set(i);
+        ret = results.at(i)->set_number_shallow(
+            *reinterpret_cast<const number::ObCompactNumber *>(number_buffer));
+        if (OB_SUCC(ret)) { eval_flags.set(i); }
         // LOG_DEBUG("mul speedup", K(l_num.format()),
         // K(r_num.format()), K(res_num.format()));
       } else {
         // normal path: no speedup
         if (OB_FAIL(l_num.add_v3(r_num, res_num, local_alloc))) {
         } else {
-          results.at(i)->set_number(res_num);
-          eval_flags.set(i);
+          ret = ObExprUtil::set_number(expr, ctx, *results.at(i), res_num, i);
+          if (OB_SUCC(ret)) { eval_flags.set(i); }
         }
         local_alloc.free();
       }
@@ -634,7 +633,7 @@ struct NmbTryFastAdditionOp
 template <bool SWAP_L_R>
 struct ObNumberDatetimeAddFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r) const
   {
     int ret = OB_SUCCESS;
     number::ObNumber left_nmb((!SWAP_L_R ? l : r).get_number());
@@ -695,7 +694,7 @@ int ObExprAdd::add_datetime_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 struct ObDatetimeDatetimeAddFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r) const
+  int operator()(Datum &res, const Datum &l, const Datum &r) const
   {
     int ret = OB_SUCCESS;
     const int64_t left_i = l.get_datetime();
@@ -768,11 +767,11 @@ struct ObDecimalIntBatchAddRawWithCheck : public ObDecimalIntBatchAddRaw<int512_
 #define DECINC_ADD_EVAL_FUNC_DECL(TYPE) \
 int ObExprAdd::add_decimal##TYPE(EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(EVAL_FUNC_ARG_LIST); \
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(EVAL_FUNC_ARG_LIST, expr, ctx); \
 }                                            \
 int ObExprAdd::add_decimal##TYPE##_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
-  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST); \
+  return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchAddRaw<TYPE##_t>>>(BATCH_EVAL_FUNC_ARG_LIST, expr, ctx); \
 }
 
 
@@ -784,13 +783,13 @@ DECINC_ADD_EVAL_FUNC_DECL(int512)
 
 int ObExprAdd::add_decimalint512_with_check(EVAL_FUNC_ARG_DECL)
 {
-  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchAddRawWithCheck>>(EVAL_FUNC_ARG_LIST);
+  return def_arith_eval_func<ObArithOpWrap<ObDecimalIntBatchAddRawWithCheck>>(EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 int ObExprAdd::add_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
   return def_batch_arith_op<ObArithOpWrap<ObDecimalIntBatchAddRawWithCheck>>(
-    BATCH_EVAL_FUNC_ARG_LIST);
+    BATCH_EVAL_FUNC_ARG_LIST, expr, ctx);
 }
 
 
@@ -799,15 +798,18 @@ int ObExprAdd::add_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL)
 template<typename T>
 struct ObDecimalNumberAddFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const int64_t scale,
-                 ObNumStackOnceAlloc &alloc) const
+  int operator()(Datum &res, const Datum &l, const Datum &r, const int64_t scale,
+                 ObNumStackOnceAlloc &alloc, const ObExpr &expr, ObEvalCtx &ctx) const
   {
     int ret = OB_SUCCESS;
-    const T res_int = *reinterpret_cast<const T *>(l.ptr_) + *reinterpret_cast<const T *>(r.ptr_);
+    T left;
+    T right;
     number::ObNumber res_num;
-    if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
+    if (OB_FAIL(ObExprUtil::get_decimal_int(l, left))) {
+    } else if (OB_FAIL(ObExprUtil::get_decimal_int(r, right))) {
+    } else if (OB_FAIL(wide::to_number(T(left + right), scale, alloc, res_num))) {
     } else {
-      res.set_number(res_num);
+      ret = ObExprUtil::set_number(expr, ctx, res, res_num);
       alloc.free();  // for batch function reuse alloc
     }
     return ret;
@@ -819,13 +821,13 @@ int ObExprAdd::add_decimal##TYPE##_number_result(EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_arith_eval_func<ObDecimalNumberAddFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_arith_eval_func<ObDecimalNumberAddFunc<TYPE##_t>>(EVAL_FUNC_ARG_LIST, scale, tmp_alloc, expr, ctx); \
 }                                            \
 int ObExprAdd::add_decimal##TYPE##_number_result_batch(BATCH_EVAL_FUNC_ARG_DECL)      \
 {                                            \
   ObNumStackOnceAlloc tmp_alloc;                                \
   const int64_t scale = expr.args_[0]->datum_meta_.scale_;      \
-  return def_batch_arith_op_by_datum_func<ObDecimalNumberAddFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc); \
+  return def_batch_arith_op_by_datum_func<ObDecimalNumberAddFunc<TYPE##_t>>(BATCH_EVAL_FUNC_ARG_LIST, scale, tmp_alloc, expr, ctx); \
 }
 
 DECINC_ADD_EVAL_FUNC_NUMBER_DECL(int32)

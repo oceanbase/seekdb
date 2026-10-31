@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_ascii.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
@@ -64,7 +65,7 @@ int ObExprAscii::calc_result_type1(ObExprResType &type,
 }
 
 
-inline void calc_ascii_expr_inner(ObDatum &res_datum, const ObString &str_val)
+inline void calc_ascii_expr_inner(Datum &res_datum, const ObString &str_val)
 {
   if (str_val.empty()) {
     res_datum.set_int32(0);
@@ -73,10 +74,10 @@ inline void calc_ascii_expr_inner(ObDatum &res_datum, const ObString &str_val)
   }
 }
 
-int ObExprAscii::calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprAscii::calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *s_datum = NULL;
+  Datum *s_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
   } else if (s_datum->is_null()) {
     res_datum.set_null();
@@ -174,10 +175,10 @@ static int calc_ord_expr_inner(const ObCollationType &cs_type,
 }
 
 // ORD evaluation helper shared by ASCII-compatible paths.
-int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *s_datum = NULL;
+  Datum *s_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
   } else if (s_datum->is_null()) {
     res_datum.set_null();
@@ -213,7 +214,7 @@ int ObExprOrd::calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
         ObNumStackOnceAlloc tmp_alloc;
         if (OB_FAIL(res_nmb.from(res_int, tmp_alloc))) {
         } else {
-          res_datum.set_number(res_nmb);
+          ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
         }
       } else if (ObIntType == res_type) {
         res_datum.set_int(res_int);

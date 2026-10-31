@@ -19,6 +19,7 @@
 #include "common/datum/datum_core.h"
 #include "common/datum/datum.h"
 #include "common/datum/sql_type.h"
+#include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
 {
@@ -37,6 +38,7 @@ namespace common
 class DatumCopyPlan
 {
 public:
+  using ResourceCloner = int (*)(const SqlType &, const Datum &, ObIAllocator &, Datum &, void *);
   DatumCopyPlan(const SqlTypeMeta &meta, const ObAccuracy &accuracy)
     : meta_(meta), accuracy_(accuracy), type_(nullptr) {}
 
@@ -46,6 +48,9 @@ public:
 
   const SqlTypeMeta &get_type_meta() const { return meta_; }
   const ObAccuracy &get_accuracy() const { return accuracy_; }
+
+  // Log only the copied metadata and binding presence, never borrowed trees.
+  TO_STRING_KV(K_(meta), K_(accuracy), "has_full_type", type_ != nullptr);
 
   // This reports external payload bytes, excluding the Datum descriptor and
   // any allocator padding. Unknown Decimal precision stays unknown: its
@@ -152,6 +157,108 @@ public:
     bool reference = false;
     const int ret = prepare_legacy(source, prepared, scratch, reference, true);
     if (ret == OB_SUCCESS) { size = prepared.is_null() ? 0 : prepared.len_; }
+    return ret;
+  }
+
+  // A temporary old ABI view, never an owning copy. Ordinary reference spans
+  // borrow source bytes; inline/state/normalized coefficients borrow scratch.
+  // Requiring a complete scratch buffer makes its lifetime explicit at every
+  // call site. No pointer to a callee-local temporary can escape this method.
+  int legacy_view(const Datum &source, ObDatum &destination, void *scratch, uint32_t capacity) const
+  {
+    if (capacity < 64) { return OB_BUF_NOT_ENOUGH; }
+    if (scratch == nullptr) { return OB_INVALID_ARGUMENT; }
+    ObDatum candidate;
+    bool reference = false;
+    const int ret = prepare_legacy(source, candidate, static_cast<char *>(scratch), reference, true);
+    if (ret == OB_SUCCESS) { destination = candidate; }
+    return ret;
+  }
+
+  int payload_copy_size(const Datum &source, int64_t &size) const
+  {
+    ObDatum prepared;
+    char scratch[64];
+    bool reference = false;
+    int ret = prepare_legacy(source, prepared, scratch, reference, false);
+    if (ret == OB_SUCCESS && reference && needs_resource_clone()) { ret = OB_NOT_SUPPORTED; }
+    if (ret == OB_SUCCESS) { size = reference ? source.length() : 0; }
+    return ret;
+  }
+
+  // Carrier bytes only. For resource values these are the address/locator
+  // wrapper, not the retained object. Only callers that keep the existing
+  // pointee owner alive may use this with copy_carrier_span_borrowing_resources.
+  int carrier_span_size(const Datum &source, int64_t &size) const
+  {
+    ObDatum prepared;
+    char scratch[64];
+    bool reference = false;
+    const int ret = prepare_legacy(source, prepared, scratch, reference, false);
+    if (ret == OB_SUCCESS) { size = reference ? source.length() : 0; }
+    return ret;
+  }
+
+  int get_decimal(const Datum &source, ObDatum &coefficient_view, void *scratch, uint32_t capacity) const
+  {
+    return meta_.get_type() != ObDecimalIntType ? OB_INVALID_ARGUMENT
+        : legacy_view(source, coefficient_view, scratch, capacity);
+  }
+
+  // The established byte equality of two values in this prepared domain.
+  // This is distinct from SQL equality (for example, signed zero/NaN bits).
+  int binary_equal(const Datum &left, const Datum &right, bool &equal) const
+  {
+    alignas(8) char left_scratch[64], right_scratch[64];
+    ObDatum left_view, right_view;
+    int ret = legacy_view(left, left_view, left_scratch, sizeof(left_scratch));
+    if (ret == OB_SUCCESS) { ret = legacy_view(right, right_view, right_scratch, sizeof(right_scratch)); }
+    if (ret == OB_SUCCESS) {
+      equal = left_view.pack_ == right_view.pack_ && left_view.len_ == 0
+          ? true : ObDatum::binary_equal(left_view, right_view);
+    }
+    return ret;
+  }
+
+  // Copy and representation normalization only, not a scale conversion or SQL
+  // precision cast. Wide native values keep the source's actual legal width.
+  int set_decimal(const ObDecimalInt *coefficient, int32_t bytes, Datum &destination,
+                  void *buffer, uint32_t capacity) const
+  {
+    if (meta_.get_type() != ObDecimalIntType || !decimal_width(bytes)
+        || (bytes > 0 && coefficient == nullptr)) { return OB_INVALID_ARGUMENT; }
+    ObDatum source;
+    source.ptr_ = reinterpret_cast<const char *>(coefficient); source.pack_ = bytes;
+    Datum candidate;
+    int ret = import_legacy(source, candidate);
+    SqlType temporary;
+    const SqlType *type = nullptr;
+    if (ret == OB_SUCCESS) { ret = resolve_type(temporary, type); }
+    if (ret == OB_SUCCESS && type->canonical_representation() == DatumRepresentation::Reference) {
+      if (static_cast<uint32_t>(bytes) > capacity) { ret = OB_BUF_NOT_ENOUGH; }
+      else if (bytes > 0 && buffer == nullptr) { ret = OB_INVALID_ARGUMENT; }
+      else {
+        if (bytes > 0) { MEMMOVE(buffer, coefficient, bytes); }
+        ret = candidate.set_reference(bytes > 0 ? buffer : nullptr, bytes);
+      }
+    }
+    if (ret == OB_SUCCESS) { destination = candidate; }
+    return ret;
+  }
+
+  int deep_copy_resource(const Datum &source, Datum &destination, ObIAllocator &allocator,
+                         ResourceCloner cloner, void *context) const
+  {
+    if (!source.is_present() || !needs_resource_clone()) { return deep_copy(source, destination, allocator); }
+    if (type_ == nullptr || cloner == nullptr) { return OB_INVALID_ARGUMENT; }
+    ObDatum prepared;
+    char scratch[64];
+    bool reference = false;
+    Datum candidate;
+    int ret = prepare_legacy(source, prepared, scratch, reference, false);
+    if (ret == OB_SUCCESS) { ret = cloner(*type_, source, allocator, candidate, context); }
+    if (ret == OB_SUCCESS) { ret = prepare_legacy(candidate, prepared, scratch, reference, false); }
+    if (ret == OB_SUCCESS) { destination = candidate; }
     return ret;
   }
 
@@ -271,6 +378,8 @@ public:
     bool reference = false;
     Datum candidate = source;
     if (OB_FAIL(prepare_legacy(source, prepared, scratch, reference, false))) {
+    } else if (reference && needs_resource_clone()) {
+      ret = OB_NOT_SUPPORTED;
     } else if (reference) {
       char *bytes = nullptr;
       if (source.length() > 0 && (bytes = static_cast<char *>(allocator.alloc(source.length()))) == nullptr) {
@@ -286,6 +395,18 @@ public:
 
   int deep_copy(const Datum &source, Datum &destination, char *buffer,
                 int64_t capacity, int64_t &position) const
+  { return copy_native_span(source, destination, buffer, capacity, position, false); }
+
+  // Same-scope carrier copy: resource pointees remain borrowed from their
+  // existing owner. This is intentionally distinct from an owning deep_copy.
+  // Complete preflight precedes every write; overlap/self-copy is supported.
+  int copy_carrier_span_borrowing_resources(const Datum &source, Datum &destination,
+                                            char *buffer, int64_t capacity, int64_t &position) const
+  { return copy_native_span(source, destination, buffer, capacity, position, true); }
+
+private:
+  int copy_native_span(const Datum &source, Datum &destination, char *buffer,
+                       int64_t capacity, int64_t &position, bool borrow_resources) const
   {
     int ret = OB_SUCCESS;
     ObDatum prepared;
@@ -295,6 +416,8 @@ public:
     if (position < 0 || capacity < position) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(prepare_legacy(source, prepared, scratch, reference, false))) {
+    } else if (reference && needs_resource_clone() && !borrow_resources) {
+      ret = OB_NOT_SUPPORTED;
     } else {
       const int64_t size = reference ? source.length() : 0;
       if (size > capacity - position) {
@@ -313,7 +436,10 @@ public:
     return ret;
   }
 
-private:
+  bool needs_resource_clone() const
+  { return type_ != nullptr ? type_->requires_resource_clone()
+      : meta_.is_ext_sql_array() || meta_.is_pl_extend_type(); }
+
   static bool decimal_width(int64_t size)
   { return size == 0 || size == 4 || size == 8 || size == 16 || size == 32 || size == 64; }
 
@@ -332,9 +458,8 @@ private:
     else if (OB_FAIL(SqlType::from_legacy(meta_, accuracy_, temporary))) {}
     else { type = &temporary; }
     if (OB_SUCC(ret)) {
-      if (type->kind() < ObNullType || type->kind() >= ObMaxType
-          || type->form() == SqlTypeForm::Array || type->form() == SqlTypeForm::Record
-          || type->form() == SqlTypeForm::UserDefined) {
+      if (type->kind() < ObNullType || (type->kind() >= ObMaxType
+          && type->kind() != ObTimestampLTZType && type->kind() != ObTimestampNanoType)) {
         ret = OB_NOT_SUPPORTED;
       } else {
         SqlTimeSemantics expected = SqlTimeSemantics::Unspecified;
@@ -344,6 +469,8 @@ private:
           case ObYearType: expected = SqlTimeSemantics::Year; break;
           case ObDateTimeType: case ObMySQLDateTimeType: expected = SqlTimeSemantics::WallClock; break;
           case ObTimestampType: expected = SqlTimeSemantics::Instant; break;
+          case ObTimestampLTZType: expected = SqlTimeSemantics::SessionLocal; break;
+          case ObTimestampNanoType: expected = SqlTimeSemantics::WallClock; break;
           default: break;
         }
         if (type->time_semantics() != expected) { ret = OB_NOT_SUPPORTED; }
@@ -368,14 +495,19 @@ private:
   {
     if (source.len_ > 0 && source.ptr_ == nullptr) { return OB_INVALID_ARGUMENT; }
     const SqlValueType kind = type.kind();
-    if (kind == ObExtendType) {
+    if (type.legacy_meta().is_ext_sql_array() && !source.is_ext()) {
+      if (source.flag_ != ObDatumDesc::NONE || source.len_ != sizeof(int64_t)) { return OB_INVALID_ARGUMENT; }
+    } else if (kind == ObExtendType) {
       int64_t value = 0;
       const int ret = source.is_ext() ? extended_value(source, value) : OB_INVALID_ARGUMENT;
       if (ret != OB_SUCCESS) { return ret; }
       if (source.is_extended_null() || value == DATUM_MIN_EXT_VALUE || value == DATUM_MAX_EXT_VALUE
           || value == ObActionFlag::OP_NOP) { return OB_INVALID_ARGUMENT; }
       const uint8_t subtype = source.get_extend_type();
-      if (subtype > 0 && subtype <= T_EXT_SQL_ARRAY) { return OB_NOT_SUPPORTED; }
+      if (subtype > 0 && subtype <= T_EXT_SQL_ARRAY
+          && subtype != type.legacy_meta().get_extend_type()) {
+        return type.form() == SqlTypeForm::Scalar ? OB_NOT_SUPPORTED : OB_INVALID_ARGUMENT;
+      }
     } else if (kind == ObDecimalIntType) {
       if (source.flag_ != ObDatumDesc::NONE || !decimal_width(source.len_)) { return OB_INVALID_ARGUMENT; }
     } else if (kind == ObNumberType || kind == ObUNumberType) {
@@ -386,6 +518,8 @@ private:
           || source.len_ != sizeof(desc) + sizeof(uint32_t) * desc.len_) { return OB_INVALID_ARGUMENT; }
     } else if (kind == ObUnknownType) {
       if (source.flag_ != ObDatumDesc::NONE || source.len_ != sizeof(int64_t)) { return OB_INVALID_ARGUMENT; }
+    } else if (kind == ObTimestampLTZType || kind == ObTimestampNanoType) {
+      if (source.flag_ != ObDatumDesc::NONE || source.len_ != sizeof(ObOTimestampTinyData)) { return OB_INVALID_ARGUMENT; }
     } else if (source.is_ext()) {
       return OB_INVALID_ARGUMENT;
     }

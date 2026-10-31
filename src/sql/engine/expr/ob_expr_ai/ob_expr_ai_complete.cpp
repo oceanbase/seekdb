@@ -84,12 +84,12 @@ int ObExprAIComplete::calc_result_typeN(ObExprResType &type,
 
 int ObExprAIComplete::eval_ai_complete(const ObExpr &expr, 
                                        ObEvalCtx &ctx,
-                                       ObDatum &res) 
+                                       Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *arg_model_id = nullptr;
-  ObDatum *arg_prompt = nullptr;
-  ObDatum *arg_config = nullptr;
+  Datum *arg_model_id = nullptr;
+  Datum *arg_prompt = nullptr;
+  Datum *arg_config = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_prompt, arg_config))) {
   } else if (arg_model_id->is_null() || arg_prompt->is_null()) {
     ret = OB_INVALID_ARGUMENT;

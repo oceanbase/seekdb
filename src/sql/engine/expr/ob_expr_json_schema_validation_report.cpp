@@ -96,7 +96,7 @@ int ObExprJsonSchemaValidationReport::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprJsonSchemaValidationReport::eval_json_schema_validation_report(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonSchemaValidationReport::eval_json_schema_validation_report(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   const ObExprJsonSchemaValidInfo *info

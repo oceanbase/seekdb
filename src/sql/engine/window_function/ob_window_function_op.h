@@ -609,6 +609,16 @@ public:
     Stores res_;
 
     Frame last_valid_frame_;
+    // Fixed result-row staging: each cell owns the inline/coefficient view until
+    // RowsStore synchronously encodes it. Reference spans keep their original owner.
+    alignas(8) char legacy_result_scratch_[64];
+    int legacy_result(const ObExpr &expr, const Datum &value, common::ObDatum &out)
+    {
+      int ret = expr.get_datum_copy_plan().legacy_view(value, out,
+          legacy_result_scratch_, sizeof(legacy_result_scratch_));
+      if (OB_SUCC(ret)) { expr.set_evaluated_flag(op_.eval_ctx_); }
+      return ret;
+    }
   };
 
   class AggrCell : public WinFuncCell
@@ -1001,8 +1011,8 @@ private:
   // shadow copy the next and restore it before get next row from child.
   ObChunkDatumStore::ShadowStoredRow next_row_; // for backup & restore datum ptr of child output
   DatumFixedArray curr_row_collect_values_;
-  common::ObFixedArray<ObDatum*, common::ObIAllocator> all_expr_datums_copy_;
-  common::ObFixedArray<ObDatum*, common::ObIAllocator> all_expr_datums_;
+  common::ObFixedArray<Datum*, common::ObIAllocator> all_expr_datums_copy_;
+  common::ObFixedArray<Datum*, common::ObIAllocator> all_expr_datums_;
   int64_t restore_row_cnt_;
   // previous output line
   int64_t last_output_row_idx_;

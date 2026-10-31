@@ -93,7 +93,7 @@ int ObExprPLSQLCodeSQLErrm::cg_expr(
 }
 
 int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   pl::ObPLSqlCodeInfo *sqlcode_info = NULL;
@@ -134,7 +134,7 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
       }
       OX (expr_datum.set_string(sqlerrm_result, strlen(sqlerrm_result)));
     } else if (1 == expr.arg_cnt_) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       int64_t sqlcode = 0;
       if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
       } else if (FALSE_IT(sqlcode = datum->get_int())) {

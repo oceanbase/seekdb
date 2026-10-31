@@ -1156,7 +1156,7 @@ int ObAIFuncUtils::check_info_type_rerank(const ObAIFuncExprInfo *info)
   return ret;
 }
 
-int ObAIFuncUtils::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str)
+int ObAIFuncUtils::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, ObString &res_str)
 {
   int ret = OB_SUCCESS;
   ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);

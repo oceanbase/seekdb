@@ -351,7 +351,7 @@ int ObDASIndexMergeIter::fill_default_values_for_union(const common::ObIArray<Ob
       ObEvalCtx::BatchInfoScopeGuard batch_info_guard(*eval_ctx_);
       batch_info_guard.set_batch_size(1);
       batch_info_guard.set_batch_idx(0);
-      ObDatum &datum = expr->locate_datum_for_write(*eval_ctx_);
+      Datum &datum = expr->locate_datum_for_write(*eval_ctx_);
       datum.set_double(0.0);
       expr->set_evaluated_flag(*eval_ctx_);
       expr->set_evaluated_projected(*eval_ctx_);

@@ -42,7 +42,7 @@ public:
   explicit ObExprMysqlProcInfo(common::ObIAllocator& alloc);
   virtual ~ObExprMysqlProcInfo();
 
-  static int eval_mysql_proc_info(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_mysql_proc_info(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int calc_result_typeN(ObExprResType &type,
                                 ObExprResType *types_stack,
                                 int64_t param_num,
@@ -52,22 +52,22 @@ public:
 private:
   static int get_param_list_info(const ObExpr &expr,
                                  ObEvalCtx &ctx,
-                                 ObDatum &expr_datum,
+                                 Datum &expr_datum,
                                  uint64_t routine_id);
   static int get_param_list_info(const ObExpr &expr,
                                  ObEvalCtx &ctx,
-                                 ObDatum &expr_datum,
+                                 Datum &expr_datum,
                                  ObString &routine_body,
                                  ObString &exec_env_str,
                                  uint64_t routine_id);
   static int get_returns_info(const ObExpr &expr,
                               ObEvalCtx &ctx,
-                              ObDatum &expr_datum,
+                              Datum &expr_datum,
                               uint64_t routine_id);
 
   static int get_returns_info(const ObExpr &expr,
                               ObEvalCtx &ctx,
-                              ObDatum &expr_datum,
+                              Datum &expr_datum,
                               int64_t param_type,
                               int64_t param_length,
                               int64_t param_precision,
@@ -77,26 +77,26 @@ private:
                               ObString &routine_body);
   static int get_body_info(const ObExpr &expr,
                            ObEvalCtx &ctx,
-                           ObDatum &expr_datum,
+                           Datum &expr_datum,
                            uint64_t routine_id);
   static int get_body_info(const ObExpr &expr,
                            ObEvalCtx &ctx,
-                           ObDatum &expr_datum,
+                           Datum &expr_datum,
                            ObString &routine_body,
                            ObString &exec_env_str);
 
   static int get_info_by_field_id(const ObExpr &expr,
                                   ObEvalCtx &ctx,
-                                  ObDatum &expr_datum,
+                                  Datum &expr_datum,
                                   uint64_t routine_id,
                                   uint64_t field_id);
   static int get_sys_package_name_info(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &expr_datum,
+                                       Datum &expr_datum,
                                        uint64_t package_id);
   static int get_info_by_field_id(const ObExpr &expr,
                                   ObEvalCtx &ctx,
-                                  ObDatum &expr_datum,
+                                  Datum &expr_datum,
                                   ObString &routine_body,
                                   uint64_t field_id);
   static int get_routine_info(ObSQLSessionInfo *session,
@@ -104,7 +104,7 @@ private:
                               const ObRoutineInfo *&routine_info);
   static int set_return_result(const ObExpr &expr,
                                ObEvalCtx &ctx,
-                               ObDatum &expr_datum,
+                               Datum &expr_datum,
                                ObString &value_str);
   static int extract_create_node_from_routine_info(ObIAllocator &alloc,
                                                    const ObRoutineInfo &routine_info,
@@ -117,10 +117,10 @@ private:
                                                    ParseNode *&create_node);
   static int calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
                                             ObEvalCtx &ctx,
-                                            ObDatum &expr_datum);
+                                            Datum &expr_datum);
   static int calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
                                             ObEvalCtx &ctx,
-                                            ObDatum &expr_datum);
+                                            Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprMysqlProcInfo);
 };

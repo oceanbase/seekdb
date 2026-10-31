@@ -1093,7 +1093,7 @@ int ObSql::prepare_pl_sql(const ObString &sql,
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_NOT_NULL(params) &&
                      OB_FAIL(construct_param_store(*params,
-                                                   result.get_exec_context().get_physical_plan_ctx()->get_param_store_for_update()))) {
+                                                   *result.get_exec_context().get_physical_plan_ctx()))) {
           } else if (OB_FAIL(sess.store_query_string(sql))) {
           } else if (OB_FAIL(parser.parse(sql, parse_result, parse_mode,
                                           false, false, true,
@@ -1211,7 +1211,7 @@ int ObSql::handle_sql_execute(const ObString &sql,
     if (OB_FAIL(reconstruct_pl_params_store(allocator, context, org_params, params, ab_params))) {
     } else if (context.is_batch_params_execute() && OB_ISNULL(ab_params)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(construct_param_store(params, pctx->get_param_store_for_update()))) {
+    } else if (OB_FAIL(construct_param_store(params, *pctx))) {
     } else if (OB_FAIL(construct_parameterized_params(params, pc_ctx))) {
     } else {
       pc_ctx.normal_parse_const_cnt_ = params.count();
@@ -1234,7 +1234,7 @@ int ObSql::handle_sql_execute(const ObString &sql,
   if (OB_SUCC(ret)) {
     if (!result.get_is_from_plan_cache()) {
       if (mode == PC_PS_MODE || mode == PC_PL_MODE) {
-        pctx->get_param_store_for_update().reset();
+        pctx->reset_datum_param_store();
       }
       // Use SMART_CALL_LARGE for complex SQL plan generation when plan cache misses
       // This prevents frequent stack extending during physical plan generation
@@ -1564,6 +1564,13 @@ int ObSql::construct_param_store(const ParamStore &params,
   return ret;
 }
 
+int ObSql::construct_param_store(const ParamStore &params, ObPhysicalPlanCtx &plan_ctx)
+{
+  return plan_ctx.edit_parameter_inputs([&](ParamStore &inputs) {
+    return construct_param_store(params, inputs);
+  });
+}
+
 int ObSql::construct_parameterized_params(const ParamStore &params,
                                           ObPlanCacheCtx &phy_ctx)
 {
@@ -1833,7 +1840,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
     } else if (context.is_batch_params_execute() &&
         OB_ISNULL(ps_ab_params)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(construct_param_store(ps_params, pctx->get_param_store_for_update()))) {
+    } else if (OB_FAIL(construct_param_store(ps_params, *pctx))) {
     } else {
       const ObString &sql = !ps_info->get_no_param_sql().empty() ? ps_info->get_no_param_sql() : ps_info->get_ps_sql();
       context.cur_sql_ = sql;
@@ -1867,7 +1874,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
           if (OB_FAIL(ret)) {//do nothing
           } else if (!result.get_is_from_plan_cache()) {
             pctx->set_original_param_cnt(origin_params_count);
-            pctx->get_param_store_for_update().reset();
+            pctx->reset_datum_param_store();
             // Use SMART_CALL_LARGE for complex SQL plan generation when plan cache misses
             if (OB_FAIL(SMART_CALL_LARGE(handle_physical_plan(sql, context, result, pc_ctx, get_plan_err)))) {
             }
@@ -3187,15 +3194,15 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
     ret = OB_INVALID_ARGUMENT;
   } else {
     pctx->reset_datum_param_store();
-    pctx->get_param_store_for_update().reuse();
     ObParser parser(allocator, session->get_sql_mode(), session->get_charsets4parser());
     if (OB_FAIL(parser.parse(outlined_stmt, parse_result,
                              STD_MODE,
                              pc_ctx.sql_ctx_.handle_batched_multi_stmt(),
                              false, NULL != session->get_pl_context()))) {
     } else if ((PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_)
-      && OB_FAIL(construct_param_store_from_parameterized_params(
-                    pc_ctx, pctx->get_param_store_for_update()))) {
+      && OB_FAIL(pctx->edit_parameter_inputs([&](ParamStore &inputs) {
+                    return construct_param_store_from_parameterized_params(pc_ctx, inputs);
+                  }))) {
     }
     pc_ctx.sql_ctx_.is_sensitive_ |= parse_result.contain_sensitive_data_;
     if (OB_SUCC(ret)) {
@@ -3329,12 +3336,11 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
       if (is_transform_outline) {
         LOG_WARN("is_transform_outline", K(is_transform_outline));
       }
-      if (OB_FAIL(ObSqlParameterization::parameterize_syntax_tree(allocator,
-                                                                  is_transform_outline,
-                                                                  pc_ctx,
-                                                                  parse_result.result_tree_,
-                                                                  pctx->get_param_store_for_update(),
-                                                                  session->get_charsets4parser()))) {
+      if (OB_FAIL(pctx->edit_parameter_inputs([&](ParamStore &inputs) {
+            return ObSqlParameterization::parameterize_syntax_tree(allocator,
+                is_transform_outline, pc_ctx, parse_result.result_tree_, inputs,
+                session->get_charsets4parser());
+          }))) {
         bool need_retry_param = true;
         int tmp_ret = OB_SUCCESS;
         tmp_ret = OB_E(EventTable::EN_SQL_PARAM_FP_NP_NOT_SAME_ERROR) OB_SUCCESS;
@@ -3817,21 +3823,13 @@ int ObSql::check_batched_multi_stmt_after_resolver(ObPlanCacheCtx &pc_ctx,
         if (OB_FAIL(resolve_ins_multi_row_params(pc_ctx, stmt, ab_params))) {
         } else {
           pc_ctx.ab_params_ = ab_params;
-          ParamStore &param_store = plan_ctx->get_param_store_for_update();
-          for (int64_t i = 0; OB_SUCC(ret) && i < param_store.count(); i++) {
-            DatumParameter &obj_param = param_store.at(i);
-            obj_param.get_param_flag().is_batch_parameter_ = true;
-          }
+          plan_ctx->mark_batch_parameters();
         }
       } else if (!pc_ctx.sql_ctx_.multi_stmt_item_.is_ab_batch_opt()) {
         if (OB_FAIL(resolve_multi_query_params(pc_ctx, stmt, ab_params))) {
         } else {
           pc_ctx.ab_params_ = ab_params;
-          ParamStore &param_store = plan_ctx->get_param_store_for_update();
-          for (int64_t i = 0; OB_SUCC(ret) && i < param_store.count(); i++) {
-            DatumParameter &obj_param = param_store.at(i);
-            obj_param.get_param_flag().is_batch_parameter_ = true;
-          }
+          plan_ctx->mark_batch_parameters();
         }
       }
     }
@@ -3907,7 +3905,7 @@ int ObSql::calc_pre_calculable_exprs(const ObDMLStmt &stmt,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     phy_plan_ctx->set_ignore_stmt(is_ignore_stmt);
-    DatumParamStore &datum_param_store = phy_plan_ctx->get_datum_param_store();
+    const DatumParamStore &datum_param_store = phy_plan_ctx->get_datum_param_store();
     ObStaticEngineExprCG expr_cg(phy_plan.get_allocator(),
                                  exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx()->schema_guard_,

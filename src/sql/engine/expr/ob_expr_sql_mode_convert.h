@@ -29,7 +29,7 @@ public:
   explicit  ObExprSqlModeConvert(common::ObIAllocator &alloc);
   virtual ~ObExprSqlModeConvert();
   virtual int calc_result_type1(ObExprResType &type, ObExprResType &type1, common::ObExprTypeCtx &type_ctx) const;
-  static int sql_mode_convert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int sql_mode_convert(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSqlModeConvert);

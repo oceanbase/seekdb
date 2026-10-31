@@ -86,7 +86,7 @@ int ObExprJsonExtract::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonExtract::eval_json_extract_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonExtract::eval_json_extract_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   UNUSED(expr);
   UNUSED(ctx);
@@ -94,10 +94,10 @@ int ObExprJsonExtract::eval_json_extract_null(const ObExpr &expr, ObEvalCtx &ctx
   return OB_SUCCESS;
 }
 
-int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[0];
   SqlValueType val_type = json_arg->datum_meta_.type_;
   ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
@@ -143,7 +143,7 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
     path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
     for (int64_t i = 1; OB_SUCC(ret) && (!is_null_result) && i < expr.arg_cnt_; i++) {
       hit.reset();
-      ObDatum *path_data = NULL;
+      Datum *path_data = NULL;
       if (OB_FAIL(allocator.eval_arg(expr.args_[i], ctx, path_data))) {
       } else if (path_data->is_null()) {
         is_null_result = true;

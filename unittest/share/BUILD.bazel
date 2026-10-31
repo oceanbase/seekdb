@@ -4,6 +4,18 @@ load("//bazel:defs.bzl", "cc_library")
 package(default_testonly = True)
 
 cc_library(
+    name = "native_datum_ops_cases",
+    srcs = ["test_native_datum_ops.cpp"],
+    alwayslink = True,
+    deps = ["//src/share:datum", "//src/oblib:oblib_common", "//src/oblib:oblib_base", "//bazel/third_party:gtest"],
+)
+cc_test(
+    name = "test_native_datum_ops",
+    linkstatic = True,
+    deps = [":native_datum_ops_cases", "//src/oblib:oblib_test_runtime"],
+)
+
+cc_library(
     name = "typed_datum_compare_cases",
     srcs = ["test_typed_datum_compare.cpp"],
     alwayslink = True,

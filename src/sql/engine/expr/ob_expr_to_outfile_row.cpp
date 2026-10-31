@@ -126,7 +126,10 @@ int ObExprToOutfileRow::calc_outfile_info(const ObExpr &expr,
   }
 
   for (int i = 0; OB_SUCC(ret) && i < PARAM_SELECT_ITEM; ++i) {
-    values[i] = DatumValue(expr.locate_param_datum(ctx, i), expr.args_[i]->obj_meta_);
+    common::ObDatum legacy;
+    OZ(ObExprUtil::export_legacy_value(*expr.args_[i], expr.locate_param_datum(ctx, i),
+                                      allocator, legacy));
+    OX(values[i] = DatumValue(legacy, expr.args_[i]->obj_meta_));
   }
   if (OB_SUCC(ret)) {
     out_info.field_ = values[PARAM_FIELD];
@@ -144,7 +147,7 @@ int ObExprToOutfileRow::calc_outfile_info(const ObExpr &expr,
   return ret;
 }
 
-int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(expr.arg_cnt_ <= PARAM_SELECT_ITEM)) {
@@ -166,9 +169,12 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         char *buf = out_info->buf_;
         int64_t buf_len =  out_info->buf_len_;
         for (int64_t i = PARAM_SELECT_ITEM; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
-          ObDatum &v = expr.locate_param_datum(ctx, i);
+          Datum &v = expr.locate_param_datum(ctx, i);
           const SqlTypeMeta &datum_meta = expr.args_[i]->obj_meta_;
-          DatumValue value(v, datum_meta);
+          alignas(8) char value_scratch[64];
+          common::ObDatum legacy;
+          OZ(expr.args_[i]->get_datum_copy_plan().legacy_view(v, legacy, value_scratch, sizeof(value_scratch)));
+          DatumValue value(legacy, datum_meta);
           if (!datum_meta.is_lob_storage()) {
             OZ(print_field(buf, buf_len, pos, value, *out_info));
           } else { // text tc

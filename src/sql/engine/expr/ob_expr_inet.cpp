@@ -390,12 +390,12 @@ int ObExprInetAton::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, O
   return ret;
 }
 
-int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum& text = expr.locate_param_datum(ctx, 0);
+    Datum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
       expr_datum.set_null();
     } else {
@@ -473,12 +473,12 @@ int ObExprInet6Ntoa::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, 
   return ret;
 }
 
-int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum& text = expr.locate_param_datum(ctx, 0);
+    Datum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
       expr_datum.set_null();
     } else {
@@ -555,7 +555,7 @@ int ObExprInet6Aton::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, 
   return ret;
 }
 
-int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
@@ -566,7 +566,7 @@ int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
     } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, sizeof(in6_addr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      ObDatum& text = expr.locate_param_datum(ctx, 0);
+      Datum& text = expr.locate_param_datum(ctx, 0);
       ObString m_text = text.get_string();
       bool is_ip_format_invalid = false;
       if (text.is_null()) {
@@ -693,12 +693,12 @@ int ObExprIsIpv4::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObE
   return ret;
 }
 
-int ObExprIsIpv4::calc_is_ipv4(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprIsIpv4::calc_is_ipv4(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum& text = expr.locate_param_datum(ctx, 0);
+    Datum& text = expr.locate_param_datum(ctx, 0);
     ObString m_text = text.get_string();
     if (text.is_null()) {
       expr_datum.set_int(0);
@@ -730,12 +730,12 @@ int ObExprIsIpv4Mapped::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_exp
   return ret;
 }
 
-int ObExprIsIpv4Mapped::calc_is_ipv4_mapped(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprIsIpv4Mapped::calc_is_ipv4_mapped(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum& text = expr.locate_param_datum(ctx, 0);
+    Datum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
       expr_datum.set_int(0);
     } else if (!ob_is_varbinary_type(expr.args_[0]->datum_meta_.type_,expr.args_[0]->datum_meta_.cs_type_)) {
@@ -783,12 +783,12 @@ int ObExprIsIpv4Compat::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_exp
   return ret;
 }
 
-int ObExprIsIpv4Compat::calc_is_ipv4_compat(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprIsIpv4Compat::calc_is_ipv4_compat(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum& text = expr.locate_param_datum(ctx, 0);
+    Datum& text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
       expr_datum.set_int(0);
     } else if (!ob_is_varbinary_type(expr.args_[0]->datum_meta_.type_, expr.args_[0]->datum_meta_.cs_type_)) {
@@ -836,12 +836,12 @@ int ObExprIsIpv6::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObE
   return ret;
 }
 
-int ObExprIsIpv6::calc_is_ipv6(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& expr_datum)
+int ObExprIsIpv6::calc_is_ipv6(const ObExpr& expr, ObEvalCtx& ctx, Datum& expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum& text = expr.locate_param_datum(ctx, 0);
+    Datum& text = expr.locate_param_datum(ctx, 0);
     ObString m_text = text.get_string();
     if (text.is_null()) {
       expr_datum.set_int(0);

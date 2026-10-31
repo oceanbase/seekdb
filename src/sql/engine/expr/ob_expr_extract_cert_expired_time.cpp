@@ -57,7 +57,7 @@ int ObExprExtractExpiredTime::calc_result_type1(ObExprResType &type,
 }
 
 int ObExprExtractExpiredTime::eval_extract_cert_expired_time(const ObExpr &expr, ObEvalCtx &ctx, 
-                                                              ObDatum &res)
+                                                              Datum &res)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(expr.arg_cnt_ != 1)
@@ -65,7 +65,7 @@ int ObExprExtractExpiredTime::eval_extract_cert_expired_time(const ObExpr &expr,
       || OB_ISNULL(expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObDatum *arg = NULL;
+    Datum *arg = NULL;
     int64_t expired_time = 0;
     SqlTypeClass in_tc = sql_type_class(expr.args_[0]->datum_meta_.type_);
     if (!ob_is_castable_type_class(in_tc)) {

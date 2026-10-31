@@ -21,6 +21,8 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/ob_expr_type_to_str.h"
+#include "sql/engine/expr/ob_expr_util.h"
 
 namespace oceanbase
 {
@@ -289,7 +291,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
       // init max_length_
       rt_expr->max_length_ = raw_expr->get_result_type().get_length();
       // init obj_datum_map_
-      rt_expr->obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(result_meta.get_type());
+      rt_expr->obj_datum_map_ = common::ObDatum::get_sql_value_datum_map_type(result_meta.get_type());
       if (ob_is_decimal_int(rt_expr->datum_meta_.type_)) {
         const int16_t precision = rt_expr->datum_meta_.precision_;
         const int16_t scale = rt_expr->datum_meta_.scale_;
@@ -348,6 +350,27 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
     }
     if (OB_SUCC(ret)) {
       rt_expr->local_session_var_id_ = raw_expr->get_local_session_var_id();
+      if (T_OP_ROW == raw_expr->get_expr_type()) {
+        ret = rt_expr->prepare_scalar_type(rt_expr->obj_meta_, common::ObAccuracy(), allocator_);
+      } else if (T_FUN_ENUM_TO_INNER_TYPE == raw_expr->get_expr_type()
+                 || T_FUN_SET_TO_INNER_TYPE == raw_expr->get_expr_type()) {
+        // wrap_enum_set() has already formalized these labels in the actual
+        // operator. Inner metadata carries a real collation, not a SubSchema
+        // id, and cannot be resolved by interpreting it as an Enum declaration.
+        ObSysFunRawExpr *function = dynamic_cast<ObSysFunRawExpr *>(raw_expr);
+        const ObExprTypeToStr *operation = function == nullptr ? nullptr
+            : dynamic_cast<const ObExprTypeToStr *>(function->get_op());
+        const common::SqlType *type = nullptr;
+        if (operation == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObExprUtil::resolve_enum_sql_type(rt_expr->obj_meta_,
+            raw_expr->get_result_type().get_accuracy(), operation->get_str_values(), allocator_, type))) {
+        } else {
+          ret = rt_expr->bind_sql_type(*type, allocator_);
+        }
+      } else {
+        ret = rt_expr->prepare_resolved_type(raw_expr->get_result_type(), op_cg_ctx_.session_, allocator_);
+      }
     }
   } // for end
 
@@ -743,8 +766,9 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
   //init res_buf_len_
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
     ObExpr *rt_expr = get_rt_expr(*exprs.at(i));
-    uint32_t def_res_len = ObDatum::get_reserved_size(rt_expr->obj_datum_map_,
-                                                      rt_expr->datum_meta_.precision_);
+    uint32_t def_res_len = rt_expr->get_sql_type().canonical_representation()
+        == common::DatumRepresentation::Reference
+        ? common::ObDatum::get_reserved_size(rt_expr->obj_datum_map_, rt_expr->datum_meta_.precision_) : 0;
     if (ObDynReserveBuf::supported(rt_expr->datum_meta_.type_)) {
       if (!reserve_empty_string) {
         // Some expressions do not set the accuracy length, here max_length_ is the default -1
@@ -836,9 +860,10 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
       e->eval_info_off_ = ScalarFrameLayout::eval_info_offset(i);
       const int64_t consume_size = reserve_data_consume(*e);
       if (consume_size > 0) {
+        const bool dynamic = ObDynReserveBuf::supported(e->datum_meta_.type_);
+        e->dyn_buf_header_offset_ = dynamic ? data_off : 0;
+        e->res_buf_off_ = data_off + (dynamic ? sizeof(ObDynReserveBuf) : 0);
         data_off += consume_size;
-        e->res_buf_off_ = data_off - e->res_buf_len_;
-        e->dyn_buf_header_offset_ = e->res_buf_off_ - sizeof(ObDynReserveBuf);
       } else {
         e->res_buf_off_ = 0;
       }
@@ -849,7 +874,7 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
   } else {
     ret = OB_ERR_UNEXPECTED;
     // // FIXME bin.lb: ALIGN_SIZE may affect the performance, set to 1 if no affect
-    // // make sure all ObDatum is aligned with %ALIGN_SIZE
+    // // make sure all Datum is aligned with %ALIGN_SIZE
     // const static int64_t ALIGN_SIZE = 8;
     // // offset for data only area
     // int64_t data_off = 0;
@@ -857,7 +882,7 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
     //   ObExpr *e = get_rt_expr(*exprs.at(i));
     //   data_off += DATUM_EVAL_INFO_SIZE;
     //   if (!ob_is_string_type(e->datum_meta_.type_) && 0 == (e->res_buf_len_ % ALIGN_SIZE)) {
-    //     // data follow ObDatum
+    //     // data follow Datum
     //     data_off += reserve_data_consume(*e);
     //   }
     // }
@@ -867,7 +892,7 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
     //   ObExpr *e = get_rt_expr(*exprs.at(i));
     //   e->frame_idx_ = frame.frame_idx_;
     //   e->datum_off_ = datum_off;
-    //   e->eval_info_off_ = e->datum_off_ + sizeof(ObDatum);
+    //   e->eval_info_off_ = e->datum_off_ + sizeof(Datum);
     //   datum_off += DATUM_EVAL_INFO_SIZE;
     //   const int64_t consume_size = reserve_data_consume(*e);
     //   if (!ob_is_string_type(e->datum_meta_.type_) && 0 == (e->res_buf_len_ % ALIGN_SIZE)) {
@@ -947,8 +972,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->datum_off_ = cur_total_size;
-      cur_total_size += get_expr_skip_vector_size(*e) /* pvt skip bitmap */
-                          + get_datums_header_size(*e) /* datums */;
+      cur_total_size += align_frame_part(get_expr_skip_vector_size(*e) + get_datums_header_size(*e));
     }
 
 
@@ -956,7 +980,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       ObExpr *e = get_rt_expr(*exprs.at(i));
       e->eval_info_off_ = cur_total_size + eval_info_total;
-      eval_info_total += sizeof(ObEvalInfo);
+      eval_info_total += align_frame_part(sizeof(ObEvalInfo));
     }
     cur_total_size += eval_info_total;
 
@@ -986,7 +1010,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
       // datum data part: reserved buf data + dynamic buf header
       e->res_buf_off_ =
           cur_total_size + expr_data_offset;
-      expr_data_offset += e->res_buf_len_ * get_expr_datums_count(*e);
+      expr_data_offset += align_frame_part(e->res_buf_len_ * get_expr_datums_count(*e));
       LOG_TRACE("expression details during CG", K(e->is_batch_result()), KPC(e),
                 K(expr_data_offset));
     }
@@ -1069,23 +1093,20 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
         ret = OB_INVALID_ARGUMENT;
       } else {
         const DatumValue &source = static_cast<ObConstRawExpr *>(raw_expr)->get_value();
-        ObDatum *datum = reinterpret_cast<ObDatum *>(frame_mem + ScalarFrameLayout::datum_offset(j));
-        // Fixed-width literals already have reserved frame storage. Keep them
-        // in that storage instead of adding an allocation per scalar.
-        if (!source.is_ext_sql_array() && source.datum_.len_ <= rt_expr->res_buf_len_) {
-          int64_t pos = 0;
-          OZ (datum->deep_copy(source.datum_, frame_mem + rt_expr->res_buf_off_, rt_expr->res_buf_len_, pos));
-          if (OB_SUCC(ret) && datum->len_ == 0) { datum->ptr_ = nullptr; }
-        } else {
-          DatumValue owned;
-          OZ (clone_typed_value(source, owned, allocator_));
-          OX (*datum = owned.datum_);
-        }
-        if (OB_SUCC(ret) && is_lob_storage(source.get_type())) {
-          // Header removal returns a slice, so it must inspect the plan-owned
-          // payload, never the AST's shorter-lived copy.
-          const DatumValue owned_view(*datum, source.meta_);
-          OZ (ob_adjust_in_memory_lob_datum(owned_view, rt_expr->obj_meta_, allocator_, datum));
+        Datum *datum = new (frame_mem + ScalarFrameLayout::datum_offset(j)) Datum();
+        const DatumCopyPlan plan = rt_expr->get_datum_copy_plan();
+        Datum imported;
+        if (OB_FAIL(plan.import_legacy(source.datum_, imported))) {
+        } else if (OB_FAIL(ObExpr::clone_native_value(rt_expr->get_sql_type(), imported,
+                                                     allocator_, *datum))) {
+        } else if (is_lob_storage(source.get_type())) {
+          // The LOB helper reads the owned literal, not the shorter-lived AST.
+          common::ObDatum legacy;
+          if (OB_FAIL(plan.borrow_legacy(*datum, legacy))) {
+          } else {
+            const DatumValue owned_view(legacy, source.meta_);
+            ret = ob_adjust_in_memory_lob_datum(owned_view, rt_expr->obj_meta_, allocator_, datum);
+          }
         }
       }
     }
@@ -1104,12 +1125,7 @@ int ObStaticEngineExprCG::cg_expr_basic_funcs(const ObIArray<ObRawExpr *> &raw_e
     if (OB_ISNULL(rt_expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      rt_expr->basic_funcs_ = ObDatumFuncs::get_basic_func(rt_expr->datum_meta_.type_,
-                                                        rt_expr->datum_meta_.cs_type_,
-                                                        rt_expr->datum_meta_.scale_,
-                                                        rt_expr->obj_meta_.has_lob_header(),
-                                                        rt_expr->datum_meta_.precision_);
-      CK(NULL != rt_expr->basic_funcs_);
+      ret = rt_expr->init_runtime_functions(allocator_);
     }
   }
   return ret;
@@ -1291,8 +1307,9 @@ int ObStaticEngineExprCG::calc_exprs_res_buf_len(const ObIArray<ObRawExpr *> &ra
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_exprs.count(); i++) {
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
-    uint32_t def_res_len = ObDatum::get_reserved_size(rt_expr->obj_datum_map_,
-                                                      rt_expr->datum_meta_.precision_);
+    uint32_t def_res_len = rt_expr->get_sql_type().canonical_representation()
+        == common::DatumRepresentation::Reference
+        ? common::ObDatum::get_reserved_size(rt_expr->obj_datum_map_, rt_expr->datum_meta_.precision_) : 0;
     if (ObDynReserveBuf::supported(rt_expr->datum_meta_.type_)) {
       if (rt_expr->max_length_ > 0) {
         rt_expr->res_buf_len_ = min(def_res_len,
@@ -1328,10 +1345,10 @@ int ObStaticEngineExprCG::create_tmp_frameinfo(const common::ObIArray<ObRawExpr 
   for (int64_t expr_idx = 0; OB_SUCC(ret) && expr_idx < raw_exprs.count(); expr_idx++) {
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(expr_idx));
     const int64_t expr_datums_size = get_expr_datums_size(*rt_expr);
-    const int64_t expr_zero_init_pos = get_datums_header_size(*rt_expr)
-                                       + get_expr_skip_vector_size(*rt_expr);
+    const int64_t expr_zero_init_pos = align_frame_part(get_datums_header_size(*rt_expr)
+                                       + get_expr_skip_vector_size(*rt_expr));
     const int64_t expr_zero_init_size = dynamic_buf_header_size(*rt_expr)
-                                        + sizeof(ObEvalInfo)
+                                        + align_frame_part(sizeof(ObEvalInfo))
                                         + get_expr_bitmap_vector_size(*rt_expr);
 
     if (expr_datums_size > MAX_FRAME_SIZE) {
@@ -1560,7 +1577,7 @@ static inline bool expr_is_added(ObExpr &e)
 int64_t ObStaticEngineExprCG::frame_max_offset(const ObExpr &e, const int64_t batch_size)
 {
   int64_t size = 0;
-  size = std::max<int64_t>(size, e.datum_off_ + sizeof(ObDatum));
+  size = std::max<int64_t>(size, e.datum_off_ + sizeof(Datum));
   size = CALC_MAX_FRAME_SIZE(e.eval_info_off_, sizeof(ObEvalInfo));
   size = CALC_MAX_FRAME_SIZE(e.dyn_buf_header_offset_, dynamic_buf_header_size(e, batch_size));
   size = CALC_MAX_FRAME_SIZE(e.res_buf_off_, get_expr_datums_count(e, batch_size) * e.res_buf_len_);
@@ -1745,7 +1762,7 @@ int ObStaticEngineExprCG::compute_max_batch_size(const ObRawExpr *raw_expr)
   // expr_datums_header_size
   int64_t irrelevant = sizeof(ObEvalInfo) + 1 + 1;
   // Per-row datum storage and bitmap contribution.
-  int64_t relevant = sizeof(ObDatum) + 1;
+  int64_t relevant = sizeof(Datum) + 1;
   // reserve_datums_buf_len
   const ObRawExprResType &result_type = raw_expr->get_result_type();
   relevant += reserve_data_consume(result_type.get_type(), result_type.get_precision());

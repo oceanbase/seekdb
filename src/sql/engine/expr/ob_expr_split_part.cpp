@@ -87,13 +87,13 @@ int ObExprSplitPart::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
 }
 
 int ObExprSplitPart::calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                        ObDatum &res)
+                                        Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *delimiter_datum = NULL;
-  ObDatum *str_datum = NULL;
-  ObDatum *start_part_datum = NULL;
-  ObDatum *end_part_datum = NULL;
+  Datum *delimiter_datum = NULL;
+  Datum *str_datum = NULL;
+  Datum *start_part_datum = NULL;
+  Datum *end_part_datum = NULL;
   if (OB_UNLIKELY(3 != expr.arg_cnt_ && 4 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (4 == expr.arg_cnt_ &&

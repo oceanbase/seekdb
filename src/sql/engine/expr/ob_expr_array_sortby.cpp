@@ -104,7 +104,7 @@ int ObExprArraySortby::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArraySortby::eval_array_sortby(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArraySortby::eval_array_sortby(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

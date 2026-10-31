@@ -35,7 +35,7 @@ public:
   virtual int calc_result_typeN(ObExprResType &type, ObExprResType *types_array,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -52,7 +52,7 @@ private:
   
   static int eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, common::ObIAllocator &allocator,
                                          common::ObString &model_id, common::ObString &query, common::ObJsonArray *document_array,
-                                         common::ObString &doc_key, const common::ObAIFuncExprInfo &info, const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res);
+                                         common::ObString &doc_key, const common::ObAIFuncExprInfo &info, const share::ObAiModelEndpointInfo &endpoint_info, Datum &res);
   static int get_doc_array_from_documents_array_with_key(ObIAllocator &allocator, ObJsonArray *document_object_array, ObString &doc_key, ObJsonArray *&doc_array);
   static int sort_document_array_by_model_result(common::ObIAllocator &allocator, common::ObJsonArray *document_array, common::ObJsonArray *model_result_array, common::ObJsonArray *&sorted_document_array);
   static int construct_config_json(common::ObIAllocator &allocator, int64_t top_k, int64_t return_doc, common::ObJsonObject *&config_json);

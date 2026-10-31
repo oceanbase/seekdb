@@ -181,7 +181,7 @@ int ObExprFuncRound::set_res_scale_prec(ObExprTypeCtx &type_ctx, ObExprResType *
 int ObExprFuncRound::do_round_decimalint(
     const int16_t in_prec, const int16_t in_scale,
     const int16_t out_prec, const int16_t out_scale, const int64_t round_scale,
-    const ObDatum &in_datum, ObDecimalIntBuilder &res_val)
+    const common::ObDatum &in_datum, ObDecimalIntBuilder &res_val)
 {
   int ret = OB_SUCCESS;
   const ObDecimalInt *decint = in_datum.get_decimal_int();
@@ -207,29 +207,33 @@ int ObExprFuncRound::do_round_decimalint(
 }
 
 int ObExprFuncRound::calc_round_decimalint(
-    const ObDatumMeta &in_meta, const ObDatumMeta &out_meta, const int64_t round_scale,
-    const ObDatum &in_datum, ObDatum &res_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, const ObDatumMeta &in_meta, const ObDatumMeta &out_meta, const int64_t round_scale,
+    const Datum &in_datum, Datum &res_datum, int64_t index)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char coefficient_scratch[64];
+  common::ObDatum coefficient;
+  if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(in_datum, coefficient,
+      coefficient_scratch, sizeof(coefficient_scratch)))) { return ret; }
   if (in_meta.scale_ != round_scale
       || get_decimalint_type(in_meta.precision_) != get_decimalint_type(out_meta.precision_)) {
     ObDecimalIntBuilder res_val;
     if (OB_FAIL(do_round_decimalint(
         in_meta.precision_, in_meta.scale_, out_meta.precision_, out_meta.scale_, round_scale,
-        in_datum, res_val))) {
+        coefficient, res_val))) {
     } else {
-      res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+      ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, res_val.get_decimal_int(), res_val.get_int_bytes(), index);
     }
   } else {
-    res_datum.set_decimal_int(in_datum.get_decimal_int(), in_datum.len_); // need deep copy
+    ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, coefficient.get_decimal_int(), coefficient.get_int_bytes(), index);
   }
   return ret;
 }
 
 static int do_round_by_type(
-    const ObDatumMeta &in_meta, const ObDatumMeta &out_meta, const int64_t round_scale,
-    const ObDatum &x_datum, ObEvalCtx &ctx,
-    ObDatum &res_datum)
+    const ObExpr &expr, const ObDatumMeta &in_meta, const ObDatumMeta &out_meta, const int64_t round_scale,
+    const Datum &x_datum, ObEvalCtx &ctx,
+    Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   const SqlValueType &x_type = in_meta.get_type();
@@ -243,13 +247,13 @@ static int do_round_by_type(
       if (OB_FAIL(res_nmb.from(x_nmb, tmp_alloc))) {
       } else if (OB_FAIL(res_nmb.round(GET_SCALE_FOR_CALC(round_scale)))) {
       } else {
-        res_datum.set_number(res_nmb);
+        ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
       }
       break;
     }
     case ObDecimalIntType: {
       if (OB_FAIL(ObExprFuncRound::calc_round_decimalint(
-                  in_meta, out_meta, GET_SCALE_FOR_CALC(round_scale), x_datum, res_datum))) {
+                  expr, ctx, in_meta, out_meta, GET_SCALE_FOR_CALC(round_scale), x_datum, res_datum))) {
       }
       break;
     }
@@ -299,7 +303,7 @@ static int do_round_by_type(
  * @return true 
  * @return false 
  */
-static bool is_batch_need_cal_all(const ObDatum *x_datums,
+static bool is_batch_need_cal_all(const Datum *x_datums,
                             const ObBitVector &skip,
                             const ObBitVector &eval_flags,
                             const int64_t batch_size)
@@ -318,8 +322,8 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
 {
   int ret = OB_SUCCESS;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ObDatum *results = expr.locate_batch_datums(ctx);
-  ObDatum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
+  Datum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
   const SqlValueType x_type = expr.args_[0]->datum_meta_.type_;
   switch (x_type) {
     case ObNumberType:
@@ -328,8 +332,7 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (skip.at(i) || eval_flags.at(i)) {
             continue;
         }
-        ObDatum &x_datum = x_datums[i];
-        eval_flags.set(i);
+        Datum &x_datum = x_datums[i];
         if (x_datum.is_null()) {
           results[i].set_null();
         } else{
@@ -341,9 +344,10 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
           } else if (OB_FAIL(res_nmb.round(GET_SCALE_FOR_CALC(scale)))) {
             break;
           } else {
-            results[i].set_number(res_nmb);
+            ret = ObExprUtil::set_number(expr, ctx, results[i], res_nmb, i);
           }
         }
+        if (OB_SUCC(ret)) { eval_flags.set(i); }
       }
       break;
     }
@@ -354,14 +358,14 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (skip.at(i) || eval_flags.at(i)) {
           continue;
         } else {
-          ObDatum &x_datum = x_datums[i];
-          eval_flags.set(i);
+          Datum &x_datum = x_datums[i];
           if (x_datum.is_null()) {
             results[i].set_null();
           } else if (OB_FAIL(ObExprFuncRound::calc_round_decimalint(
-                             in_meta, out_meta, GET_SCALE_FOR_CALC(scale), x_datum, results[i]))) {
+                             expr, ctx, in_meta, out_meta, GET_SCALE_FOR_CALC(scale), x_datum, results[i], i))) {
           }
         }
+        if (OB_SUCC(ret)) { eval_flags.set(i); }
       }
       break;
     }
@@ -370,7 +374,7 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (skip.at(i) || eval_flags.at(i)) {
             continue;
         }
-        ObDatum &x_datum = x_datums[i];
+        Datum &x_datum = x_datums[i];
         eval_flags.set(i);
         if (x_datum.is_null()) {
           results[i].set_null();
@@ -386,7 +390,7 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (skip.at(i) || eval_flags.at(i)) {
             continue;
         }
-        ObDatum &x_datum = x_datums[i];
+        Datum &x_datum = x_datums[i];
         eval_flags.set(i);
         if (x_datum.is_null()) {
           results[i].set_null();
@@ -402,7 +406,7 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (skip.at(i) || eval_flags.at(i)) {
             continue;
         }
-        ObDatum &x_datum = x_datums[i];
+        Datum &x_datum = x_datums[i];
         eval_flags.set(i);
         if (x_datum.is_null()) {
           results[i].set_null();
@@ -422,7 +426,7 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
         if (skip.at(i) || eval_flags.at(i)) {
             continue;
         }
-        ObDatum &x_datum = x_datums[i];
+        Datum &x_datum = x_datums[i];
         eval_flags.set(i);
         if (x_datum.is_null()) {
           results[i].set_null();
@@ -448,8 +452,8 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
   // This function only calculates batch that do not contain null value
   int ret = OB_SUCCESS;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ObDatum *results = expr.locate_batch_datums(ctx);
-  ObDatum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
+  Datum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
   const SqlValueType x_type = expr.args_[0]->datum_meta_.type_;
   switch (x_type) {
     case ObNumberType:
@@ -461,7 +465,7 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
         if (OB_FAIL(res_nmb.from(x_nmb, tmp_alloc))) {
         } else if (OB_FAIL(res_nmb.round(GET_SCALE_FOR_CALC(scale)))) {
         } else {
-          results[i].set_number(res_nmb);
+          ret = ObExprUtil::set_number(expr, ctx, results[i], res_nmb, i);
         }
       }
       break;
@@ -471,7 +475,7 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
       const ObDatumMeta &out_meta = expr.datum_meta_;
       for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
         if (OB_FAIL(ObExprFuncRound::calc_round_decimalint(
-                    in_meta, out_meta, GET_SCALE_FOR_CALC(scale), x_datums[i], results[i]))) {
+                    expr, ctx, in_meta, out_meta, GET_SCALE_FOR_CALC(scale), x_datums[i], results[i], i))) {
         }
       }
       break;
@@ -521,15 +525,15 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
 }
 
 int calc_round_expr_numeric1(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
-                              sql::ObDatum &res_datum)
+                              sql::Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *x_datum = NULL;
+  Datum *x_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum))) {
   } else if (x_datum->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(do_round_by_type(
-              expr.args_[0]->datum_meta_, expr.datum_meta_, 0, *x_datum, ctx, res_datum))) {
+        expr,               expr.args_[0]->datum_meta_, expr.datum_meta_, 0, *x_datum, ctx, res_datum))) {
   }
   return ret;
 }
@@ -542,7 +546,7 @@ int ObExprFuncRound::calc_round_expr_numeric1_batch(const ObExpr &expr,
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
+    Datum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (is_batch_need_cal_all(x_datums, skip, eval_flags, batch_size)) {
       if (OB_FAIL(do_round_by_type_batch_without_check(0, expr, ctx, batch_size))) {
@@ -558,11 +562,11 @@ int ObExprFuncRound::calc_round_expr_numeric1_batch(const ObExpr &expr,
 }
 
 int calc_round_expr_numeric2(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
-                              sql::ObDatum &res_datum)
+                              sql::Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *x_datum = NULL;
-  ObDatum *fmt_datum = NULL;
+  Datum *x_datum = NULL;
+  Datum *fmt_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, fmt_datum))) {
   } else if (x_datum->is_null() || fmt_datum->is_null()) {
@@ -593,7 +597,7 @@ int calc_round_expr_numeric2(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
         }
       }
       if (OB_FAIL(do_round_by_type(
-                  expr.args_[0]->datum_meta_, expr.datum_meta_, scale, *x_datum, ctx, res_datum))) {
+        expr,                   expr.args_[0]->datum_meta_, expr.datum_meta_, scale, *x_datum, ctx, res_datum))) {
       }
     }
   }
@@ -606,7 +610,7 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
                             const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum *fmt_datum = NULL;
+  Datum *fmt_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, fmt_datum))) {
   } else {
@@ -627,7 +631,7 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
     if (OB_SUCC(ret)) {
       if (fmt_datum->is_null()) {
         ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-        ObDatum *results = expr.locate_batch_datums(ctx);
+        Datum *results = expr.locate_batch_datums(ctx);
         for (int64_t i = 0; i < batch_size; ++i) {
           eval_flags.set(i);
           results[i].set_null();
@@ -644,7 +648,7 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
             scale = expr.datum_meta_.scale_;
           }
         }
-        ObDatum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
+        Datum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
         ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
         if (is_batch_need_cal_all(x_datums, skip, eval_flags, batch_size)) {
           if (OB_FAIL(do_round_by_type_batch_without_check(scale, expr, ctx, batch_size))) {

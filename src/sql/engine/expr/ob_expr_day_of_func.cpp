@@ -33,7 +33,7 @@ ObExprDayOfMonth::ObExprDayOfMonth(ObIAllocator &alloc)
 
 ObExprDayOfMonth::~ObExprDayOfMonth() {}
 
-int ObExprDayOfMonth::calc_dayofmonth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDayOfMonth::calc_dayofmonth(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_MDAY, true, true);
 }
@@ -48,7 +48,7 @@ ObExprDayOfWeek::ObExprDayOfWeek(ObIAllocator &alloc)
 
 ObExprDayOfWeek::~ObExprDayOfWeek() {}
 
-int ObExprDayOfWeek::calc_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDayOfWeek::calc_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprTimeBase::calc(expr, ctx, expr_datum, DT_WDAY, true))) {
@@ -63,7 +63,7 @@ ObExprDayOfYear::ObExprDayOfYear(ObIAllocator &alloc)
 
 ObExprDayOfYear::~ObExprDayOfYear() { }
 
-int ObExprDayOfYear::calc_dayofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDayOfYear::calc_dayofyear(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_YDAY, true);
 }
@@ -88,10 +88,10 @@ int ObExprToSeconds::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   const ObSQLSessionInfo *session = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
@@ -112,7 +112,7 @@ int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
                                               tz_info, ot,
                                               get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                                               date_sql_mode,
-                                              expr.args_[0]->obj_meta_.has_lob_header()))) {
+                                              expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                         session->is_ignore_stmt(),
@@ -166,10 +166,10 @@ int ObExprSecToTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   const ObSQLSessionInfo *session = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
@@ -248,10 +248,10 @@ int ObExprTimeToSec::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprTimeToSec::calc_timetosec(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprTimeToSec::calc_timetosec(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   const ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
@@ -380,10 +380,10 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
                                   ObEvalCtx &ctx,
-                                  ObDatum &expr_datum,
+                                  Datum &expr_datum,
                                   bool &null_res,
-                                  ObDatum *&date_arg,
-                                  ObDatum *&time_arg,
+                                  Datum *&date_arg,
+                                  Datum *&time_arg,
                                   int64_t &time_val,
                                   const common::ObTimeZoneInfo *tz_info,
                                   ObSQLMode sql_mode)
@@ -406,7 +406,7 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
     } else if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
                  *time_arg, expr.args_[1]->datum_meta_.type_, expr.args_[1]->datum_meta_.scale_,
                  tz_info, ot2,
-                 expr.args_[1]->obj_meta_.has_lob_header()))) {
+                 expr.args_[1]->obj_meta_.has_lob_header(), &expr.args_[1]->get_sql_type()))) {
       expr_datum.set_null();
       null_res = true;
       uint64_t cast_mode = 0;
@@ -423,11 +423,11 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
   return ret;
 }
 
-int ObExprSubAddtime::subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSubAddtime::subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *date_arg = NULL;
-  ObDatum *time_arg = NULL;
+  Datum *date_arg = NULL;
+  Datum *time_arg = NULL;
   int64_t t_val1 = 0;
   int64_t t_val2 = 0;
   bool null_res = false;
@@ -468,11 +468,11 @@ int ObExprSubAddtime::subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, Ob
   return ret;
 }
 
-int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *date_arg = NULL;
-  ObDatum *time_arg = NULL;
+  Datum *date_arg = NULL;
+  Datum *time_arg = NULL;
   int64_t t_val1 = 0;
   int64_t t_val2 = 0;
   bool null_res = false;
@@ -487,7 +487,7 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObTime ot1(DT_TYPE_TIME);
     if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_, *date_arg, expr.args_[0]->datum_meta_.type_,
                                                  expr.args_[0]->datum_meta_.scale_, tz_info, ot1,
-                                                 expr.args_[0]->obj_meta_.has_lob_header()))) {
+                                                 expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
       expr_datum.set_null();
     } else {
       bool param_with_date = true;
@@ -519,8 +519,7 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
         } else if (!param_with_date && OB_FAIL(ObTimeConverter::time_to_str(int_usec, -1, buf,
                                                                 datetime_buf_len, pos, true))) {
         } else {
-          expr_datum.ptr_ = buf;
-          expr_datum.pack_ = static_cast<uint32_t>(pos);
+          ret = expr_datum.set_string(buf, static_cast<uint32_t>(pos));
         }
       }
     }
@@ -553,7 +552,7 @@ ObExprDayName::ObExprDayName(ObIAllocator &alloc)
     : ObExprTimeBase(alloc, DT_WDAY, T_FUN_SYS_DAY_NAME, N_DAY_NAME, VALID_FOR_GENERATED_COL) {};
 ObExprDayName::~ObExprDayName() {}
 
-int ObExprDayName::calc_dayname(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDayName::calc_dayname(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprTimeBase::calc(expr, ctx, expr_datum, DT_WDAY, true))) {

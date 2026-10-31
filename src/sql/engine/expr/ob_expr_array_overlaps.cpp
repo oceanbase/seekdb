@@ -97,7 +97,7 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx, Relation relation, ObDatum &res)
+int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx, Relation relation, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -106,8 +106,8 @@ int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx
   const uint16_t r_meta_id = expr.args_[1]->obj_meta_.get_subschema_id();
   ObIArrayType *l_arr_obj = NULL;
   ObIArrayType *r_arr_obj = NULL;
-  ObDatum *l_datum = NULL;
-  ObDatum *r_datum = NULL;
+  Datum *l_datum = NULL;
+  Datum *r_datum = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, l_datum))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, r_datum))) {
@@ -127,7 +127,7 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
                                                     const int64_t batch_size, Relation relation)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -138,8 +138,8 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector l_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector r_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector l_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector r_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;
@@ -160,7 +160,7 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
   return ret;
 }
 
-int ObExprArrayOverlaps::eval_array_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayOverlaps::eval_array_overlaps(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_array_relations(expr, ctx, OVERLAPS, res);
 }

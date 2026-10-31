@@ -45,11 +45,11 @@ int ObExprPrefixPattern::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum) {
+int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum) {
   int ret = OB_SUCCESS;
-  ObDatum *pattern = NULL;
-  ObDatum *len_param = NULL;
-  ObDatum *escape = NULL;
+  Datum *pattern = NULL;
+  Datum *len_param = NULL;
+  Datum *escape = NULL;
   ObCollationType escape_coll = expr.args_[2]->datum_meta_.cs_type_;
   int64_t result_len = 0;
   int64_t prefix_len = 0;

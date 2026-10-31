@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "share/datum/datum_value_cast.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_unix_timestamp.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -157,7 +158,7 @@ int ObExprUnixTimestamp::calc_result_type_column(ObExprResType &type,
 }
 
 int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx, 
-                                       ObDatum &res)
+                                       Datum &res)
 {
   int ret = OB_SUCCESS;
   int64_t utz_value = 0;
@@ -169,7 +170,7 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
       utz_value = date.get_timestamp();
     }
   } else if (1 == expr.arg_cnt_) {
-    ObDatum *arg = NULL;
+    Datum *arg = NULL;
     if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
     } else if (arg->is_null()) {
       is_null = true;
@@ -196,7 +197,7 @@ int ObExprUnixTimestamp::eval_unix_timestamp(const ObExpr &expr, ObEvalCtx &ctx,
       OZ(usec_nmb.from(usec, calc_alloc));
       OZ(tmp_nmb.from(utz_value, calc_alloc));
       OZ(tmp_nmb.div(usec_nmb, res_nmb, calc_alloc));
-      OX(res.set_number(res_nmb));
+      OZ(ObExprUtil::set_number(expr, ctx, res, res_nmb));
     } else {
       ret = OB_ERR_UNEXPECTED;
     }

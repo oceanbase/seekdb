@@ -26,14 +26,14 @@ namespace sql
 namespace
 {
 
-void set_doc_id_int(ObDatum &datum, const ObDocIdExt &id)
+void set_doc_id_int(common::Datum &datum, const ObDocIdExt &id)
 {
   datum.set_int(id.get_datum().get_int());
 }
 
-void set_doc_id_shallow(ObDatum &datum, const ObDocIdExt &id)
+void set_doc_id_shallow(common::Datum &datum, const ObDocIdExt &id)
 {
-  datum.set_datum(id.get_datum());
+  datum.set_string(id.get_datum().get_string());
 }
 
 class ObDASMatchSumRelevanceCollector final
@@ -378,8 +378,8 @@ int ObDASMatchIter::inner_get_next_row()
         ret = OB_ERR_UNEXPECTED;
       } else {
         const double query_boost = ir_match_part_score_rtdef_->match_boost_;
-        const ObDatumVector &input_relevance_vector = input_relevance_expr->locate_expr_datumvector(*eval_ctx_);
-        ObDatum *output_relevance_datums = output_relevance_expr->locate_batch_datums(*eval_ctx_);
+        const sql::DatumVector &input_relevance_vector = input_relevance_expr->locate_expr_datumvector(*eval_ctx_);
+        common::Datum *output_relevance_datums = output_relevance_expr->locate_batch_datums(*eval_ctx_);
         double result = input_relevance_vector.at(0)->get_double() * query_boost;
         if (is_min_max_norm && result > max_query_score) {
           ret = OB_ERR_UNEXPECTED;
@@ -440,8 +440,8 @@ int ObDASMatchIter::inner_get_next_rows(int64_t &count, int64_t capacity)
         ret = OB_ERR_UNEXPECTED;
       } else {
         const double query_boost = ir_match_part_score_rtdef_->match_boost_;
-        const ObDatumVector &input_relevance_vector = input_relevance_expr->locate_expr_datumvector(*eval_ctx_);
-        ObDatum *output_relevance_datums = output_relevance_expr->locate_batch_datums(*eval_ctx_);
+        const sql::DatumVector &input_relevance_vector = input_relevance_expr->locate_expr_datumvector(*eval_ctx_);
+        common::Datum *output_relevance_datums = output_relevance_expr->locate_batch_datums(*eval_ctx_);
         for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
           double result = input_relevance_vector.at(i)->get_double() * query_boost;
           if (is_min_max_norm && result > max_query_score * query_boost) {
@@ -516,10 +516,13 @@ int ObDASMatchIter::fill_merge_heap()
         ret = OB_SUCCESS;
       }
     } else {
-      ObDatum &domain_id = children_domain_id_exprs_.at(iter_idx)->locate_expr_datum(*eval_ctx_, 0);
-      ObDatum &input_relevance = children_relevance_exprs_.at(iter_idx)->locate_expr_datum(*eval_ctx_, 0);
+      common::Datum &domain_id = children_domain_id_exprs_.at(iter_idx)->locate_expr_datum(*eval_ctx_, 0);
+      common::Datum &input_relevance = children_relevance_exprs_.at(iter_idx)->locate_expr_datum(*eval_ctx_, 0);
       item.relevance_ = input_relevance.get_double();
-      iter_domain_ids_[iter_idx].from_datum(domain_id);
+      if (OB_FAIL(iter_domain_ids_[iter_idx].from_native(
+              domain_id, children_domain_id_exprs_.at(iter_idx)->get_sql_type()))) {
+        break;
+      }
       item.iter_idx_ = iter_idx;
       if (is_match_part_score_iter()) {
         if (need_get_max_query_score) {
@@ -623,7 +626,7 @@ int ObDASMatchIter::project_results(const int64_t count)
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
     for (int64_t i = 0; i < count; ++i) {
       guard.set_batch_idx(i);
-      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+      common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
       set_datum_func_(id_proj_datum, buffered_domain_ids_[i]);
       id_evaluated_flags.set(i);
       id_proj_expr->set_evaluated_projected(*eval_ctx);
@@ -632,13 +635,13 @@ int ObDASMatchIter::project_results(const int64_t count)
       sql::ObBitVector &relevance_evaluated_flags = relevance_proj_expr->get_evaluated_flags(*eval_ctx);
       for (int64_t i = 0; i < count; ++i) {
         guard.set_batch_idx(i);
-        ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+        common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
         relevance_proj_datum.set_double(buffered_relevances_[i]);
         relevance_evaluated_flags.set(i);
         relevance_proj_expr->set_evaluated_projected(*eval_ctx);
         for (int64_t j = 1; is_match_score_iter() && j < children_relevance_exprs_.count(); ++j) {
           // TODO: trick. just use one expr to project, the other exprs is filled with 0.
-          ObDatum &tmp_relevance_proj_datum = children_relevance_exprs_.at(j)->locate_datum_for_write(*eval_ctx);
+          common::Datum &tmp_relevance_proj_datum = children_relevance_exprs_.at(j)->locate_datum_for_write(*eval_ctx);
           tmp_relevance_proj_datum.set_double(0);
           children_relevance_exprs_.at(j)->get_evaluated_flags(*eval_ctx).set(i);
           children_relevance_exprs_.at(j)->set_evaluated_projected(*eval_ctx);
@@ -649,14 +652,14 @@ int ObDASMatchIter::project_results(const int64_t count)
     ret = OB_ERR_UNEXPECTED;
   } else {
     guard.set_batch_idx(0);
-    ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
     set_datum_func_(id_proj_datum, buffered_domain_ids_[0]);
     id_proj_expr->set_evaluated_projected(*eval_ctx);
-    ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
     relevance_proj_datum.set_double(buffered_relevances_[0]);
     relevance_proj_expr->set_evaluated_projected(*eval_ctx);
     for (int64_t j = 1; is_match_score_iter() && j < children_relevance_exprs_.count(); ++j) {
-      ObDatum &tmp_relevance_proj_datum = children_relevance_exprs_.at(j)->locate_datum_for_write(*eval_ctx);
+      common::Datum &tmp_relevance_proj_datum = children_relevance_exprs_.at(j)->locate_datum_for_write(*eval_ctx);
       tmp_relevance_proj_datum.set_double(0);
       children_relevance_exprs_.at(j)->set_evaluated_projected(*eval_ctx);
     }
@@ -724,13 +727,13 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
   int ret = OB_SUCCESS;
   ObExpr *param_text = nullptr;
   ObEvalCtx *eval_ctx = nullptr;
-  ObDatum *param_text_datum = nullptr;
+  common::Datum *param_text_datum = nullptr;
   if (OB_ISNULL(match_rtdef) || OB_ISNULL(match_ctdef) || OB_ISNULL(match_ctdef->es_param_text_expr_) || OB_ISNULL(match_rtdef->eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(param_text = match_ctdef->es_param_text_expr_)) {
   } else if (FALSE_IT(eval_ctx = match_rtdef->eval_ctx_)) {
   } else if (OB_FAIL(param_text->eval(*eval_ctx, param_text_datum))) {
-  } else if (0 == param_text_datum->len_) {
+  } else if (0 == param_text_datum->length()) {
     minimum_should_match = 0;
     match_rtdef->match_boost_ = 1.0;
     match_rtdef->match_operator_ = ObMatchOperator::MATCH_OPERATOR_OR;

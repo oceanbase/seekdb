@@ -144,11 +144,11 @@ int ObExprPLSQLVariable::cg_expr(ObExprCGCtx &op_cg_ctx,
   rt_expr.eval_func_ = eval_plsql_variable;
   return ret;
 }
-int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   const ObPLSQLVariableInfo *info = static_cast<ObPLSQLVariableInfo *>(expr.extra_info_);
-  ObDatum result;
+  Datum result;
   result.set_null();
   int64_t line = 0;
   char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
@@ -156,7 +156,6 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_LINE")) {
     line = static_cast<int32_t>(info->plsql_line_);
-    result.ptr_ = reinterpret_cast<const char *>(&line);
     // Int32 expression values use the common eight-byte integer row Datum.
     result.set_int(line);
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_UNIT")
@@ -177,7 +176,9 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
       } else {
       }
     }
-    OZ (value.to_row_datum(result, extended_payload));
+    common::ObDatum legacy_result;
+    OZ(value.to_row_datum(legacy_result, extended_payload));
+    OZ(expr.get_datum_copy_plan().import_legacy(legacy_result, result));
     if (OB_SUCC(ret) && is_lob_storage(value.get_type())) {
       OZ (ob_adjust_lob_datum(ctx.exec_ctx_, result, value.get_meta(),
                              expr.obj_meta_, ctx.exec_ctx_.get_allocator()));

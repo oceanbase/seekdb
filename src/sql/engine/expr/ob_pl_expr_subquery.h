@@ -102,7 +102,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 
-  static int eval_subquery(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_subquery(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
 private:
   static int fill_param_store(const ObExpr &expr, ObEvalCtx &ctx, ParamStore &params, ObIAllocator &owner);

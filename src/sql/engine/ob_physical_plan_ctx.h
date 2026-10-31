@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_PHYSICAL_PLAN_CTX_H
 #define OCEANBASE_SQL_OB_PHYSICAL_PLAN_CTX_H
 #include "common/datum/datum.h"
+#include "common/datum/datum_parameter_array.h"
 #include "share/ob_autoincrement_param.h"
 #include "share/ob_tablet_autoincrement_param.h"
 #include "common/sql_mode/ob_sql_mode.h"
@@ -35,6 +36,7 @@
 
 namespace oceanbase
 {
+namespace pl { class ObPLExecState; }
 namespace sql
 {
 class ObResultSet;
@@ -80,7 +82,8 @@ public:
   virtual ~ObPhysicalPlanCtx();
   void destroy() 
   {
-    native_parameter_owner_ = nullptr;
+    native_parameters_ready_ = false;
+    native_parameter_types_.reuse();
     total_memstore_read_row_count_ = 0;
     total_ssstore_read_row_count_ = 0;
     // Member variables that need to request additional memory 
@@ -166,8 +169,26 @@ public:
   }
   // param store
   int reserve_param_space(int64_t param_count);
+  int append_parameter_input(const DatumParameter &parameter);
   const ParamStore &get_param_store() const { return param_store_; }
-  ParamStore &get_param_store_for_update() { return param_store_; }
+  int assign_parameter_inputs(const ParamStore &parameters);
+  int truncate_runtime_parameters(int64_t count);
+  void mark_batch_parameters();
+  // Construction callbacks receive a staging store, never the live frame's
+  // writable compatibility descriptors. No reference may escape the callback.
+  template <typename Writer> int edit_parameter_inputs(Writer writer)
+  {
+    ParamStore staged((common::ObWrapperAllocator(&allocator_)));
+    int ret = common::OB_SUCCESS;
+    for (int64_t i = 0; ret == common::OB_SUCCESS && i < param_store_.count(); ++i) {
+      DatumParameter copy;
+      ret = common::DatumParameterArray::clone_parameter(param_store_.at(i), copy, allocator_);
+      if (ret == common::OB_SUCCESS) { ret = staged.push_back(copy); }
+    }
+    if (ret == common::OB_SUCCESS) { ret = writer(staged); }
+    if (ret == common::OB_SUCCESS) { ret = assign_parameter_inputs(staged); }
+    return ret;
+  }
   const common::DatumParameter *get_param_mem() const
   {
     if (param_store_.count() <= 0) {
@@ -176,22 +197,27 @@ public:
       return &param_store_.at(0);
     }
   }
-  DatumParamStore &get_datum_param_store() { return param_store_; }
   const DatumParamStore &get_datum_param_store() const { return param_store_; }
   const ObIArray<char *> &get_param_frame_ptrs() const { return param_frame_ptrs_; }
   int init_datum_param_store();
-  // A read-only native slot is available only while the current descriptor
-  // still borrows its exact execution-owner index with unchanged metadata.
-  // Recheck for every use: mutable store references may escape this context.
-  // Consume/copy the result before another parameter mutation; storage keys
-  // must keep their independent snapshot rather than retaining this binding.
+  // Read-only execution values and their complete effective types. A selected
+  // grouped-array element has its own effective type; the construction array
+  // remains available only for later group selection. Retaining storage keys
+  // must clone rather than retain this mutable execution binding.
+  const common::Datum *get_native_parameter(int64_t index) const;
+  const common::SqlType *get_native_parameter_type(int64_t index) const;
   const common::Datum *get_native_bigint_parameter(int64_t index) const;
-  // Parameters have a single native owner; SQL frames borrow Datum views.
-  // The caller owns the value payload for as long as this binding is used.
+  // Prepare type/payload ownership before publishing a replacement slot and
+  // its compatibility descriptor. Failure preserves the previous binding.
   int set_runtime_parameter(int64_t index, const DatumParameter &parameter);
+  // Typed PX decode writes directly into these final execution-arena pages.
+  // Complete preflight precedes publication; no second value array is built.
+  int restore_native_parameter_frames(const common::ObIArray<char *> &frames,
+      const common::ObIArray<const common::SqlType *> &types, int64_t original_count);
   void reset_datum_param_store()
   {
-    native_parameter_owner_ = nullptr;
+    native_parameters_ready_ = false;
+    native_parameter_types_.reuse();
     param_store_.reuse();
     param_frame_ptrs_.reuse();
     original_param_cnt_ = 0;
@@ -502,14 +528,21 @@ public:
   int get_local_session_vars(int64_t idx, const ObSolidifiedVarsContext *&local_vars);
   bool is_param_datum_frame_inited() const { return param_frame_ptrs_.count() > 0; }
 private:
-  struct NativeParameterOwner;
-  bool can_use_native_bigint_parameters() const;
-  int init_native_bigint_parameters(NativeParameterOwner *&owner);
+  friend class oceanbase::pl::ObPLExecState;
+  // PL variables use their PL domain owner and do not bind SQL parameter pages.
+  // This deliberately private access cannot expose an initialized SQL frame.
+  ParamStore &pl_variable_store()
+  { OB_ASSERT(!native_parameters_ready_); return param_store_; }
+  int prepare_runtime_parameter(const DatumParameter &source, common::Datum &value,
+      const common::SqlType *&type, int64_t index);
+  int publish_runtime_parameter(int64_t index, const DatumParameter &source,
+      const common::Datum &value, const common::SqlType &type, bool preserve_array_input);
+  int refresh_parameter_view(int64_t index);
   void reset_datum_frame(char *frame, int64_t expr_cnt);
   int extend_param_frame(const int64_t old_size);
   int reserve_param_frame(const int64_t capacity);
   void get_param_frame_info(int64_t param_idx,
-                            ObDatum *&datum,
+                            common::Datum *&datum,
                             ObEvalInfo *&eval_info);
   int inner_get_subschema_id_by_type_info(const SqlTypeMeta &obj_meta,
                                           const ObIArray<common::ObString> &type_info,
@@ -536,9 +569,12 @@ private:
   int64_t ts_timeout_us_;
   common::ObConsistencyLevel consistency_level_;
   ParamStore param_store_;
-  // Process-local only. Older blocks remain in allocator_ until its reset so
-  // existing legacy frame borrows survive store reset/rebuild/replacement.
-  NativeParameterOwner *native_parameter_owner_;
+  // Construction inputs become read-only compatibility views once the native
+  // execution frames have been initialized. No second native value array.
+  bool native_parameters_ready_;
+  // Effective full types of native execution slots (including the selected
+  // element of a grouped array input), owned by this context's arena.
+  common::ObSEArray<const common::SqlType *, 16> native_parameter_types_;
   common::ObSEArray<char *, 1, common::ModulePageAllocator, true> param_frame_ptrs_;
   // Original param cont for input SQL, used in static engine for param frames allocation.
   // Param store can be divided into three continuous part:

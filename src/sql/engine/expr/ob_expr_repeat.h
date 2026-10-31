@@ -36,7 +36,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   static int repeat(common::ObString &output,
                     bool &is_null,

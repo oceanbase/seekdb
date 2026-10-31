@@ -53,10 +53,10 @@ int ObExprSqlModeConvert::calc_result_type1(ObExprResType &type,
 
 int ObExprSqlModeConvert::sql_mode_convert(const ObExpr &expr,
                                            ObEvalCtx &ctx,
-                                           ObDatum &expr_datum)
+                                           Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();

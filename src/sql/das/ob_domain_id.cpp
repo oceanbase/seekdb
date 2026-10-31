@@ -556,7 +556,7 @@ int ObDomainIdUtils::fill_domain_id_datum(ObDomainIDType type, void *expr, void 
   if (OB_ISNULL(domain_id_expr) || OB_ISNULL(ctx)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObDatum &dst_datum = domain_id_expr->locate_datum_for_write(*ctx);
+    Datum &dst_datum = domain_id_expr->locate_datum_for_write(*ctx);
     switch (type) {
       case ObDomainIDType::DOC_ID:
       case ObDomainIDType::IVFFLAT_CID:
@@ -617,7 +617,7 @@ int ObDomainIdUtils::fill_batch_domain_id_datum(ObDomainIDType type, void *expr,
   sql::ObExpr *domain_id_expr = reinterpret_cast<sql::ObExpr*>(expr);
   sql::ObEvalCtx *ctx = reinterpret_cast<sql::ObEvalCtx*>(eval_ctx);
   // bool set_null = (domain_id.length() == 0);
-  ObDatum *datums = nullptr;
+  Datum *datums = nullptr;
   if (OB_ISNULL(domain_id_expr) || OB_ISNULL(ctx) || domain_ids.count() == 0) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(datums = domain_id_expr->locate_datums_for_update(*ctx, domain_ids.count()))) {

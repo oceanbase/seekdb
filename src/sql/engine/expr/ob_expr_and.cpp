@@ -54,11 +54,11 @@ int ObExprAnd::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-static int calc_and_expr2(const ObDatum &left, const ObDatum &right,
-                          ObDatum &res)
+static int calc_and_expr2(const Datum &left, const Datum &right,
+                          Datum &res)
 {
   int ret = OB_SUCCESS;
-  if (left.is_false() || right.is_false()) {
+  if ((!left.is_null() && !left.get_bool()) || (!right.is_null() && !right.get_bool())) {
     res.set_false();
   } else if (left.is_null() || right.is_null()) {
     res.set_null();
@@ -68,24 +68,24 @@ static int calc_and_expr2(const ObDatum &left, const ObDatum &right,
   return ret;
 }
 
-int calc_and_exprN(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_and_exprN(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *tmp_res = NULL;
-  ObDatum *child_res = NULL;
+  Datum *tmp_res = NULL;
+  Datum *child_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, tmp_res))) {
   } else if (tmp_res->is_null()) {
     res_datum.set_null();
   } else {
     res_datum.set_bool(tmp_res->get_bool());
   }
-  if (OB_SUCC(ret) && !res_datum.is_false()) {
+  if (OB_SUCC(ret) && (res_datum.is_null() || res_datum.get_bool())) {
     for (int64_t i = 1; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, child_res))) {
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(calc_and_expr2(res_datum, *child_res, res_datum))) {
-        } else if (res_datum.is_false()) {
+        } else if ((!res_datum.is_null() && !res_datum.get_bool())) {
           break;
         }
       }
@@ -113,7 +113,7 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
                                     const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum* results = expr.locate_batch_datums(ctx);
+  Datum* results = expr.locate_batch_datums(ctx);
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -133,8 +133,8 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
     if (real_param == skip_cnt) {
     } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, my_skip, batch_size))) {
     } else if (expr.args_[0]->is_batch_result()) {
-      ObDatum *curr_datum  = nullptr;
-      ObDatum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
+      Datum *curr_datum  = nullptr;
+      Datum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
         if (my_skip.at(j)) {
           continue;
@@ -152,7 +152,7 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
         eval_flags.set(j);
       }
     } else {
-      ObDatum *curr_datum = &expr.args_[0]->locate_expr_datum(ctx);
+      Datum *curr_datum = &expr.args_[0]->locate_expr_datum(ctx);
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
         if (my_skip.at(j)) {
           continue;
@@ -175,8 +175,8 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
     for (; OB_SUCC(ret) && arg_idx < expr.arg_cnt_ - 1 && skip_cnt < real_param; ++arg_idx) {
       if (OB_FAIL(expr.args_[arg_idx]->eval_batch(ctx, my_skip, batch_size))) {
       } else if (expr.args_[arg_idx]->is_batch_result()) {
-        ObDatum *curr_datum  = nullptr;
-        ObDatum *datum_array = expr.args_[arg_idx]->locate_batch_datums(ctx);
+        Datum *curr_datum  = nullptr;
+        Datum *datum_array = expr.args_[arg_idx]->locate_batch_datums(ctx);
         for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
           if (my_skip.at(j)) {
             continue;
@@ -192,7 +192,7 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
           }
         }
       } else {
-        ObDatum *curr_datum = &expr.args_[arg_idx]->locate_expr_datum(ctx);
+        Datum *curr_datum = &expr.args_[arg_idx]->locate_expr_datum(ctx);
         for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
           if (my_skip.at(j)) {
             continue;
@@ -214,8 +214,8 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
     } else if (real_param == skip_cnt) {
     } else if (OB_FAIL(expr.args_[arg_idx]->eval_batch(ctx, my_skip, batch_size))) {
     } else if (expr.args_[arg_idx]->is_batch_result()) {
-      ObDatum *curr_datum  = nullptr;
-      ObDatum *datum_array = expr.args_[arg_idx]->locate_batch_datums(ctx);
+      Datum *curr_datum  = nullptr;
+      Datum *datum_array = expr.args_[arg_idx]->locate_batch_datums(ctx);
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
         if (my_skip.at(j)) {
           continue;
@@ -230,7 +230,7 @@ int ObExprAnd::eval_and_batch_exprN(const ObExpr &expr, ObEvalCtx &ctx,
         }
       }
     } else {
-      ObDatum *curr_datum = &expr.args_[arg_idx]->locate_expr_datum(ctx);
+      Datum *curr_datum = &expr.args_[arg_idx]->locate_expr_datum(ctx);
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
         if (my_skip.at(j)) {
           continue;

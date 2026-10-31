@@ -69,10 +69,10 @@ int ObExprJsonMergePreserve::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonMergePreserve::eval_json_merge_preserve(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonMergePreserve::eval_json_merge_preserve(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());

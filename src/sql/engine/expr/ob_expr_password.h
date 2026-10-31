@@ -36,7 +36,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_password(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum);
+  static int eval_password(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum);
   
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:

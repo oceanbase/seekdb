@@ -59,7 +59,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
   void set_plsql_line(int64_t v) { plsql_line_ = v; }
   int64_t get_plsql_line() { return plsql_line_; }

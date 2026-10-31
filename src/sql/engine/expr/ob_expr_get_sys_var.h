@@ -39,7 +39,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
   static int calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum);
+                                 Datum &res_datum);
 private:
   static int calc_(common::DatumValue &result, const common::ObString &var_name,
                    const int64_t var_scope, ObSQLSessionInfo *session, 

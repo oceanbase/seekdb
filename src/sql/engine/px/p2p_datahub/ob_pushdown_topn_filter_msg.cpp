@@ -204,10 +204,10 @@ int ObPushDownTopNFilterMsg::merge(ObP2PDatahubMsgBase &msg)
 }
 
 int ObPushDownTopNFilterMsg::filter_out_data(const ObExpr &expr, ObEvalCtx &ctx,
-                                             ObExprTopNFilterContext &filter_ctx, ObDatum &res)
+                                             ObExprTopNFilterContext &filter_ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   int cmp_res = 0;
   bool is_filtered = false;
   filter_ctx.total_count_++;
@@ -224,7 +224,10 @@ int ObPushDownTopNFilterMsg::filter_out_data(const ObExpr &expr, ObEvalCtx &ctx,
         cmp_res = -1;
         break;
       } else {
-        if (OB_FAIL(get_compare_result(i, *datum, cmp_res))) {
+        alignas(8) char scratch[64];
+        ObDatum legacy;
+        if (OB_FAIL(expr.args_[i]->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(get_compare_result(i, legacy, cmp_res))) {
         } else if (cmp_res > 0) {
           is_filtered = true;
           break;
@@ -257,7 +260,7 @@ int ObPushDownTopNFilterMsg::filter_out_data_batch(
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx_))) {
   } else if (OB_UNLIKELY(is_empty_)) {
-    ObDatum *results = expr.locate_batch_datums(ctx);
+    Datum *results = expr.locate_batch_datums(ctx);
     for (int64_t i = 0; i < batch_size; i++) {
       results[i].set_int(0);
     }
@@ -459,7 +462,7 @@ int ObPushDownTopNFilterMsg::do_filter_out_data_batch(
   int ret = OB_SUCCESS;
   int64_t filter_count = 0;
   int64_t total_count = 0;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
   batch_info_guard.set_batch_size(batch_size);
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
@@ -468,7 +471,7 @@ int ObPushDownTopNFilterMsg::do_filter_out_data_batch(
   }
   if (OB_SUCC(ret)) {
     int cmp_res = 0;
-    ObDatum *datum = nullptr;
+    Datum *datum = nullptr;
     bool is_filtered = false;
     for (int64_t batch_i = 0; OB_SUCC(ret) && batch_i < batch_size; ++batch_i) {
       if (skip.at(batch_i)) {
@@ -483,7 +486,13 @@ int ObPushDownTopNFilterMsg::do_filter_out_data_batch(
         if (datum->is_null()) {
           cmp_res = -1;
           break;
-        } else if (OB_FAIL(get_compare_result(arg_i, *datum, cmp_res))) {
+        } else {
+          alignas(8) char scratch[64];
+          ObDatum legacy;
+          if (OB_FAIL(expr.args_[arg_i]->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, sizeof(scratch)))) {
+          } else { ret = get_compare_result(arg_i, legacy, cmp_res); }
+        }
+        if (OB_FAIL(ret)) {
         } else if (cmp_res > 0) {
           // the data bigger than head top data should be filterd out.
           filter_count++;

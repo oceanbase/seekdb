@@ -20,7 +20,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::sql;
 namespace oceanbase { namespace sql {
 // Existing expression evaluator, not a test wrapper or a value conversion.
-int calc_assign_expr(const ObExpr &, ObEvalCtx &, ObDatum &);
+int calc_assign_expr(const ObExpr &, ObEvalCtx &, Datum &);
 } }
 
 namespace {
@@ -43,7 +43,8 @@ protected:
     expr.obj_meta_.set_type(type); expr.obj_meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     expr.datum_meta_ = ObDatumMeta(type, CS_TYPE_UTF8MB4_BIN, -1);
     expr.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(type);
-    new (frames[0] + base) ObDatum();
+    ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, expr.prepare_legacy_copy_plan().get_accuracy(), arena));
+    new (frames[0] + base) Datum();
     new (frames[0] + base + 32) ObEvalInfo();
     auto *dynamic = new (frames[0] + base + 96) ObDynReserveBuf();
     dynamic->magic_ = ObDynReserveBuf::MAGIC_NUM;
@@ -73,9 +74,11 @@ protected:
     return session.ObBasicSessionInfo::replace_user_variable(
         ObString::make_string("u"), record, false);
   }
-  int fetch(ObDatum &result) {
+  int fetch(Datum &result) {
     output.arg_cnt_ = 1;
-    return ObExprGetUserVar::eval_get_user_var(output, *eval, result);
+    int ret = output.prepare_scalar_type(output.obj_meta_, output.prepare_legacy_copy_plan().get_accuracy(), arena);
+    if (OB_SUCC(ret)) { ret = ObExprGetUserVar::eval_get_user_var(output, *eval, result); }
+    return ret;
   }
   void set_output_type(SqlValueType type, int16_t scale = -1, int16_t precision = -1) {
     output.obj_meta_.set_type(type);
@@ -126,7 +129,7 @@ TEST_F(NativeUserVariable, assignment_copies_frame_bytes_before_next_input_evalu
   input.locate_datum_for_write(*eval).set_string(text, sizeof(text) - 1);
   input.get_eval_info(*eval).evaluated_ = true;
   output.arg_cnt_ = 2;
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, calc_assign_expr(output, *eval, result));
   std::memset(text, 'x', sizeof(text) - 1);
   DatumValue stored;
@@ -139,7 +142,7 @@ TEST_F(NativeUserVariable, null_assignment_canonicalizes_raw_value_but_retains_s
   input.locate_datum_for_write(*eval).set_null();
   input.get_eval_info(*eval).evaluated_ = true;
   output.arg_cnt_ = 2;
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, calc_assign_expr(output, *eval, result));
   ObSessionVariable record;
   ASSERT_EQ(OB_SUCCESS, session.get_user_variable(ObString::make_string("u"), record));
@@ -151,7 +154,7 @@ TEST_F(NativeUserVariable, null_assignment_canonicalizes_raw_value_but_retains_s
 }
 
 TEST_F(NativeUserVariable, result_frame_survives_map_replacement_and_source_arena_reset) {
-  ObDatum result;
+  Datum result;
   const std::string text(2048, 'q'); // force the expression's dynamic result buffer
   {
     ObArenaAllocator source_owner;
@@ -161,13 +164,13 @@ TEST_F(NativeUserVariable, result_frame_survives_map_replacement_and_source_aren
     ASSERT_EQ(OB_SUCCESS, store(source));
     ASSERT_EQ(OB_SUCCESS, fetch(result));
     const DatumValue *stored = session.get_user_variable_value(ObString::make_string("u"));
-    ASSERT_NE(nullptr, stored); EXPECT_NE(stored->datum_.ptr_, result.ptr_);
+    ASSERT_NE(nullptr, stored); EXPECT_NE(stored->datum_.ptr_, result.get_string().ptr());
   }
   DatumValue replacement;
   ASSERT_EQ(OB_SUCCESS, replacement.set_int(123, arena));
   ASSERT_EQ(OB_SUCCESS, store(replacement));
-  EXPECT_EQ(text, std::string(result.ptr_, result.len_));
-  EXPECT_EQ(result.ptr_, output.locate_expr_datum(*eval).ptr_);
+  EXPECT_EQ(text, std::string(result.get_string().ptr(), result.length()));
+  EXPECT_EQ(result.get_string().ptr(), output.locate_expr_datum(*eval).get_string().ptr());
 }
 
 TEST_F(NativeUserVariable, changed_value_type_is_cast_to_the_prepared_expression_type) {
@@ -175,13 +178,13 @@ TEST_F(NativeUserVariable, changed_value_type_is_cast_to_the_prepared_expression
   ASSERT_EQ(OB_SUCCESS, integer.set_int(12345, arena));
   ASSERT_EQ(OB_SUCCESS, store(integer));
   set_output_type(ObVarcharType);
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
   EXPECT_EQ(ObString::make_string("12345"), result.get_string());
-  const char *previous = result.ptr_;
+  const char *previous = result.get_string().ptr();
   context.get_eval_tmp_allocator().reuse();
   EXPECT_EQ(ObString::make_string("12345"), result.get_string());
-  EXPECT_EQ(previous, output.locate_expr_datum(*eval).ptr_);
+  EXPECT_EQ(previous, output.locate_expr_datum(*eval).get_string().ptr());
 }
 
 TEST_F(NativeUserVariable, decimal_coefficient_is_extended_to_expression_frame_width) {
@@ -191,11 +194,13 @@ TEST_F(NativeUserVariable, decimal_coefficient_is_extended_to_expression_frame_w
       reinterpret_cast<const ObDecimalInt *>(&coefficient), arena));
   ASSERT_EQ(OB_SUCCESS, store(decimal));
   set_output_type(ObDecimalIntType, 2, 65);
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
-  EXPECT_EQ(sizeof(int512_t), result.get_int_bytes());
-  EXPECT_EQ(int512_t(coefficient), result.get_decimal_int512());
-  EXPECT_NE(decimal.datum_.ptr_, result.ptr_);
+  EXPECT_EQ(sizeof(int512_t), result.length());
+  int512_t actual;
+  ASSERT_EQ(OB_SUCCESS, result.get_decimal_int512(actual));
+  EXPECT_EQ(int512_t(coefficient), actual);
+  EXPECT_NE(decimal.datum_.ptr_, result.get_string().ptr());
 }
 
 TEST_F(NativeUserVariable, expression_projects_independent_decimal_declaration_scale) {
@@ -206,7 +211,7 @@ TEST_F(NativeUserVariable, expression_projects_independent_decimal_declaration_s
   SqlTypeMeta declaration = decimal.meta_; declaration.set_scale(3);
   ASSERT_EQ(OB_SUCCESS, store(decimal, &declaration));
   set_output_type(ObVarcharType);
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
   EXPECT_EQ(ObString::make_string("12.345"), result.get_string());
   DatumValue raw;
@@ -230,7 +235,7 @@ TEST_F(NativeUserVariable, lob_results_adjust_both_header_directions_before_fram
     set_output_type(ObLongTextType);
     output.obj_meta_.set_inrow();
     if (!source_has_header) { output.obj_meta_.set_has_lob_header(); }
-    ObDatum result;
+    Datum result;
     ASSERT_EQ(OB_SUCCESS, fetch(result));
     ObString content = result.get_string();
     if (!source_has_header) {
@@ -238,13 +243,13 @@ TEST_F(NativeUserVariable, lob_results_adjust_both_header_directions_before_fram
       ASSERT_EQ(OB_SUCCESS, locator.get_inrow_data(content));
     }
     EXPECT_EQ(ObString::make_string("lob-content"), content);
-    EXPECT_NE(source.datum_.ptr_, result.ptr_);
+    EXPECT_NE(source.datum_.ptr_, result.get_string().ptr());
   }
 }
 
 TEST_F(NativeUserVariable, unknown_variable_returns_null_without_map_insertion) {
   key.locate_datum_for_write(*eval).set_string("absent", 6);
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result)); EXPECT_TRUE(result.is_null());
   EXPECT_EQ(0, session.get_user_var_val_map().size());
 }

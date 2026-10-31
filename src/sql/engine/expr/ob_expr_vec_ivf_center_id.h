@@ -39,7 +39,7 @@ public:
   static int calc_center_id(
       const ObExpr &expr,
       ObEvalCtx &eval_ctx,
-      ObDatum &expr_datum);
+      Datum &expr_datum);
   virtual bool need_rt_ctx() const override { return true; }
 private :
   //disallow copy

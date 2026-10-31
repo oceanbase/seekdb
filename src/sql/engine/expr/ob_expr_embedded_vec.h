@@ -27,7 +27,7 @@
  public:
    explicit ObExprEmbeddedVec(common::ObIAllocator &alloc);
    virtual ~ObExprEmbeddedVec() {}
-   static int pack_embedded_res(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, const ObString &str);
+   static int pack_embedded_res(const ObExpr &expr, ObEvalCtx &ctx, Datum &res, const ObString &str);
    virtual int calc_result_typeN(ObExprResType &type,
                                  ObExprResType *types,
                                  int64_t param_num,
@@ -40,7 +40,7 @@
    static int generate_embedded_vec(
            const ObExpr &raw_ctx,
            ObEvalCtx &eval_ctx,
-           ObDatum &expr_datum);
+           Datum &expr_datum);
  
  private :
    //disallow copy

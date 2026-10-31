@@ -1612,8 +1612,8 @@ int ObRelationalExprOperator::assign(const ObExprOperator &other)
 }
 
 int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
-                                              const ObDatum &obj1,
-                                              const ObDatum &obj2,
+                                              const Datum &obj1,
+                                              const Datum &obj2,
                                               ObExecContext &exec_ctx,
                                               const ObCmpOp cmp_op)
 {
@@ -1772,11 +1772,11 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
 
 int ObRelationalExprOperator::eval_pl_udt_compare(const ObExpr &expr,
                                                   ObEvalCtx &ctx,
-                                                  ObDatum &expr_datum)
+                                                  Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *l = NULL;
-  ObDatum *r = NULL;
+  Datum *l = NULL;
+  Datum *r = NULL;
   OZ(expr.eval_param_value(ctx, l, r));
   if (OB_SUCC(ret)) {
     if (l->is_null() || r->is_null()) {
@@ -1806,8 +1806,8 @@ int ObRelationalExprOperator::eval_pl_udt_compare(const ObExpr &expr,
 }
 
 int ObRelationalExprOperator::eval_compare_composite(CollectionPredRes &cmp_result,
-                                                     const common::ObDatum &obj1,
-                                                     const common::ObDatum &obj2,
+                                                     const common::Datum &obj1,
+                                                     const common::Datum &obj2,
                                                      ObExecContext &exec_ctx,
                                                      const ObCmpOp cmp_op)
 {
@@ -1956,7 +1956,6 @@ int ObSubQueryRelationalExpr::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   ObSEArray<ObExprResType, 1> left_types;
   ObSEArray<ObExprResType, 1> right_types;
-  void **funcs = NULL;
 
   CK(NULL != op_cg_ctx.allocator_);
   CK(2 == raw_expr.get_param_count());
@@ -1971,27 +1970,22 @@ int ObSubQueryRelationalExpr::cg_expr(ObExprCGCtx &op_cg_ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("operand cnt mismatch",
              K(ret), K(left_types.count()), K(right_types.count()));
-  } else if (OB_ISNULL(funcs = (void **)op_cg_ctx.allocator_->alloc(
-              sizeof(void *) * left_types.count()))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(rt_expr.prepare_cmp_ops(*op_cg_ctx.allocator_, left_types.count()))) {
   } else {
-    rt_expr.inner_func_cnt_ = left_types.count();
-    rt_expr.inner_functions_ = funcs;
-
-    for (int64_t i = 0; OB_SUCC(ret) && i < rt_expr.inner_func_cnt_; i++) {
-      auto &l = left_types.at(i);
-      auto &r = right_types.at(i);
-      bool has_lob_header = l.has_lob_header() || r.has_lob_header();
-      if (ObDatumFuncs::is_string_type(l.get_type())
-          && ObDatumFuncs::is_string_type(r.get_type())) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < left_types.count(); ++i) {
+      const auto &l = left_types.at(i);
+      const auto &r = right_types.at(i);
+      if (ObDatumFuncs::is_string_type(l.get_type()) && ObDatumFuncs::is_string_type(r.get_type())) {
         CK(l.get_collation_type() == r.get_collation_type());
       }
-      if (OB_SUCC(ret)) {
-        funcs[i] = (void *)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-          l.get_type(), r.get_type(), l.get_scale(), r.get_scale(), l.get_precision(),
-          r.get_precision(), l.get_collation_type(), has_lob_header);
-        CK(NULL != funcs[i]);
-      }
+      ObExpr left_type;
+      ObExpr right_type;
+      left_type.obj_meta_ = l.get_sql_type_meta();
+      right_type.obj_meta_ = r.get_sql_type_meta();
+      OZ(left_type.prepare_resolved_type(l, op_cg_ctx.session_, *op_cg_ctx.allocator_));
+      OZ(right_type.prepare_resolved_type(r, op_cg_ctx.session_, *op_cg_ctx.allocator_));
+      OZ(rt_expr.configure_cmp_op(i, left_type.get_sql_type(), right_type.get_sql_type(), NULL_LAST,
+                                 l.get_collation_type()));
     }
     if (OB_SUCC(ret)) {
       ExtraInfo &info = ExtraInfo::get_info(rt_expr);
@@ -2026,9 +2020,9 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
     bool found_in_hash_map = false;
     bool is_hash_enabled = iter->has_hashmap();
     if (is_hash_enabled) {
-      ObDatum out;
+      Datum out;
       if (OB_FAIL(iter->get_curr_probe_row())) {
-      } else if (OB_FAIL(iter->get_refactored(out))) {
+      } else if (OB_FAIL(iter->get_refactored(out, expr))) {
         if (OB_HASH_NOT_EXIST != ret) {
         } else {
           ret = OB_SUCCESS;
@@ -2052,36 +2046,9 @@ int ObSubQueryRelationalExpr::check_exists(const ObExpr &expr, ObEvalCtx &ctx, b
     if (OB_SUCC(ret) && is_hash_enabled
                      && iter->probe_row_.cnt_ > 0
                      && !found_in_hash_map) {
-      //now we can insert curr row and curr result into hashmap
-      //first to get arena allocator from sp_iter to deep copy row
-      ObDatum value;
-      DatumRow row_key;
-      row_key.cnt_ = iter->probe_row_.cnt_;
-              //first check memory is enough
-      int64_t need_size = sizeof(ObDatum) + sizeof(int64_t);
-      for (int64_t i = 0; i < iter->probe_row_.cnt_; ++i) {
-        need_size += (iter->probe_row_.elems_[i].len_ + sizeof(ObDatum));
-      }
-      bool can_insert = iter->check_can_insert(need_size);
-      ObIAllocator *alloc = nullptr;
-      if (!can_insert) {
-        //memory is exceed, do not insert new rows
-      } else if (OB_FAIL(iter->get_arena_allocator(alloc)) || OB_ISNULL(alloc)) {
-      } else if (OB_ISNULL(value.ptr_ = static_cast<char *>(alloc->alloc(sizeof(int64_t))))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (FALSE_IT(value.pack_ = sizeof(int64_t))) {
-      } else if (OB_ISNULL(row_key.elems_
-                = static_cast<ObDatum *> (alloc->alloc(sizeof(ObDatum) * row_key.cnt_)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        value.set_bool(exists);
-        for (int64_t i = 0; OB_SUCC(ret) && i < row_key.cnt_; ++i) {
-          if (OB_FAIL(row_key.elems_[i].deep_copy(iter->probe_row_.elems_[i], *alloc))) {
-          }
-        }
-        if (OB_SUCC(ret) && OB_FAIL(iter->set_refactored(row_key, value, need_size))) {
-        }
-      }
+      Datum value;
+      value.set_bool(exists);
+      ret = iter->cache_result(value, expr);
     }
   }
   return ret;
@@ -2121,7 +2088,7 @@ int ObSubQueryRelationalExpr::setup_row(
 }
 
 int ObSubQueryRelationalExpr::cmp_one_row(
-    const ObExpr &expr, ObDatum &res,
+    const ObExpr &expr, Datum &res,
     ObExpr **l_row, ObEvalCtx &l_ctx, ObExpr **r_row, ObEvalCtx &r_ctx,
     bool left_all_null, bool right_all_null)
 {
@@ -2131,10 +2098,10 @@ int ObSubQueryRelationalExpr::cmp_one_row(
       res.set_true();
     } else if (left_all_null || right_all_null) {
       bool both_are_null = true;
-      ObDatum *l = NULL;
-      ObDatum *r = NULL;
-      for (int64_t i = 0; OB_SUCC(ret) && both_are_null && i < expr.inner_func_cnt_; i++) {
-        if (NULL == expr.inner_functions_[i]) {
+      Datum *l = NULL;
+      Datum *r = NULL;
+      for (int64_t i = 0; OB_SUCC(ret) && both_are_null && i < expr.get_cmp_op_count(); i++) {
+        if (!expr.get_cmp_op(i).is_valid()) {
           ret = OB_INVALID_ARGUMENT;
         } else if ((!left_all_null && OB_FAIL(l_row[i]->eval(l_ctx, l)))
             || (!right_all_null && OB_FAIL(r_row[i]->eval(r_ctx, r)))) {
@@ -2163,7 +2130,7 @@ int ObSubQueryRelationalExpr::cmp_one_row(
 }
 
 int ObSubQueryRelationalExpr::subquery_cmp_eval(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   const ExtraInfo &info = ExtraInfo::get_info(expr);
@@ -2176,9 +2143,9 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval(
   bool left_all_null = false;
   if (2 != expr.arg_cnt_) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(setup_row(expr.args_, ctx, info.left_is_iter_, expr.inner_func_cnt_,
+  } else if (OB_FAIL(setup_row(expr.args_, ctx, info.left_is_iter_, expr.get_cmp_op_count(),
                                l_iter, l_row, l_ctx))) {
-  } else if (OB_FAIL(setup_row(expr.args_ + 1, ctx, info.right_is_iter_, expr.inner_func_cnt_,
+  } else if (OB_FAIL(setup_row(expr.args_ + 1, ctx, info.right_is_iter_, expr.get_cmp_op_count(),
                                r_iter, r_row, r_ctx))) {
   } else if (OB_ISNULL(l_row) || OB_ISNULL(r_row)
              || OB_ISNULL(l_ctx) || OB_ISNULL(r_ctx)) {
@@ -2227,7 +2194,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval(
 }
 
 int ObSubQueryRelationalExpr::subquery_cmp_eval_with_none(
-      const ObExpr &expr, ObEvalCtx &l_ctx, ObDatum &res,
+      const ObExpr &expr, ObEvalCtx &l_ctx, Datum &res,
       ObExpr **l_row, ObEvalCtx &r_ctx, ObExpr **r_row, ObSubQueryIterator *r_iter,
       bool left_all_null)
 {
@@ -2266,7 +2233,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_none(
 
 // copy from ObSubQueryRelationalExpr::calc_result_with_any
 int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
-      const ObExpr &expr, ObEvalCtx &l_ctx, ObDatum &res,
+      const ObExpr &expr, ObEvalCtx &l_ctx, Datum &res,
       ObExpr **l_row, ObEvalCtx &r_ctx, ObExpr **r_row, ObSubQueryIterator *r_iter,
       bool left_all_null)
 {
@@ -2282,7 +2249,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
       if (OB_FAIL(cmp_one_row(expr, res, l_row, l_ctx, r_row, r_ctx, left_all_null, right_all_null))) {
-      } else if (res.is_true()) {
+      } else if ((!res.is_null() && res.get_bool())) {
         break;
         // As long as one element satisfies the condition, the result is true, so break the iteration
       } else if (res.is_null()) {
@@ -2293,7 +2260,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
       ret = OB_SUCCESS;
     }
     if (OB_SUCC(ret)) {
-      if (res.is_false() && cnt_null) {
+      if ((!res.is_null() && !res.get_bool()) && cnt_null) {
         res.set_null();
       }
     }
@@ -2303,7 +2270,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
 
 // copy from ObSubQueryRelationalExpr::calc_result_with_all
 int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
-      const ObExpr &expr, ObEvalCtx &l_ctx, ObDatum &res,
+      const ObExpr &expr, ObEvalCtx &l_ctx, Datum &res,
       ObExpr **l_row, ObEvalCtx &r_ctx, ObExpr **r_row, ObSubQueryIterator *r_iter,
       bool left_all_null)
 {
@@ -2319,7 +2286,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
       if (OB_FAIL(cmp_one_row(expr, res, l_row, l_ctx, r_row, r_ctx, left_all_null, right_all_null))) {
-      } else if (res.is_false()) {
+      } else if ((!res.is_null() && !res.get_bool())) {
         break;
         // As long as one element satisfies the condition, the result is true, so break the iteration
       } else if (res.is_null()) {
@@ -2330,7 +2297,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
       ret = OB_SUCCESS;
     }
     if (OB_SUCC(ret)) {
-      if (res.is_true() && cnt_null) {
+      if ((!res.is_null() && res.get_bool()) && cnt_null) {
         res.set_null();
       }
     }
@@ -2939,12 +2906,12 @@ int ObBitwiseExprOperator::calc_result_typeN(ObExprResType &type,
 
 
 int ObBitwiseExprOperator::calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx,
-                                              ObDatum &res_datum)
+                                              Datum &res_datum)
 
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   const BitOperator op = static_cast<const BitOperator>(expr.extra_);
   ObCastMode cast_mode = CM_NONE;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
@@ -2975,10 +2942,10 @@ int ObBitwiseExprOperator::calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx
     // choose_get_int_func can find a way to put it into the cg stage, but bitwise expression
     // Should not be a performance sensitive place
     if (OB_FAIL(choose_get_int_func(left_meta, get_uint_func0))) {
-    } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func0)(left_meta, *left, true,
+    } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func0)(left_meta, *left, expr.args_[0]->get_sql_type(), true,
                                                         left_uint, cast_mode)))) {
     } else if (OB_FAIL(choose_get_int_func(right_meta, get_uint_func1))) {
-    } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func1)(right_meta, *right, true,
+    } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func1)(right_meta, *right, expr.args_[1]->get_sql_type(), true,
                                                         right_uint, cast_mode)))) {
     } else {
       //Do not worry too much about the efficiency
@@ -3040,10 +3007,11 @@ int ObBitwiseExprOperator::choose_get_int_func(const ObDatumMeta datum_meta, voi
 
 
 int ObBitwiseExprOperator::get_uint64_from_int_tc(
-    const ObDatumMeta &datum_meta, const ObDatum &datum, bool is_round,
+    const ObDatumMeta &datum_meta, const Datum &datum, const SqlType &input_type, bool is_round,
     uint64_t &out, const ObCastMode &cast_mode)
 {
   int ret = OB_SUCCESS;
+  UNUSED(input_type);
   UNUSED(is_round);
   UNUSED(cast_mode);
   UNUSED(datum_meta);
@@ -3053,13 +3021,15 @@ int ObBitwiseExprOperator::get_uint64_from_int_tc(
 
 
 int ObBitwiseExprOperator::get_uint64_from_number_type(const ObDatumMeta &datum_meta,
-                                                       const ObDatum &datum,
+                                                       const Datum &datum,
+                                                       const SqlType &input_type,
                                                        bool is_round,
                                                        uint64_t &out,
                                                        const ObCastMode &cast_mode)
 {
   int ret = OB_SUCCESS;
   UNUSED(datum_meta);
+  UNUSED(input_type);
   ObNumStackAllocator<> num_allocator;
   number::ObNumber nmb;
   int64_t tmp_int = 0;
@@ -3081,7 +3051,7 @@ int ObBitwiseExprOperator::get_uint64_from_number_type(const ObDatumMeta &datum_
 }
 
 int ObBitwiseExprOperator::get_uint64_from_decimalint_type(
-    const ObDatumMeta &datum_meta, const common::ObDatum &datum, bool is_round,
+    const ObDatumMeta &datum_meta, const common::Datum &datum, const SqlType &input_type, bool is_round,
     uint64_t &out, const common::ObCastMode &cast_mode)
 {
   int ret = OB_SUCCESS;
@@ -3090,11 +3060,15 @@ int ObBitwiseExprOperator::get_uint64_from_decimalint_type(
   ObDecimalIntBuilder builder;
   bool is_valid_int64 = true;
   bool is_valid_uint64 = true;
-  if (false == is_round) { // this func is only used in mysql mode, is_round can only be true
+  common::ObDatum coefficient;
+  alignas(8) char coefficient_buf[64];
+  if (OB_FAIL(DatumCopyPlan(input_type).get_decimal(
+      datum, coefficient, coefficient_buf, sizeof(coefficient_buf)))) {
+  } else if (false == is_round) { // this func is only used in mysql mode, is_round can only be true
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObExprFuncRound::do_round_decimalint(datum_meta.precision_, datum_meta.scale_,
                      DEFAULT_NUMBER_PRECISION_FOR_INTEGER, DEFAULT_NUMBER_SCALE_FOR_INTEGER, 0,
-                     datum, builder))) {
+                     coefficient, builder))) {
   } else if (OB_FAIL(wide::check_range_valid_int64(
              builder.get_decimal_int(), builder.get_int_bytes(), is_valid_int64, tmp_int))) {
   } else if (is_valid_int64) {
@@ -3379,7 +3353,7 @@ int ObLocationExprOperator::get_calc_cs_type(const ObExpr &expr, ObCollationType
 }
 
 int ObLocationExprOperator::calc_location_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                                ObDatum &res_datum)
+                                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // locate(sub, ori, pos)
@@ -3395,12 +3369,12 @@ int ObLocationExprOperator::calc_location_expr(const ObExpr &expr, ObEvalCtx &ct
 //     instr(ori_str, sub_str): the substring to be searched is the second parameter
 int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
                                   const ObExpr &ori_arg, ObEvalCtx &ctx,
-                                  ObDatum &res_datum)
+                                  Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *sub = NULL;
-  ObDatum *ori = NULL;
-  ObDatum *pos = NULL;
+  Datum *sub = NULL;
+  Datum *ori = NULL;
+  Datum *pos = NULL;
   bool has_result = false;
   // The first and second parameters will not short-circuit when they are null, only the third parameter will short-circuit
   if (OB_FAIL(sub_arg.eval(ctx, sub)) || OB_FAIL(ori_arg.eval(ctx, ori))) {
@@ -3551,9 +3525,6 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
                          || NULL == rt_expr.args_[1])) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    rt_expr.inner_func_cnt_ = 0;
-    rt_expr.inner_functions_ = NULL;
-
     const ObCmpOp cmp_op = get_cmp_op(raw_expr.get_expr_type());
     const SqlValueType input_type1 = rt_expr.args_[0]->datum_meta_.type_;
     const SqlValueType input_type2 = rt_expr.args_[1]->datum_meta_.type_;
@@ -3569,6 +3540,8 @@ int ObRelationalExprOperator::cg_datum_cmp_expr(ObIAllocator &allocator,
     } else if (ob_is_double_tc(input_type1) && ob_is_double_tc(input_type2)) {
       CK(rt_expr.args_[0]->datum_meta_.scale_ == rt_expr.args_[1]->datum_meta_.scale_);
     }
+    OZ(rt_expr.prepare_cmp_ops(allocator, 1));
+    OZ(rt_expr.configure_cmp_op(0, 0, 1, NULL_LAST, cs_type));
     if (OB_SUCC(ret)) {
       rt_expr.eval_func_ = ObExprCmpFuncsHelper::get_eval_expr_cmp_func(
         input_type1, input_type2, input_scale1, input_scale2, in_prec1, in_prec2, cmp_op,
@@ -3590,99 +3563,57 @@ int ObRelationalExprOperator::cg_row_cmp_expr(const int row_dimension,
                                               ObExpr &rt_expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(rt_expr.arg_cnt_ != 2
-                         || row_dimension <= 0
-                         || NULL == rt_expr.args_
-                         || NULL == rt_expr.args_[0]
-                         || NULL == rt_expr.args_[1]
-                         || rt_expr.args_[0]->arg_cnt_ != row_dimension)) {
+  UNUSED(raw_expr);
+  if (rt_expr.arg_cnt_ != 2 || row_dimension <= 0 || rt_expr.args_ == nullptr
+      || rt_expr.args_[0] == nullptr || rt_expr.args_[1] == nullptr
+      || rt_expr.args_[0]->arg_cnt_ != row_dimension) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    void **inner_func_buf = NULL;
-    if (OB_ISNULL(inner_func_buf = (void **)allocator.alloc(
-                                              sizeof(void *) * row_dimension))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
+    ObExpr *left = rt_expr.args_[0];
+    ObExpr *right = nullptr;
+    if (rt_expr.args_[1]->type_ != T_OP_ROW || rt_expr.args_[1]->args_ == nullptr
+        || rt_expr.args_[1]->args_[0] == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      rt_expr.inner_func_cnt_ = row_dimension;
-      rt_expr.inner_functions_ = inner_func_buf;
-
-      ObExpr *left_row = rt_expr.args_[0];
-      ObExpr *right_row = NULL;
-      if (OB_LIKELY(T_OP_ROW == rt_expr.args_[1]->type_ && NULL != rt_expr.args_[1]->args_[0])) {
-        if (T_OP_ROW == rt_expr.args_[1]->args_[0]->type_) {
-          right_row = rt_expr.args_[1]->args_[0];
-        } else {
-          right_row = rt_expr.args_[1];
-        }
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-      }
-      if (OB_ISNULL(right_row) || OB_ISNULL(left_row)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_UNLIKELY(left_row->arg_cnt_ != right_row->arg_cnt_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected row cnt", K(left_row->arg_cnt_), K(right_row->arg_cnt_));
-      }
-
-      for (int i = 0; OB_SUCC(ret) && i < row_dimension; i++)
-      {
-        const SqlValueType type1 = left_row->args_[i]->datum_meta_.type_;
-        const SqlValueType type2 = right_row->args_[i]->datum_meta_.type_;
-        const ObScale scale1 = left_row->args_[i]->datum_meta_.scale_;
-        const ObScale scale2 = right_row->args_[i]->datum_meta_.scale_;
-        const ObPrecision prec1 = left_row->args_[i]->datum_meta_.precision_;
-        const ObPrecision prec2 = right_row->args_[i]->datum_meta_.precision_;
-        const ObCollationType cs_type = left_row->args_[i]->datum_meta_.cs_type_;
-        const bool has_lob_header = left_row->args_[i]->obj_meta_.has_lob_header() ||
-                                    right_row->args_[i]->obj_meta_.has_lob_header();
-        if (ObDatumFuncs::is_string_type(type1) && ObDatumFuncs::is_string_type(type2)) {
-          CK(left_row->args_[i]->datum_meta_.cs_type_
-                    == right_row->args_[i]->datum_meta_.cs_type_);
-          rt_expr.inner_functions_[i] = (void*)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                                                                  type1, type2,
-                                                                  scale1, scale2,
-                                                                  prec1, prec2,
-                                                                  cs_type,
-                                                                  has_lob_header);
-        } else {
-          rt_expr.inner_functions_[i] = (void *)ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-            type1, type2, scale1, scale2, prec1, prec2, cs_type,
-            has_lob_header);
-          if (OB_ISNULL(rt_expr.inner_functions_[i])) {
-            ret = OB_ERR_UNEXPECTED;
-          }
-        }
-      } // for end
-      if (OB_SUCC(ret)) {
-        rt_expr.eval_func_ = &row_eval;
-      }
+      right = rt_expr.args_[1]->args_[0]->type_ == T_OP_ROW
+          ? rt_expr.args_[1]->args_[0] : rt_expr.args_[1];
     }
+    if (OB_SUCC(ret) && right->arg_cnt_ != left->arg_cnt_) { ret = OB_ERR_UNEXPECTED; }
+    OZ(rt_expr.prepare_cmp_ops(allocator, row_dimension));
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_dimension; ++i) {
+      const auto &l = *left->args_[i];
+      const auto &r = *right->args_[i];
+      if (ObDatumFuncs::is_string_type(l.datum_meta_.type_) && ObDatumFuncs::is_string_type(r.datum_meta_.type_)) {
+        CK(l.datum_meta_.cs_type_ == r.datum_meta_.cs_type_);
+      }
+      OZ(rt_expr.configure_cmp_op(i, l.get_sql_type(), r.get_sql_type(), NULL_LAST, l.datum_meta_.cs_type_));
+    }
+    if (OB_SUCC(ret)) { rt_expr.eval_func_ = &row_eval; }
   }
   return ret;
 }
 
 int ObRelationalExprOperator::row_eval(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(2 != expr.arg_cnt_
                   || NULL == expr.args_
-                  || expr.inner_func_cnt_ <= 0
-                  || expr.args_[0]->arg_cnt_ != expr.inner_func_cnt_
+                  || expr.get_cmp_op_count() <= 0
+                  || expr.args_[0]->arg_cnt_ != expr.get_cmp_op_count()
                   || NULL == expr.args_[0]->args_
-                  || NULL == expr.args_[1]->args_
-                  || NULL == expr.inner_functions_)) {
+                  || NULL == expr.args_[1]->args_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObExpr *left_row = expr.args_[0];
     ObExpr *right_row = NULL;
     if (1 == expr.args_[1]->arg_cnt_ && T_OP_ROW == expr.args_[1]->args_[0]->type_) {
-      if (expr.args_[1]->args_[0]->arg_cnt_ != expr.inner_func_cnt_) {
+      if (expr.args_[1]->args_[0]->arg_cnt_ != expr.get_cmp_op_count()) {
         ret = OB_ERR_UNEXPECTED;
       } else {
         right_row = expr.args_[1]->args_[0];
       }
-    } else if (OB_UNLIKELY(expr.inner_func_cnt_ != expr.args_[1]->arg_cnt_)) {
+    } else if (OB_UNLIKELY(expr.get_cmp_op_count() != expr.args_[1]->arg_cnt_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       right_row = expr.args_[1];
@@ -3693,13 +3624,13 @@ int ObRelationalExprOperator::row_eval(
 }
 
 int ObRelationalExprOperator::row_cmp(
-    const ObExpr &expr, ObDatum &expr_datum,
+    const ObExpr &expr, Datum &expr_datum,
     ObExpr **l_row, ObEvalCtx &l_ctx, ObExpr **r_row, ObEvalCtx &r_ctx)
 {
   // performance critical, do not check pointer validity.
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
 
   bool cnt_row_null = false;
   int first_nonequal_cmp_ret = 0;
@@ -3708,7 +3639,7 @@ int ObRelationalExprOperator::row_cmp(
   if (OB_FAIL(l_ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   // locate first non-equal pair
-  for (; OB_SUCC(ret) && i < expr.inner_func_cnt_; i++) {
+  for (; OB_SUCC(ret) && i < expr.get_cmp_op_count(); i++) {
     if (OB_FAIL(l_row[i]->eval(l_ctx, left))) {
       if (OB_FAIL(try_get_inner_row_cmp_ret<true>(ret, first_nonequal_cmp_ret))) {
       } else {
@@ -3729,7 +3660,7 @@ int ObRelationalExprOperator::row_cmp(
       }
     } else if (left->is_null() || right->is_null()) {
       cnt_row_null = true;
-    } else if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[i])(
+    } else if (OB_FAIL(expr.get_cmp_op(i)(
                    *left, *right, first_nonequal_cmp_ret,
                    datum_access_ctx))) {
     } else if (0 != first_nonequal_cmp_ret) {
@@ -3739,7 +3670,7 @@ int ObRelationalExprOperator::row_cmp(
   ObCmpOp cmp_op = get_cmp_op(expr.type_);
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (i == expr.inner_func_cnt_) {
+  } else if (i == expr.get_cmp_op_count()) {
     if (cnt_row_null) {
       expr_datum.set_null();
     } else {
@@ -4066,7 +3997,7 @@ int ObExprOperator::add_local_var_to_expr(share::ObSysVarClassType var_type,
       // alive through that call instead of writing through a null Datum ptr.
       uint64_t sql_mode = session->get_sql_mode();
       common::ObDatum datum;
-      datum.ptr_ = reinterpret_cast<char *>(&sql_mode);
+      datum.ptr_ = reinterpret_cast<const char *>(&sql_mode);
       datum.set_uint(sql_mode);
       common::SqlTypeMeta meta;
       meta.set_uint64();

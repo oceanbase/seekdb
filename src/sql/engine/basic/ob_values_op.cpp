@@ -69,7 +69,7 @@ int ObValuesOp::inner_get_next_row()
     clear_evaluated_flag();
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_.count(); i++) {
       const DatumValue &cell = cur_row_.cells_[i];
-      ObDatum &datum = MY_SPEC.output_.at(i)->locate_datum_for_write(eval_ctx_);
+      Datum &datum = MY_SPEC.output_.at(i)->locate_datum_for_write(eval_ctx_);
       ObExpr *expr = MY_SPEC.output_.at(i);
       char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
       ObDatum projected;
@@ -82,13 +82,13 @@ int ObValuesOp::inner_get_next_row()
       } else {
         // Iterator values live until its next advance. Extend normalization
         // uses stack bytes, so publish those bytes in the expression frame.
-        if (cell.is_ext()) {
-          ret = expr->deep_copy_datum(eval_ctx_, projected);
-        } else {
-          datum = projected;
-        }
+        Datum value;
+        if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(projected, value))) {
+        } else if (cell.is_ext()) {
+          ret = expr->deep_copy_datum(eval_ctx_, value);
+        } else { datum = value; }
         if (OB_SUCC(ret) && is_lob_storage(cell.get_type())) {
-          ret = ob_adjust_lob_datum(get_exec_ctx(), projected, cell.get_meta(),
+          ret = ob_adjust_lob_datum(get_exec_ctx(), value, cell.get_meta(),
               expr->obj_meta_, get_exec_ctx().get_allocator(), datum);
         }
         if (OB_SUCC(ret)) { expr->set_evaluated_projected(eval_ctx_); }

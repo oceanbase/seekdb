@@ -32,13 +32,13 @@ public:
   virtual ~ObExprPrivSTTouches();
   virtual int calc_result_type2(ObExprResType &type, ObExprResType &type1, ObExprResType &type2,
       common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(
       ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 
 private:
   static int get_input_geometry(common::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &temp_allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
-      ObDatum *gis_datum, const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty);
+      Datum *gis_datum, const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty);
   DISALLOW_COPY_AND_ASSIGN(ObExprPrivSTTouches);
 };
 }  // namespace sql

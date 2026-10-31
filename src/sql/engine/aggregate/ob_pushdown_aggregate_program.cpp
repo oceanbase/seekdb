@@ -412,7 +412,9 @@ public:
           ret = OB_ERR_UNEXPECTED;
         } else {
           spec.kind_ = T_FUN_MIN == expr->type_ ? SCALAR_AGG_MIN : SCALAR_AGG_MAX;
-          spec.cmp_func_ = expr->basic_funcs_->null_first_cmp_;
+          // Segment reductions and owned MIN/MAX accumulators are legacy
+          // storage descriptors, so preserve the exact selected old function.
+          spec.cmp_func_ = expr->basic_funcs_->null_first_cmp_.legacy_function();
         }
       } else {
         ret = OB_NOT_SUPPORTED;
@@ -802,9 +804,13 @@ private:
       } else if (!agg_state.current_.has_value_) {
         expr->locate_datum_for_write(eval_ctx_).set_null();
         expr->get_eval_info(eval_ctx_).evaluated_ = true;
-      } else if (OB_FAIL(expr->deep_copy_datum(eval_ctx_, agg_state.current_.datum_))) {
       } else {
-        expr->get_eval_info(eval_ctx_).evaluated_ = true;
+        common::Datum value;
+        if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(agg_state.current_.datum_, value))) {
+        } else if (OB_FAIL(expr->deep_copy_datum(eval_ctx_, value))) {
+        } else {
+          expr->get_eval_info(eval_ctx_).evaluated_ = true;
+        }
       }
     }
     return ret;

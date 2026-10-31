@@ -46,7 +46,7 @@ public:
   int add_row(const blocksstable::ObStorageDatum *storage_datums, const int64_t column_count,
               const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row) override;
   int close() override;
-  int add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
+  int add_batch(const common::Datum **datums, const common::ObIArray<ObExpr *> &exprs,
                 const uint16_t selector[], const int64_t size,
                 ObChunkDatumStore::StoredRow **stored_rows, BatchCtx *batch_ctx) override;
   void set_meta(const ChunkRowMeta *row_meta) override {};

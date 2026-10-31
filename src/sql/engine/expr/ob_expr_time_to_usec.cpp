@@ -55,10 +55,10 @@ int ObExprTimeToUsec::calc_result_type1(ObExprResType &type,
 }
 
 int calc_time_to_usec_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                  ObDatum &res_datum)
+                                  Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg_datum = NULL;
+  Datum *arg_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg_datum))) {
   } else if (arg_datum->is_null()) {
     res_datum.set_null();

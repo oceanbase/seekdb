@@ -380,25 +380,9 @@ int ObPxReceiveOp::wrap_get_next_batch(const int64_t max_row_cnt)
         for (int64_t i = 0; OB_SUCC(ret) && i < all_exprs->count(); i++) {
           ObExpr *e = all_exprs->at(i);
           if (OB_LIKELY(e->is_batch_result())) {
-            ObDatum *datum = NULL;
+            Datum *datum = NULL;
             if (OB_FAIL(e->eval(eval_ctx_, datum))) {
-            } else if (!datum->is_null()) {
-              if (datum->len_ <= e->res_buf_len_) {
-                char *ptr = eval_ctx_.frames_[e->frame_idx_] + e->res_buf_off_
-                    + idx * e->res_buf_len_;
-                MEMMOVE(ptr, datum->ptr_, datum->len_);
-                datum->ptr_ = ptr;
-              } else {
-                char *ptr = e->get_str_res_mem(eval_ctx_, datum->len_, idx);
-                if (OB_UNLIKELY(NULL == ptr)) {
-                  ret = OB_ALLOCATE_MEMORY_FAILED;
-                } else {
-                  MEMMOVE(ptr, datum->ptr_, datum->len_);
-                  datum->ptr_ = ptr;
-                }
-              }
-            } else {
-              // do nothing
+            } else if (OB_FAIL(e->deep_copy_self_datum(eval_ctx_))) {
             }
           }
         } // for end

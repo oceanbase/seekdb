@@ -37,7 +37,7 @@ int ObExprStmtId::calc_result_type0(ObExprResType &type,
   return OB_SUCCESS;
 }
 
-int ObExprStmtId::eval_stmt_id(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprStmtId::eval_stmt_id(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

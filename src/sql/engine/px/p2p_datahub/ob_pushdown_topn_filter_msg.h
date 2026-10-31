@@ -134,7 +134,7 @@ public:
   int merge(ObP2PDatahubMsgBase &) override;
 
   int filter_out_data(const ObExpr &expr, ObEvalCtx &ctx, ObExprTopNFilterContext &filter_ctx,
-                      ObDatum &res);
+                      Datum &res);
   int filter_out_data_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                           const int64_t batch_size,
                           ObExprTopNFilterContext &filter_ctx);

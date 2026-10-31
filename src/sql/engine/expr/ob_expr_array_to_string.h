@@ -36,7 +36,7 @@ public:
                                 ObExprResType *types,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_array_to_string(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_to_string(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_to_string_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,

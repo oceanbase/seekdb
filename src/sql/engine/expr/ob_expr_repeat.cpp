@@ -215,11 +215,11 @@ int ObExprRepeat::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) con
   return ret;
 }
 
-int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = NULL;
-  ObDatum *count = NULL;
+  Datum *text = NULL;
+  Datum *count = NULL;
   int64_t max_size = 0;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObIAllocator &tmp_allocator = tmp_alloc_g.get_allocator();

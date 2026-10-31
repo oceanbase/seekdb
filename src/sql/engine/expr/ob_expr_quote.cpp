@@ -117,10 +117,10 @@ int ObExprQuote::calc(ObString &res_str, ObString str, ObCollationType coll_type
 }
 
 int ObExprQuote::calc_quote_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     // in mysql, quote(null) does not return nulltype but 'null'

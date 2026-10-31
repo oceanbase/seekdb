@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_mod.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "rpc/obmysql/ob_mysql_util.h"
@@ -73,11 +74,11 @@ int ObExprMod::calc_result_type2(ObExprResType &type,
 }
 
 
-int ObExprMod::mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -102,11 +103,11 @@ int ObExprMod::mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   return ret;
 }
 
-int ObExprMod::mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -131,11 +132,11 @@ int ObExprMod::mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   return ret;
 }
 
-int ObExprMod::mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -156,11 +157,11 @@ int ObExprMod::mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   return ret;
 }
 
-int ObExprMod::mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -182,18 +183,18 @@ int ObExprMod::mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
 }
 
 
-int ObExprMod::mod_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_float(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
   ret = OB_ERR_UNEXPECTED;
   return ret;
 }
 
-int ObExprMod::mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_double(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -214,11 +215,11 @@ int ObExprMod::mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   return ret;
 }
 
-int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -238,7 +239,7 @@ int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
       number::ObNumber result;
       if (OB_FAIL(lnum.rem_v3(rnum, result, local_alloc))) {
       } else {
-        datum.set_number(result);
+        ret = ObExprUtil::set_number(expr, ctx, datum, result);
       }
     }
   }
@@ -253,19 +254,27 @@ int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
     break;                                      \
   }
 
-int ObExprMod::mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprMod::mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
     //do nothing
   } else {
-    const int32_t int_bytes = left->get_int_bytes();
-    const ObDecimalInt *l_decint = left->get_decimal_int();
-    const ObDecimalInt *r_decint = right->get_decimal_int();
+    alignas(8) char left_scratch[64];
+    alignas(8) char right_scratch[64];
+    common::ObDatum left_view;
+    common::ObDatum right_view;
+    if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(
+        *left, left_view, left_scratch, sizeof(left_scratch)))) { return ret; }
+    if (OB_FAIL(expr.args_[1]->get_datum_copy_plan().get_decimal(
+        *right, right_view, right_scratch, sizeof(right_scratch)))) { return ret; }
+    const int32_t int_bytes = left_view.get_int_bytes();
+    const ObDecimalInt *l_decint = left_view.get_decimal_int();
+    const ObDecimalInt *r_decint = right_view.get_decimal_int();
     if (OB_UNLIKELY(wide::str_helper::is_zero(r_decint, int_bytes))) {
       if (CM_IS_ERROR_FOR_DIVISION_BY_ZERO(expr.extra_)) {
         ret = OB_DIVISION_BY_ZERO;
@@ -295,7 +304,7 @@ int ObExprMod::mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
         }
       }
       if (OB_SUCC(ret)) {
-        datum.set_decimal_int(res_val.get_decimal_int(), int_bytes);
+        ret = ObExprUtil::set_decimal_int(expr, ctx, datum, res_val.get_decimal_int(), int_bytes);
       }
     }
   }

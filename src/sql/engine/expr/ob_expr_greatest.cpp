@@ -33,7 +33,7 @@ ObExprGreatest::ObExprGreatest(ObIAllocator &alloc)
 }
 
 //same type params
-int ObExprGreatest::calc_greatest(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprGreatest::calc_greatest(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ret = ObExprLeastGreatest::calc_mysql(expr, ctx, expr_datum, false);

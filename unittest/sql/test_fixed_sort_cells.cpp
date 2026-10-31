@@ -120,6 +120,8 @@ struct OwnedFixedRow
   FixedRow *row_;
 };
 
+int64_t read_integer(const Datum &value)
+{ EXPECT_FALSE(value.is_null()); return value.is_null() ? 0 : value.get_int(); }
 int64_t read_integer(const ObDatum &value)
 {
   int64_t output = 0;
@@ -150,8 +152,9 @@ protected:
       expr.obj_meta_.set_int();
       expr.datum_meta_.type_ = ObIntType;
       expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(), arena_));
       for (int64_t row = 0; row < 4; ++row) {
-        new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
+        new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
       }
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo;
       ASSERT_EQ(OB_SUCCESS, exprs_.push_back(&expr));
@@ -174,8 +177,19 @@ protected:
     eval_.max_batch_size_ = 4;
     for (auto &expr : expressions_) { expr.batch_result_ = true; expr.batch_idx_mask_ = UINT64_MAX; }
   }
-  ObDatum &datum(int64_t column, int64_t index = 0)
+  Datum &datum(int64_t column, int64_t index = 0)
   { return expressions_[column].locate_batch_datums(eval_)[index]; }
+  void set_datum(int64_t column, const ObDatum &value, int64_t row = 0)
+  { ASSERT_EQ(OB_SUCCESS, expressions_[column].get_datum_copy_plan().import_legacy(value, datum(column, row))); }
+  ObDatum legacy(int64_t column, int64_t row = 0)
+  {
+    ObDatum value;
+    EXPECT_EQ(OB_SUCCESS, expressions_[column].get_datum_copy_plan().legacy_view(
+        datum(column, row), value, legacy_scratch_[column][row], 64));
+    return value;
+  }
+  alignas(8) char legacy_scratch_[3][4][64]{};
+
 
   ObArenaAllocator arena_;
   ObExecContext exec_;
@@ -227,11 +241,12 @@ TEST_F(FixedSortCells, expression_and_with_ties_compare_borrow_only_one_decoded_
   add_key(2, true); add_key(0, false);
   OwnedFixedRow row({integer(7), text("ignored!"), integer(19)});
   int64_t first = 9, last = 19;
-  datum(0) = integer(first); datum(2) = integer(last);
+  set_datum(0, integer(first)); set_datum(2, integer(last));
   ObSortOpImpl::Compare compare; bind(compare);
   EXPECT_TRUE(compare(&exprs_, row.row_, eval_));
   EXPECT_GT(compare.with_ties_cmp(&exprs_, row.row_, eval_), 0);
   first = 7;
+  set_datum(0, integer(first));
   EXPECT_FALSE(compare(&exprs_, row.row_, eval_));
   EXPECT_EQ(0, compare.with_ties_cmp(&exprs_, row.row_, eval_));
   EXPECT_EQ(OB_SUCCESS, compare.ret_);
@@ -286,9 +301,9 @@ TEST_F(FixedSortCells, prefix_checks_the_fixed_row_against_batch_expression_valu
   FixedSortCellsTestAccess::prefix(prefix, collations_, functions_, 2, eval_);
   OwnedFixedRow row({integer(-7), text("ignored!"), null_value()});
   int64_t same = -7, different = -8;
-  datum(2, 0).set_null(); datum(0, 0) = integer(same);
-  datum(2, 1).set_null(); datum(0, 1) = integer(different);
-  datum(2, 2) = integer(same); datum(0, 2) = integer(same);
+  datum(2, 0).set_null(); set_datum(0, integer(same), 0);
+  datum(2, 1).set_null(); set_datum(0, integer(different), 1);
+  set_datum(2, integer(same), 2); set_datum(0, integer(same), 2);
   bool equal = false;
   ASSERT_EQ(OB_SUCCESS, FixedSortCellsTestAccess::same_prefix(prefix, row.row_, exprs_, 0, equal)); EXPECT_TRUE(equal);
   ASSERT_EQ(OB_SUCCESS, FixedSortCellsTestAccess::same_prefix(prefix, row.row_, exprs_, 1, equal)); EXPECT_FALSE(equal);
@@ -342,7 +357,7 @@ TEST_F(FixedSortCells, unique_batch_compares_previous_saved_row_across_batch_bou
       batch_counts.push_back(count);
       consumed.push_back(FixedSortCellsTestAccess::consumed_rows(unique));
       for (int64_t i = 0; i < count; ++i) {
-        const ObDatum &value = datum(0, i);
+        const Datum &value = datum(0, i);
         actual.push_back(value.is_null() ? "NULL" : std::to_string(read_integer(value)));
       }
     }

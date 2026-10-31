@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_abs.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "share/datum/ob_datum_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -33,10 +34,10 @@ namespace sql
 #define DEF_EVAL_ABS_FUNC(type)                                \
   template <>                                                  \
   int eval_datum_abs<type>(const ObExpr &expr, ObEvalCtx &ctx, \
-                           ObDatum &expr_datum)
+                           Datum &expr_datum)
 
 static int check_expr_and_eval(const ObExpr &expr, ObEvalCtx &ctx,
-                               ObDatum *&param_datum, bool &found_null)
+                               Datum *&param_datum, bool &found_null)
 {
   int ret = OB_SUCCESS;
   found_null = false;
@@ -56,7 +57,7 @@ static int check_expr_and_eval(const ObExpr &expr, ObEvalCtx &ctx,
 template<SqlValueType obj_type>
 int eval_datum_abs(const ObExpr &expr,
                           ObEvalCtx &ctx,
-                          ObDatum &expr_datum)
+                          Datum &expr_datum)
 {
   UNUSED(expr);
   UNUSED(ctx);
@@ -76,7 +77,7 @@ DEF_EVAL_ABS_FUNC(ObNullType)
 DEF_EVAL_ABS_FUNC(ObNumberType)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
   } else if (found_null) {
@@ -87,7 +88,7 @@ DEF_EVAL_ABS_FUNC(ObNumberType)
     if (param_nmb.is_negative()) {
       res_num = param_nmb.negate();
     }
-    expr_datum.set_number(res_num);
+    ret = ObExprUtil::set_number(expr, ctx, expr_datum, res_num);
   }
   return ret;
 }
@@ -95,7 +96,7 @@ DEF_EVAL_ABS_FUNC(ObNumberType)
 DEF_EVAL_ABS_FUNC(ObUNumberType)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
   } else if (found_null) {
@@ -106,7 +107,7 @@ DEF_EVAL_ABS_FUNC(ObUNumberType)
     if (param_nmb.is_negative()) {
       res_num = param_nmb.negate();
     }
-    expr_datum.set_number(res_num);
+    ret = ObExprUtil::set_number(expr, ctx, expr_datum, res_num);
   }
   return ret;
 }
@@ -114,7 +115,7 @@ DEF_EVAL_ABS_FUNC(ObUNumberType)
 DEF_EVAL_ABS_FUNC(ObFloatType)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
   } else if (found_null) {
@@ -129,7 +130,7 @@ DEF_EVAL_ABS_FUNC(ObFloatType)
 DEF_EVAL_ABS_FUNC(ObDoubleType)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
   } else if (found_null) {
@@ -144,7 +145,7 @@ DEF_EVAL_ABS_FUNC(ObDoubleType)
 DEF_EVAL_ABS_FUNC(ObUDoubleType)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
   } else if (found_null) {
@@ -158,7 +159,7 @@ DEF_EVAL_ABS_FUNC(ObUDoubleType)
 DEF_EVAL_ABS_FUNC(ObIntType)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
   } else if (found_null) {
@@ -178,7 +179,7 @@ DEF_EVAL_ABS_FUNC(ObIntType)
 DEF_EVAL_ABS_FUNC(ObUInt64Type)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param, found_null))) {
   } else if (found_null) {
@@ -198,14 +199,18 @@ DEF_EVAL_ABS_FUNC(ObUInt64Type)
 DEF_EVAL_ABS_FUNC(ObDecimalIntType)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval(expr, ctx, param_datum, found_null))) {
   } else if (found_null) {
     expr_datum.set_null();
   } else {
-    const ObDecimalInt *decint = param_datum->get_decimal_int();
-    const int32_t int_bytes = param_datum->get_int_bytes();
+    alignas(8) char decimal_scratch[64];
+    common::ObDatum coefficient_view;
+    if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(
+        *param_datum, coefficient_view, decimal_scratch, sizeof(decimal_scratch)))) { return ret; }
+    const ObDecimalInt *decint = coefficient_view.get_decimal_int();
+    const int32_t int_bytes = coefficient_view.get_int_bytes();
     bool is_neg = wide::is_negative(decint, int_bytes);
     if (is_neg) {
       ObDecimalIntBuilder res_val;
@@ -221,10 +226,10 @@ DEF_EVAL_ABS_FUNC(ObDecimalIntType)
         }
       }
       if (OB_SUCC(ret)) {
-        expr_datum.set_decimal_int(res_val.get_decimal_int(), int_bytes);
+        ret = ObExprUtil::set_decimal_int(expr, ctx, expr_datum, res_val.get_decimal_int(), int_bytes);
       }
     } else {
-      expr_datum.set_decimal_int(decint, int_bytes);
+      ret = ObExprUtil::set_decimal_int(expr, ctx, expr_datum, decint, int_bytes);
     }
   }
   return ret;

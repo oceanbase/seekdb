@@ -56,11 +56,11 @@ int ObExprPrivSTGeometryType::calc_result_type1(
   return ret;
 }
 
-int ObExprPrivSTGeometryType::eval_priv_st_geometrytype(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTGeometryType::eval_priv_st_geometrytype(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;
-  ObDatum *datum1 = nullptr;
+  Datum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   SqlValueType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

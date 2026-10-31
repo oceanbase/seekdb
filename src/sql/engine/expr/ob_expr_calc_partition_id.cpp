@@ -154,7 +154,7 @@ int ObExprCalcPartitionBase::init_calc_part_info(ObIAllocator *allocator,
 
 int ObExprCalcPartitionBase::resolve_nonpartitioned_tablet(const ObExpr &expr,
                                                         ObEvalCtx &ctx,
-                                                        ObDatum &res_datum)
+                                                        Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
@@ -192,7 +192,7 @@ int ObExprCalcPartitionBase::resolve_nonpartitioned_tablet(const ObExpr &expr,
 
 int ObExprCalcPartitionBase::calc_partition_level_one(const ObExpr &expr,
                                                       ObEvalCtx &ctx,
-                                                      ObDatum &res_datum)
+                                                      Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   CalcPartitionBaseInfo *calc_part_info = reinterpret_cast<CalcPartitionBaseInfo *>(expr.extra_info_);
@@ -219,7 +219,7 @@ int ObExprCalcPartitionBase::calc_partition_level_one(const ObExpr &expr,
 
 int ObExprCalcPartitionBase::calc_partition_level_two(const ObExpr &expr,
                                                       ObEvalCtx &ctx,
-                                                      ObDatum &res_datum)
+                                                      Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   OB_ASSERT(2 == expr.arg_cnt_);
@@ -285,7 +285,7 @@ int ObExprCalcPartitionBase::calc_partition_level_two(const ObExpr &expr,
 
 int ObExprCalcPartitionBase::concat_part_and_tablet_id(const ObExpr &expr,
                                                        ObEvalCtx &ctx,
-                                                       ObDatum &res_datum,
+                                                       Datum &res_datum,
                                                        uint64_t partition_id,
                                                        uint64_t tablet_id)
 {
@@ -302,7 +302,7 @@ int ObExprCalcPartitionBase::concat_part_and_tablet_id(const ObExpr &expr,
   return ret;
 }
 
-int ObExprCalcPartitionBase::extract_part_and_tablet_id(const ObDatum &part_datum,
+int ObExprCalcPartitionBase::extract_part_and_tablet_id(const Datum &part_datum,
                                                         ObObjectID &part_id,
                                                         ObTabletID &tablet_id)
 {
@@ -324,7 +324,7 @@ int ObExprCalcPartitionBase::calc_part_and_tablet_id(const ObExpr *calc_part_id,
                                                      ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObDatum *partition_id_datum = NULL;
+  Datum *partition_id_datum = NULL;
   if (OB_ISNULL(calc_part_id) || !calc_part_id->datum_meta_.is_binary()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(calc_part_id->eval(eval_ctx, partition_id_datum))) {
@@ -342,7 +342,7 @@ int ObExprCalcPartitionBase::calc_part_and_subpart_and_tablet_id(const ObExpr *c
                                                      ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObDatum *partition_id_datum = NULL;
+  Datum *partition_id_datum = NULL;
   if (OB_FAIL(calc_part_and_tablet_id(calc_part_id, eval_ctx, partition_id, tablet_id))) {
   } else {
     // get first partition_id from table schema by partition_id
@@ -383,10 +383,10 @@ int ObExprCalcPartitionBase::build_row(ObEvalCtx &ctx,
   OB_ASSERT(expr.arg_cnt_ > 0);
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     ObExpr *col_expr = expr.args_[i];
-    const ObDatum &col_datum = col_expr->locate_expr_datum(ctx);
+    const Datum &col_datum = col_expr->locate_expr_datum(ctx);
     DatumValue view, owned;
-    if (OB_FAIL(project_datum_value_view(col_datum, col_expr->obj_meta_,
-                    col_expr->obj_datum_map_, view.meta_, view))) {
+    if (OB_FAIL(project_native_datum_value_view(col_datum, col_expr->get_sql_type(), col_expr->obj_meta_,
+                    col_expr->obj_datum_map_, view.meta_, view, allocator))) {
     } else if (OB_FAIL(clone_typed_value(view, owned, allocator))) {
     } else if (OB_FAIL(row.push_back(owned))) {
     }
@@ -414,7 +414,7 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
                                                                 tablet_mapper,
                                                                 &calc_part_info.related_table_ids_))) {
   } else if (T_OP_ROW == part_expr.type_) {
-    ObDatum *tmp_datum = NULL;
+    Datum *tmp_datum = NULL;
     // Here we pre-calculate the expr child value, rather than calling eval directly in build row,
     // is to avoid eval calculation using reset tmp alloc, affecting the allocation of row below
     // cell memory usage for reset tmp alloc
@@ -439,10 +439,10 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
     DatumValue func_value;
     DatumValue result;
     ObArenaAllocator value_owner("CalcPartValue");
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(part_expr.eval(ctx, datum))) {
-    } else if (OB_FAIL(project_datum_value_view(*datum, part_expr.obj_meta_,
-                              part_expr.obj_datum_map_, func_value.meta_, func_value))) {
+    } else if (OB_FAIL(project_native_datum_value_view(*datum, part_expr.get_sql_type(), part_expr.obj_meta_,
+                              part_expr.obj_datum_map_, func_value.meta_, func_value, value_owner))) {
     } else if (func_value.is_lob_storage() && func_value.has_lob_header()
                && func_value.datum_.len_ != 0
                && ObLobLocatorV2(func_value.get_string(), true).is_valid()
@@ -452,9 +452,9 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
     } else {
       result = func_value;
       if (PARTITION_FUNC_TYPE_HASH == part_type) {
-        if (OB_FAIL(result.set_int(0, value_owner))) {
-        } else if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(
-                             func_value.datum_, result.datum_, func_value.get_type()))) {
+        Datum hash_result;
+        if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(*datum, hash_result, func_value.get_type()))) {
+        } else if (OB_FAIL(result.set_int(hash_result.get_int(), value_owner))) {
         }
       }
       if (OB_SUCC(ret)) {
@@ -532,8 +532,8 @@ ObExprCalcPartitionTabletId::~ObExprCalcPartitionTabletId()
 bool PartValKey::operator==(const PartValKey &other) const
 {
   int res = true;
-  cmp_func_(datum_, other.datum_, res, datum_access_ctx_);
-  return res == 0;
+  const int ret = cmp_func_(datum_, other.datum_, res, datum_access_ctx_);
+  return ret == OB_SUCCESS && res == 0;
 }
 
 int PartValKey::hash(uint64_t &hash_val, uint64_t seed) const
@@ -541,7 +541,7 @@ int PartValKey::hash(uint64_t &hash_val, uint64_t seed) const
   return hash_func_(datum_, seed, hash_val, datum_access_ctx_);
 }
 
-bool RangePartCmp::operator()(const ObDatum &l, const RangePartition &r) {
+bool RangePartCmp::operator()(const Datum &l, const RangePartition &r) {
   int cmp_ret = 0;
   bool res = false;
 
@@ -568,32 +568,20 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
   range_partitions_.set_allocator(&allocator);
   if (OB_FAIL(range_partitions_.prepare_allocate(part_num))) {
   }
-  ObDatum tmp_datum;
-  char buf[OBJ_DATUM_MAX_RES_SIZE];
-  tmp_datum.ptr_ = buf;
+  Datum tmp_datum;
   for (int i = 0; OB_SUCC(ret) && i < part_num; ++i) {
     if (part_array[i]->get_high_bound_val().is_max_row()) {
       range_partitions_.at(i).set_max_range_part();
-    } else if (FALSE_IT(tmp_datum = part_array[i]->get_high_bound_val().get_cells()[0].datum_)) {
-    } else if (OB_FAIL(range_partitions_.at(i).datum_.deep_copy(tmp_datum,
-                                        allocator))) {
+    } else if (OB_FAIL(part_expr.get_datum_copy_plan().import_legacy(
+        part_array[i]->get_high_bound_val().get_cells()[0].datum_, tmp_datum))) {
+    } else if (OB_FAIL(ObExpr::clone_native_value(part_expr.get_sql_type(), tmp_datum,
+        allocator, range_partitions_.at(i).datum_))) {
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(part_cmp_.cmp_func_ =
-                      ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                          part_expr.datum_meta_.type_,
-                          part_expr.datum_meta_.type_,
-                          part_expr.datum_meta_.scale_,
-                          part_expr.datum_meta_.scale_,
-                          part_expr.datum_meta_.precision_,
-                          part_expr.datum_meta_.precision_,
-                          part_expr.datum_meta_.cs_type_,
-                          part_expr.obj_meta_.has_lob_header()))) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      part_cmp_.datum_access_ctx_ = datum_access_ctx_;
-    }
+    ret = ObDatumFuncs::prepare_cmp(part_expr.get_sql_type(), part_expr.get_sql_type(), NULL_LAST,
+        part_expr.datum_meta_.cs_type_, part_cmp_.cmp_func_);
+    if (OB_SUCC(ret)) { part_cmp_.datum_access_ctx_ = datum_access_ctx_; }
   }
   return ret;
 }
@@ -623,9 +611,7 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
     if (OB_FAIL(list_part_map_.create(list_val_cnt * 2,
                                   list_part_map_attr, list_part_map_attr))) {
     } else {
-      ObDatum list_part_datum;
-      char buf[OBJ_DATUM_MAX_RES_SIZE];
-      list_part_datum.ptr_ = buf;
+      Datum list_part_datum;
       for (int64_t i = 0; OB_SUCC(ret) && i < part_num; ++i) {
         if (i == default_list_part_idx_) {
           continue;
@@ -633,11 +619,11 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
         const ObIArray<PartitionBoundRow> &list_row_values =
               part_array[i]->get_list_row_values();
         for (int64_t j = 0; OB_SUCC(ret) && j < list_row_values.count(); ++j) {
-          if (FALSE_IT(list_part_datum = list_row_values.at(j).get_cell(0).datum_)) {
+          if (OB_FAIL(part_expr.get_datum_copy_plan().import_legacy(list_row_values.at(j).get_cell(0).datum_, list_part_datum))) {
           } else {
             PartValKey list_part_row;
-            if (OB_FAIL(list_part_row.datum_.deep_copy(list_part_datum,
-                                        allocator))) {
+            if (OB_FAIL(ObExpr::clone_native_value(part_expr.get_sql_type(), list_part_datum,
+                                        allocator, list_part_row.datum_))) {
             } else {
               list_part_row.hash_func_ = part_expr.basic_funcs_->murmur_hash_v2_;
               list_part_row.cmp_func_ = part_expr.basic_funcs_->null_first_cmp_;

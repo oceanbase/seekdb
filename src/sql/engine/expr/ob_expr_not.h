@@ -37,7 +37,7 @@ public:
                       ObExpr &rt_expr) const override;
   static int eval_not(const ObExpr &expr,
                       ObEvalCtx &ctx,
-                      ObDatum &expr_datum);
+                      Datum &expr_datum);
   static int eval_not_batch(const ObExpr &expr,
                             ObEvalCtx &ctx,
                             const ObBitVector &skip,

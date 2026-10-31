@@ -31,7 +31,7 @@ public:
                                 ObExprResType *types,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc_hash_value_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_hash_value_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
   static int calc_hash_value_expr_batch(const ObExpr &expr,
                                         ObEvalCtx &ctx,
                                         const ObBitVector &skip,

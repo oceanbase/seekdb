@@ -59,7 +59,7 @@ int ObExprVecIVFPQCenterId::cg_expr(
 int ObExprVecIVFPQCenterId::generate_pq_center_id(
       const ObExpr &expr,
       ObEvalCtx &eval_ctx,
-      ObDatum &expr_datum)
+      Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (expr.arg_cnt_ != 1) {

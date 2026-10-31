@@ -88,7 +88,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
 
     if (!call_proc_info->can_direct_use_param()) {
       DatumParameter param;
-      const ParamStore &origin_params = ctx.get_physical_plan_ctx()->get_param_store_for_update();
+      const ParamStore &origin_params = ctx.get_physical_plan_ctx()->get_param_store();
       pl::ExecCtxBak exec_ctx_bak;
       sql::ObPhysicalPlanCtx phy_plan_ctx(ctx.get_allocator());
       phy_plan_ctx.set_timeout_timestamp(ctx.get_physical_plan_ctx()->get_timeout_timestamp());
@@ -100,7 +100,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
       OZ (call_proc_info->get_frame_info().pre_alloc_exec_memory(ctx));
 
       for (int64_t i = 0; OB_SUCC(ret) && i < origin_params.count(); ++i) {
-        OZ (phy_plan_ctx.get_param_store_for_update().push_back(origin_params.at(i)));
+        OZ (phy_plan_ctx.append_parameter_input(origin_params.at(i)));
       }
 
       for (int64_t i = 0; OB_SUCC(ret) && i < call_proc_info->get_expressions().count(); ++i) {
@@ -207,7 +207,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                   const DatumValue &value = expr->get_expr_items().at(0).get_obj();
                   if (T_QUESTIONMARK == expr_type) {
                     int64_t param_idx = value.get_unknown();
-                    ctx.get_physical_plan_ctx()->get_param_store_for_update().at(param_idx) = out_value;
+                    OZ (ctx.get_physical_plan_ctx()->set_runtime_parameter(param_idx, out_value));
                   } else {
                     /* do nothing */
                   }
@@ -225,7 +225,7 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                   ret = OB_ERR_OUT_PARAM_NOT_BIND_VAR;
                 }
               } else {
-                ctx.get_physical_plan_ctx()->get_param_store_for_update().at(i) = out_value;
+                OZ (ctx.get_physical_plan_ctx()->set_runtime_parameter(i, out_value));
               }
             }
           }  // for end
@@ -341,7 +341,7 @@ int ObAnonymousBlockExecutor::execute(ObExecContext &ctx, ObAnonymousBlockStmt &
       CK (OB_NOT_NULL(ctx.get_physical_plan_ctx()));
       CK (ctx.get_physical_plan_ctx()->get_param_store().count() == stmt.get_params()->count());
       for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_params()->count(); ++i) {
-        ctx.get_physical_plan_ctx()->get_param_store_for_update().at(i) = stmt.get_params()->at(i);
+        OZ (ctx.get_physical_plan_ctx()->set_runtime_parameter(i, stmt.get_params()->at(i)));
       }
     }
     // Process the output parameters of the top-level anonymous block, the output parameters of the top-level anonymous block need to be returned to the client

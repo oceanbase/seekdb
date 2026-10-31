@@ -73,7 +73,7 @@ int ObExprJsonContainsPath::calc_result_typeN(ObExprResType& type,
 
 int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
                                                     ObEvalCtx &ctx,
-                                                    ObDatum &res)
+                                                    Datum &res)
 {
   // get json doc
   int ret = OB_SUCCESS;
@@ -86,7 +86,7 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
   } else {
     // get one_or_all flag
     bool one_flag;
-    ObDatum *json_datum = NULL;
+    Datum *json_datum = NULL;
     ObExpr *json_arg = expr.args_[1];
     SqlValueType val_type = json_arg->datum_meta_.type_;
     if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
@@ -113,7 +113,7 @@ int ObExprJsonContainsPath::eval_json_contains_path(const ObExpr &expr,
 
       for (int64_t i = 2; OB_SUCC(ret) && i < expr.arg_cnt_ && !is_null_result; i++) {
         ObJsonSeekResult hit;
-        ObDatum *path_data = NULL;
+        Datum *path_data = NULL;
         if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, path_data))) {
         } else if (expr.args_[i]->datum_meta_.type_ == ObNullType || path_data->is_null()) {
           is_null_result = true;

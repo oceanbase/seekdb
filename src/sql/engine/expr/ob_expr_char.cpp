@@ -97,11 +97,11 @@ int ObExprChar::calc_result_type(ObExprResType &type, ObExprResType &type1) cons
   return ret;
 }
 
-int calc_char_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_char_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObSqlString str_buf;
-  ObDatum *child_res = NULL;
+  Datum *child_res = NULL;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObCharsetInfo *cs = NULL;
   int64_t mb_minlen = 0;

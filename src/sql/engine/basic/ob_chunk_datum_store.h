@@ -346,7 +346,7 @@ public:
     int init(common::ObIAllocator &allocator, int64_t datum_cnt)
     {
       int ret = common::OB_SUCCESS;
-      int64_t buffer_len = datum_cnt * sizeof(StoredDatumCell) + sizeof(StoredRow);
+      int64_t buffer_len = datum_cnt * (sizeof(StoredDatumCell) + 64) + sizeof(StoredRow);
       const int64_t row_size = datum_cnt * sizeof(StoredDatumCell) + sizeof(StoredRow);
       char *buf = nullptr;
       if (nullptr != store_row_) {
@@ -382,18 +382,23 @@ public:
         if (saved_) {
           reuse();
         }
-        ObDatum *datum = nullptr;
+        Datum *datum = nullptr;
         StoredDatumCell *cells = store_row_->stored_cells();
         for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
           if (OB_FAIL(exprs.at(i)->eval(ctx, datum))) {
           } else {
-            cells[i] = StoredDatumCodec::encode_legacy_view(*datum);
+            common::ObDatum legacy;
+            char *scratch = store_row_->payload_ + sizeof(StoredDatumCell) * store_row_->cnt_ + i * 64;
+            if (OB_FAIL(exprs.at(i)->get_datum_copy_plan().legacy_view(*datum, legacy, scratch, 64))) {
+            } else {
+              cells[i] = StoredDatumCodec::encode_legacy_view(legacy);
+            }
           }
           if (OB_SUCC(ret)) {
             store_row_->row_size_ += cells[i].len_;
           }
         }
-        saved_ = true;
+        saved_ = OB_SUCC(ret);
       }
       return ret;
     }
@@ -799,7 +804,7 @@ public:
 
     // attach read store rows to expressions
     template <bool fill_invariable_res_buf = false>
-    static void attach_rows(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx,
+    static int attach_rows(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx,
                             const StoredRow **srows, const int64_t read_rows);
 
     int convert_to_row(const StoredRow *sr, const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx)
@@ -949,7 +954,7 @@ public:
 
   struct BatchCtx
   {
-    const ObDatum **datums_;
+    const Datum **datums_;
     StoredRow **stored_rows_;
     uint32_t *row_size_array_;
     uint16_t *selector_;
@@ -1115,7 +1120,7 @@ public:
 private:
   OB_INLINE int add_row(const common::ObIArray<ObExpr*> &exprs, ObEvalCtx *ctx,
                         const int64_t row_size, StoredRow **stored_row);
-  int inner_add_batch(const common::ObDatum **datums, const common::ObIArray<ObExpr *> &exprs,
+  int inner_add_batch(const common::Datum **datums, const common::ObIArray<ObExpr *> &exprs,
                       const uint16_t selector[], const int64_t size,
                       StoredRow **stored_rows);
   // fallback to add_row() loop.
@@ -1275,6 +1280,30 @@ OB_INLINE int ObChunkDatumStore::StoredRow::copy_shadow_cells(const StoredDatumC
   return ret;
 }
 
+inline int restore_expr_cell(const StoredDatumCell &cell, const ObExpr &expr,
+                             ObEvalCtx &ctx, bool copy_reference)
+{
+  int ret = OB_SUCCESS;
+  common::Datum value;
+  const common::DatumCopyPlan plan = expr.get_datum_copy_plan();
+  if (OB_FAIL(StoredDatumCodec::decode_native(cell, plan, value))) {
+  } else if (copy_reference && !expr.is_variable_res_buf()) {
+    int64_t size = 0;
+    if (OB_FAIL(plan.carrier_span_size(value, size))) {
+    } else if (size > 0) {
+      char *buffer = expr.get_reference_res_mem(ctx, size);
+      int64_t position = 0;
+      if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { ret = plan.copy_carrier_span_borrowing_resources(value, expr.locate_expr_datum(ctx), buffer, size, position); }
+    } else {
+      expr.locate_expr_datum(ctx) = value;
+    }
+  } else {
+    expr.locate_expr_datum(ctx) = value;
+  }
+  return ret;
+}
+
 template <bool fill_invariable_res_buf>
 int ObChunkDatumStore::StoredRow::to_expr(
     const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx) const
@@ -1284,21 +1313,14 @@ int ObChunkDatumStore::StoredRow::to_expr(
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "datum count mismatch", K(ret), K(cnt_), K(exprs.count()));
   } else {
-    for (uint32_t i = 0; i < cnt_; ++i) {
+    for (uint32_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
       ObExpr *expr = exprs.at(i);
       if (expr->is_const_expr()) {
         continue;
       } else {
         const StoredDatumCell &src = stored_cells()[i];
-        if (OB_UNLIKELY(fill_invariable_res_buf && !expr->is_variable_res_buf())) {
-          ObDatum &dst = expr->locate_datum_for_write(ctx);
-          dst.pack_ = src.pack_;
-          MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-        } else {
-          ObDatum &dst = expr->locate_expr_datum(ctx);
-          dst = StoredDatumCodec::decode_legacy_view(src);
-        }
-        expr->set_evaluated_projected(ctx);
+        ret = restore_expr_cell(src, *expr, ctx, fill_invariable_res_buf);
+        if (OB_SUCC(ret)) { expr->set_evaluated_projected(ctx); }
         SQL_ENG_LOG(DEBUG, "succ to_expr", K(cnt_), K(exprs.count()),
                   KPC(exprs.at(i)), K(stored_cells()[i]), K(lbt()));
       }
@@ -1312,14 +1334,16 @@ inline int ObChunkDatumStore::row_copy_size(const common::ObIArray<ObExpr *> &ex
 {
   int ret = OB_SUCCESS;
   ObExpr *expr = nullptr;
-  common::ObDatum *datum = nullptr;
+  common::Datum *datum = nullptr;
   size = DATUM_SIZE * exprs.count();
   for (int64_t i = 0; i < exprs.count() && OB_SUCC(ret); ++i) {
     expr = exprs.at(i);
     if (OB_ISNULL(expr)) {
     } else if (OB_FAIL(expr->eval(ctx, datum))) {
     } else {
-      size += datum->len_;
+      int64_t payload = 0;
+      if (OB_SUCC(ret) && OB_FAIL(expr->get_datum_copy_plan().legacy_payload_size(*datum, payload))) {
+      } else if (OB_SUCC(ret)) { size += payload; }
     }
   }
   return ret;
@@ -1354,22 +1378,14 @@ int ObChunkDatumStore::Iterator::get_next_row(
     // In main plan the const value overwrite problem is avoided by ad remove_const() expr,
     // but in subplan of mini task the subplan is generated in CG time, has no corresponding
     // logical operator, we can not add expr in CG.
-    for (int64_t i = 0; i < sr->cnt_; i++) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < sr->cnt_; i++) {
       const ObExpr *expr = exprs.at(i);
       if (expr->is_const_expr()) { // T_QUESTIONMARK is included in is_dynamic_const
         continue;
       } else {
         const StoredDatumCell &src = sr->stored_cells()[i];
-        if (OB_UNLIKELY(fill_invariable_res_buf && !exprs.at(i)->is_variable_res_buf())) {
-          ObDatum &dst = expr->locate_datum_for_write(ctx);
-          dst.pack_ = src.pack_;
-          OB_ASSERT(dst.ptr_ == expr->get_rev_buf(ctx) + expr->res_buf_len_ * expr->get_datum_idx(ctx));
-          MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-        } else {
-          ObDatum &dst = expr->locate_expr_datum(ctx);
-          dst = StoredDatumCodec::decode_legacy_view(src);
-        }
-        expr->set_evaluated_projected(ctx);
+        ret = restore_expr_cell(src, *expr, ctx, fill_invariable_res_buf);
+        if (OB_SUCC(ret)) { expr->set_evaluated_projected(ctx); }
       }
     }
   }
@@ -1406,56 +1422,38 @@ int ObChunkDatumStore::Iterator::get_next_batch(
       read_rows = 0;
     }
   } else {
-    attach_rows<fill_invariable_res_buf>(exprs, ctx, srows, read_rows);
+    ret = attach_rows<fill_invariable_res_buf>(exprs, ctx, srows, read_rows);
   }
 
   return ret;
 }
 
 template <bool fill_invariable_res_buf>
-void ObChunkDatumStore::Iterator::attach_rows(
+int ObChunkDatumStore::Iterator::attach_rows(
     const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx,
     const StoredRow **srows, const int64_t read_rows)
 {
-  // FIXME bin.lb: change to row style?
-  if (NULL != srows) {
-    for (int64_t col_idx = 0; col_idx < exprs.count(); col_idx++) {
-      ObExpr *e = exprs.at(col_idx);
-      if (e->is_const_expr()) {
-        continue;
-      }
-      if (OB_LIKELY(!fill_invariable_res_buf || e->is_variable_res_buf())) {
-        ObDatum *datums = e->locate_batch_datums(ctx);
-        if (!e->is_batch_result()) {
-          datums[0] = StoredDatumCodec::decode_legacy_view(srows[0]->stored_cells()[col_idx]);
-        } else {
-          for (int64_t i = 0; i < read_rows; i++) {
-            datums[i] = StoredDatumCodec::decode_legacy_view(srows[i]->stored_cells()[col_idx]);
-          }
+  int ret = OB_SUCCESS;
+  if (srows != nullptr && read_rows > 0) {
+    ObEvalCtx::BatchInfoScopeGuard guard(ctx);
+    for (int64_t col = 0; OB_SUCC(ret) && col < exprs.count(); ++col) {
+      ObExpr &expr = *exprs.at(col);
+      if (!expr.is_const_expr()) {
+        const int64_t count = expr.is_batch_result() ? read_rows : 1;
+        for (int64_t row = 0; OB_SUCC(ret) && row < count; ++row) {
+          guard.set_batch_idx(row);
+          ret = restore_expr_cell(srows[row]->stored_cells()[col], expr, ctx,
+                                  fill_invariable_res_buf);
         }
-      } else {
-        if (!e->is_batch_result()) {
-          ObDatum *datums = e->locate_datums_for_update(ctx, 1);
-          const StoredDatumCell &src = srows[0]->stored_cells()[col_idx];
-          ObDatum &dst = datums[0];
-          dst.pack_ = src.pack_;
-          MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-        } else {
-          ObDatum *datums = e->locate_datums_for_update(ctx, read_rows);
-          for (int64_t i = 0; i < read_rows; i++) {
-            const StoredDatumCell &src = srows[i]->stored_cells()[col_idx];
-            ObDatum &dst = datums[i];
-            dst.pack_ = src.pack_;
-            MEMCPY(const_cast<char *>(dst.ptr_), src.ptr_, src.len_);
-          }
+        if (OB_SUCC(ret)) {
+          expr.set_evaluated_projected(ctx);
+          expr.get_eval_info(ctx).notnull_ = false;
+          expr.get_eval_info(ctx).point_to_frame_ = false;
         }
       }
-      e->set_evaluated_projected(ctx);
-      ObEvalInfo &info = e->get_eval_info(ctx);
-      info.notnull_ = false;
-      info.point_to_frame_ = false;
     }
   }
+  return ret;
 }
 
 } // end namespace sql

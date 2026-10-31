@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_frame_info.h"
+#include "native_frame_value_codec.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -32,6 +33,541 @@ OB_SERIALIZE_MEMBER(ObFrameInfo,
                     zero_init_pos_,
                     zero_init_size_);
 
+namespace
+{
+constexpr int32_t NATIVE_FRAME_WIRE_VERSION = 1;
+
+bool wire_expr_selected(const ObExprFrameInfo &expressions, int64_t index, uint32_t frame_index)
+{
+  const ObExpr &expr = expressions.rt_exprs_.at(index);
+  return expr.frame_idx_ == frame_index && (expr.type_ != T_INVALID || expr.sql_type_ != nullptr)
+      && (!expressions.is_mark_serialize()
+          || (index < expressions.ser_expr_marks_.count() && expressions.ser_expr_marks_.at(index)));
+}
+
+bool first_wire_expr(const ObExprFrameInfo &expressions, int64_t index, uint32_t frame_index)
+{
+  bool first = wire_expr_selected(expressions, index, frame_index);
+  for (int64_t i = 0; first && i < index; ++i) {
+    if (wire_expr_selected(expressions, i, frame_index)
+        && expressions.rt_exprs_.at(i).datum_off_ == expressions.rt_exprs_.at(index).datum_off_) {
+      first = false;
+    }
+  }
+  return first;
+}
+
+int validate_wire_frame(const ObFrameInfo &info, int64_t frame_count)
+{
+  // Partial plans intentionally retain the original expr count and zero-init
+  // range while shrinking frame_size_. Only actual selected Exprs define the
+  // readable/writable regions below; neither historical field is a byte span.
+  return frame_count < 0 || info.frame_idx_ >= frame_count || info.frame_size_ > UINT32_MAX
+      || (info.expr_cnt_ > 0 && info.frame_size_ == 0)
+      ? OB_DESERIALIZE_ERROR : OB_SUCCESS;
+}
+
+int wire_expr_extent(const ObFrameInfo &info, const ObExpr &expr, uint64_t &count)
+{
+  count = 1;
+  int ret = OB_SUCCESS;
+  if (expr.sql_type_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else if (expr.is_batch_result()) {
+    if (expr.pvt_skip_off_ <= expr.datum_off_
+        || (expr.pvt_skip_off_ - expr.datum_off_) % sizeof(Datum) != 0) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else { count = (expr.pvt_skip_off_ - expr.datum_off_) / sizeof(Datum); }
+  }
+  if (OB_SUCC(ret) && (expr.datum_off_ % alignof(Datum) != 0
+      || expr.datum_off_ > info.frame_size_
+      || count > (info.frame_size_ - expr.datum_off_) / sizeof(Datum)
+      || expr.eval_info_off_ % alignof(ObEvalInfo) != 0
+      || expr.eval_info_off_ > info.frame_size_
+      || sizeof(ObEvalInfo) > info.frame_size_ - expr.eval_info_off_
+      || (expr.eval_info_off_ < expr.datum_off_ + count * sizeof(Datum)
+          && expr.eval_info_off_ + sizeof(ObEvalInfo) > expr.datum_off_)
+      || (expr.res_buf_len_ > 0 && (expr.res_buf_off_ > info.frame_size_
+          || count > (info.frame_size_ - expr.res_buf_off_) / expr.res_buf_len_)))) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  if (OB_SUCC(ret) && expr.is_batch_result()) {
+    const int64_t bitmap = ObBitVector::memory_size(count);
+    if (expr.pvt_skip_off_ > info.frame_size_ || bitmap > info.frame_size_ - expr.pvt_skip_off_
+        || expr.eval_flags_off_ > info.frame_size_ || bitmap > info.frame_size_ - expr.eval_flags_off_) {
+      ret = OB_DESERIALIZE_ERROR;
+    }
+  }
+  if (OB_SUCC(ret) && ObDynReserveBuf::supported(expr.datum_meta_.type_)
+      && (expr.res_buf_len_ > 0 || expr.is_batch_result())) {
+    if (expr.dyn_buf_header_offset_ % alignof(ObDynReserveBuf) != 0
+        || expr.dyn_buf_header_offset_ > info.frame_size_
+        || count > (info.frame_size_ - expr.dyn_buf_header_offset_) / sizeof(ObDynReserveBuf)) {
+      ret = OB_DESERIALIZE_ERROR;
+    }
+  }
+  return ret;
+}
+
+int wire_record_count(const ObFrameInfo &info, const ObExprFrameInfo &expressions,
+                      bool no_data, int64_t &records)
+{
+  int ret = OB_SUCCESS;
+  records = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < expressions.rt_exprs_.count(); ++i) {
+    if (wire_expr_selected(expressions, i, info.frame_idx_)) {
+      const ObExpr &expr = expressions.rt_exprs_.at(i);
+      uint64_t count = 0;
+      if (OB_FAIL(wire_expr_extent(info, expr, count))) {
+      } else if (!no_data && count != 1) { ret = OB_NOT_SUPPORTED; }
+      else {
+        if (first_wire_expr(expressions, i, info.frame_idx_)) { records += no_data ? 0 : 1; }
+        for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
+          const ObExpr &other = expressions.rt_exprs_.at(j);
+          if (wire_expr_selected(expressions, j, info.frame_idx_)) {
+            uint64_t other_count = 0;
+            if (OB_FAIL(wire_expr_extent(info, other, other_count))) {
+            } else if (other.datum_off_ == expr.datum_off_) {
+              if (other.eval_info_off_ != expr.eval_info_off_ || other_count != count
+                  || !other.get_sql_type().equals(expr.get_sql_type())) { ret = OB_DESERIALIZE_ERROR; }
+            } else if ((other.datum_off_ < expr.datum_off_ + count * sizeof(Datum)
+                        && expr.datum_off_ < other.datum_off_ + other_count * sizeof(Datum))
+                || (other.eval_info_off_ < expr.datum_off_ + count * sizeof(Datum)
+                    && expr.datum_off_ < other.eval_info_off_ + sizeof(ObEvalInfo))
+                || (expr.eval_info_off_ < other.datum_off_ + other_count * sizeof(Datum)
+                    && other.datum_off_ < expr.eval_info_off_ + sizeof(ObEvalInfo))
+                || (other.eval_info_off_ < expr.eval_info_off_ + sizeof(ObEvalInfo)
+                    && expr.eval_info_off_ < other.eval_info_off_ + sizeof(ObEvalInfo))) {
+              ret = OB_DESERIALIZE_ERROR;
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int add_wire_size(int64_t increment, int64_t &size)
+{
+  return increment < 0 || __builtin_add_overflow(size, increment, &size) ? OB_SIZE_OVERFLOW : OB_SUCCESS;
+}
+
+int64_t parameter_page_slots(int64_t page, int64_t count, int64_t original)
+{
+  const int64_t original_pages = ScalarFrameLayout::frame_count(original);
+  const int64_t local_page = page < original_pages ? page : page - original_pages;
+  const int64_t local_count = page < original_pages ? original : count - original;
+  return std::min(ScalarFrameLayout::slots_per_frame(),
+                  local_count - local_page * ScalarFrameLayout::slots_per_frame());
+}
+} // namespace
+
+int NativeFrameCodec::metadata_size(const ObIArray<ObFrameInfo> &group, int64_t &size)
+{
+  int ret = OB_SUCCESS;
+  int64_t candidate = 8;
+  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+    ret = add_wire_size(group.at(i).get_serialize_size(), candidate);
+  }
+  if (OB_SUCC(ret)) { size = candidate; }
+  return ret;
+}
+
+int NativeFrameCodec::serialize_metadata(const ObIArray<ObFrameInfo> &group,
+    char *buf, int64_t length, int64_t &pos)
+{
+  int64_t bytes = 0;
+  int ret = metadata_size(group, bytes);
+  if (OB_FAIL(ret)) {
+  } else if (buf == nullptr || pos < 0 || pos > length) { ret = OB_INVALID_ARGUMENT; }
+  else if (bytes > length - pos) { ret = OB_BUF_NOT_ENOUGH; }
+  else {
+    int64_t cursor = pos;
+    ret = serialization::encode_i64(buf, length, cursor, group.count());
+    for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+      ret = group.at(i).serialize(buf, length, cursor);
+    }
+    if (OB_SUCC(ret)) { pos = cursor; }
+  }
+  return ret;
+}
+
+int NativeFrameCodec::deserialize_metadata(const char *buf, int64_t length, int64_t &pos,
+    ObIArray<ObFrameInfo> &group, int64_t frame_count)
+{
+  int ret = OB_SUCCESS;
+  int64_t cursor = pos, count = 0;
+  ObSEArray<ObFrameInfo, 4> candidate;
+  if (buf == nullptr || pos < 0 || pos > length || length - pos < 8) { ret = OB_DESERIALIZE_ERROR; }
+  else if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &count))) {
+  } else if (count < 0 || count > frame_count || count > (length - cursor) / 6) { ret = OB_DESERIALIZE_ERROR; }
+  else if (OB_FAIL(candidate.reserve(count))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      ObFrameInfo info;
+      if (OB_FAIL(info.deserialize(buf, length, cursor))) {
+      } else if (OB_FAIL(validate_wire_frame(info, frame_count))) {
+      } else {
+        for (int64_t j = 0; OB_SUCC(ret) && j < candidate.count(); ++j) {
+          if (candidate.at(j).frame_idx_ == info.frame_idx_) { ret = OB_DESERIALIZE_ERROR; }
+        }
+        if (OB_SUCC(ret)) { ret = candidate.push_back(info); }
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(group.reserve(candidate.count()))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(group.assign(candidate))) {
+    } else if (OB_SUCC(ret)) { pos = cursor; }
+  }
+  return ret;
+}
+
+int NativeFrameCodec::group_size(bool plan_part, const ObIArray<ObFrameInfo> &group,
+    const ObExprFrameInfo &expressions, char *const *frames, int64_t frame_count,
+    bool no_data, int64_t &size)
+{
+  int ret = OB_SUCCESS;
+  int64_t candidate = 5;
+  if (plan_part) {
+    int64_t bytes = 0;
+    if (OB_FAIL(metadata_size(group, bytes))) {
+    } else { ret = add_wire_size(bytes, candidate); }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+    const ObFrameInfo &info = group.at(i);
+    int64_t records = 0;
+    if (OB_FAIL(validate_wire_frame(info, frame_count))) {
+    } else if (frames == nullptr || (info.frame_size_ > 0 && frames[info.frame_idx_] == nullptr)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(wire_record_count(info, expressions, no_data, records))) {
+    } else if (OB_FAIL(add_wire_size(8, candidate))) {
+    } else if (!no_data) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < expressions.rt_exprs_.count(); ++j) {
+        if (first_wire_expr(expressions, j, info.frame_idx_)) {
+          const ObExpr &expr = expressions.rt_exprs_.at(j);
+          const Datum &value = *reinterpret_cast<const Datum *>(frames[info.frame_idx_] + expr.datum_off_);
+          int64_t bytes = 0;
+          if (OB_FAIL(NativeFrameValueCodec::size(expr.get_sql_type(), value, bytes))) {
+          } else if (OB_FAIL(add_wire_size(12, candidate))) {
+          } else { ret = add_wire_size(bytes, candidate); }
+        }
+      }
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
+      if (group.at(j).frame_idx_ == info.frame_idx_) { ret = OB_DESERIALIZE_ERROR; }
+    }
+  }
+  if (OB_SUCC(ret)) { size = candidate; }
+  return ret;
+}
+
+int NativeFrameCodec::serialize_group(char *buf, int64_t length, int64_t &pos, bool plan_part,
+    const ObIArray<ObFrameInfo> &group, const ObExprFrameInfo &expressions,
+    char *const *frames, int64_t frame_count, bool no_data)
+{
+  int64_t bytes = 0;
+  int ret = group_size(plan_part, group, expressions, frames, frame_count, no_data, bytes);
+  if (OB_FAIL(ret)) { return ret; }
+  if (buf == nullptr || pos < 0 || pos > length) { return OB_INVALID_ARGUMENT; }
+  if (bytes > length - pos) { return OB_BUF_NOT_ENOUGH; }
+  int64_t cursor = pos;
+  if (OB_FAIL(serialization::encode_i32(buf, length, cursor, NATIVE_FRAME_WIRE_VERSION))) {
+  } else if (OB_FAIL(serialization::encode_i8(buf, length, cursor, no_data ? 1 : 0))) {
+  } else if (plan_part) { ret = serialize_metadata(group, buf, length, cursor); }
+  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+    const ObFrameInfo &info = group.at(i);
+    int64_t records = 0;
+    if (OB_FAIL(wire_record_count(info, expressions, no_data, records))) {
+    } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, records))) {
+    } else if (!no_data) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < expressions.rt_exprs_.count(); ++j) {
+        if (first_wire_expr(expressions, j, info.frame_idx_)) {
+          const ObExpr &expr = expressions.rt_exprs_.at(j);
+          const char *frame = frames[info.frame_idx_];
+          const ObEvalInfo &eval = *reinterpret_cast<const ObEvalInfo *>(frame + expr.eval_info_off_);
+          const Datum &value = *reinterpret_cast<const Datum *>(frame + expr.datum_off_);
+          if (OB_FAIL(serialization::encode_i64(buf, length, cursor, j))) {
+          } else if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.flag_))) {
+          } else if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.cnt_))) {
+          } else { ret = NativeFrameValueCodec::encode(expr.get_sql_type(), value, buf, length, cursor); }
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) { pos = cursor; }
+  return ret;
+}
+
+int NativeFrameCodec::initialize_frame(const ObFrameInfo &info,
+    const ObExprFrameInfo &expressions, char *frame)
+{
+  int64_t unused = 0;
+  int ret = wire_record_count(info, expressions, true, unused);
+  if (OB_SUCC(ret) && (info.frame_size_ > INT64_MAX || (info.frame_size_ > 0 && frame == nullptr))) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_SUCC(ret)) {
+    if (info.frame_size_ > 0) { MEMSET(frame, 0, info.frame_size_); }
+    for (int64_t i = 0; OB_SUCC(ret) && i < expressions.rt_exprs_.count(); ++i) {
+      if (first_wire_expr(expressions, i, info.frame_idx_)) {
+        const ObExpr &expr = expressions.rt_exprs_.at(i);
+        uint64_t count = 0;
+        if (OB_FAIL(wire_expr_extent(info, expr, count))) {
+        } else {
+          for (uint64_t row = 0; row < count; ++row) {
+            new (frame + expr.datum_off_ + row * sizeof(Datum)) Datum();
+          }
+          new (frame + expr.eval_info_off_) ObEvalInfo{};
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int NativeFrameCodec::deserialize_group(const char *buf, int64_t length, int64_t &pos,
+    ObIAllocator &owner, bool plan_part, const ObIArray<ObFrameInfo> &group,
+    const ObExprFrameInfo &expressions, ObIArray<char *> *pointers,
+    char **frames, int64_t frame_count, bool no_data)
+{
+  int ret = OB_SUCCESS;
+  int64_t cursor = pos;
+  int32_t version = 0;
+  int8_t empty = 0;
+  ObSEArray<ObFrameInfo, 4> decoded_group;
+  ObSEArray<char *, 4> decoded_frames;
+  if (buf == nullptr || pos < 0 || pos > length || length - pos < 5 || frame_count < 0
+      || (frame_count > 0 && frames == nullptr)) { return OB_DESERIALIZE_ERROR; }
+  if (OB_FAIL(serialization::decode_i32(buf, length, cursor, &version))) {
+  } else if (OB_FAIL(serialization::decode_i8(buf, length, cursor, &empty))) {
+  } else if (version != NATIVE_FRAME_WIRE_VERSION || empty != (no_data ? 1 : 0)) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else if (plan_part) { ret = deserialize_metadata(buf, length, cursor, decoded_group, frame_count); }
+  else { ret = decoded_group.assign(group); }
+  for (int64_t i = 0; OB_SUCC(ret) && i < decoded_group.count(); ++i) {
+    const ObFrameInfo &info = decoded_group.at(i);
+    int64_t records = 0, expected = 0;
+    char *frame = nullptr;
+    if (OB_FAIL(validate_wire_frame(info, frame_count))) {
+    } else if (frames[info.frame_idx_] != nullptr || length - cursor < 8) { ret = OB_DESERIALIZE_ERROR; }
+    else if (OB_FAIL(wire_record_count(info, expressions, no_data, expected))) {
+    } else if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &records))) {
+    } else if (records != expected) { ret = OB_DESERIALIZE_ERROR; }
+    else if (info.frame_size_ > 0 && (frame = static_cast<char *>(owner.alloc(info.frame_size_))) == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(initialize_frame(info, expressions, frame))) {
+    } else if (!no_data) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < expressions.rt_exprs_.count(); ++j) {
+        if (first_wire_expr(expressions, j, info.frame_idx_)) {
+          const ObExpr &expr = expressions.rt_exprs_.at(j);
+          int64_t index = 0;
+          int16_t flags = 0, count = 0;
+          const SqlType *type = nullptr;
+          Datum value;
+          if (length - cursor < 12) { ret = OB_DESERIALIZE_ERROR; }
+          else if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &index))) {
+          } else if (index != j) { ret = OB_DESERIALIZE_ERROR; }
+          else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &flags))) {
+          } else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &count))) {
+          } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner, type, value))) {
+          } else if (!type->equals(expr.get_sql_type())) { ret = OB_DESERIALIZE_ERROR; }
+          else {
+            *reinterpret_cast<Datum *>(frame + expr.datum_off_) = value;
+            ObEvalInfo &eval = *reinterpret_cast<ObEvalInfo *>(frame + expr.eval_info_off_);
+            eval.flag_ = static_cast<uint16_t>(flags); eval.cnt_ = static_cast<uint16_t>(count);
+            // Reference bytes now belong to the receiving owner, not a copied
+            // sender res_buf. The other logical evaluation bits are retained.
+            eval.point_to_frame_ = 0;
+          }
+        }
+      }
+    }
+    for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
+      if (decoded_group.at(j).frame_idx_ == info.frame_idx_) { ret = OB_DESERIALIZE_ERROR; }
+    }
+    if (OB_SUCC(ret)) { ret = decoded_frames.push_back(frame); }
+  }
+  if (OB_SUCC(ret) && pointers != nullptr) { ret = pointers->reserve(decoded_frames.count()); }
+  if (OB_SUCC(ret) && plan_part) {
+    ObIArray<ObFrameInfo> &output = const_cast<ObIArray<ObFrameInfo> &>(group);
+    if (OB_SUCC(ret = output.reserve(decoded_group.count()))) { ret = output.assign(decoded_group); }
+  }
+  if (OB_SUCC(ret) && pointers != nullptr) { ret = pointers->assign(decoded_frames); }
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; i < decoded_group.count(); ++i) { frames[decoded_group.at(i).frame_idx_] = decoded_frames.at(i); }
+    pos = cursor;
+  }
+  return ret;
+}
+
+int NativeFrameCodec::parameter_size(const ObPhysicalPlanCtx &plan, int64_t &size)
+{
+  int ret = OB_SUCCESS;
+  int64_t candidate = 20;
+  const int64_t count = plan.get_param_store().count();
+  if (plan.get_original_param_cnt() < 0 || plan.get_original_param_cnt() > count) { return OB_INVALID_ARGUMENT; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    const Datum *value = plan.get_native_parameter(i);
+    const SqlType *type = plan.get_native_parameter_type(i);
+    int64_t bytes = 0;
+    if (value == nullptr || type == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(NativeFrameValueCodec::size(*type, *value, bytes))) {
+    } else if (OB_FAIL(add_wire_size(4, candidate))) {
+    } else { ret = add_wire_size(bytes, candidate); }
+  }
+  if (OB_SUCC(ret)) { size = candidate; }
+  return ret;
+}
+
+int NativeFrameCodec::serialize_parameters(const ObPhysicalPlanCtx &plan,
+    char *buf, int64_t length, int64_t &pos)
+{
+  int64_t bytes = 0;
+  int ret = parameter_size(plan, bytes);
+  if (OB_FAIL(ret)) { return ret; }
+  if (buf == nullptr || pos < 0 || pos > length) { return OB_INVALID_ARGUMENT; }
+  if (bytes > length - pos) { return OB_BUF_NOT_ENOUGH; }
+  int64_t cursor = pos;
+  if (OB_FAIL(serialization::encode_i32(buf, length, cursor, NATIVE_FRAME_WIRE_VERSION))) {
+  } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, plan.get_param_store().count()))) {
+  } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, plan.get_original_param_cnt()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_param_store().count(); ++i) {
+    int64_t page = 0, slot = 0;
+    ScalarFrameLayout::locate_parameter(plan.get_original_param_cnt(), i, page, slot);
+    const ObEvalInfo &eval = *reinterpret_cast<const ObEvalInfo *>(plan.get_param_frame_ptrs().at(page)
+        + ScalarFrameLayout::eval_info_offset(slot));
+    if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.flag_))) {
+    } else if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.cnt_))) {
+    } else { ret = NativeFrameValueCodec::encode(*plan.get_native_parameter_type(i),
+        *plan.get_native_parameter(i), buf, length, cursor); }
+  }
+  if (OB_SUCC(ret)) { pos = cursor; }
+  return ret;
+}
+
+int NativeFrameCodec::deserialize_parameters(const char *buf, int64_t length, int64_t &pos,
+    ObIAllocator &owner, ObIArray<char *> &pages,
+    ObIArray<const SqlType *> &types, int64_t &original_count)
+{
+  int ret = OB_SUCCESS;
+  int64_t cursor = pos, count = 0, original = 0;
+  int32_t version = 0;
+  ObSEArray<char *, 4> candidate_pages;
+  ObSEArray<const SqlType *, 16> candidate_types;
+  if (buf == nullptr || pos < 0 || pos > length || length - pos < 20) { return OB_DESERIALIZE_ERROR; }
+  if (OB_FAIL(serialization::decode_i32(buf, length, cursor, &version))) {
+  } else if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &count))) {
+  } else if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &original))) {
+  } else if (version != NATIVE_FRAME_WIRE_VERSION || original < 0 || count < original
+             || count > (length - cursor) / 11) { ret = OB_DESERIALIZE_ERROR; }
+  else {
+    const int64_t page_count = ScalarFrameLayout::frame_count(original)
+        + ScalarFrameLayout::frame_count(count - original);
+    if (OB_FAIL(candidate_pages.reserve(page_count))) {
+    } else if (OB_FAIL(candidate_types.reserve(count))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < page_count; ++i) {
+      const int64_t slots = parameter_page_slots(i, count, original);
+      char *page = static_cast<char *>(owner.alloc(slots * ScalarFrameLayout::slot_size()));
+      if (page == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else {
+        MEMSET(page, 0, slots * ScalarFrameLayout::slot_size());
+        for (int64_t j = 0; j < slots; ++j) {
+          new (page + ScalarFrameLayout::datum_offset(j)) Datum();
+          new (page + ScalarFrameLayout::eval_info_offset(j)) ObEvalInfo{};
+        }
+        ret = candidate_pages.push_back(page);
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      int64_t page = 0, slot = 0;
+      ScalarFrameLayout::locate_parameter(original, i, page, slot);
+      char *frame = candidate_pages.at(page);
+      Datum &value = *reinterpret_cast<Datum *>(frame + ScalarFrameLayout::datum_offset(slot));
+      ObEvalInfo &eval = *reinterpret_cast<ObEvalInfo *>(frame + ScalarFrameLayout::eval_info_offset(slot));
+      int16_t flags = 0, rows = 0;
+      const SqlType *type = nullptr;
+      if (length - cursor < 4) { ret = OB_DESERIALIZE_ERROR; }
+      else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &flags))) {
+      } else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &rows))) {
+      } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner, type, value))) {
+      } else if (OB_FAIL(candidate_types.push_back(type))) {
+      } else {
+        eval.flag_ = static_cast<uint16_t>(flags); eval.cnt_ = static_cast<uint16_t>(rows);
+        eval.point_to_frame_ = 0;
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(pages.reserve(candidate_pages.count()))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(types.reserve(candidate_types.count()))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(pages.assign(candidate_pages))) {
+    } else if (OB_SUCC(ret) && OB_FAIL(types.assign(candidate_types))) {
+    } else if (OB_SUCC(ret)) { original_count = original; pos = cursor; }
+  }
+  return ret;
+}
+
+int NativeFrameCodec::bind_parameter_pages(const ObIArray<ObFrameInfo> &group,
+    const ObIArray<char *> &pages, int64_t parameter_count, int64_t original_count,
+    char **frames, int64_t frame_count)
+{
+  int ret = OB_SUCCESS;
+  if (original_count < 0 || parameter_count < original_count || group.count() > pages.count()
+      || frame_count < 0 || (frame_count > 0 && frames == nullptr)) { return OB_INVALID_ARGUMENT; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < group.count(); ++i) {
+    const ObFrameInfo &info = group.at(i);
+    const int64_t slots = parameter_page_slots(i, parameter_count, original_count);
+    if (OB_FAIL(validate_wire_frame(info, frame_count))) {
+    } else if (slots <= 0 || info.expr_cnt_ > slots || info.frame_size_ > slots * ScalarFrameLayout::slot_size()
+               || frames[info.frame_idx_] != nullptr || pages.at(i) == nullptr) { ret = OB_DESERIALIZE_ERROR; }
+    else {
+      for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
+        if (group.at(j).frame_idx_ == info.frame_idx_) { ret = OB_DESERIALIZE_ERROR; }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; i < group.count(); ++i) { frames[group.at(i).frame_idx_] = pages.at(i); }
+  }
+  return ret;
+}
+
+int NativeFrameCodec::clone_constant_frames(const ObExprFrameInfo &source,
+    ObIAllocator &owner, ObIArray<char *> &destination)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<char *, 4> candidate;
+  if (source.const_frame_.count() != source.const_frame_ptrs_.count()) { return OB_INVALID_ARGUMENT; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < source.const_frame_.count(); ++i) {
+    const ObFrameInfo &info = source.const_frame_.at(i);
+    char *frame = nullptr;
+    int64_t records = 0;
+    if (OB_FAIL(validate_wire_frame(info, source.const_frame_.count()))) {
+    } else if (OB_FAIL(wire_record_count(info, source, false, records))) {
+    } else if (source.const_frame_ptrs_.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
+    else if ((frame = static_cast<char *>(owner.alloc(info.frame_size_))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else if (OB_FAIL(initialize_frame(info, source, frame))) {
+    } else {
+      for (int64_t j = 0; OB_SUCC(ret) && j < source.rt_exprs_.count(); ++j) {
+        if (first_wire_expr(source, j, info.frame_idx_)) {
+          const ObExpr &expr = source.rt_exprs_.at(j);
+          const Datum &value = *reinterpret_cast<const Datum *>(source.const_frame_ptrs_.at(i) + expr.datum_off_);
+          Datum &copy = *reinterpret_cast<Datum *>(frame + expr.datum_off_);
+          if (expr.is_batch_result()) { ret = OB_ERR_UNEXPECTED; }
+          else if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), value, owner, copy))) {
+          } else {
+            ObEvalInfo &eval = *reinterpret_cast<ObEvalInfo *>(frame + expr.eval_info_off_);
+            eval = *reinterpret_cast<const ObEvalInfo *>(source.const_frame_ptrs_.at(i) + expr.eval_info_off_);
+            eval.point_to_frame_ = 0;
+          }
+        }
+      }
+      if (OB_SUCC(ret)) { ret = candidate.push_back(frame); }
+    }
+  }
+  if (OB_SUCC(ret)) { ret = destination.assign(candidate); }
+  return ret;
+}
+
 int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
                             common::ObIAllocator &allocator)
 {
@@ -43,48 +579,17 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
   } else if (OB_FAIL(param_frame_.assign(other.param_frame_))) {
   } else if (OB_FAIL(dynamic_frame_.assign(other.dynamic_frame_))) {
   } else if (OB_FAIL(datum_frame_.assign(other.datum_frame_))) {
-  } else if (OB_FAIL(const_frame_ptrs_.prepare_allocate(other.const_frame_ptrs_.count()))) {
+  } else if (OB_FAIL(NativeFrameCodec::clone_constant_frames(other, allocator, const_frame_ptrs_))) {
   } else {
-    char *frame_mem = NULL;
-    for (int i = 0; OB_SUCC(ret) && i < other.const_frame_.count(); i++) {
-      if (OB_ISNULL(frame_mem = (char *)allocator.alloc(other.const_frame_.at(i).frame_size_))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        MEMCPY(frame_mem, other.const_frame_ptrs_.at(i), other.const_frame_.at(i).frame_size_);
-        const_frame_ptrs_.at(i) = frame_mem;
-      }
-      // set datum ptr
-      for (int j = 0; OB_SUCC(ret) && j < other.const_frame_.at(i).expr_cnt_; j++) {
-          char *other_frame_mem = other.const_frame_ptrs_.at(i);
-          int64_t other_frame_size = other.const_frame_.at(i).frame_size_;
-          ObDatum *other_expr_datum = reinterpret_cast<ObDatum *>
-                                      (other_frame_mem + ScalarFrameLayout::datum_offset(j));
-          ObDatum *expr_datum = reinterpret_cast<ObDatum *>
-                                      (frame_mem + ScalarFrameLayout::datum_offset(j));
-          // In mysql mode, empty string len is 0, and ptr = NULL, when ptr is NULL, no need to change ptr value during copy
-          if (NULL == other_expr_datum->ptr_) {
-            // do nothing
-          } else if ((other_expr_datum->ptr_ < other_frame_mem
-                     || other_expr_datum->ptr_ >= other_frame_mem + other_frame_size)) {
-            // if datum's ptr_ does not locate in frame_mem, it must be deep copied separately
-            void *extra_buf = NULL;
-            if (0 == other_expr_datum->len_) {
-              ret = OB_INVALID_ARGUMENT;
-            } else if (OB_ISNULL(extra_buf = allocator.alloc(other_expr_datum->len_))) {
-              ret = OB_ALLOCATE_MEMORY_FAILED;
-            } else {
-              MEMCPY(extra_buf, other_expr_datum->ptr_, other_expr_datum->len_);
-              expr_datum->ptr_ = static_cast<char *>(extra_buf);
-            }
-          } else {
-            expr_datum->ptr_
-              = frame_mem + (other_expr_datum->ptr_ - other.const_frame_ptrs_.at(i));
-          }
-      } // end for
-    } // for end
     if (OB_SUCC(ret)) {
       // deep copy extra info & inner function ptrs
       for (int i = 0; OB_SUCC(ret) && i < other.rt_exprs_.count(); i++) {
+        if (other.rt_exprs_.at(i).type_ == T_INVALID && other.rt_exprs_.at(i).sql_type_ == nullptr) {
+          continue; // genuine ObEmptyExpr placeholder in a partial PX plan
+        }
+        if (OB_FAIL(rt_exprs_.at(i).clone_prepared_metadata_from(other.rt_exprs_.at(i), allocator))) {
+          break;
+        }
         if (ObExprExtraInfoFactory::is_registered(other.rt_exprs_.at(i).type_)) {
           if (OB_ISNULL(other.rt_exprs_.at(i).extra_info_)) {
             // do nothing
@@ -162,31 +667,6 @@ int ObExprFrameInfo::assign(const ObExprFrameInfo &other,
       } // end for
     }
   } // end for
-  if (OB_SUCC(ret)) {
-    // deep copy extra info & inner function ptrs
-    for (int i = 0; OB_SUCC(ret) && i < other.rt_exprs_.count(); i++) {
-      if (ObExprExtraInfoFactory::is_registered(other.rt_exprs_.at(i).type_)) {
-        if (OB_ISNULL(other.rt_exprs_.at(i).extra_info_)) {
-          // do nothing
-        } else if (OB_FAIL(other.rt_exprs_.at(i).extra_info_->deep_copy(allocator,
-                                                              other.rt_exprs_.at(i).type_,
-                                                              rt_exprs_.at(i).extra_info_))) {
-        }
-      }
-
-      // copy inner function ptrs
-      if (OB_SUCC(ret) && other.rt_exprs_.at(i).inner_func_cnt_ > 0) {
-        int64_t func_cnt = other.rt_exprs_.at(i).inner_func_cnt_;
-        void *funcs_buf = NULL;
-        if (OB_ISNULL(funcs_buf = allocator.alloc(sizeof(void *) * func_cnt))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          MEMCPY(funcs_buf, other.rt_exprs_.at(i).inner_functions_, func_cnt * sizeof(void *));
-          rt_exprs_.at(i).inner_functions_ = (void **)funcs_buf;
-        }
-      }
-    } // end for
-  }
 
   return ret;
 }
@@ -211,71 +691,53 @@ int ObExprFrameInfo::pre_alloc_exec_memory(ObExecContext &exec_ctx, ObIAllocator
   return ret;
 }
 
-#define ALLOC_FRAME_MEM(frame_info_arr)                          \
-    for (int64_t i = 0; OB_SUCC(ret) && i < frame_info_arr.count(); i++) { \
-      const ObFrameInfo &frame_info = frame_info_arr.at(i); \
-      char *frame_mem = static_cast<char *>(exec_allocator.alloc(frame_info.frame_size_)); \
-      if (OB_ISNULL(frame_mem)) { \
-        ret = OB_ALLOCATE_MEMORY_FAILED; \
-        LOG_WARN("alloc memory failed", K(ret), K(frame_info.frame_size_)); \
-      } else if (frame_info.zero_init_size_ > 0) { \
-        MEMSET(frame_mem + frame_info.zero_init_pos_, 0, frame_info.zero_init_size_);\
-      } \
-      frames[frame_idx++] = frame_mem; \
-    } \
-// Allocate frame memory, and store all frame pointers in the frames array in order of each frame idx
-// 1. const frame memory comes from shared memory in plan, directly use the pointer stored in plan
-// 2. param frame memory comes from the parameters generated at compile time, here it can be directly obtained
-// 3. dynamic frame and datum frame allocation is done here
+// Const pages belong to the plan, parameter pages to PlanCtx, and only
+// dynamic/batch pages are newly allocated here. Construct each Datum at the
+// actual Expr offset; a vector frame is not an array of scalar slots.
 int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
                                  const ObIArray<char *> &param_frame_ptrs,
-                                 uint64_t &frame_cnt,
-                                 char **&frames) const
+                                 uint64_t &frame_cnt, char **&frames) const
 {
-  int ret = common::OB_SUCCESS;
-  frame_cnt = const_frame_ptrs_.count()
-              + param_frame_.count()
-              + dynamic_frame_.count()
-              + datum_frame_.count();
-  if (frame_cnt == 0) {
-    // do nothing
-  } else if (NULL == (frames = static_cast<char **>(exec_allocator.alloc(
-                                         frame_cnt * sizeof(char *))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
-    int64_t frame_idx = 0; //frame idx
-    OB_ASSERT(const_frame_ptrs_.count() == const_frame_.count());
-    // Param frame size maybe small than param frame ptrs, because the pre-calculated
-    // exprs may be evaluate again in plan cache constraints check after param store extended.
-    // After param_frame_ptrs from physical_plan_ctx is reset in ObPlanCacheValue::choose_plan,
-    // can check OB_ASSERT(param_frame_.empty() || param_frame_ptrs.count() == param_frame_.count());
-    OB_ASSERT(param_frame_.empty()
-              || param_frame_ptrs.count() >= param_frame_.count());
-    for (int64_t i = 0 ; i < const_frame_ptrs_.count(); i++) {
-      frames[frame_idx++] = const_frame_ptrs_.at(i);
-    }
-    if (!param_frame_.empty()) {
-      for (int64_t i = 0 ; i < param_frame_.count(); i++) {
-        frames[frame_idx++] = param_frame_ptrs.at(i);
-      }
-    }
-    int64_t begin_idx = frame_idx;
-    ALLOC_FRAME_MEM(dynamic_frame_);
-    //for subquery core 
-    // Preemptively set datum in frame to null
-    for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_frame_.count(); ++i) {
-      char *cur_frame = frames[begin_idx + i];
-      for (int64_t j = 0; j < dynamic_frame_.at(i).expr_cnt_; ++j) {
-        ObDatum *datum = reinterpret_cast<ObDatum *>(cur_frame + ScalarFrameLayout::datum_offset(j));
-        datum->set_null();
-      }
-    }
-    ALLOC_FRAME_MEM(datum_frame_);
+  int ret = OB_SUCCESS;
+  const uint64_t count = const_frame_.count() + param_frame_.count()
+      + dynamic_frame_.count() + datum_frame_.count();
+  char **candidate = nullptr;
+  if (const_frame_ptrs_.count() != const_frame_.count() || param_frame_ptrs.count() < param_frame_.count()
+      || count > INT64_MAX / sizeof(char *)) { return OB_INVALID_ARGUMENT; }
+  if (count > 0) {
+    candidate = static_cast<char **>(exec_allocator.alloc(count * sizeof(char *)));
+    if (candidate == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else { MEMSET(candidate, 0, count * sizeof(char *)); }
   }
-
+  for (int64_t i = 0; OB_SUCC(ret) && i < const_frame_.count(); ++i) {
+    const ObFrameInfo &info = const_frame_.at(i);
+    if (OB_FAIL(validate_wire_frame(info, count))) {
+    } else if (candidate[info.frame_idx_] != nullptr || const_frame_ptrs_.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
+    else { candidate[info.frame_idx_] = const_frame_ptrs_.at(i); }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_frame_.count(); ++i) {
+    const ObFrameInfo &info = param_frame_.at(i);
+    if (OB_FAIL(validate_wire_frame(info, count))) {
+    } else if (candidate[info.frame_idx_] != nullptr || param_frame_ptrs.at(i) == nullptr) { ret = OB_INVALID_ARGUMENT; }
+    else { candidate[info.frame_idx_] = param_frame_ptrs.at(i); }
+  }
+  const ObIArray<ObFrameInfo> *groups[] = {&dynamic_frame_, &datum_frame_};
+  for (int64_t group = 0; OB_SUCC(ret) && group < 2; ++group) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < groups[group]->count(); ++i) {
+      const ObFrameInfo &info = groups[group]->at(i);
+      if (OB_FAIL(validate_wire_frame(info, count))) {
+      } else if (candidate[info.frame_idx_] != nullptr) { ret = OB_INVALID_ARGUMENT; }
+      else {
+        char *frame = static_cast<char *>(exec_allocator.alloc(info.frame_size_));
+        if (frame == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else if (OB_FAIL(NativeFrameCodec::initialize_frame(info, *this, frame))) {
+        } else { candidate[info.frame_idx_] = frame; }
+      }
+    }
+  }
+  if (OB_SUCC(ret)) { frames = candidate; frame_cnt = count; }
   return ret;
 }
-#undef ALLOC_FRAME_MEM
 
 OB_SERIALIZE_MEMBER(ObEmptyExpr);
 
@@ -318,6 +780,7 @@ OB_DEF_SERIALIZE(ObExprFrameInfo)
   }
   OB_UNIS_ENCODE(const_frame_ptrs_.count());
   OZ(ObPxTreeSerializer::serialize_frame_info<true>(buf, buf_len, pos, const_frame_,
+                                              *this,
                                               const_frame_ptrs_.get_data(),
                                               const_frame_ptrs_.count()));
   OB_UNIS_ENCODE(param_frame_);
@@ -336,7 +799,12 @@ OB_DEF_DESERIALIZE(ObExprFrameInfo)
   ObIArray<ObExpr> &exprs = const_cast<ObArray<ObExpr> &>(rt_exprs_);
   ObIArray<ObExpr> *seri_arr_bak = ObExpr::get_serialize_array();
   ObExpr::get_serialize_array() = &exprs;
-  if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &expr_cnt))) {
+  if (OB_FAIL(ret)) {
+  } else if (data_len - pos < 4) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &expr_cnt))) {
+  } else if (expr_cnt < 0 || expr_cnt > data_len - pos) {
+    ret = OB_DESERIALIZE_ERROR;
   } else if (OB_FAIL(exprs.prepare_allocate(expr_cnt))) {
   } else {
     for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
@@ -349,13 +817,17 @@ OB_DEF_DESERIALIZE(ObExprFrameInfo)
   int64_t const_frame_cnt = 0;
   char **frames = NULL;
   OB_UNIS_DECODE(const_frame_cnt);
-  if (0 != const_frame_cnt) {
+  if (OB_SUCC(ret) && (const_frame_cnt < 0 || const_frame_cnt > INT64_MAX / sizeof(char *)
+      || const_frame_cnt > data_len - pos)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  if (OB_SUCC(ret) && 0 != const_frame_cnt) {
     CK(OB_NOT_NULL(frames = static_cast<char**>(
              allocator_.alloc(sizeof(char*) * const_frame_cnt))));
     OX(MEMSET(frames, 0, sizeof(char*) * const_frame_cnt));
   }
   OZ(ObPxTreeSerializer::deserialize_frame_info<true>(buf, data_len, pos,
-     allocator_, const_frame_, &const_frame_ptrs_, frames, const_frame_cnt));
+     allocator_, const_frame_, *this, &const_frame_ptrs_, frames, const_frame_cnt));
 
   OB_UNIS_DECODE(param_frame_);
   OB_UNIS_DECODE(datum_frame_);
@@ -381,7 +853,7 @@ OB_DEF_SERIALIZE_SIZE(ObExprFrameInfo)
 
   OB_UNIS_ADD_LEN(const_frame_ptrs_.count());
   len += ObPxTreeSerializer::get_serialize_frame_info_size<true>(
-         const_frame_, const_frame_ptrs_.get_data(), const_frame_ptrs_.count());
+         const_frame_, *this, const_frame_ptrs_.get_data(), const_frame_ptrs_.count());
 
   OB_UNIS_ADD_LEN(param_frame_);
   OB_UNIS_ADD_LEN(datum_frame_);
@@ -434,7 +906,7 @@ OB_INLINE int ObPreCalcExprFrameInfo::do_normal_eval(ObExecContext &exec_ctx,
 {
   int ret = OB_SUCCESS;
   ObEvalCtx eval_ctx(exec_ctx);
-  ObDatum *res_datum = NULL;
+  Datum *res_datum = NULL;
   DatumParameter datum_param;
   ObExpr *rt_expr = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < pre_calc_rt_exprs_.count(); ++i) {
@@ -442,16 +914,11 @@ OB_INLINE int ObPreCalcExprFrameInfo::do_normal_eval(ObExecContext &exec_ctx,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(rt_expr->eval(eval_ctx, res_datum))) {
     } else {
-      datum_param.set_datum(*res_datum);
-      datum_param.set_type_meta(rt_expr->obj_meta_);
-      ObAccuracy accuracy;
-      accuracy.set_scale(rt_expr->datum_meta_.scale_);
-      accuracy.set_precision(rt_expr->datum_meta_.precision_);
-      datum_param.set_accuracy(accuracy);
-      if (rt_expr->obj_meta_.has_lob_header()) {
+      if (OB_FAIL(capture_datum_parameter(*rt_expr, eval_ctx, datum_param))) {
+      } else if (rt_expr->obj_meta_.has_lob_header()) {
         datum_param.set_result_flag(HAS_LOB_HEADER_FLAG);
       }
-      if (OB_FAIL(res_datum_params.push_back(datum_param))) {
+      if (OB_SUCC(ret) && OB_FAIL(res_datum_params.push_back(datum_param))) {
       }
     } // else end
   } // for end
@@ -463,7 +930,7 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
 {
   int ret = OB_SUCCESS;
   ObEvalCtx eval_ctx(exec_ctx);
-  ObDatum *res_datum = NULL;
+  Datum *res_datum = NULL;
   DatumParameter datum_param;
   int64_t group_cnt = exec_ctx.get_sql_ctx()->get_batch_params_count();
   DatumParameterArray *datum_array = nullptr;
@@ -511,17 +978,13 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
       ObExpr *rt_expr = pre_calc_rt_exprs_.at(i);
       datum_array = res_datum_params.at(i).get_array<DatumParameterArray>();
       if (OB_FAIL(rt_expr->eval(eval_ctx, res_datum))) {
-      } else if (OB_FAIL(datum_array->data_[group_id].datum_.deep_copy(*res_datum,
-                                                                exec_ctx.get_allocator()))) {
       } else {
-        DatumParameter &value = datum_array->data_[group_id];
-        value.set_type_meta(rt_expr->obj_meta_);
-        ObAccuracy accuracy;
-        accuracy.set_scale(rt_expr->datum_meta_.scale_);
-        accuracy.set_precision(rt_expr->datum_meta_.precision_);
-        value.set_accuracy(accuracy);
-        if (rt_expr->obj_meta_.has_lob_header()) {
-          value.set_result_flag(HAS_LOB_HEADER_FLAG);
+        DatumParameter borrowed;
+        if (OB_FAIL(capture_datum_parameter(*rt_expr, eval_ctx, borrowed))) {
+        } else if (OB_FAIL(DatumParameterArray::clone_parameter(borrowed,
+            datum_array->data_[group_id], exec_ctx.get_allocator()))) {
+        } else if (rt_expr->obj_meta_.has_lob_header()) {
+          datum_array->data_[group_id].set_result_flag(HAS_LOB_HEADER_FLAG);
         }
       }
     }
@@ -552,7 +1015,7 @@ int ObPreCalcExprFrameInfo::eval_expect_err(ObExecContext &exec_ctx,
   } else if (OB_FAIL(exec_ctx.init_expr_op(need_ctx_cnt_))) {
   } else {
     ObEvalCtx eval_ctx(exec_ctx);
-    ObDatum *res_datum = NULL;
+    Datum *res_datum = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && all_eval_err && i < pre_calc_rt_exprs_.count(); ++i) {
       if (OB_ISNULL(pre_calc_rt_exprs_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
@@ -585,10 +1048,10 @@ ObTempExprCtx::~ObTempExprCtx()
 }
 
 int ObTempExpr::eval_datum(ObExecContext &exec_ctx, ObIAllocator &result_allocator,
-                            ObDatum &result) const
+                            Datum &result) const
 {
   int ret = OB_SUCCESS;
-  ObDatum *res_datum = nullptr;
+  Datum *res_datum = nullptr;
   ObTempExprCtx *temp_expr_ctx = nullptr;
   result.set_null();
   if (OB_UNLIKELY(!idx_col_arr_.empty() || expr_idx_ < 0 || expr_idx_ >= rt_exprs_.count())) {
@@ -601,7 +1064,8 @@ int ObTempExpr::eval_datum(ObExecContext &exec_ctx, ObIAllocator &result_allocat
       ObTempExprCtxReplaceGuard exec_ctx_backup_guard(exec_ctx, *temp_expr_ctx);
       OZ(rt_exprs_.at(expr_idx_).eval(*temp_expr_ctx, res_datum));
       CK(OB_NOT_NULL(res_datum));
-      OZ(result.deep_copy(*res_datum, result_allocator));
+      OZ(ObExpr::clone_native_value(rt_exprs_.at(expr_idx_).get_sql_type(),
+          *res_datum, result_allocator, result));
       if (!exec_ctx.use_temp_expr_ctx_cache()) {
         temp_expr_ctx->~ObTempExprCtx();
       }
@@ -611,7 +1075,7 @@ int ObTempExpr::eval_datum(ObExecContext &exec_ctx, ObIAllocator &result_allocat
 }
 
 int ObTempExpr::eval_datum(ObExecContext &exec_ctx, const ObIArray<DatumValue> &row,
-                            ObIAllocator &result_allocator, ObDatum &result) const
+                            ObIAllocator &result_allocator, Datum &result) const
 {
   int ret = OB_SUCCESS;
   ObTempExprCtx *temp_expr_ctx = nullptr;
@@ -632,16 +1096,58 @@ int ObTempExpr::eval_datum(ObExecContext &exec_ctx, const ObIArray<DatumValue> &
     if (OB_FAIL(row_to_frame(row, *temp_expr_ctx))) {
     } else {
       ObTempExprCtxReplaceGuard guard(exec_ctx, *temp_expr_ctx);
-      ObDatum *evaluated = nullptr;
-      ObDatum owned;
+      Datum *evaluated = nullptr;
+      Datum owned;
       if (OB_FAIL(rt_exprs_.at(expr_idx_).eval(*temp_expr_ctx, evaluated))) {
       } else if (OB_ISNULL(evaluated)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(owned.deep_copy(*evaluated, result_allocator))) {
+      } else if (OB_FAIL(ObExpr::clone_native_value(rt_exprs_.at(expr_idx_).get_sql_type(),
+          *evaluated, result_allocator, owned))) {
       } else {
         result = owned;
       }
     }
+  }
+  return ret;
+}
+
+namespace {
+int export_temp_expr_result(const SqlType &type, const Datum &source,
+                            ObIAllocator &owner, common::ObDatum &destination)
+{
+  const DatumCopyPlan plan(type);
+  int64_t bytes = 0;
+  int ret = plan.legacy_payload_size(source, bytes);
+  if (OB_SUCC(ret)) {
+    char *buffer = bytes == 0 ? nullptr : static_cast<char *>(owner.alloc(bytes));
+    if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      int64_t position = 0;
+      ret = plan.export_legacy(source, destination, buffer, bytes, position);
+    }
+  }
+  return ret;
+}
+} // namespace
+
+int ObTempExpr::eval_datum(ObExecContext &exec_ctx, ObIAllocator &result_allocator,
+                          common::ObDatum &result) const
+{
+  Datum native;
+  int ret = eval_datum(exec_ctx, result_allocator, native);
+  if (OB_SUCC(ret)) {
+    ret = export_temp_expr_result(rt_exprs_.at(expr_idx_).get_sql_type(), native, result_allocator, result);
+  }
+  return ret;
+}
+
+int ObTempExpr::eval_datum(ObExecContext &exec_ctx, const ObIArray<DatumValue> &row,
+                          ObIAllocator &result_allocator, common::ObDatum &result) const
+{
+  Datum native;
+  int ret = eval_datum(exec_ctx, row, result_allocator, native);
+  if (OB_SUCC(ret)) {
+    ret = export_temp_expr_result(rt_exprs_.at(expr_idx_).get_sql_type(), native, result_allocator, result);
   }
   return ret;
 }
@@ -658,25 +1164,21 @@ int ObTempExpr::row_to_frame(const ObIArrayWrap<DatumValue> &row,
     } else {
       const DatumValue &value = row.at(column.idx_);
       ObExpr &expr = rt_exprs_.at(column.expr_pos_);
-      ObDatum input;
+      common::ObDatum legacy;
       char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+      Datum input;
       if (value.get_type() != expr.datum_meta_.type_ && !value.is_null()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(value.to_row_datum(input, extended_payload))) {
+      } else if (OB_FAIL(value.to_row_datum(legacy, extended_payload))) {
+      } else if (OB_FAIL(expr.get_datum_copy_plan().import_legacy(legacy, input))) {
+      } else if (OB_FAIL(expr.deep_copy_datum(temp_expr_ctx, input))) {
       } else {
-        ObDatum &frame = expr.locate_datum_for_write(temp_expr_ctx);
-        if (value.is_ext() && !value.is_null()) {
-          // The normalized Extend uses stack scratch. Publish a copy in the
-          // expression's reserved result buffer before that scratch expires.
-          int64_t pos = 0;
-          ret = frame.deep_copy(input, const_cast<char *>(frame.ptr_), expr.res_buf_len_, pos);
-        } else {
-          frame = input;
-        }
-        if (OB_SUCC(ret) && is_lob_storage(value.get_type())) {
-          ret = ob_adjust_lob_datum(temp_expr_ctx.exec_ctx_, input, value.get_meta(),
+        Datum &frame = expr.locate_expr_datum(temp_expr_ctx);
+        if (is_lob_storage(value.get_type())) {
+          ret = ob_adjust_lob_datum(temp_expr_ctx.exec_ctx_, frame, value.get_meta(),
               expr.obj_meta_, temp_expr_ctx.exec_ctx_.get_allocator(), frame);
         }
+        if (OB_SUCC(ret)) { expr.set_evaluated_projected(temp_expr_ctx); }
       }
     }
   }

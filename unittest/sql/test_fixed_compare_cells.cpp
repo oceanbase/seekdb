@@ -128,8 +128,10 @@ protected:
       expr.obj_meta_.set_type(type);
       expr.datum_meta_ = ObDatumMeta(type, CS_TYPE_BINARY, 0);
       expr.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(type);
+      expr.obj_meta_.set_collation_type(CS_TYPE_BINARY);
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(), arena_));
       for (int64_t row = 0; row < BATCH; ++row) {
-        new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
+        new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
       }
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo;
       expr.get_eval_info(eval_).evaluated_ = true;
@@ -154,10 +156,21 @@ protected:
     function.cmp_func_ = CompareProbe::fail;
     ASSERT_EQ(OB_SUCCESS, functions_.push_back(function));
   }
-  ObDatum &datum(int64_t column, int64_t row = 0)
+  Datum &datum(int64_t column, int64_t row = 0)
   { return expressions_[column].locate_batch_datums(eval_)[row]; }
+  void set_datum(int64_t column, const ObDatum &value, int64_t row = 0)
+  { ASSERT_EQ(OB_SUCCESS, expressions_[column].get_datum_copy_plan().import_legacy(value, datum(column, row))); }
+  ObDatum legacy(int64_t column, int64_t row = 0)
+  {
+    ObDatum value;
+    EXPECT_EQ(OB_SUCCESS, expressions_[column].get_datum_copy_plan().legacy_view(
+        datum(column, row), value, legacy_scratch_[column][row], 64));
+    return value;
+  }
+  alignas(8) char legacy_scratch_[3][4][64]{};
+
   void bind_row(int64_t row, const int64_t &first, const std::string &middle, const ObDatum &last)
-  { datum(0, row) = integer(first); datum(1, row) = text(middle); datum(2, row) = last; }
+  { set_datum(0, integer(first), row); set_datum(1, text(middle), row); set_datum(2, last, row); }
 
   ObArenaAllocator arena_;
   ObExecContext exec_;
@@ -279,7 +292,7 @@ TEST_F(FixedCompareCells, merge_distinct_saved_row_handles_ci_null_nonbatch_and_
   bool equal = false;
   ASSERT_EQ(OB_SUCCESS, compare.equal(&exprs_, row.row_, equal)); EXPECT_TRUE(equal);
   ASSERT_EQ(OB_SUCCESS, compare.equal_in_batch(&exprs_, row.row_, 2, equal)); EXPECT_TRUE(equal);
-  datum(0, 2) = integer(different);
+  set_datum(0, integer(different), 2);
   ASSERT_EQ(OB_SUCCESS, compare.equal_in_batch(&exprs_, row.row_, 2, equal)); EXPECT_FALSE(equal);
   expressions_[0].batch_result_ = false; expressions_[0].batch_idx_mask_ = 0;
   ASSERT_EQ(OB_SUCCESS, compare.equal_in_batch(&exprs_, row.row_, 2, equal)); EXPECT_TRUE(equal);
@@ -294,7 +307,7 @@ TEST_F(FixedCompareCells, merge_set_saved_null_keeps_bound_null_order_and_direct
 {
   int64_t value = INT64_MAX;
   OwnedFixedRow row({null_value()}); row.relocate();
-  datum(0, 0) = integer(value); datum(0, 2) = integer(value);
+  set_datum(0, integer(value), 0); set_datum(0, integer(value), 2);
   ObSEArray<ObExpr *, 1> one;
   ASSERT_EQ(OB_SUCCESS, one.push_back(&expressions_[0]));
   for (bool ascending : {false, true}) {
@@ -332,7 +345,7 @@ TEST_F(FixedCompareCells, stored_hash_distinct_uses_mapped_keys_and_restores_exp
   bool equal = false;
   ASSERT_EQ(OB_SUCCESS, saved.equal_distinct(&exprs_, probe, &collations_, &functions_, &eval_, equal, guard_));
   EXPECT_TRUE(equal); EXPECT_EQ(2, eval_.get_batch_idx());
-  datum(1, 2) = text(other);
+  set_datum(1, text(other), 2);
   ASSERT_EQ(OB_SUCCESS, saved.equal_distinct(&exprs_, probe, &collations_, &functions_, &eval_, equal, guard_));
   EXPECT_FALSE(equal); EXPECT_EQ(2, eval_.get_batch_idx());
 }
@@ -368,10 +381,15 @@ TEST_F(FixedCompareCells, real_hash_table_resolves_equal_hash_collisions_using_s
 TEST_F(FixedCompareCells, compare_errors_preserve_flags_borrowed_payloads_and_return_codes)
 {
   add_failing_key(0);
+  expressions_[0].obj_meta_.set_varchar();
+  expressions_[0].obj_meta_.set_collation_type(CS_TYPE_BINARY);
+  expressions_[0].obj_datum_map_ = OBJ_DATUM_STRING;
+  ASSERT_EQ(OB_SUCCESS, expressions_[0].prepare_scalar_type(
+      expressions_[0].obj_meta_, ObAccuracy(), arena_));
   std::string source = "source", current = "current";
   ObDatum src = text(source), input = text(current); src.set_has_lob_header(); input.set_has_lob_header();
   OwnedFixedRow row({src}, sizeof(ObHashPartStoredRow::ExtraInfo)); row.relocate();
-  datum(0, 0) = input; datum(0, 2) = input;
+  set_datum(0, input, 0); set_datum(0, input, 2);
   ObSEArray<ObExpr *, 1> one;
   ASSERT_EQ(OB_SUCCESS, one.push_back(&expressions_[0]));
   CompareProbe::expect(row.row_->stored_cells()[0], input);

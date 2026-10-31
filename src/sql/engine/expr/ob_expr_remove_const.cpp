@@ -51,10 +51,10 @@ int ObExprRemoveConst::cg_expr(ObExprCGCtx &,
 
 int ObExprRemoveConst::eval_remove_const(const ObExpr &expr,
                                          ObEvalCtx &ctx,
-                                         ObDatum &expr_datum)
+                                         Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else {
     expr_datum.set_datum(*arg);

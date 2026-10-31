@@ -19,6 +19,7 @@
 #include "share/ob_autoincrement_service.h"
 #include "src/sql/engine/ob_des_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/ob_sql_context.h"
 #include "share/sql_udt_support.h"
 
@@ -29,66 +30,13 @@ using namespace share;
 using namespace transaction;
 namespace sql
 {
-namespace
-{
-class ExecutionBigintLayout final
-{
-public:
-  ExecutionBigintLayout() : type_(), status_(init_type(type_)), copy_plan_(type_) {}
-  ExecutionBigintLayout(const ExecutionBigintLayout &) = delete;
-  ExecutionBigintLayout &operator=(const ExecutionBigintLayout &) = delete;
-  int status() const { return status_; }
-  const SqlType &type() const { return type_; }
-  const DatumCopyPlan &copy_plan() const { return copy_plan_; }
-
-private:
-  static int init_type(SqlType &type)
-  {
-    SqlTypeMeta meta;
-    meta.set_int();
-    meta.set_collation_level(CS_LEVEL_COERCIBLE);
-    meta.set_scale(0);
-    return SqlType::from_legacy(meta, ObAccuracy(20, 0), type);
-  }
-  SqlType type_;
-  const int status_;
-  const DatumCopyPlan copy_plan_;
-};
-
-const ExecutionBigintLayout &execution_bigint_layout()
-{
-  static const ExecutionBigintLayout layout;
-  return layout;
-}
-
-bool same_execution_parameter_meta(const SqlTypeMeta &left, const SqlTypeMeta &right)
-{
-  // SqlTypeMeta::operator== intentionally omits scale.
-  return left == right && left.get_scale() == right.get_scale();
-}
-} // namespace
-
-// One final arena allocation: this 32-byte header followed by Datum[count_].
-// Metadata is common to the admitted batch; no per-slot metadata/value shadow.
-struct alignas(8) ObPhysicalPlanCtx::NativeParameterOwner
-{
-  NativeParameterOwner(const DatumCopyPlan &copy_plan, int64_t count,
-                       const SqlTypeMeta &meta, const ObAccuracy &accuracy)
-    : copy_plan_(&copy_plan), count_(count), meta_(meta), accuracy_(accuracy) {}
-  Datum *values() { return reinterpret_cast<Datum *>(this + 1); }
-  const DatumCopyPlan *const copy_plan_;
-  const int64_t count_;
-  const SqlTypeMeta meta_;
-  const ObAccuracy accuracy_;
-};
-
 ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
     : allocator_(allocator),
       tsc_snapshot_timestamp_(0),
       ts_timeout_us_(0),
       consistency_level_(INVALID_CONSISTENCY),
       param_store_( (ObWrapperAllocator(&allocator_)) ),
-      native_parameter_owner_(nullptr),
+      native_parameters_ready_(false),
       original_param_cnt_(0),
       param_frame_capacity_(0),
       sql_mode_(SMO_DEFAULT),
@@ -155,135 +103,351 @@ int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
   for (int64_t i = old_count; OB_SUCC(ret) && i < param_count; ++i) {
     ret = param_store_.push_back(DatumParameter());
   }
+  if (OB_SUCC(ret) && native_parameters_ready_ && param_store_.count() > old_count) {
+    ret = extend_param_frame(old_count);
+  }
   if (OB_FAIL(ret)) {
     while (param_store_.count() > old_count) { param_store_.pop_back(); }
+    while (native_parameter_types_.count() > old_count) { native_parameter_types_.pop_back(); }
   }
   return ret;
 }
 
-int ObPhysicalPlanCtx::init_datum_param_store()
+int ObPhysicalPlanCtx::append_parameter_input(const DatumParameter &parameter)
+{
+  return native_parameters_ready_ ? OB_STATE_NOT_MATCH : param_store_.push_back(parameter);
+}
+
+int ObPhysicalPlanCtx::assign_parameter_inputs(const ParamStore &parameters)
 {
   int ret = OB_SUCCESS;
-  native_parameter_owner_ = nullptr;
+  if (&parameters == &param_store_) { return ret; }
+  // Reserve before invalidating the current binding. Descriptor assignment
+  // after reserve is trivial and cannot allocate; input bytes stay owned by
+  // their producer until init_datum_param_store imports them into final pages.
+  if (OB_FAIL(param_store_.reserve(parameters.count()))) {
+  } else {
+    native_parameters_ready_ = false;
+    native_parameter_types_.reuse();
+    param_frame_ptrs_.reuse();
+    param_frame_capacity_ = 0;
+    ret = param_store_.assign(parameters);
+  }
+  return ret;
+}
+
+int ObPhysicalPlanCtx::truncate_runtime_parameters(int64_t count)
+{
+  int ret = OB_SUCCESS;
+  if (count < original_param_cnt_ || count < 0 || count > param_store_.count()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    while (param_store_.count() > count) { param_store_.pop_back(); }
+    while (native_parameter_types_.count() > count) { native_parameter_types_.pop_back(); }
+    // Retain allocated pages/capacity so compiled frame pointers do not move.
+    // Logical count gates every native value/type accessor and PX serialization.
+  }
+  return ret;
+}
+
+void ObPhysicalPlanCtx::mark_batch_parameters()
+{
+  for (int64_t i = 0; i < param_store_.count(); ++i) {
+    param_store_.at(i).get_param_flag().is_batch_parameter_ = true;
+  }
+}
+
+int ObPhysicalPlanCtx::init_datum_param_store()
+{
+  native_parameters_ready_ = false;
+  native_parameter_types_.reuse();
   param_frame_ptrs_.reuse();
   param_frame_capacity_ = 0;
-  NativeParameterOwner *native_candidate = nullptr;
-  const bool use_native = can_use_native_bigint_parameters();
-  // Input producers may use a shorter-lived request arena. Keep execution
-  // payloads in this context without maintaining a second descriptor store.
-  if (use_native) {
-    ret = init_native_bigint_parameters(native_candidate);
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
+  // Array inputs retain all groups in the execution arena. Ordinary inputs
+  // are imported once below, then their descriptors borrow the native slot.
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
+    if (param_store_.at(i).is_ext_sql_array()) {
       DatumParameter owned;
       if (OB_FAIL(DatumParameterArray::clone_parameter(param_store_.at(i), owned, allocator_))) {
-      } else {
-        param_store_.at(i) = owned;
-      }
+      } else { param_store_.at(i) = owned; }
     }
   }
   if (OB_SUCC(ret)) { ret = extend_param_frame(0); }
-  if (OB_SUCC(ret)) { native_parameter_owner_ = native_candidate; }
-  else if (use_native) {
+  if (OB_SUCC(ret)) { native_parameters_ready_ = true; }
+  else {
+    native_parameter_types_.reuse();
     param_frame_ptrs_.reuse();
     param_frame_capacity_ = 0;
   }
   return ret;
 }
 
-bool ObPhysicalPlanCtx::can_use_native_bigint_parameters() const
+int ObPhysicalPlanCtx::prepare_runtime_parameter(const DatumParameter &source,
+    Datum &value, const SqlType *&type, int64_t index)
 {
-  const ObSqlCtx *sql_ctx = exec_ctx_ == nullptr ? nullptr : exec_ctx_->get_sql_ctx();
-  bool supported = param_store_.count() > 0 && sql_ctx != nullptr
-      && sql_ctx->exec_type_ == MpQuery && sql_ctx->is_prepare_protocol_
-      && !sql_ctx->is_prepare_stage_ && !sql_ctx->is_mock_prepare_
-      && !sql_ctx->is_cursor_ && !sql_ctx->is_text_ps_mode_
-      && !sql_ctx->is_execute_call_stmt_ && !sql_ctx->is_batch_params_execute()
-      && sql_ctx->stmt_type_ != stmt::T_CALL_PROCEDURE
-      && sql_ctx->stmt_type_ != stmt::T_ANONYMOUS_BLOCK
-      && !exec_ctx_->has_dynamic_values_table();
-  // Ordinary external PS also sets is_dynamic_sql_; it is not a PL gate.
-  if (supported) {
-    const DatumParameter &first = param_store_.at(0);
-    const SqlTypeMeta &meta = first.get_type_meta();
-    supported = same_execution_parameter_meta(meta, execution_bigint_layout().type().legacy_meta());
-    for (int64_t i = 0; supported && i < param_store_.count(); ++i) {
-      const DatumParameter &parameter = param_store_.at(i);
-      supported = same_execution_parameter_meta(parameter.get_type_meta(), meta)
-          && parameter.get_accuracy() == first.get_accuracy()
-          && !parameter.is_null() && parameter.datum_.flag_ == ObDatumDesc::NONE
-          && parameter.datum_.len_ == sizeof(int64_t) && parameter.datum_.ptr_ != nullptr;
+  int ret = OB_SUCCESS;
+  const SqlType *candidate_type = nullptr;
+  const SqlTypeMeta &meta = source.get_type_meta();
+  const bool scalar = !meta.is_enum_or_set() && !meta.is_enumset_inner_type()
+      && !meta.is_collection_sql_type() && meta.get_type() != ObExtendType
+      && meta.get_type() != ObUserDefinedSQLType;
+  if (scalar) {
+    SqlType resolved;
+    if (OB_FAIL(SqlType::from_legacy(meta, source.get_accuracy(), resolved))) {
+    } else {
+      // Share an already prepared declaration within this execution context.
+      // Ordinary scalar preparation needs neither a temporary arena nor one
+      // heap allocation per repeated BIGINT key in the same parameter list.
+      const SqlType *previous = get_native_parameter_type(index);
+      const SqlType *adjacent = get_native_parameter_type(index - 1);
+      if (previous != nullptr && previous->equals(resolved)) { candidate_type = previous; }
+      else if (adjacent != nullptr && adjacent->equals(resolved)) { candidate_type = adjacent; }
+      if (candidate_type == nullptr) { ret = resolved.clone_to(allocator_, candidate_type); }
+    }
+  } else {
+    ObArenaAllocator temporary("ParamTypePrep");
+    const SqlType *resolved = nullptr;
+    if (exec_ctx_ == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      // Runtime type resolution may populate this execution context's lazy type cache.
+      ret = ObExprUtil::resolve_sql_type(*const_cast<ObExecContext *>(exec_ctx_), meta, source.get_accuracy(),
+          source.get_subschema_id(), temporary, resolved);
+    }
+    if (OB_SUCC(ret)) {
+      const SqlType *previous = get_native_parameter_type(index);
+      if (previous != nullptr && previous->equals(*resolved)) { candidate_type = previous; }
+      else { ret = resolved->clone_to(allocator_, candidate_type); }
     }
   }
-  return supported;
+  if (OB_SUCC(ret)) {
+    const DatumCopyPlan plan(*candidate_type);
+    Datum imported;
+    Datum owned;
+    if (OB_FAIL(plan.import_legacy(source.datum_, imported))) {
+    } else if (candidate_type->requires_resource_clone()) {
+      // PL addresses retain their lvalue identity and existing PL-domain
+      // owner. Own only the execution wrapper; cloning the pointee here
+      // would redirect OUT/INOUT and object-field writes to a different object.
+      int64_t bytes = 0;
+      if (OB_FAIL(plan.carrier_span_size(imported, bytes))) {
+      } else {
+        char *buffer = bytes == 0 ? nullptr : static_cast<char *>(allocator_.alloc(bytes));
+        if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else {
+          int64_t position = 0;
+          ret = plan.copy_carrier_span_borrowing_resources(imported, owned, buffer, bytes, position);
+        }
+      }
+    } else { ret = plan.deep_copy(imported, owned, allocator_); }
+    if (OB_SUCC(ret)) { value = owned; type = candidate_type; }
+  }
+  return ret;
 }
 
-int ObPhysicalPlanCtx::init_native_bigint_parameters(NativeParameterOwner *&owner)
+int ObPhysicalPlanCtx::publish_runtime_parameter(int64_t index, const DatumParameter &source,
+    const Datum &value, const SqlType &type, bool preserve_array_input)
 {
-  static_assert(sizeof(NativeParameterOwner) == 32, "BIGINT owner header byte contract");
-  static_assert(sizeof(NativeParameterOwner) % alignof(Datum) == 0, "aligned native values");
   int ret = OB_SUCCESS;
-  const int64_t count = param_store_.count();
-  const ExecutionBigintLayout &layout = execution_bigint_layout();
-  if (OB_FAIL(layout.status())) {
-  } else if (count > (INT64_MAX - static_cast<int64_t>(sizeof(NativeParameterOwner)))
-                       / static_cast<int64_t>(sizeof(Datum))) {
-    ret = OB_SIZE_OVERFLOW;
-  } else if (OB_FAIL(reserve_param_frame(count))) {
-    // All frame allocations precede publishing new parameter descriptors.
-  } else {
-    char *storage = static_cast<char *>(allocator_.alloc(sizeof(NativeParameterOwner) + count * sizeof(Datum)));
-    if (storage == nullptr) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      NativeParameterOwner *candidate = new (storage) NativeParameterOwner(
-          layout.copy_plan(), count, param_store_.at(0).get_type_meta(), param_store_.at(0).get_accuracy());
-      for (int64_t i = 0; i < count; ++i) {
-        int64_t value = 0;
-        MEMCPY(&value, param_store_.at(i).datum_.ptr_, sizeof(value));
-        new (&candidate->values()[i]) Datum();
-        candidate->values()[i].set_int(value);
+  const DatumCopyPlan plan(type);
+  DatumParameter compatibility = source;
+  ObDatum legacy;
+  bool direct_borrow = true;
+  if (index < 0 || index >= param_store_.count() || index >= native_parameter_types_.count()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!preserve_array_input) {
+    ret = plan.borrow_legacy(value, legacy);
+    if (ret == OB_NOT_SUPPORTED) {
+      direct_borrow = false;
+      int64_t bytes = 0;
+      ret = plan.legacy_payload_size(value, bytes);
+      if (OB_SUCC(ret)) {
+        char *buffer = bytes == 0 ? nullptr : static_cast<char *>(allocator_.alloc(bytes));
+        if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else {
+          int64_t position = 0;
+          ret = plan.export_legacy(value, legacy, buffer, bytes, position);
+        }
       }
-      // The prepared type and set_int above establish every bridge precondition.
-      // No old 8-byte scalar clone or allocating setter runs on this path.
-      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-        ret = layout.copy_plan().borrow_mutable_signed_int(candidate->values()[i], param_store_.at(i).datum_);
+    }
+    if (OB_SUCC(ret)) { compatibility.set_datum(legacy); }
+  }
+  if (OB_SUCC(ret)) {
+    Datum *slot = nullptr;
+    ObEvalInfo *info = nullptr;
+    get_param_frame_info(index, slot, info);
+    *slot = value;
+    native_parameter_types_.at(index) = &type;
+    if (!preserve_array_input) {
+      if (direct_borrow) {
+        // Already validated above; use the final stable slot rather than the
+        // staging value's stack address for an inline compatibility view.
+        const int borrow_ret = plan.borrow_legacy(*slot, compatibility.datum_);
+        OB_ASSERT(borrow_ret == OB_SUCCESS);
+        UNUSED(borrow_ret);
       }
-      if (OB_SUCC(ret)) { owner = candidate; }
+      param_store_.at(index) = compatibility;
+    }
+    info->evaluated_ = false;
+    info->projected_ = false;
+  }
+  return ret;
+}
+
+int ObPhysicalPlanCtx::refresh_parameter_view(int64_t index)
+{
+  int ret = OB_SUCCESS;
+  if (index < 0 || index >= native_parameter_types_.count()
+      || native_parameter_types_.at(index) == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!param_store_.at(index).is_ext_sql_array()) {
+    const Datum *slot = get_native_parameter(index);
+    if (slot == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else {
+      const DatumCopyPlan plan(*native_parameter_types_.at(index));
+      ObDatum legacy;
+      ret = plan.borrow_legacy(*slot, legacy);
+      if (ret == OB_NOT_SUPPORTED) {
+        // Wrapper materializations already belong to this context. Frame
+        // relocation changes only direct scalar/native-reference borrows.
+        ret = OB_SUCCESS;
+      } else if (OB_SUCC(ret)) { param_store_.at(index).set_datum(legacy); }
     }
   }
   return ret;
 }
 
-const Datum *ObPhysicalPlanCtx::get_native_bigint_parameter(int64_t index) const
+const Datum *ObPhysicalPlanCtx::get_native_parameter(int64_t index) const
 {
   const Datum *value = nullptr;
-  NativeParameterOwner *owner = native_parameter_owner_;
-  if (owner != nullptr && param_store_.count() == owner->count_
-      && index >= 0 && index < owner->count_) {
-    const DatumParameter &parameter = param_store_.at(index);
-    ObDatum expected;
-    if (same_execution_parameter_meta(parameter.get_type_meta(), owner->meta_)
-        && parameter.get_accuracy() == owner->accuracy_
-        && !parameter.is_null() && parameter.datum_.flag_ == ObDatumDesc::NONE
-        && parameter.datum_.len_ == sizeof(int64_t)
-        && OB_SUCCESS == owner->copy_plan_->borrow_mutable_signed_int(owner->values()[index], expected)
-        && parameter.datum_.ptr_ == expected.ptr_) {
-      value = &owner->values()[index];
+  if (native_parameters_ready_ && index >= 0 && index < param_store_.count()
+      && index < param_frame_capacity_ && index < native_parameter_types_.count() && native_parameter_types_.at(index) != nullptr) {
+    int64_t frame = 0;
+    int64_t slot = 0;
+    ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, slot);
+    if (frame >= 0 && frame < param_frame_ptrs_.count()) {
+      value = reinterpret_cast<const Datum *>(param_frame_ptrs_.at(frame)
+          + ScalarFrameLayout::datum_offset(slot));
     }
   }
   return value;
 }
 
+const SqlType *ObPhysicalPlanCtx::get_native_parameter_type(int64_t index) const
+{
+  return index >= 0 && index < native_parameter_types_.count()
+      ? native_parameter_types_.at(index) : nullptr;
+}
+
+const Datum *ObPhysicalPlanCtx::get_native_bigint_parameter(int64_t index) const
+{
+  const SqlType *type = get_native_parameter_type(index);
+  return type != nullptr && type->kind() == ObIntType ? get_native_parameter(index) : nullptr;
+}
+
 int ObPhysicalPlanCtx::set_runtime_parameter(int64_t index, const DatumParameter &parameter)
 {
   int ret = OB_SUCCESS;
-  if (index < 0 || index >= param_store_.count()) {
+  if (index < 0 || index >= param_store_.count() || parameter.get_type_meta().is_invalid()) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (parameter.get_type_meta().is_invalid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
+  } else if (!native_parameters_ready_) {
+    // Before initialization this is a construction input, not an execution
+    // value. init_datum_param_store establishes its durable owner later.
     param_store_.at(index) = parameter;
+  } else {
+    Datum value;
+    const SqlType *type = nullptr;
+    DatumParameter input = parameter;
+    const DatumParameter *effective = &input;
+    if (input.is_ext_sql_array()) {
+      ret = DatumParameterArray::clone_parameter(parameter, input, allocator_);
+      if (OB_SUCC(ret)) {
+        const DatumParameterArray *array = input.get_array<DatumParameterArray>();
+        if (array == nullptr || array->count_ <= 0) { ret = OB_INVALID_ARGUMENT; }
+        else { effective = &array->data_[0]; }
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(prepare_runtime_parameter(*effective, value, type, index))) {
+    } else if (OB_SUCC(ret)) {
+      ret = publish_runtime_parameter(index, input, value, *type, input.is_ext_sql_array());
+      if (OB_SUCC(ret) && input.is_ext_sql_array()) { param_store_.at(index) = input; }
+    }
+  }
+  return ret;
+}
+
+int ObPhysicalPlanCtx::restore_native_parameter_frames(const ObIArray<char *> &frames,
+    const ObIArray<const SqlType *> &types, int64_t original_count)
+{
+  int ret = OB_SUCCESS;
+  const int64_t count = types.count();
+  if (count > INT64_MAX - ScalarFrameLayout::slots_per_frame()
+      || original_count < 0 || original_count > count || count != param_store_.count()
+      || frames.count() != ScalarFrameLayout::frame_count(original_count)
+          + ScalarFrameLayout::frame_count(count - original_count)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  // Descriptor staging contains only compatibility views. It never carries a
+  // second authoritative native scalar and borrows the final incoming slots.
+  ObSEArray<DatumParameter, 16> views;
+  if (OB_SUCC(ret) && OB_FAIL(views.reserve(count))) {
+  } else if (OB_SUCC(ret) && OB_FAIL(native_parameter_types_.reserve(count))) {
+  } else if (OB_SUCC(ret) && OB_FAIL(param_frame_ptrs_.reserve(frames.count()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < frames.count(); ++i) {
+    if (frames.at(i) == nullptr || reinterpret_cast<uintptr_t>(frames.at(i)) % alignof(Datum) != 0) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    int64_t page = 0;
+    int64_t slot = 0;
+    ScalarFrameLayout::locate_parameter(original_count, i, page, slot);
+    const Datum &native = *reinterpret_cast<const Datum *>(frames.at(page)
+        + ScalarFrameLayout::datum_offset(slot));
+    DatumParameter view = param_store_.at(i);
+    if (types.at(i) == nullptr) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      const DatumCopyPlan plan(*types.at(i));
+      int64_t checked_span = 0;
+      if (OB_FAIL(plan.carrier_span_size(native, checked_span))) {
+      } else if (!view.is_ext_sql_array()) {
+        ObDatum legacy;
+        ret = plan.borrow_legacy(native, legacy);
+        if (ret == OB_NOT_SUPPORTED) {
+          int64_t bytes = 0;
+          ret = plan.legacy_payload_size(native, bytes);
+          if (OB_SUCC(ret)) {
+            char *buffer = bytes == 0 ? nullptr : static_cast<char *>(allocator_.alloc(bytes));
+            if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+            else {
+              int64_t position = 0;
+              ret = plan.export_legacy(native, legacy, buffer, bytes, position);
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          view.set_datum(legacy);
+          view.set_type_meta(types.at(i)->legacy_meta());
+          view.set_accuracy(types.at(i)->accuracy());
+        }
+      }
+      if (OB_SUCC(ret)) { ret = views.push_back(view); }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    // All allocation/validation has finished. Counts/pointer capacities were
+    // reserved above, so these trivial pointer publications cannot allocate.
+    const int types_ret = native_parameter_types_.assign(types);
+    const int frames_ret = param_frame_ptrs_.assign(frames);
+    OB_ASSERT(types_ret == OB_SUCCESS && frames_ret == OB_SUCCESS);
+    UNUSED(types_ret); UNUSED(frames_ret);
+    for (int64_t i = 0; i < count; ++i) { param_store_.at(i) = views.at(i); }
+    original_param_cnt_ = original_count;
+    param_frame_capacity_ = count;
+    native_parameters_ready_ = true;
   }
   return ret;
 }
@@ -453,113 +617,106 @@ int ObPhysicalPlanCtx::switch_implicit_cursor()
 void ObPhysicalPlanCtx::reset_datum_frame(char *frame, int64_t expr_cnt)
 {
   for (int64_t j = 0; j < expr_cnt; ++j) {
-    ObDatum *datum = reinterpret_cast<ObDatum *>(frame + ScalarFrameLayout::datum_offset(j));
-    datum->set_null();
+    new (frame + ScalarFrameLayout::datum_offset(j)) Datum();
   }
 }
 
 int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
 {
   int ret = OB_SUCCESS;
-  if (input_capacity > param_frame_capacity_) {
-    const int64_t item_size = ScalarFrameLayout::slot_size();
-    const int64_t cnt_per_frame = ScalarFrameLayout::slots_per_frame();
-    // reserve original param frames first
-    if (param_frame_capacity_ < original_param_cnt_) {
-      if (param_frame_capacity_ > 0) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        int64_t total = original_param_cnt_;
-        while (total > 0 && OB_SUCC(ret)) {
-          int64_t cnt = std::min(total, cnt_per_frame);
-          char *frame = static_cast<char *>(allocator_.alloc(item_size * cnt));
-          OV(NULL != frame, OB_ALLOCATE_MEMORY_FAILED);
-          OX(MEMSET(frame, 0, item_size * cnt));
-          OX(reset_datum_frame(frame, cnt));
-          OZ(param_frame_ptrs_.push_back(frame));
-          total -= cnt;
-        }
-        OX(param_frame_capacity_ = original_param_cnt_);
-      }
+  const int64_t per_page = ScalarFrameLayout::slots_per_frame();
+  if (input_capacity < 0 || original_param_cnt_ < 0
+      || input_capacity > INT64_MAX - per_page || original_param_cnt_ > INT64_MAX - per_page) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (input_capacity > param_frame_capacity_) {
+    const int64_t original_pages = ScalarFrameLayout::frame_count(original_param_cnt_);
+    int64_t beyond = std::max(int64_t(0), input_capacity - original_param_cnt_);
+    const int64_t beyond_pages = ScalarFrameLayout::frame_count(beyond);
+    if (beyond_pages > 0) {
+      const int64_t tail = beyond - (beyond_pages - 1) * per_page;
+      beyond = (beyond_pages - 1) * per_page + std::min(per_page, next_pow2(tail));
     }
-
-    // reserve frames beyond original param frames, align the last frame with pow of 2.
-    int64_t beyond = input_capacity - original_param_cnt_;
-    if (OB_SUCC(ret) && beyond > 0) {
-
-      int64_t frame_cnt = ScalarFrameLayout::frame_count(beyond);
-      int64_t last = beyond - (frame_cnt - 1) * cnt_per_frame;
-
-      // align last frame capacity to pow of 2.
-      last = std::min(cnt_per_frame, next_pow2(last));
-      beyond = (frame_cnt - 1) * cnt_per_frame + last;
-
-      const int64_t original_frame_cnt = original_param_cnt_ > 0
-          ? ScalarFrameLayout::frame_count(original_param_cnt_)
-          : 0;
-
-      const int64_t old_capacity = param_frame_capacity_ - original_param_cnt_;
-      const int64_t old_frame_cnt = ScalarFrameLayout::frame_count(old_capacity);
-      int64_t frame_idx = old_frame_cnt;
-      if (old_capacity % cnt_per_frame != 0) {
-        frame_idx--;
-      }
-
-      for (; OB_SUCC(ret) && frame_idx < frame_cnt; frame_idx++) {
-        const int64_t cnt = frame_idx + 1 == frame_cnt ? last : cnt_per_frame;
-        char *frame = static_cast<char *>(allocator_.alloc(item_size * cnt));
-        OV(NULL != frame, OB_ALLOCATE_MEMORY_FAILED);
-        if (OB_SUCC(ret)) {
-          const int64_t array_idx = original_frame_cnt + frame_idx;
-          MEMSET(frame, 0, item_size * cnt);
-          if (array_idx + 1 == param_frame_ptrs_.count()) {
-            // copy last frame data
-            int64_t old_last = (param_frame_capacity_ - original_param_cnt_) % cnt_per_frame;
-            MEMMOVE(frame, param_frame_ptrs_.at(array_idx), item_size * old_last);
-            param_frame_ptrs_.at(array_idx) = frame;
-          } else {
-            OX(reset_datum_frame(frame, cnt));
-            OZ(param_frame_ptrs_.push_back(frame));
+    const int64_t capacity = original_param_cnt_ + beyond;
+    const int64_t pages = original_pages + beyond_pages;
+    const int64_t old_beyond = std::max(int64_t(0), param_frame_capacity_ - original_param_cnt_);
+    ObSEArray<char *, 8> staged;
+    if (OB_FAIL(staged.reserve(pages))) {
+    } else if (OB_FAIL(param_frame_ptrs_.reserve(pages))) {
+    }
+    for (int64_t page = 0; OB_SUCC(ret) && page < pages; ++page) {
+      const bool original = page < original_pages;
+      const int64_t local_page = original ? page : page - original_pages;
+      const int64_t span = original ? original_param_cnt_ : beyond;
+      const int64_t slots = std::min(per_page, span - local_page * per_page);
+      const int64_t previous_span = original ? std::min(original_param_cnt_, param_frame_capacity_) : old_beyond;
+      const int64_t old_slots = page < param_frame_ptrs_.count()
+          ? std::max(int64_t(0), std::min(per_page, previous_span - local_page * per_page)) : 0;
+      char *frame = old_slots >= slots ? param_frame_ptrs_.at(page) : nullptr;
+      if (frame == nullptr) {
+        frame = static_cast<char *>(allocator_.alloc(slots * ScalarFrameLayout::slot_size()));
+        if (frame == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else {
+          MEMSET(frame, 0, slots * ScalarFrameLayout::slot_size());
+          reset_datum_frame(frame, slots);
+          if (old_slots > 0) {
+            MEMCPY(frame, param_frame_ptrs_.at(page), old_slots * ScalarFrameLayout::slot_size());
           }
         }
       }
-      if (OB_SUCC(ret)) {
-        param_frame_capacity_ = original_param_cnt_ + beyond;
-      }
+      if (OB_SUCC(ret)) { ret = staged.push_back(frame); }
+    }
+    if (OB_SUCC(ret)) {
+      const int published = param_frame_ptrs_.assign(staged);
+      OB_ASSERT(published == OB_SUCCESS);
+      UNUSED(published);
+      param_frame_capacity_ = capacity;
     }
   }
-
   return ret;
 }
 
 int ObPhysicalPlanCtx::extend_param_frame(const int64_t old_size)
 {
   int ret = OB_SUCCESS;
-  if (old_size < 0) {
+  if (old_size < 0 || old_size > param_store_.count()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(native_parameter_types_.reserve(param_store_.count()))) {
   } else if (OB_FAIL(reserve_param_frame(param_store_.count()))) {
   } else {
-    for (int64_t i = old_size; i < param_store_.count(); i++) {
-      ObDatum *datum = nullptr;
-      ObEvalInfo *eval_info = nullptr;
-      get_param_frame_info(i, datum, eval_info);
-      *datum = param_store_.at(i).datum_;
-      eval_info->evaluated_ = false;
+    while (OB_SUCC(ret) && native_parameter_types_.count() < param_store_.count()) {
+      ret = native_parameter_types_.push_back(nullptr);
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < old_size; ++i) {
+      ret = refresh_parameter_view(i);
+    }
+    for (int64_t i = old_size; OB_SUCC(ret) && i < param_store_.count(); ++i) {
+      const DatumParameter input = param_store_.at(i);
+      const DatumParameter *effective = &input;
+      if (input.is_ext_sql_array()) {
+        const DatumParameterArray *array = input.get_array<DatumParameterArray>();
+        if (array == nullptr || array->count_ <= 0) { ret = OB_INVALID_ARGUMENT; }
+        else { effective = &array->data_[0]; }
+      }
+      Datum value;
+      const SqlType *type = nullptr;
+      if (OB_SUCC(ret) && OB_FAIL(prepare_runtime_parameter(*effective, value, type, i))) {
+      } else if (OB_SUCC(ret)) {
+        ret = publish_runtime_parameter(i, input, value, *type, input.is_ext_sql_array());
+      }
     }
   }
-
   return ret;
 }
 
 OB_INLINE void ObPhysicalPlanCtx::get_param_frame_info(int64_t param_idx,
-                                                       ObDatum *&datum,
+                                                       Datum *&datum,
                                                        ObEvalInfo *&eval_info)
 {
   int64_t idx = 0;
   int64_t slot_idx = 0;
   ScalarFrameLayout::locate_parameter(original_param_cnt_, param_idx, idx, slot_idx);
   const int64_t off = ScalarFrameLayout::datum_offset(slot_idx);
-  datum = reinterpret_cast<ObDatum*>(param_frame_ptrs_.at(idx) + off);
+  datum = reinterpret_cast<Datum*>(param_frame_ptrs_.at(idx) + off);
   eval_info = reinterpret_cast<ObEvalInfo *>(param_frame_ptrs_.at(idx)
       + ScalarFrameLayout::eval_info_offset(slot_idx));
   LOG_DEBUG("get_param_frame_info", K(param_idx), K(off), K(datum), K(lbt()));
@@ -570,24 +727,22 @@ int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,
                                                  const int64_t param_cnt)
 {
   int ret = OB_SUCCESS;
-  const int64_t datum_cnt = param_store_.count();
-  if (OB_UNLIKELY(start_param < 0 || start_param + param_cnt > datum_cnt)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    for (int64_t i = start_param; OB_SUCC(ret) && i < start_param + param_cnt; i++) {
-      if (param_store_.at(i).is_ext_sql_array()) {
-        //need to expand the real param to param frame
-        ObDatum *datum = nullptr;
-        ObEvalInfo *eval_info = nullptr;
-        get_param_frame_info(i, datum, eval_info);
-        const DatumParameterArray *datum_array = param_store_.at(i).get_array<DatumParameterArray>();
-        if (OB_ISNULL(datum_array) || OB_UNLIKELY(cur_group_id < 0) ||
-            OB_UNLIKELY(cur_group_id >= datum_array->count_)) {
-          ret = OB_ERR_UNEXPECTED;
+  if (start_param < 0 || param_cnt < 0 || start_param > param_store_.count()
+      || param_cnt > param_store_.count() - start_param) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t i = start_param; OB_SUCC(ret) && i < start_param + param_cnt; ++i) {
+    if (param_store_.at(i).is_ext_sql_array()) {
+      const DatumParameterArray *array = param_store_.at(i).get_array<DatumParameterArray>();
+      if (array == nullptr || cur_group_id < 0 || cur_group_id >= array->count_) {
+        // Preserve the existing grouped-parameter API's error contract.
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        Datum value;
+        const SqlType *type = nullptr;
+        if (OB_FAIL(prepare_runtime_parameter(array->data_[cur_group_id], value, type, i))) {
         } else {
-          //assign datum ptr to the real param datum
-          *datum = datum_array->data_[cur_group_id].datum_;
-          eval_info->evaluated_ = true;
+          ret = publish_runtime_parameter(i, param_store_.at(i), value, *type, true);
         }
       }
     }
@@ -1264,7 +1419,7 @@ int ObPhysicalPlanCtx::build_subschema_by_fields(const ColumnsFieldIArray *field
 int ObPhysicalPlanCtx::build_subschema_ctx_by_param_store(share::schema::ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
-  ParamStore *param_store = &get_param_store_for_update();
+  ParamStore *param_store = &param_store_;
   if (OB_NOT_NULL(phy_plan_) || subschema_ctx_.get_subschema_count() > 0) {
     ret = OB_ERR_UNEXPECTED;
   }

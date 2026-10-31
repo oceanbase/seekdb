@@ -40,12 +40,12 @@ public:
   static int do_trunc_decimalint(
       const int16_t in_prec, const int16_t in_scale,
       const int16_t out_prec, const int64_t trunc_scale, const int64_t out_scale,
-      const ObDatum &in_datum, ObDecimalIntBuilder &res_val);
+      const common::ObDatum &in_datum, ObDecimalIntBuilder &res_val);
 
   static int calc_trunc_decimalint(
-      const int16_t in_prec, const int16_t in_scale,
+    const ObExpr &expr, ObEvalCtx &ctx,       const int16_t in_prec, const int16_t in_scale,
       const int16_t out_prec, const int64_t trunc_scale, const int16_t out_scale,
-      const ObDatum &in_datum, ObDatum &res_datum);
+      const Datum &in_datum, Datum &res_datum);
 
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:

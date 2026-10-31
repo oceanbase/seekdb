@@ -70,7 +70,7 @@ public:
   virtual ~ObExprGetLock() {}
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int get_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int get_lock(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 private :
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprGetLock);
@@ -83,7 +83,7 @@ public:
   virtual ~ObExprIsFreeLock() {}
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int is_free_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int is_free_lock(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 private :
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprIsFreeLock);
@@ -96,7 +96,7 @@ public:
   virtual ~ObExprIsUsedLock() {}
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int is_used_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int is_used_lock(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 private :
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprIsUsedLock);
@@ -109,7 +109,7 @@ public:
   virtual ~ObExprReleaseLock() {}
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int release_lock(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int release_lock(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 private :
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprReleaseLock);
@@ -125,7 +125,7 @@ public:
                       ObExpr &rt_expr) const override;
   static int release_all_locks(const ObExpr &expr,
                                ObEvalCtx &ctx,
-                               ObDatum &result);
+                               Datum &result);
 private :
   //disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprReleaseAllLocks);

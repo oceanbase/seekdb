@@ -119,7 +119,7 @@ int ObExprHex::number_uint64(const number::ObNumber &num_val, uint64_t &out)
 }
 
 int ObExprHex::decimalint_uint64(
-    const ObDatumMeta &in_meta, const ObDatum *datum, uint64_t &out)
+    const ObDatumMeta &in_meta, const SqlType &input_type, const Datum *datum, uint64_t &out)
 {
   int ret = OB_SUCCESS;
   int64_t tmp_int = 0;
@@ -127,10 +127,14 @@ int ObExprHex::decimalint_uint64(
   ObDecimalIntBuilder builder;
   bool is_valid_int64 = true;
   bool is_valid_uint64 = true;
-  if (OB_FAIL(ObExprFuncRound::do_round_decimalint(
+  common::ObDatum coefficient;
+  alignas(8) char coefficient_buf[64];
+  if (OB_FAIL(DatumCopyPlan(input_type).get_decimal(
+      *datum, coefficient, coefficient_buf, sizeof(coefficient_buf)))) {
+  } else if (OB_FAIL(ObExprFuncRound::do_round_decimalint(
               in_meta.precision_, in_meta.scale_,
               in_meta.precision_ - in_meta.scale_ + 1, 0, 0,
-              *datum, builder))) {
+              coefficient, builder))) {
   } else if (OB_FAIL(wide::check_range_valid_int64(
              builder.get_decimal_int(), builder.get_int_bytes(), is_valid_int64, tmp_int))) {
   } else if (is_valid_int64) {
@@ -152,10 +156,10 @@ int ObExprHex::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
   return ret;
 }
 
-int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (arg->is_null()) {
     expr_datum.set_null();
@@ -166,7 +170,7 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
       if (ObNumberType == in_type) {
         OZ(number_uint64(number::ObNumber(arg->get_number()), val));
       } else if (ObDecimalIntType == in_type) {
-        if (OB_FAIL(decimalint_uint64(expr.args_[0]->datum_meta_, arg, val))) {
+        if (OB_FAIL(decimalint_uint64(expr.args_[0]->datum_meta_, expr.args_[0]->get_sql_type(), arg, val))) {
         }
       } else {
         val = arg->get_uint();

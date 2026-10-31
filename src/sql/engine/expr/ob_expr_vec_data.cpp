@@ -62,7 +62,7 @@ int ObExprVecData::cg_expr(
 /*static*/ int ObExprVecData::generate_vec_data(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSEDx(raw_ctx, eval_ctx);

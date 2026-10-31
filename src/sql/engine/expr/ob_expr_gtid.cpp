@@ -70,7 +70,7 @@ int ObExprGTIDSubset::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprGTIDSubset::eval_subset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprGTIDSubset::eval_subset(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   // mock
   result.set_null();
@@ -118,7 +118,7 @@ int ObExprGTIDSubtract::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprGTIDSubtract::eval_subtract(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprGTIDSubtract::eval_subtract(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   // mock
   result.set_null();
@@ -171,7 +171,7 @@ int ObExprWaitForExecutedGTIDSet::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprWaitForExecutedGTIDSet::eval_wait_for_executed_gtid_set(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprWaitForExecutedGTIDSet::eval_wait_for_executed_gtid_set(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   // mock
   result.set_null();
@@ -232,7 +232,7 @@ int ObExprWaitUntilSQLThreadAfterGTIDs::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprWaitUntilSQLThreadAfterGTIDs::eval_wait_until_sql_thread_after_gtids(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result)
+int ObExprWaitUntilSQLThreadAfterGTIDs::eval_wait_until_sql_thread_after_gtids(const ObExpr &expr, ObEvalCtx &ctx, Datum &result)
 {
   // mock
   result.set_null();

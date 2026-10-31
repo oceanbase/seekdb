@@ -18,6 +18,7 @@
 #include "sql/engine/aggregate/ob_merge_groupby_op.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "lib/charset/ob_charset.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 #include <gtest/gtest.h>
 #include <array>
 #include <cstring>
@@ -120,17 +121,18 @@ protected:
       if (type == ObDecimalIntType) { e.obj_meta_.set_scale(2); }
       e.datum_meta_ = ObDatumMeta(type, cs, type == ObDecimalIntType ? 2 : 0);
       e.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(type);
-      e.basic_funcs_ = ObDatumFuncs::get_basic_func(type, cs, e.datum_meta_.scale_,
-          e.obj_meta_.has_lob_header(), e.datum_meta_.precision_);
+      ASSERT_EQ(OB_SUCCESS, e.prepare_scalar_type(e.obj_meta_, e.prepare_legacy_copy_plan().get_accuracy(), arena_));
       for (int64_t j = 0; j < BATCH; ++j) {
-        new (frame_.data() + e.datum_off_ + j * sizeof(ObDatum)) ObDatum;
+        new (frame_.data() + e.datum_off_ + j * sizeof(Datum)) Datum;
       }
       new (frame_.data() + e.eval_info_off_) ObEvalInfo;
       e.get_eval_info(eval_).evaluated_ = true;
       e.get_evaluated_flags(eval_).set_all(BATCH);
     }
   }
-  ObDatum &datum(int64_t i, int64_t row = 2) { return exprs_[i].locate_batch_datums(eval_)[row]; }
+  Datum &datum(int64_t i, int64_t row = 2) { return exprs_[i].locate_batch_datums(eval_)[row]; }
+  void put(int64_t i, const common::ObDatum &value, int64_t row = 2)
+  { ASSERT_EQ(OB_SUCCESS, exprs_[i].get_datum_copy_plan().import_legacy(value, datum(i, row))); }
   Keys &keys() { return op_.*member(KeysTag{}); }
   Indices &mapping() { return op_.*member(MapTag{}); }
   ObChunkDatumStore::LastStoredRow &last() { return op_.*member(LastTag{}); }
@@ -156,7 +158,7 @@ protected:
   {
     for (int64_t i : indices) {
       ASSERT_EQ(OB_SUCCESS, exprs.push_back(&exprs_[i]));
-      ObCmpFunc f; f.cmp_func_ = exprs_[i].basic_funcs_->null_first_cmp_;
+      ObCmpFunc f; f.cmp_func_ = exprs_[i].basic_funcs_->null_first_cmp_.legacy_function();
       ASSERT_EQ(OB_SUCCESS, funcs.push_back(f));
     }
   }
@@ -184,16 +186,16 @@ TEST_F(FixedGroupbyCells, merge_boundary_and_restore_keep_saved_group_spelling_d
   ASSERT_EQ(OB_SUCCESS, saved.save_store_row(*row.row_)); row.poison();
   source.assign(source.size(), 'x'); coefficient.fill(0);
   Group group; group.groupby_store_row_ = saved.store_row_;
-  datum(0) = text(current); datum(2) = bytes(expected.data(), expected.size()); datum(1).set_null();
+  put(0, text(current)); put(2, bytes(expected.data(), expected.size())); datum(1).set_null();
   int64_t diff = 99;
   ASSERT_EQ(OB_SUCCESS, op_.check_same_group(&group, diff)); EXPECT_EQ(OB_INVALID_INDEX, diff);
-  int64_t n = 17; datum(1) = integer(n);
+  int64_t n = 17; put(1, integer(n));
   ASSERT_EQ(OB_SUCCESS, op_.check_same_group(&group, diff)); EXPECT_EQ(2, diff);
   for (auto &e : exprs_) { e.get_eval_info(eval_).evaluated_ = false; e.get_eval_info(eval_).projected_ = false; }
   ASSERT_EQ(OB_SUCCESS, op_.restore_groupby_datum(&group, diff));
-  EXPECT_EQ("Customer", std::string(datum(0).ptr_, datum(0).len_));
-  EXPECT_EQ(saved.store_row_->stored_cells()[0].ptr_, datum(0).ptr_);
-  EXPECT_EQ(16, datum(2).len_); EXPECT_EQ(0, MEMCMP(expected.data(), datum(2).ptr_, expected.size()));
+  EXPECT_EQ("Customer", std::string(datum(0).get_string().ptr(), datum(0).length()));
+  EXPECT_EQ(saved.store_row_->stored_cells()[0].ptr_, datum(0).get_string().ptr());
+  EXPECT_EQ(16, datum(2).length()); EXPECT_EQ(0, MEMCMP(expected.data(), datum(2).get_string().ptr(), expected.size()));
   EXPECT_TRUE(datum(1).is_null()); EXPECT_EQ(PRECISION_UNKNOWN_YET, exprs_[2].datum_meta_.precision_);
   for (auto &e : exprs_) { EXPECT_TRUE(e.get_eval_info(eval_).evaluated_); EXPECT_TRUE(e.get_eval_info(eval_).projected_); }
   EXPECT_EQ(2, eval_.get_batch_idx());
@@ -209,7 +211,7 @@ TEST_F(FixedGroupbyCells, scalar_distinct_uses_output_mapping_skips_unmapped_and
   OwnedRow previous({bytes(coefficient.data(), coefficient.size()), text(source)});
   ASSERT_EQ(OB_SUCCESS, last().save_store_row(*previous.row_)); previous.poison();
   source.assign(source.size(), 'x');
-  datum(0) = text(current); datum(1).set_null(); datum(2) = bytes(coefficient.data(), coefficient.size());
+  put(0, text(current)); datum(1).set_null(); put(2, bytes(coefficient.data(), coefficient.size()));
   bool same = false; ASSERT_EQ(OB_SUCCESS, op_.check_unique_distinct_columns(&group, same)); EXPECT_TRUE(same);
   EXPECT_EQ(0, number(stage.row_->stored_cells()[0]));
   EXPECT_EQ(stage_bytes, stage.memory_);
@@ -226,15 +228,15 @@ TEST_F(FixedGroupbyCells, batch_distinct_crosses_saved_boundary_then_uses_batch_
   std::array<char, 16> coefficient{}; coefficient.fill(0x22);
   OwnedRow previous({bytes(coefficient.data(), coefficient.size()), text(source)});
   ASSERT_EQ(OB_SUCCESS, last().save_store_row(*previous.row_)); previous.poison();
-  datum(0, 2) = text(current); datum(0, 3) = text(source);
-  datum(2, 2) = bytes(coefficient.data(), coefficient.size()); datum(2, 3).set_null();
+  put(0, text(current), 2); put(0, text(source), 3);
+  put(2, bytes(coefficient.data(), coefficient.size()), 2); datum(2, 3).set_null();
   bool same = false;
   ASSERT_EQ(OB_SUCCESS, op_.check_unique_distinct_columns_for_batch(same, 2)); EXPECT_TRUE(same);
   EXPECT_EQ(2, op_.*member(IndexTag{})); EXPECT_FALSE(op_.*member(FirstTag{}));
   guard_.set_batch_idx(3);
   ASSERT_EQ(OB_SUCCESS, op_.check_unique_distinct_columns_for_batch(same, 3)); EXPECT_FALSE(same);
   exprs_[2].batch_result_ = false; exprs_[2].batch_idx_mask_ = 0;
-  datum(2, 0) = bytes(coefficient.data(), coefficient.size()); op_.*member(IndexTag{}) = 2;
+  put(2, bytes(coefficient.data(), coefficient.size()), 0); op_.*member(IndexTag{}) = 2;
   ASSERT_EQ(OB_SUCCESS, op_.check_unique_distinct_columns_for_batch(same, 3)); EXPECT_TRUE(same);
   op_.*member(FirstTag{}) = true;
   ASSERT_EQ(OB_SUCCESS, op_.check_unique_distinct_columns_for_batch(same, 3)); EXPECT_FALSE(same);
@@ -255,10 +257,10 @@ TEST_F(FixedGroupbyCells, real_hash_table_resolves_collisions_with_fixed_ci_deci
   ObGroupRowHashTable table; init_hash(table, exprs, funcs);
   ASSERT_EQ(OB_SUCCESS, table.set(i1)); ASSERT_EQ(OB_SUCCESS, table.set(i2));
   a.assign(a.size(), 'x'); b.assign(b.size(), 'x');
-  datum(2) = bytes(coefficient.data(), coefficient.size()); datum(1).set_null(); datum(0) = text(upper_a);
-  EXPECT_EQ(&i1, table.get(query)); datum(0) = text(upper_b); EXPECT_EQ(&i2, table.get(query));
-  datum(0) = text(absent); EXPECT_EQ(nullptr, table.get(query));
-  int64_t n = 1; datum(0) = text(upper_a); datum(1) = integer(n); EXPECT_EQ(nullptr, table.get(query));
+  put(2, bytes(coefficient.data(), coefficient.size())); datum(1).set_null(); put(0, text(upper_a));
+  EXPECT_EQ(&i1, table.get(query)); put(0, text(upper_b)); EXPECT_EQ(&i2, table.get(query));
+  put(0, text(absent)); EXPECT_EQ(nullptr, table.get(query));
+  int64_t n = 1; put(0, text(upper_a)); put(1, integer(n)); EXPECT_EQ(nullptr, table.get(query));
   EXPECT_EQ(2, eval_.get_batch_idx());
 }
 
@@ -266,8 +268,8 @@ TEST_F(FixedGroupbyCells, hash_expression_side_keeps_nonbatch_index_and_null_sho
 {
   ObSEArray<ObExpr *, 3> exprs; ObSEArray<ObCmpFunc, 3> funcs; hash_inputs(exprs, funcs, {0, 1, 2});
   std::string a = "customer", upper = "CUSTOMER"; int64_t n = 7;
-  datum(0, 1) = text(a); datum(0, 2) = text(upper);
-  exprs_[1].batch_result_ = false; exprs_[1].batch_idx_mask_ = 0; datum(1, 0) = integer(n);
+  put(0, text(a), 1); put(0, text(upper), 2);
+  exprs_[1].batch_result_ = false; exprs_[1].batch_idx_mask_ = 0; put(1, integer(n), 0);
   datum(2, 1).set_null(); datum(2, 2).set_null();
   ObGroupRowItem saved, query; saved.is_expr_row_ = query.is_expr_row_ = true;
   saved.batch_idx_ = 1; query.batch_idx_ = 2; saved.hash_ = query.hash_ = 42;
@@ -281,8 +283,10 @@ TEST_F(FixedGroupbyCells, real_consumers_keep_comparison_error_context_flags_and
   std::string a = "stored", b = "inputx";
   ObDatum stored = text(a), current = text(b); stored.set_has_lob_header(); current.set_has_lob_header();
   OwnedRow row({stored}); Group group; group.groupby_store_row_ = row.row_;
-  ASSERT_EQ(OB_SUCCESS, keys().push_back(&exprs_[0])); datum(0) = current;
-  ObDatumBasicFuncs functions = *exprs_[0].basic_funcs_; functions.null_first_cmp_ = CompareProbe::fail;
+  ASSERT_EQ(OB_SUCCESS, keys().push_back(&exprs_[0])); put(0, current);
+  DatumBasicFuncs functions = *exprs_[0].basic_funcs_;
+  ASSERT_EQ(OB_SUCCESS, ObDatumFuncs::bind_legacy_cmp(exprs_[0].get_sql_type(),
+      exprs_[0].get_sql_type(), CompareProbe::fail, functions.null_first_cmp_));
   exprs_[0].basic_funcs_ = &functions; CompareProbe::expect(row.row_->stored_cells()[0], current);
   int64_t diff = 99; EXPECT_EQ(OB_ERR_UNEXPECTED, op_.check_same_group(&group, diff));
   EXPECT_EQ(1, CompareProbe::calls); EXPECT_EQ(OB_INVALID_INDEX, diff);
@@ -292,7 +296,7 @@ TEST_F(FixedGroupbyCells, real_consumers_keep_comparison_error_context_flags_and
   saved.hash_ = query.hash_ = 42; query.is_expr_row_ = true; query.batch_idx_ = 2;
   ASSERT_EQ(OB_SUCCESS, table.set(saved)); CompareProbe::expect(row.row_->stored_cells()[0], current);
   EXPECT_EQ(nullptr, table.get(query)); EXPECT_EQ(1, CompareProbe::calls);
-  EXPECT_EQ(CompareProbe::left, row.row_->stored_cells()[0].ptr_); EXPECT_EQ(current.ptr_, datum(0).ptr_);
+  EXPECT_EQ(CompareProbe::left, row.row_->stored_cells()[0].ptr_); EXPECT_EQ(current.ptr_, datum(0).get_string().ptr());
   EXPECT_EQ(stored.pack_, row.row_->stored_cells()[0].pack_); EXPECT_EQ(2, eval_.get_batch_idx());
 }
 } // namespace

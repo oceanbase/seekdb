@@ -36,7 +36,7 @@ public:
                                 ObExprResType* types_stack,
                                 int64_t param_num,
                                 common::ObExprTypeCtx& type_ctx) const override;
-  int eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  int eval_geom_wkb(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override = 0;
@@ -60,7 +60,7 @@ class ObExprSTGeomFromWKB : public ObIExprSTGeomFromWKB
 public:
   explicit ObExprSTGeomFromWKB(common::ObIAllocator &alloc);
   virtual ~ObExprSTGeomFromWKB() {}
-  static int eval_st_geomfromwkb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_geomfromwkb(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -74,7 +74,7 @@ class ObExprSTGeometryFromWKB : public ObIExprSTGeomFromWKB
 public:
   explicit ObExprSTGeometryFromWKB(common::ObIAllocator &alloc);
   virtual ~ObExprSTGeometryFromWKB() {}
-  static int eval_st_geometryfromwkb(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_geometryfromwkb(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

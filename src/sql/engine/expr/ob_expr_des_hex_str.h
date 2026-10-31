@@ -36,7 +36,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_des_hex_str(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_des_hex_str(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   // Decode the historical serialized value wire representation into a native
   // typed datum. This is public only to permit focused codec tests.
   static int deserialize_hex_cstr(const char *buf,

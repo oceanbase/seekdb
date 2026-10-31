@@ -793,8 +793,8 @@ bool ObExprLike::checked_already(const ObExprLikeContext &like_ctx, bool null_pa
   return res;
 }
 
-int ObExprLike::like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_datum,
-                                    ObDatum &text, ObDatum &pattern, ObDatum &escape)
+int ObExprLike::like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  Datum &expr_datum,
+                                    Datum &text, Datum &pattern, Datum &escape)
 {
   int ret = OB_SUCCESS;
   const bool do_optimization = expr.extra_;
@@ -859,14 +859,14 @@ int ObExprLike::like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum 
   return ret;
 }
 
-int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_datum)
+int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   }
-  ObDatum &text = expr.locate_param_datum(ctx, 0);
-  ObDatum &pattern = expr.locate_param_datum(ctx, 1);
-  ObDatum &escape = expr.locate_param_datum(ctx, 2);
+  Datum &text = expr.locate_param_datum(ctx, 0);
+  Datum &pattern = expr.locate_param_datum(ctx, 1);
+  Datum &escape = expr.locate_param_datum(ctx, 2);
   // the third arg escape must be varchar
   if (OB_FAIL(ret)) {
   } else if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)
@@ -878,8 +878,8 @@ int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_
     ObString escape_str = escape.get_string();
     // Notice: should not change original datums
     // ToDo: @gehao Streaming like interfaces
-    ObDatum text_inrow = text; // copy datum flags;
-    ObDatum pattern_inrow = pattern;
+    Datum text_inrow = text; // copy datum flags;
+    Datum pattern_inrow = pattern;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, text,
@@ -1030,8 +1030,8 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
 {
   int ret = OB_SUCCESS;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  ObDatum *res_datums = expr.locate_batch_datums(ctx);
-  ObDatum *text_datums = expr.args_[0]->locate_batch_datums(ctx);
+  Datum *res_datums = expr.locate_batch_datums(ctx);
+  Datum *text_datums = expr.args_[0]->locate_batch_datums(ctx);
   const int64_t step_size = sizeof(uint16_t) * CHAR_BIT;
   const SqlValueType text_type = expr.args_[0]->datum_meta_.type_;
   // calc match result for each text
@@ -1125,7 +1125,7 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
 
 int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
                                            const ObBitVector &skip, const int64_t size,
-                                           ObExpr &text, ObDatum *pattern_datum, ObDatum *escape_datum)
+                                           ObExpr &text, Datum *pattern_datum, Datum *escape_datum)
 {
   int ret = OB_SUCCESS;
   const bool do_optimization = true;
@@ -1137,7 +1137,7 @@ int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
                                         &ctx.exec_ctx_, like_id, do_optimization))) {
   } else if (OB_FAIL(text.eval_batch(ctx, skip, size))) {
   } else if (OB_UNLIKELY(pattern_datum->is_null())) {
-    ObDatum *res_datums = expr.locate_batch_datums(ctx);
+    Datum *res_datums = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; i < size; i++) {
       if (!skip.contain(i)) {
@@ -1239,14 +1239,14 @@ int ObExprLike::eval_like_expr_batch_only_text_vectorized(BATCH_EVAL_FUNC_ARG_DE
   ObExpr &text = *expr.args_[0];
   ObExpr &pattern = *expr.args_[1];
   ObExpr &escape = *expr.args_[2];
-  ObDatum *pattern_datum = NULL;
-  ObDatum *escape_datum = NULL;
+  Datum *pattern_datum = NULL;
+  Datum *escape_datum = NULL;
   if (OB_FAIL(pattern.eval(ctx, pattern_datum))) {
   } else if (OB_FAIL(escape.eval(ctx, escape_datum))) {
   } else if ((!ob_is_text_tc(text.datum_meta_.type_) && !ob_is_text_tc(pattern.datum_meta_.type_))) {
     ret = like_text_vectorized_inner(expr, ctx, skip, size, text, pattern_datum, escape_datum);
   } else {
-    ObDatum pattern_inrow;
+    Datum pattern_inrow;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString pattern_val = pattern_datum->get_string();

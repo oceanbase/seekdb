@@ -107,11 +107,11 @@ int ObSPIVDaaTDimIter::save_docids()
   if (OB_ISNULL(inv_scan_score_expr_) || OB_ISNULL(inv_scan_domain_id_expr_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObDatumVector &score_datum = inv_scan_score_expr_->locate_expr_datumvector(*eval_ctx_);
-    const ObDatumVector &doc_id_datum = inv_scan_domain_id_expr_->locate_expr_datumvector(*eval_ctx_);
+    const sql::DatumVector &score_datum = inv_scan_score_expr_->locate_expr_datumvector(*eval_ctx_);
+    const sql::DatumVector &doc_id_datum = inv_scan_domain_id_expr_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       scores_[i] = score_datum.at(i)->get_float();
-      if (OB_FAIL(doc_ids_[i].from_datum(*doc_id_datum.at(i)))) {
+      if (OB_FAIL(doc_ids_[i].from_native(*doc_id_datum.at(i), inv_scan_domain_id_expr_->get_sql_type()))) {
       }
     }
   }
@@ -272,7 +272,7 @@ int ObSPIVDaaTDimIter::get_dim_max_score(double &max_score)
       }
     }
     if (OB_SUCC(ret)) {
-      const ObDatum &score_datum = inv_idx_agg_expr_->locate_expr_datum(*eval_ctx_);
+      const common::Datum &score_datum = inv_idx_agg_expr_->locate_expr_datum(*eval_ctx_);
       max_score_ = score_datum.get_float() * query_value_;
       max_score_cached_ = true;
     }

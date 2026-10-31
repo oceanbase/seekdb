@@ -31,7 +31,7 @@ int ObBatchRowDatums::init(const ObExprPtrIArray *exprs, ObIAllocator *alloc, in
     ret = OB_INVALID_ARGUMENT;
   } else {
     char *buf= (char *)alloc->alloc(ObBitVector::memory_size(batch_size)
-                                    + sizeof(ObDatum) * batch_size * exprs->count());
+                                    + sizeof(Datum) * batch_size * exprs->count());
     if (NULL == buf) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
@@ -39,7 +39,7 @@ int ObBatchRowDatums::init(const ObExprPtrIArray *exprs, ObIAllocator *alloc, in
       skip_ = to_bit_vector(buf);
       alloc_ = alloc;
       exprs_ = exprs;
-      datums_ = reinterpret_cast<ObDatum *>(buf + ObBitVector::memory_size(batch_size));
+      datums_ = reinterpret_cast<Datum *>(buf + ObBitVector::memory_size(batch_size));
       batch_size_ = batch_size;
       size_ = 0;
       saved_size_ = 0;
@@ -56,8 +56,8 @@ void ObBatchRowDatums::from_exprs(ObEvalCtx &ctx, ObBitVector *skip, int64_t siz
   OB_ASSERT(OB_NOT_NULL(skip) && OB_NOT_NULL(exprs_));
   for (int64_t i = 0; i < exprs_->count(); i++) {
     ObExpr *expr = exprs_->at(i);
-    ObDatum *datums = expr->locate_batch_datums(ctx);
-    int64_t copy_size = (expr->is_batch_result() ? size: 1) * sizeof(ObDatum);
+    Datum *datums = expr->locate_batch_datums(ctx);
+    int64_t copy_size = (expr->is_batch_result() ? size: 1) * sizeof(Datum);
     MEMCPY(datums_ + i * batch_size_, datums, copy_size);
   }
   size_ = size;
@@ -71,8 +71,8 @@ void ObBatchRowDatums::extend_save(ObEvalCtx &ctx, int64_t size)
     for (int64_t i = 0; i < exprs_->count(); i++) {
       ObExpr *expr = exprs_->at(i);
       if (expr->is_batch_result()) {
-        ObDatum *datums = expr->locate_batch_datums(ctx);
-        int64_t copy_size = (size - saved_size_) * sizeof(ObDatum);
+        Datum *datums = expr->locate_batch_datums(ctx);
+        int64_t copy_size = (size - saved_size_) * sizeof(Datum);
         MEMCPY(datums_ + i * batch_size_ + saved_size_, datums + saved_size_, copy_size);
       }
     }
@@ -85,8 +85,8 @@ void ObBatchRowDatums::to_exprs(ObEvalCtx &ctx)
   if (saved_size_ > 0) {
     for (int64_t i = 0; i < exprs_->count(); i++) {
       ObExpr *expr = exprs_->at(i);
-      ObDatum *datums = expr->locate_batch_datums(ctx);
-      int64_t copy_size = (expr->is_batch_result() ? saved_size_: 1) * sizeof(ObDatum);
+      Datum *datums = expr->locate_batch_datums(ctx);
+      int64_t copy_size = (expr->is_batch_result() ? saved_size_: 1) * sizeof(Datum);
       MEMCPY(datums, datums_ + i * batch_size_, copy_size);
     }
   }
@@ -98,7 +98,7 @@ void ObBatchRowDatums::to_exprs(ObEvalCtx &ctx, int64_t from_idx, int64_t to_idx
   OB_ASSERT(!skip_->exist(from_idx));
   for (int64_t i = 0; i < exprs_->count(); i++) {
     ObExpr *expr = exprs_->at(i);
-    ObDatum *datums = expr->locate_batch_datums(ctx);
+    Datum *datums = expr->locate_batch_datums(ctx);
     if (!expr->is_batch_result()) {
       *datums = *(datums_ + i * batch_size_);
     } else {
@@ -245,14 +245,15 @@ int ObGroupJoinBufffer::fill_cur_row_group_param()
       const ObDynamicParamSetter &rescan_param = rescan_params_->at(i);
       int64_t param_idx = rescan_param.param_idx_;
       ObExpr *dst = rescan_param.dst_;
-      ObDatum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
+      Datum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
       DatumParameterArray &arr = group_params_.at(i);
       dst->get_eval_info(*eval_ctx_).clear_evaluated_flag();
       ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
       if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, arr.data_[cur_group_idx_]))) {
-      } else if (dst->res_buf_off_ != 0 && OB_FAIL(dst->deep_copy_datum(*eval_ctx_, arr.data_[cur_group_idx_].datum_))) {
+      } else if (plan_ctx->get_native_parameter(param_idx) == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
       } else {
-        if (dst->res_buf_off_ == 0) { param_datum = arr.data_[cur_group_idx_].datum_; }
+        param_datum = *plan_ctx->get_native_parameter(param_idx);
         dst->set_evaluated_projected(*eval_ctx_);
       }
     }
@@ -268,17 +269,18 @@ int ObGroupJoinBufffer::fill_cur_row_group_param()
         const ObDynamicParamSetter &rescan_param = right_rescan_params_->at(i);
         int64_t param_idx = rescan_param.param_idx_;
         ObExpr *dst = rescan_param.dst_;
-        ObDatum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
+        Datum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
         DatumParameterArray *arr = above_right_group_params_.at(i);
         dst->get_eval_info(*eval_ctx_).clear_evaluated_flag();
         ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
         if (OB_UNLIKELY(above_group_idx_for_read_ >= arr->count_)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, arr->data_[above_group_idx_for_read_]))) {
-        } else if (dst->res_buf_off_ != 0 && OB_FAIL(dst->deep_copy_datum(*eval_ctx_, arr->data_[above_group_idx_for_read_].datum_))) {
+        } else if (plan_ctx->get_native_parameter(param_idx) == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
         } else {
-          if (dst->res_buf_off_ == 0) { param_datum = arr->data_[above_group_idx_for_read_].datum_; }
-          dst->set_evaluated_projected(*eval_ctx_);
+          param_datum = *plan_ctx->get_native_parameter(param_idx);
+        dst->set_evaluated_projected(*eval_ctx_);
         }
       }
     }
@@ -304,14 +306,15 @@ int ObGroupJoinBufffer::get_next_left_iter()
         const ObDynamicParamSetter &rescan_param = left_rescan_params_->at(i);
         int64_t param_idx = rescan_param.param_idx_;
         ObExpr *dst = rescan_param.dst_;
-        ObDatum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
+        Datum &param_datum = dst->locate_datum_for_write(*eval_ctx_);
         dst->get_eval_info(*eval_ctx_).clear_evaluated_flag();
         ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
         if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, array_obj->data_[above_group_idx_for_expand_]))) {
-        } else if (dst->res_buf_off_ != 0 && OB_FAIL(dst->deep_copy_datum(*eval_ctx_, array_obj->data_[above_group_idx_for_expand_].datum_))) {
+        } else if (plan_ctx->get_native_parameter(param_idx) == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
         } else {
-          if (dst->res_buf_off_ == 0) { param_datum = array_obj->data_[above_group_idx_for_expand_].datum_; }
-          dst->set_evaluated_projected(*eval_ctx_);
+          param_datum = *plan_ctx->get_native_parameter(param_idx);
+        dst->set_evaluated_projected(*eval_ctx_);
         }
       }
     }

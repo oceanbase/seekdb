@@ -98,11 +98,11 @@ int ObExprNameConst::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprNameConst::eval_name_const(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *name_param = NULL;
-  ObDatum *value_param = NULL;
+  Datum *name_param = NULL;
+  Datum *value_param = NULL;
   ObExpr *name_expr = expr.args_[0];
   if (OB_FAIL(expr.eval_param_value(ctx, name_param, value_param))) {
   } else if (OB_ISNULL(name_param) || OB_ISNULL(value_param) || OB_ISNULL(name_expr)) {

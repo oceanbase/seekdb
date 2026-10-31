@@ -714,10 +714,10 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
   return ret;
 }
 
-static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum,
+static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum,
                            const int64_t &trim_type, ObString &pattern, bool &res_is_clob,
                            const ObDatumMeta &str_meta, const bool str_has_lob_header,
-                           const ObDatum &str_datum)
+                           const Datum &str_datum)
 {
   int ret = OB_SUCCESS;
   ObString output;
@@ -797,7 +797,7 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
   return ret;
 }
 
-int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   bool has_null = false;
@@ -842,7 +842,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
     bool res_is_clob = false;
     if (2 == expr.arg_cnt_ && (T_FUN_SYS_LTRIM == expr.type_ || T_FUN_SYS_RTRIM == expr.type_)) {
       const ObDatumMeta &str_meta = expr.args_[expr.arg_cnt_ - 2]->datum_meta_;
-      const ObDatum &str_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 2);
+      const Datum &str_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 2);
       const bool str_has_lob_header = expr.args_[expr.arg_cnt_ - 2]->obj_meta_.has_lob_header();
       pattern = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1).get_string();
       const ObDatumMeta &pattern_meta = expr.args_[expr.arg_cnt_ - 1]->datum_meta_;
@@ -854,7 +854,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
       } else { // pattern is text tc
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-        const ObDatum &pattern_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1);
+        const Datum &pattern_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1);
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
                                                               pattern_meta, pattern_has_lob_header, pattern))) {
         } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
@@ -863,7 +863,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
       }
     } else {
       const ObDatumMeta &str_meta = expr.args_[expr.arg_cnt_ - 1]->datum_meta_;
-      const ObDatum &str_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1);
+      const Datum &str_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1);
       const bool str_has_lob_header = expr.args_[expr.arg_cnt_ - 1]->obj_meta_.has_lob_header();
       if (3 == expr.arg_cnt_) {
         const ObDatumMeta &pattern_meta = expr.args_[1]->datum_meta_;
@@ -876,7 +876,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
         } else {
           ObEvalCtx::TempAllocGuard alloc_guard(ctx);
           ObIAllocator &calc_alloc = alloc_guard.get_allocator();
-          const ObDatum &pattern_datum = expr.locate_param_datum(ctx, 1);
+          const Datum &pattern_datum = expr.locate_param_datum(ctx, 1);
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
                                                                 pattern_meta, pattern_has_lob_header, pattern))) {
           } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,

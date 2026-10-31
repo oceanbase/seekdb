@@ -92,7 +92,7 @@ int ObExprJsonKeys::get_keys_from_wrapper(ObIJsonBase *json_doc,
   return ret;
 }
 
-int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObIJsonBase *json_doc = NULL;
@@ -112,7 +112,7 @@ int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     ObJsonPathCache* path_cache = ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
     path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
 
-    ObDatum *path_data = NULL;
+    Datum *path_data = NULL;
     if (expr.args_[1]->datum_meta_.type_ == ObNullType) {
       is_null_result = true;
     } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, path_data))) {

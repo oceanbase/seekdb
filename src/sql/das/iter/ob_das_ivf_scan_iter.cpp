@@ -522,8 +522,8 @@ int ObDASIvfBaseScanIter::get_next_saved_rowkey()
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObDatum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
-          datum = rowkey.get_values()[i].datum_;
+          common::Datum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
+          ret = expr->get_datum_copy_plan().import_legacy(rowkey.get_values()[i].datum_, datum);
         }
       }
     }
@@ -551,7 +551,7 @@ int ObDASIvfBaseScanIter::get_next_saved_rowkeys(int64_t &count)
       guard.set_batch_size(count);
       for (int64_t idx_exp = 0; OB_SUCC(ret) && idx_exp < ivf_res_exprs.count(); ++idx_exp) {
         ObExpr *expr = ivf_res_exprs.at(idx_exp);
-        ObDatum *datum = nullptr;
+        common::Datum *datum = nullptr;
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_ISNULL(datum = expr->locate_datums_for_update(*vec_aux_rtdef_->eval_ctx_, count))) {
@@ -559,7 +559,7 @@ int ObDASIvfBaseScanIter::get_next_saved_rowkeys(int64_t &count)
         } else {
           for (int64_t idx_key = 0; OB_SUCC(ret) && idx_key < count; ++idx_key) {
             guard.set_batch_idx(idx_key);
-            datum[idx_key] = rowkeys[idx_key].get_values()[idx_exp].datum_;
+            ret = expr->get_datum_copy_plan().import_legacy(rowkeys[idx_key].get_values()[idx_exp].datum_, datum[idx_key]);
           }
           if (OB_SUCC(ret)) {
             expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_);
@@ -632,8 +632,8 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
         guard.set_batch_size(scan_row_cnt);
         ObExpr *cid_expr = centroid_ctdef->result_output_[CID_IDX];
         ObExpr *cid_vec_expr = centroid_ctdef->result_output_[CID_VECTOR_IDX];
-        ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
-        ObDatum *cid_vec_datum = cid_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *cid_vec_datum = cid_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
         bool has_lob_header = centroid_ctdef->result_output_.at(CID_VECTOR_IDX)->obj_meta_.has_lob_header();
         uint64_t center_idx = 0;
 
@@ -664,8 +664,8 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
       centroid_iter_->clear_evaluated_flag();
       ObExpr *cid_expr = centroid_ctdef->result_output_[CID_IDX];
       ObExpr *cid_vec_expr = centroid_ctdef->result_output_[CID_VECTOR_IDX];
-      ObDatum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
-      ObDatum &cid_vec_datum = cid_vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum &cid_vec_datum = cid_vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
       bool has_lob_header = centroid_ctdef->result_output_.at(CID_VECTOR_IDX)->obj_meta_.has_lob_header();
 
       uint64_t center_idx = 0;
@@ -809,8 +809,8 @@ int ObDASIvfBaseScanIter::gen_near_cid_heap_from_table(
       guard.set_batch_size(scan_row_cnt);
       ObExpr *cid_expr = centroid_ctdef->result_output_[CID_IDX];
       ObExpr *cid_vec_expr = centroid_ctdef->result_output_[CID_VECTOR_IDX];
-      ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
-      ObDatum *cid_vec_datum = cid_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum *cid_vec_datum = cid_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
       bool has_lob_header = centroid_ctdef->result_output_.at(CID_VECTOR_IDX)->obj_meta_.has_lob_header();
       ObCenterId center_id;
 
@@ -836,8 +836,8 @@ int ObDASIvfBaseScanIter::gen_near_cid_heap_from_table(
     centroid_iter_->clear_evaluated_flag();
     ObExpr *cid_expr = centroid_ctdef->result_output_[CID_IDX];
     ObExpr *cid_vec_expr = centroid_ctdef->result_output_[CID_VECTOR_IDX];
-    ObDatum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
-    ObDatum &cid_vec_datum = cid_vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+    common::Datum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+    common::Datum &cid_vec_datum = cid_vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
     bool has_lob_header = centroid_ctdef->result_output_.at(CID_VECTOR_IDX)->obj_meta_.has_lob_header();
 
     ObCenterId center_id;
@@ -1003,7 +1003,7 @@ int ObDASIvfBaseScanIter::get_main_rowkey_from_cid_vec_datum(ObIAllocator& alloc
         ObExpr *expr = cid_vec_out_exprs.at(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(project_datum_value_view(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_), expr->obj_meta_, expr->obj_datum_map_, obj_ptr[rowkey_idx].meta_, obj_ptr[rowkey_idx]))) {
+        } else if (OB_FAIL(project_native_datum_value_view(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_), expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, obj_ptr[rowkey_idx].meta_, obj_ptr[rowkey_idx], allocator))) {
         } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(obj_ptr[rowkey_idx], obj_ptr, rowkey_cnt, rowkey_idx))) {
         } else {
           ++rowkey_idx;
@@ -1180,7 +1180,7 @@ int ObDASIvfScanIter::get_rowkeys_to_heap(const ObString &cid_str, int64_t cid_v
       guard.set_batch_size(scan_row_cnt);
       bool has_lob_header = cid_vec_ctdef->result_output_.at(CID_VECTOR_IDX)->obj_meta_.has_lob_header();
       ObExpr *cid_expr = cid_vec_ctdef->result_output_[CID_VECTOR_IDX];
-      ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
 
       for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
         guard.set_batch_idx(i);
@@ -1361,7 +1361,7 @@ int ObDASIvfScanIter::filter_rowkey_by_cid(bool is_vectorized,
     if (OB_SUCC(ret)) {
       ObEvalCtx::BatchInfoScopeGuard guard(*vec_aux_rtdef_->eval_ctx_);
       guard.set_batch_size(scan_row_cnt);
-      ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
       bool is_cid_exist = false;
       for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
         guard.set_batch_idx(i);
@@ -1484,7 +1484,7 @@ int ObDASIvfScanIter::get_cid_from_rowkey_cid_table(ObString &cid)
     if (OB_ITER_END != ret) {
     }
   } else {
-    ObDatum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+    common::Datum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
     cid = cid_datum.get_string();
   }
 
@@ -1675,7 +1675,7 @@ int ObDASIvfPQScanIter::calc_distance_between_pq_ids_by_table(
         guard.set_batch_size(scan_row_cnt);
         bool has_lob_header = pq_cid_vec_ctdef->result_output_.at(PQ_CENTROID_VEC_IDX)->obj_meta_.has_lob_header();
         ObExpr *vec_expr = pq_cid_vec_ctdef->result_output_[PQ_CENTROID_VEC_IDX];
-        ObDatum *vec_datum = vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *vec_datum = vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
 
         for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
           float cur_dis = 0.0f;
@@ -1704,7 +1704,7 @@ int ObDASIvfPQScanIter::calc_distance_between_pq_ids_by_table(
       pq_centroid_iter_->clear_evaluated_flag();
       bool has_lob_header = pq_cid_vec_ctdef->result_output_.at(PQ_CENTROID_VEC_IDX)->obj_meta_.has_lob_header();
       ObExpr *vec_expr = pq_cid_vec_ctdef->result_output_[PQ_CENTROID_VEC_IDX];
-      ObDatum &vec_datum = vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum &vec_datum = vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
       for (int i = 0; OB_SUCC(ret) && i < batch_row_count; ++i) {
         float cur_dis = 0.0f;
         if (OB_FAIL(pq_centroid_iter_->get_next_row())) {
@@ -1785,7 +1785,7 @@ int ObDASIvfPQScanIter::calc_distance_with_precompute(
   const ObDASScanCtDef *cid_vec_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CID_VEC_SCAN);
   ObExpr *cid_expr = cid_vec_ctdef->result_output_[PQ_IDS_IDX];
-  ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+  common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
   int counter = 0;
   size_t saved_j[4] = {0, 0, 0, 0};
   for (int64_t j = 0; OB_SUCC(ret) && j < scan_row_cnt; ++j) {
@@ -2005,7 +2005,7 @@ int ObDASIvfPQScanIter::calc_nearest_limit_rowkeys_in_cids(
           ObEvalCtx::BatchInfoScopeGuard guard(*vec_aux_rtdef_->eval_ctx_);
           guard.set_batch_size(scan_row_cnt);
           ObExpr *cid_expr = cid_vec_ctdef->result_output_[PQ_IDS_IDX];
-          ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+          common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
 
           if (pre_compute_table) {
             if (OB_FAIL(calc_distance_with_precompute(guard, scan_row_cnt, rowkey_cnt, filter_main_rowkey,
@@ -2165,7 +2165,7 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
         ObEvalCtx::BatchInfoScopeGuard guard(*vec_aux_rtdef_->eval_ctx_);
         guard.set_batch_size(scan_row_cnt);
         ObExpr *vec_expr = brute_ctdef->result_output_[DATA_VECTOR_IDX];
-        ObDatum *vec_datum = vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *vec_datum = vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
 
         for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
           guard.set_batch_idx(i);
@@ -2193,7 +2193,7 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
     } else {
       brute_iter_->clear_evaluated_flag();
       ObExpr *vec_expr = brute_ctdef->result_output_[DATA_VECTOR_IDX];
-      ObDatum &vec_datum = vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum &vec_datum = vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
       while (OB_SUCC(ret)) {
         if (OB_FAIL(brute_iter_->get_next_row())) {
           if (OB_ITER_END != ret) {
@@ -2254,7 +2254,7 @@ int ObDASIvfBaseScanIter::get_main_rowkey_brute(
         ObExpr *expr = brute_out_exprs.at(i);
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(project_datum_value_view(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+        } else if (OB_FAIL(project_native_datum_value_view(expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_), expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator))) {
         } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(tmp_obj, obj_ptr, rowkey_cnt, rowkey_idx))) {
         } else {
           ++rowkey_idx;
@@ -2306,7 +2306,7 @@ int ObDASIvfPQScanIter::get_cid_from_pq_rowkey_cid_table(ObIAllocator &allocator
     }
   } else {
     pq_cids = pq_cids_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_).get_string();
-    ObDatum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+    common::Datum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
     cid = cid_datum.get_string();
   }
   return ret;
@@ -2425,8 +2425,8 @@ int ObDASIvfPQScanIter::filter_rowkey_by_cid(bool is_vectorized, int64_t batch_r
         ObEvalCtx::BatchInfoScopeGuard guard(*vec_aux_rtdef_->eval_ctx_);
         ObExpr *cid_expr = rowkey_cid_ctdef->result_output_[CIDS_IDX];
         ObExpr *pq_cids_expr = rowkey_cid_ctdef->result_output_[PQ_IDS_IDX];
-        ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
-        ObDatum *pq_cid_datum = pq_cids_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *pq_cid_datum = pq_cids_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
   
         for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
           guard.set_batch_idx(i);
@@ -2550,8 +2550,8 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
         guard.set_batch_size(scan_row_cnt);
         ObExpr *cid_expr = pq_cid_vec_ctdef->result_output_[CID_IDX];
         ObExpr *cid_vec_expr = pq_cid_vec_ctdef->result_output_[CID_VECTOR_IDX];
-        ObDatum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
-        ObDatum *cid_vec_datum = cid_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *cid_datum = cid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *cid_vec_datum = cid_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
         bool has_lob_header = pq_cid_vec_ctdef->result_output_.at(CID_VECTOR_IDX)->obj_meta_.has_lob_header();
         uint64_t center_idx = 0;
 
@@ -2582,10 +2582,10 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
     } else {
       pq_centroid_iter_->clear_evaluated_flag();
       ObExpr *cid_expr = pq_cid_vec_ctdef->result_output_[CID_IDX];
-      ObDatum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum &cid_datum = cid_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
       bool has_lob_header = pq_cid_vec_ctdef->result_output_.at(CID_VECTOR_IDX)->obj_meta_.has_lob_header();
       ObExpr *vec_expr = pq_cid_vec_ctdef->result_output_[CID_VECTOR_IDX];
-      ObDatum &vec_datum = vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+      common::Datum &vec_datum = vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
       for (int i = 0; OB_SUCC(ret); ++i) {
         if (OB_FAIL(pq_centroid_iter_->get_next_row())) {
           if (OB_ITER_END != ret) {
@@ -2815,10 +2815,8 @@ int ObDASIvfPQScanIter::build_rowkey_hash_set(
           for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
             DatumValue tmp_obj;
             ObExpr *expr = ctdef->rowkey_exprs_.at(i);
-            ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-            if (OB_ISNULL(datum.ptr_)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+            common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+            if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator))) {
             } else if (OB_FAIL(hash_datum_value(tmp_obj, hash_val, hash_val))) {
             }
           }
@@ -2853,10 +2851,8 @@ int ObDASIvfPQScanIter::build_rowkey_hash_set(
             for (int64_t j = 0; OB_SUCC(ret) && j < rowkey_cnt; ++j) {
               DatumValue tmp_obj;
               ObExpr *expr = ctdef->rowkey_exprs_.at(j);
-              ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-              if (OB_ISNULL(datum.ptr_)) {
-                ret = OB_ERR_UNEXPECTED;
-              } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+              common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+              if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator))) {
               } else if (OB_FAIL(hash_datum_value(tmp_obj, hash_val, hash_val))) {
               }
             }
@@ -2924,7 +2920,7 @@ int ObDASIvfSQ8ScanIter::get_real_search_vec_u8(bool is_vectorized, ObString &re
         guard.set_batch_size(scan_row_cnt);
         bool has_lob_header = sq_meta_ctdef->result_output_.at(META_VECTOR_IDX)->obj_meta_.has_lob_header();
         ObExpr *meta_vec_expr = sq_meta_ctdef->result_output_[META_VECTOR_IDX];
-        ObDatum *meta_vec_datum = meta_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *meta_vec_datum = meta_vec_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
 
         for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
           guard.set_batch_idx(i);
@@ -2952,7 +2948,7 @@ int ObDASIvfSQ8ScanIter::get_real_search_vec_u8(bool is_vectorized, ObString &re
     sq_meta_iter_->clear_evaluated_flag();
     bool has_lob_header = sq_meta_ctdef->result_output_.at(META_VECTOR_IDX)->obj_meta_.has_lob_header();
     ObExpr *meta_vec_expr = sq_meta_ctdef->result_output_[META_VECTOR_IDX];
-    ObDatum &meta_vec_datum = meta_vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+    common::Datum &meta_vec_datum = meta_vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
     int row_index = 0;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(sq_meta_iter_->get_next_row())) {

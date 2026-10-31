@@ -483,11 +483,21 @@ int ObDynamicSamplePieceMsgCtx::split_range(
         ++tmp_row_count;
         if (tmp_row_count % step == 0) {
           for (int64_t i = 0; OB_SUCC(ret) && i < sort_def_.exprs_->count(); ++i) {
-            ObDatum *cur_datum = nullptr;
+            Datum *cur_datum = nullptr;
             if (OB_FAIL(sort_def_.exprs_->at(i)->eval(coord_.get_eval_ctx(), cur_datum))) {
             } else if (OB_ISNULL(cur_datum)) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(copied_key.at(i).deep_copy(*cur_datum, exec_ctx_.get_allocator()))) {
+            } else {
+              const DatumCopyPlan plan = sort_def_.exprs_->at(i)->get_datum_copy_plan();
+              int64_t bytes = 0;
+              char *buffer = nullptr;
+              int64_t position = 0;
+              if (OB_FAIL(plan.legacy_payload_size(*cur_datum, bytes))) {
+              } else if (bytes > 0 && OB_ISNULL(buffer = static_cast<char *>(exec_ctx_.get_allocator().alloc(bytes)))) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+              } else {
+                ret = plan.export_legacy(*cur_datum, copied_key.at(i), buffer, bytes, position);
+              }
             }
           }
           if (OB_SUCC(ret)) {

@@ -240,7 +240,7 @@ private:
   bool is_valid();
   int insert_by_row();
   int insert_by_row_batch(const ObBatchRows *child_brs);
-  int calc_expr_values(ObDatum *&datum);
+  int calc_expr_values(Datum *&datum);
   int do_create_filter_rescan();
   int do_use_filter_rescan();
   int try_send_join_filter();

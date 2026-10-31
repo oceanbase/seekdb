@@ -35,7 +35,7 @@ ObExprInt2ip::~ObExprInt2ip()
 
 
 
-int ObExprInt2ip::int2ip(ObDatum &result, const int64_t int_val)
+int ObExprInt2ip::int2ip(Datum &result, const int64_t int_val)
 {
   int ret = OB_SUCCESS;
   ObString str_result = result.get_string();
@@ -74,12 +74,12 @@ int ObExprInt2ip::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &text = expr.locate_param_datum(ctx, 0);
+    Datum &text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
       expr_datum.set_null();
     } else {

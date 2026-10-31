@@ -42,7 +42,7 @@ int ObExprRowCount::calc_result_type0(ObExprResType &type, common::ObExprTypeCtx
 }
 
 int ObExprRowCount::eval_row_count(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

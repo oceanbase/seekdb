@@ -93,10 +93,10 @@ int ObExprRandom::assign(const ObExprOperator &other)
 }
 
 int ObExprRandom::calc_random_expr_const_seed(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *seed_datum = NULL;
+  Datum *seed_datum = NULL;
   if (OB_UNLIKELY(0 != expr.arg_cnt_ && 1 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (1 == expr.arg_cnt_ && OB_FAIL(expr.eval_param_value(ctx, seed_datum))) {
@@ -131,10 +131,10 @@ int ObExprRandom::calc_random_expr_const_seed(const ObExpr &expr, ObEvalCtx &ctx
 }
 
 int ObExprRandom::calc_random_expr_nonconst_seed(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *seed_datum = NULL;
+  Datum *seed_datum = NULL;
   if (OB_UNLIKELY(1 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, seed_datum))) {

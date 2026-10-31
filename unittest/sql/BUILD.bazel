@@ -345,24 +345,6 @@ cc_test(
 )
 
 cc_library(
-    name = "native_bigint_output_cases",
-    srcs = ["test_native_bigint_output.cpp"],
-    alwayslink = True,
-    deps = [
-        "//src/sql:sql_runtime_interface",
-        "//src/sql:sql_runtime_internal_headers",
-        "//bazel/third_party:gtest",
-    ],
-)
-cc_test(
-    name = "test_native_bigint_output",
-    linkstatic = True,
-    data = ["//src/observer:liboceanbase_test_runtime"],
-    env = {"LD_LIBRARY_PATH": "src/observer"},
-    deps = [":native_bigint_output_cases", "//src/observer:liboceanbase"],
-)
-
-cc_library(
     name = "fixed_ra_datum_cells_cases",
     srcs = ["test_fixed_ra_datum_cells.cpp"],
     alwayslink = True,
@@ -854,4 +836,80 @@ cc_test(
     data = ["//src/observer:liboceanbase_test_runtime"],
     env = {"LD_LIBRARY_PATH": "src/observer"},
     deps = [":des_hex_str_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_subquery_cache_cases",
+    srcs = ["test_native_subquery_cache.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_subquery_cache",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_subquery_cache_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_expr_callbacks_cases",
+    srcs = ["test_native_expr_callbacks.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_expr_callbacks",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_expr_callbacks_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_frame_wire_cases",
+    srcs = ["test_native_frame_wire.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_frame_wire",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_frame_wire_cases", "//src/observer:liboceanbase"],
+)
+
+cc_library(
+    name = "native_batch_hash_cases",
+    srcs = ["test_native_batch_hash.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/sql:sql_runtime_interface",
+        "//src/sql:sql_runtime_internal_headers",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_native_batch_hash",
+    data = ["//src/observer:liboceanbase_test_runtime"],
+    env = {"LD_LIBRARY_PATH": "src/observer"},
+    linkstatic = True,
+    deps = [":native_batch_hash_cases", "//src/observer:liboceanbase"],
 )

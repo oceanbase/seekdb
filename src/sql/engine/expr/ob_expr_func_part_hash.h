@@ -30,7 +30,7 @@ public:
   ObExprFuncPartHashBase(common::ObIAllocator &alloc, ObExprOperatorType type,
           const char *name, int32_t param_num, int32_t dimension,
           bool is_internal_for_mysql = false);
-  static int calc_value_for_mysql(const common::ObDatum &input, common::ObDatum &output,
+  static int calc_value_for_mysql(const common::Datum &input, common::Datum &output,
                                  const common::SqlValueType input_type);
 };
 
@@ -47,7 +47,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_part_hash(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_part_hash(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprFuncPartHash);

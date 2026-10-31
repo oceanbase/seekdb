@@ -40,7 +40,7 @@ public:
                                 const override;
   static int eval_array(const ObExpr &expr,
                         ObEvalCtx &ctx,
-                        ObDatum &res);
+                        Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

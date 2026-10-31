@@ -37,7 +37,7 @@ public:
                                 ObExprResType &interval,
                                 ObExprResType &unit,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum, bool is_add);
+  static int calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum, bool is_add);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDateAdjust);
@@ -51,7 +51,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_date_add(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_date_add(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDateAdd);
 };
@@ -64,7 +64,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_date_sub(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_date_sub(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprDateSub);
 };
@@ -80,7 +80,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprLastDay);

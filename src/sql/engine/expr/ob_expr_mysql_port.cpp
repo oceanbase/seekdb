@@ -47,7 +47,7 @@ int ObExprMySQLPort::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_
 }
 
 int ObExprMySQLPort::eval_mysql_port(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

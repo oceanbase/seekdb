@@ -15,6 +15,7 @@
  */
 
 #include "common/datum/datum_copy_plan.h"
+#include "common/datum/datum_parameter_array.h"
 #include <gtest/gtest.h>
 #include <cstring>
 
@@ -521,6 +522,187 @@ TEST(DatumCopyPlan, mutable_signed_int_rejects_other_types_and_invalid_shapes_wi
   // the mutable bridge for it would violate the producer/type contract, so this
   // test does not pretend that shape validation can identify the active member.
   EXPECT_EQ(91, sentinel);
+}
+
+TEST(DatumCopyPlan, native_size_and_explicit_decimal_writer_keep_actual_span)
+{
+  const auto small = decimal_plan(9, 2);
+  const auto wide = decimal_plan(40, 2);
+  const int64_t coefficient = -1234;
+  Datum value; value.set_int(71);
+  ASSERT_EQ(OB_SUCCESS, small.set_decimal(reinterpret_cast<const ObDecimalInt *>(&coefficient), 8,
+                                         value, nullptr, 0));
+  EXPECT_EQ(coefficient, value.get_int());
+  int64_t size = -1;
+  ASSERT_EQ(OB_SUCCESS, small.payload_copy_size(value, size)); EXPECT_EQ(0, size);
+  char owned[9]; MEMSET(owned, 0x5a, sizeof(owned));
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH, wide.set_decimal(reinterpret_cast<const ObDecimalInt *>(&coefficient), 8,
+                                               value, owned, 7));
+  EXPECT_EQ(coefficient, value.get_int()); EXPECT_EQ(char(0x5a), owned[0]);
+  ASSERT_EQ(OB_SUCCESS, wide.set_decimal(reinterpret_cast<const ObDecimalInt *>(&coefficient), 8,
+                                         value, owned, sizeof(owned)));
+  ASSERT_EQ(OB_SUCCESS, wide.payload_copy_size(value, size)); EXPECT_EQ(8, size);
+  ASSERT_EQ(OB_SUCCESS, wide.legacy_payload_size(value, size)); EXPECT_EQ(32, size);
+  alignas(8) char scratch[64]; ObDatum view;
+  ASSERT_EQ(OB_SUCCESS, wide.get_decimal(value, view, scratch, sizeof(scratch)));
+  EXPECT_EQ(32, view.len_); EXPECT_EQ(scratch, view.ptr_);
+  EXPECT_EQ(int256_t(coefficient), view.get_decimal_int256());
+  EXPECT_EQ(char(0x5a), owned[8]);
+}
+
+TEST(DatumCopyPlan, legacy_view_borrows_reference_but_uses_caller_scratch_for_scalar_and_state)
+{
+  const DatumCopyPlan integer(metadata(ObIntType), ObAccuracy());
+  Datum value; value.set_int(INT64_MIN);
+  ObDatum view = legacy("sentinel", 8);
+  const char *prior = view.ptr_;
+  alignas(8) char scratch[64]; MEMSET(scratch, 0x21, sizeof(scratch));
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH, integer.legacy_view(value, view, scratch, 63));
+  EXPECT_EQ(prior, view.ptr_); EXPECT_EQ(char(0x21), scratch[0]);
+  ASSERT_EQ(OB_SUCCESS, integer.legacy_view(value, view, scratch, sizeof(scratch)));
+  EXPECT_EQ(scratch, view.ptr_); EXPECT_EQ(INT64_MIN, view.get_int());
+  value.set_max();
+  ASSERT_EQ(OB_SUCCESS, integer.legacy_view(value, view, scratch, sizeof(scratch)));
+  EXPECT_TRUE(view.is_max());
+  const DatumCopyPlan string(metadata(ObVarcharType), ObAccuracy());
+  char text[] = "abc"; ASSERT_EQ(OB_SUCCESS, value.set_string(text, 3));
+  ASSERT_EQ(OB_SUCCESS, string.legacy_view(value, view, scratch, sizeof(scratch)));
+  EXPECT_EQ(text, view.ptr_); EXPECT_EQ(3, view.len_);
+}
+
+TEST(DatumCopyPlan, typed_wide_reads_extend_actual_zero_short_and_negative_coefficients)
+{
+  const DatumCopyPlan plan = decimal_plan(30, 2);
+  const int64_t values[] = {0, 127, -128, INT32_MIN};
+  for (int64_t value : values) {
+    for (int width : {0, 4, 8}) {
+      if (width == 0 && value != 0) { continue; }
+      char source[8]; write_coefficient(source, width, value);
+      char owned[8]; Datum datum;
+      ASSERT_EQ(OB_SUCCESS, plan.set_decimal(reinterpret_cast<const ObDecimalInt *>(source), width,
+                                             datum, owned, sizeof(owned)));
+      MEMSET(source, 0x7f, sizeof(source));
+      int128_t value128 = 71; int256_t value256 = 72; int512_t value512 = 73;
+      ASSERT_EQ(OB_SUCCESS, datum.get_decimal_int128(value128)); EXPECT_EQ(int128_t(value), value128);
+      ASSERT_EQ(OB_SUCCESS, datum.get_decimal_int256(value256)); EXPECT_EQ(int256_t(value), value256);
+      ASSERT_EQ(OB_SUCCESS, datum.get_decimal_int512(value512)); EXPECT_EQ(int512_t(value), value512);
+    }
+  }
+  char wider[32]; write_coefficient(wider, sizeof(wider), -7);
+  Datum reference; ASSERT_EQ(OB_SUCCESS, reference.set_reference(wider, sizeof(wider)));
+  int128_t result = 99;
+  ASSERT_EQ(OB_SUCCESS, reference.get_decimal_int128(result)); EXPECT_EQ(int128_t(-7), result);
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  wider[0] = 0;
+#else
+  wider[31] = 0;
+#endif
+  result = 99;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, reference.get_decimal_int128(result)); EXPECT_EQ(int128_t(99), result);
+  ASSERT_EQ(OB_SUCCESS, reference.set_reference(wider, 7));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, reference.get_decimal_int128(result)); EXPECT_EQ(int128_t(99), result);
+}
+
+namespace {
+int clone_native_sql_array(const SqlType &type, const Datum &input, ObIAllocator &owner,
+                           Datum &output, void *)
+{
+  DatumParameter source, clone;
+  source.set_type_meta(type.legacy_meta()); source.set_accuracy(type.accuracy());
+  const DatumCopyPlan plan(type);
+  int ret = plan.borrow_legacy(input, source.datum_);
+  if (ret == OB_SUCCESS) { ret = DatumParameterArray::clone_parameter(source, clone, owner); }
+  if (ret == OB_SUCCESS) { ret = plan.import_legacy(clone.datum_, output); }
+  return ret;
+}
+}
+
+TEST(DatumCopyPlan, complete_array_borrow_requires_the_existing_resource_cloner_to_own_leaves)
+{
+  ObArenaAllocator source_owner, type_owner;
+  CopyPlanAllocator destination_owner;
+  SqlType element;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(metadata(ObIntType), ObAccuracy(), element));
+  SqlTypeSpec spec;
+  spec.attributes.meta_.set_ext(); spec.attributes.meta_.set_extend_type(T_EXT_SQL_ARRAY);
+  spec.form = SqlTypeForm::Array; spec.element = &element;
+  const SqlType *type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, type_owner, type));
+  const DatumCopyPlan plan(*type);
+  DatumParameterArray *array = DatumParameterArray::alloc(source_owner, 2);
+  ASSERT_NE(nullptr, array);
+  ASSERT_EQ(OB_SUCCESS, array->data_[0].set_int(INT64_MIN, source_owner));
+  ASSERT_EQ(OB_SUCCESS, array->data_[1].set_int(77, source_owner));
+  DatumParameter source;
+  ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, source_owner));
+  Datum borrowed, copied; copied.set_int(91);
+  ASSERT_EQ(OB_SUCCESS, plan.import_legacy(source.datum_, borrowed));
+  int64_t size = 123;
+  EXPECT_EQ(OB_NOT_SUPPORTED, plan.payload_copy_size(borrowed, size)); EXPECT_EQ(123, size);
+  EXPECT_EQ(OB_NOT_SUPPORTED, plan.deep_copy(borrowed, copied, destination_owner));
+  EXPECT_EQ(91, copied.get_int()); EXPECT_EQ(0, destination_owner.calls);
+  destination_owner.reject = true;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,
+      plan.deep_copy_resource(borrowed, copied, destination_owner, clone_native_sql_array, nullptr));
+  EXPECT_EQ(91, copied.get_int());
+  destination_owner.reject = false;
+  ASSERT_EQ(OB_SUCCESS,
+      plan.deep_copy_resource(borrowed, copied, destination_owner, clone_native_sql_array, nullptr));
+  ObDatum view;
+  ASSERT_EQ(OB_SUCCESS, plan.borrow_legacy(copied, view));
+  DatumParameter owned; owned.datum_ = view; owned.set_type_meta(type->legacy_meta());
+  const auto *copy = owned.get_array<DatumParameterArray>();
+  ASSERT_NE(array, copy); ASSERT_EQ(2, copy->count_);
+  array->data_[0].datum_.set_int(0); array->data_[1].datum_.set_int(0);
+  EXPECT_EQ(INT64_MIN, copy->data_[0].get_int()); EXPECT_EQ(77, copy->data_[1].get_int());
+}
+
+TEST(DatumCopyPlan, same_scope_array_carrier_copy_borrows_pointee_and_preflights_all_writes)
+{
+  ObArenaAllocator owner;
+  SqlType element;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(metadata(ObIntType), ObAccuracy(), element));
+  SqlTypeSpec spec;
+  spec.attributes.meta_.set_ext(); spec.attributes.meta_.set_extend_type(T_EXT_SQL_ARRAY);
+  spec.form = SqlTypeForm::Array; spec.element = &element;
+  const SqlType *type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, SqlType::create(spec, owner, type));
+  const DatumCopyPlan plan(*type);
+  auto *array = DatumParameterArray::alloc(owner, 1);
+  ASSERT_NE(nullptr, array);
+  ASSERT_EQ(OB_SUCCESS, array->data_[0].set_int(17, owner));
+  alignas(8) char wrapper[16]; MEMSET(wrapper, 0x5a, sizeof(wrapper));
+  const int64_t address = reinterpret_cast<int64_t>(array);
+  MEMCPY(wrapper, &address, sizeof(address));
+  Datum source, copied; copied.set_int(91);
+  ASSERT_EQ(OB_SUCCESS, source.set_reference(wrapper, sizeof(address)));
+  int64_t bytes = -1;
+  ASSERT_EQ(OB_SUCCESS, plan.carrier_span_size(source, bytes)); EXPECT_EQ(8, bytes);
+  EXPECT_EQ(OB_NOT_SUPPORTED, plan.payload_copy_size(source, bytes)); EXPECT_EQ(8, bytes);
+  int64_t position = 4;
+  char before[16]; MEMCPY(before, wrapper, sizeof(wrapper));
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH,
+      plan.copy_carrier_span_borrowing_resources(source, copied, wrapper, 11, position));
+  EXPECT_EQ(4, position); EXPECT_EQ(91, copied.get_int());
+  EXPECT_EQ(0, MEMCMP(before, wrapper, sizeof(wrapper)));
+  ASSERT_EQ(OB_SUCCESS,
+      plan.copy_carrier_span_borrowing_resources(source, copied, wrapper, sizeof(wrapper), position));
+  EXPECT_EQ(12, position); EXPECT_EQ(wrapper + 4, copied.get_reference());
+  int64_t retained_address = 0; MEMCPY(&retained_address, copied.get_reference(), sizeof(retained_address));
+  EXPECT_EQ(address, retained_address); EXPECT_EQ(char(0x5a), wrapper[12]);
+  // The wrapper moved/overlapped; its pointee is still the original array.
+  array->data_[0].datum_.set_int(33);
+  EXPECT_EQ(33, reinterpret_cast<const DatumParameterArray *>(retained_address)->data_[0].get_int());
+  position = 4;
+  ASSERT_EQ(OB_SUCCESS,
+      plan.copy_carrier_span_borrowing_resources(copied, copied, wrapper, sizeof(wrapper), position));
+  EXPECT_EQ(12, position); EXPECT_EQ(wrapper + 4, copied.get_reference());
+  ASSERT_EQ(OB_SUCCESS, source.set_reference(wrapper, 7));
+  position = 0; bytes = 91;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, plan.carrier_span_size(source, bytes)); EXPECT_EQ(91, bytes);
+  EXPECT_EQ(OB_INVALID_ARGUMENT,
+      plan.copy_carrier_span_borrowing_resources(source, copied, wrapper, sizeof(wrapper), position));
+  EXPECT_EQ(0, position); EXPECT_EQ(wrapper + 4, copied.get_reference());
 }
 
 int main(int argc, char **argv)

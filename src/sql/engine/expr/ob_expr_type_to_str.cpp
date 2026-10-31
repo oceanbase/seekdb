@@ -207,10 +207,10 @@ int ObExprSetToStr::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
   return ret;
 }
 
-int ObExprSetToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprSetToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *set_datum = NULL;
+  Datum *set_datum = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ != 2)
       || OB_ISNULL(expr.args_)
       || OB_ISNULL(expr.args_[1])
@@ -264,10 +264,10 @@ int ObExprEnumToStr::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
   return ret;
 }
 
-int ObExprEnumToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprEnumToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *enum_datum = NULL;
+  Datum *enum_datum = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ != 2)
       || OB_ISNULL(expr.args_)
       || OB_ISNULL(expr.args_[1])
@@ -339,11 +339,11 @@ int ObExprSetToInnerType::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_e
   return ret;
 }
 
-int ObExprSetToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprSetToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   const ObString &sep = ObCharsetUtils::get_const_str(expr.datum_meta_.cs_type_, ',');
-  ObDatum *set_datum = NULL;
+  Datum *set_datum = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ != 2)
       || OB_ISNULL(expr.args_)
       || OB_ISNULL(expr.args_[1])
@@ -438,10 +438,10 @@ int ObExprEnumToInnerType::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_
 }
 
 int ObExprEnumToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &res_datum)
+    Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *enum_datum = NULL;
+  Datum *enum_datum = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ != 2)
       || OB_ISNULL(expr.args_)
       || OB_ISNULL(expr.args_[1])
@@ -522,10 +522,10 @@ int ObExprInnerTypeToEnumSet::cg_expr(ObExprCGCtx &op_cg_ctx,
   return OB_SUCCESS;
 }
 
-int ObExprInnerTypeToEnumSet::eval_inner_type_to_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprInnerTypeToEnumSet::eval_inner_type_to_enumset(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *inner_datum = NULL;
+  Datum *inner_datum = NULL;
   if (OB_FAIL(expr.args_[1]->eval(ctx, inner_datum))) {
   } else if (inner_datum->is_null()) {
     res_datum.set_null();

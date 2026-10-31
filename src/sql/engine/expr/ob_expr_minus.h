@@ -44,7 +44,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObExprMinus);
 
 public:
-  static int minus_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int minus_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int minus_int_int(EVAL_FUNC_ARG_DECL);
   static int minus_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL);
 

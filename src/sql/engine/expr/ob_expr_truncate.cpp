@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "share/datum/datum_value_cast.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_truncate.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 
@@ -176,7 +177,7 @@ int ObExprTruncate::calc_result_type2(ObExprResType &type,
 int ObExprTruncate::do_trunc_decimalint(
     const int16_t in_prec, const int16_t in_scale,
     const int16_t out_prec, const int64_t trunc_scale, const int64_t out_scale,
-    const ObDatum &in_datum, ObDecimalIntBuilder &res_val)
+    const common::ObDatum &in_datum, ObDecimalIntBuilder &res_val)
 {
   int ret = OB_SUCCESS;
   const ObDecimalInt *decint = in_datum.get_decimal_int();
@@ -212,28 +213,32 @@ int ObExprTruncate::do_trunc_decimalint(
 }
 
 int ObExprTruncate::calc_trunc_decimalint(
-    const int16_t in_prec, const int16_t in_scale,
+    const ObExpr &expr, ObEvalCtx &ctx,     const int16_t in_prec, const int16_t in_scale,
     const int16_t out_prec, const int64_t trunc_scale, const int16_t out_scale,
-    const ObDatum &in_datum, ObDatum &res_datum)
+    const Datum &in_datum, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char coefficient_scratch[64];
+  common::ObDatum coefficient;
   ObDecimalIntBuilder res_val;
-  if (OB_FAIL(do_trunc_decimalint(
-      in_prec, in_scale, out_prec, trunc_scale, out_scale, in_datum, res_val))) {
+  if (OB_FAIL(expr.args_[0]->get_datum_copy_plan().get_decimal(in_datum, coefficient,
+      coefficient_scratch, sizeof(coefficient_scratch)))) {
+  } else if (OB_FAIL(do_trunc_decimalint(
+      in_prec, in_scale, out_prec, trunc_scale, out_scale, coefficient, res_val))) {
   } else {
-    res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
+    ret = ObExprUtil::set_decimal_int(expr, ctx, res_datum, res_val.get_decimal_int(), res_val.get_int_bytes());
   }
   return ret;
 }
 
-int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   const SqlValueType res_type = expr.datum_meta_.type_;
   const SqlValueType arg_type = expr.args_[0]->datum_meta_.type_;
   // truncate(x, d)
-  ObDatum *x_datum = NULL;
-  ObDatum *d_datum = NULL;
+  Datum *x_datum = NULL;
+  Datum *d_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, d_datum))) {
   } else if (x_datum->is_null() || d_datum->is_null()) {
@@ -264,14 +269,14 @@ int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         if (OB_FAIL(res_nmb.from(arg_nmb, tmp_alloc))) {
         } else if (OB_FAIL(res_nmb.trunc(GET_SCALE_FOR_CALC(scale)))) {
         } else {
-          res_datum.set_number(res_nmb);
+          ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
         }
         break;
       }
       case ObDecimalIntType: {
         const ObDatumMeta &in_meta = expr.args_[0]->datum_meta_;
         const ObDatumMeta &out_meta = expr.datum_meta_;
-        if (OB_FAIL(ObExprTruncate::calc_trunc_decimalint(in_meta.precision_,
+        if (OB_FAIL(ObExprTruncate::calc_trunc_decimalint(expr, ctx, in_meta.precision_,
                                                           in_meta.scale_,
                                                           out_meta.precision_,
                                                           GET_SCALE_FOR_CALC(scale),

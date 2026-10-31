@@ -70,21 +70,21 @@ protected:
       expr.obj_meta_.set_scale(0);
       expr.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
       expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(20, 0), arena_));
       expr.frame_idx_ = 0;
       expr.datum_off_ = col * BLOCK;
-      expr.eval_info_off_ = col * BLOCK + 512;
-      expr.eval_flags_off_ = col * BLOCK + 576;
-      expr.pvt_skip_off_ = col * BLOCK + 640;
+      expr.eval_info_off_ = col * BLOCK + 640;
+      expr.eval_flags_off_ = col * BLOCK + 704;
+      expr.pvt_skip_off_ = col * BLOCK + 768;
       expr.res_buf_off_ = col * BLOCK + 1024;
-      expr.res_buf_len_ = sizeof(int64_t);
+      expr.res_buf_len_ = 0;
       expr.batch_result_ = is_batch;
       expr.batch_idx_mask_ = is_batch ? UINT64_MAX : 0;
       expr.eval_func_ = nullptr;
       expr.eval_batch_func_ = nullptr;
       expr.extra_ = col;
       for (int64_t row = 0; row < BATCH; ++row) {
-        auto *value = new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
-        value->ptr_ = frame_.data() + expr.res_buf_off_ + row * sizeof(int64_t);
+        auto *value = new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
         value->set_int(SENTINEL + row);
       }
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo{};
@@ -103,7 +103,7 @@ protected:
   }
 
   ObExpr &result() { return expressions_[RESULT]; }
-  ObDatum &datum(int64_t col, int64_t row = 0)
+  Datum &datum(int64_t col, int64_t row = 0)
   { return expressions_[col].locate_batch_datums(eval_)[row]; }
   ObBitVector &skip() { return *to_bit_vector(skip_memory_.data()); }
   void fill()
@@ -118,11 +118,12 @@ protected:
   void expect_integer(int64_t row, int64_t expected)
   {
     EXPECT_FALSE(datum(RESULT, row).is_null());
-    EXPECT_EQ(sizeof(int64_t), datum(RESULT, row).len_);
+    EXPECT_EQ(0, datum(RESULT, row).length());
+    EXPECT_EQ(Datum::NoReferenceFlags, datum(RESULT, row).reference_flags());
     EXPECT_EQ(expected, datum(RESULT, row).get_int());
     EXPECT_TRUE(result().get_evaluated_flags(eval_).at(row));
   }
-  static int scalar_operand(const ObExpr &expr, ObEvalCtx &, ObDatum &value)
+  static int scalar_operand(const ObExpr &expr, ObEvalCtx &, Datum &value)
   {
     ++operand_calls_[expr.extra_];
     value.set_int(23);
@@ -159,11 +160,12 @@ TEST_F(SignedAddAccessors, scalar_callback_selected_by_codegen_preserves_extreme
   for (const auto &item : cases) {
     datum(LEFT).set_int(item[0]); datum(RIGHT).set_int(item[1]);
     result().get_eval_info(eval_).clear_evaluated_flag();
-    ObDatum *value = nullptr;
+    Datum *value = nullptr;
     ASSERT_EQ(OB_SUCCESS, result().eval(eval_, value));
     ASSERT_EQ(&datum(RESULT), value);
     EXPECT_EQ(item[2], value->get_int());
-    EXPECT_EQ(sizeof(int64_t), value->len_);
+    EXPECT_EQ(0, value->length());
+    EXPECT_EQ(Datum::NoReferenceFlags, value->reference_flags());
     EXPECT_TRUE(result().get_eval_info(eval_).evaluated_);
     EXPECT_EQ(item[0], datum(LEFT).get_int()); EXPECT_EQ(item[1], datum(RIGHT).get_int());
   }
@@ -174,18 +176,18 @@ TEST_F(SignedAddAccessors, scalar_nulls_do_not_read_payload_and_still_evaluate_r
   for (int nulls = 1; nulls < 4; ++nulls) {
     ASSERT_NO_FATAL_FAILURE(configure(false, false));
     for (int col = 0; col < 2; ++col) {
-      if (nulls & (1 << col)) { datum(col).set_null(); datum(col).ptr_ = nullptr; }
+      if (nulls & (1 << col)) { datum(col).set_null(); }
       else { datum(col).set_int(8); }
     }
-    ObDatum *value = nullptr;
+    Datum *value = nullptr;
     ASSERT_EQ(OB_SUCCESS, result().eval(eval_, value));
     EXPECT_TRUE(value->is_null());
   }
   ASSERT_NO_FATAL_FAILURE(configure(false, false));
-  datum(LEFT).set_null(); datum(LEFT).ptr_ = nullptr;
+  datum(LEFT).set_null();
   expressions_[RIGHT].eval_func_ = scalar_operand;
   expressions_[RIGHT].get_eval_info(eval_).clear_evaluated_flag();
-  ObDatum *value = nullptr;
+  Datum *value = nullptr;
   ASSERT_EQ(OB_SUCCESS, result().eval(eval_, value));
   EXPECT_TRUE(value->is_null()); EXPECT_EQ(1, operand_calls_[RIGHT]);
 }
@@ -193,7 +195,7 @@ TEST_F(SignedAddAccessors, scalar_nulls_do_not_read_payload_and_still_evaluate_r
 TEST_F(SignedAddAccessors, scalar_positive_overflow_is_not_published_as_evaluated)
 {
   datum(LEFT).set_int(MAX_INT); datum(RIGHT).set_int(1);
-  ObDatum *value = nullptr;
+  Datum *value = nullptr;
   EXPECT_EQ(OB_OPERATE_OVERFLOW, result().eval(eval_, value));
   ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
   EXPECT_FALSE(result().get_eval_info(eval_).evaluated_);
@@ -206,7 +208,7 @@ TEST_F(SignedAddAccessors, scalar_positive_overflow_is_not_published_as_evaluate
 TEST_F(SignedAddAccessors, scalar_negative_overflow_is_not_published_as_evaluated)
 {
   datum(LEFT).set_int(MIN_INT); datum(RIGHT).set_int(-1);
-  ObDatum *value = nullptr;
+  Datum *value = nullptr;
   EXPECT_EQ(OB_OPERATE_OVERFLOW, result().eval(eval_, value));
   ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
   EXPECT_FALSE(result().get_eval_info(eval_).evaluated_);
@@ -251,10 +253,10 @@ TEST_F(SignedAddAccessors, batch_callback_broadcasts_scalar_right)
 TEST_F(SignedAddAccessors, batch_callback_marks_nulls_without_reading_their_payloads)
 {
   ASSERT_NO_FATAL_FAILURE(configure(true, true)); fill();
-  datum(LEFT, 1).set_null(); datum(LEFT, 1).ptr_ = nullptr;
-  datum(RIGHT, 2).set_null(); datum(RIGHT, 2).ptr_ = nullptr;
-  datum(LEFT, 3).set_null(); datum(LEFT, 3).ptr_ = nullptr;
-  datum(RIGHT, 3).set_null(); datum(RIGHT, 3).ptr_ = nullptr;
+  datum(LEFT, 1).set_null();
+  datum(RIGHT, 2).set_null();
+  datum(LEFT, 3).set_null();
+  datum(RIGHT, 3).set_null();
   ASSERT_EQ(OB_SUCCESS, batch_callback(BATCH));
   for (int64_t row = 0; row < BATCH; ++row) {
     if (row >= 1 && row <= 3) {

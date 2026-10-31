@@ -19,6 +19,8 @@
 #include "sql/optimizer/stat/ob_hybrid_hist_estimator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "lib/charset/ob_charset.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include <gtest/gtest.h>
 #include <array>
 #include <cstring>
@@ -118,7 +120,7 @@ protected:
       expr.res_buf_off_ = i * 512 + 192;
       expr.res_buf_len_ = 128;
       set_type(expr, ObIntType);
-      new (frame_.data() + expr.datum_off_) ObDatum;
+      new (frame_.data() + expr.datum_off_) Datum;
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo;
       expr.get_eval_info(eval_).evaluated_ = true;
     }
@@ -130,8 +132,7 @@ protected:
     expr.datum_meta_ = ObDatumMeta(type, collation, type == ObDecimalIntType ? 2 : 0);
     if (type == ObDecimalIntType) { expr.obj_meta_.set_scale(2); }
     expr.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(type);
-    expr.basic_funcs_ = ObDatumFuncs::get_basic_func(type, collation,
-        expr.datum_meta_.scale_, expr.obj_meta_.has_lob_header(), expr.datum_meta_.precision_);
+    ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, expr.prepare_legacy_copy_plan().get_accuracy(), arena_));
   }
   void bind(ObAggrInfo &info, ObItemType function, int64_t count = 1)
   {
@@ -146,7 +147,9 @@ protected:
   { return (processor_.*member(ProcessTag{}))(row, nullptr, cell, info); }
   int truncate(const Row &row, const SqlTypeMeta &meta, int64_t column = 0)
   { return (processor_.*member(TruncateTag{}))(meta, row, column); }
-  ObDatum &datum(int64_t i) { return exprs_[i].locate_expr_datum(eval_); }
+  Datum &datum(int64_t i) { return exprs_[i].locate_expr_datum(eval_); }
+  void put(int64_t i, const common::ObDatum &value)
+  { ASSERT_EQ(OB_SUCCESS, exprs_[i].get_datum_copy_plan().import_legacy(value, datum(i))); }
   void prepare_material(ObMaterialOpImpl &material)
   {
     // Bind the existing in-memory owner before its first add. Workarea
@@ -182,23 +185,61 @@ TEST_F(FixedAggregateCells, eval_aggr_publishes_fixed_shadow_cells_without_chang
   std::array<char, 16> decimal{}; decimal.fill(0x31);
   set_type(exprs_[1], ObVarcharType);
   set_type(exprs_[2], ObDecimalIntType);
-  datum(0) = integer(n); datum(1) = bytes(text.data(), text.size());
-  datum(2) = bytes(decimal.data(), decimal.size()); datum(3).set_null();
-  datum(4) = bytes(text.data(), text.size()); datum(4).set_has_lob_header();
+  set_type(exprs_[4], ObVarcharType);
+  put(0, integer(n)); put(1, bytes(text.data(), text.size()));
+  put(2, bytes(decimal.data(), decimal.size())); datum(3).set_null();
+  put(4, bytes(text.data(), text.size())); datum(4).set_has_lob_header();
   ObChunkDatumStore::ShadowStoredRow shadow;
   ASSERT_EQ(OB_SUCCESS, shadow.init(arena_, 5));
   ASSERT_EQ(OB_SUCCESS, info.eval_aggr(shadow, eval_));
   const StoredDatumCell *cells = shadow.get_store_row()->stored_cells();
   EXPECT_EQ(INT64_MIN, number(StoredDatumCodec::decode_legacy_view(cells[0])));
-  EXPECT_EQ(datum(1).ptr_, cells[1].ptr_); EXPECT_EQ(3, cells[1].len_);
+  EXPECT_EQ(datum(1).get_string().ptr(), cells[1].ptr_); EXPECT_EQ(3, cells[1].len_);
   EXPECT_EQ(16, cells[2].len_); EXPECT_EQ(PRECISION_UNKNOWN_YET, exprs_[2].datum_meta_.precision_);
   EXPECT_TRUE(cells[3].is_null()); EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, cells[4].flag_);
   n = 19;
-  EXPECT_EQ(19, number(StoredDatumCodec::decode_legacy_view(cells[0])));
+  // Native integer inputs own their bits; the fixed shadow borrows its own reserved scratch.
+  EXPECT_EQ(INT64_MIN, number(StoredDatumCodec::decode_legacy_view(cells[0])));
+  datum(0).set_int(23);
+  EXPECT_EQ(INT64_MIN, number(StoredDatumCodec::decode_legacy_view(cells[0])));
   DatumValue values[5];
   ASSERT_EQ(OB_SUCCESS, (processor_.*member(ValuesTag{}))(info, *shadow.get_store_row(), values, 5));
   EXPECT_EQ(ObDecimalIntType, values[2].get_type()); EXPECT_EQ(16, values[2].get_int_bytes());
   EXPECT_EQ(2, values[2].get_scale()); EXPECT_TRUE(values[3].is_null());
+}
+
+TEST_F(FixedAggregateCells, native_selected_batch_stages_only_selected_values_and_keeps_failure_atomic)
+{
+  set_type(exprs_[0], ObNumberType);
+  ObExpr &input = exprs_[1];
+  input.batch_result_ = true; input.batch_idx_mask_ = UINT64_MAX;
+  eval_.max_batch_size_ = 3; guard_.set_batch_size(3);
+  for (int64_t i = 1; i < 3; ++i) {
+    new (frame_.data() + input.datum_off_ + i * sizeof(Datum)) Datum;
+  }
+  Datum *values = input.locate_batch_datums(eval_);
+  values[0].set_int(7); values[1].set_int(900); values[1].set_has_lob_header(); values[2].set_int(-2);
+  ObAggrInfo info(arena_); info.real_aggr_type_ = T_FUN_SUM; info.expr_ = &exprs_[0];
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.init(1));
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.push_back(&input));
+  ASSERT_EQ(OB_SUCCESS, infos_.init(1)); ASSERT_EQ(OB_SUCCESS, infos_.push_back(info));
+  Cell cell;
+  ObAggregateProcessor::GroupRow group; group.aggr_cells_ = &cell; group.n_cells_ = 1;
+  ObBatchRows batch; batch.size_ = 3;
+  const uint16_t selected[] = {0, 2};
+  ASSERT_EQ(OB_SUCCESS, processor_.process_batch(&batch, group, selected, 2));
+  EXPECT_EQ(5, cell.get_tiny_num_int());
+  // The unselected value has flags invalid in the signed integer domain. It
+  // must not be exported. Once selected, preflight fails before accumulator writes.
+  const uint16_t invalid[] = {1};
+  EXPECT_EQ(OB_INVALID_ARGUMENT, processor_.process_batch(&batch, group, invalid, 1));
+  EXPECT_EQ(5, cell.get_tiny_num_int());
+  guard_.set_batch_idx(0);
+  ASSERT_EQ(OB_SUCCESS, cell.collect_result(ObIntTC, eval_, infos_.at(0)));
+  int64_t actual = 0;
+  ASSERT_EQ(OB_SUCCESS, ObExprUtil::trunc_num2int64(datum(0), actual)); EXPECT_EQ(5, actual);
+  values[0].set_int(1000); values[2].set_int(1000);
+  ASSERT_EQ(OB_SUCCESS, ObExprUtil::trunc_num2int64(datum(0), actual)); EXPECT_EQ(5, actual);
 }
 
 TEST_F(FixedAggregateCells, count_prepare_and_update_keep_multicolumn_null_rules)
@@ -267,8 +308,8 @@ TEST_F(FixedAggregateCells, stored_hash_consumer_preserves_null_short_circuit_an
   bool has_null = true; uint64_t hash = 0, expected = 0;
   const ObDatum first = StoredDatumCodec::decode_legacy_view(row.row_->stored_cells()[0]);
   const ObDatum second = StoredDatumCodec::decode_legacy_view(row.row_->stored_cells()[1]);
-  ASSERT_EQ(OB_SUCCESS, exprs_[0].basic_funcs_->murmur_hash_(first, expected, expected, nullptr));
-  ASSERT_EQ(OB_SUCCESS, exprs_[1].basic_funcs_->murmur_hash_(second, expected, expected, nullptr));
+  ASSERT_EQ(OB_SUCCESS, storage_predicate_functions(exprs_[0])->murmur_hash_(first, expected, expected, nullptr));
+  ASSERT_EQ(OB_SUCCESS, storage_predicate_functions(exprs_[1])->murmur_hash_(second, expected, expected, nullptr));
   ASSERT_EQ(OB_SUCCESS, (processor_.*member(HashTag{}))(*row.row_, info.param_exprs_, has_null, hash));
   EXPECT_FALSE(has_null); EXPECT_EQ(expected, hash);
   ASSERT_EQ(OB_SUCCESS, (processor_.*member(HashTag{}))(*skipped.row_, info.param_exprs_, has_null, hash));
@@ -282,7 +323,7 @@ TEST_F(FixedAggregateCells, histogram_truncation_is_persisted_for_real_save_equa
   ASSERT_EQ(OB_SUCCESS, info.sort_collations_.init(1));
   ASSERT_EQ(OB_SUCCESS, info.sort_cmp_funcs_.init(1));
   ASSERT_EQ(OB_SUCCESS, info.sort_collations_.push_back(ObSortFieldCollation(0, CS_TYPE_UTF8MB4_BIN, true, NULL_LAST)));
-  ObSortCmpFunc cmp; cmp.cmp_func_ = exprs_[0].basic_funcs_->null_first_cmp_;
+  ObSortCmpFunc cmp; cmp.cmp_func_ = exprs_[0].basic_funcs_->null_first_cmp_.legacy_function();
   ASSERT_EQ(OB_SUCCESS, info.sort_cmp_funcs_.push_back(cmp));
   std::string a(2000, 'a'), b(2000, 'a'); a.back() = 'x'; b.back() = 'y';
   OwnedRow first({bytes(a.data(), a.size())}), second({bytes(b.data(), b.size())});

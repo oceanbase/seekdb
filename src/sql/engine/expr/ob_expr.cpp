@@ -23,8 +23,12 @@
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_obj_cast_runtime.h"
 #include "share/datum/datum_value_cast.h"
+#include "share/datum/typed_datum_compare.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "common/enumset/ob_enum_set_meta.h"
 
 namespace oceanbase
 {
@@ -157,6 +161,7 @@ OB_DEF_SERIALIZE(ObExpr)
     }
     OB_UNIS_ENCODE(dyn_buf_header_offset_)
     OB_UNIS_ENCODE(local_session_var_id_);
+    if (OB_SUCC(ret)) { ret = serialize_native_metadata(buf, buf_len, pos); }
   }
 
   return ret;
@@ -165,6 +170,10 @@ OB_DEF_SERIALIZE(ObExpr)
 OB_DEF_DESERIALIZE(ObExpr)
 {
   int ret = OB_SUCCESS;
+  // Marked PX arrays explicitly encode ObEmptyExpr for unselected positions.
+  // Only an actually empty body is a placeholder; a nonempty truncated Expr
+  // must still fail while decoding its mandatory native metadata below.
+  if (pos == data_len) { *this = ObExpr(); return ret; }
   LST_DO_CODE(OB_UNIS_DECODE,
               type_,
               datum_meta_,
@@ -201,17 +210,14 @@ OB_DEF_DESERIALIZE(ObExpr)
     }
   }
 
-  if (OB_SUCC(ret)) {
-    basic_funcs_ = ObDatumFuncs::get_basic_func(datum_meta_.type_, datum_meta_.cs_type_,
-                                                datum_meta_.scale_,
-                                                obj_meta_.has_lob_header(), datum_meta_.precision_);
-    CK(NULL != basic_funcs_);
-  }
   if (is_batch_result()) {
     batch_idx_mask_ = UINT64_MAX;
   }
   OB_UNIS_DECODE(dyn_buf_header_offset_);
   OB_UNIS_DECODE(local_session_var_id_);
+  if (OB_SUCC(ret)) {
+    ret = deserialize_native_metadata(buf, data_len, pos, CURRENT_CONTEXT->get_arena_allocator());
+  }
   return ret;
 }
 
@@ -252,6 +258,8 @@ OB_DEF_SERIALIZE_SIZE(ObExpr)
   }
   OB_UNIS_ADD_LEN(dyn_buf_header_offset_);
   OB_UNIS_ADD_LEN(local_session_var_id_);
+  const int64_t metadata_size = native_metadata_serialize_size();
+  if (metadata_size < 0 || __builtin_add_overflow(len, metadata_size, &len)) { len = -1; }
   return len;
 }
 
@@ -259,6 +267,7 @@ ObExpr::ObExpr()
     : magic_(MAGIC_NUM),
     type_(T_INVALID),
     datum_meta_(),
+    sql_type_(nullptr),
     obj_meta_(),
     max_length_(UINT32_MAX),
     obj_datum_map_(OBJ_DATUM_NULL),
@@ -282,6 +291,9 @@ ObExpr::ObExpr()
     expr_ctx_id_(INVALID_EXP_CTX_ID),
     extra_(0),
     basic_funcs_(NULL),
+    native_cmp_ops_(nullptr),
+    native_cmp_specs_(nullptr),
+    native_cmp_op_count_(0),
     batch_idx_mask_(0),
     extra_info_(NULL),
     local_session_var_id_(OB_INVALID_INDEX_INT64)
@@ -289,12 +301,305 @@ ObExpr::ObExpr()
   is_called_in_sql_ = 1;
 }
 
+int ObExpr::bind_sql_type(const common::SqlType &type, common::ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  if (sql_type_ != nullptr && sql_type_->equals(type) && basic_funcs_ != nullptr) {
+    // The private runtime caster may see the same scalar type repeatedly.
+  } else {
+    const common::SqlType *candidate_type = nullptr;
+    common::DatumBasicFuncs *candidate_functions = nullptr;
+    if (OB_FAIL(type.clone_to(owner, candidate_type))) {
+    } else if ((candidate_functions = static_cast<common::DatumBasicFuncs *>(
+        owner.alloc(sizeof(common::DatumBasicFuncs)))) == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      new (candidate_functions) common::DatumBasicFuncs();
+      if (OB_SUCC(ret = common::ObDatumFuncs::prepare_basic(*candidate_type, *candidate_functions))) {
+        sql_type_ = candidate_type;
+        basic_funcs_ = candidate_functions;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExpr::prepare_scalar_type(const common::SqlTypeMeta &meta, const common::ObAccuracy &accuracy,
+                                common::ObIAllocator &owner)
+{
+  common::SqlType type;
+  const int ret = common::SqlType::from_legacy(meta, accuracy, type);
+  return ret == OB_SUCCESS ? bind_sql_type(type, owner) : ret;
+}
+
+int ObExpr::prepare_resolved_type(const ObRawExprResType &resolved, const ObSQLSessionInfo *session,
+                                 common::ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  if (!resolved.is_enum_or_set() && !resolved.is_enumset_inner_type()
+      && !resolved.is_collection_sql_type() && !obj_meta_.is_pl_extend_type()
+      && !obj_meta_.is_ext_sql_array() && obj_meta_.get_type() != ObUserDefinedSQLType) {
+    // CG has already normalized the execution representation (LOB header,
+    // BIT width and scalar scale). The raw resolver metadata describes the SQL
+    // declaration and must not undo those representation flags.
+    ret = prepare_scalar_type(obj_meta_, resolved.get_accuracy(), owner);
+  } else {
+    common::ObArenaAllocator temporary("ExprTypePrep");
+    const common::SqlType *type = nullptr;
+    ret = ObExprUtil::resolve_raw_sql_type(resolved, session, nullptr, temporary, type);
+    if (OB_SUCC(ret)) { ret = bind_sql_type(*type, owner); }
+  }
+  return ret;
+}
+
+int64_t ObExpr::native_metadata_serialize_size() const
+{
+  if (sql_type_ == nullptr || native_cmp_op_count_ < 0) { return -1; }
+  int64_t size = sql_type_->get_serialize_size();
+  if (size < 0 || __builtin_add_overflow(size, int64_t(sizeof(int64_t)), &size)) { return -1; }
+  for (int64_t i = 0; i < native_cmp_op_count_; ++i) {
+    const CmpSpec &spec = native_cmp_specs_[i];
+    if (spec.left_type_ == nullptr || spec.right_type_ == nullptr) { return -1; }
+    const int64_t left_size = spec.left_type_->get_serialize_size();
+    const int64_t right_size = spec.right_type_->get_serialize_size();
+    if (left_size < 0 || right_size < 0
+        || __builtin_add_overflow(size, int64_t(sizeof(int8_t) + sizeof(int32_t)), &size)
+        || __builtin_add_overflow(size, left_size, &size)
+        || __builtin_add_overflow(size, right_size, &size)) { return -1; }
+  }
+  return size;
+}
+
+int ObExpr::serialize_native_metadata(char *buffer, int64_t length, int64_t &position) const
+{
+  int ret = OB_SUCCESS;
+  const int64_t bytes = native_metadata_serialize_size();
+  if (buffer == nullptr || position < 0 || length < position || bytes < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (bytes > length - position) {
+    ret = OB_BUF_NOT_ENOUGH;
+  } else {
+    int64_t cursor = position;
+    if (OB_FAIL(sql_type_->serialize(buffer, length, cursor))) {
+    } else if (OB_FAIL(serialization::encode_i64(buffer, length, cursor, native_cmp_op_count_))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < native_cmp_op_count_; ++i) {
+      const CmpSpec &spec = native_cmp_specs_[i];
+      if (OB_FAIL(serialization::encode_i8(buffer, length, cursor, static_cast<int8_t>(spec.null_pos_)))) {
+      } else if (OB_FAIL(serialization::encode_i32(buffer, length, cursor, static_cast<int32_t>(spec.collation_)))) {
+      } else if (OB_FAIL(spec.left_type_->serialize(buffer, length, cursor))) {
+      } else { ret = spec.right_type_->serialize(buffer, length, cursor); }
+    }
+    if (OB_SUCC(ret)) { position = cursor; }
+  }
+  return ret;
+}
+
+int ObExpr::deserialize_native_metadata(const char *buffer, int64_t length, int64_t &position,
+                                        ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  int64_t cursor = position;
+  int64_t count = 0;
+  const SqlType *type = nullptr;
+  ObExpr candidate;
+  if (buffer == nullptr || cursor < 0 || length < cursor) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(SqlType::deserialize(buffer, length, cursor, owner, type))) {
+  } else if (OB_FAIL(serialization::decode_i64(buffer, length, cursor, &count))) {
+  } else if (count < 0 || count > (length - cursor) / (sizeof(int8_t) + sizeof(int32_t) + 2)) {
+    ret = OB_DESERIALIZE_ERROR;
+  } else if (OB_FAIL(candidate.bind_sql_type(*type, owner))) {
+  } else if (OB_FAIL(candidate.prepare_cmp_ops(owner, count))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    int8_t null_pos = 0;
+    int32_t collation = 0;
+    const SqlType *left = nullptr;
+    const SqlType *right = nullptr;
+    if (OB_FAIL(serialization::decode_i8(buffer, length, cursor, &null_pos))) {
+    } else if (OB_FAIL(serialization::decode_i32(buffer, length, cursor, &collation))) {
+    } else if ((null_pos != NULL_FIRST && null_pos != NULL_LAST)
+        || collation < CS_TYPE_INVALID || collation >= CS_TYPE_MAX) {
+      ret = OB_DESERIALIZE_ERROR;
+    } else if (OB_FAIL(SqlType::deserialize(buffer, length, cursor, owner, left))) {
+    } else if (OB_FAIL(SqlType::deserialize(buffer, length, cursor, owner, right))) {
+    } else {
+      ret = candidate.configure_cmp_op(i, *left, *right,
+          static_cast<ObCmpNullPos>(null_pos), static_cast<ObCollationType>(collation));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    sql_type_ = candidate.sql_type_;
+    basic_funcs_ = candidate.basic_funcs_;
+    native_cmp_ops_ = candidate.native_cmp_ops_;
+    native_cmp_specs_ = candidate.native_cmp_specs_;
+    native_cmp_op_count_ = candidate.native_cmp_op_count_;
+    position = cursor;
+  }
+  return ret;
+}
+
+int ObExpr::clone_prepared_metadata_from(const ObExpr &source, common::ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  ObExpr candidate;
+  if (source.sql_type_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(candidate.bind_sql_type(*source.sql_type_, owner))) {
+  } else if (OB_FAIL(candidate.prepare_cmp_ops(owner, source.native_cmp_op_count_))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < source.native_cmp_op_count_; ++i) {
+      const CmpSpec &specification = source.native_cmp_specs_[i];
+      const common::SqlType *left = nullptr;
+      const common::SqlType *right = nullptr;
+      if (specification.left_type_ == nullptr || specification.right_type_ == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(specification.left_type_->clone_to(owner, left))) {
+      } else if (OB_FAIL(specification.right_type_->clone_to(owner, right))) {
+      } else {
+        ret = candidate.configure_cmp_op(i, *left, *right, specification.null_pos_, specification.collation_);
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    sql_type_ = candidate.sql_type_;
+    basic_funcs_ = candidate.basic_funcs_;
+    native_cmp_ops_ = candidate.native_cmp_ops_;
+    native_cmp_specs_ = candidate.native_cmp_specs_;
+    native_cmp_op_count_ = candidate.native_cmp_op_count_;
+  }
+  return ret;
+}
+
+namespace
+{
+int clone_legacy_resource(const common::SqlType &type, const common::Datum &source,
+                           common::ObIAllocator &owner, common::Datum &destination, void *)
+{
+  common::DatumCopyPlan plan(type);
+  common::ObDatum legacy;
+  alignas(8) char scratch[64];
+  int ret = plan.legacy_view(source, legacy, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) {
+    common::DatumValue input(legacy, type.legacy_meta());
+    common::DatumValue owned;
+    if (OB_SUCC(ret = common::clone_typed_value(input, owned, owner))) {
+      ret = plan.import_legacy(owned.datum_, destination);
+    }
+  }
+  return ret;
+}
+}
+
+int ObExpr::clone_native_value(const common::SqlType &type, const common::Datum &source,
+                               common::ObIAllocator &owner, common::Datum &destination)
+{
+  common::DatumCopyPlan plan(type);
+  return type.requires_resource_clone()
+      ? plan.deep_copy_resource(source, destination, owner, clone_legacy_resource, nullptr)
+      : plan.deep_copy(source, destination, owner);
+}
+
+int ObExpr::init_runtime_functions(common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  common::DatumBasicFuncs *functions = nullptr;
+  if (sql_type_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if ((functions = static_cast<common::DatumBasicFuncs *>(
+      allocator.alloc(sizeof(common::DatumBasicFuncs)))) == nullptr) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    new (functions) common::DatumBasicFuncs();
+    if (OB_SUCC(ret = common::ObDatumFuncs::prepare_basic(*sql_type_, *functions))) {
+      basic_funcs_ = functions;
+    }
+  }
+  return ret;
+}
+
+int ObExpr::prepare_cmp_ops(common::ObIAllocator &allocator, int64_t count)
+{
+  int ret = OB_SUCCESS;
+  common::DatumCmpOp *operations = nullptr;
+  CmpSpec *specifications = nullptr;
+  if (count < 0 || count > INT64_MAX / static_cast<int64_t>(sizeof(common::DatumCmpOp))
+      || count > INT64_MAX / static_cast<int64_t>(sizeof(CmpSpec))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (count > 0) {
+    operations = static_cast<common::DatumCmpOp *>(allocator.alloc(count * sizeof(common::DatumCmpOp)));
+    specifications = static_cast<CmpSpec *>(allocator.alloc(count * sizeof(CmpSpec)));
+    if (operations == nullptr || specifications == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      for (int64_t i = 0; i < count; ++i) {
+        new (operations + i) common::DatumCmpOp();
+        new (specifications + i) CmpSpec();
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    native_cmp_ops_ = operations;
+    native_cmp_specs_ = specifications;
+    native_cmp_op_count_ = count;
+  }
+  return ret;
+}
+
+int ObExpr::configure_cmp_op(int64_t index, int64_t left_arg, int64_t right_arg,
+                             common::ObCmpNullPos null_pos, common::ObCollationType collation)
+{
+  int ret = OB_SUCCESS;
+  if (index < 0 || index >= native_cmp_op_count_ || left_arg < 0 || right_arg < 0
+      || left_arg >= arg_cnt_ || right_arg >= arg_cnt_ || args_ == nullptr
+      || args_[left_arg] == nullptr || args_[right_arg] == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ret = configure_cmp_op(index, args_[left_arg]->get_sql_type(), args_[right_arg]->get_sql_type(),
+                           null_pos, collation);
+  }
+  return ret;
+}
+
+int ObExpr::configure_cmp_op(int64_t index, const common::SqlType &left, const common::SqlType &right,
+                             common::ObCmpNullPos null_pos, common::ObCollationType collation)
+{
+  int ret = OB_SUCCESS;
+  if (index < 0 || index >= native_cmp_op_count_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    common::DatumCmpOp candidate;
+    if (OB_SUCC(ret = common::ObDatumFuncs::prepare_cmp(left, right, null_pos, collation, candidate))) {
+      native_cmp_ops_[index] = candidate;
+      native_cmp_specs_[index].left_type_ = &left;
+      native_cmp_specs_[index].right_type_ = &right;
+      native_cmp_specs_[index].null_pos_ = null_pos;
+      native_cmp_specs_[index].collation_ = collation;
+    }
+  }
+  return ret;
+}
+
+const common::DatumCmpOp &ObExpr::get_cmp_op(int64_t index) const
+{
+  OB_ASSERT(index >= 0 && index < native_cmp_op_count_);
+  return native_cmp_ops_[index];
+}
+
+
+
 char *ObExpr::alloc_str_res_mem(ObEvalCtx &ctx, const int64_t size, const int64_t idx) const
 {
   char *mem = NULL;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!ObDynReserveBuf::supported(datum_meta_.type_))) {
     LOG_ERROR("unexpected alloc string result memory called", K(size), K(*this));
+  } else if (dyn_buf_header_offset_ == 0) {
+    // A dynamically rebound private/value expression may have started as an
+    // inline scalar and therefore owns no dynamic header in its fixed frame.
+    // Allocate in its result arena instead of interpreting Datum bytes as one.
+    if (size >= 0 && size <= UINT32_MAX) { mem = static_cast<char *>(ctx.alloc_expr_res(size)); }
   } else {
     ObDynReserveBuf *drb = reinterpret_cast<ObDynReserveBuf *>(
         ctx.frames_[frame_idx_] + dyn_buf_header_offset_ + sizeof(ObDynReserveBuf) * idx);
@@ -323,13 +628,13 @@ char *ObExpr::alloc_str_res_mem(ObEvalCtx &ctx, const int64_t size, const int64_
 
 int ObExpr::eval_enumset(ObEvalCtx &ctx,
     const common::ObIArray<common::ObString> &str_values, const uint64_t cast_mode,
-    common::ObDatum *&datum) const
+    common::Datum *&datum) const
 {
   // performance critical, do not check %frame_idx_ and %frame again. (checked in CG)
   int ret = common::OB_SUCCESS;
   char *frame = ctx.frames_[frame_idx_];
   OB_ASSERT(NULL != frame);
-  datum = (ObDatum *)(frame + datum_off_);
+  datum = (Datum *)(frame + datum_off_);
   ObEvalInfo *eval_info = (ObEvalInfo *)(frame + eval_info_off_);
   const common::SqlTypeClass in_tc = args_[0]->obj_meta_.get_type_class();
   EvalEnumSetFunc eval_func;
@@ -344,7 +649,6 @@ int ObExpr::eval_enumset(ObEvalCtx &ctx,
       ObBitVector* evaluated_flags = to_bit_vector(frame + eval_flags_off_);
       if (!eval_info->evaluated_) {
         evaluated_flags->reset(ctx.get_batch_size());
-        reset_datums_ptr(frame, ctx.get_batch_size());
         // See `clear_datum_descriptors` below for the rationale.
         clear_datum_descriptors(frame, ctx.get_batch_size());
         eval_info->evaluated_ = true;
@@ -355,7 +659,7 @@ int ObExpr::eval_enumset(ObEvalCtx &ctx,
       if (!evaluated_flags->at(ctx.get_batch_idx())) {
         need_evaluate = true;
       }
-      datum = reinterpret_cast<ObDatum *>(frame + datum_off_) + ctx.get_batch_idx();
+      datum = reinterpret_cast<Datum *>(frame + datum_off_) + ctx.get_batch_idx();
       if (need_evaluate) {
         if (OB_FAIL(ObDatumCast::get_enumset_cast_function(in_tc, obj_meta_.get_type(), eval_func))) {
         } else {
@@ -373,9 +677,6 @@ int ObExpr::eval_enumset(ObEvalCtx &ctx,
     }
   } else {
     if (!eval_info->evaluated_) {
-      if (datum->ptr_ != frame + res_buf_off_) {
-        datum->ptr_ = frame + res_buf_off_;
-      }
       if (OB_FAIL(ObDatumCast::get_enumset_cast_function(in_tc, obj_meta_.get_type(), eval_func))) {
       } else {
         ret = eval_func(*this, str_values, cast_mode, ctx, *datum);
@@ -402,24 +703,45 @@ void *ObExprStrResAlloc::alloc(const int64_t size)
   return mem;
 }
 
-void capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value)
+int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value)
 {
-  DatumParameter view;
-  view.set_datum(expr.locate_expr_datum(ctx));
-  SqlTypeMeta meta = expr.obj_meta_;
-  ObAccuracy accuracy;
-  accuracy.set_scale(expr.datum_meta_.scale_);
-  accuracy.set_precision(expr.datum_meta_.precision_);
-  accuracy.set_length(expr.max_length_);
-  if (meta.is_string_or_lob_locator_type()) {
-    accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
-  } else if (meta.is_numeric_type() || meta.is_temporal_type()) {
-    meta.set_scale(expr.datum_meta_.scale_);
+  const DatumCopyPlan plan = expr.get_datum_copy_plan();
+  const Datum &source = expr.locate_expr_datum(ctx);
+  common::ObDatum legacy;
+  int ret = plan.borrow_legacy(source, legacy);
+  if (ret == OB_NOT_SUPPORTED) {
+    int64_t bytes = 0;
+    ret = plan.legacy_payload_size(source, bytes);
+    if (OB_SUCC(ret)) {
+      char *buffer = bytes == 0 ? nullptr
+          : static_cast<char *>(ctx.exec_ctx_.get_allocator().alloc(bytes));
+      if (bytes > 0 && buffer == nullptr) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        int64_t position = 0;
+        ret = plan.export_legacy(source, legacy, buffer, bytes, position);
+      }
+    }
   }
-  view.set_type_meta(meta);
-  view.set_accuracy(accuracy);
-  view.set_param_meta();
-  value = view;
+  if (OB_SUCC(ret)) {
+    DatumParameter view;
+    view.set_datum(legacy);
+    SqlTypeMeta meta = expr.obj_meta_;
+    ObAccuracy accuracy;
+    accuracy.set_scale(expr.datum_meta_.scale_);
+    accuracy.set_precision(expr.datum_meta_.precision_);
+    accuracy.set_length(expr.max_length_);
+    if (meta.is_string_or_lob_locator_type()) {
+      accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
+    } else if (meta.is_numeric_type() || meta.is_temporal_type()) {
+      meta.set_scale(expr.datum_meta_.scale_);
+    }
+    view.set_type_meta(meta);
+    view.set_accuracy(accuracy);
+    view.set_param_meta();
+    value = view;
+  }
+  return ret;
 }
 
 int bind_datum_parameter(const DatumParameter &source, DatumParameter &destination,
@@ -429,12 +751,12 @@ int bind_datum_parameter(const DatumParameter &source, DatumParameter &destinati
   return OB_SUCCESS;
 }
 
-static int clone_datum_value_with_accuracy(const ObDatum &source, const SqlTypeMeta &meta,
-                                           const ObAccuracy &accuracy, ObDatum &destination,
+static int clone_datum_value_with_accuracy(const common::ObDatum &source, const SqlTypeMeta &meta,
+                                           const ObAccuracy &accuracy, common::ObDatum &destination,
                                            ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  ObDatum owned;
+  common::ObDatum owned;
   if (meta.is_ext_sql_array() && !source.is_null()) {
     DatumParameter input, copy;
     input.set_datum(source);
@@ -454,7 +776,7 @@ static int clone_datum_value_with_accuracy(const ObDatum &source, const SqlTypeM
   return ret;
 }
 
-int clone_datum_value(const ObDatum &source, const SqlTypeMeta &meta, ObDatum &destination,
+int clone_datum_value(const common::ObDatum &source, const SqlTypeMeta &meta, common::ObDatum &destination,
                       ObIAllocator &allocator)
 {
   return clone_datum_value_with_accuracy(source, meta, ObAccuracy(), destination, allocator);
@@ -463,7 +785,7 @@ int clone_datum_value(const ObDatum &source, const SqlTypeMeta &meta, ObDatum &d
 int clone_datum_value(const DatumParameter &source, DatumParameter &destination,
                       ObIAllocator &allocator)
 {
-  ObDatum owned;
+  common::ObDatum owned;
   const int ret = clone_datum_value_with_accuracy(source.datum_, source.get_meta(),
       source.get_accuracy(), owned, allocator);
   if (ret == OB_SUCCESS) {
@@ -489,9 +811,21 @@ int assign_datum_parameter(const DatumParameter &source, DatumParameter &destina
 DEF_TO_STRING(ObToStringDatum)
 {
   int64_t pos = 0;
-  const DatumValue value(d_, e_.obj_meta_);
-  int ret = print_datum_debug_json(value, buf, buf_len, pos);
-  UNUSED(ret);
+  const DatumCopyPlan plan = e_.get_datum_copy_plan();
+  common::ObDatum legacy;
+  alignas(8) char scratch[64];
+  int ret = plan.borrow_legacy(d_, legacy);
+  if (ret == OB_NOT_SUPPORTED) {
+    int64_t cursor = 0;
+    ret = plan.export_legacy(d_, legacy, scratch, sizeof(scratch), cursor);
+  }
+  if (OB_SUCC(ret)) {
+    const DatumValue value(legacy, e_.obj_meta_);
+    ret = print_datum_debug_json(value, buf, buf_len, pos);
+  }
+  if (OB_FAIL(ret)) {
+    databuff_printf(buf, buf_len, pos, "{datum_print_error:%d}", ret);
+  }
   return pos;
 }
 
@@ -512,7 +846,7 @@ DEF_TO_STRING(ObToStringExpr)
     J_KV("batch_idx", c_.get_batch_idx());
     J_OBJ_END();
   } else {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     int ret = e_.eval(c_, datum);
     UNUSED(ret);
     pos = ObToStringDatum(e_, *datum).to_string(buf, buf_len);
@@ -544,50 +878,15 @@ DEF_TO_STRING(ObToStringExprRow)
   return pos;
 }
 
-void ObExpr::reset_datums_ptr(char *frame, const int64_t size) const
-{
-  // TODO bin.lb: on reset ptr from info->cnt_ to size if info->point_to_frame_ ?
-  ObDatum *datum = reinterpret_cast<ObDatum *>(frame + datum_off_);
-  ObDatum *datum_end = datum + size;
-  char *ptr = frame + res_buf_off_;
-  for (; datum < datum_end; datum += 1) {
-    if (datum->ptr_ != ptr) {
-      datum->ptr_ = ptr;
-    }
-    ptr += res_buf_len_;
-  }
-}
-
-// Zero out the datum descriptor part (len_/null_/flag_) on first evaluation.
-// The datums array inside an expression frame is intentionally excluded from
-// the frame's zero-init region (see ObStaticEngineExprCG::create_tmp_frameinfo).
-// Although readers should gate access on evaluated flags and skip bits, some
-// legacy batch paths can touch slots that were not written by the current
-// batch. Clearing pack_ here makes those slots a safe empty descriptor while
-// keeping ptr_ anchored to the expression's reserved buffer.
-//
-// Do this only after reset_datums_ptr() on the !info->evaluated_ branches.
-// Batch/scalar evaluators overwrite pack_ for evaluated slots; clearing it at
-// any later point would destroy valid results.
+// Called only before a fresh batch is evaluated. Skipped slots start as NULL;
+// already evaluated values are never cleared by this initialization.
 void ObExpr::clear_datum_descriptors(char *frame, const int64_t size) const
 {
-  ObDatum *datum = reinterpret_cast<ObDatum *>(frame + datum_off_);
-  for (int64_t i = 0; i < size; i++) {
-    datum[i].pack_ = 0;
-  }
+  Datum *datums = reinterpret_cast<Datum *>(frame + datum_off_);
+  for (int64_t i = 0; i < size; ++i) { datums[i].set_null(); }
 }
 
-void ObExpr::reset_datum_ptr(char *frame, const int64_t size, const int64_t idx) const
-{
-  ObDatum *datum = reinterpret_cast<ObDatum *>(frame + datum_off_);
-  datum += idx;
-  char *ptr = frame + res_buf_off_ + (batch_idx_mask_ & idx) * res_buf_len_;
-  if (datum->ptr_ != ptr && idx < size) {
-    datum->ptr_ = ptr;
-  }
-}
-
-int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) const
+int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::Datum *&datum) const
 {
 #define INNER_BATCH_SIZE() MAX(1, ctx.get_batch_size())
   int ret = OB_SUCCESS;
@@ -600,7 +899,6 @@ int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) con
   } else if (!info->evaluated_) {
     need_evaluate = true;
     to_bit_vector(frame + eval_flags_off_)->reset(ctx.get_batch_size());
-    reset_datums_ptr(frame, ctx.get_batch_size());
     // See `clear_datum_descriptors` above for the rationale.
     clear_datum_descriptors(frame, INNER_BATCH_SIZE());
     info->evaluated_ = true;
@@ -613,12 +911,11 @@ int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) con
       need_evaluate = true;
     }
   }
-  datum = reinterpret_cast<ObDatum *>(frame + datum_off_) + ctx.get_batch_idx();
+  datum = reinterpret_cast<Datum *>(frame + datum_off_) + ctx.get_batch_idx();
   if (OB_SUCC(ret) && need_evaluate) {
     if (OB_UNLIKELY(need_stack_check_) && OB_FAIL(check_stack_overflow())) {
       SQL_LOG(WARN, "failed to check stack overflow", K(ret));
     } else {
-      reset_datum_ptr(frame, INNER_BATCH_SIZE(), ctx.get_batch_idx());
       ret = eval_func_(*this, ctx, *datum);
       if (OB_SUCC(ret)) {
         ObBitVector *evaluated_flags = to_bit_vector(frame + eval_flags_off_);
@@ -658,10 +955,7 @@ int ObExpr::do_eval_batch(ObEvalCtx &ctx,
   }
 
   if (need_evaluate) {
-    // Set ObDatum::ptr_ point to reserved buffer in the first evaluation.
-    // FIXME bin.lb: maybe we can optimize this by ObEvalInfo::point_to_frame_
     if (!info->evaluated_) {
-      reset_datums_ptr(frame, size);
       // See `clear_datum_descriptors` above for the rationale.
       clear_datum_descriptors(frame, size);
       info->notnull_ = false;
@@ -675,8 +969,8 @@ int ObExpr::do_eval_batch(ObEvalCtx &ctx,
       ret = (*eval_batch_func_)(*this, ctx, skip, size);
       if (OB_SUCC(ret)) {
       } else {
-        ObDatum *datum = reinterpret_cast<ObDatum *>(frame + datum_off_);
-        ObDatum *datum_end = datum + size;
+        Datum *datum = reinterpret_cast<Datum *>(frame + datum_off_);
+        Datum *datum_end = datum + size;
         for (; datum < datum_end; datum += 1) {
           datum->set_null();
         }
@@ -695,7 +989,7 @@ int expr_default_eval_batch_func(const ObExpr &expr,
 
   char *frame = ctx.frames_[expr.frame_idx_];
   ObBitVector *evaluated_flags = to_bit_vector(frame + expr.eval_flags_off_);
-  ObDatum *datum = reinterpret_cast<ObDatum *>(frame + expr.datum_off_);
+  Datum *datum = reinterpret_cast<Datum *>(frame + expr.datum_off_);
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(ctx);
   batch_info_guard.set_batch_size(bound.batch_size());
   bool got_null = false;
@@ -738,32 +1032,32 @@ int expr_default_eval_batch_func(const ObExpr &expr,
   return expr_default_eval_batch_func(expr, ctx, skip, EvalBound(size));
 }
 
-int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ctx.exec_ctx_.get_physical_plan_ctx())) {
+  const ObPhysicalPlanCtx *plan_ctx = ctx.exec_ctx_.get_physical_plan_ctx();
+  if (plan_ctx == nullptr) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const auto &param_store = ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store();
-    if (expr.extra_ >= param_store.count()) {
+    const Datum *value = plan_ctx->get_native_parameter(expr.extra_);
+    const SqlType *type = plan_ctx->get_native_parameter_type(expr.extra_);
+    if (value == nullptr || type == nullptr) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (!value->is_null() && type->kind() != expr.datum_meta_.type_) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      const DatumParameter &v = param_store.at(expr.extra_);
-      if (v.get_type() != expr.datum_meta_.type_ && !v.is_null()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        expr_datum = v.datum_;
-        if (is_lob_storage(v.get_type())) {
-          ret = ob_adjust_lob_datum(ctx.exec_ctx_, v.datum_, v.get_meta(),
-                                    expr.obj_meta_, ctx.exec_ctx_.get_allocator(), expr_datum);
-        }
+      Datum candidate = *value;
+      if (is_lob_storage(type->kind())) {
+        ret = ob_adjust_lob_datum(ctx.exec_ctx_, *value, type->legacy_meta(),
+            expr.obj_meta_, ctx.exec_ctx_.get_allocator(), candidate);
       }
+      if (OB_SUCC(ret)) { expr_datum = candidate; }
     }
   }
   return ret;
 }
 
-int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
@@ -806,7 +1100,7 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       if (OB_FAIL(DatumValueCaster::to_type(dst_meta.get_type(), cast_ctx,
                                              source, allocator, converted))) {
       } else {
-        expr_datum = converted.datum_;
+        ret = expr.get_datum_copy_plan().import_legacy(converted.datum_, expr_datum);
       }
     }
   }

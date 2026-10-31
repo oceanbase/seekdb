@@ -45,7 +45,7 @@ struct ObBatchRowDatums
   void extend_save(ObEvalCtx &ctx, int64_t size);
   void to_exprs(ObEvalCtx &ctx);
   void to_exprs(ObEvalCtx &ctx, int64_t from_idx, int64_t to_idx);
-  ObDatum &get_datum(int64_t row_id, int64_t col_id)
+  Datum &get_datum(int64_t row_id, int64_t col_id)
   {
     return datums_[col_id * batch_size_ + row_id];
   }
@@ -57,7 +57,7 @@ private:
   common::ObIAllocator *alloc_;
   const ObExprPtrIArray *exprs_;
   int32_t batch_size_;
-  ObDatum *datums_;
+  Datum *datums_;
   ObBitVector *skip_;
   int32_t size_;
   int32_t saved_size_; // record  the saved size, include extend saved size

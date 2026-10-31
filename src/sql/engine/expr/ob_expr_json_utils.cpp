@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/pl/ob_pl.h"
 #include "ob_expr_json_utils.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "share/object/ob_obj_cast_util.h"
 #include "share/datum/typed_datum_compare.h"
 
@@ -288,7 +289,7 @@ int ObJsonUtil::get_accuracy(const ObExpr &expr,
                              bool &is_cover_by_error)
 {
   INIT_SUCC(ret);
-  ObDatum *dst_type_dat = NULL;
+  Datum *dst_type_dat = NULL;
 
   if (OB_ISNULL(expr.args_) || OB_ISNULL(expr.args_[2])) {
     ret = OB_ERR_UNEXPECTED;
@@ -462,7 +463,7 @@ int ObJsonUtil::set_lob_datum(common::ObIAllocator *allocator,
                               ObEvalCtx &ctx,
                               SqlValueType dst_type,
                               uint8_t ascii_type,
-                              ObDatum &res)
+                              Datum &res)
 {
   INIT_SUCC(ret);
   if (res.is_null()) { // null value jump this process
@@ -580,7 +581,7 @@ int cast_to_null(common::ObIAllocator *allocator,
                  ObIJsonBase *j_base,
                  common::ObAccuracy &accuracy,
                  ObJsonCastParam &cast_param,
-                 ObDatum &res,
+                 Datum &res,
                  uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -601,7 +602,7 @@ int cast_to_int(common::ObIAllocator *allocator,
                 ObIJsonBase *j_base,
                 common::ObAccuracy &accuracy,
                 ObJsonCastParam &cast_param,
-                ObDatum &res,
+                Datum &res,
                 uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -630,19 +631,20 @@ int cast_to_int(common::ObIAllocator *allocator,
 }
 
 template<>
-void ObJsonUtil::wrapper_set_uint(SqlValueType type, uint64_t val, ObDatum& obj)
+void ObJsonUtil::wrapper_set_uint(SqlValueType type, uint64_t val, Datum& obj)
 {
   obj.set_uint(val);
 }
 
 template<>
-void ObJsonUtil::wrapper_set_decimal_int(const common::ObDecimalInt *decint, ObScale scale, int32_t int_bytes, ObDatum& res)
+void ObJsonUtil::wrapper_set_decimal_int(const common::ObDecimalInt *decint, ObScale scale, int32_t int_bytes, common::ObDatum& res)
 {
+  UNUSED(scale);
   res.set_decimal_int(decint, int_bytes);
 }
 
 template<>
-void ObJsonUtil::wrapper_set_string(SqlValueType type, ObString& val, ObDatum& obj)
+void ObJsonUtil::wrapper_set_string(SqlValueType type, ObString& val, Datum& obj)
 {
   obj.set_string(val);
 }
@@ -652,7 +654,7 @@ int cast_to_uint(common::ObIAllocator *allocator,
                  ObIJsonBase *j_base,
                  common::ObAccuracy &accuracy,
                  ObJsonCastParam &cast_param,
-                 ObDatum &res,
+                 Datum &res,
                  uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -686,7 +688,7 @@ int cast_to_string(common::ObIAllocator *allocator,
                    ObIJsonBase *j_base,
                    common::ObAccuracy &accuracy,
                    ObJsonCastParam &cast_param,
-                   ObDatum &res,
+                   Datum &res,
                    uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -834,7 +836,7 @@ int cast_to_datetime(common::ObIAllocator *allocator,
                      ObIJsonBase *j_base,
                      common::ObAccuracy &accuracy,
                      ObJsonCastParam &cast_param,
-                     ObDatum &res,
+                     Datum &res,
                      uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -861,12 +863,43 @@ int cast_to_datetime(common::ObIAllocator *allocator,
   return ret;
 }
 
+namespace
+{
+int write_json_number(ObIAllocator *allocator, ObEvalCtx &ctx, const ObJsonCastParam &parameters,
+                      const number::ObNumber &value, Datum &out)
+{
+  if (parameters.rt_expr_ != nullptr) { return ObExprUtil::set_number(*parameters.rt_expr_, ctx, out, value); }
+  const uint32_t bytes = sizeof(number::ObCompactNumber) + value.get_length() * sizeof(uint32_t);
+  char *buffer = allocator == nullptr ? nullptr : static_cast<char *>(allocator->alloc(bytes));
+  return buffer == nullptr ? OB_ALLOCATE_MEMORY_FAILED : out.set_number(value, buffer, bytes);
+}
+
+int write_json_decimal(ObIAllocator *allocator, ObEvalCtx &ctx, const ObJsonCastParam &parameters,
+                       const ObDecimalInt *value, int32_t bytes, Datum &out)
+{
+  if (parameters.rt_expr_ != nullptr) { return ObExprUtil::set_decimal_int(*parameters.rt_expr_, ctx, out, value, bytes); }
+  if (parameters.result_type_ == nullptr || bytes < 0) { return OB_INVALID_ARGUMENT; }
+  const bool reference = parameters.result_type_->canonical_representation() == DatumRepresentation::Reference;
+  char *buffer = reference && bytes > 0 && allocator != nullptr ? static_cast<char *>(allocator->alloc(bytes)) : nullptr;
+  return reference && bytes > 0 && buffer == nullptr ? OB_ALLOCATE_MEMORY_FAILED
+      : DatumCopyPlan(*parameters.result_type_).set_decimal(value, bytes, out, buffer, reference ? bytes : 0);
+}
+
+int write_json_otimestamp(ObIAllocator *allocator, ObEvalCtx &ctx, const ObJsonCastParam &parameters,
+                          const ObOTimestampData &value, Datum &out)
+{
+  if (parameters.rt_expr_ != nullptr) { return ObExprUtil::set_otimestamp_tiny(*parameters.rt_expr_, ctx, out, value); }
+  char *buffer = allocator == nullptr ? nullptr : static_cast<char *>(allocator->alloc(sizeof(ObOTimestampTinyData)));
+  return buffer == nullptr ? OB_ALLOCATE_MEMORY_FAILED : out.set_otimestamp_tiny(value, buffer, sizeof(ObOTimestampTinyData));
+}
+} // namespace
+
 int cast_to_timstamp(common::ObIAllocator *allocator,
                      ObEvalCtx &ctx,
                      ObIJsonBase *j_base,
                      common::ObAccuracy &accuracy,
                      ObJsonCastParam &cast_param,
-                     ObDatum &res,
+                     Datum &res,
                      uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -908,7 +941,7 @@ int cast_to_timstamp(common::ObIAllocator *allocator,
       if (cast_param.dst_type_ == ObTimestampType) {
         res.set_datetime(out_val.time_us_);
       } else {
-        res.set_otimestamp_tiny(out_val);
+        ret = write_json_otimestamp(allocator, ctx, cast_param, out_val, res);
       }
     }
   }
@@ -920,7 +953,7 @@ int cast_to_date_time(common::ObIAllocator *allocator,
                       ObIJsonBase *j_base,
                       common::ObAccuracy &accuracy,
                       ObJsonCastParam &cast_param,
-                      ObDatum &res,
+                      Datum &res,
                       uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -937,7 +970,7 @@ int cast_to_date(common::ObIAllocator *allocator,
                  ObIJsonBase *j_base,
                  common::ObAccuracy &accuracy,
                  ObJsonCastParam &cast_param,
-                 ObDatum &res,
+                 Datum &res,
                  uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -966,7 +999,7 @@ int cast_to_mdate(common::ObIAllocator *allocator,
                  ObIJsonBase *j_base,
                  common::ObAccuracy &accuracy,
                  ObJsonCastParam &cast_param,
-                 ObDatum &res,
+                 Datum &res,
                  uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1003,7 +1036,7 @@ int cast_to_mdatetime(common::ObIAllocator *allocator,
                      ObIJsonBase *j_base,
                      common::ObAccuracy &accuracy,
                      ObJsonCastParam &cast_param,
-                     ObDatum &res,
+                     Datum &res,
                      uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1039,7 +1072,7 @@ int cast_to_time(common::ObIAllocator *allocator,
                  ObIJsonBase *j_base,
                  common::ObAccuracy &accuracy,
                  ObJsonCastParam &cast_param,
-                 ObDatum &res,
+                 Datum &res,
                  uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1091,7 +1124,7 @@ int cast_to_year(common::ObIAllocator *allocator,
                  ObIJsonBase *j_base,
                  common::ObAccuracy &accuracy,
                  ObJsonCastParam &cast_param,
-                 ObDatum &res,
+                 Datum &res,
                  uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1130,7 +1163,7 @@ int cast_to_float(common::ObIAllocator *allocator,
                   ObIJsonBase *j_base,
                   common::ObAccuracy &accuracy,
                   ObJsonCastParam &cast_param,
-                  ObDatum &res,
+                  Datum &res,
                   uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1159,7 +1192,7 @@ int cast_to_double(common::ObIAllocator *allocator,
                   ObIJsonBase *j_base,
                   common::ObAccuracy &accuracy,
                   ObJsonCastParam &cast_param,
-                  ObDatum &res,
+                  Datum &res,
                   uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1202,7 +1235,7 @@ int cast_to_number(common::ObIAllocator *allocator,
                    ObIJsonBase *j_base,
                    common::ObAccuracy &accuracy,
                    ObJsonCastParam &cast_param,
-                   ObDatum &res,
+                   Datum &res,
                    uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1210,7 +1243,7 @@ int cast_to_number(common::ObIAllocator *allocator,
   number::ObNumber val;
   if (OB_FAIL(ObJsonUtil::cast_to_number_type(allocator, j_base, accuracy, cast_param, is_type_mismatch, val))) {
   } else if (!cast_param.is_only_check_) {
-    res.set_number(val);
+    ret = write_json_number(allocator, ctx, cast_param, val, res);
   }
   return ret;
 }
@@ -1220,7 +1253,7 @@ int cast_to_decimalint(common::ObIAllocator *allocator,
                        ObIJsonBase *j_base,
                        common::ObAccuracy &accuracy,
                        ObJsonCastParam &cast_param,
-                       ObDatum &res,
+                       Datum &res,
                        uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1240,9 +1273,9 @@ int cast_to_decimalint(common::ObIAllocator *allocator,
       ObDecimalIntBuilder res_builder;
       res_builder.from(decint, int_bytes);
       res_builder.extend(len);
-      res.set_decimal_int(res_builder.get_decimal_int(), res_builder.get_int_bytes());
+      ret = write_json_decimal(allocator, ctx, cast_param, res_builder.get_decimal_int(), res_builder.get_int_bytes(), res);
     } else {
-      res.set_decimal_int(decint, int_bytes);
+      ret = write_json_decimal(allocator, ctx, cast_param, decint, int_bytes, res);
     }
   }
   return ret;
@@ -1253,7 +1286,7 @@ int cast_to_bit(common::ObIAllocator *allocator,
                 ObIJsonBase *j_base,
                 common::ObAccuracy &accuracy,
                 ObJsonCastParam &cast_param,
-                ObDatum &res,
+                Datum &res,
                 uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1285,7 +1318,7 @@ int cast_to_json(common::ObIAllocator *allocator,
                  ObIJsonBase *j_base,
                  common::ObAccuracy &accuracy,
                  ObJsonCastParam &cast_param,
-                 ObDatum &res,
+                 Datum &res,
                  uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1318,7 +1351,7 @@ int cast_not_expected(common::ObIAllocator *allocator,
                       ObIJsonBase *j_base,
                       common::ObAccuracy &accuracy,
                       ObJsonCastParam &cast_param,
-                      ObDatum &res,
+                      Datum &res,
                       uint8_t &is_type_mismatch)
 {
   int ret = OB_ERR_UNEXPECTED;
@@ -1337,7 +1370,7 @@ int ObJsonUtil::cast_to_res(common::ObIAllocator *allocator,
                             ObIJsonBase *j_base,
                             ObAccuracy &accuracy,
                             ObJsonCastParam &cast_param,
-                            ObDatum &res,
+                            Datum &res,
                             uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -1361,30 +1394,32 @@ int ObJsonUtil::cast_json_scalar_to_sql_value(ObIAllocator &owner,
     ObAccuracy &accuracy, SqlValueType type, ObScale scale, DatumValue &result)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(j_base)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    // The real JSON converters write into a caller-provided Datum buffer.
-    // Snapshot that result into the explicit owner before this buffer expires.
-    alignas(uint64_t) char buffer[OBJ_DATUM_STRING_RES_SIZE] = {0};
-    ObDatum converted;
-    converted.ptr_ = buffer;
+  if (j_base == nullptr) { ret = OB_INVALID_ARGUMENT; }
+  else {
+    SqlTypeMeta meta = result.meta_;
+    meta.set_type(type); meta.set_collation_type(collation); meta.set_scale(scale);
+    SqlType output_type;
+    Datum converted;
     ObJsonCastParam cast_param(type, CS_TYPE_UTF8MB4_BIN, collation, false);
     cast_param.relaxed_time_convert_ = true;
-    uint8_t is_type_mismatch = false;
-    if (OB_FAIL(cast_to_res(&owner, ctx, j_base, accuracy, cast_param,
-                            converted, is_type_mismatch))) {
+    cast_param.result_type_ = &output_type;
+    uint8_t mismatch = false;
+    if (OB_FAIL(SqlType::from_legacy(meta, accuracy, output_type))) {
+    } else if (OB_FAIL(cast_to_res(&owner, ctx, j_base, accuracy, cast_param, converted, mismatch))) {
     } else {
       DatumValue candidate;
-      candidate.meta_ = result.meta_;
-      candidate.meta_.set_type(type);
-      candidate.set_collation_type(collation);
-      candidate.set_scale(scale);
-      candidate.datum_ = converted;
-      if (converted.is_null()) {
+      candidate.meta_ = meta;
+      const DatumCopyPlan plan(output_type);
+      int64_t bytes = 0;
+      int64_t position = 0;
+      char *buffer = nullptr;
+      if (OB_FAIL(plan.legacy_payload_size(converted, bytes))) {
+      } else if (bytes > 0 && (buffer = static_cast<char *>(owner.alloc(bytes))) == nullptr) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(plan.export_legacy(converted, candidate.datum_, buffer, bytes, position))) {
+      } else if (converted.is_null()) {
         candidate.set_null();
       } else if (candidate.is_decimal_int() && candidate.get_scale() < 0) {
-        // Retain the old typed conversion's defensive scale validation.
         ret = OB_ERR_UNEXPECTED;
       }
       if (OB_SUCC(ret)) { ret = clone_typed_value(candidate, result, owner); }
@@ -1466,7 +1501,7 @@ int ObJsonUtil::get_json_path(ObExpr* expr,
                               bool &is_cover_by_error)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   SqlValueType type = expr->datum_meta_.type_;
   ObJsonPathCache ctx_cache(&temp_allocator);
   ObJsonPath* j_path = nullptr;
@@ -1520,7 +1555,7 @@ int ObJsonUtil::get_json_doc(ObExpr *expr,
                              bool relax)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   SqlValueType val_type = expr->datum_meta_.type_;
   ObCollationType cs_type = expr->datum_meta_.cs_type_;
 

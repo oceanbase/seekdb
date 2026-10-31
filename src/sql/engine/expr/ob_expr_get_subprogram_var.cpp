@@ -72,15 +72,15 @@ int ObExprGetSubprogramVar::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 
 int ObExprGetSubprogramVar::calc_get_subprogram_var(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int64_t ret = OB_SUCCESS;
   ObPLContext *pl_context = NULL;
   DatumParameter res_var;
   ObSQLSessionInfo *session_info = ctx.exec_ctx_.get_my_session();
-  ObDatum *pkg_id_datum = NULL;
-  ObDatum *subprogram_id_datum = NULL;
-  ObDatum *var_idx_datum = NULL;
+  Datum *pkg_id_datum = NULL;
+  Datum *subprogram_id_datum = NULL;
+  Datum *var_idx_datum = NULL;
   CK (OB_NOT_NULL(session_info));
   CK (OB_LIKELY(4 == expr.arg_cnt_));
   CK (OB_NOT_NULL(pl_context = session_info->get_pl_context()));
@@ -94,12 +94,13 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
     int64_t var_idx = var_idx_datum->get_int();
     OZ (pl_context->get_subprogram_var_from_local(
     *session_info, package_id, subprogram_id, var_idx, res_var));
-    OX (expr_datum = res_var.datum_);
+    OZ(expr.get_datum_copy_plan().import_legacy(res_var.datum_, expr_datum));
     if (is_lob_storage(res_var.get_type())) {
-      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, res_var.datum_, res_var.get_meta(), expr.obj_meta_,
+      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, expr_datum, res_var.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), expr_datum));
     }
   }
+  OZ(expr.deep_copy_datum(ctx, expr_datum));
   return ret;
 }
 

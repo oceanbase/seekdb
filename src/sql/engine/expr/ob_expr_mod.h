@@ -34,15 +34,15 @@ public:
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const;
 
-  static int mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
-  static int mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_float(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_double(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
+  static int mod_number(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
-  static int mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   // temporary used, remove after all expr converted
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,

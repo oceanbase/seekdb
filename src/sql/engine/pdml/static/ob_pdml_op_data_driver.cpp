@@ -384,7 +384,7 @@ int ObPDMLOpDataDriver::set_heap_table_hidden_pk_value(
   if (OB_ISNULL(auto_inc_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ObDatum &datum = auto_inc_expr->locate_datum_for_write(*eval_ctx_);
+    Datum &datum = auto_inc_expr->locate_datum_for_write(*eval_ctx_);
     datum.set_uint(pk_value);
     auto_inc_expr->set_evaluated_projected(*eval_ctx_);
   }

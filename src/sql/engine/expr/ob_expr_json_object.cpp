@@ -89,7 +89,7 @@ int ObExprJsonObject::calc_result_typeN(ObExprResType& type,
 }
 
 // for new sql engine
-int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -105,7 +105,7 @@ int ObExprJsonObject::eval_json_object(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 
   for (int32 i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i += 2) {
     ObExpr *arg = expr.args_[i];
-    ObDatum *json_datum = NULL;  
+    Datum *json_datum = NULL;
     if (OB_FAIL(temp_allocator.eval_arg(arg, ctx, json_datum))) {
     } else if (json_datum->is_null()) {
       ret = OB_ERR_JSON_DOCUMENT_NULL_KEY;

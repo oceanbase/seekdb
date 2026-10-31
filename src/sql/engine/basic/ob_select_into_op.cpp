@@ -21,6 +21,7 @@
 
 #include "ob_select_into_op.h"
 #include "sql/executor/ob_execute_result.h"
+#include "common/datum/datum_value_projection.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -34,6 +35,21 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+namespace
+{
+int outfile_value_view(const ObExpr &expr, const Datum &source, void *scratch,
+                       DatumValue &value)
+{
+  common::ObDatum legacy;
+  int ret = expr.get_datum_copy_plan().legacy_view(source, legacy, scratch, 64);
+  if (OB_SUCC(ret)) {
+    ret = ResultRowView::project_value(legacy, expr.get_sql_type().legacy_meta(),
+                                      expr.obj_datum_map_, value.meta_, value);
+  }
+  return ret;
+}
+}
 
 OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_,
@@ -351,10 +367,15 @@ int ObSelectIntoOp::get_row_str(const int64_t buf_len,
       }
     }
     if (OB_SUCC(ret)) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(DatumValue(*datum, expr->obj_meta_).print_plain_str_literal(
-                             buf, buf_len, pos))) {
+      } else {
+        alignas(8) char scratch[64];
+        DatumValue value;
+        if (OB_FAIL(outfile_value_view(*expr, *datum, scratch, value))) {
+        } else { ret = value.print_plain_str_literal(buf, buf_len, pos); }
+      }
+      if (OB_FAIL(ret)) {
       } else if (0 != closed_cht && (!is_optional_ || ob_is_string_type(expr->datum_meta_.type_))) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%c", closed_cht))) {
         }
@@ -846,7 +867,7 @@ int ObSelectIntoOp::print_json_to_json_buf(const DatumValue &value,
 
 int ObSelectIntoOp::write_lob_to_file(const DatumValue &value,
                                       const ObExpr &expr,
-                                      const ObDatum &datum,
+                                      const Datum &datum,
                                       ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
@@ -990,7 +1011,7 @@ int ObSelectIntoOp::write_single_char_to_file(const char *wchar, ObCsvFileWriter
 
 int ObSelectIntoOp::print_lob_field(const DatumValue &value,
                                     const ObExpr &expr,
-                                    const ObDatum &datum,
+                                    const Datum &datum,
                                     ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
@@ -1034,7 +1055,7 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
 {
   int ret = OB_SUCCESS;
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObCsvFileWriter *csv_data_writer = NULL;
   if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
     ret = OB_ERR_UNEXPECTED;
@@ -1045,12 +1066,13 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
     } else if (OB_FAIL(select_exprs.at(i)->eval(eval_ctx_, datum))) {
     } else if (OB_ISNULL(datum)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (!ob_is_text_tc(select_exprs.at(i)->obj_meta_.get_type()) || datum->is_null()) {
-      DatumValue value(*datum, select_exprs.at(i)->obj_meta_);
-      OZ(print_field(value, *csv_data_writer));
-    } else { // text tc
-      DatumValue value(*datum, select_exprs.at(i)->obj_meta_);
-      OZ(print_lob_field(value, *select_exprs.at(i), *datum, *csv_data_writer));
+    } else {
+      alignas(8) char scratch[64];
+      DatumValue value;
+      OZ(outfile_value_view(*select_exprs.at(i), *datum, scratch, value));
+      if (!ob_is_text_tc(select_exprs.at(i)->obj_meta_.get_type()) || datum->is_null()) {
+        OZ(print_field(value, *csv_data_writer));
+      } else { OZ(print_lob_field(value, *select_exprs.at(i), *datum, *csv_data_writer)); }
     }
     // print field terminator
     if (OB_SUCC(ret) && i != select_exprs.count() - 1) {
@@ -1073,8 +1095,8 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
 {
   int ret = OB_SUCCESS;
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
-  ObArray<ObDatumVector> datum_vectors;
-  ObDatum *datum = NULL;
+  ObArray<DatumVector> datum_vectors;
+  Datum *datum = NULL;
   ObCsvFileWriter *csv_data_writer = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
     if (OB_FAIL(select_exprs.at(i)->eval_batch(eval_ctx_, *brs.skip_, brs.size_))) {
@@ -1094,12 +1116,13 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
       for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < select_exprs.count(); ++col_idx) {
         if (OB_ISNULL(datum = datum_vectors.at(col_idx).at(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (!ob_is_text_tc(select_exprs.at(col_idx)->obj_meta_.get_type()) || datum->is_null()) {
-          DatumValue value(*datum, select_exprs.at(col_idx)->obj_meta_);
-          OZ(print_field(value, *csv_data_writer));
-        } else { // text tc
-          DatumValue value(*datum, select_exprs.at(col_idx)->obj_meta_);
-          OZ(print_lob_field(value, *select_exprs.at(col_idx), *datum, *csv_data_writer));
+        } else {
+          alignas(8) char scratch[64];
+          DatumValue value;
+          OZ(outfile_value_view(*select_exprs.at(col_idx), *datum, scratch, value));
+          if (!ob_is_text_tc(select_exprs.at(col_idx)->obj_meta_.get_type()) || datum->is_null()) {
+            OZ(print_field(value, *csv_data_writer));
+          } else { OZ(print_lob_field(value, *select_exprs.at(col_idx), *datum, *csv_data_writer)); }
         }
         // print field terminator
         if (OB_SUCC(ret) && col_idx != select_exprs.count() - 1) {
@@ -1163,12 +1186,12 @@ int ObSelectIntoOp::into_varlist()
     for (int i = 0 ; i < user_vars.count(); ++i) {
       const ObString &var_name = user_vars.at(i);
       DatumValue value;
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       if (OB_FAIL(select_exprs.at(i)->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(ResultRowView::project_value(*datum,
+      } else if (OB_FAIL(project_native_datum_value_view(*datum, select_exprs.at(i)->get_sql_type(),
                      select_exprs.at(i)->obj_meta_,
-                     ObDatum::get_sql_value_datum_map_type(select_exprs.at(i)->obj_meta_.get_type()),
-                     SqlTypeMeta(), value, true /*keep_null_collation*/))) {
+                     common::ObDatum::get_sql_value_datum_map_type(select_exprs.at(i)->obj_meta_.get_type()),
+                     SqlTypeMeta(), value, ctx_.get_allocator(), true /*keep_null_collation*/))) {
       } else if (value.is_lob_storage()
           && OB_FAIL(ctx_.get_lob_read_options(lob_read_options))) {
       } else if (value.is_lob_storage()

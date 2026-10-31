@@ -393,7 +393,7 @@ int ObPxTransmitOp::next_batch(const int64_t max_row_cnt)
   if (OB_FAIL(child_->get_next_batch(max_row_cnt, brs))) {
   } else if (OB_FAIL(brs_.copy(brs))) {
   } else if (NULL != MY_SPEC.random_expr_ && brs->size_ > 0) {
-    ObDatum *datums = MY_SPEC.random_expr_->locate_datums_for_update(eval_ctx_, brs->size_);
+    Datum *datums = MY_SPEC.random_expr_->locate_datums_for_update(eval_ctx_, brs->size_);
     for (int64_t i = 0; i < brs->size_; i++) {
       datums[i].set_int(get_random_seq());
     }
@@ -440,9 +440,9 @@ int ObPxTransmitOp::set_wf_hybrid_slice_id_calc_type(ObSliceIdxCalc &slice_calc)
   const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
   if (spec.is_wf_hybrid_) {
     int64_t aggr_status = INT64_MIN;
-    ObDatum &wf_hybrid_aggr_status =
+    Datum &wf_hybrid_aggr_status =
       MY_SPEC.wf_hybrid_aggr_status_expr_->locate_expr_datum(eval_ctx_);
-    if (OB_ISNULL(wf_hybrid_aggr_status.ptr().int_)) {
+    if (wf_hybrid_aggr_status.is_null()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       aggr_status = wf_hybrid_aggr_status.get_int();

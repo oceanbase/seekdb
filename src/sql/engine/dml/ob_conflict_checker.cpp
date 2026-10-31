@@ -303,7 +303,7 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
 
   if (OB_SUCC(ret)) { new (rowkey) ObRowkey(); new (objs) DatumValue[rowkey_cnt]; }
   for (int i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     DatumValue tmp_obj;
     const SqlTypeMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
     ObExpr *expr = rowkey_info->rowkey_expr_.at(i);
@@ -315,7 +315,7 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
     }
     // Here a shallow copy of datum is made, because at this point the datum comes from the data scanned out of the storage layer table_scan,
     // Read subsequent lines will overwrite the previous data, so a deep copy must be done here
-    else if (OB_FAIL(project_datum_value_view(*datum, col_obj_meta, ObDatum::get_sql_value_datum_map_type(col_obj_meta.get_type()), tmp_obj.meta_, tmp_obj, true))) {
+    else if (OB_FAIL(project_native_datum_value_view(*datum, expr->get_sql_type(), col_obj_meta, common::ObDatum::get_sql_value_datum_map_type(col_obj_meta.get_type()), tmp_obj.meta_, tmp_obj, allocator_, true))) {
     } else if (OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
                                                   col_accuracy,
                                                   *tmp_string_buffer,
@@ -355,14 +355,14 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
     } else if (OB_FAIL(get_tmp_string_buffer(tmp_string_buffer))) {
     }
     for (int i = 0; OB_SUCC(ret) && i < rowkey_info->rowkey_expr_.count(); ++i) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       const SqlTypeMeta &col_obj_meta = rowkey_info->rowkey_expr_.at(i)->obj_meta_;
       ObExpr *expr = rowkey_info->rowkey_expr_.at(i);
       const ObAccuracy &col_accuracy = rowkey_info->rowkey_accuracys_.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      } else if (OB_FAIL(project_datum_value_view(*datum, col_obj_meta, ObDatum::get_sql_value_datum_map_type(col_obj_meta.get_type()), obj_ptr[i].meta_, obj_ptr[i], true))) {
+      } else if (OB_FAIL(project_native_datum_value_view(*datum, expr->get_sql_type(), col_obj_meta, common::ObDatum::get_sql_value_datum_map_type(col_obj_meta.get_type()), obj_ptr[i].meta_, obj_ptr[i], allocator_, true))) {
       } else if (OB_FAIL(ObDASUtils::reshape_storage_value(col_obj_meta,
                                                     col_accuracy,
                                                     *tmp_string_buffer,
@@ -790,13 +790,13 @@ int ObConflictChecker::build_data_table_range(ObNewRange &lookup_range, ObRowkey
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
     DatumValue tmp_obj;
     ObExpr *expr = checker_ctdef_.data_table_rowkey_expr_.at(i);
-    ObDatum *col_datum = nullptr;
+    Datum *col_datum = nullptr;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(expr->eval(eval_ctx_, col_datum))) {
     } else if (OB_ISNULL(col_datum)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(project_datum_value_view(*col_datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+    } else if (OB_FAIL(project_native_datum_value_view(*col_datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator_))) {
     }
     // Here a deep copy needs to be done
     else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], das_ref_.get_das_alloc()))) {
@@ -866,7 +866,7 @@ int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_in
                                            int64_t buf_len)
 {
   int ret = OB_SUCCESS;
-  ObDatum *r_datum = NULL;
+  Datum *r_datum = NULL;
   DatumValue r_obj;
   int64_t unique_key_cnt = 0;
   int64_t pos = 0;
@@ -894,7 +894,7 @@ int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_in
     } else if (OB_FAIL(expr->eval(eval_ctx_, r_datum))) {
     } else if (OB_ISNULL(r_datum)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(project_datum_value_view(*r_datum, expr->obj_meta_, ObDatum::get_sql_value_datum_map_type(expr->obj_meta_.get_type()), r_obj.meta_, r_obj, true))) {
+    } else if (OB_FAIL(project_native_datum_value_view(*r_datum, expr->get_sql_type(), expr->obj_meta_, common::ObDatum::get_sql_value_datum_map_type(expr->obj_meta_.get_type()), r_obj.meta_, r_obj, allocator_, true))) {
     } else if (OB_FAIL(r_obj.print_plain_str_literal(buf, buf_len - 1, pos, session->get_timezone_info()))) {
     } else if (i == unique_key_cnt - 1) {
       // do nothing

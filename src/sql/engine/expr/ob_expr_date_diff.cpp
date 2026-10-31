@@ -46,11 +46,11 @@ int ObExprDateDiff::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprDateDiff::eval_date_diff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprDateDiff::eval_date_diff(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   int32_t date_left = 0;
   int32_t date_right = 0;
   if (OB_FAIL(expr.args_[0]->eval(ctx, left))

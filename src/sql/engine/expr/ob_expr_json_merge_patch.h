@@ -44,8 +44,8 @@ public:
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
 
-  static int eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  static int eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                     ObExpr &rt_expr) const override;
 private:

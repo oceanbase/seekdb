@@ -39,7 +39,7 @@ public:
   static int calc_pq_center_ids(
       const ObExpr &expr,
       ObEvalCtx &eval_ctx,
-      ObDatum &expr_datum);
+      Datum &expr_datum);
   virtual bool need_rt_ctx() const override { return true; }
 private :
   static int generate_empty_pq_ids(char *buf, int pq_m, int nbits, uint64_t center_prefix);

@@ -53,7 +53,6 @@ class ObTableScanOp;
 class ObDASScanOp;
 class ObGlobalIndexLookupOpImpl;
 class NativePointGetInput;
-class NativeBigintOutput;
 
 struct SnapshotScanItem
 {
@@ -482,15 +481,6 @@ public:
   int do_init_before_get_row() override;
   void destroy() override;
 
-  bool try_get_native_output(int64_t batch_idx, const common::Datum *&values,
-                             const common::SqlType *&type, int64_t &count,
-                             uint64_t &generation, const uint64_t *&current_generation) const;
-  void invalidate_native_output();
-  bool enable_native_bigint_consumer(int64_t field_count);
-  void reset_native_bigint_consumer();
-  bool has_legacy_output() const;
-  int check_native_batch_output(bool &native_only) const override;
-
   void set_iter_end(bool iter_end) { iter_end_ = iter_end; }
 
   void set_report_checksum(bool flag) { report_checksum_ = flag; }
@@ -528,7 +518,6 @@ protected:
   bool need_extract_range() const { return MY_SPEC.tsc_ctdef_.get_query_range_provider().has_range(); }
   int prepare_single_scan_range(int64_t group_idx = 0, bool need_sort = false);
   int try_prepare_native_point_get(int64_t group_idx, bool need_sort, bool &handled);
-  int prepare_native_bigint_output();
   int prepare_index_merge_scan_range(int64_t group_idx = 0, bool need_sort = false);
   int prepare_range_for_each_index(int64_t group_idx, bool need_sort, ObIAllocator &allocator, ObDASBaseRtDef *rtdef);
   int reuse_table_rescan_allocator();
@@ -776,8 +765,6 @@ private:
   // valid until DAS has reused/released the scan iterator.
   NativePointGetInput *native_point_get_input_;
   bool native_point_get_ready_;
-  NativeBigintOutput *native_bigint_output_;
-  bool native_bigint_consumer_;
  };
 
 } // end namespace sql

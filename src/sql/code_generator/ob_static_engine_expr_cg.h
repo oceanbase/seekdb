@@ -257,7 +257,7 @@ private:
   // Initialize frame layout
   // @param [in/out] exprs all expressions to be calculated for frame layout
   // @param [in] reserve_empty_string Whether to allocate reserved memory for string type in frame
-  // @param [in] continuous_datum ObDatum + ObEvalInfo should be continuous
+  // @param [in] continuous_datum Datum + ObEvalInfo should be continuous
   // @param [in/out] frame_index_pos offset of generated frame, used for calculating the current generated frame
   //                 index in all frames
   // @param [out]    frame_info_arr all frame related information
@@ -281,22 +281,29 @@ private:
                         common::ObIArray<char *> &frame_ptrs);
 
   // called after res_buf_len_ assigned to get the buffer size with dynamic reserved buffer.
+  static constexpr int64_t align_frame_part(int64_t size) { return (size + 7) / 8 * 8; }
+
   int64_t reserve_data_consume(const ObExpr &expr)
   {
     const bool need_dyn_buf = ObDynReserveBuf::supported(expr.datum_meta_.type_);
-    return expr.res_buf_len_
-        + (need_dyn_buf && expr.res_buf_len_ > 0 ? sizeof(ObDynReserveBuf) : 0);
+    return align_frame_part(expr.res_buf_len_
+        + (need_dyn_buf && expr.res_buf_len_ > 0 ? sizeof(ObDynReserveBuf) : 0));
   }
 
   // called after res_buf_len_ assigned to get the buffer size with dynamic reserved buffer.
   int64_t reserve_data_consume(const common::SqlValueType &type, const int16_t prec)
   {
     const bool need_dyn_buf = ObDynReserveBuf::supported(type);
-    // SqlValueDatumMapType datum_map_type = ObDatum::get_sql_value_datum_map_type(type);
+    // SqlValueDatumMapType datum_map_type = common::ObDatum::get_sql_value_datum_map_type(type);
     auto res_buf_len =
-        ObDatum::get_reserved_size(ObDatum::get_sql_value_datum_map_type(type), prec);
-    return res_buf_len +
-           +(need_dyn_buf && res_buf_len > 0 ? sizeof(ObDynReserveBuf) : 0);
+        common::ObDatum::get_reserved_size(common::ObDatum::get_sql_value_datum_map_type(type), prec);
+    const bool inline_kind = (type >= common::ObTinyIntType && type <= common::ObUDoubleType)
+        || (type >= common::ObDateTimeType && type <= common::ObYearType)
+        || type == common::ObBitType || type == common::ObEnumType || type == common::ObSetType
+        || type == common::ObMySQLDateType || type == common::ObMySQLDateTimeType
+        || (type == common::ObDecimalIntType && prec > 0 && prec <= common::MAX_PRECISION_DECIMAL_INT_64);
+    return inline_kind ? 0 : align_frame_part(res_buf_len
+        + (need_dyn_buf && res_buf_len > 0 ? sizeof(ObDynReserveBuf) : 0));
   }
 
   inline int64_t get_expr_datums_count(const ObExpr &expr)
@@ -347,15 +354,13 @@ private:
   int64_t reserve_datums_buf_len(const ObExpr &expr)
   {
     const bool need_dyn_buf = ObDynReserveBuf::supported(expr.datum_meta_.type_);
-    return expr.res_buf_len_ *
-               get_expr_datums_count(expr) /* reserve datums part */
-           + (need_dyn_buf ? get_expr_datums_count(expr) * sizeof(ObDynReserveBuf)
-                           : 0) /* dynamic datums part */;
+    return align_frame_part(expr.res_buf_len_ * get_expr_datums_count(expr))
+           + (need_dyn_buf ? get_expr_datums_count(expr) * sizeof(ObDynReserveBuf) : 0);
   }
 
   inline int64_t get_datums_header_size(const ObExpr &expr)
   {
-    return sizeof(ObDatum) * get_expr_datums_count(expr);
+    return sizeof(Datum) * get_expr_datums_count(expr);
   }
 
   int arrange_datum_data(common::ObIArray<ObRawExpr *> &exprs,
@@ -383,10 +388,9 @@ private:
   // - EvalFlag(BitVector) instance + BitVector data
   // - SkipBitmap(BitVector) + BitVector data
   int64_t get_expr_datums_header_size(const ObExpr &expr) {
-    int64_t size = get_datums_header_size(expr)
-                   + sizeof(ObEvalInfo)
-                   + get_expr_skip_vector_size(expr) /*skip*/
-                   + get_expr_bitmap_vector_size(expr); /*eval flags*/
+    int64_t size = align_frame_part(get_datums_header_size(expr) + get_expr_skip_vector_size(expr))
+                   + align_frame_part(sizeof(ObEvalInfo))
+                   + get_expr_bitmap_vector_size(expr);
 
     return size;
   }

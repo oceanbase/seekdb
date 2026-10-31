@@ -61,7 +61,7 @@ int ObSearchMethodOp::is_same_row(ObChunkDatumStore::StoredRow &row_1st,
     for (int64_t i = 0; OB_SUCC(ret) && i < left_output_.count(); i++) {
       const ObDatum datum_1st = StoredDatumCodec::decode_legacy_view(cells_1st[i]);
       const ObDatum datum_2nd = StoredDatumCodec::decode_legacy_view(cells_2nd[i]);
-      if (OB_FAIL(left_output_.at(i)->basic_funcs_->null_first_cmp_(
+      if (OB_FAIL(left_output_.at(i)->basic_funcs_->null_first_cmp_.legacy_function()(
               datum_1st, datum_2nd, cmp_ret, datum_access_ctx_))) {
       } else if (0 != cmp_ret) {
         is_cycle = false;

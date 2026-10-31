@@ -28,8 +28,8 @@ namespace sql
 int ObExprZipf::ObExprZipfCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr)
 {
   int ret = OB_SUCCESS;
-  ObDatum &p1 = expr.locate_param_datum(ctx, 0);
-  ObDatum &p2 = expr.locate_param_datum(ctx, 1);
+  Datum &p1 = expr.locate_param_datum(ctx, 0);
+  Datum &p2 = expr.locate_param_datum(ctx, 1);
   double alpha = 0.0;
   int64_t n = 0;
   probe_cp_.set_label("ZipfFunc");
@@ -102,7 +102,7 @@ int ObExprZipf::calc_result_type3(ObExprResType &result_type,
 
 int ObExprZipf::eval_next_value(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObExprZipfCtx *zipf_ctx = NULL;
@@ -120,7 +120,7 @@ int ObExprZipf::eval_next_value(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum &rand_val = expr.locate_param_datum(ctx, 2);
+    Datum &rand_val = expr.locate_param_datum(ctx, 2);
     if (OB_UNLIKELY(rand_val.is_null())) {
         res_datum.set_null();
     } else {

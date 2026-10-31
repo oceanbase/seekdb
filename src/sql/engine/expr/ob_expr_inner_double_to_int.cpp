@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_inner_double_to_int.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -236,9 +237,9 @@ int ObExprInnerDoubleToInt::double_to_number(double in_val,
   return ret;
 }
 
-int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum) {
+int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum) {
   int ret = OB_SUCCESS;
-  ObDatum* val_datum = NULL;
+  Datum* val_datum = NULL;
   double val = 0.;
   double ceil_val = 0.;
   double floor_val = 0.;
@@ -273,7 +274,7 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(double_to_number(val, tmp_alloc, number))) {
     } else {
-      expr_datum.set_number(number);
+      ret = ObExprUtil::set_number(expr, ctx, expr_datum, number);
     }
   } else if (!is_unsigned) {
     int64_t start = 0, end = 0;

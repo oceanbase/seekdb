@@ -549,7 +549,7 @@ int ObExprObjAccess::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
                                      ObEvalCtx &ctx,
-                                     ObDatum &expr_datum)
+                                     Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   const ExtraInfo *info = static_cast<const ExtraInfo *>(expr.extra_info_);
@@ -558,14 +558,7 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
   DatumParameter params[expr.arg_cnt_];
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
     const ObExpr *e = expr.args_[i];
-    const ObDatum &d = e->locate_expr_datum(ctx);
-    if (d.is_null()) {
-      params[i].set_null();
-    } else {
-      params[i].set_datum(d);
-      params[i].set_type_meta(e->obj_meta_);
-      params[i].set_scale(e->obj_meta_.get_scale());
-    }
+    OZ(capture_datum_parameter(*e, ctx, params[i]));
   }
 
   DatumParameter result;
@@ -579,9 +572,10 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
                 expr.arg_cnt_,
                 &ctx));
 
-  ObDatum adjusted = result.datum_;
+  Datum adjusted;
+  OZ(expr.get_datum_copy_plan().import_legacy(result.datum_, adjusted));
   if (OB_SUCC(ret) && is_lob_storage(result.get_type())) {
-    OZ (ob_adjust_lob_datum(ctx.exec_ctx_, result.datum_, result.get_meta(), expr.obj_meta_,
+    OZ (ob_adjust_lob_datum(ctx.exec_ctx_, adjusted, result.get_meta(), expr.obj_meta_,
                             ctx.exec_ctx_.get_allocator(), adjusted));
   }
   // Adjustment may return a slice into temporary locator bytes. Copy after

@@ -194,10 +194,10 @@ int ObExprJsonQuery::extract_plan_cache_param(const ObExprJsonQueryParamInfo *in
   return ret;
 }
 
-int ObExprJsonQuery::eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonQuery::eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[JSN_QUE_PATH];
   SqlValueType type = json_arg->datum_meta_.type_;
   bool is_cover_by_error = true;
@@ -260,6 +260,7 @@ int ObExprJsonQuery::eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObCollationType in_coll_type = expr.args_[JSN_QUE_DOC]->datum_meta_.cs_type_;
   ObCollationType dst_coll_type = expr.datum_meta_.cs_type_;
   ObJsonCastParam cast_param(param_ctx->json_param_.dst_type_, in_coll_type, dst_coll_type, 0);
+  cast_param.rt_expr_ = &expr;
   bool is_multivalue = param_ctx->json_param_.is_multivalue_;
   bool is_asis = param_ctx->json_param_.is_asis_;
 
@@ -396,14 +397,14 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
                                            uint8_t opt_error,
                                            ObCollationType in_collation,
                                            ObCollationType dst_collation,
-                                           ObDatum *on_error,
+                                           Datum *on_error,
                                            ObAccuracy &origin_accuracy,
                                            ObJsonCastParam &cast_param,
-                                           ObDatum &res)
+                                           Datum &res)
 {
   INIT_SUCC(ret);
 
-  ObDatum *opt_type = nullptr;
+  Datum *opt_type = nullptr;
   int32_t dst_len = 0;
   SqlValueType dest_type;
   int32_t precision = -1;
@@ -562,12 +563,13 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
 
   if (OB_FAIL(ret)) {
   } else if (!is_result_array) {
-    SqlValueDatumMapType type = ObDatum::get_sql_value_datum_map_type(dest_type);
+    ObExprStrResAlloc result_owner(expr, ctx);
     if (element_count == 0) {
       res.set_null();
     } else if (OB_ISNULL(object_ptr)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(res.from_storage_datum(object_ptr->datum_, type))) {
+    } else if (OB_FAIL(expr.get_datum_copy_plan().import_legacy(object_ptr->datum_, res))) {
+    } else if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), res, result_owner, res))) {
     } else if (OB_FAIL(ObJsonUtil::set_lob_datum(&allocator, expr, ctx, dest_type, cast_param.ascii_type_, res))) {
     }
   } else {
@@ -859,7 +861,7 @@ int ObExprJsonQuery::set_result(ObJsonExprParam* json_param,
                                 common::ObIAllocator *allocator, 
                                 ObEvalCtx &ctx, 
                                 const ObExpr &expr, 
-                                ObDatum &res) {
+                                Datum &res) {
   INIT_SUCC(ret);
   uint8_t is_type_mismatch = 0;
   ObCollationType in_coll_type = expr.args_[0]->datum_meta_.cs_type_;
@@ -1057,7 +1059,7 @@ bool ObExprJsonQuery::try_set_error_val(common::ObIAllocator *allocator,
                                         ObEvalCtx &ctx, 
                                         ObJsonExprParam* json_param,
                                         const ObExpr &expr, 
-                                        ObDatum &res, 
+                                        Datum &res,
                                         int &ret)
 {
   bool has_set_res = true;

@@ -40,10 +40,10 @@ int ObExprSysOpOpnsize::calc_result_type1(ObExprResType &type,
 }
 
 int ObExprSysOpOpnsize::calc_sys_op_opnsize_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                                 ObDatum &res)
+                                                 Datum &res)
 {
 	int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else {
     int64_t size = 0;
@@ -65,18 +65,23 @@ int ObExprSysOpOpnsize::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_e
   return ret;
 }
 
-int ObExprSysOpOpnsize::calc_sys_op_opnsize(const ObExpr *expr,const ObDatum *arg, int64_t &size) {
+int ObExprSysOpOpnsize::calc_sys_op_opnsize(const ObExpr *expr,const Datum *arg, int64_t &size) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(arg) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!is_lob_storage(expr->datum_meta_.type_) || arg->is_null()) {
-    size = sizeof(*arg) + (arg->is_null() ? 0 : arg->len_);
+    // This SQL internal reports the legacy value size, not frame allocation.
+    int64_t payload = arg->is_null() ? 0 : arg->length();
+    if (!arg->is_null() && expr->get_sql_type().canonical_representation() != DatumRepresentation::Reference) {
+      ret = expr->get_datum_copy_plan().legacy_payload_size(*arg, payload);
+    }
+    if (OB_SUCC(ret)) { size = sizeof(common::ObDatum) + payload; }
   } else { // (texts except tiny, json, gis)
     ObLobLocatorV2 locator(arg->get_string(), expr->obj_meta_.has_lob_header());
     int64_t lob_data_byte_len = 0;
     if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
     } else {
-      size = sizeof(*arg) + static_cast<int64_t>(lob_data_byte_len);
+      size = sizeof(common::ObDatum) + static_cast<int64_t>(lob_data_byte_len);
     }
   }
   return ret;

@@ -132,12 +132,12 @@ int ObExprRegexpLike::is_valid_for_generated_column(const ObRawExpr*expr,
 }
 
 template<typename RegExpCtx>
-int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *text = NULL;
-  ObDatum *pattern = NULL;
-  ObDatum *match_type = NULL;
+  Datum *text = NULL;
+  Datum *pattern = NULL;
+  Datum *match_type = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, text, pattern, match_type))) {
     if (ret == OB_ERR_INCORRECT_STRING_VALUE) {//compatible mysql
       ret = OB_SUCCESS;
@@ -225,7 +225,7 @@ int ObExprRegexpLike::regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   return ret;
 }
 
-int ObExprRegexpLike::eval_regexp_like(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprRegexpLike::eval_regexp_like(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return regexp_like<ObExprRegexContext>(expr, ctx, expr_datum);
 }

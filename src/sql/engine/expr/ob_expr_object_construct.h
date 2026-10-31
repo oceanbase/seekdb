@@ -66,7 +66,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_object_construct(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_object_construct(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
   static int check_types(ObEvalCtx &ctx, const common::DatumParameter *objs_stack,
                          const common::ObIArray<ObExprResType> &elem_types,

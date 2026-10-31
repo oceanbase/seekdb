@@ -74,7 +74,7 @@ int ObExprExtractValue::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

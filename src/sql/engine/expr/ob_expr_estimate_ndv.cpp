@@ -134,10 +134,10 @@ bool ObExprEstimateNdv::llc_is_num_buckets_valid(int64_t num_buckets)
 }
 
 int ObExprEstimateNdv::calc_estimate_ndv_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                              ObDatum &res_datum)
+                                              Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   double res_double = 0.0;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
   } else if (!arg->is_null() &&

@@ -17,6 +17,7 @@
 #include "sql/engine/window_function/ob_window_function_op.h"
 #include "sql/engine/px/datahub/components/ob_dh_range_dist_wf.h"
 #include "lib/charset/ob_charset.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 #include <gtest/gtest.h>
 #include <array>
 #include <cstring>
@@ -200,7 +201,7 @@ protected:
       e.type_ = T_REF_COLUMN; e.frame_idx_ = 0; e.datum_off_ = i * 512;
       e.eval_info_off_ = i * 512 + 64; e.res_buf_off_ = i * 512 + 192; e.res_buf_len_ = 128;
       set_type(i, ObIntType);
-      new (frame_.data() + e.datum_off_) ObDatum;
+      new (frame_.data() + e.datum_off_) Datum;
       new (frame_.data() + e.eval_info_off_) ObEvalInfo;
       e.get_eval_info(eval_).evaluated_ = true;
     }
@@ -212,10 +213,11 @@ protected:
     if (type == ObDecimalIntType) { e.obj_meta_.set_scale(2); }
     e.datum_meta_ = ObDatumMeta(type, cs, type == ObDecimalIntType ? 2 : 0);
     e.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(type);
-    e.basic_funcs_ = ObDatumFuncs::get_basic_func(type, cs, e.datum_meta_.scale_,
-        e.obj_meta_.has_lob_header(), e.datum_meta_.precision_);
+    ASSERT_EQ(OB_SUCCESS, e.prepare_scalar_type(e.obj_meta_, e.prepare_legacy_copy_plan().get_accuracy(), arena_));
   }
-  ObDatum &datum(int64_t i) { return exprs_[i].locate_expr_datum(eval_); }
+  Datum &datum(int64_t i) { return exprs_[i].locate_expr_datum(eval_); }
+  void put(int64_t i, const common::ObDatum &value)
+  { ASSERT_EQ(OB_SUCCESS, exprs_[i].get_datum_copy_plan().import_legacy(value, datum(i))); }
   int same(Op::WinFuncCell &cell, bool &result) { return (op_.*member(SameTag{}))(cell, result); }
   int copy(const RARow &row, ObWinbufPieceMsg &piece, int64_t capacity, char *buffer)
   { return (op_.*member(CopyTag{}))(row, piece, capacity, buffer); }
@@ -228,7 +230,7 @@ protected:
     for (int64_t i = 0; i < 3; ++i) {
       ASSERT_EQ(OB_SUCCESS, spec_.rd_sort_collations_.push_back(
           ObSortFieldCollation(i, exprs_[i].datum_meta_.cs_type_, true, NULL_FIRST)));
-      ObCmpFunc function; function.cmp_func_ = exprs_[i].basic_funcs_->null_first_cmp_;
+      ObCmpFunc function; function.cmp_func_ = exprs_[i].basic_funcs_->null_first_cmp_.legacy_function();
       ASSERT_EQ(OB_SUCCESS, spec_.rd_sort_cmp_funcs_.push_back(function));
     }
     spec_.rd_pby_sort_cnt_ = 2;
@@ -271,7 +273,7 @@ protected:
     ASSERT_EQ(OB_SUCCESS, info.sort_exprs_.push_back(&exprs_[0]));
     ASSERT_EQ(OB_SUCCESS, info.sort_collations_.push_back(
         ObSortFieldCollation(0, CS_TYPE_UTF8MB4_GENERAL_CI, true, NULL_FIRST)));
-    ObCmpFunc cmp; cmp.cmp_func_ = exprs_[0].basic_funcs_->null_first_cmp_;
+    ObCmpFunc cmp; cmp.cmp_func_ = exprs_[0].basic_funcs_->null_first_cmp_.legacy_function();
     ASSERT_EQ(OB_SUCCESS, info.sort_cmp_funcs_.push_back(cmp));
   }
   void ra_peers(Op::RowsStore &store)
@@ -307,8 +309,8 @@ TEST_F(FixedWindowCells, partition_boundary_compares_owned_mixed_keys_and_typed_
   const int64_t current_key = INT64_MIN; const std::string current_name = "CUSTOMER";
   std::array<char, 16> current_coefficient = coefficient;
   key = 0; name.assign(name.size(), 'x'); coefficient.fill(0);
-  datum(0) = integer(current_key); datum(1) = text(current_name);
-  datum(2) = bytes(current_coefficient.data(), current_coefficient.size());
+  put(0, integer(current_key)); put(1, text(current_name));
+  put(2, bytes(current_coefficient.data(), current_coefficient.size()));
   bool equal = false; ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_TRUE(equal);
   current_coefficient[0] += 1;
   ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_FALSE(equal);
@@ -316,7 +318,7 @@ TEST_F(FixedWindowCells, partition_boundary_compares_owned_mixed_keys_and_typed_
   ASSERT_EQ(OB_SUCCESS, cell.part_values_.save_store_row(*nulls.row_)); nulls.poison();
   datum(0).set_null(); datum(1).set_null(); datum(2).set_null();
   ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_TRUE(equal);
-  datum(0) = integer(current_key);
+  put(0, integer(current_key));
   ASSERT_EQ(OB_SUCCESS, same(cell, equal)); EXPECT_FALSE(equal);
 }
 
@@ -330,7 +332,7 @@ TEST_F(FixedWindowCells, partition_hash_reads_fixed_cells_after_source_overwrite
   std::array<ObDatum, 3> values{{integer(key), text(name), bytes(coefficient.data(), coefficient.size())}};
   uint64_t expected = 99194853094755497L;
   for (int i = 0; i < 3; ++i) {
-    ASSERT_EQ(OB_SUCCESS, exprs_[i].basic_funcs_->murmur_hash_v2_(values[i], expected, expected, nullptr));
+    ASSERT_EQ(OB_SUCCESS, storage_predicate_functions(exprs_[i])->murmur_hash_v2_(values[i], expected, expected, nullptr));
   }
   OwnedRow owned({values[0], values[1], values[2]});
   key = 0; name.assign(name.size(), 'x'); coefficient.fill(0);
@@ -339,7 +341,7 @@ TEST_F(FixedWindowCells, partition_hash_reads_fixed_cells_after_source_overwrite
   EXPECT_EQ(expected, actual);
   OwnedRow nulls({null_value(), null_value(), null_value()}); expected = 99194853094755497L;
   for (int i = 0; i < 3; ++i) {
-    ASSERT_EQ(OB_SUCCESS, exprs_[i].basic_funcs_->murmur_hash_v2_(null_value(), expected, expected, nullptr));
+    ASSERT_EQ(OB_SUCCESS, storage_predicate_functions(exprs_[i])->murmur_hash_v2_(null_value(), expected, expected, nullptr));
   }
   ASSERT_EQ(OB_SUCCESS, (op_.*member(HashTag{}))(&exprs, nulls.row_, actual)); EXPECT_EQ(expected, actual);
 }
@@ -549,8 +551,8 @@ TEST_F(FixedWindowCells, ra_numeric_range_preserves_bound_comparison_errors)
   info.upper_.is_nmb_literal_ = true; info.upper_.is_unbounded_ = false;
   info.upper_.between_value_expr_ = &exprs_[1];
   info.upper_.range_bound_expr_ = &exprs_[2];
-  datum(1) = integer(bound);
-  datum(2) = integer(bound);
+  put(1, integer(bound));
+  put(2, integer(bound));
   Op::NonAggrCellRowNumber cell(info, op_); Op::RowsReader reader(rows);
   const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, rows.get_row(1, row));
   int64_t position = -1; bool got_null = false;
@@ -589,6 +591,7 @@ TEST_F(FixedWindowCells, ra_collect_result_owns_previous_payload_before_store_re
 
 TEST_F(FixedWindowCells, ra_scalar_output_borrows_result_payload_and_preserves_null_flags)
 {
+  set_type(3, ObVarcharType);
   ASSERT_EQ(OB_SUCCESS, spec_.all_expr_.init(1));
   ASSERT_EQ(OB_SUCCESS, spec_.all_expr_.push_back(&exprs_[0]));
   WinFuncInfo first_info, second_info;
@@ -598,15 +601,33 @@ TEST_F(FixedWindowCells, ra_scalar_output_borrows_result_payload_and_preserves_n
   BorrowedStore input(op_.*member(InputStoresTag{}), input_rows), result(second.res_, result_rows);
   BorrowedFunctions functions(op_.*member(FunctionsTag{}), first, second);
   int64_t key = INT64_MIN;
-  std::string text_value = "result"; ObDatum output_value = text(text_value); output_value.flag_ = 2;
+  std::string text_value = "result"; ObDatum output_value = text(text_value); output_value.flag_ = ObDatumDesc::EXT;
   ra_add(input_rows, {integer(key)}); ra_add(result_rows, {null_value(), output_value});
   key = 0; text_value.assign(text_value.size(), 'x');
   const RARow *row = nullptr; ASSERT_EQ(OB_SUCCESS, result_rows.get_row(0, row));
+  // The original six-byte string with flag 2 is an invalid EXT descriptor,
+  // not a present varchar. The real typed import must reject it without
+  // publishing that result slot; keep this as the negative control.
+  ASSERT_EQ(OB_SUCCESS, datum(3).set_string("previous", 8));
+  const char *previous = datum(3).get_string().ptr();
+  exprs_[3].get_eval_info(eval_).clear_evaluated_flag();
+  EXPECT_EQ(OB_INVALID_ARGUMENT, (op_.*member(OutputTag{}))(0, &Op::Stores::cur_, nullptr));
+  EXPECT_EQ(previous, datum(3).get_string().ptr());
+  EXPECT_EQ(ObString::make_string("previous"), datum(3).get_string());
+  EXPECT_FALSE(exprs_[3].get_eval_info(eval_).evaluated_);
+
+  // Exercise the original borrow/NULL/flag oracle with a valid reference flag.
+  const_cast<RARow *>(row)->stored_cells()[1].flag_ = ObDatumDesc::OUTROW;
   ASSERT_EQ(OB_SUCCESS, (op_.*member(OutputTag{}))(0, &Op::Stores::cur_, nullptr));
   EXPECT_EQ(INT64_MIN, datum(0).get_int()); EXPECT_TRUE(datum(2).is_null());
-  EXPECT_EQ(row->stored_cells()[1].ptr_, datum(3).ptr_);
-  EXPECT_EQ(row->stored_cells()[1].pack_, datum(3).pack_);
-  EXPECT_EQ("result", std::string(datum(3).ptr_, datum(3).len_));
+  EXPECT_EQ(row->stored_cells()[1].ptr_, datum(3).get_string().ptr());
+  EXPECT_EQ(row->stored_cells()[1].len_, datum(3).length());
+  EXPECT_EQ(Datum::OutRow, datum(3).reference_flags());
+  common::ObDatum exported;
+  alignas(8) char scratch[64];
+  ASSERT_EQ(OB_SUCCESS, exprs_[3].get_datum_copy_plan().legacy_view(datum(3), exported, scratch, sizeof(scratch)));
+  EXPECT_EQ(row->stored_cells()[1].flag_, exported.flag_);
+  EXPECT_EQ("result", std::string(datum(3).get_string().ptr(), datum(3).length()));
 }
 
 TEST_F(FixedWindowCells, ra_batch_output_uses_each_row_index_and_advances_both_cursors)
@@ -616,7 +637,7 @@ TEST_F(FixedWindowCells, ra_batch_output_uses_each_row_index_and_advances_both_c
   for (int64_t col = 0; col < 4; ++col) {
     exprs_[col].batch_result_ = true; exprs_[col].batch_idx_mask_ = UINT64_MAX;
     exprs_[col].eval_flags_off_ = col * 512 + 128;
-    new (frame_.data() + exprs_[col].datum_off_ + sizeof(ObDatum)) ObDatum;
+    new (frame_.data() + exprs_[col].datum_off_ + sizeof(Datum)) Datum;
   }
   WinFuncInfo first_info, second_info;
   first_info.expr_ = &exprs_[2]; second_info.expr_ = &exprs_[3];

@@ -26,7 +26,7 @@ namespace oceanbase
 {
 namespace common
 {
-struct ObDatum;
+struct Datum;
 }
 namespace sql
 {

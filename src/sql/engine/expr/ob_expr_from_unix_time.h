@@ -40,19 +40,19 @@ public:
 
   static int eval_one_temporal_fromtime(const ObExpr &expr,
                                         ObEvalCtx &eval_ctx,
-                                        ObDatum &expr_datum);
+                                        Datum &expr_datum);
 
   static int eval_one_param_fromtime(const ObExpr &expr,
                                      ObEvalCtx &eval_ctx,
-                                     ObDatum &expr_datum);
+                                     Datum &expr_datum);
 
   static int eval_fromtime_normal(const ObExpr &expr,
                                   ObEvalCtx &eval_ctx,
-                                  ObDatum &expr_datum);
+                                  Datum &expr_datum);
 
   static int eval_fromtime_special(const ObExpr &expr,
                                    ObEvalCtx &eval_ctx,
-                                   ObDatum &expr_datum);
+                                   Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   int set_scale_for_single_param(ObExprResType &type,
@@ -60,7 +60,7 @@ private:
 
   common::SqlValueType calc_one_param_type(ObExprResType *params) const;
 
-  static int get_usec_from_datum(const common::ObDatum &param_datum,
+  static int get_usec_from_datum(const common::Datum &param_datum,
                                  common::ObIAllocator &alloc,
                                  int64_t &value);
 

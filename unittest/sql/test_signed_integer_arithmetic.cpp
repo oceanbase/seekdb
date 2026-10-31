@@ -92,19 +92,19 @@ protected:
       expr.obj_meta_.set_int(); expr.obj_meta_.set_scale(0);
       expr.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
       expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(20, 0), arena_));
       expr.frame_idx_ = 0;
       expr.datum_off_ = col * BLOCK;
-      expr.eval_info_off_ = col * BLOCK + 512;
-      expr.eval_flags_off_ = col * BLOCK + 576;
-      expr.pvt_skip_off_ = col * BLOCK + 640;
+      expr.eval_info_off_ = col * BLOCK + 640;
+      expr.eval_flags_off_ = col * BLOCK + 704;
+      expr.pvt_skip_off_ = col * BLOCK + 768;
       expr.res_buf_off_ = col * BLOCK + 1024;
-      expr.res_buf_len_ = sizeof(int64_t);
+      expr.res_buf_len_ = 0;
       expr.batch_result_ = is_batch;
       expr.batch_idx_mask_ = is_batch ? UINT64_MAX : 0;
       expr.eval_func_ = nullptr; expr.eval_batch_func_ = nullptr;
       for (int64_t row = 0; row < BATCH; ++row) {
-        ObDatum *value = new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
-        value->ptr_ = frame_.data() + expr.res_buf_off_ + row * sizeof(int64_t);
+        Datum *value = new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
         value->set_int(SENTINEL + row);
       }
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo{};
@@ -128,7 +128,7 @@ protected:
   }
 
   ObExpr &result() { return expressions_[RESULT]; }
-  ObDatum &datum(int64_t col, int64_t row = 0)
+  Datum &datum(int64_t col, int64_t row = 0)
   { return expressions_[col].locate_batch_datums(eval_)[row]; }
   ObBitVector &skip() { return *to_bit_vector(skip_memory_.data()); }
   int callback(int64_t size) { return result().eval_batch_func_(result(), eval_, skip(), size); }
@@ -141,7 +141,8 @@ protected:
   void expect_value(int64_t row, int64_t value)
   {
     ASSERT_FALSE(datum(RESULT, row).is_null());
-    EXPECT_EQ(sizeof(int64_t), datum(RESULT, row).len_);
+    EXPECT_EQ(0, datum(RESULT, row).length());
+    EXPECT_EQ(Datum::NoReferenceFlags, datum(RESULT, row).reference_flags());
     EXPECT_EQ(value, datum(RESULT, row).get_int());
     EXPECT_TRUE(result().get_evaluated_flags(eval_).at(row));
   }
@@ -183,7 +184,7 @@ TEST_F(SignedIntegerArithmetic, scalar_codegen_callbacks_match_exact_boundary_ma
       ASSERT_NO_FATAL_FAILURE(select(op, false, false));
       datum(LEFT).set_int(pair[0]); datum(RIGHT).set_int(pair[1]);
       const Expected expected = oracle(op, pair[0], pair[1]);
-      ObDatum *value = nullptr;
+      Datum *value = nullptr;
       EXPECT_EQ(expected.overflow_ ? OB_OPERATE_OVERFLOW : OB_SUCCESS, result().eval(eval_, value));
       ASSERT_NE(nullptr, value);
       EXPECT_EQ(expected.overflow_, value->is_null());
@@ -199,9 +200,9 @@ TEST_F(SignedIntegerArithmetic, scalar_codegen_callbacks_match_exact_boundary_ma
     for (int nulls = 1; nulls < 4; ++nulls) {
       ASSERT_NO_FATAL_FAILURE(select(op, false, false));
       for (int col = 0; col < 2; ++col) {
-        if (nulls & (1 << col)) { datum(col).set_null(); datum(col).ptr_ = nullptr; }
+        if (nulls & (1 << col)) { datum(col).set_null(); }
       }
-      ObDatum *value = nullptr;
+      Datum *value = nullptr;
       ASSERT_EQ(OB_SUCCESS, result().eval(eval_, value));
       ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
     }
@@ -227,7 +228,7 @@ TEST_F(SignedIntegerArithmetic, real_batch_evaluation_covers_full_groups_tail_an
       if (shape != 0) {
         ASSERT_NO_FATAL_FAILURE(select(op, left_batch, right_batch)); fill();
         const int64_t null_col = left_batch ? RIGHT : LEFT;
-        datum(null_col).set_null(); datum(null_col).ptr_ = nullptr;
+        datum(null_col).set_null();
         ASSERT_EQ(OB_SUCCESS, result().eval_batch(eval_, skip(), BATCH));
         for (int64_t row = 0; row < BATCH; ++row) {
           EXPECT_TRUE(datum(RESULT, row).is_null());
@@ -246,8 +247,8 @@ TEST_F(SignedIntegerArithmetic, callbacks_preserve_masks_nulls_and_slots_outside
     skip().set(1); skip().set(16); result().get_evaluated_flags(eval_).set(3);
     datum(LEFT, 1).set_int(MIN_INT); datum(RIGHT, 1).set_int(op == Operation::Minus ? 1 : -1);
     datum(LEFT, 3).set_int(MAX_INT); datum(RIGHT, 3).set_int(op == Operation::Minus ? -1 : 2);
-    datum(LEFT, 2).set_null(); datum(LEFT, 2).ptr_ = nullptr;
-    datum(RIGHT, 4).set_null(); datum(RIGHT, 4).ptr_ = nullptr;
+    datum(LEFT, 2).set_null();
+    datum(RIGHT, 4).set_null();
     ASSERT_EQ(OB_SUCCESS, callback(19));
     for (int64_t row = 0; row < BATCH; ++row) {
       if (row == 1 || row == 3 || row == 16 || row >= 19) {

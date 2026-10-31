@@ -163,15 +163,15 @@ OB_INLINE bool get_first_matched_value(ObCollationType cs_type,
 }
 
 int ObExprKeyValue::calc_key_value_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                        ObDatum &res)
+                                        Datum &res)
 {
   int ret = OB_SUCCESS;
   bool null_res = false;
   ObArenaAllocator tmp_alloc;
   ObString item_delim;
   ObString key_delim;
-  ObDatum *dict_str_datum = NULL;
-  ObDatum *key_str_datum = NULL;
+  Datum *dict_str_datum = NULL;
+  Datum *key_str_datum = NULL;
   ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
   if (expr.arg_cnt_ == 2) {
     if (OB_FAIL(expr.eval_param_value(ctx, dict_str_datum, key_str_datum))) {
@@ -186,8 +186,8 @@ int ObExprKeyValue::calc_key_value_expr(const ObExpr &expr, ObEvalCtx &ctx,
       OZ(ObCharset::charset_convert(tmp_alloc, ":", CS_TYPE_UTF8MB4_BIN, cs_type, key_delim));
     }
   } else if (expr.arg_cnt_ == 4) {
-    ObDatum *item_delim_datum = NULL;
-    ObDatum *key_delim_datum = NULL;
+    Datum *item_delim_datum = NULL;
+    Datum *key_delim_datum = NULL;
     if (OB_FAIL(expr.eval_param_value(ctx, dict_str_datum, item_delim_datum,
                                       key_delim_datum, key_str_datum))) {
     } else if (dict_str_datum->is_null() || item_delim_datum->is_null() ||

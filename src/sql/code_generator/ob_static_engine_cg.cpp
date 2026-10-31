@@ -74,6 +74,7 @@
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/engine/subquery/ob_subplan_scan_op.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/aggregate/ob_merge_groupby_op.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/join/ob_merge_join_op.h"
@@ -869,7 +870,7 @@ int ObStaticEngineCG::generate_merge_distinct_spec(
       } else {
         ObCmpFunc cmp_func;
         // no matter null first or null last.
-        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_;
+        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_.legacy_function();
         CK(NULL != cmp_func.cmp_func_);
         OZ(spec.cmp_funcs_.push_back(cmp_func));
       }
@@ -885,10 +886,12 @@ int ObStaticEngineCG::generate_spec(
 }
 
 void ObStaticEngineCG::set_murmur_hash_func(
-     ObHashFunc &hash_func, const common::ObDatumBasicFuncs *basic_funcs_)
+     ObHashFunc &hash_func, const common::DatumBasicFuncs *basic_funcs_)
 {
-  hash_func.hash_func_ = basic_funcs_->murmur_hash_v2_;
-  hash_func.batch_hash_func_ = basic_funcs_->murmur_hash_v2_batch_;
+  // Wire wrappers contain the exact legacy callables selected during preparation.
+  const common::ObDatumBasicFuncs *legacy_functions = basic_funcs_->legacy_functions();
+  hash_func.hash_func_ = legacy_functions->murmur_hash_v2_;
+  hash_func.batch_hash_func_ = legacy_functions->murmur_hash_v2_batch_;
 }
 
 int ObStaticEngineCG::generate_spec(
@@ -1700,6 +1703,7 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
     if (OB_FAIL(spec.column_exprs_.prepare_allocate(op.get_column_exprs().count()))) {
     } else if (OB_FAIL(spec.value_exprs_.prepare_allocate(table_def->access_exprs_.count()))) {
     } else if (OB_FAIL(spec.datum_values_.prepare_allocate(table_def->access_values_.count()))) {
+    } else if (OB_FAIL(spec.datum_value_types_.prepare_allocate(table_def->access_values_.count()))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < op.get_column_exprs().count(); i++) {
         ObColumnRefRawExpr *col_expr = op.get_column_exprs().at(i);
@@ -1730,9 +1734,16 @@ int ObStaticEngineCG::generate_spec(ObLogValuesTableAccess &op,
       for (int64_t i = 0; OB_SUCC(ret) && i < table_def->access_values_.count(); i++) {
         const DatumParameter &source = table_def->access_values_.at(i);
         DatumValue &value = spec.datum_values_.at(i);
-        if (OB_FAIL(clone_datum_value(source.datum_, source.get_type_meta(), value.datum_, allocator))) {
+        DatumParameter owned;
+        const SqlType *type = nullptr;
+        if (opt_ctx_ == nullptr || opt_ctx_->get_exec_ctx() == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ObExprUtil::resolve_sql_type(*opt_ctx_->get_exec_ctx(),
+            source.get_type_meta(), source.get_accuracy(), source.get_subschema_id(), allocator, type))) {
+        } else if (OB_FAIL(DatumParameterArray::clone_parameter(source, owned, allocator))) {
         } else {
-          value.meta_ = source.get_type_meta();
+          value = owned.value_view();
+          spec.datum_value_types_.at(i) = type;
         }
       }
       if (OB_FAIL(ret)) {
@@ -2501,8 +2512,8 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
           ObHashFunc hash_func;
           ObCmpFunc null_first_cmp;
           ObCmpFunc null_last_cmp;
-          null_first_cmp.cmp_func_ = join_expr->basic_funcs_->null_first_cmp_;
-          null_last_cmp.cmp_func_ = join_expr->basic_funcs_->null_last_cmp_;
+          null_first_cmp.cmp_func_ = join_expr->basic_funcs_->null_first_cmp_.legacy_function();
+          null_last_cmp.cmp_func_ = join_expr->basic_funcs_->null_last_cmp_.legacy_function();
           set_murmur_hash_func(hash_func, join_expr->basic_funcs_);
           if (OB_ISNULL(hash_func.hash_func_) || OB_ISNULL(hash_func.batch_hash_func_) ||
               OB_ISNULL(null_first_cmp.cmp_func_) ||
@@ -3477,7 +3488,7 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObHashGroupBySpec &spec,
       } else {
         ObCmpFunc cmp_func;
         // no matter null first or null last.
-        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_;
+        cmp_func.cmp_func_ = expr->basic_funcs_->null_last_cmp_.legacy_function();
         CK(NULL != cmp_func.cmp_func_);
         OZ(spec.cmp_funcs_.push_back(cmp_func));
       }
@@ -4050,8 +4061,8 @@ int ObStaticEngineCG::generate_join_spec(ObLogJoin &op, ObJoinSpec &spec)
           if (OB_FAIL(hj_spec.all_join_keys_.push_back(left_expr))) {
           } else if (OB_FAIL(right_key_exprs.push_back(right_expr))) {
           } else {
-            left_hash_func.hash_func_ = left_expr->basic_funcs_->murmur_hash_v2_;
-            right_hash_func.hash_func_ = right_expr->basic_funcs_->murmur_hash_v2_;
+            left_hash_func.hash_func_ = left_expr->basic_funcs_->legacy_functions()->murmur_hash_v2_;
+            right_hash_func.hash_func_ = right_expr->basic_funcs_->legacy_functions()->murmur_hash_v2_;
             if (OB_ISNULL(left_hash_func.hash_func_) || OB_ISNULL(right_hash_func.hash_func_)) {
               ret = OB_ERR_UNEXPECTED;
             } else if (OB_FAIL(hj_spec.all_hash_funcs_.push_back(left_hash_func))) {

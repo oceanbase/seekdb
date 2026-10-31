@@ -100,7 +100,7 @@ int ObDASMVILookupIter::save_rowkey()
         || OB_ISNULL(doc_id_expr = index_table_ctdef->result_output_.at(rowkey_cnt))) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      const ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
+      const common::Datum &doc_id_datum = doc_id_expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
       // DOC_ID() and its hidden column are binary VARCHAR(16). This lookup
       // always targets the real doc-id auxiliary table. Keep that invariant
       // explicit so the generic scan helper cannot select its old-value path.
@@ -108,7 +108,7 @@ int ObDASMVILookupIter::save_rowkey()
           || doc_id_expr->obj_meta_.get_type() != ObVarcharType
           || doc_id_expr->obj_meta_.get_cs_type() != CS_TYPE_BINARY
           || doc_id_expr->obj_datum_map_ != OBJ_DATUM_STRING
-          || doc_id_datum.len_ != OB_DOC_ID_COLUMN_BYTE_LENGTH
+          || doc_id_datum.length() != OB_DOC_ID_COLUMN_BYTE_LENGTH
           || is_virtual_table(lookup_ctdef_->ref_table_id_))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -164,7 +164,7 @@ bool ObDASMVILookupIter::check_has_rowkey()
     if (T_PSEUDO_GROUP_ID == expr->type_) {
       // do nothing
     } else {
-      ObDatum &datum = expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
+      common::Datum &datum = expr->locate_expr_datum(*lookup_rtdef_->eval_ctx_);
       if (datum.is_null()) {
         rowkey_null_col_cnt++;
       }

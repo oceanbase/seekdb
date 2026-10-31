@@ -128,7 +128,7 @@ int ObExprArrayMapCommon::eval_src_arrays(const ObExpr &expr, ObEvalCtx &ctx, Ob
   int ret = OB_SUCCESS;
   bool is_first_arr = true;
   for (int64_t i = 1; i < expr.arg_cnt_ && OB_SUCC(ret) && !is_null_res; i++) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     const uint16_t meta_id = expr.args_[i]->obj_meta_.get_subschema_id();
     arr_obj[i - 1] = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
@@ -152,7 +152,7 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
 {
   int ret = OB_SUCCESS;
   uint16_t subschema_id  = info->lambda_subschema_id_;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObIArrayType *elem_arr = NULL;
 
   if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id , lambda_arr, false))) {
@@ -179,7 +179,7 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
       const ObCollectionBasicType *elem_type = dynamic_cast<const ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(lambda_arr->get_array_type())->element_type_);
       if (OB_UNLIKELY(OB_ISNULL(elem_type))) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObArrayUtil::append(*lambda_arr, elem_type->basic_meta_.get_obj_type(), datum))) {
+      } else if (OB_FAIL(ObArrayExprUtils::append_native_element(*lambda_arr, elem_type->basic_meta_.get_obj_type(), *datum, *lambda_expr))) {
       }
     }
   } // end for
@@ -491,7 +491,7 @@ int ObExprArrayMap::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArrayMap::eval_array_map(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayMap::eval_array_map(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

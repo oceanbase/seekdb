@@ -36,7 +36,7 @@ public:
 
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const;
-  static int calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_ascii_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprAscii);
@@ -56,7 +56,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                             ObExpr &rt_expr) const;
 
-  static int calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_ord_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprOrd);
 };

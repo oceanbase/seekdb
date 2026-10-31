@@ -89,7 +89,7 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
 }
 
 #define EVAL_FUNC_ARRAY_CONTAINS(TYPE, GET_FUNC)                                                                      \
-  int ObExprArrayContains::eval_array_contains_##TYPE(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)               \
+  int ObExprArrayContains::eval_array_contains_##TYPE(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)               \
   {                                                                                                                   \
     int ret = OB_SUCCESS;                                                                                             \
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);                                                                       \
@@ -98,8 +98,8 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
     uint32_t p1 = expr.extra_ == 1 ? 0 : 1;                                                                           \
     const uint16_t meta_id = expr.args_[p0]->obj_meta_.get_subschema_id();                                            \
     ObIArrayType *arr_obj = NULL;                                                                                     \
-    ObDatum *datum = NULL;                                                                                            \
-    ObDatum *datum_val = NULL;                                                                                        \
+    Datum *datum = NULL;                                                                                            \
+    Datum *datum_val = NULL;                                                                                        \
     TYPE val;                                                                                                         \
     bool bret = false;                                                                                                \
     if (OB_FAIL(expr.args_[p0]->eval(ctx, datum))) {                                                                  \
@@ -127,7 +127,7 @@ EVAL_FUNC_ARRAY_CONTAINS(float, get_float)
 EVAL_FUNC_ARRAY_CONTAINS(double, get_double)
 EVAL_FUNC_ARRAY_CONTAINS(ObString, get_string)
 
-int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -138,8 +138,8 @@ int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx
   const uint16_t r_meta_id = expr.args_[p1]->obj_meta_.get_subschema_id();
   ObIArrayType *arr_obj = NULL;
   ObIArrayType *arr_val = NULL;
-  ObDatum *datum = NULL;
-  ObDatum *datum_val = NULL;
+  Datum *datum = NULL;
+  Datum *datum_val = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[p0]->eval(ctx, datum))) {
   } else if (OB_FAIL(expr.args_[p1]->eval(ctx, datum_val))) {
@@ -162,7 +162,7 @@ int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)    \
   {                                                                                             \
     int ret = OB_SUCCESS;                                                                       \
-    ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);                                \
+    DatumVector res_datum = expr.locate_expr_datumvector(ctx);                                \
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);                                    \
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);                                                 \
     common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();                      \
@@ -175,8 +175,8 @@ int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx
     } else if (OB_FAIL(expr.args_[p1]->eval_batch(ctx, skip, batch_size))) {                    \
       LOG_WARN("failed to eval batch result args0", K(ret));                                    \
     } else {                                                                                    \
-      ObDatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);                   \
-      ObDatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);                   \
+      DatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);                   \
+      DatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);                   \
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {                                \
         if (skip.at(j) || eval_flags.at(j)) {                                                   \
           continue;                                                                             \
@@ -211,7 +211,7 @@ EVAL_FUNC_ARRAY_CONTAINS_BATCH(ObString, get_string)
 int ObExprArrayContains::eval_array_contains_array_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -224,8 +224,8 @@ int ObExprArrayContains::eval_array_contains_array_batch(const ObExpr &expr, ObE
   if (OB_FAIL(expr.args_[p0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[p1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);
-    ObDatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);
+    DatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);
+    DatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

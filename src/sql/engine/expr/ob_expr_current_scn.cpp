@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_current_scn.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -45,7 +46,7 @@ int ObExprCurrentScn::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type
   return OB_SUCCESS;
 }
 
-int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
@@ -66,7 +67,7 @@ int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       number::ObNumber num;
       if (OB_FAIL(num.from(scn_version, tmp_alloc))) {
       } else {
-        expr_datum.set_number(num);
+        ret = ObExprUtil::set_number(expr, ctx, expr_datum, num);
       }
     }
   }

@@ -121,15 +121,15 @@ protected:
       expr.obj_meta_.set_type(is_signed ? ObIntType : ObUInt64Type); expr.obj_meta_.set_scale(0);
       expr.datum_meta_ = ObDatumMeta(is_signed ? ObIntType : ObUInt64Type, CS_TYPE_BINARY, 0, 20);
       expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(20, 0), arena_));
       expr.frame_idx_ = 0; expr.datum_off_ = col * BLOCK;
-      expr.eval_info_off_ = col * BLOCK + 512; expr.eval_flags_off_ = col * BLOCK + 576;
-      expr.pvt_skip_off_ = col * BLOCK + 640;
-      expr.res_buf_off_ = col * BLOCK + 1024; expr.res_buf_len_ = sizeof(uint64_t);
+      expr.eval_info_off_ = col * BLOCK + 640; expr.eval_flags_off_ = col * BLOCK + 704;
+      expr.pvt_skip_off_ = col * BLOCK + 768;
+      expr.res_buf_off_ = col * BLOCK + 1024; expr.res_buf_len_ = 0;
       expr.batch_result_ = is_batch; expr.batch_idx_mask_ = is_batch ? UINT64_MAX : 0;
       expr.eval_func_ = nullptr; expr.eval_batch_func_ = nullptr;
       for (int64_t row = 0; row < BATCH; ++row) {
-        ObDatum *value = new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
-        value->ptr_ = frame_.data() + expr.res_buf_off_ + row * sizeof(uint64_t);
+        Datum *value = new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
         if (is_signed) { value->set_int(SENTINEL + row); }
         else { value->set_uint(SENTINEL + row); }
       }
@@ -168,7 +168,7 @@ protected:
   }
 
   ObExpr &result() { return expressions_[RESULT]; }
-  ObDatum &datum(int64_t col, int64_t row = 0)
+  Datum &datum(int64_t col, int64_t row = 0)
   { return expressions_[col].locate_batch_datums(eval_)[row]; }
   ObBitVector &skip() { return *to_bit_vector(skip_memory_.data()); }
   int callback(int64_t size) { return result().eval_batch_func_(result(), eval_, skip(), size); }
@@ -181,8 +181,8 @@ protected:
   }
   Pair input_at(int64_t row, bool left_batch = true, bool right_batch = true)
   {
-    const ObDatum &left = datum(LEFT, left_batch ? row : 0);
-    const ObDatum &right = datum(RIGHT, right_batch ? row : 0);
+    const Datum &left = datum(LEFT, left_batch ? row : 0);
+    const Datum &right = datum(RIGHT, right_batch ? row : 0);
     return {left_signed(family_) ? static_cast<uint64_t>(left.get_int()) : left.get_uint(),
             right_signed(family_) ? static_cast<uint64_t>(right.get_int()) : right.get_uint()};
   }
@@ -193,7 +193,8 @@ protected:
   void expect_value(int64_t row, uint64_t expected)
   {
     EXPECT_FALSE(datum(RESULT, row).is_null());
-    EXPECT_EQ(sizeof(uint64_t), datum(RESULT, row).len_);
+    EXPECT_EQ(0, datum(RESULT, row).length());
+    EXPECT_EQ(Datum::NoReferenceFlags, datum(RESULT, row).reference_flags());
     EXPECT_EQ(expected, datum(RESULT, row).get_uint());
     EXPECT_TRUE(result().get_evaluated_flags(eval_).at(row));
   }
@@ -234,7 +235,7 @@ TEST_F(UnsignedIntegerArithmetic, scalar_and_single_row_batch_match_exact_bounda
           << ":" << pair.left_ << "," << pair.right_);
       const Expected expected = oracle(op, family, pair);
       ASSERT_NO_FATAL_FAILURE(select(op, family, false, false)); input(0, pair);
-      ObDatum *value = nullptr;
+      Datum *value = nullptr;
       EXPECT_EQ(expected.overflow_ ? OB_OPERATE_OVERFLOW : OB_SUCCESS, result().eval(eval_, value));
       ASSERT_NE(nullptr, value); EXPECT_EQ(expected.overflow_, value->is_null());
       EXPECT_EQ(!expected.overflow_, result().get_eval_info(eval_).evaluated_);
@@ -257,9 +258,9 @@ TEST_F(UnsignedIntegerArithmetic, null_scalar_operands_and_real_batches_preserve
     for (int nulls = 1; nulls < 4; ++nulls) {
       ASSERT_NO_FATAL_FAILURE(select(op, family, false, false));
       for (int col = 0; col < 2; ++col) if (nulls & (1 << col)) {
-        datum(col).set_null(); datum(col).ptr_ = nullptr;
+        datum(col).set_null();
       }
-      ObDatum *value = nullptr; ASSERT_EQ(OB_SUCCESS, result().eval(eval_, value));
+      Datum *value = nullptr; ASSERT_EQ(OB_SUCCESS, result().eval(eval_, value));
       ASSERT_NE(nullptr, value); EXPECT_TRUE(value->is_null());
     }
     for (int shape = 0; shape < 3; ++shape) {
@@ -274,7 +275,7 @@ TEST_F(UnsignedIntegerArithmetic, null_scalar_operands_and_real_batches_preserve
       if (shape != 0) {
         ASSERT_NO_FATAL_FAILURE(select(op, family, left_batch, right_batch)); fill();
         const int64_t null_col = left_batch ? RIGHT : LEFT;
-        datum(null_col).set_null(); datum(null_col).ptr_ = nullptr;
+        datum(null_col).set_null();
         ASSERT_EQ(OB_SUCCESS, result().eval_batch(eval_, skip(), BATCH));
         for (int64_t row = 0; row < BATCH; ++row) {
           EXPECT_TRUE(datum(RESULT, row).is_null());
@@ -291,8 +292,8 @@ TEST_F(UnsignedIntegerArithmetic, masks_nulls_and_tail_slots_do_not_evaluate_inv
     ASSERT_NO_FATAL_FAILURE(select(op, family, true, true)); fill();
     skip().set(1); skip().set(16); result().get_evaluated_flags(eval_).set(3);
     input(1, error_pair(op, family, 0)); input(3, error_pair(op, family, 1));
-    datum(LEFT, 2).set_null(); datum(LEFT, 2).ptr_ = nullptr;
-    datum(RIGHT, 4).set_null(); datum(RIGHT, 4).ptr_ = nullptr;
+    datum(LEFT, 2).set_null();
+    datum(RIGHT, 4).set_null();
     ASSERT_EQ(OB_SUCCESS, callback(19));
     for (int64_t row = 0; row < BATCH; ++row) {
       if (row == 1 || row == 3 || row == 16 || row >= 19) {

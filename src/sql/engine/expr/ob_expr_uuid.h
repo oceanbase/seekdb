@@ -51,7 +51,7 @@ public:
   virtual int calc_result_type0(ObExprResType &type,
                                 common::ObExprTypeCtx &type_ctx) const;
   static int init();
-  static int eval_uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_uuid(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   //used to generate uuid for server_uuid system variable.
   static int gen_server_uuid(char *server_uuid, const int64_t uuid_len);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
@@ -87,7 +87,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int uuid2bin(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int uuid2bin(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int uuid2bin_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprUuid2bin);
@@ -104,7 +104,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int is_uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int is_uuid(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int is_uuid_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprIsUuid);
@@ -137,7 +137,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int bin2uuid(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   static int bin2uuid_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprBin2uuid);

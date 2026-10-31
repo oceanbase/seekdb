@@ -42,7 +42,7 @@ ObExprArrayContainsAll::~ObExprArrayContainsAll()
 {
 }
 
-int ObExprArrayContainsAll::eval_array_contains_all(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayContainsAll::eval_array_contains_all(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_array_relations(expr, ctx, CONTAINS_ALL, res);
 }

@@ -131,8 +131,8 @@ int ObDASFuncDataIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
   } else {
     ObDocIdExt doc_id;
     const ObExpr *expr = rowkey_exprs.at(0);
-    ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx);
-    if (OB_FAIL(doc_id.from_datum(col_datum))) {
+    common::Datum &col_datum = expr->locate_expr_datum(*eval_ctx);
+    if (OB_FAIL(doc_id.from_native(col_datum, expr->get_sql_type()))) {
     } else if (OB_FAIL(add_doc_id(doc_id))) {
     }
   }

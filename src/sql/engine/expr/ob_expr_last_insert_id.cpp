@@ -67,12 +67,12 @@ int ObExprLastInsertID::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_exp
 }
 
 int ObExprLastInsertID::eval_last_insert_id(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = ctx.exec_ctx_.get_physical_plan_ctx();
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  ObDatum *arg = NULL;
+  Datum *arg = NULL;
   if (NULL == plan_ctx || NULL == session) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {

@@ -84,7 +84,7 @@ int ObExprJsonSchemaValid::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonSchemaValid::eval_json_schema_valid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   const ObExprJsonSchemaValidInfo *info

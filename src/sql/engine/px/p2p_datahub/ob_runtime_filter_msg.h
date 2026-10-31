@@ -43,7 +43,7 @@ public:
   virtual int might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
-      ObDatum &res) override;
+      Datum &res) override;
   virtual int might_contain_batch(
       const ObExpr &expr,
       ObEvalCtx &ctx,
@@ -114,7 +114,7 @@ public:
   virtual int might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
-      ObDatum &res) override;
+      Datum &res) override;
   virtual int might_contain_batch(
       const ObExpr &expr,
       ObEvalCtx &ctx,
@@ -217,7 +217,7 @@ public:
   ObRFInFilterMsg() : ObP2PDatahubMsgBase(), rows_set_(),
       cmp_funcs_(allocator_), hash_funcs_for_insert_(allocator_),
       serial_rows_(), need_null_cmp_flags_(allocator_),
-      cur_row_(allocator_), col_cnt_(0),
+      cur_row_(allocator_), insert_scratch_(allocator_), col_cnt_(0),
       max_in_num_(0), query_range_info_(allocator_),
       query_range_(), is_query_range_ready_(false), query_range_allocator_(),
       datum_access_ctx_(nullptr),
@@ -229,7 +229,7 @@ public:
   virtual int might_contain(const ObExpr &expr,
       ObEvalCtx &ctx,
       ObExprJoinFilter::ObExprJoinFilterContext &filter_ctx,
-      ObDatum &res) override;
+      Datum &res) override;
   virtual int might_contain_batch(
       const ObExpr &expr,
       ObEvalCtx &ctx,
@@ -292,6 +292,8 @@ public:
   ObSArray<ObFixedArray<ObDatum, common::ObIAllocator> *> serial_rows_;
   ObFixedArray<bool, common::ObIAllocator> need_null_cmp_flags_;
   ObFixedArray<ObDatum, common::ObIAllocator> cur_row_;
+  struct LegacyCellScratch { alignas(8) char bytes_[64]; TO_STRING_EMPTY(); };
+  ObFixedArray<LegacyCellScratch, common::ObIAllocator> insert_scratch_;
   int64_t col_cnt_;
   int64_t max_in_num_;
   // for extract query range

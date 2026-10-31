@@ -35,7 +35,7 @@ public:
 
   static int eval_to_pinyin(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &expr_datum);
+                            Datum &expr_datum);
   static int eval_to_pinyin_batch(
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,

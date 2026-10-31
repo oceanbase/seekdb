@@ -52,13 +52,13 @@ int ObExprSTCentroid::calc_result_type1(
   return ret;
 }
 
-int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   bool is_null_result = false;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;

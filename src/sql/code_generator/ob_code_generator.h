@@ -40,7 +40,7 @@ class ObRawExprUniqueSet;
 class ObCodeGenerator
 {
 public:
-  explicit ObCodeGenerator(DatumParamStore *param_store)
+  explicit ObCodeGenerator(const DatumParamStore *param_store)
     : param_store_(param_store)
   {}
   virtual ~ObCodeGenerator() {}
@@ -69,7 +69,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObCodeGenerator);
 private:
   // All parameterized constant objects
-  DatumParamStore *param_store_;
+  const DatumParamStore *param_store_;
 };
 
 } // end namespace sql

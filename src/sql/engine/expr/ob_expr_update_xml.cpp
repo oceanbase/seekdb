@@ -68,7 +68,7 @@ int ObExprUpdateXml::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprUpdateXml::eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprUpdateXml::eval_mysql_update_xml(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -449,7 +449,7 @@ int ObExprUpdateXml::update_namespace_node(ObMulModeMemCtx* xml_mem_ctx,
   int ret = OB_SUCCESS;
   SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObXmlNode *clone_node = nullptr;
   if (val_type == ObNullType) {
     ret = OB_ERR_XML_PARSE;
@@ -540,7 +540,7 @@ int ObExprUpdateXml::get_update_str_info(ObMulModeMemCtx* xml_mem_ctx,
                                           ObXmlUpdateNodeInfo *&update_info)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObString value_str;
   SqlValueType val_type = expr->datum_meta_.type_;
   uint16_t sub_schema_id = expr->obj_meta_.get_subschema_id();
@@ -579,7 +579,7 @@ int ObExprUpdateXml::get_update_xml_info(ObMulModeMemCtx* xml_mem_ctx,
                                           ObXmlUpdateNodeInfo *&update_info)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   ObString value_str;
   ObXmlDocument *xml_doc = NULL;
   SqlValueType val_type = expr->datum_meta_.type_;

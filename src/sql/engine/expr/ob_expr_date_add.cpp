@@ -123,16 +123,16 @@ int ObExprDateAdjust::calc_result_type3(ObExprResType &type,
   return ret;
 }
 
-int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum,
+int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum,
                                        bool is_add)
 {
   int ret = OB_SUCCESS;
   const ObSQLSessionInfo *session = NULL;
   const SqlValueType res_type = expr.datum_meta_.type_;
   const SqlValueType date_type = expr.args_[0]->datum_meta_.type_;
-  ObDatum *date = NULL;
-  ObDatum *interval = NULL;
-  ObDatum *unit = NULL;
+  Datum *date = NULL;
+  Datum *interval = NULL;
+  Datum *unit = NULL;
   bool is_json = (expr.args_[0]->args_ != NULL) && (expr.args_[0]->args_[0]->datum_meta_.type_ == ObJsonType);
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
@@ -173,7 +173,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                             ob_time,
                                             get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                                             date_sql_mode,
-                                            expr.args_[0]->obj_meta_.has_lob_header()))) {
+                                            expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
         uint64_t cast_mode = 0;
         ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                           session->is_ignore_stmt(),
@@ -281,8 +281,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
               } else if (OB_FAIL(ObTimeConverter::ob_time_to_str(ob_time, DT_TYPE_DATE, 0, buf,
                                                                 date_buf_len, pos, true))) {
               } else {
-                expr_datum.ptr_ = buf;
-                expr_datum.pack_ = static_cast<uint32_t>(pos);
+                ret = expr_datum.set_string(buf, static_cast<uint32_t>(pos));
               }
             }
           } else {
@@ -295,8 +294,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                               -1, buf,
                                               datetime_buf_len, pos, true))) {
             } else {
-              expr_datum.ptr_ = buf;
-              expr_datum.pack_ = static_cast<uint32_t>(pos);
+              ret = expr_datum.set_string(buf, static_cast<uint32_t>(pos));
             }
           }
         }
@@ -333,7 +331,7 @@ int ObExprDateAdd::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   return ret;
 }
 
-int ObExprDateAdd::calc_date_add(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDateAdd::calc_date_add(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprDateAdjust::calc_date_adjust(expr, ctx, expr_datum, true /* is_add */);
 }
@@ -357,7 +355,7 @@ int ObExprDateSub::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   return ret;
 }
 
-int ObExprDateSub::calc_date_sub(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprDateSub::calc_date_sub(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   return ObExprDateAdjust::calc_date_adjust(expr, ctx, expr_datum, false /* is_add */);
 }
@@ -400,10 +398,10 @@ int ObExprLastDay::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   return ret;
 }
 
-int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprLastDay::calc_last_day(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   ObSQLSessionInfo *session = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;

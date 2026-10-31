@@ -30,11 +30,11 @@ class ObPhyOpSeriCtx;
 
 class ObValuesTableAccessSpec : public ObOpSpec
 {
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 public:
   ObValuesTableAccessSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
     : ObOpSpec(alloc, type), access_type_(ObValuesTableDef::ACCESS_EXPR), column_exprs_(alloc),
-      value_exprs_(alloc), start_param_idx_(-1), end_param_idx_(-1), datum_values_(alloc) {}
+      value_exprs_(alloc), start_param_idx_(-1), end_param_idx_(-1), datum_values_(alloc), datum_value_types_(alloc) {}
   INHERIT_TO_STRING_KV("op_spec", ObOpSpec, K_(access_type));
   ObValuesTableDef::TableAccessType access_type_;
   common::ObFixedArray<ObExpr *, common::ObIAllocator> column_exprs_;
@@ -42,6 +42,7 @@ public:
   int64_t start_param_idx_;
   int64_t end_param_idx_;
   common::ObFixedArray<common::DatumValue, common::ObIAllocator> datum_values_;
+  common::ObFixedArray<const common::SqlType *, common::ObIAllocator> datum_value_types_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObValuesTableAccessSpec);
 };
@@ -62,7 +63,7 @@ private:
                            const int64_t row_idx,
                            ObExpr *src_expr,
                            ObExpr *dst_expr);
-  int calc_datum_from_param(const common::ObDatum &source, const common::SqlTypeMeta &meta,
+  int calc_datum_from_param(const common::Datum &source, const common::SqlType &source_type,
                              ObExpr *dst_expr);
   void update_src_meta(const SqlTypeMeta &src_obj_meta,
                        const ObAccuracy &src_obj_acc,

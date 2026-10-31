@@ -76,10 +76,10 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *child_res = NULL;
+  Datum *child_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_res))) {
   } else {
     ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;

@@ -42,7 +42,7 @@ int ObArrayExprUtils::get_type_vector(
     bool &is_null)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   if (OB_FAIL(expr.eval(ctx, datum))) {
   } else if (OB_UNLIKELY(datum->is_null())) {
     is_null = true;
@@ -54,7 +54,7 @@ int ObArrayExprUtils::get_type_vector(
 // get vector or array(float)
 int ObArrayExprUtils::get_type_vector(
     const ObExpr &expr,
-    const ObDatum &datum,
+    const Datum &datum,
     ObEvalCtx &ctx,
     ObIAllocator &allocator,
     ObIArrayType *&result)
@@ -84,10 +84,10 @@ int ObArrayExprUtils::get_type_vector(
 }
 
 int ObArrayExprUtils::vector_datum_add(ObExecContext &exec_ctx,
-                                       ObDatum &res,
-                                       const ObDatum &data,
+                                       Datum &res,
+                                       const Datum &data,
                                        ObIAllocator &allocator,
-                                       ObDatum *tmp_res,
+                                       Datum *tmp_res,
                                        bool negative)
 {
   int ret = OB_SUCCESS;
@@ -332,7 +332,7 @@ int ObArrayExprUtils::set_array_res(ObIArrayType *arr_obj, const int32_t res_siz
   int ret = OB_SUCCESS;
   char *res_buf = nullptr;
   int64_t res_buf_len = 0;
-  ObDatum tmp_res;
+  Datum tmp_res;
   ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &tmp_res);
   if (OB_FAIL(str_result.init(res_size, nullptr))) {
   } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
@@ -355,7 +355,7 @@ int ObArrayExprUtils::set_array_res(ObIArrayType *arr_obj, const int32_t res_siz
   const bool has_lob_header = true;
   char *res_buf = nullptr;
   int64_t res_buf_len = 0;
-  ObDatum tmp_res;
+  Datum tmp_res;
   ObTextStringDatumResult str_result(ObCollectionSQLType, has_lob_header, &tmp_res);
   if (OB_FAIL(str_result.init(res_size, &allocator))) {
   } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
@@ -557,7 +557,7 @@ int ObArrayExprUtils::deduce_map_subschema_id(ObExecContext *exec_ctx, uint16_t 
   return ret;
 }
 
-int ObVectorVectorArithFunc::operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const
+int ObVectorVectorArithFunc::operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const
 {
   int ret = OB_SUCCESS;
   const ObExpr &left_expr = *expr.args_[0];
@@ -613,7 +613,7 @@ int ObVectorVectorArithFunc::operator()(ObDatum &res, const ObDatum &l, const Ob
   return ret;
 }
 
-int ObVectorElemArithFunc::operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const
+int ObVectorElemArithFunc::operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const
 {
   UNUSED(type);
   int ret = OB_SUCCESS;
@@ -744,17 +744,27 @@ int ObArrayExprUtils::get_array_obj(ObIAllocator &alloc, ObEvalCtx &ctx, const u
   return ret;
 }
 
+int ObArrayExprUtils::append_native_element(ObIArrayType &array, SqlValueType element_type,
+                                             const Datum &value, const ObExpr &source)
+{
+  common::ObDatum legacy;
+  alignas(8) char scratch[64];
+  int ret = source.get_datum_copy_plan().legacy_view(value, legacy, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = ObArrayUtil::append(array, element_type, &legacy); }
+  return ret;
+}
+
 int ObArrayExprUtils::add_elem_to_array(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &alloc,
                                         ObCollectionArrayType *arr_type,  ObIArrayType *arr_obj, int args_idx)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   if (OB_FAIL(expr.args_[args_idx]->eval(ctx, datum))) {
   } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_BASIC_TYPE) {
     ObCollectionBasicType *value_elem = NULL;
     if (OB_ISNULL(value_elem = dynamic_cast<ObCollectionBasicType *>(arr_type->element_type_))) {
       ret = OB_ERR_NULL_VALUE;
-    } else if (OB_FAIL(ObArrayUtil::append(*arr_obj, value_elem->basic_meta_.get_obj_type(), datum))) {
+    } else if (OB_FAIL(append_native_element(*arr_obj, value_elem->basic_meta_.get_obj_type(), *datum, *expr.args_[args_idx]))) {
     }
   } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_ARRAY_TYPE ||
              arr_type->element_type_->type_id_ == ObNestedType::OB_VECTOR_TYPE) {
@@ -778,7 +788,7 @@ int ObArrayExprUtils::add_elem_to_array(const ObExpr &expr, ObEvalCtx &ctx, ObIA
 }
 
 int ObArrayExprUtils::add_elem_to_nested_array(ObIAllocator &tmp_allocator, ObEvalCtx &ctx, uint16_t subschema_id,
-                                               const ObDatum &datum, ObArrayNested *nest_array)
+                                               const Datum &datum, ObArrayNested *nest_array)
 {
   int ret = OB_SUCCESS;
   ObSubSchemaValue value;

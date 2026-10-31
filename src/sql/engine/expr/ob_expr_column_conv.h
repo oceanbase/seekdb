@@ -138,7 +138,7 @@ public:
                                      const common::ObIArray<ObString> *type_infos = nullptr);
   static int column_convert(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &datum);
+                            Datum &datum);
   static int column_convert_batch(const ObExpr &expr,
                                   ObEvalCtx &ctx,
                                   const ObBitVector &skip,
@@ -157,8 +157,8 @@ public:
                                           const ObLength max_accuracy_len,
                                           const uint64_t cast_mode,
                                           ObBitVector &eval_flags,
-                                          ObDatum *vals,
-                                          ObDatum *results,
+                                          Datum *vals,
+                                          Datum *results,
                                           ObEvalCtx::BatchInfoScopeGuard &batch_info_guard);
 
   virtual bool need_rt_ctx() const override
@@ -170,7 +170,7 @@ private:
                                 ObCollationType coll_type,
                                 common::ObExprTypeCtx &type_ctx,
                                 bool &wrap_to_str) const;
-  static int eval_enumset(const ObExpr &expr, ObEvalCtx &ctx, common::ObDatum *&datum);
+  static int eval_enumset(const ObExpr &expr, ObEvalCtx &ctx, common::Datum *&datum);
 
 private:
   // disallow copy

@@ -44,7 +44,7 @@ int ObExprObVersion::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_
 
 int ObExprObVersion::eval_version(const ObExpr &expr,
                                          ObEvalCtx &ctx,
-                                         ObDatum &expr_datum)
+                                         Datum &expr_datum)
 {
   UNUSED(expr);
   UNUSED(ctx);

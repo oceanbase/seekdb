@@ -94,10 +94,10 @@ int ObExprGetUserVar::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *key = NULL;
+  Datum *key = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, key))) {
   } else if (key->is_null()) {
     ret = OB_ERR_UNEXPECTED;
@@ -115,16 +115,18 @@ int ObExprGetUserVar::eval_get_user_var(const ObExpr &expr, ObEvalCtx &ctx, ObDa
           int ret = OB_SUCCESS;
           ObDecimalIntBuilder decimal_builder;
           char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
-          ObDatum result;
+          common::ObDatum legacy_result;
+          Datum result;
           if (widen_decimal && !source.is_null() && source.is_decimal_int()
               && source.get_int_bytes() != sizeof(int512_t)) {
             decimal_builder.from(source.get_decimal_int(), source.get_int_bytes());
             decimal_builder.extend(sizeof(int512_t));
-            result.set_decimal_int_shallow(decimal_builder.get_decimal_int(),
+            legacy_result.set_decimal_int_shallow(decimal_builder.get_decimal_int(),
                                             decimal_builder.get_int_bytes());
           } else {
-            OZ(source.to_row_datum(result, extended_payload));
+            OZ(source.to_row_datum(legacy_result, extended_payload));
           }
+          OZ(expr.get_datum_copy_plan().import_legacy(legacy_result, result));
           if (OB_SUCC(ret) && is_lob_storage(source.get_type())) {
             OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, source.meta_, expr.obj_meta_,
                                    ctx.exec_ctx_.get_allocator()));

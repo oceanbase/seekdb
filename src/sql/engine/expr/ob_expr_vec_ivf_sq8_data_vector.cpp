@@ -106,7 +106,7 @@ int ObExprVecIVFSQ8DataVector::cal_u8_data_vector(ObIAllocator &alloc, uint32_t 
 int ObExprVecIVFSQ8DataVector::generate_data_vector(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (expr.arg_cnt_ == 1) {

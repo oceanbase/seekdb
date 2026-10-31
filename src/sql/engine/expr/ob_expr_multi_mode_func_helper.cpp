@@ -39,7 +39,7 @@ void *MultimodeAlloctor::alloc(const int64_t size, const ObMemAttr &attr)
 }
 
 
-int MultimodeAlloctor::eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::ObDatum *&datum)
+int MultimodeAlloctor::eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::Datum *&datum)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(arg)) {

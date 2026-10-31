@@ -35,7 +35,7 @@ public:
                                 common::ObExprTypeCtx& type_ctx) const override;
   static int eval_priv_st_as_ewkb(const ObExpr &expr,
                                   ObEvalCtx &ctx,
-                                  ObDatum &res);
+                                  Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

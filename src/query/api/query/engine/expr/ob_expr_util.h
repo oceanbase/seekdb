@@ -19,12 +19,15 @@
 
 #include "common/number/ob_number_v2.h"
 #include "query/engine/expr/ob_expr_operator.h"
+#include <type_traits>
 
 namespace oceanbase
 {
+namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace common
 {
 class ObIVector;
+class ObIArrayType;
 }
 namespace sql
 {
@@ -58,6 +61,61 @@ using ObTextStringDatumResult = ObTextStringVectorResult<common::ObIVector>;
 class ObExprUtil
 {
 public:
+  // The bound evaluator has already selected a coefficient width from its
+  // prepared SQL type. Dynamic coefficient consumers use CopyPlan::get_decimal.
+  template <typename Coefficient>
+  static int get_decimal_int(const common::Datum &value, Coefficient &out)
+  {
+    if constexpr (std::is_same<Coefficient, int32_t>::value) {
+      out = value.get_decimal_int32(); return common::OB_SUCCESS;
+    } else if constexpr (std::is_same<Coefficient, int64_t>::value) {
+      out = value.get_decimal_int64(); return common::OB_SUCCESS;
+    } else if constexpr (std::is_same<Coefficient, uint64_t>::value) {
+      out = value.get_uint(); return common::OB_SUCCESS;
+    } else if constexpr (std::is_same<Coefficient, common::int128_t>::value) {
+      return value.get_decimal_int128(out);
+    } else if constexpr (std::is_same<Coefficient, common::int256_t>::value) {
+      return value.get_decimal_int256(out);
+    } else {
+      static_assert(std::is_same<Coefficient, common::int512_t>::value,
+          "A Decimal evaluator requires a prepared coefficient width");
+      return value.get_decimal_int512(out);
+    }
+  }
+
+  // Prepare once from the actual declaration/schema owner. No value loop may
+  // reconstruct a type from its payload or a four-byte metadata fragment.
+  // actual_meta must carry the definition's collation, never a SubSchema ID.
+  static int resolve_enum_sql_type(const common::SqlTypeMeta &actual_meta,
+                                   const common::ObAccuracy &accuracy,
+                                   const common::ObIArray<common::ObString> &labels,
+                                   common::ObIAllocator &owner, const common::SqlType *&out);
+  static int resolve_raw_sql_type(const ObRawExprResType &resolved,
+                                  const ObSQLSessionInfo *session,
+                                  share::schema::ObSchemaGetterGuard *schema_guard,
+                                  common::ObIAllocator &owner, const common::SqlType *&out);
+  static int resolve_sql_type(ObExecContext &ctx, const common::SqlTypeMeta &meta,
+                              const common::ObAccuracy &accuracy, uint16_t subschema_id,
+                              common::ObIAllocator &owner, const common::SqlType *&out);
+
+  static int set_number(const ObExpr &expr, ObEvalCtx &ctx, common::Datum &out,
+                        const common::number::ObNumber &value, int64_t index = -1);
+  static int set_number(const ObExpr &expr, ObEvalCtx &ctx, common::Datum &out,
+                        const common::number::ObCompactNumber &value, int64_t index = -1);
+  static int export_legacy_value(const ObExpr &expr, const common::Datum &value,
+                                 common::ObIAllocator &owner, common::ObDatum &output);
+
+  static int set_array_element(const ObExpr &expr, ObEvalCtx &ctx,
+                               const common::ObIArrayType &array, uint32_t element,
+                               common::Datum &out, int64_t index = -1);
+
+  static int set_otimestamp_tiny(const ObExpr &expr, ObEvalCtx &ctx, common::Datum &out,
+                                const common::ObOTimestampData &value, int64_t index = -1);
+
+  static int set_decimal_int(const ObExpr &expr, ObEvalCtx &ctx, common::Datum &out,
+                             const common::ObDecimalInt *coefficient, int32_t bytes,
+                             int64_t index = -1);
+
   static int get_trunc_int64(const common::DatumValue &value, common::ObExprCtx &expr_ctx, int64_t &out);
   static int get_round_int64(const common::DatumValue &value, common::ObExprCtx &expr_ctx, int64_t &out);
 
@@ -100,8 +158,8 @@ public:
   static int trunc_num2int64(const common::number::ObNumber &nmb, int64_t &v);
 
   static int trunc_decint2int64(const ObDecimalInt *decint, const int32_t int_bytes, const ObScale scale, int64_t &v);
-  // get number out of ObDatum and truncate to int64
-  static int trunc_num2int64(const common::ObDatum &datum, int64_t &v)
+  // get number out of Datum and truncate to int64
+  static int trunc_num2int64(const common::Datum &datum, int64_t &v)
   {
     return trunc_num2int64(common::number::ObNumber(datum.get_number()), v);
   }
@@ -109,15 +167,15 @@ public:
   // round the decimal part, round to INT64_MAX/INT64_MIN too if out of range.
   static int round_num2int64(const common::number::ObNumber &nmb, int64_t &v);
 
-  // get number out of ObDatum and round to int64
-  static int round_num2int64(const common::ObDatum &datum, int64_t &v)
+  // get number out of Datum and round to int64
+  static int round_num2int64(const common::Datum &datum, int64_t &v)
   {
     return round_num2int64(common::number::ObNumber(datum.get_number()), v);
   }
   // Get integer value from integer parameter.
   //
   // Keep %int_val unchanged if datum is NULL or datum->is_null().
-  static int get_int_param_val(common::ObDatum *datum, bool is_decint, int64_t &int_val);
+  static int get_int_param_val(const common::Datum *datum, const ObExpr *input_expr, int64_t &int_val);
 
   // Set the ASCII string to expression result.
   // e.g.:
@@ -131,14 +189,14 @@ public:
                                       const common::ObCollationType src_coll_type = CS_TYPE_UTF8MB4_BIN);
   static int set_expr_ascii_result(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                common::ObDatum &expr_datum,
+                                common::Datum &expr_datum,
                                 const common::ObString &ascii_str,
                                 const int64_t datum_idx,
                                 const bool is_ascii = true,
                                 const common::ObCollationType src_coll_type = CS_TYPE_UTF8MB4_BIN);
   static int set_expr_ascii_result(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                common::ObDatum &expr_datum,
+                                common::Datum &expr_datum,
                                 const common::ObString &ascii_str,
                                 const bool is_ascii = true,
                                 const common::ObCollationType src_coll_type = CS_TYPE_UTF8MB4_BIN);
@@ -162,7 +220,7 @@ public:
 
   static int eval_stack_overflow_check(const ObExpr &rt_expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &expr_datum);
+                                       Datum &expr_datum);
 
   static int eval_batch_stack_overflow_check(const ObExpr &expr,
                                              ObEvalCtx &ctx,
@@ -206,10 +264,10 @@ T ObExprUtil::trunc_integer(T val, int64_t dec)
 // atan2 calculation function implemented separately
 #define DEF_CALC_TRIGONOMETRIC_EXPR(tritype, INVALID_DOUBLE_ARG_CHECK, INVALID_DOUBLE_ARG_ERRNO) \
 int calc_##tritype##_expr(const ObExpr &expr, ObEvalCtx &ctx,                 \
-                               ObDatum &res_datum)                        \
+                               Datum &res_datum)                        \
 {                                                                             \
   int ret = OB_SUCCESS;                                                       \
-  ObDatum *radian = NULL;                                                     \
+  Datum *radian = NULL;                                                     \
   if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {                            \
     LOG_WARN("eval radian arg failed", K(ret), K(expr));                      \
   } else if (radian->is_null()) {                                             \
@@ -222,7 +280,7 @@ int calc_##tritype##_expr(const ObExpr &expr, ObEvalCtx &ctx,                 \
     if (OB_FAIL(radian_nmb.tritype(res_nmb, alloc_guard.get_allocator()))) {    \
       LOG_WARN("calc expr failed", K(ret), K(radian_nmb), K(expr));           \
     } else {                                                                  \
-      res_datum.set_number(res_nmb);                                          \
+      ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);                                          \
     }                                                                         \
   } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {              \
     const double arg = radian->get_double();                                  \

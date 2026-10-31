@@ -38,11 +38,11 @@ public:
   static int cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
                         const ObDatumMeta &dst_meta,
                         const ObCastMode &cm, ObIAllocator &allocator,
-                        ObDatum &res_datum);
+                        Datum &res_datum);
   static int cast_result(const ObExpr &src_expr, const ObExpr &dst_expr, ObEvalCtx &ctx,
-                         const ObCastMode &cm, ObDatum &expr_datum);
-  static int eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  static int eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+                         const ObCastMode &cm, Datum &expr_datum);
+  static int eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int eval_nullif_enumset(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   int set_extra_info(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                      ObSQLMode sql_mode, ObExpr &rt_expr) const;
   void set_first_param_flag(bool flag) { first_param_can_be_null_ = flag; }

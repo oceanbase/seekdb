@@ -156,13 +156,13 @@ int ObExprJsonValue::calc_empty_error_type(ObExprResType* types_stack, uint8_t p
 }
 
 
-int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonValue::eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   bool is_cover_by_error = true;
   bool is_null_result = false;
   uint8_t is_type_mismatch = 0;
-  ObDatum *return_val = NULL;
+  Datum *return_val = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
@@ -341,8 +341,8 @@ int ObExprJsonValue::set_result(const ObExpr &expr,
                                 bool &is_null_result,
                                 bool &is_cover_by_error,
                                 uint8_t &is_type_mismatch,
-                                ObDatum &res,
-                                ObDatum *return_val,
+                                Datum &res,
+                                Datum *return_val,
                                 ObIAllocator *allocator,
                                 ObJsonSeekResult &hits)
 {
@@ -455,10 +455,9 @@ int ObExprJsonValue::get_clause_param_value(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-template<typename Obj>
 int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
                                                 const SqlValueType &type,
-                                                const Obj *obj)
+                                                const common::ObDatum *obj)
 {
   INIT_SUCC(ret);
   SqlTypeClass tc = sql_type_class(type);
@@ -522,7 +521,7 @@ int ObExprJsonValue::check_default_val_accuracy(const ObAccuracy &accuracy,
 
 int ObExprJsonValue::doc_do_seek(ObJsonSeekResult &hits, bool &is_null_result, ObJsonExprParam* json_param,
                                 ObIJsonBase *j_base, const ObExpr &expr, ObEvalCtx &ctx, bool &is_cover_by_error,
-                                ObDatum *&return_val, 
+                                Datum *&return_val,
                                 uint8_t &is_type_mismatch)
 {
   INIT_SUCC(ret);
@@ -555,10 +554,10 @@ int ObExprJsonValue::doc_do_seek(ObJsonSeekResult &hits, bool &is_null_result, O
   return ret;
 }
 
-int ObExprJsonValue::get_empty_option(ObDatum *&empty_res, 
+int ObExprJsonValue::get_empty_option(Datum *&empty_res,
                                       bool &is_cover_by_error, 
                                       int8_t empty_type, 
-                                      ObDatum *empty_datum, 
+                                      Datum *empty_datum,
                                       bool &is_null_result)
 {
   INIT_SUCC(ret);
@@ -612,7 +611,7 @@ void ObExprJsonValue::get_error_option(int8_t error_type,
 
 bool ObExprJsonValue::try_set_error_val(const ObExpr &expr,
                                         ObEvalCtx &ctx,
-                                        ObDatum &res, int &ret, 
+                                        Datum &res, int &ret,
                                         ObJsonExprParam* json_param,
                                         uint8_t &is_type_mismatch)
 {
@@ -651,11 +650,13 @@ bool ObExprJsonValue::try_set_error_val(const ObExpr &expr,
 int ObExprJsonValue::get_default_value(ObExpr *expr,
                                       ObEvalCtx &ctx,
                                       const ObAccuracy &accuracy,
-                                      ObDatum **default_value)
+                                      Datum **default_value)
 {
   INIT_SUCC(ret);
   SqlValueType val_type = expr->datum_meta_.type_;
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
+  common::ObDatum checked_view;
+  alignas(8) char checked_scratch[64];
   {
     expr->extra_ &= ~CM_WARN_ON_FAIL; // make cast return error when fail
     expr->extra_ &= ~CM_NO_RANGE_CHECK; // make cast check range
@@ -665,7 +666,9 @@ int ObExprJsonValue::get_default_value(ObExpr *expr,
   }
   if (OB_FAIL(expr->eval(ctx, json_datum))) {
   } else if (val_type == ObNullType || json_datum->is_null()) {
-  } else if (OB_FAIL(check_default_val_accuracy<ObDatum>(accuracy, val_type, json_datum))) {
+  } else if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(
+      *json_datum, checked_view, checked_scratch, sizeof(checked_scratch)))) {
+  } else if (OB_FAIL(check_default_val_accuracy(accuracy, val_type, &checked_view))) {
   } else {
     *default_value = json_datum;
   }

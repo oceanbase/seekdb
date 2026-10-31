@@ -103,9 +103,9 @@ int ObRADatumStore::StoredRow::copy_datums(const common::ObIArray<ObExpr*> &expr
     int64_t pos = sizeof(StoredDatumCell) * exprs.count() + row_extend_size;
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
       const ObExpr &expr = *exprs.at(i);
-      const ObDatum &in_datum = expr.locate_expr_datum(ctx);
-      ret = StoredDatumCodec::encode_legacy_copy(in_datum, stored_cells()[i],
-          expr.prepare_legacy_copy_plan(), buf, size, pos);
+      const Datum &in_datum = expr.locate_expr_datum(ctx);
+      ret = StoredDatumCodec::encode_native_copy(in_datum, stored_cells()[i],
+          expr.get_datum_copy_plan(), buf, size, pos);
     }
     if (OB_SUCC(ret)) {
       readable_ = true;
@@ -157,8 +157,9 @@ int ObRADatumStore::StoredRow::to_expr(const common::ObIArray<ObExpr*> &exprs,
       if (exprs.at(i)->is_const_expr()) {
         continue;
       } else {
-        exprs.at(i)->locate_expr_datum(ctx) = StoredDatumCodec::decode_legacy_view(stored_cells()[i]);
-        exprs.at(i)->set_evaluated_projected(ctx);
+        ret = StoredDatumCodec::decode_native(stored_cells()[i],
+            exprs.at(i)->get_datum_copy_plan(), exprs.at(i)->locate_expr_datum(ctx));
+        if (OB_SUCC(ret)) { exprs.at(i)->set_evaluated_projected(ctx); }
         LOG_DEBUG("succ to_expr", K(cnt_), K(i), KPC(exprs.at(i)), K(stored_cells()[i]));
       }
     }

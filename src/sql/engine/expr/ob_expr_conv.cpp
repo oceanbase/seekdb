@@ -84,12 +84,12 @@ int ObExprConv::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprConv::eval_conv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprConv::eval_conv(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_0 = NULL;
-  ObDatum *param_1 = NULL;
-  ObDatum *param_2 = NULL;
+  Datum *param_0 = NULL;
+  Datum *param_1 = NULL;
+  Datum *param_2 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param_0))
       || OB_FAIL(expr.args_[1]->eval(ctx, param_1))
       || OB_FAIL(expr.args_[2]->eval(ctx, param_2))) {

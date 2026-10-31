@@ -57,7 +57,7 @@ int ObJsonExprHelper::get_json_or_str_data(ObExpr *expr, ObEvalCtx &ctx,
                                            ObString& str, bool& is_null) 
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   SqlValueType val_type = expr->datum_meta_.type_;
   if (OB_FAIL(allocator.eval_arg(expr, ctx, json_datum))) {
   } else if (json_datum->is_null() || val_type == ObNullType) {
@@ -81,7 +81,7 @@ int ObJsonExprHelper::get_json_schema(const ObExpr &expr, ObEvalCtx &ctx,
 {
   INIT_SUCC(ret);
 
-  ObDatum *schema_datum = nullptr;
+  Datum *schema_datum = nullptr;
   ObExpr *schema_arg = expr.args_[index];
   SqlValueType type = schema_arg->datum_meta_.type_;
   ObCollationType cs_type = schema_arg->datum_meta_.cs_type_;
@@ -115,7 +115,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
                                     bool relax, bool preserve_dup)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[index];
   SqlValueType val_type = json_arg->datum_meta_.type_;
   ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
@@ -248,7 +248,7 @@ int ObJsonExprHelper::get_json_for_partial_update(
     const ObExpr &json_expr,
     ObEvalCtx &ctx,
     ObIAllocator &allocator,
-    ObDatum &json_datum,
+    Datum &json_datum,
     ObIJsonBase *&j_base)
 {
   INIT_SUCC(ret);
@@ -329,7 +329,7 @@ int ObJsonExprHelper::refine_range_json_value_const(
 }
 
 
-int ObJsonExprHelper::get_json_val(const common::ObDatum &data, 
+int ObJsonExprHelper::get_json_val(const common::Datum &data,
                                    ObExecContext &ctx,
                                    ObExpr* expr,
                                    common::ObIAllocator *allocator,
@@ -369,7 +369,7 @@ int ObJsonExprHelper::get_json_val(const common::ObDatum &data,
                                                                     session->get_timezone_info(),
                                                                     session,
                                                                     j_base, to_bin,
-                                                                    expr->is_boolean_))) {
+                                                                    expr->is_boolean_, &expr->get_sql_type()))) {
     }
   }
 
@@ -394,11 +394,11 @@ int ObJsonExprHelper::cast_to_json_tree(ObString &text, common::ObIAllocator *al
 }
 
 int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator, 
-                                  ObDatum &src_datum, 
+                                  Datum &src_datum,
                                   const ObExpr &expr, 
                                   const ObExpr &default_expr, 
                                   ObEvalCtx &ctx, 
-                                  ObDatum &res, 
+                                  Datum &res,
                                   bool xt_need_acc_check)
 {
   int ret = OB_SUCCESS;
@@ -424,13 +424,17 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
           cast_ctx,
           ctx.exec_ctx_.get_srs_provider(),
           ctx.exec_ctx_.get_lob_read_service());
-      DatumValue source(src_datum, default_expr.obj_meta_);
+      alignas(8) char source_scratch[64];
+      common::ObDatum legacy_source;
+      OZ(default_expr.get_datum_copy_plan().legacy_view(src_datum, legacy_source, source_scratch, sizeof(source_scratch)));
+      DatumValue source(legacy_source, default_expr.obj_meta_);
       DatumValue converted;
-      ObDatum accuracy_checked;
+      Datum accuracy_checked;
       int warning = OB_SUCCESS;
-      if (OB_FAIL(DatumValueCaster::to_type(obj_type, cast_ctx, source, allocator, converted))) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(DatumValueCaster::to_type(obj_type, cast_ctx, source, allocator, converted))) {
       } else if (FALSE_IT(get_accuracy_from_expr(expr, out_acc))) {
-      } else if (OB_FAIL(datum_accuracy_check(expr, def_cm, ctx, out_acc,
+      } else if (OB_FAIL(datum_accuracy_check_legacy_input(expr, def_cm, ctx, out_acc,
                                                expr.obj_meta_.has_lob_header(),
                                                converted.datum_, accuracy_checked, warning))) {
         if (!xt_need_acc_check && ob_is_varchar_or_char(obj_type, cs_type)
@@ -448,8 +452,7 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
           if (trunc_len_byte <= 0) {
             accuracy_checked.set_null();
           } else {
-            accuracy_checked.set_datum(converted.datum_);
-            accuracy_checked.set_string(ObString(trunc_len_byte, str));
+            ret = accuracy_checked.set_string(ObString(trunc_len_byte, str));
           }
           ret = OB_SUCCESS;
         } else {
@@ -458,11 +461,15 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
         DatumParameter padded;
         padded.set_type_meta(expr.obj_meta_);
         padded.set_accuracy(out_acc);
-        padded.set_datum(accuracy_checked);
-        if (OB_FAIL(ObSPIService::spi_pad_char_or_varchar(session, obj_type, out_acc,
+        alignas(8) char checked_scratch[64];
+        common::ObDatum checked_view;
+        if (OB_FAIL(expr.get_datum_copy_plan().legacy_view(accuracy_checked, checked_view,
+            checked_scratch, sizeof(checked_scratch)))) {
+        } else if (FALSE_IT(padded.set_datum(checked_view))) {
+        } else if (OB_FAIL(ObSPIService::spi_pad_char_or_varchar(session, obj_type, out_acc,
                                                           &allocator, &padded))) {
         } else {
-          accuracy_checked = padded.datum_;
+          ret = expr.get_datum_copy_plan().import_legacy(padded.datum_, accuracy_checked);
         }
       }
 
@@ -470,7 +477,7 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
         if (!accuracy_checked.is_null()) {
           res.set_datum(accuracy_checked);
           ObExprStrResAlloc res_alloc(expr, ctx);
-          if (OB_FAIL(res.deep_copy(res, res_alloc))) {
+          if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), res, res_alloc, res))) {
           }
         } else {
           res.set_null();
@@ -499,7 +506,7 @@ int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
                                    uint32_t parse_flag)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[index];
   SqlValueType val_type = json_arg->datum_meta_.type_;
   MultimodeAlloctor *alloc = nullptr;
@@ -573,7 +580,7 @@ int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
                                                                     allocator, scale,
                                                                     session->get_timezone_info(),
                                                                     session,
-                                                                    j_base, to_bin))) {
+                                                                    j_base, to_bin, false, &json_arg->get_sql_type()))) {
     }
   }
 
@@ -584,7 +591,7 @@ int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 
-int ObJsonExprHelper::datum_to_json_val(const ObDatum *json_datum,
+int ObJsonExprHelper::datum_to_json_val(const common::ObDatum *json_datum,
                                         SqlTypeMeta& data_meta,
                                         common::ObIAllocator *allocator,
                                         ObBasicSessionInfo *session,
@@ -1002,7 +1009,8 @@ int ObJsonExprHelper::transform_scalar_2jsonBase(const T &datum,
                                                  ObBasicSessionInfo *session,
                                                  ObIJsonBase*& j_base,
                                                  bool to_bin,
-                                                 bool is_bool)
+                                                 bool is_bool,
+                                                 const common::SqlType *type_context)
 {
   int ret = OB_SUCCESS;
   void* buf = NULL;
@@ -1171,7 +1179,16 @@ int ObJsonExprHelper::transform_scalar_2jsonBase(const T &datum,
       }
       if (OB_FAIL(ret)) {
       } else if (ob_is_decimal_int(type)) {
-        if (OB_FAIL(wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(), scale, *allocator, num))) {
+        if constexpr (std::is_same<T, common::Datum>::value) {
+          alignas(8) char coefficient_scratch[64];
+          common::ObDatum coefficient;
+          if (type_context == nullptr) { ret = OB_INVALID_ARGUMENT; }
+          else if (OB_FAIL(DatumCopyPlan(*type_context).get_decimal(datum, coefficient,
+              coefficient_scratch, sizeof(coefficient_scratch)))) {
+          } else if (OB_FAIL(wide::to_number(coefficient.get_decimal_int(), coefficient.get_int_bytes(), scale, *allocator, num))) {
+          }
+        } else {
+          ret = wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(), scale, *allocator, num);
         }
       } else if (OB_FAIL(num.deep_copy_v3(datum.get_number(), *allocator))) {
       }
@@ -1398,6 +1415,14 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
   return ret;
 }
 
+// Aggregate JSON accumulators keep their explicit legacy/fixed value domain.
+// The template body lives in this TU, so its cross-TU ObDatum callers require
+// an emitted specialization independently of native Expr callback callers.
+template int ObJsonExprHelper::transform_convertible_2jsonBase<common::ObDatum>(
+    const common::ObDatum &datum, SqlValueType type, common::ObIAllocator *allocator,
+    ObCollationType cs_type, ObIJsonBase *&j_base, ObConv2JsonParam flags,
+    const common::ObLobReadOptions *lob_options);
+
 int ObJsonExprHelper::get_sql_scalar_type(
   ObEvalCtx& ctx,
   int64_t origin, 
@@ -1608,7 +1633,7 @@ int ObJsonExprHelper::get_clause_opt(ObExpr *expr,
                                     int8_t &type)
 {
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   if (OB_FAIL(expr->eval(ctx, json_datum))) {
   } else {
     int64_t option_type = json_datum->get_int();
@@ -2070,7 +2095,7 @@ int ObJsonExprHelper::pack_json_diff_res(
     ObEvalCtx &ctx,
     ObIAllocator &temp_allocator,
     ObIJsonBase *json_doc,
-    ObDatum &res)
+    Datum &res)
 {
   INIT_SUCC(ret);
   ObJsonBin *bin = nullptr;
@@ -2100,7 +2125,7 @@ int ObJsonExprHelper::pack_json_res(
     ObEvalCtx &ctx,
     ObIAllocator &temp_allocator,
     ObIJsonBase *json_doc,
-    ObDatum &res)
+    Datum &res)
 {
   INIT_SUCC(ret);
   bool shoudl_pack_diff = false;

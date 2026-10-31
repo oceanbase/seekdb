@@ -35,7 +35,7 @@ ObExprInstr::ObExprInstr(ObIAllocator &alloc)
 
 ObExprInstr::~ObExprInstr() {}
 
-int ObExprInstr::calc_mysql_instr_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprInstr::calc_mysql_instr_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(2 != expr.arg_cnt_) || OB_ISNULL(expr.args_) ||

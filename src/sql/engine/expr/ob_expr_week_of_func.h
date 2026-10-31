@@ -39,7 +39,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
@@ -75,7 +75,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
@@ -113,7 +113,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
@@ -136,7 +136,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_week(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:

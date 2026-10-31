@@ -15,6 +15,7 @@
  */
 
 #include "sql/das/ob_das_utils.h"
+#include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -122,8 +123,9 @@ protected:
       expr.obj_meta_.set_int();
       expr.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0);
       expr.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(), arena_));
       for (int64_t row = 0; row < BATCH; ++row) {
-        new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
+        new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
       }
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo;
       expr.get_eval_info(eval_).evaluated_ = true;
@@ -131,8 +133,11 @@ protected:
       ASSERT_EQ(OB_SUCCESS, exprs_.push_back(&expr));
     }
   }
-  ObDatum &datum(int64_t col, int64_t row = 1)
+  Datum &datum(int64_t col, int64_t row = 1)
   { return expressions_[col].locate_batch_datums(eval_)[row]; }
+  void set_datum(int64_t col, const ObDatum &value, int64_t row = 1)
+  { ASSERT_EQ(OB_SUCCESS, expressions_[col].get_datum_copy_plan().import_legacy(value, datum(col, row))); }
+
   void columns(ObSEArray<SqlTypeMeta, 4> &types, const std::vector<SqlTypeMeta> &values)
   { for (const auto &value : values) { ASSERT_EQ(OB_SUCCESS, types.push_back(value)); } }
   void projection(ObDASInsCtDef &ctdef, const std::vector<SqlTypeMeta> &types,
@@ -149,7 +154,7 @@ protected:
       ASSERT_EQ(OB_SUCCESS, ctdef.new_row_projector_.push_back(indexes[i]));
     }
   }
-  static int fail_eval(const ObExpr &, ObEvalCtx &, ObDatum &) { return OB_TIMEOUT; }
+  static int fail_eval(const ObExpr &, ObEvalCtx &, Datum &) { return OB_TIMEOUT; }
 
   ObArenaAllocator arena_;
   ObExecContext exec_;
@@ -161,6 +166,76 @@ protected:
   ObExpr expressions_[COLS];
   ObSEArray<ObExpr *, COLS> exprs_;
 };
+
+TEST_F(FixedDmlCore, ignored_null_integer_becomes_inline_zero_without_result_payload)
+{
+  ObExpr &expr = expressions_[0];
+  expr.res_buf_len_ = 0;
+  expr.res_buf_off_ = 0;
+  datum(0, 0).set_int(INT64_MIN);
+  datum(0).set_null();
+  ColumnContent column;
+  column.column_name_ = ObString::make_string("i");
+  const auto untouched_batch_row = datum(0, 0);
+  ASSERT_EQ(OB_SUCCESS, ObDMLService::check_column_null(
+      eval_, exprs_, column, datum(0), true, true, 0));
+  ASSERT_FALSE(datum(0).is_null());
+  EXPECT_EQ(0, datum(0).get_int());
+  int64_t payload_bytes = -1;
+  ASSERT_EQ(OB_SUCCESS, expr.get_datum_copy_plan().payload_copy_size(datum(0), payload_bytes));
+  EXPECT_EQ(0, payload_bytes);
+  EXPECT_EQ(0, expr.res_buf_len_);
+  EXPECT_EQ(0, MEMCMP(&untouched_batch_row, &datum(0, 0), sizeof(Datum)));
+
+  // The other supported correction path is non-strict, multi-row DML.
+  datum(0).set_null();
+  ASSERT_EQ(OB_SUCCESS, ObDMLService::check_column_null(
+      eval_, exprs_, column, datum(0), false, false, 0));
+  EXPECT_EQ(0, datum(0).get_int());
+  datum(0).set_null();
+  EXPECT_EQ(OB_BAD_NULL_ERROR, ObDMLService::check_column_null(
+      eval_, exprs_, column, datum(0), false, true, 0));
+  EXPECT_TRUE(datum(0).is_null());
+}
+
+TEST_F(FixedDmlCore, ignored_null_binary_padding_uses_expression_owned_memory)
+{
+  ObExpr &expr = expressions_[0];
+  expr.obj_meta_.set_binary();
+  expr.datum_meta_ = ObDatumMeta(ObCharType, CS_TYPE_BINARY, 0);
+  expr.obj_datum_map_ = OBJ_DATUM_STRING;
+  expr.max_length_ = 19;
+  ObAccuracy accuracy; accuracy.set_length(expr.max_length_);
+  ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, accuracy, arena_));
+  datum(0).set_null();
+  ColumnContent column;
+  column.column_name_ = ObString::make_string("b");
+  ASSERT_EQ(OB_SUCCESS, ObDMLService::check_column_null(
+      eval_, exprs_, column, datum(0), true, true, 0));
+  EXPECT_EQ(std::string(19, '\0'), std::string(datum(0).get_string().ptr(), datum(0).length()));
+  EXPECT_EQ(frame_.data() + expr.res_buf_off_ + expr.res_buf_len_, datum(0).get_string().ptr());
+}
+
+TEST_F(FixedDmlCore, ignored_null_number_owns_zero_bytes_after_legacy_scratch_expires)
+{
+  ObExpr &expr = expressions_[0];
+  expr.obj_meta_.set_number();
+  expr.datum_meta_ = ObDatumMeta(ObNumberType, CS_TYPE_BINARY, 0);
+  expr.obj_datum_map_ = OBJ_DATUM_NUMBER;
+  ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(), arena_));
+  datum(0).set_null();
+  ColumnContent column;
+  column.column_name_ = ObString::make_string("n");
+  ASSERT_EQ(OB_SUCCESS, ObDMLService::check_column_null(
+      eval_, exprs_, column, datum(0), true, true, 0));
+  EXPECT_EQ(frame_.data() + expr.res_buf_off_ + expr.res_buf_len_, datum(0).get_string().ptr());
+  EXPECT_TRUE(datum(0).get_number().is_zero());
+  // Another correction reuses the helper's temporary stack, not this owner.
+  datum(1).set_null(); column.projector_index_ = 1;
+  ASSERT_EQ(OB_SUCCESS, ObDMLService::check_column_null(
+      eval_, exprs_, column, datum(1), true, true, 0));
+  EXPECT_TRUE(datum(0).get_number().is_zero());
+}
 
 TEST_F(FixedDmlCore, storage_shadow_initializes_and_preserves_reserved_numeric_buffers)
 {
@@ -245,14 +320,20 @@ TEST_F(FixedDmlCore, expression_shadow_uses_batch_index_and_nonbatch_slot_then_b
 {
   int64_t ignored = 91, value = INT64_MAX, constant = INT64_MIN;
   std::string string_value("s\0t", 3);
-  for (int64_t i = 0; i < COLS; ++i) { datum(i, 0) = integer(ignored); }
-  datum(0) = integer(value); datum(1) = text(string_value); datum(1).set_has_lob_header();
-  datum(2, 0) = integer(constant); datum(3).set_null();
+  expressions_[1].obj_meta_.set_varchar();
+  expressions_[1].obj_meta_.set_collation_type(CS_TYPE_BINARY);
+  expressions_[1].obj_datum_map_ = OBJ_DATUM_STRING;
+  ASSERT_EQ(OB_SUCCESS, expressions_[1].prepare_scalar_type(expressions_[1].obj_meta_, ObAccuracy(), arena_));
+  for (int64_t i = 0; i < COLS; ++i) { if (i != 1) { set_datum(i, integer(ignored), 0); } }
+  set_datum(1, text(string_value), 0);
+  set_datum(0, integer(value)); set_datum(1, text(string_value)); datum(1).set_has_lob_header();
+  set_datum(2, integer(constant), 0); datum(3).set_null();
   expressions_[2].batch_result_ = false; expressions_[2].batch_idx_mask_ = 0;
   ShadowRow shadow; ASSERT_EQ(OB_SUCCESS, shadow.init(arena_, COLS, false));
   ASSERT_EQ(OB_SUCCESS, shadow.shadow_copy(exprs_, eval_));
   FixedRow *borrowed = shadow.get_store_row();
-  EXPECT_EQ(reinterpret_cast<const char *>(&value), borrowed->stored_cells()[0].ptr_);
+  EXPECT_EQ(value, read_integer(decoded(*borrowed, 0)));
+  EXPECT_NE(reinterpret_cast<const char *>(&value), borrowed->stored_cells()[0].ptr_);
   EXPECT_EQ(string_value.data(), borrowed->stored_cells()[1].ptr_);
   EXPECT_EQ(INT64_MIN, read_integer(decoded(*borrowed, 2)));
   EXPECT_TRUE(borrowed->stored_cells()[3].is_null());
@@ -270,7 +351,7 @@ TEST_F(FixedDmlCore, expression_shadow_uses_batch_index_and_nonbatch_slot_then_b
 TEST_F(FixedDmlCore, expression_failure_does_not_append_and_next_call_reuses_shadow)
 {
   int64_t values[COLS] = {11, 22, 33, 44};
-  for (int64_t i = 0; i < COLS; ++i) { datum(i) = integer(values[i]); }
+  for (int64_t i = 0; i < COLS; ++i) { set_datum(i, integer(values[i])); }
   expressions_[2].batch_result_ = false; expressions_[2].batch_idx_mask_ = 0;
   expressions_[2].eval_func_ = fail_eval;
   expressions_[2].get_eval_info(eval_).evaluated_ = false;
@@ -279,7 +360,7 @@ TEST_F(FixedDmlCore, expression_failure_does_not_append_and_next_call_reuses_sha
   EXPECT_EQ(OB_TIMEOUT, buffer.add_row(exprs_, &eval_, output, false));
   EXPECT_EQ(&sentinel, output); EXPECT_EQ(0, buffer.get_row_cnt());
   expressions_[2].get_eval_info(eval_).evaluated_ = true;
-  datum(2, 0) = integer(values[2]);
+  set_datum(2, integer(values[2]), 0);
   ASSERT_EQ(OB_SUCCESS, buffer.add_row(exprs_, &eval_, output, false));
   ASSERT_NE(&sentinel, output); EXPECT_EQ(1, buffer.get_row_cnt());
   EXPECT_EQ(sizeof(FixedRow) + COLS * sizeof(StoredDatumCell) + COLS * sizeof(int64_t), output->row_size_);

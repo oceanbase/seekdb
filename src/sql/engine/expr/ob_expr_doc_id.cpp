@@ -68,7 +68,7 @@ int ObExprDocID::cg_expr(
 /*static*/ int ObExprDocID::generate_doc_id(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObObjectID partition_id = OB_INVALID_ID;

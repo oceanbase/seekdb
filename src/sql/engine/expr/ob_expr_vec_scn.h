@@ -39,7 +39,7 @@ public:
   static int generate_vec_scn(
           const ObExpr &raw_ctx,
           ObEvalCtx &eval_ctx,
-          ObDatum &expr_datum);
+          Datum &expr_datum);
 
 private :
   //disallow copy

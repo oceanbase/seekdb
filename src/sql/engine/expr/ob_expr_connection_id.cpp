@@ -45,7 +45,7 @@ int ObExprConnectionId::calc_result_type0(ObExprResType &type, ObExprTypeCtx &ty
 }
 
 int ObExprConnectionId::eval_connection_id(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

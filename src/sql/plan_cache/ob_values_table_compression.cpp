@@ -401,7 +401,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session, false,
                           enable_mysql_compatible_dates))) {
   } else {
-    ParamStore &phy_param_store = phy_ctx->get_param_store_for_update();
+    const ParamStore &phy_param_store = phy_ctx->get_param_store();
     ObIArray<ObArrayParamGroup> &array_param_groups = phy_ctx->get_array_param_groups();
     for (int64_t i = 0; OB_SUCC(ret) && i < array_param_groups.count(); ++i) {
       int64_t param_num = array_param_groups.at(i).column_count_;
@@ -535,7 +535,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session, false,
                           enable_mysql_compatible_dates))) {
   } else {
-    ParamStore &phy_param_store = phy_ctx->get_param_store_for_update();
+    const ParamStore &phy_param_store = phy_ctx->get_param_store();
     ObIArray<ObArrayParamGroup> &array_param_groups = phy_ctx->get_array_param_groups();
     int64_t not_param_offset = 0;
     int64_t tmp_raw_idx = 0;
@@ -633,7 +633,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             }
             array_param.set_param_meta();
             array_param.get_param_flag().is_batch_parameter_ = true;
-            if (OB_SUCC(ret)) { phy_param_store.at(raw_idx) = array_param; }
+            if (OB_SUCC(ret)) { ret = phy_ctx->set_runtime_parameter(raw_idx, array_param); }
           }
         }
       }

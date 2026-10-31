@@ -30,7 +30,7 @@ public:
   virtual ~ObExprCurrentUser();
   virtual int calc_result_type0(ObExprResType &type,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int eval_current_user(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_current_user(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

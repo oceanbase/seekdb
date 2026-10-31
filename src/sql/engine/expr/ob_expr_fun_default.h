@@ -34,7 +34,7 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const;
-  static int calc_default_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int calc_default_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprFunDefault);
 };

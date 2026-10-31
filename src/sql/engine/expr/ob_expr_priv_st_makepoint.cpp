@@ -75,12 +75,12 @@ int ObExprPrivSTMakePoint::calc_result_typeN(
 int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
         const ObExpr &expr,
         ObEvalCtx &ctx,
-        ObDatum &res)
+        Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_result = false;
   int num_args = expr.arg_cnt_;
-  ObDatum *datum[3] = {nullptr};
+  Datum *datum[3] = {nullptr};
   double p[3] = {0.0};
   ObGeoSrid srid = 0;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

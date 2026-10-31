@@ -96,15 +96,15 @@ int ObExprArraySlice::calc_result_typeN(ObExprResType &type,
 
 int ObExprArraySlice::eval_array_slice(const ObExpr &expr, 
                           ObEvalCtx &ctx, 
-                          ObDatum &res)
+                          Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   uint16_t subschema_id = expr.obj_meta_.get_subschema_id();
-  ObDatum *arr_datum = NULL;
-  ObDatum *offset_datum = NULL;
-  ObDatum *len_datum = NULL;
+  Datum *arr_datum = NULL;
+  Datum *offset_datum = NULL;
+  Datum *len_datum = NULL;
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
 
@@ -157,7 +157,7 @@ int ObExprArraySlice::eval_array_slice_batch(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
 
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -169,10 +169,10 @@ int ObExprArraySlice::eval_array_slice_batch(const ObExpr &expr,
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else if (expr.arg_cnt_ > 2 && OB_FAIL(expr.args_[2]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector offset_array = expr.args_[1]->locate_expr_datumvector(ctx);
-    ObDatumVector len_array =
-        expr.arg_cnt_ > 2 ? expr.args_[2]->locate_expr_datumvector(ctx) : ObDatumVector();
+    DatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector offset_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector len_array =
+        expr.arg_cnt_ > 2 ? expr.args_[2]->locate_expr_datumvector(ctx) : DatumVector();
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

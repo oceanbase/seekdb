@@ -1060,7 +1060,7 @@ int ObNestedLoopJoinOp::calc_other_conds(bool &is_match)
   int ret = OB_SUCCESS;
   is_match = true;
   const ObIArray<ObExpr *> &conds = MY_SPEC.other_join_conds_;
-  ObDatum *cmp_res = NULL;
+  Datum *cmp_res = NULL;
   ARRAY_FOREACH(conds, i) {
     auto cond = conds.at(i);
     if (OB_FAIL(conds.at(i)->eval(eval_ctx_, cmp_res))) {

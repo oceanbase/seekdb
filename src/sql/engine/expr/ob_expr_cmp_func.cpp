@@ -117,9 +117,9 @@ int get_fixed_double_tolerance(const ObExpr &expr, double &tolerance)
 
 struct RuntimeFixedDoubleCmp
 {
-  int operator()(ObDatum &res,
-                 const ObDatum &l_datum,
-                 const ObDatum &r_datum,
+  int operator()(Datum &res,
+                 const Datum &l_datum,
+                 const Datum &r_datum,
                  const double &tolerance,
                  const ObCmpOp &cmp_op) const
   {
@@ -144,105 +144,12 @@ struct RuntimeFixedDoubleCmp
   }
 };
 
-int get_runtime_decint_cmp_func(const ObExpr &expr, decint_cmp_fp &cmp_func)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(2 != expr.arg_cnt_)
-      || OB_ISNULL(expr.args_)
-      || OB_ISNULL(expr.args_[0])
-      || OB_ISNULL(expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const ObDatumMeta &left_meta = expr.args_[0]->datum_meta_;
-    const ObDatumMeta &right_meta = expr.args_[1]->datum_meta_;
-    const ObDecimalIntWideType left_width = get_decimalint_type(left_meta.precision_);
-    const ObDecimalIntWideType right_width = get_decimalint_type(right_meta.precision_);
-    if (OB_UNLIKELY(!ob_is_decimal_int(left_meta.type_)
-                    || !ob_is_decimal_int(right_meta.type_)
-                    || left_width < DECIMAL_INT_32
-                    || left_width >= DECIMAL_INT_MAX
-                    || right_width < DECIMAL_INT_32
-                    || right_width >= DECIMAL_INT_MAX)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const int32_t left_bytes = 2 << (static_cast<int32_t>(left_width) + 1);
-      const int32_t right_bytes = 2 << (static_cast<int32_t>(right_width) + 1);
-      cmp_func = wide::ObDecimalIntCmpSet::get_decint_decint_cmp_func(
-          left_bytes, right_bytes);
-      if (OB_ISNULL(cmp_func)) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-  }
-  return ret;
-}
-
-struct RuntimeDecintCmp
-{
-  int operator()(ObDatum &res,
-                 const ObDatum &l_datum,
-                 const ObDatum &r_datum,
-                 const decint_cmp_fp &cmp_func,
-                 const ObCmpOp &cmp_op) const
-  {
-    OB_ASSERT(nullptr != cmp_func);
-    const int cmp_ret = cmp_func(l_datum.get_decimal_int(), r_datum.get_decimal_int());
-    res.set_int(get_cmp_ret(cmp_op, cmp_ret));
-    return OB_SUCCESS;
-  }
-};
-
-int get_runtime_tc_cmp_func(const ObExpr &expr, ObDatumCmpFuncType &cmp_func)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(2 != expr.arg_cnt_)
-      || OB_ISNULL(expr.args_)
-      || OB_ISNULL(expr.args_[0])
-      || OB_ISNULL(expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    const SqlValueType left_type = expr.args_[0]->datum_meta_.type_;
-    const SqlValueType right_type = expr.args_[1]->datum_meta_.type_;
-    if (OB_UNLIKELY(left_type < ObNullType || left_type >= ObMaxType
-                    || right_type < ObNullType || right_type >= ObMaxType)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      const SqlTypeClass left_tc = sql_type_class(left_type);
-      const SqlTypeClass right_tc = sql_type_class(right_type);
-      if (OB_UNLIKELY(is_invalid_sql_type_class(left_tc) || is_invalid_sql_type_class(right_tc))) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(cmp_func = DATUM_TC_CMP_FUNCS[left_tc][right_tc])) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-  }
-  return ret;
-}
-
-struct RuntimeTCCmp
-{
-  int operator()(ObDatum &res,
-                 const ObDatum &l_datum,
-                 const ObDatum &r_datum,
-                 const ObDatumCmpFuncType &cmp_func,
-                 const ObDatumAccessContext *access_ctx,
-                 const ObCmpOp &cmp_op) const
-  {
-    int cmp_ret = 0;
-    int ret = cmp_func(l_datum, r_datum, cmp_ret, access_ctx);
-    if (OB_FAIL(ret)) {
-    } else {
-      res.set_int(get_cmp_ret(cmp_op, cmp_ret));
-    }
-    return ret;
-  }
-};
 
 } // namespace
 
 int ObFixedDoubleRelationFunc::eval(const ObExpr &expr,
                                     ObEvalCtx &ctx,
-                                    ObDatum &expr_datum)
+                                    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   double tolerance = 0;
@@ -270,66 +177,26 @@ int ObFixedDoubleRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
 
 int ObDecintRelationFunc::eval(const ObExpr &expr,
                                ObEvalCtx &ctx,
-                               ObDatum &expr_datum)
+                               Datum &expr_datum)
 {
-  int ret = OB_SUCCESS;
-  decint_cmp_fp cmp_func = nullptr;
-  if (OB_FAIL(get_runtime_decint_cmp_func(expr, cmp_func))) {
-  } else {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    ret = def_relational_eval_func<RuntimeDecintCmp>(
-        expr, ctx, expr_datum, cmp_func, cmp_op);
-  }
-  return ret;
+  return eval_native_relation(expr, ctx, expr_datum);
 }
 
 int ObDecintRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  int ret = OB_SUCCESS;
-  decint_cmp_fp cmp_func = nullptr;
-  if (OB_FAIL(get_runtime_decint_cmp_func(expr, cmp_func))) {
-  } else {
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    ret = def_relational_eval_batch_func<RuntimeDecintCmp>(
-        BATCH_EVAL_FUNC_ARG_LIST, cmp_func, cmp_op);
-  }
-  return ret;
+  return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 int ObTCRelationFunc::eval(const ObExpr &expr,
                            ObEvalCtx &ctx,
-                           ObDatum &expr_datum)
+                           Datum &expr_datum)
 {
-  int ret = OB_SUCCESS;
-  ObDatumCmpFuncType cmp_func = NULL;
-  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
-  } else {
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_func<RuntimeTCCmp>(
-          expr, ctx, expr_datum, cmp_func, access_ctx, cmp_op);
-    }
-  }
-  return ret;
+  return eval_native_relation(expr, ctx, expr_datum);
 }
 
 int ObTCRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
 {
-  int ret = OB_SUCCESS;
-  ObDatumCmpFuncType cmp_func = NULL;
-  if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
-  } else {
-    const ObDatumAccessContext *access_ctx = nullptr;
-    ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
-    } else {
-      ret = def_relational_eval_batch_func<RuntimeTCCmp>(
-          BATCH_EVAL_FUNC_ARG_LIST, cmp_func, access_ctx, cmp_op);
-    }
-  }
-  return ret;
+  return eval_native_relation_batch(BATCH_EVAL_FUNC_ARG_LIST);
 }
 
 OB_NOINLINE void init_expr_cmp_func_array(ObExpr::EvalFunc *eval_funcs,

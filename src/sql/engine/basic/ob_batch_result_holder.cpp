@@ -41,7 +41,7 @@ int ObBatchResultHolder::init(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
     allocator_ = allocator;
     common::ObIAllocator &alloc =
       (nullptr != allocator) ? *allocator : eval_ctx.exec_ctx_.get_allocator();
-    datums_ = static_cast<ObDatum *>(alloc.alloc(batch_size * exprs.count() * sizeof(*datums_)));
+    datums_ = static_cast<Datum *>(alloc.alloc(batch_size * exprs.count() * sizeof(*datums_)));
     if (OB_ISNULL(datums_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     }
@@ -72,7 +72,7 @@ int ObBatchResultHolder::save(int64_t size)
     for (int64_t i = 0; i < exprs_->count(); i++) {
       ObExpr *e = exprs_->at(i);
       const int cnt = e->is_batch_result() ? size : 1;
-      MEMCPY(datums_ + off, e->locate_batch_datums(*eval_ctx_), sizeof(ObDatum) * cnt);
+      MEMCPY(datums_ + off, e->locate_batch_datums(*eval_ctx_), sizeof(Datum) * cnt);
       off += cnt;
     }
     saved_size_ = size;
@@ -92,7 +92,7 @@ int ObBatchResultHolder::restore()
     for (int64_t i = 0; i < exprs_->count(); i++) {
       ObExpr *e = exprs_->at(i);
       const int cnt = e->is_batch_result() ? saved_size_ : 1;
-      MEMCPY(e->locate_batch_datums(*eval_ctx_), datums_ + off, sizeof(ObDatum) * cnt);
+      MEMCPY(e->locate_batch_datums(*eval_ctx_), datums_ + off, sizeof(Datum) * cnt);
       off += cnt;
     }
   }
@@ -112,20 +112,20 @@ int ObBatchResultHolder::check_datum_modified()
       ObExpr *e = exprs_->at(i);
       const int cnt = e->is_batch_result() ? saved_size_ : 1;
       if (OB_UNLIKELY(0 != memcmp(e->locate_batch_datums(*eval_ctx_), datums_ + off,
-                                  sizeof(ObDatum) * cnt))) {
+                                  sizeof(Datum) * cnt))) {
         ret = OB_ERR_UNEXPECTED;
         int j;
         for (j = 0; j < cnt; ++j) {
           if (0 != memcmp(e->locate_batch_datums(*eval_ctx_) + j, datums_ + off + j,
-                          sizeof(ObDatum))) {
+                          sizeof(Datum))) {
             break;
           }
         }
         if (j >= cnt) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const ObDatum datum_saved = (datums_ + off)[j];
-          const ObDatum datum_in_expr = e->locate_batch_datums(*eval_ctx_)[j];
+          const Datum datum_saved = (datums_ + off)[j];
+          const Datum datum_in_expr = e->locate_batch_datums(*eval_ctx_)[j];
         }
         break;
       }

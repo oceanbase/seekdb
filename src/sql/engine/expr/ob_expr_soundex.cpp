@@ -260,7 +260,7 @@ int ObExprSoundex::calc(const ObString &input, const ObCollationType intput_cs_t
   return ret;
 }
 
-int ObExprSoundex::calc_text(const ObDatum &input_datum,
+int ObExprSoundex::calc_text(const Datum &input_datum,
                              const SqlValueType input_type,
                              const SqlValueType res_type,
                              const ObCollationType input_cs_type,
@@ -345,10 +345,10 @@ int ObExprSoundex::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) co
   return ret;
 }
 
-int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   ObExprStrResAlloc expr_res_alloc(expr, ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_guard(ctx);
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {

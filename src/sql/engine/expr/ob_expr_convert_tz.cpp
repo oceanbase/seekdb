@@ -56,7 +56,7 @@ int ObExprConvertTZ::calc_convert_tz(int64_t timestamp_data,
                                     const ObString &tz_str_s,//source time zone (input2)
                                     const ObString &tz_str_d,//destination time zone (input3)
                                     ObSQLSessionInfo *session,
-                                    ObDatum &result)
+                                    Datum &result)
 {
   int ret = OB_SUCCESS;
   int32_t offset_couple =0;
@@ -141,7 +141,7 @@ int ObExprConvertTZ::calc_convert_tz_const(
     const ObExpr &expr, ObEvalCtx &ctx, int64_t &timestamp_data,
     const ObString &tz_str_s, // source time zone (input4)
     const ObString &tz_str_d, // destination time zone (input5)
-    ObSQLSessionInfo *session, ObDatum &result) {
+    ObSQLSessionInfo *session, Datum &result) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(calc_convert_tz_timestamp(expr, ctx, timestamp_data, tz_str_s, tz_str_d, session))) {
     ret = OB_SUCCESS;
@@ -306,12 +306,12 @@ int ObExprConvertTZ::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   return ret;
 }
 
-int ObExprConvertTZ::eval_convert_tz(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprConvertTZ::eval_convert_tz(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *timestamp = NULL;
-  ObDatum *time_zone_s = NULL;
-  ObDatum *time_zone_d = NULL;
+  Datum *timestamp = NULL;
+  Datum *time_zone_s = NULL;
+  Datum *time_zone_d = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, timestamp, time_zone_s, time_zone_d))) {
   } else if (OB_UNLIKELY(timestamp->is_null() || time_zone_s->is_null() || time_zone_d->is_null())) {
     res.set_null();

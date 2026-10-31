@@ -38,7 +38,7 @@ public:
 
   void set_is_sqlcode(bool is_sqlcode) { is_sqlcode_ = is_sqlcode; }
   int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const;
-  static int eval_pl_sql_code_errm(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_pl_sql_code_errm(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:

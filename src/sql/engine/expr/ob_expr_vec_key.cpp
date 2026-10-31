@@ -65,7 +65,7 @@ int ObExprVecKey::cg_expr(
 /*static*/ int ObExprVecKey::generate_vec_key(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSEDx(raw_ctx, eval_ctx);

@@ -62,7 +62,7 @@ int ObExprMysqlProcInfo::calc_result_typeN(ObExprResType &type,
 
 int ObExprMysqlProcInfo::set_return_result(const ObExpr &expr,
                                            ObEvalCtx &ctx,
-                                           ObDatum &expr_datum,
+                                           Datum &expr_datum,
                                            ObString &value_str)
 {
   int ret = OB_SUCCESS;
@@ -186,7 +186,7 @@ int ObExprMysqlProcInfo::get_routine_info(ObSQLSessionInfo *session,
 
 int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
                                              ObEvalCtx &ctx,
-                                             ObDatum &expr_datum,
+                                             Datum &expr_datum,
                                              uint64_t routine_id)
 {
   int ret = OB_SUCCESS;
@@ -256,7 +256,7 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
                                              ObEvalCtx &ctx,
-                                             ObDatum &expr_datum,
+                                             Datum &expr_datum,
                                              ObString &routine_body,
                                              ObString &exec_env_str,
                                              uint64_t routine_id)
@@ -335,7 +335,7 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &expr_datum,
+                                          Datum &expr_datum,
                                           uint64_t routine_id)
 {
   int ret = OB_SUCCESS;
@@ -381,7 +381,7 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &expr_datum,
+                                          Datum &expr_datum,
                                           int64_t param_type,
                                           int64_t param_length,
                                           int64_t param_precision,
@@ -451,7 +451,7 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &expr_datum,
+                                       Datum &expr_datum,
                                        uint64_t routine_id)
 {
   int ret = OB_SUCCESS;
@@ -504,7 +504,7 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &expr_datum,
+                                       Datum &expr_datum,
                                        ObString &routine_body,
                                        ObString &exec_env_str)
 {
@@ -555,7 +555,7 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
                                                     ObEvalCtx &ctx,
-                                                    ObDatum &expr_datum,
+                                                    Datum &expr_datum,
                                                     uint64_t routine_id,
                                                     uint64_t field_id)
 {
@@ -607,7 +607,7 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_sys_package_name_info(const ObExpr &expr,
                                                    ObEvalCtx &ctx,
-                                                   ObDatum &expr_datum,
+                                                   Datum &expr_datum,
                                                    uint64_t package_id)
 {
   int ret = OB_SUCCESS;
@@ -633,7 +633,7 @@ int ObExprMysqlProcInfo::get_sys_package_name_info(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
                                                     ObEvalCtx &ctx,
-                                                    ObDatum &expr_datum,
+                                                    Datum &expr_datum,
                                                     ObString &exec_env_str,
                                                     uint64_t field_id)
 {
@@ -683,11 +683,11 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
                                                         ObEvalCtx &ctx,
-                                                        ObDatum &expr_datum)
+                                                        Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum  *arg1 = NULL;
-  ObDatum  *arg2 = NULL;
+  Datum  *arg1 = NULL;
+  Datum  *arg2 = NULL;
   uint64_t routine_id;
   ObString info_name;
   
@@ -741,18 +741,18 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
                                                         ObEvalCtx &ctx,
-                                                        ObDatum &expr_datum)
+                                                        Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum  *arg0 = NULL;
-  ObDatum  *arg1 = NULL;
-  ObDatum  *arg2 = NULL;
-  ObDatum  *arg3 = NULL;
-  ObDatum  *arg4 = NULL;
-  ObDatum  *arg5 = NULL;
-  ObDatum  *arg6 = NULL;
-  ObDatum  *arg7 = NULL;
-  ObDatum  *arg8 = NULL;
+  Datum  *arg0 = NULL;
+  Datum  *arg1 = NULL;
+  Datum  *arg2 = NULL;
+  Datum  *arg3 = NULL;
+  Datum  *arg4 = NULL;
+  Datum  *arg5 = NULL;
+  Datum  *arg6 = NULL;
+  Datum  *arg7 = NULL;
+  Datum  *arg8 = NULL;
   ObString info_name;
   ObString routine_body;
   ObString exec_env;
@@ -854,7 +854,7 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
 
 int ObExprMysqlProcInfo::eval_mysql_proc_info(const ObExpr &expr,
                                                  ObEvalCtx &ctx,
-                                                 ObDatum &expr_datum)
+                                                 Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (2 == expr.arg_cnt_) {

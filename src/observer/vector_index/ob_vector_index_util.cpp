@@ -5019,7 +5019,7 @@ int ObVectorIndexUtil::calc_location_ids(sql::ObEvalCtx &eval_ctx,
                                         ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObDatum *res = nullptr;
+  common::Datum *res = nullptr;
   ObObjectID partition_id = OB_INVALID_ID;
   if (OB_ISNULL(table_id_expr) || table_id_expr->datum_meta_.type_ != ObUInt64Type) {
     ret = OB_INVALID_ARGUMENT;
@@ -5057,7 +5057,7 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
     ObExpr *calc_table_id_expr = expr.args_[1];
     ObExpr *calc_part_id_expr = expr.args_[2];
     ObExpr *calc_distance_algo_expr = expr.args_[3];
-    ObDatum *res = nullptr;
+    common::Datum *res = nullptr;
     if (OB_ISNULL(calc_vector_expr) || calc_vector_expr->datum_meta_.type_ != ObCollectionSQLType) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(calc_vector_expr), eval_ctx, allocator, arr, contain_null))) {

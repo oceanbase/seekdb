@@ -768,9 +768,9 @@ int ObDASDomainIdMergeIter::get_rowkey(
         } else if (T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_) {
           // nothing to do.
         } else {
-          ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+          common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
           DatumValue value;
-          if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, obj_ptr[j].meta_, value))) {
+          if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, obj_ptr[j].meta_, value, allocator))) {
           } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(value, obj_ptr, rowkey_cnt, j))) {
           } else {
             ++j;
@@ -847,7 +847,7 @@ int ObDASDomainIdMergeIter::get_domain_id(
       if (OB_ISNULL(expr = ctdef->result_output_.at(rowkey_cnt + part_key_num + i))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+        common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
         if (datum.get_string().length() == 0) {
           if (OB_FAIL(domain_id.push_back(ObString()))) {
           }
@@ -1254,7 +1254,7 @@ int ObDASDomainIdMergeIter::fill_null_domain_id_in_data_table(
         } else if (OB_ISNULL(domain_id_expr = data_table_ctdef_->result_output_.at(domain_id_idx))) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ObDatum &datum = domain_id_expr->locate_expr_datum(*data_table_rtdef_->eval_ctx_);
+          common::Datum &datum = domain_id_expr->locate_expr_datum(*data_table_rtdef_->eval_ctx_);
           datum.set_null();
           domain_id_expr->set_evaluated_projected(*data_table_rtdef_->eval_ctx_);
         }

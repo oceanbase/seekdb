@@ -70,11 +70,11 @@ int ObExprInnerInfoColsColumnDefPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr 
   return ret;
 }
 
-int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *table_id = nullptr;
-  ObDatum *column_id = nullptr;
+  Datum *table_id = nullptr;
+  Datum *column_id = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, table_id, column_id))) {
   } else if (table_id->is_null() || column_id->is_null()) {
     expr_datum.set_null();
@@ -178,12 +178,12 @@ int ObExprInnerInfoColsCharLenPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &,
   return ret;
 }
 
-int ObExprInnerInfoColsCharLenPrinter::eval_column_char_len(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsCharLenPrinter::eval_column_char_len(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *data_type = nullptr;
-  ObDatum *collation_type = nullptr;
-  ObDatum *data_length = nullptr;
+  Datum *data_type = nullptr;
+  Datum *collation_type = nullptr;
+  Datum *data_length = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, data_type, collation_type, data_length))) {
   } else if (data_type->is_null() || collation_type->is_null() || data_length->is_null()) {
     expr_datum.set_null();
@@ -249,11 +249,11 @@ int ObExprInnerInfoColsCharNamePrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &
   return ret;
 }
 
-int ObExprInnerInfoColsCharNamePrinter::eval_column_char_name(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsCharNamePrinter::eval_column_char_name(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *data_type = nullptr;
-  ObDatum *collation_type = nullptr;
+  Datum *data_type = nullptr;
+  Datum *collation_type = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, data_type))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, collation_type))) {
   } else if (data_type->is_null() || collation_type->is_null()) {
@@ -320,11 +320,11 @@ int ObExprInnerInfoColsCollNamePrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &
   return ret;
 }
 
-int ObExprInnerInfoColsCollNamePrinter::eval_column_collation_name(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsCollNamePrinter::eval_column_collation_name(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *data_type = nullptr;
-  ObDatum *collation_type = nullptr;
+  Datum *data_type = nullptr;
+  Datum *collation_type = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, data_type))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, collation_type))) {
   } else if (data_type->is_null() || collation_type->is_null()) {
@@ -391,11 +391,11 @@ int ObExprInnerInfoColsPrivPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &, Ob
   return ret;
 }
 
-int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *database_name = nullptr;
-  ObDatum *table_name = nullptr;
+  Datum *database_name = nullptr;
+  Datum *table_name = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, database_name))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, table_name))) {
   } else if (database_name->is_null() || table_name->is_null()) {
@@ -505,13 +505,13 @@ int ObExprInnerInfoColsExtraPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &, O
   return ret;
 }
 
-int ObExprInnerInfoColsExtraPrinter::eval_column_extra(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsExtraPrinter::eval_column_extra(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *auto_inc = nullptr;
-  ObDatum *on_update_current_timestamp = nullptr;
-  ObDatum *data_scale = nullptr;
-  ObDatum *column_flag = nullptr;
+  Datum *auto_inc = nullptr;
+  Datum *on_update_current_timestamp = nullptr;
+  Datum *data_scale = nullptr;
+  Datum *column_flag = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, auto_inc, on_update_current_timestamp, data_scale, column_flag))) {
   } else if (auto_inc->is_null() || on_update_current_timestamp->is_null()
              || data_scale->is_null() || column_flag->is_null()) {
@@ -619,13 +619,13 @@ int ObExprInnerInfoColsDataTypePrinter::cg_expr(ObExprCGCtx &, const ObRawExpr &
   return ret;
 }
 
-int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *data_type = nullptr;
-  ObDatum *collation_type = nullptr;
-  ObDatum *extended_type_info = nullptr;
-  ObDatum *srs_id = nullptr;
+  Datum *data_type = nullptr;
+  Datum *collation_type = nullptr;
+  Datum *extended_type_info = nullptr;
+  Datum *srs_id = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, data_type, collation_type, extended_type_info, srs_id))) {
   } else if (data_type->is_null() || collation_type->is_null() || srs_id->is_null()) {
     expr_datum.set_null();
@@ -706,19 +706,19 @@ int ObExprInnerInfoColsColumnTypePrinter::cg_expr(ObExprCGCtx &, const ObRawExpr
   return ret;
 }
 
-int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *data_type = nullptr;
-  ObDatum *sub_data_type = nullptr;
-  ObDatum *srs_id = nullptr;
-  ObDatum *collation_type = nullptr;
-  ObDatum *data_scale = nullptr;
-  ObDatum *data_length = nullptr;
-  ObDatum *data_precision = nullptr;
-  ObDatum *zero_fill = nullptr;
-  ObDatum *extended_type_info = nullptr;
-  ObDatum *is_string_lob = nullptr;
+  Datum *data_type = nullptr;
+  Datum *sub_data_type = nullptr;
+  Datum *srs_id = nullptr;
+  Datum *collation_type = nullptr;
+  Datum *data_scale = nullptr;
+  Datum *data_length = nullptr;
+  Datum *data_precision = nullptr;
+  Datum *zero_fill = nullptr;
+  Datum *extended_type_info = nullptr;
+  Datum *is_string_lob = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, data_type, sub_data_type,
                                     srs_id, collation_type, data_scale,
                                     data_length, data_precision, zero_fill,
@@ -843,11 +843,11 @@ int ObExprInnerInfoColsColumnKeyPrinter::cg_expr(ObExprCGCtx &, const ObRawExpr 
   return ret;
 }
 
-int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *table_id = nullptr;
-  ObDatum *column_id = nullptr;
+  Datum *table_id = nullptr;
+  Datum *column_id = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, table_id, column_id))) {
   } else if (table_id->is_null() || column_id->is_null()) {
     expr_datum.set_null();

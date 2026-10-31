@@ -60,7 +60,7 @@ int ObExprExists::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) con
 };
 
 int ObExprExists::exists_eval(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   bool exists = false;

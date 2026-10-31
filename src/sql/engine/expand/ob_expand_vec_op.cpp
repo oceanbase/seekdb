@@ -154,7 +154,7 @@ int ObExpandVecOp::do_dup_partial()
     // do nothing
   } else {
     ObExpr *null_expr = MY_SPEC.expand_exprs_.at(expr_iter_idx_);
-    ObDatumVector null_vec = null_expr->locate_expr_datumvector(eval_ctx_);
+    DatumVector null_vec = null_expr->locate_expr_datumvector(eval_ctx_);
     for (int i = 0; i < child_input_size_; i++) {
       if (child_input_skip_->at(i)) {
       } else {
@@ -222,7 +222,7 @@ int ObExpandVecOp::setup_grouping_id()
   int64_t seq = MY_SPEC.expand_exprs_.count() - expr_iter_idx_;
   if (OB_UNLIKELY(child_input_size_ <= 0)) {
   } else {
-    ObDatum *datums = grouping_id->locate_datums_for_update(eval_ctx_, child_input_size_);
+    Datum *datums = grouping_id->locate_datums_for_update(eval_ctx_, child_input_size_);
     for (int i = 0; i < child_input_size_; i++) {
       if (child_input_skip_->at(i)) {
       } else {
@@ -245,8 +245,8 @@ int ObExpandVecOp::duplicate_rollup_exprs()
     ObExpr *dup_expr = MY_SPEC.dup_expr_pairs_.at(i).dup_expr_;
     if (OB_FAIL(org_expr->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
     } else {
-      ObDatum *to_datums = dup_expr->locate_datums_for_update(eval_ctx_, brs_.size_);
-      ObDatumVector src_datums = org_expr->locate_expr_datumvector(eval_ctx_);
+      Datum *to_datums = dup_expr->locate_datums_for_update(eval_ctx_, brs_.size_);
+      DatumVector src_datums = org_expr->locate_expr_datumvector(eval_ctx_);
       for (int j = 0; j < brs_.size_; j++) {
         if (brs_.skip_->at(j)) {
         } else {

@@ -122,10 +122,10 @@ int ObExprSpace::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) cons
   return ret;
 }
 
-int ObExprSpace::eval_space(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSpace::eval_space(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *count = NULL;
+  Datum *count = NULL;
   int64_t max_size = 0;
   bool is_null = false;
   ObString output;

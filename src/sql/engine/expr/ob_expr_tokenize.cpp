@@ -50,7 +50,7 @@ ObExprTokenize::ObExprTokenize(common::ObIAllocator &alloc)
 
 ObExprTokenize::~ObExprTokenize() {}
 
-int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprTokenize::eval_tokenize(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
 
@@ -200,7 +200,7 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *parser_params_datum;
+  Datum *parser_params_datum;
   ObString raw_parser_name = ObString::make_string(OB_DEFAULT_FULLTEXT_PARSER_NAME);
 
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -297,7 +297,7 @@ int ObExprTokenize::parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeP
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *fulltext_datum;
+  Datum *fulltext_datum;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, fulltext_datum))) {
   } else {
@@ -316,7 +316,7 @@ int ObExprTokenize::parse_fulltext(const ObExpr &expr, ObEvalCtx &ctx, TokenizeP
 int ObExprTokenize::parse_parser_name(const ObExpr &expr, ObEvalCtx &ctx, TokenizeParam &param)
 {
   int ret = OB_SUCCESS;
-  ObDatum *parser_datum = nullptr;
+  Datum *parser_datum = nullptr;
   ObString raw_parser_name;
 
   if (expr.arg_cnt_ < 2) {

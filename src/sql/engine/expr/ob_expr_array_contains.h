@@ -37,11 +37,11 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_array_contains_int64_t(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  static int eval_array_contains_float(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  static int eval_array_contains_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  static int eval_array_contains_ObString(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
-  static int eval_array_contains_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_contains_int64_t(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int eval_array_contains_float(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int eval_array_contains_double(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int eval_array_contains_ObString(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
+  static int eval_array_contains_array(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_contains_array_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   static int eval_array_contains_batch_int64_t(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);
   static int eval_array_contains_batch_float(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size);

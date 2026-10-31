@@ -504,7 +504,7 @@ int ObDASHNSWScanIter::save_distance_expr_result(ObVectorResultRow *row)
 {
   int ret = OB_SUCCESS;
   if (need_save_distance_result()) {
-    ObDatum &distance = distance_calc_->locate_datum_for_write(*sort_rtdef_->eval_ctx_);
+    common::Datum &distance = distance_calc_->locate_datum_for_write(*sort_rtdef_->eval_ctx_);
     ObEvalInfo &eval_info = distance_calc_->get_eval_info(*sort_rtdef_->eval_ctx_);
 
     double dis_value = 0;
@@ -569,8 +569,8 @@ int ObDASHNSWScanIter::inner_get_next_row()
           if (OB_ISNULL(expr)) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            ObDatum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
-            datum = row->get_cell(row_cell_idx++).datum_;
+            common::Datum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
+            ret = expr->get_datum_copy_plan().import_legacy(row->get_cell(row_cell_idx++).datum_, datum);
           }
         }
       }
@@ -611,7 +611,7 @@ int ObDASHNSWScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
       int64_t a_batch_obj_cnt = 2 + extra_column_count_ + rel_count;
       for (int64_t idx_exp = 0; OB_SUCC(ret) && idx_exp < res_exprs.count(); ++idx_exp) {
         ObExpr *expr = res_exprs.at(idx_exp);
-        ObDatum *datum = nullptr;
+        common::Datum *datum = nullptr;
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_ISNULL(datum = expr->locate_datums_for_update(*vec_aux_rtdef_->eval_ctx_, count))) {
@@ -621,7 +621,7 @@ int ObDASHNSWScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           // row.cell(a_batch_obj_cnt): dis, row.cell(a_batch_obj_cnt + 1): vid
           for (int64_t num = 0; OB_SUCC(ret) && num < count; ++num) {
             guard.set_batch_idx(num);
-            datum[num] = row->get_cell(num * a_batch_obj_cnt + 1 + idx_exp).datum_;
+            ret = expr->get_datum_copy_plan().import_legacy(row->get_cell(num * a_batch_obj_cnt + 1 + idx_exp).datum_, datum[num]);
           }
           if (OB_SUCC(ret)) {
             expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_);
@@ -665,7 +665,7 @@ int ObDASHNSWScanIter::save_distance_expr_result(ObVectorResultRow *row, int64_t
       }
 
       if (OB_SUCC(ret)) {
-        ObDatum& wr_datum = distance_calc_->locate_datum_for_write(*sort_rtdef_->eval_ctx_);
+        common::Datum& wr_datum = distance_calc_->locate_datum_for_write(*sort_rtdef_->eval_ctx_);
         wr_datum.set_double(dis_value);
 
         ObEvalInfo &eval_info = distance_calc_->get_eval_info(*sort_rtdef_->eval_ctx_);
@@ -1553,7 +1553,7 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_with_rowkey(
 
           if (OB_SUCC(ret)) {
             ObExpr *vid_expr = vec_aux_ctdef_->inv_scan_vec_id_col_;
-            ObDatum *vid_datum = vid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+            common::Datum *vid_datum = vid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
             if (go_brute_force_ && add_brute && (brute_cnt + scan_row_cnt < MAX_HNSW_BRUTE_FORCE_SIZE)) {
               for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
                 int64_t vid = vid_datum[i].get_int();
@@ -1624,16 +1624,16 @@ int ObDASHNSWScanIter::get_from_vid_rowkey(ObIAllocator &allocator, ObRowkey *&r
     for (int64_t i = 0; OB_SUCC(ret) && i < output_cnt; ++i) {
       DatumValue tmp_obj;
       ObExpr *expr = vid_rowkey_ctdef_->result_output_.at(i);
-      ObDatum &datum = expr->locate_expr_datum(*vid_rowkey_rtdef_->eval_ctx_);
+      common::Datum &datum = expr->locate_expr_datum(*vid_rowkey_rtdef_->eval_ctx_);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_) {
         // nothing to do.
       } else {
-        ObDatum &datum = expr->locate_expr_datum(*vid_rowkey_rtdef_->eval_ctx_);
+        common::Datum &datum = expr->locate_expr_datum(*vid_rowkey_rtdef_->eval_ctx_);
         if (i >= main_rowkey_cnt) {
           ret = ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+        } else if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator))) {
         } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], allocator))) {
         } else {
           ++add_rowkey_cnt;
@@ -1678,7 +1678,7 @@ int ObDASHNSWScanIter::get_from_embedded_table(ObIAllocator &allocator, ObString
             ret = OB_ERR_UNEXPECTED;
           } else {
             found_vector_column = true;
-            ObDatum &datum = expr->locate_expr_datum(*embedded_table_rtdef->eval_ctx_);
+            common::Datum &datum = expr->locate_expr_datum(*embedded_table_rtdef->eval_ctx_);
             vector = datum.get_string();
             if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                                                                   *exec_ctx_,
@@ -1903,7 +1903,7 @@ int ObDASHNSWScanIter::get_vid_from_idx_filter(
 
       if (OB_SUCC(ret)) {
         ObExpr *vid_expr = vec_aux_ctdef_->inv_scan_vec_id_col_;
-        ObDatum *vid_datum = vid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
+        common::Datum *vid_datum = vid_expr->locate_batch_datums(*vec_aux_rtdef_->eval_ctx_);
 
         if (go_brute_force_ && brute_cnt + scan_row_cnt < MAX_HNSW_BRUTE_FORCE_SIZE) {
           for (int64_t i = 0; OB_SUCC(ret) && i < scan_row_cnt; ++i) {
@@ -1964,7 +1964,7 @@ int ObDASHNSWScanIter::get_pk_increment(int64_t &vid)
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObExpr *expr = ctdef->rowkey_exprs_.at(0);
-    ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+    common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
     vid = datum.get_uint64();
   }
 
@@ -2184,13 +2184,13 @@ int ObDASHNSWScanIter::check_is_simple_cmp_filter()
           simple_cmp_info_.inited_ = false;
           bool is_rowkey_filter = rowkey_expr == arg_col;
           simple_cmp_info_.filter_expr_ = filter_expr;
-          ObDatum* filter_datum_ = nullptr;
+          common::Datum* filter_datum_ = nullptr;
           if (!is_rowkey_filter) {
             // do nothing
           } else if (OB_UNLIKELY(OB_ISNULL(data_filter_rtdef_->eval_ctx_))) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_UNLIKELY(OB_FAIL(arg_num->eval(*(data_filter_rtdef_->eval_ctx_), filter_datum_)))) {
-          } else if (OB_FAIL(project_datum_value_view(*filter_datum_, arg_num->obj_meta_, arg_num->obj_datum_map_, simple_cmp_info_.filter_arg_.meta_, simple_cmp_info_.filter_arg_, true))) {
+          } else if (OB_FAIL(project_native_datum_value_view(*filter_datum_, arg_num->get_sql_type(), arg_num->obj_meta_, arg_num->obj_datum_map_, simple_cmp_info_.filter_arg_.meta_, simple_cmp_info_.filter_arg_, vec_op_alloc_, true))) {
           } else if (OB_FAIL(clone_typed_value(simple_cmp_info_.filter_arg_, simple_cmp_info_.filter_arg_, vec_op_alloc_))) {
           } else {
             simple_cmp_info_.inited_ = OB_NOT_NULL(arg_col);
@@ -2461,10 +2461,8 @@ int ObDASHNSWScanIter::get_one_relevance(ObIAllocator &allocator, double* &rel_a
     for (int64_t i = extra_column_count_ + 1, idx = 0; OB_SUCC(ret) && i < out_exprs.count(); ++i, ++idx) {
       DatumValue tmp_obj;
       ObExpr *expr = out_exprs.at(i);
-      ObDatum &datum = expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
-      if (OB_ISNULL(datum.ptr_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+      common::Datum &datum = expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_);
+      if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator))) {
       } else if (tmp_obj.is_double()) {
         rel_ptr[idx] = tmp_obj.get_double();
       } else {
@@ -2984,7 +2982,7 @@ int ObDASHNSWScanIter::set_vector_query_condition(ObVectorQueryConditions &query
       query_cond.n_candidate_ = n_candidate;
     }
 
-    ObDatum *vec_datum = NULL;
+    common::Datum *vec_datum = NULL;
     query_cond.extra_column_count_ = extra_column_count_;
     if (OB_FAIL(ret)) {
     } else if (!OB_ISNULL(search_vec_)) {
@@ -3180,7 +3178,7 @@ int ObDASHNSWScanIter::get_vid_from_rowkey_vid_table(int64_t &vid)
     } else {
       ObDASScanRtDef *rowkey_vid_rtdef = vec_aux_rtdef_->get_vec_aux_tbl_rtdef(vec_aux_ctdef_->get_rowkey_vid_tbl_idx());
       ObExpr *vid_expr = vec_aux_ctdef_->inv_scan_vec_id_col_;
-      ObDatum &vid_datum = vid_expr->locate_expr_datum(*rowkey_vid_rtdef->eval_ctx_);
+      common::Datum &vid_datum = vid_expr->locate_expr_datum(*rowkey_vid_rtdef->eval_ctx_);
       vid = vid_datum.get_int();
     }
   }

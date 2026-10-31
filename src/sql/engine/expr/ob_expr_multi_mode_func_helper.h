@@ -39,7 +39,7 @@ public:
   int64_t used() const { return arena_.used(); }
   int64_t total() const { return arena_.total(); }
   void reset() { arena_.reset(); }
-  int eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::ObDatum *&datum);
+  int eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::Datum *&datum);
 private:
   ObIAllocator &arena_;
 };

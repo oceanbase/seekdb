@@ -171,7 +171,7 @@ int ObTextRetrievalTokenIter::fill_token_doc_cnt()
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx_);
     guard.set_batch_idx(0);
-    ObDatum &doc_cnt_datum = inv_idx_agg_expr_->locate_datum_for_write(*eval_ctx_);
+    common::Datum &doc_cnt_datum = inv_idx_agg_expr_->locate_datum_for_write(*eval_ctx_);
     doc_cnt_datum.set_int(token_doc_cnt_);
   }
   return ret;
@@ -185,7 +185,7 @@ int ObTextRetrievalTokenIter::fill_token_weight()
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx_);
     guard.set_batch_idx(0);
-    ObDatum &token_weight_datum = token_weight_expr_->locate_datum_for_write(*eval_ctx_);
+    common::Datum &token_weight_datum = token_weight_expr_->locate_datum_for_write(*eval_ctx_);
     token_weight_datum.set_double(max_token_relevance_);
   }
   return ret;
@@ -194,7 +194,7 @@ int ObTextRetrievalTokenIter::fill_token_weight()
 int ObTextRetrievalTokenIter::eval_relevance_expr()
 {
   int ret = OB_SUCCESS;
-  ObDatum *relevance_datum = nullptr;
+  common::Datum *relevance_datum = nullptr;
   if (OB_FAIL(relevance_expr_->eval(*eval_ctx_, relevance_datum))) {
   }
   return ret;
@@ -509,12 +509,12 @@ int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
   } else if (OB_FAIL(relevance_expr_->eval_batch(*eval_ctx_, *token_iter_->get_skip(), count_))) {
   } else {
     cur_idx_ = 0;
-    const ObDatumVector &relevance_datum = relevance_expr_->locate_expr_datumvector(*eval_ctx_);
-    const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
+    const sql::DatumVector &relevance_datum = relevance_expr_->locate_expr_datumvector(*eval_ctx_);
+    const sql::DatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
         relevance_[i] = relevance_datum.at(i)->get_double();
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_FAIL(doc_id_[i].from_native(*doc_id_datum.at(i), inv_scan_domain_id_col_->get_sql_type()))) {
         }
       }
     }
@@ -529,10 +529,10 @@ int ObTextRetrievalDaaTTokenIter::save_docids()
     ret = OB_INVALID_ARGUMENT;
   } else {
     cur_idx_ = 0;
-    const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
+    const sql::DatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!token_iter_->get_skip()->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_FAIL(doc_id_[i].from_native(*doc_id_datum.at(i), inv_scan_domain_id_col_->get_sql_type()))) {
         };
       }
     }

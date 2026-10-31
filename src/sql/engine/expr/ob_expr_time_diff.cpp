@@ -79,12 +79,12 @@ int ObExprTimeDiff::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   bool calc_param_failure = false;
-  ObDatum *param_datum1 = NULL;
-  ObDatum *param_datum2 = NULL;
+  Datum *param_datum1 = NULL;
+  Datum *param_datum2 = NULL;
   const ObSQLSessionInfo *session = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
@@ -103,7 +103,7 @@ int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     ObTime ot2(DT_TYPE_TIME);
     if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
           *param_datum1, expr.args_[0]->datum_meta_.type_, expr.args_[0]->datum_meta_.scale_,
-          tz_info, ot1, expr.args_[0]->obj_meta_.has_lob_header()))) {
+          tz_info, ot1, expr.args_[0]->obj_meta_.has_lob_header(), &expr.args_[0]->get_sql_type()))) {
       ret = OB_INVALID_DATE_VALUE;
       expr_datum.set_null();
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
@@ -112,7 +112,7 @@ int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
       expr_datum.set_null();
     } else if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
                  *param_datum2, expr.args_[1]->datum_meta_.type_, expr.args_[1]->datum_meta_.scale_,
-                 tz_info, ot2, expr.args_[1]->obj_meta_.has_lob_header()))) {
+                 tz_info, ot2, expr.args_[1]->obj_meta_.has_lob_header(), &expr.args_[1]->get_sql_type()))) {
       ret = OB_INVALID_DATE_VALUE;
       expr_datum.set_null();
     } else if (OB_FAIL(

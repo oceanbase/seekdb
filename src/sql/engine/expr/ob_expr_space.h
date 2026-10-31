@@ -38,7 +38,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_space(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_space(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   int calc_result_type(ObExprTypeCtx &type_ctx, const common::DatumValue &obj, SqlValueType &res_type) const;

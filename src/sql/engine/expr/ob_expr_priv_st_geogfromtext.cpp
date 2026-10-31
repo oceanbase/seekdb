@@ -60,21 +60,21 @@ int ObExprPrivSTGeogFromText::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_priv_st_geogfromtext_common(expr, ctx, res, N_PRIV_ST_GEOGFROMTEXT);
 }
 
 int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &expr,
                                                                ObEvalCtx &ctx,
-                                                               ObDatum &res,
+                                                               Datum &res,
                                                                const char *func_name)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
 
   // get wkt
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, datum))) {

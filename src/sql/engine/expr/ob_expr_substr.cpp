@@ -327,14 +327,14 @@ static int eval_substr_text(const ObCollationType &cs_type,
   return ret;
 }
 
-int ObExprSubstr::eval_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprSubstr::eval_substr(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum *str_datum = &expr.locate_param_datum(ctx, 0);
-    ObDatum *pos_datum = &expr.locate_param_datum(ctx, 1);
-    ObDatum *len_datum = NULL;
+    Datum *str_datum = &expr.locate_param_datum(ctx, 0);
+    Datum *pos_datum = &expr.locate_param_datum(ctx, 1);
+    Datum *len_datum = NULL;
     if (expr.arg_cnt_ > 2) {
       len_datum = &expr.locate_param_datum(ctx, 2);
     }
@@ -393,7 +393,7 @@ int ObExprSubstr::eval_substr_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                     const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
 
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
@@ -402,11 +402,11 @@ int ObExprSubstr::eval_substr_batch(const ObExpr &expr, ObEvalCtx &ctx,
     const bool has_len_param = expr.arg_cnt_ > 2 ? true : false;
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
     } else {
-      ObDatum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
+      Datum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
       ObString output;
       ObString input;
-      ObDatum *pos_datum = NULL;
-      ObDatum *len_datum = NULL;
+      Datum *pos_datum = NULL;
+      Datum *len_datum = NULL;
       int64_t pos = 0;
       int64_t len = INT_MAX64;
       bool is_text_params_all_null = true; // used for mark if all the first params are all null

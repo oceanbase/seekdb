@@ -72,7 +72,7 @@ int ObExprArrayCompact::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -80,7 +80,7 @@ int ObExprArrayCompact::eval_array_compact(const ObExpr &expr, ObEvalCtx &ctx, O
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
@@ -105,20 +105,20 @@ int ObExprArrayCompact::eval_array_compact_batch(const ObExpr &expr, ObEvalCtx &
                                                  const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
-  ObDatum *arr_datum = NULL;
+  Datum *arr_datum = NULL;
 
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

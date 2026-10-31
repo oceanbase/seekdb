@@ -64,14 +64,14 @@ int ObExprSTCoordinate::calc_result_typeN(ObExprResType& type,
 
 int ObExprSTCoordinate::eval_common(const ObExpr &expr,
                                     ObEvalCtx &ctx,
-                                    ObDatum &res,
+                                    Datum &res,
                                     bool is_first_d,
                                     bool only_geog,
                                     const char *func_name)
 {
   int ret = OB_SUCCESS;
   int num_args = expr.arg_cnt_;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
@@ -203,7 +203,7 @@ int ObExprSTCoordinate::check_latitude(double new_val_radian,
   return ret;
 }
 
-int ObExprSTX::eval_st_x(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTX::eval_st_x(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_common(expr, ctx, res, true, false, N_ST_X); 
 }
@@ -218,7 +218,7 @@ int ObExprSTX::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return OB_SUCCESS;
 }
 
-int ObExprSTY::eval_st_y(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTY::eval_st_y(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_common(expr, ctx, res, false, false, N_ST_Y); 
 }
@@ -233,7 +233,7 @@ int ObExprSTY::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return OB_SUCCESS;
 }
 
-int ObExprSTLatitude::eval_st_latitude(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTLatitude::eval_st_latitude(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_common(expr, ctx, res, false, true, N_ST_LATITUDE); 
 }
@@ -248,7 +248,7 @@ int ObExprSTLatitude::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return OB_SUCCESS;
 }
 
-int ObExprSTLongitude::eval_st_longitude(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTLongitude::eval_st_longitude(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_common(expr, ctx, res, true, true, N_ST_LONGITUDE); 
 }

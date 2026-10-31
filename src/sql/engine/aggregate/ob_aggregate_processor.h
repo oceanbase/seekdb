@@ -313,6 +313,7 @@ public:
     }
 
     ObRTDatumArith *linear_inter_;
+    alignas(8) char legacy_result_scratch_[64];
   };
 
   // Context structure for one aggregation function of one group, only some functions need this:
@@ -370,7 +371,7 @@ public:
   private:
     const common::ObIArray<ObExpr *> *exprs_;
     ObEvalCtx *eval_ctx_;
-    ObDatum *datums_;
+    Datum *datums_;
     bool inited_;
   };
 

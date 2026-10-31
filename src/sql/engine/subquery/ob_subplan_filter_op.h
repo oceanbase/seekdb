@@ -30,13 +30,14 @@ namespace sql
 class DatumRow
 {
 public:
-  DatumRow() : elems_(NULL), cnt_(0) {}
+  DatumRow() : elems_(NULL), cnt_(0), types_(nullptr) {}
   ~DatumRow() {}
   bool operator==(const DatumRow &other) const;
   int hash(uint64_t &hash_val, uint64_t seed=0) const;
   TO_STRING_KV(KP(elems_));
-  ObDatum *elems_;
+  common::Datum *elems_;
   int64_t cnt_;
+  const common::SqlType **types_;
 };
 
 // iterator subquery rows
@@ -89,9 +90,20 @@ public:
   void set_iter_id(const int64_t id) { id_ = id; }
   int64_t get_iter_id() const { return id_; }
   //use curr probe_row_ to probe hashmap
-  int get_refactored(common::ObDatum &out);
+  int get_refactored(common::Datum &out, const ObExpr &result_expr);
   //set row into hashmap
-  int set_refactored(const DatumRow &row, const ObDatum &result, const int64_t deep_copy_size);
+  struct PendingCacheEntry
+  {
+    PendingCacheEntry() : key_(), value_(), result_type_(nullptr), ready_(false) {}
+    DatumRow key_;
+    common::Datum value_;
+    const common::SqlType *result_type_;
+    bool ready_;
+  };
+  int prepare_cache_result(const common::Datum &result, const ObExpr &result_expr,
+                           PendingCacheEntry &pending);
+  int publish_cache_result(PendingCacheEntry &pending);
+  int cache_result(const common::Datum &result, const ObExpr &result_expr);
   void set_parent(const ObSubPlanFilterOp *filter) { parent_ = filter; }
   int reset_hash_map();
   int64_t cur_idx() const { return batch_row_pos_ - 1; }
@@ -132,7 +144,12 @@ private:
   ObChunkDatumStore::Iterator store_it_;
 
   //cache optimizer for spf, the same exec_param into queryref_expr will return directly
-  common::hash::ObHashMap<DatumRow, common::ObDatum, common::hash::NoPthreadDefendMode> hashmap_;
+  struct CachedResult
+  {
+    common::Datum value_;
+    const common::SqlType *type_ = nullptr;
+  };
+  common::hash::ObHashMap<DatumRow, CachedResult, common::hash::NoPthreadDefendMode> hashmap_;
   lib::MemoryContext mem_entity_;
   int64_t id_; // curr op_id in spf
   const ObSubPlanFilterOp *parent_; //needs to get exec_param_idxs_ from op

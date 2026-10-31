@@ -56,7 +56,7 @@ int ObExprSpatialCellid::calc_result_type1(ObExprResType &type,
 
 int ObExprSpatialCellid::eval_spatial_cellid(const ObExpr &expr,
                                              ObEvalCtx &ctx,
-                                             ObDatum &res)
+                                             Datum &res)
 {
   UNUSED(expr);
   UNUSED(ctx);

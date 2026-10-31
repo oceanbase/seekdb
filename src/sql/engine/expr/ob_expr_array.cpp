@@ -78,7 +78,7 @@ int ObExprArray::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArray::eval_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArray::eval_array(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -100,12 +100,12 @@ int ObExprArray::eval_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       int num_args = expr.arg_cnt_;
       ObCollectionArrayType *arr_type = static_cast<ObCollectionArrayType *>(coll_info->collection_meta_);
       for (int i = 0; i < num_args && OB_SUCC(ret); i++) {
-        ObDatum *datum = NULL;
+        Datum *datum = NULL;
         if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
         } else {
           if (arr_type->element_type_->type_id_ == ObNestedType::OB_BASIC_TYPE) {
             ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
-            if (OB_FAIL(ObArrayUtil::append(*arr_obj, elem_type->basic_meta_.get_obj_type(), datum))) {
+            if (OB_FAIL(ObArrayExprUtils::append_native_element(*arr_obj, elem_type->basic_meta_.get_obj_type(), *datum, *expr.args_[i]))) {
             }
           } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_ARRAY_TYPE ||
                      arr_type->element_type_->type_id_ == ObNestedType::OB_VECTOR_TYPE) {

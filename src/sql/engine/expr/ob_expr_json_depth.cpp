@@ -50,11 +50,11 @@ int ObExprJsonDepth::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   // get json doc
   INIT_SUCC(ret);
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   ObExpr *json_arg = expr.args_[0];
   SqlValueType val_type = json_arg->datum_meta_.type_;
   ObIJsonBase *json_doc = NULL;

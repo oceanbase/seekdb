@@ -147,7 +147,7 @@ int ObExprArraySetOperation::calc_result_typeN(ObExprResType& type,
 
 int ObExprArraySetOperation::eval_array_set_operation(const ObExpr &expr, 
                                 ObEvalCtx &ctx, 
-                                ObDatum &res, 
+                                Datum &res,
                                 SetOperation operation)
 {
   int ret = OB_SUCCESS;
@@ -162,7 +162,7 @@ int ObExprArraySetOperation::eval_array_set_operation(const ObExpr &expr,
     is_null_res = true;
   } else {
     for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret) && !is_null_res; ++i) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       src_arr[i] = NULL;
       if (subschema_id != expr.args_[i]->obj_meta_.get_subschema_id()) {
         ret = OB_ERR_UNEXPECTED;
@@ -212,14 +212,14 @@ int ObExprArraySetOperation::eval_array_set_operation_batch(const ObExpr &expr,
                                 SetOperation operation)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   uint16_t subschema_id = expr.obj_meta_.get_subschema_id();
   ObIArrayType *res_arr = NULL;
   ObIArrayType *src_arr[expr.arg_cnt_];
-  ObDatumVector arr_datums[expr.arg_cnt_];
+  DatumVector arr_datums[expr.arg_cnt_];
   
   if (ob_is_null(expr.obj_meta_.get_type())) {
     // do nothing
@@ -296,7 +296,7 @@ ObExprArrayUnion::~ObExprArrayUnion()
 {
 }
 
-int ObExprArrayUnion::eval_array_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayUnion::eval_array_union(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_array_set_operation(expr, ctx, res, UNIONINZE);
 }

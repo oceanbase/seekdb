@@ -97,7 +97,7 @@ int ObExprArrayConcat::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArrayConcat::eval_array_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayConcat::eval_array_concat(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -114,7 +114,7 @@ int ObExprArrayConcat::eval_array_concat(const ObExpr &expr, ObEvalCtx &ctx, ObD
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, res_arr, false))) {
   } else {
     for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); i++) {
-      ObDatum *datum = NULL;
+      Datum *datum = NULL;
       if (subschema_id != expr.args_[i]->obj_meta_.get_subschema_id()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("subschema id not match", K(ret), K(subschema_id), K(expr.args_[i]->obj_meta_.get_subschema_id()));
@@ -145,14 +145,14 @@ int ObExprArrayConcat::eval_array_concat_batch(const ObExpr &expr, ObEvalCtx &ct
                                                const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
   const uint16_t subschema_id = expr.obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
   ObIArrayType *res_arr = NULL;
-  ObDatumVector arr_datums[expr.arg_cnt_];
+  DatumVector arr_datums[expr.arg_cnt_];
 
   if (ob_is_null(expr.obj_meta_.get_type())) {
     // do nothing

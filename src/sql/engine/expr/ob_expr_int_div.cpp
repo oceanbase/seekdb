@@ -72,11 +72,11 @@ static OB_INLINE bool is_int_int_out_of_range(int64_t val1, int64_t val2, int64_
   return (val1 >> 63) && (val2 >> 63) && (res >> 63);
 }
 
-int ObExprIntDiv::div_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprIntDiv::div_int_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -109,11 +109,11 @@ int ObExprIntDiv::div_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
 }
 
 
-int ObExprIntDiv::div_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprIntDiv::div_int_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -140,11 +140,11 @@ int ObExprIntDiv::div_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datu
   return ret;
 }
 
-int ObExprIntDiv::div_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprIntDiv::div_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -165,11 +165,11 @@ int ObExprIntDiv::div_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &dat
   return ret;
 }
 
-int ObExprIntDiv::div_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprIntDiv::div_uint_int(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(ObArithExprOperator::get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {
@@ -196,11 +196,11 @@ int ObExprIntDiv::div_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datu
   return ret;
 }
 
-int ObExprIntDiv::div_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
+int ObExprIntDiv::div_number(const ObExpr &expr, ObEvalCtx &ctx, Datum &datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *left = NULL;
-  ObDatum *right = NULL;
+  Datum *left = NULL;
+  Datum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
   } else if (is_finish) {

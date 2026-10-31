@@ -66,7 +66,7 @@ protected:
   ObDocIdExt cache_first_id_;
   bool are_chunk_stores_inited_;
   bool are_chunk_stores_filled_;
-  void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  void (*set_datum_func_)(common::Datum &, const ObDocIdExt &);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRTaaTIterImpl);
 };

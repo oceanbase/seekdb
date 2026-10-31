@@ -46,16 +46,15 @@ public:
                                 int64_t param_num, 
                                 common::ObExprTypeCtx& type_ctx)
                                 const override;
-  static int eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_json_value(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 
   static int calc_input_type(ObExprResType& types_stack, bool &is_json_input);
 
 
   /* code for cast accuracy check */
-  template<typename Obj>
   static int check_default_val_accuracy(const ObAccuracy &accuracy,
                                         const SqlValueType &type,
-                                        const Obj *obj);
+                                        const common::ObDatum *obj);
 
   DECLARE_SET_LOCAL_SESSION_VARS;
 
@@ -126,22 +125,22 @@ private:
 private:
   static bool try_set_error_val(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                ObDatum &res, int &ret,
+                                Datum &res, int &ret,
                                 ObJsonExprParam* json_param,
                                 uint8_t &is_type_mismatch);
   static int doc_do_seek(ObJsonSeekResult &hits, bool &is_null_result, ObJsonExprParam* json_param,
                          ObIJsonBase *j_base, const ObExpr &expr, ObEvalCtx &ctx, bool &is_cover_by_error,
-                         ObDatum *&return_val, 
+                         Datum *&return_val,
                          uint8_t &is_type_mismatch);
 
   // new sql engine
-  static inline void set_val(ObDatum &res, ObDatum *val)
+  static inline void set_val(Datum &res, Datum *val)
   { res.set_datum(*val); }
 
   static int get_default_value(ObExpr *expr,
                                   ObEvalCtx &ctx,
                                   const ObAccuracy &accuracy,
-                                  ObDatum **default_value);                         
+                                  Datum **default_value);
   static int get_default_empty_error_value(const ObExpr &expr, 
                                             ObJsonExprParam* json_param,  
                                             ObEvalCtx &ctx);
@@ -170,10 +169,10 @@ public:
 
   static void get_error_option(int8_t error_type, 
                     bool &is_null, bool &has_default_val);
-  static int get_empty_option(ObDatum *&empty_res, 
+  static int get_empty_option(Datum *&empty_res,
                               bool &is_cover_by_error, 
                               int8_t empty_type, 
-                              ObDatum *empty_datum, 
+                              Datum *empty_datum,
                               bool &is_null_result);
   static int set_result(const ObExpr &expr, 
                         ObJsonExprParam* json_param,  
@@ -181,8 +180,8 @@ public:
                         bool &is_null_result,
                         bool &is_cover_by_error,
                         uint8_t &is_type_mismatch,
-                        ObDatum &res,
-                        ObDatum *return_val,
+                        Datum &res,
+                        Datum *return_val,
                         ObIAllocator *allocator,
                         ObJsonSeekResult &hits);
 

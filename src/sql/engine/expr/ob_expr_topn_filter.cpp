@@ -18,6 +18,7 @@
 #include "sql/engine/expr/ob_expr_topn_filter.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 
 namespace oceanbase
 {
@@ -101,7 +102,7 @@ int ObExprTopNFilterContext::state_machine(const ObExpr &expr, ObEvalCtx &ctx, A
 }
 
 // bypass interface for eval one row, for storage black filter
-inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   UNUSED(expr);
   UNUSED(ctx);
@@ -128,7 +129,7 @@ inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   int64_t total_count = 0;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(ObBitVector::flip_foreach(
           skip, batch_size, [&](int64_t idx) __attribute__((always_inline)) {
@@ -165,7 +166,7 @@ inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 // filter interface for eval one row, for storage black filter
-inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = topn_filter_msg_->filter_out_data(expr, ctx, *this, res);
   if (dynamic_disable()) {
@@ -196,12 +197,16 @@ inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ct
   if (OB_FAIL(topn_filter_msg_->prepare_storage_white_filter_data(dynamic_filter, ctx, params,
                                                                   is_data_prepared))) {
   } else {
-    if (topn_filter_msg_->is_null_first(dynamic_filter.get_col_idx())) {
+    const ObDatumBasicFuncs *storage_funcs = storage_predicate_functions(
+        *expr.args_[dynamic_filter.get_col_idx()]);
+    if (OB_ISNULL(storage_funcs)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (topn_filter_msg_->is_null_first(dynamic_filter.get_col_idx())) {
       dynamic_filter.cmp_func_ =
-          expr.args_[dynamic_filter.get_col_idx()]->basic_funcs_->null_first_cmp_;
+          storage_funcs->null_first_cmp_;
     } else {
       dynamic_filter.cmp_func_ =
-          expr.args_[dynamic_filter.get_col_idx()]->basic_funcs_->null_last_cmp_;
+          storage_funcs->null_last_cmp_;
     }
     LOG_TRACE("[TopN Filter] prepare white filter data succ", K(total_count_), K(filter_count_),
               K(check_count_), K(topn_filter_msg_->is_null_first(dynamic_filter.get_col_idx())));
@@ -269,7 +274,7 @@ int ObExprTopNFilter::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_exp
   return ret;
 }
 
-int ObExprTopNFilter::eval_topn_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprTopNFilter::eval_topn_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   uint64_t expr_ctx_id = expr.expr_ctx_id_;
@@ -292,7 +297,7 @@ int ObExprTopNFilter::eval_topn_filter_batch(const ObExpr &expr, ObEvalCtx &ctx,
   uint64_t expr_ctx_id = expr.expr_ctx_id_;
   ObExecContext &exec_ctx = ctx.exec_ctx_;
   ObExprTopNFilterContext *topn_filter_ctx = nullptr;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
   if (OB_ISNULL(topn_filter_ctx = static_cast<ObExprTopNFilterContext *>(

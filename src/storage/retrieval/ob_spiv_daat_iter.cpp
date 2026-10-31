@@ -258,7 +258,7 @@ int ObSPIVDaaTNaiveIter::inner_get_next_rows(const int64_t capacity, int64_t &co
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
     for (int64_t i = 0; i < count; ++i) {
       guard.set_batch_idx(i);
-      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+      common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
       set_datum_func_(id_proj_datum, result_docids_.at(result_docids_curr_iter_++));
       id_evaluated_flags.set(i);
       id_proj_expr->set_evaluated_projected(*eval_ctx);
@@ -405,7 +405,7 @@ int ObSPIVBMWIter::project_rows_from_result_docids(const int64_t capacity, int64
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
     for (int64_t i = 0; i < count; ++i) {
       guard.set_batch_idx(i);
-      ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+      common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
       set_datum_func_(id_proj_datum, result_docids_.at(result_docids_curr_iter_++));
       id_evaluated_flags.set(i);
       id_proj_expr->set_evaluated_projected(*eval_ctx);

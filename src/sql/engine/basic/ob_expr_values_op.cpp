@@ -326,7 +326,7 @@ int ObExprValuesOp::eval_values_op_dynamic_cast_to_lob(ObExpr &real_src_expr,
                                                        ObExpr *dst_expr)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   // large string types to temp lob needs lots of memory, 
   // for example char type from send long/piece data which is 40M, cast to longtext
   // 1. char to longtext 40M (only used to add lob header if cs type is the same)
@@ -338,7 +338,7 @@ int ObExprValuesOp::eval_values_op_dynamic_cast_to_lob(ObExpr &real_src_expr,
       && (src_obj_meta.get_charset_type() == dst_expr->obj_meta_.get_charset_type())) {
     string_to_lob_withsame_cs_type = true;
   }
-  ObDatum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
+  Datum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
   if (!string_to_lob_withsame_cs_type) {
     if (OB_FAIL(datum_caster_.to_type(dst_expr->datum_meta_, real_src_expr,
                                       cm_, datum))) {
@@ -352,11 +352,11 @@ int ObExprValuesOp::eval_values_op_dynamic_cast_to_lob(ObExpr &real_src_expr,
                                       src_obj_meta,
                                       dst_expr->obj_meta_,
                                       eval_ctx_.exec_ctx_.get_eval_tmp_allocator()))) {
-      } else if (OB_FAIL(dst_datum.deep_copy(*datum, res_alloc))) {
+      } else if (OB_FAIL(dst_expr->get_datum_copy_plan().deep_copy(*datum, dst_datum, res_alloc))) {
       }
     }
   } else {
-    ObDatum *src_datum;
+    Datum *src_datum;
     if (OB_FAIL(real_src_expr.eval(eval_ctx_, src_datum))) {
     } else if (src_datum->is_null()) {
       dst_datum.set_null();
@@ -388,7 +388,7 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
     ret = OB_ITER_END;
   } else {
     bool is_break = false;
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     int64_t group_idx = 0;
     if (my_spec.contain_ab_param_) {
       group_idx = node_idx_ / my_spec.get_value_count();
@@ -401,6 +401,7 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
       ObExpr *src_expr = my_spec.values_.at(real_node_idx);
       ObExpr *dst_expr = my_spec.output_.at(col_idx);
       ObDatumMeta src_meta = src_expr->datum_meta_;
+      const common::SqlType *actual_src_type = &src_expr->get_sql_type();
       bool is_strict_json = my_spec.get_is_strict_json_desc_count() == 0 ? false :
                             my_spec.is_strict_json_desc_.at(node_idx_ % my_spec.get_is_strict_json_desc_count());
        
@@ -434,6 +435,12 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
         if (T_PSEUDO_STMT_ID == src_expr->type_) {
           src_expr->locate_datum_for_write(eval_ctx_).set_int(group_idx);
         }
+      }
+      if (OB_SUCC(ret) && src_expr->type_ == T_QUESTIONMARK
+          && src_expr->frame_idx_ < spec_.plan_->get_expr_frame_info().const_frame_.count()
+              + spec_.plan_->get_expr_frame_info().param_frame_.count()) {
+        actual_src_type = plan_ctx->get_native_parameter_type(src_expr->extra_);
+        if (actual_src_type == nullptr) { ret = OB_ERR_UNEXPECTED; }
       }
       bool need_adjust_decimal_int =
         (src_meta.type_ == ObDecimalIntType && dst_expr->datum_meta_.type_ == ObDecimalIntType
@@ -486,8 +493,9 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
         ObExpr real_src_expr = *src_expr;
         real_src_expr.datum_meta_ = src_meta;
         real_src_expr.obj_meta_ = src_obj_meta;
-        real_src_expr.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(src_meta.type_);
-        if (dst_expr->obj_meta_.is_enum_or_set()) {
+        real_src_expr.obj_datum_map_ = common::ObDatum::get_sql_value_datum_map_type(src_meta.type_);
+        if (OB_FAIL(real_src_expr.bind_sql_type(*actual_src_type, ctx_.get_allocator()))) {
+        } else if (dst_expr->obj_meta_.is_enum_or_set()) {
           if (OB_UNLIKELY(col_idx < 0 || col_idx >= my_spec.str_values_array_.count())) {
             ret = OB_ERR_UNEXPECTED;
           } else {
@@ -525,17 +533,8 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
         }
 
         if (OB_SUCC(ret) && !dst_expr->obj_meta_.is_lob_storage()) {
-          ObDatum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
-          if (SqlValueDatumMapType::OBJ_DATUM_STRING == dst_expr->obj_datum_map_) {
-            ObExprStrResAlloc res_alloc(*dst_expr, eval_ctx_);
-            if (OB_FAIL(dst_datum.deep_copy(*datum, res_alloc))) {
-            }
-          } else {
-            ObDataBuffer res_alloc(const_cast<char*>(dst_datum.ptr_),
-                                   dst_expr->res_buf_len_);
-            if (OB_FAIL(dst_datum.deep_copy(*datum, res_alloc))) {
-            }
-          }
+          Datum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
+          ret = dst_expr->deep_copy_datum(eval_ctx_, *datum);
           dst_expr->set_evaluated_projected(eval_ctx_);
         }
       }

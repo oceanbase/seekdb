@@ -225,21 +225,20 @@ int ObReceiveRowReader::to_expr(const ObChunkDatumStore::StoredRow *srow,
   } else if (srow->cnt_ != exprs.count()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    for (uint32_t i = 0; i < srow->cnt_; ++i) {
+    for (uint32_t i = 0; OB_SUCC(ret) && i < srow->cnt_; ++i) {
       if (exprs.at(i)->is_static_const_) {
         continue;
       } else {
-        exprs.at(i)->locate_expr_datum(eval_ctx) =
-            StoredDatumCodec::decode_legacy_view(srow->stored_cells()[i]);
-        exprs.at(i)->set_evaluated_projected(eval_ctx);
+        ret = restore_expr_cell(srow->stored_cells()[i], *exprs.at(i), eval_ctx, false);
+        if (OB_SUCC(ret)) { exprs.at(i)->set_evaluated_projected(eval_ctx); }
       }
     }
     // deep copy dynamic const expr datum
     if (dynamic_const_exprs.count() > 0) {
       for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); i++) {
         ObExpr *expr = dynamic_const_exprs.at(i);
-        // Fixed-width datums do not reserve an external result buffer.
-        if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
+        // Inline scalars need no payload copy; references use the Expr owner.
+        if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
         }
       }
     }
@@ -292,12 +291,12 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
         continue;
       } else {
         ObExpr *e = exprs.at(col_idx);
-        ObDatum *datums = e->locate_batch_datums(eval_ctx);
+        Datum *datums = e->locate_batch_datums(eval_ctx);
         if (!e->is_batch_result()) {
-          datums[0] = StoredDatumCodec::decode_legacy_view(srows[0]->stored_cells()[col_idx]);
+          ret = StoredDatumCodec::decode_native(srows[0]->stored_cells()[col_idx], e->get_datum_copy_plan(), datums[0]);
         } else {
           for (int64_t i = 0; i < read_rows; i++) {
-            datums[i] = StoredDatumCodec::decode_legacy_view(srows[i]->stored_cells()[col_idx]);
+            ret = StoredDatumCodec::decode_native(srows[i]->stored_cells()[col_idx], e->get_datum_copy_plan(), datums[i]);
           }
         }
         e->set_evaluated_projected(eval_ctx);
@@ -314,8 +313,8 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
       for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); i++) {
         ObExpr *expr = dynamic_const_exprs.at(i);
         OB_ASSERT(!expr->is_batch_result());
-        // Fixed-width datums do not reserve an external result buffer.
-        if (0 != expr->res_buf_off_ && OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
+        // Inline scalars need no payload copy; references use the Expr owner.
+        if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
         }
       }
     }

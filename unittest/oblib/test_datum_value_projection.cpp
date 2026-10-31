@@ -1,7 +1,23 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #include "common/datum/datum_value_projection.h"
+#include "lib/allocator/ob_allocator.h"
 #include <gtest/gtest.h>
 using namespace oceanbase::common;
+
+namespace {
+class ProjectionAllocator final : public ObIAllocator
+{
+public:
+  void *alloc(int64_t bytes) override
+  { ++calls; last = reject ? nullptr : arena.alloc(bytes); return last; }
+  void *alloc(int64_t bytes, const ObMemAttr &) override { return alloc(bytes); }
+  void free(void *pointer) override { arena.free(pointer); }
+  ObArenaAllocator arena;
+  int64_t calls = 0;
+  bool reject = false;
+  void *last = nullptr;
+};
+}
 
 TEST(DatumValueProjection, decimal_int_accepts_negative_scale)
 {
@@ -33,8 +49,109 @@ TEST(DatumValueProjection, decimal_int_rejects_unknown_scale_without_overwriting
   EXPECT_EQ(reinterpret_cast<char *>(&coefficient), output.datum_.ptr_);
 }
 
+TEST(DatumValueProjection, native_scalar_and_reference_views_borrow_without_allocation)
+{
+  ProjectionAllocator owner;
+  SqlTypeMeta integer_meta; integer_meta.set_int();
+  SqlType integer;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(integer_meta, ObAccuracy(), integer));
+  Datum source; source.set_int(INT64_MIN);
+  DatumValue output;
+  ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, integer, integer_meta,
+      OBJ_DATUM_8BYTE_DATA, SqlTypeMeta(), output, owner));
+  EXPECT_EQ(0, owner.calls); EXPECT_EQ(INT64_MIN, output.get_int());
+  source.set_int(77);
+  EXPECT_EQ(77, output.get_int());
+
+  SqlTypeMeta string_meta; string_meta.set_varchar();
+  string_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  string_meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  SqlType string_type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(string_meta, ObAccuracy(), string_type));
+  char text[] = "abc";
+  ASSERT_EQ(OB_SUCCESS, source.set_string(text, 3));
+  ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, string_type, string_meta,
+      OBJ_DATUM_STRING, SqlTypeMeta(), output, owner));
+  EXPECT_EQ(0, owner.calls); EXPECT_EQ(text, output.datum_.ptr_);
+  text[0] = 'z'; EXPECT_EQ('z', output.get_string().ptr()[0]);
+}
+
+TEST(DatumValueProjection, native_normalized_decimal_and_marker_use_stable_owner_bytes)
+{
+  ProjectionAllocator owner;
+  SqlTypeMeta meta; meta.set_decimal_int(2);
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(40, 2), type));
+  int64_t coefficient = -1234;
+  Datum source;
+  ASSERT_EQ(OB_SUCCESS, source.set_reference(&coefficient, sizeof(coefficient)));
+  DatumValue output;
+  ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, type, meta,
+      OBJ_DATUM_DECIMALINT, SqlTypeMeta(), output, owner));
+  ASSERT_EQ(1, owner.calls); ASSERT_EQ(32, output.datum_.len_);
+  EXPECT_EQ(owner.last, output.datum_.ptr_);
+  coefficient = 0; source.set_null();
+  // Source and scratch reuse must not alter the normalized legacy coefficient.
+  volatile char poison[128];
+  for (uint32_t i = 0; i < sizeof(poison); ++i) { poison[i] = 0x5a; }
+  int256_t copied;
+  MEMCPY(&copied, output.datum_.ptr_, sizeof(copied));
+  EXPECT_EQ(int256_t(-1234), copied);
+
+  SqlTypeMeta integer_meta; integer_meta.set_int();
+  SqlType integer;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(integer_meta, ObAccuracy(), integer));
+  source.set_max();
+  SqlTypeMeta extended; extended.set_ext();
+  ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, integer, extended,
+      OBJ_DATUM_EXTEND, SqlTypeMeta(), output, owner));
+  EXPECT_EQ(2, owner.calls); EXPECT_EQ(owner.last, output.datum_.ptr_);
+  source.set_int(0); EXPECT_TRUE(output.datum_.is_max());
+}
+
+TEST(DatumValueProjection, native_failure_preserves_destination_and_null_projection_contract)
+{
+  ProjectionAllocator owner;
+  SqlTypeMeta meta; meta.set_decimal_int(-2);
+  SqlType type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(40, -2), type));
+  int64_t coefficient = 42;
+  Datum source;
+  ASSERT_EQ(OB_SUCCESS, source.set_reference(&coefficient, sizeof(coefficient)));
+  int64_t sentinel = 91;
+  ObDatum old; old.ptr_ = reinterpret_cast<const char *>(&sentinel); old.pack_ = 8;
+  SqlTypeMeta previous; previous.set_int();
+  previous.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  previous.set_collation_level(CS_LEVEL_IMPLICIT);
+  DatumValue output(old, previous);
+  owner.reject = true;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, project_native_datum_value_view(source, type, meta,
+      OBJ_DATUM_DECIMALINT, previous, output, owner));
+  EXPECT_EQ(previous, output.meta_); EXPECT_EQ(old.ptr_, output.datum_.ptr_);
+  EXPECT_EQ(91, output.get_int());
+  owner.reject = false;
+  EXPECT_EQ(OB_ERR_UNEXPECTED, project_native_datum_value_view(source, type, meta,
+      OBJ_DATUM_MAPPING_MAX, previous, output, owner));
+  EXPECT_EQ(previous, output.meta_); EXPECT_EQ(old.ptr_, output.datum_.ptr_);
+  ASSERT_EQ(OB_SUCCESS, source.set_reference(&coefficient, 7));
+  const int64_t calls = owner.calls;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, project_native_datum_value_view(source, type, meta,
+      OBJ_DATUM_DECIMALINT, previous, output, owner));
+  EXPECT_EQ(calls, owner.calls); EXPECT_EQ(old.ptr_, output.datum_.ptr_);
+
+  source.set_null();
+  SqlTypeMeta null_meta; null_meta.set_null();
+  null_meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  null_meta.set_collation_level(CS_LEVEL_COERCIBLE);
+  ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, type, null_meta,
+      OBJ_DATUM_MAPPING_MAX, previous, output, owner, true));
+  EXPECT_TRUE(output.is_null()); EXPECT_EQ(null_meta, output.meta_);
+  EXPECT_EQ(calls, owner.calls);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
+  if (ObCharset::init_charset() != OB_SUCCESS) { return 1; }
   return RUN_ALL_TESTS();
 }

@@ -225,11 +225,11 @@ int ObExprGetSysVar::get_sys_var_disp_obj(common::ObIAllocator &allocator,
 
 // for engine 3.0
 int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *name = NULL;
-  ObDatum *scope = NULL;
+  Datum *name = NULL;
+  Datum *scope = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, name, scope))) {
@@ -246,9 +246,13 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
     if (ObIntType == scope_type) {
       var_scope = scope->get_int();
     } else if (ObDecimalIntType == scope_type) {
-      int32_t int_bytes = scope->get_int_bytes();
-      const ObDecimalInt *dec_int = scope->get_decimal_int();
-      switch (int_bytes) {
+      common::ObDatum coefficient;
+      char coefficient_buf[64];
+      OZ(expr.args_[1]->get_datum_copy_plan().get_decimal(
+          *scope, coefficient, coefficient_buf, sizeof(coefficient_buf)));
+      const int32_t int_bytes = coefficient.get_int_bytes();
+      const ObDecimalInt *dec_int = coefficient.get_decimal_int();
+      if (OB_SUCC(ret)) switch (int_bytes) {
       case sizeof(int32_t): {
         var_scope = *dec_int->int32_v_;
         break;
@@ -290,8 +294,10 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
         ret = OB_ERR_UNEXPECTED;
       } else {
         char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
-        ObDatum row_value;
-        OZ(result.to_row_datum(row_value, extended_payload));
+        common::ObDatum legacy_value;
+        Datum row_value;
+        OZ(result.to_row_datum(legacy_value, extended_payload));
+        OZ(expr.get_datum_copy_plan().import_legacy(legacy_value, row_value));
         OZ(expr.deep_copy_datum(ctx, row_value));
         OX(res_datum.set_datum(expr.locate_expr_datum(ctx)));
       }

@@ -43,7 +43,7 @@ public:
                         ObExprResType &type1,
                         ObExprResType &type2,
                         common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_subset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int eval_subset(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprGTIDSubset);
@@ -58,7 +58,7 @@ public:
                         ObExprResType &type1,
                         ObExprResType &type2,
                         common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_subtract(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int eval_subtract(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprGTIDSubtract);
@@ -73,7 +73,7 @@ public:
                         ObExprResType *types,
                         int64_t param_num,
                         common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_wait_for_executed_gtid_set(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int eval_wait_for_executed_gtid_set(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprWaitForExecutedGTIDSet);
@@ -88,7 +88,7 @@ public:
                         ObExprResType *types,
                         int64_t param_num,
                         common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_wait_until_sql_thread_after_gtids(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &result);
+  static int eval_wait_until_sql_thread_after_gtids(const ObExpr &expr, ObEvalCtx &ctx, Datum &result);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprWaitUntilSQLThreadAfterGTIDs);

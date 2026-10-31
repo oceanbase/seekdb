@@ -121,6 +121,8 @@ public:
   virtual int copy_single_output_row(sql::ObEvalCtx &ctx);
   virtual int collect_result(sql::ObEvalCtx &ctx);
   virtual int collect_batch_result_in_group_by(const int64_t distinct_cnt);
+  int publish_native_rows(sql::ObEvalCtx &ctx, int64_t count);
+  int import_native_inputs(sql::ObEvalCtx &ctx, int64_t begin, int64_t end);
   virtual bool need_access_data() const { return true; }
   virtual bool finished() const { return false; }
   virtual int reserve_group_by_buf(const int64_t size);
@@ -150,6 +152,7 @@ protected:
     return DEFAULT_DATUM_OFFSET == datum_offset ? result_datum_ : group_by_result_datum_buf_->at(datum_offset);
   }
   int prepare_def_datum();
+  int init_legacy_frame_buffers();
   ObAggCellBasicInfo basic_info_;
   // for scalar group by pushdown
   blocksstable::ObStorageDatum def_datum_;
@@ -159,6 +162,9 @@ protected:
   // for normal group by pushdown
   // agg col expr's datums
   common::ObDatum *col_datums_;
+  ObAggDatumBuf *legacy_result_owner_;
+  ObAggDatumBuf *legacy_input_owner_;
+  sql::ObEvalCtx *native_eval_ctx_;
   // store the aggregated result
   ObGroupByExtendableBuf<ObDatum> *group_by_result_datum_buf_;
   int64_t group_by_result_cnt_;
@@ -312,7 +318,7 @@ public:
   static const int64_t LLC_BUCKET_BITS = 10; // same as ObAggregateProcessor llc bucket bits.
 private:
   virtual bool can_use_index_info() const override { return false; } // can not use now.
-  sql::ObExprHashFuncType hash_func_;
+  common::ObDatumHashFuncType hash_func_;
   const common::ObDatumAccessContext *datum_access_ctx_;
   ObHyperLogLogCalculator *ndv_calculator_;
   uint64_t def_hash_value_;
@@ -535,8 +541,8 @@ public:
       const bool is_default_datum = false) override;
   virtual int copy_output_rows(const int32_t start_offset, const int32_t end_offset) override
   {
-    UNUSEDx(start_offset, end_offset);
-    return OB_SUCCESS;
+    return native_eval_ctx_ == nullptr ? OB_ERR_UNEXPECTED
+        : import_native_inputs(*native_eval_ctx_, start_offset, end_offset);
   }
   virtual int copy_single_output_row(sql::ObEvalCtx &ctx) override
   {
@@ -625,6 +631,7 @@ public:
   OB_INLINE const char **get_cell_datas() override
   { return need_extract_distinct_ ? tmp_group_by_datum_buf_->get_group_by_cell_datas() : group_by_col_datum_buf_->get_group_by_cell_datas(); }
   OB_INLINE common::ObDatum *get_group_by_col_datums() const { return group_by_col_datum_buf_->get_group_by_datums(); }
+  int publish_native_rows(sql::ObEvalCtx &ctx, int64_t count);
   OB_INLINE common::ObIArray<ObAggCell*> &get_agg_cells() { return agg_cells_; }
   OB_INLINE bool need_read_reference() const { return need_extract_distinct_ || agg_cells_.count() > 0; }
   OB_INLINE bool need_do_aggregate() const { return agg_cells_.count() > 0; }
@@ -637,6 +644,9 @@ protected:
 private:
   int init_agg_cells(const ObTableAccessParam &param, const ObTableAccessContext &context, sql::ObEvalCtx &eval_ctx, const bool is_for_single_row);
   ObAggGroupByDatumBuf *group_by_col_datum_buf_;
+  ObAggDatumBuf *legacy_group_owner_;
+  sql::ObEvalCtx *native_eval_ctx_;
+  int import_native_keys(int64_t begin, int64_t end);
   // for micro with bitmap
   // first read all the distinct values into this buffer
   // then extract actual distinct values according bitmap

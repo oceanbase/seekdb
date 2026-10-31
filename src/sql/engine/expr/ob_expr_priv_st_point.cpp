@@ -95,14 +95,14 @@ int ObExprPrivSTPoint::calc_result_typeN(ObExprResType& type,
 
 int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &res)
+                                          Datum &res)
 {
 	int ret = OB_SUCCESS;
   bool is_null_result = false;
   int num_args = expr.arg_cnt_;
-  ObDatum *datum_x = nullptr;
-  ObDatum *datum_y = nullptr;
-  ObDatum *datum_srid = nullptr;
+  Datum *datum_x = nullptr;
+  Datum *datum_y = nullptr;
+  Datum *datum_srid = nullptr;
   ObExpr *arg_x = expr.args_[0];
   ObExpr *arg_y = expr.args_[1];
   SqlValueType type_x = arg_x->datum_meta_.type_;

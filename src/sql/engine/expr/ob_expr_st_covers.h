@@ -33,7 +33,7 @@ public:
                                 ObExprResType &type1,
                                 ObExprResType &type2,
                                 common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   template<typename ResType>
   static int eval_st_covers_common(const ObExpr &expr, 
                                    ObEvalCtx &ctx,

@@ -49,10 +49,10 @@ int ObExprScnToTimestamp::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int calc_scn_to_timestamp_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_scn_to_timestamp_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *usec_datum = NULL;
+  Datum *usec_datum = NULL;
   ObTimeZoneInfoWrap tz_info_wrap;
   ObString sys_time_zone;
   const ObTimeZoneInfo *cur_tz_info = get_timezone_info(ctx.exec_ctx_.get_my_session());

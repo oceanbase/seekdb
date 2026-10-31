@@ -63,7 +63,7 @@ int ObExprVecVid::cg_expr(
 /*static*/ int ObExprVecVid::generate_vec_id(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (raw_ctx.arg_cnt_ == 0) {

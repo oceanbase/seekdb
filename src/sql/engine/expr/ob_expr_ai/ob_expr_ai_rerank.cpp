@@ -94,13 +94,13 @@ int ObExprAIRerank::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
+int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *arg_model_id = nullptr;
-  ObDatum *arg_query = nullptr;
-  ObDatum *arg_documents = nullptr;
-  ObDatum *arg_doc_key = nullptr;
+  Datum *arg_model_id = nullptr;
+  Datum *arg_query = nullptr;
+  Datum *arg_documents = nullptr;
+  Datum *arg_doc_key = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_query, arg_documents, arg_doc_key))) {
   } else if (arg_model_id->is_null() || arg_query->is_null() || arg_documents->is_null()) {
     ret = OB_INVALID_ARGUMENT;
@@ -207,7 +207,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
 int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator, 
                                                 ObString& model_id, ObString& query, ObJsonArray *document_array,
                                                 ObString& doc_key, const ObAIFuncExprInfo &info,
-                                                const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res)
+                                                const share::ObAiModelEndpointInfo &endpoint_info, Datum &res)
 {
   INIT_SUCC(ret);
   ObJsonArray *doc_array = nullptr;

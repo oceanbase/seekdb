@@ -190,13 +190,14 @@ TEST(DatumParameterConstraints, batch_frames_select_full_native_array_values)
   ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(text, array->data_[1], allocator));
   DatumParameter source; ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, allocator));
   ObPhysicalPlanCtx context(allocator);
-  ASSERT_EQ(OB_SUCCESS, context.get_param_store_for_update().push_back(source));
+  ASSERT_EQ(OB_SUCCESS, context.append_parameter_input(source));
   ASSERT_EQ(OB_SUCCESS, context.init_datum_param_store());
   EXPECT_NE(array, context.get_datum_param_store().at(0).get_array<DatumParameterArray>());
   array->data_[0].datum_.set_int(999);
   array->data_[1].set_null();
   ASSERT_EQ(1, context.get_param_frame_ptrs().count());
-  ObDatum *frame = reinterpret_cast<ObDatum *>(context.get_param_frame_ptrs().at(0));
+  const Datum *frame = context.get_native_parameter(0);
+  ASSERT_NE(nullptr, frame);
   ASSERT_EQ(OB_SUCCESS, context.replace_batch_param_datum(0, 0, 1)); EXPECT_EQ(123, frame->get_int());
   ASSERT_EQ(OB_SUCCESS, context.replace_batch_param_datum(1, 0, 1)); EXPECT_EQ(ObString("bytes"), frame->get_string());
   ASSERT_EQ(OB_SUCCESS, context.replace_batch_param_datum(2, 0, 1)); EXPECT_TRUE(frame->is_null());
@@ -244,7 +245,7 @@ TEST(DatumParameterConstraints, context_serialization_decodes_canonical_arrays_i
   ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(integer, array->data_[1], source_arena));
   DatumParameter envelope; ASSERT_EQ(OB_SUCCESS, envelope.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, source_arena));
   ObPhysicalPlanCtx source(source_arena), output(output_arena);
-  ASSERT_EQ(OB_SUCCESS, source.get_param_store_for_update().push_back(envelope));
+  ASSERT_EQ(OB_SUCCESS, source.append_parameter_input(envelope));
   ASSERT_EQ(OB_SUCCESS, source.get_array_param_groups().push_back(ObArrayParamGroup(2, 1, 0)));
   std::vector<char> wire(source.get_serialize_size()); int64_t pos = 0;
   ASSERT_EQ(OB_SUCCESS, source.serialize(wire.data(), wire.size(), pos)); EXPECT_EQ(wire.size(), pos);
@@ -278,7 +279,7 @@ TEST(DatumParameterConstraints, context_rejects_trailing_bytes_in_deferred_nativ
   ObArenaAllocator arena; auto *array = DatumParameterArray::alloc(arena, 0); ASSERT_NE(nullptr, array);
   DatumParameter envelope; ASSERT_EQ(OB_SUCCESS, envelope.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, arena));
   ObPhysicalPlanCtx source(arena), output(arena);
-  ASSERT_EQ(OB_SUCCESS, source.get_param_store_for_update().push_back(envelope));
+  ASSERT_EQ(OB_SUCCESS, source.append_parameter_input(envelope));
   ASSERT_EQ(OB_SUCCESS, source.get_array_param_groups().push_back(ObArrayParamGroup(0, 1, 0)));
   std::vector<char> wire(source.get_serialize_size()); int64_t pos = 0;
   ASSERT_EQ(OB_SUCCESS, source.serialize(wire.data(), wire.size(), pos));

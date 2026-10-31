@@ -80,7 +80,7 @@ public:
     const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, int64_t &size)
   {
     int ret = common::OB_SUCCESS;
-    common::ObDatum *datum = nullptr;
+    common::Datum *datum = nullptr;
     int64_t required = 0;
     if (exprs.count() > INT32_MAX) {
       ret = common::OB_SIZE_OVERFLOW;
@@ -95,10 +95,10 @@ public:
         SQL_ENG_LOG(WARN, "failed to eval expr datum", K(ret));
       } else if (!NEED_EVAL && FALSE_IT(datum = &exprs.at(i)->locate_expr_datum(ctx))) {
       } else {
-        if (!datum->is_null() && datum->len_ > 0 && datum->ptr_ == nullptr) {
-          ret = common::OB_INVALID_ARGUMENT;
+        int64_t bytes = 0;
+        if (OB_FAIL(exprs.at(i)->get_datum_copy_plan().legacy_payload_size(*datum, bytes))) {
         } else {
-          required += datum->is_null() ? 0 : datum->len_;
+          required += bytes;
           if (required > UINT32_MAX) { ret = common::OB_SIZE_OVERFLOW; }
         }
       }

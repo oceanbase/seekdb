@@ -54,14 +54,18 @@ public:
 };
 class ScalarResultProducer final : public ObOperator {
 public:
-  int calls=0;bool null_second=false;
+  int calls=0;bool null_first=false;bool null_second=false;
   ScalarResultProducer(ObExecContext &ctx,const ObOpSpec &spec):ObOperator(ctx,spec,nullptr){}
   int get_next_row() override {
     if(calls++>=2){return OB_ITER_END;}
-    ObExpr &expr=*get_spec().output_.at(0);ObEvalCtx &ctx=get_eval_ctx();
-    ObDatum &value=expr.locate_expr_datum(ctx);value.ptr_=expr.get_rev_buf(ctx);
-    if(null_second&&calls==2){value.set_null();}else{value.set_int(42+calls);}
-    expr.get_eval_info(ctx).evaluated_=true;return OB_SUCCESS;
+    ObEvalCtx &ctx=get_eval_ctx();
+    for(int64_t i=0;i<get_spec().output_.count();++i) {
+      ObExpr &expr=*get_spec().output_.at(i);Datum &value=expr.locate_expr_datum(ctx);
+      if((null_first&&calls==1)||(null_second&&calls==2)){value.set_null();}
+      else{value.set_int(42+calls+10*i);}
+      expr.get_eval_info(ctx).evaluated_=true;
+    }
+    return OB_SUCCESS;
   }
   int inner_get_next_row() override {return get_next_row();}
   void destroy() override {ObOperator::destroy();}
@@ -74,7 +78,7 @@ struct ResultFrame {
     frames[0]=static_cast<char*>(owner.alloc(2048));EXPECT_NE(nullptr,frames[0]);MEMSET(frames[0],0,2048);exec.set_frames(frames);producer.get_eval_ctx().frames_=frames;
     expr.frame_idx_=0;expr.datum_off_=64;expr.eval_info_off_=128;expr.res_buf_off_=256;expr.res_buf_len_=512;expr.type_=T_COLUMN_REF;
     expr.obj_meta_.set_int();expr.obj_meta_.set_scale(7);expr.obj_datum_map_=OBJ_DATUM_8BYTE_DATA;expr.datum_meta_.type_=ObIntType;
-    new(frames[0]+64)ObDatum();EXPECT_EQ(OB_SUCCESS,spec.output_.init(1));EXPECT_EQ(OB_SUCCESS,spec.output_.push_back(&expr));result.set_static_engine_root(&producer);
+    EXPECT_EQ(OB_SUCCESS,expr.prepare_scalar_type(expr.obj_meta_,ObAccuracy(20,7),owner));new(frames[0]+64)Datum();EXPECT_EQ(OB_SUCCESS,spec.output_.init(1));EXPECT_EQ(OB_SUCCESS,spec.output_.push_back(&expr));result.set_static_engine_root(&producer);
   }
 };
 }
@@ -102,92 +106,143 @@ TEST(SessionNativeResult,metadata_oom_does_not_advance_or_publish_a_row) {
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,frame.result.get_next_native_result_row(frame.exec,view));EXPECT_EQ(0,frame.producer.calls);EXPECT_FALSE(view.is_datum_row());
   frame.owner.fail=false;EXPECT_EQ(OB_SUCCESS,frame.result.get_next_native_result_row(frame.exec,view));EXPECT_EQ(1,frame.producer.calls);
 }
-TEST(SessionNativeResult,inline_view_borrows_native_slots_and_rejects_an_advanced_generation) {
+TEST(SessionNativeResult,first_null_uses_initial_column_metadata_and_rebinding_resets_history) {
   ResultFrame frame;
-  ResultRowView shadow;
-  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, shadow));
-  SqlType type;
-  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(frame.expr.obj_meta_, ObAccuracy(20,0), type));
-  Datum native;
-  native.set_int(INT64_MIN);
-  uint64_t generation = 1;
+  frame.producer.null_first = true;
+  ASSERT_EQ(7, frame.expr.get_sql_type().legacy_meta().get_scale());
+  ASSERT_EQ(7, frame.expr.get_sql_type().scale());
   ResultRowView view;
-  view.set_inline_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false,
-                         &native, &type, &generation, generation);
+  DatumValue output;
+  ASSERT_EQ(OB_SUCCESS, output.set_int(99, frame.owner));
+  output.set_scale(11);
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_native_result_row(frame.exec, view));
+  ASSERT_EQ(OB_SUCCESS, view.get_value(0, output));
+  EXPECT_TRUE(output.is_null());
+  EXPECT_EQ(-1, output.get_scale());
+  EXPECT_EQ(CS_TYPE_BINARY, output.get_collation_type());
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_native_result_row(frame.exec, view));
+  ASSERT_EQ(OB_SUCCESS, view.get_value(0, output));
+  EXPECT_EQ(44, output.get_int());
+  EXPECT_EQ(7, output.get_scale());
+  frame.producer.calls = 0;
+  frame.result.set_static_engine_root(&frame.producer);
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_native_result_row(frame.exec, view));
+  ASSERT_EQ(OB_SUCCESS, view.get_value(0, output));
+  EXPECT_TRUE(output.is_null());
+  EXPECT_EQ(-1, output.get_scale());
+  EXPECT_EQ(nullptr, (frame.result.*result_member(OldRowTag{})).cells_);
+}
+TEST(SessionNativeResult,unconsumed_rows_update_each_column_without_reusing_the_callers_metadata) {
+  ObExpr other;
+  ResultFrame frame;
+  other.frame_idx_ = 0;
+  other.datum_off_ = 80;
+  other.eval_info_off_ = 136;
+  other.res_buf_off_ = 768;
+  other.res_buf_len_ = 512;
+  other.type_ = T_COLUMN_REF;
+  other.obj_meta_.set_int();
+  other.obj_meta_.set_scale(3);
+  other.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+  other.datum_meta_.type_ = ObIntType;
+  ASSERT_EQ(OB_SUCCESS, other.prepare_scalar_type(other.obj_meta_, ObAccuracy(20,3), frame.owner));
+  new (frame.frames[0] + other.datum_off_) Datum();
+  frame.spec.output_.reset();
+  ASSERT_EQ(OB_SUCCESS, frame.spec.output_.init(2));
+  ASSERT_EQ(OB_SUCCESS, frame.spec.output_.push_back(&frame.expr));
+  ASSERT_EQ(OB_SUCCESS, frame.spec.output_.push_back(&other));
+  frame.producer.null_second = true;
+  ResultRowView view;
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_native_result_row(frame.exec, view));
+  // Deliberately do not read either value from the first row.
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_native_result_row(frame.exec, view));
+  DatumValue output;
+  ASSERT_EQ(OB_SUCCESS, output.set_int(99, frame.owner));
+  output.set_scale(11);
+  ASSERT_EQ(OB_SUCCESS, view.get_value(1, output));
+  EXPECT_TRUE(output.is_null());
+  EXPECT_EQ(3, output.get_scale());
+  ASSERT_EQ(OB_SUCCESS, view.get_value(0, output));
+  EXPECT_TRUE(output.is_null());
+  EXPECT_EQ(7, output.get_scale());
+  ASSERT_EQ(OB_SUCCESS, view.get_value(1, output));
+  EXPECT_TRUE(output.is_null());
+  EXPECT_EQ(3, output.get_scale());
+  EXPECT_EQ(CS_TYPE_BINARY, output.get_collation_type());
+  EXPECT_EQ(nullptr, (frame.result.*result_member(OldRowTag{})).cells_);
+}
+TEST(SessionNativeResult,inline_view_borrows_the_authoritative_native_frame_until_reset) {
+  ResultFrame frame;
+  ResultRowView view;
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, view));
+  Datum &native = frame.expr.locate_expr_datum(frame.producer.get_eval_ctx());
+  native.set_int(INT64_MIN);
   ASSERT_TRUE(view.is_datum_row());
   ASSERT_TRUE(view.is_inline_datum_row());
   const Datum *value = nullptr;
   const SqlType *value_type = nullptr;
   ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
   EXPECT_EQ(&native, value);
-  EXPECT_EQ(&type, value_type);
+  EXPECT_EQ(&frame.expr.get_sql_type(), value_type);
   EXPECT_EQ(INT64_MIN, value->get_int());
-  // The compatibility frame is distinct; native access never reinterprets it.
-  EXPECT_EQ(43, view.datum(0).get_int());
   DatumValue old_view;
   ASSERT_EQ(OB_SUCCESS, view.get_value(0, old_view));
-  EXPECT_EQ(43, old_view.get_int());
+  EXPECT_EQ(INT64_MIN, old_view.get_int());
   EXPECT_EQ(OB_SIZE_OVERFLOW, view.get_inline_value(1, value, value_type));
-  ++generation;
+  // There is one frame, so ordinary row reuse is directly visible. Consumers
+  // needing a snapshot must explicitly clone, as the owner test below does.
   native.set_int(99);
-  EXPECT_FALSE(view.inline_row_valid());
+  EXPECT_TRUE(view.inline_row_valid());
+  EXPECT_EQ(99, value->get_int());
+  view.set_legacy(nullptr);
   EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_inline_value(0, value, value_type));
-  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_value(0, old_view));
-  EXPECT_EQ(43, old_view.get_int());
+  EXPECT_EQ(OB_NOT_INIT, view.get_value(0, old_view));
+  EXPECT_EQ(INT64_MIN, old_view.get_int());
 }
 TEST(SessionNativeResult,inline_typed_null_and_fallback_setters_do_not_retain_old_slots) {
   ResultFrame frame;
-  SqlType type;
-  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(frame.expr.obj_meta_, ObAccuracy(20,0), type));
-  Datum native;
-  uint64_t generation = 7;
   ResultRowView view;
-  view.set_inline_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false,
-                         &native, &type, &generation, generation);
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, view));
+  frame.expr.locate_expr_datum(frame.producer.get_eval_ctx()).set_null();
   const Datum *value = nullptr;
   const SqlType *value_type = nullptr;
   ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
   EXPECT_TRUE(value->is_null());
   EXPECT_EQ(ObIntType, value_type->kind());
-  view.set_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false);
-  EXPECT_FALSE(view.is_inline_datum_row());
-  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_inline_value(0, value, value_type));
+  alignas(8) char scratch[64];
+  view.set_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false, scratch);
+  EXPECT_TRUE(view.is_inline_datum_row());
+  ASSERT_EQ(OB_SUCCESS, view.get_inline_value(0, value, value_type));
+  EXPECT_TRUE(value->is_null());
   view.set_legacy(nullptr);
   EXPECT_FALSE(view.is_datum_row());
   EXPECT_EQ(0, view.count());
+  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_inline_value(0, value, value_type));
 }
-TEST(SessionNativeResult,native_only_get_value_borrows_owner_storage_and_preserves_expression_metadata) {
+TEST(SessionNativeResult,native_get_value_borrows_stable_compatibility_scratch_and_preserves_metadata) {
   ResultFrame frame;
-  ResultRowView shadow;
-  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, shadow));
-  SqlType type;
-  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(frame.expr.obj_meta_, ObAccuracy(20,0), type));
-  Datum native;
-  native.set_int(INT64_MAX);
-  uint64_t generation = 7;
   ResultRowView view;
-  view.set_inline_datums(frame.spec.output_, frame.producer.get_eval_ctx(), 0, false,
-                         &native, &type, &generation, generation, false);
-  ASSERT_FALSE(view.has_legacy_datums());
+  ASSERT_EQ(OB_SUCCESS, frame.result.get_next_result_row(frame.exec, view));
+  Datum &native = frame.expr.locate_expr_datum(frame.producer.get_eval_ctx());
+  native.set_int(INT64_MAX);
   DatumValue borrowed;
   frame.owner.fail = true;
   ASSERT_EQ(OB_SUCCESS, view.get_value(0, borrowed));
   EXPECT_EQ(INT64_MAX, borrowed.get_int());
   EXPECT_EQ(7, borrowed.get_scale());
-  const uintptr_t ptr = reinterpret_cast<uintptr_t>(borrowed.datum_.ptr_);
-  const uintptr_t begin = reinterpret_cast<uintptr_t>(&native);
-  EXPECT_GE(ptr, begin);
-  EXPECT_LE(ptr + sizeof(int64_t), begin + sizeof(native));
-  EXPECT_NE(shadow.datum(0).ptr_, borrowed.datum_.ptr_);
+  const char *payload = borrowed.datum_.ptr_;
   native.set_int(61);
-  EXPECT_EQ(61, borrowed.get_int()); // descriptor never points into getter scratch
-  EXPECT_EQ(43, shadow.datum(0).get_int());
-  ++generation;
-  EXPECT_EQ(OB_STATE_NOT_MATCH, view.get_value(0, borrowed));
-  EXPECT_EQ(61, borrowed.get_int()); // failure does not replace the output
+  // The explicit legacy bridge uses per-column owner scratch, not stack bytes.
+  EXPECT_EQ(INT64_MAX, borrowed.get_int());
+  ASSERT_EQ(OB_SUCCESS, view.get_value(0, borrowed));
+  EXPECT_EQ(payload, borrowed.datum_.ptr_);
+  EXPECT_EQ(61, borrowed.get_int());
+  view.set_legacy(nullptr);
+  EXPECT_EQ(OB_NOT_INIT, view.get_value(0, borrowed));
+  EXPECT_EQ(61, borrowed.get_int());
 }
-TEST(SessionNativeResult,invalid_decimal_scale_is_reported_before_publishing_native_row) {
-  ResultFrame frame;frame.expr.obj_meta_.set_decimal_int();frame.expr.obj_meta_.set_scale(-1);frame.expr.obj_datum_map_=OBJ_DATUM_DECIMALINT;ResultRowView view;
+TEST(SessionNativeResult,unknown_decimal_scale_is_reported_before_publishing_native_row) {
+  ResultFrame frame;frame.expr.obj_meta_.set_decimal_int();frame.expr.obj_meta_.set_scale(-1);frame.expr.obj_datum_map_=OBJ_DATUM_DECIMALINT;ASSERT_EQ(OB_SUCCESS,frame.expr.prepare_scalar_type(frame.expr.obj_meta_,ObAccuracy(20,-1),frame.owner));ASSERT_FALSE(frame.expr.get_sql_type().has_scale());ResultRowView view;
   EXPECT_EQ(OB_ERR_UNEXPECTED,frame.result.get_next_native_result_row(frame.exec,view));EXPECT_FALSE(view.is_datum_row());EXPECT_EQ(nullptr,(frame.result.*result_member(OldRowTag{})).cells_);
 }
 TEST(SessionNativeResult,explicit_owner_snapshot_survives_producer_reuse_and_oom_preserves_output) {

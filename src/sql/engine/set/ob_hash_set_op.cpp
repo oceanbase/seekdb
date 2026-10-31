@@ -286,7 +286,7 @@ int ObHashSetOp::convert_row(
     LOG_WARN("unexpected status: exprs is not match", K(ret), K(src_exprs.count()),
       K(dst_exprs.count()));
   } else {
-    ObDatum *src_datum = nullptr;
+    Datum *src_datum = nullptr;
     for (uint32_t i = 0; i < dst_exprs.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(src_exprs.at(i)->eval(eval_ctx_, src_datum))) {
       } else {
@@ -312,9 +312,9 @@ int ObHashSetOp::convert_batch(const common::ObIArray<ObExpr*> &src_exprs,
       K(dst_exprs.count()));
   } else {
     for (uint32_t i = 0; i < dst_exprs.count(); ++i) {
-      ObDatum *dst = dst_exprs.at(i)->locate_batch_datums(eval_ctx_);
+      Datum *dst = dst_exprs.at(i)->locate_batch_datums(eval_ctx_);
       if (!src_exprs.at(i)->is_batch_result()) {
-        ObDatum &src = src_exprs.at(i)->locate_expr_datum(eval_ctx_, 0);
+        Datum &src = src_exprs.at(i)->locate_expr_datum(eval_ctx_, 0);
         for (int64_t j = 0; j < batch_size; ++j) {
           if (skip.at(j)) {
             continue;
@@ -322,8 +322,8 @@ int ObHashSetOp::convert_batch(const common::ObIArray<ObExpr*> &src_exprs,
           dst_exprs.at(i)->locate_expr_datum(eval_ctx_, j) = src;
         }
       } else {
-        ObDatum *src = src_exprs.at(i)->locate_batch_datums(eval_ctx_);
-        MEMCPY(dst, src, sizeof(ObDatum) * batch_size);
+        Datum *src = src_exprs.at(i)->locate_batch_datums(eval_ctx_);
+        MEMCPY(dst, src, sizeof(Datum) * batch_size);
       }
       dst_exprs.at(i)->set_evaluated_projected(eval_ctx_);
     } // end for

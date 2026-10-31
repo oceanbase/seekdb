@@ -216,7 +216,7 @@ private:
   int print_field(const common::DatumValue &value, ObCsvFileWriter &data_writer);
   int print_lob_field(const common::DatumValue &value,
                       const ObExpr &expr,
-                      const ObDatum &datum,
+                      const Datum &datum,
                       ObCsvFileWriter &data_writer);
   int get_buf(char* &buf, int64_t &buf_len, int64_t &pos, ObCsvFileWriter &data_writer);
   int use_shared_buf(ObCsvFileWriter &data_writer, char* &buf, int64_t &buf_len, int64_t &pos);
@@ -254,7 +254,7 @@ private:
   int write_single_char_to_file(const char *wchar, ObCsvFileWriter &data_writer);
   int write_lob_to_file(const common::DatumValue &value,
                         const ObExpr &expr,
-                        const ObDatum &datum,
+                        const Datum &datum,
                         ObCsvFileWriter &data_writer);
   int into_varlist();
   int calc_next_file_path(ObExternalFileWriter &data_writer);

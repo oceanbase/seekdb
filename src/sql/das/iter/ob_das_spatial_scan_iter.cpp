@@ -94,9 +94,9 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
     if (T_PSEUDO_GROUP_ID == expr->type_) {
       // do nothing
     } else {
-      ObDatum &col_datum = expr->locate_expr_datum(*scan_rtdef_->eval_ctx_);
+      Datum &col_datum = expr->locate_expr_datum(*scan_rtdef_->eval_ctx_);
       DatumValue value;
-      if (OB_FAIL(project_datum_value_view(col_datum, expr->obj_meta_, expr->obj_datum_map_, obj_ptr_[i].meta_, value))) {
+      if (OB_FAIL(project_native_datum_value_view(col_datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, obj_ptr_[i].meta_, value, *allocator_))) {
       } else if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(value, obj_ptr_, rowkey_cnt, i))) {
       }
     }    
@@ -108,8 +108,8 @@ int ObDASSpatialScanIter::filter_by_mbr(bool &got_row)
 
     DatumValue mbr_obj;
     ObExpr *mbr_expr = scan_ctdef_->result_output_.at(rowkey_cnt);
-    ObDatum &mbr_datum = mbr_expr->locate_expr_datum(*scan_rtdef_->eval_ctx_);
-    if (OB_FAIL(project_datum_value_view(mbr_datum, mbr_expr->obj_meta_, mbr_expr->obj_datum_map_, mbr_obj.meta_, mbr_obj))) {
+    Datum &mbr_datum = mbr_expr->locate_expr_datum(*scan_rtdef_->eval_ctx_);
+    if (OB_FAIL(project_native_datum_value_view(mbr_datum, mbr_expr->get_sql_type(), mbr_expr->obj_meta_, mbr_expr->obj_datum_map_, mbr_obj.meta_, mbr_obj, *allocator_))) {
     } else if (!is_whole_range_ && OB_FAIL(filter_by_mbr(mbr_obj, pass_through))) {
     } else if (!is_whole_range_ && pass_through) {
       // not target

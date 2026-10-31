@@ -28,11 +28,31 @@
 #include "share/object/ob_obj_cast.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include <type_traits>
 
 namespace oceanbase
 {
 namespace sql
 {
+template <typename Number>
+inline Number read_native_numeric(const common::Datum &value)
+{
+  if constexpr (std::is_same<Number, common::ObMySQLDate>::value) {
+    return value.get_mysql_date();
+  } else if constexpr (std::is_same<Number, common::ObMySQLDateTime>::value) {
+    return value.get_mysql_datetime();
+  } else if constexpr (std::is_same<Number, float>::value) {
+    return value.get_float();
+  } else if constexpr (std::is_same<Number, double>::value) {
+    return value.get_double();
+  } else {
+    static_assert(std::is_integral<Number>::value && sizeof(Number) <= sizeof(uint64_t),
+        "A numeric cast reads the prepared inline scalar representation");
+    if constexpr (std::is_signed<Number>::value) { return static_cast<Number>(value.get_int()); }
+    else { return static_cast<Number>(value.get_uint()); }
+  }
+}
+
 int datum_value_to_ob_time_with_date(
     const common::DatumValue &value, const common::ObTimeZoneInfo *timezone,
     common::ObTime &result, int64_t current_timestamp,
@@ -125,8 +145,8 @@ int string_length_check(const ObExpr &expr,
                         const SqlValueType type,
                         const ObCollationType cs_type,
                         ObEvalCtx &ctx,
-                        const ObDatum &in_datum,
-                        ObDatum &res_datum,
+                        const Datum &in_datum,
+                        Datum &res_datum,
                         int &warning);
 int string_length_check(const ObExpr &expr,
                         const ObCastMode &cast_mode,
@@ -144,9 +164,9 @@ int datum_accuracy_check(const ObExpr &expr,
                          const uint64_t cast_mode,
                          ObEvalCtx &ctx,
                          bool has_lob_header,
-                         const common::ObDatum &in_datum,
-                         ObDatum &res_datum,
-                         int &warning);
+                         const common::Datum &in_datum,
+                         Datum &res_datum,
+                         int &warning, const common::SqlType *input_type = nullptr);
 
 // check if accuracy in %in_datum is ok. if ok, call res_datum.set_datum(in_datum).
 // if not, will trunc data in %in_datum and put it in res_datum.
@@ -156,9 +176,15 @@ int datum_accuracy_check(const ObExpr &expr,
                          ObEvalCtx &ctx,
                          const common::ObAccuracy &acc,
                          bool has_lob_header,
-                         const common::ObDatum &in_datum,
-                         ObDatum &res_datum,
-                         int &warning);
+                         const common::Datum &in_datum,
+                         Datum &res_datum,
+                         int &warning, const common::SqlType *input_type = nullptr);
+
+// Explicit input boundary for legacy numeric converters. Decimal accuracy is
+// applied to its actual coefficient before choosing the native result carrier.
+int datum_accuracy_check_legacy_input(const ObExpr &expr, uint64_t cast_mode,
+    ObEvalCtx &ctx, const common::ObAccuracy &accuracy, bool has_lob_header,
+    const common::ObDatum &input, common::Datum &output, int &warning);
 
 int vector_accuracy_check(const ObExpr &expr,
                           const uint64_t cast_mode,
@@ -195,7 +221,8 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
                                   common::ObTime& ob_time,
                                   const int64_t cur_ts_value,
                                   const ObDateSqlMode date_sql_mode,
-                                  const bool has_lob_header)
+                                  const bool has_lob_header,
+                                  const common::SqlType *type_context = nullptr)
 {
   int ret = OB_SUCCESS;
   switch (sql_type_class(type)) {
@@ -250,9 +277,19 @@ int ob_datum_to_ob_time_with_date(ObExecContext &exec_ctx,
       number::ObNumber num;
       ObNumStackOnceAlloc tmp_alloc;
       if (ob_is_decimal_int(type)) {
-        if (OB_FAIL(wide::to_number(datum.get_decimal_int(),
-                                    datum.get_int_bytes(), scale, tmp_alloc,
-                                    num))) {
+        if constexpr (std::is_same<T, common::Datum>::value) {
+          common::ObDatum coefficient;
+          char coefficient_buf[64];
+          if (OB_ISNULL(type_context)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(common::DatumCopyPlan(*type_context).get_decimal(
+                         datum, coefficient, coefficient_buf, sizeof(coefficient_buf)))) {
+          } else if (OB_FAIL(wide::to_number(coefficient.get_decimal_int(),
+                            coefficient.get_int_bytes(), scale, tmp_alloc, num))) {
+          }
+        } else {
+          ret = wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(),
+                                scale, tmp_alloc, num);
         }
       } else {
         num = datum.get_number();
@@ -297,7 +334,8 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
                                     const ObScale scale,
                                     const common::ObTimeZoneInfo *tz_info,
                                     common::ObTime &ob_time,
-                                    const bool has_lob_header)
+                                    const bool has_lob_header,
+                                  const common::SqlType *type_context = nullptr)
 {
   int ret = OB_SUCCESS;
   switch (sql_type_class(type)) {
@@ -359,9 +397,19 @@ int ob_datum_to_ob_time_without_date(ObExecContext &exec_ctx,
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber num;
       if (ob_is_decimal_int(type)) {
-        if (OB_FAIL(wide::to_number(datum.get_decimal_int(),
-                                    datum.get_int_bytes(), scale, tmp_alloc,
-                                    num))) {
+        if constexpr (std::is_same<T, common::Datum>::value) {
+          common::ObDatum coefficient;
+          char coefficient_buf[64];
+          if (OB_ISNULL(type_context)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(common::DatumCopyPlan(*type_context).get_decimal(
+                         datum, coefficient, coefficient_buf, sizeof(coefficient_buf)))) {
+          } else if (OB_FAIL(wide::to_number(coefficient.get_decimal_int(),
+                            coefficient.get_int_bytes(), scale, tmp_alloc, num))) {
+          }
+        } else {
+          ret = wide::to_number(datum.get_decimal_int(), datum.get_int_bytes(),
+                                scale, tmp_alloc, num);
         }
       } else {
         num = datum.get_number();
@@ -412,7 +460,7 @@ int common_string_double(const ObExpr &expr,
                          const ObCollationType &in_cs_type,
                          const SqlValueType &out_type,
                          const ObString &in_str,
-                         ObDatum &res_datum);
+                         Datum &res_datum);
 
 
 int get_cast_ret_wrap(const ObCastMode &cast_mode, int ret, int &warning);
@@ -458,13 +506,13 @@ public:
 static int unhex(const ObExpr &expr,
                  const common::ObString &in_str,
                  ObEvalCtx &ctx,
-                 ObDatum &res_datum,
+                 Datum &res_datum,
                  bool &has_set_res);
 static int hex(const ObExpr &expr,
                const common::ObString &in_str,
                ObEvalCtx &ctx,
                common::ObIAllocator &calc_alloc,
-               ObDatum &res_datum,
+               Datum &res_datum,
                bool upper_case = true);
 };
 
@@ -605,14 +653,14 @@ public:
                int *warning = nullptr);
 
   // Cast the source expression directly into a Datum of the destination type.
-  // input is ObExpr, and output is ObDatum, it's better if input is also ObDatum.
+  // input is ObExpr, and output is Datum, it's better if input is also Datum.
   // we will do this later if necessary.
   // subschema id from sql udt type is a combination of (cs_type_ and cs_level_), 
-  // datum meta does not have cs_level_, or we can use ObDatum precision_ as subschema id? 
+  // datum meta does not have cs_level_, or we can use Datum precision_ as subschema id?
   int to_type(const ObDatumMeta &dst_type,
               const ObExpr &src_expr,
               const common::ObCastMode &cm,
-              common::ObDatum *&res,
+              common::Datum *&res,
               int64_t batch_idx = 0,
               const uint16_t subschema_id = 0,
               const int32_t max_length = LENGTH_UNKNOWN_YET);
@@ -621,8 +669,13 @@ public:
               const common::ObIArray<common::ObString> &str_values,
               const ObExpr &src_expr,
               const common::ObCastMode &cm,
-              common::ObDatum *&res,
+              common::Datum *&res,
               int64_t batch_idx = 0);
+
+  // Synchronous companion of a successful to_type(): only its current source
+  // or result slot is accepted, and no Type pointer escapes on failure.
+  int get_result_type(const ObExpr &source, const common::Datum *result,
+                       const common::SqlType *&type) const;
 
   int destroy();
   bool native_cast_active() const { return native_cast_active_; }
@@ -637,7 +690,8 @@ private:
                       const common::ObCastMode cm,
                       ObExpr &cast_expr,
                       const uint16_t subschema_id = 0,
-                      const int32_t max_length = LENGTH_UNKNOWN_YET);
+                      const int32_t max_length = LENGTH_UNKNOWN_YET,
+                      const common::ObIArray<common::ObString> *enum_values = nullptr);
   bool inited_;
   ObEvalCtx *eval_ctx_;
   ObExpr *cast_expr_;

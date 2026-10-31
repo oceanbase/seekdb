@@ -556,8 +556,8 @@ int ObSRBMWIterImpl::project_rows_from_top_k_heap(const int64_t capacity, int64_
     ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
     sql::ObBitVector &id_evaluated_flags = id_proj_expr->get_evaluated_flags(*eval_ctx);
     sql::ObBitVector *relevance_evaluated_flags = nullptr;
-    ObDatum *id_datums = id_proj_expr->locate_datums_for_update(*eval_ctx, capacity);
-    ObDatum *relevance_datums = nullptr;
+    common::Datum *id_datums = id_proj_expr->locate_datums_for_update(*eval_ctx, capacity);
+    common::Datum *relevance_datums = nullptr;
     if (iter_param_->need_project_relevance()) {
       relevance_datums = relevance_proj_expr->locate_datums_for_update(*eval_ctx, capacity);
       relevance_evaluated_flags = &relevance_proj_expr->get_evaluated_flags(*eval_ctx);

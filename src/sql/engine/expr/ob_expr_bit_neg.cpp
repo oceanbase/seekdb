@@ -29,11 +29,11 @@ ObExprBitNeg::ObExprBitNeg(ObIAllocator &alloc)
     : ObBitwiseExprOperator(alloc, T_OP_BIT_NEG, N_BIT_NEG, 1, NOT_ROW_DIMENSION) {}
 
 int ObExprBitNeg::calc_bitneg_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                   ObDatum& res_datum)
+                                   Datum& res_datum)
 {
   int ret = OB_SUCCESS;
   uint64_t uint_val = 0;
-  ObDatum *child_res = NULL;
+  Datum *child_res = NULL;
   ObCastMode cast_mode = CM_NONE;
   void *get_uint_func = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
@@ -53,7 +53,7 @@ int ObExprBitNeg::calc_bitneg_expr(const ObExpr &expr, ObEvalCtx &ctx,
                                     session->is_ignore_stmt(),
                                     sql_mode, cast_mode))) {
   } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func)(
-                     expr.args_[0]->datum_meta_, *child_res, true, uint_val, cast_mode)))) {
+                     expr.args_[0]->datum_meta_, *child_res, expr.args_[0]->get_sql_type(), true, uint_val, cast_mode)))) {
   } else {
     res_datum.set_uint(~uint_val);
   }

@@ -38,7 +38,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
   static int calc_estimate_ndv_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                    ObDatum &res_datum);
+                                    Datum &res_datum);
 private:
   // Calculate the function for alpha * m^2 in HyperLogLogCount. The calculation involves variable m(uint64_t)
   // Convert to double steps, caller needs to consider possible precision loss (currently m usually does not exceed 4096, no loss).

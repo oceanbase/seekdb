@@ -78,10 +78,10 @@ int ObExprVecIVFPQCenterVector::cg_expr(
 int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   if (1 == expr.arg_cnt_) {
     expr_datum.set_null();
   } else if (4 == expr.arg_cnt_) {

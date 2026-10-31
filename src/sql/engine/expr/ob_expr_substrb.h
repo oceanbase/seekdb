@@ -39,7 +39,7 @@ public:
 
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                         ObExpr &rt_expr) const;
-  static int calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int handle_invalid_byte(char* ptr,
                                  const int64_t text_len,
                                  int64_t &start,

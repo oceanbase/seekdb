@@ -167,18 +167,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
 
   const ObDataTypeCastParams dtc_params =
       ObBasicSessionInfo::create_dtc_params(&session_);
-  if (OB_SUCC(ret) && !is_packed && !is_cac_found_rows) {
-    // This must precede the first storage advance: a field requiring a cast
-    // cannot fall back to an Expr frame after its projection was omitted.
-    bool supported = fields->count() > 0 && fields->count() <= 3;
-    for (int64_t i = 0; supported && i < fields->count(); ++i) {
-      supported = DatumMysqlRow::can_encode_inline_bigint_field(fields->at(i));
-    }
-    if (supported) {
-      bool accepted = false;
-      ret = result.try_enable_native_bigint_output(fields->count(), accepted);
-    }
-  }
   while (OB_SUCC(ret) && row_num < limit_count && !OB_FAIL(result.get_next_result_row(result_view)) ) {
     ObNewRow *row = const_cast<ObNewRow*>(result_view.legacy_row());
     if (result_view.is_datum_row()) {

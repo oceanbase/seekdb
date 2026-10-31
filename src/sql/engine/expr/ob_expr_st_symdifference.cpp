@@ -55,8 +55,8 @@ int ObExprSTSymDifference::process_input_geometry(common::ObSrsCacheGuard &srs_g
     const ObSrsItem *&srs)
 {
   int ret = OB_SUCCESS;
-  ObDatum *gis_datum1 = nullptr;
-  ObDatum *gis_datum2 = nullptr;
+  Datum *gis_datum1 = nullptr;
+  Datum *gis_datum2 = nullptr;
   ObExpr *gis_arg1 = expr.args_[0];
   ObExpr *gis_arg2 = expr.args_[1];
   SqlValueType input_type1 = gis_arg1->datum_meta_.type_;
@@ -114,7 +114,7 @@ int ObExprSTSymDifference::process_input_geometry(common::ObSrsCacheGuard &srs_g
   return ret;
 }
 
-int ObExprSTSymDifference::eval_st_symdifference(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTSymDifference::eval_st_symdifference(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_geo1_empty = false;

@@ -141,7 +141,7 @@ int ObDasVecScanUtils::get_real_search_vec(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *search_vec_datum = NULL;
+  Datum *search_vec_datum = NULL;
   const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_ISNULL(sort_rtdef) || OB_ISNULL(sort_rtdef->eval_ctx_)
       || OB_ISNULL(origin_vec)) {
@@ -200,7 +200,7 @@ int ObDasVecScanUtils::init_limit(const ObDASVecAuxScanCtDef *ir_ctdef,
                     && (OB_ISNULL(base_rtdef) || base_rtdef->limit_param_.is_valid()))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (nullptr != sort_ctdef->limit_expr_) {
-      ObDatum *limit_datum = nullptr;
+      Datum *limit_datum = nullptr;
       if (OB_FAIL(sort_ctdef->limit_expr_->eval(*sort_rtdef->eval_ctx_, limit_datum))) {
       } else if (limit_datum->is_null()) {
         is_null = true;
@@ -211,7 +211,7 @@ int ObDasVecScanUtils::init_limit(const ObDASVecAuxScanCtDef *ir_ctdef,
     }
 
     if (OB_SUCC(ret) && !is_null && nullptr != sort_ctdef->offset_expr_) {
-      ObDatum *offset_datum = nullptr;
+      Datum *offset_datum = nullptr;
       if (OB_FAIL(sort_ctdef->offset_expr_->eval(*sort_rtdef->eval_ctx_, offset_datum))) {
       } else if (offset_datum->is_null()) {
         limit_param.offset_ = 0;
@@ -442,10 +442,9 @@ int ObDasVecScanUtils::get_rowkey(ObIAllocator &allocator, const ObDASScanCtDef 
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
       DatumValue tmp_obj;
       ObExpr *expr = ctdef->rowkey_exprs_.at(i);
-      ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-      if (OB_ISNULL(datum.ptr_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(project_datum_value_view(datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+      Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
+      if (OB_FAIL(project_native_datum_value_view(datum, expr->get_sql_type(),
+          expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, allocator))) {
       } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], allocator))) {
       }
     }

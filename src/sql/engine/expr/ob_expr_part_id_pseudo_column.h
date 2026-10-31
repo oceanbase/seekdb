@@ -40,7 +40,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_part_id(const ObExpr &expr, ObEvalCtx &ctx, common::ObDatum &expr_datum);
+  static int eval_part_id(const ObExpr &expr, ObEvalCtx &ctx, common::Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprPartIdPseudoColumn);
 };

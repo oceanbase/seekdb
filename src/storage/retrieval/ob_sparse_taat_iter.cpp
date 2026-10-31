@@ -164,7 +164,7 @@ int ObSRTaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
 
     if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0) {
       ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
-      ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx, 0);
+      common::Datum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx, 0);
       set_datum_func_(id_datum, cache_first_id_);
     }
   }
@@ -281,11 +281,15 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
               skips_[i]->set_all(capacity);
             }
             for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-              const ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx, i);
-              if (OB_UNLIKELY(id_datum.is_null()) || OB_ISNULL(id_datum.ptr_)) {
+              const common::Datum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx, i);
+              alignas(8) char scratch[64];
+              ObDatum legacy_id;
+              if (OB_UNLIKELY(id_datum.is_null())) {
                 ret = OB_ERR_UNEXPECTED;
+              } else if (OB_FAIL(iter_param_->id_proj_expr_->get_datum_copy_plan().legacy_view(
+                  id_datum, legacy_id, scratch, sizeof(scratch)))) {
               } else {
-                uint64_t partition = murmurhash(id_datum.ptr_, id_datum.len_, 0) % partition_cnt_;
+                uint64_t partition = murmurhash(legacy_id.ptr_, legacy_id.len_, 0) % partition_cnt_;
                 skips_[partition]->unset(i);
               }
             }
@@ -312,11 +316,15 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
             if (OB_UNLIKELY(OB_ITER_END != ret)) {
             }
           } else {
-            const ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
-            if (OB_UNLIKELY(id_datum.is_null()) || OB_ISNULL(id_datum.ptr_)) {
+            const common::Datum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
+            alignas(8) char scratch[64];
+            ObDatum legacy_id;
+            if (OB_UNLIKELY(id_datum.is_null())) {
               ret = OB_ERR_UNEXPECTED;
+            } else if (OB_FAIL(iter_param_->id_proj_expr_->get_datum_copy_plan().legacy_view(
+                id_datum, legacy_id, scratch, sizeof(scratch)))) {
             } else {
-              uint64_t partition = murmurhash(id_datum.ptr_, id_datum.len_, 0) % partition_cnt_;
+              uint64_t partition = murmurhash(legacy_id.ptr_, legacy_id.len_, 0) % partition_cnt_;
               if (OB_FAIL(query::spill_row_store_add_row(
                   datum_stores_[partition], exprs, *eval_ctx))) {
               } else {
@@ -393,10 +401,10 @@ int ObSRTaaTIterImpl::load_next_hash_map()
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
         }
       } else {
-        ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
-        if (OB_FAIL(id.from_datum(id_datum))) {
+        common::Datum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
+        if (OB_FAIL(id.from_native(id_datum, iter_param_->id_proj_expr_->get_sql_type()))) {
         } else if (iter_param_->need_project_relevance()) {
-          ObDatum &relevance_datum = iter_param_->relevance_expr_->locate_expr_datum(*eval_ctx);
+          common::Datum &relevance_datum = iter_param_->relevance_expr_->locate_expr_datum(*eval_ctx);
           cur_relevance = relevance_datum.get_double();
           if (OB_FAIL(map->get_refactored(id, last_relevance))) {
             if (OB_HASH_NOT_EXIST != ret) {
@@ -432,9 +440,9 @@ int ObSRTaaTIterImpl::project_results(const int64_t safe_capacity, int64_t &coun
 {
   int ret = OB_SUCCESS;
   ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
-  ObDatum *id_datum = iter_param_->id_proj_expr_->locate_batch_datums(*eval_ctx);
+  common::Datum *id_datum = iter_param_->id_proj_expr_->locate_batch_datums(*eval_ctx);
   ObExpr *relevance_expr = iter_param_->relevance_proj_expr_;
-  ObDatum *relevance_datum = nullptr;
+  common::Datum *relevance_datum = nullptr;
   ObExpr *filter_expr = iter_param_->filter_expr_;
   const ObLimitParam *limit_param = iter_param_->limit_param_;
   if (iter_param_->need_project_relevance()) {
@@ -457,7 +465,7 @@ int ObSRTaaTIterImpl::project_results(const int64_t safe_capacity, int64_t &coun
     }
 
     bool need_project = false;
-    ObDatum *filter_res = nullptr;
+    common::Datum *filter_res = nullptr;
     if (!iter_param_->need_filter()) {
       need_project = true;
     } else {

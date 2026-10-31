@@ -84,7 +84,7 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
 }
 
 int ObExprIsBase::is_infinite_nan(const SqlValueType datum_type,
-                              ObDatum *datum,
+                              Datum *datum,
                               bool &ret_bool,
                               Ieee754 inf_or_nan)
 {
@@ -253,10 +253,10 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   return ret;
 }
 
-int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else {
     bool ret_bool = param1->is_null();
@@ -265,10 +265,10 @@ int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
   return ret;
 }
 
-int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
@@ -283,10 +283,10 @@ int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   return ret;
 }
 
-int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
@@ -301,10 +301,10 @@ int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   return ret;
 }
 
-int ObExprIsNot::calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsNot::calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else {
     bool ret_bool = !param1->is_null();
@@ -317,7 +317,7 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else {
@@ -325,7 +325,7 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       }
-      ObDatum &arg = expr.args_[0]->locate_expr_datum(ctx, i);
+      Datum &arg = expr.args_[0]->locate_expr_datum(ctx, i);
       bool v = !arg.is_null();
       results[i].set_int32(static_cast<int32_t>(v));
       eval_flags.set(i);
@@ -334,10 +334,10 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
@@ -352,10 +352,10 @@ int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   return ret;
 }
 
-int ObExprIsNot::calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprIsNot::calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
+  Datum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) {
     expr_datum.set_null();
@@ -503,21 +503,46 @@ int ObExprIsBase::is_zero<const ObDecimalInt *>(const ObDecimalInt *decimal_int,
   return is_zero;
 }
 
+namespace
+{
+#define SCALAR_ZERO_READER(kind) \
+int read_zero_##kind(const ObExpr &, const Datum &value, bool &zero) \
+{ zero = ObExprIsBase::is_zero(value.get_##kind(), value.length()); return OB_SUCCESS; }
+SCALAR_ZERO_READER(int)
+SCALAR_ZERO_READER(float)
+SCALAR_ZERO_READER(double)
+SCALAR_ZERO_READER(number)
+SCALAR_ZERO_READER(json)
+#undef SCALAR_ZERO_READER
+
+int read_zero_decimal_int(const ObExpr &expr, const Datum &value, bool &zero)
+{
+  alignas(8) char scratch[64];
+  common::ObDatum coefficient;
+  const int ret = expr.args_[0]->get_datum_copy_plan().get_decimal(value, coefficient, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) {
+    zero = ObExprIsBase::is_zero(coefficient.get_decimal_int(), coefficient.get_int_bytes());
+  }
+  return ret;
+}
+} // namespace
+
 #define NUMERIC_CALC_FUNC(type, func_name, bool_is_not, is_true, str_is_not)                \
   int func_name::type##_##str_is_not##_##is_true(const ObExpr &expr, ObEvalCtx &ctx,        \
-                                                ObDatum &expr_datum)                    \
+                                                Datum &expr_datum)                    \
   {                                                           \
     int ret = OB_SUCCESS;                                     \
-    ObDatum *param1 = NULL;                                   \
+    Datum *param1 = NULL;                                   \
     bool ret_bool = false;                                    \
     if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {          \
       LOG_WARN("eval first param failed", K(ret));            \
     } else if (param1->is_null()) {                           \
       ret_bool = bool_is_not;                                 \
     } else {                                                  \
-      ret_bool = bool_is_not == is_true ?                     \
-                is_zero(param1->get_##type(), param1->len_) : \
-                !is_zero(param1->get_##type(), param1->len_); \
+      bool zero = false;                                      \
+      if (OB_SUCC(ret = read_zero_##type(expr, *param1, zero))) { \
+        ret_bool = bool_is_not == is_true ? zero : !zero;       \
+      }                                                       \
     }                                                         \
     if (OB_SUCC(ret)) {                                       \
       expr_datum.set_int32(static_cast<int32_t>(ret_bool));   \
@@ -556,26 +581,25 @@ NUMERIC_CALC_FUNC(json, ObExprIs, false, false, is)
 
 #define INNER_NUMERIC_CALC_FUNC(type, is_start, str_pos)                          \
   int ObExprInnerIsTrue::type##_##is_true##_##str_pos(const ObExpr &expr, ObEvalCtx &ctx,     \
-                                                      ObDatum &expr_datum)        \
+                                                      Datum &expr_datum)        \
   {                                                                               \
     int ret = OB_SUCCESS;                                                         \
-    ObDatum *param1 = NULL;                                                       \
+    Datum *param1 = NULL;                                                       \
     bool ret_bool = false;                                                        \
     if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {                              \
       LOG_WARN("eval first param failed", K(ret));                                \
     } else if (param1->is_null()) {                                               \
       ret_bool = false;                                                           \
     } else {                                                                      \
-      ret_bool = !is_zero(param1->get_##type(), param1->len_);                    \
+      bool zero = false;                                                         \
+      if (OB_SUCC(ret = read_zero_##type(expr, *param1, zero))) { ret_bool = !zero; } \
     }                                                                             \
     if (OB_SUCC(ret)) {                                                           \
-      DatumValue result;                                                          \
       if ((ret_bool && is_start) || (!ret_bool && !is_start)) {                   \
-        result.set_min_value();                                                   \
+        expr_datum.set_min();                                                   \
       } else {                                                                    \
-        result.set_max_value();                                                   \
+        expr_datum.set_max();                                                   \
       }                                                                           \
-      expr_datum = result.datum_;                                                 \
     }                                                                             \
     return ret;                                                                   \
   }

@@ -79,8 +79,8 @@ public:
   bool is_error_default_const_;
   bool is_asis_;
   bool is_multivalue_;
-  ObDatum *empty_val_;
-  ObDatum *error_val_;
+  Datum *empty_val_;
+  Datum *error_val_;
   common::ObSEArray<int8_t, 1, common::ModulePageAllocator, true> on_mismatch_;
   common::ObSEArray<int8_t, 1, common::ModulePageAllocator, true> on_mismatch_type_;
   ObAccuracy accuracy_;
@@ -230,7 +230,7 @@ public:
       const ObExpr &json_expr,
       ObEvalCtx &ctx,
       ObIAllocator &allocator,
-      ObDatum &json_datum,
+      Datum &json_datum,
       ObIJsonBase *&j_base);
 
   static int get_partial_json_bin(
@@ -243,7 +243,7 @@ public:
       const ObExpr &json_expr,
       ObEvalCtx &ctx,
       ObIAllocator &allocator,
-      ObDatum &json_datum,
+      Datum &json_datum,
       ObIJsonBase *&j_base);
 
 
@@ -285,14 +285,14 @@ public:
                           const common::DatumValue &data, ObExecContext &ctx,
                           bool is_bool, common::ObIAllocator *allocator,
                           ObIJsonBase*& j_base, bool to_bin = false);
-  static int get_json_val(const common::ObDatum &data, 
+  static int get_json_val(const common::Datum &data,
                           ObExecContext &ctx,
                           ObExpr* expr,
                           common::ObIAllocator *allocator,
                           SqlValueType val_type,
                           ObCollationType &cs_type,
                           ObIJsonBase*& j_base, bool to_bin = false);
-  static int datum_to_json_val(const ObDatum *json_datum,  SqlTypeMeta& data_meta, common::ObIAllocator *allocator,
+  static int datum_to_json_val(const common::ObDatum *json_datum,  SqlTypeMeta& data_meta, common::ObIAllocator *allocator,
                                ObBasicSessionInfo *session, ObIJsonBase*& j_base, bool is_bool_data_type,
                                bool format_json, bool is_strict, bool is_bin,
                                const common::ObLobReadOptions *lob_options);
@@ -349,7 +349,8 @@ public:
                                         ObBasicSessionInfo *session,
                                         ObIJsonBase*& j_base,
                                         bool to_bin,
-                                        bool is_bool = false);
+                                        bool is_bool = false,
+                                        const common::SqlType *type_context = nullptr);
   /*
   try to transfrom from type which is_convertible_to_json to jsonBase
   @param[in]  datum          the input datum
@@ -386,7 +387,7 @@ public:
   template <typename T>
   static int pack_json_str_res(const ObExpr &expr, 
                                ObEvalCtx &ctx, 
-                               ObDatum &res,
+                               Datum &res,
                                T &str, 
                                common::ObIAllocator *allocator = nullptr)
   {
@@ -405,7 +406,7 @@ public:
       ObEvalCtx &ctx,
       ObIAllocator &temp_allocator,
       ObIJsonBase *json_doc,
-      ObDatum &res);
+      Datum &res);
 
   /**
    * the following 3 functions is used for json_query and json_mergepatch 
@@ -456,11 +457,11 @@ public:
                                      ObString& result,
                                      int32_t reserve_len = 0);
   static int cast_to_res(ObIAllocator &allocator, 
-                          ObDatum &src_datum, 
+                          Datum &src_datum,
                           const ObExpr &expr, 
                           const ObExpr &default_expr, 
                           ObEvalCtx &ctx, 
-                          ObDatum &res, 
+                          Datum &res,
                           bool xt_need_acc_check);
   static void get_accuracy_from_expr(const ObExpr &expr, ObAccuracy &accuracy);
   static int get_clause_opt(ObExpr *expr,
@@ -483,7 +484,7 @@ public:
     ObEvalCtx &ctx,
     ObIAllocator &temp_allocator,
     ObIJsonBase *json_doc,
-    ObDatum &res);
+    Datum &res);
 
   static int refresh_root_when_bin_rebuild_all(ObIJsonBase *j_base);
 

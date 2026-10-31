@@ -22,6 +22,7 @@
 #include "sql/rewrite/ob_range_generator.h"
 #include "sql/engine/basic/ob_values_table_access_op.h"
 #include "sql/resolver/expr/ob_raw_expr_copier.h"
+#include <algorithm>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
@@ -81,7 +82,10 @@ std::vector<std::pair<std::string, std::string>> plan_frames() {
   return result;
 }
 std::string encode_plan(const ObValuesTableAccessSpec &spec) {
-  std::string result(spec.get_serialize_size(), '\0');
+  const int64_t size = spec.get_serialize_size();
+  EXPECT_GE(size, 0);
+  if (size < 0) { return std::string(); }
+  std::string result(size, '\0');
   int64_t pos = 0;
   EXPECT_EQ(OB_SUCCESS, spec.serialize(&result[0], result.size(), pos));
   EXPECT_EQ(result.size(), pos);
@@ -97,6 +101,31 @@ std::string encode_value(const DatumParameter &value) {
   EXPECT_EQ(size, pos);
   return result;
 }
+// These six captured *present* values have only bare metadata. The old wire
+// contains no source labels, schema graph or declaration identity; target column
+// expressions are absent and could not substitute for a source declaration.
+bool missing_source_declaration(const std::string &name)
+{
+  return name == "value-type-32" || name == "value-type-33" || name == "value-type-34"
+      || name == "value-type-35" || name == "value-type-38" || name == "value-type-40";
+}
+
+std::string encode_value(const DatumValue &value)
+{
+  DatumParameter view;
+  view.set_datum(value.datum_);
+  view.set_type_meta(value.meta_);
+  return encode_value(view);
+}
+
+void expect_value_plan_shape(const ObValuesTableAccessSpec &spec)
+{
+  EXPECT_EQ(ObValuesTableDef::ACCESS_VALUE, spec.access_type_);
+  EXPECT_TRUE(spec.column_exprs_.empty());
+  EXPECT_TRUE(spec.value_exprs_.empty());
+  EXPECT_EQ(-1, spec.start_param_idx_);
+  EXPECT_EQ(-1, spec.end_param_idx_);
+}
 } // namespace
 
 TEST(ValuesTableDatum, plan_and_statement_constants_are_native) {
@@ -110,13 +139,15 @@ TEST(ValuesTableDatum, plan_and_statement_constants_are_native) {
 
 TEST(ValuesTableDatum, captured_legacy_plan_wire_and_native_owned_constants_match) {
   const auto expected = plan_frames();
-  EXPECT_EQ(152, expected.size());
-  int covered = 0;
+  ASSERT_EQ(152, expected.size());
+  int covered = 0, rejected = 0, restored = 0;
   for (const auto &frame : expected) {
     SCOPED_TRACE(frame.first);
     ObArenaAllocator output;
     ObValuesTableAccessSpec spec(output, PHY_VALUES_TABLE_ACCESS);
     spec.access_type_ = ObValuesTableDef::ACCESS_VALUE;
+    std::string expected_value;
+    const bool needs_declaration = missing_source_declaration(frame.first);
     if (frame.first != "empty") {
       ObArenaAllocator input;
       bool found = false;
@@ -134,22 +165,80 @@ TEST(ValuesTableDatum, captured_legacy_plan_wire_and_native_owned_constants_matc
         ASSERT_EQ(OB_SUCCESS, clone_datum_value(source.datum_, source.get_type_meta(),
                                               spec.datum_values_.at(0).datum_, output));
         spec.datum_values_.at(0).meta_ = source.get_type_meta();
+        expected_value = bare_value(f.canonical); // independent captured value wire
+        EXPECT_EQ(expected_value, encode_value(spec.datum_values_.at(0)));
+        if (needs_declaration) {
+          EXPECT_FALSE(source.is_null());
+          EXPECT_TRUE(source.get_meta().is_enum_or_set() || source.get_meta().is_enumset_inner_type()
+              || source.get_type() == ObUserDefinedSQLType || source.get_type() == ObCollectionSQLType);
+        } else {
+          ASSERT_EQ(OB_SUCCESS, spec.datum_value_types_.prepare_allocate(1));
+          SqlTypeMeta type_meta = source.get_type_meta();
+          if (source.datum_.is_ext()) {
+            ASSERT_NE(nullptr, source.datum_.ptr_);
+            ASSERT_TRUE(source.datum_.is_extended_null() || source.datum_.has_ext_value());
+            if (!source.datum_.is_extended_null()) {
+              const int64_t state = source.datum_.get_ext();
+              ASSERT_TRUE(state == DATUM_MIN_EXT_VALUE || state == DATUM_MAX_EXT_VALUE || state == ObActionFlag::OP_NOP);
+            }
+            type_meta.set_extend_type(0); // no resource declaration for a state marker
+          }
+          ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(type_meta, ObAccuracy(), output, spec.datum_value_types_.at(0)));
+        }
         ++covered;
         break;
       }
       ASSERT_TRUE(found);
     }
-    // The producer arena has gone away before serialization of the copied plan.
-    EXPECT_EQ(frame.second, encode_plan(spec));
+    // Both producer inputs have retired before these owned outputs are read.
     ObArenaAllocator decoded_arena;
     ObValuesTableAccessSpec decoded(decoded_arena, PHY_VALUES_TABLE_ACCESS);
     int64_t pos = 0;
-    ASSERT_EQ(OB_SUCCESS, decoded.deserialize(frame.second.data(), frame.second.size(), pos));
+    std::string legacy_input = frame.second;
+    const int old_ret = decoded.deserialize(legacy_input.data(), legacy_input.size(), pos);
+    if (needs_declaration) {
+      EXPECT_EQ(OB_NOT_SUPPORTED, old_ret);
+      EXPECT_TRUE(decoded.datum_values_.empty());
+      EXPECT_TRUE(decoded.datum_value_types_.empty());
+      // An incomplete native constant must also be refused by the writer.
+      EXPECT_EQ(-1, spec.get_serialize_size());
+      ++rejected;
+      continue;
+    }
+    ASSERT_EQ(OB_SUCCESS, old_ret);
     EXPECT_EQ(frame.second.size(), pos);
-    EXPECT_EQ(frame.second, encode_plan(decoded));
-    EXPECT_EQ(spec.datum_values_.count(), decoded.datum_values_.count());
+    std::fill(legacy_input.begin(), legacy_input.end(), char(0xa5));
+    expect_value_plan_shape(decoded);
+    ASSERT_EQ(spec.datum_values_.count(), decoded.datum_values_.count());
+    ASSERT_EQ(decoded.datum_values_.count(), decoded.datum_value_types_.count());
+    if (!spec.datum_values_.empty()) {
+      EXPECT_EQ(expected_value, encode_value(decoded.datum_values_.at(0)));
+      ASSERT_NE(nullptr, decoded.datum_value_types_.at(0));
+      EXPECT_TRUE(spec.datum_value_types_.at(0)->equals(*decoded.datum_value_types_.at(0)));
+    }
+    const std::string native_wire = encode_plan(spec);
+    EXPECT_NE(frame.second, native_wire); // intentional v2 declaration wire
+    EXPECT_EQ(native_wire, encode_plan(decoded));
+    ObArenaAllocator native_arena;
+    ObValuesTableAccessSpec native_decoded(native_arena, PHY_VALUES_TABLE_ACCESS);
+    pos = 0;
+    std::string native_input = native_wire;
+    ASSERT_EQ(OB_SUCCESS, native_decoded.deserialize(native_input.data(), native_input.size(), pos));
+    EXPECT_EQ(native_wire.size(), pos);
+    std::fill(native_input.begin(), native_input.end(), char(0xa5));
+    expect_value_plan_shape(native_decoded);
+    ASSERT_EQ(spec.datum_values_.count(), native_decoded.datum_values_.count());
+    if (!spec.datum_values_.empty()) {
+      EXPECT_EQ(expected_value, encode_value(native_decoded.datum_values_.at(0)));
+      ASSERT_NE(nullptr, native_decoded.datum_value_types_.at(0));
+      EXPECT_TRUE(spec.datum_value_types_.at(0)->equals(*native_decoded.datum_value_types_.at(0)));
+    }
+    EXPECT_EQ(native_wire, encode_plan(native_decoded));
+    ++restored;
   }
   EXPECT_EQ(151, covered);
+  EXPECT_EQ(6, rejected);
+  EXPECT_EQ(146, restored);
 }
 
 TEST(ValuesTableDatum, captured_plan_rejects_truncated_constant_payloads) {

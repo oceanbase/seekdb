@@ -81,7 +81,7 @@ public:
   virtual bool need_rt_ctx() const override { return true; }
   static int to_outfile_str(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &datum);
+                            Datum &datum);
   static int extract_fisrt_wchar_from_varhcar(const common::DatumValue &value, int32_t &wchar);
   static int print_field(char *buf, const int64_t buf_len, int64_t &pos, const common::DatumValue &value,
                          ObExprOutFileInfo &out_info);

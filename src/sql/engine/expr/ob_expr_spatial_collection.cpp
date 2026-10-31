@@ -161,7 +161,7 @@ int ObExprSpatialCollection::calc_polygon(const ObString wkb_linestring,
 
 int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
                                                      ObEvalCtx &ctx,
-                                                     ObDatum &res)
+                                                     Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -183,7 +183,7 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
   } else if (ObGeoType::GEOMETRYCOLLECTION == geo_type && expr.arg_cnt_ == 0) {
     // construct an empty geometry by calling GeometryCollection().
   } else {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     ObString wkb;
     for (uint32_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_ && !is_null_result; i++) {
       if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[i], ctx, datum))) {
@@ -245,7 +245,7 @@ ObExprLineString::~ObExprLineString()
 
 int ObExprLineString::eval_linestring(const ObExpr &expr,
                                       ObEvalCtx &ctx,
-                                      ObDatum &res)
+                                      Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -279,7 +279,7 @@ ObExprPolygon::~ObExprPolygon()
 
 int ObExprPolygon::eval_polygon(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                ObDatum &res)
+                                Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -313,7 +313,7 @@ ObExprMultiPoint::~ObExprMultiPoint()
 
 int ObExprMultiPoint::eval_multipoint(const ObExpr &expr,
                                       ObEvalCtx &ctx,
-                                      ObDatum &res)
+                                      Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -347,7 +347,7 @@ ObExprMultiLineString::~ObExprMultiLineString()
 
 int ObExprMultiLineString::eval_multilinestring(const ObExpr &expr,
                                                 ObEvalCtx &ctx,
-                                                ObDatum &res)
+                                                Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -381,7 +381,7 @@ ObExprMultiPolygon::~ObExprMultiPolygon()
 
 int ObExprMultiPolygon::eval_multipolygon(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &res)
+                                          Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -415,7 +415,7 @@ ObExprGeomCollection::~ObExprGeomCollection()
 
 int ObExprGeomCollection::eval_geomcollection(const ObExpr &expr,
                                               ObEvalCtx &ctx,
-                                              ObDatum &res)
+                                              Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -449,7 +449,7 @@ ObExprGeometryCollection::~ObExprGeometryCollection()
 
 int ObExprGeometryCollection::eval_geometrycollection(const ObExpr &expr,
                                                       ObEvalCtx &ctx,
-                                                      ObDatum &res)
+                                                      Datum &res)
 {
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();

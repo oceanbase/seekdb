@@ -54,13 +54,13 @@ int ObExprPrivSTGeomFromEwkt::calc_result_type1(ObExprResType &type,
 }
 
 // ewkt is always long-lat
-int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   bool is_null_result = false;
   uint32_t srid = 0;
   ObString wkt;

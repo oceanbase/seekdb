@@ -44,14 +44,14 @@ public:
   static int cast_param(const ObExpr &src_expr, ObEvalCtx &ctx,
                         const ObDatumMeta &dst_meta,
                         const ObCastMode &cm, ObIAllocator &allocator,
-                        ObDatum &res_datum);
+                        Datum &res_datum);
   static int cast_result(const ObExpr &src_expr, const ObExpr &dst_expr, ObEvalCtx &ctx,
                          const ObCastMode &cm,
-                         ObDatum &expr_datum);
-  static int calc_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum, bool least);
+                         Datum &expr_datum);
+  static int calc_mysql(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum, bool least);
   // left < right: return true, else return false.
-  static inline bool cmp_integer(const ObDatum &l_datum, const bool l_is_int,
-                                 const ObDatum &r_datum, const bool r_is_int)
+  static inline bool cmp_integer(const Datum &l_datum, const bool l_is_int,
+                                 const Datum &r_datum, const bool r_is_int)
   {
     bool ret_bool = true;
     if (l_is_int && r_is_int) {
@@ -77,7 +77,7 @@ public:
   explicit  ObExprLeast(common::ObIAllocator &alloc);
   virtual ~ObExprLeast() {}
 
-  static int calc_least(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_least(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprLeast);

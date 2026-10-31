@@ -83,14 +83,14 @@ int ObExprTabletAutoincNextval::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr
 }
 
 int ObExprTabletAutoincNextval::eval_nextval(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
   UNUSED(ctx);
   expr_datum.set_null();
-//  ObDatum *col_id = NULL;
-//  ObDatum *tablet_id_datum = NULL; // TODO(shuangcan): currently it is partition id
+//  Datum *col_id = NULL;
+//  Datum *tablet_id_datum = NULL; // TODO(shuangcan): currently it is partition id
 //  ObPhysicalPlanCtx *plan_ctx = ctx.exec_ctx_.get_physical_plan_ctx();
 //  ObSQLSessionInfo *my_session = ctx.exec_ctx_.get_my_session();
 //  if (OB_ISNULL(plan_ctx) || OB_ISNULL(my_session)) {

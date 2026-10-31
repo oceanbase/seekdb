@@ -40,7 +40,7 @@ public:
                           ObEvalCtx &ctx,
                           const share::ObCipherOpMode op_mode,
                           const ObString &func_name,
-                          ObDatum &res);
+                          Datum &res);
 };
 
 class ObExprBaseDecrypt : public ObFuncExprOperator 
@@ -57,7 +57,7 @@ public:
                           ObEvalCtx &ctx,
                           const share::ObCipherOpMode op_mode,
                           const ObString &func_name,
-                          ObDatum &res);
+                          Datum &res);
 };
 
 class ObExprAesEncrypt : public ObExprBaseEncrypt 
@@ -69,7 +69,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_aes_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_aes_encrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprAesEncrypt);
 };
@@ -83,7 +83,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_aes_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_aes_decrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprAesDecrypt);
 };
@@ -97,7 +97,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_sm4_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_sm4_encrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSm4Encrypt);
 };
@@ -111,7 +111,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_sm4_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_sm4_decrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSm4Decrypt);
 };

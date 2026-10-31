@@ -56,14 +56,14 @@ int ObExprFunValues::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) 
   return ret;
 }
 
-int ObExprFunValues::eval_values(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprFunValues::eval_values(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   // values() meaningful only in insert on duplicate update clause (extra_ set to 1),
   // return NULL otherwise.
   int ret = OB_SUCCESS;
   if (expr.extra_) {
     // in insert update scope
-    ObDatum *arg = NULL;
+    Datum *arg = NULL;
     if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
     } else {
       expr_datum.set_datum(*arg);

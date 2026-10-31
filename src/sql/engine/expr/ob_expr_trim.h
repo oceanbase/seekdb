@@ -69,7 +69,7 @@ public:
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 
-  static int eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_trim(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   // fill ' ' to %buf with specified charset.
   static int fill_default_pattern(char *buf, const int64_t in_len,
                                   common::ObCollationType cs_type, int64_t &out_len);

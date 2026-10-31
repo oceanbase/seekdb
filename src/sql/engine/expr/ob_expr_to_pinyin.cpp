@@ -105,11 +105,11 @@ ObString convert_word_to_pinyin(ObIAllocator &alloc, ObString input) {
 }
 
 int ObExprToPinyin::eval_to_pinyin(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *input = NULL;
+  Datum *input = NULL;
   ObString input_str;
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
@@ -167,7 +167,7 @@ int ObExprToPinyin::eval_to_pinyin_batch(
   const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = expr.locate_batch_datums(ctx);
+  Datum *results = expr.locate_batch_datums(ctx);
   const sql::ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   
   if (OB_ISNULL(results)) {
@@ -176,7 +176,7 @@ int ObExprToPinyin::eval_to_pinyin_batch(
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
     } else {
-      ObDatum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
+      Datum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
       ObEvalCtx::TempAllocGuard alloc_guard(ctx);
       ObIAllocator &calc_alloc = alloc_guard.get_allocator();
       ObIAllocator &res_alloc = ctx.get_expr_res_alloc();

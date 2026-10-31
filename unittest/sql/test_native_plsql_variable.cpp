@@ -31,10 +31,13 @@ public:
   { return OB_NOT_SUPPORTED; }
   const ObDatum *datum_;
 };
-int eval_cursor_attr_test_arg(const ObExpr &expr, ObEvalCtx &, ObDatum &result)
+int eval_cursor_attr_test_arg(const ObExpr &expr, ObEvalCtx &, Datum &result)
 {
-  result = *static_cast<const CursorDatumExtraInfo *>(expr.extra_info_)->datum_;
-  return OB_SUCCESS;
+  const oceanbase::common::ObDatum &wire = *static_cast<const CursorDatumExtraInfo *>(expr.extra_info_)->datum_;
+  if (wire.is_null() || wire.is_extended_null()) { result.set_null(); return OB_SUCCESS; }
+  // Preserve the fixture's real 15/16-byte cursor wrapper and malformed-size
+  // negative control. The consumer checks shape/subtype before reading fields.
+  return result.set_reference(wire.ptr_, wire.len_, Datum::LegacyExtended);
 }
 
 std::string plsql_hex(const char *p, int64_t n) {
@@ -85,7 +88,7 @@ protected:
     expr.dyn_buf_header_offset_ = 96;
     expr.res_buf_off_ = 128;
     expr.res_buf_len_ = 256;
-    new (frames[0]) ObDatum();
+    new (frames[0]) Datum();
     new (frames[0] + 32) ObEvalInfo();
     auto *dynamic = new (frames[0] + 96) ObDynReserveBuf();
     dynamic->magic_ = ObDynReserveBuf::MAGIC_NUM;
@@ -102,8 +105,9 @@ protected:
     expr.obj_meta_ = meta;
     expr.datum_meta_ = ObDatumMeta(meta.get_type(), meta.get_collation_type(), meta.get_scale());
     expr.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(meta.get_type());
+    ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, expr.prepare_legacy_copy_plan().get_accuracy(), owner));
   }
-  int fetch(ObDatum &result) {
+  int fetch(Datum &result) {
     return ObExprPLSQLVariable::eval_plsql_variable(expr, *eval, result);
   }
 };
@@ -113,11 +117,11 @@ TEST_F(NativePLSQLVariable, line_is_copied_from_stack_to_expression_frame) {
   meta.set_int32();
   configure("PLSQL_LINE", meta);
   info.plsql_line_ = 2147483647;
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
   EXPECT_EQ(2147483647, result.get_int());
-  EXPECT_EQ(8, result.len_);
-  EXPECT_EQ(expr.locate_expr_datum(*eval).ptr_, result.ptr_);
+  EXPECT_EQ(0, result.length()); // native integer bits are inline
+  EXPECT_EQ(expr.locate_expr_datum(*eval).get_int(), result.get_int());
   info.plsql_line_ = -1;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
   EXPECT_EQ(-1, result.get_int());
@@ -130,10 +134,12 @@ TEST_F(NativePLSQLVariable, unsigned_system_variable_preserves_all_64_bits) {
   DatumValue stored;
   ASSERT_EQ(OB_SUCCESS, session.get_sys_variable_by_name(ObString::make_string("last_insert_id"), stored));
   configure("last_insert_id", stored.get_meta());
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
   EXPECT_EQ(UINT64_MAX, result.get_uint());
-  EXPECT_NE(stored.datum_.ptr_, result.ptr_);
+  EXPECT_EQ(0, result.length());
+  std::memset(const_cast<char *>(stored.datum_.ptr_), 0, stored.datum_.len_);
+  EXPECT_EQ(UINT64_MAX, result.get_uint());
 }
 
 TEST_F(NativePLSQLVariable, borrowed_system_string_survives_replacement_and_source_owner_reset) {
@@ -141,7 +147,7 @@ TEST_F(NativePLSQLVariable, borrowed_system_string_survives_replacement_and_sour
   ASSERT_EQ(OB_SUCCESS, session.get_sys_variable(SYS_VAR_TX_ISOLATION, variable));
   ASSERT_NE(nullptr, variable);
   const std::string text(4096, 'v');
-  ObDatum result;
+  Datum result;
   {
     ObArenaAllocator source;
     DatumValue value;
@@ -150,7 +156,7 @@ TEST_F(NativePLSQLVariable, borrowed_system_string_survives_replacement_and_sour
     ASSERT_EQ(OB_SUCCESS, variable->set_value(value, source));
     configure("tx_isolation", value.get_meta());
     ASSERT_EQ(OB_SUCCESS, fetch(result));
-    EXPECT_NE(variable->get_value().datum_.ptr_, result.ptr_);
+    EXPECT_NE(variable->get_value().datum_.ptr_, result.get_string().ptr());
     DatumValue replacement;
     ASSERT_EQ(OB_SUCCESS, replacement.set_varchar(ObString::make_string("replacement"), owner));
     replacement.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -158,8 +164,8 @@ TEST_F(NativePLSQLVariable, borrowed_system_string_survives_replacement_and_sour
     source.reuse();
     std::memset(source.alloc(65536), 0x6d, 65536);
   }
-  EXPECT_EQ(text, std::string(result.ptr_, result.len_));
-  EXPECT_EQ(expr.locate_expr_datum(*eval).ptr_, result.ptr_);
+  EXPECT_EQ(text, std::string(result.get_string().ptr(), result.length()));
+  EXPECT_EQ(expr.locate_expr_datum(*eval).get_string().ptr(), result.get_string().ptr());
 }
 
 TEST_F(NativePLSQLVariable, headerless_and_inrow_lob_system_values_use_native_adjustment) {
@@ -185,7 +191,7 @@ TEST_F(NativePLSQLVariable, headerless_and_inrow_lob_system_values_use_native_ad
     result_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     if (!has_header) { result_meta.set_has_lob_header(); }
     configure("tx_isolation", result_meta);
-    ObDatum result;
+    Datum result;
     ASSERT_EQ(OB_SUCCESS, fetch(result));
     ObString content = result.get_string();
     if (!has_header) {
@@ -193,7 +199,7 @@ TEST_F(NativePLSQLVariable, headerless_and_inrow_lob_system_values_use_native_ad
       ASSERT_EQ(OB_SUCCESS, locator.get_inrow_data(content));
     }
     EXPECT_EQ(ObString::make_string("native-lob"), content);
-    EXPECT_NE(variable->get_value().datum_.ptr_, result.ptr_);
+    EXPECT_NE(variable->get_value().datum_.ptr_, result.get_string().ptr());
   }
 }
 
@@ -201,7 +207,7 @@ TEST_F(NativePLSQLVariable, unknown_name_is_null_and_resolver_keeps_system_colla
   SqlTypeMeta meta;
   meta.set_null();
   configure("native_unknown_system_variable", meta);
-  ObDatum result;
+  Datum result;
   ASSERT_EQ(OB_SUCCESS, fetch(result));
   EXPECT_TRUE(result.is_null());
   ObExprPLSQLVariable function(owner);
@@ -219,15 +225,15 @@ TEST_F(NativePLSQLVariable, invalid_info_or_absent_pl_frame_preserves_failed_out
   meta.set_varchar();
   meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   configure("PLSQL_UNIT", meta);
-  ObDatum result;
+  Datum result;
   result.set_string("previous", 8);
-  const char *previous = result.ptr_;
+  const char *previous = result.get_string().ptr();
   EXPECT_EQ(OB_ERR_UNEXPECTED, fetch(result));
-  EXPECT_EQ(previous, result.ptr_);
+  EXPECT_EQ(previous, result.get_string().ptr());
   EXPECT_EQ(ObString::make_string("previous"), result.get_string());
   expr.extra_info_ = nullptr;
   EXPECT_EQ(OB_ERR_UNEXPECTED, fetch(result));
-  EXPECT_EQ(previous, result.ptr_);
+  EXPECT_EQ(previous, result.get_string().ptr());
 }
 TEST_F(NativePLSQLVariable, immutable_old_evaluator_and_type_resolver_oracle) {
   std::ifstream input("unittest/sql/data/native_plsql_variable.golden");
@@ -257,14 +263,24 @@ TEST_F(NativePLSQLVariable, immutable_old_evaluator_and_type_resolver_oracle) {
     EXPECT_EQ(fields[9], plsql_wire(type));
     configure(name.c_str(), meta); info.plsql_line_ = std::stoll(fields[3]);
     expr.extra_info_ = invalid == 1 ? nullptr : &info;
-    ObDatum &result = expr.locate_expr_datum(*eval);
+    Datum &result = expr.locate_expr_datum(*eval);
     std::memcpy(frames[0] + expr.res_buf_off_, "previous", 8);
     result.set_string(frames[0] + expr.res_buf_off_, 8);
     context.set_my_session(invalid == 2 ? nullptr : &session);
     const int ret = fetch(result); context.set_my_session(&session);
-    EXPECT_EQ(std::stoi(fields[10]), ret); EXPECT_EQ(std::stoull(fields[11]), result.pack_);
-    EXPECT_EQ(std::stoi(fields[12]) != 0, result.is_null());
-    EXPECT_EQ(fields[13], plsql_hex(result.ptr_, result.len_));
+    EXPECT_EQ(std::stoi(fields[10]), ret);
+    oceanbase::common::ObDatum legacy;
+    alignas(8) char scratch[64];
+    if (ret == OB_SUCCESS) {
+      ASSERT_EQ(OB_SUCCESS, expr.get_datum_copy_plan().legacy_view(result, legacy, scratch, sizeof(scratch)));
+    } else {
+      SqlTypeMeta sentinel_meta; sentinel_meta.set_varchar(); sentinel_meta.set_collation_type(CS_TYPE_BINARY);
+      ObAccuracy sentinel_accuracy;
+      ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(sentinel_meta, sentinel_accuracy).legacy_view(result, legacy, scratch, sizeof(scratch)));
+    }
+    EXPECT_EQ(std::stoull(fields[11]), legacy.pack_);
+    EXPECT_EQ(std::stoi(fields[12]) != 0, legacy.is_null());
+    EXPECT_EQ(fields[13], plsql_hex(legacy.ptr_, legacy.len_));
     expr.extra_info_ = &info; ++cases;
   }
   EXPECT_EQ(28, cases);
@@ -294,7 +310,7 @@ TEST_F(NativePLSQLVariable, explicit_cursor_attribute_reads_native_datum_payload
   cursor_arg.eval_func_ = eval_cursor_attr_test_arg;
   cursor_arg.obj_meta_.set_ext();
   cursor_arg.datum_meta_.type_ = ObExtendType;
-  new (frames[0] + cursor_arg.datum_off_) ObDatum();
+  new (frames[0] + cursor_arg.datum_off_) Datum();
   new (frames[0] + cursor_arg.eval_info_off_) ObEvalInfo();
   auto *dynamic = new (frames[0] + cursor_arg.dyn_buf_header_offset_) ObDynReserveBuf();
   dynamic->magic_ = ObDynReserveBuf::MAGIC_NUM;
@@ -311,9 +327,7 @@ TEST_F(NativePLSQLVariable, explicit_cursor_attribute_reads_native_datum_payload
   CursorDatumExtraInfo input_info(owner, &input);
   cursor_arg.extra_info_ = &input_info;
 
-  char result_buffer[sizeof(int64_t)] = {};
-  ObDatum result;
-  result.ptr_ = result_buffer;
+  Datum result;
   auto evaluate = [&]() {
     cursor_arg.get_eval_info(*eval).clear_evaluated_flag();
     return ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(cursor_expr, *eval, result);

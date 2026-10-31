@@ -73,7 +73,7 @@ int ObExprPrivSTSetSRID::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprPrivSTSetSRID::eval_priv_st_setsrid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTSetSRID::eval_priv_st_setsrid(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_st_srid_common(expr, ctx, res, N_PRIV_ST_SETSRID);
 }

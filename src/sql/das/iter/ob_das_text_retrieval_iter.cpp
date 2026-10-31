@@ -496,7 +496,7 @@ int ObDASTextRetrievalIter::do_doc_cnt_agg()
   } else {
     const sql::ObExpr *inv_idx_agg_expr = inv_idx_agg_param_.aggregate_exprs_->at(0);
     sql::ObEvalCtx *eval_ctx = ir_rtdef_->get_inv_idx_agg_rtdef()->eval_ctx_;
-    ObDatum *doc_cnt_datum = nullptr;
+    common::Datum *doc_cnt_datum = nullptr;
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
     guard.set_batch_idx(0);
     if (OB_FAIL(inv_idx_agg_expr->eval(*eval_ctx, doc_cnt_datum))) {
@@ -641,7 +641,7 @@ int ObDASTextRetrievalIter::fill_token_doc_cnt()
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
     guard.set_batch_idx(0);
-    ObDatum &doc_cnt_datum = inv_idx_agg_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &doc_cnt_datum = inv_idx_agg_expr->locate_datum_for_write(*eval_ctx);
     doc_cnt_datum.set_int(token_doc_cnt_);
   }
   return ret;
@@ -659,7 +659,7 @@ int ObDASTextRetrievalIter::fill_token_weight()
         total_doc_cnt_expr->locate_expr_datum(*ir_rtdef_->eval_ctx_, 0).get_int();
     ObEvalCtx::BatchInfoScopeGuard guard(*ir_rtdef_->eval_ctx_);
     guard.set_batch_idx(0);
-    ObDatum &token_weight_datum =
+    common::Datum &token_weight_datum =
         token_weight_expr_->locate_datum_for_write(*ir_rtdef_->eval_ctx_);
     token_weight_datum.set_double(
         sql::ObExprBM25::query_token_weight(token_doc_cnt_, total_doc_cnt));
@@ -671,7 +671,7 @@ int ObDASTextRetrievalIter::project_relevance_expr()
 {
   int ret = OB_SUCCESS;
   sql::ObExpr *relevance_expr = ir_ctdef_->relevance_expr_;
-  ObDatum *relevance_datum = nullptr;
+  common::Datum *relevance_datum = nullptr;
   if (OB_ISNULL(relevance_expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(relevance_expr->eval(*ir_rtdef_->eval_ctx_, relevance_datum))) {
@@ -683,7 +683,7 @@ int ObDASTextRetrievalIter::batch_project_relevance_expr(const int64_t &count)
 {
   int ret = OB_SUCCESS;
   sql::ObExpr *relevance_expr = ir_ctdef_->relevance_expr_;
-  ObDatum *relevance_datum = nullptr;
+  common::Datum *relevance_datum = nullptr;
   if (OB_ISNULL(relevance_expr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(relevance_expr->eval_batch(*ir_rtdef_->eval_ctx_, *skip_, count))) {
@@ -831,12 +831,12 @@ int ObDASTRCacheIter::save_relevances_and_docids()
   } else if (OB_FAIL(relevance_expr->eval_batch(*ir_rtdef_->eval_ctx_, *skip_, count_))) {
   } else {
     cur_idx_ = 0;
-    const ObDatumVector &relevance_datum = relevance_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
-    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
+    const sql::DatumVector &relevance_datum = relevance_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
+    const sql::DatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!skip_->at(i))) {
         relevance_[i] = relevance_datum.at(i)->get_double();
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_FAIL(doc_id_[i].from_native(*doc_id_datum.at(i), doc_id_expr->get_sql_type()))) {
         }
       }
     }
@@ -852,10 +852,10 @@ int ObDASTRCacheIter::save_docids()
     ret = OB_INVALID_ARGUMENT;
   } else {
     cur_idx_ = 0;
-    const ObDatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
+    const sql::DatumVector &doc_id_datum = doc_id_expr->locate_expr_datumvector(*ir_rtdef_->eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_LIKELY(!skip_->at(i))) {
-        if (OB_FAIL(doc_id_[i].from_datum(*doc_id_datum.at(i)))) {
+        if (OB_FAIL(doc_id_[i].from_native(*doc_id_datum.at(i), doc_id_expr->get_sql_type()))) {
         };
       }
     }

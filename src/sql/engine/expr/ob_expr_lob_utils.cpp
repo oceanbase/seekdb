@@ -109,11 +109,11 @@ int ObTextStringHelper::build_text_iter(
 }
 
 int ob_adjust_lob_datum(ObExecContext &exec_ctx,
-                        const ObDatum &origin_datum,
+                        const Datum &origin_datum,
                         const common::SqlTypeMeta &origin_meta,
                         const common::SqlTypeMeta &result_meta,
                         ObIAllocator &allocator,
-                        ObDatum &out_datum)
+                        Datum &out_datum)
 {
   int ret = OB_SUCCESS;
   if (origin_datum.is_null() || origin_datum.is_nop() || !is_lob_storage(origin_meta.get_type())) {
@@ -142,27 +142,27 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
 
 /// only called in ObExprValuesOp::calc_next_row
 int ob_adjust_lob_datum(ObExecContext &exec_ctx,
-                        ObDatum &datum,
+                        Datum &datum,
                         const common::SqlTypeMeta &in_obj_meta,
                         const common::SqlTypeMeta &out_obj_meta,
                         ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  if (!is_lob_storage(in_obj_meta.get_type())) { // null & nop is not lob
+  if (datum.is_null() || datum.is_nop() || !is_lob_storage(in_obj_meta.get_type())) {
   } else if (in_obj_meta.get_type_class() != out_obj_meta.get_type_class()) {
     // lob casted to other type do nothing
   } else if (in_obj_meta.has_lob_header() != out_obj_meta.has_lob_header()) {
     if (in_obj_meta.has_lob_header()) { // obj_meta does not have lob header, get data only
       // The mapped-cell path strips an ordinary in-row header directly,
       // before requesting runtime LOB services for other locator forms.
-      ret = ob_adjust_lob_datum(exec_ctx, static_cast<const ObDatum &>(datum),
+      ret = ob_adjust_lob_datum(exec_ctx, static_cast<const Datum &>(datum),
           in_obj_meta, out_obj_meta, allocator, datum);
     } else { // origin obj does not have lob header, but meta has, build temp lob header
-      if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(datum,
-                                                                    in_obj_meta,
-                                                                    out_obj_meta,
-                                                                    allocator))) {
-      }
+      common::ObDatum legacy;
+      legacy.set_string(datum.get_string());
+      if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
+          legacy, in_obj_meta, out_obj_meta, allocator))) {
+      } else { ret = datum.set_string(legacy.get_string()); }
     }
   }
   return ret;
@@ -171,7 +171,7 @@ int ob_adjust_lob_datum(ObExecContext &exec_ctx,
 int ob_adjust_in_memory_lob_datum(const DatumValue &source,
                                   const common::SqlTypeMeta &result_meta,
                                   ObIAllocator &allocator,
-                                  ObDatum *out_datum)
+                                  Datum *out_datum)
 {
   int ret = OB_SUCCESS;
   if (out_datum == nullptr) { return OB_INVALID_ARGUMENT; }
@@ -187,8 +187,11 @@ int ob_adjust_in_memory_lob_datum(const DatumValue &source,
     } else if (OB_FAIL(locator.get_inrow_data(data))) {
     } else { out_datum->set_string(data); }
   } else {
-    ret = ObTextStringResult::ob_convert_datum_temporay_lob(
-        *out_datum, source.meta_, result_meta, allocator);
+    common::ObDatum legacy;
+    legacy.set_string(out_datum->get_string());
+    if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
+        legacy, source.meta_, result_meta, allocator))) {
+    } else { ret = out_datum->set_string(legacy.get_string()); }
   }
   return ret;
 }

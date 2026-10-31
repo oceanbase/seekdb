@@ -491,18 +491,20 @@ int ObVirtualTableIterator::get_next_row()
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < scan_param_->output_exprs_->count(); i++) {
       ObExpr *expr = scan_param_->output_exprs_->at(i);
-      ObDatum &datum = expr->locate_datum_for_write(scan_param_->op_->get_eval_ctx());
       const DatumValue &value = row->cells_[i];
       ObDatum projected;
+      Datum native;
       char extended_payload[DATUM_EXTEND_PAYLOAD_SIZE];
       if (OB_FAIL(value.to_row_datum(projected, extended_payload))) {
-      } else if (value.is_ext() && OB_FAIL(datum.deep_copy(projected, row_calc_buf_))) {
+      } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(projected, native))) {
       } else {
-        if (!value.is_ext()) { datum = projected; }
         if (is_lob_storage(value.get_type())) {
           ret = ob_adjust_lob_datum(scan_param_->op_->get_eval_ctx().exec_ctx_,
-              static_cast<const ObDatum &>(datum), value.meta_, expr->obj_meta_, *allocator_, datum);
+              static_cast<const Datum &>(native), value.meta_, expr->obj_meta_, *allocator_, native);
         }
+        // Extended normalization may borrow the stack buffer above. Publish
+        // carrier bytes in the Expr owner, retaining the row's PL pointee owner.
+        if (OB_SUCC(ret)) { ret = expr->deep_copy_datum(scan_param_->op_->get_eval_ctx(), native); }
       }
     }
   }

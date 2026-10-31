@@ -31,7 +31,7 @@ ObExprFuncPartHashBase::ObExprFuncPartHashBase(common::ObIAllocator &alloc, ObEx
 {
 }
 
-int ObExprFuncPartHashBase::calc_value_for_mysql(const ObDatum &input, ObDatum &output,
+int ObExprFuncPartHashBase::calc_value_for_mysql(const Datum &input, Datum &output,
                                                  const SqlValueType input_type)
 {
   int ret = OB_SUCCESS;
@@ -127,11 +127,11 @@ int ObExprFuncPartHash::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_exp
 }
 
 int ObExprFuncPartHash::eval_part_hash(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   // for mysql, see calc_value_for_mysql
-  ObDatum *arg0 = NULL;
+  Datum *arg0 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg0))) {
   } else if (arg0->is_null()) {
     expr_datum.set_int(0);

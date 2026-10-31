@@ -85,6 +85,9 @@ class ObIMicroBlockRowScanner;
 };
 namespace sql
 {
+// Prepared legacy operations are confined to decoder predicate parameters.
+const common::ObDatumBasicFuncs *storage_predicate_functions(const ObExpr &expr);
+
 class ObRawExpr;
 class ObPseudoColumnRawExpr;
 class ObOpRawExpr;
@@ -909,7 +912,8 @@ public:
                         ObPushdownBlackFilterNode &filter,
                         ObPushdownOperator &op)
       : ObPhysicalFilterExecutor(alloc, op, PushdownExecutorType::BLACK_FILTER_EXECUTOR),
-        filter_(filter), skip_bit_(nullptr)
+        filter_(filter), skip_bit_(nullptr), decoder_memory_(nullptr),
+        decoder_datums_(nullptr), decoder_capacity_(0)
   {}
   ~ObBlackFilterExecutor();
 
@@ -950,6 +954,9 @@ private:
 private:
   ObPushdownBlackFilterNode &filter_;
   ObBitVector *skip_bit_;
+  char *decoder_memory_;
+  common::ObDatum *decoder_datums_;
+  int64_t decoder_capacity_;
 };
 
 class ObWhiteFilterParam
@@ -959,7 +966,7 @@ public:
       : datum_(nullptr), hash_func_(nullptr), cmp_func_(nullptr), access_ctx_(nullptr)
   {}
   ObWhiteFilterParam(const ObDatum *datum,
-      const ObExprHashFuncType *hash_func,
+      const common::ObDatumHashFuncType *hash_func,
       const ObDatumCmpFuncType *cmp_func,
       const ObDatumAccessContext *access_ctx)
     : datum_(datum),
@@ -993,7 +1000,7 @@ public:
   TO_STRING_KV(KPC_(datum), KP_(hash_func), KP_(cmp_func));
 private:
   const ObDatum *datum_;
-  const ObExprHashFuncType *hash_func_;
+  const common::ObDatumHashFuncType *hash_func_;
   const ObDatumCmpFuncType *cmp_func_;
   const ObDatumAccessContext *access_ctx_;
 };
@@ -1047,7 +1054,7 @@ public:
     }
     return ret;
   }
-  inline void set_hash_and_cmp_func(const ObExprHashFuncType hash_func,
+  inline void set_hash_and_cmp_func(const common::ObDatumHashFuncType hash_func,
                                     const ObDatumCmpFuncType cmp_func,
                                     const ObDatumAccessContext *access_ctx)
   {
@@ -1058,7 +1065,7 @@ public:
   TO_STRING_KV(K_(set), K_(hash_func), K_(cmp_func));
 private:
   common::hash::ObHashSet<ObWhiteFilterParam, common::hash::NoPthreadDefendMode> set_;
-  ObExprHashFuncType hash_func_;
+  common::ObDatumHashFuncType hash_func_;
   ObDatumCmpFuncType cmp_func_;
   const ObDatumAccessContext *access_ctx_;
 };
@@ -1080,7 +1087,7 @@ public:
     return set_.inited();
   }
   inline int create(int param_num,
-                    const ObExprHashFuncType hash_func,
+                    const common::ObDatumHashFuncType hash_func,
                     const ObDatumAccessContext *access_ctx)
   {
     hash_func_ = hash_func;
@@ -1113,7 +1120,7 @@ public:
   }
 private:
   ObSmallHashSet<true> set_; // Filter more data if template _Accurate is true;
-  ObExprHashFuncType hash_func_;
+  common::ObDatumHashFuncType hash_func_;
   const ObDatumAccessContext *access_ctx_;
   // TODO: add batch hash and batch insert
 };
@@ -1273,7 +1280,7 @@ public:
   }
   void locate_runtime_filter_ctx();
   int init_small_set(const int64_t count,
-                     const ObExprHashFuncType hash_func,
+                     const common::ObDatumHashFuncType hash_func,
                      const ObDatumAccessContext *access_ctx);
   int add_to_small_set(const ObDatum &datum);
   virtual int exist_in_set(const common::ObDatum &datum, bool &is_exist) const override final;
@@ -1327,7 +1334,7 @@ public:
   static PreparePushdownDataFunc PREPARE_PD_DATA_FUNCS[DynamicFilterType::MAX_DYNAMIC_FILTER_TYPE];
   static UpdatePushdownDataFunc UPDATE_PD_DATA_FUNCS[DynamicFilterType::MAX_DYNAMIC_FILTER_TYPE];
 public:
-  ObExprHashFuncType hash_func_;
+  common::ObDatumHashFuncType hash_func_;
 
 private:
   int try_preparing_data();
@@ -1462,7 +1469,7 @@ OB_INLINE int ObPushdownOperator::filter_row_outside(const ObExprPtrIArray &expr
 OB_INLINE bool ObBlackFilterExecutor::can_vectorized()
 { return op_.is_vectorized(); }
 
-OB_INLINE bool is_row_filtered(const common::ObDatum &d)
+OB_INLINE bool is_row_filtered(const common::Datum &d)
 {
   return (d.is_null() || 0 == d.get_int());
 }

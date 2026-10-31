@@ -34,7 +34,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int eval_stmt_id(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_stmt_id(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprStmtId);
 

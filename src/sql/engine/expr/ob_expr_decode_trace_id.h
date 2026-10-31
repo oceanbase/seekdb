@@ -27,7 +27,7 @@ public:
   virtual int calc_result_type1(ObExprResType &type, ObExprResType &trace_id,
                                 common::ObExprTypeCtx &type_ctx) const;
   static int calc_decode_trace_id_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                       ObDatum &res_datum);
+                                       Datum &res_datum);
   static int calc_decode_trace_id_expr_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                              const ObBitVector &skip,
                                              const int64_t batch_size);

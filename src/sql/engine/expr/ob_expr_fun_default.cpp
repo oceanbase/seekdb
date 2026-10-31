@@ -83,7 +83,7 @@ int ObExprFunDefault::calc_result_typeN(ObExprResType &type,
 }
 
 int ObExprFunDefault::calc_default_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                        ObDatum &res)
+                                        Datum &res)
 {
   int ret = OB_SUCCESS;
   //objs[0] type
@@ -92,8 +92,8 @@ int ObExprFunDefault::calc_default_expr(const ObExpr &expr, ObEvalCtx &ctx,
   //objs[3] nullable_expr
   //objs[4] default_value
   //objs[5] column_info
-  ObDatum *nullable = NULL;
-  ObDatum *def = NULL;
+  Datum *nullable = NULL;
+  Datum *def = NULL;
   if (OB_UNLIKELY(expr.arg_cnt_ != ObExprColumnConv::PARAMS_COUNT_WITH_COLUMN_INFO
       && expr.arg_cnt_ != ObExprColumnConv::PARAMS_COUNT_WITHOUT_COLUMN_INFO)) {
     ret = OB_INVALID_ARGUMENT_NUM;

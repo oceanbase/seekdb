@@ -51,9 +51,9 @@ public:
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                        ObExpr &rt_expr) const override;
   static int calc_random_expr_const_seed(const ObExpr &expr, ObEvalCtx &ctx,
-                                         ObDatum &res_datum);
+                                         Datum &res_datum);
   static int calc_random_expr_nonconst_seed(const ObExpr &expr, ObEvalCtx &ctx,
-                                            ObDatum &res_datum);
+                                            Datum &res_datum);
 public:
   virtual int assign(const ObExprOperator &other) override;
 private:

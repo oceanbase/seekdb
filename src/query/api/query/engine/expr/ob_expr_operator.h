@@ -1051,11 +1051,11 @@ public:
                                 ObExpr &rt_expr);
 
    static int is_row_cmp(const ObRawExpr&, int &row_dim);
-   static int row_eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datm);
+   static int row_eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datm);
 
    // row compare
    // CAUTION: null safe equal row compare is not included.
-   static int row_cmp(const ObExpr &expr, ObDatum &expr_datum,
+   static int row_cmp(const ObExpr &expr, Datum &expr_datum,
                       ObExpr **l_row, ObEvalCtx &l_ctx, ObExpr **r_row, ObEvalCtx &r_ctx);
 
    template <bool IS_LEFT>
@@ -1066,8 +1066,8 @@ public:
   OB_INLINE static int get_comparator_operands(
                          const ObExpr &expr,
                          ObEvalCtx &ctx,
-                         common::ObDatum *&left, common::ObDatum *&right,
-                         ObDatum &result, bool &is_finish)
+                         common::Datum *&left, common::Datum *&right,
+                         Datum &result, bool &is_finish)
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
@@ -1085,11 +1085,11 @@ public:
                              const common::SqlTypeMeta &meta1,
                              const common::SqlTypeMeta &meta2);
   // Prepare for pl's udt comparison, when comparing udt, compare the values of its internal elements rather than the udt itself.
-  static int pl_udt_compare2(CollectionPredRes &cmp_result, const common::ObDatum &obj1,
-                      const common::ObDatum &obj2, ObExecContext &exec_ctx,
+  static int pl_udt_compare2(CollectionPredRes &cmp_result, const common::Datum &obj1,
+                      const common::Datum &obj2, ObExecContext &exec_ctx,
                       const common::ObCmpOp cmp_op);
 
-  static int eval_pl_udt_compare(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_pl_udt_compare(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   // get_const_cast_mode returns cast_mode for const/calculated params when compares with decimal type column
   // col is defined as number(10, 3)
@@ -1137,8 +1137,8 @@ public:
   }
 
   static int eval_compare_composite(CollectionPredRes &cmp_result,
-                                    const common::ObDatum &obj1,
-                                    const common::ObDatum &obj2,
+                                    const common::Datum &obj1,
+                                    const common::Datum &obj2,
                                     ObExecContext &exec_ctx,
                                     const ObCmpOp cmp_op);
 
@@ -1279,7 +1279,7 @@ public:
                                 ObExprResType *types,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
-  static int subquery_cmp_eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int subquery_cmp_eval(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 
   VIRTUAL_TO_STRING_KV(N_EXPR_TYPE, get_type_name(type_),
                        N_REAL_PARAM_NUM, real_param_num_,
@@ -1307,16 +1307,16 @@ protected:
       ObSubQueryIterator *&iter, ObExpr **&row, ObEvalCtx *&used_ctx);
 
   static int subquery_cmp_eval_with_none(
-      const ObExpr &expr, ObEvalCtx &l_ctx, ObDatum &res,
+      const ObExpr &expr, ObEvalCtx &l_ctx, Datum &res,
       ObExpr **l_row, ObEvalCtx &r_ctx, ObExpr **r_row, ObSubQueryIterator *r_iter, bool left_all_null);
   static int subquery_cmp_eval_with_any(
-      const ObExpr &expr, ObEvalCtx &l_ctx, ObDatum &res,
+      const ObExpr &expr, ObEvalCtx &l_ctx, Datum &res,
       ObExpr **l_row, ObEvalCtx &r_ctx, ObExpr **r_row, ObSubQueryIterator *r_iter, bool left_all_null);
   static int subquery_cmp_eval_with_all(
-      const ObExpr &expr, ObEvalCtx &l_ctx, ObDatum &res,
+      const ObExpr &expr, ObEvalCtx &l_ctx, Datum &res,
       ObExpr **l_row, ObEvalCtx &r_ctx, ObExpr **r_row, ObSubQueryIterator *r_iter, bool left_all_null);
 
-  static int cmp_one_row(const ObExpr &expr, ObDatum &res,
+  static int cmp_one_row(const ObExpr &expr, Datum &res,
                          ObExpr **l_row, ObEvalCtx &l_ctx, ObExpr **r_row, ObEvalCtx &r_ctx,
                          bool left_all_null, bool right_all_null);
 
@@ -1375,7 +1375,7 @@ public:
 protected:
   // temporary used, remove after all expr converted
   OB_INLINE static int get_arith_operand(const ObExpr &expr, ObEvalCtx &ctx,
-      common::ObDatum *&left, common::ObDatum *&right, ObDatum &result, bool &is_finish)
+      common::Datum *&left, common::Datum *&right, Datum &result, bool &is_finish)
   {
     int ret = common::OB_SUCCESS;
     is_finish = false;
@@ -1392,8 +1392,8 @@ protected:
   static int def_arith_eval_func(EVAL_FUNC_ARG_DECL, Args &...args)
   {
     int ret = common::OB_SUCCESS;
-    ObDatum *l = NULL;
-    ObDatum *r = NULL;
+    Datum *l = NULL;
+    Datum *r = NULL;
     bool finish = false;
     if (OB_FAIL(get_arith_operand(expr, ctx, l, r, expr_datum, finish))) {
     } else if (!finish) {
@@ -1613,7 +1613,7 @@ public:
   // Get int64/uint64 from parameter datum, then perform actual bit operations
   // based on extra_ field.
   static int calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx,
-                                ObDatum &res_datum);
+                                Datum &res_datum);
 
   DECLARE_SET_LOCAL_SESSION_VARS;
 
@@ -1632,10 +1632,10 @@ protected:
 
   // Get int64/uint64 from datum, for number rounding/truncation operations are needed, for int tc will get directly
   // int value
-  typedef int (*GetIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, int64_t &,
-                            common::ObCastMode &);
-  typedef int (*GetUIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, uint64_t &,
-                             common::ObCastMode &);
+  typedef int (*GetIntFunc)(const ObDatumMeta &, const common::Datum &, const common::SqlType &, bool, int64_t &,
+                            const common::ObCastMode &);
+  typedef int (*GetUIntFunc)(const ObDatumMeta &, const common::Datum &, const common::SqlType &, bool, uint64_t &,
+                             const common::ObCastMode &);
 
   // Initialize eval_func_, inner_functions_, extra_ fields
   static int cg_bitwise_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
@@ -1644,13 +1644,13 @@ protected:
   static int choose_get_int_func(const ObDatumMeta datum_meta, void *&out_func);
 
   static int get_uint64_from_int_tc(
-      const ObDatumMeta &datum_meta, const common::ObDatum &datum, bool is_round,
+      const ObDatumMeta &datum_meta, const common::Datum &datum, const common::SqlType &input_type, bool is_round,
       uint64_t &out, const common::ObCastMode &cast_mode);
   static int get_uint64_from_number_type(
-      const ObDatumMeta &datum_meta, const common::ObDatum &datum, bool is_round,
+      const ObDatumMeta &datum_meta, const common::Datum &datum, const common::SqlType &input_type, bool is_round,
       uint64_t &out, const common::ObCastMode &cast_mode);
   static int get_uint64_from_decimalint_type(
-      const ObDatumMeta &datum_meta, const common::ObDatum &datum, bool is_round,
+      const ObDatumMeta &datum_meta, const common::Datum &datum, const common::SqlType &input_type, bool is_round,
       uint64_t &out, const common::ObCastMode &cast_mode);
 };
 
@@ -1737,8 +1737,8 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const;
   // for sql engine 3.0
   static int calc_(const ObExpr &expr, const ObExpr &sub_arg, const ObExpr &ori_arg,
-                   ObEvalCtx &ctx, ObDatum &res_datum);
-  static int calc_location_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+                   ObEvalCtx &ctx, Datum &res_datum);
+  static int calc_location_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum);
   static int get_calc_cs_type(const ObExpr &expr, common::ObCollationType &calc_cs_type);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const;

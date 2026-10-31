@@ -149,12 +149,8 @@ int ObDASScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     }
   }
   const ObBitVector *skip = nullptr;
-  const bool legacy = scan_param_ == nullptr || scan_param_->row2exprs_projector_ == nullptr
-      || scan_param_->row2exprs_projector_->can_read_legacy_projection();
-  if ((OB_SUCC(ret) || ret == OB_ITER_END) && legacy) {
+  if (OB_SUCC(ret) || ret == OB_ITER_END) {
     PRINT_VECTORIZED_ROWS(SQL, DEBUG, *eval_ctx_, *output_, count, skip);
-  } else {
-    LOG_DEBUG("scan result without a readable Expr shadow", K(ret), K(count));
   }
   return ret;
 }
@@ -190,10 +186,10 @@ int ObDASScanIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
     for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; i++) {
       DatumValue tmp_obj;
       const ObExpr *expr = rowkey_exprs.at(i);
-      ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx);
+      Datum &col_datum = expr->locate_expr_datum(*eval_ctx);
       if (OB_UNLIKELY(T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_)) {
         // skip.
-      } else if (OB_FAIL(project_datum_value_view(col_datum, expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj))) {
+      } else if (OB_FAIL(project_native_datum_value_view(col_datum, expr->get_sql_type(), expr->obj_meta_, expr->obj_datum_map_, tmp_obj.meta_, tmp_obj, *alloc))) {
       } else if (OB_FAIL(clone_typed_value(tmp_obj, obj_ptr[i], *alloc))) {
       }
     }
@@ -266,10 +262,12 @@ int ObDASScanIter::add_datum_lookup_key(ObEvalCtx &eval_ctx,
       // Construct and fill each cell together, so initialization overwritten
       // by the copy can be eliminated without a separate constructor loop.
       blocksstable::ObStorageDatum &dest = *new (key.datums_ + i) blocksstable::ObStorageDatum();
-      const ObDatum &datum = rowkey_exprs.at(i)->locate_expr_datum(eval_ctx);
-      if (!datum.is_null() && !datum.is_ext() && datum.len_ == sizeof(uint64_t)) {
-        // Integer keys (and other eight-byte payloads) need one fixed-size
-        // copy, without dispatching through the generic memcpy routine.
+      const ObExpr &expr = *rowkey_exprs.at(i);
+      const Datum &source = expr.locate_expr_datum(eval_ctx);
+      alignas(8) char scratch[64];
+      ObDatum datum;
+      if (OB_FAIL(expr.get_datum_copy_plan().legacy_view(source, datum, scratch, sizeof(scratch)))) {
+      } else if (!datum.is_null() && !datum.is_ext() && datum.len_ == sizeof(uint64_t)) {
         dest.reuse();
         dest.pack_ = datum.pack_;
         MEMCPY(dest.buf_, datum.ptr_, sizeof(uint64_t));

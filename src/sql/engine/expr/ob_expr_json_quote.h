@@ -34,13 +34,13 @@ public:
   explicit ObExprJsonQuote(common::ObIAllocator &alloc);
   virtual ~ObExprJsonQuote();
 
-  static int calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, const ObDatum &data,
+  static int calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, const Datum &data,
                   ObDatumMeta meta, bool has_lob_header, ObJsonBuffer &j_buf, bool &is_null);
   int calc_result_type1(ObExprResType &type,
                         ObExprResType &type1,
                         common::ObExprTypeCtx &type_ctx) const override;
 
-  static int eval_json_quote(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_json_quote(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

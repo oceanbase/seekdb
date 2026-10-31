@@ -51,7 +51,7 @@ void ObJoinOp::blank_row_batch(const ExprFixedArray &exprs, int64_t batch_size)
 {
   for (int64_t col_idx = 0; col_idx < exprs.count(); col_idx++) {
     ObExpr *e = exprs.at(col_idx);
-    ObDatum *datums = e->locate_batch_datums(eval_ctx_);
+    Datum *datums = e->locate_batch_datums(eval_ctx_);
     if (!e->is_batch_result()) {
       datums[0].set_null();
     } else {
@@ -82,7 +82,7 @@ int ObJoinOp::calc_other_conds(bool &is_match)
   int ret = OB_SUCCESS;
   is_match = true;
   const ObIArray<ObExpr *> &conds = get_spec().other_join_conds_;
-  ObDatum *cmp_res = NULL;
+  Datum *cmp_res = NULL;
   ARRAY_FOREACH(conds, i) {
     if (OB_FAIL(conds.at(i)->eval(eval_ctx_, cmp_res))) {
     } else if (cmp_res->is_null() || 0 == cmp_res->get_int()) {

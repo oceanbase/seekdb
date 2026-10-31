@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "data_plane/lob/ob_lob_access_context.h"
+#include "common/datum/datum_parameter_array.h"
 #include "query/engine/ob_exec_context_access.h"
 #include "query/session/ob_session_access.h"
 #include "ob_exec_context.h"
@@ -1048,12 +1049,24 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
           } else {
             expr->get_eval_info(eval_ctx).clear_evaluated_flag();
             ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *expr);
-            ObDatum &param_datum = expr->locate_datum_for_write(eval_ctx);
-            ret = assign_parameter_to_expr(eval_ctx, *expr, one_params.at(i).datum_, one_params.at(i).get_type_meta());
+            Datum &param_datum = expr->locate_datum_for_write(eval_ctx);
+            // Grouped input keeps its whole envelope for a later rescan, but
+            // the expression receives the selected scalar, just as the sole
+            // native parameter slot does. Never interpret an array address as
+            // an inline integer.
+            const DatumParameter *effective = &one_params.at(i);
+            if (effective->is_ext_sql_array()) {
+              const DatumParameterArray *groups = effective->get_array<DatumParameterArray>();
+              if (groups == nullptr || groups->count_ <= 0) { ret = OB_ERR_UNEXPECTED; }
+              else { effective = &groups->data_[0]; }
+            }
+            if (OB_SUCC(ret)) {
+              ret = assign_parameter_to_expr(eval_ctx, *expr, effective->datum_, effective->get_type_meta());
+            }
             if (OB_FAIL(ret)) {
-            } else if (is_lob_storage(one_params.at(i).get_type()) &&
-                       OB_FAIL(ob_adjust_lob_datum(*this, one_params.at(i).datum_,
-                           one_params.at(i).get_type_meta(), expr->obj_meta_, get_allocator(), param_datum))) {
+            } else if (is_lob_storage(effective->get_type()) &&
+                       OB_FAIL(ob_adjust_lob_datum(*this, param_datum,
+                           effective->get_type_meta(), expr->obj_meta_, get_allocator(), param_datum))) {
             } else {
               expr->get_eval_info(eval_ctx).evaluated_ = true;
             }

@@ -365,7 +365,7 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
 
   for (int64_t i = 0; OB_SUCC(ret) && i < fk_cnt; ++i) {
     DatumValue tmp_obj;
-    ObDatum *col_datum = nullptr;
+    Datum *col_datum = nullptr;
     ObExpr *column_expr = row.at(columns.at(i).idx_);
     const SqlTypeMeta &col_obj_meta = column_expr->obj_meta_;
     const SqlTypeMeta &dst_obj_meta = columns.at(i).obj_meta_;
@@ -382,7 +382,7 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
         need_extra_cast))) {
     } else if (OB_FAIL(column_expr->eval(eval_ctx_, col_datum))) {
     } else if (!need_extra_cast && FALSE_IT(to_obj_meta = dst_obj_meta)) {
-    } else if (OB_FAIL(project_datum_value_view(*col_datum, to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj))) {
+    } else if (OB_FAIL(project_native_datum_value_view(*col_datum, column_expr->get_sql_type(), to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj, *allocator_))) {
     } else if (need_extra_cast) {
       ObCastMode cm = CM_NONE | CM_CONST_TO_DECIMAL_INT_EQ;
       ObCastCtx cast_ctx(allocator_, NULL, cm, ObCharset::get_system_collation());
@@ -447,7 +447,7 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
     if (i < fk_cnt) {
       DatumValue tmp_obj;
-      ObDatum *col_datum = nullptr;
+      Datum *col_datum = nullptr;
       ObExpr *column_expr = row.at(columns.at(i).idx_);
       const SqlTypeMeta &col_obj_meta = column_expr->obj_meta_;
       const SqlTypeMeta &dst_obj_meta = columns.at(i).obj_meta_;
@@ -464,7 +464,7 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
           need_extra_cast))) {
       } else if (OB_FAIL(column_expr->eval(eval_ctx_, col_datum))) {
       } else if (!need_extra_cast && FALSE_IT(to_obj_meta = dst_obj_meta)) {
-      } else if (OB_FAIL(project_datum_value_view(*col_datum, to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj))) {
+      } else if (OB_FAIL(project_native_datum_value_view(*col_datum, column_expr->get_sql_type(), to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj, *allocator_))) {
       } else if (need_extra_cast) {
         ObCastMode cm = CM_NONE | CM_CONST_TO_DECIMAL_INT_EQ;
         ObCastCtx cast_ctx(allocator_, NULL, cm, ObCharset::get_system_collation());
@@ -540,7 +540,7 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
     if (i < fk_cnt) {
       DatumValue tmp_obj;
-      ObDatum *col_datum = nullptr;
+      Datum *col_datum = nullptr;
       ObExpr *column_expr = row.at(columns.at(i).idx_);
       const SqlTypeMeta &col_obj_meta = column_expr->obj_meta_;
       const SqlTypeMeta &dst_obj_meta = columns.at(i).obj_meta_;
@@ -557,7 +557,7 @@ int ObForeignKeyChecker::build_index_table_range_need_shadow_column(const ObIArr
           need_extra_cast))) {
       } else if (OB_FAIL(column_expr->eval(eval_ctx_, col_datum))) {
       } else if (!need_extra_cast && FALSE_IT(to_obj_meta = dst_obj_meta)) {
-      } else if (OB_FAIL(project_datum_value_view(*col_datum, to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj))) {
+      } else if (OB_FAIL(project_native_datum_value_view(*col_datum, column_expr->get_sql_type(), to_obj_meta, obj_datum_map, tmp_obj.meta_, tmp_obj, *allocator_))) {
       } else if (need_extra_cast) {
         ObCastMode cm = CM_NONE | CM_CONST_TO_DECIMAL_INT_EQ;
         ObCastCtx cast_ctx(allocator_, NULL, cm, ObCharset::get_system_collation());
@@ -603,7 +603,7 @@ int ObForeignKeyChecker::check_need_shadow_columns(const ObIArray<ObForeignKeyCo
   need_shadow_columns = false;
   bool is_rowkey_all_null = true;
   for (int64_t i = 0; OB_SUCC(ret) && is_rowkey_all_null && i < columns.count(); ++i) {
-    ObDatum *col_datum = nullptr;
+    Datum *col_datum = nullptr;
     OZ(row.at(columns.at(i).idx_)->eval(eval_ctx_, col_datum));
     if (!col_datum->is_null()) {
       is_rowkey_all_null = false;
@@ -622,7 +622,7 @@ int ObForeignKeyChecker::check_fk_columns_has_null(const ObIArray<ObForeignKeyCo
   is_all_null = true;
   has_null = false;
   for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
-    ObDatum *col_datum = nullptr;
+    Datum *col_datum = nullptr;
     OZ(row.at(columns.at(i).idx_)->eval(eval_ctx_, col_datum));
     if (!col_datum->is_null()) {
       is_all_null = false;

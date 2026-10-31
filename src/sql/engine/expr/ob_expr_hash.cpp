@@ -49,7 +49,7 @@ int ObExprHash::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int ObExprHash::calc_hash_value_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprHash::calc_hash_value_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   uint64_t hash_value = HASH_SEED;
@@ -57,7 +57,7 @@ int ObExprHash::calc_hash_value_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
-    ObDatum *datum = NULL;
+    Datum *datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
     } else {
       ObExprHashFuncType hash_func = expr.args_[i]->basic_funcs_->murmur_hash_v2_;
@@ -74,34 +74,42 @@ int ObExprHash::calc_hash_value_expr_batch(
     const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  uint64_t hash_seed = HASH_SEED;
-  uint64_t *batch_hash_vals = reinterpret_cast<uint64_t *>(
-                              ctx.frames_[expr.frame_idx_] + expr.res_buf_off_);
+  Datum *results = expr.locate_batch_datums(ctx);
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     if (OB_FAIL(expr.args_[i]->eval_batch(ctx, skip, batch_size))) {
     } else {
-      ObDatum *datums = expr.args_[i]->locate_batch_datums(ctx);
+      Datum *datums = expr.args_[i]->locate_batch_datums(ctx);
       if (OB_ISNULL(datums)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ObBatchDatumHashFunc hash_func = expr.args_[i]->basic_funcs_->murmur_hash_v2_batch_;
-        hash_func(batch_hash_vals, datums, expr.args_[i]->is_batch_result(), skip, batch_size,
-                  i > 0 ? batch_hash_vals: &hash_seed, i > 0, datum_access_ctx);
+        const DatumHashOp &hash_func = expr.args_[i]->basic_funcs_->murmur_hash_v2_batch_;
+        for (int64_t row = 0; OB_SUCC(ret) && row < batch_size; ++row) {
+          if (skip.at(row) || eval_flags.at(row)) { continue; }
+          uint64_t value = 0;
+          const uint64_t seed = i == 0 ? HASH_SEED : results[row].get_uint();
+          if (OB_FAIL(hash_func(datums[expr.args_[i]->is_batch_result() ? row : 0],
+                               seed, value, datum_access_ctx))) {
+          } else {
+            // Inline results have no reserved payload. Keep the running hash
+            // in the native slot; publish evaluated flags only after all args.
+            // ObExpr::do_eval_batch clears these slots if a later arg fails.
+            results[row].set_uint(value);
+          }
+        }
       }
     }
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
-    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
       if (skip.at(i) || eval_flags.at(i)) {
         continue;
       } else {
-        expr.locate_expr_datum(ctx, i).set_uint(batch_hash_vals[i]);
         eval_flags.set(i);
       }
     }

@@ -29,7 +29,7 @@ class ObExprPrivSTGeographyFromText : public ObExprPrivSTGeogFromText
 public:
   explicit ObExprPrivSTGeographyFromText(common::ObIAllocator &alloc);
   virtual ~ObExprPrivSTGeographyFromText();
-  static int eval_priv_st_geographyfromtext(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_priv_st_geographyfromtext(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

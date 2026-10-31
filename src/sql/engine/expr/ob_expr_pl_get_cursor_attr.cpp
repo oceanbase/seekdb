@@ -140,10 +140,10 @@ int ObExprPLGetCursorAttr::cg_expr(
 }
 
 int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObDatumMeta datum_meta;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   ExtraInfo *info = static_cast<ExtraInfo *>(expr.extra_info_);
@@ -184,9 +184,8 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
   if (OB_SUCC(ret)) {
     if (info->pl_cursor_info_.is_explicit_cursor()) {
       CK (ObExtendType == datum_meta.type_);
-      if (datum->is_null() || datum->is_extended_null()) {
-        // A null cursor is legal. This also handles the legacy 16-byte Datum
-        // encoding whose embedded metadata marks it as NULL.
+      if (datum->is_null()) {
+        // The explicit legacy import normalizes embedded extended NULL.
         cursor = NULL;
       } else if (!datum->is_ext() || !datum->has_ext_value()
                  || datum->get_extend_type() != pl::PL_CURSOR_TYPE) {

@@ -99,7 +99,7 @@ int ObExprAutoincNextval::calc_result_typeN(ObExprResType &type,
 }
 
 int ObExprAutoincNextval::get_uint_value(const ObExpr &input_expr,
-                                         ObDatum *input_value,
+                                         Datum *input_value,
                                          bool &is_zero, uint64_t &casted_value)
 {
   int ret = OB_SUCCESS;
@@ -146,7 +146,7 @@ int ObExprAutoincNextval::get_uint_value(const ObExpr &input_expr,
 
 int ObExprAutoincNextval::get_input_value(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum *input_value,
+                                          Datum *input_value,
                                           share::AutoincParam &autoinc_param,
                                           bool &is_to_generate,
                                           uint64_t &casted_value)
@@ -259,10 +259,10 @@ int ObExprAutoincNextval::cg_expr(
 }
 
 int ObExprAutoincNextval::eval_nextval(
-    const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+    const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *input_value = NULL;
+  Datum *input_value = NULL;
   ObPhysicalPlanCtx *plan_ctx = ctx.exec_ctx_.get_physical_plan_ctx();
   ObSQLSessionInfo *my_session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(plan_ctx) || OB_ISNULL(my_session)) {

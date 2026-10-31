@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/expr/ob_expr_uniform.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_distribution.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -29,8 +30,8 @@ namespace sql
 int ObExprUniform::ObExprUniformIntCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr)
 {
   int ret = OB_SUCCESS;
-  ObDatum &p1 = expr.locate_param_datum(ctx, 0);
-  ObDatum &p2 = expr.locate_param_datum(ctx, 1);
+  Datum &p1 = expr.locate_param_datum(ctx, 0);
+  Datum &p2 = expr.locate_param_datum(ctx, 1);
   if (p1.is_null() || p2.is_null()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "uniform min/max value. must be a constant expression.");
@@ -58,8 +59,8 @@ int ObExprUniform::ObExprUniformIntCtx::generate_next_value(int64_t seed, int64_
 int ObExprUniform::ObExprUniformRealCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr)
 {
   int ret = OB_SUCCESS;
-  ObDatum &p1 = expr.locate_param_datum(ctx, 0);
-  ObDatum &p2 = expr.locate_param_datum(ctx, 1);
+  Datum &p1 = expr.locate_param_datum(ctx, 0);
+  Datum &p2 = expr.locate_param_datum(ctx, 1);
   if (p1.is_null() || p2.is_null()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "uniform min/max value. must be a constant number.");
@@ -118,7 +119,7 @@ int ObExprUniform::calc_result_type3(ObExprResType &result_type,
 
 int ObExprUniform::eval_next_int_value(const ObExpr &expr,
                                        ObEvalCtx &ctx,
-                                       ObDatum &res_datum)
+                                       Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObExprUniformIntCtx *uniform_ctx = NULL;
@@ -136,7 +137,7 @@ int ObExprUniform::eval_next_int_value(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum &rand_val = expr.locate_param_datum(ctx, 2);
+    Datum &rand_val = expr.locate_param_datum(ctx, 2);
     if (OB_UNLIKELY(rand_val.is_null())) {
         res_datum.set_null();
     } else {
@@ -153,7 +154,7 @@ int ObExprUniform::eval_next_int_value(const ObExpr &expr,
 
 int ObExprUniform::eval_next_real_value(const ObExpr &expr,
                                         ObEvalCtx &ctx,
-                                        ObDatum &res_datum)
+                                        Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObExprUniformRealCtx *uniform_ctx = NULL;
@@ -171,7 +172,7 @@ int ObExprUniform::eval_next_real_value(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum &rand_val = expr.locate_param_datum(ctx, 2);
+    Datum &rand_val = expr.locate_param_datum(ctx, 2);
     if (OB_UNLIKELY(rand_val.is_null())) {
         res_datum.set_null();
     } else {
@@ -190,7 +191,7 @@ int ObExprUniform::eval_next_real_value(const ObExpr &expr,
 // and convert the double result into number format
 int ObExprUniform::eval_next_number_value(const ObExpr &expr,
                                           ObEvalCtx &ctx,
-                                          ObDatum &res_datum)
+                                          Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObExprUniformRealCtx *uniform_ctx = NULL;
@@ -208,7 +209,7 @@ int ObExprUniform::eval_next_number_value(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum &rand_val = expr.locate_param_datum(ctx, 2);
+    Datum &rand_val = expr.locate_param_datum(ctx, 2);
     if (OB_UNLIKELY(rand_val.is_null())) {
         res_datum.set_null();
     } else {
@@ -220,7 +221,7 @@ int ObExprUniform::eval_next_number_value(const ObExpr &expr,
       if (OB_FAIL(uniform_ctx->generate_next_value(seed, d))) {
       } else if (OB_FAIL(ObJsonBaseUtil::double_to_number(d, local_alloc, res))) {
       } else {
-        res_datum.set_number(res);
+        ret = ObExprUtil::set_number(expr, ctx, res_datum, res);
       }
     }
   }

@@ -81,7 +81,7 @@ int ObExprJsonInsert::calc_result_typeN(ObExprResType& type,
   return ret;
 }                                     
 
-int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -89,7 +89,7 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("JSONModule"));
   ObIJsonBase *j_base = NULL;
-  ObDatum *json_datum = NULL;
+  Datum *json_datum = NULL;
   bool is_null = false;
 
   // transform to tree node

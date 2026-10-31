@@ -100,6 +100,8 @@ ObDatum integer(const int64_t &value)
 { return ObDatum(reinterpret_cast<const char *>(&value), sizeof(value), false); }
 ObDatum bytes(const void *value, uint32_t length)
 { return ObDatum(static_cast<const char *>(value), length, false); }
+int64_t read_int(const Datum &value)
+{ EXPECT_FALSE(value.is_null()); return value.is_null() ? 0 : value.get_int(); }
 int64_t read_int(const ObDatum &value)
 {
   int64_t number = 0;
@@ -154,7 +156,7 @@ protected:
       expr.batch_idx_mask_ = UINT64_MAX;
       set_type(col, col == 1 || col == 4 ? ObVarcharType : col == 2 ? ObDecimalIntType : ObIntType);
       for (int64_t row = 0; row < BATCH; ++row) {
-        new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
+        new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
       }
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo;
       ASSERT_EQ(OB_SUCCESS, exprs_.push_back(&expr));
@@ -165,11 +167,11 @@ protected:
       MEMCPY(text_[row].data(), payload, sizeof(payload));
       decimal_[row].fill(static_cast<char>(0x30 + row));
       flagged_[row].fill(static_cast<char>('L' + row));
-      datum(0, row) = integer(numbers_[row]);
-      datum(1, row) = bytes(text_[row].data(), text_[row].size());
-      datum(2, row) = bytes(decimal_[row].data(), decimal_[row].size());
+      set_datum(0, integer(numbers_[row]), row);
+      set_datum(1, bytes(text_[row].data(), text_[row].size()), row);
+      set_datum(2, bytes(decimal_[row].data(), decimal_[row].size()), row);
       datum(3, row).set_null();
-      datum(4, row) = bytes(flagged_[row].data(), flagged_[row].size());
+      set_datum(4, bytes(flagged_[row].data(), flagged_[row].size()), row);
       datum(4, row).set_has_lob_header();
     }
     evaluated();
@@ -185,9 +187,25 @@ protected:
       expr.datum_meta_.scale_ = 2;
       expr.datum_meta_.precision_ = PRECISION_UNKNOWN_YET;
     }
+    expr.obj_meta_.set_collation_type(CS_TYPE_BINARY);
+    ObAccuracy accuracy;
+    accuracy.set_precision(expr.datum_meta_.precision_);
+    accuracy.set_scale(expr.datum_meta_.scale_);
+    ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, accuracy, arena_));
   }
-  ObDatum &datum(int64_t col, int64_t row = 0)
+  Datum &datum(int64_t col, int64_t row = 0)
   { return expressions_[col].locate_batch_datums(eval_)[row]; }
+  void set_datum(int64_t column, const ObDatum &value, int64_t row = 0)
+  { ASSERT_EQ(OB_SUCCESS, expressions_[column].get_datum_copy_plan().import_legacy(value, datum(column, row))); }
+  ObDatum legacy(int64_t column, int64_t row = 0)
+  {
+    ObDatum value;
+    EXPECT_EQ(OB_SUCCESS, expressions_[column].get_datum_copy_plan().legacy_view(
+        datum(column, row), value, legacy_scratch_[column][row], 64));
+    return value;
+  }
+  alignas(8) char legacy_scratch_[5][4][64]{};
+
   void evaluated()
   {
     for (auto &expr : expressions_) {
@@ -198,7 +216,7 @@ protected:
   std::vector<ObDatum> values(int64_t row = 0)
   {
     std::vector<ObDatum> result;
-    for (int64_t col = 0; col < COLS; ++col) { result.push_back(datum(col, row)); }
+    for (int64_t col = 0; col < COLS; ++col) { result.push_back(legacy(col, row)); }
     return result;
   }
   void expect_mixed(const StoredDatumCell *cells, int64_t row)
@@ -258,9 +276,9 @@ TEST_F(FixedRowConsumers, das_store_returns_stable_fixed_cells_and_restores_owne
   ASSERT_EQ(OB_SUCCESS, store.to_expr(true, 2));
   EXPECT_EQ(INT64_MIN, read_int(datum(0, 0)));
   EXPECT_EQ(INT64_MAX, read_int(datum(0, 1)));
-  EXPECT_EQ(16, datum(2, 1).len_);
+  EXPECT_EQ(16, legacy(2, 1).len_);
   EXPECT_TRUE(datum(3, 0).is_null());
-  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, datum(4, 1).flag_);
+  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, legacy(4, 1).flag_);
   expect_mixed(store.cur_stored_cells(), 2);
   store.reuse();
   EXPECT_FALSE(store.have_data());
@@ -280,17 +298,17 @@ TEST_F(FixedRowConsumers, das_group_selection_reads_group_and_order_from_fixed_c
     ASSERT_EQ(OB_SUCCESS, stores.at(i).init(arena_));
   }
   int64_t first = (int64_t(3) << 32) | 9;
-  datum(0) = integer(first);
+  set_datum(0, integer(first));
   ASSERT_EQ(OB_SUCCESS, stores.at(0).save(false, 1));
   int64_t second = (int64_t(2) << 32) | 99;
-  datum(0) = integer(second);
+  set_datum(0, integer(second));
   ASSERT_EQ(OB_SUCCESS, stores.at(1).save(false, 1));
   int64_t output = 0;
   ASSERT_EQ(OB_SUCCESS, (merge.*member(MergeCompareTag{}))(1, output));
   EXPECT_EQ(1, output);
   EXPECT_EQ(3, stores.at(0).cur_group_idx());
   first = (int64_t(2) << 32) | 7;
-  datum(0) = integer(first);
+  set_datum(0, integer(first));
   ASSERT_EQ(OB_SUCCESS, stores.at(0).save(false, 1));
   output = 1;
   ASSERT_EQ(OB_SUCCESS, (merge.*member(MergeCompareTag{}))(0, output));
@@ -302,7 +320,7 @@ TEST_F(FixedRowConsumers, das_batch_group_count_is_independent_of_the_low_order_
   MergeStoreRows store(&exprs_, &eval_, 0, BATCH);
   ASSERT_EQ(OB_SUCCESS, store.init(arena_));
   const int64_t groups[] = {(int64_t(2) << 32) | 3, (int64_t(2) << 32) | 8, int64_t(3) << 32};
-  for (int i = 0; i < 3; ++i) { datum(0, i) = integer(groups[i]); }
+  for (int i = 0; i < 3; ++i) { set_datum(0, integer(groups[i]), i); }
   ASSERT_EQ(OB_SUCCESS, store.save(true, 3));
   EXPECT_EQ(2, store.cur_group_idx());
   EXPECT_EQ(2, store.row_cnt_with_cur_group_idx());
@@ -337,6 +355,8 @@ TEST_F(FixedRowConsumers, index_merge_compares_fixed_cells_with_existing_directi
   ASSERT_EQ(OB_SUCCESS, keys.push_back(&expressions_[0]));
   ASSERT_EQ(OB_SUCCESS, keys.push_back(&expressions_[1]));
   expressions_[1].obj_meta_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  ASSERT_EQ(OB_SUCCESS, expressions_[1].prepare_scalar_type(expressions_[1].obj_meta_,
+      expressions_[1].get_sql_type().accuracy(), arena_));
   ArenaIter<ObDASIndexMergeIter> owner(arena_);
   ASSERT_NE(nullptr, owner.get());
   ObDASIndexMergeIter &merge = *owner.get();
@@ -348,8 +368,8 @@ TEST_F(FixedRowConsumers, index_merge_compares_fixed_cells_with_existing_directi
   const char a[] = "customer", b[] = "CUSTOMER";
   for (int64_t i = 0; i < 2; ++i) {
     ASSERT_EQ(OB_SUCCESS, stores.at(i).init(arena_, &keys, &eval_, 1));
-    datum(0) = integer(number);
-    datum(1) = bytes(i == 0 ? a : b, 8);
+    set_datum(0, integer(number));
+    set_datum(1, bytes(i == 0 ? a : b, 8));
     ASSERT_EQ(OB_SUCCESS, stores.at(i).save(false, 1));
   }
   int64_t output = 0;
@@ -357,7 +377,7 @@ TEST_F(FixedRowConsumers, index_merge_compares_fixed_cells_with_existing_directi
   ASSERT_EQ(OB_SUCCESS, (merge.*member(IndexCompareTag{}))(1, output, cmp));
   EXPECT_EQ(0, cmp);
   number = INT64_MIN;
-  datum(0) = integer(number);
+  set_datum(0, integer(number));
   ASSERT_EQ(OB_SUCCESS, stores.at(1).save(false, 1));
   output = 0;
   ASSERT_EQ(OB_SUCCESS, (merge.*member(IndexCompareTag{}))(1, output, cmp));
@@ -372,7 +392,7 @@ TEST_F(FixedRowConsumers, index_merge_compares_fixed_cells_with_existing_directi
   ASSERT_EQ(OB_SUCCESS, (merge.*member(IndexCompareTag{}))(1, output, cmp));
   EXPECT_NE(0, cmp);
   number = 7;
-  datum(0) = integer(number);
+  set_datum(0, integer(number));
   ASSERT_EQ(OB_SUCCESS, stores.at(1).save(false, 1));
   keys.at(1) = nullptr;
   output = 0;
@@ -389,18 +409,18 @@ TEST_F(FixedRowConsumers, px_scalar_output_preserves_flags_unknown_decimal_and_d
   for (auto &expr : expressions_) { expr.batch_result_ = false; expr.batch_idx_mask_ = 0; }
   expressions_[0].is_static_const_ = true;
   int64_t constant = 71;
-  datum(0) = integer(constant);
+  set_datum(0, integer(constant));
   ASSERT_EQ(OB_SUCCESS, ObReceiveRowReader::to_expr(row.row_, dynamic, exprs_, eval_));
   EXPECT_EQ(71, read_int(datum(0)));
-  EXPECT_EQ(16, datum(2).len_);
+  EXPECT_EQ(16, legacy(2).len_);
   EXPECT_EQ(PRECISION_UNKNOWN_YET, expressions_[2].datum_meta_.precision_);
   EXPECT_TRUE(datum(3).is_null());
-  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, datum(4).flag_);
-  EXPECT_EQ(row.row_->stored_cells()[2].ptr_, datum(2).ptr_);
-  EXPECT_NE(row.row_->stored_cells()[1].ptr_, datum(1).ptr_);
+  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, legacy(4).flag_);
+  EXPECT_EQ(row.row_->stored_cells()[2].ptr_, legacy(2).ptr_);
+  EXPECT_NE(row.row_->stored_cells()[1].ptr_, legacy(1).ptr_);
   MEMSET(const_cast<char *>(row.row_->stored_cells()[1].ptr_), 'x', 4);
   const char expected[4] = {'a', '\0', 'z', '0'};
-  EXPECT_EQ(0, MEMCMP(expected, datum(1).ptr_, sizeof(expected)));
+  EXPECT_EQ(0, MEMCMP(expected, legacy(1).ptr_, sizeof(expected)));
 }
 
 TEST_F(FixedRowConsumers, px_batch_output_uses_first_row_for_nonbatch_values_and_skips_static_constants)
@@ -410,15 +430,15 @@ TEST_F(FixedRowConsumers, px_batch_output_uses_first_row_for_nonbatch_values_and
   ObSEArray<ObExpr *, 1> dynamic;
   expressions_[0].is_static_const_ = true;
   int64_t constant = 89;
-  datum(0) = integer(constant);
+  set_datum(0, integer(constant));
   expressions_[2].batch_result_ = false;
   expressions_[2].batch_idx_mask_ = 0;
   ASSERT_EQ(OB_SUCCESS, ObReceiveRowReader::attach_rows(exprs_, dynamic, eval_, rows, 2));
   EXPECT_EQ(89, read_int(datum(0)));
-  EXPECT_EQ(first.row_->stored_cells()[2].ptr_, datum(2).ptr_);
-  EXPECT_EQ(second.row_->stored_cells()[1].ptr_, datum(1, 1).ptr_);
+  EXPECT_EQ(first.row_->stored_cells()[2].ptr_, legacy(2).ptr_);
+  EXPECT_EQ(second.row_->stored_cells()[1].ptr_, legacy(1, 1).ptr_);
   EXPECT_TRUE(datum(3, 1).is_null());
-  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, datum(4, 1).flag_);
+  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, legacy(4, 1).flag_);
   EXPECT_FALSE(expressions_[1].get_eval_info(eval_).point_to_frame_);
   EXPECT_TRUE(expressions_[1].get_eval_info(eval_).projected_);
 }
@@ -449,10 +469,10 @@ TEST_F(FixedRowConsumers, temp_scalar_iterator_decodes_reordered_duplicate_colum
   MEMSET(source.memory_.data(), 0xA5, source.memory_.size());
   ASSERT_EQ(OB_SUCCESS, op.inner_get_next_row());
   EXPECT_EQ(INT64_MIN, read_int(datum(1)));
-  EXPECT_EQ(16, datum(0).len_);
-  EXPECT_EQ(datum(0).ptr_, datum(2).ptr_);
+  EXPECT_EQ(16, legacy(0).len_);
+  EXPECT_EQ(legacy(0).ptr_, legacy(2).ptr_);
   EXPECT_EQ(PRECISION_UNKNOWN_YET, expressions_[0].datum_meta_.precision_);
-  for (int i = 0; i < 16; ++i) { EXPECT_EQ(0x30, datum(0).ptr_[i]); }
+  for (int i = 0; i < 16; ++i) { EXPECT_EQ(0x30, legacy(0).ptr_[i]); }
   EXPECT_EQ(OB_ITER_END, op.inner_get_next_row());
 }
 
@@ -482,10 +502,10 @@ TEST_F(FixedRowConsumers, temp_batch_iterator_decodes_fixed_rows_with_nonbatch_a
   ASSERT_EQ(OB_SUCCESS, op.inner_get_next_batch(BATCH));
   EXPECT_EQ(INT64_MIN, read_int(datum(0, 0)));
   EXPECT_EQ(INT64_MAX, read_int(datum(0, 1)));
-  EXPECT_EQ(16, datum(2).len_);
-  EXPECT_EQ(0x30, datum(2).ptr_[0]);
+  EXPECT_EQ(16, legacy(2).len_);
+  EXPECT_EQ(0x30, legacy(2).ptr_[0]);
   EXPECT_TRUE(datum(3, 1).is_null());
-  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, datum(4, 1).flag_);
+  EXPECT_EQ(ObDatumDesc::HAS_LOB_HEADER, legacy(4, 1).flag_);
   EXPECT_EQ(OB_SUCCESS, op.inner_get_next_batch(BATCH));
   EXPECT_TRUE(op.get_brs().end_);
 }

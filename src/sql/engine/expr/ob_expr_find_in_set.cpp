@@ -287,12 +287,12 @@ int search_with_const_set(const ObExpr &expr,
 }
 
 int ObExprFindInSet::calc_find_in_set_expr(const ObExpr &expr, ObEvalCtx &ctx, 
-                                           ObDatum &res_datum)
+                                           Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   // find_in_set(str, strlist)
-  ObDatum *str = NULL;
-  ObDatum *strlist = NULL;
+  Datum *str = NULL;
+  Datum *strlist = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.eval_param_value(ctx, str, strlist))) {

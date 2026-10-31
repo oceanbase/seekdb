@@ -49,7 +49,7 @@ private:
   common::ObIAllocator *allocator_;
   const common::ObIArray<ObExpr *> *exprs_;
   ObEvalCtx *eval_ctx_;
-  ObDatum *datums_;
+  Datum *datums_;
   int64_t saved_size_;
   bool inited_;
 };

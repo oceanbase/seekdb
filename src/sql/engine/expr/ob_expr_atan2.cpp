@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_atan2.h"
+#include "sql/engine/expr/ob_expr_util.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -52,12 +53,12 @@ int ObExprAtan2::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   if (1 == expr.arg_cnt_) {
     // only mysql mode
-    ObDatum *radian = NULL;
+    Datum *radian = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {
     } else if (radian->is_null()) {
       res_datum.set_null();
@@ -69,8 +70,8 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     // calc atan2(y/x)
     ObExpr *arg0 = expr.args_[0];
     ObExpr *arg1 = expr.args_[1];
-    ObDatum *y = NULL;
-    ObDatum *x = NULL;
+    Datum *y = NULL;
+    Datum *x = NULL;
     if (OB_FAIL(arg0->eval(ctx, y))) {
     } else if (y->is_null()) {
       /* arg is already cast to number type, no extra null-type handling needed */
@@ -89,7 +90,7 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         if (OB_FAIL(y_nmb.atan2(x_nmb, res_nmb, alloc_guard.get_allocator()))) {
         } else {
-          res_datum.set_number(res_nmb);
+          ret = ObExprUtil::set_number(expr, ctx, res_datum, res_nmb);
         }
       }
     } else if (ObDoubleType == arg0->datum_meta_.type_

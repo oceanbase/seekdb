@@ -69,10 +69,13 @@ public:
   static int get_coll_type_by_subschema_id(ObExecContext *exec_ctx, const uint16_t subschema_id, ObCollectionTypeBase *&coll_type);
   static int construct_array_obj(ObIAllocator &alloc, ObEvalCtx &ctx, const uint16_t subschema_id, ObIArrayType *&res, bool read_only = true);
   static int get_array_obj(ObIAllocator &alloc, ObEvalCtx &ctx, const uint16_t subschema_id, const ObString &raw_data, ObIArrayType *&res);
+  // The old array library copies each scalar/string into its own array owner.
+  static int append_native_element(ObIArrayType &array, SqlValueType element_type,
+                                    const Datum &value, const ObExpr &source);
   static int add_elem_to_array(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &alloc,
                                ObCollectionArrayType *value_type,  ObIArrayType *value_arr, int args_idx);
   static int add_elem_to_nested_array(ObIAllocator &tmp_allocator, ObEvalCtx &ctx, uint16_t subschema_id,
-                                      const ObDatum &datum, ObArrayNested *nest_array);
+                                      const Datum &datum, ObArrayNested *nest_array);
   static int get_child_subschema_id(ObExecContext *exec_ctx, uint16_t subid, uint16_t &child_subid);
   static int calc_collection_hash_val(
       const SqlTypeMeta &meta, const void *data, ObLength len,
@@ -188,7 +191,7 @@ public:
                              ObIArrayType *&result,
                              bool &is_null);
   static int get_type_vector(const ObExpr &expr,
-                             const ObDatum &datum,
+                             const Datum &datum,
                              ObEvalCtx &ctx,
                              ObIAllocator &allocator,
                              ObIArrayType *&result);
@@ -204,10 +207,10 @@ public:
 
   // update inplace
   static int vector_datum_add(ObExecContext &exec_ctx,
-                              ObDatum &res,
-                              const ObDatum &data,
+                              Datum &res,
+                              const Datum &data,
                               ObIAllocator &allocator,
-                              ObDatum *tmp_res = nullptr,
+                              Datum *tmp_res = nullptr,
                               bool negative = false);
   // check
   template<typename T>
@@ -242,12 +245,12 @@ struct ObVectorArithFunc
 struct ObVectorVectorArithFunc : public ObVectorArithFunc
 {
 
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const;
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const;
 };
 
 struct ObVectorElemArithFunc : public ObVectorArithFunc
 {
-  int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const;
+  int operator()(Datum &res, const Datum &l, const Datum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const;
 };
 
 class ObNestedVectorFunc

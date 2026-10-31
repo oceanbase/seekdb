@@ -53,6 +53,19 @@ public:
   static int compare(ObMergeJoinOp &join, bool left_stored,
                      const ObRADatumStore::StoredRow *row, int64_t batch_idx, int64_t &result)
   {
+    // Production prepares these full-Type companions in inner_open; this
+    // fixture binds the same selected functions without opening unrelated PX.
+    const auto &spec = static_cast<const ObMergeJoinSpec &>(join.get_spec());
+    join.native_equal_cmp_.reuse();
+    for (int64_t i = 0; i < spec.equal_cond_infos_.count(); ++i) {
+      const auto &condition = spec.equal_cond_infos_.at(i);
+      const ObExpr *left = condition.expr_->args_[condition.is_opposite_ ? 1 : 0];
+      const ObExpr *right = condition.expr_->args_[condition.is_opposite_ ? 0 : 1];
+      DatumCmpOp operation;
+      int ret = ObDatumFuncs::bind_legacy_cmp(left->get_sql_type(), right->get_sql_type(), condition.ns_cmp_func_, operation);
+      if (ret != OB_SUCCESS) { return ret; }
+      if ((ret = join.native_equal_cmp_.push_back(operation)) != OB_SUCCESS) { return ret; }
+    }
     return left_stored ? join.calc_equal_conds_with_stored_row<true>(row, batch_idx, result)
                        : join.calc_equal_conds_with_stored_row<false>(row, batch_idx, result);
   }
@@ -158,8 +171,10 @@ protected:
       expr.obj_meta_.set_type(type);
       expr.datum_meta_ = ObDatumMeta(type, CS_TYPE_BINARY, 0);
       expr.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(type);
+      expr.obj_meta_.set_collation_type(CS_TYPE_BINARY);
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, ObAccuracy(), arena_));
       for (int row = 0; row < BATCH; ++row) {
-        new (frame_.data() + expr.datum_off_ + row * sizeof(ObDatum)) ObDatum;
+        new (frame_.data() + expr.datum_off_ + row * sizeof(Datum)) Datum;
       }
       new (frame_.data() + expr.eval_info_off_) ObEvalInfo;
       expr.get_eval_info(eval).evaluated_ = true;
@@ -186,10 +201,13 @@ protected:
     }
     ASSERT_EQ(OB_SUCCESS, FixedMergeJoinCellsTestAccess::map(join_, {2, 1}, {0, 2}));
   }
-  ObDatum &datum(bool left, int key, int row = 2)
+  Datum &datum(bool left, int key, int row = 2)
   { return columns_[(left ? 0 : 3) + key].locate_batch_datums(join_.get_eval_ctx())[row]; }
   void bind(bool left, int row, const ObDatum &first, const ObDatum &second)
-  { datum(left, 0, row) = first; datum(left, 1, row) = second; }
+  {
+    ASSERT_EQ(OB_SUCCESS, columns_[(left ? 0 : 3)].get_datum_copy_plan().import_legacy(first, datum(left, 0, row)));
+    ASSERT_EQ(OB_SUCCESS, columns_[(left ? 0 : 3) + 1].get_datum_copy_plan().import_legacy(second, datum(left, 1, row)));
+  }
   int compare(bool left_stored, const RARow *row, int64_t &result, int64_t batch_idx = 2)
   { return FixedMergeJoinCellsTestAccess::compare(join_, left_stored, row, batch_idx, result); }
 
@@ -216,7 +234,7 @@ TEST_F(FixedMergeJoinCells, both_stored_sides_use_independent_mapping_and_opposi
   int64_t result = 0;
   ASSERT_EQ(OB_SUCCESS, compare(true, left.row_, result)); EXPECT_EQ(0, result);
   ASSERT_EQ(OB_SUCCESS, compare(false, right.row_, result)); EXPECT_EQ(0, result);
-  datum(false, 0) = integer(greater); datum(true, 0) = integer(greater);
+  datum(false, 0).set_int(greater); datum(true, 0).set_int(greater);
   ASSERT_EQ(OB_SUCCESS, compare(true, left.row_, result)); EXPECT_LT(result, 0);
   result = 0; ASSERT_EQ(OB_SUCCESS, compare(false, right.row_, result)); EXPECT_GT(result, 0);
   spec_.merge_directions_.at(0) = -1;
@@ -296,6 +314,11 @@ TEST_F(FixedMergeJoinCells, nonbatch_cast_frames_use_zero_index_without_changing
 TEST_F(FixedMergeJoinCells, errors_stop_before_the_next_key_and_never_publish_a_stack_pointer)
 {
   int64_t ignored = 0;
+  for (int col : {0, 3}) {
+    columns_[col].obj_meta_.set_varchar(); columns_[col].obj_meta_.set_collation_type(CS_TYPE_BINARY);
+    columns_[col].obj_datum_map_ = OBJ_DATUM_STRING;
+    ASSERT_EQ(OB_SUCCESS, columns_[col].prepare_scalar_type(columns_[col].obj_meta_, ObAccuracy(), arena_));
+  }
   std::string source = "source", current = "current", name = "name";
   ObDatum stored = text(source), input = text(current);
   stored.set_has_lob_header(); input.set_has_lob_header();
@@ -320,7 +343,7 @@ TEST_F(FixedMergeJoinCells, errors_stop_before_the_next_key_and_never_publish_a_
   }
   EXPECT_EQ(left_payload, left.row_->stored_cells()[2].ptr_);
   EXPECT_EQ(right_payload, right.row_->stored_cells()[0].ptr_);
-  EXPECT_EQ(input.ptr_, datum(false, 0).ptr_); EXPECT_EQ(input.ptr_, datum(true, 0).ptr_);
+  EXPECT_EQ(input.ptr_, datum(false, 0).get_string().ptr()); EXPECT_EQ(input.ptr_, datum(true, 0).get_string().ptr());
   EXPECT_EQ(1, join_.get_eval_ctx().get_batch_idx());
 }
 } // namespace

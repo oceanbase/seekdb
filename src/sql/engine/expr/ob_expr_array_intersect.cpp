@@ -34,7 +34,7 @@ ObExprArrayIntersect::~ObExprArrayIntersect()
 {
 }
 
-int ObExprArrayIntersect::eval_array_intersect(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayIntersect::eval_array_intersect(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   return eval_array_set_operation(expr, ctx, res, INTERSECT);
 }

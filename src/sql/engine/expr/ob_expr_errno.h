@@ -33,7 +33,7 @@ public:
                                 ObExprResType *types_array,
                                 int64_t param_num,
                                 ObExprTypeCtx &type_ctx) const;
-  static int eval_errno(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_errno(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   virtual int cg_expr(ObExprCGCtx &ctx, const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
 private:

@@ -227,7 +227,7 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
     } else if (OB_ISNULL(est_ctx_.total_doc_cnt_expr_)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      ObDatum &total_doc_cnt = est_ctx_.total_doc_cnt_expr_->locate_datum_for_write(eval_ctx);
+      common::Datum &total_doc_cnt = est_ctx_.total_doc_cnt_expr_->locate_datum_for_write(eval_ctx);
       total_doc_cnt.set_int(est_ctx_.estimated_total_doc_cnt_);
       total_doc_cnt_ = est_ctx_.estimated_total_doc_cnt_;
     }

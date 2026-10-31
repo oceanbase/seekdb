@@ -1,6 +1,7 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #pragma once
 #include "common/datum/datum_value.h"
+#include "common/datum/datum_copy_plan.h"
 namespace oceanbase { namespace common {
 // Native view of the historical typed Datum projection. The caller chooses
 // whether NULL preserves the declared collation (the two-argument contract).
@@ -72,6 +73,41 @@ inline int project_datum_value_view(const ObDatum &datum,const SqlTypeMeta &meta
     if (datum.is_outrow()) { candidate.meta_.set_outrow(); }
   }
   if (OB_SUCC(ret)) { value = candidate; }
+  return ret;
+}
+
+// The source type selects the native representation; result_meta retains the
+// historical projection (including FK target metadata and NULL collation).
+// Ordinary values borrow source bytes. A required legacy wrapper/coefficient
+// normalization instead lives in wrapper_owner, never in a local scratch slot.
+// Neither path retains a referenced resource; its existing owner must outlive
+// the view. Failure preserves value, although failed allocations remain owned
+// by wrapper_owner until that owner's normal reset.
+inline int project_native_datum_value_view(const Datum &datum, const SqlType &source_type,
+    const SqlTypeMeta &result_meta, SqlValueDatumMapType mapping,
+    const SqlTypeMeta &previous_meta, DatumValue &value, ObIAllocator &wrapper_owner,
+    bool keep_null_collation = false)
+{
+  const DatumCopyPlan plan(source_type);
+  ObDatum legacy;
+  int ret = plan.borrow_legacy(datum, legacy);
+  if (ret == OB_NOT_SUPPORTED) {
+    int64_t bytes = 0;
+    ret = plan.legacy_payload_size(datum, bytes);
+    if (OB_SUCC(ret)) {
+      char *buffer = bytes == 0 ? nullptr : static_cast<char *>(wrapper_owner.alloc(bytes));
+      if (bytes > 0 && buffer == nullptr) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        int64_t position = 0;
+        ret = plan.export_legacy(datum, legacy, buffer, bytes, position);
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ret = project_datum_value_view(legacy, result_meta, mapping, previous_meta,
+                                  value, keep_null_collation);
+  }
   return ret;
 }
 } }

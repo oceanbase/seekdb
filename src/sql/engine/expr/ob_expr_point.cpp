@@ -71,12 +71,12 @@ int ObExprPoint::calc_result_type2(ObExprResType &type,
 
 int ObExprPoint::eval_point(const ObExpr &expr,
                             ObEvalCtx &ctx,
-                            ObDatum &res)
+                            Datum &res)
 {
 	int ret = OB_SUCCESS;
   bool is_null_result = false;
-  ObDatum *datum_x = NULL;
-  ObDatum *datum_y = NULL;
+  Datum *datum_x = NULL;
+  Datum *datum_y = NULL;
   ObExpr *arg_x = expr.args_[0];
   ObExpr *arg_y = expr.args_[1];
   SqlValueType type_x = arg_x->datum_meta_.type_;

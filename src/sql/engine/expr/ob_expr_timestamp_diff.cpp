@@ -176,12 +176,12 @@ int ObExprTimeStampDiff::calc_month_diff(const int64_t &left,
 }
 
 int ObExprTimeStampDiff::eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx,
-                                             ObDatum &res)
+                                             Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *u = NULL;
-  ObDatum *l = NULL;
-  ObDatum *r = NULL;
+  Datum *u = NULL;
+  Datum *l = NULL;
+  Datum *r = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {

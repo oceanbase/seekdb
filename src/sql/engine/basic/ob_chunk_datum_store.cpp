@@ -79,12 +79,13 @@ int ObChunkDatumStore::StoredRow::to_expr(const common::ObIArray<ObExpr*> &exprs
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("datum count mismatch", K(ret), K(cnt_), K(exprs.count()), K(count));
   } else {
-    for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (exprs.at(i)->is_const_expr()) {
         continue;
       } else {
-        exprs.at(i)->locate_expr_datum(ctx) = StoredDatumCodec::decode_legacy_view(stored_cells()[i]);
-        exprs.at(i)->set_evaluated_projected(ctx);
+        ret = StoredDatumCodec::decode_native(stored_cells()[i],
+            exprs.at(i)->get_datum_copy_plan(), exprs.at(i)->locate_expr_datum(ctx));
+        if (OB_SUCC(ret)) { exprs.at(i)->set_evaluated_projected(ctx); }
       }
     }
   }
@@ -172,36 +173,37 @@ int ObChunkDatumStore::StoredRow::do_build(StoredRow *&sr,
                                            const common::ObIArray<DatumCopyPlan> *copy_plans)
 {
   int ret = OB_SUCCESS;
-  sr = reinterpret_cast<StoredRow *>(buf);
-  int64_t pos = sizeof(*sr) + sizeof(StoredDatumCell) * exprs.count() + extra_size;
+  StoredRow *candidate = reinterpret_cast<StoredRow *>(buf);
+  int64_t pos = sizeof(*candidate) + sizeof(StoredDatumCell) * exprs.count() + extra_size;
   if (copy_plans != nullptr && copy_plans->count() != exprs.count()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (pos > buf_len) {
     ret = OB_BUF_NOT_ENOUGH;
   } else {
-    sr->cnt_ = exprs.count();
-    StoredDatumCell *datums = sr->stored_cells();
+    candidate->cnt_ = exprs.count();
+    StoredDatumCell *datums = candidate->stored_cells();
     for (int64_t i = 0; i < exprs.count() && OB_SUCC(ret); i++) {
       ObExpr *expr = exprs.at(i);
       if (OB_UNLIKELY(NULL == expr)) {
         // Set datum to NULL for NULL expr
         datums[i].set_null();
       } else {
-        ObDatum *in_datum = NULL;
+        Datum *in_datum = NULL;
         if (OB_FAIL(expr->eval(ctx, in_datum))) {
         } else {
           if (copy_plans != nullptr) {
-            ret = StoredDatumCodec::encode_legacy_copy(*in_datum, datums[i], copy_plans->at(i),
+            ret = StoredDatumCodec::encode_native_copy(*in_datum, datums[i], copy_plans->at(i),
                                                        buf, buf_len, pos, UNSWIZZLING);
           } else {
-            ret = StoredDatumCodec::encode_legacy_copy(*in_datum, datums[i],
-                expr->prepare_legacy_copy_plan(), buf, buf_len, pos, UNSWIZZLING);
+            ret = StoredDatumCodec::encode_native_copy(*in_datum, datums[i],
+                expr->get_datum_copy_plan(), buf, buf_len, pos, UNSWIZZLING);
           }
         }
       }
     }
     if (OB_SUCC(ret)) {
-      sr->row_size_ = static_cast<int32_t>(pos);
+      candidate->row_size_ = static_cast<int32_t>(pos);
+      sr = candidate;
     }
   }
 
@@ -339,8 +341,8 @@ int ObChunkDatumStore::BlockBufferWrap::append_row(
       StoredDatumCell *datum = new (&sr->stored_cells()[i])StoredDatumCell();
       // Attension : can't print dst datum after deep_copy_unswizzling
       ObExpr *expr = exprs.at(i);
-      ret = StoredDatumCodec::encode_legacy_copy(expr->locate_expr_datum(*ctx), *datum,
-          expr->prepare_legacy_copy_plan(), head(), max_size, pos, true);
+      ret = StoredDatumCodec::encode_native_copy(expr->locate_expr_datum(*ctx), *datum,
+          expr->get_datum_copy_plan(), head(), max_size, pos, true);
       if (OB_FAIL(ret)) {
         if (OB_BUF_NOT_ENOUGH != ret) {
         }
@@ -1265,25 +1267,7 @@ int ObChunkDatumStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEval
   return ret;
 }
 
-template <typename T>
-static void assign_datums(const ObDatum **datums, const uint16_t selector[], const int64_t size,
-    ObChunkDatumStore::StoredRow **stored_rows, int64_t col_idx)
-{
-  const ObDatum *cur_datums = datums[col_idx];
-  for (int64_t i = 0; i < size; i++) {
-    ObChunkDatumStore::StoredRow *srow = stored_rows[i];
-    const ObDatum &src = cur_datums[selector[i]];
-    StoredDatumCell &dst = srow->stored_cells()[col_idx];
-    dst = StoredDatumCodec::encode_legacy_view(src);
-    dst.ptr_ = reinterpret_cast<char *>(srow) + srow->row_size_;
-    if (!src.is_null()) {
-      T::assign_datum_value((void *)dst.ptr_, src.ptr_, src.len_);
-    }
-    srow->row_size_ += src.len_;
-  }
-}
-
-int ObChunkDatumStore::inner_add_batch(const ObDatum **datums,
+int ObChunkDatumStore::inner_add_batch(const Datum **datums,
                                        const common::ObIArray<ObExpr *> &exprs,
                                        const uint16_t selector[],
                                        const int64_t size, StoredRow **stored_rows)
@@ -1294,16 +1278,26 @@ int ObChunkDatumStore::inner_add_batch(const ObDatum **datums,
   int64_t col_cnt = exprs.count();
   const int64_t base_row_size = Block::ROW_HEAD_SIZE
       + sizeof(StoredDatumCell) * col_cnt + row_extend_size_;
-  for (int64_t i = 0; i < size; i++) {
+  if (base_row_size < 0 || base_row_size > UINT32_MAX) { ret = OB_SIZE_OVERFLOW; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
     size_array[i] = base_row_size;
   }
-  for (int64_t col_idx = 0; col_idx < col_cnt; col_idx++) {
+  for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < col_cnt; col_idx++) {
     if (OB_ISNULL(datums[col_idx])) {
       continue;
     }
-    const ObDatum *cur_datums = datums[col_idx];
-    for (int64_t i = 0; i < size; i++) {
-      size_array[i] += cur_datums[selector[i]].len_;
+    const Datum *cur_datums = datums[col_idx];
+    for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
+      int64_t bytes = 0;
+      if (OB_FAIL(exprs.at(col_idx)->get_datum_copy_plan().legacy_payload_size(
+              cur_datums[selector[i]], bytes))) {
+        break;
+      } else if (bytes > UINT32_MAX - size_array[i]) {
+        ret = OB_SIZE_OVERFLOW;
+        break;
+      } else {
+        size_array[i] += bytes;
+      }
     }
   }
 
@@ -1312,12 +1306,6 @@ int ObChunkDatumStore::inner_add_batch(const ObDatum **datums,
   while (idx < size && OB_SUCC(ret)) {
     if (OB_FAIL(ensure_write_blk(size_array[idx]))) {
       LOG_WARN("ensure write block failed", K(ret), K(size_array[idx]), K(col_cnt), K(size));
-      for (int64_t col_idx = 0; col_idx < col_cnt; col_idx++) {
-        if (OB_ISNULL(datums[col_idx])) {
-          continue;
-        }
-        const ObDatum *cur_datums = datums[col_idx];
-      }
     } else {
       int64_t data_size = 0;
       const int64_t remain = cur_blk_buffer_->remain();
@@ -1345,53 +1333,23 @@ int ObChunkDatumStore::inner_add_batch(const ObDatum **datums,
   // FIXME bin.lb:
   // 1. try row style loop?
   if (OB_SUCC(ret)) {
-    for (int64_t col_idx = 0; col_idx < col_cnt; col_idx++) {
+    for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < col_cnt; col_idx++) {
       if (OB_ISNULL(exprs.at(col_idx))) {
-        for (int64_t i = 0; i < size; i++) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
           stored_rows[i]->stored_cells()[col_idx].set_null();
         }
         continue;
       }
-      SqlValueType meta_type = exprs.at(col_idx)->datum_meta_.type_;
-      const SqlValueDatumMapType datum_map_type = ObDatum::get_sql_value_datum_map_type(meta_type);
-      switch (datum_map_type) {
-      case OBJ_DATUM_NUMBER:
-        assign_datums<AssignNumberDatumValue>(datums, selector, size, stored_rows, col_idx);
-        break;
-      case OBJ_DATUM_DECIMALINT:
-        switch (get_decimalint_type(exprs.at(col_idx)->datum_meta_.precision_)) {
-        case DECIMAL_INT_32:
-          assign_datums<AssignFixedLenDatumValue<4>>(datums, selector, size, stored_rows, col_idx);
-          break;
-        case DECIMAL_INT_64:
-          assign_datums<AssignFixedLenDatumValue<8>>(datums, selector, size, stored_rows, col_idx);
-          break;
-        case DECIMAL_INT_128:
-          assign_datums<AssignFixedLenDatumValue<16>>(datums, selector, size, stored_rows, col_idx);
-          break;
-        case DECIMAL_INT_256:
-          assign_datums<AssignFixedLenDatumValue<32>>(datums, selector, size, stored_rows, col_idx);
-          break;
-        case DECIMAL_INT_512:
-          assign_datums<AssignFixedLenDatumValue<64>>(datums, selector, size, stored_rows, col_idx);
-          break;
-        default:
-          assign_datums<AssignDefaultDatumValue>(datums, selector, size, stored_rows, col_idx);
-          break;
+      const DatumCopyPlan plan = exprs.at(col_idx)->get_datum_copy_plan();
+      for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+        StoredRow *row = stored_rows[i];
+        int64_t position = row->row_size_;
+        if (OB_FAIL(StoredDatumCodec::encode_native_copy(
+                datums[col_idx][selector[i]], row->stored_cells()[col_idx], plan,
+                reinterpret_cast<char *>(row), size_array[i], position))) {
+        } else {
+          row->row_size_ = position;
         }
-        break;
-      case OBJ_DATUM_8BYTE_DATA:
-        assign_datums<AssignFixedLenDatumValue<8>>(datums, selector, size, stored_rows, col_idx);
-        break;
-      case OBJ_DATUM_4BYTE_DATA:
-        assign_datums<AssignFixedLenDatumValue<4>>(datums, selector, size, stored_rows, col_idx);
-        break;
-      case OBJ_DATUM_1BYTE_DATA:
-        assign_datums<AssignFixedLenDatumValue<1>>(datums, selector, size, stored_rows, col_idx);
-        break;
-      default:
-        assign_datums<AssignDefaultDatumValue>(datums, selector, size, stored_rows, col_idx);
-        break;
       }
     }
   }
@@ -1401,7 +1359,7 @@ int ObChunkDatumStore::inner_add_batch(const ObDatum **datums,
 
 #ifndef NDEBUG
   if (OB_SUCC(ret)) {
-    for (int64_t i = 0; i < size; i++) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
       if (size_array[i] != stored_rows[i]->row_size_) {
         ret = OB_ERR_UNEXPECTED;
       }

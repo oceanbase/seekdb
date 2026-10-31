@@ -81,7 +81,7 @@ int ObExprPrivSTAsEwkt::calc_result_typeN(ObExprResType& type,
  * axis-order issue 
  * may still need srs for validation input swkb in cast(hexstring->obgeometry)
  */
-int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -90,7 +90,7 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObString res_wkt;
-  ObDatum *gis_datum = NULL;
+  Datum *gis_datum = NULL;
   int64_t maxdecimaldigits = DEFAULT_DIGITS_IN_DOUBLE;
 
   // get geo
@@ -98,7 +98,7 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
   } else if (gis_datum->is_null()) {
     is_null_result = true;
   } else if (num_args > 1) { // get maxdecimaldigits
-    ObDatum *precsion_data = NULL;
+    Datum *precsion_data = NULL;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, precsion_data))) {
     } else if (precsion_data->is_null()){
       is_null_result = true;

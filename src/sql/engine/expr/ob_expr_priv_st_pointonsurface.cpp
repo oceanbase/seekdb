@@ -58,7 +58,7 @@ int ObExprPrivSTPointOnSurface::process_input_geometry(
     const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator, bool &is_null_res, ObGeometry *&geo1)
 {
   int ret = OB_SUCCESS;
-  ObDatum *datum1 = nullptr;
+  Datum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   SqlValueType type1 = arg1->datum_meta_.type_;
 
@@ -88,7 +88,7 @@ int ObExprPrivSTPointOnSurface::process_input_geometry(
   return ret;
 }
 
-int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTPointOnSurface::eval_priv_st_pointonsurface(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;

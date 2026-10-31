@@ -65,7 +65,7 @@ int ObExprDocLength::cg_expr(
 int ObExprDocLength::generate_doc_length(
     const ObExpr &raw_ctx,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSEDx(raw_ctx, eval_ctx);

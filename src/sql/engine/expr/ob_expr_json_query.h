@@ -44,7 +44,7 @@ public:
                               int64_t param_num, 
                               common::ObExprTypeCtx& type_ctx)
                               const override;
-    static int eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+    static int eval_json_query(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
     virtual int cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
                     ObExpr &rt_expr) const override;
     virtual common::ObCastMode get_cast_mode() const { return CM_ERROR_ON_SCALE_OVER;}
@@ -59,13 +59,13 @@ private:
                                   bool is_json_input);
   static bool try_set_error_val(common::ObIAllocator *allocator, ObEvalCtx &ctx, 
                                 ObJsonExprParam* json_param,
-                                const ObExpr &expr, ObDatum &res, int &ret);
+                                const ObExpr &expr, Datum &res, int &ret);
   static int set_result(ObJsonExprParam* json_param,
                         ObIJsonBase *jb_res, 
                         common::ObIAllocator *allocator, 
                         ObEvalCtx &ctx, 
                         const ObExpr &expr, 
-                        ObDatum &res);
+                        Datum &res);
   static int get_dest_type(const ObExpr &expr,
                           int32_t &dst_len,
                           ObEvalCtx& ctx,
@@ -79,10 +79,10 @@ private:
                                    uint8_t opt_error,
                                    ObCollationType in_coll_type,
                                    ObCollationType dst_coll_type,
-                                   ObDatum *on_error,
+                                   Datum *on_error,
                                    ObAccuracy &accuracy,
                                    ObJsonCastParam &cast_param,
-                                   ObDatum &res);
+                                   Datum &res);
   static int get_clause_opt(const ObExpr &expr,
                             ObEvalCtx &ctx,
                             uint8_t index,
@@ -103,7 +103,7 @@ private:
   static int get_ora_json_path(const ObExpr &expr, ObEvalCtx &ctx,
                           common::ObArenaAllocator &allocator, ObJsonPath*& j_path,
                           uint16_t index, bool &is_null, bool &is_cover_by_error, 
-                          ObDatum*& json_datum);
+                          Datum*& json_datum);
 
     /*
   Get json doc to JsonBase in static_typing_engine.

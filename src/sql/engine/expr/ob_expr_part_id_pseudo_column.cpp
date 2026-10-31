@@ -56,7 +56,7 @@ int ObExprPartIdPseudoColumn::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprPartIdPseudoColumn::eval_part_id(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprPartIdPseudoColumn::eval_part_id(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   // partition id pseudo list expression comparison is special, its corresponding value is set to the datum of expr in advance
   // Each time it is directly obtained through local_expr_dutam, direct access

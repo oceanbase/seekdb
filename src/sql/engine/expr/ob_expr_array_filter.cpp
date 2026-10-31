@@ -95,7 +95,7 @@ int ObExprArrayFilter::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprArrayFilter::eval_array_filter(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayFilter::eval_array_filter(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -143,7 +143,7 @@ int ObExprArrayFilter::fill_array_by_filter(ObArenaAllocator &allocator, ObIArra
   int ret = OB_SUCCESS;
   alignas(int512_t) char datum_buf[sizeof(int512_t)] = {};
   for (uint32_t i = 0; i < filter_arr->size() && OB_SUCC(ret); i++) {
-    ObDatum filter_elem;
+    common::ObDatum filter_elem;
     filter_elem.ptr_ = datum_buf;
     if (filter_arr->is_null(i)) {
       // do nothing

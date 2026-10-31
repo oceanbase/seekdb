@@ -130,7 +130,7 @@ SqlValueType ObExprFromUnixTime::calc_one_param_type(ObExprResType *params) cons
 
 int ObExprFromUnixTime::eval_one_temporal_fromtime(const ObExpr &expr,
                                                    ObEvalCtx &ctx,
-                                                   ObDatum &expr_datum)
+                                                   Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);
@@ -141,10 +141,10 @@ int ObExprFromUnixTime::eval_one_temporal_fromtime(const ObExpr &expr,
 
 int ObExprFromUnixTime::eval_one_param_fromtime(const ObExpr &expr,
                                                 ObEvalCtx &ctx,
-                                                ObDatum &expr_datum)
+                                                Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum = NULL;
+  Datum *param_datum = NULL;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
@@ -199,11 +199,11 @@ int ObExprFromUnixTime::eval_one_param_fromtime(const ObExpr &expr,
 
 int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
                                              ObEvalCtx &ctx,
-                                             ObDatum &expr_datum)
+                                             Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
-  ObDatum *param2 = NULL;
+  Datum *param1 = NULL;
+  Datum *param2 = NULL;
   bool res_null = false;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
@@ -242,7 +242,7 @@ int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
       expr_datum.set_null();
     } else {
       ObTime ob_time;
-      ObDatum tmp_val;
+      Datum tmp_val;
       char *buf = NULL;
       int64_t pos = 0;
       const int64_t BUF_LEN = 1024;
@@ -277,11 +277,11 @@ int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
 
 int ObExprFromUnixTime::eval_fromtime_special(const ObExpr &expr,
                                               ObEvalCtx &ctx,
-                                              ObDatum &expr_datum)
+                                              Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param1 = NULL;
-  ObDatum *param2 = NULL;
+  Datum *param1 = NULL;
+  Datum *param2 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
   } else if (param1->is_null()) { // mysql mode from_unixtime has short-circuit logic
     expr_datum.set_null();
@@ -295,7 +295,7 @@ int ObExprFromUnixTime::eval_fromtime_special(const ObExpr &expr,
   return ret;
 }
 
-int ObExprFromUnixTime::get_usec_from_datum(const common::ObDatum &param_datum,
+int ObExprFromUnixTime::get_usec_from_datum(const common::Datum &param_datum,
                                             common::ObIAllocator &alloc,
                                             int64_t &usec_val)
 {

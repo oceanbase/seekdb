@@ -29,7 +29,7 @@ public:
   explicit  ObExprUtcTimestamp(common::ObIAllocator &alloc);
   virtual ~ObExprUtcTimestamp();
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const;
-  static int eval_utc_timestamp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_utc_timestamp(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -45,7 +45,7 @@ public:
   explicit  ObExprUtcTime(common::ObIAllocator &alloc);
   virtual ~ObExprUtcTime();
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const;
-  static int eval_utc_time(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_utc_time(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -61,7 +61,7 @@ public:
   explicit  ObExprUtcDate(common::ObIAllocator &alloc);
   virtual ~ObExprUtcDate();
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const;
-  static int eval_utc_date(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_utc_date(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -76,7 +76,7 @@ public:
   explicit  ObExprCurTimestamp(common::ObIAllocator &alloc);
   virtual ~ObExprCurTimestamp();
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const;
-  static int eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_cur_timestamp(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -92,7 +92,7 @@ public:
   explicit  ObExprSysdate(common::ObIAllocator &alloc);
   virtual ~ObExprSysdate();
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const override;
-  static int eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_sysdate(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -108,7 +108,7 @@ public:
   explicit  ObExprCurDate(common::ObIAllocator &alloc);
   virtual ~ObExprCurDate();
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const;
-  static int eval_cur_date(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_cur_date(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
@@ -124,7 +124,7 @@ public:
   explicit  ObExprCurTime(common::ObIAllocator &alloc);
   virtual ~ObExprCurTime();
   virtual int calc_result_type0(ObExprResType &type, common::ObExprTypeCtx &type_ctx) const;
-  static int eval_cur_time(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int eval_cur_time(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;

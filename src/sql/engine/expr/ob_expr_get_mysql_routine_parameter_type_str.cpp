@@ -52,14 +52,14 @@ int ObExprGetMySQLRoutineParameterTypeStr::calc_result_type2(ObExprResType &type
 
 int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(const ObExpr &expr,
                                            ObEvalCtx &ctx,
-                                           ObDatum &res_datum)
+                                           Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
     const share::schema::ObRoutineInfo *routine_info = NULL;
-    ObDatum &first_param = expr.locate_param_datum(ctx, 0);
-    ObDatum &second_param = expr.locate_param_datum(ctx, 1);
+    Datum &first_param = expr.locate_param_datum(ctx, 0);
+    Datum &second_param = expr.locate_param_datum(ctx, 1);
     int64_t routine_id = first_param.get_int();
     int64_t param_pos = second_param.get_int() - 1;
     CK (OB_NOT_NULL(ctx.exec_ctx_.get_my_session()));

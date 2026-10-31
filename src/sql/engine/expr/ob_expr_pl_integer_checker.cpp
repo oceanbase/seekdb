@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_pl_integer_checker.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/ob_exec_context.h"
 #include <type_traits>
 
@@ -98,7 +99,7 @@ int ObExprPLIntegerChecker::check_range(const T &obj, const SqlValueType type, i
   if constexpr (std::is_same<T, DatumValue>::value) {
     // A native runtime NULL may retain its declared type. It is the same
     // logical NULL that the legacy value dispatch skipped as ObNullType.
-    // ObDatum already supplies the width-specific numeric/NUMBER getters used
+    // Datum already supplies the width-specific numeric/NUMBER getters used
     // by this range algorithm; do not reconstruct a general value object.
     return obj.is_null() ? OB_SUCCESS : check_range(obj.datum_, type, range);
   } else {
@@ -161,7 +162,7 @@ int ObExprPLIntegerChecker::calc(DatumParameter &result,
     // its small NUMBER representation); unchanged values borrow source until
     // the final owned copy. This also handles result == source safely.
     alignas(8) char scratch[64];
-    ObDatum checked; checked.ptr_ = scratch;
+    common::ObDatum checked; checked.ptr_ = scratch;
     OZ (calc(checked, source.get_type(), source.datum_, pls_type, pls_range, owner));
     if (OB_SUCC(ret)) {
       DatumParameter output = source; output.datum_ = checked;
@@ -172,9 +173,9 @@ int ObExprPLIntegerChecker::calc(DatumParameter &result,
 }
 
 
-int ObExprPLIntegerChecker::calc(ObDatum &res_datum,
+int ObExprPLIntegerChecker::calc(common::ObDatum &res_datum,
                                  const SqlValueType type,
-                                 const ObDatum &param,
+                                 const common::ObDatum &param,
                                  const pl::ObPLIntegerType &pls_type,
                                  const pl::ObPLIntegerRange &pls_range,
                                  ObIAllocator &calc_buf)
@@ -197,7 +198,7 @@ int ObExprPLIntegerChecker::calc(ObDatum &res_datum,
           } else if (ObNumberType == type) {
             number::ObNumber n;
             OZ (n.from(v, calc_buf));
-            OX (res_datum.set_number(n));
+            OX(res_datum.set_number(n));
           }
         } else {
           res_datum = param;
@@ -246,10 +247,10 @@ int ObExprPLIntegerChecker::cg_expr(ObExprCGCtx &op_cg_ctx,
 }
 
 int ObExprPLIntegerChecker::calc_pl_integer_checker(const ObExpr &expr,
-                                                    ObEvalCtx &ctx, ObDatum &expr_datum)
+                                                    ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   const SqlValueType type = expr.args_[0]->datum_meta_.type_;
   ExtraInfo *info = static_cast<ExtraInfo *>(expr.extra_info_);
   CK(OB_NOT_NULL(info));
@@ -266,8 +267,17 @@ int ObExprPLIntegerChecker::calc_pl_integer_checker(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
-    OZ (calc(expr_datum, type, *param, info->pl_integer_type_,
-       info->pl_integer_range_, alloc_guard.get_allocator()));
+    alignas(8) char input_scratch[64];
+    alignas(8) char output_scratch[64];
+    common::ObDatum input;
+    common::ObDatum checked;
+    checked.ptr_ = output_scratch;
+    Datum candidate;
+    OZ(expr.args_[0]->get_datum_copy_plan().legacy_view(*param, input, input_scratch, sizeof(input_scratch)));
+    OZ(calc(checked, type, input, info->pl_integer_type_, info->pl_integer_range_, alloc_guard.get_allocator()));
+    OZ(expr.get_datum_copy_plan().import_legacy(checked, candidate));
+    ObExprStrResAlloc owner(expr, ctx);
+    OZ(ObExpr::clone_native_value(expr.get_sql_type(), candidate, owner, expr_datum));
   }
   return ret;
 }

@@ -38,7 +38,7 @@ public:
 
   static int eval_uuid_short(const ObExpr &expr,
                       ObEvalCtx &ctx,
-                      ObDatum &expr_datum);
+                      Datum &expr_datum);
 private:
   static uint64_t generate_uuid_short();
   DISALLOW_COPY_AND_ASSIGN(ObExprUuidShort) const;

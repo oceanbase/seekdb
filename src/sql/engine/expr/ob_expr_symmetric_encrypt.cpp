@@ -92,11 +92,11 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
                                     ObEvalCtx &ctx,
                                     const ObCipherOpMode op_mode,
                                     const ObString &func_name,
-                                    ObDatum &res)
+                                    Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *src = NULL;
-  ObDatum *key = NULL;
+  Datum *src = NULL;
+  Datum *key = NULL;
   bool is_ecb = true;
   if (OB_UNLIKELY(2 != expr.arg_cnt_ && 3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -192,11 +192,11 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
                                     ObEvalCtx &ctx,
                                     const ObCipherOpMode op_mode,
                                     const ObString &func_name,
-                                    ObDatum &res)
+                                    Datum &res)
 {
   int ret = OB_SUCCESS;
-  ObDatum *src = NULL;
-  ObDatum *key = NULL;
+  Datum *src = NULL;
+  Datum *key = NULL;
   bool is_null = false;
   bool is_ecb = true;
   if (OB_FAIL(expr.eval_param_value(ctx, src, key))) {
@@ -274,7 +274,7 @@ int ObExprAesEncrypt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return ret;
 }
 
-int ObExprAesEncrypt::eval_aes_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprAesEncrypt::eval_aes_encrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
@@ -304,7 +304,7 @@ int ObExprAesDecrypt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return ret;
 }
 
-int ObExprAesDecrypt::eval_aes_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprAesDecrypt::eval_aes_decrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
@@ -334,7 +334,7 @@ int ObExprSm4Encrypt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return ret;
 }
 
-int ObExprSm4Encrypt::eval_sm4_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSm4Encrypt::eval_sm4_encrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
@@ -371,7 +371,7 @@ int ObExprSm4Decrypt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   return ret;
 }
 
-int ObExprSm4Decrypt::eval_sm4_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSm4Decrypt::eval_sm4_decrypt(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;

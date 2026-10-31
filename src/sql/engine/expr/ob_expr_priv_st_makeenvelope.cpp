@@ -81,7 +81,7 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
   int ret = OB_SUCCESS;
   ObExpr *arg = nullptr;
   SqlValueType type = SqlValueType::ObMaxType;
-  ObDatum *datum = nullptr;
+  Datum *datum = nullptr;
   double coord = 0.0;
 
   // read args
@@ -127,7 +127,7 @@ int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, cons
   return ret;
 }
 
-int ObExprPrivSTMakeEnvelope::eval_priv_st_makeenvelope(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprPrivSTMakeEnvelope::eval_priv_st_makeenvelope(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObGeoSrid srid = 0;

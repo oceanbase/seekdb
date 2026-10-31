@@ -77,7 +77,7 @@ int ObExprArrayRemove::calc_result_type2(ObExprResType &type,
 }
 
 #define EVAL_FUNC_ARRAY_REMOVE(TYPE, GET_FUNC)                                                                        \
-  int ObExprArrayRemove::eval_array_remove_##TYPE(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)                   \
+  int ObExprArrayRemove::eval_array_remove_##TYPE(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)                   \
   {                                                                                                                   \
     int ret = OB_SUCCESS;                                                                                             \
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);                                                                       \
@@ -85,8 +85,8 @@ int ObExprArrayRemove::calc_result_type2(ObExprResType &type,
     const uint16_t meta_id = expr.args_[0]->obj_meta_.get_subschema_id();                                             \
     ObIArrayType *arr_obj = NULL;                                                                                     \
     ObIArrayType *res_arr_obj = NULL;                                                                                 \
-    ObDatum *datum = NULL;                                                                                            \
-    ObDatum *datum_val = NULL;                                                                                        \
+    Datum *datum = NULL;                                                                                            \
+    Datum *datum_val = NULL;                                                                                        \
     TYPE val;                                                                                                         \
     bool bret = true;                                                                                                 \
     bool changed = true;                                                                                              \
@@ -132,7 +132,7 @@ EVAL_FUNC_ARRAY_REMOVE(float, get_float)
 EVAL_FUNC_ARRAY_REMOVE(double, get_double)
 EVAL_FUNC_ARRAY_REMOVE(ObString, get_string)
 
-int ObExprArrayRemove::eval_array_remove_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprArrayRemove::eval_array_remove_array(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -142,8 +142,8 @@ int ObExprArrayRemove::eval_array_remove_array(const ObExpr &expr, ObEvalCtx &ct
   ObIArrayType *arr_obj = NULL;
   ObIArrayType *remove_arr_obj = NULL;
   ObIArrayType *res_arr_obj = NULL;
-  ObDatum *datum = NULL;
-  ObDatum *datum_val = NULL;
+  Datum *datum = NULL;
+  Datum *datum_val = NULL;
   bool bret = true;
   bool changed = true;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
@@ -183,23 +183,23 @@ int ObExprArrayRemove::eval_array_remove_array(const ObExpr &expr, ObEvalCtx &ct
       const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)             \
   {                                                                                                      \
     int ret = OB_SUCCESS;                                                                                \
-    ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);                                         \
+    DatumVector res_datum = expr.locate_expr_datumvector(ctx);                                         \
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);                                             \
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);                                                          \
     common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();                               \
     const uint16_t meta_id = expr.args_[0]->obj_meta_.get_subschema_id();                                \
     ObIArrayType *arr_obj = NULL;                                                                        \
     ObIArrayType *res_arr_obj = NULL;                                                                    \
-    ObDatum *datum = NULL;                                                                               \
-    ObDatum *datum_val = NULL;                                                                           \
+    Datum *datum = NULL;                                                                               \
+    Datum *datum_val = NULL;                                                                           \
     TYPE val;                                                                                            \
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {                                     \
       LOG_WARN("failed to eval args", K(ret));                                                           \
     } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {                              \
       LOG_WARN("failed to eval args", K(ret));                                                           \
     } else {                                                                                             \
-      ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);                             \
-      ObDatumVector val_array = expr.args_[1]->locate_expr_datumvector(ctx);                             \
+      DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);                             \
+      DatumVector val_array = expr.args_[1]->locate_expr_datumvector(ctx);                             \
       for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {                                         \
         if (skip.at(j) || eval_flags.at(j)) {                                                            \
           continue;                                                                                      \
@@ -265,7 +265,7 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
     const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
+  DatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -277,8 +277,8 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else {
-    ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
-    ObDatumVector val_array = expr.args_[1]->locate_expr_datumvector(ctx);
+    DatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
+    DatumVector val_array = expr.args_[1]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
       if (skip.at(j) || eval_flags.at(j)) {
         continue;

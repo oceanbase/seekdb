@@ -167,15 +167,15 @@ int ObExprInsert::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprInsert::calc_expr_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprInsert::calc_expr_insert(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else {
-    ObDatum &text = expr.locate_param_datum(ctx, 0);
-    ObDatum &start_pos = expr.locate_param_datum(ctx, 1);
-    ObDatum &length = expr.locate_param_datum(ctx, 2);
-    ObDatum &replace_text =  expr.locate_param_datum(ctx, 3);
+    Datum &text = expr.locate_param_datum(ctx, 0);
+    Datum &start_pos = expr.locate_param_datum(ctx, 1);
+    Datum &length = expr.locate_param_datum(ctx, 2);
+    Datum &replace_text =  expr.locate_param_datum(ctx, 3);
     if (text.is_null() || start_pos.is_null() || length.is_null() || replace_text.is_null()) {
       expr_datum.set_null();
     } else {

@@ -245,11 +245,15 @@ private:
       ret = OB_ITER_END;
       exhausted_ = true;
     } else if (OB_SUCC(ret)) {
-      const ObDatumVector &score_datums = score_expr_->locate_expr_datumvector(*eval_ctx_);
-      const ObDatumVector &id_datums = id_expr_->locate_expr_datumvector(*eval_ctx_);
+      const sql::DatumVector &score_datums = score_expr_->locate_expr_datumvector(*eval_ctx_);
+      const sql::DatumVector &id_datums = id_expr_->locate_expr_datumvector(*eval_ctx_);
+      const common::DatumCopyPlan id_plan = id_expr_->get_datum_copy_plan();
+      alignas(8) char id_scratch[64];
+      common::ObDatum id_view;
       for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
         scores_[i] = score_datums.at(i)->get_float();
-        if (OB_FAIL(ids_[i].assign(data_plane::ObSparseRetrievalIdView(*id_datums.at(i))))) {
+        if (OB_FAIL(id_plan.legacy_view(*id_datums.at(i), id_view, id_scratch, sizeof(id_scratch)))) {
+        } else if (OB_FAIL(ids_[i].assign(data_plane::ObSparseRetrievalIdView(id_view)))) {
         }
       }
     }
@@ -445,7 +449,7 @@ int ObDASSPIVMergeIter::init_query_vector(const ObDASVecAuxScanCtDef *ir_ctdef,
 {
   int ret = OB_SUCCESS;
 
-  ObDatum *qvec_datum;
+  common::Datum *qvec_datum;
   ObString qvec_data;
   uint64_t drop_ratio;
   if (OB_FAIL(get_ob_sparse_drop_ratio_search(drop_ratio))) {
@@ -1056,7 +1060,7 @@ int ObDASSPIVMergeIter::project_brute_result(int64_t &count, int64_t capacity)
   } else {
     count = OB_MIN(result_docids_.count() - result_docids_curr_iter_, capacity);
     ObExpr *docid_expr = vec_aux_ctdef_->spiv_scan_docid_col_;
-    ObDatum *docid_datum = nullptr;
+    common::Datum *docid_datum = nullptr;
     ObEvalCtx::BatchInfoScopeGuard guard(*vec_aux_rtdef_->eval_ctx_);
     guard.set_batch_size(count);
     if (OB_ISNULL(docid_datum = docid_expr->locate_datums_for_update(*vec_aux_rtdef_->eval_ctx_, count))) {
@@ -1087,7 +1091,7 @@ int ObDASSPIVMergeIter::project_retrieval_matches(int64_t &count, int64_t capaci
     ret = OB_ERR_UNEXPECTED;
   } else if (count > 0) {
     ObExpr *docid_expr = vec_aux_ctdef_->spiv_scan_docid_col_;
-    ObDatum *docid_datums = nullptr;
+    common::Datum *docid_datums = nullptr;
     ObEvalCtx::BatchInfoScopeGuard guard(*vec_aux_rtdef_->eval_ctx_);
     guard.set_batch_size(count);
     if (OB_ISNULL(docid_expr)
@@ -1095,15 +1099,15 @@ int ObDASSPIVMergeIter::project_retrieval_matches(int64_t &count, int64_t capaci
             docid_expr->locate_datums_for_update(*vec_aux_rtdef_->eval_ctx_, count))) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      for (int64_t i = 0; i < count; ++i) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
         guard.set_batch_idx(i);
         if (is_use_docid()) {
-          docid_datums[i].set_datum(matches[i].id_.datum());
+          ret = docid_expr->get_datum_copy_plan().import_legacy(matches[i].id_.datum(), docid_datums[i]);
         } else {
           docid_datums[i].set_int(matches[i].id_.datum().get_int());
         }
       }
-      docid_expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_);
+      if (OB_SUCC(ret)) { docid_expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_); }
     }
   }
   return ret;
@@ -1650,8 +1654,8 @@ int ObDASSPIVMergeIter::get_docid_from_rowkey_docid_table(ObDocIdExt &docid)
     }
   } else {
     ObExpr *docid_expr = vec_aux_ctdef_->spiv_scan_docid_col_;
-    ObDatum &docid_datum = docid_expr->locate_expr_datum(*rowkey_docid_rtdef->eval_ctx_);
-    if (OB_FAIL(docid.from_datum(docid_datum))) {
+    common::Datum &docid_datum = docid_expr->locate_expr_datum(*rowkey_docid_rtdef->eval_ctx_);
+    if (OB_FAIL(docid.from_native(docid_datum, docid_expr->get_sql_type()))) {
     } 
   }
 

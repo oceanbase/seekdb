@@ -45,10 +45,10 @@ int ObExprDate::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprDate::eval_date(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprDate::eval_date(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
   } else if (param->is_null()) {
     res_datum.set_null();

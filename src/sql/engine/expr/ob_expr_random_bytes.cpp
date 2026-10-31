@@ -53,11 +53,11 @@ int ObExprRandomBytes::calc_result_type1(ObExprResType &type,
 
 
 int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx, 
-                                             ObDatum &expr_datum)
+                                             Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (ObInt32Type == expr.args_[0]->datum_meta_.type_) {
-    ObDatum *num_datum = NULL;
+    Datum *num_datum = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, num_datum))) {
     } else if (num_datum->is_null()) {
       expr_datum.set_null();

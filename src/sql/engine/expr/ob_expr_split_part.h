@@ -110,7 +110,7 @@ public:
     return ret;
   }
   static int calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                                        ObDatum &res);
+                                        Datum &res);
   DECLARE_SET_LOCAL_SESSION_VARS;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprSplitPart);

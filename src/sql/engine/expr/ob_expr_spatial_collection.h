@@ -40,7 +40,7 @@ public:
                                 common::ObExprTypeCtx &type_ctx) const override;
   int eval_spatial_collection(const ObExpr &expr,
                               ObEvalCtx &ctx,
-                              ObDatum &res);
+                              Datum &res);
   virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override = 0;
@@ -64,7 +64,7 @@ public:
   virtual ~ObExprLineString();
   static int eval_linestring(const ObExpr &expr,
                              ObEvalCtx &ctx,
-                             ObDatum &res);
+                             Datum &res);
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;
@@ -82,7 +82,7 @@ public:
   virtual ~ObExprPolygon();
   static int eval_polygon(const ObExpr &expr,
                           ObEvalCtx &ctx,
-                          ObDatum &res);
+                          Datum &res);
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;
@@ -100,7 +100,7 @@ public:
   virtual ~ObExprMultiPoint();
   static int eval_multipoint(const ObExpr &expr,
                              ObEvalCtx &ctx,
-                             ObDatum &res);
+                             Datum &res);
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;
@@ -117,7 +117,7 @@ public:
   explicit ObExprMultiLineString(common::ObIAllocator &alloc);
   static int eval_multilinestring(const ObExpr &expr,
                                   ObEvalCtx &ctx,
-                                  ObDatum &res);
+                                  Datum &res);
   virtual ~ObExprMultiLineString();
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
@@ -136,7 +136,7 @@ public:
   virtual ~ObExprMultiPolygon();
   static int eval_multipolygon(const ObExpr &expr,
                                ObEvalCtx &ctx,
-                               ObDatum &res);
+                               Datum &res);
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;
@@ -154,7 +154,7 @@ public:
   virtual ~ObExprGeomCollection();
   static int eval_geomcollection(const ObExpr &expr,
                                  ObEvalCtx &ctx,
-                                 ObDatum &res);
+                                 Datum &res);
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;
@@ -173,7 +173,7 @@ public:
   virtual ~ObExprGeometryCollection();
   static int eval_geometrycollection(const ObExpr &expr,
                                      ObEvalCtx &ctx,
-                                     ObDatum &res);
+                                     Datum &res);
   int cg_expr(ObExprCGCtx &expr_cg_ctx,
               const ObRawExpr &raw_expr,
               ObExpr &rt_expr) const override;

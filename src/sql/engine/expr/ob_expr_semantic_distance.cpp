@@ -60,7 +60,7 @@
    return ret;
  }
  
- int ObExprSemanticDistance::calc_semantic_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+ int ObExprSemanticDistance::calc_semantic_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
  {
    // no need to support, this expr is only used for parser 
    return OB_NOT_SUPPORTED;
@@ -108,7 +108,7 @@
  }
  
  
- int ObExprSemanticVectorDistance::calc_semantic_vector_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+ int ObExprSemanticVectorDistance::calc_semantic_vector_distance(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
  {
    int ret = OB_SUCCESS;
    ObExprVectorDistance::ObVecDisType dis_type = ObExprVectorDistance::ObVecDisType::MAX_TYPE;
@@ -116,7 +116,7 @@
    if (3 != expr.arg_cnt_) {
      ret = OB_NOT_SUPPORTED;
    } else {
-     ObDatum *datum = NULL;
+     Datum *datum = NULL;
      if (OB_FAIL(expr.args_[2]->eval(ctx, datum))) {
      } else if (datum->is_null()) {
        ret = OB_INVALID_ARGUMENT;

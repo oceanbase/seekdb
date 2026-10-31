@@ -60,7 +60,7 @@ int ObExprJsonOverlaps::calc_result_type2(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonOverlaps::eval_json_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonOverlaps::eval_json_overlaps(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   ObIJsonBase *json_a = NULL;

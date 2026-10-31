@@ -54,18 +54,18 @@ int ObExprSTLength::calc_result_typeN(ObExprResType &type, ObExprResType *types_
   return ret;
 }
 
-int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   bool is_null_res = false;
-  ObDatum *datum1 = nullptr;
+  Datum *datum1 = nullptr;
   ObExpr *arg1 = expr.args_[0];
   SqlValueType type1 = arg1->datum_meta_.type_;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   double res_num = 0;
-  ObDatum *gis_unit = NULL;
+  Datum *gis_unit = NULL;
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(temp_allocator.eval_arg(arg1, ctx, datum1))) {

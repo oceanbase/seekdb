@@ -75,14 +75,14 @@ int ObExprVecIVFFlatDataVector::cg_expr(
 int ObExprVecIVFFlatDataVector::generate_data_vector(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
 
   common::ObArenaAllocator tmp_allocator("IVFFlatExprVec", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObExpr *calc_vector_expr = expr.args_[0];
   ObExpr *calc_distance_algo_expr = expr.args_[1];
-  ObDatum *res = nullptr;
+  Datum *res = nullptr;
   if (OB_ISNULL(calc_vector_expr) || OB_ISNULL(calc_distance_algo_expr)) {
     ret = OB_ERR_NULL_VALUE;
   } else {

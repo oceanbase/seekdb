@@ -1176,7 +1176,7 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
         // skip virtual column which has nop default value.
         if (!def_cell.is_nop_value()) {
           sql::ObExpr *expr = access_param_->output_exprs_->at(pos);
-          sql::ObDatum &datum = expr->locate_datum_for_write(
+          common::Datum &datum = expr->locate_datum_for_write(
               access_param_->get_op()->get_eval_ctx());
           sql::ObEvalInfo &eval_info = expr->get_eval_info(
               access_param_->get_op()->get_eval_ctx());
@@ -1191,14 +1191,13 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
             source.pack_ = source.len_;
             if (def_cell.get_meta().is_outrow()) { source.set_outrow(); }
           }
-          if (source.is_ext()) {
-            datum.datum2datum<OBJ_DATUM_EXTEND>(source);
-          } else if (OB_FAIL(datum.from_storage_datum(source, expr->obj_datum_map_))) {
-          }
+          common::Datum native_source;
+          if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(source, native_source))) {
+          } else { datum = native_source; }
           if (OB_SUCC(ret) && is_lob_storage(def_cell.get_type()) &&
               OB_FAIL(sql::ob_adjust_lob_datum(
                   access_param_->get_op()->get_eval_ctx().exec_ctx_,
-                  source, def_cell.get_meta(), expr->obj_meta_,
+                  native_source, def_cell.get_meta(), expr->obj_meta_,
                   lob_reader_.get_allocator(), datum))) {
           } else if (OB_SUCC(ret)) {
             eval_info.evaluated_ = true;
@@ -1277,7 +1276,7 @@ int ObMultipleMerge::fill_virtual_columns(ObDatumRow &row)
         sql::ObExpr *expr = access_param_->output_exprs_->at(pos);
         // table scan access exprs is column reference expr, only virtual column has argument.
         if (expr->arg_cnt_ > 0) {
-          ObDatum *datum = NULL;
+          common::Datum *datum = NULL;
           access_param_->get_op()->clear_datum_eval_flag();
           if (OB_FAIL(expr->eval(access_param_->get_op()->get_eval_ctx(), datum))) {
           } else if (need_padding_ && expr->obj_meta_.is_fixed_len_char_type()) {

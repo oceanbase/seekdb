@@ -259,7 +259,8 @@ int ObExprFormat::build_format_str(char *buf,
 }
 
 int ObExprFormat::convert_num_to_str(const ObDatumMeta &x_meta,
-                                     const ObDatum &x_datum,
+                                     const SqlType &input_type,
+                                     const Datum &x_datum,
                                      char *buf,
                                      int64_t buf_len,
                                      int64_t scale,
@@ -276,10 +277,14 @@ int ObExprFormat::convert_num_to_str(const ObDatumMeta &x_meta,
                       buf, NULL);
   } else if (ObDecimalIntType == obj_type) {
     ObDecimalIntBuilder builder;
-    if (OB_FAIL(ObExprFuncRound::do_round_decimalint(
+    common::ObDatum coefficient;
+    alignas(8) char coefficient_buf[64];
+    if (OB_FAIL(DatumCopyPlan(input_type).get_decimal(
+        x_datum, coefficient, coefficient_buf, sizeof(coefficient_buf)))) {
+    } else if (OB_FAIL(ObExprFuncRound::do_round_decimalint(
                 x_meta.precision_, x_meta.scale_,
                 x_meta.precision_ - x_meta.scale_ + 1 + scale, scale, scale,
-                x_datum, builder))) {
+                coefficient, builder))) {
     } else if (OB_FAIL(wide::to_string(builder.get_decimal_int(), builder.get_int_bytes(),
                        scale, buf, buf_len, str_len, false))) {
     }
@@ -298,12 +303,12 @@ int ObExprFormat::convert_num_to_str(const ObDatumMeta &x_meta,
   return ret;
 }
 
-int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   int64_t scale = 0;
-  ObDatum *x_datum = NULL;
-  ObDatum *d_datum = NULL;
+  Datum *x_datum = NULL;
+  Datum *d_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, d_datum))) {
   } else if ((OB_NOT_NULL(x_datum) && x_datum->is_null())
@@ -323,7 +328,7 @@ int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
                             alloc_guard.get_allocator().alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("fail to allocate memory", K(buf_len), K(ret));
-    } else if (OB_FAIL(convert_num_to_str(x_meta, *x_datum, tmp_buf, MAX_FORMAT_BUFFER_SIZE,
+    } else if (OB_FAIL(convert_num_to_str(x_meta, expr.args_[0]->get_sql_type(), *x_datum, tmp_buf, MAX_FORMAT_BUFFER_SIZE,
                                           scale, str))) {
     } else {
       tmp_buf = tmp_buf + MAX_FORMAT_BUFFER_SIZE;

@@ -69,6 +69,8 @@ public:
                         bool &equal);
     ObEvalCtx *eval_ctx_;
     const common::ObDatumAccessContext *datum_access_ctx_;
+    // Selected legacy semantic functions. Native frame inputs are exported
+    // through their Expr's complete Type before synchronous comparison.
     const common::ObIArray<ObCmpFunc> *cmp_funcs_;
     int ret_code_;
   };

@@ -59,7 +59,7 @@ int ObExprVecIVFMetaID::cg_expr(
 int ObExprVecIVFMetaID::generate_meta_id(
     const ObExpr &expr,
     ObEvalCtx &eval_ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   if (expr.arg_cnt_ != 1) {

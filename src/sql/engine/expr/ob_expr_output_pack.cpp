@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/expr/ob_expr_output_pack.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "share/ob_lob_access_utils.h"
 #include "lib/container/ob_se_array.h"
 #include "query/protocol/ob_mysql_rust_row.h"
@@ -132,7 +133,7 @@ int ObOutputPackInfo::init_output_pack_info(uint64_t extra,
   return ret;
 }
 
-int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = nullptr;
@@ -163,7 +164,7 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
   ObOutputPackInfo *extra_info = static_cast<ObOutputPackInfo *> (expr.extra_info_);
   ObEvalCtx::TempAllocGuard alloc_guard(ctx);
   ObIAllocator &alloc = alloc_guard.get_allocator();
-  ObDatum *result = expr.locate_batch_datums(ctx);
+  Datum *result = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())
@@ -386,7 +387,7 @@ static bool can_build_output_pack_cell_from_datum(const DatumValue &value)
     break;
   }
   return expected_map != OBJ_DATUM_MAPPING_MAX
-      && expected_map == ObDatum::get_sql_value_datum_map_type(value.get_type());
+      && expected_map == common::ObDatum::get_sql_value_datum_map_type(value.get_type());
 }
 
 int ObExprOutputPack::build_row_values(
@@ -399,12 +400,14 @@ int ObExprOutputPack::build_row_values(
   const ObDataTypeCastParams dtc_params =
       ObBasicSessionInfo::create_dtc_params(session);
   for (int64_t column_idx = 1; OB_SUCC(ret) && column_idx < expr.arg_cnt_; ++column_idx) {
-    ObDatum &datum = expr.locate_param_datum(ctx, column_idx);
+    Datum &datum = expr.locate_param_datum(ctx, column_idx);
     const SqlTypeMeta &meta = expr.args_[column_idx]->obj_meta_;
     const ObField &field = extra_info->param_fields_.at(column_idx - 1);
-    DatumValue value(datum, meta);
+    common::ObDatum legacy;
+    OZ(ObExprUtil::export_legacy_value(*expr.args_[column_idx], datum, alloc, legacy));
+    DatumValue value(legacy, meta);
     ObCastMode cast_mode = CM_NONE;
-    if (obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
+    if (OB_SUCC(ret) && obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
       if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session, cast_mode))) {
       } else {
         cast_mode |= CM_WARN_ON_FAIL;
@@ -459,14 +462,14 @@ int ObExprOutputPack::build_row_values(
 int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLSessionInfo *session,
                                       common::ObIAllocator &alloc, ObOutputPackInfo *extra_info,
                                       share::schema::ObSchemaGetterGuard *schema_guard,
-                                      ObDatum &expr_datum)
+                                      Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   char *buffer = nullptr;
   int64_t len = 0;
   int64_t blob_len = 0;
   obmysql::MYSQL_PROTOCOL_TYPE encode_type;
-  ObDatum &type_datum = expr.locate_param_datum(ctx, 0);
+  Datum &type_datum = expr.locate_param_datum(ctx, 0);
   encode_type = (type_datum.get_int() == 0)
               ? obmysql::MYSQL_PROTOCOL_TYPE::BINARY : obmysql::MYSQL_PROTOCOL_TYPE::TEXT;
   const int64_t cell_count = expr.arg_cnt_ - 1;

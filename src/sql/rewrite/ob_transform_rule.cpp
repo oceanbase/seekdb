@@ -362,7 +362,6 @@ int ObTransformRule::evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stm
                                                   *stmt->get_query_ctx(), *ctx_))) {
   } else {
     ctx_->eval_cost_ = true;
-    ParamStore &param_store = ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store_for_update();
     ObDMLStmt *root_stmt = NULL;
     lib::ContextParam param;
     ObTransformerImpl trans(ctx_);

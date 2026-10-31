@@ -67,11 +67,11 @@ int ObExprTimestampNvl::cg_expr(ObExprCGCtx &op_cg_ctx,
 }
 
 int ObExprTimestampNvl::calc_timestampnvl(const ObExpr &expr, ObEvalCtx &ctx,
-                                          ObDatum &expr_datum)
+                                          Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param_datum1 = NULL;
-  ObDatum *param_datum2 = NULL;
+  Datum *param_datum1 = NULL;
+  Datum *param_datum2 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param_datum1, param_datum2))) {
   } else if (param_datum1->is_null()) {
     if (param_datum2->is_null()) {

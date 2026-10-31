@@ -48,10 +48,10 @@ int ObExprUnhex::cg_expr(ObExprCGCtx &op_cg_ctx,
   return ret;
 }
 
-int ObExprUnhex::eval_unhex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
+int ObExprUnhex::eval_unhex(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *param = NULL;
+  Datum *param = NULL;
   bool has_set_res = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
   } else if (param->is_null()) {

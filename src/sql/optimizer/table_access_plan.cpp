@@ -19,6 +19,7 @@
 #include "table_access_plan.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
+#include "sql/ob_sql_utils.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/optimizer/ob_log_plan.h"
 #include "share/ob_timezone_mgr.h"
@@ -3517,10 +3518,7 @@ int TableAccessPlan::calc_partition_id_by_func_value(
       hash_type = (PARTITION_FUNC_TYPE_HASH == subpart_type_);
     }
     if (hash_type) {
-      if (OB_FAIL(result.set_int(0, owner))) {
-      } else if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(func_value.datum_, result.datum_,
-                  func_value.get_type()))) {
-      }
+      ret = ObSQLUtils::revise_hash_part_object(result, owner);
     }
   }
   if (OB_FAIL(ret)) {

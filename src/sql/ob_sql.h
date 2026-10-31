@@ -66,6 +66,7 @@ class ObSPIService;
 class ObIVirtualTableIteratorFactory;
 struct ObSqlCtx;
 class ObResultSet;
+class ObPhysicalPlanCtx;
 class ObLogPlan;
 class ObOptimizer;
 
@@ -320,6 +321,7 @@ private:
 
   int construct_param_store(const ParamStore &params,
                             ParamStore &param_store);
+  int construct_param_store(const ParamStore &params, ObPhysicalPlanCtx &plan_ctx);
   int construct_ps_param_store(const ParamStore &params,
                                const ParamStore &fixed_params,
                                const ObIArray<int64_t> &fixed_param_idx,

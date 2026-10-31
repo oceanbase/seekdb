@@ -46,7 +46,7 @@ int ObExprRpcPort::calc_result_type0(ObExprResType &type, ObExprTypeCtx &type_ct
 }
 
 int ObExprRpcPort::eval_rpc_port(const ObExpr &expr, ObEvalCtx &ctx,
-    ObDatum &expr_datum)
+    Datum &expr_datum)
 {
   int ret = OB_SUCCESS;
   UNUSED(expr);

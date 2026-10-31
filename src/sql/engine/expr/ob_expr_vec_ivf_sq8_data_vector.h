@@ -39,7 +39,7 @@ public:
   static int generate_data_vector(
       const ObExpr &expr,
       ObEvalCtx &eval_ctx,
-      ObDatum &expr_datum);
+      Datum &expr_datum);
   static int cal_u8_data_vector(ObIAllocator &alloc, uint32_t size, float *min_vec, float *step_vec, float *data_vec, uint8_t *&res_vec);
   virtual bool need_rt_ctx() const override { return true; }
 private :

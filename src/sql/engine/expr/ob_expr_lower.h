@@ -39,7 +39,7 @@ public:
                               int64_t param_num,
                               common::ObExprTypeCtx &type_ctx) const;
   static int calc_common(const ObExpr &expr, ObEvalCtx &ctx,
-                         ObDatum &expr_datum, bool lower, common::ObCollationType cs_type);
+                         Datum &expr_datum, bool lower, common::ObCollationType cs_type);
   int cg_expr_common(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const;
   DECLARE_SET_LOCAL_SESSION_VARS;
   
@@ -63,7 +63,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_lower(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_lower(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprLower);
 };
@@ -79,7 +79,7 @@ public:
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const override;
-  static int calc_upper(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int calc_upper(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprUpper);
 };

@@ -213,8 +213,8 @@ static int calc(const ObExpr &expr, ObEvalCtx &ctx, bool &is_null, int64_t &res_
   int ret = OB_SUCCESS;
   is_null = false;
   res_int = 0;
-  ObDatum *date_datum = NULL;
-  ObDatum *fmt_datum = NULL;
+  Datum *date_datum = NULL;
+  Datum *fmt_datum = NULL;
   const ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   ObSQLMode sql_mode = 0;
@@ -275,7 +275,7 @@ static int calc(const ObExpr &expr, ObEvalCtx &ctx, bool &is_null, int64_t &res_
 }
 
 int calc_str_to_date_expr_date(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   bool is_null = false;
@@ -300,7 +300,7 @@ int calc_str_to_date_expr_date(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 int calc_str_to_date_expr_time(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   bool is_null = false;
@@ -317,7 +317,7 @@ int calc_str_to_date_expr_time(const ObExpr &expr, ObEvalCtx &ctx,
 }
 
 int calc_str_to_date_expr_datetime(const ObExpr &expr, ObEvalCtx &ctx,
-                                 ObDatum &res_datum)
+                                 Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   bool is_null = false;

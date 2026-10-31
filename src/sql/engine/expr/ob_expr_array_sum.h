@@ -47,7 +47,7 @@ public:
   static int get_data(const ObExpr &expr, ObEvalCtx &ctx, ObString &data_str, int64_t idx,
                       uint32_t &len, uint8_t *null_bitmaps, const char *data, uint32_t &data_len);
 
-  static int eval_array_sum(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_array_sum(const ObExpr &expr, ObEvalCtx &ctx, Datum &res);
   static int eval_array_sum_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                   const int64_t batch_size);
 

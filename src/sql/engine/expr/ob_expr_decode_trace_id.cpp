@@ -49,10 +49,10 @@ int ObExprDecodeTraceId::calc_result_type1(ObExprResType &type,
   return ret;
 }
 int ObExprDecodeTraceId::calc_decode_trace_id_expr(const ObExpr &expr, ObEvalCtx &ctx,
-                               ObDatum &res_datum)
+                               Datum &res_datum)
 {
   int ret = OB_SUCCESS;
-  ObDatum *trace_id_datum = nullptr;
+  Datum *trace_id_datum = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, trace_id_datum))) {
   } else if (OB_ISNULL(trace_id_datum)) {
     ret = OB_ERR_UNEXPECTED;
@@ -67,8 +67,8 @@ int ObExprDecodeTraceId::calc_decode_trace_id_expr_batch(const ObExpr &expr, ObE
                                              const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  ObDatum *results = nullptr;
-  ObDatum *trace_id_datum_array = nullptr;
+  Datum *results = nullptr;
+  Datum *trace_id_datum_array = nullptr;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_ISNULL(results = expr.locate_batch_datums(ctx))) {

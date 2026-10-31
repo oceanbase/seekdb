@@ -39,7 +39,7 @@ public:
                       
   static int eval_any_value(const ObExpr &expr,
                       ObEvalCtx &ctx,
-                      ObDatum &expr_datum);
+                      Datum &expr_datum);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExprAnyValue) const;
 };

@@ -19,6 +19,8 @@
 #include "common/object/ob_type_metadata.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/string/ob_string.h"
+#include "lib/utility/ob_print_utils.h"
+#include <type_traits>
 
 namespace oceanbase
 {
@@ -27,7 +29,7 @@ namespace common
 
 class SqlType;
 
-enum class SqlTypeForm : uint8_t { Scalar, Array, Record, Enum, Set, UserDefined };
+enum class SqlTypeForm : uint8_t { Scalar, Array, Record, Enum, Set, UserDefined, Map, Vector, SparseVector };
 enum class SqlTimeSemantics : uint8_t {
   Unspecified, Date, TimeOfDay, Year, WallClock, Instant, SessionLocal, WithTimeZone
 };
@@ -58,7 +60,8 @@ struct SqlTypeSpec
   enum Attribute : uint8_t { Precision = 1, Scale = 2, Length = 4, LengthSemantics = 8 };
   SqlTypeSpec()
     : attributes(), form(SqlTypeForm::Scalar), specified(0), time(SqlTimeSemantics::Unspecified),
-      nominal(), element(nullptr), array_limit(-1), heterogeneous(false), members(nullptr),
+      nominal(), element(nullptr), key(nullptr), value(nullptr), dimension(0),
+      array_limit(-1), heterogeneous(false), members(nullptr),
       member_count(0), labels(nullptr), label_count(0) {}
   ObDataType attributes;
   SqlTypeForm form;
@@ -66,6 +69,9 @@ struct SqlTypeSpec
   SqlTimeSemantics time;
   SqlNominalType nominal;
   const SqlType *element;
+  const SqlType *key;
+  const SqlType *value;
+  uint32_t dimension;
   int64_t array_limit; // -1 means no declared bound.
   bool heterogeneous;
   const SqlTypeMember *members;
@@ -94,6 +100,38 @@ public:
   // an arbitrary malloc-style allocator.
   static int create(const SqlTypeSpec &spec, ObIAllocator &owner, const SqlType *&output)
   { return create(spec, owner, output, 0); }
+
+  int clone_to(ObIAllocator &owner, const SqlType *&output) const
+  { return create(specification(), owner, output, 0); }
+
+  // Versioned metadata tree, never an address encoding. As for create(), a
+  // failed decode leaves partial allocations in the caller's bulk-lifetime
+  // owner, but publishes neither an output pointer nor an advanced cursor.
+  int serialize(char *buffer, int64_t capacity, int64_t &position) const
+  {
+    const int64_t size = get_serialize_size();
+    if (position < 0 || capacity < position || buffer == nullptr) { return OB_INVALID_ARGUMENT; }
+    if (size < 0) { return OB_SIZE_OVERFLOW; }
+    if (size > capacity - position) { return OB_BUF_NOT_ENOUGH; }
+    int64_t cursor = position;
+    const int ret = encode_node(buffer, capacity, cursor, 0);
+    if (ret == OB_SUCCESS) { position = cursor; }
+    return ret;
+  }
+
+  int64_t get_serialize_size() const
+  { int64_t size = 0; return wire_size(size, 0) == OB_SUCCESS ? size : -1; }
+
+  static int deserialize(const char *buffer, int64_t length, int64_t &position,
+                         ObIAllocator &owner, const SqlType *&output)
+  {
+    if (position < 0 || length < position || buffer == nullptr) { return OB_INVALID_ARGUMENT; }
+    int64_t cursor = position;
+    const SqlType *candidate = nullptr;
+    const int ret = decode_node(buffer, length, cursor, owner, candidate, 0);
+    if (ret == OB_SUCCESS) { output = candidate; position = cursor; }
+    return ret;
+  }
 
   // Four-byte legacy metadata cannot recover enum labels, collection children
   // or a nominal schema version. Such types require an explicit complete spec.
@@ -134,6 +172,7 @@ public:
       output.attributes_ = spec.attributes;
       output.form_ = spec.form; output.specified_ = spec.specified; output.time_ = spec.time;
       output.nominal_ = spec.nominal; output.element_ = nullptr; output.array_limit_ = -1;
+      output.key_ = nullptr; output.value_ = nullptr; output.dimension_ = 0;
       output.heterogeneous_ = false; output.members_ = nullptr; output.member_count_ = 0;
       output.labels_ = nullptr; output.label_count_ = 0;
     }
@@ -141,6 +180,229 @@ public:
   }
 
 private:
+  static int add_wire_size(int64_t field, int64_t &size)
+  {
+    if (field < 0 || size > INT64_MAX - field) { return OB_SIZE_OVERFLOW; }
+    size += field;
+    return OB_SUCCESS;
+  }
+
+  int wire_size(int64_t &size, int depth) const
+  {
+    if (depth > 64) { return OB_SIZE_OVERFLOW; }
+    int ret = OB_SUCCESS;
+#define TYPE_WIRE_SIZE(FIELD) \
+    if (ret == OB_SUCCESS) { ret = add_wire_size(serialization::encoded_length(FIELD), size); }
+    TYPE_WIRE_SIZE(int64_t(1));
+    TYPE_WIRE_SIZE(attributes_.meta_);
+    TYPE_WIRE_SIZE(attributes_.accuracy_.get_accuracy());
+    TYPE_WIRE_SIZE(attributes_.is_zero_fill_);
+    // All attributes are explicit: the historical ObDataType codec omits
+    // charset/binary and permits truncated trailing fields for compatibility.
+    TYPE_WIRE_SIZE(static_cast<int32_t>(attributes_.charset_));
+    TYPE_WIRE_SIZE(attributes_.is_binary_collation_);
+    TYPE_WIRE_SIZE(static_cast<uint8_t>(form_));
+    TYPE_WIRE_SIZE(specified_);
+    TYPE_WIRE_SIZE(static_cast<uint8_t>(time_));
+    TYPE_WIRE_SIZE(nominal_.specified);
+    TYPE_WIRE_SIZE(nominal_.tenant_id);
+    TYPE_WIRE_SIZE(nominal_.object_id);
+    TYPE_WIRE_SIZE(nominal_.schema_version);
+    TYPE_WIRE_SIZE(array_limit_);
+    TYPE_WIRE_SIZE(heterogeneous_);
+    TYPE_WIRE_SIZE(element_ != nullptr);
+    if (ret == OB_SUCCESS && element_ != nullptr) { ret = element_->wire_size(size, depth + 1); }
+    TYPE_WIRE_SIZE(key_ != nullptr);
+    if (ret == OB_SUCCESS && key_ != nullptr) { ret = key_->wire_size(size, depth + 1); }
+    TYPE_WIRE_SIZE(value_ != nullptr);
+    if (ret == OB_SUCCESS && value_ != nullptr) { ret = value_->wire_size(size, depth + 1); }
+    TYPE_WIRE_SIZE(dimension_);
+    TYPE_WIRE_SIZE(member_count_);
+    for (int64_t i = 0; ret == OB_SUCCESS && i < member_count_; ++i) {
+      TYPE_WIRE_SIZE(members_[i].name);
+      TYPE_WIRE_SIZE(members_[i].nullable);
+      if (ret == OB_SUCCESS) { ret = members_[i].type->wire_size(size, depth + 1); }
+    }
+    TYPE_WIRE_SIZE(label_count_);
+    for (int64_t i = 0; ret == OB_SUCCESS && i < label_count_; ++i) { TYPE_WIRE_SIZE(labels_[i]); }
+#undef TYPE_WIRE_SIZE
+    return ret;
+  }
+
+  int encode_node(char *buffer, int64_t length, int64_t &position, int depth) const
+  {
+    if (depth > 64) { return OB_SIZE_OVERFLOW; }
+    int ret = OB_SUCCESS;
+#define TYPE_WIRE_WRITE(FIELD) \
+    if (ret == OB_SUCCESS) { ret = serialization::encode(buffer, length, position, FIELD); }
+    TYPE_WIRE_WRITE(int64_t(1));
+    TYPE_WIRE_WRITE(attributes_.meta_);
+    TYPE_WIRE_WRITE(attributes_.accuracy_.get_accuracy());
+    TYPE_WIRE_WRITE(attributes_.is_zero_fill_);
+    TYPE_WIRE_WRITE(static_cast<int32_t>(attributes_.charset_));
+    TYPE_WIRE_WRITE(attributes_.is_binary_collation_);
+    TYPE_WIRE_WRITE(static_cast<uint8_t>(form_));
+    TYPE_WIRE_WRITE(specified_);
+    TYPE_WIRE_WRITE(static_cast<uint8_t>(time_));
+    TYPE_WIRE_WRITE(nominal_.specified);
+    TYPE_WIRE_WRITE(nominal_.tenant_id);
+    TYPE_WIRE_WRITE(nominal_.object_id);
+    TYPE_WIRE_WRITE(nominal_.schema_version);
+    TYPE_WIRE_WRITE(array_limit_);
+    TYPE_WIRE_WRITE(heterogeneous_);
+    TYPE_WIRE_WRITE(element_ != nullptr);
+    if (ret == OB_SUCCESS && element_ != nullptr) { ret = element_->encode_node(buffer, length, position, depth + 1); }
+    TYPE_WIRE_WRITE(key_ != nullptr);
+    if (ret == OB_SUCCESS && key_ != nullptr) { ret = key_->encode_node(buffer, length, position, depth + 1); }
+    TYPE_WIRE_WRITE(value_ != nullptr);
+    if (ret == OB_SUCCESS && value_ != nullptr) { ret = value_->encode_node(buffer, length, position, depth + 1); }
+    TYPE_WIRE_WRITE(dimension_);
+    TYPE_WIRE_WRITE(member_count_);
+    for (int64_t i = 0; ret == OB_SUCCESS && i < member_count_; ++i) {
+      TYPE_WIRE_WRITE(members_[i].name);
+      TYPE_WIRE_WRITE(members_[i].nullable);
+      if (ret == OB_SUCCESS) { ret = members_[i].type->encode_node(buffer, length, position, depth + 1); }
+    }
+    TYPE_WIRE_WRITE(label_count_);
+    for (int64_t i = 0; ret == OB_SUCCESS && i < label_count_; ++i) { TYPE_WIRE_WRITE(labels_[i]); }
+#undef TYPE_WIRE_WRITE
+    return ret;
+  }
+
+  template <typename T>
+  static int read_wire_field(const char *buffer, int64_t length, int64_t &position, T &field)
+  {
+    static_assert(std::is_integral<T>::value, "Type wire fields require an explicit bounded decoder");
+    if (position >= length) { return OB_DESERIALIZE_ERROR; }
+    if (sizeof(T) == 1) {
+      if (std::is_same<T, bool>::value && static_cast<uint8_t>(buffer[position]) > 1) {
+        return OB_DESERIALIZE_ERROR;
+      }
+    } else {
+      // The existing vi decoder assumes the terminating byte is accessible.
+      // Check both the input bound and the final partial word before calling it.
+      const int bits = sizeof(T) * 8;
+      bool terminated = false;
+      int64_t cursor = position;
+      for (int shift = 0; shift < bits && !terminated; shift += 7) {
+        if (cursor >= length) { return OB_DESERIALIZE_ERROR; }
+        const uint8_t byte = static_cast<uint8_t>(buffer[cursor++]);
+        if (bits - shift < 7 && (byte >> (bits - shift)) != 0) { return OB_DESERIALIZE_ERROR; }
+        terminated = (byte & 0x80) == 0;
+      }
+      if (!terminated) { return OB_DESERIALIZE_ERROR; }
+    }
+    return serialization::decode(buffer, length, position, field);
+  }
+
+  static int read_wire_field(const char *buffer, int64_t length, int64_t &position, SqlTypeMeta &field)
+  {
+    // The established metadata codec consists of exactly four one-byte fields.
+    return length - position < 4 ? OB_DESERIALIZE_ERROR
+        : serialization::decode(buffer, length, position, field);
+  }
+
+  static int read_wire_field(const char *buffer, int64_t length, int64_t &position, ObString &field)
+  {
+    int64_t cursor = position;
+    int64_t bytes = 0;
+    int ret = read_wire_field(buffer, length, cursor, bytes);
+    if (ret == OB_SUCCESS && (bytes < 0 || bytes > INT32_MAX || bytes >= length - cursor
+        || buffer[cursor + bytes] != '\0')) { ret = OB_DESERIALIZE_ERROR; }
+    if (ret == OB_SUCCESS) {
+      field.assign_ptr(const_cast<char *>(buffer + cursor), static_cast<int32_t>(bytes));
+      position = cursor + bytes + 1;
+    }
+    return ret;
+  }
+
+  static int decode_node(const char *buffer, int64_t length, int64_t &position,
+                         ObIAllocator &owner, const SqlType *&output, int depth)
+  {
+    if (depth > 64) { return OB_SIZE_OVERFLOW; }
+    int ret = OB_SUCCESS;
+    int64_t version = 0;
+    int32_t charset = 0;
+    uint8_t form = 0, time = 0;
+    bool has_element = false, has_key = false, has_value = false;
+    SqlTypeSpec spec;
+#define TYPE_WIRE_READ(FIELD) \
+    if (ret == OB_SUCCESS) { ret = read_wire_field(buffer, length, position, FIELD); }
+    TYPE_WIRE_READ(version);
+    if (ret == OB_SUCCESS && version != 1) { ret = OB_NOT_SUPPORTED; }
+    TYPE_WIRE_READ(spec.attributes.meta_);
+    TYPE_WIRE_READ(spec.attributes.accuracy_.accuracy_);
+    TYPE_WIRE_READ(spec.attributes.is_zero_fill_);
+    TYPE_WIRE_READ(charset);
+    TYPE_WIRE_READ(spec.attributes.is_binary_collation_);
+    TYPE_WIRE_READ(form);
+    TYPE_WIRE_READ(spec.specified);
+    TYPE_WIRE_READ(time);
+    TYPE_WIRE_READ(spec.nominal.specified);
+    TYPE_WIRE_READ(spec.nominal.tenant_id);
+    TYPE_WIRE_READ(spec.nominal.object_id);
+    TYPE_WIRE_READ(spec.nominal.schema_version);
+    TYPE_WIRE_READ(spec.array_limit);
+    TYPE_WIRE_READ(spec.heterogeneous);
+    TYPE_WIRE_READ(has_element);
+    spec.attributes.charset_ = static_cast<ObCharsetType>(charset);
+    spec.form = static_cast<SqlTypeForm>(form);
+    spec.time = static_cast<SqlTimeSemantics>(time);
+    if (ret == OB_SUCCESS && has_element) {
+      ret = decode_node(buffer, length, position, owner, spec.element, depth + 1);
+    }
+    TYPE_WIRE_READ(has_key);
+    if (ret == OB_SUCCESS && has_key) { ret = decode_node(buffer, length, position, owner, spec.key, depth + 1); }
+    TYPE_WIRE_READ(has_value);
+    if (ret == OB_SUCCESS && has_value) { ret = decode_node(buffer, length, position, owner, spec.value, depth + 1); }
+    TYPE_WIRE_READ(spec.dimension);
+    TYPE_WIRE_READ(spec.member_count);
+    // Every member needs at least a string length, nullable byte and sixteen
+    // mandatory child-node fields. Check before multiplication/allocation.
+    if (ret == OB_SUCCESS && (spec.member_count < 0
+        || spec.member_count > (length - position) / 18
+        || spec.member_count > INT64_MAX / int64_t(sizeof(SqlTypeMember)))) { ret = OB_DESERIALIZE_ERROR; }
+    if (ret == OB_SUCCESS && spec.member_count > 0) {
+      auto *members = static_cast<SqlTypeMember *>(owner.alloc(spec.member_count * sizeof(SqlTypeMember)));
+      if (members == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else {
+        spec.members = members;
+        for (int64_t i = 0; ret == OB_SUCCESS && i < spec.member_count; ++i) {
+          new (&members[i]) SqlTypeMember();
+          ObString name;
+          TYPE_WIRE_READ(name);
+          TYPE_WIRE_READ(members[i].nullable);
+          if (ret == OB_SUCCESS) { ret = copy_string(name, owner, members[i].name); }
+          if (ret == OB_SUCCESS) { ret = decode_node(buffer, length, position, owner, members[i].type, depth + 1); }
+        }
+      }
+    }
+    TYPE_WIRE_READ(spec.label_count);
+    if (ret == OB_SUCCESS && (spec.label_count < 0 || spec.label_count > length - position
+        || spec.label_count > INT64_MAX / int64_t(sizeof(ObString)))) { ret = OB_DESERIALIZE_ERROR; }
+    if (ret == OB_SUCCESS && spec.label_count > 0) {
+      auto *labels = static_cast<ObString *>(owner.alloc(spec.label_count * sizeof(ObString)));
+      if (labels == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else {
+        spec.labels = labels;
+        for (int64_t i = 0; ret == OB_SUCCESS && i < spec.label_count; ++i) {
+          new (&labels[i]) ObString();
+          ObString value;
+          TYPE_WIRE_READ(value);
+          if (ret == OB_SUCCESS) { ret = copy_string(value, owner, labels[i]); }
+        }
+      }
+    }
+#undef TYPE_WIRE_READ
+    if (ret == OB_SUCCESS) { ret = validate(spec); }
+    if (ret == OB_SUCCESS) {
+      void *memory = owner.alloc(sizeof(SqlType));
+      if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { output = new (memory) SqlType(spec); }
+    }
+    return ret;
+  }
+
   static int legacy_spec(const ObDataType &attributes, SqlTypeSpec &spec)
   {
     const SqlValueType kind = attributes.get_obj_type();
@@ -183,12 +445,35 @@ public:
   SqlTimeSemantics time_semantics() const { return time_; }
   const SqlNominalType &nominal() const { return nominal_; }
   const SqlType *element() const { return element_; }
+  const SqlType *key_type() const { return key_; }
+  const SqlType *value_type() const { return value_; }
+  uint32_t vector_dimension() const { return dimension_; }
   int64_t array_limit() const { return array_limit_; }
   bool heterogeneous_array() const { return heterogeneous_; }
   int64_t member_count() const { return member_count_; }
   const SqlTypeMember &member(int64_t index) const { OB_ASSERT(index >= 0 && index < member_count_); return members_[index]; }
   int64_t label_count() const { return label_count_; }
   const ObString &label(int64_t index) const { OB_ASSERT(index >= 0 && index < label_count_); return labels_[index]; }
+
+  // Bounded metadata summary: do not traverse child types, labels or resources.
+  // Read the ObAccuracy overlay only through its explicit attribute mask.
+  TO_STRING_KV("kind", kind(), "form", static_cast<int>(form_), "specified", specified_,
+      "precision", has_precision() ? precision() : PRECISION_UNKNOWN_YET,
+      "scale", has_scale() ? scale() : SCALE_UNKNOWN_YET,
+      "length", has_length() ? length() : -1,
+      "length_semantics", has_length_semantics() ? length_semantics() : LS_INVALIED,
+      "collation", collation(), "time", static_cast<int>(time_),
+      "nominal_specified", nominal_.specified, "tenant_id", nominal_.tenant_id,
+      "object_id", nominal_.object_id, "schema_version", nominal_.schema_version,
+      "child_count", int(element_ != nullptr) + int(key_ != nullptr) + int(value_ != nullptr),
+      "dimension", dimension_, "array_limit", array_limit_, "heterogeneous", heterogeneous_,
+      "member_count", member_count_, "label_count", label_count_);
+
+  // SQL UDT/collection byte encodings are self-contained spans. In contrast,
+  // PL and extended SQL-array values carry an address whose pointee belongs to
+  // a separate resource owner and needs that domain's existing clone routine.
+  bool requires_resource_clone() const
+  { return legacy_meta().is_ext_sql_array() || legacy_meta().is_pl_extend_type(); }
 
   // This is a future canonical native carrier choice, not the current pointer
   // ObDatum ABI. Every ordinary integer <=64 bits has exactly one representation.
@@ -233,9 +518,13 @@ public:
         || attributes_.charset_ != other.attributes_.charset_
         || attributes_.is_binary_collation_ != other.attributes_.is_binary_collation_)) { return false; }
     if (array_limit_ != other.array_limit_ || heterogeneous_ != other.heterogeneous_
+        || dimension_ != other.dimension_ || (key_ == nullptr) != (other.key_ == nullptr)
+        || (value_ == nullptr) != (other.value_ == nullptr)
         || member_count_ != other.member_count_ || label_count_ != other.label_count_
         || (element_ == nullptr) != (other.element_ == nullptr)) { return false; }
     if (element_ != nullptr && !element_->equals(*other.element_)) { return false; }
+    if (key_ != nullptr && !key_->equals(*other.key_)) { return false; }
+    if (value_ != nullptr && !value_->equals(*other.value_)) { return false; }
     for (int64_t i = 0; i < member_count_; ++i) {
       if (members_[i].name != other.members_[i].name || members_[i].nullable != other.members_[i].nullable
           || !members_[i].type->equals(*other.members_[i].type)) { return false; }
@@ -280,8 +569,9 @@ private:
   explicit SqlType(const SqlTypeSpec &spec)
     : attributes_(spec.attributes), form_(spec.form), specified_(spec.specified),
       time_(spec.time == SqlTimeSemantics::Unspecified ? default_time(spec.attributes.get_obj_type()) : spec.time),
-      nominal_(spec.nominal), element_(nullptr), array_limit_(spec.array_limit), heterogeneous_(spec.heterogeneous),
-      members_(nullptr), member_count_(spec.member_count), labels_(nullptr), label_count_(spec.label_count) {}
+      nominal_(spec.nominal), element_(spec.element), key_(spec.key), value_(spec.value), dimension_(spec.dimension),
+      array_limit_(spec.array_limit), heterogeneous_(spec.heterogeneous),
+      members_(spec.members), member_count_(spec.member_count), labels_(spec.labels), label_count_(spec.label_count) {}
   SqlType(const SqlType &) = delete;
   SqlType &operator=(const SqlType &) = delete;
 
@@ -332,7 +622,7 @@ private:
   static int validate(const SqlTypeSpec &spec)
   {
     const SqlValueType kind = spec.attributes.get_obj_type();
-    if (!valid_kind(kind) || static_cast<uint8_t>(spec.form) > static_cast<uint8_t>(SqlTypeForm::UserDefined)
+    if (!valid_kind(kind) || static_cast<uint8_t>(spec.form) > static_cast<uint8_t>(SqlTypeForm::SparseVector)
         || static_cast<uint8_t>(spec.time) > static_cast<uint8_t>(SqlTimeSemantics::WithTimeZone)
         || (spec.specified & ~uint8_t(15)) != 0 || spec.array_limit < -1
         || spec.member_count < 0 || spec.label_count < 0
@@ -361,13 +651,21 @@ private:
     if (spec.form == SqlTypeForm::Scalar && (enum_kind || complex_kind)) { return OB_NOT_SUPPORTED; }
     if (spec.form == SqlTypeForm::Array && kind != ObCollectionSQLType
         && !spec.attributes.meta_.is_ext_sql_array()) { return OB_INVALID_ARGUMENT; }
+    const bool map = spec.form == SqlTypeForm::Map || spec.form == SqlTypeForm::SparseVector;
+    const bool vector = spec.form == SqlTypeForm::Vector;
+    if ((map || vector) && kind != ObCollectionSQLType) { return OB_INVALID_ARGUMENT; }
+    if (map ? (spec.key == nullptr || spec.value == nullptr) : (spec.key != nullptr || spec.value != nullptr)) {
+      return OB_INVALID_ARGUMENT;
+    }
+    if (vector ? spec.element == nullptr : spec.dimension != 0) { return OB_INVALID_ARGUMENT; }
     if ((spec.form == SqlTypeForm::Record || spec.form == SqlTypeForm::UserDefined)
         && kind != ObUserDefinedSQLType && !spec.attributes.meta_.is_pl_extend_type()) { return OB_INVALID_ARGUMENT; }
     if ((spec.form == SqlTypeForm::Enum && kind != ObEnumType && kind != ObEnumInnerType)
         || (spec.form == SqlTypeForm::Set && kind != ObSetType && kind != ObSetInnerType)) { return OB_INVALID_ARGUMENT; }
     if ((spec.form == SqlTypeForm::Enum || spec.form == SqlTypeForm::Set) && spec.label_count == 0) { return OB_INVALID_ARGUMENT; }
     if (spec.form == SqlTypeForm::Array && (spec.element == nullptr && !spec.heterogeneous)) { return OB_INVALID_ARGUMENT; }
-    if (spec.form != SqlTypeForm::Array && (spec.element != nullptr || spec.array_limit != -1 || spec.heterogeneous)) {
+    if (spec.form != SqlTypeForm::Array && ((!vector && spec.element != nullptr)
+        || spec.array_limit != -1 || spec.heterogeneous)) {
       return OB_INVALID_ARGUMENT;
     }
     if (spec.form != SqlTypeForm::Record && spec.form != SqlTypeForm::UserDefined && spec.member_count != 0) { return OB_INVALID_ARGUMENT; }
@@ -388,6 +686,7 @@ private:
   }
   static int copy_string(const ObString &source, ObIAllocator &owner, ObString &output)
   {
+    if (source.length() < 0 || (source.length() > 0 && source.ptr() == nullptr)) { return OB_INVALID_ARGUMENT; }
     if (source.empty()) { output.reset(); return OB_SUCCESS; }
     char *bytes = static_cast<char *>(owner.alloc(source.length()));
     if (bytes == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
@@ -399,7 +698,8 @@ private:
   {
     SqlTypeSpec spec;
     spec.attributes = attributes_; spec.form = form_; spec.specified = specified_; spec.time = time_;
-    spec.nominal = nominal_; spec.element = element_; spec.array_limit = array_limit_; spec.heterogeneous = heterogeneous_;
+    spec.nominal = nominal_; spec.element = element_; spec.key = key_; spec.value = value_; spec.dimension = dimension_;
+    spec.array_limit = array_limit_; spec.heterogeneous = heterogeneous_;
     spec.members = members_; spec.member_count = member_count_; spec.labels = labels_; spec.label_count = label_count_;
     return spec;
   }
@@ -412,6 +712,8 @@ private:
     if (memory == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
     SqlType *candidate = new (memory) SqlType(spec);
     if (spec.element != nullptr) { ret = create(spec.element->specification(), owner, candidate->element_, depth + 1); }
+    if (ret == OB_SUCCESS && spec.key != nullptr) { ret = create(spec.key->specification(), owner, candidate->key_, depth + 1); }
+    if (ret == OB_SUCCESS && spec.value != nullptr) { ret = create(spec.value->specification(), owner, candidate->value_, depth + 1); }
     if (ret == OB_SUCCESS && spec.member_count > 0) {
       auto *members = static_cast<SqlTypeMember *>(owner.alloc(spec.member_count * sizeof(SqlTypeMember)));
       if (members == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
@@ -445,6 +747,9 @@ private:
   SqlTimeSemantics time_;
   SqlNominalType nominal_;
   const SqlType *element_;
+  const SqlType *key_;
+  const SqlType *value_;
+  uint32_t dimension_;
   int64_t array_limit_;
   bool heterogeneous_;
   const SqlTypeMember *members_;

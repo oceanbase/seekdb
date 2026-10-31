@@ -134,7 +134,7 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, DatumValue &result, uint64_t udt
   return ret;
 }
 
-int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   int ret = OB_SUCCESS;
   pl::ObPLRecord *record = NULL;
@@ -211,7 +211,8 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
     if (OB_SUCC(ret)) {
       if (ctx.exec_ctx_.get_pl_ctx() == nullptr) { OZ (ctx.exec_ctx_.init_pl_ctx()); }
       OZ (ctx.exec_ctx_.get_pl_ctx()->add(result, ctx.exec_ctx_.get_allocator()));
-      OX (res = result.datum_);
+      OZ(expr.get_datum_copy_plan().import_legacy(result.datum_, res));
+      OZ(expr.deep_copy_datum(ctx, res));
     }
     if (OB_FAIL(ret)) {
       if (record->get_allocator() != nullptr) {
@@ -231,9 +232,9 @@ int ObExprObjectConstruct::fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, Da
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     new (objs + i) DatumParameter();
-    ObDatum *value = nullptr;
+    Datum *value = nullptr;
     OZ (expr.args_[i]->eval(ctx, value)); CK (value != nullptr);
-    if (OB_SUCC(ret)) { capture_datum_parameter(*expr.args_[i], ctx, objs[i]); }
+    OZ(capture_datum_parameter(*expr.args_[i], ctx, objs[i]));
   }
   return ret;
 }

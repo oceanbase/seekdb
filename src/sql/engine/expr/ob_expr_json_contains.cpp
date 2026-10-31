@@ -68,7 +68,7 @@ int ObExprJsonContains::calc_result_typeN(ObExprResType& type,
   return ret;
 }
 
-int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObIJsonBase *json_target = NULL;
@@ -94,7 +94,7 @@ int ObExprJsonContains::eval_json_contains(const ObExpr &expr, ObEvalCtx &ctx, O
       ObJsonPathCache* path_cache = ObJsonExprHelper::get_path_cache_ctx(expr.expr_ctx_id_, &ctx.exec_ctx_);
       path_cache = ((path_cache != NULL) ? path_cache : &ctx_cache);
 
-      ObDatum *path_data = NULL;
+      Datum *path_data = NULL;
       if (OB_FAIL(temp_allocator.eval_arg(expr.args_[2], ctx, path_data))) {
       } else if (expr.args_[2]->datum_meta_.type_ == ObNullType || path_data->is_null()) {
         is_null_result = true;

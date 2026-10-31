@@ -231,7 +231,7 @@ public:
   ObPlanCacheKey pc_key_; //plan cache key, parameterized by fast parser
   common::ObSEArray<ObPCParam *, 16> raw_params_;
   common::ObFixedArray<const common::DatumParameter *, common::ObIAllocator> parameterized_params_;
-  ParamStore *cache_params_;
+  const ParamStore *cache_params_;
   ObQuestionMarkCtx question_mark_ctx_;
   int64_t values_token_pos_; // for insert values
   common::ObSEArray<ObValuesTokenPos, 4> values_tokens_; // for values table

@@ -149,10 +149,51 @@ public:
   common::ObIAllocator &allocator_;
 };
 
-// Empty struct, for unused expr serialization.
+// Concrete Query frame protocol. Runtime frames contain native values, but
+// their memory representation is never a wire format. Parameter pages are
+// decoded separately because partial PX plans omit unreferenced parameter
+// expressions and may shrink their frame metadata.
+class NativeFrameCodec
+{
+public:
+  static int group_size(bool plan_part, const ObIArray<ObFrameInfo> &group,
+      const ObExprFrameInfo &expressions, char *const *frames, int64_t frame_count,
+      bool no_data, int64_t &size);
+  static int serialize_group(char *buf, int64_t length, int64_t &pos, bool plan_part,
+      const ObIArray<ObFrameInfo> &group, const ObExprFrameInfo &expressions,
+      char *const *frames, int64_t frame_count, bool no_data);
+  static int deserialize_group(const char *buf, int64_t length, int64_t &pos,
+      ObIAllocator &owner, bool plan_part, const ObIArray<ObFrameInfo> &group,
+      const ObExprFrameInfo &expressions, ObIArray<char *> *pointers,
+      char **frames, int64_t frame_count, bool no_data);
+
+  static int metadata_size(const ObIArray<ObFrameInfo> &group, int64_t &size);
+  static int serialize_metadata(const ObIArray<ObFrameInfo> &group,
+      char *buf, int64_t length, int64_t &pos);
+  static int deserialize_metadata(const char *buf, int64_t length, int64_t &pos,
+      ObIArray<ObFrameInfo> &group, int64_t frame_count);
+  static int parameter_size(const ObPhysicalPlanCtx &plan, int64_t &size);
+  static int serialize_parameters(const ObPhysicalPlanCtx &plan,
+      char *buf, int64_t length, int64_t &pos);
+  static int deserialize_parameters(const char *buf, int64_t length, int64_t &pos,
+      ObIAllocator &owner, ObIArray<char *> &pages,
+      ObIArray<const common::SqlType *> &types, int64_t &original_count);
+  static int bind_parameter_pages(const ObIArray<ObFrameInfo> &group,
+      const ObIArray<char *> &pages, int64_t parameter_count, int64_t original_count,
+      char **frames, int64_t frame_count);
+  // Uses actual per-Expr offsets for native arrays/EvalInfo, including batch
+  // frames whose wire deliberately contains no execution values.
+  static int initialize_frame(const ObFrameInfo &info, const ObExprFrameInfo &expressions,
+      char *frame);
+  static int clone_constant_frames(const ObExprFrameInfo &source,
+      ObIAllocator &owner, ObIArray<char *> &destination);
+};
+
+// Empty body for unused expressions in marked PX arrays. Its envelope version
+// must match ObExpr because receivers decode every array position as ObExpr.
 struct ObEmptyExpr
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   static const ObEmptyExpr &instance()
   {
@@ -224,9 +265,13 @@ public:
   // Input-free range/DDL expressions return an allocator-owned Datum. Copy
   // before releasing the temporary context, also when its cache is disabled.
   int eval_datum(ObExecContext &exec_ctx, common::ObIAllocator &result_allocator,
+                  common::Datum &result) const;
+  int eval_datum(ObExecContext &exec_ctx, common::ObIAllocator &result_allocator,
                   common::ObDatum &result) const;
   // Borrow input values for this evaluation; copy the result into the caller
   // owner before releasing a noncached temporary expression context.
+  int eval_datum(ObExecContext &exec_ctx, const common::ObIArray<common::DatumValue> &row,
+                  common::ObIAllocator &result_allocator, common::Datum &result) const;
   int eval_datum(ObExecContext &exec_ctx, const common::ObIArray<common::DatumValue> &row,
                   common::ObIAllocator &result_allocator, common::ObDatum &result) const;
   int deep_copy(ObIAllocator &allocator, ObTempExpr *&dst) const;

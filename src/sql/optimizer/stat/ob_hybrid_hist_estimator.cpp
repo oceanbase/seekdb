@@ -617,11 +617,13 @@ int ObHybridHistograms::build_prefix_str_datum_for_lob(ObIAllocator &allocator,
                    str,
                    OPT_STATS_MAX_VALUE_CHAR_LEN))) {
     } else {
-      ObTextStringDatumResult text_result(obj_meta.get_type(), obj_meta.has_lob_header(), &new_datum);
+      common::ObTextStringResult text_result(obj_meta.get_type(), obj_meta.has_lob_header(), &allocator);
       if (OB_FAIL(text_result.init(str.length(), &allocator))) {
       } else if (OB_FAIL(text_result.append(str.ptr(), str.length()))) {
       } else {
-        text_result.set_result();
+        ObString result;
+        text_result.get_result_buffer(result);
+        new_datum.set_string(result); // legacy statistics value; bytes belong to allocator
       }
     }
   }

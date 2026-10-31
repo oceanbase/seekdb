@@ -32,6 +32,88 @@ using namespace common;
 namespace sql {
 ERRSIM_POINT_DEF(ERRSIM_FAST_NLJ_RANGE_GENERATOR_CHECK);
 
+namespace
+{
+// The old RangeMap corpus contains an inert TempExpr: no expression, frame,
+// context or input column and expr_idx == -1. Its empty legacy frame group has
+// no carrier bytes to migrate. Keep this narrow range-wire codec independent
+// of the native executable Expr/frame codec.
+bool is_legacy_inert_temp(const ObTempExpr &expr)
+{
+  return expr.need_ctx_cnt_ == 0 && expr.rt_exprs_.empty() && expr.const_frame_ptrs_.empty()
+      && expr.const_frame_.empty() && expr.param_frame_.empty() && expr.datum_frame_.empty()
+      && expr.dynamic_frame_.empty() && expr.ser_expr_marks_.empty()
+      && expr.expr_idx_ == OB_INVALID_INDEX && expr.idx_col_arr_.empty();
+}
+
+int64_t legacy_inert_frame_body_size()
+{
+  // need_ctx, fixed i32 expression count, const pointers, old frame-group count
+  // and extra-memory count, followed by the three remaining frame arrays.
+  return serialization::encoded_length(int64_t(0)) + serialization::encoded_length_i32(0)
+      + 6 * serialization::encoded_length(int64_t(0));
+}
+
+int64_t legacy_inert_temp_size()
+{
+  const int64_t header = serialization::encoded_length(int64_t(1)) + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+  return 2 * header + legacy_inert_frame_body_size()
+      + serialization::encoded_length(int64_t(OB_INVALID_INDEX)) + serialization::encoded_length(int64_t(0));
+}
+
+int encode_inert_header(char *buf, int64_t length, int64_t &pos, int64_t body_size)
+{
+  int ret = serialization::encode(buf, length, pos, int64_t(1));
+  if (OB_SUCC(ret)) { ret = serialization::encode_fixed_bytes_i64(buf, length, pos, body_size); }
+  return ret;
+}
+
+int serialize_legacy_inert_temp(char *buf, int64_t length, int64_t &position)
+{
+  int ret = OB_SUCCESS;
+  int64_t pos = position;
+  const int64_t header = serialization::encoded_length(int64_t(1)) + serialization::OB_SERIALIZE_SIZE_NEED_BYTES;
+  if (OB_FAIL(encode_inert_header(buf, length, pos, legacy_inert_temp_size() - header))) {
+  } else if (OB_FAIL(encode_inert_header(buf, length, pos, legacy_inert_frame_body_size()))) {
+  } else if (OB_FAIL(serialization::encode(buf, length, pos, int64_t(0)))) {
+  } else if (OB_FAIL(serialization::encode_i32(buf, length, pos, 0))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < 6; ++i) { ret = serialization::encode(buf, length, pos, int64_t(0)); }
+  if (OB_SUCC(ret)) { ret = serialization::encode(buf, length, pos, int64_t(OB_INVALID_INDEX)); }
+  if (OB_SUCC(ret)) { ret = serialization::encode(buf, length, pos, int64_t(0)); }
+  if (OB_SUCC(ret)) { position = pos; }
+  return ret;
+}
+
+bool deserialize_legacy_inert_temp(const char *buf, int64_t length, int64_t &position)
+{
+  int64_t pos = position;
+  int64_t version = 0, body_size = 0;
+  if (buf == nullptr || pos < 0 || pos > length
+      || serialization::decode(buf, length, pos, version) != OB_SUCCESS || version != 1
+      || serialization::decode(buf, length, pos, body_size) != OB_SUCCESS
+      || body_size < 0 || body_size > length - pos) { return false; }
+  const int64_t temp_end = pos + body_size;
+  if (serialization::decode(buf, temp_end, pos, version) != OB_SUCCESS || version != 1
+      || serialization::decode(buf, temp_end, pos, body_size) != OB_SUCCESS
+      || body_size != legacy_inert_frame_body_size() || body_size > temp_end - pos) { return false; }
+  const int64_t frame_end = pos + body_size;
+  int64_t zero = -1;
+  int32_t expr_count = -1;
+  if (serialization::decode(buf, frame_end, pos, zero) != OB_SUCCESS || zero != 0
+      || serialization::decode_i32(buf, frame_end, pos, &expr_count) != OB_SUCCESS || expr_count != 0) { return false; }
+  for (int64_t i = 0; i < 6; ++i) {
+    if (serialization::decode(buf, frame_end, pos, zero) != OB_SUCCESS || zero != 0) { return false; }
+  }
+  int64_t expr_idx = 0, columns = -1;
+  if (pos != frame_end || serialization::decode(buf, temp_end, pos, expr_idx) != OB_SUCCESS
+      || expr_idx != OB_INVALID_INDEX || serialization::decode(buf, temp_end, pos, columns) != OB_SUCCESS
+      || columns != 0 || pos != temp_end) { return false; }
+  position = pos;
+  return true;
+}
+} // namespace
+
 void ObRangeNode::reset()
 {
   flags_ = 0;
@@ -220,7 +302,10 @@ OB_DEF_SERIALIZE(ObRangeMap)
         ret = DatumParameterCodec::encode_value(*info.const_val_, info.const_meta_, buf, buf_len, pos);
       }
     } else if (expr_final_infos_.at(i).is_expr_) {
-      OB_UNIS_ENCODE(*expr_final_infos_.at(i).temp_expr_);
+      const ObTempExpr *expr = expr_final_infos_.at(i).temp_expr_;
+      if (expr == nullptr) { ret = OB_INVALID_ARGUMENT; }
+      else if (is_legacy_inert_temp(*expr)) { ret = serialize_legacy_inert_temp(buf, buf_len, pos); }
+      else { OB_UNIS_ENCODE(*expr); }
     }
   }
   cnt = in_params_.count();
@@ -278,7 +363,11 @@ OB_DEF_DESERIALIZE(ObRangeMap)
         LOG_ERROR("failed to allocate memeory for temp expr");
       } else {
         temp_expr = new(ptr)ObTempExpr(allocator_);
-        ret = temp_expr->deserialize(buf, data_len, pos);
+        // Only a structurally empty, nonexecutable legacy TempExpr bypasses
+        // the native frame codec. Nonempty old execution frames remain rejected.
+        if (!deserialize_legacy_inert_temp(buf, data_len, pos)) {
+          ret = temp_expr->deserialize(buf, data_len, pos);
+        }
         if (OB_SUCC(ret)) {
           expr_final_infos_.at(i).temp_expr_ = temp_expr;
         }
@@ -342,7 +431,10 @@ OB_DEF_SERIALIZE_SIZE(ObRangeMap)
             return 0;
           }
     } else if (expr_final_infos_.at(i).is_expr_) {
-      OB_UNIS_ADD_LEN(*expr_final_infos_.at(i).temp_expr_);
+      const ObTempExpr *expr = expr_final_infos_.at(i).temp_expr_;
+      if (expr == nullptr) { return 0; }
+      if (is_legacy_inert_temp(*expr)) { len += legacy_inert_temp_size(); }
+      else { OB_UNIS_ADD_LEN(*expr); }
     }
   }
   cnt = in_params_.count();

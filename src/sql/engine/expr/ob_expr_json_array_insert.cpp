@@ -78,7 +78,7 @@ int ObExprJsonArrayInsert::calc_result_typeN(ObExprResType& type, ObExprResType*
   return ret;
 }
 
-int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
@@ -103,7 +103,7 @@ int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx 
   for (int32 i = 1; OB_SUCC(ret) && i < expr.arg_cnt_ && !is_null; i += 2) {
     hit.reset();
     ObExpr *arg = expr.args_[i];
-    ObDatum *json_datum = NULL;
+    Datum *json_datum = NULL;
     if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, json_datum))) {
     } else if (json_datum->is_null() || arg->datum_meta_.type_ == ObNullType) {
       is_null = true;

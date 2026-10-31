@@ -106,8 +106,8 @@ int ObSRLookupIter::get_next_row()
       ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
       ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx);
       guard.set_batch_idx(0);
-      ObDatum &id_proj_datum = iter_param_->id_proj_expr_->locate_datum_for_write(*eval_ctx);
-      ObDatum &relevance_proj_datum = iter_param_->relevance_proj_expr_->locate_datum_for_write(*eval_ctx);
+      common::Datum &id_proj_datum = iter_param_->id_proj_expr_->locate_datum_for_write(*eval_ctx);
+      common::Datum &relevance_proj_datum = iter_param_->relevance_proj_expr_->locate_datum_for_write(*eval_ctx);
       set_datum_func_(id_proj_datum, cached_domain_ids_.at(0));
       relevance_proj_datum.set_double(0.0);
       ++output_row_cnt_;
@@ -165,6 +165,7 @@ int ObSRSortedLookupIter::load_results()
   int ret = OB_SUCCESS;
   int cur_idx = 0;
   bool iter_end = false;
+  const common::DatumCopyPlan id_plan = iter_param_->id_proj_expr_->get_datum_copy_plan();
   while (OB_SUCC(ret) && !iter_end && cur_idx < rangekey_size_) {
     int64_t sub_count = 0;
     if (OB_FAIL(merge_iter_->get_next_rows(rangekey_size_ - cur_idx, sub_count))) {
@@ -175,15 +176,20 @@ int ObSRSortedLookupIter::load_results()
       }
     }
     ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
-    const ObDatumVector &id_datums = iter_param_->id_proj_expr_->locate_expr_datumvector(*eval_ctx);
-    const ObDatumVector &relevance_datums = iter_param_->relevance_proj_expr_->locate_expr_datumvector(*eval_ctx);
+    const sql::DatumVector &id_datums = iter_param_->id_proj_expr_->locate_expr_datumvector(*eval_ctx);
+    const sql::DatumVector &relevance_datums = iter_param_->relevance_proj_expr_->locate_expr_datumvector(*eval_ctx);
     int cmp_result = 0;
+    // Domain IDs in the cache retain their storage descriptor ABI. Export the
+    // native Expr value only for this synchronous, already-selected comparator.
+    alignas(8) char id_scratch[64];
+    common::ObDatum id_view;
     for (int64_t i = 0; OB_SUCC(ret) && i < sub_count; ) {
       if (OB_UNLIKELY(cur_idx >= rangekey_size_)) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(id_plan.legacy_view(*id_datums.at(i), id_view, id_scratch, sizeof(id_scratch)))) {
       } else if (OB_FAIL(cmp_func_(
                      cached_domain_ids_[cur_idx].get_datum(),
-                     *id_datums.at(i),
+                     id_view,
                      cmp_result,
                      nullptr))) {
       } else if (0 == cmp_result) {
@@ -216,10 +222,10 @@ int ObSRSortedLookupIter::project_results(const int64_t capacity, int64_t &count
   sql::ObBitVector &relevance_evaluated_flags = relevance_proj_expr->get_evaluated_flags(*eval_ctx);
   while (count < capacity && output_row_cnt_ < rangekey_size_) {
     guard.set_batch_idx(count);
-    ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
     set_datum_func_(id_proj_datum, cached_domain_ids_[reverse_hints_[output_row_cnt_]]);
     id_evaluated_flags.set(count);
-    ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
     relevance_proj_datum.set_double(cached_relevances_[reverse_hints_[output_row_cnt_]]);
     relevance_evaluated_flags.set(count);
     ++count;
@@ -287,14 +293,14 @@ int ObSRHashLookupIter::load_results()
       }
     }
     ObEvalCtx *eval_ctx = iter_param_->eval_ctx_;
-    const ObDatumVector &id_datums = iter_param_->id_proj_expr_->locate_expr_datumvector(*eval_ctx);
-    const ObDatumVector &relevance_datums = iter_param_->relevance_proj_expr_->locate_expr_datumvector(*eval_ctx);
+    const sql::DatumVector &id_datums = iter_param_->id_proj_expr_->locate_expr_datumvector(*eval_ctx);
+    const sql::DatumVector &relevance_datums = iter_param_->relevance_proj_expr_->locate_expr_datumvector(*eval_ctx);
     ObDocIdExt id;
     double relevance = 0.0;
     for (int64_t i = 0; OB_SUCC(ret) && i < sub_count; ++i) {
       if (OB_UNLIKELY(cur_idx >= rangekey_size_)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(id.from_datum(*id_datums.at(i)))) {
+      } else if (OB_FAIL(id.from_native(*id_datums.at(i), iter_param_->id_proj_expr_->get_sql_type()))) {
       } else if (OB_UNLIKELY(OB_HASH_NOT_EXIST != (ret = hash_map_.get_refactored(id, relevance)))) {
         ret = COVER_SUCC(OB_ERR_UNEXPECTED);
       } else if (OB_FAIL(hash_map_.set_refactored(id, relevance_datums.at(i)->get_double(), 0))) {
@@ -319,10 +325,10 @@ int ObSRHashLookupIter::project_results(const int64_t capacity, int64_t &count)
   sql::ObBitVector &relevance_evaluated_flags = relevance_proj_expr->get_evaluated_flags(*eval_ctx);
   while (OB_SUCC(ret) && count < capacity && output_row_cnt_ < rangekey_size_) {
     guard.set_batch_idx(count);
-    ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
     set_datum_func_(id_proj_datum, cached_domain_ids_[output_row_cnt_]);
     id_evaluated_flags.set(count);
-    ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
+    common::Datum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
     double relevance = 0.0;
     if (OB_FAIL(hash_map_.get_refactored(cached_domain_ids_[output_row_cnt_], relevance))) {
       relevance = 0.0;

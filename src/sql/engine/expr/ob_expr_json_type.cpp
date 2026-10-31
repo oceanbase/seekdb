@@ -122,7 +122,7 @@ int ObExprJsonType::calc_result_type1(ObExprResType &type,
   return ret;
 }
 
-int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, bool has_lob_header,
+int ObExprJsonType::calc(ObEvalCtx &ctx, const Datum &data, ObDatumMeta meta, bool has_lob_header,
                          ObIAllocator *allocator, uint32_t &type_idx, bool &is_null)
 {
   INIT_SUCC(ret);
@@ -186,10 +186,10 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
 }                      
 
 // for new sql engine
-int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+int ObExprJsonType::eval_json_type(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
 {
   INIT_SUCC(ret);
-  ObDatum *datum = NULL;
+  Datum *datum = NULL;
   ObExpr *arg = expr.args_[0];
 
   if (OB_FAIL(arg->eval(ctx, datum))) {

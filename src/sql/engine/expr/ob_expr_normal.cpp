@@ -29,8 +29,8 @@ namespace sql
 int ObExprNormal::ObExprNormalCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr)
 {
   int ret = OB_SUCCESS;
-  ObDatum &p1 = expr.locate_param_datum(ctx, 0);
-  ObDatum &p2 = expr.locate_param_datum(ctx, 1);
+  Datum &p1 = expr.locate_param_datum(ctx, 0);
+  Datum &p2 = expr.locate_param_datum(ctx, 1);
   if (p1.is_null() || p2.is_null()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "normal function. first and second argument must be constant expression.");
@@ -75,7 +75,7 @@ int ObExprNormal::calc_result_type3(ObExprResType &result_type,
 
 int ObExprNormal::eval_next_value(const ObExpr &expr,
                                 ObEvalCtx &ctx,
-                                ObDatum &res_datum)
+                                Datum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObExprNormalCtx *normal_ctx = NULL;
@@ -93,7 +93,7 @@ int ObExprNormal::eval_next_value(const ObExpr &expr,
   }
 
   if (OB_SUCC(ret)) {
-    ObDatum &rand_val = expr.locate_param_datum(ctx, 2);
+    Datum &rand_val = expr.locate_param_datum(ctx, 2);
     if (OB_UNLIKELY(rand_val.is_null())) {
         res_datum.set_null();
     } else {

@@ -40,7 +40,7 @@ int binary_operand_batch_eval(const ObExpr &expr,
         ObBitVector &my_skip = expr.get_pvt_skip(ctx);
         rskip = &my_skip;
         my_skip.deep_copy(skip, size);
-        const ObDatum *ldatums = left.locate_batch_datums(ctx);
+        const Datum *ldatums = left.locate_batch_datums(ctx);
         for (int64_t i = 0; i < size; i++) {
           if (!my_skip.at(i) && ldatums[i].is_null()) {
             my_skip.set(i);

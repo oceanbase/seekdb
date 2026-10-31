@@ -171,7 +171,7 @@ public:
   // Callers retaining it across evaluation must clone it into their own arena.
   int capture_dynamic_param(ObEvalCtx &eval_ctx, common::DatumParameter &param) const;
   int restore_dynamic_param(ObEvalCtx &eval_ctx, const common::DatumParameter &param) const;
-  int update_dynamic_param(ObEvalCtx &eval_ctx, common::ObDatum &datum) const;
+  int update_dynamic_param(ObEvalCtx &eval_ctx, const common::Datum &datum) const;
 
   static void clear_parent_evaluated_flag(ObEvalCtx &eval_ctx, const ObExpr &expr);
 
@@ -451,10 +451,6 @@ public:
 
   virtual int do_diagnosis(ObExecContext &exec_ctx, ObBitVector &skip)
   { return OB_SUCCESS; };
-  // Only the explicitly enabled root BIGINT point get may return a batch
-  // without expression values. All other operators retain normal output eval.
-  virtual int check_native_batch_output(bool &native_only) const
-  { native_only = false; return common::OB_SUCCESS; }
 
 protected:
   virtual int do_drain_exch();
