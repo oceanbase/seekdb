@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_RESOLVER_DDL_OB_DDL_RESOLVER_H_
 #define OCEANBASE_SQL_RESOLVER_DDL_OB_DDL_RESOLVER_H_ 1
 #include "sql/resolver/ob_stmt_resolver.h"
+#include "sql/resolver/ddl/ob_ai_column_def.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "lib/string/ob_sql_string.h"
@@ -75,6 +76,7 @@ struct ObColumnResolveStat
     is_set_null_ = false;
     is_set_not_null_ = false;
     is_set_default_value_ = false;
+    vector_dim_ = 0;
   }
   int64_t to_string(char *buf, const int64_t buf_len) const
   {
@@ -86,6 +88,7 @@ struct ObColumnResolveStat
          K(is_set_null_),
          K(is_set_not_null_),
          K(is_set_default_value_),
+         K(vector_dim_),
          K(is_unique_key_));
     J_OBJ_END();
     return pos;
@@ -97,6 +100,7 @@ struct ObColumnResolveStat
   bool is_set_not_null_;
   bool is_set_default_value_;
   bool is_unique_key_;
+  int64_t vector_dim_;
 };
 
 struct ObDefaultValueRes
@@ -547,6 +551,15 @@ protected:
                                          ObColumnResolveStat &reslove_stat);
   int resolve_srid_node(share::schema::ObColumnSchemaV2 &column,
                         const ParseNode &srid_node);
+  int resolve_ai_column_attribute(share::schema::ObColumnSchemaV2 &column,
+                                  ParseNode *attr_node,
+                                  ObColumnResolveStat &resolve_stat);
+  int parse_ai_column_options(const ParseNode *options_node,
+                              ObAiColumnDef &def);
+  int build_ai_hidden_column(const common::ObString &user_column_name,
+                             const common::ObString &suffix,
+                             uint64_t column_id,
+                             share::schema::ObColumnSchemaV2 &hidden_column);
   int resolve_column_skip_index(
       const ParseNode &skip_index_node,
       share::schema::ObColumnSchemaV2 &column_schema);
@@ -881,6 +894,10 @@ protected:
   common::ObString vec_column_name_;
   ObIndexType vec_index_type_;
   ObSemiStructEncodingType semistruct_encoding_type_;
+  common::ObSEArray<ObAiColumnDef, 4> ai_column_defs_;
+public:
+  common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() { return ai_column_defs_; }
+  const common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() const { return ai_column_defs_; }
 private:
   template <typename STMT>
   DISALLOW_COPY_AND_ASSIGN(ObDDLResolver);

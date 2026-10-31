@@ -618,6 +618,7 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
     saved_conn_(),
     need_foreign_key_check_(false),
     need_close_conn_(false),
+    ai_column_flag_(-1),
     iter_end_(false),
     dml_rtctx_(eval_ctx_, ctx, *this),
     execute_single_row_(false),
@@ -633,9 +634,39 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
   GET_SQL_MODE_BIT(IS_NO_BACKSLASH_ESCAPES, ctx_.get_my_session()->get_sql_mode(), obj_print_params_.skip_escape_);
 }
 
+bool ObTableModifyOp::has_ai_column(const ObDMLBaseCtDef &dml_ctdef)
+{
+  if (-1 == ai_column_flag_) {
+    ai_column_flag_ = 0;
+    // NOTE: das_base_ctdef_.table_id_ is the query-internal table-loc id, NOT the
+    // physical table id. The physical table id is index_tid_ (ref_table_id, see
+    // ObDMLService::init_das_dml_rtdef). Try index_tid_ first, then table_id_.
+    const uint64_t cand_ids[2] = { dml_ctdef.das_base_ctdef_.index_tid_,
+                                   dml_ctdef.das_base_ctdef_.table_id_ };
+    ObSqlCtx *sql_ctx = ctx_.get_sql_ctx();
+    const share::schema::ObTableSchema *table_schema = NULL;
+    if (NULL != sql_ctx && NULL != sql_ctx->schema_guard_) {
+      for (int64_t i = 0; 0 == ai_column_flag_ && i < 2; ++i) {
+        table_schema = NULL;
+        if (OB_SUCCESS == sql_ctx->schema_guard_->get_table_schema(cand_ids[i], table_schema)
+            && NULL != table_schema && table_has_ai_column(*table_schema)) {
+          ai_column_flag_ = 1;
+          LOG_INFO("[AI_PROBE] has_ai_column hit", K(i), "table_id", cand_ids[i]);
+        }
+      }
+    }
+    LOG_INFO("[AI_PROBE] has_ai_column", "id0", cand_ids[0], "id1", cand_ids[1],
+             K(ai_column_flag_), "has_sql_ctx", NULL != sql_ctx,
+             "has_guard", NULL != sql_ctx && NULL != sql_ctx->schema_guard_,
+             "has_schema", NULL != table_schema);
+  }
+  return 1 == ai_column_flag_;
+}
+
 int ObTableModifyOp::inner_open()
 {
   int ret = OB_SUCCESS;
+  ai_column_flag_ = -1;
   ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
   if (OB_FAIL(init_foreign_key_operation())) {
   } else if (MY_SPEC.plan_->has_nested_sql() && OB_FAIL(open_inner_conn())) {

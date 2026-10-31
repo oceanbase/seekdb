@@ -59,8 +59,35 @@ int ObAiService::init()
   return ret;
 }
 
+int ObAiService::start()
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+    // never block server startup because of the background worker
+    LOG_ERROR("sql proxy is not ready, ai column worker is disabled");
+  } else if (OB_FAIL(ai_column_worker_.init(*GCTX.sql_proxy_))) {
+    LOG_WARN("failed to init ai column worker", K(ret));
+  } else if (OB_FAIL(ai_column_worker_.start())) {
+    LOG_WARN("failed to start ai column worker", K(ret));
+  }
+  return ret;
+}
+
+void ObAiService::stop()
+{
+  ai_column_worker_.stop();
+}
+
+void ObAiService::wait()
+{
+  ai_column_worker_.wait();
+}
+
 void ObAiService::destroy()
 {
+  ai_column_worker_.destroy();
   is_inited_ = false;
 }
 
