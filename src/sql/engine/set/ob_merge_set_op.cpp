@@ -161,15 +161,16 @@ int ObMergeSetOp::Compare::operator()(
   int ret = OB_SUCCESS;
   cmp = 0;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  const ObDatum *lcells = l.cells();
+  const StoredDatumCell *lcells = l.stored_cells();
   ObDatum *r_datum = nullptr;
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
+    const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(lcells[idx]);
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
     } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                   lcells[idx], *r_datum, cmp, datum_access_ctx))) {
+                   l_datum, *r_datum, cmp, datum_access_ctx))) {
     } else {
       if (0 != cmp) {
         cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
@@ -251,20 +252,19 @@ int ObMergeSetOp::Compare::operator() (const ObChunkDatumStore::StoredRow &l,
   int ret = OB_SUCCESS;
   cmp = 0;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
-  const ObDatum *l_datum = nullptr;
   ObDatum *r_datum = nullptr;
-  const ObDatum *l_cells = l.cells();
+  const StoredDatumCell *l_cells = l.stored_cells();
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
   batch_info_guard.set_batch_idx(r_idx);
   if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
   }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
-    l_datum = &l_cells[idx];
+    const ObDatum l_datum = StoredDatumCodec::decode_legacy_view(l_cells[idx]);
     batch_info_guard.set_batch_idx(r_idx);
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
     } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                   *l_datum, *r_datum, cmp, datum_access_ctx))) {
+                   l_datum, *r_datum, cmp, datum_access_ctx))) {
     } else if (0 != cmp) {
       cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
       break;

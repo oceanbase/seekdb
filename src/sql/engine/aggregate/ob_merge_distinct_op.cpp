@@ -284,13 +284,14 @@ int ObMergeDistinctOp::Compare::equal(
       equal = true;
     }
   } else {
-    const ObDatum *rcells = r->cells();
+    const StoredDatumCell *rcells = r->stored_cells();
     int cmp = 0;
     ObDatum *other_datum = nullptr;
     for (int64_t i = 0; 0 == cmp && i < cmp_funcs_->count() && OB_SUCC(ret); i++) {
+      const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(rcells[i]);
       if (OB_FAIL(l->at(i)->eval(*eval_ctx_, other_datum))) {
       } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-                     *other_datum, rcells[i], cmp, datum_access_ctx_))) {
+                     *other_datum, r_datum, cmp, datum_access_ctx_))) {
       }
     }
     equal = OB_SUCC(ret) ? (0 == cmp) : false;
@@ -338,13 +339,12 @@ int ObMergeDistinctOp::Compare::equal_in_batch(const common::ObIArray<ObExpr*> *
     equal = true;
   } else {
     int cmp = 0;
-    const ObDatum *r_datum = nullptr;
     const ObDatum *l_datum = nullptr;
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cmp_funcs_->count(); i++) {
       l_datum = &set_exprs->at(i)->locate_expr_datum(*eval_ctx_, curr_idx);
-      r_datum = &r->cells()[i];
+      const ObDatum r_datum = StoredDatumCodec::decode_legacy_view(r->stored_cells()[i]);
       if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
-              *l_datum, *r_datum, cmp, datum_access_ctx_))) {
+              *l_datum, r_datum, cmp, datum_access_ctx_))) {
       }
     }
     equal = (0 == cmp);
