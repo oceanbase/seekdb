@@ -18,6 +18,7 @@
 
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_area.h"
+#include "share/geo/ob_geo_geographic_area.h"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -67,10 +68,9 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeogPolygon, double)
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
   } else {
-    boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-    boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
     const ObWkbGeogPolygon *geo = reinterpret_cast<const ObWkbGeogPolygon *>(g->val());
-    result = boost::geometry::area(*geo, area_strategy);
+    ObGeoGeographicArea area_calc(srs->semi_major_axis(), srs->semi_minor_axis());
+    result = area_calc.polygon_area(*geo);
   }
   return ret;
 } OB_GEO_FUNC_END;
@@ -82,10 +82,9 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeogMultiPolygon, double)
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
   } else {
-    boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
-    boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
     const ObWkbGeogMultiPolygon *geo = reinterpret_cast<const ObWkbGeogMultiPolygon *>(g->val());
-    result = boost::geometry::area(*geo, area_strategy);
+    ObGeoGeographicArea area_calc(srs->semi_major_axis(), srs->semi_minor_axis());
+    result = area_calc.multipolygon_area(*geo);
   }
   return ret;
 } OB_GEO_FUNC_END;
