@@ -3082,6 +3082,65 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
   return ret;
 }
 
+// A membership list that repeats values, e.g. `col IN (1,2,3,1,2,3)`, is
+// semantically equivalent to its deduplicated form, but every duplicate costs
+// one extra comparison whenever the predicate is evaluated. Vector index (ANN)
+// scans evaluate the pushed-down filter once per candidate, so a duplicated
+// membership list measurably increases end-to-end latency while returning the
+// same result set. Drop duplicated constant elements at resolve time so that
+// both spellings produce the same expression.
+static int dedup_in_list_constants(ObOpRawExpr *row_expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(row_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null in-list row expr", K(ret));
+  } else if (T_OP_ROW != row_expr->get_expr_type() || row_expr->get_param_count() <= 1) {
+    // nothing to deduplicate
+  } else {
+    const int64_t element_cnt = row_expr->get_param_count();
+    ObSEArray<ObRawExpr *, 8> uniq_exprs;
+    for (int64_t i = 0; OB_SUCC(ret) && i < element_cnt; ++i) {
+      ObRawExpr *cur_expr = row_expr->get_param_expr(i);
+      bool is_dup = false;
+      if (OB_ISNULL(cur_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null in-list element", K(ret), K(i));
+      } else if (ObRawExpr::EXPR_CONST != cur_expr->get_expr_class()) {
+        // Only literal constants can be compared at resolve time, keep the rest.
+      } else {
+        const ObObj &cur_obj = static_cast<ObConstRawExpr *>(cur_expr)->get_value();
+        for (int64_t j = 0; OB_SUCC(ret) && !is_dup && j < uniq_exprs.count(); ++j) {
+          ObRawExpr *cmp_expr = uniq_exprs.at(j);
+          if (OB_ISNULL(cmp_expr) || ObRawExpr::EXPR_CONST != cmp_expr->get_expr_class()) {
+            // keep going, non-constant elements are never treated as duplicates
+          } else {
+            const ObObj &cmp_obj = static_cast<ObConstRawExpr *>(cmp_expr)->get_value();
+            int cmp_ret = 0;
+            if (cmp_obj.get_type() != cur_obj.get_type()
+                || cmp_obj.get_collation_type() != cur_obj.get_collation_type()) {
+              // elements of different types are not comparable here, keep both
+            } else if (OB_FAIL(cmp_obj.compare(cur_obj, cmp_obj.get_collation_type(), cmp_ret))) {
+              LOG_WARN("failed to compare in-list constants", K(ret));
+            } else if (0 == cmp_ret) {
+              is_dup = true;
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret) && !is_dup && OB_FAIL(uniq_exprs.push_back(cur_expr))) {
+        LOG_WARN("failed to push back in-list element", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && uniq_exprs.count() != element_cnt) {
+      if (OB_FAIL(row_expr->set_param_exprs(uniq_exprs))) {
+        LOG_WARN("failed to set deduplicated in-list elements", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObRawExprResolverImpl::process_in_or_not_in_node(const ParseNode *node,
                                                      const bool is_root_expr,
                                                      ObRawExpr *&expr)
@@ -3128,6 +3187,8 @@ int ObRawExprResolverImpl::process_in_or_not_in_node(const ParseNode *node,
       ObOpRawExpr *row_expr = static_cast<ObOpRawExpr *>(sub_expr2);
       if (OB_ISNULL(row_expr)) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(dedup_in_list_constants(row_expr))) {
+        LOG_WARN("failed to deduplicate in-list constants", K(ret));
       } else if (1 == row_expr->get_param_count()) {
         ObRawExpr *param = row_expr->get_param_expr(0);
         if (OB_FAIL(in_expr->set_param_exprs(sub_expr1, param))) {
