@@ -263,6 +263,161 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+int ObInListResolver::try_deduplicate_inlist(ObExprResolveContext &resolve_ctx,
+                                           const ObItemType op_type,
+                                           const ObRawExpr &left_expr,
+                                           const bool is_root_condition,
+                                           const ParseNode *in_list,
+                                           const ParseNode *&ret_node)
+{
+  int ret = OB_SUCCESS;
+  ret_node = in_list;
+  // Bound resolver work independently of a user-specified rewrite threshold.
+  // In particular, do not turn a large, mostly distinct IN into quadratic work.
+  const int64_t max_children = 16384;
+  const int64_t max_distinct = 128;
+  const int64_t max_comparisons = 1048576;
+  const ObSQLSessionInfo *session = resolve_ctx.session_info_;
+  ObQueryCtx *query_ctx = resolve_ctx.query_ctx_;
+  int64_t threshold = 0;
+  bool eligible = true;
+  if (OB_ISNULL(in_list)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(session) || OB_ISNULL(query_ctx)
+             || T_WHERE_SCOPE != resolve_ctx.current_scope_
+             || !is_root_condition || resolve_ctx.is_need_print_
+             || NULL != resolve_ctx.secondary_namespace_
+             || resolve_ctx.is_for_dynamic_sql_ || query_ctx->is_prepare_stmt()
+             || (T_OP_IN != op_type && T_OP_NOT_IN != op_type)
+             || !left_expr.is_column_ref_expr()
+             || T_EXPR_LIST != in_list->type_
+             || in_list->num_child_ < 2 || in_list->num_child_ > max_children
+             || OB_ISNULL(in_list->children_)) {
+    eligible = false;
+  } else {
+    threshold = session->get_inlist_rewrite_threshold();
+    if (NULL != resolve_ctx.stmt_) {
+      if (OB_ISNULL(resolve_ctx.stmt_->get_query_ctx())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(resolve_ctx.stmt_->get_query_ctx()->get_global_hint().opt_params_.
+                         get_integer_opt_param(ObOptParamHint::INLIST_REWRITE_THRESHOLD, threshold))) {
+      }
+    }
+    eligible = OB_SUCC(ret) && threshold > 1;
+  }
+  ObSEArray<ParseNode *, 8> representatives;
+  ObSEArray<int64_t, 8> integer_values;
+  ObSEArray<ObPCParamEqualInfo, 8> equal_constraints;
+  ObItemType source_type = T_INVALID;
+  ObItemType literal_type = T_INVALID;
+  const ObObjParam *first_param = NULL;
+  int64_t null_index = -1;
+  int64_t comparisons = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && eligible && i < in_list->num_child_; ++i) {
+    ParseNode *child = in_list->children_[i];
+    int64_t value = 0;
+    bool is_null = false;
+    if (OB_ISNULL(child) || 0 != child->num_child_) {
+      eligible = false;
+    } else if (T_NULL == child->type_) {
+      // A literal NULL is immutable, but must not disappear: NOT IN needs its
+      // UNKNOWN result. A currently NULL bind is deliberately not equivalent.
+      is_null = true;
+    } else if (T_QUESTIONMARK == child->type_) {
+      const ParamStore *params = resolve_ctx.param_list_;
+      if ((T_INVALID != source_type && T_QUESTIONMARK != source_type)
+          || OB_ISNULL(params) || child->value_ < 0 || child->value_ >= params->count()) {
+        eligible = false;
+      } else {
+        const ObObjParam &param = params->at(child->value_);
+        if ((ObIntType != param.get_type() && ObUInt64Type != param.get_type())
+            || param.is_batch_parameters() || param.is_boolean()
+            || !param.need_to_check_type()
+            || (NULL != first_param
+                && (param.get_meta() != first_param->get_meta()
+                    || param.get_param_meta() != first_param->get_param_meta()
+                    || !(param.get_accuracy() == first_param->get_accuracy())))) {
+          eligible = false;
+        } else {
+          first_param = NULL == first_param ? &param : first_param;
+          source_type = T_QUESTIONMARK;
+          value = ObIntType == param.get_type() ? param.get_int()
+                                               : static_cast<int64_t>(param.get_uint64());
+        }
+      }
+    } else if ((T_INT == child->type_ || T_UINT64 == child->type_)
+               && !child->is_literal_bool_ && !child->is_date_unit_) {
+      if (T_QUESTIONMARK == source_type
+          || (T_INVALID != literal_type && literal_type != child->type_)) {
+        eligible = false;
+      } else {
+        source_type = child->type_;
+        literal_type = child->type_;
+        value = child->value_;
+      }
+    } else {
+      // No casts, expressions, strings, decimal values, row constructors, or
+      // subqueries: evaluating or comparing those here can change SQL semantics.
+      eligible = false;
+    }
+    int64_t representative = is_null ? null_index : -1;
+    for (int64_t j = 0; eligible && !is_null && representative < 0
+                        && j < representatives.count(); ++j) {
+      if (++comparisons > max_comparisons) {
+        eligible = false;
+      } else if (T_NULL != representatives.at(j)->type_ && integer_values.at(j) == value
+                 && (T_QUESTIONMARK == source_type
+                     || child->str_len_ == representatives.at(j)->str_len_)) {
+        representative = j;
+      }
+    }
+    if (OB_SUCC(ret) && eligible) {
+      if (representative >= 0) {
+        if (T_QUESTIONMARK == child->type_
+            && child->value_ != representatives.at(representative)->value_) {
+          ObPCParamEqualInfo constraint;
+          constraint.first_param_idx_ = representatives.at(representative)->value_;
+          constraint.second_param_idx_ = child->value_;
+          constraint.use_abs_cmp_ = false;
+          ret = equal_constraints.push_back(constraint);
+        }
+      } else if (representatives.count() >= max_distinct) {
+        eligible = false;
+      } else if (OB_FAIL(integer_values.push_back(value))) {
+      } else if (OB_FAIL(representatives.push_back(child))) {
+      } else if (is_null) {
+        null_index = representatives.count() - 1;
+      }
+    }
+  }
+  // ACCESS_PARAM expands a contiguous range of original parameter indexes. A
+  // compacted list with holes must never reach that path. If it would still be
+  // rewritten to VALUES, keep the original AST AND publish no new constraints.
+  if (OB_SUCC(ret) && eligible && representatives.count() < in_list->num_child_
+      && representatives.count() < threshold) {
+    ObIAllocator &alloc = resolve_ctx.expr_factory_.get_allocator();
+    ParseNode *compact = new_node(&alloc, T_EXPR_LIST, representatives.count());
+    if (OB_ISNULL(compact) || OB_ISNULL(compact->children_)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      ParseNode **children = compact->children_;
+      *compact = *in_list;
+      compact->children_ = children;
+      compact->num_child_ = representatives.count();
+      for (int64_t i = 0; i < representatives.count(); ++i) {
+        compact->children_[i] = representatives.at(i);
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < equal_constraints.count(); ++i) {
+        ret = query_ctx->all_equal_param_constraints_.push_back(equal_constraints.at(i));
+      }
+      if (OB_SUCC(ret)) {
+        ret_node = compact;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
