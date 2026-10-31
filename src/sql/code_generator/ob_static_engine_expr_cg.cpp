@@ -219,17 +219,24 @@ int ObStaticEngineExprCG::cg_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
     if (OB_ISNULL(raw_exprs.at(i))
         || OB_ISNULL(rt_expr = get_rt_expr(*raw_exprs.at(i)))) {
       ret = OB_INVALID_ARGUMENT;
+      LOG_INFO("expression code generation stage failed", "phase", "validate_expressions", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
     // init type_, datum_meta_, obj_meta_, obj_datum_map_, args_, arg_cnt_
     // row_dimension_, op_
     if (OB_FAIL(cg_expr_basic(raw_exprs))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_basic", K(ret));
     } else if (OB_FAIL(cg_expr_basic_funcs(raw_exprs))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_basic_funcs", K(ret));
     } else if (OB_FAIL(cg_expr_by_operator(raw_exprs, expr_info.need_ctx_cnt_))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_by_operator", K(ret));
     } else if (OB_FAIL(cg_expr_parents(raw_exprs))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_expr_parents", K(ret));
     } else if (OB_FAIL(cg_all_frame_layout(raw_exprs, expr_info))) {
+      LOG_INFO("expression code generation stage failed", "phase", "cg_all_frame_layout", K(ret));
     } else if (OB_FAIL(alloc_so_check_exprs(raw_exprs, expr_info))) {
+      LOG_INFO("expression code generation stage failed", "phase", "alloc_so_check_exprs", K(ret));
     }
   }
 
@@ -372,6 +379,11 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         ret = rt_expr->prepare_resolved_type(raw_expr->get_result_type(), op_cg_ctx_.session_, allocator_,
             op_cg_ctx_.schema_guard_, op_cg_ctx_.pl_declarations_);
       }
+    }
+    if (OB_FAIL(ret)) {
+      LOG_INFO("expression basic preparation failed", K(ret), K(i),
+               "expr_type", raw_expr->get_expr_type(),
+               "result_type", raw_expr->get_result_type());
     }
   } // for end
 

@@ -1294,36 +1294,50 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
   for(int64_t routine_idx = 0; OB_SUCC(ret) && routine_idx < routine_table.get_count(); routine_idx++) {
     ObPLFunctionAST *routine_ast = NULL;
     const ObPLRoutineInfo *routine_info = NULL;
+    const char *phase = "check_session_alive";
     if (OB_FAIL(ObPL::check_session_alive(session_info))) {
     } else if (OB_FAIL(routine_table.get_routine_info(routine_idx, routine_info))) {
+      phase = "get_routine_info";
     } else if (OB_ISNULL(routine_info)) {
       //empty routine info is possible when package body is empty, push null to make idx correct
       if (OB_FAIL(compile_unit.add_routine(NULL))) {
+        phase = "add_null_routine_info";
       }
     } else if (OB_FAIL(routine_table.get_routine_ast(routine_idx, routine_ast))) {
+      phase = "get_routine_ast";
     } else if (OB_ISNULL(routine_ast)) {
       //empty routine ast is possible when package spec generating or package body is empty
       // push null to make idx correct, will report error when called
       if (OB_FAIL(compile_unit.add_routine(NULL))) {
+        phase = "add_null_routine_ast";
       }
     } else {
       ObPLFunction *routine = NULL;
+      phase = "allocate_routine";
       if (OB_ISNULL(routine
         = static_cast<ObPLFunction *>(compile_unit.get_allocator().alloc(sizeof(ObPLFunction))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         new (routine) ObPLFunction(compile_unit.get_mem_context());
+        phase = "init_function";
         OZ (init_function(schema_guard, exec_env, *routine_info, *routine));
         if (OB_SUCC(ret)) {
           lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_BUILD)));
           // Prepare expressions and AST metadata for interpreter execution.
+          if (OB_SUCC(ret)) { phase = "pl_prepare_expressions"; }
           OZ (pl_prepare_expressions(*routine_ast, *routine));
+          if (OB_SUCC(ret)) { phase = "pl_finalize_expressions"; }
           OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine,
                                       SqlPLDeclarationSource::None, SqlNominalType()));
+          if (OB_SUCC(ret)) { phase = "assign_enum_set_context"; }
           OZ (routine->get_enum_set_ctx().assgin(routine_ast->get_enum_set_ctx()));
+          if (OB_SUCC(ret)) { phase = "set_variables"; }
           OZ (routine->set_variables(routine_ast->get_symbol_table()));
+          if (OB_SUCC(ret)) { phase = "set_types"; }
           OZ (routine->set_types(routine_ast->get_user_type_table()));
+          if (OB_SUCC(ret)) { phase = "assign_dependency_table"; }
           OZ (routine->get_dependency_table().assign(routine_ast->get_dependency_table()));
+          if (OB_SUCC(ret)) { phase = "add_members"; }
           OZ (routine->add_members(routine_ast->get_flag()));
           OX (routine->set_can_cached(routine_ast->get_can_cached()));
           OX (routine->set_has_incomplete_rt_dep_error(routine_ast->has_incomplete_rt_dep_error()));
@@ -1331,6 +1345,7 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
           OX (routine->set_has_parallel_affect_factor(routine_ast->has_parallel_affect_factor()));
           OX (routine->set_ret_type(routine_ast->get_ret_type()));
           OX (routine->set_ast(routine_ast));
+          if (OB_SUCC(ret)) { phase = "add_routine"; }
           OZ (compile_unit.add_routine(routine));
         }
       }
@@ -1339,6 +1354,12 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
         compile_unit.get_allocator().free(routine);
         routine = NULL;
       }
+    }
+    if (OB_FAIL(ret)) {
+      const uint64_t routine_id = routine_info == NULL ? OB_INVALID_ID : routine_info->get_id();
+      const ObString routine_name = routine_info == NULL ? ObString() : routine_info->get_name();
+      LOG_INFO("PL subprogram compile stage failed", K(ret), K(phase), K(routine_idx),
+               K(routine_id), K(routine_name));
     }
   }
   return ret;
