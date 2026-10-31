@@ -22,3 +22,24 @@ cc_test(
     linkstatic = True,
     deps = [":jemalloc_hook_cases", "//src/oblib:oblib_test_runtime"],
 )
+
+cc_library(
+    name = "sql_string_identifier_cases",
+    srcs = ["test_sql_string_identifier.cpp"],
+    alwayslink = True,
+    deps = [
+        "//src/oblib:oblib_base",
+        "//bazel/third_party:gtest",
+    ],
+)
+
+cc_test(
+    name = "test_sql_string_identifier",
+    linkstatic = True,
+    deps = [
+        ":sql_string_identifier_cases",
+        "//src/oblib:oblib_test_runtime",
+        # OBLib's RPC runtime calls the Rust SQL networking bridge.
+        "//rust:bridges",
+    ],
+)
