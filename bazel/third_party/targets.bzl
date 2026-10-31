@@ -205,11 +205,14 @@ def sdk_aliases():
             elif name == "boost_headers":
                 ios = "@sdk_boost//:library"
                 simulator = ios
+            native_headers = ("@sdk_boost//:library" if name == "boost_headers"
+                              else "@third_party_native//:" + name)
             actual = select({
                 "@platforms//os:android": "@third_party_android//:" + name,
                 "@platforms//os:emscripten": wasm,
                 "@platforms//os:ios": ios,
                 Label("//bazel:ios_simulator"): simulator,
+                "@platforms//os:windows": native_headers,
                 "//conditions:default": "@third_party_native//:" + name,
             })
         native.alias(name = name, actual = actual)

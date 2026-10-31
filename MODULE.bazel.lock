@@ -197,7 +197,7 @@
   "moduleExtensions": {
     "//bazel/sdk_sources:repositories.bzl%sdk_sources": {
       "general": {
-        "bzlTransitiveDigest": "grRzR3MqOylPNlcddE5beIC8HKzWu9eL8gHtSDAiIps=",
+        "bzlTransitiveDigest": "9jx7FvPusldDJBOina8CV9bNCfDJ0aIKCGSUqt8zqIE=",
         "usagesDigest": "C88oWWRSwl985DWTNoqa3RJhrmyPEurpg8bTGjwBxHo=",
         "recordedInputs": [
           "FILE:@@//bazel/sdk_sources/dependencies.json 223daa6025112ad5314805f7152ec4d790bf1ad6f8f5aec6084e2f3903a908f6"
