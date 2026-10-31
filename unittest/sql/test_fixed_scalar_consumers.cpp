@@ -27,6 +27,17 @@
 #include <string>
 #include <vector>
 
+namespace oceanbase
+{
+namespace sql
+{
+struct FixedPxReceiveCompareTestAccess
+{
+  using Compare = ObPxMSReceiveOp::Compare;
+};
+} // namespace sql
+} // namespace oceanbase
+
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -309,7 +320,7 @@ TEST_F(FixedScalarConsumers, px_compare_keeps_mapped_keys_direction_and_null_ord
         col == 1 ? CS_TYPE_UTF8MB4_GENERAL_CI : CS_TYPE_BINARY, SCALE_UNKNOWN_YET, false);
     ASSERT_EQ(OB_SUCCESS, compares.push_back(cmp));
   }
-  ObPxMSReceiveOp::Compare compare;
+  FixedPxReceiveCompareTestAccess::Compare compare;
   ASSERT_EQ(OB_SUCCESS, compare.init(&collations, &compares));
   EXPECT_FALSE(compare(stored.row_, &exprs_, eval_));
   collations.at(2).is_ascending_ = false;
@@ -330,7 +341,7 @@ TEST_F(FixedScalarConsumers, px_compare_error_is_sticky_and_borrows_the_original
   ASSERT_EQ(OB_SUCCESS, collations.push_back(ObSortFieldCollation(0, CS_TYPE_BINARY, true, NULL_FIRST)));
   ObSortCmpFunc cmp; cmp.cmp_func_ = CompareProbe::fail;
   ASSERT_EQ(OB_SUCCESS, compares.push_back(cmp));
-  ObPxMSReceiveOp::Compare compare;
+  FixedPxReceiveCompareTestAccess::Compare compare;
   ASSERT_EQ(OB_SUCCESS, compare.init(&collations, &compares));
   CompareProbe::expect(stored.row_->stored_cells()[0], r);
   EXPECT_FALSE(compare(stored.row_, &exprs_, eval_)); EXPECT_EQ(OB_TIMEOUT, compare.get_error_code());
