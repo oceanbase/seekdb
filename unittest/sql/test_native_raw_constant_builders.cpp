@@ -24,6 +24,8 @@
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_operator_factory.h"
+#include "sql/optimizer/ob_optimizer_util.h"
+#include "sql/plan_cache/ob_plan_cache_util.h"
 #include "share/system_variable/ob_system_variable_init.h"
 #include "lib/utility/ob_defer.h"
 #include <gtest/gtest.h>
@@ -489,4 +491,142 @@ TEST_F(NativeRawConstantBuilders, name_const_double_cache_keeps_metadata_without
   ASSERT_NE(nullptr, evaluated);
   EXPECT_EQ(0U, evaluated->length());
   EXPECT_DOUBLE_EQ(1.5, evaluated->get_double());
+}
+
+TEST_F(NativeRawConstantBuilders, substr_literal_position_monotonicity_has_no_parameter_constraint)
+{
+  for (int64_t start : {int64_t(1), int64_t(2)}) {
+    for (bool with_length : {false, true}) {
+      SCOPED_TRACE(::testing::Message() << start << "/" << with_length);
+      ObArenaAllocator owner;
+      ObRawExprFactory factory(owner);
+      ObSQLSessionInfo session;
+      ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+      ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+      ObExecContext execution(owner);
+      execution.set_my_session(&session);
+      ASSERT_EQ(OB_SUCCESS, execution.create_physical_plan_ctx());
+      ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &execution);
+      DEFER(ObSQLSessionInfo::ExecCtxSessionRegister unregister(session, nullptr));
+      ObColumnRefRawExpr *column = nullptr;
+      ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_REF_COLUMN, column));
+      column->set_ref_id(500100, 16);
+      column->set_column_attr(ObString::make_string("source"), ObString::make_string("text"));
+      ObRawExprResType column_type;
+      column_type.set_varchar(); column_type.set_length(64);
+      column_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      column_type.set_collation_level(CS_LEVEL_IMPLICIT);
+      column->set_result_type(column_type);
+      ObConstRawExpr *position = nullptr, *length = nullptr;
+      ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(factory, ObIntType, start, position));
+      ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(factory, ObIntType, 3, length));
+      ObSysFunRawExpr *substring = nullptr;
+      ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_FUN_SYS_SUBSTR, substring));
+      substring->set_func_name(ObString::make_string("substr"));
+      if (with_length) {
+        ASSERT_EQ(OB_SUCCESS, substring->set_param_exprs(column, position, length));
+      } else {
+        ASSERT_EQ(OB_SUCCESS, substring->set_param_exprs(column, position));
+      }
+      ASSERT_EQ(OB_SUCCESS, substring->formalize(&session));
+      ASSERT_EQ(T_INT, position->get_expr_type());
+      ASSERT_EQ(start, position->get_value_datum().get_int());
+      ObPCConstParamInfo constraint;
+      Monotonicity monotonicity = Monotonicity::DESC;
+      bool strict = true;
+      ASSERT_EQ(OB_SUCCESS, ObOptimizerUtil::get_expr_monotonicity(substring, column,
+          execution, monotonicity, strict, execution.get_physical_plan_ctx()->get_param_store(), constraint));
+      EXPECT_EQ(start == 1 ? Monotonicity::ASC : Monotonicity::NONE_MONO, monotonicity);
+      EXPECT_FALSE(strict);
+      EXPECT_TRUE(constraint.cache_eligible_);
+      EXPECT_EQ(0, constraint.const_idx_.count());
+      EXPECT_EQ(0, constraint.const_params_.count());
+      EXPECT_EQ(start, position->get_bound_param_datum().get_int());
+    }
+  }
+}
+
+TEST_F(NativeRawConstantBuilders, substr_questionmark_monotonicity_constrains_the_actual_parameter_slot)
+{
+  const int64_t parameter_index = 3; // Deliberately distinct from the required value1.
+  for (int64_t start : {int64_t(1), int64_t(2)}) {
+    for (bool with_length : {false, true}) {
+      SCOPED_TRACE(::testing::Message() << start << "/" << with_length);
+      ObArenaAllocator owner;
+      ObRawExprFactory factory(owner);
+      ObSQLSessionInfo session;
+      ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+      ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+      ObExecContext execution(owner);
+      execution.set_my_session(&session);
+      ASSERT_EQ(OB_SUCCESS, execution.create_physical_plan_ctx());
+      ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &execution);
+      DEFER(ObSQLSessionInfo::ExecCtxSessionRegister unregister(session, nullptr));
+      ParamStore inputs{ObWrapperAllocator(owner)};
+      for (int64_t i = 0; i <= parameter_index; ++i) {
+        DatumParameter input;
+        ASSERT_EQ(OB_SUCCESS, input.set_int(i == parameter_index ? start : 100 + i, owner));
+        input.set_param_meta();
+        ASSERT_EQ(OB_SUCCESS, inputs.push_back(input));
+      }
+      ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->assign_parameter_inputs(inputs));
+      const ParamStore &parameters = execution.get_physical_plan_ctx()->get_param_store();
+      std::string question("?");
+      ParseNode question_node = literal_node(T_QUESTIONMARK, question, parameter_index);
+      ObRawExpr *position_expr = nullptr;
+      ASSERT_EQ(OB_SUCCESS, resolve_node(factory, session, question_node, position_expr, &parameters));
+      ASSERT_NE(nullptr, position_expr);
+      ASSERT_EQ(T_QUESTIONMARK, position_expr->get_expr_type());
+      auto *position = static_cast<ObConstRawExpr *>(position_expr);
+      int64_t actual_index = -1;
+      ASSERT_EQ(OB_SUCCESS, position->get_questionmark_index(actual_index));
+      ASSERT_EQ(parameter_index, actual_index);
+      ASSERT_EQ(start, position->get_bound_param_datum().get_int());
+      ObColumnRefRawExpr *column = nullptr;
+      ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_REF_COLUMN, column));
+      column->set_ref_id(500100, 16);
+      column->set_column_attr(ObString::make_string("source"), ObString::make_string("text"));
+      ObRawExprResType column_type;
+      column_type.set_varchar(); column_type.set_length(64);
+      column_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      column_type.set_collation_level(CS_LEVEL_IMPLICIT);
+      column->set_result_type(column_type);
+      ObConstRawExpr *length = nullptr;
+      ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(factory, ObIntType, 3, length));
+      ObSysFunRawExpr *substring = nullptr;
+      ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_FUN_SYS_SUBSTR, substring));
+      substring->set_func_name(ObString::make_string("substr"));
+      if (with_length) {
+        ASSERT_EQ(OB_SUCCESS, substring->set_param_exprs(column, position, length));
+      } else {
+        ASSERT_EQ(OB_SUCCESS, substring->set_param_exprs(column, position));
+      }
+      ASSERT_EQ(OB_SUCCESS, substring->formalize(&session));
+      ObPCConstParamInfo constraint;
+      Monotonicity monotonicity = Monotonicity::DESC;
+      bool strict = true;
+      ASSERT_EQ(OB_SUCCESS, ObOptimizerUtil::get_expr_monotonicity(substring, column,
+          execution, monotonicity, strict, parameters, constraint));
+      EXPECT_EQ(start == 1 ? Monotonicity::ASC : Monotonicity::NONE_MONO, monotonicity);
+      EXPECT_FALSE(strict);
+      EXPECT_TRUE(constraint.cache_eligible_);
+      ASSERT_EQ(start == 1 ? 1 : 0, constraint.const_idx_.count());
+      ASSERT_EQ(constraint.const_idx_.count(), constraint.const_params_.count());
+      if (start == 1) {
+        EXPECT_EQ(parameter_index, constraint.const_idx_.at(0));
+        const NativeTypedDatum &captured = constraint.const_params_.at(0);
+        ASSERT_NE(nullptr, captured.type_);
+        EXPECT_EQ(ObIntType, captured.type_->kind());
+        EXPECT_EQ(0U, captured.datum_.length());
+        EXPECT_EQ(1, captured.datum_.get_int());
+        int comparison = 9;
+        ASSERT_EQ(OB_SUCCESS, ObPCConstParamInfo::compare_constant(captured, parameters.at(parameter_index), comparison));
+        EXPECT_EQ(0, comparison);
+        ASSERT_EQ(OB_SUCCESS, ObPCConstParamInfo::compare_constant(captured, parameters.at(0), comparison));
+        EXPECT_NE(0, comparison); // Must not bind value1 to unrelated slot0.
+      }
+      EXPECT_EQ(start, position->get_bound_param_datum().get_int());
+      EXPECT_EQ(start, parameters.at(parameter_index).value_view().get_int());
+    }
+  }
 }

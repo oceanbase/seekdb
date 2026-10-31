@@ -995,11 +995,20 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
                                                                         mono,is_strict_inner,
                                                                         param_store, const_param_info)))) {
         } else if (OB_FALSE_IT(const_expr = static_cast<const ObConstRawExpr*>(param_expr_pos))) {
-        } else if (OB_FAIL(const_param_info.const_idx_.push_back(const_expr->get_questionmark_index()))) {
-        } else if (OB_FAIL(const_param_info.add_int_constant(1, ctx.get_allocator()))) {
         } else {
-          monotonicity = mono;
-          is_strict = false;
+          // A hard literal is already part of this expression. Only a question
+          // mark needs a plan-cache constraint on its structural parameter slot.
+          if (T_QUESTIONMARK == const_expr->get_expr_type()) {
+            int64_t param_idx = OB_INVALID_INDEX;
+            if (OB_FAIL(const_expr->get_questionmark_index(param_idx))) {
+            } else if (OB_FAIL(const_param_info.const_idx_.push_back(param_idx))) {
+            } else if (OB_FAIL(const_param_info.add_int_constant(1, ctx.get_allocator()))) {
+            }
+          }
+          if (OB_SUCC(ret)) {
+            monotonicity = mono;
+            is_strict = false;
+          }
         }
       }
     } else if (expr->get_expr_type() == T_OP_MINUS || expr->get_expr_type() == T_OP_ADD) {
