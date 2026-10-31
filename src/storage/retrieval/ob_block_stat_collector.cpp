@@ -29,7 +29,9 @@ ObBM25MaxScoreParamCollector::ObBM25MaxScoreParamCollector()
   token_freq_agg_idx_(-1),
   doc_len_data_idx_(-1),
   doc_len_agg_idx_(-1),
-  curr_max_score_(0),
+  curr_max_token_freq_(0),
+  curr_min_doc_length_(0),
+  is_first_(true),
   token_freq_res_(nullptr),
   doc_len_res_(nullptr),
   is_inited_(false)
@@ -41,7 +43,9 @@ void ObBM25MaxScoreParamCollector::reset()
   token_freq_agg_idx_ = -1;
   doc_len_data_idx_ = -1;
   doc_len_agg_idx_ = -1;
-  curr_max_score_ = 0;
+  curr_max_token_freq_ = 0;
+  curr_min_doc_length_ = 0;
+  is_first_ = true;
   token_freq_res_ = nullptr;
   doc_len_res_ = nullptr;
   is_inited_ = false;
@@ -57,7 +61,9 @@ void ObBM25MaxScoreParamCollector::reuse()
     doc_len_res_->reuse();
     doc_len_res_->set_null();
   }
-  curr_max_score_ = 0;
+  curr_max_token_freq_ = 0;
+  curr_min_doc_length_ = 0;
+  is_first_ = true;
 }
 
 int ObBM25MaxScoreParamCollector::init(
@@ -125,13 +131,19 @@ int ObBM25MaxScoreParamCollector::collect_data_row(const blocksstable::ObDatumRo
   } else {
     const uint64_t token_freq = data_row.storage_datums_[token_freq_data_idx_].get_uint();
     const uint64_t doc_len = data_row.storage_datums_[doc_len_data_idx_].get_uint();
-    const double norm_len = static_cast<double>(doc_len);
-    const double tf_score = sql::ObExprBM25::doc_token_weight(token_freq, norm_len);
-    if (tf_score > curr_max_score_) {
+    // Aggregate (max token freq, min doc length) independently. This pair is a valid
+    // BM25 upper bound for the block regardless of avg_doc_length (doc_token_weight is
+    // monotonic in both). Selecting the pair with doc_token_weight(avg=1) is NOT
+    // equivalent and can underestimate the upper bound, causing wrong WAND pruning.
+    if (is_first_ || token_freq > curr_max_token_freq_) {
+      curr_max_token_freq_ = token_freq;
       token_freq_res_->set_uint(token_freq);
-      doc_len_res_->set_uint(doc_len);
-      curr_max_score_ = tf_score;
     }
+    if (is_first_ || doc_len < curr_min_doc_length_) {
+      curr_min_doc_length_ = doc_len;
+      doc_len_res_->set_uint(doc_len);
+    }
+    is_first_ = false;
   }
   return ret;
 }
@@ -147,13 +159,16 @@ int ObBM25MaxScoreParamCollector::collect_agg_row(const blocksstable::ObDatumRow
   } else {
     const uint64_t token_freq = agg_row.storage_datums_[token_freq_agg_idx_].get_uint();
     const uint64_t doc_len = agg_row.storage_datums_[doc_len_agg_idx_].get_uint();
-    const double norm_len = static_cast<double>(doc_len);
-    const double tf_score = sql::ObExprBM25::doc_token_weight(token_freq, norm_len);
-    if (tf_score > curr_max_score_ || 0 == curr_max_score_) {
+    // Same independent (max token freq, min doc length) aggregation as data-row path.
+    if (is_first_ || token_freq > curr_max_token_freq_) {
+      curr_max_token_freq_ = token_freq;
       token_freq_res_->set_uint(token_freq);
-      doc_len_res_->set_uint(doc_len);
-      curr_max_score_ = tf_score;
     }
+    if (is_first_ || doc_len < curr_min_doc_length_) {
+      curr_min_doc_length_ = doc_len;
+      doc_len_res_->set_uint(doc_len);
+    }
+    is_first_ = false;
   }
   return ret;
 }

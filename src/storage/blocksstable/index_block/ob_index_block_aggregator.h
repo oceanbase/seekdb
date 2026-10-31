@@ -306,9 +306,14 @@ private:
 private:
   const int64_t TOKEN_FREQ_IDX = 0;
   const int64_t DOC_LENGTH_IDX = 1;
-  // since TF term stays monotonic on average_doc_length, we use 1 as avg_doc_length here to calculate mas score parameters
-  double get_norm_len(const int64_t doc_length) const { return static_cast<double>(doc_length); }
-  double curr_max_score_;
+  // For block max BM25 upper bound, we need the (max token freq, min doc length) pair
+  // which is a valid upper bound regardless of avg_doc_length (BM25 is monotonic in
+  // both token freq and doc length). Selecting the pair by evaluating doc_token_weight
+  // with avg=1 is NOT equivalent, because scaling norm_len by avg changes the argmax,
+  // leading to an underestimated block max score and incorrect WAND pruning.
+  uint64_t curr_max_token_freq_;
+  uint64_t curr_min_doc_length_;
+  bool is_first_;
   DISALLOW_COPY_AND_ASSIGN(ObBM25ParamAggregator);
 };
 
