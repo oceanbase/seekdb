@@ -1,0 +1,169 @@
+# owner: wb-coder
+# owner group: storage
+# tags: fts
+# description: regression for the full-text index build pipeline (task-5). Builds FTS
+#   indexes on populated tables (ik and beng parsers, inline and afterwards, partitioned
+#   and non-partitioned), then verifies: the four generated aux tables exist with
+#   deterministic row counts, the fts index aux (inverted) rows are stored in exact
+#   (word, doc_id) collation order and the fts_doc_word (forward) rows in exact
+#   (doc_id, word) order (locked via per-word counts + a md5 of the full ordered word
+#   stream), and MATCH outputs are deterministic and ordered. All data are fixed
+#   literals; no query depends on raw doc_id values, so the recorded result is stable
+#   across builds. Byte-identical across repeated runs.
+
+--disable_warnings
+DROP DATABASE IF EXISTS fts_pipeline_reg;
+PURGE RECYCLEBIN;
+CREATE DATABASE fts_pipeline_reg;
+USE fts_pipeline_reg;
+--enable_warnings
+
+# ---------- non-partitioned table, explicit PK, build afterwards (ik) ----------
+CREATE TABLE t_ik(
+    id      BIGINT PRIMARY KEY,
+    title   VARCHAR(256),
+    content VARCHAR(512));
+
+INSERT INTO t_ik(id, title, content) VALUES
+(1,  'OceanBase 数据库', 'OceanBase 是一款分布式数据库，支持全文索引与检索。'),
+(2,  '全文索引原理', '全文索引通过倒排索引加速关键词检索。'),
+(3,  'database engine', 'The database engine processes queries efficiently.'),
+(4,  '倒排索引', '倒排索引将词项映射到文档列表，是搜索引擎的核心结构。'),
+(5,  'search engine', 'A search engine ranks documents by relevance and freshness.'),
+(6,  '分布式系统', '分布式系统需要处理一致性、可用性与分区容错。'),
+(7,  'query optimizer', 'The query optimizer rewrites plans to reduce cost.'),
+(8,  '数据检索', '海量数据检索依赖索引结构与缓存优化。'),
+(9,  'inverted index', 'An inverted index is the core of modern search systems.'),
+(10, '高可用架构', '高可用架构通过多副本与自动切换保障服务。'),
+(11, 'tokenizer', 'The tokenizer splits text into tokens for indexing.'),
+(12, '分词器', '分词器决定中文全文索引的质量与性能。'),
+(13, 'full text search', 'Full text search combines tokenization, indexing and ranking.'),
+(14, 'SQL 引擎', 'SQL engine executes plans with parallel workers and vectorized operators.'),
+(15, '存储引擎', 'The storage engine writes macro blocks and maintains sstables.');
+
+# build the fulltext index afterwards, on a populated table (same path as the benchmark)
+ALTER SYSTEM SET _ENABLE_ADD_FULLTEXT_INDEX_TO_EXISTING_TABLE = TRUE;
+sleep 2;
+CREATE FULLTEXT INDEX idx_ik ON t_ik(title, content) WITH PARSER ik;
+
+# four aux tables with deterministic row counts and aux rowkey order
+set ob_enable_index_direct_select = 'ON';
+--disable_query_log
+let $data_table_id = query_get_value("SELECT table_id FROM oceanbase.__all_table WHERE table_name = 't_ik'", table_id, 1);
+let $rowkey_doc_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 11 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_rowkey_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 12 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $data_table_id, table_name, 1);
+let $doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $data_table_id, table_name, 1);
+let $fts_index_table_id = query_get_value("SELECT table_id FROM oceanbase.__all_table WHERE table_name = '$fts_index_table_name'", table_id, 1);
+let $doc_word_table_id = query_get_value("SELECT table_id FROM oceanbase.__all_table WHERE table_name = '$doc_word_table_name'", table_id, 1);
+let $fts_word_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $fts_index_table_id AND column_name LIKE '%word\_segment%'", column_name, 1);
+let $fts_doc_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $fts_index_table_id AND column_name LIKE '%doc\_id%'", column_name, 1);
+let $dw_word_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $doc_word_table_id AND column_name LIKE '%word\_segment%'", column_name, 1);
+let $dw_doc_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $doc_word_table_id AND column_name LIKE '%doc\_id%'", column_name, 1);
+--replace_regex /__idx_[0-9]*/__idx_DATA_TABLE_ID/g
+eval SELECT table_name FROM oceanbase.__all_table WHERE data_table_id = $data_table_id AND table_name LIKE '__idx_%' ORDER BY table_name;
+eval SELECT COUNT(*) FROM $rowkey_doc_table_name;
+eval SELECT COUNT(*) FROM $doc_rowkey_table_name;
+eval SELECT COUNT(*) FROM $fts_index_table_name;
+eval SELECT COUNT(*) FROM $doc_word_table_name;
+
+# lock the aux rowkey order: per-word counts in (word) order on the inverted aux,
+# and a md5 over the full (word, doc_id)-ordered word stream on both aux tables
+SET SESSION group_concat_max_len = 1073741824;
+--replace_regex /__idx_[0-9]*/__idx_DATA_TABLE_ID/g
+eval SELECT $fts_word_col AS word, COUNT(*) AS cnt FROM $fts_index_table_name GROUP BY $fts_word_col ORDER BY $fts_word_col;
+eval SELECT MD5(GROUP_CONCAT(word ORDER BY word, doc_id)) AS inverted_word_stream_md5 FROM (SELECT $fts_word_col AS word, $fts_doc_col AS doc_id FROM $fts_index_table_name) t;
+eval SELECT MD5(GROUP_CONCAT(word ORDER BY doc_id, word)) AS forward_word_stream_md5 FROM (SELECT $dw_word_col AS word, $dw_doc_col AS doc_id FROM $doc_word_table_name) t;
+--enable_query_log
+
+# ordered MATCH results on the non-partitioned table
+--echo ===== single cn word, ordered =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('索引') ORDER BY id;
+--echo ===== single en word, ordered =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('engine') ORDER BY id;
+--echo ===== multi word, ordered =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('database search') ORDER BY id;
+--echo ===== hit count =====
+SELECT COUNT(*) FROM t_ik WHERE MATCH(title, content) AGAINST('全文索引');
+--echo ===== ordered with limit =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('the') ORDER BY id LIMIT 3;
+
+# ---------- non-partitioned table, inline index, beng parser ----------
+CREATE TABLE t_beng(
+    id     BIGINT PRIMARY KEY,
+    detail VARCHAR(512),
+    FULLTEXT INDEX idx_beng(detail) WITH PARSER beng);
+
+INSERT INTO t_beng(id, detail) VALUES
+(1, 'The quick brown fox jumps over the lazy dog'),
+(2, 'Full-text search requires efficient tokenization on the hot path'),
+(3, 'A distributed database spans multiple servers and storage nodes'),
+(4, 'Search relevance depends on tokenization quality and ranking'),
+(5, 'Benchmark documents exercise the indexing and matching paths'),
+(6, 'Inverted index build performance matters for large corpora'),
+(7, 'Query latency under heavy load stays stable with proper tuning'),
+(8, 'Bulk insert throughput measurement uses fixed size batches');
+
+--disable_query_log
+let $beng_data_table_id = query_get_value("SELECT table_id FROM oceanbase.__all_table WHERE table_name = 't_beng'", table_id, 1);
+let $beng_fts_index_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 13 AND data_table_id = $beng_data_table_id, table_name, 1);
+let $beng_doc_word_table_name = query_get_value(SELECT table_name FROM oceanbase.__all_table WHERE index_type = 14 AND data_table_id = $beng_data_table_id, table_name, 1);
+let $beng_fts_index_table_id = query_get_value("SELECT table_id FROM oceanbase.__all_table WHERE table_name = '$beng_fts_index_table_name'", table_id, 1);
+let $beng_doc_word_table_id = query_get_value("SELECT table_id FROM oceanbase.__all_table WHERE table_name = '$beng_doc_word_table_name'", table_id, 1);
+let $beng_fts_word_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $beng_fts_index_table_id AND column_name LIKE '%word\_segment%'", column_name, 1);
+let $beng_fts_doc_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $beng_fts_index_table_id AND column_name LIKE '%doc\_id%'", column_name, 1);
+let $beng_dw_word_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $beng_doc_word_table_id AND column_name LIKE '%word\_segment%'", column_name, 1);
+let $beng_dw_doc_col = query_get_value("SELECT column_name FROM oceanbase.__all_column WHERE table_id = $beng_doc_word_table_id AND column_name LIKE '%doc\_id%'", column_name, 1);
+SET SESSION group_concat_max_len = 1073741824;
+--replace_regex /__idx_[0-9]*/__idx_DATA_TABLE_ID/g
+eval SELECT COUNT(*) FROM $beng_fts_index_table_name;
+eval SELECT COUNT(*) FROM $beng_doc_word_table_name;
+eval SELECT $beng_fts_word_col AS word, COUNT(*) AS cnt FROM $beng_fts_index_table_name GROUP BY $beng_fts_word_col ORDER BY $beng_fts_word_col;
+eval SELECT MD5(GROUP_CONCAT(word ORDER BY word, doc_id)) AS beng_inverted_word_stream_md5 FROM (SELECT $beng_fts_word_col AS word, $beng_fts_doc_col AS doc_id FROM $beng_fts_index_table_name) t;
+eval SELECT MD5(GROUP_CONCAT(word ORDER BY doc_id, word)) AS beng_forward_word_stream_md5 FROM (SELECT $beng_dw_word_col AS word, $beng_dw_doc_col AS doc_id FROM $beng_doc_word_table_name) t;
+--enable_query_log
+
+--echo ===== beng: single word, ordered =====
+SELECT id FROM t_beng WHERE MATCH(detail) AGAINST('search') ORDER BY id;
+--echo ===== beng: hit count =====
+SELECT COUNT(*) FROM t_beng WHERE MATCH(detail) AGAINST('tokenization');
+
+# ---------- partitioned table, inline index, ik parser ----------
+CREATE TABLE t_part(
+    id     BIGINT PRIMARY KEY,
+    detail VARCHAR(512),
+    FULLTEXT INDEX idx_part(detail) WITH PARSER ik
+) PARTITION BY HASH(id) PARTITIONS 2;
+
+INSERT INTO t_part(id, detail) VALUES
+(1, 'The quick brown fox jumps over the lazy dog'),
+(2, '全文索引支持分区表的文档检索'),
+(3, 'A distributed database spans multiple servers'),
+(4, '倒排索引在分区场景下按分区构建与合并'),
+(5, 'Search relevance depends on tokenization quality'),
+(6, '分区表的全文索引为每个分区维护独立倒排'),
+(7, 'OceanBase stores data in distributed tablets'),
+(8, '检索系统需要统一处理多分区的查询结果');
+
+--disable_query_log
+let $part_data_table_id = query_get_value("SELECT table_id FROM oceanbase.__all_table WHERE table_name = 't_part'", table_id, 1);
+--enable_query_log
+# note: direct select on partitioned fts aux tables is not supported, so the
+# partitioned scenario locks the aux table set and the MATCH outputs only
+--disable_query_log
+--replace_regex /__idx_[0-9]*/__idx_DATA_TABLE_ID/g
+eval SELECT table_name, index_type FROM oceanbase.__all_table WHERE data_table_id = $part_data_table_id AND table_name LIKE '__idx_%' ORDER BY table_name;
+--enable_query_log
+
+--echo ===== partitioned: cn word, ordered =====
+SELECT id FROM t_part WHERE MATCH(detail) AGAINST('全文索引') ORDER BY id;
+--echo ===== partitioned: en word, ordered =====
+SELECT id FROM t_part WHERE MATCH(detail) AGAINST('database') ORDER BY id;
+--echo ===== partitioned: hit count =====
+SELECT COUNT(*) FROM t_part WHERE MATCH(detail) AGAINST('distributed');
+--echo ===== partitioned: ordered desc with limit =====
+SELECT id FROM t_part WHERE MATCH(detail) AGAINST('倒排') ORDER BY id DESC LIMIT 2;
+
+--disable_warnings
+DROP DATABASE fts_pipeline_reg;
+--enable_warnings

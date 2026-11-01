@@ -1,0 +1,167 @@
+DROP DATABASE IF EXISTS fts_order_collation_reg;
+PURGE RECYCLEBIN;
+CREATE DATABASE fts_order_collation_reg;
+USE fts_order_collation_reg;
+CREATE TABLE t_general(
+id BIGINT PRIMARY KEY,
+v  VARCHAR(200) COLLATE utf8mb4_general_ci);
+CREATE TABLE t_bin(
+id BIGINT PRIMARY KEY,
+v  VARCHAR(200) COLLATE utf8mb4_bin);
+CREATE TABLE t_uci(
+id BIGINT PRIMARY KEY,
+v  VARCHAR(200) COLLATE utf8mb4_unicode_ci);
+INSERT INTO t_general(id, v) VALUES
+(1, 'apple'), (2, 'Apple'), (3, 'APPLE'), (4, 'banana'), (5, 'Banana '),
+(6, 'apple '), (7, '数据库'), (8, '數據庫'), (9, 'Database'), (10, 'database'),
+(11, 'z'), (12, 'Z'), (13, 'z '), (14, '0abc'), (15, '!bang'),
+(16, 'café'), (17, 'CAFE'), (18, 'eclair'), (19, ' ÉCLAIR '), (20, '中');
+INSERT INTO t_bin(id, v) SELECT id, v FROM t_general;
+INSERT INTO t_uci(id, v) SELECT id, v FROM t_general;
+===== general_ci: asc =====
+SELECT id, v FROM t_general ORDER BY v, id;
+id	v
+19	 ÉCLAIR 
+15	!bang
+14	0abc
+1	apple
+2	Apple
+3	APPLE
+6	apple 
+4	banana
+5	Banana 
+16	café
+17	CAFE
+9	Database
+10	database
+18	eclair
+11	z
+12	Z
+13	z 
+20	中
+7	数据库
+8	數據庫
+===== general_ci: desc =====
+SELECT id, v FROM t_general ORDER BY v DESC, id;
+id	v
+8	數據庫
+7	数据库
+20	中
+11	z
+12	Z
+13	z 
+18	eclair
+9	Database
+10	database
+16	café
+17	CAFE
+4	banana
+5	Banana 
+1	apple
+2	Apple
+3	APPLE
+6	apple 
+14	0abc
+15	!bang
+19	 ÉCLAIR 
+===== bin: asc =====
+SELECT id, v FROM t_bin ORDER BY v, id;
+id	v
+19	 ÉCLAIR 
+15	!bang
+14	0abc
+3	APPLE
+2	Apple
+5	Banana 
+17	CAFE
+9	Database
+12	Z
+1	apple
+6	apple 
+4	banana
+16	café
+10	database
+18	eclair
+11	z
+13	z 
+20	中
+7	数据库
+8	數據庫
+===== bin: desc =====
+SELECT id, v FROM t_bin ORDER BY v DESC, id;
+id	v
+8	數據庫
+7	数据库
+20	中
+11	z
+13	z 
+18	eclair
+10	database
+16	café
+4	banana
+1	apple
+6	apple 
+12	Z
+9	Database
+17	CAFE
+5	Banana 
+2	Apple
+3	APPLE
+14	0abc
+15	!bang
+19	 ÉCLAIR 
+===== unicode_ci: asc =====
+SELECT id, v FROM t_uci ORDER BY v, id;
+id	v
+19	 ÉCLAIR 
+15	!bang
+14	0abc
+1	apple
+2	Apple
+3	APPLE
+6	apple 
+4	banana
+5	Banana 
+16	café
+17	CAFE
+9	Database
+10	database
+18	eclair
+11	z
+12	Z
+13	z 
+20	中
+7	数据库
+8	數據庫
+===== unicode_ci: desc =====
+SELECT id, v FROM t_uci ORDER BY v DESC, id;
+id	v
+8	數據庫
+7	数据库
+20	中
+11	z
+12	Z
+13	z 
+18	eclair
+9	Database
+10	database
+16	café
+17	CAFE
+4	banana
+5	Banana 
+1	apple
+2	Apple
+3	APPLE
+6	apple 
+14	0abc
+15	!bang
+19	 ÉCLAIR 
+===== general_ci: min max group =====
+SELECT MIN(v), MAX(v), COUNT(DISTINCT v) FROM t_general;
+MIN(v)	MAX(v)	COUNT(DISTINCT v)
+ ÉCLAIR 	數據庫	12
+===== bin: min max group =====
+SELECT MIN(v), MAX(v), COUNT(DISTINCT v) FROM t_bin;
+MIN(v)	MAX(v)	COUNT(DISTINCT v)
+ ÉCLAIR 	數據庫	18
+DROP DATABASE fts_order_collation_reg;

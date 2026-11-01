@@ -1,0 +1,311 @@
+DROP DATABASE IF EXISTS fts_pipeline_reg;
+PURGE RECYCLEBIN;
+CREATE DATABASE fts_pipeline_reg;
+USE fts_pipeline_reg;
+CREATE TABLE t_ik(
+id      BIGINT PRIMARY KEY,
+title   VARCHAR(256),
+content VARCHAR(512));
+INSERT INTO t_ik(id, title, content) VALUES
+(1,  'OceanBase 数据库', 'OceanBase 是一款分布式数据库，支持全文索引与检索。'),
+(2,  '全文索引原理', '全文索引通过倒排索引加速关键词检索。'),
+(3,  'database engine', 'The database engine processes queries efficiently.'),
+(4,  '倒排索引', '倒排索引将词项映射到文档列表，是搜索引擎的核心结构。'),
+(5,  'search engine', 'A search engine ranks documents by relevance and freshness.'),
+(6,  '分布式系统', '分布式系统需要处理一致性、可用性与分区容错。'),
+(7,  'query optimizer', 'The query optimizer rewrites plans to reduce cost.'),
+(8,  '数据检索', '海量数据检索依赖索引结构与缓存优化。'),
+(9,  'inverted index', 'An inverted index is the core of modern search systems.'),
+(10, '高可用架构', '高可用架构通过多副本与自动切换保障服务。'),
+(11, 'tokenizer', 'The tokenizer splits text into tokens for indexing.'),
+(12, '分词器', '分词器决定中文全文索引的质量与性能。'),
+(13, 'full text search', 'Full text search combines tokenization, indexing and ranking.'),
+(14, 'SQL 引擎', 'SQL engine executes plans with parallel workers and vectorized operators.'),
+(15, '存储引擎', 'The storage engine writes macro blocks and maintains sstables.');
+ALTER SYSTEM SET _ENABLE_ADD_FULLTEXT_INDEX_TO_EXISTING_TABLE = TRUE;
+CREATE FULLTEXT INDEX idx_ik ON t_ik(title, content) WITH PARSER ik;
+set ob_enable_index_direct_select = 'ON';
+table_name
+__idx_DATA_TABLE_ID_fts_doc_rowkey
+__idx_DATA_TABLE_ID_fts_rowkey_doc
+__idx_DATA_TABLE_ID_idx_ik
+__idx_DATA_TABLE_ID_idx_ik_fts_doc_word
+COUNT(*)
+15
+COUNT(*)
+15
+COUNT(*)
+138
+COUNT(*)
+138
+word	cnt
+a	1
+an	1
+and	4
+blocks	1
+by	1
+combines	1
+core	1
+cost.	1
+database	1
+documents	1
+efficiently.	1
+engine	4
+executes	1
+for	1
+freshness.	1
+full	1
+index	1
+indexing	1
+indexing.	1
+into	1
+inverted	1
+is	1
+macro	1
+maintains	1
+modern	1
+oceanbase	1
+of	1
+operators.	1
+optimizer	1
+parallel	1
+plans	2
+processes	1
+queries	1
+query	1
+ranking.	1
+ranks	1
+reduce	1
+relevance	1
+rewrites	1
+search	3
+splits	1
+sql	1
+sstables.	1
+storage	1
+systems.	1
+text	2
+the	5
+to	1
+tokenization	1
+tokenizer	1
+tokens	1
+vectorized	1
+with	1
+workers	1
+writes	1
+一款	1
+一致性	1
+与	5
+中文	1
+优化	1
+依赖	1
+保障	1
+倒排	2
+全文索引	3
+关键词	1
+决定	1
+分区	1
+分布式	1
+分布式数据库	1
+分词器	1
+切换	1
+列表	1
+副本	1
+加速	1
+原理	1
+可用	1
+可用性	1
+处理	1
+存储	1
+容错	1
+射到	1
+将	1
+引擎	2
+性能	1
+搜索引擎	1
+支持	1
+数据库	1
+数据检索	1
+文档	1
+映	1
+是	2
+服务	1
+架构	1
+核心	1
+检索	2
+海量	1
+的	2
+系统	1
+索引	3
+结构	2
+缓存	1
+自动	1
+词	1
+质量	1
+过多	1
+通	1
+通过	1
+需要	1
+项	1
+高	1
+inverted_word_stream_md5
+b06e9ce08bb25deac1906d609007b3f8
+forward_word_stream_md5
+088da508a7f535e448b7d1bf164fb5c5
+===== single cn word, ordered =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('索引') ORDER BY id;
+id
+2
+4
+8
+===== single en word, ordered =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('engine') ORDER BY id;
+id
+3
+5
+14
+15
+===== multi word, ordered =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('database search') ORDER BY id;
+id
+3
+5
+9
+13
+===== hit count =====
+SELECT COUNT(*) FROM t_ik WHERE MATCH(title, content) AGAINST('全文索引');
+COUNT(*)
+3
+===== ordered with limit =====
+SELECT id FROM t_ik WHERE MATCH(title, content) AGAINST('the') ORDER BY id LIMIT 3;
+id
+3
+7
+9
+CREATE TABLE t_beng(
+id     BIGINT PRIMARY KEY,
+detail VARCHAR(512),
+FULLTEXT INDEX idx_beng(detail) WITH PARSER beng);
+INSERT INTO t_beng(id, detail) VALUES
+(1, 'The quick brown fox jumps over the lazy dog'),
+(2, 'Full-text search requires efficient tokenization on the hot path'),
+(3, 'A distributed database spans multiple servers and storage nodes'),
+(4, 'Search relevance depends on tokenization quality and ranking'),
+(5, 'Benchmark documents exercise the indexing and matching paths'),
+(6, 'Inverted index build performance matters for large corpora'),
+(7, 'Query latency under heavy load stays stable with proper tuning'),
+(8, 'Bulk insert throughput measurement uses fixed size batches');
+COUNT(*)
+61
+COUNT(*)
+61
+word	cnt
+and	3
+batches	1
+benchmark	1
+brown	1
+build	1
+bulk	1
+corpora	1
+database	1
+depends	1
+distributed	1
+documents	1
+dog	1
+efficient	1
+exercise	1
+fixed	1
+fox	1
+full	1
+heavy	1
+hot	1
+index	1
+indexing	1
+insert	1
+inverted	1
+jumps	1
+large	1
+latency	1
+lazy	1
+load	1
+matching	1
+matters	1
+measurement	1
+multiple	1
+nodes	1
+over	1
+path	1
+paths	1
+performance	1
+proper	1
+quality	1
+query	1
+quick	1
+ranking	1
+relevance	1
+requires	1
+search	2
+servers	1
+size	1
+spans	1
+stable	1
+stays	1
+storage	1
+text	1
+throughput	1
+tokenization	2
+tuning	1
+under	1
+uses	1
+beng_inverted_word_stream_md5
+7d23893d184894892f78aa61d8fa7495
+beng_forward_word_stream_md5
+e8bc51a4d0b112f48be0993e0ba43c2b
+===== beng: single word, ordered =====
+SELECT id FROM t_beng WHERE MATCH(detail) AGAINST('search') ORDER BY id;
+id
+2
+4
+===== beng: hit count =====
+SELECT COUNT(*) FROM t_beng WHERE MATCH(detail) AGAINST('tokenization');
+COUNT(*)
+2
+CREATE TABLE t_part(
+id     BIGINT PRIMARY KEY,
+detail VARCHAR(512),
+FULLTEXT INDEX idx_part(detail) WITH PARSER ik
+) PARTITION BY HASH(id) PARTITIONS 2;
+INSERT INTO t_part(id, detail) VALUES
+(1, 'The quick brown fox jumps over the lazy dog'),
+(2, '全文索引支持分区表的文档检索'),
+(3, 'A distributed database spans multiple servers'),
+(4, '倒排索引在分区场景下按分区构建与合并'),
+(5, 'Search relevance depends on tokenization quality'),
+(6, '分区表的全文索引为每个分区维护独立倒排'),
+(7, 'OceanBase stores data in distributed tablets'),
+(8, '检索系统需要统一处理多分区的查询结果');
+table_name	index_type
+__idx_DATA_TABLE_ID_fts_doc_rowkey	12
+__idx_DATA_TABLE_ID_fts_rowkey_doc	11
+__idx_DATA_TABLE_ID_idx_part	13
+__idx_DATA_TABLE_ID_idx_part_fts_doc_word	14
+===== partitioned: cn word, ordered =====
+SELECT id FROM t_part WHERE MATCH(detail) AGAINST('全文索引') ORDER BY id;
+id
+2
+6
+===== partitioned: en word, ordered =====
+SELECT id FROM t_part WHERE MATCH(detail) AGAINST('database') ORDER BY id;
+id
+3
+===== partitioned: hit count =====
+SELECT COUNT(*) FROM t_part WHERE MATCH(detail) AGAINST('distributed');
+COUNT(*)
+2
+===== partitioned: ordered desc with limit =====
+SELECT id FROM t_part WHERE MATCH(detail) AGAINST('倒排') ORDER BY id DESC LIMIT 2;
+id
+6
+4
+DROP DATABASE fts_pipeline_reg;
