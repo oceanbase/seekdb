@@ -1,5 +1,7 @@
 """Numeric correctness and rejection cases; these tests never claim GPU execution."""
 import copy
+import hashlib
+import io
 import json
 import math
 from pathlib import Path
@@ -13,7 +15,7 @@ from benchmark import (assess_results, exact_neighbors, fingerprint, generate_da
                        identifier, match_evidence, parse_options, query_sql,
                        summarize, validate_comparable, log_position, evidence_from_log,
                        first_query_when_ready, coverage_retry_settings, coverage_query_result,
-                       run_round, safe_failure_detail)
+                       run_round, safe_failure_detail, scan_log_interval)
 
 
 class CoverageDiagnosticTests(unittest.TestCase):
@@ -101,6 +103,7 @@ class RawBuildEvidenceTests(unittest.TestCase):
             self.assertEqual(evidence["stderr_start"], len(self.record))
             self.assertEqual(evidence["raw_record"], self.record.rstrip())
             self.assertEqual(len(evidence["stderr_interval_sha256"]), 64)
+            self.assertEqual(evidence["stderr_interval_bytes"], len(self.record))
 
     def test_missing_ambiguous_fallback_or_wrong_shape_is_rejected(self):
         for data in ("", self.record * 2, self.record.replace("fallback=false", "fallback=true"),
@@ -122,6 +125,76 @@ class RawBuildEvidenceTests(unittest.TestCase):
             path.write_bytes(self.record.encode())
             with self.assertRaises(RuntimeError):
                 evidence_from_log(path, start, "t", "i", 100, 8)
+
+    @patch('benchmark.LOG_READ_CHUNK_BYTES', 11)
+    def test_marker_and_line_cross_chunk_boundaries_without_hash_changes(self):
+        data = b'unrelated log line\n' + self.record.encode() + b'last unrelated line'
+        record, digest = scan_log_interval(io.BytesIO(data), len(data))
+        self.assertEqual(record, self.record.rstrip())
+        self.assertEqual(digest, hashlib.sha256(data).hexdigest())
+
+    def test_short_reads_are_consumed_until_the_exact_interval_end(self):
+        class ShortReader(io.BytesIO):
+            def read(self, length):
+                return super().read(min(length, 3))
+        data = self.record.encode()
+        record, digest = scan_log_interval(ShortReader(data + b'not in captured interval'), len(data))
+        self.assertEqual(record, self.record.rstrip())
+        self.assertEqual(digest, hashlib.sha256(data).hexdigest())
+
+    def test_early_eof_is_rejected_even_after_a_complete_gpu_record(self):
+        data = self.record.encode()
+        with self.assertRaisesRegex(RuntimeError, 'truncated'):
+            scan_log_interval(io.BytesIO(data), len(data) + 1)
+
+    @patch('benchmark.LOG_READ_CHUNK_BYTES', 7)
+    def test_duplicate_record_split_across_chunks_is_rejected(self):
+        data = (self.record + 'unrelated\n' + self.record).encode()
+        with self.assertRaisesRegex(RuntimeError, 'ambiguous'):
+            scan_log_interval(io.BytesIO(data), len(data))
+
+    @patch('benchmark.LOG_MAX_LINE_BYTES', 256)
+    @patch('benchmark.LOG_READ_CHUNK_BYTES', 17)
+    def test_overlong_complete_and_unterminated_lines_are_rejected(self):
+        for suffix in (b'\n', b''):
+            data = self.record.encode() + b'x' * 257 + suffix
+            with self.subTest(suffix=suffix), self.assertRaisesRegex(RuntimeError, 'Oversized'):
+                scan_log_interval(io.BytesIO(data), len(data))
+
+    def test_overall_limit_rejects_before_reading(self):
+        source = Mock()
+        with self.assertRaisesRegex(RuntimeError, 'large stderr interval'):
+            scan_log_interval(source, 512 * 1024 * 1024 + 1)
+        source.read.assert_not_called()
+
+    def test_log_interval_larger_than_old_limit_is_streamed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'stderr.log'
+            path.touch()
+            start = log_position(path)
+            block = b'unrelated log record\n' * 4096
+            digest = hashlib.sha256()
+            with path.open('wb') as out:
+                for _ in range(210):
+                    out.write(block)
+                    digest.update(block)
+                out.write(self.record.encode())
+                digest.update(self.record.encode())
+            evidence = evidence_from_log(path, start, 't', 'i', 100, 8)
+            self.assertGreater(evidence['stderr_interval_bytes'], 16 * 1024 * 1024)
+            self.assertEqual(evidence['stderr_interval_bytes'], path.stat().st_size)
+            self.assertEqual(evidence['stderr_interval_sha256'], digest.hexdigest())
+
+    def test_path_rotation_during_scan_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'stderr.log'
+            path.touch()
+            start = log_position(path)
+            path.write_bytes(self.record.encode())
+            swapped = Mock(st_dev=start[0], st_ino=start[1] + 1, st_size=len(self.record))
+            with patch('benchmark.Path.stat', return_value=swapped):
+                with self.assertRaisesRegex(RuntimeError, 'rotated'):
+                    evidence_from_log(path, start, 't', 'i', 100, 8)
 
 
 class NumericTests(unittest.TestCase):

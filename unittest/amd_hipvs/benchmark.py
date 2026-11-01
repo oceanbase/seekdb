@@ -29,11 +29,53 @@ BUILD_LOG = re.compile(r'\[seekdb-hipvs-build\] backend=hipvs device_vendor=AMD 
                        r'gpu_name="([^"\r\n]+)" arch=(gfx[0-9A-Za-z_:]+) '
                        r'rows=([0-9]+) dim=([0-9]+) gpu_compute=true '
                        r'cpu_fallback=false export_completed=true')
+LOG_MAX_INTERVAL_BYTES = 512 * 1024 * 1024
+LOG_MAX_LINE_BYTES = 1024 * 1024
+LOG_READ_CHUNK_BYTES = 64 * 1024
 
 
 def log_position(path: Path) -> tuple[int, int, int]:
     info = path.stat()
     return info.st_dev, info.st_ino, info.st_size
+
+
+def scan_log_interval(source, length: int) -> tuple[str, str]:
+    """Hash a bounded interval and match complete lines with bounded memory."""
+    if not 0 <= length <= LOG_MAX_INTERVAL_BYTES:
+        raise RuntimeError("Unexpectedly large stderr interval; inspect server log")
+    digest = hashlib.sha256()
+    remaining = length
+    pending = b""
+    candidate = None
+
+    def inspect_line(line):
+        nonlocal candidate
+        if len(line) > LOG_MAX_LINE_BYTES:
+            raise RuntimeError("Oversized stderr line; inspect server log")
+        if b"[seekdb-hipvs-build]" in line:
+            if candidate is not None:
+                raise RuntimeError("Missing or ambiguous GPU execution record during SQL CREATE")
+            candidate = line.removesuffix(b"\r").decode("utf-8", errors="replace")
+
+    while remaining:
+        block = source.read(min(LOG_READ_CHUNK_BYTES, remaining))
+        if not block:
+            raise RuntimeError("Unexpected end of stderr interval; log was truncated during reading")
+        if len(block) > remaining:
+            raise RuntimeError("stderr reader exceeded the captured interval")
+        remaining -= len(block)
+        digest.update(block)
+        lines = (pending + block).split(b"\n")
+        pending = lines.pop()
+        for line in lines:
+            inspect_line(line)
+        if len(pending) > LOG_MAX_LINE_BYTES:
+            raise RuntimeError("Oversized stderr line; inspect server log")
+    if pending:
+        inspect_line(pending)
+    if candidate is None:
+        raise RuntimeError("Missing or ambiguous GPU execution record during SQL CREATE")
+    return candidate, digest.hexdigest()
 
 
 def evidence_from_log(path: Path, start: tuple[int, int, int], table: str, index: str,
@@ -48,15 +90,14 @@ def evidence_from_log(path: Path, start: tuple[int, int, int], table: str, index
         if (info.st_dev, info.st_ino) != start[:2] or info.st_size < start[2]:
             raise RuntimeError("seekdb stderr rotated during timed index construction")
         length = info.st_size - start[2]
-        if length > 16 * 1024 * 1024:
-            raise RuntimeError("Unexpectedly large stderr interval; inspect server log")
         source.seek(start[2])
-        raw = source.read(length)
-    candidates = [line for line in raw.decode("utf-8", errors="replace").splitlines()
-                  if "[seekdb-hipvs-build]" in line]
-    if len(candidates) != 1:
-        raise RuntimeError("Missing or ambiguous GPU execution record during SQL CREATE")
-    match = BUILD_LOG.fullmatch(candidates[0])
+        candidate, digest = scan_log_interval(source, length)
+        after = os.fstat(source.fileno())
+        current = path.stat()
+        if ((after.st_dev, after.st_ino) != start[:2] or after.st_size < info.st_size
+                or (current.st_dev, current.st_ino) != start[:2] or current.st_size < info.st_size):
+            raise RuntimeError("seekdb stderr rotated or shrank while reading build evidence")
+    match = BUILD_LOG.fullmatch(candidate)
     if not match or (int(match[3]), int(match[4])) != (rows, dim):
         raise RuntimeError("GPU execution record does not match the SQL input")
     return {"producer": "seekdb-hipvs-build", "backend": "hipvs", "device_vendor": "AMD",
@@ -64,8 +105,9 @@ def evidence_from_log(path: Path, start: tuple[int, int, int], table: str, index
             "rows": rows, "dim": dim, "gpu_name": match[1], "gpu_architecture": match[2],
             "table_name": table, "index_name": index,
             "correlation": "single build in dedicated server stderr during SQL CREATE and first ANN query",
-            "stderr_start": start[2], "stderr_end": start[2] + len(raw),
-            "stderr_interval_sha256": hashlib.sha256(raw).hexdigest(), "raw_record": candidates[0]}
+            "stderr_start": start[2], "stderr_end": start[2] + length,
+            "stderr_interval_bytes": length,
+            "stderr_interval_sha256": digest, "raw_record": candidate}
 
 
 def identifier(value: str) -> str:

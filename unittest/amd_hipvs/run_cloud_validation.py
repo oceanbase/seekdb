@@ -56,7 +56,7 @@ process = None
 console = None
 connection = None
 summary = {'status': 'RUNNING', 'runtime': str(RUNTIME), 'port': PORT,
-           'config': {'m': args.m, 'ef_construction': args.ef_construction,
+           'config': {'server_log_level': 'WARN', 'm': args.m, 'ef_construction': args.ef_construction,
                       'ef_search': args.ef_search, 'min_recall': args.min_recall,
                       'cpu_with': CPU_WITH, 'gpu_with': GPU_WITH,
                       'lifecycle_rows': LIFECYCLE_ROWS, 'smoke_rows': SMOKE_ROWS,
@@ -145,6 +145,7 @@ try:
     if len(cpus) != 8:
         raise RuntimeError('This fixed reproduction configuration requires 8 available CPU IDs')
     command = [str(binary), '--nodaemon', '--base-dir', str(RUNTIME), '--port', str(PORT),
+        '--log-level', 'WARN',
         '--parameter', 'memory_budget=8G', '--parameter', 'vector_memory_limit=2G',
         '--parameter', 'cpu_count=8', '--parameter', 'server_cpu_quota_min=8',
         '--parameter', 'server_cpu_quota_max=8', '--parameter', 'datafile_size=1G',
