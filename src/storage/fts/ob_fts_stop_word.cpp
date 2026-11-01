@@ -17,6 +17,7 @@
 #include "object/ob_object.h"
 #define USING_LOG_PREFIX STORAGE_FTS
 
+#include "lib/charset/ob_charset.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/fts/ob_fts_stop_word.h"
 #include "storage/fts/ob_fts_parser_helper.h"
@@ -76,21 +77,27 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
   int ret = OB_SUCCESS;
   
   
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     common::ObString cmp_str;
-    // do nothing set out with in if type is the same.
-    if (OB_FAIL(common::ObCharset::charset_convert(
-                                       allocator,
-                                       word.get_word().get_string(),
-                                       word.get_collation_type(),
-                                       stopword_type_.get_collation_type(),
-                                       cmp_str))) {
+    const ObString &word_str = word.get_word().get_string();
+    if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+      // The common path needs neither charset conversion nor an allocation.
+      cmp_str = word_str;
     } else {
+      common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
+      if (OB_FAIL(common::ObCharset::charset_convert(
+                                             allocator,
+                                             word_str,
+                                             word.get_collation_type(),
+                                             stopword_type_.get_collation_type(),
+                                             cmp_str))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
       ObFTWord converted(cmp_str.length(), cmp_str.ptr(), stopword_type_);
       ret = stopword_set_.exist_refactored(converted);
       if (OB_HASH_NOT_EXIST == ret) {
@@ -101,7 +108,6 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
         ret = OB_SUCCESS;
       } else if (OB_SUCC(ret)) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
       }
     }
   }
@@ -163,19 +169,50 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
-    } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
-    }
-  } else {
+  } else if (!flag_.casedown()) {
     dst = src;
+  } else {
+    const ObString src_str = src.get_word().get_string();
+    const ObCharsetInfo *cs_info = ObCharset::get_charset(word_meta_.get_collation_type());
+    constexpr int64_t STACK_CASE_BUF_SIZE = 256;
+    char stack_buf[STACK_CASE_BUF_SIZE];
+    bool used_stack_buffer = false;
+
+    if (nullptr != cs_info && nullptr != cs_info->cset && cs_info->casedn_multiply > 0
+        && src_str.length() <= STACK_CASE_BUF_SIZE / cs_info->casedn_multiply) {
+      const size_t dst_len = cs_info->cset->casedn(
+          cs_info,
+          const_cast<char *>(src_str.ptr()),
+          src_str.length(),
+          stack_buf,
+          STACK_CASE_BUF_SIZE);
+      if (dst_len == static_cast<size_t>(src_str.length())
+          && 0 == MEMCMP(stack_buf, src_str.ptr(), dst_len)) {
+        // CJK and normalized lowercase tokens take this allocation-free path.
+        dst = src;
+      } else {
+        char *dst_ptr = static_cast<char *>(allocator_.alloc(dst_len));
+        if (OB_ISNULL(dst_ptr)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(dst_ptr, stack_buf, dst_len);
+          dst = ObFTWord(static_cast<int32_t>(dst_len), dst_ptr, word_meta_);
+        }
+      }
+      used_stack_buffer = true;
+    }
+
+    if (OB_SUCC(ret) && !used_stack_buffer) {
+      ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(
+                      word_meta_.get_collation_type(),
+                      src_str,
+                      dst_str,
+                      allocator_))) {
+      } else {
+        dst = ObFTWord(dst_str.length(), dst_str.ptr(), word_meta_);
+      }
+    }
   }
   return ret;
 }

@@ -380,7 +380,25 @@ int ObDASLegacyTRMergeIter::create_sparse_retrieval_iter()
   sr_iter_param_.id_proj_expr_ = ir_ctdef_->inv_scan_domain_id_col_;
   sr_iter_param_.relevance_expr_ = ir_ctdef_->relevance_expr_;
   sr_iter_param_.relevance_proj_expr_ = ir_ctdef_->relevance_proj_col_;
-  sr_iter_param_.filter_expr_ = ir_ctdef_->match_filter_;
+  bool match_filter_is_redundant = false;
+  if (!topk_mode_
+      && ObMatchAgainstMode::NATURAL_LANGUAGE_MODE == ir_ctdef_->mode_flag_
+      && nullptr != ir_ctdef_->match_filter_) {
+    const ObExpr *match_filter = ir_ctdef_->match_filter_;
+    if (T_FUN_MATCH_AGAINST == match_filter->type_) {
+      match_filter_is_redundant = true;
+    } else if (T_OP_BOOL == match_filter->type_
+               && 1 == match_filter->arg_cnt_
+               && nullptr != match_filter->args_[0]
+               && T_FUN_MATCH_AGAINST == match_filter->args_[0]->type_) {
+      match_filter_is_redundant = true;
+    }
+  }
+  // The natural-language posting scan emits only positive-score documents,
+  // so BOOL(MATCH(...)) is true for every row it returns. Keep score
+  // predicates, other search modes and top-k pruning unchanged.
+  sr_iter_param_.filter_expr_ =
+      match_filter_is_redundant ? nullptr : ir_ctdef_->match_filter_;
   sr_iter_param_.topk_limit_ = topk_limit_;
   if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
@@ -1111,7 +1129,7 @@ int ObDASLegacyTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     int64_t doc_length = 0;
     storage::ObFTParseHelper tokenize_helper;
     common::ObSEArray<ObFTWord, 16> tokens;
-    hash::ObHashMap<ObFTWord, int64_t> token_map;
+    ObFTWordMap token_map;
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
     } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
@@ -1122,7 +1140,7 @@ int ObDASLegacyTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
                            doc_length,
                            token_map))) {
     } else {
-      for (hash::ObHashMap<ObFTWord, int64_t>::const_iterator iter = token_map.begin();
+      for (ObFTWordMap::const_iterator iter = token_map.begin();
           OB_SUCC(ret) && iter != token_map.end();
           ++iter) {
         const ObFTWord &token = iter->first;

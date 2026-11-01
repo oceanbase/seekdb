@@ -44,6 +44,96 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+class ObFTCharMatchCache
+{
+public:
+  static constexpr int64_t CACHE_SIZE = 256;
+  static constexpr int64_t MAX_KEY_LEN = 4;
+
+  bool get(const ObFTRangeDict *range_dict,
+           const ObString &word,
+           ObDATrieHit &hit) const
+  {
+    if (!cacheable(word)) {
+      return false;
+    }
+    const Entry &entry = entries_[hash(range_dict, word)];
+    if (!entry.valid_ || entry.range_dict_ != range_dict
+        || entry.len_ != word.length()
+        || 0 != MEMCMP(entry.word_, word.ptr(), entry.len_)) {
+      return false;
+    }
+    const int64_t start_pos = hit.start_pos_;
+    hit.dict_ = entry.hit_.dict_;
+    hit.char_cnt_ = entry.hit_.char_cnt_;
+    hit.start_pos_ = start_pos;
+    hit.end_pos_ = start_pos + entry.hit_.end_pos_;
+    hit.base_idx_ = entry.hit_.base_idx_;
+    hit.current_check_ = entry.hit_.current_check_;
+    hit.is_match_ = entry.hit_.is_match_;
+    hit.is_prefix_ = entry.hit_.is_prefix_;
+    return true;
+  }
+
+  void put(const ObFTRangeDict *range_dict,
+           const ObString &word,
+           const ObDATrieHit &hit)
+  {
+    if (!cacheable(word)) {
+      return;
+    }
+    Entry &entry = entries_[hash(range_dict, word)];
+    entry.range_dict_ = range_dict;
+    entry.len_ = static_cast<uint8_t>(word.length());
+    MEMCPY(entry.word_, word.ptr(), word.length());
+    entry.valid_ = true;
+    entry.hit_.dict_ = hit.dict_;
+    entry.hit_.char_cnt_ = hit.char_cnt_;
+    entry.hit_.start_pos_ = 0;
+    entry.hit_.end_pos_ = hit.end_pos_ - hit.start_pos_;
+    entry.hit_.base_idx_ = hit.base_idx_;
+    entry.hit_.current_check_ = hit.current_check_;
+    entry.hit_.is_match_ = hit.is_match_;
+    entry.hit_.is_prefix_ = hit.is_prefix_;
+  }
+
+private:
+  static bool cacheable(const ObString &word)
+  {
+    return word.length() > 0 && word.length() <= MAX_KEY_LEN;
+  }
+
+  static uint64_t hash(const ObFTRangeDict *range_dict, const ObString &word)
+  {
+    uint64_t hash_val = reinterpret_cast<uintptr_t>(range_dict) >> 4;
+    for (int64_t i = 0; i < word.length(); ++i) {
+      hash_val = hash_val * 131 + static_cast<uint8_t>(word.ptr()[i]);
+    }
+    return hash_val & (CACHE_SIZE - 1);
+  }
+
+  struct Entry
+  {
+    Entry() : range_dict_(nullptr), len_(0), valid_(false), word_(), hit_(nullptr, 0) {}
+
+    const ObFTRangeDict *range_dict_;
+    uint8_t len_;
+    bool valid_;
+    char word_[MAX_KEY_LEN];
+    ObDATrieHit hit_;
+  };
+
+  Entry entries_[CACHE_SIZE];
+};
+
+ObFTCharMatchCache &char_match_cache()
+{
+  static thread_local ObFTCharMatchCache cache;
+  return cache;
+}
+} // namespace
 
 int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
 {
@@ -336,18 +426,23 @@ int ObFTRangeDict::match(const ObString &single_word, ObDATrieHit &hit) const
 {
   int ret = OB_SUCCESS;
   ObIFTDict *dict = nullptr;
-  if (OB_FAIL(find_first_char_range(single_word, dict)) && OB_ENTRY_NOT_EXIST != ret) {
+  if (char_match_cache().get(this, single_word, hit)) {
+  } else if (OB_FAIL(find_first_char_range(single_word, dict)) && OB_ENTRY_NOT_EXIST != ret) {
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     hit.set_unmatch();
+    char_match_cache().put(this, single_word, hit);
     ret = OB_SUCCESS;
   } else {
     // do nothing
     hit.dict_ = dict; // set dict
     if (OB_FAIL(dict->match(single_word, hit))) {
+    } else {
+      char_match_cache().put(this, single_word, hit);
     }
   }
   return ret;
 }
+
 int ObFTRangeDict::match(const ObString &words, bool &is_match) const
 {
   // find first char range and find dict
@@ -382,17 +477,49 @@ int ObFTRangeDict::find_first_char_range(const ObString &single_word, ObIFTDict 
 {
   int ret = OB_SUCCESS;
   bool found = false;
-  for (int i = 0; OB_SUCC(ret) && !found && i < range_dicts_.size(); ++i) {
-    if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                          range_dicts_[i].start_.get_word(),
-                          single_word)
-            <= 0
-        && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
-                             range_dicts_[i].end_.get_word(),
-                             single_word)
-               >= 0) {
-      dict = range_dicts_[i].dict_;
-      found = true;
+  const int64_t range_cnt = range_dicts_.size();
+  if (is_sorted_ && range_cnt > 0) {
+    // The ranges are sorted and do not overlap, so the range holding the word
+    // can be found with a binary search instead of scanning all the ranges.
+    // The lookup happens for every single character of the document, so the
+    // saved comparisons are worth the extra bookkeeping done at build time.
+    int64_t low = 0;
+    int64_t high = range_cnt - 1;
+    while (low <= high) {
+      const int64_t mid = low + (high - low) / 2;
+      if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                            range_dicts_[mid].start_.get_word(),
+                            single_word)
+          > 0) {
+        // The word is smaller than the start of this range, and than the
+        // start of every following range.
+        high = mid - 1;
+      } else if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                                   range_dicts_[mid].end_.get_word(),
+                                   single_word)
+                 < 0) {
+        // The word is bigger than the end of this range, and than the end of
+        // every preceding range.
+        low = mid + 1;
+      } else {
+        dict = range_dicts_[mid].dict_;
+        found = true;
+        break;
+      }
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !found && i < range_cnt; ++i) {
+      if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                            range_dicts_[i].start_.get_word(),
+                            single_word)
+              <= 0
+          && ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                               range_dicts_[i].end_.get_word(),
+                               single_word)
+                 >= 0) {
+        dict = range_dicts_[i].dict_;
+        found = true;
+      }
     }
   }
   if (!found) {
@@ -419,6 +546,24 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       range.end_ = dat->end_word_;
       range.dict_ = dict;
       if (OB_FAIL(range_dicts_.push_back(range))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    // Check whether the ranges are sorted and do not overlap. Only then the
+    // range of a word can be found with a binary search.
+    is_sorted_ = true;
+    for (int64_t i = 1; i < range_dicts_.size(); ++i) {
+      if (ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                            range_dicts_[i - 1].start_.get_word(),
+                            range_dicts_[i].start_.get_word())
+              > 0
+          || ObCharset::strcmp(ObCollationType::CS_TYPE_UTF8MB4_BIN,
+                               range_dicts_[i - 1].end_.get_word(),
+                               range_dicts_[i].start_.get_word())
+                 >= 0) {
+        is_sorted_ = false;
+        break;
       }
     }
   }

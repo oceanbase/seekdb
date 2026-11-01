@@ -52,6 +52,15 @@ public:
                                  const uint8_t char_len,
                                  CharType &type);
 
+  static int first_valid_char_fast(ObCollationType coll_type,
+                                   const char *buf,
+                                   const int64_t buf_size,
+                                   int64_t &char_len);
+
+  static int classify_utf8mb4_fast(const char *input,
+                                   const uint8_t char_len,
+                                   CharType &type);
+
   static int check_cn_number(ObCollationType coll_type,
                              const char *input,
                              const uint8_t char_len,
@@ -74,6 +83,11 @@ public:
                                   bool &ignore);
 
 private:
+  static inline bool is_continuation_byte(const char ch)
+  {
+    return 0x02 == (static_cast<unsigned char>(ch) >> 6);
+  }
+
   template <ObCharsetType CS_TYPE>
   static int do_classify(const char *input, const uint8_t char_len, CharType &type);
 
@@ -445,27 +459,79 @@ template <ObCharsetType CS_TYPE>
 inline int ObFTCharUtil::do_classify(const char *input, const uint8_t char_len, CharType &type)
 {
   int ret = OB_SUCCESS;
-  bool checker = false;
   type = CharType::USELESS;
 
-  if (OB_FAIL(is_alpha<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
-    type = CharType::ENGLISH_LETTER;
-  } else if (OB_FAIL(is_arabic<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
-    type = CharType::ARABIC_LETTER;
-  } else if (OB_FAIL(is_chinese<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  if (1 == char_len) {
+    const uint8_t ch = static_cast<uint8_t>(input[0]);
+    if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+      type = CharType::ENGLISH_LETTER;
+      return ret;
+    } else if (ch >= '0' && ch <= '9') {
+      type = CharType::ARABIC_LETTER;
+      return ret;
+    }
+  }
+
+  // Decode the codepoint exactly once, then run all block predicates on it.
+  // The previous implementation called is_alpha/is_arabic/is_chinese/... in
+  // sequence, and each wrapper decoded the same bytes again — up to 3 redundant
+  // decodes per character. Predicate order and results are unchanged.
+  ob_wc_t unicode = 0;
+  if (OB_FAIL(decode_unicode<CS_TYPE>(input, char_len, unicode))) {
+    // decode failure: leave type as USELESS, same as before
+  } else if ((CS_TYPE != CHARSET_UTF8MB4 || char_len > 1)
+             && ObUnicodeBlockUtils::is_chinese(unicode)) {
     type = CharType::CHINESE;
-  } else if (OB_FAIL(is_other_cjk<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if (ObUnicodeBlockUtils::is_alpha(unicode)) {
+    type = CharType::ENGLISH_LETTER;
+  } else if (ObUnicodeBlockUtils::is_arabic(unicode)) {
+    type = CharType::ARABIC_LETTER;
+  } else if (ObUnicodeBlockUtils::is_other_cjk(unicode)) {
     type = CharType::OTHER_CJK;
-  } else if (OB_FAIL(is_surrogate_high<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if ((CS_TYPE == CHARSET_UTF16 || CS_TYPE == CHARSET_UTF16LE)
+             && ObUnicodeBlockUtils::check_high_surrogate(unicode)) {
     type = CharType::SURROGATE_HIGH;
-  } else if (OB_FAIL(is_surrogate_low<CS_TYPE>(input, char_len, checker))) {
-  } else if (checker) {
+  } else if ((CS_TYPE == CHARSET_UTF16 || CS_TYPE == CHARSET_UTF16LE)
+             && ObUnicodeBlockUtils::check_low_surrogate(unicode)) {
     type = CharType::SURROGATE_LOW;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::classify_utf8mb4_fast(const char *input,
+                                                const uint8_t char_len,
+                                                CharType &type)
+{
+  int ret = OB_SUCCESS;
+  type = CharType::USELESS;
+  if (OB_ISNULL(input) || OB_UNLIKELY(0 == char_len)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const unsigned char first = static_cast<unsigned char>(input[0]);
+    if (first < 0x80) {
+      if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')) {
+        type = CharType::ENGLISH_LETTER;
+      } else if (first >= '0' && first <= '9') {
+        type = CharType::ARABIC_LETTER;
+      }
+    } else if (first < 0xe0) {
+      ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+    } else if (first < 0xf0) {
+      if (3 == char_len) {
+        const unsigned char second = static_cast<unsigned char>(input[1]);
+        // U+4E00..U+9FFF is the dominant CJK block in the tokenize workload.
+        if (first >= 0xe4 && first <= 0xe9 && (first > 0xe4 || second >= 0xb8)
+            && is_continuation_byte(input[2])) {
+          type = CharType::CHINESE;
+        } else {
+          ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+        }
+      } else {
+        ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+      }
+    } else {
+      ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+    }
   }
   return ret;
 }
@@ -480,7 +546,7 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
 
   switch (cs_type) {
   case CHARSET_UTF8MB4: {
-    ret = do_classify<CHARSET_UTF8MB4>(input, char_len, type);
+    ret = classify_utf8mb4_fast(input, char_len, type);
     break;
   }
   case CHARSET_UTF16: {
@@ -495,6 +561,54 @@ inline int ObFTCharUtil::classify_first_char(ObCollationType coll_type,
     ret = OB_NOT_SUPPORTED;
     STORAGE_FTS_LOG(WARN, "Not supported charset type", K(ret), K(cs_type));
     break;
+  }
+  return ret;
+}
+
+inline int ObFTCharUtil::first_valid_char_fast(ObCollationType coll_type,
+                                                const char *buf,
+                                                const int64_t buf_size,
+                                                int64_t &char_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(ObCharset::charset_type_by_coll(coll_type) != CHARSET_UTF8MB4)) {
+    ret = ObCharset::first_valid_char(coll_type, buf, buf_size, char_len);
+  } else if (OB_ISNULL(buf)) {
+    ret = OB_NOT_INIT;
+  } else if (buf_size <= 0) {
+    char_len = 0;
+  } else {
+    const unsigned char first = static_cast<unsigned char>(buf[0]);
+    if (first < 0x80) {
+      char_len = 1;
+    } else if (first < 0xc2) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (first < 0xe0) {
+      if (buf_size < 2 || !is_continuation_byte(buf[1])) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        char_len = 2;
+      }
+    } else if (first < 0xf0) {
+      if (buf_size < 3 || !is_continuation_byte(buf[1]) || !is_continuation_byte(buf[2])
+          || !(first >= 0xe1 || static_cast<unsigned char>(buf[1]) >= 0xa0)
+          || (first == 0xed && static_cast<unsigned char>(buf[1]) >= 0xa0)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        char_len = 3;
+      }
+    } else if (first < 0xf5) {
+      if (buf_size < 4 || !is_continuation_byte(buf[1]) || !is_continuation_byte(buf[2])
+          || !is_continuation_byte(buf[3])
+          || !(first >= 0xf1 || static_cast<unsigned char>(buf[1]) >= 0x90)
+          || !(first <= 0xf3 || static_cast<unsigned char>(buf[1]) <= 0x8f)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        char_len = 4;
+      }
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+    }
   }
   return ret;
 }

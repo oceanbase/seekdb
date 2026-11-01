@@ -103,6 +103,16 @@ public:
 
   int process(TokenizeContext &ctx);
 
+  // Fast path: the caller has already fetched ch/char_len/type for the current
+  // character, so skip the redundant per-processor re-read of the context.
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type)
+  {
+    return do_process(ctx, ch, char_len, type);
+  }
+
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,
                          const uint8_t char_len,

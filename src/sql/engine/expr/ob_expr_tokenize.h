@@ -67,8 +67,8 @@ private:
     int try_load_dictionary_for_ik();
 
   public:
-    // for property and tmp json string
-    mutable ObArenaAllocator allocator_;
+    // Owned by the current expression evaluation.
+    ObIAllocator *allocator_;
     ObString parser_name_;
     ObString properties_;
     ObObjMeta meta_;

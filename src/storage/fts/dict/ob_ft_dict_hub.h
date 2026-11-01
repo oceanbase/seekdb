@@ -17,8 +17,11 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 
+#include <atomic>
+
 #include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_bucket_lock.h"
+#include "lib/lock/ob_mutex.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
 namespace oceanbase
@@ -93,10 +96,17 @@ private:
 };
 
 class ObFTCacheRangeContainer;
+class ObIFTDict;
+
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_() {}
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), shared_dict_mutex_()
+  {
+    for (int64_t i = 0; i < MAX_DICT_TYPE_NUM; ++i) {
+      shared_dicts_[i].store(nullptr, std::memory_order_relaxed);
+    }
+  }
   ~ObFTDictHub() {}
 
   int init();
@@ -107,17 +117,42 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  /**
+   * @brief Get the dictionary shared by all the parsers of the given descriptor.
+   *
+   * Building a dictionary is expensive: the KV cache blocks holding the
+   * double array tries have to be pinned and one range dictionary object is
+   * created for every range of the dictionary. The content of a dictionary
+   * never changes during the lifetime of the process, so the dictionary is
+   * built once and then shared by every parser instead of being rebuilt for
+   * every tokenize call and for every row of the fulltext index build.
+   *
+   * The returned dictionary is read-only and stays valid until destroy() is
+   * called on the hub.
+   */
+  int get_shared_dict(const ObFTDictDesc &desc, ObIFTDict *&dict);
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
   int put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &info);
 
+  // Holds one built dictionary together with the KV cache handles that keep
+  // the dictionary blocks alive. The definition lives in the cpp file.
+  class ObFTSharedDict;
 
 private:
+  static constexpr int64_t MAX_DICT_TYPE_NUM = 4;
+
   bool is_inited_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
+  // Publication is protected by shared_dict_mutex_, while the steady-state
+  // lookup is lock-free. Dictionary construction takes rw_dict_lock_, so it
+  // must use a separate mutex to avoid recursive locking.
+  lib::ObMutex shared_dict_mutex_;
+  std::atomic<ObFTSharedDict *> shared_dicts_[MAX_DICT_TYPE_NUM];
 };
 
 } //  namespace storage
