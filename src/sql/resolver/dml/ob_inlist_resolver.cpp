@@ -507,6 +507,50 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
       }
     }
   }
+  // Drop exact-duplicate constant rows before the values table is materialized.
+  // A duplicate-heavy IN list such as "col IN (1, 2, 3, ... repeated)" otherwise
+  // produces one values-table row per list element even though the derived
+  // subquery is already DISTINCT, which inflates materialization and filtering
+  // cost (see oceanbase/seekdb#1512). Removing binary-equal rows here preserves
+  // semantics (DISTINCT still guarantees uniqueness) while shrinking the input.
+  // A cap bounds the comparison cost so a large all-distinct list is left as-is.
+  if (OB_SUCC(ret) && column_cnt > 0 && table_def.row_cnt_ > 1
+      && column_cnt * table_def.row_cnt_ == table_def.access_objs_.count()) {
+    const int64_t max_dedup_unique_rows = 4096;
+    ObSEArray<ObObjParam, 16> unique_objs;
+    int64_t unique_rows = 0;
+    bool do_dedup = true;
+    for (int64_t r = 0; OB_SUCC(ret) && do_dedup && r < table_def.row_cnt_; r++) {
+      bool is_dup = false;
+      for (int64_t u = 0; !is_dup && u < unique_rows; u++) {
+        bool row_eq = true;
+        for (int64_t c = 0; row_eq && c < column_cnt; c++) {
+          row_eq = (table_def.access_objs_.at(r * column_cnt + c)
+                    == unique_objs.at(u * column_cnt + c));
+        }
+        is_dup = row_eq;
+      }
+      if (is_dup) {
+        /* duplicate row, skip */
+      } else if (unique_rows >= max_dedup_unique_rows) {
+        do_dedup = false;  // too many distinct rows, keep original to bound cost
+      } else {
+        for (int64_t c = 0; OB_SUCC(ret) && c < column_cnt; c++) {
+          if (OB_FAIL(unique_objs.push_back(table_def.access_objs_.at(r * column_cnt + c)))) {
+          }
+        }
+        if (OB_SUCC(ret)) {
+          unique_rows++;
+        }
+      }
+    }
+    if (OB_SUCC(ret) && do_dedup && unique_rows < table_def.row_cnt_) {
+      if (OB_FAIL(table_def.access_objs_.assign(unique_objs))) {
+      } else {
+        table_def.row_cnt_ = unique_rows;
+      }
+    }
+  }
   return ret;
 }
 
