@@ -1,8 +1,8 @@
 DROP TABLE IF EXISTS ddl_identifier_escaping;
 CREATE TABLE ddl_identifier_escaping (
-  id INT PRIMARY KEY,
-  `enum``name` ENUM('one', 'two'),
-  `set````name` SET('one', 'two')
+id INT PRIMARY KEY,
+`enum``name` ENUM('one', 'two'),
+`set````name` SET('one', 'two')
 );
 INSERT INTO ddl_identifier_escaping VALUES (1, 'one', 'one'), (2, 'two', 'one,two');
 CREATE UNIQUE INDEX idx_enum ON ddl_identifier_escaping (`enum``name`);
