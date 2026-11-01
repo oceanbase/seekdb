@@ -13111,6 +13111,9 @@ int ObDatumCaster::to_value(const DatumParameter &source, const ObExprResType &t
     input_expr_->obj_meta_ = source.get_meta();
     input_expr_->datum_meta_ = ObDatumMeta(source.get_type(), source.get_collation_type(),
         source.get_meta().get_scale(), source.get_precision());
+    if (source.get_meta().is_collection_sql_type()) {
+      input_expr_->datum_meta_.cs_type_ = static_cast<ObCollationType>(source.get_subschema_id());
+    }
     if (ob_is_string_or_lob_type(source.get_type())) {
       input_expr_->datum_meta_.length_semantics_ = source.get_accuracy().get_length_semantics();
     }
@@ -13124,8 +13127,11 @@ int ObDatumCaster::to_value(const DatumParameter &source, const ObExprResType &t
                         source.get_meta().get_subschema_id()));
     OZ (input_expr_->get_datum_copy_plan().import_legacy(validated, input_expr_->locate_expr_datum(*eval_ctx_)));
     if (OB_SUCC(ret)) { input_expr_->get_eval_info(*eval_ctx_).evaluated_ = true; }
-    const ObDatumMeta target(type.get_type(), type.get_collation_type(),
-                              type.get_scale(), type.get_precision());
+    ObDatumMeta target(type.get_type(), type.get_collation_type(),
+                       type.get_scale(), type.get_precision());
+    if (type.is_collection_sql_type()) {
+      target.cs_type_ = static_cast<ObCollationType>(type.get_subschema_id());
+    }
     Datum *converted = nullptr;
     if (ob_is_enum_or_set_type(type.get_type())) {
       CK (type_infos != nullptr);

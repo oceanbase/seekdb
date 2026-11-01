@@ -32,6 +32,8 @@
 #include "sql/ob_spi.h"
 #include "sql/engine/expr/ob_sql_expression.h"
 #include "sql/pl/ob_pl.h"
+#include "sql/pl/ob_pl_package_guard.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/pl/ob_pl_stmt.h"
 #include "sql/ob_sql_utils.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -1931,4 +1933,199 @@ int main(int argc, char **argv)
   ::testing::InitGoogleTest(&argc, argv);
   if (ObCharset::init_charset() != OB_SUCCESS) { return 1; }
   return RUN_ALL_TESTS();
+}
+
+namespace
+{
+struct PLQuestionMarkBindingGuard
+{
+  PLQuestionMarkBindingGuard(ObExecContext &execution, ObSQLSessionInfo &session,
+                            oceanbase::pl::ObPLExecState &state,
+                            oceanbase::pl::ObPLContext &context)
+    : execution_(execution), session_(session), old_plan_(execution.get_physical_plan_ctx()),
+      old_context_(session.get_pl_context()), old_frames_(execution.get_frames()),
+      old_frame_count_(execution.get_frame_cnt())
+  {
+    execution_.set_physical_plan_ctx(&state.get_physical_plan_ctx());
+    session_.set_pl_stack_ctx(&context);
+  }
+  ~PLQuestionMarkBindingGuard()
+  {
+    execution_.set_physical_plan_ctx(old_plan_);
+    execution_.set_frames(old_frames_);
+    execution_.set_frame_cnt(old_frame_count_);
+    session_.set_pl_stack_ctx(old_context_);
+  }
+  ObExecContext &execution_;
+  ObSQLSessionInfo &session_;
+  ObPhysicalPlanCtx *old_plan_;
+  oceanbase::pl::ObPLContext *old_context_;
+  char **old_frames_;
+  int64_t old_frame_count_;
+};
+} // namespace
+
+TEST_F(NativeExecutionParameters, live_pl_questionmark_uses_only_matching_private_variable_domain)
+{
+  using oceanbase::pl::ObPLContext;
+  using oceanbase::pl::ObPLExecState;
+  using oceanbase::pl::ObPLPackageGuard;
+  ASSERT_EQ(OB_SUCCESS, oceanbase::share::ObSysVariables::init_default_values());
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ResolverInputSessionGuard registration(session, exec_);
+  ASSERT_NO_FATAL_FAILURE(load({73}));
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  ObPhysicalPlanCtx &sql_parameters = plan();
+
+  SpiUnitContext scope;
+  lib::ContextParam context_param;
+  context_param.set_mem_attr("PlQmTest").set_properties(lib::USE_TL_PAGE_OPTIONAL);
+  ASSERT_EQ(OB_SUCCESS, CURRENT_CONTEXT->CREATE_CONTEXT(scope.context_, context_param));
+  ObPLFunction function(scope.context_);
+  DatumParameter integer;
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(INT64_MIN, owner_));
+  integer.set_accuracy(ObAccuracy(19, 0)); integer.set_param_meta();
+  const std::string payload("g\0is", 4);
+  DatumValue lob_value;
+  ASSERT_EQ(OB_SUCCESS, ObTextStringHelper::str_to_lob_storage_obj(
+      owner_, ObString(payload.size(), payload.data()), lob_value));
+  lob_value.set_type(ObTextType); lob_value.set_collation_type(CS_TYPE_BINARY);
+  DatumParameter blob; blob.assign_value(lob_value);
+  ObAccuracy blob_accuracy; blob_accuracy.set_full_length(65535, LS_BYTE); blob_accuracy.set_scale(0);
+  blob.set_accuracy(blob_accuracy); blob.set_param_meta();
+  ParamStore initial_inputs((ObWrapperAllocator(&owner_)));
+  ASSERT_EQ(OB_SUCCESS, initial_inputs.push_back(integer));
+  ASSERT_EQ(OB_SUCCESS, initial_inputs.push_back(blob));
+  ObPLSymbolTable symbols(owner_);
+  ObPLDataType declared_integer(ObIntType);
+  declared_integer.get_data_type()->set_meta_type(integer.get_meta());
+  declared_integer.get_data_type()->set_accuracy(integer.get_accuracy());
+  ObPLDataType declared_blob(ObTextType);
+  declared_blob.get_data_type()->set_meta_type(blob.get_meta());
+  declared_blob.get_data_type()->set_accuracy(blob_accuracy);
+  ASSERT_EQ(OB_SUCCESS, symbols.add_symbol(ObString::make_string("n"), declared_integer));
+  ASSERT_EQ(OB_SUCCESS, symbols.add_symbol(ObString::make_string("b"), declared_blob));
+  ASSERT_EQ(OB_SUCCESS, function.set_variables(symbols));
+  function.set_arg_count(2);
+  ASSERT_EQ(OB_SUCCESS, function.add_in_arg(0));
+  ASSERT_EQ(OB_SUCCESS, function.add_in_arg(1));
+  ObPLPackageGuard package_guard;
+  ObPLContext pl_context;
+  DatumParameter function_result;
+  int function_status = OB_SUCCESS;
+  ObPLExecState state(owner_, owner_, exec_, package_guard, function, function_result, function_status);
+  ASSERT_EQ(OB_SUCCESS, pl_context.get_exec_stack().push_back(&state));
+  PLQuestionMarkBindingGuard binding(exec_, session, state, pl_context);
+  // The actual PL initializer creates this private, mutable variable directory.
+  ASSERT_EQ(OB_SUCCESS, state.init_params(&initial_inputs, false));
+  ASSERT_EQ(2, state.get_params().count());
+  ASSERT_FALSE(state.get_physical_plan_ctx().native_parameters_ready());
+  ASSERT_EQ(nullptr, state.get_physical_plan_ctx().get_native_parameter(0));
+  EXPECT_EQ(ObTextType, state.get_params().at(1).get_param_meta().get_type());
+  EXPECT_NE(blob.get_datum().get_reference(), state.get_params().at(1).get_datum().get_reference());
+  EXPECT_TRUE(state.get_params().at(1).has_lob_header());
+
+  alignas(8) char frame[8192] = {};
+  char *frames[] = {frame};
+  exec_.set_frames(frames); exec_.set_frame_cnt(1);
+  new (frame) Datum(); new (frame + 32) ObEvalInfo();
+  auto *dynamic = new (frame + 96) ObDynReserveBuf();
+  dynamic->magic_ = ObDynReserveBuf::MAGIC_NUM;
+  dynamic->len_ = 256; dynamic->mem_ = frame + 128;
+  ObEvalCtx evaluation(exec_);
+  ObExpr expression;
+  expression.type_ = T_QUESTIONMARK; expression.extra_ = 0;
+  expression.frame_idx_ = 0; expression.datum_off_ = 0; expression.eval_info_off_ = 32;
+  expression.dyn_buf_header_offset_ = 96; expression.res_buf_off_ = 128; expression.res_buf_len_ = 256;
+  auto prepare = [&](const SqlTypeMeta &meta, const ObAccuracy &accuracy) -> int {
+    expression.obj_meta_ = meta;
+    expression.datum_meta_ = ObDatumMeta(meta.get_type(), meta.get_collation_type(), meta.get_scale());
+    return expression.prepare_scalar_type(meta, accuracy, owner_);
+  };
+  ASSERT_EQ(OB_SUCCESS, prepare(integer.get_meta(), integer.get_accuracy()));
+  Datum output;
+  owner_.clear_calls();
+  ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(expression, evaluation, output));
+  EXPECT_EQ(INT64_MIN, output.get_int());
+  EXPECT_EQ(INT64_MIN, expression.locate_expr_datum(evaluation).get_int());
+  EXPECT_EQ(0, output.length());
+  EXPECT_TRUE(owner_.sizes_.empty());
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(INT64_MAX, owner_));
+  ASSERT_EQ(OB_SUCCESS, state.set_var(0, integer));
+  ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(expression, evaluation, output));
+  EXPECT_EQ(INT64_MAX, output.get_int());
+  EXPECT_EQ(INT64_MAX, expression.locate_expr_datum(evaluation).get_int());
+
+  expression.extra_ = 1;
+  for (bool with_header : {true, false}) {
+    SCOPED_TRACE(with_header);
+    SqlTypeMeta result_meta = state.get_params().at(1).get_meta();
+    if (!with_header) { result_meta.set_inrow(); }
+    ASSERT_EQ(OB_SUCCESS, prepare(result_meta, blob_accuracy));
+    ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(expression, evaluation, output));
+    EXPECT_NE(state.get_params().at(1).get_datum().get_reference(), output.get_reference());
+    EXPECT_EQ(expression.locate_expr_datum(evaluation).get_reference(), output.get_reference());
+    const ObString actual = output.get_string();
+    if (with_header) {
+      const ObString stored = state.get_params().at(1).get_string();
+      EXPECT_EQ(std::string(stored.ptr(), stored.length()), std::string(actual.ptr(), actual.length()));
+    } else {
+      EXPECT_EQ(payload, std::string(actual.ptr(), actual.length()));
+    }
+  }
+  // A later PL assignment cannot invalidate the already published frame copy.
+  const ObString retained = output.get_string();
+  DatumParameter null_blob; null_blob.set_null(); null_blob.set_param_meta(blob.get_meta());
+  ASSERT_EQ(OB_SUCCESS, state.set_var(1, null_blob));
+  EXPECT_EQ(payload, std::string(retained.ptr(), retained.length()));
+  ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(expression, evaluation, output));
+  EXPECT_TRUE(output.is_null());
+  EXPECT_TRUE(expression.locate_expr_datum(evaluation).is_null());
+  EXPECT_EQ(ObTextType, expression.get_sql_type().kind());
+  EXPECT_FALSE(state.get_physical_plan_ctx().native_parameters_ready());
+
+  // Missing/foreign PL domains are not a general construction-input fallback.
+  expression.extra_ = 0;
+  ASSERT_EQ(OB_SUCCESS, prepare(integer.get_meta(), integer.get_accuracy()));
+  for (int64_t index : {-1, 2}) {
+    expression.extra_ = index; output.set_int(515);
+    EXPECT_EQ(OB_INVALID_ARGUMENT, eval_question_mark_func(expression, evaluation, output));
+    EXPECT_EQ(515, output.get_int());
+  }
+  expression.extra_ = 0;
+  ObPhysicalPlanCtx construction(owner_);
+  ASSERT_EQ(OB_SUCCESS, construction.append_parameter_input(integer));
+  exec_.set_physical_plan_ctx(&construction); output.set_int(515);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, eval_question_mark_func(expression, evaluation, output));
+  EXPECT_EQ(515, output.get_int());
+  exec_.set_physical_plan_ctx(&state.get_physical_plan_ctx());
+  session.set_pl_stack_ctx(nullptr);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, eval_question_mark_func(expression, evaluation, output));
+  session.set_pl_stack_ctx(&pl_context);
+  ObExecContext foreign_execution(owner_);
+  foreign_execution.set_my_session(&session);
+  foreign_execution.set_physical_plan_ctx(&state.get_physical_plan_ctx());
+  ObEvalCtx foreign_evaluation(foreign_execution);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, eval_question_mark_func(expression, foreign_evaluation, output));
+  foreign_execution.set_physical_plan_ctx(nullptr);
+  foreign_execution.set_my_session(nullptr);
+  EXPECT_EQ(515, output.get_int());
+
+  EXPECT_TRUE(expression.locate_expr_datum(evaluation).is_null());
+  SqlTypeMeta wrong_kind = integer.get_meta(); wrong_kind.set_uint64();
+  ASSERT_EQ(OB_SUCCESS, prepare(wrong_kind, ObAccuracy(20, 0)));
+  EXPECT_EQ(OB_ERR_UNEXPECTED, eval_question_mark_func(expression, evaluation, output));
+  EXPECT_EQ(515, output.get_int());
+  EXPECT_TRUE(expression.locate_expr_datum(evaluation).is_null());
+  ASSERT_EQ(OB_SUCCESS, prepare(integer.get_meta(), integer.get_accuracy()));
+
+  // An active PL stack must not override a real ready SQL binding.
+  exec_.set_physical_plan_ctx(&sql_parameters);
+  ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(expression, evaluation, output));
+  EXPECT_EQ(73, output.get_int());
+  EXPECT_TRUE(expression.locate_expr_datum(evaluation).is_null());
+  EXPECT_EQ(1, sql_parameters.get_parameter_count());
+  EXPECT_EQ(2, state.get_params().count());
 }

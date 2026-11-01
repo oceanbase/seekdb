@@ -29,6 +29,7 @@
 #include "share/datum/datum_value_cast.h"
 #include "share/datum/typed_datum_compare.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
+#include "sql/pl/ob_pl.h"
 #include "common/enumset/ob_enum_set_meta.h"
 
 namespace oceanbase
@@ -1069,6 +1070,35 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr_datu
   const ObPhysicalPlanCtx *plan_ctx = ctx.exec_ctx_.get_physical_plan_ctx();
   if (plan_ctx == nullptr) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (!plan_ctx->native_parameters_ready()) {
+    // PL variables remain in their live PL owner, outside SQL parameter pages.
+    // Do not admit an arbitrary SQL construction directory through this path.
+    ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
+    pl::ObPLContext *pl_context = session == nullptr ? nullptr : session->get_pl_context();
+    pl::ObPLExecState *state = pl_context == nullptr ? nullptr : pl_context->get_current_state();
+    if (state == nullptr || &state->get_physical_plan_ctx() != plan_ctx
+        || state->get_exec_ctx().exec_ctx_ != &ctx.exec_ctx_
+        || expr.extra_ < 0 || expr.extra_ >= state->get_params().count()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      const DatumParameter &value = state->get_params().at(expr.extra_);
+      if (!value.is_null() && value.get_type() != expr.datum_meta_.type_) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        alignas(8) char scratch[64];
+        ObDatum legacy;
+        Datum candidate;
+        if (OB_FAIL(value.export_legacy(legacy, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(expr.get_datum_copy_plan().import_legacy(legacy, candidate))) {
+        } else if (is_lob_storage(value.get_type())
+            && OB_FAIL(ob_adjust_lob_datum(ctx.exec_ctx_, candidate, value.get_meta(),
+                expr.obj_meta_, ctx.exec_ctx_.get_allocator(), candidate))) {
+        } else if (OB_FAIL(expr.deep_copy_datum(ctx, candidate))) {
+        } else {
+          expr_datum = expr.locate_expr_datum(ctx);
+        }
+      }
+    }
   } else {
     const Datum *value = plan_ctx->get_native_parameter(expr.extra_);
     const SqlType *type = plan_ctx->get_native_parameter_type(expr.extra_);
@@ -1111,6 +1141,29 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &ex
       cast_mode = (cast_mode | CM_COLUMN_CONVERT);
       if (ctx.exec_ctx_.get_physical_plan_ctx()->is_ignore_stmt()) {
         cast_mode = cast_mode | CM_WARN_ON_FAIL | CM_CHARSET_CONVERT_IGNORE_ERR;
+      }
+      if (dst_meta.is_collection_sql_type()) {
+        // A collection assignment needs the executed column declaration, not
+        // only ObCollectionSQLType. The common scalar caster has no such port.
+        alignas(8) char source_scratch[64], result_scratch[64];
+        ObDatum source_view, result_view;
+        DatumParameter source, converted;
+        ObExprResType destination;
+        static_cast<SqlTypeMeta &>(destination) = dst_meta;
+        destination.set_accuracy(expr.get_sql_type().accuracy());
+        destination.set_length(expr.max_length_);
+        ObDatumCaster caster;
+        if (OB_FAIL(DatumCopyPlan(*parameter_type).legacy_view(
+            *parameter, source_view, source_scratch, sizeof(source_scratch)))) {
+        } else if (OB_FAIL(source.assign_legacy_borrowed(source_view, attributes->type_meta_))) {
+        } else {
+          source.set_metadata(*attributes);
+          if (OB_FAIL(caster.init(ctx.exec_ctx_, false))) {
+          } else if (OB_FAIL(caster.to_value(source, destination, cast_mode, allocator, converted))) {
+          } else if (OB_FAIL(converted.export_legacy(result_view, result_scratch, sizeof(result_scratch)))) {
+          } else { ret = expr.get_datum_copy_plan().import_legacy(result_view, expr_datum); }
+        }
+        return ret;
       }
       ObCastCtx cast_ctx(&allocator, &dtc_params, cast_mode, dst_meta.get_collation_type());
       ObAccuracy res_acc;
