@@ -7303,7 +7303,7 @@ int ObSelectLogPlan::adjust_late_materialization_plan_structure(ObLogicalOperato
     if (OB_SUCC(ret)) {
       const ObDataTypeCastParams dtc_params =
             ObBasicSessionInfo::create_dtc_params(optimizer_context_.get_session_info());
-      const ParamStore *params = get_optimizer_context().get_params();
+      const ObPhysicalPlanCtx *params = get_optimizer_context().get_parameter_context();
       if (OB_ISNULL(params)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(table_scan->set_range_columns(range_columns))) {

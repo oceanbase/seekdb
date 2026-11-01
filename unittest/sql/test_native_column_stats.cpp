@@ -39,8 +39,8 @@ std::string wire(const ObOptColumnStat &stat) {
   EXPECT_EQ(OB_SUCCESS,stat.serialize(buf.data(),buf.size(),pos));return hex(buf.data(),pos);
 }
 std::string value_wire(const DatumValue &v) {
-  int64_t n=0,pos=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(v.datum_,v.meta_,n));
-  std::vector<char> buf(n+64);EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(v.datum_,v.meta_,buf.data(),buf.size(),pos));
+  int64_t n=0,pos=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::native_value_size(v.datum_,v.meta_,n));
+  std::vector<char> buf(n+64);EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_native_value(v.datum_,v.meta_,buf.data(),buf.size(),pos));
   return hex(buf.data(),pos);
 }
 std::string min_wire(const ObOptColumnStat &stat) {
@@ -113,8 +113,10 @@ void expect_osg_hash_matches_native_datum_hash(const DatumValue &value) {
   ObOptColumnStat stat(owner);
   ObOptOSGColumnStat osg(owner);
   osg.col_stat_ = &stat;
+  alignas(8) char physical_scratch[64]; ObDatum physical;
+  ASSERT_EQ(OB_SUCCESS,value.export_legacy(physical,physical_scratch,sizeof(physical_scratch)));
   ASSERT_EQ(OB_SUCCESS, osg.update_column_stat_info(
-      &value.datum_, value.meta_, nullptr));
+      &physical, value.meta_, nullptr));
   std::vector<char> expected(ObOptColumnStat::NUM_LLC_BUCKET, 0);
   ASSERT_EQ(OB_SUCCESS, oceanbase::sql::ObAggregateProcessor::llc_add_value(
       expected_hash, expected.data(), expected.size()));
@@ -141,7 +143,7 @@ TEST(NativeColumnStats, immutable_old_wire_compare_merge_and_bounds) {
     if(line.empty()||line[0]=='#'){continue;}const auto f=fields(line);SCOPED_TRACE(line);
     if(f[0]=="V") {
       ASSERT_EQ(values.size(),std::stoi(f[1]));const auto b=unhex(f[3]);int64_t p=0;DatumValue value;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(b.data(),b.size(),p,owner,value.datum_,value.meta_));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(b.data(),b.size(),p,owner,value.datum_,value.meta_));
       ASSERT_EQ(b.size(),p);values.push_back(value);
     } else if(f[0]=="L") {
       SqlTypeMeta output_meta;output_meta.set_varchar();output_meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
@@ -251,8 +253,12 @@ TEST(NativeColumnStats, osg_publication_is_native_and_owns_payload) {
   ObArenaAllocator owner,source;ObOptOSGColumnStat osg(owner);
   ObOptColumnStat stat(owner);osg.col_stat_=&stat;
   DatumValue a=integer(-30,source),b=integer(70,source);
-  osg.min_val_.datum_=&a.datum_;osg.min_val_.meta_=a.meta_;
-  osg.max_val_.datum_=&b.datum_;osg.max_val_.meta_=b.meta_;
+  alignas(8) char min_scratch[64], max_scratch[64];
+  ObDatum minimum, maximum;
+  ASSERT_EQ(OB_SUCCESS,a.export_legacy(minimum,min_scratch,sizeof(min_scratch)));
+  ASSERT_EQ(OB_SUCCESS,b.export_legacy(maximum,max_scratch,sizeof(max_scratch)));
+  osg.min_val_.datum_=&minimum;osg.min_val_.meta_=a.meta_;
+  osg.max_val_.datum_=&maximum;osg.max_val_.meta_=b.meta_;
   ASSERT_EQ(OB_SUCCESS,osg.publish_min_max_values());
   source.reuse();std::memset(source.alloc(65536),0x2f,65536);
   EXPECT_EQ(-30,stat.get_min_datum().get_int());EXPECT_EQ(70,stat.get_max_datum().get_int());
@@ -322,7 +328,7 @@ TEST(NativeColumnStats, nested_sql_array_cache_clone_owns_descriptors_and_leaves
   const uintptr_t first=reinterpret_cast<uintptr_t>(buffer.data()),last=first+buffer.size();
   for(const void *p:{static_cast<const void *>(owned_outer),static_cast<const void *>(owned_outer->data_),
                      static_cast<const void *>(owned_child),static_cast<const void *>(owned_child->data_),
-                     static_cast<const void *>(owned_child->data_[0].datum_.ptr_),static_cast<const void *>(owned_child->data_[1].datum_.ptr_)}) {
+                     static_cast<const void *>(&owned_child->data_[0].datum_),owned_child->data_[1].datum_.get_reference()}) {
     EXPECT_GE(reinterpret_cast<uintptr_t>(p),first);EXPECT_LT(reinterpret_cast<uintptr_t>(p),last);
     EXPECT_EQ(0,reinterpret_cast<uintptr_t>(p)&7);
   }
@@ -362,9 +368,25 @@ TEST(NativeColumnStats, inline_integer_payload_operations_do_not_allocate)
   ASSERT_EQ(OB_SUCCESS,maximum.add_native(stat.get_max_datum(),stat.get_max_meta()));
   ASSERT_EQ(OB_SUCCESS,minimum.flush(&owner));ASSERT_EQ(OB_SUCCESS,maximum.flush(&owner));
   EXPECT_EQ(0,owner.calls_);
-  // The explicit legacy retaining output still needs its own 8-byte span.
+  // Generic wrapper copies retain inline integers without any old 8-byte
+  // payload allocation. An actual Reference remains an owned-copy OOM seam.
   DatumValue output=integer(123,source);
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,stat.copy_min_value(output,owner));
+  ASSERT_EQ(OB_SUCCESS,stat.copy_min_value(output,owner));
+  EXPECT_EQ(std::numeric_limits<int64_t>::min(),output.get_int());
+  EXPECT_EQ(0,owner.calls_);
+  ObOptColumnStat reference_stat(source);
+  DatumValue reference;
+  ASSERT_EQ(OB_SUCCESS,reference.set_varchar(ObString::make_string("owned stats endpoint"),source));
+  reference.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ASSERT_EQ(OB_SUCCESS,reference_stat.set_min_value(reference));
+  ASSERT_GT(reference_stat.get_min_datum().length(),0);
+  output=integer(123,source);
+  const Datum previous_output=output.datum_;
+  const SqlTypeMeta previous_meta=output.meta_;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,reference_stat.copy_min_value(output,owner));
+  EXPECT_EQ(1,owner.calls_);
+  EXPECT_EQ(0,MEMCMP(&previous_output,&output.datum_,sizeof(previous_output)));
+  EXPECT_EQ(0,MEMCMP(&previous_meta,&output.meta_,sizeof(previous_meta)));
   EXPECT_EQ(123,output.get_int());
   source.reuse();std::memset(source.alloc(65536),0x73,65536);
   EXPECT_EQ(std::numeric_limits<int64_t>::min(),decoded.get_min_datum().get_int());
@@ -408,12 +430,12 @@ TEST(NativeColumnStats, generic_reference_metadata_and_actual_decimal_width_surv
     std::vector<char> cache(stat.size());ObIKVCacheValue *base=nullptr;
     ASSERT_EQ(OB_SUCCESS,stat.deep_copy(cache.data(),cache.size(),base));
     const auto *cached=static_cast<const ObOptColumnStat *>(base);
-    if(width>0){EXPECT_NE(decimal.datum_.ptr_,stat.get_min_datum().get_reference());}
+    if(width>0){EXPECT_NE(decimal.datum_.get_reference(),stat.get_min_datum().get_reference());}
     source.reuse();std::memset(source.alloc(65536),0x45,65536);
     ASSERT_EQ(OB_SUCCESS,stat.export_min_value(exported,scratch,sizeof(scratch)));
-    EXPECT_EQ(width,exported.datum_.len_);EXPECT_EQ(expected,value_wire(exported));
+    EXPECT_EQ(width,exported.datum_.length());EXPECT_EQ(expected,value_wire(exported));
     EXPECT_EQ(expected,min_wire(*cached));
-    if(width>0){EXPECT_EQ(0,MEMCMP(coefficient,exported.datum_.ptr_,width));}
+    if(width>0){EXPECT_EQ(0,MEMCMP(coefficient,exported.datum_.get_reference(),width));}
   }
   Datum null_value;SqlTypeMeta declared;declared.set_decimal_int(7);
   declared.set_collation_level(CS_LEVEL_COERCIBLE);declared.set_collation_type(CS_TYPE_UTF8MB4_BIN);

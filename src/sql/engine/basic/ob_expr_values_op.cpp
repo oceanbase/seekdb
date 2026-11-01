@@ -224,7 +224,7 @@ int ObExprValuesOp::inner_open()
                               ctx_.get_sql_ctx()->get_batch_params_count() : 1;
         real_value_cnt_ = my_spec.get_value_count() * value_group;
         param_idx_ = 0;
-        param_cnt_ = plan_ctx->get_datum_param_store().count();
+        param_cnt_ = plan_ctx->get_parameter_count();
       } else if (my_spec.contain_ab_param_ && ctx_.has_dynamic_values_table() &&
                  my_spec.array_group_idx_ >= 0) {
         if (OB_UNLIKELY(my_spec.array_group_idx_ >= plan_ctx->get_array_param_groups().count())) {
@@ -297,12 +297,12 @@ int ObExprValuesOp::get_real_batch_obj_type(ObDatumMeta &src_meta,
     int64_t param_idx = src_expr->extra_;
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
     const DatumParameterArray *array_obj = NULL;
-    if (param_idx < 0 || param_idx >= plan_ctx->get_datum_param_store().count()) {
+    if (param_idx < 0 || param_idx >= plan_ctx->get_parameter_count()) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (plan_ctx->get_datum_param_store().at(param_idx).is_ext_sql_array()) {
+    } else if (plan_ctx->get_group_parameter_input(param_idx) != nullptr) {
       // If the parameter is is_ext_sql_array
       if (OB_ISNULL(array_obj =
-          plan_ctx->get_datum_param_store().at(param_idx).get_array<DatumParameterArray>())) {
+          plan_ctx->get_group_parameter_input(param_idx)->get_array<DatumParameterArray>())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (array_obj->count_ <= group_idx) {
         ret = OB_ERR_UNEXPECTED;
@@ -313,9 +313,12 @@ int ObExprValuesOp::get_real_batch_obj_type(ObDatumMeta &src_meta,
       }
     } else {
       // If not the is_ext_sql_array parameter
-      src_obj_meta = plan_ctx->get_datum_param_store().at(param_idx).get_type_meta();
-      const ObAccuracy &src_obj_acc = plan_ctx->get_datum_param_store().at(param_idx).get_accuracy();
-      update_src_meta(src_meta, src_obj_meta, src_obj_acc);
+      const DatumParameterMetadata *attributes = plan_ctx->get_parameter_metadata(param_idx);
+      if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else {
+        src_obj_meta = attributes->type_meta_;
+        update_src_meta(src_meta, src_obj_meta, attributes->accuracy_);
+      }
     }
   }
   return ret;
@@ -421,13 +424,15 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
            */
           int64_t param_idx = src_expr->extra_;
           ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-          if (param_idx < 0 || param_idx >= plan_ctx->get_datum_param_store().count()) {
+          if (param_idx < 0 || param_idx >= plan_ctx->get_parameter_count()) {
             ret = OB_INVALID_ARGUMENT;
           } else {
-            src_obj_meta = plan_ctx->get_datum_param_store().at(param_idx).get_type_meta();
-            const ObAccuracy &src_obj_acc =
-              plan_ctx->get_datum_param_store().at(param_idx).get_accuracy();
-            update_src_meta(src_meta, src_obj_meta, src_obj_acc);
+            const DatumParameterMetadata *attributes = plan_ctx->get_parameter_metadata(param_idx);
+            if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+            else {
+              src_obj_meta = attributes->type_meta_;
+              update_src_meta(src_meta, src_obj_meta, attributes->accuracy_);
+            }
           }
         }
       }

@@ -38,6 +38,23 @@ using namespace oceanbase::share::schema;
 
 namespace
 {
+// A partition row may outlive this synchronous physical export. Import the
+// selected value into the actual cast/row owner before the scratch expires.
+int copy_runtime_partition_value(const ObPhysicalPlanCtx &parameters, int64_t index,
+                                 ObIAllocator &owner, DatumValue &output)
+{
+  int ret = OB_SUCCESS;
+  const DatumParameterMetadata *attributes = parameters.get_parameter_metadata(index);
+  ObDatum legacy;
+  alignas(8) char scratch[64];
+  DatumValue candidate;
+  if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(parameters.export_runtime_parameter_legacy(index, legacy, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(candidate.assign_legacy_owned(legacy, attributes->type_meta_, owner))) {
+  } else { output = candidate; }
+  return ret;
+}
+
 // Own native partition inputs before a row producer can advance or reset.
 int read_partition_values(const ObNewRow &source, ObIAllocator &owner,
                           ObIArray<DatumValue> &result, bool physical_cells = false)
@@ -78,7 +95,9 @@ int evaluate_partition_expr(const ObTempExpr &expr, ObExecContext &context,
   } else if (result.is_null()) {
     value.set_null();
   } else {
-    value = DatumValue(result, expr.rt_exprs_.at(expr.expr_idx_).obj_meta_);
+    // The explicit old TempExpr result is already owned by the caller owner.
+    // Import scalars inline and borrow only those stable physical references.
+    ret = value.assign_legacy_borrowed(result, expr.rt_exprs_.at(expr.expr_idx_).obj_meta_);
   }
   return ret;
 }
@@ -1362,7 +1381,7 @@ int TableAccessPlan::get_is_weak_read(const ObDMLStmt &dml_stmt,
 
 int TableAccessPlan::calculate_tablet_targets(
     ObExecContext &exec_ctx,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     TabletAccessTargetIArray &tablet_targets,
     const ObDataTypeCastParams &dtc_params) const
 {
@@ -1388,7 +1407,7 @@ int TableAccessPlan::calculate_tablet_targets(
 }
 
 int TableAccessPlan::calculate_single_tablet_partition(ObExecContext &exec_ctx,
-                                                       const ParamStore &params,
+                                                       const ObPhysicalPlanCtx &params,
                                                        const ObDataTypeCastParams &dtc_params) const
 {
   int ret = OB_SUCCESS;
@@ -1424,7 +1443,7 @@ int TableAccessPlan::calculate_single_tablet_partition(ObExecContext &exec_ctx,
 }
 
 int TableAccessPlan::calculate_final_tablet_accesses(ObExecContext &exec_ctx,
-                                                      const ParamStore &params,
+                                                      const ObPhysicalPlanCtx &params,
                                                       const ObDataTypeCastParams &dtc_params) const
 {
   int ret = OB_SUCCESS;
@@ -1657,7 +1676,7 @@ int TableAccessPlan::calculate_tablet_id_by_row(ObExecContext &exec_ctx,
 }
 
 int TableAccessPlan::calculate_tablet_ids(ObExecContext &exec_ctx,
-                                          const ParamStore &params,
+                                          const ObPhysicalPlanCtx &params,
                                           ObIArray<ObTabletID> &tablet_ids,
                                           ObIArray<ObObjectID> &partition_ids,
                                           ObIArray<ObObjectID> &first_level_part_ids,
@@ -1755,7 +1774,7 @@ int TableAccessPlan::calculate_tablet_ids(ObExecContext &exec_ctx,
 }
 
 int TableAccessPlan::set_is_das_empty_part(ObExecContext &exec_ctx,
-                                           const ParamStore &params,
+                                           const ObPhysicalPlanCtx &params,
                                            const ObDataTypeCastParams &dtc_params)
 {
   int ret = OB_SUCCESS;
@@ -3001,7 +3020,7 @@ int TableAccessPlan::add_partition_column(const ObDMLStmt &stmt,
 
 int TableAccessPlan::calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
                                                      ObDASTabletMapper &tablet_mapper,
-                                                     const ParamStore &params,
+                                                     const ObPhysicalPlanCtx &params,
                                                      const PartitionCalcNode *calc_node,
                                                      const PartitionCalcNode *gen_col_node,
                                                      const ObTempExpr *se_gen_col_expr,
@@ -3090,7 +3109,7 @@ int TableAccessPlan::intersect_partition_ids(
 
 int TableAccessPlan::calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
                                                      ObDASTabletMapper &tablet_mapper,
-                                                     const ParamStore &params,
+                                                     const ObPhysicalPlanCtx &params,
                                                      const PartitionCalcNode *calc_node,
                                                      ObIArray<ObTabletID> &tablet_ids,
                                                      ObIArray<ObObjectID> &partition_ids,
@@ -3153,7 +3172,7 @@ int TableAccessPlan::calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
 int TableAccessPlan::calc_and_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLAndNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3211,7 +3230,7 @@ int TableAccessPlan::calc_and_partition_ids(
 int TableAccessPlan::calc_or_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLOrNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3253,7 +3272,7 @@ int TableAccessPlan::calc_or_partition_ids(
 
 int TableAccessPlan::calc_pre_range_graph_partition_ids(ObExecContext &exec_ctx,
                                                         ObDASTabletMapper &tablet_mapper,
-                                                        const ParamStore &params,
+                                                        const ObPhysicalPlanCtx &params,
                                                         const ObPLPreRangeGraphNode *calc_node,
                                                         ObIArray<ObTabletID> &tablet_ids,
                                                         ObIArray<ObObjectID> &partition_ids,
@@ -3298,7 +3317,7 @@ int TableAccessPlan::calc_pre_range_graph_partition_ids(ObExecContext &exec_ctx,
 int TableAccessPlan::calc_func_value_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLFuncValueNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3313,12 +3332,21 @@ int TableAccessPlan::calc_func_value_partition_ids(
     bool value_satisfy = true;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < calc_node->param_value_.count(); ++idx) {
       const ObPLFuncValueNode::ParamValuePair &pair = calc_node->param_value_.at(idx);
-      if (pair.param_idx_ < 0 || pair.param_idx_ >= params.count()) {
+      if (pair.param_idx_ < 0 || pair.param_idx_ >= params.get_parameter_count()) {
         ret = OB_INVALID_INDEX;
-      } else if (!binary_equal_datum_values(params.at(pair.param_idx_).value_view(), pair.value_)) {
-        value_satisfy = false;
-        break;
-      } else { } //do nothing
+      } else {
+        const DatumParameterMetadata *attributes = params.get_parameter_metadata(pair.param_idx_);
+        ObDatum legacy;
+        alignas(8) char scratch[64];
+        DatumValue view;
+        if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+        else if (OB_FAIL(params.export_runtime_parameter_legacy(pair.param_idx_, legacy, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(view.assign_legacy_borrowed(legacy, attributes->type_meta_))) {
+        } else if (!binary_equal_datum_values(view, pair.value_)) {
+          value_satisfy = false;
+          break;
+        }
+      }
     }
     if (OB_FAIL(ret)) {
     } else if (!value_satisfy) {
@@ -3345,7 +3373,7 @@ int TableAccessPlan::calc_func_value_partition_ids(
 int TableAccessPlan::calc_column_value_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLColumnValueNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -3784,15 +3812,15 @@ int TableAccessPlan::init_row(ObIAllocator &allocator, const int64_t count,
 
 
 int TableAccessPlan::se_calc_value_item(ObCastCtx cast_ctx,
-    ObExecContext &context, const ParamStore &params, const ValueItemExpr &vie,
+    ObExecContext &context, const ObPhysicalPlanCtx &params, const ValueItemExpr &vie,
     const ObIArray<DatumValue> &input_row, DatumValue &value)
 {
   int ret = OB_SUCCESS;
   if (cast_ctx.allocator_v2_ == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else if (QUESTMARK_TYPE == vie.type_) {
-    if (vie.idx_ >= params.count()) { ret = OB_INVALID_ARGUMENT; }
-    else { value = params.at(vie.idx_).value_view(); }
+    if (vie.idx_ >= params.get_parameter_count()) { ret = OB_INVALID_ARGUMENT; }
+    else { ret = copy_runtime_partition_value(params, vie.idx_, *cast_ctx.allocator_v2_, value); }
   } else if (CONST_OBJ_TYPE == vie.type_) {
     value = vie.value_;
   } else if (CONST_EXPR_TYPE == vie.type_) {
@@ -3815,7 +3843,7 @@ int TableAccessPlan::se_calc_value_item_row(ObExprCtx &expr_ctx,
   } else if (output_row.count() < key_count || context.get_physical_plan_ctx() == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const auto &params = context.get_physical_plan_ctx()->get_param_store();
+    const auto &params = *context.get_physical_plan_ctx();
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
       ValueItemExpr vie;
@@ -3823,8 +3851,9 @@ int TableAccessPlan::se_calc_value_item_row(ObExprCtx &expr_ctx,
       } else {
         DatumValue value;
         if (QUESTMARK_TYPE == vie.type_) {
-          if (vie.idx_ >= params.count()) { ret = OB_INVALID_ARGUMENT; }
-          else { value = params.at(vie.idx_).value_view(); }
+          if (vie.idx_ >= params.get_parameter_count()) { ret = OB_INVALID_ARGUMENT; }
+          else if (cast_ctx.allocator_v2_ == nullptr) { ret = OB_ERR_UNEXPECTED; }
+          else { ret = copy_runtime_partition_value(params, vie.idx_, *cast_ctx.allocator_v2_, value); }
         } else if (CONST_OBJ_TYPE == vie.type_) {
           value = vie.value_;
         } else if (CONST_EXPR_TYPE == vie.type_) {
@@ -4014,7 +4043,7 @@ OB_DEF_SERIALIZE(ObPLFuncValueNode::ParamValuePair)
   int ret = OB_SUCCESS;
   OB_UNIS_ENCODE(param_idx_);
   if (OB_SUCC(ret)) {
-    ret = DatumParameterCodec::encode_value(value_.datum_, value_.meta_, buf, buf_len, pos);
+    ret = DatumParameterCodec::encode_native_value(value_.datum_, value_.meta_, buf, buf_len, pos);
   }
   return ret;
 }
@@ -4022,7 +4051,7 @@ OB_DEF_SERIALIZE_SIZE(ObPLFuncValueNode::ParamValuePair)
 {
   int64_t len = 0, value_size = 0;
   OB_UNIS_ADD_LEN(param_idx_);
-  if (DatumParameterCodec::value_size(value_.datum_, value_.meta_, value_size) == OB_SUCCESS) {
+  if (DatumParameterCodec::native_value_size(value_.datum_, value_.meta_, value_size) == OB_SUCCESS) {
     len += value_size;
   }
   return len;
@@ -4042,7 +4071,7 @@ int ObPLFuncValueNode::ParamValuePair::deserialize(ObIAllocator &owner,
     DatumValue value = value_;
     if (body_pos < len) { ret = serialization::decode(body, len, body_pos, index); }
     if (OB_SUCC(ret) && body_pos < len) {
-      ret = DatumParameterCodec::decode_unis_value(body, len, body_pos, owner,
+      ret = DatumParameterCodec::decode_unis_native_value(body, len, body_pos, owner,
                                                  value.datum_, value.meta_);
     }
     if (OB_SUCC(ret)) { param_idx_ = index; value_ = value; }
@@ -4204,7 +4233,7 @@ int ValueItemExpr::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
   OB_UNIS_ENCODE(type_);
   if (CONST_OBJ_TYPE == type_) {
     if (OB_SUCC(ret)) {
-      ret = DatumParameterCodec::encode_value(value_.datum_, value_.meta_, buf, buf_len, pos);
+      ret = DatumParameterCodec::encode_native_value(value_.datum_, value_.meta_, buf, buf_len, pos);
     }
   } else if (CONST_EXPR_TYPE == type_) {
     OB_UNIS_ENCODE(*expr_);
@@ -4227,7 +4256,7 @@ int64_t ValueItemExpr::get_serialize_size() const
   OB_UNIS_ADD_LEN(type_);
   if (CONST_OBJ_TYPE == type_) {
     int64_t value_size = 0;
-    if (DatumParameterCodec::value_size(value_.datum_, value_.meta_, value_size) == OB_SUCCESS) {
+    if (DatumParameterCodec::native_value_size(value_.datum_, value_.meta_, value_size) == OB_SUCCESS) {
       len += value_size;
     }
   } else if (CONST_EXPR_TYPE == type_) {
@@ -4250,7 +4279,7 @@ int ValueItemExpr::deserialize(common::ObIAllocator &allocator, const char *buf,
   OB_UNIS_DECODE(type_);
   if (CONST_OBJ_TYPE == type_) {
     if (OB_SUCC(ret) && pos < data_len) {
-      ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, allocator,
+      ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, allocator,
                                                  value_.datum_, value_.meta_);
     }
   } else if (CONST_EXPR_TYPE == type_) {
@@ -4896,7 +4925,7 @@ int TableAccessPlan::pruning_single_partition(int64_t tablet_id,
     ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(exec_ctx.get_my_session());
     ObSEArray<ObObjectID, 8> partition_ids;
     ObSEArray<ObObjectID, 8> first_level_part_ids;
-    if (OB_FAIL(calculate_tablet_ids(exec_ctx, plan_ctx->get_param_store(), tablet_ids,
+    if (OB_FAIL(calculate_tablet_ids(exec_ctx, *plan_ctx, tablet_ids,
                                         partition_ids, first_level_part_ids, dtc_params))) {
     } else {
       pruning = true;
@@ -5251,7 +5280,7 @@ int TableAccessPlan::try_get_gather_stat_partition_info(
 int TableAccessPlan::calc_list_value_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLListValueNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,
@@ -5280,7 +5309,7 @@ int TableAccessPlan::calc_list_value_partition_ids(
 int TableAccessPlan::calc_gather_stat_partition_ids(
     ObExecContext &exec_ctx,
     ObDASTabletMapper &tablet_mapper,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObPLGatherStatNode *calc_node,
     ObIArray<ObTabletID> &tablet_ids,
     ObIArray<ObObjectID> &partition_ids,

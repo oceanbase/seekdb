@@ -94,7 +94,10 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
     int64_t var_idx = var_idx_datum->get_int();
     OZ (pl_context->get_subprogram_var_from_local(
     *session_info, package_id, subprogram_id, var_idx, res_var));
-    OZ(expr.get_datum_copy_plan().import_legacy(res_var.datum_, expr_datum));
+    alignas(8) char result_scratch[64];
+    ObDatum result_view;
+    OZ(res_var.export_legacy(result_view, result_scratch, sizeof(result_scratch)));
+    OZ(expr.get_datum_copy_plan().import_legacy(result_view, expr_datum));
     if (is_lob_storage(res_var.get_type())) {
       OZ (ob_adjust_lob_datum(ctx.exec_ctx_, expr_datum, res_var.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), expr_datum));

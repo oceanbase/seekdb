@@ -2614,6 +2614,9 @@ public:
   const common::SqlTypeMeta &get_value_meta() const { return value_meta_; }
   const common::Datum &get_bound_param_datum() const { return param_; }
   const common::SqlTypeMeta &get_bound_param_value_meta() const { return param_meta_; }
+  // Generic wrappers use their physical domain: Unknown is Reference8 here,
+  // while the Raw structural question index remains inline. References borrow
+  // the producer or caller scratch until an explicit retaining clone.
   int export_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
   int export_bound_param(common::DatumValue &output, void *scratch, int64_t capacity) const;
   // Question marks are structural inline I64, including the route-only invalid

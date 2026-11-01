@@ -303,7 +303,7 @@ int ObDynamicSampling::do_add_ds_stat_item(const ObDSTableParam &param,
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(print_filter_exprs(ctx_->get_session_info(),
                                             ctx_->get_sql_schema_guard()->get_schema_guard(),
-                                            ctx_->get_params(),
+                                            ctx_->get_parameter_context(),
                                             result_item.exprs_,
                                             true,
                                             filters_str))) {
@@ -440,7 +440,7 @@ int ObDynamicSampling::construct_ds_stat_key(const ObDSTableParam &param,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(print_filter_exprs(ctx_->get_session_info(),
                                         ctx_->get_sql_schema_guard()->get_schema_guard(),
-                                        allow_cache_ds_result_to_sql_ctx() ? ctx_->get_params() : NULL,
+                                        allow_cache_ds_result_to_sql_ctx() ? ctx_->get_parameter_context() : NULL,
                                         type == ObDSResultItemType::OB_DS_BASIC_STAT ? empty_exprs : filter_exprs,
                                         true,
                                         expr_str))) {
@@ -708,7 +708,7 @@ int ObDynamicSampling::add_partition_info(const ObIArray<PartInfo> &partition_in
 
 int ObDynamicSampling::print_filter_exprs(const ObSQLSessionInfo *session_info,
                                           ObSchemaGetterGuard *schema_guard,
-                                          const ParamStore *param_store,
+                                          const ObPhysicalPlanCtx *param_store,
                                           const ObIArray<ObRawExpr*> &filter_exprs,
                                           bool only_column_namespace,
                                           ObSqlString &expr_str)
@@ -729,7 +729,8 @@ int ObDynamicSampling::print_filter_exprs(const ObSQLSessionInfo *session_info,
                                       OB_MAX_DEFAULT_VALUE_LENGTH, &pos,
                                       schema_guard,
                                       TZ_INFO(session_info),
-                                      param_store);
+                                      nullptr);
+        expr_printer.bind_runtime_parameters(param_store);
         if (OB_FAIL(expr_printer.do_print(new_expr, T_WHERE_SCOPE, only_column_namespace))) {
         } else if (OB_FAIL(expr_str.append_fmt("%s%.*s", i == 0 ? " " : " and ",
                                                static_cast<int32_t>(pos), expr_str_buf))) {
@@ -1825,7 +1826,7 @@ bool ObDynamicSamplingUtils::is_valid_ds_col_type(const SqlValueType type)
 //     LOG_WARN("failed to append", K(ret));
 //   } else if (OB_FAIL(print_filter_exprs(ctx_->get_session_info(),
 //                                         ctx_->get_sql_schema_guard()->get_schema_guard(),
-//                                         ctx_->get_params(),
+//                                         ctx_->get_parameter_context(),
 //                                         all_filters,
 //                                         false,
 //                                         expr_str))) {

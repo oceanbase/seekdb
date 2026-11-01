@@ -68,7 +68,7 @@ DatumParameter live_array(ObIAllocator &owner)
   EXPECT_NE(nullptr, array); if (array == nullptr) { return value; }
   EXPECT_EQ(OB_SUCCESS, array->data_[0].set_int(918, owner));
   SqlTypeMeta meta; meta.set_ext(); meta.set_extend_type(T_EXT_SQL_ARRAY); value.set_type_meta(meta);
-  EXPECT_EQ(OB_SUCCESS, value.alloc_datum_reserved_buff(meta, -1, owner)); value.set_array_address(array);
+  EXPECT_EQ(OB_SUCCESS, value.set_array_address(array, owner));
   return value;
 }
 }
@@ -79,7 +79,7 @@ TEST(NativeRowChecksum, original_common_datum_frames_match_bytes_flags_and_crc)
   while (std::getline(input, line)) {
     if (line.compare(0, 2, "C\t") != 0) { continue; } const auto f = columns(line); SCOPED_TRACE(line);
     const auto bytes = unhex(f.at(2)); DatumValue value; int64_t pos = 0;
-    ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(bytes.data(), bytes.size(), pos, owner, value.datum_, value.meta_));
+    ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(), pos, owner, value.datum_, value.meta_));
     ASSERT_EQ(bytes.size(), pos); char scratch[DATUM_EXTEND_PAYLOAD_SIZE]; ObDatum row;
     const int ret = value.to_row_datum(row, scratch); ASSERT_EQ(std::stoi(f.at(3)), ret);
     if (ret == OB_SUCCESS) {
@@ -111,11 +111,11 @@ TEST(NativeRowChecksum, array_live_and_decoded_sizes_are_distinct_and_survive_cl
 {
   ObArenaAllocator source, decoded_owner, clone_owner; const DatumParameter live = live_array(source);
   ASSERT_FALSE(live.is_null()); EXPECT_EQ(0, live.get_val_len()); EXPECT_EQ(0, live.value_view().get_val_len()); check_ext(live.value_view(), "array");
-  int64_t size = 0; ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::value_size(live.datum_, live.get_meta(), size));
+  int64_t size = 0; ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::native_value_size(live.datum_, live.get_meta(), size));
   std::string wire(size, '\0'); int64_t pos = 0;
-  ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(live.datum_, live.get_meta(), &wire[0], wire.size(), pos));
-  DatumParameter decoded; SqlTypeMeta meta; pos = 0; ObDatum datum;
-  ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(wire.data(), wire.size(), pos, decoded_owner, datum, meta));
+  ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::encode_native_value(live.datum_, live.get_meta(), &wire[0], wire.size(), pos));
+  DatumParameter decoded; SqlTypeMeta meta; pos = 0; Datum datum;
+  ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(wire.data(), wire.size(), pos, decoded_owner, datum, meta));
   decoded.datum_ = datum; decoded.set_type_meta(meta); ASSERT_GT(decoded.get_val_len(), 0);
   EXPECT_EQ(decoded.get_array<DatumParameterArray>()->get_serialize_size(), decoded.get_val_len());
   check_ext(decoded.value_view(), "array");
@@ -131,7 +131,7 @@ TEST(NativeRowChecksum, typed_null_is_canonical_and_failed_conversion_preserves_
   ObArenaAllocator owner; DatumParameter typed_null; SqlTypeMeta type; type.set_enum(); typed_null.set_type_meta(type);
   ObDatum row; char scratch[DATUM_EXTEND_PAYLOAD_SIZE]; ASSERT_EQ(OB_SUCCESS, typed_null.value_view().to_row_datum(row, scratch));
   EXPECT_TRUE(row.is_null()); EXPECT_EQ(0, row.len_); EXPECT_EQ(ObDatumDesc::FlagType::NONE, row.flag_);
-  DatumValue bad; ASSERT_EQ(OB_SUCCESS, bad.set_int(1, owner)); bad.datum_.len_ = 1;
+  DatumValue bad; ASSERT_EQ(OB_SUCCESS, bad.set_int(1, owner)); const char byte = 1; ASSERT_EQ(OB_SUCCESS, bad.datum_.set_reference(&byte, 1));
   EXPECT_EQ(OB_INVALID_ARGUMENT, bad.to_row_datum(row, scratch)); EXPECT_TRUE(row.is_null());
 }
 

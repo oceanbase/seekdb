@@ -240,11 +240,9 @@ int ObVectorQueryVidIterator::get_next_row(ObVectorResultRow *&row, const sql::E
   } else if (cur_pos_ < total_) {
     row_->reset();
     obj_[0].meta_.set_float();
-    obj_[0].datum_.ptr_ = reinterpret_cast<const char *>(distance_ + cur_pos_);
-    obj_[0].datum_.pack_ = sizeof(float);
+    obj_[0].datum_.set_float(distance_[cur_pos_]);
     obj_[1].meta_.set_int();
-    obj_[1].datum_.ptr_ = reinterpret_cast<const char *>(vids_ + cur_pos_);
-    obj_[1].datum_.pack_ = sizeof(int64_t);
+    obj_[1].datum_.set_int(vids_[cur_pos_]);
     // set extra info if need
     if (!extra_info_ptr_.is_null()) {
       if (res_exprs.count() != rel_count_ + extra_column_count_ + 1) {
@@ -268,8 +266,9 @@ int ObVectorQueryVidIterator::get_next_row(ObVectorResultRow *&row, const sql::E
       }
       for (int i = 0; i < rel_count_ && OB_SUCC(ret); i++) {
         obj_[2 + extra_column_count_ + i].set_meta_type(res_exprs.at(i + extra_column_count_ + 1)->obj_meta_);
-        obj_[2 + extra_column_count_ + i].datum_.ptr_ = reinterpret_cast<const char *>(rel_ptr + i);
-        obj_[2 + extra_column_count_ + i].datum_.pack_ = sizeof(double);
+        ObDatum physical(reinterpret_cast<const char *>(rel_ptr + i), sizeof(double), false);
+        ret = obj_[2 + extra_column_count_ + i].assign_legacy_borrowed(
+            physical, res_exprs.at(i + extra_column_count_ + 1)->obj_meta_);
       }
     }
 
@@ -310,11 +309,9 @@ int ObVectorQueryVidIterator::get_next_rows(ObVectorResultRow *&row, int64_t &si
         int64_t index = 0;
         for (; index < batch_size_ && cur_pos_ < total_ && OB_SUCC(ret); ++index) {
           obj[index * one_size_obj_count].meta_.set_float();
-          obj[index * one_size_obj_count].datum_.ptr_ = reinterpret_cast<const char *>(distance_ + cur_pos_);
-          obj[index * one_size_obj_count].datum_.pack_ = sizeof(float);
+          obj[index * one_size_obj_count].datum_.set_float(distance_[cur_pos_]);
           obj[index * one_size_obj_count + 1].meta_.set_int();
-          obj[index * one_size_obj_count + 1].datum_.ptr_ = reinterpret_cast<const char *>(vids_ + cur_pos_);
-          obj[index * one_size_obj_count + 1].datum_.pack_ = sizeof(int64_t);
+          obj[index * one_size_obj_count + 1].datum_.set_int(vids_[cur_pos_]);
           // set extra info if need
           if (!extra_info_ptr_.is_null()) {
             if (res_exprs.count() != extra_column_count_ + 1) {
@@ -339,8 +336,7 @@ int ObVectorQueryVidIterator::get_next_rows(ObVectorResultRow *&row, int64_t &si
             }
             for (int i = 0; i < rel_count_ && OB_SUCC(ret); i++) {
               obj[index * one_size_obj_count + 2 + extra_column_count_ + i].set_meta_type(res_exprs.at(i + extra_column_count_ + 1)->obj_meta_);
-              obj[index * one_size_obj_count + 2 + extra_column_count_ + i].datum_.ptr_ = reinterpret_cast<const char *>(rel_ptr + i);
-              obj[index * one_size_obj_count + 2 + extra_column_count_ + i].datum_.pack_ = sizeof(double);
+              obj[index * one_size_obj_count + 2 + extra_column_count_ + i].datum_.set_double(rel_ptr[i]);
             }
           }
           for (int64_t i = 0; i < one_size_obj_count && OB_SUCC(ret); ++i) {

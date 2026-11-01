@@ -31,16 +31,17 @@ std::vector<std::string> old_fields(char kind)
 std::string value_wire(const DatumValue &value)
 {
   char data[128]; int64_t pos = 0;
-  if (DatumParameterCodec::encode_value(value.datum_, value.meta_, data, sizeof(data), pos) != OB_SUCCESS) { return "encode error"; }
+  if (DatumParameterCodec::encode_native_value(value.datum_, value.meta_, data, sizeof(data), pos) != OB_SUCCESS) { return "encode error"; }
   const char *hex = "0123456789abcdef"; std::string result;
   for (int64_t i = 0; i < pos; ++i) { unsigned char byte = data[i]; result += hex[byte >> 4]; result += hex[byte & 15]; }
   return result;
 }
 class ToggleAllocator final : public ObIAllocator {
 public:
-  ToggleAllocator() : fail_(false), live_() {}
+  ToggleAllocator() : fail_(false), calls_(0), live_() {}
   ~ToggleAllocator() { for (void *p : live_) { std::free(p); } }
   void *alloc(int64_t size) override {
+    ++calls_;
     if (fail_) { return nullptr; }
     void *p = std::malloc(size); if (p != nullptr) { live_.insert(p); } return p;
   }
@@ -48,7 +49,7 @@ public:
   void free(void *p) override {
     if (p != nullptr && live_.erase(p) != 0) { std::free(p); }
   }
-  bool fail_; std::set<void *> live_;
+  bool fail_; int64_t calls_; std::set<void *> live_;
 };
 static_assert(std::is_same<PL_C_INTERFACE_t,
     int(*)(ObPLExecCtx &, ParamStore &, DatumValue &)>::value,
@@ -71,7 +72,7 @@ TEST(NativeBuiltinResults, registry_dispatch_preserves_int32_type_and_owned_resu
   ASSERT_EQ(OB_SUCCESS, callback(pl_context, params, result));
   EXPECT_EQ(ObInt32Type, result.get_type());
   EXPECT_EQ(42, result.get_int());
-  EXPECT_EQ(sizeof(int64_t), result.datum_.len_);
+  EXPECT_EQ(0, result.datum_.length()); // I64 is inline, including the Int32 SQL kind.
   const auto old = old_fields('R'); ASSERT_EQ(6, old.size());
   EXPECT_EQ(std::stoi(old[3]), int(result.get_type()));
   EXPECT_EQ(std::stoll(old[4]), result.get_int());
@@ -84,12 +85,21 @@ TEST(NativeBuiltinResults, callback_oom_does_not_publish_a_partial_result)
   ParamStore params;
   DatumValue result;
   ASSERT_EQ(OB_SUCCESS, result.set_int(37, owner));
-  const char *previous = result.datum_.ptr_;
   owner.fail_ = true;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObPLInterfaceImpl::call(context, params, result));
-  EXPECT_EQ(ObIntType, result.get_type());
-  EXPECT_EQ(previous, result.datum_.ptr_);
-  EXPECT_EQ(37, result.get_int());
+  const int64_t calls = owner.calls_;
+  // The actual callback returns an inline Int32; an exhausted payload owner
+  // must no longer make this scalar result fail.
+  ASSERT_EQ(OB_SUCCESS, ObPLInterfaceImpl::call(context, params, result));
+  EXPECT_EQ(calls, owner.calls_);
+  EXPECT_EQ(ObInt32Type, result.get_type());
+  EXPECT_EQ(42, result.get_int());
+  EXPECT_EQ(0, result.datum_.length());
+  const std::string previous = value_wire(result);
+  // Keep failure/publication coverage on a value which really needs storage.
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,
+      result.set_varchar(ObString::make_string("owned callback result"), owner));
+  EXPECT_EQ(previous, value_wire(result));
+  EXPECT_EQ(42, result.get_int());
 }
 TEST(NativeBuiltinResults, unsupported_procedure_keeps_no_return_distinct_from_sql_null)
 {

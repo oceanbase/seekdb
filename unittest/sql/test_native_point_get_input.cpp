@@ -71,12 +71,12 @@ void assert_same_key(const NativePointGetInput &owner, const int64_t (&expected)
     EXPECT_EQ(expected[i], owner.values()[i]);
     EXPECT_EQ(expected[i], key.datums_[i].get_int());
     EXPECT_EQ(expected[i], key.cached_rowkey_->get_cell(i).get_int());
-    EXPECT_EQ(key.datums_[i].ptr_, key.cached_rowkey_->get_cell(i).datum_.ptr_);
+    EXPECT_EQ(0, key.cached_rowkey_->get_cell(i).get_datum().length());
     EXPECT_EQ(ObIntType, key.cached_rowkey_->get_cell(i).get_type());
     ObDatum legacy;
     legacy.ptr_ = reinterpret_cast<const char *>(&expected[i]);
     legacy.pack_ = sizeof(int64_t);
-    baseline[i] = DatumValue(legacy, meta);
+    ASSERT_EQ(OB_SUCCESS, baseline[i].assign_legacy_borrowed(legacy, meta));
   }
   const ObRowkey reference(baseline, 3);
   EXPECT_EQ(0, key.cached_rowkey_->get_rowkey().compare(reference));
@@ -127,7 +127,7 @@ TEST(NativePointGetInput, concurrent_owners_share_only_immutable_layout_and_keep
           const auto &legacy = key.cached_rowkey_->get_cell(i);
           if (owner.values()[i] != expected[i] || key.datums_[i].get_int() != expected[i]
               || legacy.get_int() != expected[i] || legacy.get_type() != ObIntType
-              || legacy.datum_.ptr_ != key.datums_[i].ptr_
+              || legacy.get_datum().length() != 0
               || key.datums_[i].ptr_ != reinterpret_cast<const char *>(owner.values() + i)) {
             correct.store(false, std::memory_order_relaxed);
           }

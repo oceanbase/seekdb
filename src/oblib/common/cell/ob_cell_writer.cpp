@@ -523,11 +523,15 @@ int ObCellWriter::append(uint64_t column_id, const DatumValue &obj, DatumValue *
       }
     }
     if (OB_SUCC(ret)) {
-      // Scalar clone bytes belong to an explicit caller-provided fixed slot.
-      // Larger strings/numbers borrow the newly written compact buffer.
-      if (clone_obj != nullptr && !clone_obj->is_null() && clone_obj->datum_.len_ <= 16) {
-        if (clone_obj->datum_.len_ > 0) { MEMMOVE(clone_scalar, clone_obj->datum_.ptr_, clone_obj->datum_.len_); }
-        clone_obj->datum_.ptr_ = clone_scalar;
+      // Only short references use the caller's fixed slot. Scalars are already
+      // inline; larger strings/numbers borrow the newly written compact buffer.
+      if (clone_obj != nullptr && NativeValueFlat::uses_reference(*clone_obj)
+          && clone_obj->datum_.length() <= 16) {
+        const uint32_t length = clone_obj->datum_.length();
+        const uint16_t flags = clone_obj->datum_.reference_flags();
+        if (length > 0) { MEMMOVE(clone_scalar, clone_obj->datum_.get_reference(), length); }
+        const int clone_ret = clone_obj->datum_.set_reference(clone_scalar, length, flags);
+        OB_ASSERT(clone_ret == OB_SUCCESS);
       }
       ++cell_cnt_;
       //Save the last_append_pos site for easy column append retry

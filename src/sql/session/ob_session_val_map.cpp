@@ -44,7 +44,7 @@ int ObSessionVariable::serialize(char *buf, int64_t buf_len, int64_t &pos) const
 {
   int ret = serialization::encode(buf, buf_len, pos, meta_);
   if (OB_SUCC(ret)) {
-    ret = DatumParameterCodec::encode_value(value_.datum_, value_.meta_, buf, buf_len, pos);
+    ret = DatumParameterCodec::encode_native_value(value_.datum_, value_.meta_, buf, buf_len, pos);
   }
   return ret;
 }
@@ -60,7 +60,7 @@ int ObSessionVariable::deserialize(const char *buf, int64_t data_len, int64_t &p
     ret = serialization::decode(buf, data_len, decoded_pos, candidate.meta_);
   }
   if (OB_SUCC(ret) && decoded_pos < data_len) {
-    ret = DatumParameterCodec::decode_unis_value(buf, data_len, decoded_pos, owner,
+    ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, decoded_pos, owner,
                                                 candidate.value_.datum_, candidate.value_.meta_);
   }
   if (OB_SUCC(ret)) { *this = candidate; pos = decoded_pos; }
@@ -70,7 +70,7 @@ int ObSessionVariable::deserialize(const char *buf, int64_t data_len, int64_t &p
 int64_t ObSessionVariable::get_serialize_size() const
 {
   int64_t value_size = 0;
-  const int ret = DatumParameterCodec::value_size(value_.datum_, value_.meta_, value_size);
+  const int ret = DatumParameterCodec::native_value_size(value_.datum_, value_.meta_, value_size);
   if (ret != OB_SUCCESS) {
     LOG_ERROR("invalid native session variable value", K(ret), K(value_));
     return 0;

@@ -95,7 +95,10 @@ bool JoinedTable::same_as(const JoinedTable &other) const
 int ColumnItem::set_default_value(const DatumValue &val, ObIAllocator *owner)
 {
   Datum native;
-  const int ret = DatumParameterCodec::borrow_schema_native_value(val.datum_, val.meta_, native);
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  int ret = val.export_legacy(physical, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) { ret = DatumParameterCodec::borrow_schema_native_value(physical, val.meta_, native); }
   return ret == OB_SUCCESS ? set_default_native_value(native, val.meta_, owner) : ret;
 }
 
@@ -133,9 +136,9 @@ int ColumnItem::set_default_native_value(const Datum &val, const SqlTypeMeta &me
 int ColumnItem::export_default_value(DatumValue &output, void *scratch, int64_t capacity) const
 {
   ObDatum view;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
+  int ret = DatumParameterCodec::export_schema_legacy_value(
       default_value_, default_meta_, view, scratch, capacity);
-  if (ret == OB_SUCCESS) { output = DatumValue(view, default_meta_); }
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(view, default_meta_); }
   return ret;
 }
 

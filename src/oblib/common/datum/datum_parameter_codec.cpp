@@ -222,6 +222,7 @@ struct ReadArchive
 template <typename Archive>
 using ParameterView = std::conditional_t<Archive::reading, DatumParameter, const DatumParameter>;
 template <typename Archive> void parameter(ParameterView<Archive> &, Archive &, int);
+void read_schema_native(Datum &, SqlTypeMeta &, ReadArchive &, int depth);
 
 template <typename Archive>
 void array_body(const DatumParameterArray &array, Archive &archive, int depth)
@@ -465,9 +466,17 @@ void value(ObDatum &datum, SqlTypeMeta &meta, Archive &archive, int depth,
 template <typename Archive>
 void parameter(ParameterView<Archive> &parameter_value, Archive &archive, int depth)
 {
-  ObDatum datum(parameter_value.datum_);
+  Datum datum(parameter_value.datum_);
   SqlTypeMeta meta(parameter_value.get_type_meta());
-  value(datum, meta, archive, depth);
+  if constexpr (Archive::reading) {
+    read_schema_native(datum, meta, archive, depth);
+  } else {
+    alignas(8) char scratch[64];
+    ObDatum legacy;
+    archive.ret_ = meta.is_invalid() ? OB_ERR_UNEXPECTED
+        : DatumParameterCodec::export_native_value(datum, meta, legacy, scratch, sizeof(scratch));
+    if (archive.ret_ == OB_SUCCESS) { value(legacy, meta, archive, depth); }
+  }
   ObAccuracy accuracy(parameter_value.get_accuracy());
   uint32_t flags = parameter_value.get_result_flag();
   archive.field(accuracy); archive.field(flags);
@@ -506,6 +515,33 @@ template <typename T> T schema_load(const void *bytes)
   T result;
   MEMCPY(&result, bytes, sizeof(result));
   return result;
+}
+
+// Generic wrappers preserve their historical reference byte domain. Unlike
+// schema clone, this does not reinterpret a Decimal coefficient using precision
+// or restrict a wire-accepted span to arithmetic's supported coefficient widths.
+// Only scalar loads and address/extended access require an exact safe shape.
+bool valid_generic_legacy(const ObDatum &datum, const SqlTypeMeta &meta)
+{
+  if (meta.get_type() < ObNullType || meta.get_type() >= ObMaxType) { return false; }
+  if (datum.is_null() || meta.is_null()) { return true; }
+  if (datum.len_ > 0 && datum.ptr_ == nullptr) { return false; }
+  switch (schema_scalar(meta)) {
+    case SchemaScalar::Signed:
+      return datum.ptr_ != nullptr && datum.len_ == (meta.get_type() == ObDateType
+          || meta.get_type() == ObMySQLDateType ? sizeof(int32_t) : sizeof(int64_t));
+    case SchemaScalar::Unsigned:
+      return datum.ptr_ != nullptr && datum.len_ == (meta.get_type() == ObYearType
+          ? sizeof(uint8_t) : sizeof(uint64_t));
+    case SchemaScalar::Float: return datum.ptr_ != nullptr && datum.len_ == sizeof(float);
+    case SchemaScalar::Double: return datum.ptr_ != nullptr && datum.len_ == sizeof(double);
+    case SchemaScalar::Reference:
+      if (meta.is_unknown() || meta.is_ext_sql_array()) {
+        return datum.ptr_ != nullptr && datum.len_ == sizeof(int64_t);
+      }
+      return !meta.is_ext() || datum.has_ext_value();
+  }
+  return false;
 }
 
 // Match the former schema clone's physical validation. Owning these bytes does
@@ -601,8 +637,11 @@ void read_schema_scalar(Datum &datum, ReadArchive &archive)
   if (archive.ret_ == OB_SUCCESS) { (datum.*Setter)(scalar); }
 }
 
-void read_schema_native(Datum &datum, SqlTypeMeta &meta, ReadArchive &archive)
+void read_schema_native(Datum &datum, SqlTypeMeta &meta, ReadArchive &archive, int depth)
 {
+  if (archive.ret_ != OB_SUCCESS) { return; }
+  if (depth > MAX_ARRAY_DEPTH) { archive.ret_ = OB_SIZE_OVERFLOW; return; }
+  if (!archive.allow_omitted_fields_) { archive.require(4); }
   archive.field(meta);
   if (archive.ret_ != OB_SUCCESS) { return; }
   if (meta.is_invalid()) { archive.ret_ = OB_ERR_UNEXPECTED; return; }
@@ -633,7 +672,7 @@ void read_schema_native(Datum &datum, SqlTypeMeta &meta, ReadArchive &archive)
     default: {
       ObDatum owned;
       owned.set_null();
-      value(owned, meta, archive, 0, false /* include_metadata */);
+      value(owned, meta, archive, depth, false /* include_metadata */);
       if (archive.ret_ == OB_SUCCESS) { archive.ret_ = borrow_schema_native(owned, meta, datum); }
       // Normalizing an Extend wrapper to a bare MIN/MAX/NOP state leaves no
       // reference in the native value. An explicit-free owner must not lose
@@ -840,7 +879,7 @@ int DatumParameterCodec::decode_unis_value(const char *buf, int64_t length, int6
     ObIAllocator &allocator, ObDatum &datum, SqlTypeMeta &meta)
 { return decode_metadata_value(buf, length, pos, allocator, datum, meta, true, true); }
 
-int DatumParameterCodec::export_schema_legacy_value(const Datum &source, const SqlTypeMeta &meta,
+int DatumParameterCodec::export_native_value(const Datum &source, const SqlTypeMeta &meta,
     ObDatum &output, void *scratch, int64_t capacity)
 {
   int ret = OB_SUCCESS;
@@ -901,34 +940,215 @@ int DatumParameterCodec::export_schema_legacy_value(const Datum &source, const S
   return ret;
 }
 
-int DatumParameterCodec::clone_schema_native_value(const Datum &source, const SqlTypeMeta &meta,
-    ObIAllocator &allocator, Datum &output)
+int DatumParameterCodec::export_schema_legacy_value(const Datum &source, const SqlTypeMeta &meta,
+    ObDatum &output, void *scratch, int64_t capacity)
+{
+  return export_native_value(source, meta, output, scratch, capacity);
+}
+
+namespace
+{
+void release_native_array(DatumParameterArray *array, ObIAllocator &allocator)
+{
+  if (array != nullptr) {
+    for (int64_t i = 0; i < array->count_; ++i) {
+      DatumParameterCodec::release_owned_schema_native_value(
+          array->data_[i].datum_, array->data_[i].get_type_meta(), allocator);
+      array->data_[i].~DatumParameter();
+    }
+    array->~DatumParameterArray();
+    allocator.free(array);
+  }
+}
+
+int clone_schema_graph(const Datum &source, const SqlTypeMeta &meta,
+                       ObIAllocator &allocator, Datum &output, int depth)
 {
   int ret = OB_SUCCESS;
   alignas(8) char scratch[64];
   ObDatum view;
   Datum candidate;
-  if (OB_FAIL(export_schema_legacy_value(source, meta, view, scratch, sizeof(scratch)))) {
-  } else if (!valid_schema_legacy(view, meta)) {
+  if (depth > MAX_ARRAY_DEPTH) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (OB_FAIL(DatumParameterCodec::export_native_value(source, meta, view, scratch, sizeof(scratch)))) {
+  } else if (!(depth == 0 ? valid_schema_legacy(view, meta) : valid_generic_legacy(view, meta))) {
+    // The outer schema domain validates its own shape. Historical array leaves
+    // used Parameter's physical span clone, not schema precision/width checks.
     ret = OB_INVALID_ARGUMENT;
   } else if (source.is_null() || !source.is_present() || schema_scalar(meta) != SchemaScalar::Reference) {
     candidate = source;
   } else if (meta.is_ext_sql_array()) {
-    DatumParameter input, owned;
-    input.set_type_meta(meta);
-    input.set_datum(view);
-    if (OB_FAIL(DatumParameterArray::clone_parameter(input, owned, allocator))) {
-    } else { ret = borrow_schema_native(owned.datum_, meta, candidate); }
+    const auto *array = reinterpret_cast<const DatumParameterArray *>(view.get_int());
+    DatumParameterArray *owned = nullptr;
+    if (array == nullptr || array->count_ < 0 || (array->count_ > 0 && array->data_ == nullptr)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if ((owned = DatumParameterArray::alloc(allocator, array->count_)) == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      owned->element_ = array->element_;
+      owned->source_value_size_ = array->source_value_size_;
+      // This explicit-free physical clone deliberately leaves runtime leaf
+      // Types unbound. Typed retaining uses clone_native_parameter_value with
+      // its separate bulk-owner contract; no Type tree leaks into this codec.
+      for (int64_t i = 0; ret == OB_SUCCESS && i < array->count_; ++i) {
+        Datum leaf;
+        const DatumParameter &input = array->data_[i];
+        if (OB_FAIL(clone_schema_graph(input.datum_, input.get_type_meta(), allocator, leaf, depth + 1))) {
+        } else {
+          owned->data_[i] = input;
+          owned->data_[i].set_datum(leaf);
+        }
+      }
+      if (ret == OB_SUCCESS) {
+        void *bytes = allocator.alloc(sizeof(int64_t));
+        if (bytes == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else {
+          const int64_t address = reinterpret_cast<int64_t>(owned);
+          MEMCPY(bytes, &address, sizeof(address));
+          ret = candidate.set_reference(bytes, sizeof(address), source.reference_flags());
+          if (ret != OB_SUCCESS) { allocator.free(bytes); }
+        }
+      }
+      if (ret != OB_SUCCESS) { release_native_array(owned, allocator); }
+    }
   } else {
-    void *bytes = allocator.alloc(std::max<int64_t>(source.length(), 1));
-    if (bytes == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    ret = DatumParameterCodec::copy_native_value_span(source, meta, allocator, candidate);
+  }
+  if (ret == OB_SUCCESS) { output = candidate; }
+  return ret;
+}
+} // anonymous namespace
+
+int DatumParameterCodec::borrow_native_value(const ObDatum &source, const SqlTypeMeta &meta,
+                                             Datum &output)
+{
+  return valid_generic_legacy(source, meta) ? borrow_schema_native(source, meta, output)
+                                           : OB_INVALID_ARGUMENT;
+}
+
+int DatumParameterCodec::native_span_size(const Datum &source, const SqlTypeMeta &meta,
+                                         int64_t &output)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  int ret = export_native_value(source, meta, view, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS && !valid_generic_legacy(view, meta)) { ret = OB_INVALID_ARGUMENT; }
+  if (ret == OB_SUCCESS) {
+    output = source.is_present() && schema_scalar(meta) == SchemaScalar::Reference
+        ? source.length() : 0;
+  }
+  return ret;
+}
+
+int DatumParameterCodec::copy_native_span(const Datum &source, const SqlTypeMeta &meta,
+    char *buffer, int64_t length, int64_t &pos, Datum &output)
+{
+  if (length < 0 || pos < 0 || pos > length) { return OB_INVALID_ARGUMENT; }
+  int64_t bytes = 0;
+  int ret = native_span_size(source, meta, bytes);
+  Datum candidate = source;
+  if (ret == OB_SUCCESS && bytes > length - pos) { ret = OB_BUF_NOT_ENOUGH; }
+  if (ret == OB_SUCCESS && source.is_present() && schema_scalar(meta) == SchemaScalar::Reference) {
+    if (bytes > 0 && buffer == nullptr) { ret = OB_INVALID_ARGUMENT; }
     else {
-      if (source.length() > 0) { MEMCPY(bytes, source.get_reference(), source.length()); }
-      ret = candidate.set_reference(bytes, source.length(), source.reference_flags());
+      char *destination = buffer == nullptr ? nullptr : buffer + pos;
+      if (bytes > 0) { MEMMOVE(destination, source.get_reference(), bytes); }
+      ret = candidate.set_reference(destination, source.length(), source.reference_flags());
+    }
+  }
+  if (ret == OB_SUCCESS) { output = candidate; pos += bytes; }
+  return ret;
+}
+
+int DatumParameterCodec::copy_native_value_span(const Datum &source, const SqlTypeMeta &meta,
+                                               ObIAllocator &allocator, Datum &output)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  Datum candidate;
+  int ret = export_native_value(source, meta, view, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS && !valid_generic_legacy(view, meta)) { ret = OB_INVALID_ARGUMENT; }
+  if (ret == OB_SUCCESS) {
+    if (!source.is_present() || schema_scalar(meta) != SchemaScalar::Reference) {
+      candidate = source;
+    } else {
+      void *bytes = allocator.alloc(std::max<int64_t>(source.length(), 1));
+      if (bytes == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else {
+        if (source.length() > 0) { MEMCPY(bytes, source.get_reference(), source.length()); }
+        ret = candidate.set_reference(bytes, source.length(), source.reference_flags());
+        if (ret != OB_SUCCESS) { allocator.free(bytes); }
+      }
     }
   }
   if (ret == OB_SUCCESS) { output = candidate; }
   return ret;
+}
+
+int DatumParameterCodec::import_native_value(const ObDatum &source, const SqlTypeMeta &meta,
+                                             ObIAllocator &allocator, Datum &output)
+{
+  Datum borrowed;
+  int ret = borrow_native_value(source, meta, borrowed);
+  if (ret == OB_SUCCESS) { ret = copy_native_value_span(borrowed, meta, allocator, output); }
+  return ret;
+}
+
+int DatumParameterCodec::copy_legacy_value(const Datum &source, const SqlTypeMeta &meta,
+                                          ObIAllocator &allocator, ObDatum &output)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  int ret = export_native_value(source, meta, view, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS && !valid_generic_legacy(view, meta)) { ret = OB_INVALID_ARGUMENT; }
+  if (ret == OB_SUCCESS && !view.is_null()) {
+    char *bytes = static_cast<char *>(allocator.alloc(std::max<int64_t>(view.len_, 1)));
+    if (bytes == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else {
+      if (view.len_ > 0) { MEMCPY(bytes, view.ptr_, view.len_); }
+      view.ptr_ = bytes;
+    }
+  }
+  if (ret == OB_SUCCESS) { output = view; }
+  return ret;
+}
+
+int DatumParameterCodec::native_value_size(const Datum &source, const SqlTypeMeta &meta, int64_t &size)
+{
+  if (meta.is_invalid()) { return OB_ERR_UNEXPECTED; }
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const int ret = export_native_value(source, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? value_size(view, meta, size) : ret;
+}
+
+int DatumParameterCodec::encode_native_value(const Datum &source, const SqlTypeMeta &meta,
+                                             char *buf, int64_t length, int64_t &pos)
+{
+  if (!valid_buffer(buf, length, pos)) { return OB_INVALID_ARGUMENT; }
+  if (meta.is_invalid()) { return OB_ERR_UNEXPECTED; }
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const int ret = export_native_value(source, meta, view, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS ? encode_value(view, meta, buf, length, pos) : ret;
+}
+
+int DatumParameterCodec::decode_native_value(const char *buf, int64_t length, int64_t &pos,
+    ObIAllocator &allocator, Datum &output, SqlTypeMeta &meta)
+{
+  if (!valid_buffer(buf, length, pos)) { return OB_INVALID_ARGUMENT; }
+  Datum candidate;
+  SqlTypeMeta type;
+  ReadArchive archive(buf, length, pos, allocator);
+  read_schema_native(candidate, type, archive, 0);
+  if (archive.ret_ == OB_SUCCESS) { output = candidate; meta = type; pos = archive.pos_; }
+  return archive.ret_;
+}
+
+int DatumParameterCodec::clone_schema_native_value(const Datum &source, const SqlTypeMeta &meta,
+    ObIAllocator &allocator, Datum &output)
+{
+  return clone_schema_graph(source, meta, allocator, output, 0);
 }
 
 int DatumParameterCodec::borrow_schema_native_value(const ObDatum &source, const SqlTypeMeta &meta,
@@ -958,7 +1178,7 @@ void DatumParameterCodec::release_owned_schema_native_value(Datum &value, const 
       if (meta.is_ext_sql_array()) {
         int64_t address = 0;
         MEMCPY(&address, bytes, sizeof(address));
-        DatumParameterArray::release_array(reinterpret_cast<DatumParameterArray *>(address), allocator);
+        release_native_array(reinterpret_cast<DatumParameterArray *>(address), allocator);
       }
       // Even a zero-length reference owns its allocation. PL and LOB wrappers
       // keep their existing byte ownership; their external pointees are not ours.
@@ -993,7 +1213,7 @@ int DatumParameterCodec::decode_schema_native_value(const char *buf, int64_t len
   Datum candidate;
   SqlTypeMeta type;
   ReadArchive archive(buf, length, pos, allocator, true /* allow_omitted_fields */);
-  read_schema_native(candidate, type, archive);
+  read_schema_native(candidate, type, archive, 0);
   if (archive.ret_ == OB_SUCCESS) { output = candidate; meta = type; pos = archive.pos_; }
   return archive.ret_;
 }
@@ -1006,7 +1226,7 @@ int DatumParameterCodec::decode_unis_native_value(const char *buf, int64_t lengt
   SqlTypeMeta type = meta;
   ReadArchive archive(buf, length, pos, allocator, true /* allow_omitted_fields */,
                       true /* allow_missing_string_terminator */);
-  read_schema_native(candidate, type, archive);
+  read_schema_native(candidate, type, archive, 0);
   if (archive.ret_ == OB_SUCCESS) { output = candidate; meta = type; pos = archive.pos_; }
   return archive.ret_;
 }
@@ -1093,11 +1313,179 @@ int DatumParameterCodec::decode_parameter(const char *buf, int64_t length, int64
   return archive.ret_;
 }
 
-int32_t datum_array_source_value_size(const ObDatum &address)
+int DatumValue::assign_native_borrowed(const Datum &source, const SqlTypeMeta &meta)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  int ret = DatumParameterCodec::export_native_value(source, meta, view, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS && !valid_generic_legacy(view, meta)) { ret = OB_INVALID_ARGUMENT; }
+  if (ret == OB_SUCCESS) { datum_ = source; meta_ = meta; }
+  return ret;
+}
+
+int DatumValue::assign_native_owned(const Datum &source, const SqlTypeMeta &meta, ObIAllocator &owner)
+{
+  Datum copy;
+  const int ret = DatumParameterCodec::copy_native_value_span(source, meta, owner, copy);
+  if (ret == OB_SUCCESS) { datum_ = copy; meta_ = meta; }
+  return ret;
+}
+
+int DatumValue::assign_legacy_borrowed(const ObDatum &source, const SqlTypeMeta &meta)
+{
+  Datum borrowed;
+  const int ret = DatumParameterCodec::borrow_native_value(source, meta, borrowed);
+  if (ret == OB_SUCCESS) { datum_ = borrowed; meta_ = meta; }
+  return ret;
+}
+
+int DatumValue::assign_legacy_owned(const ObDatum &source, const SqlTypeMeta &meta, ObIAllocator &owner)
+{
+  Datum copy;
+  const int ret = DatumParameterCodec::import_native_value(source, meta, owner, copy);
+  if (ret == OB_SUCCESS) { datum_ = copy; meta_ = meta; }
+  return ret;
+}
+
+int DatumValue::export_legacy(ObDatum &output, void *scratch, int64_t capacity) const
+{ return DatumParameterCodec::export_native_value(datum_, meta_, output, scratch, capacity); }
+
+int DatumValue::copy_legacy(ObDatum &output, ObIAllocator &owner) const
+{ return DatumParameterCodec::copy_legacy_value(datum_, meta_, owner, output); }
+
+int DatumValue::deep_copy(const DatumValue &source, ObIAllocator &owner)
+{ return assign_native_owned(source.datum_, source.meta_, owner); }
+
+int DatumValue::assign_reference_bytes(const void *bytes, int64_t length, uint16_t flags,
+                                      const SqlTypeMeta &meta, ObIAllocator &owner)
+{
+  if (length < 0 || length > datum_length_limit() || (length > 0 && bytes == nullptr)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  void *copy = owner.alloc(std::max<int64_t>(length, 1));
+  if (copy == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+  if (length > 0) { MEMCPY(copy, bytes, length); }
+  Datum candidate;
+  const int ret = candidate.set_reference(copy, length, flags);
+  if (ret != OB_SUCCESS) { owner.free(copy); }
+  else { datum_ = candidate; meta_ = meta; }
+  return ret;
+}
+
+int DatumValue::set_extend(int64_t value, uint8_t subtype, ObIAllocator &owner, int32_t size)
+{
+  SqlTypeMeta meta = meta_; meta.set_ext(); meta.set_extend_type(subtype);
+  alignas(8) char bytes[DATUM_EXTEND_PAYLOAD_SIZE];
+  ObDatum source;
+  if (meta.is_ext_sql_array()) {
+    MEMCPY(bytes, &value, sizeof(value));
+    source.set_string(bytes, sizeof(value));
+  } else {
+    source.ptr_ = bytes;
+    source.set_extend(value, subtype, size);
+  }
+  return assign_legacy_owned(source, meta, owner);
+}
+
+int64_t DatumValue::get_data_length() const
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const int ret = export_legacy(view, scratch, sizeof(scratch));
+  OB_ASSERT(ret == OB_SUCCESS);
+  return view.len_;
+}
+
+int DatumValue::to_row_datum(ObDatum &output,
+                            char (&legacy_payload)[DATUM_EXTEND_PAYLOAD_SIZE]) const
+{
+  int ret = OB_SUCCESS;
+  ObDatum candidate;
+  if (!meta_.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (is_null() || meta_.is_null()) {
+    candidate.set_null();
+  } else if (OB_FAIL(export_legacy(candidate, legacy_payload, sizeof(legacy_payload)))) {
+  } else if (is_ext()) {
+    if ((is_ext_sql_array() && (candidate.ptr_ == nullptr || candidate.len_ != sizeof(int64_t)))
+        || (!is_ext_sql_array() && !candidate.has_ext_value())) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      candidate.ptr_ = legacy_payload;
+      candidate.set_extend(get_ext(), meta_.get_extend_type(), get_val_len(),
+                           meta_.get_cs_level(), meta_.get_cs_type());
+    }
+  } else {
+    const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(get_type());
+    const bool fixed = mapping == OBJ_DATUM_8BYTE_DATA
+        || mapping == OBJ_DATUM_4BYTE_DATA || mapping == OBJ_DATUM_1BYTE_DATA;
+    if ((candidate.len_ > 0 && candidate.ptr_ == nullptr)
+        || (fixed && candidate.len_ != ObDatum::get_reserved_size(mapping))
+        || (mapping == OBJ_DATUM_NUMBER && (candidate.ptr_ == nullptr
+            || candidate.len_ < sizeof(number::ObNumber::Desc)
+            || candidate.len_ != sizeof(number::ObNumber::Desc)
+                + sizeof(uint32_t) * candidate.get_number_desc().len_))) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      candidate.pack_ = candidate.len_;
+      if (mapping == OBJ_DATUM_STRING && meta_.is_outrow()) { candidate.set_outrow(); }
+    }
+  }
+  if (ret == OB_SUCCESS) { output = candidate; }
+  return ret;
+}
+
+int DatumParameter::assign_native_borrowed(const Datum &source, const SqlTypeMeta &meta)
+{
+  DatumValue candidate;
+  const int ret = candidate.assign_native_borrowed(source, meta);
+  if (ret == OB_SUCCESS) { assign_value(candidate); }
+  return ret;
+}
+
+int DatumParameter::assign_native_owned(const Datum &source, const SqlTypeMeta &meta, ObIAllocator &owner)
+{
+  Datum copy;
+  const int ret = DatumParameterCodec::copy_native_value_span(source, meta, owner, copy);
+  if (ret == OB_SUCCESS) { datum_ = copy; metadata_.type_meta_ = meta; }
+  return ret;
+}
+
+int DatumParameter::assign_legacy_borrowed(const ObDatum &source, const SqlTypeMeta &meta)
+{
+  Datum borrowed;
+  const int ret = DatumParameterCodec::borrow_native_value(source, meta, borrowed);
+  if (ret == OB_SUCCESS) { datum_ = borrowed; metadata_.type_meta_ = meta; }
+  return ret;
+}
+
+int DatumParameter::assign_legacy_owned(const ObDatum &source, const SqlTypeMeta &meta, ObIAllocator &owner)
+{
+  Datum copy;
+  const int ret = DatumParameterCodec::import_native_value(source, meta, owner, copy);
+  if (ret == OB_SUCCESS) { datum_ = copy; metadata_.type_meta_ = meta; }
+  return ret;
+}
+
+int DatumParameter::export_legacy(ObDatum &output, void *scratch, int64_t capacity) const
+{ return DatumParameterCodec::export_native_value(datum_, metadata_.type_meta_, output, scratch, capacity); }
+
+int DatumParameter::copy_legacy(ObDatum &output, ObIAllocator &owner) const
+{ return DatumParameterCodec::copy_legacy_value(datum_, metadata_.type_meta_, owner, output); }
+
+int DatumParameter::deep_copy(const DatumParameter &source, ObIAllocator &owner)
+{
+  Datum copy;
+  const int ret = DatumParameterCodec::copy_native_value_span(source.datum_, source.get_type_meta(), owner, copy);
+  if (ret == OB_SUCCESS) { *this = source; datum_ = copy; }
+  return ret;
+}
+
+int32_t datum_array_source_value_size(const Datum &address)
 {
   int32_t size = 0;
-  if (!address.is_null() && address.ptr_ != nullptr && address.len_ == sizeof(int64_t)) {
-    const auto *array = reinterpret_cast<const DatumParameterArray *>(address.get_int());
+  if (address.is_present() && address.get_reference() != nullptr && address.length() == sizeof(int64_t)) {
+    const auto *array = reinterpret_cast<const DatumParameterArray *>(address.get_unknown());
     if (array != nullptr) { size = array->source_value_size_; }
   }
   return size;
@@ -1106,8 +1494,8 @@ int32_t datum_array_source_value_size(const ObDatum &address)
 int DatumParameter::get_string(ObString &out) const
 {
   int ret = OB_OBJ_TYPE_ERROR;
-  if (!is_null() && (type_meta_.is_string_or_lob_locator_type() || is_lob_storage())) {
-    if (!is_lob_storage() || datum_.len_ == 0) {
+  if (!is_null() && (get_type_meta().is_string_or_lob_locator_type() || is_lob_storage())) {
+    if (!is_lob_storage() || datum_.length() == 0) {
       out = datum_.get_string();
     } else {
       ObLobLocatorV2 locator(datum_.get_string(), has_lob_header());
@@ -1150,7 +1538,7 @@ int DatumParameter::get_real_param_count(int64_t &count) const
 bool DatumParameter::is_outrow_lob() const
 {
   bool result = false;
-  if (type_meta_.is_lob_storage() && datum_.len_ > 0 && has_lob_header()) {
+  if (get_type_meta().is_lob_storage() && datum_.length() > 0 && has_lob_header()) {
     ObLobLocatorV2 locator(datum_.get_string(), true);
     if (locator.is_valid()) { result = !locator.has_inrow_data(); }
   }

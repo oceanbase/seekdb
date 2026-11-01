@@ -18,6 +18,7 @@
 
 #include "ob_expr.h"
 #include "common/datum/datum_copy_plan.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "common/datum/datum_sql_print.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_datum_cast.h"
@@ -484,11 +485,11 @@ int clone_legacy_resource(const common::SqlType &type, const common::Datum &sour
   alignas(8) char scratch[64];
   int ret = plan.legacy_view(source, legacy, scratch, sizeof(scratch));
   if (OB_SUCC(ret)) {
-    common::DatumValue input(legacy, type.legacy_meta());
-    common::DatumValue owned;
-    if (OB_SUCC(ret = common::clone_typed_value(input, owned, owner))) {
-      ret = plan.import_legacy(owned.datum_, destination);
-    }
+    common::DatumValue input, owned;
+    if (OB_FAIL(input.assign_legacy_borrowed(legacy, type.legacy_meta()))) {
+    } else if (OB_FAIL(common::clone_typed_value(input, owned, owner))) {
+    } else if (OB_FAIL(owned.export_legacy(legacy, scratch, sizeof(scratch)))) {
+    } else { ret = plan.import_legacy(legacy, destination); }
   }
   return ret;
 }
@@ -498,6 +499,13 @@ int ObExpr::clone_native_value(const common::SqlType &type, const common::Datum 
                                common::ObIAllocator &owner, common::Datum &destination)
 {
   common::DatumCopyPlan plan(type);
+  if (type.legacy_meta().is_ext_sql_array()) {
+    NativeTypedDatum borrowed, owned;
+    borrowed.datum_ = source; borrowed.type_ = &type;
+    const int ret = clone_native_parameter_value(borrowed, owner, owned);
+    if (ret == OB_SUCCESS) { destination = owned.datum_; }
+    return ret;
+  }
   return type.requires_resource_clone()
       ? plan.deep_copy_resource(source, destination, owner, clone_legacy_resource, nullptr)
       : plan.deep_copy(source, destination, owner);
@@ -705,50 +713,61 @@ void *ObExprStrResAlloc::alloc(const int64_t size)
   return mem;
 }
 
-int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value)
+int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx,
+    NativeTypedDatum &value, DatumParameterMetadata &attributes)
 {
   const SqlType &type = expr.get_sql_type();
-  const DatumCopyPlan plan(type);
-  const Datum &source = expr.locate_expr_datum(ctx);
-  common::ObDatum legacy;
-  int ret = plan.borrow_legacy(source, legacy);
-  if (ret == OB_NOT_SUPPORTED) {
-    int64_t bytes = 0;
-    ret = plan.legacy_payload_size(source, bytes);
-    if (OB_SUCC(ret)) {
-      char *buffer = bytes == 0 ? nullptr
-          : static_cast<char *>(ctx.exec_ctx_.get_allocator().alloc(bytes));
-      if (bytes > 0 && buffer == nullptr) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        int64_t position = 0;
-        ret = plan.export_legacy(source, legacy, buffer, bytes, position);
-      }
-    }
-  }
+  NativeTypedDatum candidate;
+  candidate.datum_ = expr.locate_expr_datum(ctx);
+  candidate.type_ = &type;
+  int64_t span = 0;
+  int ret = DatumCopyPlan(type).carrier_span_size(candidate.datum_, span);
   if (OB_SUCC(ret)) {
-    DatumParameter view;
-    view.set_datum(legacy);
-    SqlTypeMeta meta = expr.obj_meta_;
-    ObAccuracy accuracy;
+    DatumParameterMetadata metadata;
+    metadata.type_meta_ = expr.obj_meta_;
     if (type.legacy_meta().is_pl_extend_type()) {
-      // PL accuracy is the complete declaration ID, including for typed NULL.
-      // Numeric/length fields cannot reconstruct it, and payloads do not own it.
-      accuracy = type.accuracy();
+      // Declaration identity uses the whole word, including for typed NULL.
+      metadata.accuracy_ = type.accuracy();
     } else {
-      accuracy.set_scale(expr.datum_meta_.scale_);
-      accuracy.set_precision(expr.datum_meta_.precision_);
-      accuracy.set_length(expr.max_length_);
-      if (meta.is_string_or_lob_locator_type()) {
-        accuracy.set_length_semantics(expr.datum_meta_.length_semantics_);
-      } else if (meta.is_numeric_type() || meta.is_temporal_type()) {
-        meta.set_scale(expr.datum_meta_.scale_);
+      metadata.accuracy_.set_scale(expr.datum_meta_.scale_);
+      metadata.accuracy_.set_precision(expr.datum_meta_.precision_);
+      metadata.accuracy_.set_length(expr.max_length_);
+      if (metadata.type_meta_.is_string_or_lob_locator_type()) {
+        metadata.accuracy_.set_length_semantics(expr.datum_meta_.length_semantics_);
+      } else if (metadata.type_meta_.is_numeric_type() || metadata.type_meta_.is_temporal_type()) {
+        metadata.type_meta_.set_scale(expr.datum_meta_.scale_);
       }
     }
-    view.set_type_meta(meta);
-    view.set_accuracy(accuracy);
-    view.set_param_meta();
-    value = view;
+    metadata.param_meta_ = metadata.type_meta_;
+    if (candidate.datum_.is_min() || candidate.datum_.is_max() || candidate.datum_.is_nop()) {
+      metadata.type_meta_.set_ext();
+    }
+    value = candidate;
+    attributes = metadata;
+  }
+  return ret;
+}
+
+int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value)
+{
+  NativeTypedDatum borrowed;
+  DatumParameterMetadata attributes;
+  int ret = capture_datum_parameter(expr, ctx, borrowed, attributes);
+  alignas(8) char scratch[64];
+  ObDatum legacy;
+  DatumParameter candidate;
+  if (OB_SUCC(ret) && OB_FAIL(DatumCopyPlan(*borrowed.type_).legacy_view(
+      borrowed.datum_, legacy, scratch, sizeof(scratch)))) {
+  } else if (OB_SUCC(ret)) {
+    // Inline/state/normalized Decimal exports may point into this stack buffer.
+    // Materialize only such reference bytes; ordinary references keep the
+    // original frame owner, and generic ordinary scalars import inline.
+    const uintptr_t address = reinterpret_cast<uintptr_t>(legacy.ptr_);
+    const uintptr_t begin = reinterpret_cast<uintptr_t>(scratch);
+    if (address >= begin && address < begin + sizeof(scratch)) {
+      ret = candidate.assign_legacy_owned(legacy, attributes.type_meta_, ctx.exec_ctx_.get_allocator());
+    } else { ret = candidate.assign_legacy_borrowed(legacy, attributes.type_meta_); }
+    if (OB_SUCC(ret)) { candidate.set_metadata(attributes); value = candidate; }
   }
   return ret;
 }
@@ -768,12 +787,11 @@ static int clone_datum_value_with_accuracy(const common::ObDatum &source, const 
   common::ObDatum owned;
   if (meta.is_ext_sql_array() && !source.is_null()) {
     DatumParameter input, copy;
-    input.set_datum(source);
-    input.set_type_meta(meta);
-    input.set_accuracy(accuracy);
-    if (OB_FAIL(DatumParameterArray::clone_parameter(input, copy, allocator))) {
+    if (OB_FAIL(input.assign_legacy_borrowed(source, meta))) {
     } else {
-      owned = copy.datum_;
+      input.set_accuracy(accuracy);
+      if (OB_FAIL(DatumParameterArray::clone_parameter(input, copy, allocator))) {
+      } else { ret = copy.copy_legacy(owned, allocator); }
     }
   } else {
     const DatumCopyPlan plan(meta, accuracy);
@@ -794,13 +812,13 @@ int clone_datum_value(const common::ObDatum &source, const SqlTypeMeta &meta, co
 int clone_datum_value(const DatumParameter &source, DatumParameter &destination,
                       ObIAllocator &allocator)
 {
-  common::ObDatum owned;
-  const int ret = clone_datum_value_with_accuracy(source.datum_, source.get_meta(),
-      source.get_accuracy(), owned, allocator);
-  if (ret == OB_SUCCESS) {
-    destination.datum_ = owned;
-    destination.set_type_meta(source.get_meta());
-  }
+  DatumParameter owned;
+  int ret = source.is_ext_sql_array() && !source.is_null()
+      ? DatumParameterArray::clone_parameter(source, owned, allocator)
+      : owned.deep_copy(source, allocator);
+  // This value-only PL boundary preserves the destination's declaration and
+  // attributes; only the current value/current physical metadata are replaced.
+  if (OB_SUCC(ret)) { destination.assign_value(owned); }
   return ret;
 }
 
@@ -829,8 +847,12 @@ DEF_TO_STRING(ObToStringDatum)
     ret = plan.export_legacy(d_, legacy, scratch, sizeof(scratch), cursor);
   }
   if (OB_SUCC(ret)) {
-    const DatumValue value(legacy, e_.obj_meta_);
-    ret = print_datum_debug_json(value, buf, buf_len, pos);
+    DatumValue value;
+    SqlTypeMeta physical_meta = e_.obj_meta_;
+    if (d_.is_min() || d_.is_max() || d_.is_nop()) { physical_meta.set_ext(); }
+    if (OB_SUCC(ret = value.assign_legacy_borrowed(legacy, physical_meta))) {
+      ret = print_datum_debug_json(value, buf, buf_len, pos);
+    }
   }
   if (OB_FAIL(ret)) {
     databuff_printf(buf, buf_len, pos, "{datum_print_error:%d}", ret);
@@ -1074,13 +1096,15 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &ex
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObCastMode cast_mode = CM_NONE;
-    const auto &param_store = ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store();
-    if (expr.extra_ >= param_store.count()) {
+    const ObPhysicalPlanCtx &parameters = *ctx.exec_ctx_.get_physical_plan_ctx();
+    const Datum *parameter = parameters.get_native_parameter(expr.extra_);
+    const SqlType *parameter_type = parameters.get_native_parameter_type(expr.extra_);
+    const DatumParameterMetadata *attributes = parameters.get_parameter_metadata(expr.extra_);
+    if (parameter == nullptr || parameter_type == nullptr || attributes == nullptr) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(
                        session->get_stmt_type(), session, cast_mode))) {
     } else {
-      const DatumParameter &parameter = param_store.at(expr.extra_);
       const common::SqlTypeMeta dst_meta = expr.obj_meta_;
       ObIAllocator &allocator = ctx.exec_ctx_.get_allocator();
       const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
@@ -1104,13 +1128,16 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, Datum &ex
           cast_ctx,
           ctx.exec_ctx_.get_srs_provider(),
           ctx.exec_ctx_.get_lob_read_service());
-      const DatumValue source(parameter.datum_, parameter.get_meta());
-      DatumValue converted;
-      if (OB_FAIL(DatumValueCaster::to_type(dst_meta.get_type(), cast_ctx,
+      alignas(8) char source_scratch[64], result_scratch[64];
+      ObDatum source_view, result_view;
+      DatumValue source, converted;
+      if (OB_FAIL(DatumCopyPlan(*parameter_type).legacy_view(
+          *parameter, source_view, source_scratch, sizeof(source_scratch)))) {
+      } else if (OB_FAIL(source.assign_legacy_borrowed(source_view, attributes->type_meta_))) {
+      } else if (OB_FAIL(DatumValueCaster::to_type(dst_meta.get_type(), cast_ctx,
                                              source, allocator, converted))) {
-      } else {
-        ret = expr.get_datum_copy_plan().import_legacy(converted.datum_, expr_datum);
-      }
+      } else if (OB_FAIL(converted.export_legacy(result_view, result_scratch, sizeof(result_scratch)))) {
+      } else { ret = expr.get_datum_copy_plan().import_legacy(result_view, expr_datum); }
     }
   }
   return ret;

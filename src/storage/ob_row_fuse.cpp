@@ -81,7 +81,7 @@ static int copy_native_fuse_cell(const DatumValue &source, ObStoreRow &result,
                                  int64_t index, ObIAllocator *owner)
 {
   if (owner == nullptr || source.is_null()
-      || (!source.is_ext_sql_array() && source.datum_.len_ <= 16)) {
+      || (!source.is_ext_sql_array() && source.datum_.length() <= 16)) {
     return DatumValueBuffer::assign_view(source, result.row_val_.cells_, result.capacity_, index);
   }
   DatumParameter input, owned;

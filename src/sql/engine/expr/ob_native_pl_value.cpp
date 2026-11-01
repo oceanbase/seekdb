@@ -87,7 +87,7 @@ int resolve_node(const SqlType *requested, const DatumParameter &source,
       ret = OB_INVALID_ARGUMENT;
     } else { type = resolved; }
   } else if (type == nullptr) {
-    ret = SqlType::from_legacy(source.get_type_meta(), source.get_accuracy(), scalar);
+    ret = SqlType::from_legacy(meta, source.get_accuracy(), scalar);
     if (ret == OB_SUCCESS) { type = &scalar; }
   }
   if (ret == OB_SUCCESS && type == nullptr) { ret = OB_ERR_UNEXPECTED; }
@@ -182,11 +182,12 @@ int check_typed_graph(const SqlType *requested, const DatumParameter &source,
       ? source.get_param_meta() : source.get_type_meta();
   if (source.is_null() && !declared_meta.is_pl_extend_type() && !declared_meta.is_ext_sql_array()
       && (requested == nullptr || !requested->requires_resource_clone())) { return OB_SUCCESS; }
-  if (source.datum_.len_ > 0 && source.datum_.ptr_ == nullptr) { return OB_INVALID_ARGUMENT; }
   SqlType scalar;
   const SqlType *type = nullptr;
   const ObRecordType *declaration = nullptr;
   Datum imported;
+  alignas(8) char scratch[64];
+  ObDatum physical;
   int ret = resolve_node(requested, source, resolver, scalar, type, declaration, prepared_native_type);
   if (ret != OB_SUCCESS) {}
   else if (source.is_null()) {
@@ -197,7 +198,8 @@ int check_typed_graph(const SqlType *requested, const DatumParameter &source,
   } else if (type->kind() != source.get_type()
       || (type->kind() == ObExtendType && type->legacy_meta().get_extend_type() != source.get_extend_type())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(source.datum_, imported))) {}
+  } else if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {}
+  else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(physical, imported))) {}
   else if (source.is_ext_sql_array()) {
     const auto *array = source.get_array<DatumParameterArray>();
     if (type->form() != SqlTypeForm::Array || array == nullptr || array->count_ < 0
@@ -205,7 +207,13 @@ int check_typed_graph(const SqlType *requested, const DatumParameter &source,
         || (type->array_limit() >= 0 && array->count_ > type->array_limit())) { ret = OB_INVALID_ARGUMENT; }
     else {
       for (int64_t i = 0; ret == OB_SUCCESS && i < array->count_; ++i) {
-        ret = check_typed_graph(type->element(), array->data_[i], resolver, depth + 1, prepared_native_type);
+        const SqlType *leaf = array->get_element_type(i);
+        if (leaf != nullptr && type->element() != nullptr
+            && !same_full_declaration(*leaf, *type->element())) { ret = OB_INVALID_ARGUMENT; }
+        else {
+          if (leaf == nullptr) { leaf = type->element(); }
+          ret = check_typed_graph(leaf, array->data_[i], resolver, depth + 1, prepared_native_type);
+        }
       }
     }
   } else if (source.get_type_meta().is_pl_extend_type()) {
@@ -226,7 +234,8 @@ int check_typed_graph(const SqlType *requested, const DatumParameter &source,
 int release_graph(DatumParameter &value, ObIAllocator &allocator, ObSQLSessionInfo *session, int depth);
 int clone_graph(const SqlType *requested, const DatumParameter &source, DatumParameter &output,
     ObIAllocator &allocator, const INativePlTypeResolver *resolver,
-    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type);
+    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type,
+    ObIAllocator *metadata_owner);
 
 int release_array(DatumParameterArray *array, ObIAllocator &allocator,
                   ObSQLSessionInfo *session, int depth)
@@ -307,7 +316,15 @@ int release_graph(DatumParameter &value, ObIAllocator &allocator, ObSQLSessionIn
       }
     }
     if (ret == OB_SUCCESS) {
-      allocator.free(const_cast<char *>(value.datum_.ptr_));
+      // Ordinary SQL scalars are inline. Only an actual physical Reference
+      // span is owned here; the graph pointee was released above.
+      const SqlTypeMeta &meta = value.get_type_meta();
+      const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(meta.get_type());
+      if (value.datum_.is_present() && (meta.is_unknown() || meta.is_ext_sql_array()
+          || (mapping != OBJ_DATUM_8BYTE_DATA && mapping != OBJ_DATUM_4BYTE_DATA
+              && mapping != OBJ_DATUM_1BYTE_DATA))) {
+        allocator.free(const_cast<void *>(value.datum_.get_reference()));
+      }
       value.reset();
     }
   }
@@ -316,27 +333,55 @@ int release_graph(DatumParameter &value, ObIAllocator &allocator, ObSQLSessionIn
 
 int clone_array(const SqlType &type, const DatumParameter &source, DatumParameter &output,
     ObIAllocator &allocator, const INativePlTypeResolver *resolver,
-    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type)
+    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type,
+    ObIAllocator *metadata_owner)
 {
   const auto *array = source.get_array<DatumParameterArray>();
   auto *copy = DatumParameterArray::alloc(allocator, array->count_);
   int ret = copy == nullptr ? OB_ALLOCATE_MEMORY_FAILED : OB_SUCCESS;
+  DatumParameter candidate = source;
+  candidate.datum_.set_null();
   if (ret == OB_SUCCESS) {
     copy->element_ = array->element_;
     copy->source_value_size_ = array->source_value_size_;
+    // Native retaining preallocates the outer address span, so a failed
+    // rollback can retain the entire partial graph in its Resource token.
+    if (metadata_owner != nullptr) { ret = candidate.set_array_address(copy, allocator); }
     for (int64_t i = 0; ret == OB_SUCCESS && i < array->count_; ++i) {
-      ret = clone_graph(type.element(), array->data_[i], copy->data_[i], allocator,
-                        resolver, session, need_new_allocator, depth + 1, prepared_native_type);
+      const SqlType *leaf = array->get_element_type(i);
+      if (leaf == nullptr) { leaf = type.element(); }
+      const SqlType *owned_leaf = leaf;
+      SqlType scalar;
+      const ObRecordType *declaration = nullptr;
+      if (metadata_owner != nullptr) {
+        // A heterogeneous resource without a bound leaf still requires the
+        // actual explicit resolver. The outer element is never fabricated.
+        if (OB_FAIL(resolve_node(leaf, array->data_[i], resolver, scalar,
+                                 leaf, declaration, prepared_native_type))) {}
+        else { ret = leaf->clone_to(*metadata_owner, owned_leaf); }
+      }
+      if (ret == OB_SUCCESS) {
+        ret = clone_graph(owned_leaf, array->data_[i], copy->data_[i], allocator,
+                          resolver, session, need_new_allocator, depth + 1,
+                          prepared_native_type, metadata_owner);
+      }
+      if (ret == OB_SUCCESS && metadata_owner != nullptr) {
+        ret = copy->set_element_type_borrowed(i, *owned_leaf, *metadata_owner);
+      }
     }
-    DatumParameter candidate = source;
-    candidate.datum_.ptr_ = nullptr; candidate.datum_.set_null();
-    if (ret == OB_SUCCESS) {
-      ret = candidate.set_extend(reinterpret_cast<int64_t>(copy), T_EXT_SQL_ARRAY, allocator);
+    if (ret == OB_SUCCESS && metadata_owner == nullptr) {
+      ret = candidate.set_array_address(copy, allocator);
     }
     if (ret == OB_SUCCESS) { output = candidate; }
     else {
       const int cleanup_ret = release_array(copy, allocator, session, depth);
-      if (cleanup_ret != OB_SUCCESS) { LOG_ERROR("failed to rollback SQL array clone", K(cleanup_ret)); }
+      if (cleanup_ret != OB_SUCCESS) {
+        if (metadata_owner != nullptr && !candidate.is_null()) { output = candidate; }
+        LOG_ERROR("failed to rollback SQL array clone", K(cleanup_ret));
+      } else if (!candidate.is_null()) {
+        // The graph was released explicitly; free only its address span.
+        allocator.free(const_cast<void *>(candidate.datum_.get_reference()));
+      }
     }
   }
   return ret;
@@ -345,13 +390,14 @@ int clone_array(const SqlType &type, const DatumParameter &source, DatumParamete
 int clone_record(const SqlType &type,
     const DatumParameter &source, DatumParameter &output, ObIAllocator &allocator,
     const INativePlTypeResolver *resolver, ObSQLSessionInfo *session,
-    bool need_new_allocator, int depth, bool prepared_native_type)
+    bool need_new_allocator, int depth, bool prepared_native_type,
+    ObIAllocator *metadata_owner)
 {
   const auto *record = reinterpret_cast<const ObPLRecord *>(source.get_ext());
   const int64_t count = type.member_count();
   const int64_t init_size = ObRecordType::get_init_size(count);
   DatumParameter candidate = source;
-  candidate.datum_.ptr_ = nullptr; candidate.datum_.set_null();
+  candidate.datum_.set_null();
   int ret = candidate.set_extend(0, PL_RECORD_TYPE, allocator, init_size);
   ObPLRecord *copy = nullptr;
   if (ret == OB_SUCCESS) {
@@ -359,8 +405,13 @@ int clone_record(const SqlType &type,
     if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
     else {
       copy = new (memory) ObPLRecord(type.pl_declaration().declaration_id, count);
-      candidate.datum_.set_extend(reinterpret_cast<int64_t>(copy), PL_RECORD_TYPE, init_size);
-      ret = copy->init_data(allocator, need_new_allocator);
+      // The freshly allocated 15-byte physical carrier already belongs to
+      // allocator. Update that buffer explicitly; no setter scratch escapes.
+      Datum &carrier = candidate.datum_;
+      ret = carrier.set_extend(reinterpret_cast<int64_t>(copy), PL_RECORD_TYPE, init_size,
+          const_cast<void *>(carrier.get_reference()), carrier.length(),
+          carrier.get_extend_collation_level(), carrier.get_extend_collation());
+      if (ret == OB_SUCCESS) { ret = copy->init_data(allocator, need_new_allocator); }
     }
   }
   if (ret == OB_SUCCESS) {
@@ -373,30 +424,37 @@ int clone_record(const SqlType &type,
         field.assign_value(const_cast<ObPLRecord *>(record)->get_element()[i]);
         field.set_accuracy(const_cast<ObPLRecord *>(record)->get_element_type()[i].get_accuracy());
         ret = clone_graph(type.member(i).type, field, owned, *copy->get_allocator(),
-                          resolver, session, false, depth + 1, prepared_native_type);
-        if (ret == OB_SUCCESS) { copy->get_element()[i] = owned.value_view(); }
+                          resolver, session, false, depth + 1, prepared_native_type, metadata_owner);
+        if (ret == OB_SUCCESS || (metadata_owner != nullptr && !owned.is_null())) {
+          copy->get_element()[i] = owned.value_view();
+        }
       }
     }
   }
   if (ret == OB_SUCCESS) { output = candidate; }
   else {
+    int cleanup_ret = OB_SUCCESS;
     if (copy != nullptr) {
-      const int cleanup_ret = release_record(copy, allocator, session, depth);
+      cleanup_ret = release_record(copy, allocator, session, depth);
       if (cleanup_ret != OB_SUCCESS) { LOG_ERROR("failed to rollback PL record clone", K(cleanup_ret)); }
     }
-    if (candidate.datum_.ptr_ != nullptr) { allocator.free(const_cast<char *>(candidate.datum_.ptr_)); }
+    if (cleanup_ret != OB_SUCCESS && metadata_owner != nullptr) { output = candidate; }
+    else if (!candidate.is_null()) {
+      allocator.free(const_cast<void *>(candidate.datum_.get_reference()));
+    }
   }
   return ret;
 }
 
 int clone_graph(const SqlType *requested, const DatumParameter &source, DatumParameter &output,
     ObIAllocator &allocator, const INativePlTypeResolver *resolver,
-    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type)
+    ObSQLSessionInfo *session, bool need_new_allocator, int depth, bool prepared_native_type,
+    ObIAllocator *metadata_owner)
 {
   if (depth > MAX_GRAPH_DEPTH) { return OB_SIZE_OVERFLOW; }
   if (source.is_null()) {
     DatumParameter candidate = source;
-    candidate.datum_.ptr_ = nullptr; candidate.datum_.set_null();
+    candidate.datum_.set_null();
     output = candidate;
     return OB_SUCCESS;
   }
@@ -406,13 +464,14 @@ int clone_graph(const SqlType *requested, const DatumParameter &source, DatumPar
   int ret = resolve_node(requested, source, resolver, scalar, type, declaration, prepared_native_type);
   if (ret != OB_SUCCESS) {}
   else if (source.is_ext_sql_array()) {
-    ret = clone_array(*type, source, output, allocator, resolver, session, need_new_allocator, depth, prepared_native_type);
+    ret = clone_array(*type, source, output, allocator, resolver, session,
+                      need_new_allocator, depth, prepared_native_type, metadata_owner);
   } else if (source.get_type_meta().is_pl_extend_type()) {
     ObPLRecord *record = nullptr;
     if (OB_FAIL(record_declaration(*type, source, declaration, record, prepared_native_type && requested != nullptr))) {}
     else {
       ret = clone_record(*type, source, output, allocator,
-                          resolver, session, need_new_allocator, depth, prepared_native_type);
+                          resolver, session, need_new_allocator, depth, prepared_native_type, metadata_owner);
     }
   } else { ret = output.deep_copy(source, allocator); }
   return ret;
@@ -462,7 +521,7 @@ int clone_owned_parameter_graph(const SqlType &type, const DatumParameter &sourc
 {
   const int ret = check_typed_graph(&type, source, resolver, 0, false);
   return ret == OB_SUCCESS
-      ? clone_graph(&type, source, output, allocator, resolver, session, need_new_allocator, 0, false) : ret;
+      ? clone_graph(&type, source, output, allocator, resolver, session, need_new_allocator, 0, false, nullptr) : ret;
 }
 
 int release_owned_parameter_graph(DatumParameter &value, ObIAllocator &allocator,
@@ -516,21 +575,31 @@ int NativeSqlValueOwner::clone(const SqlType &type, const Datum &source, Datum &
     alignas(8) char scratch[64];
     ObDatum legacy;
     DatumParameter parameter;
+    int64_t array_address = 0;
     if (OB_FAIL(plan.legacy_view(source, legacy, scratch, sizeof(scratch)))) {}
     else {
-      parameter.set_type_meta(type.legacy_meta());
+      if (type.legacy_meta().is_ext_sql_array() && legacy.has_ext_value()) {
+        array_address = legacy.get_ext();
+        legacy.set_string(reinterpret_cast<const char *>(&array_address), sizeof(array_address));
+      }
+      ret = parameter.assign_legacy_borrowed(legacy, type.legacy_meta());
       parameter.set_accuracy(type.accuracy());
-      parameter.set_datum(legacy);
-      if (OB_FAIL(check_typed_graph(&type, parameter, resolver, 0, prepared_native_type))) {}
+      parameter.set_param_meta(type.legacy_meta());
+      if (ret != OB_SUCCESS) {}
+      else if (OB_FAIL(check_typed_graph(&type, parameter, resolver, 0, prepared_native_type))) {}
       else {
         void *memory = allocator_.alloc(sizeof(NativeSqlValueOwner::Resource));
         if (memory == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
         else {
-          auto *resource = new (memory) NativeSqlValueOwner::Resource;
+          auto *resource = new (memory) NativeSqlValueOwner::Resource(allocator_);
           Datum candidate;
           ret = clone_graph(&type, parameter, resource->value_, allocator_, resolver,
-                            session_, need_new_allocator, 0, prepared_native_type);
-          if (ret == OB_SUCCESS) { ret = plan.import_legacy(resource->value_.datum_, candidate); }
+                            session_, need_new_allocator, 0, prepared_native_type,
+                            &resource->metadata_owner_);
+          if (ret == OB_SUCCESS) {
+            ret = resource->value_.export_legacy(legacy, scratch, sizeof(scratch));
+          }
+          if (ret == OB_SUCCESS) { ret = plan.import_legacy(legacy, candidate); }
           if (ret == OB_SUCCESS) {
             keep(resource);
             output = candidate;

@@ -91,7 +91,8 @@ int scan_copy_to_storage(const ObExpr &expr, const Datum &source,
 // fixed-width destinations used the scalar bits, while strings had length zero.
 // Normalize those native payload descriptors explicitly; do not retain Ext
 // flags after that metadata replacement or reinterpret an Ext-sized Datum.
-int normalize_scan_multivalue_scalar(DatumValue &value, const SqlTypeMeta &column_meta)
+int normalize_scan_multivalue_scalar(DatumValue &value, const SqlTypeMeta &column_meta,
+                                     ObIAllocator &owner)
 {
   int ret = OB_SUCCESS;
   if (!value.is_null()) {
@@ -103,9 +104,16 @@ int normalize_scan_multivalue_scalar(DatumValue &value, const SqlTypeMeta &colum
         value.datum_.set_string(ObString());
       } else if (target == OBJ_DATUM_8BYTE_DATA || target == OBJ_DATUM_4BYTE_DATA
                  || target == OBJ_DATUM_1BYTE_DATA) {
-        // The native Ext payload begins with the same int64 scalar bits. The
-        // decoded bytes belong to the row batch arena and survive this view.
-        value.datum_.pack_ = ObDatum::get_reserved_size(target);
+        // Preserve the old scalar-bit interpretation at an explicit codec
+        // boundary. Native state/payload headers are never a legacy pack word.
+        const int64_t bits = value.get_ext();
+        alignas(8) char scalar[sizeof(bits)];
+        MEMCPY(scalar, &bits, sizeof(bits));
+        ObDatum legacy;
+        legacy.ptr_ = scalar; legacy.pack_ = ObDatum::get_reserved_size(target);
+        Datum candidate;
+        if (OB_FAIL(DatumParameterCodec::import_native_value(legacy, column_meta, owner, candidate))) {
+        } else { value.get_datum() = candidate; }
       } else {
         ret = OB_DESERIALIZE_ERROR;
       }
@@ -960,7 +968,7 @@ int ObTableScanOp::prepare_das_task()
     ObSEArray<ObObjectID, 1> partition_ids;
     ObSEArray<ObObjectID, 1> first_level_part_ids;
     if (OB_FAIL(das_access.calculate_tablet_ids(ctx_,
-                                                  plan_ctx->get_param_store(),
+                                                  *plan_ctx,
                                                   tablet_ids,
                                                   partition_ids,
                                                   first_level_part_ids,
@@ -986,7 +994,7 @@ int ObTableScanOp::prepare_all_das_tasks()
   // get grop size of batch rescan
   int ret = OB_SUCCESS;
   if (need_perform_real_batch_rescan()) {
-    tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_;
+    tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).group_->count_;
     if (OB_UNLIKELY(tsc_rtdef_.group_size_ > tsc_rtdef_.max_group_size_)) {
       ret = OB_ERR_UNEXPECTED;
     }
@@ -1017,6 +1025,8 @@ int ObTableScanOp::prepare_all_das_tasks()
           MY_INPUT.key_ranges_.reuse();
         }
       }
+      const int restore_ret = grp_guard.restore();
+      if (OB_SUCC(ret)) { ret = restore_ret; }
     }
   }
 
@@ -1277,7 +1287,7 @@ int ObTableScanOp::prepare_batch_scan_range()
   int64_t batch_size = 0;
   if (OB_SUCC(ret)) {
     if (!tsc_rtdef_.bnlj_params_.empty()) {
-      tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_;
+      tsc_rtdef_.group_size_ = tsc_rtdef_.bnlj_params_.at(0).group_->count_;
       if (OB_UNLIKELY(tsc_rtdef_.group_size_ > tsc_rtdef_.max_group_size_)) {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -1291,7 +1301,7 @@ int ObTableScanOp::prepare_batch_scan_range()
   for (int64_t i = 0; OB_SUCC(ret) && i < tsc_rtdef_.group_size_; ++i) {
     //replace real param to param store to extract scan range
     ret = grp_guard.switch_group_rescan_param(i);
-    LOG_DEBUG("replace bnlj param to extract range", K(plan_ctx->get_param_store()));
+    LOG_DEBUG("replace bnlj param to extract range", K(plan_ctx->get_parameter_count()));
 
     // When using batch rescan, the actual scan order of storage must be KEEP_ORDER，thus the original ordering
     // may be disrupted when dealing with multiple range segments.
@@ -1299,6 +1309,8 @@ int ObTableScanOp::prepare_batch_scan_range()
     if (OB_SUCC(ret) && OB_FAIL(prepare_single_scan_range(i, need_sort))) {
     }
   }
+  const int restore_ret = grp_guard.restore();
+  if (OB_SUCC(ret)) { ret = restore_ret; }
   return ret;
 }
 
@@ -1320,7 +1332,7 @@ int ObTableScanOp::build_bnlj_params()
         // LOG_WARN("failed to find group param", K(ret), K(exist), K(i), K(array_idx));
       } else {
         const GroupRescanParam &group_param = group_params_above->at(array_idx);
-        OZ(tsc_rtdef_.bnlj_params_.push_back(GroupRescanParamInfo(param_idx, group_param.gr_param_)));
+        OZ(tsc_rtdef_.bnlj_params_.push_back(GroupRescanParamInfo(param_idx, &group_param)));
       }
     }
     if (OB_SUCC(ret) && !tsc_rtdef_.bnlj_params_.empty() && (OB_ISNULL(fold_iter_))) {
@@ -1368,7 +1380,7 @@ int ObTableScanOp::prepare_single_scan_range(int64_t group_idx, bool need_sort)
               tsc_rtdef_.fast_final_nlj_range_ctx_,
               range_allocator,
               ctx_,
-              plan_ctx->get_datum_param_store(),
+              *plan_ctx,
               tsc_rtdef_.range_buffer_idx_,
               locate_range_buffer(),
               key_ranges,
@@ -1824,7 +1836,7 @@ int ObTableScanOp::inner_rescan_for_tsc()
       ret = local_iter_rescan();
     }
     if (OB_SUCC(ret) && need_perform_real_batch_rescan()) {
-      fold_iter_->init_group_range(0, tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_);
+      fold_iter_->init_group_range(0, tsc_rtdef_.bnlj_params_.at(0).group_->count_);
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(rand_scan_processor_.use_rand_scan())) {
@@ -2049,11 +2061,11 @@ int ObTableScanOp::check_need_real_rescan(bool &bret)
         int64_t partition_cnt = 0;
         int64_t group_size = 0;
         if (OB_UNLIKELY(tsc_rtdef_.bnlj_params_.empty()) ||
-            OB_ISNULL(tsc_rtdef_.bnlj_params_.at(0).gr_param_)) {
+            OB_ISNULL(tsc_rtdef_.bnlj_params_.at(0).group_)) {
           ret = OB_INVALID_ARGUMENT;
         } else if (OB_ISNULL(tsc_rtdef_.scan_rtdef_.table_access_)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (FALSE_IT(group_size = tsc_rtdef_.bnlj_params_.at(0).gr_param_->count_)) {
+        } else if (FALSE_IT(group_size = tsc_rtdef_.bnlj_params_.at(0).group_->count_)) {
         } else {
           DASRuntimeTableAccess *table_access = tsc_rtdef_.scan_rtdef_.table_access_;
           for (DASRuntimeTabletListIter node = table_access->tablet_accesses_begin();
@@ -3380,7 +3392,7 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
                 is_none_unique_done = true;
                 // Keep decoded bytes in the current row-batch arena, which is
                 // reset only after all domain rows for this source row drain.
-                if (OB_FAIL(DatumParameterCodec::decode_value(data, data_len, pos,
+                if (OB_FAIL(DatumParameterCodec::decode_native_value(data, data_len, pos,
                               domain_index_.alloc_, value.datum_, value.meta_))) {
                 } else {
                   SqlTypeMeta col_type = expr->obj_meta_;
@@ -3389,7 +3401,7 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
                   } else {
                     col_type.set_collation_level(CS_LEVEL_IMPLICIT);
                   }
-                  if (OB_FAIL(normalize_scan_multivalue_scalar(value, col_type))) {
+                  if (OB_FAIL(normalize_scan_multivalue_scalar(value, col_type, domain_index_.alloc_))) {
                   } else if (OB_FAIL(domain_index_.rows_[i].storage_datums_[j].from_value(value))) {
                   }
                 }

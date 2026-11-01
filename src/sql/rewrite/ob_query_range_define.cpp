@@ -460,7 +460,7 @@ OB_SERIALIZE_MEMBER(ObFastFinalPos, index_, offset_, flags_);
 int ObQueryRangeCtx::init(ObPreRangeGraph *pre_range_graph,
                           const ObIArray<ColumnItem> &range_columns,
                           ExprConstrantArray *expr_constraints,
-                          const ParamStore *params,
+                          const ObPhysicalPlanCtx *params,
                           ObRawExprFactory *expr_factory,
                           const bool ignore_calc_failure,
                           const int64_t index_prefix,
@@ -481,7 +481,7 @@ int ObQueryRangeCtx::init(ObPreRangeGraph *pre_range_graph,
   } else {
     column_cnt_ = range_columns.count();
     expr_constraints_ = expr_constraints;
-    params_ = params;
+    parameter_context_ = params;
     ignore_calc_failure_ = ignore_calc_failure;
     expr_factory_ = expr_factory;
     session_info_ = exec_ctx_->get_my_session();
@@ -705,7 +705,7 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
                                                      const ObIArray<ObRawExpr*> &root_exprs,
                                                      ObExecContext *exec_ctx,
                                                      ExprConstrantArray *expr_constraints,
-                                                     const ParamStore *params,
+                                                     const ObPhysicalPlanCtx *params,
                                                      const bool ignore_calc_failure,
                                                      const int64_t index_prefix /* =-1*/,
                                                      const ObTableSchema *index_schema /* = NULL*/,
@@ -734,22 +734,24 @@ int ObPreRangeGraph::preliminary_extract_query_range(const ObIArray<ColumnItem> 
 int ObQueryRangeProvider::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
                                                      Datum (&values)[3], bool &supported) const
 {
-  return try_get_native_bigint_point(plan_ctx.get_datum_param_store(), values, supported);
+  UNUSED(plan_ctx); UNUSED(values);
+  supported = false;
+  return OB_SUCCESS;
 }
 
 int ObPreRangeGraph::try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
                                                 Datum (&values)[3], bool &supported) const
 {
-  return try_get_native_bigint_point(plan_ctx.get_datum_param_store(), &plan_ctx, values, supported);
+  return try_get_native_bigint_point(nullptr, &plan_ctx, values, supported);
 }
 
 int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &parameters,
                                                 Datum (&values)[3], bool &supported) const
 {
-  return try_get_native_bigint_point(parameters, nullptr, values, supported);
+  return try_get_native_bigint_point(&parameters, nullptr, values, supported);
 }
 
-int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &parameters,
+int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore *parameters,
                                                 const ObPhysicalPlanCtx *plan_ctx,
                                                 Datum (&values)[3], bool &supported) const
 {
@@ -769,9 +771,9 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &paramete
     return OB_SUCCESS;
   }
 
-  const DatumParameter *inputs[3] = {nullptr, nullptr, nullptr};
-  const Datum *native_inputs[3] = {nullptr, nullptr, nullptr};
-  bool all_native = plan_ctx != nullptr;
+  if ((parameters == nullptr) == (plan_ctx == nullptr)) { return OB_ERR_UNEXPECTED; }
+  const int64_t count = plan_ctx != nullptr ? plan_ctx->get_parameter_count() : parameters->count();
+  const Datum *inputs[3] = {nullptr, nullptr, nullptr};
   for (int64_t i = 0; i < 3; ++i) {
     const ObRangeColumnMeta *meta = column_metas_.at(i);
     const int64_t index = node->start_keys_[i];
@@ -782,36 +784,27 @@ int ObPreRangeGraph::try_get_native_bigint_point(const DatumParamStore &paramete
     const ObRangeMap::ExprFinalInfo &info = range_map_.expr_final_infos_.at(index);
     // A single param bit excludes constants, casts, NULL-safe comparisons,
     // row-expression modifiers and execution parameters in this first pilot.
-    if (info.flags_ != 1 || info.param_idx_ < 0 || info.param_idx_ >= parameters.count()) {
+    if (info.flags_ != 1 || info.param_idx_ < 0 || info.param_idx_ >= count) {
       return OB_SUCCESS;
     }
-    const DatumParameter &input = parameters.at(info.param_idx_);
-    if (input.get_type() != ObIntType || input.is_null() || input.datum_.is_ext()
-        || input.datum_.flag_ != ObDatumDesc::NONE || input.datum_.len_ != sizeof(int64_t)
-        || input.datum_.ptr_ == nullptr) {
-      return OB_SUCCESS;
-    }
-    inputs[i] = &input;
     if (plan_ctx != nullptr) {
-      native_inputs[i] = plan_ctx->get_native_bigint_parameter(info.param_idx_);
-      all_native = all_native && native_inputs[i] != nullptr;
+      // This accessor validates the current execution binding and complete Type.
+      // No compatibility descriptor or construction payload remains after init.
+      inputs[i] = plan_ctx->get_native_bigint_parameter(info.param_idx_);
+      if (inputs[i] == nullptr) { return OB_SUCCESS; }
+    } else {
+      // Explicit construction-only input. Its physical metadata selects inline I64.
+      const DatumParameter &input = parameters->at(info.param_idx_);
+      if (input.get_type() != ObIntType || !input.datum_.is_present()
+          || input.datum_.reference_flags() != Datum::NoReferenceFlags) {
+        return OB_SUCCESS;
+      }
+      inputs[i] = &input.datum_;
     }
   }
 
   Datum candidate[3];
-  for (int64_t i = 0; i < 3; ++i) {
-    if (all_native) {
-      // The current-owner guard established the canonical signed-I64 shape.
-      // Copy its scalar without moving the already-validated state fields.
-      candidate[i].set_int(native_inputs[i]->get_int());
-    } else {
-      // Metadata or an escaped mutable reference may have rebound any slot.
-      // Preserve the original native point-get admission and fresh-value path.
-      int64_t scalar = 0;
-      MEMCPY(&scalar, inputs[i]->datum_.ptr_, sizeof(scalar));
-      candidate[i].set_int(scalar);
-    }
-  }
+  for (int64_t i = 0; i < 3; ++i) { candidate[i].set_int(inputs[i]->get_int()); }
   for (int64_t i = 0; i < 3; ++i) { values[i] = candidate[i]; }
   supported = true;
   return OB_SUCCESS;
@@ -857,7 +850,7 @@ int ObPreRangeGraph::get_tablet_ranges(common::ObIAllocator &allocator,
 int ObPreRangeGraph::get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                                 common::ObIAllocator &allocator,
                                                 ObExecContext &exec_ctx,
-                                                const common::DatumParamStore &param_store,
+                                                const ObPhysicalPlanCtx &param_store,
                                                 int64_t range_buffer_idx,
                                                 void *range_buffer,
                                                 ObQueryRangeArray &ranges,
@@ -1424,7 +1417,7 @@ int ObPreRangeGraph::get_range_exprs(ObRawExprFactory &expr_factory,
                                      ObIArray<ObRawExpr*> &range_exprs,
                                      ObExecContext *exec_ctx,
                                      ObQueryCtx *query_ctx,
-                                     const ParamStore *params,
+                                     const ObPhysicalPlanCtx *params,
                                      const int64_t index_prefix /* =-1*/)
 {
   int ret = OB_SUCCESS;
@@ -1723,7 +1716,7 @@ int ObPreRangeGraph::range_node_to_expr(ObQueryRangeCtx &ctx,
       bool all_is_percent_sign = false;
       if (!pattern_expr->is_static_const_expr() || !escape_expr->is_static_const_expr()) {
         create_like = true;
-      } else if (OB_FAIL(ObOptEstUtils::if_expr_start_with_patten_sign(ctx.params_,
+      } else if (OB_FAIL(ObOptEstUtils::if_expr_start_with_patten_sign(ctx.parameter_context_,
                                                                        pattern_expr,
                                                                        escape_expr,
                                                                        ctx.exec_ctx_,

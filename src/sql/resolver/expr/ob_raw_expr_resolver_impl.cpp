@@ -1886,10 +1886,11 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
             c_expr->set_result_type(result_type);
             if (ob_is_enumset_inner_tc(c_expr->get_result_type().get_type())) { // only in PL execute, enum or set paramters generate enumset_inner type param value
               ObDatum datum;
+              alignas(8) char enum_scratch[64];
               ObEnumSetInnerValue inner_value;
               ObSEArray<common::ObString, 64> type_info_value;
               if (!param.is_null()) {
-                OX (datum = param.datum_);
+                OZ (param.export_legacy(datum, enum_scratch, sizeof(enum_scratch)));
                 OZ (datum.get_enumset_inner(inner_value));
                 if (ObEnumInnerType == c_expr->get_result_type().get_type()) {
                   OZ (mock_enum_type_info(ctx_.expr_factory_.get_allocator(), inner_value.string_value_, inner_value.numberic_value_, type_info_value));

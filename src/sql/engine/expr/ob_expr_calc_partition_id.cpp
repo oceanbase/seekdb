@@ -444,7 +444,7 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
     } else if (OB_FAIL(project_native_datum_value_view(*datum, part_expr.get_sql_type(), part_expr.obj_meta_,
                               part_expr.obj_datum_map_, func_value.meta_, func_value, value_owner))) {
     } else if (func_value.is_lob_storage() && func_value.has_lob_header()
-               && func_value.datum_.len_ != 0
+               && func_value.datum_.length() != 0
                && ObLobLocatorV2(func_value.get_string(), true).is_valid()
                && !ObLobLocatorV2(func_value.get_string(), true).has_inrow_data()) {
       ret = OB_NOT_SUPPORTED;
@@ -572,10 +572,15 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
   for (int i = 0; OB_SUCC(ret) && i < part_num; ++i) {
     if (part_array[i]->get_high_bound_val().is_max_row()) {
       range_partitions_.at(i).set_max_range_part();
-    } else if (OB_FAIL(part_expr.get_datum_copy_plan().import_legacy(
-        part_array[i]->get_high_bound_val().get_cells()[0].datum_, tmp_datum))) {
-    } else if (OB_FAIL(ObExpr::clone_native_value(part_expr.get_sql_type(), tmp_datum,
-        allocator, range_partitions_.at(i).datum_))) {
+    } else {
+      alignas(8) char bound_scratch[64];
+      ObDatum physical_bound;
+      if (OB_FAIL(part_array[i]->get_high_bound_val().get_cells()[0].export_legacy(
+          physical_bound, bound_scratch, sizeof(bound_scratch)))) {
+      } else if (OB_FAIL(part_expr.get_datum_copy_plan().import_legacy(physical_bound, tmp_datum))) {
+      } else if (OB_FAIL(ObExpr::clone_native_value(part_expr.get_sql_type(), tmp_datum,
+          allocator, range_partitions_.at(i).datum_))) {
+      }
     }
   }
   if (OB_SUCC(ret)) {
@@ -619,7 +624,11 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
         const ObIArray<PartitionBoundRow> &list_row_values =
               part_array[i]->get_list_row_values();
         for (int64_t j = 0; OB_SUCC(ret) && j < list_row_values.count(); ++j) {
-          if (OB_FAIL(part_expr.get_datum_copy_plan().import_legacy(list_row_values.at(j).get_cell(0).datum_, list_part_datum))) {
+          alignas(8) char bound_scratch[64];
+          ObDatum physical_bound;
+          if (OB_FAIL(list_row_values.at(j).get_cell(0).export_legacy(
+              physical_bound, bound_scratch, sizeof(bound_scratch)))) {
+          } else if (OB_FAIL(part_expr.get_datum_copy_plan().import_legacy(physical_bound, list_part_datum))) {
           } else {
             PartValKey list_part_row;
             if (OB_FAIL(ObExpr::clone_native_value(part_expr.get_sql_type(), list_part_datum,

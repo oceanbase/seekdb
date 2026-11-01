@@ -1,6 +1,7 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #include "common/datum/partition_bound_row.h"
 #include "common/datum/datum_parameter_codec.h"
+#include "common/datum/datum_value_flat.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_se_array.h"
 namespace oceanbase { namespace common {
@@ -28,22 +29,25 @@ private:
 };
 bool valid_bound_payload(const DatumValue &value)
 {
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (value.export_legacy(physical, scratch, sizeof(scratch)) != OB_SUCCESS) { return false; }
   const SqlValueType type = value.get_type();
   if (type < ObNullType || type >= ObMaxType) { return false; }
   if (value.is_null()) { return true; }
-  if (value.datum_.ptr_ == nullptr && value.datum_.len_ > 0) { return false; }
-  if (value.is_ext_sql_array()) { return value.datum_.ptr_ != nullptr && value.datum_.len_ == sizeof(int64_t); }
+  if (physical.ptr_ == nullptr && physical.len_ > 0) { return false; }
+  if (value.is_ext_sql_array()) { return physical.ptr_ != nullptr && physical.len_ == sizeof(int64_t); }
   switch (ObDatum::get_sql_value_datum_map_type(type)) {
-    case OBJ_DATUM_8BYTE_DATA: return value.datum_.ptr_ != nullptr && value.datum_.len_ == 8;
-    case OBJ_DATUM_4BYTE_DATA: return value.datum_.ptr_ != nullptr && value.datum_.len_ == 4;
-    case OBJ_DATUM_1BYTE_DATA: return value.datum_.ptr_ != nullptr && value.datum_.len_ == 1;
-    case OBJ_DATUM_EXTEND: return value.datum_.ptr_ != nullptr && value.datum_.has_ext_value();
+    case OBJ_DATUM_8BYTE_DATA: return physical.ptr_ != nullptr && physical.len_ == 8;
+    case OBJ_DATUM_4BYTE_DATA: return physical.ptr_ != nullptr && physical.len_ == 4;
+    case OBJ_DATUM_1BYTE_DATA: return physical.ptr_ != nullptr && physical.len_ == 1;
+    case OBJ_DATUM_EXTEND: return physical.ptr_ != nullptr && physical.has_ext_value();
     case OBJ_DATUM_NUMBER:
-      return value.datum_.ptr_ != nullptr && value.datum_.len_ >= sizeof(number::ObNumber::Desc)
-          && value.datum_.len_ == sizeof(number::ObNumber::Desc) + sizeof(uint32_t) * value.datum_.get_number_desc().len_;
+      return physical.ptr_ != nullptr && physical.len_ >= sizeof(number::ObNumber::Desc)
+          && physical.len_ == sizeof(number::ObNumber::Desc) + sizeof(uint32_t) * physical.get_number_desc().len_;
     case OBJ_DATUM_DECIMALINT:
-      return value.datum_.len_ == 0 || value.datum_.len_ == 4 || value.datum_.len_ == 8
-          || value.datum_.len_ == 16 || value.datum_.len_ == 32 || value.datum_.len_ == 64;
+      return physical.len_ == 0 || physical.len_ == 4 || physical.len_ == 8
+          || physical.len_ == 16 || physical.len_ == 32 || physical.len_ == 64;
     default: return true;
   }
 }
@@ -51,10 +55,10 @@ int64_t bound_payload_size(const DatumValue &value, int depth = 0)
 {
   int64_t size = 0;
   if (depth > 64 || !valid_bound_payload(value)) { size = INT64_MAX; }
-  else if (!value.is_null()) {
-    size = MAX(1, value.datum_.len_) + 7;
+  else if (NativeValueFlat::uses_reference(value)) {
+    size = MAX(int64_t(1), int64_t(value.datum_.length())) + 7;
     if (value.is_ext_sql_array()) {
-      const DatumParameterArray *array = reinterpret_cast<const DatumParameterArray *>(value.datum_.get_int());
+      const DatumParameterArray *array = reinterpret_cast<const DatumParameterArray *>(value.get_ext());
       if (array == nullptr || array->count_ < 0 || array->count_ > (INT64_MAX - sizeof(DatumParameterArray) - 7) / sizeof(DatumParameter)
           || (array->count_ > 0 && array->data_ == nullptr)) { size = INT64_MAX; }
       else {
@@ -144,8 +148,7 @@ int PartitionBoundRow::deep_copy(const PartitionBoundRow &source, char *buf, int
       if (OB_SUCC(ret)) { candidate.cells_[i] = owned.value_view(); }
     } else {
       // Ordinary key cells need only their native payload and raw metadata.
-      ret = candidate.cells_[i].datum_.deep_copy(value.datum_, allocator);
-      if (OB_SUCC(ret)) { candidate.cells_[i].meta_ = value.meta_; }
+      ret = candidate.cells_[i].deep_copy(value, allocator);
     }
   }
   if (OB_SUCC(ret) && source.projector_size_ > 0) {
@@ -187,7 +190,7 @@ int PartitionBoundRow::serialize(char *buf, int64_t len, int64_t &pos) const
   else if (!is_legal()) { ret = OB_INVALID_DATA; }
   else { ret = serialization::encode_vi64(buf, len, pos, count_); }
   for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
-    ret = DatumParameterCodec::encode_value(cells_[i].datum_, cells_[i].meta_, buf, len, pos);
+    ret = DatumParameterCodec::encode_native_value(cells_[i].datum_, cells_[i].meta_, buf, len, pos);
   }
   return ret;
 }
@@ -196,7 +199,7 @@ int64_t PartitionBoundRow::get_serialize_size() const
   int64_t size = serialization::encoded_length_vi64(count_);
   for (int64_t i = 0; i < count_; ++i) {
     int64_t bytes = 0;
-    if (DatumParameterCodec::value_size(cells_[i].datum_, cells_[i].meta_, bytes) != OB_SUCCESS) { return 0; }
+    if (DatumParameterCodec::native_value_size(cells_[i].datum_, cells_[i].meta_, bytes) != OB_SUCCESS) { return 0; }
     size += bytes;
   }
   return size;
@@ -234,7 +237,7 @@ int PartitionBoundRow::decode(ObIAllocator &owner, const char *buf, int64_t len,
     // deserializer starts from zero while omitted metadata fields are retained.
     if (row_wire && i < count_) { cells.at(i) = cells_[i]; }
     if (next < len) {
-      ret = DatumParameterCodec::decode_unis_value(buf, len, next, scratch, cells.at(i).datum_, cells.at(i).meta_);
+      ret = DatumParameterCodec::decode_unis_native_value(buf, len, next, scratch, cells.at(i).datum_, cells.at(i).meta_);
     }
   }
   if (OB_SUCC(ret) && row_wire) {

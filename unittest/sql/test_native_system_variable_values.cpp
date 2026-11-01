@@ -41,9 +41,9 @@ std::string unhex(const std::string &text)
 std::string wire(const DatumValue &value)
 {
   int64_t size = 0, pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::value_size(value.datum_, value.meta_, size));
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::native_value_size(value.datum_, value.meta_, size));
   std::string bytes(size, '\0');
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(value.datum_, value.meta_,
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_native_value(value.datum_, value.meta_,
       bytes.data(), bytes.size(), pos));
   EXPECT_EQ(size, pos);
   return bytes;
@@ -53,7 +53,7 @@ DatumValue decoded(const std::string &text, ObIAllocator &owner)
   const auto bytes = unhex(text);
   DatumValue value;
   int64_t pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(bytes.data(), bytes.size(),
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(),
       pos, owner, value.datum_, value.meta_));
   EXPECT_EQ(bytes.size(), pos);
   return value;
@@ -343,11 +343,9 @@ TEST_F(NativeSystemVariableValues, failed_compaction_stage_keeps_active_arenas_a
   alignas(8) char scratch[64];
   ASSERT_EQ(OB_SUCCESS, session.export_sys_variable(SYS_VAR__OB_ENABLE_ROLE_IDS, old, scratch, sizeof(scratch)));
   ASSERT_EQ(OB_SUCCESS, pending.set_varchar(ObString("33,44"), owner));
-  Datum pending_native;
-  ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::import_schema_native_value(
-      pending.datum_, pending.meta_, owner, pending_native));
+  const Datum pending_native = pending.datum_;
   const std::string old_wire = wire(old);
-  const char *old_payload = old.datum_.ptr_;
+  const void *old_payload = old.datum_.get_reference();
   const int32_t index = session.*access(BufferIndexTag{});
   ObArray<std::pair<int64_t, std::pair<Datum, SqlTypeMeta>>> staged;
   ObArenaAllocator stage_owner;
@@ -357,7 +355,7 @@ TEST_F(NativeSystemVariableValues, failed_compaction_stage_keeps_active_arenas_a
   EXPECT_EQ(0, staged.count());
   EXPECT_EQ(index, session.*access(BufferIndexTag{}));
   ASSERT_EQ(OB_SUCCESS, session.export_sys_variable(SYS_VAR__OB_ENABLE_ROLE_IDS, old, scratch, sizeof(scratch)));
-  EXPECT_EQ(old_wire, wire(old)); EXPECT_EQ(old_payload, old.datum_.ptr_);
+  EXPECT_EQ(old_wire, wire(old)); EXPECT_EQ(old_payload, old.datum_.get_reference());
   ASSERT_EQ(OB_SUCCESS, session.export_sys_variable(SYS_VAR_AUTOCOMMIT, old, scratch, sizeof(scratch)));
   EXPECT_EQ(0, old.get_int());
   ASSERT_EQ(OB_SUCCESS, session.export_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, old, scratch, sizeof(scratch)));
@@ -405,7 +403,9 @@ TEST(NativeSystemVariableOwner, nop_null_and_incremental_priority_keep_exact_phy
   ObDatum marker; marker.ptr_ = payload;
   marker.set_extend(ObActionFlag::OP_NOP, 0, 17, CS_LEVEL_INVALID, CS_TYPE_INVALID);
   SqlTypeMeta marker_meta; marker_meta.set_ext(); marker_meta.set_scale(13);
-  ASSERT_EQ(OB_SUCCESS, provider.set_value(DatumValue(marker, marker_meta), destination));
+  DatumValue marker_value;
+  ASSERT_EQ(OB_SUCCESS, marker_value.assign_legacy_borrowed(marker, marker_meta));
+  ASSERT_EQ(OB_SUCCESS, provider.set_value(marker_value, destination));
   EXPECT_TRUE(provider.is_inc_value_empty());
 
   // SQL-array's eight-byte address wrapper must not be read as ordinary ext.
@@ -426,7 +426,9 @@ TEST(NativeSystemVariableOwner, nop_null_and_incremental_priority_keep_exact_phy
   int64_t unknown_payload = 37;
   ObDatum unknown; unknown.ptr_ = reinterpret_cast<const char *>(&unknown_payload); unknown.pack_ = sizeof(unknown_payload);
   SqlTypeMeta unknown_meta; unknown_meta.set_unknown();
-  ASSERT_EQ(OB_SUCCESS, provider.set_value(DatumValue(unknown, unknown_meta), destination));
+  DatumValue unknown_value;
+  ASSERT_EQ(OB_SUCCESS, unknown_value.assign_legacy_borrowed(unknown, unknown_meta));
+  ASSERT_EQ(OB_SUCCESS, provider.set_value(unknown_value, destination));
   EXPECT_EQ(8U, provider.get_value_datum().length()); // Generic domain, not Raw inline index.
   EXPECT_NE(&unknown_payload, provider.get_value_datum().get_reference());
   unknown_payload = 99;

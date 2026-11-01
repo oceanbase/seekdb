@@ -60,7 +60,7 @@ int ObColumnSchemaV2::copy_default_value(const DatumValue &source, Datum &target
   if (source.is_null() && !meta.is_null()) { meta.set_null(); }
   ObIAllocator *owner = get_allocator();
   if (owner == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-  else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(source.datum_, meta, *owner, candidate))) {
+  else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(source.datum_, meta, *owner, candidate))) {
   } else { target = candidate; target_meta = meta; }
   return ret;
 }
@@ -87,17 +87,17 @@ int ObColumnSchemaV2::copy_default_value(const Datum &source, const SqlTypeMeta 
 int ObColumnSchemaV2::export_orig_default_value(DatumValue &output, void *scratch, int64_t capacity) const
 {
   ObDatum view;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
+  int ret = DatumParameterCodec::export_schema_legacy_value(
       orig_default_value_, orig_default_meta_, view, scratch, capacity);
-  if (ret == OB_SUCCESS) { output = DatumValue(view, orig_default_meta_); }
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(view, orig_default_meta_); }
   return ret;
 }
 int ObColumnSchemaV2::export_cur_default_value(DatumValue &output, void *scratch, int64_t capacity) const
 {
   ObDatum view;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
+  int ret = DatumParameterCodec::export_schema_legacy_value(
       cur_default_value_, cur_default_meta_, view, scratch, capacity);
-  if (ret == OB_SUCCESS) { output = DatumValue(view, cur_default_meta_); }
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(view, cur_default_meta_); }
   return ret;
 }
 int ObColumnSchemaV2::copy_orig_default_value(DatumValue &output, ObIAllocator &owner) const
@@ -118,7 +118,10 @@ namespace {
 int64_t default_payload_size(const DatumValue &value, int depth = 0)
 {
   if (value.is_null()) { return 0; }
-  int64_t size = value.datum_.get_deep_copy_size();
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (value.export_legacy(physical, scratch, sizeof(scratch)) != OB_SUCCESS) { return INT64_MAX; }
+  int64_t size = physical.get_deep_copy_size();
   if (value.is_ext_sql_array() && depth <= 64) {
     const auto *array = reinterpret_cast<const DatumParameterArray *>(value.get_ext());
     if (array != nullptr) {

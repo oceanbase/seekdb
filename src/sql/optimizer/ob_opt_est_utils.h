@@ -29,6 +29,7 @@ class ObSchemaGetterGuard;
 }
 namespace sql
 {
+class ObPhysicalPlanCtx;
 class ObLogPlan;
 class ObSQLSessionInfo;
 class ObOptimizerContext;
@@ -81,7 +82,7 @@ public:
   //get the expr's value.
   //@@param get_value[out]:is_calculable_expr:true, otherwise:false
   //@@param value[out]:the value of calculable expr
-  static int get_expr_value(const ParamStore *params,
+  static int get_expr_value(const ObPhysicalPlanCtx *params,
                             const ObRawExpr &expr,
                             ObExecContext *exec_ctx,
                             common::ObIAllocator &allocator,
@@ -89,14 +90,14 @@ public:
                             common::DatumValue &value);
 
   //whether the value of calculable expr is null.
-  static int if_expr_value_null(const ParamStore *params,
+  static int if_expr_value_null(const ObPhysicalPlanCtx *params,
                                 const ObRawExpr &expr,
                                 ObExecContext *exec_ctx,
                                 common::ObIAllocator &allocator,
                                 bool &is_null);
 
   // whether the like condition's patten start with '%' or '_' and not start with escape sign
-  static int if_expr_start_with_patten_sign(const ParamStore *params,
+  static int if_expr_start_with_patten_sign(const ObPhysicalPlanCtx *params,
                                             const ObRawExpr *expr,
                                             const ObRawExpr *esp_expr,
                                             ObExecContext *exec_ctx,

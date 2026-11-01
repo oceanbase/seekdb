@@ -36,6 +36,7 @@ int ObDeleteStmtPrinter::do_print()
                        schema_guard_, 
                        print_params_,
                        param_store_);
+    expr_printer_.bind_runtime_parameters(parameter_context_);
     if (OB_FAIL(print())) {
     }
   }

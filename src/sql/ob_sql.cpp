@@ -2041,6 +2041,8 @@ int ObSql::generate_stmt(ParseResult &parse_result,
   int ret = OB_SUCCESS;
   uint64_t session_id = 0;
   ObResolverParams resolver_ctx;
+  ObArenaAllocator resolution_descriptors("ResolveParams");
+  ParamStore resolution_inputs((ObWrapperAllocator(&resolution_descriptors)));
   ObPhysicalPlanCtx *plan_ctx = NULL;
   ObSchemaChecker *schema_checker = NULL;
 
@@ -2113,7 +2115,6 @@ int ObSql::generate_stmt(ParseResult &parse_result,
     resolver_ctx.is_mock_prepare_ = context.is_mock_prepare_;
     resolver_ctx.is_dynamic_sql_ = context.is_dynamic_sql_;
     resolver_ctx.statement_id_ = context.statement_id_;
-    resolver_ctx.param_list_ = &plan_ctx->get_param_store();
     resolver_ctx.sql_proxy_ = GCTX.sql_proxy_;
   }
 
@@ -2134,16 +2135,26 @@ int ObSql::generate_stmt(ParseResult &parse_result,
   if (OB_SUCC(ret)) {
       // set # of question marks
       if (context.is_prepare_protocol_ && !context.is_prepare_stage_) {
-        resolver_ctx.query_ctx_->set_questionmark_count(plan_ctx->get_param_store().count());
-        LOG_DEBUG("question mark size is ", K(plan_ctx->get_param_store()));
+        resolver_ctx.query_ctx_->set_questionmark_count(plan_ctx->get_parameter_count());
+        LOG_DEBUG("question mark size is ", K(plan_ctx->get_parameter_count()));
       } else {
         resolver_ctx.query_ctx_->set_questionmark_count(static_cast<int64_t>(parse_result.question_mark_ctx_.count_));
       }
 
-      HEAP_VAR(ObResolver, resolver, resolver_ctx) {
       NG_TRACE(resolve_begin);
       if (OB_FAIL(plan_ctx->build_subschema_ctx_by_param_store(context.schema_guard_))) {
-      } else if (stmt::T_ANONYMOUS_BLOCK == context.stmt_type_
+      } else if (OB_FAIL(plan_ctx->build_resolution_inputs(resolution_inputs, result.get_mem_pool()))) {
+      } else {
+        // Resolving an early predicate can bind execution parameters and retire
+        // their construction arena. Keep every later question mark on this
+        // statement-owned snapshot, including the prepared subschema metadata.
+        resolver_ctx.param_list_ = &resolution_inputs;
+      }
+  }
+  if (OB_SUCC(ret)) {
+      // ObResolver copies resolver_ctx, so prepare and bind its inputs first.
+      HEAP_VAR(ObResolver, resolver, resolver_ctx) {
+      if (stmt::T_ANONYMOUS_BLOCK == context.stmt_type_
           && context.is_prepare_protocol_
           && !context.is_prepare_stage_
           && !context.is_mock_prepare_) {
@@ -2165,6 +2176,11 @@ int ObSql::generate_stmt(ParseResult &parse_result,
       context.all_local_session_vars_ = &(resolver_ctx.query_ctx_->all_local_session_vars_);
       context.cur_stmt_ = stmt;
       NG_TRACE(resolve_end);
+      if (OB_SUCC(ret)) {
+        ret = plan_ctx->merge_resolution_parameter_flags(resolution_inputs);
+      }
+      // Do not retain a pointer into the retired construction directory.
+      resolver_ctx.param_list_ = nullptr;
       if (OB_SUCC(ret)) {
         if (NULL != pc_ctx && NULL != pc_ctx->exec_ctx_.get_physical_plan_ctx()) {
           if (OB_FAIL(pc_ctx->exec_ctx_.get_physical_plan_ctx()->init_datum_param_store())) {
@@ -2349,7 +2365,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
                               &result.get_exec_context().get_stmt_factory()->get_query_ctx()->sql_schema_guard_,
                               opt_stat_mgr_,
                               result.get_mem_pool(),
-                              &pctx->get_param_store(),
                               self_addr_,
                               global_hint,
                               *result.get_exec_context().get_expr_factory(),
@@ -2511,7 +2526,7 @@ int ObSql::generate_stmt_with_reconstruct_sql(ObDMLStmt* &stmt,
                                                 sql,
                                                 sql_ctx.schema_guard_,
                                                 print_param,
-                                                &phy_plan_ctx->get_param_store(),
+                                                *phy_plan_ctx,
                                                 session))) {
   } else {
     ObStmt *basic_stmt = NULL;
@@ -2762,7 +2777,7 @@ int ObSql::code_generate(
         || OB_ISNULL(pctx)) {
       ret = OB_INVALID_ARGUMENT;
   } else {
-    ObCodeGenerator code_generator(&(pctx->get_datum_param_store()));
+    ObCodeGenerator code_generator(pctx->get_parameter_count());
     phy_plan->set_is_packed(logical_plan->get_optimizer_context().is_packed());
     if (OB_FAIL(code_generator.generate(*logical_plan, *phy_plan))) {
     } else {
@@ -3368,7 +3383,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
           add_plan_to_pc = false;
         }
       } else {
-        parse_result.question_mark_ctx_.count_ = static_cast<int> (pctx->get_param_store().count());
+        parse_result.question_mark_ctx_.count_ = static_cast<int> (pctx->get_parameter_count());
       }
     }
   }
@@ -3664,7 +3679,7 @@ int ObSql::handle_parser(const ObString &sql,
       }
     }
     if (OB_SUCC(ret)) {
-      pctx->set_original_param_cnt(pctx->get_param_store().count());
+      pctx->set_original_param_cnt(pctx->get_parameter_count());
     }
   }
   return ret;
@@ -3746,7 +3761,7 @@ int ObSql::resolve_ins_multi_row_params(ObPlanCacheCtx &pc_ctx, const ObStmt &st
   int64_t param_num = 0;
   if (OB_ISNULL(plan_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(param_num = plan_ctx->get_param_store().count())) {
+  } else if (FALSE_IT(param_num = plan_ctx->get_parameter_count())) {
     // do nothing
   } else if (OB_FAIL(before_resolve_array_params(pc_ctx,
                                                  query_num,
@@ -3781,7 +3796,7 @@ int ObSql::resolve_multi_query_params(ObPlanCacheCtx &pc_ctx, const ObStmt &stmt
   int64_t param_num = 0;
   if (OB_ISNULL(plan_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(param_num = plan_ctx->get_param_store().count())) {
+  } else if (FALSE_IT(param_num = plan_ctx->get_parameter_count())) {
     // do nothing
   } else if (OB_FAIL(before_resolve_array_params(pc_ctx,
                                                  query_num,
@@ -3922,12 +3937,11 @@ int ObSql::calc_pre_calculable_exprs(const ObDMLStmt &stmt,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     phy_plan_ctx->set_ignore_stmt(is_ignore_stmt);
-    const DatumParamStore &datum_param_store = phy_plan_ctx->get_datum_param_store();
     ObStaticEngineExprCG expr_cg(phy_plan.get_allocator(),
                                  exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx()->schema_guard_,
                                  phy_plan_ctx->get_original_param_cnt(),
-                                 datum_param_store.count());
+                                 phy_plan_ctx->get_parameter_count());
     pre_calc_frame = new(frame_buf)ObPreCalcExprFrameInfo(phy_plan.get_allocator());
     if (OB_FAIL(expr_cg.generate_calculable_exprs(calculable_exprs,
                                                   *pre_calc_frame))) {
@@ -4016,7 +4030,7 @@ int ObSql::create_expr_constraint(ObQueryCtx &query_ctx,
     ObStaticEngineExprCG expr_cg(exec_ctx.get_allocator(), exec_ctx.get_my_session(),
                                  exec_ctx.get_sql_ctx()->schema_guard_,
                                  plan_ctx->get_original_param_cnt(),
-                                 plan_ctx->get_datum_param_store().count());
+                                 plan_ctx->get_parameter_count());
     pre_calc_constraint = new(cons_buf)ObPreCalcExprConstraint(exec_ctx.get_allocator());
     pre_calc_constraint->expect_result_ = expect_result;
     if (OB_FAIL(expr_cg.generate_calculable_exprs(pre_calc_exprs,
@@ -4064,13 +4078,22 @@ int ObSql::handle_text_execute(const ObStmt *basic_stmt,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(handle_ps_execute(exec_stmt->get_prepare_id(),
-                                    exec_stmt->get_prepare_type(),
-                                    param_store,
-                                    sql_ctx,
-                                    result,
-                                    false/*is_inner_sql*/))) {
-      } else if (OB_FAIL(construct_param_store(param_store, result.get_ps_params()))) {
+      ObPhysicalPlanCtx *plan_ctx = result.get_exec_context().get_physical_plan_ctx();
+      if (OB_ISNULL(plan_ctx)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        // USING values now belong to the execution allocator, independently of
+        // the outer EXECUTE binding. The prepared statement starts a new
+        // parameter scope and sets its own original parameter count below.
+        plan_ctx->reset_datum_param_store();
+        if (OB_FAIL(handle_ps_execute(exec_stmt->get_prepare_id(),
+                                      exec_stmt->get_prepare_type(),
+                                      param_store,
+                                      sql_ctx,
+                                      result,
+                                      false/*is_inner_sql*/))) {
+        } else if (OB_FAIL(construct_param_store(param_store, result.get_ps_params()))) {
+        }
       }
     }
   }

@@ -88,7 +88,7 @@ int ObColumnParam::copy_default_value(const DatumValue &source, Datum &target, S
   Datum owned;
   SqlTypeMeta meta = source.meta_;
   if (source.is_null() && !meta.is_null()) { meta.set_null(); }
-  const int ret = DatumParameterCodec::import_schema_native_value(source.datum_, meta, allocator_, owned);
+  const int ret = DatumParameterCodec::clone_schema_native_value(source.datum_, meta, allocator_, owned);
   if (ret == OB_SUCCESS) {
     release_default_value(target, target_meta);
     target = owned;
@@ -117,17 +117,17 @@ int ObColumnParam::copy_default_datum(const Datum &source, const SqlTypeMeta &so
 int ObColumnParam::export_orig_default_value(DatumValue &output, void *scratch, int64_t capacity) const
 {
   ObDatum view;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
+  int ret = DatumParameterCodec::export_schema_legacy_value(
       orig_default_value_, orig_default_meta_, view, scratch, capacity);
-  if (ret == OB_SUCCESS) { output = DatumValue(view, orig_default_meta_); }
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(view, orig_default_meta_); }
   return ret;
 }
 int ObColumnParam::export_cur_default_value(DatumValue &output, void *scratch, int64_t capacity) const
 {
   ObDatum view;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
+  int ret = DatumParameterCodec::export_schema_legacy_value(
       cur_default_value_, cur_default_meta_, view, scratch, capacity);
-  if (ret == OB_SUCCESS) { output = DatumValue(view, cur_default_meta_); }
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(view, cur_default_meta_); }
   return ret;
 }
 int ObColumnParam::copy_orig_default_value(DatumValue &output, ObIAllocator &owner) const

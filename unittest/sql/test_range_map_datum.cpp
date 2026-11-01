@@ -65,9 +65,9 @@ std::string encode(const ObRangeMap &map) {
 }
 std::string encode_value(const DatumValue &value) {
   int64_t size = 0, pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::value_size(value.datum_, value.meta_, size));
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::native_value_size(value.datum_, value.meta_, size));
   std::string out(size, '\0');
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_native_value(
       value.datum_, value.meta_, &out[0], out.size(), pos));
   EXPECT_EQ(out.size(), pos);
   return out;
@@ -272,14 +272,14 @@ TEST(RangeMapDatum, copying_values_uses_one_owned_payload_without_unused_reserve
   CountingAllocator decimals;
   int32_t raw = -1234;
   source.reset();
-  source.datum_.set_decimal_int_shallow(reinterpret_cast<ObDecimalInt *>(&raw), sizeof(raw));
+  ASSERT_EQ(OB_SUCCESS, source.datum_.set_reference(&raw, sizeof(raw)));
   source.get_meta().set_decimal_int(2);
   source.set_precision(38);
   ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(source, value, decimals));
   EXPECT_EQ(1, decimals.calls);
   EXPECT_EQ(sizeof(raw), decimals.bytes);
   raw = 0;
-  EXPECT_EQ(-1234, *reinterpret_cast<const int32_t *>(value.datum_.ptr_));
+  EXPECT_EQ(-1234, *reinterpret_cast<const int32_t *>(value.datum_.get_reference()));
 }
 TEST(RangeMapDatum, failed_value_clone_leaves_datum_and_type_unchanged) {
   CountingAllocator rejecting;
@@ -288,12 +288,11 @@ TEST(RangeMapDatum, failed_value_clone_leaves_datum_and_type_unchanged) {
   source.set_varchar_view(ObString::make_string("payload"));
   DatumParameter destination;
   int64_t scalar = 77;
-  destination.datum_.set_string(reinterpret_cast<const char *>(&scalar), sizeof(scalar));
+  destination.datum_.set_int(scalar);
   destination.get_meta().set_int();
   const DatumParameter before = destination;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, clone_datum_parameter(source, destination, rejecting));
-  EXPECT_EQ(before.datum_.ptr_, destination.datum_.ptr_);
-  EXPECT_EQ(before.datum_.pack_, destination.datum_.pack_);
+  EXPECT_EQ(0, MEMCMP(&before.datum_, &destination.datum_, sizeof(Datum)));
   EXPECT_EQ(before.get_meta(), destination.get_meta());
 }
 TEST(RangeMapDatum, fast_nlj_constant_bounds_survive_plan_arena_and_keep_null_rules) {
@@ -318,7 +317,8 @@ TEST(RangeMapDatum, fast_nlj_constant_bounds_survive_plan_arena_and_keep_null_ru
     input.set_varchar_view(ObString::make_string("lookup key"));
     input.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(input, owned, plan_arena));
-    ObDatum value = owned.datum_;
+    ObDatum value;
+    ASSERT_EQ(OB_SUCCESS, owned.copy_legacy(value, plan_arena));
     SqlTypeMeta meta = owned.get_meta();
     ASSERT_EQ(OB_SUCCESS, graph.get_range_map().expr_final_infos_.prepare_allocate(1));
     auto &info = graph.get_range_map().expr_final_infos_.at(0);
@@ -332,7 +332,7 @@ TEST(RangeMapDatum, fast_nlj_constant_bounds_survive_plan_arena_and_keep_null_ru
     ObSEArray<ObRangeColumnMeta *, 1> columns;
     ASSERT_EQ(OB_SUCCESS, columns.push_back(&column));
     ASSERT_EQ(OB_SUCCESS, graph.deep_copy_column_metas(columns));
-    DatumParamStore no_parameters;
+    ObPhysicalPlanCtx no_parameters(plan_arena);
     bool valid = false;
     ASSERT_EQ(OB_SUCCESS,
               ObRangeGenerator::check_can_final_fast_nlj_range(graph, no_parameters, valid));
@@ -357,7 +357,7 @@ TEST(RangeMapDatum, fast_nlj_constant_bounds_survive_plan_arena_and_keep_null_ru
   info.is_const_ = true;
   info.const_val_ = &null;
   info.const_meta_.set_null();
-  DatumParamStore empty;
+  ObPhysicalPlanCtx empty(a);
   ASSERT_EQ(OB_SUCCESS, ObRangeGenerator::generate_fast_nlj_range(graph, empty, a, range));
   EXPECT_TRUE(range->start_key_.get_cell(0).is_max_value());
   EXPECT_TRUE(range->end_key_.get_cell(0).is_min_value());
@@ -385,10 +385,10 @@ TEST(RangeMapDatum, native_value_clone_preserves_every_captured_value_and_owns_p
       const auto &entry = source.expr_final_infos_.at(0);
       flags = entry.flags_;
       DatumParameter view, owned;
-      view.set_datum(*entry.const_val_);
+      ASSERT_EQ(OB_SUCCESS, view.assign_legacy_borrowed(*entry.const_val_, entry.const_meta_));
       view.set_type_meta(entry.const_meta_);
       ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(view, owned, destination_arena));
-      copied = owned.datum_;
+      ASSERT_EQ(OB_SUCCESS, owned.copy_legacy(copied, destination_arena));
       meta = owned.get_meta();
     }
     ObRangeMap output(destination_arena);
@@ -422,10 +422,15 @@ TEST(RangeMapDatum, native_parameter_boundaries_keep_all_captured_scalar_values_
       int64_t pos = 0;
       ASSERT_EQ(OB_SUCCESS, original.deserialize(f.wire.data(), f.wire.size(), pos));
       DatumParameter parameter;
-      parameter.set_datum(*original.expr_final_infos_.at(0).const_val_);
+      ASSERT_EQ(OB_SUCCESS, parameter.assign_legacy_borrowed(
+          *original.expr_final_infos_.at(0).const_val_, original.expr_final_infos_.at(0).const_meta_));
       parameter.set_type_meta(original.expr_final_infos_.at(0).const_meta_);
-      DatumParamStore parameters((ObWrapperAllocator(input)));
-      ASSERT_EQ(OB_SUCCESS, parameters.push_back(parameter));
+      // Captured legacy values carry physical metadata only. Keep this full
+      // corpus on the existing constant boundary, without fabricating enum,
+      // UDT or odd-collation declarations for a ready parameter binding.
+      ObPhysicalPlanCtx parameters(input);
+      ObDatum constant;
+      ASSERT_EQ(OB_SUCCESS, parameter.copy_legacy(constant, input));
       ObPreRangeGraph graph(input);
       ObRangeNode node(input);
       int64_t key = 0;
@@ -435,8 +440,9 @@ TEST(RangeMapDatum, native_parameter_boundaries_keep_all_captured_scalar_values_
       graph.set_range_head(&node);
       ASSERT_EQ(OB_SUCCESS, graph.get_range_map().expr_final_infos_.prepare_allocate(1));
       auto &entry = graph.get_range_map().expr_final_infos_.at(0);
-      entry.is_param_ = true;
-      entry.param_idx_ = 0;
+      entry.is_const_ = true;
+      entry.const_val_ = &constant;
+      entry.const_meta_ = parameter.get_type_meta();
       entry.null_safe_ = true;
       ASSERT_EQ(OB_SUCCESS,
                 ObRangeGenerator::generate_fast_nlj_range(graph, parameters, output, range));
@@ -473,13 +479,15 @@ TEST(RangeMapDatum, native_fast_parameter_bounds_keep_composite_types_and_lifeti
     raw[2].set_varchar_view(ObString::make_string(text));
     raw[2].set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS, raw[3].set_datetime(1792702301123456LL, input));
-    DatumParamStore parameters((ObWrapperAllocator(input)));
+    ObExecContext execution(input);
+    ASSERT_EQ(OB_SUCCESS, execution.create_physical_plan_ctx());
+    ObPhysicalPlanCtx &parameters = *execution.get_physical_plan_ctx();
     ObRangeColumnMeta columns[4];
     ObSEArray<ObRangeColumnMeta *, 4> column_refs;
     for (int i = 0; i < 4; ++i) {
       DatumParameter value;
       ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(raw[i], value, input));
-      ASSERT_EQ(OB_SUCCESS, parameters.push_back(value));
+      ASSERT_EQ(OB_SUCCESS, parameters.append_parameter_input(value));
       auto &entry = graph.get_range_map().expr_final_infos_.at(i);
       entry.is_param_ = true;
       entry.param_idx_ = i;
@@ -489,6 +497,11 @@ TEST(RangeMapDatum, native_fast_parameter_bounds_keep_composite_types_and_lifeti
       ASSERT_EQ(OB_SUCCESS, column_refs.push_back(&columns[i]));
     }
     ASSERT_EQ(OB_SUCCESS, graph.deep_copy_column_metas(column_refs));
+    parameters.set_original_param_cnt(4);
+    ASSERT_EQ(OB_SUCCESS, parameters.init_datum_param_store());
+    ASSERT_TRUE(parameters.native_parameters_ready());
+    ASSERT_NE(nullptr, parameters.get_native_parameter_type(0));
+    ASSERT_NE(nullptr, parameters.get_native_parameter_type(3));
     bool valid = false;
     ASSERT_EQ(OB_SUCCESS,
               ObRangeGenerator::check_can_final_fast_nlj_range(graph, parameters, valid));
@@ -528,14 +541,23 @@ TEST(RangeMapDatum, native_fast_parameter_bounds_preserve_null_rules_and_reject_
   auto *range = new (memory) ObNewRange();
   new (memory + sizeof(ObNewRange)) DatumValue();
   new (memory + sizeof(ObNewRange) + sizeof(DatumValue)) DatumValue();
-  DatumParamStore parameters((ObWrapperAllocator(arena)));
+  ObExecContext execution(arena);
+  ASSERT_EQ(OB_SUCCESS, execution.create_physical_plan_ctx());
+  ObPhysicalPlanCtx &parameters = *execution.get_physical_plan_ctx();
   bool valid = true;
   EXPECT_EQ(OB_ERR_UNEXPECTED,
             ObRangeGenerator::check_can_final_fast_nlj_range(graph, parameters, valid));
   EXPECT_EQ(OB_ERR_UNEXPECTED,
             ObRangeGenerator::generate_fast_nlj_range(graph, parameters, arena, range));
   DatumParameter parameter;
-  ASSERT_EQ(OB_SUCCESS, parameters.push_back(parameter));
+  SqlTypeMeta integer_declaration; integer_declaration.set_int();
+  parameter.set_param_meta(integer_declaration);
+  parameter.set_accuracy(ObAccuracy(20, 0));
+  ASSERT_EQ(OB_SUCCESS, parameters.append_parameter_input(parameter));
+  parameters.set_original_param_cnt(1);
+  ASSERT_EQ(OB_SUCCESS, parameters.init_datum_param_store());
+  ASSERT_TRUE(parameters.native_parameters_ready());
+  ASSERT_EQ(ObIntType, parameters.get_native_parameter_type(0)->kind());
   ASSERT_EQ(OB_SUCCESS, ObRangeGenerator::generate_fast_nlj_range(graph, parameters, arena, range));
   EXPECT_TRUE(range->start_key_.get_cell(0).is_max_value());
   EXPECT_TRUE(range->end_key_.get_cell(0).is_min_value());
@@ -545,10 +567,18 @@ TEST(RangeMapDatum, native_fast_parameter_bounds_preserve_null_rules_and_reject_
   EXPECT_TRUE(range->end_key_.get_cell(0).is_null());
   int32_t raw = 123;
   DatumParameter decimal;
-  decimal.datum_.set_decimal_int_shallow(reinterpret_cast<ObDecimalInt *>(&raw), sizeof(raw));
+  ASSERT_EQ(OB_SUCCESS, decimal.datum_.set_reference(&raw, sizeof(raw)));
   decimal.get_meta().set_decimal_int(2);
-  decimal.set_precision(38);
-  ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(decimal, parameters.at(0), arena));
+  decimal.set_precision(38); decimal.set_scale(2);
+  SqlType decimal_declaration;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(decimal.get_type_meta(),
+      decimal.get_accuracy(), decimal_declaration));
+  alignas(8) char decimal_scratch[64];
+  ObDatum decimal_view; Datum native_decimal;
+  ASSERT_EQ(OB_SUCCESS, decimal.export_legacy(decimal_view, decimal_scratch, sizeof(decimal_scratch)));
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(decimal_declaration).import_legacy(decimal_view, native_decimal));
+  ASSERT_EQ(OB_SUCCESS, parameters.set_runtime_parameter(0, native_decimal,
+      decimal_declaration, decimal.get_metadata()));
   column.column_type_.set_type(ObDecimalIntType);
   column.column_type_.set_scale(2);
   column.column_type_.set_precision(38);

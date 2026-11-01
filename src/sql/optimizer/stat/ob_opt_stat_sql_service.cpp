@@ -923,7 +923,7 @@ int ObOptStatSqlService::hex_str_to_value(const char *buf, int64_t length,
   else if ((binary = static_cast<char *>(owner.alloc(length))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
   else if (length != (decoded_length = common::str_to_hex(buf, static_cast<int32_t>(length), binary,
                                                          static_cast<int32_t>(length)))) { ret = OB_ERR_UNEXPECTED; }
-  else { ret = DatumParameterCodec::decode_unis_value(binary, decoded_length, pos, owner, value.datum_, value.meta_); }
+  else { ret = DatumParameterCodec::decode_unis_native_value(binary, decoded_length, pos, owner, value.datum_, value.meta_); }
   return ret;
 }
 
@@ -954,10 +954,10 @@ int ObOptStatSqlService::get_value_binary_hex_str(const DatumValue &value, ObIAl
   int ret = OB_SUCCESS;
   int64_t length = 0, pos = 0, hex_pos = 0;
   char *binary = nullptr, *hex = nullptr;
-  if (OB_FAIL(DatumParameterCodec::value_size(value.datum_, value.meta_, length))) {}
+  if (OB_FAIL(DatumParameterCodec::native_value_size(value.datum_, value.meta_, length))) {}
   else if ((binary = static_cast<char *>(owner.alloc(length))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
   else if ((hex = static_cast<char *>(owner.alloc(OB_MAX_PARTITION_EXPR_LENGTH))) == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-  else if (OB_FAIL(DatumParameterCodec::encode_value(value.datum_, value.meta_, binary, length, pos))) {}
+  else if (OB_FAIL(DatumParameterCodec::encode_native_value(value.datum_, value.meta_, binary, length, pos))) {}
   else if (pos > length || pos < 0) { ret = OB_ERR_UNEXPECTED; }
   else if (OB_FAIL(hex_print(binary, pos, hex, OB_MAX_PARTITION_EXPR_LENGTH, hex_pos))) {}
   else { out_str.assign_ptr(hex, static_cast<int32_t>(hex_pos)); }

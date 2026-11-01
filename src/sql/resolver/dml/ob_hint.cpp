@@ -790,11 +790,7 @@ int ObOptParamHint::get_opt_param(const OptParamType param_type, DatumValue &val
   int ret = OB_SUCCESS;
   int64_t idx = OB_INVALID_INDEX;
   val.meta_.set_ext();
-  // ObDatum::set_extend writes the complete payload through ptr_. The NOP
-  // sentinel only needs to remain valid for the caller's immediate check.
-  thread_local char nop_payload[DATUM_EXTEND_PAYLOAD_SIZE];
-  val.datum_.ptr_ = nop_payload;
-  val.datum_.set_extend(ObActionFlag::OP_NOP, 0);
+  val.datum_.set_nop();
   for (int64_t i = 0; OB_INVALID_INDEX == idx && i < param_types_.count(); ++i) {
     if (param_type == param_types_.at(i)) {
       idx = i;

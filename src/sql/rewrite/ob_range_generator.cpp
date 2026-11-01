@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_range_generator.h"
 #include "common/datum/datum_value_projection.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "share/datum/datum_value_cast.h"
 #include "share/datum/typed_datum_compare.h"
 #include "sql/engine/expr/ob_datum_cast.h"
@@ -79,9 +80,11 @@ int compare_native_range_values(const DatumValue &left,const DatumValue &right,O
   if(ret==OB_SUCCESS)result=comparison;return ret;
 }
 int copy_native_range_value(const DatumValue &source,DatumValue &output,char *buffer,int64_t size,int64_t &pos) {
-  DatumValue candidate=source;ObDatum datum;int64_t next=pos;
-  const int ret=datum.deep_copy(source.datum_,buffer,size,next);
-  if(ret==OB_SUCCESS){candidate.datum_=datum;output=candidate;pos=next;}return ret;
+  Datum copied; int64_t next = pos;
+  const int ret = DatumParameterCodec::copy_native_span(source.datum_, source.meta_,
+      buffer, size, next, copied);
+  if (ret == OB_SUCCESS) { output = DatumValue(copied, source.meta_); pos = next; }
+  return ret;
 }
 int cast_native_range_json(ObIAllocator &owner,ObExecContext &context,ObIJsonBase *json,
     const ObExprResType &type,DatumValue &result) {
@@ -91,7 +94,11 @@ int cast_native_range_json(ObIAllocator &owner,ObExecContext &context,ObIJsonBas
 void set_native_range_nop(DatumValue &value) {
   struct Payload { int64_t action;int32_t size;uint8_t subtype,level,collation; } __attribute__((packed));
   static const Payload nop{ObActionFlag::OP_NOP,0,0,CS_LEVEL_INVALID,CS_TYPE_INVALID};
-  value.meta_.set_ext();value.datum_.ptr_=reinterpret_cast<const char *>(&nop);value.datum_.set_ext();
+  value.meta_.set_ext();
+  // Preserve the historical marker's own subtype/collation bytes independently
+  // of the current range metadata. The static bytes outlive every range.
+  const int ret = value.datum_.set_reference(&nop, sizeof(nop), Datum::LegacyExtended);
+  OB_ASSERT(ret == OB_SUCCESS);
 }
 }
 #define GET_RANGE_NODE_DOMAIN_TYPE(n) (static_cast<ObDomainOpType>((n)->domain_extra_.domain_releation_type_))
@@ -1022,10 +1029,12 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
   if(plan==nullptr||val_idx<0||val_idx>=range_map.expr_final_infos_.count())ret=OB_ERR_UNEXPECTED;
   else {
     const auto &info=range_map.expr_final_infos_.at(val_idx);const ObDatum *datum=nullptr;const SqlTypeMeta *meta=nullptr;
-    ObDatum evaluated;SqlValueDatumMapType mapping=OBJ_DATUM_MAPPING_MAX;bool keep_null_collation=true;
+    ObDatum evaluated; alignas(8) char parameter_scratch[64];
+    SqlValueDatumMapType mapping=OBJ_DATUM_MAPPING_MAX;bool keep_null_collation=true;
     if(info.is_param_){
-      if(info.param_idx_<0||info.param_idx_>=plan->get_param_store().count())ret=OB_ERR_UNEXPECTED;
-      else {const auto &parameter=plan->get_param_store().at(info.param_idx_);datum=&parameter.datum_;meta=&parameter.get_meta();}
+      const auto *attributes = plan->get_parameter_metadata(info.param_idx_);
+      if(info.param_idx_<0||info.param_idx_>=plan->get_parameter_count()||attributes==nullptr)ret=OB_ERR_UNEXPECTED;
+      else if((ret=plan->export_runtime_parameter_legacy(info.param_idx_,evaluated,parameter_scratch,sizeof(parameter_scratch)))==OB_SUCCESS){datum=&evaluated;meta=&attributes->type_meta_;}
     }else if(info.is_const_){datum=info.const_val_;meta=&info.const_meta_;}
     else if(info.is_expr_){
       if(info.temp_expr_==nullptr)ret=OB_ERR_UNEXPECTED;
@@ -1037,7 +1046,12 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
     if(ret==OB_SUCCESS&&(datum==nullptr||meta==nullptr))ret=OB_ERR_UNEXPECTED;
     else if(ret==OB_SUCCESS){
       if(keep_null_collation)mapping=ObDatum::get_sql_value_datum_map_type(meta->get_type());
-      ret=project_datum_value_view(*datum,*meta,mapping,value.meta_,value,keep_null_collation);
+      DatumValue projected;
+      ret=project_datum_value_view(*datum,*meta,mapping,value.meta_,projected,keep_null_collation);
+      if(ret==OB_SUCCESS){
+        if(info.is_param_)ret=clone_typed_value(projected,value,allocator);
+        else value=projected;
+      }
       if(ret==OB_SUCCESS&&value.is_nop_value())ret=OB_ERR_UNEXPECTED;
       else if(ret==OB_SUCCESS&&value.is_lob_storage()&&!value.meta_.is_inrow()){
         const ObLobReadOptions *options=nullptr;
@@ -1894,7 +1908,7 @@ int ObRangeGenerator::check_need_merge_range_nodes(const ObRangeNode *node,
   return ret;
 }
 int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_graph,
-                                              const common::DatumParamStore &param_store,
+                                              const ObPhysicalPlanCtx &param_store,
                                               ObIAllocator &allocator,
                                               void *range_buffer)
 {
@@ -1919,14 +1933,21 @@ int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_g
       const ObRangeMap::ExprFinalInfo& expr_info = range_map.expr_final_infos_.at(start_idx);
       const ObDatum *source = nullptr;
       const SqlTypeMeta *source_meta = nullptr;
+      ObDatum parameter_view;
+      alignas(8) char parameter_scratch[64];
       if (expr_info.is_param_) {
         const int64_t index = expr_info.param_idx_;
-        if (index < 0 || index >= param_store.count()) {
+        if (index < 0 || index >= param_store.get_parameter_count()) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const DatumParameter &parameter = param_store.at(index);
-          source = &parameter.datum_;
-          source_meta = &parameter.get_type_meta();
+          const DatumParameterMetadata *attributes = param_store.get_parameter_metadata(index);
+          if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+          else if (OB_FAIL(param_store.export_runtime_parameter_legacy(index, parameter_view,
+                  parameter_scratch, sizeof(parameter_scratch)))) {
+          } else {
+            source = &parameter_view;
+            source_meta = &attributes->type_meta_;
+          }
         }
       } else if (expr_info.is_const_) {
         source = expr_info.const_val_;
@@ -1977,7 +1998,7 @@ int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_g
 }
 
 int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_range_graph,
-                                                     const common::DatumParamStore &param_store,
+                                                     const ObPhysicalPlanCtx &param_store,
                                                      bool &is_valid)
 {
   int ret = OB_SUCCESS;
@@ -2005,10 +2026,12 @@ int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_
       // do nothing
     } else if (range_map.expr_final_infos_.at(start_idx).is_param_) {
       const int64_t index = range_map.expr_final_infos_.at(start_idx).param_idx_;
-      if (index < 0 || index >= param_store.count()) {
+      if (index < 0 || index >= param_store.get_parameter_count()) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        source_meta = &param_store.at(index).get_type_meta();
+        const DatumParameterMetadata *attributes = param_store.get_parameter_metadata(index);
+        if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+        else { source_meta = &attributes->type_meta_; }
       }
     } else if (range_map.expr_final_infos_.at(start_idx).is_const_) {
       if (range_map.expr_final_infos_.at(start_idx).const_val_ == nullptr) {
@@ -2503,8 +2526,12 @@ int ObRangeGenerator::calc_copy_ranges_buffer_size(const ObIArray<ObNewRange*> &
       ret = OB_ERR_UNEXPECTED;
     } else {
       for (int64_t j = 0; j < column_cnt; ++j) {
-        extra_buffer_size += range->get_start_key().get_values()[j].datum_.get_deep_copy_size();
-        extra_buffer_size += range->get_end_key().get_values()[j].datum_.get_deep_copy_size();
+        const DatumValue &start = range->get_start_key().get_values()[j];
+        const DatumValue &end = range->get_end_key().get_values()[j];
+        int64_t start_bytes = 0, end_bytes = 0;
+        if (OB_FAIL(DatumParameterCodec::native_span_size(start.datum_, start.meta_, start_bytes))) {
+        } else if (OB_FAIL(DatumParameterCodec::native_span_size(end.datum_, end.meta_, end_bytes))) {
+        } else { extra_buffer_size += start_bytes + end_bytes; }
       }
     }
   }

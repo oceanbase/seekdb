@@ -73,7 +73,7 @@ int ObTablePartitionInfo::get_not_insert_dml_part_sort_expr(const ObDMLStmt &stm
 
 int ObTablePartitionInfo::calculate_access_targets(
                           ObExecContext &exec_ctx,
-                          const ParamStore &params,
+                          const ObPhysicalPlanCtx &params,
                           const common::ObDataTypeCastParams &dtc_params)
 {
   int ret = OB_SUCCESS;

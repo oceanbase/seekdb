@@ -166,11 +166,14 @@ public:
   virtual ~ObDynamicParamSetter() {}
 
   int set_dynamic_param(ObEvalCtx &eval_ctx) const;
-  int set_dynamic_param(ObEvalCtx &eval_ctx, common::DatumParameter &param) const;
+  int set_dynamic_param(ObEvalCtx &eval_ctx, common::NativeTypedDatum &value,
+                        common::DatumParameterMetadata &attributes) const;
   // A borrowed view of the current expression datum and its parameter metadata.
   // Callers retaining it across evaluation must clone it into their own arena.
-  int capture_dynamic_param(ObEvalCtx &eval_ctx, common::DatumParameter &param) const;
-  int restore_dynamic_param(ObEvalCtx &eval_ctx, const common::DatumParameter &param) const;
+  int capture_dynamic_param(ObEvalCtx &eval_ctx, common::NativeTypedDatum &value,
+                            common::DatumParameterMetadata &attributes) const;
+  int restore_dynamic_param(ObEvalCtx &eval_ctx, const common::NativeTypedDatum &value,
+                            const common::DatumParameterMetadata &attributes) const;
   int update_dynamic_param(ObEvalCtx &eval_ctx, const common::Datum &datum) const;
 
   static void clear_parent_evaluated_flag(ObEvalCtx &eval_ctx, const ObExpr &expr);

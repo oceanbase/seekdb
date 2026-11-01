@@ -22,15 +22,12 @@
 
 namespace oceanbase { namespace sql {
 // Text/NUMBER endpoints borrow the statement arena, as optimizer constants do.
-// Scalar DOUBLE endpoints own bytes here; copying a range rebases those views.
+// Scalar DOUBLE endpoints own their bits inline in the native carrier.
 struct SimpleRange
 {
-  SimpleRange() : scalar_storage_{0.0, 0.0} { set_whole_range(); }
-  SimpleRange(const SimpleRange &other) : scalar_storage_{0.0, 0.0} { copy_from(other); }
-  SimpleRange &operator=(const SimpleRange &other) {
-    if (this != &other) { copy_from(other); }
-    return *this;
-  }
+  SimpleRange() { set_whole_range(); }
+  SimpleRange(const SimpleRange &other) = default;
+  SimpleRange &operator=(const SimpleRange &other) = default;
   void set_whole_range();
   void set_false_range();
   int compare_with_end(const SimpleRange &r, int &cmp) const;
@@ -47,49 +44,14 @@ struct SimpleRange
   bool inclusive_start_;
   bool inclusive_end_;
 private:
-  void assign_bound(common::DatumValue &target, const common::DatumValue &source, int slot) {
+  void assign_bound(common::DatumValue &target, const common::DatumValue &source) {
     target = source;
-    if (!source.is_null() && source.is_double()) {
-      scalar_storage_[slot] = source.get_double();
-      target.datum_.set_string(reinterpret_cast<const char *>(&scalar_storage_[slot]), sizeof(double));
-    }
   }
-  void set_owned_double(common::DatumValue &target, double value, int slot) {
-    scalar_storage_[slot] = value;
+  void set_owned_double(common::DatumValue &target, double value) {
     target.meta_.set_double();
-    target.datum_.set_string(reinterpret_cast<const char *>(&scalar_storage_[slot]), sizeof(double));
+    target.datum_.set_double(value);
   }
-  void normalize_double_storage() {
-    const bool left_double = !start_.is_null() && start_.is_double();
-    const bool right_double = !end_.is_null() && end_.is_double();
-    // Capture both before writing either slot: a negative coefficient swaps
-    // descriptors and their old pointers, not the backing scalar slots.
-    const double left = left_double ? start_.get_double() : 0.0;
-    const double right = right_double ? end_.get_double() : 0.0;
-    if (left_double) {
-      scalar_storage_[0] = left;
-      start_.datum_.set_string(reinterpret_cast<const char *>(&scalar_storage_[0]), sizeof(double));
-    }
-    if (right_double) {
-      scalar_storage_[1] = right;
-      end_.datum_.set_string(reinterpret_cast<const char *>(&scalar_storage_[1]), sizeof(double));
-    }
-  }
-  void copy_from(const SimpleRange &other) {
-    MEMCPY(scalar_storage_, other.scalar_storage_, sizeof(scalar_storage_));
-    start_ = other.start_; end_ = other.end_;
-    inclusive_start_ = other.inclusive_start_; inclusive_end_ = other.inclusive_end_;
-    for (common::DatumValue *endpoint : {&start_, &end_}) {
-      for (int slot=0;slot<2;++slot) {
-        if (endpoint->datum_.ptr_ == reinterpret_cast<const char *>(&other.scalar_storage_[slot])) {
-          endpoint->datum_.ptr_ = reinterpret_cast<const char *>(&scalar_storage_[slot]);
-          break;
-        }
-      }
-    }
-    normalize_double_storage();
-  }
-  double scalar_storage_[2];
+
 };
 
 inline void SimpleRange::set_whole_range()
@@ -167,11 +129,11 @@ inline bool SimpleRange::intersect(const SimpleRange &r)
   } else {
     bret = true;
     if (cmp_start == -1) {
-      assign_bound(start_, r.start_, 0);
+      assign_bound(start_, r.start_);
       inclusive_start_ = r.inclusive_start_;
     }
     if (cmp_end == 1) {
-      assign_bound(end_, r.end_, 1);
+      assign_bound(end_, r.end_);
       inclusive_end_ = r.inclusive_end_;
     }
   }
@@ -192,20 +154,20 @@ inline void SimpleRange::set_bound(ObItemType item_type, common::DatumValue boun
       set_false_range();
     }
   } else if (T_OP_LE == item_type) {
-    assign_bound(end_, bound, 1);
+    assign_bound(end_, bound);
     inclusive_end_ = true;
   } else if (T_OP_LT == item_type) {
-    assign_bound(end_, bound, 1);
+    assign_bound(end_, bound);
     inclusive_end_ = false;
   } else if (T_OP_GE == item_type) {
-    assign_bound(start_, bound, 0);
+    assign_bound(start_, bound);
     inclusive_start_ = true;
   } else if (T_OP_GT == item_type) {
-    assign_bound(start_, bound, 0);
+    assign_bound(start_, bound);
     inclusive_start_ = false;
   } else if (T_OP_EQ == item_type || T_OP_NSEQ == item_type) {
-    assign_bound(start_, bound, 0);
-    assign_bound(end_, bound, 1);
+    assign_bound(start_, bound);
+    assign_bound(end_, bound);
     inclusive_start_ = true;
     inclusive_end_ = true;
   }
@@ -215,7 +177,7 @@ inline void SimpleRange::set_bound(ObItemType item_type, double bound)
 {
   common::DatumValue value;
   value.meta_.set_double();
-  value.datum_.set_string(reinterpret_cast<const char *>(&bound), sizeof(bound));
+  value.datum_.set_double(bound);
   set_bound(item_type, value);
 }
 
@@ -269,15 +231,14 @@ inline bool SimpleRange::is_superset(const SimpleRange &r) const
 inline void SimpleRange::multiply_double(double coff)
 {
   if (!start_.is_null() && start_.is_double()) {
-    set_owned_double(start_, start_.get_double() * coff, 0);
+    set_owned_double(start_, start_.get_double() * coff);
   }
   if (!end_.is_null() && end_.is_double()) {
-    set_owned_double(end_, end_.get_double() * coff, 1);
+    set_owned_double(end_, end_.get_double() * coff);
   }
   if (coff < 0) {
     std::swap(start_, end_);
     std::swap(inclusive_start_, inclusive_end_);
-    normalize_double_storage();
     if (start_.is_min_value()) {
       start_.set_max_value();
     } else if (start_.is_max_value()) {

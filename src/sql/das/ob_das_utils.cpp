@@ -213,9 +213,10 @@ int ObDASUtils::reshape_storage_value(const SqlTypeMeta &col_type,
       if(bytes==nullptr)ret=OB_ALLOCATE_MEMORY_FAILED;
       else {
         MEMCPY(bytes,value.get_string_ptr(),len);MEMSET(bytes+len,0,binary_len-len);
-        ObDatum datum;datum.set_string(bytes,binary_len);
+        Datum datum;
+        ret=datum.set_string(bytes,binary_len);
         SqlTypeMeta meta=value.meta_;meta.set_char();meta.set_collation_type(CS_TYPE_BINARY);meta.set_collation_level(CS_LEVEL_IMPLICIT);
-        value=DatumValue(datum,meta);
+        if (OB_SUCC(ret)) { value=DatumValue(datum,meta); }
       }
     }
   }else if(value.meta_.is_fixed_len_char_type()){
@@ -224,8 +225,8 @@ int ObDASUtils::reshape_storage_value(const SqlTypeMeta &col_type,
     for(;len>=space.length();len-=space.length()){
       if(MEMCMP(bytes+len-space.length(),space.ptr(),space.length())!=0)break;
     }
-    ObDatum datum;datum.set_string(bytes,len);SqlTypeMeta meta=value.meta_;meta.set_collation_level(CS_LEVEL_IMPLICIT);
-    value=DatumValue(datum,meta);
+    Datum datum;ret=datum.set_string(bytes,len);SqlTypeMeta meta=value.meta_;meta.set_collation_level(CS_LEVEL_IMPLICIT);
+    if (OB_SUCC(ret)) { value=DatumValue(datum,meta); }
   }
   return ret;
 }
@@ -246,12 +247,14 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
         char pad_char = '\0';
         MEMCPY(dest_str, str, len);
         MEMSET(dest_str + len, pad_char, binary_len - len);
-        ObDatum datum;
-        datum.set_string(dest_str, binary_len);
-        value.datum_ = datum;
-        value.meta_.set_char();
-        value.meta_.set_collation_type(CS_TYPE_BINARY);
-        value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        Datum datum;
+        if (OB_FAIL(datum.set_string(dest_str, binary_len))) {
+        } else {
+          value.datum_ = datum;
+          value.meta_.set_char();
+          value.meta_.set_collation_type(CS_TYPE_BINARY);
+          value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+        }
       }
     }
   } else if (value.meta_.is_fixed_len_char_type()) {
@@ -263,10 +266,12 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
         break;
       }
     }
-    ObDatum datum;
-    datum.set_string(str, len);
-    value.datum_ = datum;
-    value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    Datum datum;
+    if (OB_FAIL(datum.set_string(str, len))) {
+    } else {
+      value.datum_ = datum;
+      value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    }
   }
   return ret;
 }

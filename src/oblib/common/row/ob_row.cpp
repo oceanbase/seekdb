@@ -202,7 +202,7 @@ int ObNewRow::serialize(char *buffer, int64_t length, int64_t &pos) const
 {
   int ret = serialization::encode_vi64(buffer, length, pos, count_);
   for (int64_t i = 0; ret == OB_SUCCESS && i < count_; ++i) {
-    ret = DatumParameterCodec::encode_value(cells_[i].datum_, cells_[i].meta_, buffer, length, pos);
+    ret = DatumParameterCodec::encode_native_value(cells_[i].datum_, cells_[i].meta_, buffer, length, pos);
   }
   if (ret == OB_SUCCESS) { ret = serialization::encode_vi64(buffer, length, pos, projector_size_); }
   for (int64_t i = 0; ret == OB_SUCCESS && i < projector_size_; ++i) {
@@ -216,7 +216,7 @@ int64_t ObNewRow::get_serialize_size() const
       + serialization::encoded_length_vi64(projector_size_);
   for (int64_t i = 0; i < count_; ++i) {
     int64_t bytes = 0;
-    if (DatumParameterCodec::value_size(cells_[i].datum_, cells_[i].meta_, bytes) != OB_SUCCESS) { return 0; }
+    if (DatumParameterCodec::native_value_size(cells_[i].datum_, cells_[i].meta_, bytes) != OB_SUCCESS) { return 0; }
     if (!add_size(size, bytes)) { return 0; }
   }
   for (int64_t i = 0; i < projector_size_; ++i) {
@@ -244,7 +244,7 @@ int ObNewRow::deserialize(ObIAllocator &owner, const char *buffer, int64_t lengt
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     values[i] = cells_[i];
     if (next < length) {
-      ret = DatumParameterCodec::decode_unis_value(buffer, length, next, scratch, values[i].datum_, values[i].meta_);
+      ret = DatumParameterCodec::decode_unis_native_value(buffer, length, next, scratch, values[i].datum_, values[i].meta_);
     }
   }
   if (OB_SUCC(ret) && next < length) { ret = serialization::decode_vi64(buffer, length, next, &projector_size); }

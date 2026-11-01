@@ -523,7 +523,15 @@ int ObDASIvfBaseScanIter::get_next_saved_rowkey()
           ret = OB_ERR_UNEXPECTED;
         } else {
           common::Datum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
-          ret = expr->get_datum_copy_plan().import_legacy(rowkey.get_values()[i].datum_, datum);
+          ObDatum physical;
+          alignas(8) char scratch[64];
+          common::Datum imported;
+          if (OB_FAIL(rowkey.get_values()[i].export_legacy(physical, scratch, sizeof(scratch)))) {
+          } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(physical, imported))) {
+          } else if (imported.is_present() && imported.length() > 0
+                     && imported.get_reference() == scratch) {
+            ret = expr->deep_copy_datum(*vec_aux_rtdef_->eval_ctx_, imported);
+          } else { datum = imported; }
         }
       }
     }
@@ -559,7 +567,15 @@ int ObDASIvfBaseScanIter::get_next_saved_rowkeys(int64_t &count)
         } else {
           for (int64_t idx_key = 0; OB_SUCC(ret) && idx_key < count; ++idx_key) {
             guard.set_batch_idx(idx_key);
-            ret = expr->get_datum_copy_plan().import_legacy(rowkeys[idx_key].get_values()[idx_exp].datum_, datum[idx_key]);
+            ObDatum physical;
+            alignas(8) char scratch[64];
+            common::Datum imported;
+            if (OB_FAIL(rowkeys[idx_key].get_values()[idx_exp].export_legacy(physical, scratch, sizeof(scratch)))) {
+            } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(physical, imported))) {
+            } else if (imported.is_present() && imported.length() > 0
+                       && imported.get_reference() == scratch) {
+              ret = expr->deep_copy_datum(*vec_aux_rtdef_->eval_ctx_, imported);
+            } else { datum[idx_key] = imported; }
           }
           if (OB_SUCC(ret)) {
             expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_);

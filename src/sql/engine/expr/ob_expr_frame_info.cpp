@@ -35,7 +35,8 @@ OB_SERIALIZE_MEMBER(ObFrameInfo,
 
 namespace
 {
-constexpr int32_t NATIVE_FRAME_WIRE_VERSION = 1;
+constexpr int32_t NATIVE_FRAME_WIRE_VERSION = 2;
+constexpr int32_t PHYSICAL_ARRAY_FRAME_WIRE_VERSION = 1;
 
 bool wire_expr_selected(const ObExprFrameInfo &expressions, int64_t index, uint32_t frame_index)
 {
@@ -339,7 +340,8 @@ int NativeFrameCodec::deserialize_group(const char *buf, int64_t length, int64_t
       || (frame_count > 0 && frames == nullptr)) { return OB_DESERIALIZE_ERROR; }
   if (OB_FAIL(serialization::decode_i32(buf, length, cursor, &version))) {
   } else if (OB_FAIL(serialization::decode_i8(buf, length, cursor, &empty))) {
-  } else if (version != NATIVE_FRAME_WIRE_VERSION || empty != (no_data ? 1 : 0)) {
+  } else if ((version != NATIVE_FRAME_WIRE_VERSION && version != PHYSICAL_ARRAY_FRAME_WIRE_VERSION)
+             || empty != (no_data ? 1 : 0)) {
     ret = OB_DESERIALIZE_ERROR;
   } else if (plan_part) { ret = deserialize_metadata(buf, length, cursor, decoded_group, frame_count); }
   else { ret = decoded_group.assign(group); }
@@ -368,7 +370,7 @@ int NativeFrameCodec::deserialize_group(const char *buf, int64_t length, int64_t
           } else if (index != j) { ret = OB_DESERIALIZE_ERROR; }
           else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &flags))) {
           } else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &count))) {
-          } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner, type, value))) {
+          } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner, type, value, version))) {
           } else if (!type->equals(expr.get_sql_type())) { ret = OB_DESERIALIZE_ERROR; }
           else {
             *reinterpret_cast<Datum *>(frame + expr.datum_off_) = value;
@@ -402,16 +404,25 @@ int NativeFrameCodec::deserialize_group(const char *buf, int64_t length, int64_t
 int NativeFrameCodec::parameter_size(const ObPhysicalPlanCtx &plan, int64_t &size)
 {
   int ret = OB_SUCCESS;
-  int64_t candidate = 20;
-  const int64_t count = plan.get_param_store().count();
-  if (plan.get_original_param_cnt() < 0 || plan.get_original_param_cnt() > count) { return OB_INVALID_ARGUMENT; }
+  int64_t candidate = 28; // version, count, original count, sparse group count
+  const int64_t count = plan.get_parameter_count();
+  if (!plan.native_parameters_ready() || plan.get_original_param_cnt() < 0
+      || plan.get_original_param_cnt() > count) { return OB_INVALID_ARGUMENT; }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     const Datum *value = plan.get_native_parameter(i);
     const SqlType *type = plan.get_native_parameter_type(i);
     int64_t bytes = 0;
-    if (value == nullptr || type == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    if (value == nullptr || type == nullptr || plan.get_parameter_metadata(i) == nullptr) { ret = OB_ERR_UNEXPECTED; }
     else if (OB_FAIL(NativeFrameValueCodec::size(*type, *value, bytes))) {
-    } else if (OB_FAIL(add_wire_size(4, candidate))) {
+    } else if (OB_FAIL(add_wire_size(4 + NativeFrameValueCodec::metadata_size(), candidate))) {
+    } else { ret = add_wire_size(bytes, candidate); }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_native_group_count(); ++i) {
+    NativeParameterGroup group;
+    int64_t bytes = 0;
+    if (OB_FAIL(plan.capture_native_group(i, group))) {
+    } else if (OB_FAIL(NativeFrameValueCodec::size(*group.value_.type_, group.value_.datum_, bytes))) {
+    } else if (OB_FAIL(add_wire_size(8 + NativeFrameValueCodec::metadata_size(), candidate))) {
     } else { ret = add_wire_size(bytes, candidate); }
   }
   if (OB_SUCC(ret)) { size = candidate; }
@@ -428,18 +439,27 @@ int NativeFrameCodec::serialize_parameters(const ObPhysicalPlanCtx &plan,
   if (bytes > length - pos) { return OB_BUF_NOT_ENOUGH; }
   int64_t cursor = pos;
   if (OB_FAIL(serialization::encode_i32(buf, length, cursor, NATIVE_FRAME_WIRE_VERSION))) {
-  } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, plan.get_param_store().count()))) {
+  } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, plan.get_parameter_count()))) {
   } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, plan.get_original_param_cnt()))) {
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_param_store().count(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_parameter_count(); ++i) {
     int64_t page = 0, slot = 0;
     ScalarFrameLayout::locate_parameter(plan.get_original_param_cnt(), i, page, slot);
     const ObEvalInfo &eval = *reinterpret_cast<const ObEvalInfo *>(plan.get_param_frame_ptrs().at(page)
         + ScalarFrameLayout::eval_info_offset(slot));
     if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.flag_))) {
     } else if (OB_FAIL(serialization::encode_i16(buf, length, cursor, eval.cnt_))) {
+    } else if (OB_FAIL(NativeFrameValueCodec::encode_metadata(*plan.get_parameter_metadata(i), buf, length, cursor))) {
     } else { ret = NativeFrameValueCodec::encode(*plan.get_native_parameter_type(i),
         *plan.get_native_parameter(i), buf, length, cursor); }
+  }
+  if (OB_SUCC(ret)) { ret = serialization::encode_i64(buf, length, cursor, plan.get_native_group_count()); }
+  for (int64_t i = 0; OB_SUCC(ret) && i < plan.get_native_group_count(); ++i) {
+    NativeParameterGroup group;
+    if (OB_FAIL(plan.capture_native_group(i, group))) {
+    } else if (OB_FAIL(serialization::encode_i64(buf, length, cursor, group.index_))) {
+    } else if (OB_FAIL(NativeFrameValueCodec::encode_metadata(group.attributes_, buf, length, cursor))) {
+    } else { ret = NativeFrameValueCodec::encode(*group.value_.type_, group.value_.datum_, buf, length, cursor); }
   }
   if (OB_SUCC(ret)) { pos = cursor; }
   return ret;
@@ -447,24 +467,30 @@ int NativeFrameCodec::serialize_parameters(const ObPhysicalPlanCtx &plan,
 
 int NativeFrameCodec::deserialize_parameters(const char *buf, int64_t length, int64_t &pos,
     ObIAllocator &owner, ObIArray<char *> &pages,
-    ObIArray<const SqlType *> &types, int64_t &original_count)
+    ObIArray<const SqlType *> &types, int64_t &original_count,
+    ObIArray<DatumParameterMetadata> *metadata, ObIArray<NativeParameterGroup> *groups,
+    int32_t *wire_version)
 {
   int ret = OB_SUCCESS;
   int64_t cursor = pos, count = 0, original = 0;
   int32_t version = 0;
   ObSEArray<char *, 4> candidate_pages;
   ObSEArray<const SqlType *, 16> candidate_types;
+  ObSEArray<DatumParameterMetadata, 8> candidate_metadata;
+  ObSEArray<NativeParameterGroup, 2> candidate_groups;
   if (buf == nullptr || pos < 0 || pos > length || length - pos < 20) { return OB_DESERIALIZE_ERROR; }
   if (OB_FAIL(serialization::decode_i32(buf, length, cursor, &version))) {
   } else if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &count))) {
   } else if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &original))) {
-  } else if (version != NATIVE_FRAME_WIRE_VERSION || original < 0 || count < original
-             || count > (length - cursor) / 11) { ret = OB_DESERIALIZE_ERROR; }
+  } else if ((version != NATIVE_FRAME_WIRE_VERSION && version != PHYSICAL_ARRAY_FRAME_WIRE_VERSION)
+      || original < 0 || count < original || count > (length - cursor) / 11
+      || count > INT64_MAX - ScalarFrameLayout::slots_per_frame()) { ret = OB_DESERIALIZE_ERROR; }
   else {
     const int64_t page_count = ScalarFrameLayout::frame_count(original)
         + ScalarFrameLayout::frame_count(count - original);
     if (OB_FAIL(candidate_pages.reserve(page_count))) {
     } else if (OB_FAIL(candidate_types.reserve(count))) {
+    } else if (version >= 2 && OB_FAIL(candidate_metadata.reserve(count))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < page_count; ++i) {
       const int64_t slots = parameter_page_slots(i, count, original);
@@ -487,21 +513,55 @@ int NativeFrameCodec::deserialize_parameters(const char *buf, int64_t length, in
       ObEvalInfo &eval = *reinterpret_cast<ObEvalInfo *>(frame + ScalarFrameLayout::eval_info_offset(slot));
       int16_t flags = 0, rows = 0;
       const SqlType *type = nullptr;
+      DatumParameterMetadata attributes;
       if (length - cursor < 4) { ret = OB_DESERIALIZE_ERROR; }
       else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &flags))) {
       } else if (OB_FAIL(serialization::decode_i16(buf, length, cursor, &rows))) {
-      } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner, type, value))) {
+      } else if (version >= 2 && OB_FAIL(NativeFrameValueCodec::decode_metadata(buf, length, cursor, attributes))) {
+      } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner, type, value, version))) {
       } else if (OB_FAIL(candidate_types.push_back(type))) {
+      } else if (version >= 2 && OB_FAIL(candidate_metadata.push_back(attributes))) {
       } else {
         eval.flag_ = static_cast<uint16_t>(flags); eval.cnt_ = static_cast<uint16_t>(rows);
         eval.point_to_frame_ = 0;
       }
     }
+    if (OB_SUCC(ret) && version >= 2) {
+      int64_t group_count = 0;
+      if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &group_count))) {
+      } else if (group_count < 0 || group_count > count || group_count > (length - cursor) / 39) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else { ret = candidate_groups.reserve(group_count); }
+      for (int64_t i = 0; OB_SUCC(ret) && i < group_count; ++i) {
+        NativeParameterGroup group;
+        if (OB_FAIL(serialization::decode_i64(buf, length, cursor, &group.index_))) {
+        } else if (group.index_ < 0 || group.index_ >= count) { ret = OB_DESERIALIZE_ERROR; }
+        else if (OB_FAIL(NativeFrameValueCodec::decode_metadata(buf, length, cursor, group.attributes_))) {
+        } else if (OB_FAIL(NativeFrameValueCodec::decode(buf, length, cursor, owner,
+            group.value_.type_, group.value_.datum_, version))) {
+        } else if (!group.value_.type_->legacy_meta().is_ext_sql_array()) { ret = OB_DESERIALIZE_ERROR; }
+        for (int64_t j = 0; OB_SUCC(ret) && j < candidate_groups.count(); ++j) {
+          if (candidate_groups.at(j).index_ == group.index_) { ret = OB_DESERIALIZE_ERROR; }
+        }
+        if (OB_SUCC(ret)) { ret = candidate_groups.push_back(group); }
+      }
+    }
+    // Reserve every output before any externally visible publication.
     if (OB_SUCC(ret) && OB_FAIL(pages.reserve(candidate_pages.count()))) {
     } else if (OB_SUCC(ret) && OB_FAIL(types.reserve(candidate_types.count()))) {
-    } else if (OB_SUCC(ret) && OB_FAIL(pages.assign(candidate_pages))) {
-    } else if (OB_SUCC(ret) && OB_FAIL(types.assign(candidate_types))) {
-    } else if (OB_SUCC(ret)) { original_count = original; pos = cursor; }
+    } else if (OB_SUCC(ret) && metadata != nullptr && OB_FAIL(metadata->reserve(candidate_metadata.count()))) {
+    } else if (OB_SUCC(ret) && groups != nullptr && OB_FAIL(groups->reserve(candidate_groups.count()))) {
+    } else if (OB_SUCC(ret)) {
+      const int a = pages.assign(candidate_pages);
+      const int b = types.assign(candidate_types);
+      const int c = metadata == nullptr ? OB_SUCCESS : metadata->assign(candidate_metadata);
+      const int d = groups == nullptr ? OB_SUCCESS : groups->assign(candidate_groups);
+      OB_ASSERT(a == OB_SUCCESS && b == OB_SUCCESS && c == OB_SUCCESS && d == OB_SUCCESS);
+      UNUSED(a); UNUSED(b); UNUSED(c); UNUSED(d);
+      original_count = original;
+      if (wire_version != nullptr) { *wire_version = version; }
+      pos = cursor;
+    }
   }
   return ret;
 }
@@ -957,11 +1017,7 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
       array_meta.set_ext();
       array_meta.set_extend_type(T_EXT_SQL_ARRAY);
       datum_param.set_type_meta(array_meta);
-      if (OB_FAIL(datum_param.alloc_datum_reserved_buff(array_meta, // is_ext_sql_array
-                                                        PRECISION_UNKNOWN_YET, // precision is unknown
-                                                        exec_ctx.get_allocator()))) {
-      } else if (FALSE_IT(datum_param.set_array_address(datum_array))) {
-        //always false, do nothing
+      if (OB_FAIL(datum_param.set_array_address(datum_array, exec_ctx.get_allocator()))) {
       } else if (OB_FAIL(res_datum_params.push_back(datum_param))) {
       }
     } // else end
@@ -969,7 +1025,7 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
   //replace array param to the real param and eval the pre calc expr
   for (int64_t group_id = 0; OB_SUCC(ret) && group_id < group_cnt; ++group_id) {
     if (OB_FAIL(exec_ctx.get_physical_plan_ctx()->replace_batch_param_datum(group_id, 0,
-                              exec_ctx.get_physical_plan_ctx()->get_datum_param_store().count()))) {
+                              exec_ctx.get_physical_plan_ctx()->get_parameter_count()))) {
     }
     //params of each group need to clear the datum evaluted flags before calc the pre_calc_expr
     //otherwise, the result of pre_calc_expr will be the result of the last group param
@@ -979,12 +1035,14 @@ OB_NOINLINE int ObPreCalcExprFrameInfo::do_batch_stmt_eval(ObExecContext &exec_c
       datum_array = res_datum_params.at(i).get_array<DatumParameterArray>();
       if (OB_FAIL(rt_expr->eval(eval_ctx, res_datum))) {
       } else {
-        DatumParameter borrowed;
-        if (OB_FAIL(capture_datum_parameter(*rt_expr, eval_ctx, borrowed))) {
-        } else if (OB_FAIL(DatumParameterArray::clone_parameter(borrowed,
-            datum_array->data_[group_id], exec_ctx.get_allocator()))) {
-        } else if (rt_expr->obj_meta_.has_lob_header()) {
-          datum_array->data_[group_id].set_result_flag(HAS_LOB_HEADER_FLAG);
+        NativeTypedDatum borrowed, owned;
+        DatumParameterMetadata attributes;
+        if (OB_FAIL(capture_datum_parameter(*rt_expr, eval_ctx, borrowed, attributes))) {
+        } else if (OB_FAIL(clone_native_parameter_value(borrowed, exec_ctx.get_allocator(), owned))) {
+        } else {
+          if (rt_expr->obj_meta_.has_lob_header()) { attributes.res_flags_ |= HAS_LOB_HEADER_FLAG; }
+          ret = datum_array->set_native_element_borrowed_type(group_id,
+              owned.datum_, *owned.type_, attributes, exec_ctx.get_allocator());
         }
       }
     }

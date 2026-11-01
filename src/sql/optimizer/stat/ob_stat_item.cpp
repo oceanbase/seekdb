@@ -32,10 +32,9 @@ namespace {
 int export_stat_item_value(const Datum &value, const SqlTypeMeta &meta, DatumValue &output,
                            void *scratch, int64_t capacity)
 {
-  DatumValue candidate;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
-      value, meta, candidate.datum_, scratch, capacity);
-  if (ret == OB_SUCCESS) { candidate.meta_ = meta; output = candidate; }
+  ObDatum physical;
+  int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, physical, scratch, capacity);
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(physical, meta); }
   return ret;
 }
 int copy_stat_item_value(const Datum &value, const SqlTypeMeta &meta,
@@ -57,7 +56,10 @@ int clone_stat_item_value(const Datum &value, const SqlTypeMeta &meta, ObIAlloca
 int borrow_stat_item_value(const DatumValue &value, Datum &output, SqlTypeMeta &output_meta)
 {
   Datum candidate;
-  const int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, candidate);
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  int ret = value.export_legacy(physical, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) { ret = DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, candidate); }
   if (ret == OB_SUCCESS) { output = candidate; output_meta = value.meta_; }
   return ret;
 }
@@ -722,7 +724,10 @@ int ObGlobalMaxEval::add(const DatumValue &value)
   int ret = OB_SUCCESS;
   int cmp = 0;
   Datum candidate;
-  if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, candidate))) {
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(value.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, candidate))) {
   } else if (global_max_.is_null()) {
     global_max_ = candidate; meta_ = value.meta_;
   } else {
@@ -755,7 +760,10 @@ int ObGlobalMinEval::add(const DatumValue &value)
   int ret = OB_SUCCESS;
   int cmp = 0;
   Datum candidate;
-  if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, candidate))) {
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(value.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, candidate))) {
   } else if (global_min_.is_null()) {
     global_min_ = candidate; meta_ = value.meta_;
   } else {

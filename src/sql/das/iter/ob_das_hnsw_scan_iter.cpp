@@ -570,7 +570,15 @@ int ObDASHNSWScanIter::inner_get_next_row()
             ret = OB_ERR_UNEXPECTED;
           } else {
             common::Datum &datum = expr->locate_datum_for_write(*vec_aux_rtdef_->eval_ctx_);
-            ret = expr->get_datum_copy_plan().import_legacy(row->get_cell(row_cell_idx++).datum_, datum);
+            ObDatum physical;
+            alignas(8) char scratch[64];
+            common::Datum imported;
+            if (OB_FAIL(row->get_cell(row_cell_idx++).export_legacy(physical, scratch, sizeof(scratch)))) {
+            } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(physical, imported))) {
+            } else if (imported.is_present() && imported.length() > 0
+                       && imported.get_reference() == scratch) {
+              ret = expr->deep_copy_datum(*vec_aux_rtdef_->eval_ctx_, imported);
+            } else { datum = imported; }
           }
         }
       }
@@ -621,7 +629,15 @@ int ObDASHNSWScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           // row.cell(a_batch_obj_cnt): dis, row.cell(a_batch_obj_cnt + 1): vid
           for (int64_t num = 0; OB_SUCC(ret) && num < count; ++num) {
             guard.set_batch_idx(num);
-            ret = expr->get_datum_copy_plan().import_legacy(row->get_cell(num * a_batch_obj_cnt + 1 + idx_exp).datum_, datum[num]);
+            ObDatum physical;
+            alignas(8) char scratch[64];
+            common::Datum imported;
+            if (OB_FAIL(row->get_cell(num * a_batch_obj_cnt + 1 + idx_exp).export_legacy(physical, scratch, sizeof(scratch)))) {
+            } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(physical, imported))) {
+            } else if (imported.is_present() && imported.length() > 0
+                       && imported.get_reference() == scratch) {
+              ret = expr->deep_copy_datum(*vec_aux_rtdef_->eval_ctx_, imported);
+            } else { datum[num] = imported; }
           }
           if (OB_SUCC(ret)) {
             expr->set_evaluated_projected(*vec_aux_rtdef_->eval_ctx_);

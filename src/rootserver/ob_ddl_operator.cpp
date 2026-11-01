@@ -53,9 +53,8 @@ namespace rootserver
 
 
 ObSysStat::Item::Item(ObSysStat::ItemList &list, const char *name, const char *info)
-  : name_(name), datum_payload_(0), info_(info)
+  : name_(name), info_(info)
 {
-  value_.datum_.ptr_ = reinterpret_cast<char *>(&datum_payload_);
   value_.datum_.set_int(0);
   value_.meta_.set_int();
   const bool add_success = list.add_last(this);

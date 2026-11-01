@@ -129,7 +129,7 @@ int ObExprToOutfileRow::calc_outfile_info(const ObExpr &expr,
     common::ObDatum legacy;
     OZ(ObExprUtil::export_legacy_value(*expr.args_[i], expr.locate_param_datum(ctx, i),
                                       allocator, legacy));
-    OX(values[i] = DatumValue(legacy, expr.args_[i]->obj_meta_));
+    OZ(values[i].assign_legacy_borrowed(legacy, expr.args_[i]->obj_meta_));
   }
   if (OB_SUCC(ret)) {
     out_info.field_ = values[PARAM_FIELD];
@@ -174,8 +174,10 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, Datum
           alignas(8) char value_scratch[64];
           common::ObDatum legacy;
           OZ(expr.args_[i]->get_datum_copy_plan().legacy_view(v, legacy, value_scratch, sizeof(value_scratch)));
-          DatumValue value(legacy, datum_meta);
-          if (!datum_meta.is_lob_storage()) {
+          DatumValue value;
+          OZ(value.assign_legacy_borrowed(legacy, datum_meta));
+          if (OB_FAIL(ret)) {
+          } else if (!datum_meta.is_lob_storage()) {
             OZ(print_field(buf, buf_len, pos, value, *out_info));
           } else { // text tc
             ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

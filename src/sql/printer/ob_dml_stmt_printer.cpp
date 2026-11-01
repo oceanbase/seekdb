@@ -45,6 +45,7 @@ ObDMLStmtPrinter::ObDMLStmtPrinter(char *buf, int64_t buf_len, int64_t *pos, con
     print_params_(print_params),
     expr_printer_(buf, buf_len, pos, schema_guard_, print_params_, param_store),
     param_store_(param_store),
+    parameter_context_(nullptr),
     session_(session)
 {
 }
@@ -1550,6 +1551,7 @@ int ObDMLStmtPrinter::print_subquery(const ObSelectStmt *subselect_stmt,
                               param_store_,
                               subquery_print_params & FORCE_COL_ALIAS,
                               session_);
+  printer.bind_runtime_parameters(parameter_context_);
   if (subquery_print_params & PRINT_CTE) {
     printer.enable_print_temp_table_as_cte();
   }

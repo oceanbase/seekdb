@@ -381,7 +381,7 @@ int ObTransformSimplifyExpr::replace_op_null_condition(ObDMLStmt *stmt, bool &tr
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(replace_cmp_null_condition(stmt->get_condition_exprs().at(i),
                                                   *stmt,
-                                                  plan_ctx->get_param_store(),
+                                                  *plan_ctx,
                                                   is_happened))) {
     } else {
       trans_happened |= is_happened;
@@ -392,7 +392,7 @@ int ObTransformSimplifyExpr::replace_op_null_condition(ObDMLStmt *stmt, bool &tr
     for (int64_t i = 0; OB_SUCC(ret) && i < sel_stmt->get_having_expr_size(); ++i) {
       if (OB_FAIL(replace_cmp_null_condition(sel_stmt->get_having_exprs().at(i),
                                              *stmt,
-                                             plan_ctx->get_param_store(),
+                                             *plan_ctx,
                                              is_happened))) {
       } else {
         trans_happened |= is_happened;
@@ -404,7 +404,7 @@ int ObTransformSimplifyExpr::replace_op_null_condition(ObDMLStmt *stmt, bool &tr
 
 int ObTransformSimplifyExpr::replace_cmp_null_condition(ObRawExpr *&expr,
                                                         const ObDMLStmt &stmt,
-                                                        const ParamStore &param_store,
+                                                        const ObPhysicalPlanCtx &param_store,
                                                         bool &trans_happened)
 {
   int ret = OB_SUCCESS;
@@ -454,7 +454,7 @@ int ObTransformSimplifyExpr::replace_cmp_null_condition(ObRawExpr *&expr,
 
 int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
                                                const ObDMLStmt &stmt,
-                                               const ParamStore &param_store,
+                                               const ObPhysicalPlanCtx &param_store,
                                                ObIArray<const ObRawExpr *> &null_expr_lists)
 {
   int ret = OB_SUCCESS;
@@ -1870,7 +1870,7 @@ int ObTransformSimplifyExpr::is_filter_exprs_false(common::ObIArray<ObRawExpr*>&
         DatumParameter result;
         bool is_cal_true = false;
         if (OB_FAIL(ObSQLUtils::calc_const_expr(
-          filter_expr, &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(), result,
+          *ctx_->exec_ctx_, filter_expr, result,
           is_cal_true, *ctx_->allocator_))) {
         } else if ((!is_cal_true) || (!result.is_integer_type())) {
         // do nothing if plan cache does not check the bool value, or the result is not integer type
@@ -1905,7 +1905,7 @@ int ObTransformSimplifyExpr::check_limit_value(ObSelectStmt* stmt,
     int64_t limit_value = 0;
     limit_expr = stmt->get_limit_expr();
     if (OB_FAIL(ObTransformUtils::get_expr_int_value(limit_expr,
-                                                     &plan_ctx->get_param_store(),
+                                                     plan_ctx,
                                                      ctx_->exec_ctx_,
                                                      ctx_->allocator_,
                                                      limit_value,

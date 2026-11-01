@@ -252,7 +252,6 @@ int ObSQLUtils::calc_const_or_calculable_expr(
     ObIArray<ObExprConstraint> *constraints /* = NULL */)
 {
   int ret = OB_SUCCESS;
-  const ParamStore *params = NULL;
   DatumParameter evaluated;
   is_valid = false;
   if (OB_ISNULL(raw_expr) || OB_ISNULL(exec_ctx) || OB_ISNULL(exec_ctx->get_physical_plan_ctx())) {
@@ -261,10 +260,9 @@ int ObSQLUtils::calc_const_or_calculable_expr(
   } else if (raw_expr->has_flag(CNT_PL_UDF)) {
     // A deterministic PL UDF can still contain DML side effects. Constant folding,
     // selectivity estimation, and EXPLAIN generation must not execute it while planning.
-  } else if (FALSE_IT(params = &exec_ctx->get_physical_plan_ctx()->get_param_store())) {
   } else if (raw_expr->is_const_raw_expr()) {
     bool need_check = false;
-    if (OB_FAIL(calc_const_expr(raw_expr, params, evaluated, need_check, allocator))) {
+    if (OB_FAIL(calc_const_expr(*exec_ctx, raw_expr, evaluated, need_check, allocator))) {
     } else {
       result = evaluated.value_view();
       is_valid = true;
@@ -275,7 +273,7 @@ int ObSQLUtils::calc_const_or_calculable_expr(
     } else if (hit_cache && (is_valid || ignore_failure)) {
       // do nothing
     } else if (OB_FAIL(calc_const_expr(*exec_ctx, raw_expr,
-                                       evaluated, allocator, *params))) {
+                                       evaluated, allocator))) {
       if (T_FUN_SYS_INNER_ROW_CMP_VALUE == raw_expr->get_expr_type()) {
         if (ret == OB_ERR_MIN_VALUE) {
           ret = result.set_extend(DATUM_MIN_EXT_VALUE, 0, allocator);
@@ -404,23 +402,24 @@ int ObSQLUtils::calc_sql_expression_without_row(
       ObEvalCtx eval_ctx(exec_ctx, allocator);
       OZ (clear_expr_eval_flags_norecursive(*new_expr, eval_ctx));
       OZ (new_expr->eval(eval_ctx, datum)); // sql exprs called here
-      ObDatum owned;
       SqlTypeMeta meta = new_expr->obj_meta_;
       if (OB_SUCC(ret) && !datum->is_null() && meta.is_decimal_int() && meta.get_scale() < 0) {
         ret = OB_ERR_UNEXPECTED;
       }
-      // The result still belongs to the legacy parameter domain. Keep this
-      // typed view local and clone its bytes into the selected result owner.
+      // This API produces a native physical parameter. The Expr carries its
+      // complete semantic declaration; normalize that explicit boundary once.
       alignas(8) char scratch[64];
       ObDatum legacy;
       const DatumCopyPlan plan(new_expr->get_sql_type());
       OZ (plan.legacy_view(*datum, legacy, scratch, sizeof(scratch)));
-      OZ (clone_datum_value(legacy, meta, owned,
-                            allocator != nullptr ? *allocator : exec_ctx.get_allocator()));
       if (OB_SUCC(ret)) {
         if (datum->is_null()) { meta.set_null(); }
-        result.datum_ = owned;
-        result.set_type_meta(meta);
+        ret = result.assign_legacy_owned(legacy, meta,
+            allocator != nullptr ? *allocator : exec_ctx.get_allocator());
+        if (OB_SUCC(ret)) {
+          result.set_accuracy(new_expr->get_sql_type().accuracy());
+          result.set_param_meta(new_expr->get_sql_type().legacy_meta());
+        }
       }
     }
   }
@@ -459,6 +458,66 @@ int ObSQLUtils::calc_const_expr(const ObRawExpr *expr,
     if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
     } else if (OB_FAIL(clone_typed_value(view, owned, allocator))) {
     } else { result.assign_value(owned); }
+  }
+  return ret;
+}
+
+int ObSQLUtils::calc_const_expr(ObExecContext &bound_ctx, const ObRawExpr *expr,
+    DatumParameter &result, ObIAllocator &result_owner)
+{
+  return se_calc_const_expr_bound(bound_ctx, expr, result_owner, result);
+}
+
+int ObSQLUtils::calc_const_expr(ObExecContext &bound_ctx, const ObRawExpr *expr,
+    DatumParameter &result, bool &need_check, ObIAllocator &result_owner)
+{
+  int ret = OB_SUCCESS;
+  need_check = false;
+  if (expr == nullptr || !expr->is_const_raw_expr()) { return OB_ERR_UNEXPECTED; }
+  const ObConstRawExpr &literal = static_cast<const ObConstRawExpr &>(*expr);
+  if (literal.get_expr_type() != T_QUESTIONMARK) {
+    // A literal has no dependency on a parameter source.
+    ret = calc_const_expr(expr, nullptr, result, need_check, result_owner);
+  } else {
+    ObPhysicalPlanCtx *plan = bound_ctx.get_physical_plan_ctx();
+    if (plan == nullptr) { return OB_ERR_UNEXPECTED; }
+    if (!plan->native_parameters_ready() && OB_FAIL(plan->init_datum_param_store())) { return ret; }
+    int64_t index = -1;
+    DatumValue raw_index;
+    alignas(8) char index_scratch[64];
+    if (OB_FAIL(literal.export_value(raw_index, index_scratch, sizeof(index_scratch)))) {
+    } else if (OB_FAIL(raw_index.get_unknown(index))) {
+    } else if (index < 0 || index >= plan->get_parameter_count()) {
+      ret = OB_ERR_ILLEGAL_INDEX;
+    } else {
+      const Datum *native = plan->get_native_parameter(index);
+      const DatumParameterMetadata *attributes = plan->get_parameter_metadata(index);
+      alignas(8) char scratch[64];
+      ObDatum legacy;
+      if (native == nullptr || attributes == nullptr) { ret = OB_NOT_INIT; }
+      else if (OB_FAIL(plan->export_runtime_parameter_legacy(index, legacy, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(result.assign_legacy_owned(legacy, attributes->type_meta_, result_owner))) {
+      } else {
+        result.set_metadata(*attributes);
+        need_check = attributes->flag_.need_to_check_bool_value_;
+        if (result.is_nop_value()) { ret = OB_ERR_NOP_VALUE; }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObSQLUtils::se_calc_const_expr_bound(ObExecContext &bound_ctx, const ObRawExpr *expr,
+    ObIAllocator &result_owner, DatumParameter &result, bool force_copy_extend_type)
+{
+  ObPhysicalPlanCtx *plan = bound_ctx.get_physical_plan_ctx();
+  if (plan == nullptr || bound_ctx.get_my_session() == nullptr || expr == nullptr) {
+    return OB_INVALID_ARGUMENT;
+  }
+  int ret = plan->native_parameters_ready() ? OB_SUCCESS : plan->init_datum_param_store();
+  if (OB_SUCC(ret)) {
+    ret = se_calc_const_expr_impl(bound_ctx.get_my_session(), expr, nullptr,
+        result_owner, &bound_ctx, result, force_copy_extend_type, plan);
   }
   return ret;
 }
@@ -503,64 +562,63 @@ int ObSQLUtils::calc_const_expr(ObSQLSessionInfo *session,
 
 namespace {
 int save_evaluated_value(const Datum &value, const ObExpr &expression,
-                         ObIAllocator &allocator, ObExecContext *out_ctx,
-                         DatumParameter &result, bool force_copy_extend_type)
+    ObIAllocator &allocator, ObExecContext *out_ctx, DatumParameter &result,
+    bool force_copy_extend_type)
 {
   int ret = OB_SUCCESS;
   const SqlTypeMeta &meta = expression.obj_meta_;
   const DatumCopyPlan plan(expression.get_sql_type());
   alignas(8) char scratch[64];
-  ObDatum res_datum;
-  ObDatum owned;
-  SqlTypeMeta output_meta = meta;
-  if (OB_FAIL(plan.legacy_view(value, res_datum, scratch, sizeof(scratch)))) {
-  } else if (!res_datum.is_null() && meta.is_ext() && !meta.is_ext_sql_array()) {
-    DatumParameter source, snapshot;
-    source.datum_ = res_datum;
-    source.set_type_meta(meta);
-    if (force_copy_extend_type || out_ctx != nullptr) {
-      // Match the PL clone contract: these paths require a real PL value,
-      // whereas a result without an execution context only copies its view.
-      ObIAllocator &value_owner = force_copy_extend_type
-          ? allocator : out_ctx->get_allocator();
-      if (!source.is_pl_extend()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(pl::ObUserDefinedType::clone_parameter(value_owner, source, snapshot))) {
-      } else if (!force_copy_extend_type) {
-        if (out_ctx->get_pl_ctx() == nullptr) { ret = out_ctx->init_pl_ctx(); }
-        if (OB_SUCC(ret) && out_ctx->get_pl_ctx() == nullptr) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (OB_SUCC(ret)) {
-          ret = out_ctx->get_pl_ctx()->add(snapshot, value_owner);
-        }
-        if (ret != OB_SUCCESS) {
-          const int cleanup_ret = pl::ObUserDefinedType::destruct_objparam(
-              value_owner, snapshot, out_ctx->get_my_session());
-          if (cleanup_ret != OB_SUCCESS) {
-            LOG_WARN_RET(cleanup_ret, "failed to release unregistered PL result");
+  ObDatum physical;
+  DatumParameter candidate;
+  SqlTypeMeta physical_meta = meta;
+  if (OB_FAIL(plan.legacy_view(value, physical, scratch, sizeof(scratch)))) {
+  } else if (!physical.is_null() && meta.is_ext() && !meta.is_ext_sql_array()) {
+    DatumParameter source;
+    if (OB_FAIL(source.assign_legacy_borrowed(physical, meta))) {
+    } else {
+      source.set_accuracy(expression.get_sql_type().accuracy());
+      if (force_copy_extend_type || out_ctx != nullptr) {
+        ObIAllocator &value_owner = force_copy_extend_type ? allocator : out_ctx->get_allocator();
+        if (!source.is_pl_extend()) { ret = OB_ERR_UNEXPECTED; }
+        else if (OB_FAIL(pl::ObUserDefinedType::clone_parameter(value_owner, source, candidate))) {
+        } else if (!force_copy_extend_type) {
+          if (out_ctx->get_pl_ctx() == nullptr) { ret = out_ctx->init_pl_ctx(); }
+          if (OB_SUCC(ret) && out_ctx->get_pl_ctx() == nullptr) { ret = OB_INVALID_ARGUMENT; }
+          else if (OB_SUCC(ret)) { ret = out_ctx->get_pl_ctx()->add(candidate, value_owner); }
+          if (ret != OB_SUCCESS) {
+            const int cleanup_ret = pl::ObUserDefinedType::destruct_objparam(
+                value_owner, candidate, out_ctx->get_my_session());
+            if (cleanup_ret != OB_SUCCESS) {
+              LOG_WARN_RET(cleanup_ret, "failed to release unregistered PL result");
+            }
           }
         }
-      }
-    } else {
-      ret = clone_datum_value(source, snapshot, allocator);
+      } else { ret = clone_datum_value(source, candidate, allocator); }
     }
-    if (OB_SUCC(ret)) {
-      owned = snapshot.datum_;
-      output_meta = snapshot.get_type_meta();
-    }
-  } else if (!res_datum.is_null() && meta.is_decimal_int() && meta.get_scale() < 0) {
+  } else if (!physical.is_null() && meta.is_decimal_int() && meta.get_scale() < 0) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(clone_datum_value(res_datum, meta, owned, allocator))) {
-  } else if (res_datum.is_null()) {
-    output_meta.set_null();
-    if (!meta.is_null()) {
-      output_meta.set_collation_level(meta.get_collation_level());
-      output_meta.set_collation_type(meta.get_collation_type());
+  } else if (!physical.is_null() && meta.is_ext_sql_array()) {
+    NativeTypedDatum borrowed, owned;
+    borrowed.datum_ = value;
+    borrowed.type_ = &expression.get_sql_type();
+    if (OB_FAIL(clone_native_parameter_value(borrowed, allocator, owned))) {
+    } else if (OB_FAIL(export_native_parameter_value(owned, physical, scratch, sizeof(scratch)))) {
+    } else { ret = candidate.assign_legacy_owned(physical, meta, allocator); }
+  } else {
+    if (physical.is_null()) {
+      physical_meta.set_null();
+      if (!meta.is_null()) {
+        physical_meta.set_collation_level(meta.get_collation_level());
+        physical_meta.set_collation_type(meta.get_collation_type());
+      }
     }
+    ret = candidate.assign_legacy_owned(physical, physical_meta, allocator);
   }
   if (OB_SUCC(ret)) {
-    result.datum_ = owned;
-    result.set_type_meta(output_meta);
+    candidate.set_accuracy(expression.get_sql_type().accuracy());
+    candidate.set_param_meta(expression.get_sql_type().legacy_meta());
+    result = candidate;
   }
   return ret;
 }
@@ -569,11 +627,12 @@ int save_evaluated_value(const Datum &value, const ObExpr &expression,
 template <typename Result>
 int ObSQLUtils::se_calc_const_expr_impl(ObSQLSessionInfo *session,
                                    const ObRawExpr *expr,
-                                   const ParamStore &params,
+                                   const ParamStore *construction_parameters,
                                    ObIAllocator &allocator,
                                    ObExecContext *out_ctx,
                                    Result &result,
-                                   bool force_copy_extend_type)
+                                   bool force_copy_extend_type,
+                                   ObPhysicalPlanCtx *bound_parameters)
 {
   int ret = OB_SUCCESS;
   OB_ASSERT(NULL != session);
@@ -582,29 +641,21 @@ int ObSQLUtils::se_calc_const_expr_impl(ObSQLSessionInfo *session,
                      ObCtxIds::DEFAULT_CTX_ID)
     .set_properties(lib::USE_TL_PAGE_OPTIONAL)
     .set_page_size(OB_MALLOC_BIG_BLOCK_SIZE);
-  bool use_tmp_phy_plan_ctx = !(out_ctx != NULL
-                                && out_ctx->get_physical_plan_ctx() != NULL
-                                && (&params == &out_ctx->get_physical_plan_ctx()->get_param_store()));
-  if (!use_tmp_phy_plan_ctx && !out_ctx->get_physical_plan_ctx()->is_param_datum_frame_inited()) {
-    if (OB_FAIL(out_ctx->get_physical_plan_ctx()->init_datum_param_store())) {
-    }
+  const bool use_tmp_phy_plan_ctx = bound_parameters == nullptr;
+  if ((construction_parameters == nullptr) == use_tmp_phy_plan_ctx) {
+    return OB_INVALID_ARGUMENT;
   }
   CREATE_WITH_TEMP_CONTEXT(param) {
     ObIAllocator &tmp_allocator = CURRENT_CONTEXT->get_arena_allocator();
     ObPhysicalPlanCtx tmp_phy_plan_ctx(tmp_allocator);
-    ObPhysicalPlanCtx *phy_plan_ctx = nullptr;
-
-    if (out_ctx != NULL
-        && out_ctx->get_physical_plan_ctx() != NULL
-        && (&params == &out_ctx->get_physical_plan_ctx()->get_param_store())) {
-      phy_plan_ctx = out_ctx->get_physical_plan_ctx();
-    } else {
+    ObPhysicalPlanCtx *phy_plan_ctx = bound_parameters;
+    if (use_tmp_phy_plan_ctx) {
       phy_plan_ctx = &tmp_phy_plan_ctx;
-      for (int i = 0; OB_SUCC(ret) && i < params.count(); i++) {
-        if (OB_FAIL(phy_plan_ctx->append_parameter_input(params.at(i)))) {
-        }
-      } // end for
-      if (OB_FAIL(ret)) {
+      // This is an explicit construction input. out_ctx supplies declaration
+      // services and result ownership, never a parameter-array identity test.
+      phy_plan_ctx->set_exec_ctx(out_ctx);
+      phy_plan_ctx->set_original_param_cnt(construction_parameters->count());
+      if (OB_FAIL(phy_plan_ctx->assign_parameter_inputs(*construction_parameters))) {
       } else if (OB_FAIL(phy_plan_ctx->init_datum_param_store())) {
       }
     }
@@ -634,7 +685,7 @@ int ObSQLUtils::se_calc_const_expr_impl(ObSQLSessionInfo *session,
                    (ObStaticEngineExprCG, expr_cg, tmp_allocator,
                    session, schema_guard,
                    phy_plan_ctx->get_original_param_cnt(),
-                    phy_plan_ctx->get_datum_param_store().count())) {
+                    phy_plan_ctx->get_parameter_count())) {
         LinkExecCtxGuard link_guard(*session, exec_ctx);
         exec_ctx.set_my_session(session);
         exec_ctx.set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
@@ -706,8 +757,8 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
                                    common::DatumParameter &result,
                                    bool force_copy_extend_type)
 {
-  return se_calc_const_expr_impl(session, expr, params, allocator, out_ctx,
-                                 result, force_copy_extend_type);
+  return se_calc_const_expr_impl(session, expr, &params, allocator, out_ctx,
+                                 result, force_copy_extend_type, nullptr);
 }
 
 
@@ -1654,6 +1705,17 @@ int ObSQLUtils::reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObS
   return ret;
 }
 
+int ObSQLUtils::reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObString &sql,
+    ObSchemaGetterGuard *schema_guard, ObValuePrintParams print_params,
+    const ObPhysicalPlanCtx &bound_parameters, const ObSQLSessionInfo *session)
+{
+  if (stmt == nullptr) { return OB_INVALID_ARGUMENT; }
+  if (stmt->get_query_ctx() == nullptr || !stmt->is_dml_stmt()) { return OB_ERR_UNEXPECTED; }
+  ObSqlPrinter printer(stmt, schema_guard, print_params, nullptr, session);
+  printer.bind_runtime_parameters(&bound_parameters);
+  return printer.do_print(allocator, sql);
+}
+
 int ObISqlPrinter::do_print(ObIAllocator &allocator, ObString &result)
 {
   int ret = OB_SUCCESS;
@@ -1708,7 +1770,8 @@ int ObSqlPrinter::inner_print(char *buf, int64_t buf_len, int64_t &res_len)
                                schema_guard_,
                                print_params_,
                                param_store_,
-                               session_);
+                               session_,
+                               bound_parameters_);
 }
 
 int ObSQLUtils::print_sql(char *buf,
@@ -1718,7 +1781,8 @@ int ObSQLUtils::print_sql(char *buf,
                           ObSchemaGetterGuard *schema_guard,
                           ObValuePrintParams print_params,
                           const ParamStore *param_store,
-                          const ObSQLSessionInfo *session)
+                          const ObSQLSessionInfo *session,
+                          const ObPhysicalPlanCtx *bound_parameters)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
@@ -1750,6 +1814,7 @@ int ObSQLUtils::print_sql(char *buf,
                                   param_store,
                                   false,
                                   session);
+      printer.bind_runtime_parameters(bound_parameters);
       printer.set_is_root(true);
       printer.set_is_first_stmt_for_hint(true);
       printer.enable_print_temp_table_as_cte();
@@ -1767,6 +1832,7 @@ int ObSQLUtils::print_sql(char *buf,
                                   print_params,
                                   param_store,
                                   session);
+      printer.bind_runtime_parameters(bound_parameters);
       printer.set_is_root(true);
       printer.set_is_first_stmt_for_hint(true);
       if (OB_FAIL(printer.do_print())) {
@@ -1782,6 +1848,7 @@ int ObSQLUtils::print_sql(char *buf,
                                   print_params,
                                   param_store,
                                   session);
+      printer.bind_runtime_parameters(bound_parameters);
       printer.set_is_root(true);
       printer.set_is_first_stmt_for_hint(true);
       if (OB_FAIL(printer.do_print())) {
@@ -1797,6 +1864,7 @@ int ObSQLUtils::print_sql(char *buf,
                                   print_params,
                                   param_store,
                                   session);
+      printer.bind_runtime_parameters(bound_parameters);
       printer.set_is_root(true);
       printer.set_is_first_stmt_for_hint(true);
       if (OB_FAIL(printer.do_print())) {
@@ -2234,7 +2302,13 @@ int ObSQLUtils::revise_hash_part_object(common::DatumValue &obj, ObIAllocator &o
   SqlType type;
   Datum input, output;
   if (OB_FAIL(SqlType::from_legacy(obj.get_meta(), ObAccuracy(), type))) {
-  } else if (OB_FAIL(DatumCopyPlan(type).import_legacy(obj.datum_, input))) {
+  } else {
+    alignas(8) char scratch[64];
+    ObDatum physical;
+    if (OB_FAIL(obj.export_legacy(physical, scratch, sizeof(scratch)))) {
+    } else { ret = DatumCopyPlan(type).import_legacy(physical, input); }
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(input, output, obj.get_type()))) {
   } else {
     ret = result.set_int(output.get_int(), owner);
@@ -3249,7 +3323,7 @@ int ObPreCalcExprConstraint::check_is_match(DatumParameter &parameter,
 {
   UNUSED(exec_ctx);
   int ret = OB_SUCCESS;
-  const ObDatum &datum = parameter.datum_;
+  const Datum &datum = parameter.datum_;
   switch (expect_result_) {
     case PRE_CALC_RESULT_NULL:
       is_match = datum.is_null();
@@ -3258,10 +3332,10 @@ int ObPreCalcExprConstraint::check_is_match(DatumParameter &parameter,
       is_match = !datum.is_null();
       break;
     case PRE_CALC_RESULT_TRUE:
-      is_match = datum.is_true();
+      is_match = !datum.is_null() && datum.get_int() != 0;
       break;
     case PRE_CALC_RESULT_FALSE:
-      is_match = datum.is_false();
+      is_match = !datum.is_null() && datum.get_int() == 0;
       break;
     case PRE_CALC_PRECISE:
     case PRE_CALC_NOT_PRECISE: {

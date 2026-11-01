@@ -84,10 +84,10 @@ int ObTextStringHelper::read_real_string_data(
     str.reset();
   } else if (!value.get_meta().is_lob_storage() || !value.has_lob_header()) {
     // Plain character data and headerless LOBs already expose their bytes.
-  } else if (value.datum_.len_ != 0 && !value.datum_.get_lob_data().is_mem_loc_
+  } else if (value.datum_.length() != 0 && !value.datum_.get_lob_data().is_mem_loc_
              && value.datum_.get_lob_data().in_row_) {
     const ObLobCommon &lob = value.datum_.get_lob_data();
-    str.assign_ptr(lob.get_inrow_data_ptr(), static_cast<int32_t>(lob.get_byte_size(value.datum_.len_)));
+    str.assign_ptr(lob.get_inrow_data_ptr(), static_cast<int32_t>(lob.get_byte_size(value.datum_.length())));
   } else {
     ret = read_real_string_data(exec_ctx, allocator, value.get_type(),
                                value.get_collation_type(), value.has_lob_header(), str);

@@ -1,5 +1,6 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #include "common/datum/datum_key_ops.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "common/wide_integer/ob_wide_integer_helper.h"
 #include "common/json_type/ob_json_bin.h"
 #include "lib/charset/ob_charset.h"
@@ -120,7 +121,10 @@ int validate_key_value(const DatumValue &value)
 {
   if(!value.meta_.is_valid())return OB_ERR_UNEXPECTED;
   if(null_value(value))return OB_SUCCESS;
-  const auto &datum=value.datum_;
+  alignas(8) char scratch[64];
+  ObDatum datum;
+  const int exported=value.export_legacy(datum,scratch,sizeof(scratch));
+  if(exported!=OB_SUCCESS)return exported;
   if(datum.len_>0&&datum.ptr_==nullptr)return OB_INVALID_ARGUMENT;
   if(value.is_ext())return !value.is_ext_sql_array()&&datum.has_ext_value()?OB_SUCCESS:OB_ERR_UNEXPECTED;
   switch(ObDatum::get_sql_value_datum_map_type(value.get_type())){
@@ -180,7 +184,8 @@ int equal_key_value(const DatumValue &left,const DatumValue &right,bool &equal)
   if(l!=r)equal=false;
   else switch(l){
     case ObNullTC:break;
-    case ObIntTC:case ObUIntTC:case ObEnumSetTC:case ObDateTimeTC:case ObMySQLDateTimeTC:case ObTimeTC:case ObBitTC:equal=left.get_int()==right.get_int();break;
+    case ObIntTC:case ObDateTimeTC:case ObMySQLDateTimeTC:case ObTimeTC:equal=left.get_int()==right.get_int();break;
+    case ObUIntTC:case ObEnumSetTC:case ObBitTC:equal=left.get_uint64()==right.get_uint64();break;
     case ObExtendTC:equal=left.get_ext()==right.get_ext();break;
     case ObDateTC:case ObMySQLDateTC:equal=left.get_date()==right.get_date();break;
     case ObYearTC:equal=left.get_year()==right.get_year();break;
@@ -257,6 +262,12 @@ int hash_key_value(const DatumValue &value,uint64_t seed,uint64_t &hash)
 }
 namespace {
 template<class T>void fill_scalar(ObBatchChecksum &checksum,T value){checksum.fill(&value,sizeof(value));}
+int64_t integer_bits(const DatumValue &value)
+{
+  const auto tc=value.get_type_class();
+  return tc==ObUIntTC||tc==ObEnumSetTC||tc==ObBitTC
+      ?static_cast<int64_t>(value.get_uint64()):value.get_int();
+}
 }
 int checksum_key_value(const DatumValue &value,ObBatchChecksum &checksum)
 {
@@ -266,10 +277,10 @@ int checksum_key_value(const DatumValue &value,ObBatchChecksum &checksum)
   checksum.fill(&type,sizeof(type));
   if(type==ObNullType)return OB_SUCCESS;
   switch(type){
-    case ObTinyIntType:case ObUTinyIntType:fill_scalar(checksum,static_cast<int8_t>(value.get_int()));break;
-    case ObSmallIntType:case ObUSmallIntType:fill_scalar(checksum,static_cast<int16_t>(value.get_int()));break;
-    case ObMediumIntType:case ObInt32Type:case ObUMediumIntType:case ObUInt32Type:fill_scalar(checksum,static_cast<int32_t>(value.get_int()));break;
-    case ObIntType:case ObUInt64Type:case ObBitType:case ObEnumType:case ObSetType:case ObDateTimeType:case ObTimestampType:case ObMySQLDateTimeType:case ObTimeType:fill_scalar(checksum,value.get_int());break;
+    case ObTinyIntType:case ObUTinyIntType:fill_scalar(checksum,static_cast<int8_t>(integer_bits(value)));break;
+    case ObSmallIntType:case ObUSmallIntType:fill_scalar(checksum,static_cast<int16_t>(integer_bits(value)));break;
+    case ObMediumIntType:case ObInt32Type:case ObUMediumIntType:case ObUInt32Type:fill_scalar(checksum,static_cast<int32_t>(integer_bits(value)));break;
+    case ObIntType:case ObUInt64Type:case ObBitType:case ObEnumType:case ObSetType:case ObDateTimeType:case ObTimestampType:case ObMySQLDateTimeType:case ObTimeType:fill_scalar(checksum,integer_bits(value));break;
     case ObExtendType:fill_scalar(checksum,value.get_ext());break;
     case ObDateType:case ObMySQLDateType:fill_scalar(checksum,value.get_date());break;
     case ObYearType:fill_scalar(checksum,value.get_year());break;
@@ -297,7 +308,7 @@ int transform_key_sortkey(const DatumValue &source,DatumValue &output,bool &vali
       if(bytes==nullptr)ret=OB_ALLOCATE_MEMORY_FAILED;
       else {
         const size_t n=variable?ObCharset::sortkey_var_len(source.get_collation_type(),source.get_string_ptr(),size,bytes,capacity,false,valid_sortkey):ObCharset::sortkey(source.get_collation_type(),source.get_string_ptr(),size,bytes,capacity,valid_sortkey);
-        candidate.datum_.set_string(bytes,n);
+        ret=candidate.datum_.set_string(bytes,n);
       }
     }
     if(ret==OB_SUCCESS){candidate.set_collation_type(CS_TYPE_COLLATION_FREE);output=candidate;}

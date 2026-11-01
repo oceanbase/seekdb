@@ -216,6 +216,13 @@ int resolve_pl_record_type(const ObDataType &attributes, const oceanbase::pl::Ob
 }
 } // namespace
 
+int ObExprUtil::resolve_pl_parameter_sql_type(const pl::ObPLDataType &declaration,
+    const pl::ObPLINS &declarations, const ObExecContext &sql_metadata,
+    ObIAllocator &owner, const SqlType *&out)
+{
+  return resolve_pl_member_type(declaration, declarations, &sql_metadata, owner, out, 0);
+}
+
 int ObExprUtil::resolve_enum_sql_type(const SqlTypeMeta &actual_meta,
                                      const ObAccuracy &accuracy,
                                      const ObIArray<ObString> &labels,

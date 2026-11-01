@@ -485,7 +485,8 @@ TEST_F(NativePLDeclarationProducers, actual_table_row_to_cg_keeps_fields_and_typ
   EXPECT_EQ(PL_RECORD_TYPE, captured.get_type_meta().get_extend_type());
   EXPECT_EQ(TABLE_ID, captured.get_udt_id());
   EXPECT_EQ(TABLE_ID, static_cast<uint64_t>(captured.get_accuracy().get_accuracy()));
-  EXPECT_EQ(nullptr, captured.datum_.ptr_);
+  EXPECT_EQ(0, captured.datum_.length());
+  EXPECT_EQ(Datum::State::Null, captured.datum_.state());
   EXPECT_EQ(captured.get_type_meta(), captured.get_param_meta());
   ObArenaAllocator retained("PlProdRetain");
   const SqlType *clone = nullptr;

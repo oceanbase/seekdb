@@ -51,7 +51,7 @@ DatumValue decoded(const std::string &hex, ObIAllocator &owner)
   const auto bytes = unhex(hex);
   DatumValue value;
   int64_t pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(bytes.data(), bytes.size(), pos,
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(), pos,
       owner, value.datum_, value.meta_));
   EXPECT_EQ(bytes.size(), pos);
   return value;

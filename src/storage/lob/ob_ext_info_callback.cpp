@@ -152,7 +152,7 @@ int ObExtInfoCallback::set(
   key_.reset();
   key_seq_ = static_cast<uint64_t>(seq_no_cur_.cast_to_int());
   key_value_.meta_.set_uint64();
-  key_value_.datum_.set_string(reinterpret_cast<const char *>(&key_seq_), sizeof(key_seq_));
+  key_value_.datum_.set_uint(key_seq_);
   rowkey_.assign(&key_value_, OB_EXT_INFO_MUTATOR_ROW_KEY_CNT);
   SMART_VAR(blocksstable::ObRowWriter, row_writer) {
     if (data.empty()) {

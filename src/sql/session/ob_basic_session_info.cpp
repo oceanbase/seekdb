@@ -1516,7 +1516,7 @@ int ObBasicSessionInfo::update_sys_variable_by_name(const common::ObString &var,
 {
   DatumValue obj;
   obj.meta_.set_int();
-  obj.datum_.set_string(reinterpret_cast<const char *>(&val), sizeof(val));
+  obj.datum_.set_int(val);
   return update_sys_variable_by_name(var, obj);
 }
 
@@ -1532,7 +1532,7 @@ int ObBasicSessionInfo::update_sys_variable(const ObSysVarClassType sys_var_id, 
 {
   DatumValue obj;
   obj.meta_.set_int();
-  obj.datum_.set_string(reinterpret_cast<const char *>(&val), sizeof(val));
+  obj.datum_.set_int(val);
   return update_sys_variable(sys_var_id, obj);
 }
 
@@ -1682,7 +1682,7 @@ int ObBasicSessionInfo::deep_copy_sys_variable(ObBasicSysVar &sys_var,
   }
   Datum pending;
   SystemVarValueAllocator current_owner(*inc_sys_var_alloc_[current_buf_index_]);
-  OZ(DatumParameterCodec::import_schema_native_value(src_val.datum_, meta, current_owner, pending));
+  OZ(DatumParameterCodec::clone_schema_native_value(src_val.datum_, meta, current_owner, pending));
   OZ(publish_sys_variable(sys_var, sys_var_id, pending, meta));
   return ret;
 }

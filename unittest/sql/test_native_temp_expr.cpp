@@ -32,10 +32,12 @@ protected:
     ObExpr &input = expression.rt_exprs_.at(0);
     input.type_ = T_REF_COLUMN;
     input.frame_idx_ = 0; input.datum_off_ = 0; input.eval_info_off_ = 32;
+    input.dyn_buf_header_offset_ = 96;
     input.res_buf_off_ = 128; input.res_buf_len_ = 128;
     input.obj_meta_.set_varchar(); input.obj_meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     input.datum_meta_ = ObDatumMeta(ObVarcharType, CS_TYPE_UTF8MB4_BIN, -1);
     input.obj_datum_map_ = OBJ_DATUM_STRING;
+    ASSERT_EQ(OB_SUCCESS, input.prepare_scalar_type(input.obj_meta_, ObAccuracy(), arena));
   }
 };
 
@@ -54,8 +56,8 @@ TEST_F(NativeTempExpr, result_owns_bytes_across_input_and_context_reuse) {
       ASSERT_EQ(OB_SUCCESS, row.push_back(value));
       ObDatum result;
       ASSERT_EQ(OB_SUCCESS, expression.eval_datum(context, row, output_owner, result));
-      ASSERT_NE(value.datum_.ptr_, result.ptr_);
-      std::memset(const_cast<char *>(value.datum_.ptr_), 'x', value.datum_.len_);
+      ASSERT_NE(value.datum_.get_string().ptr(), result.ptr_);
+      std::memset(const_cast<char *>(value.datum_.get_string().ptr()), 'x', value.datum_.length());
       EXPECT_EQ(text, std::string(result.ptr_, result.len_));
       if (i > 0) { EXPECT_EQ("row-" + std::to_string(i - 1), std::string(previous.ptr_, previous.len_)); }
       previous = result;
@@ -78,7 +80,8 @@ TEST_F(NativeTempExpr, invalid_row_mapping_and_type_preserve_existing_result) {
   DatumValue input, old;
   ASSERT_EQ(OB_SUCCESS, input.set_int(19, arena));
   ASSERT_EQ(OB_SUCCESS, old.set_int(47, output_owner));
-  ObDatum result = old.datum_;
+  ObDatum result;
+  ASSERT_EQ(OB_SUCCESS, old.copy_legacy(result, output_owner));
   const char *previous = result.ptr_;
   ObSEArray<DatumValue, 1> row;
   ASSERT_EQ(OB_SUCCESS, row.push_back(input));
@@ -107,7 +110,8 @@ TEST_F(NativeTempExpr, failed_output_clone_preserves_output_and_can_retry) {
   input.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   ObArenaAllocator output_owner;
   ASSERT_EQ(OB_SUCCESS, old.set_int(47, output_owner));
-  ObDatum result = old.datum_;
+  ObDatum result;
+  ASSERT_EQ(OB_SUCCESS, old.copy_legacy(result, output_owner));
   const char *previous = result.ptr_;
   ObSEArray<DatumValue, 1> row;
   ASSERT_EQ(OB_SUCCESS, row.push_back(input));
@@ -123,6 +127,7 @@ TEST_F(NativeTempExpr, extended_row_payload_is_copied_out_of_normalization_scrat
   ObExpr &input = expression.rt_exprs_.at(0);
   input.obj_meta_.set_ext(); input.datum_meta_ = ObDatumMeta(ObExtendType, CS_TYPE_BINARY, -1);
   input.obj_datum_map_ = OBJ_DATUM_EXTEND;
+  ASSERT_EQ(OB_SUCCESS, input.prepare_scalar_type(input.obj_meta_, ObAccuracy(), arena));
   DatumValue minimum;
   minimum.set_min_value();
   ObSEArray<DatumValue, 1> row;

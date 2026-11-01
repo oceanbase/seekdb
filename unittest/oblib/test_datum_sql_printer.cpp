@@ -53,7 +53,7 @@ TEST(DatumSqlPrinter, matches_frozen_production_outputs_without_legacy_values) {
     const int id=std::stoi(fields[1]);
     if (fields[0]=="S") {
       std::string wire=unhex(fields[2]); DatumParameter value; int64_t pos=0;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),pos,owner,value.datum_,value.get_meta()));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),pos,owner,value.datum_,value.get_meta()));
       ASSERT_EQ(wire.size(),pos); ASSERT_TRUE(values.emplace(id,value).second);
     } else {
       ASSERT_EQ("P",fields[0]); ASSERT_EQ(6,fields.size());
@@ -90,7 +90,7 @@ TEST(DatumSqlPrinter, rejects_invalid_buffers_and_invalid_return_sentinel) {
 TEST(DatumSqlPrinter, fixed_point_uses_raw_value_scale_instead_of_parameter_accuracy) {
   ObArenaAllocator owner; DatumParameter value;
   int64_t raw=12345;
-  value.datum_.set_decimal_int_shallow(reinterpret_cast<const ObDecimalInt*>(&raw),sizeof(raw));
+  ASSERT_EQ(OB_SUCCESS,value.datum_.set_reference(&raw,sizeof(raw)));
   value.get_meta().set_type(ObDecimalIntType); value.get_meta().set_scale(2);
   ObAccuracy declaration; declaration.set_scale(5); declaration.set_precision(12); value.set_accuracy(declaration);
   char buffer[128]; int64_t pos=0;
@@ -104,7 +104,7 @@ TEST(DatumSqlPrinter, every_captured_value_respects_small_output_buffer_guards) 
     if (line.compare(0,2,"S\t")!=0) { continue; }
     const auto fields=columns(line); const std::string wire=unhex(fields[2]);
     DatumParameter value; int64_t decoded=0;
-    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),decoded,owner,value.datum_,value.get_meta()));
+    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),decoded,owner,value.datum_,value.get_meta()));
     for (int capacity=1; capacity<=32; ++capacity) {
       std::vector<char> bytes(capacity+32,'~'); int64_t pos=0;
       SCOPED_TRACE(fields[1]);
@@ -155,7 +155,7 @@ TEST(DatumSqlPrinter, default_formatters_match_independent_legacy_outputs) {
     const auto f=columns(line);ASSERT_GE(f.size(),3);const int id=std::stoi(f[1]);
     if(f[0]=="S") {
       const std::string wire=unhex(f[2]);DatumParameter value;int64_t pos=0;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),pos,owner,value.datum_,value.get_meta()));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),pos,owner,value.datum_,value.get_meta()));
       ASSERT_EQ(wire.size(),pos);ASSERT_TRUE(values.emplace(id,value).second);
     } else {
       ASSERT_TRUE(values.count(id));char buffer[16384]={0};int64_t pos=0;int ret=OB_SUCCESS;
@@ -199,7 +199,7 @@ TEST(DatumSqlPrinter, default_formatters_keep_small_output_canaries) {
     const std::string wire = unhex(fields[2]);
     DatumParameter value;
     int64_t decoded = 0;
-    ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(wire.data(), wire.size(), decoded,
+    ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(wire.data(), wire.size(), decoded,
         owner, value.datum_, value.get_meta()));
     for (int capacity = 0; capacity <= 32; ++capacity) {
       for (int plain = 0; plain < 2; ++plain) {

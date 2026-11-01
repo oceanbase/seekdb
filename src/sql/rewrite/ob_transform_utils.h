@@ -1353,14 +1353,14 @@ public:
   static int add_table_item(ObDMLStmt *stmt, ObIArray<TableItem *> &table_items);
 
   static int get_limit_value(ObRawExpr *limit_expr,
-                                      const ParamStore *param_store,
+                                      const ObPhysicalPlanCtx *param_store,
                                       ObExecContext *exec_ctx,
                                       ObIAllocator *allocator,
                                       int64_t &limit_value,
                                       bool &is_null_value);
 
   static int get_expr_int_value(ObRawExpr *expr,
-                             const ParamStore *param_store,
+                             const ObPhysicalPlanCtx *param_store,
                              ObExecContext *exec_ctx,
                              ObIAllocator *allocator,
                              int64_t &value,
@@ -1368,7 +1368,7 @@ public:
 
   static int get_percentage_value(ObRawExpr *percent_expr,
                                   const ObDMLStmt *stmt,
-                                  const ParamStore *param_store,
+                                  const ObPhysicalPlanCtx *param_store,
                                   ObExecContext *exec_ctx,
                                   ObIAllocator *allocator,
                                   double &percent_value,

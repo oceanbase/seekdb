@@ -25,8 +25,8 @@ std::vector<std::string> fields(const std::string &line) {
   return output;
 }
 std::string wire(const DatumValue &value) {
-  int64_t size=0,pos=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(value.datum_,value.meta_,size));
-  std::string bytes(size+64,'\0');EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(value.datum_,value.meta_,bytes.data(),bytes.size(),pos));
+  int64_t size=0,pos=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::native_value_size(value.datum_,value.meta_,size));
+  std::string bytes(size+64,'\0');EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_native_value(value.datum_,value.meta_,bytes.data(),bytes.size(),pos));
   static const char *digits="0123456789abcdef";std::string output;
   for(int64_t i=0;i<pos;++i) { const uint8_t c=bytes[i];output+=digits[c>>4];output+=digits[c&15]; }
   return output.empty()?"-":output;
@@ -147,9 +147,9 @@ public:
       ASSERT_EQ(OB_SUCCESS,columns.push_back(source));MEMSET(source.fixed_payload_,0xff,sizeof(source.fixed_payload_));
     }
     ASSERT_EQ(OB_SUCCESS,columns.reserve(4096));
-    for(int64_t i=0;i<columns.count();++i) { EXPECT_EQ(-i-17,columns.at(i).column_value_.get_int());EXPECT_EQ(columns.at(i).fixed_payload_,columns.at(i).column_value_.datum_.ptr_); }
+    for(int64_t i=0;i<columns.count();++i) { EXPECT_EQ(-i-17,columns.at(i).column_value_.get_int());EXPECT_EQ(0,columns.at(i).column_value_.datum_.length()); }
     std::string bytes(48,'A');Column source;ASSERT_EQ(OB_SUCCESS,DatumValueBuffer::set_varchar_view(&source.column_value_,1,0,ObString(bytes.size(),bytes.data())));ASSERT_EQ(OB_SUCCESS,columns.push_back(source));
-    const DatumValue &borrowed=columns.at(columns.count()-1).column_value_;EXPECT_EQ(bytes.data(),borrowed.datum_.ptr_);
+    const DatumValue &borrowed=columns.at(columns.count()-1).column_value_;EXPECT_EQ(bytes.data(),borrowed.datum_.get_string().ptr());
     ObArenaAllocator owner;DatumValue owned;ASSERT_EQ(OB_SUCCESS,clone_typed_value(borrowed,owned,owner));
     bytes[0]='Z';EXPECT_EQ('Z',borrowed.get_string_ptr()[0]);columns.reset();EXPECT_EQ('A',owned.get_string_ptr()[0]);
   }

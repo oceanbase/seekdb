@@ -51,8 +51,9 @@ protected:
       ASSERT_EQ(OB_SUCCESS, items.push_back(item));
       write_parameter(i, 10 + i);
       DatumParameter parameter;
-      parameter.get_meta().set_int();
-      parameter.datum_.set_string(raw[i] + 1, sizeof(int64_t));
+      SqlTypeMeta physical; physical.set_int();
+      const ObDatum legacy(raw[i] + 1, sizeof(int64_t), false);
+      ASSERT_EQ(OB_SUCCESS, parameter.assign_legacy_borrowed(legacy, physical));
       ASSERT_EQ(OB_SUCCESS, parameters.push_back(parameter));
     }
     ASSERT_EQ(OB_SUCCESS, graph.fill_column_metas(items));
@@ -73,7 +74,10 @@ protected:
   }
 
   void write_parameter(int64_t index, int64_t value)
-  { MEMCPY(raw[index] + 1, &value, sizeof(value)); }
+  {
+    MEMCPY(raw[index] + 1, &value, sizeof(value));
+    if (index < parameters.count()) { parameters.at(index).datum_.set_int(value); }
+  }
 
   void expect_fallback()
   {
@@ -106,6 +110,7 @@ TEST_F(NativeBigintPoint, real_provider_imports_extremes_without_allocating_or_b
   ASSERT_EQ(OB_SUCCESS, provider.try_get_native_bigint_point(parameters, values, supported));
   EXPECT_TRUE(supported); EXPECT_EQ(before, owner.calls);
   MEMSET(raw, 0x55, sizeof(raw));
+  for (int64_t i = 0; i < parameters.count(); ++i) { parameters.at(i).datum_.set_null(); }
   EXPECT_EQ(INT64_MIN, values[0].get_int()); EXPECT_EQ(0, values[1].get_int());
   EXPECT_EQ(INT64_MAX, values[2].get_int());
   for (const Datum &value : values) { EXPECT_EQ(0, value.length()); EXPECT_TRUE(value.is_present()); }
@@ -153,7 +158,7 @@ TEST_F(NativeBigintPoint, adjacent_executions_read_fresh_values)
 TEST_F(NativeBigintPoint, typed_null_and_null_safe_conditions_fall_back_without_partial_values)
 {
   for (int64_t i = 0; i < 3; ++i) {
-    const ObDatum previous = parameters.at(i).datum_;
+    const Datum previous = parameters.at(i).datum_;
     parameters.at(i).datum_.set_null();
     EXPECT_EQ(ObIntType, parameters.at(i).get_type());
     expect_fallback(); parameters.at(i).datum_ = previous;
@@ -167,24 +172,43 @@ TEST_F(NativeBigintPoint, casts_unsigned_and_other_parameter_types_fall_back)
   const SqlValueType kinds[] = {ObUInt64Type, ObInt32Type, ObVarcharType, ObDecimalIntType, ObExtendType};
   for (const SqlValueType kind : kinds) {
     for (int64_t i = 0; i < 3; ++i) {
-      const SqlTypeMeta previous = parameters.at(i).get_meta();
-      parameters.at(i).get_meta().set_type(kind);
-      expect_fallback(); parameters.at(i).get_meta() = previous;
+      const DatumParameter previous = parameters.at(i);
+      DatumParameter input;
+      if (kind == ObUInt64Type) { ASSERT_EQ(OB_SUCCESS, input.set_uint64(12, owner)); }
+      else if (kind == ObInt32Type) { ASSERT_EQ(OB_SUCCESS, input.set_int32(12, owner)); }
+      else if (kind == ObVarcharType) { ASSERT_EQ(OB_SUCCESS, input.set_varchar(ObString::make_string("12"), owner)); }
+      else if (kind == ObDecimalIntType) {
+        const int64_t coefficient = 12;
+        SqlTypeMeta meta; meta.set_decimal_int(0);
+        ObDatum legacy(reinterpret_cast<const char *>(&coefficient), sizeof(coefficient), false);
+        ASSERT_EQ(OB_SUCCESS, input.assign_legacy_owned(legacy, meta, owner));
+      } else { input.get_meta().set_ext(); input.datum_.set_nop(); }
+      parameters.at(i) = input;
+      expect_fallback(); parameters.at(i) = previous;
     }
   }
 }
 
 TEST_F(NativeBigintPoint, malformed_or_extended_payloads_never_partially_publish)
 {
-  const ObDatum previous = parameters.at(2).datum_;
+  const DatumParameter previous = parameters.at(2);
+  SqlTypeMeta meta; meta.set_int();
+  const char bytes[16] = {};
   for (const int64_t length : {int64_t(0), int64_t(4), int64_t(16)}) {
-    parameters.at(2).datum_.len_ = length; expect_fallback(); parameters.at(2).datum_ = previous;
+    const ObDatum malformed(bytes, length, false);
+    EXPECT_EQ(OB_INVALID_ARGUMENT, parameters.at(2).assign_legacy_borrowed(malformed, meta));
+    EXPECT_EQ(previous.get_int(), parameters.at(2).get_int());
+    EXPECT_EQ(0, parameters.at(2).get_datum().length());
   }
-  parameters.at(2).datum_.ptr_ = nullptr; expect_fallback(); parameters.at(2).datum_ = previous;
-  const ObDatumDesc::FlagType flags[] = {ObDatumDesc::EXT, ObDatumDesc::OUTROW, ObDatumDesc::HAS_LOB_HEADER};
-  for (const auto flag : flags) {
-    parameters.at(2).datum_.set_flag(flag); expect_fallback(); parameters.at(2).datum_ = previous;
-  }
+  ObDatum missing(nullptr, sizeof(int64_t), false);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, parameters.at(2).assign_legacy_borrowed(missing, meta));
+  EXPECT_EQ(previous.get_int(), parameters.at(2).get_int());
+  // Canonical SQL states and the original disallowed flags still exercise the
+  // actual provider rejection. Invalid old byte extents cannot enter a native
+  // wrapper through the checked physical import above.
+  parameters.at(2).datum_.set_nop(); expect_fallback(); parameters.at(2) = previous;
+  parameters.at(2).datum_.set_outrow(); expect_fallback(); parameters.at(2) = previous;
+  parameters.at(2).datum_.set_has_lob_header(); expect_fallback(); parameters.at(2) = previous;
 }
 
 TEST_F(NativeBigintPoint, nonparameter_and_expression_modifiers_fall_back)

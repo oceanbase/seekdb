@@ -163,7 +163,12 @@ protected:
     ASSERT_NE(nullptr, key.cached_rowkey_);
     for (int64_t i = 0; i < 3; ++i) {
       EXPECT_EQ(owner_.values()[i], key.datums_[i].get_int());
-      EXPECT_EQ(key.datums_[i].ptr_, key.cached_rowkey_->get_cell(i).datum_.ptr_);
+      // Fixed storage still borrows the execution owner's stable I64 bytes.
+      EXPECT_EQ(reinterpret_cast<const char *>(&owner_.values()[i]), key.datums_[i].ptr_);
+      // The generic cached key owns the same scalar bits directly inline.
+      const DatumValue &cached = key.cached_rowkey_->get_cell(i);
+      EXPECT_EQ(owner_.values()[i], cached.get_int());
+      EXPECT_EQ(0, cached.datum_.length());
     }
     EXPECT_EQ(int64_t(9) << 32, key.group_id_);
   }

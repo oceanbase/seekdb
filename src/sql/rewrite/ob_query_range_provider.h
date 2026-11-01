@@ -56,8 +56,8 @@ public:
     supported = false;
     return common::OB_SUCCESS;
   }
-  // The default forwards to the existing parameter-store probe. Providers may
-  // read an explicitly guarded execution owner, retaining the old fallback.
+  // A bound execution owner is an explicit source, independent of construction inputs.
+  // Providers without this specialization conservatively decline the fast path.
   virtual int try_get_native_bigint_point(const ObPhysicalPlanCtx &plan_ctx,
                                           common::Datum (&values)[3], bool &supported) const;
   virtual int get_tablet_ranges(common::ObIAllocator &allocator,
@@ -77,7 +77,7 @@ public:
   virtual int get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                          common::ObIAllocator &allocator,
                                          ObExecContext &exec_ctx,
-                                         const common::DatumParamStore &param_store,
+                                         const ObPhysicalPlanCtx &param_store,
                                          int64_t range_buffer_idx,
                                          void *range_buffer,
                                          ObQueryRangeArray &ranges,

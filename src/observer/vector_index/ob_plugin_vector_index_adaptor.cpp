@@ -3127,8 +3127,7 @@ int ObPluginVectorIndexAdaptor::prepare_delta_mem_data(roaring::api::roaring64_b
         const int64_t vid = roaring64_iterator_value(bitmap_iter);
         DatumValue value;
         value.meta_.set_int();
-        value.datum_.ptr_ = reinterpret_cast<const char *>(&vid);
-        value.datum_.pack_ = sizeof(vid);
+        value.datum_.set_int(vid);
         if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(value, vids, bitmap_cnt, index))) {
         } else {
           ++index;

@@ -90,11 +90,12 @@ int NativePointGetInput::init(const Datum (&values)[COLUMN_COUNT], int64_t group
     prepared_rowkey.set_group_idx(group_id);
     for (int64_t i = 0; i < COLUMN_COUNT; ++i) {
       values_[i] = prepared[i];
-      // The fixed layout owns aligned int64_t bytes. Only legacy sidecars use
-      // pointers, and each points into this owner, never into prepared/input.
+      // The fixed storage sidecars borrow aligned int64_t bytes from this
+      // owner. The generic rowkey values copy their I64 directly inline.
       const ObDatum borrowed(reinterpret_cast<const char *>(&values_[i]), sizeof(values_[i]), false);
       storage_datums_[i].shallow_copy_from_datum(borrowed);
-      legacy_values_[i] = DatumValue(borrowed, layout->type().legacy_meta());
+      Datum native; native.set_int(prepared[i]);
+      legacy_values_[i] = DatumValue(native, layout->type().legacy_meta());
     }
     cached_rowkey_ = prepared_rowkey;
     key_.datums_ = storage_datums_;

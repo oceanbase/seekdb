@@ -43,7 +43,11 @@ DatumValue make_default_expr_value(const ObString &expr)
   SqlTypeMeta meta;
   meta.set_varchar();
   meta.set_collation_level(CS_LEVEL_IMPLICIT);
-  return DatumValue(datum, meta);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
 }
 
 bool get_function_args(const ObString &expr_string,

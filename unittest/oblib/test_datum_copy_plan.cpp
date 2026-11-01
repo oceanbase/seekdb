@@ -610,9 +610,12 @@ int clone_native_sql_array(const SqlType &type, const Datum &input, ObIAllocator
   DatumParameter source, clone;
   source.set_type_meta(type.legacy_meta()); source.set_accuracy(type.accuracy());
   const DatumCopyPlan plan(type);
-  int ret = plan.borrow_legacy(input, source.datum_);
+  ObDatum legacy; alignas(8) char scratch[64];
+  int ret = plan.borrow_legacy(input, legacy);
+  if (ret == OB_SUCCESS) { ret = source.assign_legacy_borrowed(legacy, type.legacy_meta()); }
   if (ret == OB_SUCCESS) { ret = DatumParameterArray::clone_parameter(source, clone, owner); }
-  if (ret == OB_SUCCESS) { ret = plan.import_legacy(clone.datum_, output); }
+  if (ret == OB_SUCCESS) { ret = clone.export_legacy(legacy, scratch, sizeof(scratch)); }
+  if (ret == OB_SUCCESS) { ret = plan.import_legacy(legacy, output); }
   return ret;
 }
 }
@@ -636,7 +639,9 @@ TEST(DatumCopyPlan, complete_array_borrow_requires_the_existing_resource_cloner_
   DatumParameter source;
   ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, source_owner));
   Datum borrowed, copied; copied.set_int(91);
-  ASSERT_EQ(OB_SUCCESS, plan.import_legacy(source.datum_, borrowed));
+  alignas(8) char scratch[64]; ObDatum source_view;
+  ASSERT_EQ(OB_SUCCESS, source.export_legacy(source_view, scratch, sizeof(scratch)));
+  ASSERT_EQ(OB_SUCCESS, plan.import_legacy(source_view, borrowed));
   int64_t size = 123;
   EXPECT_EQ(OB_NOT_SUPPORTED, plan.payload_copy_size(borrowed, size)); EXPECT_EQ(123, size);
   EXPECT_EQ(OB_NOT_SUPPORTED, plan.deep_copy(borrowed, copied, destination_owner));
@@ -650,7 +655,7 @@ TEST(DatumCopyPlan, complete_array_borrow_requires_the_existing_resource_cloner_
       plan.deep_copy_resource(borrowed, copied, destination_owner, clone_native_sql_array, nullptr));
   ObDatum view;
   ASSERT_EQ(OB_SUCCESS, plan.borrow_legacy(copied, view));
-  DatumParameter owned; owned.datum_ = view; owned.set_type_meta(type->legacy_meta());
+  DatumParameter owned; ASSERT_EQ(OB_SUCCESS, owned.assign_legacy_borrowed(view, type->legacy_meta()));
   const auto *copy = owned.get_array<DatumParameterArray>();
   ASSERT_NE(array, copy); ASSERT_EQ(2, copy->count_);
   array->data_[0].datum_.set_int(0); array->data_[1].datum_.set_int(0);

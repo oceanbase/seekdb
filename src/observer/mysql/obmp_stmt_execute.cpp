@@ -94,36 +94,6 @@ int read_checked_length(const char *&data, uint64_t &length,
   return ret;
 }
 
-class BigintParameterLayout final
-{
-public:
-  BigintParameterLayout() : type_(), init_ret_(init_type(type_)), copy_plan_(type_) {}
-  BigintParameterLayout(const BigintParameterLayout &) = delete;
-  BigintParameterLayout &operator=(const BigintParameterLayout &) = delete;
-  int status() const { return init_ret_; }
-  const SqlType &type() const { return type_; }
-  const DatumCopyPlan &copy_plan() const { return copy_plan_; }
-
-private:
-  static int init_type(SqlType &type)
-  {
-    SqlTypeMeta meta;
-    meta.set_int();
-    meta.set_collation_level(CS_LEVEL_COERCIBLE);
-    meta.set_scale(0);
-    return SqlType::from_legacy(meta, ObAccuracy(20, 0), type);
-  }
-  SqlType type_;
-  const int init_ret_;
-  const DatumCopyPlan copy_plan_;
-};
-
-const BigintParameterLayout &bigint_parameter_layout()
-{
-  // Only the immutable type/operation is shared. Request values never are.
-  static const BigintParameterLayout layout;
-  return layout;
-}
 } // namespace
 
 void ObPsSessionInfoParamsCleaner::operator()(
@@ -187,8 +157,7 @@ ObMPStmtExecute::ObMPStmtExecute(const share::ObGlobalContext &gctx)
       exec_end_timestamp_(0),
       prepare_packet_sent_(false),
       params_num_(0),
-      curr_sql_idx_(0),
-      native_parameter_owner_(nullptr)
+      curr_sql_idx_(0)
 {
   ctx_.exec_type_ = MpQuery;
 }
@@ -976,11 +945,12 @@ int ObMPStmtExecute::set_standard_bytes_param(ObIAllocator &allocator,
       if (param.is_lob_storage() && dst.length() > 0) {
         SqlTypeMeta output_meta = param.get_meta();
         output_meta.set_has_lob_header();
-        if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
-                param.datum_, param.get_meta(), output_meta, allocator))) {
-        } else {
-          param.set_type_meta(output_meta);
-        }
+        alignas(8) char scratch[64];
+        ObDatum physical;
+        if (OB_FAIL(param.export_legacy(physical, scratch, sizeof(scratch)))) {
+        } else if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
+                physical, param.get_meta(), output_meta, allocator))) {
+        } else { ret = param.assign_legacy_borrowed(physical, output_meta); }
       }
     } else if (MYSQL_TYPE_STRING == type || MYSQL_TYPE_VARCHAR == type ||
                MYSQL_TYPE_VAR_STRING == type) {
@@ -1058,9 +1028,6 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
                                              bool &handled) {
   int ret = OB_SUCCESS;
   handled = false;
-  // A failed or unsupported rebind cannot retain the preceding native input.
-  // Its arena allocation is not reused while old descriptors can still borrow it.
-  native_parameter_owner_ = nullptr;
   const int64_t param_count = ps_session_info.get_param_count();
   const int64_t tail_len = analysis_checker_.remain_len();
   oceanbase::nio::NioMysqlExecuteParamMeta *cached = NULL;
@@ -1145,42 +1112,6 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
              OB_FAIL(params_->prepare_allocate(param_count))) {
   }
 
-  NativeParameterOwner *native_candidate = nullptr;
-  const BigintParameterLayout *native_layout = nullptr;
-  bool native_supported = OB_SUCC(ret) && handled && param_count > 0
-      && !is_arraybinding_ && !is_pl_stmt(stmt_type_) && !is_ps_cursor()
-      && !is_send_long_data();
-  for (int64_t i = 0; native_supported && i < param_count; ++i) {
-    const oceanbase::nio::NioMysqlExecuteParam &desc = parsed[i];
-    native_supported = desc.mysql_type == MYSQL_TYPE_LONGLONG
-        && desc.kind == static_cast<uint8_t>(oceanbase::nio::ExecuteKind::I64)
-        && (desc.flags & static_cast<uint8_t>(oceanbase::nio::ExecuteFlag::Unsigned)) == 0
-        && long_data[i] == 0;
-  }
-  if (native_supported) {
-    static_assert(sizeof(NativeParameterOwner) % alignof(Datum) == 0,
-                  "request Datum slots must follow an aligned owner header");
-    native_layout = &bigint_parameter_layout();
-    if (OB_FAIL(native_layout->status())) {
-    } else if (param_count > (INT64_MAX - static_cast<int64_t>(sizeof(NativeParameterOwner)))
-                              / static_cast<int64_t>(sizeof(Datum))) {
-      ret = OB_SIZE_OVERFLOW;
-    } else {
-      const int64_t bytes = sizeof(NativeParameterOwner) + param_count * sizeof(Datum);
-      char *storage = static_cast<char *>(alloc.alloc(bytes));
-      if (OB_ISNULL(storage)) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        Datum *values = reinterpret_cast<Datum *>(storage + sizeof(NativeParameterOwner));
-        native_candidate = new (storage) NativeParameterOwner(native_layout->type(), param_count, values);
-        for (int64_t i = 0; i < param_count; ++i) {
-          new (&values[i]) Datum();
-          values[i].set_int(static_cast<int64_t>(parsed[i].value));
-        }
-      }
-    }
-  }
-
   ParamTypeArray new_types;
   ParamTypeFlagArray new_flags;
   for (int64_t i = 0; OB_SUCC(ret) && handled && i < param_count; ++i) {
@@ -1198,10 +1129,6 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
     }
 
     if (OB_FAIL(ret)) {
-    } else if (native_candidate != nullptr) {
-      // The old descriptor is a read-only boundary view, not another payload.
-      // Keep the existing protocol metadata and its common post-processing.
-      ret = native_layout->copy_plan().borrow_legacy(native_candidate->values_[i], param.datum_);
     } else if (static_cast<uint8_t>(oceanbase::nio::ExecuteKind::Null) == desc.kind) {
       param.set_null();
       if (ob_is_accuracy_length_valid_tc(ob_type)) {
@@ -1312,7 +1239,6 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
     } else if (OB_FAIL(assignment.ret_)) {
     }
   }
-  if (OB_SUCC(ret) && handled) { native_parameter_owner_ = native_candidate; }
   return ret;
 }
 

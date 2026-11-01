@@ -43,7 +43,7 @@ int constraint_legacy_view(const common::NativeTypedDatum &source,
     common::ObDatum datum;
     if (OB_FAIL(plan.legacy_view(source.datum_, datum, scratch, sizeof(scratch)))) {
     } else {
-      view = common::DatumValue(datum, source.type_->legacy_meta());
+      ret = view.assign_legacy_borrowed(datum, source.type_->legacy_meta());
     }
   }
   return ret;
@@ -100,12 +100,47 @@ int ObPCConstParamInfo::add_constant(const common::ObDatum &value, const common:
   return ret == OB_SUCCESS ? add_constant(imported, type, allocator) : ret;
 }
 
+int ObPCConstParamInfo::add_runtime_parameter(const ObPhysicalPlanCtx &parameters,
+                                              int64_t index,
+                                              common::ObIAllocator &allocator)
+{
+  int ret = OB_SUCCESS;
+  common::NativeTypedDatum value;
+  common::DatumParameterMetadata attributes;
+  if (OB_FAIL(parameters.capture_native_parameter(index, value, attributes))) {
+  } else if (value.type_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    int64_t span = 0;
+    const common::DatumCopyPlan plan(*value.type_);
+    if (OB_FAIL(plan.carrier_span_size(value.datum_, span))) {
+    } else if (value.type_->requires_resource_clone()
+        || parameters.get_group_parameter_input(index) != nullptr) {
+      // P1 does not broaden cache admission for resource/PL typed NULL or
+      // original grouped arrays merely because a complete bound Type exists.
+      // Execution keeps its value; no cache key or synthetic Type is published.
+      cache_eligible_ = false;
+    } else {
+      ret = add_constant(value.datum_, *value.type_, allocator);
+    }
+  }
+  return ret;
+}
+
 int ObPCConstParamInfo::add_parameter(const common::DatumParameter &value,
                                       const ObExecContext *actual_ctx,
                                       common::ObIAllocator &allocator,
                                       const pl::ObPLINS *actual_declarations)
 {
   int ret = OB_SUCCESS;
+  auto add_prepared = [&](const common::SqlType &type) {
+    alignas(8) char scratch[64];
+    common::ObDatum legacy;
+    const int code = value.export_legacy(legacy, scratch, sizeof(scratch));
+    // The wrapper is generic physical (Decimal keeps actual bytes, Unknown
+    // is Reference8). The actual prepared Type chooses semantic representation.
+    return code == OB_SUCCESS ? add_constant(legacy, type, allocator) : code;
+  };
   // A runtime NULL has no payload type, but its protocol/declaration metadata
   // and full accuracy remain available independently of initialized frames.
   const common::SqlTypeMeta &meta = value.is_null() && value.get_type_meta().is_null()
@@ -113,7 +148,7 @@ int ObPCConstParamInfo::add_parameter(const common::DatumParameter &value,
   if (simple_constraint_type(meta)) {
     common::SqlType type;
     if (OB_FAIL(common::SqlType::from_legacy(meta, value.get_accuracy(), type))) {
-    } else { ret = add_constant(value.datum_, type, allocator); }
+    } else { ret = add_prepared(type); }
   } else if (meta.get_type() == common::ObUserDefinedSQLType
       || actual_ctx == nullptr || (meta.is_pl_extend_type()
       && (meta.get_extend_type() != pl::PL_RECORD_TYPE || actual_declarations == nullptr))) {
@@ -123,7 +158,7 @@ int ObPCConstParamInfo::add_parameter(const common::DatumParameter &value,
     const common::SqlType *type = nullptr;
     if (OB_FAIL(ObExprUtil::resolve_sql_type(*const_cast<ObExecContext *>(actual_ctx), meta, value.get_accuracy(),
           meta.get_subschema_id(), temporary, type, actual_declarations))) {
-    } else { ret = add_constant(value.datum_, *type, allocator); }
+    } else { ret = add_prepared(*type); }
   }
   return ret;
 }
@@ -136,12 +171,20 @@ int ObPCConstParamInfo::add_raw_constant(const common::DatumValue &value,
                                          const pl::ObPLINS *actual_declarations)
 {
   int ret = OB_SUCCESS;
+  auto add_prepared = [&](const common::SqlType &type) {
+    alignas(8) char scratch[64];
+    common::ObDatum legacy;
+    const int code = value.export_legacy(legacy, scratch, sizeof(scratch));
+    // The wrapper is generic physical (Decimal keeps actual bytes, Unknown
+    // is Reference8). The actual prepared Type chooses semantic representation.
+    return code == OB_SUCCESS ? add_constant(legacy, type, allocator) : code;
+  };
   const common::SqlTypeMeta &meta = value.is_null()
       ? original_type.get_sql_type_meta() : value.get_meta();
   if (simple_constraint_type(meta)) {
     common::SqlType type;
     if (OB_FAIL(common::SqlType::from_legacy(meta, original_type.get_accuracy(), type))) {
-    } else { ret = add_constant(value.datum_, type, allocator); }
+    } else { ret = add_prepared(type); }
   } else if (meta.get_type() == common::ObUserDefinedSQLType
       || (meta.is_pl_extend_type()
       && (meta.get_extend_type() != pl::PL_RECORD_TYPE || actual_declarations == nullptr))
@@ -152,7 +195,7 @@ int ObPCConstParamInfo::add_raw_constant(const common::DatumValue &value,
     const common::SqlType *type = nullptr;
     if (OB_FAIL(ObExprUtil::resolve_raw_sql_type(original_type, session, schema_guard,
                                                temporary, type, actual_declarations))) {
-    } else { ret = add_constant(value.datum_, *type, allocator); }
+    } else { ret = add_prepared(*type); }
   }
   return ret;
 }
@@ -286,7 +329,7 @@ int TableAccessTargetBuilder::collect_access_targets(const ObIArray<TableAccessP
   } else {
     ObSEArray<const TableAccessPlan *, 2> table_access_plan_ptrs;
     ObSEArray<TableAccessTargets *, 2> target_ptrs;
-    const ParamStore &params = plan_ctx->get_param_store();
+    const ObPhysicalPlanCtx &params = *plan_ctx;
     if (OB_FAIL(table_targets.prepare_allocate(N))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
@@ -352,7 +395,7 @@ int TableAccessTargetBuilder::build_related_tablet_info(const TableAccessPlan &t
   ObArray<ObTabletID> tablet_ids;
 
   if (OB_FAIL(table_access_plan.calculate_tablet_ids(exec_ctx,
-                                                  plan_ctx->get_param_store(),
+                                                  *plan_ctx,
                                                   tablet_ids,
                                                   partition_ids,
                                                   first_level_part_ids,

@@ -22,12 +22,14 @@
 #include "sql/engine/expr/ob_expr.h"
 #include "common/row/ob_row.h"
 #include "common/datum/datum_value.h"
+#include "common/datum/datum_parameter_metadata.h"
 
 namespace oceanbase
 {
 namespace sql
 {
 class ObPhysicalPlanCtx;
+struct NativeParameterGroup;
 class ObDynExtReuseAlloc;
 class ObExprOperatorCtx;
 
@@ -177,7 +179,9 @@ public:
       char *buf, int64_t length, int64_t &pos);
   static int deserialize_parameters(const char *buf, int64_t length, int64_t &pos,
       ObIAllocator &owner, ObIArray<char *> &pages,
-      ObIArray<const common::SqlType *> &types, int64_t &original_count);
+      ObIArray<const common::SqlType *> &types, int64_t &original_count,
+      ObIArray<common::DatumParameterMetadata> *metadata = nullptr,
+      ObIArray<NativeParameterGroup> *groups = nullptr, int32_t *wire_version = nullptr);
   static int bind_parameter_pages(const ObIArray<ObFrameInfo> &group,
       const ObIArray<char *> &pages, int64_t parameter_count, int64_t original_count,
       char **frames, int64_t frame_count);

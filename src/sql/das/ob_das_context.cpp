@@ -85,7 +85,7 @@ int ObDASCtx::init(const ObPhysicalPlan &plan, ObExecContext &ctx)
     partition_ids.reuse();
     first_level_part_ids.reuse();
     if (OB_FAIL(das_access.calculate_tablet_ids(ctx,
-                                                  plan_ctx->get_param_store(),
+                                                  *plan_ctx,
                                                   tablet_ids,
                                                   partition_ids,
                                                   first_level_part_ids,

@@ -174,7 +174,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                         const int64_t sql_mode_value = exec_env.get_sql_mode();
           DatumValue int_value;
                         int_value.meta_.set_int();
-          int_value.datum_.set_string(reinterpret_cast<const char *>(&sql_mode_value), sizeof(sql_mode_value));
+          int_value.datum_.set_int(sql_mode_value);
                         if (OB_FAIL(ob_sql_mode_to_str(int_value, cells[col_idx], allocator_))) {
                         } else {
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(

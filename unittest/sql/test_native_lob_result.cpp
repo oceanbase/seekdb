@@ -142,13 +142,13 @@ TEST(NativeLobConversion, inapplicable_input_keeps_existing_output) {
   ObArenaAllocator owner;
   DatumValue output;
   ASSERT_EQ(OB_SUCCESS, output.set_varchar(ObString::make_string("unchanged"), owner));
-  const char *original = output.datum_.ptr_;
+  const char *original = output.datum_.get_string().ptr();
   DatumValue plain, null;
   ASSERT_EQ(OB_SUCCESS, plain.set_varchar(ObString::make_string("input"), owner));
   for (const DatumValue &input : {plain, null}) {
     EXPECT_EQ(OB_SUCCESS, ObTextStringIter::convert_outrow_lob_to_inrow_templob(
         input, output, nullptr, owner, false, true));
-    EXPECT_EQ(original, output.datum_.ptr_);
+    EXPECT_EQ(original, output.datum_.get_string().ptr());
   }
 }
 
@@ -159,12 +159,12 @@ TEST(NativeLobConversion, permitted_inrow_value_borrows_or_deep_copies_exact_met
   DatumValue output;
   ASSERT_EQ(OB_SUCCESS, ObTextStringIter::convert_outrow_lob_to_inrow_templob(
       input, output, nullptr, owner, true));
-  EXPECT_EQ(input.datum_.ptr_, output.datum_.ptr_);
+  EXPECT_EQ(input.datum_.get_string().ptr(), output.datum_.get_string().ptr());
   EXPECT_EQ(CS_LEVEL_COERCIBLE, output.get_collation_level());
   EXPECT_TRUE(output.has_lob_header());
   ASSERT_EQ(OB_SUCCESS, ObTextStringIter::convert_outrow_lob_to_inrow_templob(
       input, output, nullptr, owner, true, true));
-  EXPECT_NE(input.datum_.ptr_, output.datum_.ptr_);
+  EXPECT_NE(input.datum_.get_string().ptr(), output.datum_.get_string().ptr());
   std::memset(bytes.data(), 'x', bytes.size());
   ObString payload;
   ASSERT_EQ(OB_SUCCESS, ObLobLocatorV2(output.get_string(), true).get_inrow_data(payload));
@@ -176,10 +176,10 @@ TEST(NativeLobConversion, rebuilt_inrow_value_owns_bytes_and_matches_lob_metadat
     ObArenaAllocator owner;
     auto bytes = memory_lob("converted");
     DatumValue value = lob_view(type, ObString(bytes.size(), bytes.data()));
-    const char *original = value.datum_.ptr_;
+    const char *original = value.datum_.get_string().ptr();
     ASSERT_EQ(OB_SUCCESS, ObTextStringIter::convert_outrow_lob_to_inrow_templob(
         value, value, nullptr, owner));
-    EXPECT_NE(original, value.datum_.ptr_);
+    EXPECT_NE(original, value.datum_.get_string().ptr());
     EXPECT_EQ(type, value.get_type()); EXPECT_TRUE(value.has_lob_header());
     EXPECT_FALSE(value.meta_.is_outrow());
     EXPECT_EQ(type == ObCollectionSQLType ? CS_LEVEL_EXPLICIT : CS_LEVEL_IMPLICIT,
@@ -198,11 +198,11 @@ TEST(NativeLobConversion, allocation_error_keeps_source_and_output) {
   ObArenaAllocator owner; RejectAllocator reject;
   auto bytes = memory_lob("allocation");
   DatumValue value = lob_view(ObLongTextType, ObString(bytes.size(), bytes.data()));
-  const char *original = value.datum_.ptr_;
+  const char *original = value.datum_.get_string().ptr();
   for (bool allow : {false, true}) {
     EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObTextStringIter::convert_outrow_lob_to_inrow_templob(
         value, value, nullptr, reject, allow, true));
-    EXPECT_EQ(original, value.datum_.ptr_);
+    EXPECT_EQ(original, value.datum_.get_string().ptr());
     EXPECT_EQ(CS_LEVEL_COERCIBLE, value.get_collation_level());
   }
 }
@@ -227,13 +227,13 @@ TEST(NativeLobConversion, iterator_errors_and_short_reads_do_not_publish_partial
     ObArenaAllocator owner;
     auto bytes = memory_lob("abcdefgh", true);
     DatumValue value = lob_view(ObLongTextType, ObString(bytes.size(), bytes.data()));
-    const char *original = value.datum_.ptr_;
+    const char *original = value.datum_.get_string().ptr();
     BlockReadService service; service.blocks = {"abc"}; service.fail_after = failure;
     ObLobReadOptions options(service);
     EXPECT_EQ(failure < 0 ? OB_ERR_UNEXPECTED : OB_IO_ERROR,
               ObTextStringIter::convert_outrow_lob_to_inrow_templob(
                   value, value, &options, owner));
-    EXPECT_EQ(original, value.datum_.ptr_);
+    EXPECT_EQ(original, value.datum_.get_string().ptr());
     EXPECT_EQ(1, service.release_count);
   }
 }

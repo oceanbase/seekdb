@@ -52,7 +52,7 @@ struct ObMinMaxValEval {
   }
   inline bool is_valid() const { return datum_ != NULL && cmp_func_ != NULL; }
   // Borrowed native view; publish_min_max_values copies into the statistic owner.
-  void get_value(DatumValue &value) const;
+  int get_value(DatumValue &value) const;
   int deep_copy(const ObMinMaxValEval &other, ObIAllocator &alloc);
 
   ValEvalType val_type_;

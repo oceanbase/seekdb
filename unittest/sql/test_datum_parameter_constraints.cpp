@@ -18,6 +18,7 @@
 #include <vector>
 #include <gtest/gtest.h>
 #include "sql/ob_sql_utils.h"
+#include "sql/plan_cache/ob_cache_object.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/engine/expr/ob_expr.h"
@@ -45,7 +46,7 @@ void expect_match(DatumParameter &value, PreCalcExprExpectResult expected, bool 
 TEST(DatumParameterConstraints, null_boolean_never_reads_a_payload)
 {
   DatumParameter value; SqlTypeMeta meta; meta.set_int(); value.set_type_meta(meta);
-  value.datum_.ptr_ = nullptr; value.datum_.set_null();
+  value.datum_.set_null();
   expect_match(value, PRE_CALC_RESULT_NULL, true);
   expect_match(value, PRE_CALC_RESULT_NOT_NULL, false);
   expect_match(value, PRE_CALC_RESULT_TRUE, false);
@@ -57,8 +58,8 @@ TEST(DatumParameterConstraints, null_boolean_never_reads_a_payload)
 
 TEST(DatumParameterConstraints, signed_boolean_zero_and_nonzero)
 {
-  char bytes[8]; DatumParameter value; SqlTypeMeta meta; meta.set_int();
-  value.set_type_meta(meta); value.datum_.ptr_ = bytes;
+  DatumParameter value; SqlTypeMeta meta; meta.set_int();
+  value.set_type_meta(meta);
   for (int64_t n : {-17LL, 0LL, 1LL, 9223372036854775807LL}) {
     value.datum_.set_int(n);
     expect_match(value, PRE_CALC_RESULT_NULL, false);
@@ -131,7 +132,6 @@ TEST(DatumParameterConstraints, legacy_input_keeps_full_metadata_without_reverse
   ParamFlag flags; flags.flag_ = 0xa5; flags.extend_flag_ = 0x5a;
   source.set_param_flag(flags); source.set_result_flag(0xfedcba98U);
   DatumParameter value;
-  ASSERT_EQ(OB_SUCCESS, value.alloc_datum_reserved_buff(source.get_meta(), source.get_precision(), allocator));
   ASSERT_EQ(OB_SUCCESS, bind_datum_parameter(source, value, &allocator));
   EXPECT_TRUE(value.is_null());
   EXPECT_EQ(source.get_meta(), value.get_type_meta());
@@ -149,11 +149,10 @@ TEST(DatumParameterConstraints, numeric_payload_is_contiguous_and_not_a_legacy_o
   ASSERT_EQ(OB_SUCCESS, number.from("123456789012345678901234567890.123456789", allocator));
   DatumParameter source; ASSERT_EQ(OB_SUCCESS, source.set_number(number, allocator)); source.set_precision(65); source.set_scale(30);
   DatumParameter value;
-  ASSERT_EQ(OB_SUCCESS, value.alloc_datum_reserved_buff(source.get_meta(), source.get_precision(), allocator));
   ASSERT_EQ(OB_SUCCESS, bind_datum_parameter(source, value, &allocator));
   EXPECT_EQ(ObNumberType, value.get_type()); EXPECT_EQ(65, value.get_precision());
   EXPECT_EQ(30, value.get_scale());
-  EXPECT_EQ(sizeof(number.get_desc()) + number.get_length() * sizeof(uint32_t), value.datum_.len_);
+  EXPECT_EQ(sizeof(number.get_desc()) + number.get_length() * sizeof(uint32_t), value.datum_.length());
   EXPECT_EQ(0, memcmp(value.datum_.get_number_digits(), number.get_digits(), number.get_length() * sizeof(uint32_t)));
 }
 
@@ -170,7 +169,6 @@ TEST(DatumParameterConstraints, scalar_input_envelope_shares_canonical_native_ar
   ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(text, array->data_[1], allocator));
   DatumParameter source; ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, allocator));
   DatumParameter value;
-  ASSERT_EQ(OB_SUCCESS, value.alloc_datum_reserved_buff(source.get_meta(), source.get_precision(), allocator));
   ASSERT_EQ(OB_SUCCESS, bind_datum_parameter(source, value, &allocator));
   EXPECT_EQ(array, value.get_array<DatumParameterArray>());
   EXPECT_EQ(123, array->data_[0].datum_.get_int()); EXPECT_EQ(ObIntType, array->data_[0].get_type());
@@ -186,21 +184,38 @@ TEST(DatumParameterConstraints, batch_frames_select_full_native_array_values)
   DatumParameterArray *array = DatumParameterArray::alloc(allocator, 3);
   ASSERT_NE(nullptr, array);
   DatumParameter integer, text; ASSERT_EQ(OB_SUCCESS, integer.set_int(123, allocator)); text.set_varchar_view(ObString("bytes"));
+  text.set_collation_type(CS_TYPE_UTF8MB4_BIN); text.set_length(5);
   ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(integer, array->data_[0], allocator));
   ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(text, array->data_[1], allocator));
   DatumParameter source; ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, allocator));
+  // Bind the real declaration of each heterogeneous leaf before execution.
+  // The third producer value is a declared SQL NULL, not a guessed outer type.
+  for (int64_t i = 0; i < 3; ++i) {
+    const SqlType *type = nullptr;
+    array->data_[i].set_param_meta();
+    ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(array->data_[i].get_type_meta(),
+        array->data_[i].get_accuracy(), allocator, type));
+    ASSERT_NE(nullptr, type);
+    ASSERT_EQ(OB_SUCCESS, array->set_element_type_borrowed(i, *type, allocator));
+  }
   ObPhysicalPlanCtx context(allocator);
   ASSERT_EQ(OB_SUCCESS, context.append_parameter_input(source));
   ASSERT_EQ(OB_SUCCESS, context.init_datum_param_store());
-  EXPECT_NE(array, context.get_datum_param_store().at(0).get_array<DatumParameterArray>());
+  ASSERT_NE(nullptr, context.get_group_parameter_input(0));
+  EXPECT_NE(array, context.get_group_parameter_input(0)->get_array<DatumParameterArray>());
   array->data_[0].datum_.set_int(999);
   array->data_[1].set_null();
   ASSERT_EQ(1, context.get_param_frame_ptrs().count());
   const Datum *frame = context.get_native_parameter(0);
   ASSERT_NE(nullptr, frame);
   ASSERT_EQ(OB_SUCCESS, context.replace_batch_param_datum(0, 0, 1)); EXPECT_EQ(123, frame->get_int());
+  ASSERT_NE(nullptr, context.get_native_parameter_type(0));
+  EXPECT_EQ(ObIntType, context.get_native_parameter_type(0)->kind());
   ASSERT_EQ(OB_SUCCESS, context.replace_batch_param_datum(1, 0, 1)); EXPECT_EQ(ObString("bytes"), frame->get_string());
+  EXPECT_EQ(ObVarcharType, context.get_native_parameter_type(0)->kind());
+  EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, context.get_native_parameter_type(0)->collation());
   ASSERT_EQ(OB_SUCCESS, context.replace_batch_param_datum(2, 0, 1)); EXPECT_TRUE(frame->is_null());
+  EXPECT_EQ(ObNullType, context.get_native_parameter_type(0)->kind());
   EXPECT_EQ(OB_ERR_UNEXPECTED, context.replace_batch_param_datum(-1, 0, 1));
   EXPECT_EQ(OB_ERR_UNEXPECTED, context.replace_batch_param_datum(3, 0, 1));
 }
@@ -214,11 +229,9 @@ TEST(DatumParameterConstraints, nested_array_envelope_preserves_native_descripto
   DatumParameter integer; ASSERT_EQ(OB_SUCCESS, integer.set_uint64(UINT64_MAX, allocator)); integer.set_precision(20);
   ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(integer, inner->data_[0], allocator));
   DatumParameter child; ASSERT_EQ(OB_SUCCESS, child.set_extend(reinterpret_cast<int64_t>(inner), T_EXT_SQL_ARRAY, allocator));
-  ASSERT_EQ(OB_SUCCESS, outer->data_[0].alloc_datum_reserved_buff(child.get_meta(), -1, allocator));
   ASSERT_EQ(OB_SUCCESS, bind_datum_parameter(child, outer->data_[0], &allocator));
   DatumParameter source; ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(outer), T_EXT_SQL_ARRAY, allocator));
   DatumParameter destination;
-  ASSERT_EQ(OB_SUCCESS, destination.alloc_datum_reserved_buff(source.get_meta(), -1, allocator));
   ASSERT_EQ(OB_SUCCESS, bind_datum_parameter(source, destination, &allocator));
   const DatumParameterArray *native_outer = destination.get_array<DatumParameterArray>();
   ASSERT_EQ(outer, native_outer);
@@ -253,12 +266,13 @@ TEST(DatumParameterConstraints, context_serialization_decodes_canonical_arrays_i
   std::vector<char> repeated(output.get_serialize_size()); pos = 0;
   ASSERT_EQ(OB_SUCCESS, output.serialize(repeated.data(), repeated.size(), pos)); EXPECT_EQ(wire, repeated);
   memset(wire.data(), 0xa5, wire.size()); memset(bytes, 'x', sizeof(bytes));
-  ASSERT_EQ(1, output.get_datum_param_store().count());
-  auto *owned = output.get_datum_param_store().at(0).get_array<DatumParameterArray>();
+  EXPECT_FALSE(output.native_parameters_ready()); // Historical v1 is physical input only.
+  ASSERT_EQ(1, output.get_parameter_inputs().count());
+  auto *owned = output.get_parameter_inputs().at(0).get_array<DatumParameterArray>();
   ASSERT_NE(nullptr, owned); EXPECT_NE(array, owned); ASSERT_EQ(2, owned->count_);
   EXPECT_EQ(ObString("persisted array"), owned->data_[0].datum_.get_string());
   EXPECT_EQ(UINT64_MAX, owned->data_[1].datum_.get_uint()); EXPECT_EQ(20, owned->data_[1].get_precision());
-  EXPECT_EQ(reinterpret_cast<int64_t>(owned), output.get_param_store().at(0).get_ext());
+  EXPECT_EQ(reinterpret_cast<int64_t>(owned), output.get_parameter_inputs().at(0).get_ext());
 }
 
 TEST(DatumParameterConstraints, owned_scalar_import_does_not_borrow_temporary_strings)
@@ -310,11 +324,70 @@ TEST(DatumParameterConstraints, scalar_array_boundary_preserves_full_metadata_an
   DatumParameter source; SqlTypeMeta meta; meta.set_ext(); meta.set_extend_type(T_EXT_SQL_ARRAY); meta.set_cs_level(0xa7);
   source.set_type_meta(meta); source.set_param_meta(meta); source.set_raw_text_info(17, 19);
   source.set_result_flags(0x1234); source.get_param_flag().flag_ = 0xa5;
-  ASSERT_EQ(OB_SUCCESS, source.alloc_datum_reserved_buff(meta, -1, arena)); source.set_array_address(array);
+  ASSERT_EQ(OB_SUCCESS, source.set_array_address(array, arena));
   DatumParameter output; ASSERT_EQ(OB_SUCCESS, assign_datum_parameter(source, output));
   EXPECT_EQ(0, memcmp(&meta, &output.get_meta(), sizeof(meta))); EXPECT_EQ(meta, output.get_param_meta());
   EXPECT_EQ(reinterpret_cast<int64_t>(array), output.get_ext()); EXPECT_EQ(0x1234, output.get_result_flag());
   EXPECT_EQ(0xa5, output.get_param_flag().flag_); EXPECT_EQ(17, output.get_raw_text_pos()); EXPECT_EQ(19, output.get_raw_text_len());
+}
+
+
+TEST(DatumParameterConstraints, param_info_version_one_wire_keeps_flags_and_runtime_extension_rules)
+{
+  // Accepted 18f ob_cache_object.cpp member order is flag, scale, type,
+  // ext_real_type, typed_null, collation, precision. The nested seven-byte
+  // ParamFlag v1 frame is the literal oracle in DatumCore's existing test.
+  // Outer length is 13: nested flag frame 7 bytes plus six one-byte fields.
+  const unsigned char expected[] = {
+      1, 0x8d, 0x80, 0x80, 0x80, 0,
+      1, 0x81, 0x80, 0x80, 0x80, 0, 0xb7,
+      7, 39, 5, 1, 63, 20};
+  ObParamInfo source;
+  source.flag_.flag_ = 0xb7;  // Includes nonzero legacy reserved and check bits.
+  source.flag_.extend_flag_ = 0x5a;  // Runtime-only, including reserved bits.
+  source.scale_ = 7;
+  source.type_ = ObDecimalIntType;
+  source.ext_real_type_ = ObIntType;
+  source.is_typed_null_value_ = true;
+  source.col_type_ = CS_TYPE_BINARY;
+  source.precision_ = 20;
+  ASSERT_EQ(sizeof(expected), source.get_serialize_size());
+  std::vector<char> wire(source.get_serialize_size());
+  int64_t pos = 0;
+  ASSERT_EQ(OB_SUCCESS, source.serialize(wire.data(), wire.size(), pos));
+  ASSERT_EQ(sizeof(expected), pos);
+  EXPECT_EQ(0, memcmp(expected, wire.data(), sizeof(expected)));
+
+  for (uint8_t previous_extension : {uint8_t(0), uint8_t(0xe6)}) {
+    SCOPED_TRACE(static_cast<int>(previous_extension));
+    ObParamInfo decoded;
+    decoded.flag_.flag_ = 0x48;
+    decoded.flag_.extend_flag_ = previous_extension;
+    decoded.scale_ = -1; decoded.type_ = ObVarcharType;
+    decoded.ext_real_type_ = ObNullType; decoded.is_typed_null_value_ = false;
+    decoded.col_type_ = CS_TYPE_UTF8MB4_BIN; decoded.precision_ = 65;
+    int64_t read = 0;
+    ASSERT_EQ(OB_SUCCESS, decoded.deserialize(
+        reinterpret_cast<const char *>(expected), sizeof(expected), read));
+    EXPECT_EQ(sizeof(expected), read);
+    EXPECT_EQ(0xb7, decoded.flag_.flag_);
+    EXPECT_EQ(previous_extension, decoded.flag_.extend_flag_);
+    EXPECT_EQ(7, decoded.scale_);
+    EXPECT_EQ(ObDecimalIntType, decoded.type_);
+    EXPECT_EQ(ObIntType, decoded.ext_real_type_);
+    EXPECT_TRUE(decoded.is_typed_null_value_);
+    EXPECT_EQ(CS_TYPE_BINARY, decoded.col_type_);
+    EXPECT_EQ(20, decoded.precision_);
+    pos = 0;
+    ASSERT_EQ(OB_SUCCESS, decoded.serialize(wire.data(), wire.size(), pos));
+    EXPECT_EQ(sizeof(expected), pos);
+    EXPECT_EQ(0, memcmp(expected, wire.data(), sizeof(expected)));
+  }
+  source.flag_.extend_flag_ = 0xff;
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, source.serialize(wire.data(), wire.size(), pos));
+  EXPECT_EQ(sizeof(expected), pos);
+  EXPECT_EQ(0, memcmp(expected, wire.data(), sizeof(expected)));
 }
 
 int main(int argc, char **argv)

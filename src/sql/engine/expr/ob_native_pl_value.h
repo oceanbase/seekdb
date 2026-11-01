@@ -19,6 +19,7 @@
 #include "common/datum/datum.h"
 #include "common/datum/datum_parameter.h"
 #include "common/datum/sql_type.h"
+#include "lib/allocator/ob_allocator.h"
 
 namespace oceanbase
 {
@@ -92,9 +93,13 @@ public:
 private:
   struct Resource
   {
-    Resource() : value_(), next_(nullptr) {}
+    explicit Resource(common::ObIAllocator &allocator)
+        : value_(), next_(nullptr), metadata_owner_(allocator) {}
+    // clear() releases the payload graph before destroying this bulk Type
+    // owner. A failed graph release keeps both the token and metadata alive.
     common::DatumParameter value_;
     Resource *next_;
+    common::ObArenaAllocator metadata_owner_;
   };
   NativeSqlValueOwner(const NativeSqlValueOwner &) = delete;
   NativeSqlValueOwner &operator=(const NativeSqlValueOwner &) = delete;
@@ -113,6 +118,8 @@ private:
   int64_t count_;
 };
 
+// Native retained SQL-array leaf Types and pointer directories use a private
+// bulk metadata arena per Resource; payloads still use the original allocator.
 // Primitive values require neither a token nor a declaration lookup. Resource
 // token allocation precedes clone; success is published only after typed import.
 // Cursor retaining remains explicitly NOT_SUPPORTED until session ownership is

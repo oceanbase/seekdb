@@ -67,6 +67,7 @@ int ObCreateTableExecutor::prepare_stmt(ObCreateTableStmt &stmt,
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("CreateTableExec");
+
   const int64_t buf_len = OB_MAX_SQL_LENGTH;
   char *buf = static_cast<char*>(allocator.alloc(buf_len));
   int64_t pos = 0;
@@ -282,6 +283,14 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
   ObSQLSessionInfo *my_session = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   ObArenaAllocator allocator("CreateTableExec");
+  ObArenaAllocator descriptor_owner("CTASInputs");
+  ParamStore parameter_inputs((ObWrapperAllocator(descriptor_owner)));
+  auto prepare_parameter_inputs = [&]() -> int {
+    if (plan_ctx == nullptr) { return OB_ERR_UNEXPECTED; }
+    return plan_ctx->native_parameters_ready()
+        ? plan_ctx->build_resolution_inputs(parameter_inputs, ctx.get_allocator())
+        : parameter_inputs.assign(plan_ctx->get_parameter_inputs());
+  };
   HEAP_VAR(obcall::ObAlterTableArg, alter_table_arg) {
     obcall::ObDropTableArg drop_table_arg;
     obcall::ObTableItem table_item;
@@ -304,7 +313,8 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
     
     if (OB_SUCC(ret)) {
       if (OB_FAIL(prepare_stmt(stmt, *my_session, create_table_name))) {
-      } else if (OB_FAIL(prepare_ins_arg(stmt, my_session, ctx.get_sql_ctx()->schema_guard_, &plan_ctx->get_param_store(), ins_sql))) {
+      } else if (OB_FAIL(prepare_parameter_inputs())) {
+      } else if (OB_FAIL(prepare_ins_arg(stmt, my_session, ctx.get_sql_ctx()->schema_guard_, &parameter_inputs, ins_sql))) {
       } else if (OB_FAIL(prepare_alter_arg(stmt, my_session, create_table_name, alter_table_arg))) {
       } else if (OB_FAIL(prepare_drop_arg(stmt, my_session, table_item, drop_table_arg))) {
       } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){

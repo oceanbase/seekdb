@@ -31,6 +31,29 @@ namespace oceanbase
 {
 namespace sql
 {
+namespace {
+int export_runtime_parameter_view(const ObPhysicalPlanCtx &parameters, int64_t index,
+                                  DatumParameter &output, char (&scratch)[64])
+{
+  int ret = OB_SUCCESS;
+  if (const DatumParameter *group = parameters.get_group_parameter_input(index)) {
+    output = *group;
+  } else {
+    const DatumParameterMetadata *attributes = parameters.get_parameter_metadata(index);
+    ObDatum legacy;
+    DatumParameter candidate;
+    if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(parameters.export_runtime_parameter_legacy(index, legacy, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(candidate.assign_legacy_borrowed(legacy, attributes->type_meta_))) {
+    } else {
+      candidate.set_metadata(*attributes);
+      output = candidate;
+    }
+  }
+  return ret;
+}
+} // namespace
+
   const ObPCUserVarMeta ObPlanSet::UNKNOWN_VAR_DEFAULT_META = ObPCUserVarMeta(PRECISION_UNKNOWN_YET,
                                                                               ObVarcharType,
                                                                               CS_LEVEL_IMPLICIT,
@@ -171,6 +194,122 @@ int ObPlanSet::match_params_info(const ParamStore *params,
 
     if (OB_SUCC(ret) && is_same) {
       if (OB_FAIL(match_multi_stmt_info(*params, multi_stmt_rowkey_pos_, is_same))) {
+      } else if (!is_same) {
+        ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
+      }
+    }
+    if (OB_FAIL(ret)) {
+      is_same = false;
+    }
+  }
+  return ret;
+}
+
+int ObPlanSet::match_runtime_params_info(const ObPhysicalPlanCtx *params,
+                                 ObPlanCacheCtx &pc_ctx,
+                                 bool &is_same)
+{
+  int ret = OB_SUCCESS;
+  is_same = true;
+  ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
+  ObSessionVariable sess_var;
+  bool is_sql = is_sql_planset();
+  if (OB_ISNULL(params)) {
+    is_same = true;
+  } else if (!params->native_parameters_ready()) {
+    ret = OB_STATE_NOT_MATCH;
+    is_same = false;
+  } else if (params->get_parameter_count() > params_info_.count()) {
+    is_same = false;
+  } else {
+    // Match the original parameters
+    int64_t N = params->get_parameter_count();
+    for (int64_t i = 0; OB_SUCC(ret) && is_same && i < N; ++i) {
+      DatumParameter parameter;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(export_runtime_parameter_view(*params, i, parameter, scratch))) {
+      } else if (OB_FAIL(match_param_info(params_info_.at(i), parameter, is_same, is_sql))) {
+      }
+    }
+    // Match related user session variables
+    // Here should first compare related_user_var_names_ with variables inside session_info, then perform pre-calculation
+    // Otherwise it will lead to session var type change, unable to match the plan. Example as follows:
+    // eg:   SQL                   ParamStore
+    //     1. set @a := 1;
+    //     2. select @a;            int obj
+    //     3. set @a := '1';
+    //     4. select @a;            varchar obj
+    //     5. select @a;            int obj(because it fills the pre-calculated result when matching sql2 plan)
+    //     Result: sql5 cannot match sql4's plan
+    //     Reason: sql5 matches sql2's plan by pre-calculating first, obtaining int obj, then comparing related_user_var_names_
+    //           Found sess_var in session_info_ as varchar, matching failed.
+    //           sql5 rematch sql4's plan, since it has already been pre-calculated, no further calculation is performed, so ParamStore
+    //           inside is still int obj, while Obj in params_info_ is varchar, matching failed.
+    //
+    //     So it should be changed to compare related_user_var_names with sess_var first, then perform pre-calculation
+    //     would not result in matching with precomputed results of the previous plan in ParamStore
+    if (OB_SUCC(ret) && is_same && related_user_var_names_.count() > 0) {
+      if (related_user_var_names_.count() != related_user_sess_var_metas_.count()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ObSQLSessionInfo *session_info = pc_ctx.sql_ctx_.session_info_;
+        ObPCUserVarMeta tmp_meta;
+        for (int64_t i = 0 ; OB_SUCC(ret) && is_same && i < related_user_var_names_.count(); i++) {
+          if (OB_FAIL(get_variable_meta(pc_ctx.sql_ctx_.session_info_,
+                related_user_var_names_.at(i), tmp_meta))) {
+          } else {
+            is_same = (related_user_sess_var_metas_.at(i) == tmp_meta);
+          }
+        }
+      }
+    }
+
+    //pre calculate
+    if (OB_SUCC(ret) && is_same) {
+      ObPhysicalPlanCtx *plan_ctx = exec_ctx.get_physical_plan_ctx();
+      ObSQLSessionInfo *session = exec_ctx.get_my_session();
+
+      if (OB_ISNULL(session)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(plan_ctx)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (fetch_cur_time_ && FALSE_IT(plan_ctx->set_cur_time(
+                                ObClockGenerator::getClock(), *session))) {
+        // never reach
+      } else if (FALSE_IT(plan_ctx->set_last_trace_id(session->get_last_trace_id()))) {
+      } else if (params->get_parameter_count() != params_info_.count()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        /* check calculable expr constraints*/
+        DLIST_FOREACH(pre_calc_con, all_pre_calc_constraints_) {
+          if (OB_FAIL(ObPlanCacheObject::check_pre_calc_cons(is_ignore_stmt_,
+                                                             is_same,
+                                                             *pre_calc_con,
+                                                             exec_ctx))) {
+          } else if (!is_same) {
+            break;
+          }
+        }
+      }
+    }
+    // Match true/false, at this time the flag_ in params is the initial value, and cannot be used directly.
+    for (int64_t i = 0; OB_SUCC(ret) && is_same && i < params->get_parameter_count(); ++i) {
+      DatumParameter parameter;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(export_runtime_parameter_view(*params, i, parameter, scratch))) {
+      } else if (OB_FAIL(match_param_bool_value(params_info_.at(i), parameter, is_same))) {
+      }
+    } //for end
+
+    // check const constraint
+    if (OB_SUCC(ret) && is_same) {
+      OC( (match_runtime_constraint)(*params, is_same) );
+    }
+
+    if (OB_SUCC(ret) && is_same) {
+      if (OB_FAIL(match_runtime_multi_stmt_info(*params, multi_stmt_rowkey_pos_, is_same))) {
       } else if (!is_same) {
         ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
       }
@@ -357,6 +496,71 @@ int ObPlanSet::match_multi_stmt_info(const ParamStore &params,
   }
   return ret;
 }
+
+int ObPlanSet::match_runtime_multi_stmt_info(const ObPhysicalPlanCtx &params,
+                                     const ObIArray<int64_t> &multi_stmt_rowkey_pos,
+                                     bool &is_match)
+{
+  int ret = OB_SUCCESS;
+  is_match = false;
+  if (multi_stmt_rowkey_pos.empty()) {
+    is_match = true;
+  } else {
+    // check all rowkey are different
+    int64_t stmt_count = 0;
+    ObSEArray<const DatumParameter*, 16> binding_data;
+    for (int64_t i = 0; OB_SUCC(ret) && i < multi_stmt_rowkey_pos.count(); i++) {
+      int64_t pos = multi_stmt_rowkey_pos.at(i);
+      if (OB_UNLIKELY(pos < 0 || pos >= params.get_parameter_count())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (params.get_group_parameter_input(pos) == nullptr
+          || !params.get_group_parameter_input(pos)->is_ext_sql_array()) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        const DatumParameterArray *array_params = reinterpret_cast<const DatumParameterArray*>(
+                                                  params.get_group_parameter_input(pos)->get_ext());
+        if (OB_ISNULL(array_params)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(binding_data.push_back(array_params->data_))) {
+        } else if (i == 0) {
+          stmt_count = array_params->count_;
+        } else if (OB_UNLIKELY(stmt_count != array_params->count_)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else { /*do nothing*/ }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      is_match = true;
+      HashKey hash_key;
+      UniqueHashSet unique_ctx;
+      if (OB_FAIL(unique_ctx.create(stmt_count))) {
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && is_match && i < stmt_count; i++) {
+          hash_key.reuse();
+          for (int64_t j = 0; OB_SUCC(ret) && j < binding_data.count(); j++) {
+            ret = hash_key.rowkey_.push_back(binding_data.at(j)[i].value_view());
+          }
+          if (OB_SUCC(ret)) {
+            ret = unique_ctx.exist_refactored(hash_key);
+            if (OB_HASH_EXIST == ret) {
+              ret = OB_SUCCESS;
+              is_match = false;
+              if (REACH_TIME_INTERVAL(10000000)) {
+                LOG_INFO("batched multi-stmt does not have the same rowkey", K(i),
+                    K(hash_key));
+              }
+            } else if (OB_HASH_NOT_EXIST == ret) {
+              if (OB_FAIL(unique_ctx.set_refactored(hash_key))) {
+              }
+            } else {
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
 // Determine whether all parameters in the same column across multiple groups are true/false, and return the first parameter that is true/false
 
 /*//Determine if each obj in the array parameter of param store is always true/false*/
@@ -448,8 +652,8 @@ int ObPlanSet::match_params_info(const Ob2DArray<ObParamInfo,
     if (is_sql_planset() && OB_SUCC(ret) && is_same) {
       CK( OB_NOT_NULL(pc_ctx.exec_ctx_.get_physical_plan_ctx()) );
       if (OB_SUCC(ret)) {
-        const ParamStore &params = pc_ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store();
-        OC( (match_constraint)(params, is_same));
+        const ObPhysicalPlanCtx &params = *pc_ctx.exec_ctx_.get_physical_plan_ctx();
+        OC( (match_runtime_constraint)(params, is_same));
         OC( (match_cons)(pc_ctx, is_same));
       }
     }
@@ -907,6 +1111,138 @@ int ObPlanSet::match_constraint(const ParamStore &params, bool &is_matched)
   return ret;
 }
 
+int ObPlanSet::match_runtime_constraint(const ObPhysicalPlanCtx &params, bool &is_matched)
+{
+  int ret = OB_SUCCESS;
+  is_matched = true;
+
+  for (int64_t i = 0; is_matched && i < all_plan_const_param_constraints_.count(); ++i) {
+    is_matched = all_plan_const_param_constraints_.at(i).cache_eligible_;
+  }
+  for (int64_t i = 0; is_matched && i < all_possible_const_param_constraints_.count(); ++i) {
+    is_matched = all_possible_const_param_constraints_.at(i).cache_eligible_;
+  }
+  if (!is_matched) { return ret; }
+
+  if (all_plan_const_param_constraints_.count() > 0) { // check all_plan_const_param_constraints_ first
+    for (int64_t i = 0; is_matched && OB_SUCC(ret) && i < all_plan_const_param_constraints_.count(); i++) {
+      const ObPCConstParamInfo &const_param_info = all_plan_const_param_constraints_.at(i);
+      CK( const_param_info.const_idx_.count() > 0,
+          const_param_info.const_params_.count() > 0,
+          const_param_info.const_idx_.count() == const_param_info.const_params_.count() );
+
+      for (int64_t j = 0; is_matched && OB_SUCC(ret) && j < const_param_info.const_idx_.count(); j++) {
+        const int64_t param_idx = const_param_info.const_idx_.at(j);
+        const common::NativeTypedDatum &const_param = const_param_info.const_params_.at(j);
+        int cmp = 0;
+        DatumParameter parameter;
+        alignas(8) char scratch[64];
+        if (param_idx < 0 || param_idx >= params.get_parameter_count()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(export_runtime_parameter_view(params, param_idx, parameter, scratch))) {
+        } else if (const_param.type_ == nullptr || !const_param.type_->legacy_meta().is_valid() ||
+                   parameter.is_invalid_type()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_SUCCESS != ObPCConstParamInfo::compare_constant(const_param, parameter, cmp) || cmp != 0) {
+          LOG_TRACE("not matched const param", K(const_param), K(parameter));
+          is_matched = false;
+        } else {
+          // do nothing
+        }
+      }
+    }
+  } else if (all_possible_const_param_constraints_.count() > 0) {
+    // check if possible generated column exists
+    for (int64_t i = 0; is_matched && OB_SUCC(ret) && i < all_possible_const_param_constraints_.count(); i++) {
+      bool match_const = true;
+      const ObPCConstParamInfo &const_param_info = all_possible_const_param_constraints_.at(i);
+      CK( const_param_info.const_idx_.count() > 0,
+          const_param_info.const_params_.count() > 0,
+          const_param_info.const_idx_.count() == const_param_info.const_params_.count() );
+      for (int64_t j = 0; match_const && OB_SUCC(ret) && j < const_param_info.const_idx_.count(); j++) {
+        const int64_t param_idx = const_param_info.const_idx_.at(j);
+        const common::NativeTypedDatum &const_param = const_param_info.const_params_.at(j);
+        int cmp = 0;
+        DatumParameter parameter;
+        alignas(8) char scratch[64];
+        if (param_idx < 0 || param_idx >= params.get_parameter_count()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(export_runtime_parameter_view(params, param_idx, parameter, scratch))) {
+        } else if (const_param.type_ == nullptr || !const_param.type_->legacy_meta().is_valid() ||
+                   parameter.is_invalid_type()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_SUCCESS != ObPCConstParamInfo::compare_constant(const_param, parameter, cmp) || cmp != 0) {
+          match_const = false;
+        } else {
+          // do nothing
+        }
+      }
+      if (match_const) {
+        LOG_TRACE("matched const param constraint", K(params), K(all_possible_const_param_constraints_.at(i)));
+        is_matched = false; // matching one of the constraint, need to generated new plan
+      }
+    }
+  } else {
+    // do nothing
+  }
+
+  for (int64_t i = 0; is_matched && OB_SUCC(ret) && i < all_equal_param_constraints_.count(); ++i) {
+    int64_t first_idx = all_equal_param_constraints_.at(i).first_param_idx_;
+    int64_t second_idx = all_equal_param_constraints_.at(i).second_param_idx_;
+    if (OB_UNLIKELY(first_idx < 0 || first_idx >= params.get_parameter_count() ||
+                    second_idx < 0 || second_idx >= params.get_parameter_count())) {
+      ret = OB_ERR_UNEXPECTED;
+      break;
+    }
+    common::DatumParameter param1, param2;
+    alignas(8) char first_scratch[64], second_scratch[64];
+    if (OB_FAIL(export_runtime_parameter_view(params, first_idx, param1, first_scratch))) {
+    } else if (OB_FAIL(export_runtime_parameter_view(params, second_idx, param2, second_scratch))) {
+    }
+    if (OB_FAIL(ret)) { break; }
+    param1.set_collation_type(CS_TYPE_BINARY);
+    param2.set_collation_type(CS_TYPE_BINARY);
+    int cmp = 0;
+    if (!all_equal_param_constraints_.at(i).use_abs_cmp_ &&
+               can_compare_datum_values(param1.value_view(), param2.value_view()) &&
+               param1.get_collation_type() == param2.get_collation_type()) {
+      is_matched = OB_SUCCESS == compare_datum_values(param1.value_view(), param2.value_view(), cmp) && cmp == 0;
+    } else if (all_equal_param_constraints_.at(i).use_abs_cmp_) {
+      /*
+       * for plan like: select ? from t1 group by grouping sets (c1, ?);
+       * if  plan has absequal constraint,
+       * then both "select -1 from t1 group by grouping sets (c1, 1);"
+       *       and "select 1 from t1 group by grouping sets (c1, 1);"
+       * will hit the plan.
+       * but "select -2 from t1 group by grouping sets (c1, 1);" won't hit the plan.
+       */
+      if (param1.is_number() && param2.is_number()) {
+        is_matched = (0 == param1.get_number().abs_compare(param2.get_number()));
+      } else if (param1.is_double() && param2.is_double()) {
+        is_matched = (0 == param1.get_double() + param2.get_double()) ||
+                     (param1.get_double() == param2.get_double());
+      } else if (param1.is_float() && param2.is_float()) {
+        is_matched = (0 == param1.get_float() + param2.get_float()) ||
+                     (param1.get_float() == param2.get_float());
+      } else if (param1.is_decimal_int() && param2.is_decimal_int()) {
+        is_matched = wide::abs_equal(param1, param2);
+      } else if (can_compare_datum_values(param1.value_view(), param2.value_view()) &&
+                 param1.get_collation_type() == param2.get_collation_type()) {
+        is_matched = OB_SUCCESS == compare_datum_values(param1.value_view(), param2.value_view(), cmp) && cmp == 0;
+      }
+    }
+    if (OB_SUCC(ret) && !is_matched) {
+      is_matched = false;
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+    is_matched = false;
+  }
+
+  return ret;
+}
+
 int ObPlanSet::init_pre_calc_exprs(const ObPlanCacheObject &phy_plan,
                                    common::ObIAllocator* pc_alloc_)
 {
@@ -1305,7 +1641,7 @@ int ObSqlPlanSet::build_access_plans(const ObIArray<TableAccessPlan> &table_acce
         ObBasicSessionInfo::create_dtc_params(pc_ctx.sql_ctx_.session_info_);
     for (int64_t i = 0; OB_SUCC(ret) && i < table_access_plans.count(); ++i) {
       if (OB_FAIL(table_access_plans.at(i).calculate_final_tablet_accesses(
-              exec_ctx, plan_ctx->get_param_store(), dtc_params))) {
+              exec_ctx, *plan_ctx, dtc_params))) {
       }
     }
   } else {

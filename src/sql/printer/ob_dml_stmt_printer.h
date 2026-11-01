@@ -63,6 +63,12 @@ public:
   void enable_print_temp_table_as_cte() { print_cte_ = true; }
   void disable_print_temp_table_as_cte() { print_cte_ = false; }
   void init(char *buf, int64_t buf_len, int64_t *pos, ObDMLStmt *stmt);
+  void bind_runtime_parameters(const ObPhysicalPlanCtx *parameters)
+  {
+    parameter_context_ = parameters;
+    if (nullptr != parameters) { param_store_ = nullptr; }
+    expr_printer_.bind_runtime_parameters(parameters);
+  }
   virtual int do_print() = 0;
 
   int print_from(bool need_from = true);
@@ -128,7 +134,8 @@ protected:
   ObSchemaGetterGuard *schema_guard_;
   ObValuePrintParams print_params_;
   ObRawExprPrinter expr_printer_;
-  const ParamStore *param_store_;
+  const ParamStore *param_store_; // construction inputs only
+  const ObPhysicalPlanCtx *parameter_context_;
   const ObSQLSessionInfo *session_;
 };
 

@@ -25,6 +25,7 @@
 #include "sql/optimizer/stat/ob_opt_ds_stat_cache.h"
 namespace oceanbase {
 namespace sql {
+class ObPhysicalPlanCtx;
 class ObRawExpr;
 class ObEstSelInfo;
 class ObRawExprPrinter;
@@ -281,7 +282,7 @@ public:
                          ObString &partition_str);
   static int print_filter_exprs(const ObSQLSessionInfo *session_info,
                                 ObSchemaGetterGuard *schema_guard,
-                                const ParamStore *param_store,
+                                const ObPhysicalPlanCtx *param_store,
                                 const ObIArray<ObRawExpr*> &filter_exprs,
                                 bool only_column_namespace,
                                 ObSqlString &expr_str);

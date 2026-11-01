@@ -106,21 +106,14 @@ public:
 typedef common::ObFixedArray<int64_t, common::ObIAllocator> Int64FixedArray;
 struct GroupRescanParamInfo
 {
-  GroupRescanParamInfo()
-    : param_idx_(common::OB_INVALID_ID),
-      gr_param_(nullptr),
-      cur_param_()
-  { }
-  GroupRescanParamInfo(int64_t param_idx, DatumParameterArray *gr_param)
-  : param_idx_(param_idx),
-    gr_param_(gr_param)
-  { }
-  TO_STRING_KV(K_(param_idx),
-               KPC_(gr_param),
-               K_(cur_param));
+  GroupRescanParamInfo() : param_idx_(common::OB_INVALID_ID), group_(nullptr), cur_value_(), cur_metadata_() {}
+  GroupRescanParamInfo(int64_t param_idx, const GroupRescanParam *group)
+      : param_idx_(param_idx), group_(group), cur_value_(), cur_metadata_() {}
+  TO_STRING_KV(K_(param_idx), KPC_(group), K_(cur_value));
   int64_t param_idx_;
-  DatumParameterArray *gr_param_; //group rescan param
-  DatumParameter cur_param_; // Query-arena-owned value saved while group ranges are extracted.
+  const GroupRescanParam *group_;
+  common::NativeTypedDatum cur_value_;
+  common::DatumParameterMetadata cur_metadata_;
 };
 typedef common::ObFixedArray<GroupRescanParamInfo, common::ObIAllocator> GroupRescanParamArray;
 
@@ -643,17 +636,18 @@ protected:
   class GroupRescanParamGuard
   {
   public:
-    GroupRescanParamGuard(ObTableScanRtDef &tsc_rtdef, ObPhysicalPlanCtx &plan_ctx, common::ObIAllocator &allocator)
-      : tsc_rtdef_(tsc_rtdef), plan_ctx_(plan_ctx),
-        range_buffer_idx_(tsc_rtdef.range_buffer_idx_), saved_count_(0), ret_(common::OB_SUCCESS)
+    GroupRescanParamGuard(ObTableScanRtDef &tsc_rtdef, ObPhysicalPlanCtx &plan_ctx,
+                         common::ObIAllocator &allocator)
+      : tsc_rtdef_(tsc_rtdef), plan_ctx_(plan_ctx), range_buffer_idx_(tsc_rtdef.range_buffer_idx_),
+        saved_count_(0), changed_(false), ret_(common::OB_SUCCESS)
     {
       for (int64_t i = 0; ret_ == common::OB_SUCCESS && i < tsc_rtdef_.bnlj_params_.count(); ++i) {
         auto &info = tsc_rtdef_.bnlj_params_.at(i);
-        if (info.param_idx_ < 0 || info.param_idx_ >= plan_ctx_.get_datum_param_store().count()) {
-          ret_ = common::OB_ERR_UNEXPECTED;
-        } else if (common::OB_SUCCESS != (ret_ = info.cur_param_.deep_copy(
-                       plan_ctx_.get_datum_param_store().at(info.param_idx_), allocator))) {
-        } else { ++saved_count_; }
+        common::NativeTypedDatum value, owned;
+        common::DatumParameterMetadata attributes;
+        if (common::OB_SUCCESS != (ret_ = plan_ctx_.capture_native_parameter(info.param_idx_, value, attributes))) {
+        } else if (common::OB_SUCCESS != (ret_ = common::clone_native_parameter_value(value, allocator, owned))) {
+        } else { info.cur_value_ = owned; info.cur_metadata_ = attributes; ++saved_count_; }
       }
     }
     int status() const { return ret_; }
@@ -662,32 +656,45 @@ protected:
       int ret = ret_;
       for (int64_t i = 0; OB_SUCC(ret) && i < tsc_rtdef_.bnlj_params_.count(); ++i) {
         const auto &info = tsc_rtdef_.bnlj_params_.at(i);
-        DatumParameterArray *array = info.gr_param_;
-        if (array == nullptr || group_idx < 0 || group_idx >= array->count_) {
+        const GroupRescanParam *group = info.group_;
+        if (group == nullptr || group_idx < 0 || group_idx >= group->count_
+            || group->values_.at(group_idx).type_ == nullptr) {
           ret = common::OB_ERR_UNEXPECTED;
         } else {
-          DatumParameter parameter = array->data_[group_idx];
-          parameter.set_param_meta();
-          ret = plan_ctx_.set_runtime_parameter(info.param_idx_, parameter);
+          const auto &value = group->values_.at(group_idx);
+          ret = plan_ctx_.set_runtime_parameter(info.param_idx_, value.datum_, *value.type_, group->metadata_.at(group_idx));
+          if (OB_SUCC(ret)) { changed_ = true; }
         }
       }
       if (OB_SUCC(ret)) { tsc_rtdef_.range_buffer_idx_ = group_idx; }
       return ret;
     }
+    int restore()
+    {
+      int ret = common::OB_SUCCESS;
+      if (changed_) {
+        for (int64_t i = 0; i < saved_count_; ++i) {
+          const auto &info = tsc_rtdef_.bnlj_params_.at(i);
+          const int result = plan_ctx_.set_runtime_parameter(info.param_idx_,
+              info.cur_value_.datum_, *info.cur_value_.type_, info.cur_metadata_);
+          if (result != common::OB_SUCCESS && ret == common::OB_SUCCESS) { ret = result; }
+        }
+        if (ret == common::OB_SUCCESS) { changed_ = false; tsc_rtdef_.range_buffer_idx_ = range_buffer_idx_; }
+      }
+      return ret;
+    }
     ~GroupRescanParamGuard()
     {
-      for (int64_t i = 0; i < saved_count_; ++i) {
-        const auto &info = tsc_rtdef_.bnlj_params_.at(i);
-        const int ret = plan_ctx_.set_runtime_parameter(info.param_idx_, info.cur_param_);
-        if (ret != common::OB_SUCCESS) { LOG_ERROR("failed to restore group parameter", K(ret)); }
-      }
-      tsc_rtdef_.range_buffer_idx_ = range_buffer_idx_;
+      // Real callers explicitly propagate restore(); this is only exceptional-path cleanup.
+      const int ret = restore();
+      if (ret != common::OB_SUCCESS) { LOG_ERROR("failed to restore group parameters", K(ret)); }
     }
   private:
     ObTableScanRtDef &tsc_rtdef_;
     ObPhysicalPlanCtx &plan_ctx_;
     int64_t range_buffer_idx_;
     int64_t saved_count_;
+    bool changed_;
     int ret_;
   };
 

@@ -235,18 +235,21 @@ OB_INLINE int ObStorageDatum::from_value(const common::DatumValue &value)
     set_ext_value(value.get_ext());
   } else if (value.is_invalid_type()) {
     return common::OB_ERR_UNEXPECTED;
-  } else if (value.datum_.len_ > 0 && value.datum_.ptr_ == nullptr) {
-    return common::OB_INVALID_ARGUMENT;
   } else {
+    common::ObDatum source;
+    // Inline values materialize directly in this storage datum's own buffer.
+    // References retain their actual width and existing source-owner policy.
+    const int ret = value.export_legacy(source, buf_, sizeof(buf_));
+    if (ret != common::OB_SUCCESS) { return ret; }
     const auto mapping = common::ObDatum::get_sql_value_datum_map_type(value.get_type());
-    pack_ = value.datum_.len_;
+    pack_ = source.len_;
     if (mapping == common::OBJ_DATUM_STRING || mapping == common::OBJ_DATUM_DECIMALINT) {
-      ptr_ = value.datum_.ptr_;
+      ptr_ = source.ptr_;
       if (mapping == common::OBJ_DATUM_STRING && value.get_meta().is_outrow()) { set_outrow(); }
-    } else if (value.datum_.len_ <= sizeof(buf_)) {
-      if (value.datum_.len_ > 0) { MEMCPY(buf_, value.datum_.ptr_, value.datum_.len_); }
+    } else if (source.len_ <= sizeof(buf_)) {
+      if (source.len_ > 0 && source.ptr_ != buf_) { MEMMOVE(buf_, source.ptr_, source.len_); }
     } else {
-      ptr_ = value.datum_.ptr_;
+      ptr_ = source.ptr_;
     }
   }
   return common::OB_SUCCESS;
@@ -258,10 +261,17 @@ OB_INLINE int ObStorageDatum::to_value_view(const common::SqlTypeMeta &meta, com
   common::DatumValue candidate = value;
   if (is_null()) { candidate.set_null(); }
   else if (is_outrow()) { ret = common::OB_ERR_UNEXPECTED; }
-  else if (is_ext()) { candidate.meta_.set_ext(); candidate.datum_ = *this; }
+  else if (is_ext()) {
+    candidate.meta_.set_ext();
+    ret = candidate.assign_legacy_borrowed(*this, candidate.meta_);
+  }
   else if (meta.is_decimal_int() && meta.get_scale() < 0) { ret = common::OB_ERR_UNEXPECTED; }
   else if (!meta.is_valid()) { ret = common::OB_ERR_UNEXPECTED; }
-  else { candidate.meta_ = meta; candidate.datum_ = *this; candidate.datum_.pack_ = len_; }
+  else {
+    common::ObDatum source = *this;
+    source.pack_ = len_;
+    ret = candidate.assign_legacy_borrowed(source, meta);
+  }
   if (ret == common::OB_SUCCESS) { value = candidate; }
   return ret;
 }

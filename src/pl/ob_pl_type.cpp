@@ -347,13 +347,13 @@ int initialize_session_scalar(const SqlTypeMeta &meta, ObIAllocator &allocator, 
       case OBJ_DATUM_NUMBER: bytes = sizeof(number::ObNumber::Desc); break;
       default: break; // zero-length strings/decimal/opaque payloads
     }
-    char *data = nullptr;
-    if (bytes > 0 && OB_ISNULL(data = static_cast<char *>(allocator.alloc(bytes)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      if (bytes > 0) { MEMSET(data, 0, bytes); }
-      value.datum_.set_string(data, bytes);
-    }
+    // The legacy PL initializer defines zero bytes in its physical domain.
+    // Export/import that domain explicitly: ordinary integers become inline,
+    // while generic Unknown/Number/reference shapes retain their real spans.
+    alignas(8) char zero[sizeof(int64_t)] = {};
+    ObDatum physical;
+    physical.set_string(bytes == 0 ? nullptr : zero, bytes);
+    ret = value.assign_legacy_owned(physical, meta, allocator);
   }
   if (OB_SUCC(ret)) { output.assign_value(value); }
   return ret;

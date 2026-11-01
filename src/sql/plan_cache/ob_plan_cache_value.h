@@ -166,7 +166,8 @@ public:
                              const ObBitSet<> &must_be_positive_idx,
                              const ObBitSet<> &fmt_int_or_ch_decint_idx,
                              ObIArray<ObPCParam *> &raw_params,
-                             ParamStore *obj_params);
+                             ParamStore *obj_params,
+                             common::ObIArray<const common::SqlType *> *resolved_types = nullptr);
 
   int resolve_multi_stmt_params(ObPlanCacheCtx &pc_ctx);
 

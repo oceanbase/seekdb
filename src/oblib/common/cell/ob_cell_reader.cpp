@@ -94,6 +94,16 @@ namespace common
     } \
   }
 
+void ObCellReader::set_extend_value(DatumValue &output, int64_t value)
+{
+  output.meta_.set_ext();
+  // End/delete/lock markers keep their actual wrapper bytes in the reader.
+  // Canonical NOP/MIN/MAX have no payload; the wire representation is unchanged.
+  const int ret = output.datum_.set_extend(value, 0, 0,
+      scalar_payload_, sizeof(scalar_payload_), output.meta_.get_cs_level(), output.meta_.get_cs_type());
+  OB_ASSERT(ret == OB_SUCCESS);
+}
+
 int ObCellReader::read_decimal_int(DatumValue &obj)
 {
   int ret = OB_SUCCESS;

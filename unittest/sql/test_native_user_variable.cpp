@@ -96,12 +96,12 @@ TEST_F(NativeUserVariable, raw_getters_borrow_map_snapshot_and_keep_independent_
   SqlTypeMeta declaration = source.meta_;
   declaration.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI); declaration.set_scale(12);
   ASSERT_EQ(OB_SUCCESS, store(source, &declaration));
-  std::memset(const_cast<char *>(source.datum_.ptr_), 'x', source.datum_.len_);
+  std::memset(const_cast<char *>(source.datum_.get_string().ptr()), 'x', source.datum_.length());
   DatumValue raw;
   ASSERT_EQ(OB_SUCCESS, session.get_user_variable_value(ObString::make_string("u"), raw));
   const DatumValue *pointer = session.get_user_variable_value(ObString::make_string("u"));
-  ASSERT_NE(nullptr, pointer); EXPECT_EQ(raw.datum_.ptr_, pointer->datum_.ptr_);
-  EXPECT_NE(source.datum_.ptr_, raw.datum_.ptr_);
+  ASSERT_NE(nullptr, pointer); EXPECT_EQ(raw.datum_.get_string().ptr(), pointer->datum_.get_string().ptr());
+  EXPECT_NE(source.datum_.get_string().ptr(), raw.datum_.get_string().ptr());
   EXPECT_EQ(ObString::make_string("owned-by-map"), raw.get_string());
   EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, raw.get_collation_type());
   ObSessionVariable record;
@@ -113,15 +113,15 @@ TEST_F(NativeUserVariable, raw_getters_borrow_map_snapshot_and_keep_independent_
 TEST_F(NativeUserVariable, getter_error_contract_and_empty_record_name_are_unchanged) {
   DatumValue sentinel;
   ASSERT_EQ(OB_SUCCESS, sentinel.set_int(47, arena));
-  const char *old = sentinel.datum_.ptr_;
+  const Datum old = sentinel.datum_;
   EXPECT_EQ(OB_INVALID_ARGUMENT, session.get_user_variable_value(ObString(), sentinel));
-  EXPECT_EQ(old, sentinel.datum_.ptr_); EXPECT_EQ(47, sentinel.get_int());
+  EXPECT_EQ(0, std::memcmp(&old, &sentinel.datum_, sizeof(old))); EXPECT_EQ(47, sentinel.get_int());
   EXPECT_EQ(OB_ERR_USER_VARIABLE_UNKNOWN,
       session.get_user_variable_value(ObString::make_string("absent"), sentinel));
-  EXPECT_EQ(old, sentinel.datum_.ptr_); EXPECT_EQ(nullptr, session.get_user_variable_value(ObString()));
+  EXPECT_EQ(0, std::memcmp(&old, &sentinel.datum_, sizeof(old))); EXPECT_EQ(nullptr, session.get_user_variable_value(ObString()));
   ObSessionVariable record; record.value_ = sentinel;
   EXPECT_EQ(OB_SUCCESS, session.get_user_variable(ObString(), record));
-  EXPECT_EQ(old, record.value_.datum_.ptr_);
+  EXPECT_EQ(0, std::memcmp(&old, &record.value_.datum_, sizeof(old)));
 }
 
 TEST_F(NativeUserVariable, assignment_copies_frame_bytes_before_next_input_evaluation) {
@@ -135,7 +135,7 @@ TEST_F(NativeUserVariable, assignment_copies_frame_bytes_before_next_input_evalu
   DatumValue stored;
   ASSERT_EQ(OB_SUCCESS, session.get_user_variable_value(ObString::make_string("u"), stored));
   EXPECT_EQ(ObString::make_string("frame-content"), stored.get_string());
-  EXPECT_NE(text, stored.datum_.ptr_);
+  EXPECT_NE(text, stored.datum_.get_string().ptr());
 }
 
 TEST_F(NativeUserVariable, null_assignment_canonicalizes_raw_value_but_retains_session_collation) {
@@ -164,7 +164,7 @@ TEST_F(NativeUserVariable, result_frame_survives_map_replacement_and_source_aren
     ASSERT_EQ(OB_SUCCESS, store(source));
     ASSERT_EQ(OB_SUCCESS, fetch(result));
     const DatumValue *stored = session.get_user_variable_value(ObString::make_string("u"));
-    ASSERT_NE(nullptr, stored); EXPECT_NE(stored->datum_.ptr_, result.get_string().ptr());
+    ASSERT_NE(nullptr, stored); EXPECT_NE(stored->datum_.get_string().ptr(), result.get_string().ptr());
   }
   DatumValue replacement;
   ASSERT_EQ(OB_SUCCESS, replacement.set_int(123, arena));
@@ -200,7 +200,7 @@ TEST_F(NativeUserVariable, decimal_coefficient_is_extended_to_expression_frame_w
   int512_t actual;
   ASSERT_EQ(OB_SUCCESS, result.get_decimal_int512(actual));
   EXPECT_EQ(int512_t(coefficient), actual);
-  EXPECT_NE(decimal.datum_.ptr_, result.get_string().ptr());
+  EXPECT_NE(decimal.datum_.get_string().ptr(), result.get_string().ptr());
 }
 
 TEST_F(NativeUserVariable, expression_projects_independent_decimal_declaration_scale) {
@@ -243,7 +243,7 @@ TEST_F(NativeUserVariable, lob_results_adjust_both_header_directions_before_fram
       ASSERT_EQ(OB_SUCCESS, locator.get_inrow_data(content));
     }
     EXPECT_EQ(ObString::make_string("lob-content"), content);
-    EXPECT_NE(source.datum_.ptr_, result.get_string().ptr());
+    EXPECT_NE(source.datum_.get_string().ptr(), result.get_string().ptr());
   }
 }
 

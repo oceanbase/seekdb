@@ -73,6 +73,13 @@ std::string native_text(const ObConstRawExpr &node)
   return std::string(buffer, pos);
 }
 
+DatumValue legacy_value(const ObDatum &physical, const SqlTypeMeta &meta)
+{
+  DatumValue value;
+  EXPECT_EQ(OB_SUCCESS, value.assign_legacy_borrowed(physical, meta));
+  return value;
+}
+
 std::string legacy_text(const DatumValue &value)
 {
   char buffer[512];
@@ -112,7 +119,7 @@ TEST_F(NativeRawConstantOwner, signed_unsigned_and_unknown_are_inline_without_pa
     legacy.set_int(source);
     SqlTypeMeta meta;
     meta.set_int();
-    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(DatumValue(legacy, meta)));
+    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(legacy_value(legacy, meta)));
     source = 17;
     EXPECT_EQ(expected, node.get_value_datum().get_int());
     EXPECT_EQ(expected, node.get_bound_param_datum().get_int());
@@ -159,7 +166,7 @@ TEST_F(NativeRawConstantOwner, floating_bits_and_old_hash_print_semantics_surviv
     SqlTypeMeta meta;
     meta.set_double();
     meta.set_scale(7);
-    const DatumValue input(legacy, meta);
+    const DatumValue input = legacy_value(legacy, meta);
     ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(input));
     const double actual = node.get_value_datum().get_double();
     uint64_t actual_bits = 0;
@@ -183,7 +190,8 @@ TEST_F(NativeRawConstantOwner, floating_bits_and_old_hash_print_semantics_surviv
   DatumValue exported;
   ASSERT_EQ(OB_SUCCESS, node.export_value(exported, scratch, sizeof(scratch)));
   uint32_t actual_bits = 0;
-  MEMCPY(&actual_bits, exported.datum_.ptr_, sizeof(actual_bits));
+  const float exported_float = exported.get_float();
+  MEMCPY(&actual_bits, &exported_float, sizeof(actual_bits));
   EXPECT_EQ(bits, actual_bits);
   EXPECT_EQ(0, owner.calls());
 }
@@ -250,7 +258,7 @@ TEST_F(NativeRawConstantOwner, decimal_actual_width_is_owned_without_result_prec
     meta.set_decimal_int(5);
     ObConstRawExpr node(owner);
     node.set_expr_type(T_NUMBER);
-    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(DatumValue(legacy, meta)));
+    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(legacy_value(legacy, meta)));
     node.set_accuracy(ObAccuracy(18, 2));
     EXPECT_EQ(width, node.get_value_datum().length());
     EXPECT_EQ(bytes, node.get_value_datum().get_reference());
@@ -260,10 +268,10 @@ TEST_F(NativeRawConstantOwner, decimal_actual_width_is_owned_without_result_prec
     alignas(8) char scratch[64];
     DatumValue exported;
     ASSERT_EQ(OB_SUCCESS, node.export_value(exported, scratch, sizeof(scratch)));
-    EXPECT_EQ(width, exported.datum_.len_);
+    EXPECT_EQ(width, exported.datum_.length());
     EXPECT_EQ(5, exported.get_scale());
     for (int i = 0; i < width; ++i) {
-      EXPECT_EQ(0xa5, static_cast<unsigned char>(exported.datum_.ptr_[i]));
+      EXPECT_EQ(0xa5, static_cast<const unsigned char *>(exported.datum_.get_reference())[i]);
     }
     same_meta(meta, exported.meta_);
     EXPECT_EQ(18, node.get_accuracy().get_precision());
@@ -381,16 +389,18 @@ TEST_F(NativeRawConstantOwner, markers_and_reference_flags_preserve_original_phy
     legacy.set_extend(marker, 0, 0, meta.get_cs_level(), meta.get_cs_type());
     const std::string expected(payload, sizeof(payload));
     ObConstRawExpr node(owner);
-    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(DatumValue(legacy, meta)));
+    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(legacy_value(legacy, meta)));
     EXPECT_FALSE(node.get_value_datum().is_present());
     ASSERT_EQ(OB_SUCCESS, node.inner_deep_copy(copier));
     alignas(8) char scratch[64];
     DatumValue exported;
     ASSERT_EQ(OB_SUCCESS, node.export_value(exported, scratch, sizeof(scratch)));
-    EXPECT_EQ(expected, std::string(exported.datum_.ptr_, exported.datum_.len_));
+    ObDatum exported_physical; alignas(8) char physical_scratch[64];
+    ASSERT_EQ(OB_SUCCESS, exported.export_legacy(exported_physical, physical_scratch, sizeof(physical_scratch)));
+    EXPECT_EQ(expected, std::string(exported_physical.ptr_, exported_physical.len_));
     // A nonzero wrapper size cannot be reconstructed from meta and must remain a reference.
     legacy.set_extend(marker, 0, 17, meta.get_cs_level(), meta.get_cs_type());
-    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(DatumValue(legacy, meta)));
+    ASSERT_EQ(OB_SUCCESS, node.set_value_borrowed(legacy_value(legacy, meta)));
     EXPECT_TRUE(node.get_value_datum().is_present());
     EXPECT_EQ(Datum::LegacyExtended, node.get_value_datum().reference_flags());
     ASSERT_EQ(OB_SUCCESS, node.inner_deep_copy(copier));
@@ -410,8 +420,10 @@ TEST_F(NativeRawConstantOwner, markers_and_reference_flags_preserve_original_phy
     alignas(8) char scratch[64];
     DatumValue exported;
     ASSERT_EQ(OB_SUCCESS, node.export_value(exported, scratch, sizeof(scratch)));
-    EXPECT_EQ(legacy.datum_.pack_, exported.datum_.pack_);
-    EXPECT_NE(legacy.datum_.ptr_, exported.datum_.ptr_);
+    EXPECT_EQ(legacy.datum_.state(), exported.datum_.state());
+    EXPECT_EQ(legacy.datum_.length(), exported.datum_.length());
+    EXPECT_EQ(legacy.datum_.reference_flags(), exported.datum_.reference_flags());
+    EXPECT_NE(legacy.datum_.get_reference(), exported.datum_.get_reference());
     EXPECT_EQ(legacy.get_string(), exported.get_string());
   }
 }
@@ -431,7 +443,12 @@ TEST_F(NativeRawConstantOwner, failed_import_native_write_and_short_export_leave
   ObDatum broken;
   broken.ptr_ = short_payload;
   broken.pack_ = 5;
-  EXPECT_EQ(OB_INVALID_ARGUMENT, node.set_value_borrowed(DatumValue(broken, integer)));
+  DatumValue broken_value;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, broken_value.assign_legacy_borrowed(broken, integer));
+  EXPECT_TRUE(broken_value.is_null());
+  broken_value.meta_ = integer;
+  ASSERT_EQ(OB_SUCCESS, broken_value.datum_.set_reference(short_payload, 5));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, node.set_value_borrowed(broken_value));
   Datum invalid_decimal;
   ASSERT_EQ(OB_SUCCESS, invalid_decimal.set_reference(short_payload, 5));
   SqlTypeMeta decimal;
@@ -449,8 +466,7 @@ TEST_F(NativeRawConstantOwner, failed_import_native_write_and_short_export_leave
   const DatumValue before = output;
   alignas(8) char scratch[8] = {};
   EXPECT_EQ(OB_BUF_NOT_ENOUGH, node.export_value(output, scratch, 7));
-  EXPECT_EQ(before.datum_.ptr_, output.datum_.ptr_);
-  EXPECT_EQ(before.datum_.pack_, output.datum_.pack_);
+  EXPECT_EQ(0, MEMCMP(&before.datum_, &output.datum_, sizeof(Datum)));
   same_meta(before.meta_, output.meta_);
   RawOwnerAllocator failing;
   failing.fail_after(0);

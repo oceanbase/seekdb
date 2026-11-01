@@ -302,9 +302,7 @@ int ObVariableSetExecutor::calc_var_value_static_engine(
   if (OB_ISNULL(node.value_expr_) || OB_ISNULL(exec_ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ParamStore &params = exec_ctx.get_physical_plan_ctx()->get_param_store();
-    OZ(ObSQLUtils::calc_const_expr(exec_ctx.get_my_session(), *node.value_expr_, value,
-                                   exec_ctx.get_allocator(), params, &exec_ctx));
+    OZ (ObSQLUtils::calc_const_expr(exec_ctx, node.value_expr_, value, exec_ctx.get_allocator()));
   }
   return ret;
 }

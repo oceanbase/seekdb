@@ -304,15 +304,16 @@ int ObNestedLoopJoinOp::fill_cur_row_rescan_param()
   } else if (batch_rescan_ctl_.cur_idx_ >= batch_rescan_ctl_.params_.get_count()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    common::ObIArray<DatumParameter>& params =
-        batch_rescan_ctl_.params_.get_one_batch_params(batch_rescan_ctl_.cur_idx_);
+    const ObBatchRescanParams::Row &params =
+        batch_rescan_ctl_.params_.get_one_batch_values(batch_rescan_ctl_.cur_idx_);
+    const auto &attributes = batch_rescan_ctl_.params_.get_one_batch_metadata(batch_rescan_ctl_.cur_idx_);
     int64_t param_cnt = params.count();
     int64_t idx = OB_INVALID_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
       idx = batch_rescan_ctl_.params_.get_param_idx(i);
       if (OB_UNLIKELY(i >= get_spec().rescan_params_.count() || get_spec().rescan_params_.at(i).param_idx_ != idx)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(get_spec().rescan_params_.at(i).restore_dynamic_param(eval_ctx_, params.at(i)))) {
+      } else if (OB_FAIL(get_spec().rescan_params_.at(i).restore_dynamic_param(eval_ctx_, params.at(i), attributes.at(i)))) {
       }
     }
   }

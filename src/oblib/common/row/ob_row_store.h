@@ -75,7 +75,7 @@ public:
     const ObRowStore *row_store_;
     const BlockInfo *cur_iter_block_;
     int64_t cur_iter_pos_;
-    // Explicit store allocator owns this reusable native scalar payload block.
+    // Explicit store allocator owns these reusable native/reference slots.
     // The store/allocator must outlive its iterators, like the borrowed rows.
     ObIAllocator *decode_owner_;
     DatumValue *decode_values_;
@@ -236,7 +236,12 @@ private:
   void free_rollbacked_block(BlockInfo *iter);
   BlockInfo *find_pre_block();
   void del_block_list(BlockInfo *del_block);
-  int adjust_row_cells_reference();
+  int write_wire_body(char *buf, int64_t length, int64_t &pos, bool sizing) const;
+  int append_wire_row(const ObNewRow &row, const DatumValue *reserved,
+                      int64_t reserved_count, int64_t payload);
+  int read_wire_v2(const char *buf, int64_t length, int64_t &pos);
+  int read_wire_1d6(const char *buf, int64_t length, int64_t &pos, int64_t block_count);
+  void adopt_wire_rows(ObRowStore &source);
 private:
   DefaultPageAllocator inner_alloc_;
   ObFixedArray<int64_t, common::ObIAllocator> reserved_columns_;

@@ -60,9 +60,11 @@ int export_sys_var_value(const Datum &value, const SqlTypeMeta &meta,
                          DatumValue &output, void *scratch, int64_t capacity)
 {
   DatumValue candidate;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
-      value, meta, candidate.datum_, scratch, capacity);
-  if (ret == OB_SUCCESS) { candidate.meta_ = meta; output = candidate; }
+  ObDatum physical;
+  int ret = DatumParameterCodec::export_schema_legacy_value(
+      value, meta, physical, scratch, capacity);
+  if (ret == OB_SUCCESS) { ret = candidate.assign_legacy_borrowed(physical, meta); }
+  if (ret == OB_SUCCESS) { output = candidate; }
   return ret;
 }
 int copy_sys_var_value(const Datum &value, const SqlTypeMeta &meta,
@@ -206,9 +208,9 @@ int ObBasicSysVar::init(const DatumValue &value,
     ret = OB_ERR_UNEXPECTED;
   } else {
     Datum owned_value, owned_min, owned_max;
-    if (OB_FAIL(DatumParameterCodec::import_schema_native_value(value.datum_, value.meta_, owner, owned_value))) {
-    } else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(min_val.datum_, min_val.meta_, owner, owned_min))) {
-    } else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(max_val.datum_, max_val.meta_, owner, owned_max))) {
+    if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(value.datum_, value.meta_, owner, owned_value))) {
+    } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(min_val.datum_, min_val.meta_, owner, owned_min))) {
+    } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(max_val.datum_, max_val.meta_, owner, owned_max))) {
     } else {
       base_value_ = owned_value;
       min_val_ = owned_min;
@@ -570,7 +572,7 @@ int ObBasicSysVar::export_global_default_value(DatumValue &out, void *scratch,
 int ObBasicSysVar::set_value(const DatumValue &value, ObIAllocator &owner)
 {
   Datum candidate;
-  int ret = DatumParameterCodec::import_schema_native_value(value.datum_, value.meta_, owner, candidate);
+  int ret = DatumParameterCodec::clone_schema_native_value(value.datum_, value.meta_, owner, candidate);
   if (OB_SUCC(ret)) { inc_value_ = candidate; inc_meta_ = value.meta_; }
   return ret;
 }

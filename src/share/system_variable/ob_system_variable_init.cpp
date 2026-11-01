@@ -9929,10 +9929,11 @@ static int export_global_sysvar_value(const Datum &value, const SqlTypeMeta &met
 {
   int ret = OB_SUCCESS;
   DatumValue candidate;
+  ObDatum physical;
   if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
-          value, meta, candidate.datum_, scratch, capacity))) {
+          value, meta, physical, scratch, capacity))) {
+  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, meta))) {
   } else {
-    candidate.meta_ = meta;
     out = candidate;
   }
   return ret;
@@ -10039,10 +10040,10 @@ int ObSysVariables::init_default_values()
           base_out_obj.set_collation_level(CS_LEVEL_SYSCONST);
         }
         Datum candidate, base_candidate;
-        if (OB_FAIL(DatumParameterCodec::import_schema_native_value(
+        if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
                 out_obj.datum_, out_obj.meta_, ObSysVarAllocator, candidate))) {
           LOG_WARN("fail to own system variable default", K(ret), K(i));
-        } else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(
+        } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
                 base_out_obj.datum_, base_out_obj.meta_, ObBaseSysVarAllocator, base_candidate))) {
           LOG_WARN("fail to own system variable base", K(ret), K(i));
         } else {

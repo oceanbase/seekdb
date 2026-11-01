@@ -231,7 +231,7 @@ int ObWhereSubQueryPullup::check_limit(const ObItemType op_type,
     bool is_null_value = false;
     int64_t limit_value = 0;
     if (OB_FAIL(ObTransformUtils::get_limit_value(subquery->get_limit_expr(),
-                                                  &plan_ctx->get_param_store(),
+                                                  plan_ctx,
                                                   ctx_->exec_ctx_,
                                                   ctx_->allocator_,
                                                   limit_value,

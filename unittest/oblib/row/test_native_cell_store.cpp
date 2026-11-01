@@ -18,7 +18,7 @@ namespace {
 std::vector<std::string> fields(const std::string &s){std::istringstream in(s);std::string c;std::vector<std::string> r;while(std::getline(in,c,'\t'))r.push_back(c);return r;}
 std::string hex(const char *p,int64_t n){const char*d="0123456789abcdef";std::string s;for(int64_t i=0;i<n;++i){unsigned char c=p[i];s+=d[c>>4];s+=d[c&15];}return s.empty()?"-":s;}
 std::string unhex(const std::string &s){if(s=="-")return {};std::string r;for(size_t i=0;i+1<s.size();i+=2)r+=static_cast<char>(std::stoul(s.substr(i,2),nullptr,16));return r;}
-std::string wire(const DatumValue &v){char data[4096];int64_t pos=0;int r=DatumParameterCodec::encode_value(v.datum_,v.meta_,data,sizeof(data),pos);return r?"ERROR"+std::to_string(r):hex(data,pos);}
+std::string wire(const DatumValue &v){char data[4096];int64_t pos=0;int r=DatumParameterCodec::encode_native_value(v.datum_,v.meta_,data,sizeof(data),pos);return r?"ERROR"+std::to_string(r):hex(data,pos);}
 std::string row_wire(const ObNewRow &row){std::string bytes(row.get_serialize_size()+16,'\0');int64_t p=0;int r=row.serialize(bytes.data(),bytes.size(),p);return r?"ERROR"+std::to_string(r):hex(bytes.data(),p);}
 std::string fixture(){const char *env=getenv("TEST_SRCDIR");if(env){std::string p=std::string(env)+"/_main/unittest/oblib/row/data/native_cell.golden";std::ifstream f(p);if(f)return p;}return "unittest/oblib/row/data/native_cell.golden";}
 struct ReservedTag {using type=ObFixedArray<int64_t,ObIAllocator> ObRowStore::*;friend type member(ReservedTag);};
@@ -37,7 +37,7 @@ TEST(NativeCellStore, actual_old269_dense_sparse_bytes_clones_and_read_values){
  std::ifstream input(fixture());ASSERT_TRUE(input.good());std::string line;int cases=0;
  while(std::getline(input,line)){
   auto f=fields(line);ASSERT_EQ(14,f.size());SCOPED_TRACE(f[1]+"/"+f[2]);++cases;ObArenaAllocator owner;DatumValue value,clone,parsed;
-  std::string encoded=unhex(f[4]);int64_t pos=0;ASSERT_EQ(0,DatumParameterCodec::decode_value(encoded.data(),encoded.size(),pos,owner,value.datum_,value.meta_));ASSERT_EQ(encoded.size(),pos);
+  std::string encoded=unhex(f[4]);int64_t pos=0;ASSERT_EQ(0,DatumParameterCodec::decode_native_value(encoded.data(),encoded.size(),pos,owner,value.datum_,value.meta_));ASSERT_EQ(encoded.size(),pos);
   const int64_t capacity=std::stoll(f[3]);std::vector<char> bytes(capacity);ObCellWriter writer;char scalar[16];ASSERT_EQ(0,clone.set_int(999,owner));
   int ret=writer.init(bytes.data(),capacity,static_cast<ObCompactStoreType>(std::stoi(f[2])));if(ret==0)ret=writer.append(42,value,&clone,scalar);
   ASSERT_EQ(std::stoi(f[5]),ret);ASSERT_EQ(f[6],wire(clone));const int append=ret;int finish=ret;if(ret==0)finish=writer.row_finish();ASSERT_EQ(std::stoi(f[7]),finish);ASSERT_EQ(f[8],hex(bytes.data(),writer.size()));
@@ -70,7 +70,7 @@ TEST(NativeCellStore, iterator_reserve_oom_does_not_advance_row_and_reuse_has_no
  ASSERT_TRUE(owner.live_.empty());
 }
 TEST(NativeCellStore, raw_rowstore_nested_array_serialization_relocates_without_source_owner){
- ObArenaAllocator source,owner,destination;auto *array=DatumParameterArray::alloc(source,2);ASSERT_NE(nullptr,array);ASSERT_EQ(0,array->data_[0].set_int(17,source));const ObString text=ObString::make_string("array string has independently owned bytes");ASSERT_EQ(0,array->data_[1].set_varchar(text,source));SqlTypeMeta meta;meta.set_ext();meta.set_extend_type(T_EXT_SQL_ARRAY);DatumParameter parameter;parameter.set_type_meta(meta);ASSERT_EQ(0,parameter.alloc_datum_reserved_buff(meta,-1,source));parameter.set_array_address(array);DatumValue value=parameter.value_view();ObNewRow row(&value,1);
+ ObArenaAllocator source,owner,destination;auto *array=DatumParameterArray::alloc(source,2);ASSERT_NE(nullptr,array);ASSERT_EQ(0,array->data_[0].set_int(17,source));const ObString text=ObString::make_string("array string has independently owned bytes");ASSERT_EQ(0,array->data_[1].set_varchar(text,source));SqlTypeMeta meta;meta.set_ext();meta.set_extend_type(T_EXT_SQL_ARRAY);DatumParameter parameter;parameter.set_type_meta(meta);ASSERT_EQ(0,parameter.set_array_address(array,source));DatumValue value=parameter.value_view();ObNewRow row(&value,1);
  ObRowStore store(owner,"ArrayStore",false);ASSERT_EQ(0,store.add_row(row));source.reset();std::vector<char> bytes(store.get_serialize_size());int64_t pos=0;ASSERT_EQ(0,store.serialize(bytes.data(),bytes.size(),pos));ObRowStore restored(destination,"ArrayRestore",false);pos=0;ASSERT_EQ(0,restored.deserialize(bytes.data(),bytes.size(),pos));store.reset();std::fill(bytes.begin(),bytes.end(),char(0xee));ObNewRow *out=nullptr;auto iterator=restored.begin();ASSERT_EQ(0,iterator.get_next_row(out,nullptr));auto *copy=reinterpret_cast<DatumParameterArray *>(out->get_cell(0).get_ext());ASSERT_EQ(17,copy->data_[0].get_int());ASSERT_EQ(text,copy->data_[1].get_string());
 }
 
@@ -84,7 +84,7 @@ TEST(NativeCellStore, declared_int_number_and_varchar_nulls_use_ordinary_null_co
    SCOPED_TRACE(int(type));
    SCOPED_TRACE(int(mode));DatumValue typed;
    if(type==ObIntType)typed.meta_.set_int();else if(type==ObNumberType)typed.meta_.set_number();else typed.meta_.set_varchar();
-   typed.datum_.set_null();ASSERT_EQ(nullptr,typed.datum_.ptr_);
+   typed.datum_.set_null();ASSERT_EQ(0,typed.datum_.length());ASSERT_TRUE(typed.datum_.is_null());
    char bytes[64],slot[16];DatumValue clone;ObCellWriter writer;
    ASSERT_EQ(0,writer.init(bytes,sizeof(bytes),mode));ASSERT_EQ(0,writer.append(42,typed,&clone,slot));
    EXPECT_TRUE(clone.is_null());EXPECT_EQ(type,clone.get_type());

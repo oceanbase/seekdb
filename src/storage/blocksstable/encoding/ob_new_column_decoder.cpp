@@ -39,18 +39,22 @@ int copy_column_default_datum(const DatumValue &value, ObDatum &datum)
     datum.set_null();
   } else if (value.is_invalid_type()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (value.datum_.len_ > 0 && OB_ISNULL(value.datum_.ptr_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (value.is_ext()) {
-    datum.datum2datum<OBJ_DATUM_EXTEND>(value.datum_);
   } else {
-    ObDatum source = value.datum_;
-    source.pack_ = value.datum_.len_;
-    const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(value.get_type());
-    if (OBJ_DATUM_STRING == mapping && value.get_meta().is_outrow()) {
-      source.set_outrow();
+    alignas(8) char scratch[64];
+    ObDatum source;
+    if (OB_FAIL(value.export_legacy(source, scratch, sizeof(scratch)))) {
+    } else if (value.is_ext()) {
+      datum.datum2datum<OBJ_DATUM_EXTEND>(source);
+    } else {
+      source.pack_ = source.len_;
+      const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(value.get_type());
+      if (OBJ_DATUM_STRING == mapping && value.get_meta().is_outrow()) {
+        source.set_outrow();
+      }
+      // Non-string mappings synchronously copy into the caller's reserved
+      // datum buffer; only strings borrow the ColumnParam's existing owner.
+      ret = datum.from_storage_datum(source, mapping);
     }
-    ret = datum.from_storage_datum(source, mapping);
   }
   return ret;
 }

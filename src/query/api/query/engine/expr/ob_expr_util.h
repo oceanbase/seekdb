@@ -24,7 +24,7 @@
 namespace oceanbase
 {
 namespace share { namespace schema { class ObSchemaGetterGuard; } }
-namespace pl { class ObPLINS; }
+namespace pl { class ObPLINS; class ObPLDataType; }
 namespace common
 {
 class ObIVector;
@@ -93,6 +93,11 @@ public:
                                    common::ObIAllocator &owner, const common::SqlType *&out);
   // A PL declaration source is borrowed only during preparation. Each actual
   // definition must already own its origin; no current-unit or value fallback.
+  // Call while the actual routine declaration namespace is alive. The
+  // resulting complete Type and its children belong to the explicit owner.
+  static int resolve_pl_parameter_sql_type(const pl::ObPLDataType &declaration,
+      const pl::ObPLINS &declarations, const ObExecContext &sql_metadata,
+      common::ObIAllocator &owner, const common::SqlType *&out);
   static int resolve_raw_sql_type(const ObRawExprResType &resolved,
                                   const ObSQLSessionInfo *session,
                                   share::schema::ObSchemaGetterGuard *schema_guard,

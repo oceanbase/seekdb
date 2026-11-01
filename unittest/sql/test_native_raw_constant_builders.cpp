@@ -160,9 +160,13 @@ TEST_F(NativeRawConstantBuilders, literal_native_and_original_parameter_boundari
     ASSERT_EQ(OB_SUCCESS, raw.export_value(exported, scratch, sizeof(scratch)));
     EXPECT_EQ(meta_bytes(legacy.get_type_meta()), meta_bytes(exported.get_meta()));
     EXPECT_EQ(meta_bytes(legacy.get_param_meta()), meta_bytes(raw.get_expr_obj_meta()));
-    EXPECT_EQ(legacy.datum_.pack_, exported.datum_.pack_);
-    EXPECT_EQ(std::string(legacy.datum_.ptr_ ? legacy.datum_.ptr_ : "", legacy.datum_.len_),
-              std::string(exported.datum_.ptr_ ? exported.datum_.ptr_ : "", exported.datum_.len_));
+    alignas(8) char old_physical_scratch[64], exported_physical_scratch[64];
+    ObDatum old_physical, exported_physical;
+    ASSERT_EQ(OB_SUCCESS, legacy.export_legacy(old_physical, old_physical_scratch, sizeof(old_physical_scratch)));
+    ASSERT_EQ(OB_SUCCESS, exported.export_legacy(exported_physical, exported_physical_scratch, sizeof(exported_physical_scratch)));
+    EXPECT_EQ(old_physical.pack_, exported_physical.pack_);
+    EXPECT_EQ(std::string(old_physical.ptr_ ? old_physical.ptr_ : "", old_physical.len_),
+              std::string(exported_physical.ptr_ ? exported_physical.ptr_ : "", exported_physical.len_));
     if (!legacy.is_unknown()) {
       EXPECT_EQ(legacy.get_accuracy().get_accuracy(), raw.get_accuracy().get_accuracy());
       EXPECT_EQ(legacy.get_result_flag(), raw.get_result_type().get_result_flag());
@@ -541,7 +545,7 @@ TEST_F(NativeRawConstantBuilders, substr_literal_position_monotonicity_has_no_pa
       Monotonicity monotonicity = Monotonicity::DESC;
       bool strict = true;
       ASSERT_EQ(OB_SUCCESS, ObOptimizerUtil::get_expr_monotonicity(substring, column,
-          execution, monotonicity, strict, execution.get_physical_plan_ctx()->get_param_store(), constraint));
+          execution, monotonicity, strict, *execution.get_physical_plan_ctx(), constraint));
       EXPECT_EQ(start == 1 ? Monotonicity::ASC : Monotonicity::NONE_MONO, monotonicity);
       EXPECT_FALSE(strict);
       EXPECT_TRUE(constraint.cache_eligible_);
@@ -576,7 +580,7 @@ TEST_F(NativeRawConstantBuilders, substr_questionmark_monotonicity_constrains_th
         ASSERT_EQ(OB_SUCCESS, inputs.push_back(input));
       }
       ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->assign_parameter_inputs(inputs));
-      const ParamStore &parameters = execution.get_physical_plan_ctx()->get_param_store();
+      const ParamStore &parameters = inputs; // The resolver consumes this explicit construction domain.
       std::string question("?");
       ParseNode question_node = literal_node(T_QUESTIONMARK, question, parameter_index);
       ObRawExpr *position_expr = nullptr;
@@ -608,11 +612,13 @@ TEST_F(NativeRawConstantBuilders, substr_questionmark_monotonicity_constrains_th
         ASSERT_EQ(OB_SUCCESS, substring->set_param_exprs(column, position));
       }
       ASSERT_EQ(OB_SUCCESS, substring->formalize(&session));
+      execution.get_physical_plan_ctx()->set_original_param_cnt(inputs.count());
+      ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->init_datum_param_store());
       ObPCConstParamInfo constraint;
       Monotonicity monotonicity = Monotonicity::DESC;
       bool strict = true;
       ASSERT_EQ(OB_SUCCESS, ObOptimizerUtil::get_expr_monotonicity(substring, column,
-          execution, monotonicity, strict, parameters, constraint));
+          execution, monotonicity, strict, *execution.get_physical_plan_ctx(), constraint));
       EXPECT_EQ(start == 1 ? Monotonicity::ASC : Monotonicity::NONE_MONO, monotonicity);
       EXPECT_FALSE(strict);
       EXPECT_TRUE(constraint.cache_eligible_);

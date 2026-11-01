@@ -591,7 +591,7 @@ OB_DEF_SERIALIZE(ObTopKFrequencyHistograms)
   OB_UNIS_ENCODE(items_count);
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     const ObTopkItem &top_k_fre_item = topk_fre_items_.at(i);
-    if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(top_k_fre_item.col_obj_.datum_,
+    if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_native_value(top_k_fre_item.col_obj_.datum_,
         top_k_fre_item.col_obj_.meta_, buf, buf_len, pos); }
     OB_UNIS_ENCODE(top_k_fre_item.fre_times_);
     OB_UNIS_ENCODE(top_k_fre_item.delta_);
@@ -610,7 +610,7 @@ OB_DEF_SERIALIZE_SIZE(ObTopKFrequencyHistograms)
   for (int64_t i = 0; i < topk_fre_items_.count(); ++i) {
     const ObTopkItem &top_k_fre_item = topk_fre_items_.at(i);
     int64_t value_size = 0;
-    if (DatumParameterCodec::value_size(top_k_fre_item.col_obj_.datum_, top_k_fre_item.col_obj_.meta_, value_size) != OB_SUCCESS) { return 0; }
+    if (DatumParameterCodec::native_value_size(top_k_fre_item.col_obj_.datum_, top_k_fre_item.col_obj_.meta_, value_size) != OB_SUCCESS) { return 0; }
     len += value_size;
     OB_UNIS_ADD_LEN(top_k_fre_item.fre_times_);
     OB_UNIS_ADD_LEN(top_k_fre_item.delta_);
@@ -632,7 +632,7 @@ OB_DEF_DESERIALIZE(ObTopKFrequencyHistograms)
   for (int64_t i = 0; OB_SUCC(ret) && i < items_count; ++i) {
     ObTopkItem top_k_fre_item;
     if (OB_SUCC(ret) && pos < data_len) {
-      ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, topk_buf_,
+      ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, topk_buf_,
           top_k_fre_item.col_obj_.datum_, top_k_fre_item.col_obj_.meta_);
     }
     OB_UNIS_DECODE(top_k_fre_item.fre_times_);

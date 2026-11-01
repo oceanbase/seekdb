@@ -1,6 +1,7 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #include "common/datum/partition_bound_row.h"
 #include "common/datum/datum_parameter_codec.h"
+#include "common/datum/datum_value_flat.h"
 #ifdef OCEANBASE_COMMON_OB_OBJECT_H_
 #error "Native partition bounds must not include a legacy value definition"
 #endif
@@ -78,7 +79,7 @@ TEST(PartitionBoundRow, nested_array_is_owned_recursively)
   PartitionBoundRow row(&value, 1), owned;
   ASSERT_EQ(OB_SUCCESS, row.clone(owned, destination));
   source.reset();
-  const auto *copy = reinterpret_cast<const DatumParameterArray *>(owned.get_cell(0).datum_.get_int());
+  const auto *copy = reinterpret_cast<const DatumParameterArray *>(owned.get_cell(0).get_ext());
   ASSERT_NE(nullptr, copy);
   ASSERT_EQ(1, copy->count_);
   ASSERT_EQ(ObString("leaf"), copy->data_[0].get_string());
@@ -206,11 +207,12 @@ TEST(PartitionBoundRow, mixed_clone_preserves_raw_metadata_flags_and_owns_one_bl
   std::string payloads[count];
   for (int64_t i = 0; i < count; ++i) {
     metadata[i] = cells[i].meta_;
-    descriptors[i] = cells[i].datum_.pack_;
-    source_payloads[i] = cells[i].datum_.ptr_;
-    if (!cells[i].is_null() && cells[i].datum_.len_ > 0) {
-      payloads[i].assign(cells[i].datum_.ptr_, cells[i].datum_.len_);
-    }
+    alignas(8) char scratch[64]; ObDatum view;
+    ASSERT_EQ(OB_SUCCESS, cells[i].export_legacy(view, scratch, sizeof(scratch)));
+    descriptors[i] = view.pack_;
+    source_payloads[i] = NativeValueFlat::uses_reference(cells[i])
+        ? static_cast<const char *>(cells[i].datum_.get_reference()) : nullptr;
+    if (!cells[i].is_null() && view.len_ > 0) { payloads[i].assign(view.ptr_, view.len_); }
   }
   int32_t projection[] = {10, 7, 4, 0, 5, 6, 9, 8, 3, 2, 1};
   PartitionBoundRow row(cells, count), owned;
@@ -223,11 +225,13 @@ TEST(PartitionBoundRow, mixed_clone_preserves_raw_metadata_flags_and_owns_one_bl
   for (int64_t i = 0; i < count; ++i) {
     SCOPED_TRACE(i);
     EXPECT_EQ(projection[i], owned.projector_[i]);
-    if (!cells[i].is_null()) {
-      EXPECT_NE(source_payloads[i], owned.get_cells()[i].datum_.ptr_);
-      if (cells[i].datum_.len_ > 0 && !cells[i].is_min_value() && !cells[i].is_max_value()) {
-        MEMSET(const_cast<char *>(cells[i].datum_.ptr_), 0xa5, cells[i].datum_.len_);
+    if (NativeValueFlat::uses_reference(cells[i])) {
+      EXPECT_NE(source_payloads[i], owned.get_cells()[i].datum_.get_reference());
+      if (cells[i].datum_.length() > 0) {
+        MEMSET(const_cast<void *>(cells[i].datum_.get_reference()), 0xa5, cells[i].datum_.length());
       }
+    } else if (!cells[i].is_null()) {
+      EXPECT_EQ(0, owned.get_cells()[i].datum_.length());
     }
     cells[i].reset();
   }
@@ -237,10 +241,12 @@ TEST(PartitionBoundRow, mixed_clone_preserves_raw_metadata_flags_and_owns_one_bl
     SCOPED_TRACE(i);
     const DatumValue &copy = owned.get_cells()[i];
     EXPECT_EQ(0, MEMCMP(&metadata[i], &copy.meta_, sizeof(SqlTypeMeta)));
-    EXPECT_EQ(descriptors[i], copy.datum_.pack_);
+    alignas(8) char scratch[64]; ObDatum view;
+    ASSERT_EQ(OB_SUCCESS, copy.export_legacy(view, scratch, sizeof(scratch)));
+    EXPECT_EQ(descriptors[i], view.pack_);
     if (!copy.is_null()) {
-      ASSERT_NE(nullptr, copy.datum_.ptr_);
-      EXPECT_EQ(0, MEMCMP(payloads[i].data(), copy.datum_.ptr_, payloads[i].size()));
+      ASSERT_NE(nullptr, view.ptr_);
+      EXPECT_EQ(0, MEMCMP(payloads[i].data(), view.ptr_, payloads[i].size()));
     }
   }
   EXPECT_TRUE(owned.get_cell(0).is_nop_value());
@@ -270,8 +276,8 @@ TEST(PartitionBoundRow, clone_preserves_every_decimal_width_and_scale_after_sour
   ASSERT_EQ(OB_SUCCESS, row.clone(owned, destination));
   EXPECT_EQ(1, destination.allocations_);
   for (int64_t i = 0; i < count; ++i) {
-    EXPECT_NE(cells[i].datum_.ptr_, owned.get_cell(i).datum_.ptr_);
-    MEMSET(const_cast<char *>(cells[i].datum_.ptr_), 0, widths[i]);
+    EXPECT_NE(cells[i].datum_.get_reference(), owned.get_cell(i).datum_.get_reference());
+    MEMSET(const_cast<void *>(cells[i].datum_.get_reference()), 0, widths[i]);
     cells[i].reset();
   }
   source.reset();
@@ -282,7 +288,7 @@ TEST(PartitionBoundRow, clone_preserves_every_decimal_width_and_scale_after_sour
     EXPECT_EQ(widths[i], copy.get_int_bytes());
     EXPECT_EQ(i + 1, copy.get_scale());
     EXPECT_FALSE(copy.is_null());
-    EXPECT_EQ(0, MEMCMP(coefficients, copy.datum_.ptr_, widths[i]));
+    EXPECT_EQ(0, MEMCMP(coefficients, copy.datum_.get_reference(), widths[i]));
   }
   owned.destroy(destination);
   EXPECT_EQ(1, destination.frees_);
@@ -334,7 +340,7 @@ TEST(PartitionBoundRow, nested_array_fallback_retains_child_parameter_metadata_a
   PartitionBoundRow row(&value, 1), owned;
   ASSERT_EQ(OB_SUCCESS, row.clone(owned, destination));
   EXPECT_EQ(1, destination.allocations_);
-  const auto *copied_outer = reinterpret_cast<const DatumParameterArray *>(owned.get_cell(0).datum_.get_int());
+  const auto *copied_outer = reinterpret_cast<const DatumParameterArray *>(owned.get_cell(0).get_ext());
   ASSERT_NE(nullptr, copied_outer);
   ASSERT_NE(outer, copied_outer);
   ASSERT_EQ(1, copied_outer->count_);
@@ -347,7 +353,7 @@ TEST(PartitionBoundRow, nested_array_fallback_retains_child_parameter_metadata_a
       copied_outer->element_.get_meta_type().get_extend_type());
   EXPECT_EQ(inner->element_.get_obj_type(), copied_inner->element_.get_obj_type());
   EXPECT_EQ(inner->element_.get_collation_type(), copied_inner->element_.get_collation_type());
-  EXPECT_NE(text, copied_inner->data_[0].datum_.ptr_);
+  EXPECT_NE(text, copied_inner->data_[0].datum_.get_reference());
   MEMSET(text, 'x', sizeof(text));
   source.reset();
   EXPECT_EQ(73, copied_outer->source_value_size_);

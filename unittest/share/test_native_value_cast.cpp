@@ -67,7 +67,7 @@ void verify_frozen_casts(const char *fixture, int expected_count,
     if (line.empty() || line[0]=='#') { continue; }
     const auto f=fields(line); if (f[0]!="V") { continue; }
     const std::string wire=unhex(f.at(3)); int64_t pos=0; DatumValue value;
-    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),pos,input_owner,value.datum_,value.meta_));
+    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),pos,input_owner,value.datum_,value.meta_));
     ASSERT_EQ(wire.size(),pos); values.push_back(value);
   }
   ASSERT_EQ(input_count,values.size());
@@ -91,18 +91,18 @@ void verify_frozen_casts(const char *fixture, int expected_count,
     ObCastCtx context(&owner,&params,modes[std::stoi(f[3])],collations[std::stoi(f[5])],std::stoi(f[6])?&accuracy:nullptr);
     DatumValue result;
     ASSERT_EQ(OB_SUCCESS,result.set_int(7788,owner));
-    const char *previous=result.datum_.ptr_;
+    const Datum previous=result.datum_;
     const int ret=DatumValueCaster::to_type(static_cast<SqlValueType>(std::stoi(f[2])),context,source,owner,result);
     EXPECT_EQ(std::stoi(f[7]),ret);
     EXPECT_EQ(std::stoi(f[8]),context.warning_);
     EXPECT_EQ(std::stoull(f[9]),accuracy.get_accuracy());
     if (ret==OB_SUCCESS) {
-      int64_t size=0,pos=0; ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(result.datum_,result.meta_,size));
+      int64_t size=0,pos=0; ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::native_value_size(result.datum_,result.meta_,size));
       std::string wire(size,'\0');
-      EXPECT_EQ(std::stoi(f[10]),DatumParameterCodec::encode_value(result.datum_,result.meta_,&wire[0],size,pos));
+      EXPECT_EQ(std::stoi(f[10]),DatumParameterCodec::encode_native_value(result.datum_,result.meta_,&wire[0],size,pos));
       EXPECT_EQ(size,pos); EXPECT_EQ(f[11],hex(wire));
     } else {
-      ++failed; EXPECT_EQ(previous,result.datum_.ptr_); EXPECT_EQ(7788,result.get_int());
+      ++failed; EXPECT_EQ(0,MEMCMP(&previous,&result.datum_,sizeof(previous))); EXPECT_EQ(7788,result.get_int());
     }
     ++checked;
   }
@@ -138,9 +138,9 @@ TEST(NativeValueCast, result_lifetime_aliasing_and_owner_failure) {
   ObAccuracy accuracy; accuracy.set_precision(17); accuracy.set_scale(3);
   ObCastCtx failing(&destination,nullptr,CM_NONE,CS_TYPE_UTF8MB4_BIN,&accuracy);
   const ObAccuracy before_accuracy=accuracy;
-  const char *before=scalar.datum_.ptr_; failure.remaining_=0;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,DatumValueCaster::to_type(ObDoubleType,failing,input,failure,scalar));
-  EXPECT_EQ(before,scalar.datum_.ptr_); EXPECT_EQ(-123.0,scalar.get_double()); EXPECT_EQ(before_accuracy,accuracy);
+  const Datum before=scalar.datum_; failure.remaining_=0;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,DatumValueCaster::to_type(ObNumberType,failing,input,failure,scalar));
+  EXPECT_EQ(0,MEMCMP(&before,&scalar.datum_,sizeof(before))); EXPECT_EQ(-123.0,scalar.get_double()); EXPECT_EQ(before_accuracy,accuracy);
 }
 
 TEST(NativeValueCast, hex_string_to_signed_integer_range_semantics) {
@@ -193,7 +193,7 @@ TEST(NativeValueCast, same_type_lob_preserves_native_payload_metadata) {
   EXPECT_TRUE(lob_result.meta_.has_lob_header());
   EXPECT_TRUE(lob_result.datum_.has_lob_header());
   EXPECT_EQ(ObString(sizeof(lob_bytes) - 1, lob_bytes), lob_result.get_string());
-  EXPECT_NE(lob.datum_.ptr_, lob_result.datum_.ptr_);
+  EXPECT_NE(lob.datum_.get_reference(), lob_result.datum_.get_reference());
 }
 TEST(NativeValueCast, decimal_requires_accuracy_and_owns_result) {
   ObArenaAllocator destination;
@@ -204,16 +204,16 @@ TEST(NativeValueCast, decimal_requires_accuracy_and_owns_result) {
     DatumValue input;
     ASSERT_EQ(OB_SUCCESS,input.set_varchar(ObString("123.25"),temporary));
     ObCastCtx context(&temporary,nullptr,CM_NONE,CS_TYPE_UTF8MB4_BIN);
-    const char *previous=result.datum_.ptr_;
+    const Datum previous=result.datum_;
     EXPECT_EQ(OB_ERR_UNEXPECTED,DatumValueCaster::to_type(ObDecimalIntType,context,input,destination,result));
-    EXPECT_EQ(previous,result.datum_.ptr_); EXPECT_EQ(7788,result.get_int());
+    EXPECT_EQ(0,MEMCMP(&previous,&result.datum_,sizeof(previous))); EXPECT_EQ(7788,result.get_int());
     ObAccuracy accuracy; accuracy.set_precision(18); accuracy.set_scale(2);
     context.res_accuracy_=&accuracy;
     ASSERT_EQ(OB_SUCCESS,DatumValueCaster::to_type(ObDecimalIntType,context,input,destination,result));
   }
   EXPECT_TRUE(result.is_decimal_int()); EXPECT_EQ(2,result.get_scale());
   ASSERT_EQ(8,result.get_int_bytes());
-  int64_t coefficient=0; MEMCPY(&coefficient,result.datum_.ptr_,sizeof(coefficient));
+  int64_t coefficient=0; MEMCPY(&coefficient,result.datum_.get_reference(),sizeof(coefficient));
   EXPECT_EQ(12325,coefficient);
 }
 TEST(NativeValueCast, numeric_datetime_interval_uses_native_datum)
@@ -298,7 +298,7 @@ TEST(NativeValueCast, nonnumeric_truth_matches_frozen_legacy_number_casts) {
     if (line.empty() || line[0]=='#') { continue; }
     const auto f=fields(line); if (f[0]!="V") { continue; }
     const std::string wire=unhex(f[3]); int64_t pos=0; DatumValue value;
-    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),pos,owner,value.datum_,value.meta_));
+    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),pos,owner,value.datum_,value.meta_));
     values.push_back(value);
   }
   const ObCastMode modes[]={CM_NONE,CM_WARN_ON_FAIL,CM_WARN_ON_FAIL|CM_NULL_ON_WARN,
@@ -316,7 +316,7 @@ TEST(NativeValueCast, nonnumeric_truth_matches_frozen_legacy_number_casts) {
     int expected_ret=std::stoi(f[7]); bool expected_truth=false;
     if (expected_ret==OB_SUCCESS) {
       const std::string wire=unhex(f[11]); int64_t pos=0; DatumValue number;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),pos,owner,number.datum_,number.meta_));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),pos,owner,number.datum_,number.meta_));
       if (number.is_null() || !number.is_number()) { expected_ret=OB_ERR_UNEXPECTED; }
       else { expected_truth=!number.get_number().is_zero(); }
     }
@@ -341,7 +341,7 @@ TEST(NativeValueCast, frozen_relational_comparison_types_collations_and_warnings
     if(line.empty() || line[0]=='#') { continue; }
     const auto f=fields(line); if(f[0]!="V") { continue; }
     const std::string wire=unhex(f.at(3)); int64_t pos=0; DatumValue value;
-    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),pos,input_owner,value.datum_,value.meta_));
+    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),pos,input_owner,value.datum_,value.meta_));
     ASSERT_EQ(wire.size(),pos); values.push_back(value);
   }
   ASSERT_EQ(104,values.size());
@@ -376,7 +376,7 @@ TEST(NativeValueCast, relational_equality_matches_frozen_direct_pairs) {
     const auto f=fields(line);
     if(f[0]=="V") {
       const std::string wire=unhex(f.at(3)); int64_t pos=0; DatumValue value;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(wire.data(),wire.size(),pos,input_owner,value.datum_,value.meta_));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(wire.data(),wire.size(),pos,input_owner,value.datum_,value.meta_));
       ASSERT_EQ(wire.size(),pos); values.push_back(value);
     } else if(f[0]=="P" && f[4]=="1") {
       DatumValue left=values.at(std::stoi(f[2])),right=values.at(std::stoi(f[3]));

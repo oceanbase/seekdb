@@ -33,6 +33,7 @@ namespace sql
 struct DASTableAccessMeta;
 struct DASRuntimeTabletAccess;
 class ObDASCtx;
+class ObPhysicalPlanCtx;
 struct ValueItemExpr;
 typedef common::hash::ObHashMap<common::ObObjectID, common::ObObjectID, common::hash::NoPthreadDefendMode> ObPartitionIdMap;
 
@@ -250,7 +251,7 @@ public:
       const share::schema::ObPartitionLevel part_level,
       const ObPartID part_id,
       ObExecContext &exec_ctx,
-      const ParamStore &params,
+      const ObPhysicalPlanCtx &params,
       const ObDataTypeCastParams &dtc_params,
       const common::ObIArray<ValueItemExpr*> &vies,
       ObIArray<ObTabletID> &tablet_ids,
@@ -274,7 +275,7 @@ public:
   int get_tablet_and_part_id_for_list_part(
     const share::schema::ObTableSchema &table_schema,
     ObExecContext &exec_ctx,
-    const ParamStore &params,
+    const ObPhysicalPlanCtx &params,
     const ObDataTypeCastParams &dtc_params,
     const common::ObIArray<ValueItemExpr*> &vies,
     common::ObIArray<common::ObTabletID> &tablet_ids,
@@ -300,7 +301,7 @@ public:
       const share::schema::ObTableSchema &table_schema,
       const common::ObPartID &part_id,
       ObExecContext &exec_ctx,
-      const ParamStore &params,
+      const ObPhysicalPlanCtx &params,
       const ObDataTypeCastParams &dtc_params,
       const common::ObIArray<ValueItemExpr*> &vies,
       common::ObIArray<common::ObTabletID> &tablet_ids,

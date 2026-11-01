@@ -2784,7 +2784,9 @@ void set_zero_lob_value(common::SqlValueType type, common::DatumValue &value)
   meta.set_inrow();
   meta.set_collation_level(common::CS_LEVEL_IMPLICIT);
   meta.set_has_lob_header();
-  value = common::DatumValue(datum, meta);
+  const int ret = value.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
 }
 
 int fill_lob_header(common::ObIAllocator &allocator,

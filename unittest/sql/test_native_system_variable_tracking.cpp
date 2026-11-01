@@ -33,10 +33,10 @@ std::vector<std::string> columns(const std::string &line)
 std::string wire(const DatumValue &value)
 {
   int64_t size = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::value_size(value.datum_, value.meta_, size));
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::native_value_size(value.datum_, value.meta_, size));
   std::string bytes(size, '\0');
   int64_t pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_native_value(
       value.datum_, value.meta_, bytes.data(), bytes.size(), pos));
   EXPECT_EQ(size, pos);
   return bytes;
@@ -73,7 +73,7 @@ TEST_F(NativeSystemVariableTracking, compare_matches_actual_immutable_old_functi
     const std::string input_wire = decode_hex(fields[2]);
     DatumValue old, current;
     int64_t pos = 0;
-    ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(input_wire.data(), input_wire.size(),
+    ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(input_wire.data(), input_wire.size(),
         pos, owner, old.datum_, old.meta_));
     ASSERT_EQ(input_wire.size(), pos);
     bool changed = false;
@@ -101,7 +101,7 @@ TEST_F(NativeSystemVariableTracking, first_snapshot_owns_bytes_and_survives_late
   const DatumValue &snapshot = session.get_changed_sys_var().at(0).old_val_;
   EXPECT_EQ(ObString::make_string("11,22"), snapshot.get_string());
   const ObString source = provider->get_value_datum().get_string();
-  EXPECT_NE(source.ptr(), snapshot.datum_.ptr_);
+  EXPECT_NE(source.ptr(), snapshot.datum_.get_reference());
   // The old provider's value is a genuine producer; overwrite its bytes only
   // after tracking, to verify that the tracker owns its payload separately.
   std::memset(const_cast<char *>(source.ptr()), '3', source.length());
@@ -141,25 +141,27 @@ TEST_F(NativeSystemVariableTracking, actual_setter_tracks_before_change_and_keep
 
 TEST_F(NativeSystemVariableTracking, failed_current_snapshot_does_not_publish_output)
 {
+  ASSERT_EQ(OB_SUCCESS, session.update_sys_variable(
+      SYS_VAR__OB_ENABLE_ROLE_IDS, ObString("11,22")));
   ObBasicSysVar *provider = nullptr;
-  ASSERT_EQ(OB_SUCCESS, session.get_sys_variable(SYS_VAR_AUTOCOMMIT, provider));
+  ASSERT_EQ(OB_SUCCESS, session.get_sys_variable(SYS_VAR__OB_ENABLE_ROLE_IDS, provider));
   alignas(8) char scratch[64];
   DatumValue view;
   ASSERT_EQ(OB_SUCCESS, provider->export_value(view, scratch, sizeof(scratch)));
-  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR_AUTOCOMMIT, view));
+  ASSERT_EQ(OB_SUCCESS, session.track_sys_var(SYS_VAR__OB_ENABLE_ROLE_IDS, view));
   DatumValue output;
   ASSERT_EQ(OB_SUCCESS, output.set_int(99, owner));
-  const char *previous = output.datum_.ptr_;
+  const Datum previous = output.datum_;
   const SqlTypeMeta previous_meta = output.meta_;
   ObWrapperAllocator reject;
   bool changed = false;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, session.is_sys_var_actully_changed(SYS_VAR_AUTOCOMMIT,
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, session.is_sys_var_actully_changed(SYS_VAR__OB_ENABLE_ROLE_IDS,
       session.get_changed_sys_var().at(0).old_val_, output, changed, reject));
-  EXPECT_TRUE(changed); EXPECT_EQ(previous, output.datum_.ptr_);
+  EXPECT_TRUE(changed); EXPECT_EQ(0, MEMCMP(&previous, &output.datum_, sizeof(previous)));
   EXPECT_EQ(previous_meta, output.meta_); EXPECT_EQ(99, output.get_int());
   EXPECT_EQ(1, session.get_changed_sys_var().count());
   EXPECT_EQ(OB_INVALID_ARGUMENT, session.is_sys_var_actully_changed(SYS_VAR_INVALID,
       session.get_changed_sys_var().at(0).old_val_, output, changed, reject));
-  EXPECT_EQ(previous, output.datum_.ptr_); EXPECT_EQ(99, output.get_int());
+  EXPECT_EQ(0, MEMCMP(&previous, &output.datum_, sizeof(previous))); EXPECT_EQ(99, output.get_int());
 }
 } // namespace

@@ -39,7 +39,8 @@ int to_varchar(const DatumParameter &source, const ObIArray<ObString> &str_value
     ret = OB_NOT_SUPPORTED;
   } else if (source.is_null()) {
     output.set_null();
-  } else if (OB_UNLIKELY(source.datum_.ptr_ == nullptr || source.datum_.len_ != sizeof(uint64_t))) {
+  } else if (OB_UNLIKELY(!source.datum_.is_present() || source.datum_.length() != 0
+                         || source.datum_.reference_flags() != Datum::NoReferenceFlags)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObTextStringResult text(ObVarcharType, false, &allocator);

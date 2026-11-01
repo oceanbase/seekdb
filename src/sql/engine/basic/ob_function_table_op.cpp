@@ -180,7 +180,10 @@ int ObFunctionTableOp::inner_get_next_row_udf()
         } else {
           ObExpr * const &expr = MY_SPEC.column_exprs_.at(i);
           Datum value;
-          OZ (expr->get_datum_copy_plan().import_legacy(obj_stack[i].datum_, value));
+          alignas(8) char cell_scratch[64];
+          ObDatum cell_view;
+          OZ (obj_stack[i].export_legacy(cell_view, cell_scratch, sizeof(cell_scratch)));
+          OZ (expr->get_datum_copy_plan().import_legacy(cell_view, value));
           if (OB_SUCC(ret) && is_lob_storage(obj_stack[i].get_type())) {
             OZ (ob_adjust_lob_datum(get_exec_ctx(), static_cast<const Datum &>(value), obj_stack[i].meta_,
                                    expr->obj_meta_, get_exec_ctx().get_allocator(), value));

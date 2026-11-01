@@ -41,15 +41,12 @@ private:
   template<typename T> void set_scalar(DatumValue &output, T value, void (SqlTypeMeta::*setter)())
   {
     (output.meta_.*setter)();
-    MEMSET(scalar_payload_, 0, sizeof(scalar_payload_));
-    const auto mapping = ObDatum::get_sql_value_datum_map_type(output.get_type());
-    int64_t bytes = ObDatum::get_reserved_size(mapping);
-    if constexpr (std::is_floating_point<T>::value) {
-      MEMCPY(scalar_payload_, &value, sizeof(value));
-    } else if (bytes == sizeof(uint64_t)) {
-      const uint64_t extended = static_cast<uint64_t>(value); MEMCPY(scalar_payload_, &extended, sizeof(extended));
-    } else { MEMCPY(scalar_payload_, &value, bytes); }
-    output.datum_.set_string(scalar_payload_, bytes);
+    // Compact integer widths belong to the wire only. Native scalars use
+    // their prepared signed/unsigned/floating active member, never a span.
+    if constexpr (std::is_same<T, float>::value) { output.datum_.set_float(value); }
+    else if constexpr (std::is_same<T, double>::value) { output.datum_.set_double(value); }
+    else if constexpr (std::is_signed<T>::value) { output.datum_.set_int(value); }
+    else { output.datum_.set_uint(value); }
   }
   void set_string_view(DatumValue &output, const ObString &value, void (SqlTypeMeta::*setter)())
   {
@@ -57,11 +54,7 @@ private:
     if (output.get_type() == ObVarcharType || output.get_type() == ObCharType) { output.meta_.set_collation_level(CS_LEVEL_IMPLICIT); }
     output.datum_.set_string(value);
   }
-  void set_extend_value(DatumValue &output, int64_t value)
-  {
-    output.meta_.set_ext(); output.datum_.ptr_ = scalar_payload_;
-    output.datum_.set_extend(value, 0, 0, output.meta_.get_cs_level(), output.meta_.get_cs_type());
-  }
+  void set_extend_value(DatumValue &output, int64_t value);
   int parse(uint64_t *column_id);
   template<class T>
   int read(const T *&ptr);

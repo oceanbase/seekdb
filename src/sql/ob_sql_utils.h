@@ -156,8 +156,11 @@ public:
     schema_guard_(schema_guard),
     print_params_(print_params),
     param_store_(param_store),
-    session_(session)
+    session_(session),
+    bound_parameters_(nullptr)
     {}
+  void bind_runtime_parameters(const ObPhysicalPlanCtx *plan)
+  { bound_parameters_ = plan; if (plan != nullptr) { param_store_ = nullptr; } }
   virtual int inner_print(char *buf, int64_t buf_len, int64_t &res_len) override;
 
 protected:
@@ -166,6 +169,7 @@ protected:
   ObValuePrintParams print_params_;
   const ParamStore *param_store_;
   const ObSQLSessionInfo *session_;
+  const ObPhysicalPlanCtx *bound_parameters_;
 };
 
 class ObSQLUtils
@@ -291,6 +295,15 @@ public:
     // }
   }
 
+  static int calc_const_expr(ObExecContext &bound_ctx, const ObRawExpr *expr,
+      common::DatumParameter &result, common::ObIAllocator &result_owner);
+  static int calc_const_expr(ObExecContext &bound_ctx, const ObRawExpr *expr,
+      common::DatumParameter &result, bool &need_check,
+      common::ObIAllocator &result_owner);
+  static int se_calc_const_expr_bound(ObExecContext &bound_ctx, const ObRawExpr *expr,
+      common::ObIAllocator &result_owner, common::DatumParameter &result,
+      bool force_copy_extend_type = false);
+
   static int calc_const_expr(ObExecContext &exec_ctx,
                              const ObRawExpr *expr,
                              common::DatumParameter &result,
@@ -316,11 +329,12 @@ public:
   template <typename Result>
   static int se_calc_const_expr_impl(ObSQLSessionInfo *session,
                                      const ObRawExpr *expr,
-                                     const ParamStore &params,
+                                     const ParamStore *construction_parameters,
                                      ObIAllocator &allocator,
                                      ObExecContext *out_ctx,
                                      Result &result,
-                                     bool force_copy_extend_type);
+                                     bool force_copy_extend_type,
+                                     ObPhysicalPlanCtx *bound_parameters);
 
   static int check_and_convert_db_name(const common::ObCollationType cs_type, const bool preserve_lettercase,
                                        common::ObString &name);
@@ -410,6 +424,9 @@ public:
                              ObValuePrintParams print_params = ObValuePrintParams(),
                              const ParamStore *param_store = NULL,
                              const ObSQLSessionInfo *session = NULL);
+  static int reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObString &sql,
+      share::schema::ObSchemaGetterGuard *schema_guard, ObValuePrintParams print_params,
+      const ObPhysicalPlanCtx &bound_parameters, const ObSQLSessionInfo *session);
   static int reconstruct_ps_sql(ObSqlString &reconstruct_sql, const ObString &ps_sql,
                                 const ObIArray<const common::DatumParameter *> &const_tokens);
   static int append_obj_param(ObSqlString &reconstruct_sql, const common::DatumParameter & obj_param);
@@ -420,7 +437,8 @@ public:
                        share::schema::ObSchemaGetterGuard *schema_guard,
                        ObValuePrintParams print_params,
                        const ParamStore *param_store = NULL,
-                       const ObSQLSessionInfo *session = NULL);
+                       const ObSQLSessionInfo *session = NULL,
+                       const ObPhysicalPlanCtx *bound_parameters = nullptr);
 
   static int wrap_expr_ctx(const stmt::StmtType &stmt_type,
                            ObExecContext &exec_ctx,

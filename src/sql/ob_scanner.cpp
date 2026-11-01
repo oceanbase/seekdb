@@ -359,7 +359,50 @@ OB_DEF_SERIALIZE_SIZE(ObScanner)
   return len;
 }
 
-OB_DEF_DESERIALIZE(ObScanner)
+namespace {
+// RowStore v2 carries logical values. Version 1 selects its bounded legacy
+// image reader; neither format can be interpreted as the current C++ layout.
+int decode_row_store_header(const char *buf, int64_t size, int64_t &pos,
+                            int64_t &body_length)
+{
+  if (buf == nullptr || pos < 0 || size < pos) { return OB_DESERIALIZE_ERROR; }
+  int64_t cursor = pos;
+  int64_t fields[2] = {};
+  for (int field = 0; field < 2; ++field) {
+    uint64_t value = 0;
+    bool complete = false;
+    for (int byte = 0; byte < 10 && !complete; ++byte) {
+      if (cursor >= size) { return OB_DESERIALIZE_ERROR; }
+      const uint8_t part = static_cast<uint8_t>(buf[cursor++]);
+      if (byte == 9 && (part & 0xfe) != 0) { return OB_DESERIALIZE_ERROR; }
+      value |= static_cast<uint64_t>(part & 0x7f) << (7 * byte);
+      complete = (part & 0x80) == 0;
+    }
+    if (!complete) { return OB_DESERIALIZE_ERROR; }
+    fields[field] = static_cast<int64_t>(value);
+  }
+  if (fields[0] != 1 && fields[0] != 2) { return OB_NOT_SUPPORTED; }
+  if (fields[1] < 0 || fields[1] > size - cursor) { return OB_DESERIALIZE_ERROR; }
+  body_length = fields[1];
+  pos = cursor;
+  return OB_SUCCESS;
+}
+} // namespace
+
+int ObScanner::deserialize(DESERIAL_PARAMS)
+{
+  int64_t body_start = pos;
+  int64_t body_length = 0;
+  int ret = decode_row_store_header(buf, data_len, body_start, body_length);
+  if (OB_SUCC(ret)) {
+    int64_t body_pos = 0;
+    ret = deserialize_(buf + body_start, body_length, body_pos);
+    if (OB_SUCC(ret)) { pos = body_start + body_length; }
+  }
+  return ret;
+}
+
+int ObScanner::deserialize_(DESERIAL_PARAMS)
 {
   int ret = OB_SUCCESS;
   ObString extend_info;

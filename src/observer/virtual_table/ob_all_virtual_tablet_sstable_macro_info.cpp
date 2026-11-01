@@ -650,7 +650,7 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_tablet_need_ignore(const ObTablet
     DatumValue end_objs[3];
     const int64_t tablet_id = static_cast<int64_t>(tablet_meta.tablet_id_.id());
     start_objs[0].meta_.set_int();
-    start_objs[0].datum_.set_string(reinterpret_cast<const char *>(&tablet_id), sizeof(tablet_id));
+    start_objs[0].datum_.set_int(tablet_id);
     start_objs[1].set_min_value();
     start_objs[2].set_min_value();
     end_objs[0] = start_objs[0];
@@ -699,9 +699,9 @@ bool ObAllVirtualTabletSSTableMacroInfo::check_sstable_need_ignore(const ObITabl
     DatumValue end_objs[3];
     const int64_t tablet_id = static_cast<int64_t>(table_key.tablet_id_.id());
     start_objs[0].meta_.set_int();
-    start_objs[0].datum_.set_string(reinterpret_cast<const char *>(&tablet_id), sizeof(tablet_id));
+    start_objs[0].datum_.set_int(tablet_id);
     start_objs[1].meta_.set_uint64();
-    start_objs[1].datum_.set_string(reinterpret_cast<const char *>(&end_log_scn), sizeof(end_log_scn));
+    start_objs[1].datum_.set_uint(end_log_scn);
     start_objs[2].set_min_value();
     end_objs[0] = start_objs[0];
     end_objs[1] = start_objs[1];

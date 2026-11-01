@@ -16,7 +16,8 @@
 
 #pragma once
 
-#include "common/datum/datum_parameter_array.h"
+#include "common/datum/native_typed_datum.h"
+#include "common/datum/datum_parameter_metadata.h"
 #include "lib/container/ob_array.h"
 
 namespace oceanbase
@@ -29,42 +30,58 @@ namespace sql
 struct ObBatchRescanParams {
   OB_UNIS_VERSION_V(1);
 public:
-  using Row = common::ObSEArray<common::DatumParameter, 0>;
+  using Row = common::ObSEArray<common::NativeTypedDatum, 0>;
+  using MetadataRow = common::ObSEArray<common::DatumParameterMetadata, 0>;
+  using TypeRow = common::ObSEArray<const common::SqlType *, 0>;
   // Captures each value before another expression can overwrite its buffer.
   // The owner must not be reset while its row builder is alive.
   class RowBuilder
   {
   public:
     explicit RowBuilder(ObBatchRescanParams &owner)
-        : owner_(owner), values_(4 * sizeof(common::DatumParameter)), finished_(false) {}
-    int append(const common::DatumParameter &value);
+        : owner_(owner), values_(4 * sizeof(common::NativeTypedDatum)),
+          metadata_(4 * sizeof(common::DatumParameterMetadata)), finished_(false) {}
+    int append(const common::NativeTypedDatum &value,
+               const common::DatumParameterMetadata &attributes);
     int finish(const common::ObIArray<int64_t> &param_idxs,
                const common::ObIArray<int64_t> &param_expr_idxs);
   private:
     ObBatchRescanParams &owner_;
     Row values_;
+    MetadataRow metadata_;
     bool finished_;
     DISALLOW_COPY_AND_ASSIGN(RowBuilder);
   };
 
   ObBatchRescanParams() :allocator_("PxBatchRescan"), params_(),
-      param_idxs_(), param_expr_idxs_(0) {}
+      metadata_rows_(), param_idxs_(), param_expr_idxs_(0), native_ready_(true) {}
   ~ObBatchRescanParams() = default;
   int64_t get_count() const { return params_.count(); }
-  common::ObIArray<common::DatumParameter>& get_one_batch_params(int64_t idx) {
-    return params_.at(idx);
-  }
-  int64_t get_param_idx(int64_t idx) {
+  bool native_ready() const { return native_ready_; }
+  const Row &get_one_batch_values(int64_t idx) const { OB_ASSERT(native_ready_); return params_.at(idx); }
+  const MetadataRow &get_one_batch_metadata(int64_t idx) const { return metadata_rows_.at(idx); }
+  // Old v1 input is intentionally not a ready semantic frame. Only an explicit
+  // physical codec consumer or bind_received_types may inspect this view.
+  const Row &get_one_batch_physical_values(int64_t idx) const { return params_.at(idx); }
+  int native_size(int64_t &bytes) const;
+  int native_encode(char *buf, int64_t length, int64_t &pos) const;
+  int native_decode(const char *buf, int64_t length, int64_t &pos);
+  int bind_received_types(const common::ObIArray<TypeRow> &row_types);
+  int64_t get_param_idx(int64_t idx) const {
     return param_idxs_.at(idx);
   }
   int append_batch_rescan_param(const common::ObIArray<int64_t> &param_idxs,
-      const common::ObIArray<common::DatumParameter> &values);
+      const common::ObIArray<common::NativeTypedDatum> &values,
+      const common::ObIArray<common::DatumParameterMetadata> &attributes);
   int append_batch_rescan_param(const common::ObIArray<int64_t> &param_idxs,
-      const common::ObIArray<common::DatumParameter> &values,
+      const common::ObIArray<common::NativeTypedDatum> &values,
+      const common::ObIArray<common::DatumParameterMetadata> &attributes,
       const common::ObIArray<int64_t> &param_expr_idxs);
   void reset()
   {
     params_.reset();
+    metadata_rows_.reset();
+    native_ready_ = true;
     param_idxs_.reset();
     param_expr_idxs_.reset();
     allocator_.reset();
@@ -73,6 +90,8 @@ public:
   void reuse()
   {
     params_.reset();
+    metadata_rows_.reset();
+    native_ready_ = true;
     param_idxs_.reset();
     param_expr_idxs_.reset();
     allocator_.reuse();
@@ -82,14 +101,16 @@ public:
 public:
   common::ObArenaAllocator allocator_;
   common::ObSArray<Row> params_;
+  common::ObSArray<MetadataRow> metadata_rows_;
   common::ObSEArray<int64_t, 8> param_idxs_;
   common::ObSEArray<int64_t, 8> param_expr_idxs_;
-  TO_STRING_KV(K(param_idxs_), K(params_), K_(param_expr_idxs));
+  TO_STRING_KV(K(param_idxs_), K(params_), K_(metadata_rows), K_(param_expr_idxs), K_(native_ready));
 private:
+  bool native_ready_;
   int validate_shape() const;
   int validate_append(const common::ObIArray<int64_t> &param_idxs, int64_t count,
                       const common::ObIArray<int64_t> &param_expr_idxs) const;
-  int append_captured_row(const common::ObIArray<int64_t> &param_idxs, const Row &values,
+  int append_captured_row(const common::ObIArray<int64_t> &param_idxs, const Row &values, const MetadataRow &attributes,
                           const common::ObIArray<int64_t> &param_expr_idxs);
 };
 

@@ -241,7 +241,7 @@ int print_safe_character(const DatumValue &value, char *buffer, int64_t length, 
   if (!ObCharset::is_valid_collation(charset, coll) || name == nullptr || collation == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "CONVERT(x'"))) {
-  } else if (OB_FAIL(hex_print(value.datum_.ptr_, value.datum_.len_, buffer, length, pos))) {
+  } else if (OB_FAIL(hex_print(static_cast<const char *>(value.datum_.get_reference()), value.datum_.length(), buffer, length, pos))) {
   } else { ret = databuff_printf(buffer, length, pos, "' USING %s) COLLATE %s", name, collation); }
   return ret;
 }
@@ -364,7 +364,7 @@ int print_datum_sql_literal(const DatumValue &value, char *buffer, int64_t lengt
   // for this error. Keep invalid arguments separate from buffer exhaustion.
   if (pos == length) { return OB_SIZE_OVERFLOW; }
   if (value.is_null()) { return print_null(buffer, length, pos, params); }
-  const ObDatum &data = value.datum_;
+  const Datum &data = value.datum_;
   int ret = OB_SUCCESS;
   switch (value.get_type()) {
     case ObTinyIntType: return databuff_printf(buffer, length, pos, "%hhd", static_cast<int8_t>(data.get_int()));
@@ -416,10 +416,10 @@ int print_datum_sql_literal(const DatumValue &value, char *buffer, int64_t lengt
       } else if (OB_FAIL(bit_print(data.get_uint(), buffer, length, pos))) {
       } else { ret = databuff_printf(buffer, length, pos, "'"); } break;
     case ObDecimalIntType:
-      if (OB_FAIL(wide::to_string(data.get_decimal_int(), data.get_int_bytes(), value.get_scale(), buffer, length, pos))) {
+      if (OB_FAIL(wide::to_string(value.get_decimal_int(), value.get_int_bytes(), value.get_scale(), buffer, length, pos))) {
       } else if (pos >= length) { ret = OB_SIZE_OVERFLOW; }
       else { buffer[pos] = '\0'; } break;
-    case ObUnknownType: return databuff_printf(buffer, length, pos, ":%" PRId64, data.get_int());
+    case ObUnknownType: return databuff_printf(buffer, length, pos, ":%" PRId64, value.get_unknown());
     case ObExtendType: {
       const int64_t marker = value.get_ext();
       const char *text = "Extend Obj";
@@ -503,7 +503,7 @@ int print_temporal_text(const DatumValue &value, char *buffer, int64_t length,
     int64_t &pos, const ObValuePrintParams &params, bool quoted)
 {
   int ret = OB_SUCCESS;
-  const ObDatum &data = value.datum_;
+  const Datum &data = value.datum_;
   const ObTimeZoneInfo *zone = value.get_type() == ObTimestampType ? params.tz_info_ : nullptr;
   const ObScale scale = quoted ? value.get_scale() : OB_MAX_DATETIME_PRECISION;
   if (quoted && OB_FAIL(databuff_printf(buffer, length, pos, "'"))) {
@@ -564,14 +564,14 @@ int print_value_text(const DatumValue &value, char *buffer, int64_t length,
   if (value.is_null() || value.get_type() == ObNullType) {
     return databuff_printf(buffer, length, pos, "NULL");
   }
-  const ObDatum &data = value.datum_;
+  const Datum &data = value.datum_;
   int ret = OB_SUCCESS;
   switch (value.get_type()) {
     case ObVarcharType: case ObCharType:
       return print_character_text(value, buffer, length, pos, params, quoted);
     case ObTinyTextType: case ObTextType: case ObMediumTextType: case ObLongTextType: case ObGeometryType: {
       DatumValue raw = value;
-      raw.datum_.set_string(text_print_data(value, length - pos));
+      if (OB_FAIL(raw.datum_.set_string(text_print_data(value, length - pos)))) { return ret; }
       if (quoted) {
         return databuff_printf(buffer, length, pos, "'%.*s'", raw.get_string_len(), raw.get_string_ptr());
       }
@@ -583,7 +583,7 @@ int print_value_text(const DatumValue &value, char *buffer, int64_t length,
     case ObHexStringType:
       if (quoted) { return print_hex(value.get_string(), buffer, length, pos); }
       if (OB_FAIL(databuff_printf(buffer, length, pos, "X"))) {
-      } else { ret = hex_print(data.ptr_, data.len_, buffer, length, pos); }
+      } else { ret = hex_print(static_cast<const char *>(data.get_reference()), data.length(), buffer, length, pos); }
       return ret;
     case ObBitType:
       if (quoted) { return print_datum_sql_literal(value, buffer, length, pos); }
@@ -614,7 +614,7 @@ int print_value_text(const DatumValue &value, char *buffer, int64_t length,
       if (!quoted) { return OB_ERR_UNEXPECTED; }
       ObEnumSetInnerValue inner;
       int64_t cursor = 0;
-      if (OB_FAIL(inner.deserialize(data.ptr_, data.len_, cursor))) {
+      if (OB_FAIL(inner.deserialize(static_cast<const char *>(data.get_reference()), data.length(), cursor))) {
       } else { ret = databuff_printf(buffer, length, pos, "%.*s; %ld",
           inner.string_value_.length(), inner.string_value_.ptr(), inner.numberic_value_); }
       return ret;
@@ -634,7 +634,7 @@ int print_value_text(const DatumValue &value, char *buffer, int64_t length,
             params.use_memcpy_, buffer, length, pos);
       }
       DatumValue raw = value;
-      raw.datum_.set_string(str);
+      if (OB_FAIL(raw.datum_.set_string(str))) { return ret; }
       raw.meta_.set_collation_type(CS_TYPE_BINARY);
       return print_character_text(raw, buffer, length, pos, params, false);
     }
@@ -719,7 +719,7 @@ int print_debug_payload(const DatumValue &value, char *buffer, int64_t length, i
     const ObValuePrintParams &params)
 {
   int ret = OB_SUCCESS;
-  const ObDatum &datum = value.datum_;
+  const Datum &datum = value.datum_;
   const SqlValueType type = value.get_type();
   switch (type) {
     case ObNullType:
@@ -727,7 +727,7 @@ int print_debug_payload(const DatumValue &value, char *buffer, int64_t length, i
     case ObVarcharType: case ObCharType: {
       const ObCharsetType charset = ObCharset::charset_type_by_coll(value.get_collation_type());
       if (charset == CHARSET_BINARY || charset == CHARSET_UTF16 || charset == CHARSET_UTF16LE) {
-        ret = hex_print(datum.ptr_, datum.len_, buffer, length, pos);
+        ret = hex_print(static_cast<const char *>(datum.get_reference()), datum.length(), buffer, length, pos);
       } else {
         ret = databuff_print_obj(buffer, length, pos, value.get_string());
       }
@@ -736,7 +736,7 @@ int print_debug_payload(const DatumValue &value, char *buffer, int64_t length, i
     }
     case ObHexStringType:
       if (OB_FAIL(databuff_printf(buffer, length, pos, "\""))) {
-      } else if (OB_FAIL(hex_print(datum.ptr_, datum.len_, buffer, length, pos))) {
+      } else if (OB_FAIL(hex_print(static_cast<const char *>(datum.get_reference()), datum.length(), buffer, length, pos))) {
       } else { ret = databuff_printf(buffer, length, pos, "\""); }
       break;
     case ObTinyTextType: case ObTextType: case ObMediumTextType: case ObLongTextType:
@@ -795,9 +795,9 @@ int print_debug_payload(const DatumValue &value, char *buffer, int64_t length, i
     case ObUTinyIntType: case ObUSmallIntType: case ObUMediumIntType: case ObUInt32Type: case ObUInt64Type:
       ret = databuff_printf(buffer, length, pos, "%" PRIu64, datum.get_uint()); break;
     case ObDecimalIntType:
-      ret = wide::to_string(datum.get_decimal_int(), datum.get_int_bytes(), value.get_scale(), buffer, length, pos); break;
+      ret = wide::to_string(value.get_decimal_int(), value.get_int_bytes(), value.get_scale(), buffer, length, pos); break;
     case ObUnknownType:
-      ret = databuff_printf(buffer, length, pos, "%" PRId64, datum.get_int()); break;
+      ret = databuff_printf(buffer, length, pos, "%" PRId64, value.get_unknown()); break;
     case ObFloatType: case ObUFloatType:
       ret = databuff_printf(buffer, length, pos, "%f", static_cast<double>(datum.get_float())); break;
     case ObDoubleType: case ObUDoubleType:

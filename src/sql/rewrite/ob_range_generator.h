@@ -164,11 +164,11 @@ public:
 
   int generate_ranges();
   static int generate_fast_nlj_range(const ObPreRangeGraph &pre_range_graph,
-                                     const common::DatumParamStore &param_store,
+                                     const ObPhysicalPlanCtx &param_store,
                                      ObIAllocator &allocator,
                                      void *range_buffer);
   static int check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_range_graph,
-                                            const common::DatumParamStore &param_store,
+                                            const ObPhysicalPlanCtx &param_store,
                                             bool &is_valid);
   static int get_spatial_relationship_by_mask(const DatumValue& extra, ObDomainOpType& op_type);
   static bool is_geo_type(const ObDomainOpType& op_type);

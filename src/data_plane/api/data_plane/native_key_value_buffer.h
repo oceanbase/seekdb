@@ -1,6 +1,7 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #pragma once
 #include "common/datum/datum_value.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "data_plane/blocksstable/ob_storage_datum.h"
 #include "lib/allocator/ob_allocator.h"
 namespace oceanbase { namespace storage {
@@ -54,15 +55,12 @@ public:
   }
   static int project_value(const common::DatumValue &source, common::DatumValue *values,
                            int64_t count, int64_t index) {
-    int ret=common::OB_SUCCESS;common::DatumValue candidate=source;
+    int ret=common::OB_SUCCESS;common::DatumValue candidate;
     if(values==nullptr||index<0||index>=count)ret=common::OB_INVALID_ARGUMENT;
-    else if(source.datum_.len_>0&&source.datum_.ptr_==nullptr)ret=common::OB_INVALID_ARGUMENT;
     else {
-      if(!candidate.is_null()&&candidate.datum_.len_>0&&candidate.datum_.len_<=PAYLOAD_BYTES){
-        char *payload=reinterpret_cast<char *>(values+count)+index*PAYLOAD_BYTES;
-        MEMMOVE(payload,candidate.datum_.ptr_,candidate.datum_.len_);candidate.datum_.ptr_=payload;
-      }
-      values[index]=candidate;
+      char *payload=reinterpret_cast<char *>(values+count)+index*PAYLOAD_BYTES;
+      ret=copy_small_span(source,payload,candidate);
+      if(ret==common::OB_SUCCESS)values[index]=candidate;
     }
     return ret;
   }
@@ -71,24 +69,15 @@ public:
     int ret=common::OB_SUCCESS;common::DatumValue candidate;
     if(values==nullptr||index<0||index>=count)ret=common::OB_INVALID_ARGUMENT;
     else if((candidate=values[index],ret=value.to_value_view(meta,candidate))==common::OB_SUCCESS){
-      if(!candidate.is_null()&&candidate.datum_.len_>0&&candidate.datum_.len_<=PAYLOAD_BYTES){
-        char *payload=reinterpret_cast<char *>(values+count)+index*PAYLOAD_BYTES;
-        MEMMOVE(payload,candidate.datum_.ptr_,candidate.datum_.len_);candidate.datum_.ptr_=payload;
-      }
-      values[index]=candidate;
+      ret=project_value(candidate,values,count,index);
     }
     return ret;
   }
   int assign_value(int64_t index,const common::DatumValue &value) {
-    int ret=common::OB_SUCCESS;
+    int ret=common::OB_SUCCESS;common::DatumValue candidate;
     if(owner_==nullptr)ret=common::OB_NOT_INIT;
     else if(index<0||index>=capacity_)ret=common::OB_INVALID_ARGUMENT;
-    else if(value.datum_.len_>0&&value.datum_.ptr_==nullptr)ret=common::OB_INVALID_ARGUMENT;
-    else {
-      common::DatumValue candidate=value;
-      if(!value.is_null()&&value.datum_.len_>0&&value.datum_.len_<=PAYLOAD_BYTES){
-        MEMMOVE(payloads_[index],value.datum_.ptr_,value.datum_.len_);candidate.datum_.ptr_=payloads_[index];
-      }
+    else if((ret=copy_small_span(value,payloads_[index],candidate))==common::OB_SUCCESS){
       values_[index]=candidate;
     }
     return ret;
@@ -105,6 +94,20 @@ public:
     owner_=nullptr;values_=nullptr;payloads_=nullptr;capacity_=0;
   }
 private:
+  // The metadata selects native scalar vs reference representation. A short
+  // reference owns only its span here; an array/PL pointee is still borrowed.
+  static int copy_small_span(const common::DatumValue &source,char *payload,common::DatumValue &output) {
+    int64_t bytes=0;
+    int ret=common::DatumParameterCodec::native_span_size(source.datum_,source.meta_,bytes);
+    common::DatumValue candidate=source;
+    if(ret==common::OB_SUCCESS&&bytes<=PAYLOAD_BYTES){
+      int64_t pos=0;
+      ret=common::DatumParameterCodec::copy_native_span(source.datum_,source.meta_,
+          payload,PAYLOAD_BYTES,pos,candidate.datum_);
+    }
+    if(ret==common::OB_SUCCESS)output=candidate;
+    return ret;
+  }
   NativeKeyValueBuffer(const NativeKeyValueBuffer &)=delete;
   NativeKeyValueBuffer &operator=(const NativeKeyValueBuffer &)=delete;
   static const int64_t LOCAL_COUNT=64;

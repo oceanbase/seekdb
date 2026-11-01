@@ -26,6 +26,7 @@
 #include "share/ob_truncated_string.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
+#include "sql/engine/expr/ob_expr_util.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "pl/ob_pl_exception_handling.h"
@@ -879,9 +880,13 @@ int ObPL::execute(ObExecContext &ctx,
                   bool is_in_function,
                   bool is_anonymous,
                   uint64_t loc,
-                  bool is_called_from_sql)
+                  bool is_called_from_sql,
+                  ObIArray<const SqlType *> *out_parameter_types)
 {
   int ret = OB_SUCCESS;
+  if (out_parameter_types != nullptr && (params == nullptr || out_parameter_types->count() != 0)) {
+    return OB_INVALID_ARGUMENT;
+  }
   int64_t execute_start = ObTimeUtility::current_time();
   DatumParameter local_result; local_result.set_type(ObMaxType);
   int local_status = OB_SUCCESS;
@@ -951,6 +956,39 @@ int ObPL::execute(ObExecContext &ctx,
         for (int64_t i = 0; OB_SUCC(ret) && i < params->count(); ++i) {
           OZ (publish_out(pl.get_params().at(i), params->at(i)));
         }
+      }
+      if (OB_SUCC(ret) && out_parameter_types != nullptr) {
+        ObSEArray<const SqlType *, 8> prepared_types;
+        const ObPLFunctionAST *ast = routine.get_ast();
+        if (ast == nullptr || ast->get_body() == nullptr || params->count() > routine.get_variables().count()) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && i < params->count(); ++i) {
+          const SqlType *type = nullptr;
+          if (is_anonymous || routine.get_out_args().has_member(i)) {
+            const ObPLDataType &formal = routine.get_variables().at(i);
+            const DatumParameter &published = params->at(i);
+            if (formal.is_obj_type() && !published.is_null()
+                && !published.get_meta().is_enum_or_set() && !published.get_meta().is_enumset_inner_type()
+                && !published.get_meta().is_collection_sql_type() && !published.is_ext()) {
+              // Scalar casts (including enum-to-text OUT) carry the actual
+              // published physical kind/accuracy. NULL still uses its formal
+              // declaration below, never a missing payload or previous slot.
+              OZ (SqlType::from_legacy(published.get_meta(), published.get_accuracy(), allocator, type));
+            } else {
+              OZ (ObExprUtil::resolve_pl_parameter_sql_type(formal,
+                  ast->get_body()->get_namespace(), ctx, allocator, type));
+            }
+          }
+          OZ (prepared_types.push_back(type));
+        }
+        // The caller starts with an empty output directory. All Type trees
+        // already live in its explicit owner, before the callee guard retires.
+        OZ (out_parameter_types->reserve(prepared_types.count()));
+        for (int64_t i = 0; OB_SUCC(ret) && i < prepared_types.count(); ++i) {
+          OZ (out_parameter_types->push_back(prepared_types.at(i)));
+        }
+        if (OB_FAIL(ret)) { out_parameter_types->reset(); }
       }
       // Release base types of parameters in the parameter list and complex data types generated during the init param phase
       for (int i = 0; i < routine.get_arg_count(); ++i) {
@@ -1023,9 +1061,11 @@ struct ObPLExecTraceIdGuard {
   uint64_t routine_id_;
 };
 
-int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *block)
+int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *block,
+                  ObIArray<const SqlType *> *out_parameter_types)
 {
   int ret = OB_SUCCESS;
+  if (out_parameter_types != nullptr && out_parameter_types->count() != 0) { return OB_INVALID_ARGUMENT; }
   CK (OB_NOT_NULL(block));
   lib::MemoryContext mem_context = NULL;
   lib::ContextParam param;
@@ -1109,7 +1149,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
                       stack_ctx.is_top_stack(),
                       false, // inner call
                       false,
-                      true));
+                      true, 0, false, out_parameter_types));
 
           // unprepare it.
           if (stack_ctx.is_inited()) {
@@ -1146,6 +1186,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
     DESTROY_CONTEXT(mem_context);
     mem_context = NULL;
   }
+  if (OB_FAIL(ret) && out_parameter_types != nullptr) { out_parameter_types->reset(); }
   return ret;
 }
 //execute anonymous interface for ps
@@ -1153,9 +1194,11 @@ int ObPL::execute(ObExecContext &ctx,
                   ParamStore &params,
                   uint64_t stmt_id,
                   const ObString &sql,
-                  ObBitSet<OB_DEFAULT_BITSET_SIZE> &out_args)
+                  ObBitSet<OB_DEFAULT_BITSET_SIZE> &out_args,
+                  ObIArray<const SqlType *> *out_parameter_types)
 {
   int ret = OB_SUCCESS;
+  if (out_parameter_types != nullptr && out_parameter_types->count() != 0) { return OB_INVALID_ARGUMENT; }
   ObPLFunction *routine = NULL;
   ObCacheObjGuard cacheobj_guard;
   int64_t old_worker_timeout_ts = 0;
@@ -1214,7 +1257,7 @@ int ObPL::execute(ObExecContext &ctx,
                     stack_ctx.is_top_stack(),
                     false, // inner call
                     false, // in function
-                    true)); // anonymous
+                    true, 0, false, out_parameter_types)); // anonymous
         // unprepare it ...
         if (stack_ctx.is_inited()) {
           stack_ctx.destory(*(ctx.get_my_session()), ctx, ret);
@@ -1231,6 +1274,7 @@ int ObPL::execute(ObExecContext &ctx,
     }
   }
 
+  if (OB_FAIL(ret) && out_parameter_types != nullptr) { out_parameter_types->reset(); }
   return ret;
 }
 
@@ -1246,9 +1290,11 @@ int ObPL::execute(ObExecContext &ctx,
                   bool inner_call,
                   bool in_function,
                   uint64_t loc,
-                  bool is_called_from_sql)
+                  bool is_called_from_sql,
+                  ObIArray<const SqlType *> *out_parameter_types)
 {
   int ret = OB_SUCCESS;
+  if (out_parameter_types != nullptr && out_parameter_types->count() != 0) { return OB_INVALID_ARGUMENT; }
   ObPLFunction *routine = NULL;
   ObPLFunction *local_routine = NULL;
   ObCacheObjGuard cacheobj_guard;
@@ -1404,7 +1450,7 @@ int ObPL::execute(ObExecContext &ctx,
                     routine->is_function() || in_function,
                     false,
                     loc,
-                    is_called_from_sql));
+                    is_called_from_sql, out_parameter_types));
       }
     } catch (...) {
       UNPREPARE();
@@ -1417,6 +1463,7 @@ int ObPL::execute(ObExecContext &ctx,
   if (nullptr != ctx.get_my_session()) {
   }
 
+  if (OB_FAIL(ret) && out_parameter_types != nullptr) { out_parameter_types->reset(); }
   return ret;
 }
 
@@ -3283,8 +3330,9 @@ int ObPLINS::init_complex_obj(ObIAllocator &allocator,
     if (OB_FAIL(ret) && need_construct && OB_NOT_NULL(record->get_allocator())) {
       char descriptor[DATUM_EXTEND_PAYLOAD_SIZE];
       DatumValue tmp;
-      tmp.datum_.ptr_ = descriptor;
-      tmp.datum_.set_extend(reinterpret_cast<int64_t>(ptr), user_type->get_type(), init_size);
+      const int descriptor_ret = tmp.datum_.set_extend(reinterpret_cast<int64_t>(ptr),
+          user_type->get_type(), init_size, descriptor, sizeof(descriptor));
+      if (descriptor_ret != OB_SUCCESS) { LOG_WARN("build PL cleanup descriptor failed", K(descriptor_ret)); }
       tmp.get_meta().set_ext();
       tmp.get_meta().set_extend_type(user_type->get_type());
       ObIAllocator *alloc = record->get_allocator();
@@ -3302,11 +3350,15 @@ int ObPLINS::init_complex_obj(ObIAllocator &allocator,
     allocator.free(ptr);
   }
   if (OB_SUCC(ret)) {
-    descriptor.datum_.set_extend(reinterpret_cast<int64_t>(ptr), user_type->get_type(), init_size);
-    obj.assign_value(descriptor);
-    obj.set_param_meta(); obj.set_udt_id(pl_type.get_user_type_id());
-  } else {
-    allocator.free(const_cast<char *>(descriptor.datum_.ptr_));
+    OZ (descriptor.datum_.set_extend(reinterpret_cast<int64_t>(ptr), user_type->get_type(), init_size,
+        const_cast<void *>(descriptor.get_datum().get_reference()), descriptor.get_datum().length()));
+    if (OB_SUCC(ret)) {
+      obj.assign_value(descriptor);
+      obj.set_param_meta(); obj.set_udt_id(pl_type.get_user_type_id());
+    }
+  }
+  if (OB_FAIL(ret)) {
+    allocator.free(const_cast<void *>(descriptor.get_datum().get_reference()));
   }
   return ret;
 }

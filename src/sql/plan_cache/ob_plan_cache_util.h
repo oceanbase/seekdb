@@ -48,6 +48,7 @@ namespace pl { class ObPLINS; }
 namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace sql
 {
+class ObPhysicalPlanCtx;
 class ObRawExprResType;
 class ObSQLSessionInfo;
 class ObExecContext;
@@ -318,6 +319,9 @@ struct ObPCConstParamInfo
                    common::ObIAllocator &allocator);
   int add_constant(const common::ObDatum &value, const common::SqlType &type,
                    common::ObIAllocator &allocator);
+  // Capture an already bound value and its complete effective declaration.
+  int add_runtime_parameter(const ObPhysicalPlanCtx &parameters, int64_t index,
+                            common::ObIAllocator &allocator);
   int add_parameter(const common::DatumParameter &value, const ObExecContext *actual_ctx,
                     common::ObIAllocator &allocator,
                     const pl::ObPLINS *actual_declarations = nullptr);

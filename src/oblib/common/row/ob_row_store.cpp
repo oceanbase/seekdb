@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX COMMON
 #include "common/row/ob_row_store.h"
 #include "common/row/ob_row_util.h"
+#include "common/cell/ob_cell_reader.h"
+#include "lib/allocator/page_arena.h"
 namespace oceanbase
 {
 namespace common
@@ -139,8 +141,13 @@ int ObRowStore::BlockInfo::append_row(const ObIArray<int64_t> &reserved_columns,
           }
         } else {
           // success
-          stored_row->compact_row_size_ = static_cast<int32_t>(cell_writer.size());
-          advance(cell_writer.size());
+          const int64_t aligned_size = NativeValueFlat::span(cell_writer.size());
+          if (aligned_size > get_remain_size()) { ret = OB_BUF_NOT_ENOUGH; }
+          else {
+            MEMSET(get_buffer() + cell_writer.size(), 0, aligned_size - cell_writer.size());
+            stored_row->compact_row_size_ = static_cast<int32_t>(aligned_size);
+            advance(aligned_size);
+          }
           if (OB_UNLIKELY(curr_data_pos_ > block_size_ - SIZEOF(*this))) {
             ret = OB_ERR_UNEXPECTED;
             OB_LOG(ERROR, "fail to append row, overwrite the head", K(ret), K_(curr_data_pos),
@@ -186,6 +193,9 @@ int ObRowStore::BlockInfo::append_row_by_copy(const ObIArray<int64_t> &reserved_
       stored_row->reserved_cells_count_ = static_cast<int32_t>(reserved_columns.count());
       stored_row->payload_ = payload;
       stored_row->compact_row_size_ = static_cast<int32_t>(new_row_size);
+      DatumValue *reserved_values = nullptr;
+      DatumValueBuffer::initialize(stored_row->reserved_cells_, reserved_columns.count(), reserved_values);
+      UNUSED(reserved_values);
       advance(header_size);
 
       ObNewRow *row_clone = new(get_buffer()) ObNewRow();
@@ -872,185 +882,420 @@ int ObRowStore::assign(const ObRowStore &other_store)
 }
 
 namespace {
-// This is the native same-build memory image, not ordinary row value wire.
-// Pointers are rewritten only in the serialization copy; source rows stay live.
-int transform_native_block(char *block, int64_t length, bool compact, bool to_offsets,
-                             const char *source_block = nullptr)
+// V2 logical rows use the explicit physical record, never C++ images.
+constexpr int64_t ROW_STORE_LOGICAL_V2 = -2;
+class RowWireWriter
 {
-  int ret = OB_SUCCESS; int64_t cursor = 0;
-  while (OB_SUCC(ret) && cursor < length) {
-    if (length - cursor < sizeof(ObRowStore::StoredRow)) { return OB_INVALID_DATA; }
-    auto *stored = reinterpret_cast<ObRowStore::StoredRow *>(block + cursor);
-    const int64_t count = stored->reserved_cells_count_;
-    if (count < 0 || stored->compact_row_size_ < 0) { return OB_INVALID_DATA; }
-    const int64_t values_size = DatumValueBuffer::allocation_size(count);
-    if (values_size == INT64_MAX || values_size > length - cursor - sizeof(*stored)) { return OB_SIZE_OVERFLOW; }
-    const int64_t header_size = sizeof(*stored) + values_size;
-    if (stored->compact_row_size_ > length - cursor - header_size) { return OB_SIZE_OVERFLOW; }
-    char *row_bytes = block + cursor + header_size;
-    const int64_t row_length = stored->compact_row_size_;
-    if (!compact) {
-      if (row_length < sizeof(ObNewRow)) { return OB_INVALID_DATA; }
-      if (to_offsets) {
-        auto *row = reinterpret_cast<ObNewRow *>(row_bytes);
-        if (row->count_ < 0 || row->count_ > INT64_MAX / sizeof(DatumValue)
-            || row->projector_size_ < 0 || row->projector_size_ > INT64_MAX / sizeof(int32_t)) { return OB_INVALID_DATA; }
-        const int64_t descriptor_size = sizeof(DatumValue) * row->count_;
-        int64_t pos = cursor + header_size + sizeof(ObNewRow); char *memory = nullptr;
-        if (OB_FAIL(NativeValueFlat::take_span(block, length, pos, descriptor_size, memory))) { return ret; }
-        auto *values = reinterpret_cast<DatumValue *>(memory);
-        row->cells_ = reinterpret_cast<DatumValue *>(memory - block);
-        for (int64_t i = 0; OB_SUCC(ret) && i < row->count_; ++i) {
-          ret = DatumValueBuffer::make_offsets(values[i], block, length, pos);
-        }
-        if (OB_SUCC(ret) && row->projector_size_ > 0) {
-          ret = NativeValueFlat::take_span(block, length, pos, sizeof(int32_t) * row->projector_size_, memory);
-          if (OB_SUCC(ret)) { row->projector_ = reinterpret_cast<int32_t *>(memory - block); }
-        } else { row->projector_ = nullptr; }
-        if (OB_SUCC(ret) && pos != cursor + header_size + row_length) { ret = OB_INVALID_DATA; }
+public:
+  RowWireWriter(char *buffer, int64_t length, int64_t &pos, bool sizing)
+      : buffer_(buffer), length_(length), pos_(pos), sizing_(sizing), ret_(OB_SUCCESS) {}
+  template <typename T> void field(const T &value)
+  {
+    if (ret_ == OB_SUCCESS) {
+      if (sizing_) { add(serialization::encoded_length(value)); }
+      else { ret_ = serialization::encode(buffer_, length_, pos_, value); }
+    }
+  }
+  void value(const DatumValue &value)
+  {
+    if (ret_ == OB_SUCCESS) {
+      if (sizing_) {
+        int64_t bytes = 0;
+        if (OB_SUCCESS == (ret_ = NativeValueFlat::row_value_size(value, bytes))) { add(bytes); }
       } else {
-        ObNewRow *row = nullptr; int64_t pos = 0;
-        if (OB_FAIL(ObNewRow::construct(row_bytes, row_length, pos, row))) {}
-        else if (pos != row_length) { ret = OB_INVALID_DATA; }
+        ret_ = NativeValueFlat::encode_row_value(value, buffer_, length_, pos_);
       }
     }
-    // Reserved values borrow either their fixed inline scalar slot or native
-    // compact/row bytes in this same block. Nested arrays are fixed above once.
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      DatumValue &value = stored->reserved_cells_[i];
-      if (value.is_null()) { value.datum_.ptr_ = nullptr; }
-      else if (to_offsets) {
-        const uintptr_t address = reinterpret_cast<uintptr_t>(value.datum_.ptr_);
-        const uintptr_t source = reinterpret_cast<uintptr_t>(source_block);
-        if (address < source || address - source >= static_cast<uint64_t>(length)
-            || value.datum_.len_ > length - static_cast<int64_t>(address - source)) { ret = OB_INVALID_DATA; }
-        else { value.datum_.ptr_ = reinterpret_cast<char *>(address - source); }
-      } else {
-        const uintptr_t offset = reinterpret_cast<uintptr_t>(value.datum_.ptr_);
-        if (offset >= static_cast<uint64_t>(length) || value.datum_.len_ > length - static_cast<int64_t>(offset)) { ret = OB_INVALID_DATA; }
-        else { value.datum_.ptr_ = block + offset; }
+  }
+  int result() const { return ret_; }
+private:
+  void add(int64_t bytes)
+  {
+    if (bytes < 0 || pos_ < 0 || bytes > INT64_MAX - pos_) { ret_ = OB_SIZE_OVERFLOW; }
+    else { pos_ += bytes; }
+  }
+  char *buffer_; int64_t length_; int64_t &pos_; bool sizing_; int ret_;
+};
+
+template <typename T> int read_row_field(const char *buf, int64_t length, int64_t &pos, T &value)
+{
+  return buf == nullptr || pos < 0 || pos >= length
+      ? OB_DESERIALIZE_ERROR : serialization::decode(buf, length, pos, value);
+}
+
+int read_row_field(const char *buf, int64_t length, int64_t &pos, int64_t &output)
+{
+  if (buf == nullptr) { return OB_INVALID_ARGUMENT; }
+  uint64_t bits = 0;
+  int64_t next = pos;
+  for (uint32_t i = 0; i < 10; ++i) {
+    if (next < 0 || next >= length) { return OB_DESERIALIZE_ERROR; }
+    const uint8_t byte = static_cast<uint8_t>(buf[next++]);
+    if (i == 9 && (byte & 0xfe) != 0) { return OB_DESERIALIZE_ERROR; }
+    bits |= uint64_t(byte & 0x7f) << (7 * i);
+    if ((byte & 0x80) == 0) { MEMCPY(&output, &bits, sizeof(output)); pos = next; return OB_SUCCESS; }
+  }
+  return OB_DESERIALIZE_ERROR;
+}
+
+bool row_range(int64_t length, int64_t start, int64_t bytes)
+{ return start >= 0 && start <= length && bytes >= 0 && bytes <= length - start; }
+
+template <typename T> void image_field(const char *image, int64_t offset, T &value)
+{ MEMCPY(&value, image + offset, sizeof(value)); }
+
+int allocate_row_values(ObIAllocator &owner, int64_t count, DatumValue *&values)
+{
+  if (count < 0 || count > INT64_MAX / sizeof(DatumValue)) { return OB_SIZE_OVERFLOW; }
+  if (count == 0) { values = nullptr; return OB_SUCCESS; }
+  void *memory = owner.alloc(count * sizeof(DatumValue));
+  if (memory == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+  values = new (memory) DatumValue[count];
+  return OB_SUCCESS;
+}
+
+int read_compact_row(const char *bytes, int64_t length, int64_t count,
+                     ObIAllocator &owner, ObNewRow &row)
+{
+  int ret = OB_SUCCESS;
+  DatumValue *values = nullptr;
+  ObCellReader reader;
+  if (OB_FAIL(allocate_row_values(owner, count, values))) {}
+  else if (OB_FAIL(reader.init(bytes, length, DENSE))) {}
+  else {
+    int64_t index = 0;
+    bool finished = false;
+    while (OB_SUCC(ret) && !finished) {
+      DatumValue value;
+      uint64_t column_id = OB_INVALID_ID;
+      if (OB_FAIL(reader.next_cell())) {}
+      else if (OB_FAIL(reader.get_cell(column_id, value, &finished))) {}
+      else if (!finished) {
+        if (index >= count) { ret = OB_DESERIALIZE_ERROR; }
+        else if (value.datum_.has_ext_value()) {
+          // The reader reuses its marker wrapper on next_cell(). Copy only
+          // that carrier span into the caller's owner before advancing it.
+          if (OB_FAIL(values[index].deep_copy(value, owner))) {}
+          else { ++index; }
+        } else { values[index++] = value; }
       }
     }
-    cursor += header_size + row_length;
+    if (OB_SUCC(ret) && index != count) { ret = OB_DESERIALIZE_ERROR; }
+    if (OB_SUCC(ret)) { row = ObNewRow(values, count); }
   }
   return ret;
 }
 } // namespace
-int ObRowStore::adjust_row_cells_reference()
+
+int ObRowStore::write_wire_body(char *buf, int64_t length, int64_t &pos, bool sizing) const
 {
   int ret = OB_SUCCESS;
-  for (BlockInfo *block = blocks_.get_first(); OB_SUCC(ret) && block != nullptr; block = block->get_next_block()) {
-    ret = transform_native_block(const_cast<char *>(block->get_buffer_head()), block->get_curr_data_pos(), use_compact_row_, false);
+  if (row_count_ < 0 || col_count_ < 0 || (row_count_ > 0 && col_count_ == 0)) { return OB_INVALID_DATA; }
+  RowWireWriter writer(buf, length, pos, sizing);
+  writer.field(block_size_);
+  writer.field(row_count_);
+  writer.field(col_count_);
+  writer.field(is_read_only_);
+  writer.field(use_compact_row_);
+  ObArenaAllocator temporary("RowWireRead");
+  int64_t rows = 0;
+  for (const BlockInfo *block = blocks_.get_first(); OB_SUCC(ret) && block != nullptr;
+       block = block->get_next_block()) {
+    const char *data = block->get_buffer_head();
+    const int64_t size = block->get_curr_data_pos();
+    int64_t cursor = 0;
+    while (OB_SUCC(ret) && cursor < size) {
+      if (!row_range(size, cursor, sizeof(StoredRow))) { ret = OB_INVALID_DATA; break; }
+      const auto *stored = reinterpret_cast<const StoredRow *>(data + cursor);
+      const int64_t reserved_count = stored->reserved_cells_count_;
+      const int64_t reserve_bytes = DatumValueBuffer::allocation_size(reserved_count);
+      if (reserved_count < 0 || reserve_bytes == INT64_MAX
+          || !row_range(size, cursor + sizeof(StoredRow), reserve_bytes)) { ret = OB_INVALID_DATA; break; }
+      const int64_t header = sizeof(StoredRow) + reserve_bytes;
+      if (!row_range(size, cursor + header, stored->compact_row_size_)) { ret = OB_INVALID_DATA; break; }
+      const char *body = data + cursor + header;
+      ObNewRow row;
+      if (use_compact_row_) {
+        ret = read_compact_row(body, stored->compact_row_size_, col_count_, temporary, row);
+      } else if (stored->compact_row_size_ < sizeof(ObNewRow)) {
+        ret = OB_INVALID_DATA;
+      } else {
+        row = *reinterpret_cast<const ObNewRow *>(body);
+        if (row.count_ != col_count_ || row.projector_size_ != 0
+            || (row.count_ > 0 && row.cells_ == nullptr)) { ret = OB_INVALID_DATA; }
+      }
+      if (OB_SUCC(ret)) {
+        writer.field(stored->payload_);
+        writer.field(reserved_count);
+        for (int64_t i = 0; i < reserved_count && writer.result() == OB_SUCCESS; ++i) {
+          writer.value(stored->reserved_cells_[i]);
+        }
+        writer.field(row.count_);
+        for (int64_t i = 0; i < row.count_ && writer.result() == OB_SUCCESS; ++i) { writer.value(row.cells_[i]); }
+        ret = writer.result();
+        ++rows;
+        cursor += header + stored->compact_row_size_;
+      }
+      temporary.reuse();
+    }
+  }
+  if (OB_SUCC(ret)) { ret = writer.result(); }
+  if (OB_SUCC(ret) && rows != row_count_) { ret = OB_INVALID_DATA; }
+  return ret;
+}
+
+// Rebuild one decoded record with final-owner bytes. Reserved reference spans
+// live after the logical row in this same record; compact readers stop at END.
+int ObRowStore::append_wire_row(const ObNewRow &row, const DatumValue *reserved,
+                                int64_t reserved_count, int64_t payload)
+{
+  int ret = OB_SUCCESS;
+  if (row.count_ <= 0 || row.cells_ == nullptr || row.projector_size_ != 0
+      || reserved_count < 0 || reserved_count > INT32_MAX
+      || (reserved_count > 0 && reserved == nullptr)) { return OB_INVALID_ARGUMENT; }
+  const int64_t header = get_reserved_cells_size(reserved_count);
+  if (header < 0 || header >= OB_MAX_ROW_LENGTH_IN_MEMTABLE) { return OB_SIZE_OVERFLOW; }
+  BlockInfo *block = nullptr;
+  for (int64_t attempt = 0; attempt < 4; ++attempt) {
+    const bool reuse_last = attempt == 0 && blocks_.get_last() != nullptr;
+    const int64_t request = attempt <= 1 ? block_size_
+        : attempt == 2 ? BIG_BLOCK_SIZE : OB_MAX_ROW_LENGTH_IN_MEMTABLE;
+    block = reuse_last ? blocks_.get_last() : new_block(request);
+    if (block == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+    char *base = block->get_buffer();
+    const int64_t capacity = block->get_remain_size();
+    int64_t pos = header;
+    StoredRow *stored = nullptr;
+    if (pos > capacity) { ret = OB_BUF_NOT_ENOUGH; }
+    else {
+      stored = new (base) StoredRow();
+      stored->reserved_cells_count_ = static_cast<int32_t>(reserved_count);
+      stored->payload_ = payload;
+      DatumValue *values = nullptr;
+      DatumValueBuffer::initialize(stored->reserved_cells_, reserved_count, values);
+      if (use_compact_row_) {
+        ObCellWriter writer;
+        if (OB_FAIL(writer.init(base + pos, capacity - pos, DENSE))) {}
+        for (int64_t i = 0; OB_SUCC(ret) && i < row.count_; ++i) { ret = writer.append(row.cells_[i]); }
+        if (OB_SUCC(ret)) { ret = writer.row_finish(); }
+        if (OB_SUCC(ret)) { pos += writer.size(); }
+      } else if (capacity - pos < sizeof(ObNewRow)) {
+        ret = OB_BUF_NOT_ENOUGH;
+      } else {
+        auto *copy = new (base + pos) ObNewRow();
+        pos += sizeof(ObNewRow);
+        ret = copy->deep_copy(row, base, capacity, pos);
+      }
+      if (OB_SUCC(ret)) {
+        const int64_t aligned = NativeValueFlat::span(pos);
+        if (aligned > capacity) { ret = OB_BUF_NOT_ENOUGH; }
+        else { MEMSET(base + pos, 0, aligned - pos); pos = aligned; }
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < reserved_count; ++i) {
+        ret = NativeValueFlat::copy(reserved[i], values[i], base, capacity, pos);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      stored->compact_row_size_ = static_cast<int32_t>(pos - header);
+      block->advance(pos);
+      if (!reuse_last) { ret = blocks_.add_last(block); }
+      if (OB_SUCC(ret)) {
+        ++row_count_; col_count_ = row.count_;
+        last_last_row_size_ = last_row_size_; last_row_size_ = pos; data_size_ += pos;
+        return OB_SUCCESS;
+      }
+    }
+    if (!reuse_last) { block->~BlockInfo(); alloc_.free(block); }
+    block = nullptr;
+    if (ret != OB_BUF_NOT_ENOUGH && ret != OB_SIZE_OVERFLOW && ret != OB_ALLOCATE_MEMORY_FAILED) { break; }
   }
   return ret;
+}
+
+int ObRowStore::read_wire_v2(const char *buf, int64_t length, int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  int64_t expected_rows = 0, expected_columns = 0;
+  bool read_only = false, compact = true;
+  if (OB_FAIL(read_row_field(buf, length, pos, block_size_))) {}
+  else if (OB_FAIL(read_row_field(buf, length, pos, expected_rows))) {}
+  else if (OB_FAIL(read_row_field(buf, length, pos, expected_columns))) {}
+  else if (OB_FAIL(read_row_field(buf, length, pos, read_only))) {}
+  else if (OB_FAIL(read_row_field(buf, length, pos, compact))) {}
+  else if (block_size_ <= 0 || block_size_ > OB_MAX_ROW_LENGTH_IN_MEMTABLE
+      || expected_rows < 0 || expected_rows > length - pos || expected_columns < 0
+      || (expected_rows > 0 && expected_columns == 0)) { ret = OB_DESERIALIZE_ERROR; }
+  if (OB_SUCC(ret)) { use_compact_row_ = compact; col_count_ = expected_columns; }
+  ObArenaAllocator temporary("RowWireDecode");
+  for (int64_t index = 0; OB_SUCC(ret) && index < expected_rows; ++index) {
+    int64_t payload = 0, reserved_count = 0, count = 0;
+    DatumValue *reserved = nullptr, *values = nullptr;
+    if (OB_FAIL(read_row_field(buf, length, pos, payload))) {}
+    else if (OB_FAIL(read_row_field(buf, length, pos, reserved_count))) {}
+    else if (reserved_count < 0 || reserved_count > length - pos || reserved_count > INT32_MAX) { ret = OB_DESERIALIZE_ERROR; }
+    else if (OB_FAIL(allocate_row_values(temporary, reserved_count, reserved))) {}
+    for (int64_t i = 0; OB_SUCC(ret) && i < reserved_count; ++i) {
+      ret = NativeValueFlat::decode_row_value(buf, length, pos, temporary, reserved[i]);
+    }
+    if (OB_SUCC(ret) && OB_FAIL(read_row_field(buf, length, pos, count))) {}
+    else if (OB_SUCC(ret) && (count != expected_columns || count > length - pos)) { ret = OB_DESERIALIZE_ERROR; }
+    else if (OB_SUCC(ret) && OB_FAIL(allocate_row_values(temporary, count, values))) {}
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      ret = NativeValueFlat::decode_row_value(buf, length, pos, temporary, values[i]);
+    }
+    if (OB_SUCC(ret)) { ret = append_wire_row(ObNewRow(values, count), reserved, reserved_count, payload); }
+    temporary.reuse();
+  }
+  if (OB_SUCC(ret)) { is_read_only_ = read_only; }
+  return ret;
+}
+
+int ObRowStore::read_wire_1d6(const char *buf, int64_t length, int64_t &pos, int64_t block_count)
+{
+  int ret = OB_SUCCESS;
+  const int64_t blocks_start = pos;
+  if (block_count < 0 || block_count > length - pos) { return OB_DESERIALIZE_ERROR; }
+  // Locate the old footer before interpreting a block: compact mode lives there.
+  for (int64_t i = 0; OB_SUCC(ret) && i < block_count; ++i) {
+    int64_t bytes = 0;
+    if (OB_FAIL(read_row_field(buf, length, pos, bytes))) {}
+    else if (!row_range(length, pos, bytes)) { ret = OB_DESERIALIZE_ERROR; }
+    else { pos += bytes; }
+  }
+  int64_t expected_rows = -1, columns = 0, old_last_size = -1;
+  bool read_only = true;
+  if (OB_SUCC(ret) && pos < length) { ret = read_row_field(buf, length, pos, block_size_); }
+  if (OB_SUCC(ret) && pos < length) { ret = read_row_field(buf, length, pos, expected_rows); }
+  if (OB_SUCC(ret) && pos < length) { ret = read_row_field(buf, length, pos, columns); }
+  if (OB_SUCC(ret) && pos < length) { ret = read_row_field(buf, length, pos, read_only); }
+  if (OB_SUCC(ret) && pos < length) { ret = read_row_field(buf, length, pos, old_last_size); }
+  if (OB_SUCC(ret) && pos < length) { ret = read_row_field(buf, length, pos, use_compact_row_); }
+  if (OB_SUCC(ret) && (block_size_ <= 0 || block_size_ > OB_MAX_ROW_LENGTH_IN_MEMTABLE
+      || columns < 0 || expected_rows < -1)) { ret = OB_DESERIALIZE_ERROR; }
+  const int64_t end = pos;
+  int64_t input = blocks_start;
+  ObArenaAllocator temporary("RowOldImage");
+  for (int64_t block = 0; OB_SUCC(ret) && block < block_count; ++block) {
+    int64_t bytes = 0;
+    if (OB_FAIL(read_row_field(buf, end, input, bytes))) { break; }
+    const char *image = buf + input;
+    int64_t cursor = 0;
+    while (OB_SUCC(ret) && cursor < bytes) {
+      int32_t body_size = 0, reserved_count = 0;
+      int64_t payload = 0;
+      if (!row_range(bytes, cursor, 16)) { ret = OB_DESERIALIZE_ERROR; break; }
+      image_field(image, cursor, body_size);
+      image_field(image, cursor + 4, reserved_count);
+      image_field(image, cursor + 8, payload);
+      if (reserved_count < 0 || !row_range(bytes, cursor + 16, int64_t(reserved_count) * 32)) {
+        ret = OB_DESERIALIZE_ERROR; break;
+      }
+      const int64_t body = cursor + 16 + int64_t(reserved_count) * 32;
+      if (!row_range(bytes, body, body_size)) { ret = OB_DESERIALIZE_ERROR; break; }
+      DatumValue *reserved = nullptr;
+      ObNewRow row;
+      if (OB_FAIL(allocate_row_values(temporary, reserved_count, reserved))) {}
+      for (int64_t i = 0; OB_SUCC(ret) && i < reserved_count; ++i) {
+        ret = NativeValueFlat::read_legacy_1d6_value(image, bytes, cursor + 16 + i * 16, temporary, reserved[i]);
+      }
+      if (OB_SUCC(ret) && use_compact_row_) {
+        if (columns <= 0) { ret = OB_DESERIALIZE_ERROR; }
+        else { ret = read_compact_row(image + body, body_size, columns, temporary, row); }
+      } else if (OB_SUCC(ret)) {
+        int64_t count = 0, projector_count = 0;
+        uint64_t cells_offset = 0, projector_offset = 0;
+        if (body_size < 32) { ret = OB_DESERIALIZE_ERROR; }
+        else {
+          image_field(image, body, cells_offset);
+          image_field(image, body + 8, count);
+          image_field(image, body + 16, projector_count);
+          image_field(image, body + 24, projector_offset);
+          if (count <= 0 || count > body_size / 16 || projector_count != 0
+              || cells_offset != static_cast<uint64_t>(body + 32)
+              || !row_range(body + body_size, body + 32, count * 16)
+              || (columns > 0 && count != columns)) { ret = OB_DESERIALIZE_ERROR; }
+          else if (OB_FAIL(allocate_row_values(temporary, count, row.cells_))) {}
+          else {
+            row.count_ = count;
+            for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+              ret = NativeValueFlat::read_legacy_1d6_value(image, bytes, body + 32 + i * 16, temporary, row.cells_[i]);
+            }
+          }
+        }
+        UNUSED(projector_offset);
+      }
+      if (OB_SUCC(ret)) { ret = append_wire_row(row, reserved, reserved_count, payload); }
+      cursor = body + body_size;
+      temporary.reuse();
+    }
+    input += bytes;
+  }
+  if (OB_SUCC(ret) && expected_rows >= 0 && row_count_ != expected_rows) { ret = OB_DESERIALIZE_ERROR; }
+  if (OB_SUCC(ret)) {
+    if (row_count_ == 0) { col_count_ = columns; }
+    is_read_only_ = read_only; pos = end;
+  }
+  UNUSED(old_last_size);
+  return ret;
+}
+
+void ObRowStore::adopt_wire_rows(ObRowStore &source)
+{
+  reset();
+  blocks_ = source.blocks_; source.blocks_.reset();
+  block_size_ = source.block_size_; data_size_ = source.data_size_;
+  row_count_ = source.row_count_; col_count_ = source.col_count_;
+  last_row_size_ = source.last_row_size_; last_last_row_size_ = source.last_last_row_size_;
+  is_read_only_ = source.is_read_only_; has_big_block_ = source.has_big_block_;
+  use_compact_row_ = source.use_compact_row_;
+  source.data_size_ = 0; source.row_count_ = 0; source.col_count_ = 0;
 }
 
 DEFINE_SERIALIZE(ObRowStore)
 {
-  int ret = OB_SUCCESS;
-  int64_t count = blocks_.get_block_count();
-  if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, count))) {
-  } else {
-    const BlockInfo *block = blocks_.get_first();
-
-    while (NULL != block && OB_SUCC(ret)) {
-      // serialize data_buf_size
-      if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, block->get_curr_data_pos()))) {
-      } else {
-        // serialize block data
-        if (buf_len - pos < block->get_curr_data_pos()) {
-          ret = OB_SIZE_OVERFLOW;
-        } else {
-          MEMCPY(buf + pos, block->get_buffer_head(), block->get_curr_data_pos());
-          ret = transform_native_block(buf + pos, block->get_curr_data_pos(), use_compact_row_, true,
-                                         block->get_buffer_head());
-          if (OB_SUCC(ret)) { pos += block->get_curr_data_pos(); }
-          // serialize next block
-          block = block->get_next_block();
-        }
-      }
-    } //end while
-  }
-
-  OB_UNIS_ENCODE(block_size_);
-  OB_UNIS_ENCODE(row_count_);
-  OB_UNIS_ENCODE(col_count_);
-  OB_UNIS_ENCODE(is_read_only_);
-  OB_UNIS_ENCODE(last_row_size_);
-  OB_UNIS_ENCODE(use_compact_row_);
+  if (buf == nullptr || pos < 0 || pos > buf_len) { return OB_INVALID_ARGUMENT; }
+  int64_t body = 0;
+  int ret = write_wire_body(nullptr, 0, body, true);
+  int64_t next = pos;
+  if (OB_SUCC(ret)) { ret = serialization::encode_vi64(buf, buf_len, next, ROW_STORE_LOGICAL_V2); }
+  if (OB_SUCC(ret)) { ret = serialization::encode_vi64(buf, buf_len, next, body); }
+  if (OB_SUCC(ret) && body > buf_len - next) { ret = OB_SIZE_OVERFLOW; }
+  if (OB_SUCC(ret)) { ret = write_wire_body(buf, buf_len, next, false); }
+  if (OB_SUCC(ret)) { pos = next; }
   return ret;
 }
 
-
 DEFINE_DESERIALIZE(ObRowStore)
 {
-  int ret = OB_SUCCESS;
-  int64_t old_pos = pos;
-  int64_t block_size = 0;
-  int64_t data_buffer_size = 0;
-  int64_t block_count = 0;
-  BlockInfo *block = NULL;
-  if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &block_count))) {
-  } else {
-    reuse();
-    is_read_only_ = true;
-    for (int64_t i = 0; i < block_count && OB_SUCC(ret); ++i) {
-      if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &data_buffer_size))) {
-      } else {
-        block_size = data_buffer_size + sizeof(BlockInfo);
-        if (OB_ISNULL(block = new_block(block_size))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          OB_LOG(ERROR, "fail to allocate new block", K(ret), K(block_size));
-        } else if (block->get_remain_size() >= data_buffer_size) {
-          // copy data to store
-          MEMCPY(block->get_buffer(), buf + pos, data_buffer_size);
-          block->advance(data_buffer_size);
-          pos += data_buffer_size;
-          data_size_ += data_buffer_size;
-          if (OB_FAIL(blocks_.add_last(block))) {
-          }
-        } else {
-          ret = OB_BUF_NOT_ENOUGH;
-          OB_LOG(WARN, "block is not enough, ",
-              K(ret), "remain_size", block->get_remain_size(), K(data_buffer_size));
-        }
-      }
-    } // end for
-  }
-
-  OB_UNIS_DECODE(block_size_);
-  OB_UNIS_DECODE(row_count_);
-  OB_UNIS_DECODE(col_count_);
-  OB_UNIS_DECODE(is_read_only_);
-  OB_UNIS_DECODE(last_row_size_);
-  OB_UNIS_DECODE(use_compact_row_);
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(adjust_row_cells_reference())) {
+  if (buf == nullptr || pos < 0 || pos > data_len) { return OB_INVALID_ARGUMENT; }
+  int64_t next = pos, first = 0;
+  int ret = read_row_field(buf, data_len, next, first);
+  ObRowStore candidate(alloc_, label_, use_compact_row_);
+  candidate.ctx_id_ = ctx_id_;
+  if (OB_SUCC(ret) && first == ROW_STORE_LOGICAL_V2) {
+    int64_t length = 0;
+    if (OB_FAIL(read_row_field(buf, data_len, next, length))) {}
+    else if (!row_range(data_len, next, length)) { ret = OB_DESERIALIZE_ERROR; }
+    else {
+      const int64_t end = next + length;
+      ret = candidate.read_wire_v2(buf, end, next);
+      if (OB_SUCC(ret) && next != end) { ret = OB_DESERIALIZE_ERROR; }
     }
-  }
-  if (OB_FAIL(ret)) {
-    pos = old_pos;
-  }
+  } else if (OB_SUCC(ret) && first >= 0) {
+    ret = candidate.read_wire_1d6(buf, data_len, next, first);
+  } else if (OB_SUCC(ret)) { ret = OB_NOT_SUPPORTED; }
+  if (OB_SUCC(ret)) { adopt_wire_rows(candidate); pos = next; }
   return ret;
 }
 
 DEFINE_GET_SERIALIZE_SIZE(ObRowStore)
 {
-  int64_t count = blocks_.get_block_count();
-  int64_t len = serialization::encoded_length_vi64(count);
-  const BlockInfo *block = blocks_.get_first();
-  while (NULL != block) {
-    len += serialization::encoded_length_vi64(block->get_curr_data_pos());
-    len += block->get_curr_data_pos();
-    block = block->get_next_block();
-  }
-  OB_UNIS_ADD_LEN(block_size_);
-  OB_UNIS_ADD_LEN(row_count_);
-  OB_UNIS_ADD_LEN(col_count_);
-  OB_UNIS_ADD_LEN(is_read_only_);
-  OB_UNIS_ADD_LEN(last_row_size_);
-  OB_UNIS_ADD_LEN(use_compact_row_);
-  return len;
+  int64_t body = 0;
+  if (write_wire_body(nullptr, 0, body, true) != OB_SUCCESS) { return INT64_MAX; }
+  int64_t total = serialization::encoded_length_vi64(ROW_STORE_LOGICAL_V2);
+  if (!NativeValueFlat::add_size(total, serialization::encoded_length_vi64(body))
+      || !NativeValueFlat::add_size(total, body)) { return INT64_MAX; }
+  return total;
 }
 } //end common
 } //end oceanbase

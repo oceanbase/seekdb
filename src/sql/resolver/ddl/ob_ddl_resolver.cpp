@@ -2903,13 +2903,8 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
     int64_t rounded = default_value.get_time();
     ObTimeConverter::round_datetime(column_schema.get_data_scale(), rounded);
     DatumValue candidate = default_value;
-    ObDatum payload;
-    if (OB_FAIL(payload.deep_copy(default_value.datum_, allocator))) {
-    } else {
-      payload.set_time(rounded);
-      candidate.datum_ = payload;
-      default_value = candidate;
-    }
+    candidate.datum_.set_time(rounded);
+    default_value = candidate;
   }
   return ret;
 }

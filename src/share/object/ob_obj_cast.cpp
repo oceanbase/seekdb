@@ -9889,11 +9889,13 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
   const ObAccuracy original_accuracy = context.res_accuracy_ != nullptr
       ? *context.res_accuracy_ : ObAccuracy();
   detail::DatumCastFrame source(input), result;
+  alignas(8) char input_scratch[64];
+  ObDatum physical_input;
   // A zero-width DECIMAL has no coefficient. The wire decoder may reserve
   // one backing byte even for an empty Datum; that byte is not a coefficient
   // and must not change the scaler's missing-coefficient validation.
-  if (!input.is_null() && input.is_decimal_int() && input.datum_.len_ == 0) {
-    source.datum_.set_decimal_int_shallow(nullptr, 0);
+  if (!input.is_null() && input.is_decimal_int() && input.datum_.length() == 0) {
+    source.datum_.set_reference(nullptr, 0);
   }
   if (input.is_null()) {
     result = source;
@@ -9908,22 +9910,26 @@ int DatumValueCaster::to_type(SqlValueType target, DatumCastParams &context,
              && input.get_type_class() != ObJsonTC
              && input.get_type_class() != ObGeometryTC) {
     return OB_NOT_SUPPORTED;
-  } else if (input.datum_.ptr_ == nullptr && input.datum_.len_ != 0) {
+  } else if (OB_FAIL(input.export_legacy(physical_input, input_scratch, sizeof(input_scratch)))) {
+    // The existing cast-family and physical-width gates precede conversion.
+    // The view is synchronous; the cast frame and final output stay native.
+    return ret;
+  } else if (physical_input.ptr_ == nullptr && physical_input.len_ != 0) {
     return OB_INVALID_ARGUMENT;
   } else if (input.get_type_class() == ObNumberTC &&
-             (input.datum_.len_ < sizeof(number::ObNumber::Desc)
-              || input.datum_.len_ > number::ObNumber::MAX_BYTE_LEN
-              || input.datum_.len_ != sizeof(number::ObNumber::Desc)
+             (physical_input.len_ < sizeof(number::ObNumber::Desc)
+              || physical_input.len_ > number::ObNumber::MAX_BYTE_LEN
+              || physical_input.len_ != sizeof(number::ObNumber::Desc)
                   + sizeof(uint32_t) * input.datum_.get_number_desc().len_)) {
     return OB_INVALID_ARGUMENT;
-  } else if (input.is_decimal_int() && input.datum_.len_ != 0 && input.datum_.len_ != 4
-             && input.datum_.len_ != 8 && input.datum_.len_ != 16
-             && input.datum_.len_ != 32 && input.datum_.len_ != 64) {
+  } else if (input.is_decimal_int() && physical_input.len_ != 0 && physical_input.len_ != 4
+             && physical_input.len_ != 8 && physical_input.len_ != 16
+             && physical_input.len_ != 32 && physical_input.len_ != 64) {
     return OB_INVALID_ARGUMENT;
   } else if (input.get_type_class() != ObNumberTC && input.get_type_class() != ObStringTC
              && input.get_type_class() != ObDecimalIntTC && input.get_type_class() != ObTextTC
              && input.get_type_class() != ObJsonTC && input.get_type_class() != ObGeometryTC &&
-             (input.datum_.ptr_ == nullptr || input.datum_.len_ !=
+             (physical_input.ptr_ == nullptr || physical_input.len_ !=
               (input.get_type_class() == ObYearTC ? sizeof(uint8_t)
                : input.get_type_class() == ObDateTC || input.get_type_class() == ObMySQLDateTC
                    || input.get_type_class() == ObFloatTC

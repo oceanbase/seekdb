@@ -433,7 +433,7 @@ int deep_copy_row(
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < src.row_val_.count_; ++i) {
       const common::DatumValue &value = src.row_val_.cells_[i];
-      if (value.is_null() || (!value.is_ext_sql_array() && value.datum_.len_ <= 16)) {
+      if (value.is_null() || (!value.is_ext_sql_array() && value.datum_.length() <= 16)) {
         ret = common::DatumValueBuffer::assign_view(value, dest.row_val_.cells_, dest.capacity_, i);
       } else {
         common::DatumParameter input, owned;

@@ -11637,8 +11637,11 @@ int ObDMLResolver::estimate_values_table_stats(ObValuesTableDef &table_def)
             } else {
               for (int64_t i = 0; OB_SUCC(ret) && i < array_obj->count_ && i < compute_ndv_thredhold; i++) {
                 const DatumParameter &value = array_obj->data_[i];
-                if (OB_FAIL(add_datum_to_llc_bitmap(value.datum_, value.get_type_meta(),
-                                                     llc_bitmap, num_null))) {
+                ObDatum legacy;
+                alignas(8) char scratch[64];
+                if (OB_FAIL(value.export_legacy(legacy, scratch, sizeof(scratch)))) {
+                } else if (OB_FAIL(add_datum_to_llc_bitmap(legacy, value.get_type_meta(),
+                                                          llc_bitmap, num_null))) {
                 }
               }
             }
@@ -11653,16 +11656,25 @@ int ObDMLResolver::estimate_values_table_stats(ObValuesTableDef &table_def)
             } else {
               ret = OB_ERR_UNEXPECTED;
             }
-          } else if (OB_FAIL(add_datum_to_llc_bitmap(param_store->at(param_idx).datum_,
-                              param_store->at(param_idx).get_type_meta(), llc_bitmap, num_null))) {
+          } else {
+            const DatumParameter &value = param_store->at(param_idx);
+            ObDatum legacy;
+            alignas(8) char scratch[64];
+            if (OB_FAIL(value.export_legacy(legacy, scratch, sizeof(scratch)))) {
+            } else if (OB_FAIL(add_datum_to_llc_bitmap(legacy, value.get_type_meta(),
+                                                      llc_bitmap, num_null))) {
+            }
           }
         }
       } else if (ObValuesTableDef::ACCESS_VALUE == table_def.access_type_) {
         for (int64_t i = 0; OB_SUCC(ret) && i < table_def.row_cnt_ && i < compute_ndv_thredhold; i++) {
           int64_t param_idx = i * table_def.column_cnt_ + col_idx;
           const DatumParameter &value = table_def.access_values_.at(param_idx);
-          if (OB_FAIL(add_datum_to_llc_bitmap(value.datum_, value.get_type_meta(),
-                                               llc_bitmap, num_null))) {
+          ObDatum legacy;
+          alignas(8) char scratch[64];
+          if (OB_FAIL(value.export_legacy(legacy, scratch, sizeof(scratch)))) {
+          } else if (OB_FAIL(add_datum_to_llc_bitmap(legacy, value.get_type_meta(),
+                                                    llc_bitmap, num_null))) {
           }
         }
       }

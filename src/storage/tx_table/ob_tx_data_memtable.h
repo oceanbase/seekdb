@@ -92,7 +92,7 @@ private:
       tx_id_ = tx_id;
       for (int64_t i = 0; i < VALUE_CNT; i++) {
         values_[i].meta_.set_int();
-        values_[i].datum_.set_string(reinterpret_cast<const char *>(&tx_id_), sizeof(tx_id_));
+        values_[i].datum_.set_int(tx_id_);
       }
       rowkey_.assign(values_, VALUE_CNT);
     }

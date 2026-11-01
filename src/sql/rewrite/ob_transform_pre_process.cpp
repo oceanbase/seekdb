@@ -326,7 +326,7 @@ int ObTransformPreProcess::formalize_limit_expr(ObDMLStmt &stmt)
     int64_t limit_value = 0;
     ObRawExpr *cmp_expr = NULL;
     if (OB_FAIL(ObTransformUtils::get_expr_int_value(limit_expr,
-                                                  &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
+                                                  ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   ctx_->exec_ctx_,
                                                   ctx_->allocator_,
                                                   limit_value,
@@ -357,7 +357,7 @@ int ObTransformPreProcess::formalize_limit_expr(ObDMLStmt &stmt)
     ObConstRawExpr *double_zero_expr = NULL;
     if (OB_FAIL(ObTransformUtils::get_percentage_value(percent_expr,
                                                        &stmt,
-                                                       &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
+                                                       ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                        ctx_->exec_ctx_,
                                                        ctx_->allocator_,
                                                        limit_value,
@@ -390,7 +390,7 @@ int ObTransformPreProcess::formalize_limit_expr(ObDMLStmt &stmt)
     int64_t offset_value = 0;
     ObRawExpr *cmp_expr = NULL;
     if (OB_FAIL(ObTransformUtils::get_expr_int_value(offset_expr,
-                                                  &ctx_->exec_ctx_->get_physical_plan_ctx()->get_param_store(),
+                                                  ctx_->exec_ctx_->get_physical_plan_ctx(),
                                                   ctx_->exec_ctx_,
                                                   ctx_->allocator_,
                                                   offset_value,
@@ -2248,14 +2248,14 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
   ObSEArray<ObRawExpr*, 4> assignments_exprs;
   ObSEArray<ObRawExpr*, 4> group_param_exprs;
   ObPseudoColumnRawExpr *stmt_id_expr = NULL;
-  const ParamStore *param_store = nullptr;
+  const ObPhysicalPlanCtx *param_store = nullptr;
 
   if (OB_ISNULL(ctx_)
       || OB_ISNULL(exec_ctx = ctx_->exec_ctx_)
       || OB_ISNULL(plan_ctx = exec_ctx->get_physical_plan_ctx())
       || OB_ISNULL(session_info = ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(param_store = &plan_ctx->get_param_store())) {
+  } else if (FALSE_IT(param_store = plan_ctx)) {
     // do nothing
   } else if (OB_ISNULL(batch_stmt) ||
              OB_UNLIKELY(!batch_stmt->is_insert_stmt())) {
@@ -2272,9 +2272,11 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
   for (int64_t i = 0; OB_SUCC(ret) && i < assignment_params.count(); ++i) {
     ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(assignment_params.at(i));
     int64_t param_idx = param_expr->get_questionmark_index();
-    if (param_idx < 0 || param_idx >= param_store->count()) {
+    if (param_idx < 0 || param_idx >= param_store->get_parameter_count()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (param_store->at(param_idx).is_batch_parameters()
+    } else if (param_store->get_parameter_metadata(param_idx) == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (param_store->get_parameter_metadata(param_idx)->flag_.is_batch_parameter_
         && !has_exist_in_array(batch_stmt->get_query_ctx()->ab_param_exprs_,
                                static_cast<ObRawExpr*>(param_expr))) {
       ObPseudoColumnRawExpr *group_param_expr = nullptr;
@@ -2292,14 +2294,16 @@ int ObTransformPreProcess::transform_for_insertup_batch_stmt(ObDMLStmt *batch_st
   } else if (OB_FAIL(ObRawExprUtils::extract_params(insert_stmt->get_values_vector(), params))) {
   } else {
     common::ObIArray<ObRawExpr*> &value_vector = insert_stmt->get_values_vector();
-    const ParamStore &param_store = plan_ctx->get_param_store();
+    const ObPhysicalPlanCtx &param_store = *plan_ctx;
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
       ObPseudoColumnRawExpr *group_id = NULL;
       int64_t param_idx = param_expr->get_questionmark_index();
-      if (param_idx < 0 || param_idx >= param_store.count()) {
+      if (param_idx < 0 || param_idx >= param_store.get_parameter_count()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (!param_store.at(param_idx).is_batch_parameters()) {
+      } else if (param_store.get_parameter_metadata(param_idx) == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!param_store.get_parameter_metadata(param_idx)->flag_.is_batch_parameter_) {
         // is not batch params
       } else {
         param_expr->set_is_batch_stmt_parameter();
@@ -2349,14 +2353,16 @@ int ObTransformPreProcess::transform_for_ins_batch_stmt(ObDMLStmt *batch_stmt,
   } else if (OB_FAIL(ObRawExprUtils::extract_params(insert_stmt->get_values_vector(), params))) {
   } else {
     common::ObIArray<ObRawExpr*> &value_vector = insert_stmt->get_values_vector();
-    const ParamStore &param_store = plan_ctx->get_param_store();
+    const ObPhysicalPlanCtx &param_store = *plan_ctx;
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
       ObPseudoColumnRawExpr *group_id = NULL;
       int64_t param_idx = param_expr->get_questionmark_index();
-      if (param_idx < 0 || param_idx >= param_store.count()) {
+      if (param_idx < 0 || param_idx >= param_store.get_parameter_count()) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (!param_store.at(param_idx).is_batch_parameters()) {
+      } else if (param_store.get_parameter_metadata(param_idx) == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (!param_store.get_parameter_metadata(param_idx)->flag_.is_batch_parameter_) {
         // Not batch parameter, no need to mark
       } else {
         param_expr->set_is_batch_stmt_parameter();
@@ -2638,7 +2644,7 @@ int ObTransformPreProcess::mock_select_list_for_upd_del(ObDMLStmt &batch_stmt,
                                                         ObSelectStmt &inner_view)
 {
   int ret = OB_SUCCESS;
-  const ParamStore *param_store = nullptr;
+  const ObPhysicalPlanCtx *param_store = nullptr;
   ObExecContext *exec_ctx = nullptr;
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   ObSEArray<ObRawExpr*, 4> params;
@@ -2649,7 +2655,7 @@ int ObTransformPreProcess::mock_select_list_for_upd_del(ObDMLStmt &batch_stmt,
       || OB_ISNULL(exec_ctx = ctx_->exec_ctx_)
       || OB_ISNULL(plan_ctx = exec_ctx->get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (FALSE_IT(param_store = &plan_ctx->get_param_store())) {
+  } else if (FALSE_IT(param_store = plan_ctx)) {
     // do nothing
   } else if (OB_FAIL(batch_stmt.get_relation_exprs(related_exprs))) {
   } else if (OB_FAIL(ObRawExprUtils::extract_params(related_exprs, params))) {
@@ -2658,9 +2664,11 @@ int ObTransformPreProcess::mock_select_list_for_upd_del(ObDMLStmt &batch_stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     ObConstRawExpr *param_expr = static_cast<ObConstRawExpr *>(params.at(i));
     int64_t param_idx = param_expr->get_questionmark_index();
-    if (param_idx < 0 || param_idx >= param_store->count()) {
+    if (param_idx < 0 || param_idx >= param_store->get_parameter_count()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (param_store->at(param_idx).is_batch_parameters()
+    } else if (param_store->get_parameter_metadata(param_idx) == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (param_store->get_parameter_metadata(param_idx)->flag_.is_batch_parameter_
         && !has_exist_in_array(batch_stmt.get_query_ctx()->ab_param_exprs_,
                                static_cast<ObRawExpr*>(param_expr))) {
       ObPseudoColumnRawExpr *group_param_expr = nullptr;

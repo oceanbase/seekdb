@@ -130,15 +130,13 @@ int ObMdsScanParamHelper::build_key_range(
     common::ObNewRange &key_range)
 {
   int ret = OB_SUCCESS;
-  void *buf = allocator.alloc(sizeof(DatumValue) * MDS_SSTABLE_ROWKEY_CNT + sizeof(int64_t));
+  void *buf = allocator.alloc(sizeof(DatumValue) * MDS_SSTABLE_ROWKEY_CNT);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     auto *values = new (buf) DatumValue[MDS_SSTABLE_ROWKEY_CNT]();
-    auto *unit_id = reinterpret_cast<int64_t *>(values + MDS_SSTABLE_ROWKEY_CNT);
-    *unit_id = static_cast<int8_t>(mds_unit_id);
     values[0].meta_.set_tinyint();
-    values[0].datum_.set_string(reinterpret_cast<const char *>(unit_id), sizeof(*unit_id));
+    values[0].datum_.set_int(static_cast<int8_t>(mds_unit_id));
     values[1].meta_.set_varchar();
     values[1].set_collation_level(CS_LEVEL_IMPLICIT);
     // The descriptor is owned by allocator; udf_key retains its established
@@ -168,16 +166,14 @@ int ObMdsScanParamHelper::build_key_range(
 {
   int ret = OB_SUCCESS;
   char *buf = static_cast<char *>(allocator.alloc(
-      sizeof(DatumValue) * MDS_SSTABLE_ROWKEY_CNT * 2 + sizeof(int64_t)));
+      sizeof(DatumValue) * MDS_SSTABLE_ROWKEY_CNT * 2));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     auto *start_obj = new (buf) DatumValue[MDS_SSTABLE_ROWKEY_CNT * 2]();
     auto *end_obj = start_obj + MDS_SSTABLE_ROWKEY_CNT;
-    auto *unit_id = reinterpret_cast<int64_t *>(end_obj + MDS_SSTABLE_ROWKEY_CNT);
-    *unit_id = static_cast<int8_t>(mds_unit_id);
     start_obj[0].meta_.set_tinyint();
-    start_obj[0].datum_.set_string(reinterpret_cast<const char *>(unit_id), sizeof(*unit_id));
+    start_obj[0].datum_.set_int(static_cast<int8_t>(mds_unit_id));
     start_obj[1].set_min_value();
     end_obj[0] = start_obj[0];
     end_obj[1].set_max_value();

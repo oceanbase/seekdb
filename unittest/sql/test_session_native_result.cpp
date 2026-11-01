@@ -39,8 +39,8 @@ std::string unhex(const std::string &hex) {
   return out;
 }
 std::string wire(const DatumValue &value) {
-  int64_t size=0,pos=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(value.datum_,value.meta_,size));
-  std::string bytes(size,'\0');EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(value.datum_,value.meta_,bytes.data(),bytes.size(),pos));EXPECT_EQ(size,pos);return bytes;
+  int64_t size=0,pos=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::native_value_size(value.datum_,value.meta_,size));
+  std::string bytes(size,'\0');EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_native_value(value.datum_,value.meta_,bytes.data(),bytes.size(),pos));EXPECT_EQ(size,pos);return bytes;
 }
 struct OldRowTag {using type=ObNewRow ObExecuteResult::*;friend type result_member(OldRowTag);};
 template<typename Tag,typename Tag::type Member>struct ResultPrivateAccess {friend typename Tag::type result_member(Tag){return Member;}};
@@ -230,12 +230,12 @@ TEST(SessionNativeResult,native_get_value_borrows_stable_compatibility_scratch_a
   ASSERT_EQ(OB_SUCCESS, view.get_value(0, borrowed));
   EXPECT_EQ(INT64_MAX, borrowed.get_int());
   EXPECT_EQ(7, borrowed.get_scale());
-  const char *payload = borrowed.datum_.ptr_;
+  EXPECT_EQ(0, borrowed.datum_.length());
   native.set_int(61);
-  // The explicit legacy bridge uses per-column owner scratch, not stack bytes.
+  // The physical wrapper owns its scalar bits inline, independently of the frame.
   EXPECT_EQ(INT64_MAX, borrowed.get_int());
   ASSERT_EQ(OB_SUCCESS, view.get_value(0, borrowed));
-  EXPECT_EQ(payload, borrowed.datum_.ptr_);
+  EXPECT_EQ(0, borrowed.datum_.length());
   EXPECT_EQ(61, borrowed.get_int());
   view.set_legacy(nullptr);
   EXPECT_EQ(OB_NOT_INIT, view.get_value(0, borrowed));

@@ -1410,13 +1410,10 @@ int ObJsonUtil::cast_json_scalar_to_sql_value(ObIAllocator &owner,
       DatumValue candidate;
       candidate.meta_ = meta;
       const DatumCopyPlan plan(output_type);
-      int64_t bytes = 0;
-      int64_t position = 0;
-      char *buffer = nullptr;
-      if (OB_FAIL(plan.legacy_payload_size(converted, bytes))) {
-      } else if (bytes > 0 && (buffer = static_cast<char *>(owner.alloc(bytes))) == nullptr) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(plan.export_legacy(converted, candidate.datum_, buffer, bytes, position))) {
+      alignas(8) char scratch[64];
+      common::ObDatum physical;
+      if (OB_FAIL(plan.legacy_view(converted, physical, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, meta))) {
       } else if (converted.is_null()) {
         candidate.set_null();
       } else if (candidate.is_decimal_int() && candidate.get_scale() < 0) {

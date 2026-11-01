@@ -44,13 +44,13 @@ int ObRowkey::serialize_datums(char *buffer,int64_t size,int64_t &pos) const
   if(buffer==nullptr||size<=0)ret=OB_INVALID_ARGUMENT;
   else if(!is_legal())ret=OB_INVALID_DATA;
   for(int64_t i=0;ret==OB_SUCCESS&&i<count();++i)
-    ret=DatumParameterCodec::encode_value(get_cell(i).datum_,get_cell(i).meta_,buffer,size,pos);
+    ret=DatumParameterCodec::encode_native_value(get_cell(i).datum_,get_cell(i).meta_,buffer,size,pos);
   return ret;
 }
 int64_t ObRowkey::get_serialize_datums_size() const
 {
   int64_t result=0;
-  for(int64_t i=0;i<count();++i){int64_t size=0;if(DatumParameterCodec::value_size(get_cell(i).datum_,get_cell(i).meta_,size)!=OB_SUCCESS)return 0;result+=size;}
+  for(int64_t i=0;i<count();++i){int64_t size=0;if(DatumParameterCodec::native_value_size(get_cell(i).datum_,get_cell(i).meta_,size)!=OB_SUCCESS)return 0;result+=size;}
   return result;
 }
 int ObRowkey::deserialize(ObIAllocator &owner,const char *buffer,int64_t size,int64_t &pos)
@@ -78,7 +78,7 @@ int ObRowkey::decode(ObIAllocator &owner,const char *buffer,int64_t size,int64_t
     ret=staged.prepare_allocate(n);
     for(int64_t i=0;ret==OB_SUCCESS&&i<n;++i){
       if(get_values()!=nullptr)staged.at(i)=get_cell(i);
-      ret=DatumParameterCodec::decode_unis_value(buffer,size,next,owner,staged.at(i).datum_,staged.at(i).meta_);
+      ret=DatumParameterCodec::decode_unis_native_value(buffer,size,next,owner,staged.at(i).datum_,staged.at(i).meta_);
     }
     DatumValue *destination=get_values();
     if(ret==OB_SUCCESS&&destination==nullptr){
@@ -97,7 +97,7 @@ int ObRowkey::deserialize_datums(const char *buffer,int64_t size,int64_t &pos)
   else ret=staged.prepare_allocate(count());
   for(int64_t i=0;ret==OB_SUCCESS&&i<count();++i){
     staged.at(i)=get_cell(i);
-    ret=DatumParameterCodec::decode_unis_value(buffer,size,next,lib::this_worker().get_sql_arena_allocator(),staged.at(i).datum_,staged.at(i).meta_);
+    ret=DatumParameterCodec::decode_unis_native_value(buffer,size,next,lib::this_worker().get_sql_arena_allocator(),staged.at(i).datum_,staged.at(i).meta_);
   }
   if(ret==OB_SUCCESS){for(int64_t i=0;i<count();++i)get_cell(i)=staged.at(i);pos=next;}
   return ret;

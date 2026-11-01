@@ -710,6 +710,11 @@ cc_test(
     name = "test_session_native_values",
     linkstatic = True,
     data = [
+        "data/native-row-row-flat-v1.bin",
+        "data/native-row-row-compact-v1.bin",
+        "data/native-row-scanner-v1.bin",
+        "data/native-row-values-v1.bin",
+        "data/native-row-chunk-v1.bin",
         "data/session_values_map.golden",
         "data/session_result_values.golden",
         "data/session_switch_values.golden",

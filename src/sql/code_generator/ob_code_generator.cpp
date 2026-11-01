@@ -60,7 +60,7 @@ int ObCodeGenerator::generate_exprs(const ObLogPlan &log_plan,
         log_plan.get_optimizer_context().get_session_info(),
         exec_ctx->get_sql_ctx()->schema_guard_,
         exec_ctx->get_physical_plan_ctx()->get_original_param_cnt(),
-        param_store_->count());
+        parameter_count_);
     // init ctx for operator cg
     expr_cg.set_batch_size(phy_plan.get_batch_size());
     if (OB_FAIL(expr_cg.generate(log_plan.get_optimizer_context().get_all_exprs(),

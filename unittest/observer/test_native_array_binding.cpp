@@ -77,9 +77,9 @@ std::string literal(const DatumParameter &value)
 
 TEST(NativeArrayBinding, actual_collection_assign_and_two_elements_use_native_layout)
 {
-  // DatumValue and Obj both happen to be16 bytes. Matching stride does not
-  // make their pointer/pack/metadata and metadata/length/union layouts alike.
-  static_assert(sizeof(DatumValue) == 16, "native element layout");
+  // PL collection elements use the actual native value + physical metadata
+  // layout; no legacy sixteen-byte object image is reinterpreted here.
+  static_assert(sizeof(DatumValue) == 24, "native element layout");
   ObArenaAllocator source_owner, collection_owner, output_owner;
   DatumValueBuffer source(source_owner);
   ASSERT_EQ(OB_SUCCESS, source.reserve(2));
@@ -107,8 +107,10 @@ TEST(NativeArrayBinding, prepared_statement_numeric_values_decode_directly_to_da
 {
   ObArenaAllocator owner;
   const ObTimeZoneInfo *tz_info = nullptr;
+  // Wire widths and the request coercibility are independent of the native
+  // carrier's canonical eight-byte integer representation.
   const auto check_integer = [&](uint32_t wire_type, int64_t wire_value,
-                                 bool is_unsigned, SqlValueType expected_type) {
+                                 bool is_unsigned, SqlValueType expected_type, int64_t wire_length) {
     char bytes[sizeof(int64_t)] = {};
     MEMCPY(bytes, &wire_value, sizeof(wire_value));
     const char *native_input = bytes;
@@ -116,9 +118,9 @@ TEST(NativeArrayBinding, prepared_statement_numeric_values_decode_directly_to_da
     EXPECT_EQ(OB_SUCCESS, ObMPStmtExecute::parse_basic_param_value(
         owner, wire_type, nullptr, CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_BIN,
         native_input, tz_info, native, false, nullptr, is_unsigned));
-    EXPECT_EQ(bytes + sizeof(int64_t), native_input);
+    EXPECT_EQ(bytes + wire_length, native_input);
     EXPECT_EQ(expected_type, native.get_type());
-    EXPECT_EQ(CS_LEVEL_NUMERIC, native.get_collation_level());
+    EXPECT_EQ(CS_LEVEL_COERCIBLE, native.get_collation_level());
     switch (expected_type) {
       case ObTinyIntType:
         EXPECT_EQ(static_cast<int8_t>(wire_value), native.value_view().get_int());
@@ -149,14 +151,14 @@ TEST(NativeArrayBinding, prepared_statement_numeric_values_decode_directly_to_da
     }
   };
 
-  check_integer(MYSQL_TYPE_TINY, -12, false, ObTinyIntType);
-  check_integer(MYSQL_TYPE_TINY, 250, true, ObUTinyIntType);
-  check_integer(MYSQL_TYPE_SHORT, -1234, false, ObSmallIntType);
-  check_integer(MYSQL_TYPE_SHORT, 60000, true, ObUSmallIntType);
-  check_integer(MYSQL_TYPE_LONG, -12345678, false, ObInt32Type);
-  check_integer(MYSQL_TYPE_LONG, 4000000000LL, true, ObUInt32Type);
-  check_integer(MYSQL_TYPE_LONGLONG, -1234567890123LL, false, ObIntType);
-  check_integer(MYSQL_TYPE_LONGLONG, static_cast<int64_t>(UINT64_MAX), true, ObUInt64Type);
+  check_integer(MYSQL_TYPE_TINY, -12, false, ObTinyIntType, 1);
+  check_integer(MYSQL_TYPE_TINY, 250, true, ObUTinyIntType, 1);
+  check_integer(MYSQL_TYPE_SHORT, -1234, false, ObSmallIntType, 2);
+  check_integer(MYSQL_TYPE_SHORT, 60000, true, ObUSmallIntType, 2);
+  check_integer(MYSQL_TYPE_LONG, -12345678, false, ObInt32Type, 4);
+  check_integer(MYSQL_TYPE_LONG, 4000000000LL, true, ObUInt32Type, 4);
+  check_integer(MYSQL_TYPE_LONGLONG, -1234567890123LL, false, ObIntType, 8);
+  check_integer(MYSQL_TYPE_LONGLONG, static_cast<int64_t>(UINT64_MAX), true, ObUInt64Type, 8);
 
   const struct { uint32_t wire_type; SqlValueType expected_type; bool is_float; } float_cases[] = {
       {MYSQL_TYPE_FLOAT, ObFloatType, true},
@@ -221,8 +223,8 @@ TEST(NativeArrayBinding, prepared_statement_temporal_string_and_decimal_values_d
   EXPECT_EQ(19782, date_value.value_view().get_date()); // 2024-02-29, days since epoch
   const char datetime[] = {11, static_cast<char>(0xE8), 0x07, 2, 29,
                            12, 34, 56, 0x40, 0xE2, 0x01, 0x00};
-  const int64_t datetime_value = 19782LL * USECS_PER_DAY + 12LL * USECS_PER_HOUR +
-      34LL * USECS_PER_MINUTE + 56LL * USECS_PER_SEC + 123456;
+  const int64_t datetime_value = 19782LL * USECS_PER_DAY + 12LL * SECS_PER_HOUR * USECS_PER_SEC +
+      34LL * USECS_PER_MIN + 56LL * USECS_PER_SEC + 123456;
   DatumParameter datetime_datum = parse(MYSQL_TYPE_DATETIME, datetime, sizeof(datetime), ObDateTimeType);
   EXPECT_EQ(datetime_value, datetime_datum.value_view().get_datetime());
   DatumParameter timestamp_datum = parse(MYSQL_TYPE_TIMESTAMP, datetime, sizeof(datetime), ObTimestampType);
@@ -230,11 +232,13 @@ TEST(NativeArrayBinding, prepared_statement_temporal_string_and_decimal_values_d
   const char time[] = {12, 1, 2, 0, 0, 0, 3, 4, 5,
                        0x20, 0xA1, 0x07, 0x00};
   DatumParameter time_value = parse(MYSQL_TYPE_TIME, time, sizeof(time), ObTimeType);
-  EXPECT_EQ(-(26LL * USECS_PER_HOUR + 3LL * USECS_PER_MINUTE + 4LL * USECS_PER_SEC + 500000),
+  // Wire fields: negative, 2 days, 03:04:05 and 500000 microseconds.
+  EXPECT_EQ(-(2LL * USECS_PER_DAY + 3LL * SECS_PER_HOUR * USECS_PER_SEC +
+              4LL * USECS_PER_MIN + 5LL * USECS_PER_SEC + 500000),
             time_value.value_view().get_time());
   const char string[] = {5, 'h', 'e', 'l', 'l', 'o'};
   DatumParameter string_value = parse(MYSQL_TYPE_VARCHAR, string, sizeof(string), ObVarcharType);
-  EXPECT_EQ("hello", string_value.get_varchar());
+  EXPECT_EQ(ObString::make_string("hello"), string_value.get_varchar());
   EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, string_value.get_collation_type());
   const char decimal[] = {8, '1', '2', '3', '4', '.', '5', '0', '0'};
   DatumParameter decimal_value = parse(MYSQL_TYPE_NEWDECIMAL, decimal, sizeof(decimal), ObNumberType);
@@ -320,7 +324,7 @@ TEST(NativeArrayBinding, string_and_typed_null_are_owned_without_integer_derefer
   NativeArrayBindingTestAccess::configure(handler, arrays, row, stmt::T_INSERT);
   ASSERT_EQ(OB_SUCCESS, NativeArrayBindingTestAccess::row(handler, 0, output_owner));
   DatumParameter saved = row.at(0);
-  ASSERT_NE(input, saved.datum_.ptr_);
+  ASSERT_NE(input, saved.datum_.get_string().ptr());
   std::memset(input, '~', sizeof(input) - 1);
   ASSERT_EQ(OB_SUCCESS, NativeArrayBindingTestAccess::row(handler, 1, output_owner));
   EXPECT_TRUE(row.at(0).is_null());
@@ -344,12 +348,12 @@ TEST(NativeArrayBinding, per_cell_oom_and_invalid_position_do_not_publish_or_rea
   NativeArrayBindingTestAccess::configure(handler, arrays, row, stmt::T_INSERT);
   ObWrapperAllocator failing;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, NativeArrayBindingTestAccess::row(handler, 0, failing));
-  EXPECT_EQ(previous.datum_.ptr_, row.at(0).datum_.ptr_);
+  EXPECT_EQ(0, std::memcmp(&previous.datum_, &row.at(0).datum_, sizeof(Datum)));
   EXPECT_EQ(99, row.at(0).get_int());
   EXPECT_EQ(12, row.at(0).get_precision()); EXPECT_EQ(3, row.at(0).get_scale());
   EXPECT_EQ(OB_ERR_UNEXPECTED, NativeArrayBindingTestAccess::row(handler, -1, owner));
   EXPECT_EQ(OB_ERR_UNEXPECTED, NativeArrayBindingTestAccess::row(handler, 1, owner));
-  EXPECT_EQ(previous.datum_.ptr_, row.at(0).datum_.ptr_);
+  EXPECT_EQ(0, std::memcmp(&previous.datum_, &row.at(0).datum_, sizeof(Datum)));
 }
 
 TEST(NativeArrayBinding, actual_ce_complex_producer_remains_unsupported_before_element_read)
@@ -362,11 +366,11 @@ TEST(NativeArrayBinding, actual_ce_complex_producer_remains_unsupported_before_e
   const char *position = wire;
   DatumParameter result;
   ASSERT_EQ(OB_SUCCESS, result.set_int(99, owner));
-  const char *original = result.datum_.ptr_;
+  const Datum original = result.datum_;
   ObMPStmtExecute handler(oceanbase::share::ObGlobalContext::get_instance());
   EXPECT_EQ(OB_NOT_SUPPORTED, NativeArrayBindingTestAccess::parse_complex(
       handler, owner, type, position, result));
-  EXPECT_EQ(wire, position); EXPECT_EQ(original, result.datum_.ptr_);
+  EXPECT_EQ(wire, position); EXPECT_EQ(0, std::memcmp(&original, &result.datum_, sizeof(original)));
   EXPECT_EQ(99, result.get_int());
 }
 
@@ -497,7 +501,7 @@ TEST(NativeArrayBinding, actual_old_234_results_keep_every_metadata_flag_and_wir
         DatumValueBuffer values(owner); ASSERT_EQ(OB_SUCCESS, values.reserve(2));
         for (int64_t i = 0; i < 2; ++i) {
           std::string bytes = unhex(cases[name][i]); int64_t pos = 0; DatumValue value;
-          ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(bytes.data(), bytes.size(), pos,
+          ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(), pos,
               owner, value.datum_, value.meta_));
           ASSERT_EQ(bytes.size(), pos); ASSERT_EQ(OB_SUCCESS, values.assign_view(i, value));
         }
@@ -588,7 +592,7 @@ TEST(NativeArrayBinding, record_snapshot_and_partial_row_cleanup_do_not_mutate_c
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, NativeArrayBindingTestAccess::row(handler, 0, budget));
   ASSERT_TRUE(row.at(0).is_pl_extend());
   EXPECT_NE(source, reinterpret_cast<ObPLRecord *>(row.at(0).get_ext()));
-  EXPECT_EQ(previous.datum_.ptr_, row.at(1).datum_.ptr_); EXPECT_EQ(55, row.at(1).get_int());
+  EXPECT_EQ(0, std::memcmp(&previous.datum_, &row.at(1).datum_, sizeof(Datum))); EXPECT_EQ(55, row.at(1).get_int());
   ASSERT_EQ(OB_SUCCESS, NativeArrayBindingTestAccess::release(handler, budget, session));
   EXPECT_TRUE(row.at(0).is_null()); EXPECT_EQ(99, source->get_element()[0].get_int());
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(source_owner, root));
@@ -618,7 +622,7 @@ TEST(NativeArrayBinding, failed_record_and_cursor_clone_roll_back_descriptor_wit
     for (int allowance : {0, 1}) {
       BudgetOwner failing; failing.budget = allowance; const DatumParameter previous = row.at(0);
       EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, NativeArrayBindingTestAccess::row(handler, 0, failing));
-      EXPECT_EQ(previous.datum_.ptr_, row.at(0).datum_.ptr_); EXPECT_EQ(99, row.at(0).get_int());
+      EXPECT_EQ(0, std::memcmp(&previous.datum_, &row.at(0).datum_, sizeof(Datum))); EXPECT_EQ(99, row.at(0).get_int());
       EXPECT_TRUE(failing.live.empty());
       EXPECT_EQ(7, source_record->get_element()[0].get_int()); EXPECT_TRUE(source_cursor->isopen());
     }
@@ -647,15 +651,15 @@ TEST(NativeArrayBinding, closed_cursor_is_independently_owned_and_live_destinati
   for (int allowance : {0, 1, 2}) {
     BudgetOwner failing; failing.budget = allowance;
     DatumParameter previous; ASSERT_EQ(OB_SUCCESS, previous.set_int(55, output_owner));
-    const char *original = previous.datum_.ptr_;
+    const Datum original = previous.datum_;
     EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObUserDefinedType::clone_parameter(failing, source, previous));
-    EXPECT_EQ(original, previous.datum_.ptr_); EXPECT_EQ(55, previous.get_int());
+    EXPECT_EQ(0, std::memcmp(&original, &previous.datum_, sizeof(original))); EXPECT_EQ(55, previous.get_int());
     EXPECT_TRUE(failing.live.empty());
     EXPECT_FALSE(closed->isopen()); EXPECT_EQ(nullptr, closed->get_spi_cursor());
   }
   DatumParameter snapshot;
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::clone_parameter(output_owner, source, snapshot));
-  ASSERT_NE(source.get_ext(), snapshot.get_ext()); ASSERT_NE(source.datum_.ptr_, snapshot.datum_.ptr_);
+  ASSERT_NE(source.get_ext(), snapshot.get_ext()); ASSERT_NE(source.datum_.get_string().ptr(), snapshot.datum_.get_string().ptr());
   auto *copy = reinterpret_cast<ObPLCursorInfo *>(snapshot.get_ext());
   EXPECT_FALSE(copy->isopen()); EXPECT_EQ(nullptr, copy->get_spi_cursor());
   EXPECT_TRUE(copy->is_scrollable()); EXPECT_TRUE(copy->is_for_update()); EXPECT_TRUE(copy->has_hidden_rowid());
@@ -744,7 +748,7 @@ TEST(NativeArrayBinding, actual_old_closed_and_open_array_metadata_matches_with_
         // Old shallow assignment accepted this invalid open/no-handler object.
         // The native clone explicitly rejects it without publishing a value.
         EXPECT_EQ(OB_SUCCESS, std::stoi(golden[3])); EXPECT_EQ(OB_ERR_UNEXPECTED, ret);
-        EXPECT_EQ(previous.datum_.ptr_, row.at(0).datum_.ptr_);
+        EXPECT_EQ(0, std::memcmp(&previous.datum_, &row.at(0).datum_, sizeof(Datum)));
         EXPECT_EQ(previous.get_accuracy(), row.at(0).get_accuracy());
       } else {
         ASSERT_EQ(std::stoi(golden[3]), ret); ASSERT_TRUE(row.at(0).is_pl_extend());
@@ -779,16 +783,16 @@ TEST(NativeArrayBinding, local_copyout_descriptor_retires_before_request_owned_s
   ObMPStmtExecute handler(oceanbase::share::ObGlobalContext::get_instance());
   NativeArrayBindingTestAccess::configure(handler, arrays, row, stmt::T_ANONYMOUS_BLOCK);
   ASSERT_EQ(OB_SUCCESS, NativeArrayBindingTestAccess::row(handler, 0, request_owner));
-  const char *request_descriptor = row.at(0).datum_.ptr_;
+  const char *request_descriptor = row.at(0).datum_.get_string().ptr();
   const int64_t snapshot_address = row.at(0).get_ext();
   DatumParameter local = row.at(0), callee = local;
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(sql_owner, callee, local));
-  EXPECT_NE(request_descriptor, local.datum_.ptr_); EXPECT_EQ(snapshot_address, local.get_ext());
+  EXPECT_NE(request_descriptor, local.datum_.get_string().ptr()); EXPECT_EQ(snapshot_address, local.get_ext());
   auto *snapshot = reinterpret_cast<ObPLRecord *>(snapshot_address);
   EXPECT_EQ(77, snapshot->get_element()[0].get_int());
   DatumParameterArray::release_owned(local, sql_owner); // Descriptor only; shared execution pointee stays alive.
   sql_owner.reset();
-  EXPECT_EQ(request_descriptor, row.at(0).datum_.ptr_);
+  EXPECT_EQ(request_descriptor, row.at(0).datum_.get_string().ptr());
   EXPECT_EQ(77, snapshot->get_element()[0].get_int());
   ASSERT_EQ(OB_SUCCESS, NativeArrayBindingTestAccess::release(handler, request_owner, session));
   EXPECT_EQ(77, original->get_element()[0].get_int());
@@ -840,7 +844,7 @@ TEST(NativeArrayBinding, actual_fresh_store_and_three_column_middle_failure_can_
   BudgetOwner failing; failing.budget = INT_MAX; failing.reject_size = text.size();
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, NativeArrayBindingTestAccess::row(handler, 1, failing));
   ASSERT_TRUE(row.at(0).is_pl_extend()); EXPECT_NE(roots[0].get_ext(), row.at(0).get_ext());
-  EXPECT_EQ(previous_middle.datum_.ptr_, row.at(1).datum_.ptr_);
+  EXPECT_EQ(0, std::memcmp(&previous_middle.datum_, &row.at(1).datum_, sizeof(Datum)));
   // Last column is not updated this iteration: it must be the retired NULL,
   // never a stale source-owned PL pointer scanned by release_arraybinding_row.
   EXPECT_TRUE(row.at(2).is_null()); EXPECT_FALSE(row.at(2).is_pl_extend());

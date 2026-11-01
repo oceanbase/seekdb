@@ -160,7 +160,10 @@ int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
         }
       } else {
         Datum adjusted;
-        OZ(expr.get_datum_copy_plan().import_legacy(res_obj.datum_, adjusted));
+        alignas(8) char result_scratch[64];
+        ObDatum result_view;
+        OZ(res_obj.export_legacy(result_view, result_scratch, sizeof(result_scratch)));
+        OZ(expr.get_datum_copy_plan().import_legacy(result_view, adjusted));
         if (is_lob_storage(res_obj.get_type())) {
           OZ(ob_adjust_lob_datum(ctx.exec_ctx_, adjusted, res_obj.get_meta(), expr.obj_meta_,
                                 ctx.exec_ctx_.get_allocator(), adjusted));

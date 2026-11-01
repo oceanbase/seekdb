@@ -20,6 +20,7 @@
 #include <string>
 
 #include "ob_vector_index_util.h"
+#include "common/datum/datum_copy_plan.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_sched_job_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -5603,8 +5604,8 @@ int ObVecExtraInfo::extra_infos_to_buf(ObIAllocator &allocator, const ObVecExtra
   return ret;
 }
 
-// The wire layout is unchanged. Returned values borrow the encoded buffer; callers
-// retaining scalars beyond this buffer copy them into their native row/key owner.
+// The wire layout is unchanged. Fixed scalars are loaded inline; variable
+// references borrow the encoded buffer until the caller's retaining clone.
 int ObVecExtraInfo::extra_buf_to_values(const char *buf, int64_t data_len,
                                       int64_t extra_column_count, DatumValue *values,
                                       const ObIArray<int64_t> *extra_in_rowkey_idxs_)
@@ -5644,9 +5645,9 @@ int ObVecExtraInfo::extra_buf_to_values(const char *buf, int64_t data_len,
           if (len < 0 || pos > data_len - len) {
             ret = OB_INVALID_DATA;
           } else {
-            value.datum_.ptr_ = buf + pos;
-            value.datum_.pack_ = len;
-            pos += len;
+            const ObDatum physical(buf + pos, len, false);
+            ret = value.assign_legacy_borrowed(physical, value.get_meta());
+            if (OB_SUCC(ret)) { pos += len; }
           }
         }
       }
@@ -5751,7 +5752,24 @@ int ObVecExtraInfoObj::from_datum(const ObDatum &datum, const common::SqlTypeMet
 
 int ObVecExtraInfoObj::from_value(const DatumValue &value, ObIAllocator *allocator)
 {
-  return from_datum(value.datum_, value.meta_, allocator);
+  int ret = OB_SUCCESS;
+  if (value.is_null() || !ObVecExtraInfo::is_obj_type_supported(value.get_type())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    // This endpoint borrows the stable source when allocator is absent. The
+    // scalar view points at its active inline member, never a local scratch.
+    SqlTypeMeta physical_meta = value.meta_;
+    // Enum/Set use the same physical unsigned slot. This view needs no labels
+    // and does not replace their original metadata at the consumer boundary.
+    if (value.get_type() == ObEnumType || value.get_type() == ObSetType) {
+      physical_meta.set_uint64();
+    }
+    const DatumCopyPlan plan(physical_meta, ObAccuracy());
+    ObDatum physical;
+    if (OB_FAIL(plan.borrow_legacy(value.datum_, physical))) {
+    } else { ret = from_datum(physical, value.meta_, allocator); }
+  }
+  return ret;
 }
 
 int ObVecExtraInfoObj::from_vector(

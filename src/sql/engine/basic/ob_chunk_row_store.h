@@ -37,7 +37,7 @@ namespace sql
 // All row must have same cell count and  projector.
 class ObChunkRowStore
 {
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 public:
   enum STORE_MODE {           /* e.g. [0, 1, 2] with projector (0, 2) */
      WITHOUT_PROJECTOR = 0,   /* store [0, 2]    get [0, 2] */
@@ -104,7 +104,6 @@ public:
     int add_row(const common::ObNewRow &row, const int64_t row_size, uint32_t row_extend_size,
                 StoredRow **stored_row = NULL);
     int copy_row(const StoredRow *stored_row);
-    int gen_unswizzling_payload(char *unswizzling_payload, uint32 size);
     int unswizzling();
     int swizzling(int64_t *col_cnt);
     inline bool magic_check() { return MAGIC == magic_; }
@@ -433,6 +432,9 @@ public:
       K_(row_cnt), K_(file_size));
 
 private:
+  // v2 transports logical cells; v1 is the accepted 1d6 bounded image reader.
+  int deserialize_body(const char *buf, int64_t length, int64_t &pos, int64_t version);
+  int append_decoded_rows(ObChunkRowStore &candidate);
   static int get_timeout(int64_t &timeout_ms);
   void *alloc_blk_mem(const int64_t size, const bool for_iterator);
   void free_blk_mem(void *mem, const int64_t size = 0);

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_raw_expr_printer.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_json_param_type.h"
@@ -34,6 +35,7 @@ ObRawExprPrinter::ObRawExprPrinter()
       only_column_namespace_(false),
       tz_info_(NULL),
       param_store_(NULL),
+      parameter_context_(nullptr),
       schema_guard_(NULL),
       print_cte_(false)
 {
@@ -49,6 +51,7 @@ ObRawExprPrinter::ObRawExprPrinter(char *buf, int64_t buf_len, int64_t *pos, ObS
       tz_info_(NULL),
       print_params_(print_params),
       param_store_(param_store),
+      parameter_context_(nullptr),
       schema_guard_(schema_guard),
       print_cte_(false)
 {
@@ -68,6 +71,7 @@ void ObRawExprPrinter::init(char *buf, int64_t buf_len, int64_t *pos, ObSchemaGe
   schema_guard_ = schema_guard;
   print_params_ = print_params;
   param_store_ = param_store;
+  parameter_context_ = nullptr;
 }
 
 int ObRawExprPrinter::do_print(ObRawExpr *expr, ObStmtScope scope, bool only_column_namespace, bool print_cte)
@@ -239,6 +243,26 @@ int ObRawExprPrinter::print(ObConstRawExpr *expr)
   if (OB_ISNULL(buf_) || OB_ISNULL(pos_) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr->export_value(value, scratch, sizeof(scratch)))) {
+  } else if (parameter_context_ != nullptr && T_QUESTIONMARK == expr->get_expr_type()) {
+    int64_t index = OB_INVALID_INDEX;
+    ObDatum legacy;
+    alignas(8) char parameter_scratch[64];
+    DatumValue parameter;
+    if (OB_FAIL(expr->get_questionmark_index(index))) {
+    } else {
+      const DatumParameterMetadata *attributes = parameter_context_->get_parameter_metadata(index);
+      if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else if (OB_FAIL(parameter_context_->export_runtime_parameter_legacy(index, legacy,
+              parameter_scratch, sizeof(parameter_scratch)))) {
+      } else if (OB_FAIL(parameter.assign_legacy_borrowed(legacy, attributes->type_meta_))) {
+      } else if (parameter.is_datetime()) {
+        int32_t date = 0;
+        if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, "%s '", LITERAL_PREFIX_DATE))) {
+        } else if (OB_FAIL(ObTimeConverter::datetime_to_date(parameter.get_datetime(), nullptr, date))) {
+        } else if (OB_FAIL(ObTimeConverter::date_to_str(date, buf_, buf_len_, *pos_))) {
+        } else { ret = databuff_printf(buf_, buf_len_, *pos_, "'"); }
+      } else { ret = parameter.print_sql_literal(buf_, buf_len_, *pos_, print_params_); }
+    }
   } else if (OB_NOT_NULL(param_store_) && T_QUESTIONMARK == expr->get_expr_type()) {
     int64_t idx = expr->get_questionmark_index();
     CK (0 <= idx && idx < param_store_->count());
@@ -313,6 +337,7 @@ int ObRawExprPrinter::print(ObQueryRefRawExpr *expr)
                                            schema_guard_,
                                            print_params_,
                                            param_store_);
+          stmt_printer.bind_runtime_parameters(parameter_context_);
           if (print_cte_) {
             stmt_printer.enable_print_temp_table_as_cte(); 
           }

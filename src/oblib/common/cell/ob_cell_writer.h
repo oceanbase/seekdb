@@ -87,6 +87,8 @@ public:
   ObCellWriter();
   virtual ~ObCellWriter() {}
   int init(char *buf, int64_t size, const ObCompactStoreType store_type);
+  // clone_scalar remains the caller-owned 16-byte slot for short references.
+  // Native scalar clones are inline and do not point into that slot.
   int append(uint64_t column_id, const DatumValue &obj, DatumValue *clone_obj = NULL, char *clone_scalar = NULL);
   int append(const DatumValue &obj);
   int extend_buf(char *buf, int64_t size);

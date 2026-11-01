@@ -94,7 +94,11 @@ void expect_literal(const ObString &hex, const char *expected)
   ASSERT_EQ(OB_SUCCESS, ObExprDesHexStr::deserialize_hex_cstr(hex.ptr(), hex.length(), allocator, value));
   char result[512] = {};
   int64_t pos = 0;
-  ASSERT_EQ(OB_SUCCESS, value.print_plain_str_literal(result, sizeof(result), pos));
+  // The captured string expectations are quoted literals; the plain-text
+  // printer intentionally omits quotes, independently of hex decoding.
+  ASSERT_EQ(OB_SUCCESS, value.is_string_type()
+      ? value.print_varchar_literal(result, sizeof(result), pos)
+      : value.print_plain_str_literal(result, sizeof(result), pos));
   EXPECT_STREQ(expected, result);
 }
 } // namespace
@@ -204,8 +208,8 @@ TEST(DesHexStr, legacy_date_lob_decimal_int_and_ext_wire_cases)
   EXPECT_EQ(ObDateType, decoded.get_type());
   EXPECT_EQ(0, decoded.get_date());
 
-  // LOB text values use the normal serialized ObString payload. Plain
-  // rendering is type-specific in DatumValue and should quote the content.
+  // LOB text values use the normal serialized ObString payload. The
+  // varchar-literal printer quotes it; the plain printer returns its text.
   meta.set_type(ObLongTextType);
   meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
   pos = 0;
@@ -214,8 +218,11 @@ TEST(DesHexStr, legacy_date_lob_decimal_int_and_ext_wire_cases)
   ObString lob_hex = to_hex(allocator, ObString(static_cast<int32_t>(pos), wire));
   ASSERT_EQ(OB_SUCCESS, ObExprDesHexStr::deserialize_hex_cstr(lob_hex.ptr(), lob_hex.length(), allocator, decoded));
   result_pos = 0;
-  ASSERT_EQ(OB_SUCCESS, decoded.print_plain_str_literal(result, sizeof(result), result_pos));
+  ASSERT_EQ(OB_SUCCESS, decoded.print_varchar_literal(result, sizeof(result), result_pos));
   EXPECT_STREQ("'lob text'", result);
+  result_pos = 0;
+  ASSERT_EQ(OB_SUCCESS, decoded.print_plain_str_literal(result, sizeof(result), result_pos));
+  EXPECT_STREQ("lob text", result);
 
   // DecimalInt protocol is val_len, scale, then raw coefficient bytes.
   // This fixture uses the protocol-defined 8-byte coefficient representation.

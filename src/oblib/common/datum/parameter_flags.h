@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
 
@@ -67,8 +69,13 @@ struct ParamFlag
       uint8_t reserved_ : 7;
     };
   };
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION(1);
 };
+
+static_assert(!std::is_polymorphic<ParamFlag>::value,
+              "Parameter flags do not require dynamic dispatch");
+static_assert(sizeof(ParamFlag) == 2 && alignof(ParamFlag) == 1,
+              "Parameter flags contain only their two logical flag bytes");
 
 } // namespace common
 } // namespace oceanbase

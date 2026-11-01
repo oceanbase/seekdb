@@ -6,6 +6,7 @@
 #include "storage/lob/ob_lob_persistent_iterator.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
+#include "storage/tx_table/ob_tx_data_memtable.h"
 #include "common/datum/datum_parameter_codec.h"
 #include "common/datum/datum_value_projection.h"
 #include <gtest/gtest.h>
@@ -56,16 +57,16 @@ template<typename T>std::string wire(const T &value)
 }
 std::string wire_value(const DatumValue &value)
 {
-  int64_t size=0;int ret=DatumParameterCodec::value_size(value.datum_,value.meta_,size);
+  int64_t size=0;int ret=DatumParameterCodec::native_value_size(value.datum_,value.meta_,size);
   if(ret!=OB_SUCCESS)return "ERROR"+std::to_string(ret);
   std::string bytes(size,'\0');int64_t pos=0;
-  ret=DatumParameterCodec::encode_value(value.datum_,value.meta_,bytes.data(),size,pos);
+  ret=DatumParameterCodec::encode_native_value(value.datum_,value.meta_,bytes.data(),size,pos);
   return ret==0?hex(bytes.data(),pos):"ERROR"+std::to_string(ret);
 }
 DatumValue value_from(const std::string &input,ObIAllocator &owner)
 {
   const auto bytes=unhex(input);DatumValue output;int64_t pos=0;
-  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(bytes.data(),bytes.size(),pos,owner,output.datum_,output.meta_));
+  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(bytes.data(),bytes.size(),pos,owner,output.datum_,output.meta_));
   EXPECT_EQ(bytes.size(),pos);return output;
 }
 void key_from(const std::string &input,ObIAllocator &owner,ObStoreRowkey &output)
@@ -189,6 +190,62 @@ TEST(NativeStorageRowkeyConsumers, storage_plain_and_enhanced_projections_match_
       DatumValue output=value_from(fields[4],owner);const int ret=std::string(kind)=="ENHANCE"?datum.to_value_view(meta,output)
           :project_datum_value_view(datum,meta,ObDatum::get_sql_value_datum_map_type(meta.get_type()),output.meta_,output,true);
       EXPECT_EQ(std::stoi(fields[5]),ret);EXPECT_EQ(fields[6],wire_value(output));
+    }
+  }
+}
+
+struct TxDataPreprocessedTag {
+  using type = bool ObTxDataMemtable::*;
+  friend type access(TxDataPreprocessedTag);
+};
+struct TxDataInsertedCountTag {
+  using type = int64_t ObTxDataMemtable::*;
+  friend type access(TxDataInsertedCountTag);
+};
+template struct PrivateAccess<TxDataPreprocessedTag, &ObTxDataMemtable::pre_process_done_>;
+template struct PrivateAccess<TxDataInsertedCountTag, &ObTxDataMemtable::inserted_cnt_>;
+
+TEST(NativeStorageRowkeyConsumers, tx_data_split_keys_are_inline_integers_consumable_by_storage)
+{
+  // Supply the already-preprocessed sorted list expected by get_split_ranges;
+  // this case exercises the real split/row-key/storage-conversion path.
+  ObTxData transactions[4];
+  ObTxDataMemtable memtable;
+  const int64_t ids[] = {11, 37, 80, 113};
+  for (int64_t i = 0; i < 4; ++i) {
+    transactions[i].tx_id_ = oceanbase::transaction::ObTransID(ids[i]);
+    transactions[i].sort_list_node_.next_ = i + 1 < 4 ? &transactions[i + 1] : nullptr;
+  }
+  memtable.get_sorted_list_head()->next_ = &transactions[0];
+  memtable.*access(TxDataPreprocessedTag{}) = true;
+  memtable.*access(TxDataInsertedCountTag{}) = 4;
+  ObStoreRange input;
+  ObSEArray<ObStoreRange, 2> ranges;
+  ASSERT_EQ(OB_SUCCESS, memtable.get_split_ranges(input, 2, ranges));
+  ASSERT_EQ(2, ranges.count());
+
+  // Bounds belong to the memtable's assigned row keys, not the source nodes.
+  for (int64_t i = 0; i < 4; ++i) {
+    transactions[i].tx_id_ = oceanbase::transaction::ObTransID(900 + i);
+  }
+  const int64_t expected[2][2] = {{0, 37}, {37, INT64_MAX}};
+  ObArenaAllocator owner;
+  ObDatumRow row;
+  ASSERT_EQ(OB_SUCCESS, row.init(owner, 1));
+  for (int64_t i = 0; i < ranges.count(); ++i) {
+    EXPECT_TRUE(ranges.at(i).is_left_open());
+    EXPECT_TRUE(ranges.at(i).is_right_closed());
+    const ObStoreRowkey *keys[] = {&ranges.at(i).get_start_key(), &ranges.at(i).get_end_key()};
+    for (int64_t j = 0; j < 2; ++j) {
+      SCOPED_TRACE(i * 2 + j);
+      ASSERT_EQ(1, keys[j]->get_value_count());
+      const DatumValue &value = keys[j]->get_cell(0);
+      EXPECT_EQ(ObIntType, value.get_type());
+      EXPECT_EQ(0U, value.datum_.length());
+      EXPECT_EQ(expected[i][j], value.get_int());
+      ASSERT_EQ(OB_SUCCESS, ObReadRow::iterate_row_key(*keys[j], row));
+      EXPECT_EQ(static_cast<uint32_t>(sizeof(int64_t)), row.storage_datums_[0].len_);
+      EXPECT_EQ(expected[i][j], row.storage_datums_[0].get_int());
     }
   }
 }

@@ -324,17 +324,39 @@ int ObSelectIntoOp::init_env_common()
   alignas(8) char scratch[64];
   if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
-                 MY_SPEC.outfile_name_, MY_SPEC.outfile_name_meta_, option.datum_, scratch, sizeof(scratch)))) {
-  } else if (OB_FALSE_IT(option.meta_ = MY_SPEC.outfile_name_meta_)) {
-  } else if (OB_FALSE_IT(resolved.assign_value(option))) {
-  } else if (OB_FAIL(ObSQLUtils::get_param_value(option, phy_plan_ctx->get_param_store(), resolved, need_check))) {
-  } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), resolved.value_view().get_varchar(), file_name_))) {
-  } else if (OB_FAIL(calc_outfile_path())) {
-  } else if (OB_FAIL(check_has_lob_or_json())) {
-  } else if (has_coll_ && MY_SPEC.into_type_ == T_INTO_VARIABLES) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "select array/map into variables");
+  } else if (OB_FAIL(option.assign_native_borrowed(MY_SPEC.outfile_name_, MY_SPEC.outfile_name_meta_))) {
+  } else {
+    resolved.assign_value(option);
+    if (option.is_unknown()) {
+      if (!phy_plan_ctx->native_parameters_ready()) {
+        ret = ObSQLUtils::get_param_value(option, phy_plan_ctx->get_parameter_inputs(), resolved, need_check);
+      } else {
+        int64_t index = -1;
+        ObDatum physical;
+        if (OB_FAIL(option.get_unknown(index))) {
+        } else if (index < 0 || index >= phy_plan_ctx->get_parameter_count()) {
+          ret = OB_ERR_ILLEGAL_INDEX;
+        } else {
+          const DatumParameterMetadata *attributes = phy_plan_ctx->get_parameter_metadata(index);
+          if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+          else if (OB_FAIL(phy_plan_ctx->export_runtime_parameter_legacy(index, physical, scratch, sizeof(scratch)))) {
+          } else if (OB_FAIL(resolved.assign_legacy_borrowed(physical, attributes->type_meta_))) {
+          } else {
+            resolved.set_metadata(*attributes);
+            need_check = attributes->flag_.need_to_check_bool_value_;
+            if (resolved.is_nop_value()) { ret = OB_ERR_NOP_VALUE; }
+          }
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), resolved.value_view().get_varchar(), file_name_))) {
+    } else if (OB_FAIL(calc_outfile_path())) {
+    } else if (OB_FAIL(check_has_lob_or_json())) {
+    } else if (has_coll_ && MY_SPEC.into_type_ == T_INTO_VARIABLES) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "select array/map into variables");
+    }
   }
   return ret;
 }

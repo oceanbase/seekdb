@@ -85,7 +85,7 @@ int ObStorageColumnSchema::deep_copy_default_val(ObIAllocator &allocator,const D
   Datum owned;
   SqlTypeMeta meta=value.meta_;
   if (value.is_null() && !meta.is_null()) { meta.set_null(); }
-  const int ret=DatumParameterCodec::import_schema_native_value(value.datum_,meta,allocator,owned);
+  const int ret=DatumParameterCodec::clone_schema_native_value(value.datum_,meta,allocator,owned);
   if (ret==OB_SUCCESS) {
     clear_default_value(allocator);
     orig_default_value_=owned;
@@ -110,9 +110,9 @@ int ObStorageColumnSchema::deep_copy_default_datum(ObIAllocator &allocator,const
 int ObStorageColumnSchema::export_orig_default_value(DatumValue &output,void *scratch,int64_t capacity) const
 {
   ObDatum view;
-  const int ret=DatumParameterCodec::export_schema_legacy_value(
+  int ret=DatumParameterCodec::export_schema_legacy_value(
       orig_default_value_,orig_default_meta_,view,scratch,capacity);
-  if (ret==OB_SUCCESS) { output=DatumValue(view,orig_default_meta_); }
+  if (ret==OB_SUCCESS) { ret=output.assign_legacy_borrowed(view,orig_default_meta_); }
   return ret;
 }
 int ObStorageColumnSchema::copy_orig_default_value(DatumValue &output,ObIAllocator &owner) const

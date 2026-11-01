@@ -52,7 +52,7 @@ void check_fixture(const char *path, int value_count, int pair_count)
     if (f[0] == "V") {
       ASSERT_EQ(8, f.size()); ASSERT_EQ(values.size(), std::stoi(f[1]));
       const auto wire = unhex(f[3]); int64_t pos = 0; DatumValue value;
-      ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(wire.data(), wire.size(), pos, arena, value.datum_, value.meta_));
+      ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(wire.data(), wire.size(), pos, arena, value.datum_, value.meta_));
       ASSERT_EQ(wire.size(), pos); values.push_back(value);
       for (int i : {4, 6}) {
         uint64_t hash = 0;
@@ -123,7 +123,7 @@ DatumParameter integer(ObIAllocator &arena, int64_t n) {
 TEST(TypedDatum, empty_decimal_coefficient_is_zero) {
   ObArenaAllocator arena;
   DatumValue zero; zero.meta_.set_decimal_int(); zero.meta_.set_scale(0);
-  zero.datum_.set_decimal_int_shallow(nullptr, 0);
+  zero.datum_.set_reference(nullptr, 0);
   for (int64_t n : {-1, 0, 1}) {
     const DatumValue other = integer(arena, n).value_view();
     int cmp = 99; bool equal = false;
@@ -133,7 +133,7 @@ TEST(TypedDatum, empty_decimal_coefficient_is_zero) {
   }
   int32_t coefficient = 0;
   DatumValue concrete; concrete.meta_ = zero.meta_;
-  concrete.datum_.set_decimal_int_shallow(reinterpret_cast<const ObDecimalInt *>(&coefficient), sizeof(coefficient));
+  concrete.datum_.set_reference(reinterpret_cast<const ObDecimalInt *>(&coefficient), sizeof(coefficient));
   for (int scale : {-3, 0, 6}) {
     concrete.meta_.set_scale(scale); int cmp = 99;
     ASSERT_EQ(OB_SUCCESS, compare_datum_values(zero, concrete, cmp)); EXPECT_EQ(0, cmp);
@@ -147,8 +147,9 @@ TEST(TypedDatum, cloned_constants_own_payload_and_preserve_metadata) {
   str.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
   ASSERT_EQ(OB_SUCCESS, clone_typed_value(original_scalar, scalar, destination));
   ASSERT_EQ(OB_SUCCESS, clone_typed_value(str.value_view(), text, destination));
-  EXPECT_NE(original_scalar.datum_.ptr_, scalar.datum_.ptr_);
-  EXPECT_NE(str.datum_.ptr_, text.datum_.ptr_);
+  EXPECT_NE(&original_scalar.datum_, &scalar.datum_);
+  EXPECT_EQ(0u, scalar.datum_.length());
+  EXPECT_NE(static_cast<const char *>(str.datum_.get_reference()), static_cast<const char *>(text.datum_.get_reference()));
   EXPECT_EQ(str.get_meta(), text.meta_);
   source.reset();
   EXPECT_EQ(123, scalar.datum_.get_int()); EXPECT_EQ(ObString("owned payload"), text.datum_.get_string());
@@ -160,14 +161,13 @@ TEST(TypedDatum, cloned_sql_array_has_independent_elements) {
   ObArenaAllocator source, destination;
   DatumParameter array; SqlTypeMeta meta; meta.set_ext(); meta.set_extend_type(T_EXT_SQL_ARRAY);
   array.set_type_meta(meta);
-  ASSERT_EQ(OB_SUCCESS, array.alloc_datum_reserved_buff(meta, -1, source));
   auto *elements = DatumParameterArray::alloc(source, 2); ASSERT_NE(nullptr, elements);
   elements->data_[0] = integer(source, 77);
   ASSERT_EQ(OB_SUCCESS, elements->data_[1].set_varchar(ObString("array value"), source));
-  array.set_array_address(elements);
+  ASSERT_EQ(OB_SUCCESS,array.set_array_address(elements,source));
   DatumValue copy; ASSERT_EQ(OB_SUCCESS, clone_typed_value(array.value_view(), copy, destination));
-  const auto *owned = reinterpret_cast<const DatumParameterArray *>(copy.datum_.get_int());
-  EXPECT_NE(elements, owned); EXPECT_NE(elements->data_[0].datum_.ptr_, owned->data_[0].datum_.ptr_);
+  const auto *owned = reinterpret_cast<const DatumParameterArray *>(copy.get_ext());
+  EXPECT_NE(elements, owned); EXPECT_NE(&elements->data_[0].datum_, &owned->data_[0].datum_);
   source.reset();
   EXPECT_EQ(77, owned->data_[0].get_int()); EXPECT_EQ(ObString("array value"), owned->data_[1].get_string());
   EXPECT_FALSE(can_compare_datum_values(copy, copy));
@@ -175,7 +175,21 @@ TEST(TypedDatum, cloned_sql_array_has_independent_elements) {
 TEST(TypedDatum, invalid_scalar_views_are_rejected) {
   ObArenaAllocator arena;
   DatumValue valid = integer(arena, 3).value_view(), invalid = valid;
-  invalid.datum_.set_string(ObString());
+  // An untagged native empty Reference is the same valid inline-zero bits;
+  // exercise a genuinely malformed scalar shape instead of that legal value.
+  char short_scalar[7] = {};
+  ASSERT_EQ(OB_SUCCESS, invalid.datum_.set_reference(short_scalar, sizeof(short_scalar)));
+  // The checked old-ABI importer must still reject NULL scalar payload views,
+  // including the old empty-string-shaped fixture, without publishing a value.
+  for (uint32_t length : {0U, static_cast<uint32_t>(sizeof(int64_t))}) {
+    ObDatum old_invalid;
+    old_invalid.ptr_ = nullptr; old_invalid.pack_ = length;
+    DatumValue unchanged = valid;
+    const Datum saved = unchanged.datum_;
+    EXPECT_EQ(OB_INVALID_ARGUMENT, unchanged.assign_legacy_borrowed(old_invalid, valid.meta_));
+    EXPECT_EQ(0, MEMCMP(&saved, &unchanged.datum_, sizeof(saved)));
+    EXPECT_EQ(valid.meta_, unchanged.meta_);
+  }
   EXPECT_FALSE(can_compare_datum_values(invalid, valid));
   int cmp = 99; EXPECT_EQ(OB_NOT_SUPPORTED, compare_datum_values(invalid, valid, cmp));
   uint64_t hash = 42; EXPECT_EQ(OB_INVALID_ARGUMENT, hash_datum_value(invalid, 0, hash));
@@ -244,9 +258,12 @@ TEST(TypedDatum, native_number_and_extended_constant_snapshots_outlive_source_ow
   EXPECT_EQ(static_cast<int64_t>(ObActionFlag::OP_DEFAULT_NOW_FLAG),marker.get_ext()); EXPECT_EQ(17,marker.get_val_len());
   EXPECT_EQ(123,unknown.get_unknown());
   RejectAllocator reject;
-  const SqlTypeMeta previous=number.get_meta(); const char *bytes=number.datum_.ptr_;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,number.set_bool(true,reject));
-  EXPECT_EQ(previous,number.get_meta()); EXPECT_EQ(bytes,number.datum_.ptr_);
+  const SqlTypeMeta previous=number.get_meta(); const char *bytes=static_cast<const char *>(number.datum_.get_reference());
+  DatumValue inline_flag;
+  ASSERT_EQ(OB_SUCCESS, inline_flag.set_bool(true,reject));
+  EXPECT_TRUE(inline_flag.get_bool());
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,number.set_varchar(ObString("replacement"),reject));
+  EXPECT_EQ(previous,number.get_meta()); EXPECT_EQ(bytes,static_cast<const char *>(number.datum_.get_reference()));
 }
 TEST(TypedDatum, ast_binary_equality_keeps_trailing_spaces_and_numeric_coercion) {
   ObArenaAllocator owner;
@@ -279,9 +296,13 @@ TEST(TypedDatum, native_literal_scalar_widths_and_failed_replacement) {
   ASSERT_EQ(OB_SUCCESS, date.set_date(-1234, owner));
   ASSERT_EQ(OB_SUCCESS, year.set_year(99, owner));
   ASSERT_EQ(OB_SUCCESS, flag.set_tinyint(-2, owner));
-  EXPECT_EQ(4, date.datum_.len_); EXPECT_EQ(-1234, date.get_date());
-  EXPECT_EQ(1, year.datum_.len_); EXPECT_EQ(99, year.get_year());
-  EXPECT_EQ(8, flag.datum_.len_); int8_t tiny=0;
+  alignas(8) char scratch[8]; ObDatum physical;
+  ASSERT_EQ(OB_SUCCESS,date.export_legacy(physical,scratch,sizeof(scratch)));
+  EXPECT_EQ(4,physical.len_); EXPECT_EQ(0u,date.datum_.length()); EXPECT_EQ(-1234,date.get_date());
+  ASSERT_EQ(OB_SUCCESS,year.export_legacy(physical,scratch,sizeof(scratch)));
+  EXPECT_EQ(1,physical.len_); EXPECT_EQ(0u,year.datum_.length()); EXPECT_EQ(99,year.get_year());
+  ASSERT_EQ(OB_SUCCESS,flag.export_legacy(physical,scratch,sizeof(scratch)));
+  EXPECT_EQ(8,physical.len_); EXPECT_EQ(0u,flag.datum_.length()); int8_t tiny=0;
   ASSERT_EQ(OB_SUCCESS, flag.get_tinyint(tiny)); EXPECT_EQ(-2, tiny);
   {
     int64_t coefficient = -12345;
@@ -293,9 +314,11 @@ TEST(TypedDatum, native_literal_scalar_widths_and_failed_replacement) {
   ASSERT_EQ(OB_SUCCESS, decimal.print_sql_literal(text, sizeof(text), pos));
   EXPECT_EQ("-12.345", std::string(text, pos));
   RejectAllocator reject;
-  const char *previous = decimal.datum_.ptr_;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, decimal.set_int(99, reject));
-  EXPECT_EQ(previous, decimal.datum_.ptr_); EXPECT_EQ(3, decimal.get_scale());
+  const char *previous = static_cast<const char *>(decimal.datum_.get_reference());
+  const int64_t replacement = 99;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, decimal.set_decimal_int(sizeof(replacement), 3,
+      reinterpret_cast<const ObDecimalInt *>(&replacement), reject));
+  EXPECT_EQ(previous, static_cast<const char *>(decimal.datum_.get_reference())); EXPECT_EQ(3, decimal.get_scale());
   pos=0; ASSERT_EQ(OB_SUCCESS, decimal.print_sql_literal(text, sizeof(text), pos));
   EXPECT_EQ("-12.345", std::string(text, pos));
 }
@@ -316,8 +339,8 @@ TEST(TypedDatum, clone_preserves_unspecified_string_collation_and_owns_bytes) {
       original_meta = expression.meta_;
       ASSERT_EQ(OB_SUCCESS, clone_typed_value(expression, copy, destination));
       EXPECT_EQ(original_meta, copy.meta_);
-      EXPECT_NE(expression.datum_.ptr_, copy.datum_.ptr_);
-      MEMSET(const_cast<char *>(expression.datum_.ptr_), 'x', expression.datum_.len_);
+      EXPECT_NE(static_cast<const char *>(expression.datum_.get_reference()), static_cast<const char *>(copy.datum_.get_reference()));
+      MEMSET(const_cast<char *>(static_cast<const char *>(expression.datum_.get_reference())), 'x', expression.datum_.length());
       EXPECT_EQ(ObString("json_query(`j`,'')"), copy.get_string());
     }
     EXPECT_EQ(original_meta, copy.meta_);
@@ -330,15 +353,19 @@ TEST(TypedDatum, raw_string_clone_failures_preserve_previous_output) {
   ASSERT_EQ(OB_SUCCESS, expression.set_varchar(ObString("expression"), source));
   expression.set_collation_type(CS_TYPE_INVALID);
   ASSERT_EQ(OB_SUCCESS, output.set_int(123, destination));
-  const char *previous_bytes = output.datum_.ptr_;
+  const Datum previous_value = output.datum_;
   const SqlTypeMeta previous_meta = output.meta_;
   RejectAllocator reject;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, clone_typed_value(expression, output, reject));
-  EXPECT_EQ(previous_bytes, output.datum_.ptr_); EXPECT_EQ(previous_meta, output.meta_);
+  EXPECT_EQ(0, MEMCMP(&previous_value, &output.datum_, sizeof(previous_value))); EXPECT_EQ(previous_meta, output.meta_);
   EXPECT_EQ(123, output.get_int());
-  expression.datum_.ptr_ = nullptr;
+  ObDatum malformed;
+  malformed.ptr_ = nullptr; malformed.pack_ = expression.datum_.length();
+  EXPECT_EQ(OB_INVALID_ARGUMENT, expression.assign_legacy_borrowed(malformed, expression.meta_));
+  EXPECT_EQ(ObString("expression"), expression.get_string());
+  expression.meta_.set_int(); // A reference span of ten bytes is not a physical integer.
   EXPECT_EQ(OB_INVALID_ARGUMENT, clone_typed_value(expression, output, destination));
-  EXPECT_EQ(previous_bytes, output.datum_.ptr_); EXPECT_EQ(previous_meta, output.meta_);
+  EXPECT_EQ(0, MEMCMP(&previous_value, &output.datum_, sizeof(previous_value))); EXPECT_EQ(previous_meta, output.meta_);
   EXPECT_EQ(123, output.get_int());
 }
 TEST(TypedDatum, unspecified_string_collation_still_rejected_for_compare_and_hash) {

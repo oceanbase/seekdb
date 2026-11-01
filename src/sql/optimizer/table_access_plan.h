@@ -35,6 +35,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObPhysicalPlanCtx;
 class ObRawExpr;
 class ObRawExprFactory;
 class ObColumnRefRawExpr;
@@ -595,23 +596,23 @@ public:
    */
   int calculate_tablet_targets(
       ObExecContext &exec_ctx,
-      const ParamStore &params,
+      const ObPhysicalPlanCtx &params,
       TabletAccessTargetIArray &tablet_targets,
       const common::ObDataTypeCastParams &dtc_params) const;
 
   int calculate_single_tablet_partition(ObExecContext &exec_ctx,
-                                        const ParamStore &params,
+                                        const ObPhysicalPlanCtx &params,
                                         const ObDataTypeCastParams &dtc_params) const;
 
   int calculate_final_tablet_accesses(ObExecContext &exec_ctx,
-                                       const ParamStore &params,
+                                       const ObPhysicalPlanCtx &params,
                                        const common::ObDataTypeCastParams &dtc_params) const;
 
   /**
    * Calculate tablet ids from input parameters.
    */
   int calculate_tablet_ids(ObExecContext &exec_ctx,
-                           const ParamStore &params,
+                           const ObPhysicalPlanCtx &params,
                            ObIArray<ObTabletID> &tablet_ids,
                            ObIArray<ObObjectID> &partition_ids,
                            ObIArray<ObObjectID> &first_level_part_ids,
@@ -619,7 +620,7 @@ public:
                            bool *is_default_tablet = NULL) const;
 
   int set_is_das_empty_part(ObExecContext &exec_ctx,
-                            const ParamStore &params,
+                            const ObPhysicalPlanCtx &params,
                             const ObDataTypeCastParams &dtc_params);
 
   int init_partition_ids_by_rowkey2(ObExecContext &exec_ctx,
@@ -776,7 +777,7 @@ private:
   //gen_col_expr: expression of dependented column of generated partition column
   int calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
                                       ObDASTabletMapper &tablet_mapper,
-                                      const ParamStore &params,
+                                      const ObPhysicalPlanCtx &params,
                                       const PartitionCalcNode *calc_node,
                                       const PartitionCalcNode *gen_col_node,
                                       const ObTempExpr *se_gen_col_expr,
@@ -788,7 +789,7 @@ private:
 
   int calc_and_partition_ids(ObExecContext &exec_ctx,
                              ObDASTabletMapper &tablet_mapper,
-                             const ParamStore &params,
+                             const ObPhysicalPlanCtx &params,
                              const ObPLAndNode *calc_node,
                              common::ObIArray<common::ObTabletID> &tablet_ids,
                              common::ObIArray<common::ObObjectID> &partition_ids,
@@ -798,7 +799,7 @@ private:
 
   int calc_or_partition_ids(ObExecContext &exec_ctx,
                             ObDASTabletMapper &tablet_mapper,
-                            const ParamStore &params,
+                            const ObPhysicalPlanCtx &params,
                             const ObPLOrNode *calc_node,
                             common::ObIArray<common::ObTabletID> &tablet_ids,
                             common::ObIArray<common::ObObjectID> &partition_ids,
@@ -808,7 +809,7 @@ private:
 
   int calc_pre_range_graph_partition_ids(ObExecContext &exec_ctx,
                                          ObDASTabletMapper &tablet_mapper,
-                                         const ParamStore &params,
+                                         const ObPhysicalPlanCtx &params,
                                          const ObPLPreRangeGraphNode *calc_node,
                                          ObIArray<ObTabletID> &tablet_ids,
                                          ObIArray<ObObjectID> &partition_ids,
@@ -819,7 +820,7 @@ private:
 
   int calc_func_value_partition_ids(ObExecContext &exec_ctx,
                                     ObDASTabletMapper &tablet_mapper,
-                                    const ParamStore &params,
+                                    const ObPhysicalPlanCtx &params,
                                     const ObPLFuncValueNode *calc_node,
                                     common::ObIArray<common::ObTabletID> &tablet_ids,
                                     common::ObIArray<common::ObObjectID> &partition_ids,
@@ -829,7 +830,7 @@ private:
 
   int calc_column_value_partition_ids(ObExecContext &exec_ctx,
                                       ObDASTabletMapper &tablet_mapper,
-                                      const ParamStore &params,
+                                      const ObPhysicalPlanCtx &params,
                                       const ObPLColumnValueNode *calc_node,
                                       common::ObIArray<common::ObTabletID> &tablet_ids,
                                       common::ObIArray<common::ObObjectID> &partition_ids,
@@ -846,7 +847,7 @@ private:
 
   int calc_partition_ids_by_calc_node(ObExecContext &exec_ctx,
                                       ObDASTabletMapper &tablet_mapper,
-                                      const ParamStore &params,
+                                      const ObPhysicalPlanCtx &params,
                                       const PartitionCalcNode *calc_node,
                                       common::ObIArray<common::ObTabletID> &tablet_ids,
                                       common::ObIArray<common::ObObjectID> &partition_ids,
@@ -1025,7 +1026,7 @@ private:
 public:
   static int se_calc_value_item(ObCastCtx cast_ctx,
                                 ObExecContext &exec_ctx,
-                                const ParamStore &params,
+                                const ObPhysicalPlanCtx &params,
                                 const ValueItemExpr &vie,
                                 const common::ObIArray<common::DatumValue> &input_row,
                                 common::DatumValue &value);
@@ -1102,7 +1103,7 @@ private:
   int calc_list_value_partition_ids(
       ObExecContext &exec_ctx,
       ObDASTabletMapper &tablet_mapper,
-      const ParamStore &params,
+      const ObPhysicalPlanCtx &params,
       const ObPLListValueNode *calc_node,
       ObIArray<ObTabletID> &tablet_ids,
       ObIArray<ObObjectID> &partition_ids,
@@ -1116,7 +1117,7 @@ private:
                                          PartitionCalcNode *&subcalc_node);
   int calc_gather_stat_partition_ids(ObExecContext &exec_ctx,
                                      ObDASTabletMapper &tablet_mapper,
-                                     const ParamStore &params,
+                                     const ObPhysicalPlanCtx &params,
                                      const ObPLGatherStatNode *calc_node,
                                      ObIArray<ObTabletID> &tablet_ids,
                                      ObIArray<ObObjectID> &partition_ids,

@@ -108,6 +108,8 @@ int ObDbmsSpace::parse_ddl_sql(ObExecContext &ctx,
   } else {
     ObParser parser(ctx.get_allocator(), session->get_sql_mode());
     ParseResult parse_result;
+    ObArenaAllocator descriptor_owner("SpaceDDLInputs");
+    ParamStore parameter_inputs((ObWrapperAllocator(descriptor_owner)));
     SMART_VAR(ObResolverParams, resolver_ctx) {
       resolver_ctx.allocator_  = &ctx.get_allocator();
       resolver_ctx.schema_checker_ = &schema_checker;
@@ -123,8 +125,14 @@ int ObDbmsSpace::parse_ddl_sql(ObExecContext &ctx,
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "phy plan ctx is NULL", K(ret));
       } else {
-        resolver_ctx.param_list_ = &ctx.get_physical_plan_ctx()->get_param_store();
-        resolver_ctx.query_ctx_->sql_schema_guard_.set_schema_guard(ctx.get_sql_ctx()->schema_guard_);
+        const ObPhysicalPlanCtx &parameters = *ctx.get_physical_plan_ctx();
+        if (parameters.native_parameters_ready()) {
+          ret = parameters.build_resolution_inputs(parameter_inputs, ctx.get_allocator());
+        } else { ret = parameter_inputs.assign(parameters.get_parameter_inputs()); }
+        if (OB_SUCC(ret)) {
+          resolver_ctx.param_list_ = &parameter_inputs;
+          resolver_ctx.query_ctx_->sql_schema_guard_.set_schema_guard(ctx.get_sql_ctx()->schema_guard_);
+        }
       }
 
       if (OB_SUCC(ret)) {

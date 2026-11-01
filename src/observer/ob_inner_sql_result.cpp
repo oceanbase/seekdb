@@ -352,13 +352,18 @@ int ObInnerSQLResult::get_timestamp(const int64_t col_idx,
     // Native DATE/YEAR/FLOAT payloads have fewer bytes than the old union.
     const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(value.get_type());
     const int64_t bytes = ObDatum::get_reserved_size(mapping);
-    if ((mapping != OBJ_DATUM_8BYTE_DATA && mapping != OBJ_DATUM_4BYTE_DATA
-         && mapping != OBJ_DATUM_1BYTE_DATA)
-        || value.datum_.ptr_ == nullptr || value.datum_.len_ != bytes) {
+    alignas(8) char scratch[64];
+    ObDatum physical;
+    if (mapping != OBJ_DATUM_8BYTE_DATA && mapping != OBJ_DATUM_4BYTE_DATA
+        && mapping != OBJ_DATUM_1BYTE_DATA) {
+      ret = OB_OBJ_TYPE_ERROR;
+    } else if (value.export_legacy(physical, scratch, sizeof(scratch)) != OB_SUCCESS) {
+      ret = OB_OBJ_TYPE_ERROR;
+    } else if (physical.ptr_ == nullptr || physical.len_ != bytes) {
       ret = OB_OBJ_TYPE_ERROR;
     } else {
       uint64_t scalar = 0;
-      MEMCPY(&scalar, value.datum_.ptr_, bytes);
+      MEMCPY(&scalar, physical.ptr_, bytes);
       val = static_cast<int64_t>(scalar);
     }
   }

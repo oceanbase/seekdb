@@ -54,6 +54,46 @@ namespace sql
 
 namespace
 {
+// Synchronous physical view for the existing PL callback/caster domain.
+// The execution store has one typed native value; this transient descriptor
+// borrows the slot or caller scratch and never becomes another retaining store.
+int runtime_parameter_physical_view(const ObPhysicalPlanCtx &parameters, int64_t index,
+    DatumParameter &output, char (&scratch)[64])
+{
+  int ret = OB_SUCCESS;
+  if (index < 0 || index >= parameters.get_parameter_count()) { return OB_INVALID_ARGUMENT; }
+  if (!parameters.native_parameters_ready()) {
+    output = parameters.get_parameter_inputs().at(index);
+  } else {
+    ObDatum physical;
+    const DatumParameterMetadata *attributes = parameters.get_parameter_metadata(index);
+    if (attributes == nullptr) { ret = OB_NOT_INIT; }
+    else if (OB_FAIL(parameters.export_runtime_parameter_legacy(index, physical, scratch, sizeof(scratch)))) {}
+    else {
+      if (!physical.is_null() && attributes->type_meta_.is_ext_sql_array() && physical.has_ext_value()) {
+        const int64_t address = physical.get_ext();
+        MEMCPY(scratch, &address, sizeof(address));
+        physical.set_string(scratch, sizeof(address));
+      }
+      DatumParameter candidate;
+      if (OB_FAIL(candidate.assign_legacy_borrowed(physical, attributes->type_meta_))) {}
+      else { candidate.set_metadata(*attributes); output = candidate; }
+    }
+  }
+  return ret;
+}
+
+template <typename Value>
+int rewrite_owned_spi_pl_descriptor(Value &value, int64_t address, uint8_t subtype, int32_t size)
+{
+  Datum &carrier = value.datum_;
+  if (!carrier.has_ext_value() || carrier.length() != DATUM_EXTEND_PAYLOAD_SIZE) {
+    return OB_INVALID_ARGUMENT;
+  }
+  return carrier.set_extend(address, subtype, size,
+      const_cast<void *>(carrier.get_reference()), carrier.length());
+}
+
 int datum_out_values_differ(ObExecContext &exec_ctx,
                             const DatumParameter &left,
                             const DatumParameter &right,
@@ -90,8 +130,8 @@ int datum_out_values_differ(ObExecContext &exec_ctx,
       ret = OB_ERR_UNEXPECTED;
     } else {
       const int cmp = ObCharset::strcmpsp(left_cs,
-          left_value.datum_.ptr_, left_value.datum_.len_,
-          right_value.datum_.ptr_, right_value.datum_.len_, false);
+          left_value.get_string().ptr(), left_value.get_string().length(),
+          right_value.get_string().ptr(), right_value.get_string().length(), false);
       differ = cmp != 0;
     }
   } else if (left_value.get_type_class() == ObCollectionSQLTC
@@ -144,11 +184,15 @@ int datum_out_values_differ(ObExecContext &exec_ctx,
           cmp_scale, left_value.has_lob_header() || right_value.has_lob_header(),
           left.get_precision(), right.get_precision());
       const ObDatumAccessContext *access_ctx = nullptr;
+      alignas(8) char left_scratch[64], right_scratch[64];
+      ObDatum left_physical, right_physical;
       int cmp = 0;
       if (OB_ISNULL(cmp_func)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(exec_ctx.get_datum_access_ctx(access_ctx))) {
-      } else if (OB_FAIL(cmp_func(left_value.datum_, right_value.datum_, cmp, access_ctx))) {
+      } else if (OB_FAIL(left_value.export_legacy(left_physical, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(right_value.export_legacy(right_physical, right_scratch, sizeof(right_scratch)))) {
+      } else if (OB_FAIL(cmp_func(left_physical, right_physical, cmp, access_ctx))) {
       } else {
         differ = cmp != 0;
       }
@@ -270,11 +314,20 @@ int ObSPIResultSet::destruct_exec_params(ObSQLSessionInfo &session)
   if (NULL != get_result_set()
       && NULL != get_result_set()->get_exec_context().get_physical_plan_ctx()) {
     ObPhysicalPlanCtx *plan_ctx = get_result_set()->get_exec_context().get_physical_plan_ctx();
-    const ParamStore &params = plan_ctx->get_param_store();
-    for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
-      DatumParameter retiring = params.at(i);
+    for (int64_t i = 0; OB_SUCC(ret) && i < plan_ctx->get_parameter_count(); ++i) {
+      alignas(8) char scratch[64], restored_scratch[64];
+      DatumParameter retiring;
+      OZ (runtime_parameter_physical_view(*plan_ctx, i, retiring, scratch));
       OZ (ObUserDefinedType::destruct_obj(retiring, &session));
-      OZ (plan_ctx->set_runtime_parameter(i, retiring));
+      if (OB_SUCC(ret) && plan_ctx->native_parameters_ready()) {
+        const SqlType *type = plan_ctx->get_native_parameter_type(i);
+        ObDatum physical;
+        Datum restored;
+        CK (type != nullptr);
+        OZ (retiring.export_legacy(physical, restored_scratch, sizeof(restored_scratch)));
+        OZ (DatumCopyPlan(*type).import_legacy(physical, restored));
+        OZ (plan_ctx->set_runtime_parameter(i, restored, *type, retiring.get_metadata()));
+      } else if (OB_SUCC(ret)) { ret = plan_ctx->set_parameter_input(i, retiring); }
     }
   }
   return ret;
@@ -2237,25 +2290,26 @@ int ObSPIService::dynamic_out_params(
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = NULL;
-  const ParamStore *param_store = NULL;
   if (param_count > 0) {
     CK (OB_NOT_NULL(params));
     CK (OB_NOT_NULL(result_set));
     CK (OB_NOT_NULL(
       plan_ctx = result_set->get_exec_context().get_physical_plan_ctx()));
-    CK (OB_NOT_NULL(param_store = &(plan_ctx->get_param_store())));
-    OV (param_store->count() >= param_count,
-        OB_ERR_UNEXPECTED, param_store->count(), param_count);
+    OV (plan_ctx->get_parameter_count() >= param_count,
+        OB_ERR_UNEXPECTED, plan_ctx->get_parameter_count(), param_count);
     for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
-      // memory of params_store from result set will released by result close.
-      // so we need to deep copy it.
+      // Keep the physical callback view local; copy-out owns bytes in the
+      // destination allocator before the result set can retire.
+      alignas(8) char scratch[64];
+      DatumParameter parameter;
+      OZ (runtime_parameter_physical_view(*plan_ctx, i, parameter, scratch));
       DatumParameter &obj = is_cursor_params ? reinterpret_cast<ParamStore *>(params)->at(i)
                                     : *(reinterpret_cast<DatumParameter**>(params)[i]);
-      if (param_store->at(i).is_pl_extend()
-          && param_store->at(i).get_meta().get_extend_type() != PL_CURSOR_TYPE) {
-        OZ (pl::ObUserDefinedType::deep_copy_obj(allocator, param_store->at(i), obj, true));
+      if (parameter.is_pl_extend()
+          && parameter.get_meta().get_extend_type() != PL_CURSOR_TYPE) {
+        OZ (pl::ObUserDefinedType::deep_copy_obj(allocator, parameter, obj, true));
       } else {
-        OZ (DatumParameterArray::clone_parameter(param_store->at(i), obj, allocator));
+        OZ (DatumParameterArray::clone_parameter(parameter, obj, allocator));
       }
     }
   }
@@ -2468,8 +2522,8 @@ int ObSPIService::spi_cursor_alloc(ObIAllocator &allocator, DatumParameter &obj)
   } else {
     new (cursor) ObPLCursorInfo(&allocator);
     cursor->reset();
-    owned.datum_.set_extend(reinterpret_cast<int64_t>(cursor), PL_CURSOR_TYPE, 0);
-    obj.assign_value(owned);
+    OZ (rewrite_owned_spi_pl_descriptor(owned, reinterpret_cast<int64_t>(cursor), PL_CURSOR_TYPE, 0));
+    OX (obj.assign_value(owned));
   }
   return ret;
 }
@@ -4344,20 +4398,23 @@ int ObSPIService::process_function_out_result(ObPLExecCtx *ctx,
   int ret = OB_SUCCESS;
   ObExecContext *exec_ctx = NULL;
   ObPhysicalPlanCtx *pctx = NULL;
-  const ParamStore *exec_params = NULL;
   CK (OB_NOT_NULL(exec_ctx = &(result_set.get_exec_context())));
   CK (OB_NOT_NULL(pctx = exec_ctx->get_physical_plan_ctx()));
-  CK (OB_NOT_NULL(exec_params = &(pctx->get_param_store())));
+  OV (pctx->get_parameter_count() >= out_params.count(), OB_ERR_UNEXPECTED);
 
   CK (OB_NOT_NULL(ctx));
   CK (OB_NOT_NULL(ctx->allocator_));
 
   for (int64_t i = 0; OB_SUCC(ret) && i < out_params.count(); ++i) {
-    if (out_params.at(i).is_field()) {
+    alignas(8) char scratch[64];
+    DatumParameter parameter;
+    OZ (runtime_parameter_physical_view(*pctx, i, parameter, scratch));
+    if (OB_FAIL(ret)) {
+    } else if (out_params.at(i).is_field()) {
       DatumValue *obj = reinterpret_cast<DatumValue *>(out_params.at(i).address());
       ObIAllocator *owner = out_params.at(i).owner();
       CK (obj != nullptr); CK (owner != nullptr);
-      OZ (ObPLComposite::copy_element(exec_params->at(i).value_view(), *obj,
+      OZ (ObPLComposite::copy_element(parameter.value_view(), *obj,
           *owner, ctx, ctx->exec_ctx_->get_my_session(), nullptr,
           ctx->exec_ctx_->get_srs_provider(), ctx->exec_ctx_->get_lob_read_service(), false));
     } else if (out_params.at(i).is_local()) {
@@ -4366,10 +4423,10 @@ int ObSPIService::process_function_out_result(ObPLExecCtx *ctx,
       CK (idx >= 0 && idx < ctx->params_->count());
       OX (obj = &(ctx->params_->at(idx)));
       bool value_changed = false;
-      OZ (datum_out_values_differ(*exec_ctx, *obj, exec_params->at(i), value_changed));
+      OZ (datum_out_values_differ(*exec_ctx, *obj, parameter, value_changed));
       if (OB_SUCC(ret) && value_changed) {
         DatumParameter result;
-        OZ (spi_convert_objparam(ctx, &(exec_params->at(i)), idx, &result, false));
+        OZ (spi_convert_objparam(ctx, &parameter, idx, &result, false));
         OZ (clone_datum_value(result, *obj, *(ctx->allocator_)));
         obj->set_param_meta();
       }
@@ -5257,7 +5314,7 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
             OZ (type->get_size(PL_TYPE_INIT_SIZE, init_size));
             OZ (tmp_obj.set_extend(0, type->get_type(), *cast_ctx.allocator_v2_, init_size));
             OZ (type->newx(*cast_ctx.allocator_v2_, ctx, ptr));
-            OX (tmp_obj.datum_.set_extend(ptr, type->get_type(), init_size));
+            OZ (rewrite_owned_spi_pl_descriptor(tmp_obj, ptr, type->get_type(), init_size));
           }
         }
       }
@@ -5396,7 +5453,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
         OZ (type->get_size(PL_TYPE_INIT_SIZE, init_size));
         OZ (tmp_obj.set_extend(0, type->get_type(), *cast_ctx.allocator_v2_, init_size));
         OZ (type->newx(*cast_ctx.allocator_v2_, ctx, ptr));
-        OX (tmp_obj.datum_.set_extend(ptr, type->get_type(), init_size));
+        OZ (rewrite_owned_spi_pl_descriptor(tmp_obj, ptr, type->get_type(), init_size));
         OZ (tmp_obj_array.push_back(tmp_obj));
         OX (calc_array = &tmp_obj_array);
       }
@@ -5564,7 +5621,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
           OZ (DatumCopyPlan(type).borrow_legacy(inrow, legacy));
           // The reference bytes belong to cast_ctx's allocator; the local
           // native descriptor is not retained by this PL/session boundary.
-          OX (value.datum_ = legacy);
+          OZ (value.assign_legacy_borrowed(legacy, value.get_type_meta()));
         }
       }
 
@@ -5805,8 +5862,9 @@ int ObSPIService::get_result_type(ObPLExecCtx &ctx, const ObSqlExpression &expr,
   } else {
     if (is_const_expression(expr)) {
       if (is_question_mark_expression(expr)) {
-        int64_t idx = get_const_value(expr).get_int();
-        if (idx >= ctx.params_->count()) {
+        int64_t idx = OB_INVALID_INDEX;
+        if (OB_FAIL(get_const_value(expr).get_unknown(idx))) {
+        } else if (idx < 0 || idx >= ctx.params_->count()) {
           ret = OB_ERR_UNEXPECTED;
         } else {
           DatumParameter &obj_param = ctx.params_->at(idx);

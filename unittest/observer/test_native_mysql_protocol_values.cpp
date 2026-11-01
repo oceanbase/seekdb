@@ -82,7 +82,7 @@ int seed(const std::vector<std::string> &row, ObIAllocator &owner, DatumValue &v
   const std::string bytes = unhex(row[5]);
   if (bytes.empty()) { return OB_INVALID_DATA; }
   int64_t pos = 0;
-  const int ret = DatumParameterCodec::decode_value(bytes.data(), bytes.size(), pos,
+  const int ret = DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(), pos,
                                                     owner, value.datum_, value.meta_);
   return ret == OB_SUCCESS && pos != bytes.size() ? OB_INVALID_DATA : ret;
 }
@@ -217,8 +217,11 @@ TEST(NativeMysqlProtocol, inline_bigint_extremes_null_and_zerofill_match_existin
         ASSERT_EQ(OB_SUCCESS, legacy.set_int(value, owner));
         ObMySQLCellValue old_out, new_out;
         ObDataTypeCastParams cast_params;
+        ObDatum physical;
+        alignas(8) char physical_scratch[64];
+        ASSERT_EQ(OB_SUCCESS, legacy.export_legacy(physical, physical_scratch, sizeof(physical_scratch)));
         ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_datum_cell_value(
-            legacy.datum_, meta, protocol, owner, old_out, &field, cast_params));
+            physical, meta, protocol, owner, old_out, &field, cast_params));
         ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_inline_bigint_cell_value(
             native, sql_type, protocol, owner, new_out, &field));
         EXPECT_EQ(neutral(OB_SUCCESS, old_out), neutral(OB_SUCCESS, new_out));
@@ -459,8 +462,11 @@ TEST(NativeMysqlProtocol, output_pack_scalar_native_and_generic_datum_formatters
                      + ", mode=" + std::to_string(mode)
                      + ", map=" + std::to_string(static_cast<int>(map)));
         ObMySQLCellValue datum_out, generic_out;
+        ObDatum physical;
+        alignas(8) char physical_scratch[64];
+        ASSERT_EQ(OB_SUCCESS, value.export_legacy(physical, physical_scratch, sizeof(physical_scratch)));
         const int datum_ret = ObSMUtils::build_datum_cell_value(
-            value.datum_, value.meta_, protocol, datum_scratch, datum_out,
+            physical, value.meta_, protocol, datum_scratch, datum_out,
             &field, parameters);
         const int generic_ret = ObSMUtils::build_cell_value(
             value, protocol, generic_scratch, generic_out, parameters, &field, session);
@@ -513,8 +519,11 @@ TEST(NativeMysqlProtocol, DISABLED_output_pack_scalar_formatter_ab)
     candidate.field_.accuracy_.set_precision(10);
 
     ObMySQLCellValue datum_out, generic_out;
+    ObDatum physical;
+    alignas(8) char physical_scratch[64];
+    ASSERT_EQ(OB_SUCCESS, candidate.value_.export_legacy(physical, physical_scratch, sizeof(physical_scratch)));
     const int datum_ret = ObSMUtils::build_datum_cell_value(
-        candidate.value_.datum_, candidate.value_.meta_, protocol,
+        physical, candidate.value_.meta_, protocol,
         preflight_datum_scratch, datum_out, &candidate.field_, parameters);
     const int generic_ret = ObSMUtils::build_cell_value(
         candidate.value_, protocol, preflight_generic_scratch, generic_out,
@@ -550,9 +559,12 @@ TEST(NativeMysqlProtocol, DISABLED_output_pack_scalar_formatter_ab)
     for (int64_t i = 0; i < cell_count; ++i) {
       const CellFormatterBenchCase &item = cases[i % cases.size()];
       ObMySQLCellValue cell;
-      const int ret = ObSMUtils::build_datum_cell_value(
-          item.value_.datum_, item.value_.meta_, item.protocol_,
-          preflight_datum_scratch, cell, &item.field_, parameters);
+      ObDatum physical;
+      alignas(8) char physical_scratch[64];
+      const int export_ret = item.value_.export_legacy(physical, physical_scratch, sizeof(physical_scratch));
+      const int ret = export_ret == OB_SUCCESS ? ObSMUtils::build_datum_cell_value(
+          physical, item.value_.meta_, item.protocol_,
+          preflight_datum_scratch, cell, &item.field_, parameters) : export_ret;
       checksum += static_cast<uint64_t>(ret) + cell_checksum(cell);
     }
   };

@@ -118,8 +118,9 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, Datum &res_datum)
       // The session map takes its own recursive snapshot before publishing.
       // The expression frame remains alive until replace_user_variable returns.
       OZ(expr.args_[1]->get_datum_copy_plan().legacy_view(*val_res, legacy_value, value_scratch, sizeof(value_scratch)));
-      value = DatumValue(legacy_value, obj_meta);
-      if (OB_UNLIKELY(obj_meta.is_decimal_int() && obj_meta.get_scale() < 0)) {
+      OZ(value.assign_legacy_borrowed(legacy_value, obj_meta));
+      if (OB_FAIL(ret)) {
+      } else if (OB_UNLIKELY(obj_meta.is_decimal_int() && obj_meta.get_scale() < 0)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (obj_meta.is_ext()) {
         if (!val_res->has_ext_value()) {

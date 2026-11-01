@@ -505,9 +505,9 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
       }
 
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(DatumParameterCodec::value_size(temp_obj->datum_, temp_obj->meta_, reserve_len))) {
+      } else if (OB_FAIL(DatumParameterCodec::native_value_size(temp_obj->datum_, temp_obj->meta_, reserve_len))) {
       } else if (OB_FAIL(str_buff.reserve(reserve_len + 128))) {
-      } else if (OB_FAIL(DatumParameterCodec::encode_value(temp_obj->datum_, temp_obj->meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
+      } else if (OB_FAIL(DatumParameterCodec::encode_native_value(temp_obj->datum_, temp_obj->meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
       } else {
         str_buff.set_length(pos);
       }
@@ -531,9 +531,9 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
                                                                accuracy, dest_type, scale, tmp_obj))) {
       ret = OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX;
       LOG_USER_ERROR(OB_ERR_JSON_VALUE_CAST_FUNCTION_INDEX);
-    } else if (OB_FAIL(DatumParameterCodec::value_size(tmp_obj.datum_, tmp_obj.meta_, reserve_len))) {
+    } else if (OB_FAIL(DatumParameterCodec::native_value_size(tmp_obj.datum_, tmp_obj.meta_, reserve_len))) {
     } else if (OB_FAIL(str_buff.reserve(reserve_len + 128))) {
-    } else if (OB_FAIL(DatumParameterCodec::encode_value(tmp_obj.datum_, tmp_obj.meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
+    } else if (OB_FAIL(DatumParameterCodec::encode_native_value(tmp_obj.datum_, tmp_obj.meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
     } else {
       str_buff.set_length(pos);
     }
@@ -553,9 +553,9 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
     int64_t pos = str_buff.length();
     
     int64_t reserve_len = 0;
-    if (OB_FAIL(DatumParameterCodec::value_size(temp_obj.datum_, temp_obj.meta_, reserve_len))) {
+    if (OB_FAIL(DatumParameterCodec::native_value_size(temp_obj.datum_, temp_obj.meta_, reserve_len))) {
     } else if (OB_FAIL(str_buff.reserve(reserve_len + 128))) {
-    } else if (OB_FAIL(DatumParameterCodec::encode_value(temp_obj.datum_, temp_obj.meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
+    } else if (OB_FAIL(DatumParameterCodec::encode_native_value(temp_obj.datum_, temp_obj.meta_, str_buff.ptr(), str_buff.capacity(), pos))) {
     } else {
       str_buff.set_length(pos);
     }
@@ -568,9 +568,14 @@ int ObExprJsonQuery::set_multivalue_result(bool is_result_array,
       res.set_null();
     } else if (OB_ISNULL(object_ptr)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(expr.get_datum_copy_plan().import_legacy(object_ptr->datum_, res))) {
-    } else if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), res, result_owner, res))) {
-    } else if (OB_FAIL(ObJsonUtil::set_lob_datum(&allocator, expr, ctx, dest_type, cast_param.ascii_type_, res))) {
+    } else {
+      alignas(8) char result_scratch[64];
+      ObDatum physical_result;
+      if (OB_FAIL(object_ptr->export_legacy(physical_result, result_scratch, sizeof(result_scratch)))) {
+      } else if (OB_FAIL(expr.get_datum_copy_plan().import_legacy(physical_result, res))) {
+      } else if (OB_FAIL(ObExpr::clone_native_value(expr.get_sql_type(), res, result_owner, res))) {
+      } else if (OB_FAIL(ObJsonUtil::set_lob_datum(&allocator, expr, ctx, dest_type, cast_param.ascii_type_, res))) {
+      }
     }
   } else {
     apaque.set_value(str_buff.string());

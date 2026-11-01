@@ -108,7 +108,9 @@ DatumValue collection_view(const std::string &lob)
   SqlTypeMeta meta;
   meta.set_type(ObCollectionSQLType);
   meta.set_has_lob_header();
-  return DatumValue(datum, meta);
+  DatumValue value;
+  EXPECT_EQ(OB_SUCCESS, value.assign_legacy_borrowed(datum, meta));
+  return value;
 }
 
 struct MapDistinctFixture

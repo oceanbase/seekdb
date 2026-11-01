@@ -26,6 +26,7 @@ namespace oceanbase
 {
 namespace sql
 {
+class ObPhysicalPlanCtx;
 class ObObjAccessRawExpr;
 class ObExprObjAccess : public ObExprOperator
 {
@@ -43,7 +44,11 @@ public:
 
   int calc_result(common::DatumParameter &result, common::ObIAllocator &alloc,
                   const common::DatumParameter *objs_stack, int64_t param_num,
-                  const ParamStore &param_store, ObEvalCtx *ctx = nullptr) const;
+                  const ObPhysicalPlanCtx &param_store, ObEvalCtx *ctx = nullptr) const;
+  // Actual PL variable/construction domain; never a ready SQL proxy store.
+  int calc_result(common::DatumParameter &result, common::ObIAllocator &alloc,
+                  const common::DatumParameter *objs_stack, int64_t param_num,
+                  const ParamStore &parameters, ObEvalCtx *ctx = nullptr) const;
 
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
@@ -72,11 +77,13 @@ public:
                           ObIExprExtraInfo *&copied_info) const override;
     int assign(const ExtraInfo &other);
 
-    int init_param_array(const ParamStore &param_store,
+    int init_param_array(const ObPhysicalPlanCtx &param_store,
                                 const common::DatumParameter *objs_stack,
                                 int64_t param_num,
                                 ParamArray &param_array) const;
-
+    int init_param_array(const ParamStore &parameters,
+                         const common::DatumParameter *objs_stack,
+                         int64_t param_num, ParamArray &param_array) const;
 
     int get_attr_func(int64_t param_cnt,
                       int64_t* params,
@@ -103,10 +110,14 @@ public:
              ObIAllocator &alloc,
              const SqlTypeMeta &res_type,
              const int32_t extend_size,
-             const ParamStore &param_store,
+             const ObPhysicalPlanCtx &param_store,
              const common::DatumParameter *params,
              int64_t param_num,
              ObEvalCtx *ctx) const;
+    int calc(DatumParameter &result, ObIAllocator &alloc,
+             const SqlTypeMeta &res_type, int32_t extend_size,
+             const ParamStore &parameters, const common::DatumParameter *params,
+             int64_t param_num, ObEvalCtx *ctx) const;
 
     TO_STRING_KV(K_(param_idxs),
                  K_(access_idx_cnt),
@@ -123,6 +134,10 @@ public:
     // extend size only used in static engine, the old expr get extend size from ObExprResType
     int32_t extend_size_;
     common::ObFixedArray<pl::ObObjAccessIdx, common::ObIAllocator> access_idxs_;
+  private:
+    int calc_with_param_array(DatumParameter &result, ObIAllocator &alloc,
+                              const SqlTypeMeta &res_type, int32_t extend_size,
+                              ParamArray &param_array, ObEvalCtx *ctx) const;
   };
 private:
   ExtraInfo info_;

@@ -162,11 +162,15 @@ int ObExprPLIntegerChecker::calc(DatumParameter &result,
     // its small NUMBER representation); unchanged values borrow source until
     // the final owned copy. This also handles result == source safely.
     alignas(8) char scratch[64];
+    alignas(8) char source_scratch[64];
+    common::ObDatum source_view;
     common::ObDatum checked; checked.ptr_ = scratch;
-    OZ (calc(checked, source.get_type(), source.datum_, pls_type, pls_range, owner));
+    OZ (source.export_legacy(source_view, source_scratch, sizeof(source_scratch)));
+    OZ (calc(checked, source.get_type(), source_view, pls_type, pls_range, owner));
     if (OB_SUCC(ret)) {
-      DatumParameter output = source; output.datum_ = checked;
-      ret = clone_datum_parameter(output, result, owner);
+      DatumParameter output = source;
+      OZ (output.assign_legacy_borrowed(checked, source.get_type_meta()));
+      OZ (clone_datum_parameter(output, result, owner));
     }
   }
   return ret;

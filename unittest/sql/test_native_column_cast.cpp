@@ -71,7 +71,7 @@ TEST(NativeColumnCast, no_sql_frames_needed_and_output_survives_source_and_caste
     ASSERT_EQ(OB_SUCCESS, ObExprColumnConv::convert_with_null_check(state.context,
         input, target(ObVarcharType, 32, CS_TYPE_UTF8MB4_BIN), CM_STRICT_MODE, owner, output));
     EXPECT_EQ(ObString::make_string("12345"), output.get_string());
-    EXPECT_NE(input.datum_.ptr_, output.datum_.ptr_);
+    EXPECT_NE(static_cast<const void *>(&input.datum_), output.datum_.get_reference());
   }
   ObDatumCaster *first = nullptr, *second = nullptr;
   ASSERT_EQ(OB_SUCCESS, state.context.get_native_datum_caster(first));
@@ -126,14 +126,16 @@ TEST(NativeColumnCast, datum_zero_values_and_fixed_string_padding) {
   SqlTypeMeta char_meta;
   char_meta.set_char();
   char_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-  DatumValue fixed_char(datum, char_meta);
+  DatumValue fixed_char;
+  ASSERT_EQ(OB_SUCCESS, fixed_char.assign_legacy_borrowed(datum, char_meta));
   ASSERT_EQ(OB_SUCCESS, ObDASUtils::padding_fixed_string_value(8, allocator, fixed_char));
   EXPECT_EQ(1, fixed_char.get_string_len());
   EXPECT_EQ('a', fixed_char.get_string_ptr()[0]);
 
   datum.set_string("a", 1);
   char_meta.set_collation_type(CS_TYPE_BINARY);
-  DatumValue fixed_binary(datum, char_meta);
+  DatumValue fixed_binary;
+  ASSERT_EQ(OB_SUCCESS, fixed_binary.assign_legacy_borrowed(datum, char_meta));
   ASSERT_EQ(OB_SUCCESS, ObDASUtils::padding_fixed_string_value(3, allocator, fixed_binary));
   EXPECT_EQ(3, fixed_binary.get_string_len());
   EXPECT_EQ('a', fixed_binary.get_string_ptr()[0]);
@@ -194,15 +196,16 @@ TEST(NativeColumnCast, failed_output_clone_and_malformed_scalar_are_transactiona
   DatumParameter input, output;
   ASSERT_EQ(OB_SUCCESS, input.set_int(123, state.arena));
   ASSERT_EQ(OB_SUCCESS, output.set_int(42, owner));
-  const char *old = output.datum_.ptr_;
+  const Datum old = output.datum_;
   owner.reject = true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObExprColumnConv::convert_with_null_check(state.context,
       input, target(ObVarcharType, 32, CS_TYPE_UTF8MB4_BIN), CM_STRICT_MODE, owner, output));
-  EXPECT_EQ(42, output.get_int()); EXPECT_EQ(old, output.datum_.ptr_);
-  input.datum_.len_ = 1;
+  EXPECT_EQ(42, output.get_int()); EXPECT_EQ(0, MEMCMP(&old, &output.datum_, sizeof(old)));
+  const char malformed_payload = 0;
+  ASSERT_EQ(OB_SUCCESS, input.datum_.set_reference(&malformed_payload, 1));
   EXPECT_EQ(OB_INVALID_ARGUMENT, ObExprColumnConv::convert_with_null_check(state.context,
       input, target(ObIntType), CM_STRICT_MODE, owner, output));
-  EXPECT_EQ(42, output.get_int()); EXPECT_EQ(old, output.datum_.ptr_);
+  EXPECT_EQ(42, output.get_int()); EXPECT_EQ(0, MEMCMP(&old, &output.datum_, sizeof(old)));
 }
 TEST(NativeColumnCast, caster_allocation_failure_retry_and_destroy_own_single_frame_block) {
   FailingCastAllocator allocator;
@@ -252,7 +255,8 @@ TEST(NativeColumnCast, native_pl_integer_wrap_snapshot_and_null) {
   ObPLIntegerRange range; range.set_range(INT32_MIN, INT32_MAX);
   ASSERT_EQ(OB_SUCCESS, ObExprPLIntegerChecker::calc(output, input, PL_SIMPLE_INTEGER, range, state.arena));
   EXPECT_EQ(INT32_MIN, output.get_int()); EXPECT_EQ(2147483648LL, input.get_int());
-  EXPECT_NE(output.datum_.ptr_, input.datum_.ptr_);
+  EXPECT_NE(&output.datum_, &input.datum_);
+  EXPECT_EQ(0u, output.datum_.length());
   input.set_null();
   ASSERT_EQ(OB_SUCCESS, ObExprPLIntegerChecker::calc(output, input, PL_SIMPLE_INTEGER, range, state.arena));
   EXPECT_TRUE(output.is_null());
@@ -280,10 +284,10 @@ TEST(NativeColumnCast, spi_facade_native_result_is_owned_and_preserves_previous_
       target(ObVarcharType, 32, CS_TYPE_UTF8MB4_BIN), result, nullptr, nullptr));
   EXPECT_EQ(ObString::make_string("123"), result.get_string());
   EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, result.get_collation_type());
-  const char *old = result.datum_.ptr_;
+  const void *old = result.datum_.get_reference();
   EXPECT_NE(OB_SUCCESS, ObSPIService::spi_convert(nullptr, &output_owner, input,
       target(ObIntType), result, nullptr, nullptr));
-  EXPECT_EQ(old, result.datum_.ptr_); EXPECT_EQ(ObString::make_string("123"), result.get_string());
+  EXPECT_EQ(old, result.datum_.get_reference()); EXPECT_EQ(ObString::make_string("123"), result.get_string());
 }
 
 TEST(NativeStatsValue, string_prefix_borrows_without_splitting_utf8_and_keeps_metadata) {
@@ -336,9 +340,9 @@ TEST(NativeStatsValue, native_temporary_lob_owns_bytes_and_preserves_output_on_f
   ObLobLocatorV2 locator(output.get_string(),output.has_lob_header());
   ObString data; ASSERT_EQ(OB_SUCCESS,locator.get_inrow_data(data));
   EXPECT_EQ(ObString::make_string("native LOB"),data);
-  const char *bytes=output.datum_.ptr_; owner.reject=true;
+  const void *bytes=output.datum_.get_reference(); owner.reject=true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,ObTextStringHelper::str_to_lob_storage_obj(owner,ObString::make_string("replace"),output));
-  EXPECT_EQ(bytes,output.datum_.ptr_); EXPECT_EQ(ObLongTextType,output.get_type());
+  EXPECT_EQ(bytes,output.datum_.get_reference()); EXPECT_EQ(ObLongTextType,output.get_type());
 }
 
 TEST(NativeColumnItem, default_payload_uses_plan_owner_and_failed_replace_is_atomic) {
@@ -352,7 +356,7 @@ TEST(NativeColumnItem, default_payload_uses_plan_owner_and_failed_replace_is_ato
     ASSERT_EQ(OB_SUCCESS, value.set_varchar(ObString::make_string("customer_客户"), input_owner));
     value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS, item.set_default_value(value));
-    EXPECT_NE(value.datum_.ptr_, item.get_default_datum().get_reference());
+    EXPECT_NE(value.datum_.get_reference(), item.get_default_datum().get_reference());
   }
   EXPECT_EQ(ObString::make_string("customer_客户"), item.get_default_datum().get_string());
   const void *before = item.get_default_datum().get_reference();
@@ -449,19 +453,19 @@ TEST(NativeDefaultChecks, strict_character_error_precedes_length_and_preserves_s
   ASSERT_EQ(OB_SUCCESS, input.set_varchar(ObString(sizeof(invalid), invalid), state.arena));
   input.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   ASSERT_EQ(OB_SUCCESS, output.set_int(42, state.arena));
-  const char *source_bytes = input.datum_.ptr_;
-  const char *old_output = output.datum_.ptr_;
+  const void *source_bytes = input.datum_.get_reference();
+  const Datum old_output = output.datum_;
   ObExprResType text = target(ObVarcharType, 1, CS_TYPE_UTF8MB4_BIN);
   EXPECT_EQ(OB_ERR_INCORRECT_STRING_VALUE,
       caster->check_accuracy_and_collation(input, text.get_accuracy(),
           CS_TYPE_UTF8MB4_BIN, CM_NONE, true, state.arena, output));
-  EXPECT_EQ(source_bytes, input.datum_.ptr_);
-  EXPECT_EQ(0, MEMCMP(invalid, input.datum_.ptr_, sizeof(invalid)));
-  EXPECT_EQ(old_output, output.datum_.ptr_); EXPECT_EQ(42, output.get_int());
+  EXPECT_EQ(source_bytes, input.datum_.get_reference());
+  EXPECT_EQ(0, MEMCMP(invalid, input.datum_.get_reference(), sizeof(invalid)));
+  EXPECT_EQ(0, MEMCMP(&old_output, &output.datum_, sizeof(old_output))); EXPECT_EQ(42, output.get_int());
   ASSERT_EQ(OB_SUCCESS, caster->check_accuracy_and_collation(input,
       text.get_accuracy(), CS_TYPE_UTF8MB4_BIN, CM_NONE, false, state.arena, output));
   EXPECT_EQ(ObString::make_string("a"), output.get_string());
-  EXPECT_EQ(0, MEMCMP(invalid, input.datum_.ptr_, sizeof(invalid)));
+  EXPECT_EQ(0, MEMCMP(invalid, input.datum_.get_reference(), sizeof(invalid)));
 }
 
 TEST(NativeDefaultChecks, decimal_accuracy_owns_output_and_never_writes_source_coefficient) {
@@ -474,24 +478,24 @@ TEST(NativeDefaultChecks, decimal_accuracy_owns_output_and_never_writes_source_c
   ObExprResType type = target(ObDecimalIntType);
   type.set_precision(8); type.set_scale(2);
   ASSERT_EQ(OB_SUCCESS, caster->to_value(input, type, CM_NONE, state.arena, decimal));
-  const std::string coefficient(decimal.datum_.ptr_, decimal.datum_.len_);
-  const char *source_bytes = decimal.datum_.ptr_;
+  const std::string coefficient(static_cast<const char *>(decimal.datum_.get_reference()), decimal.datum_.length());
+  const void *source_bytes = decimal.datum_.get_reference();
   ObArenaAllocator owner;
   ASSERT_EQ(OB_SUCCESS, caster->check_accuracy_and_collation(decimal,
       type.get_accuracy(), CS_TYPE_BINARY, CM_NONE, true, owner, checked));
-  EXPECT_NE(source_bytes, checked.datum_.ptr_);
-  EXPECT_EQ(source_bytes, decimal.datum_.ptr_);
-  EXPECT_EQ(coefficient, std::string(decimal.datum_.ptr_, decimal.datum_.len_));
+  EXPECT_NE(source_bytes, checked.datum_.get_reference());
+  EXPECT_EQ(source_bytes, decimal.datum_.get_reference());
+  EXPECT_EQ(coefficient, std::string(static_cast<const char *>(decimal.datum_.get_reference()), decimal.datum_.length()));
   EXPECT_EQ(2, checked.get_scale()); EXPECT_EQ(2, checked.get_meta().get_scale());
   ASSERT_EQ(OB_SUCCESS, caster->to_value(checked,
       target(ObVarcharType, 32, CS_TYPE_UTF8MB4_BIN), CM_NONE, state.arena, text));
   EXPECT_EQ(ObString::make_string("123.46"), text.get_string());
-  const char *previous = checked.datum_.ptr_;
+  const void *previous = checked.datum_.get_reference();
   type.set_precision(2);
   EXPECT_NE(OB_SUCCESS, caster->check_accuracy_and_collation(decimal,
       type.get_accuracy(), CS_TYPE_BINARY, CM_NONE, true, owner, checked));
-  EXPECT_EQ(previous, checked.datum_.ptr_);
-  EXPECT_EQ(coefficient, std::string(decimal.datum_.ptr_, decimal.datum_.len_));
+  EXPECT_EQ(previous, checked.datum_.get_reference());
+  EXPECT_EQ(coefficient, std::string(static_cast<const char *>(decimal.datum_.get_reference()), decimal.datum_.length()));
 }
 
 TEST(NativeDefaultChecks, float_precision_and_failed_owner_clone_leave_source_and_output_unchanged) {
@@ -506,10 +510,18 @@ TEST(NativeDefaultChecks, float_precision_and_failed_owner_clone_leave_source_an
   EXPECT_DOUBLE_EQ(12.35, output.get_double()); EXPECT_DOUBLE_EQ(12.3456, input.get_double());
   FailingCastAllocator reject;
   reject.reject = true;
-  const char *previous = output.datum_.ptr_;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, caster->check_accuracy_and_collation(input,
+  const Datum previous = output.datum_;
+  // Rounded inline output needs no payload allocation even under exhaustion.
+  EXPECT_EQ(OB_SUCCESS, caster->check_accuracy_and_collation(input,
       type.get_accuracy(), CS_TYPE_BINARY, CM_NONE, true, reject, output));
-  EXPECT_EQ(previous, output.datum_.ptr_); EXPECT_DOUBLE_EQ(12.35, output.get_double());
+  EXPECT_EQ(0, MEMCMP(&previous, &output.datum_, sizeof(previous)));
+  DatumParameter reference;
+  ASSERT_EQ(OB_SUCCESS, reference.set_varchar(ObString("reference clone"), state.arena));
+  reference.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  const ObExprResType reference_type = target(ObVarcharType, 64, CS_TYPE_UTF8MB4_BIN);
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, caster->check_accuracy_and_collation(reference,
+      reference_type.get_accuracy(), CS_TYPE_UTF8MB4_BIN, CM_NONE, true, reject, output));
+  EXPECT_EQ(0, MEMCMP(&previous, &output.datum_, sizeof(previous))); EXPECT_DOUBLE_EQ(12.35, output.get_double());
   EXPECT_DOUBLE_EQ(12.3456, input.get_double());
 }
 
@@ -537,12 +549,11 @@ TEST(NativeColumnCast, direct_native_pl_range_symbol_and_integer_widths) {
       DatumValue value;
       ASSERT_EQ(OB_SUCCESS, value.set_int(input, state.arena));
       value.meta_.set_type(type);
-      const char *bytes = value.datum_.ptr_;
-      const uint32_t pack = value.datum_.pack_;
+      const Datum before = value.datum_;
       const int expected = input < -2 || input > 2 ? OB_NUMERIC_OVERFLOW : OB_SUCCESS;
       EXPECT_EQ(expected, ObExprPLIntegerChecker::check_range<DatumValue>(
           value, type, signed_range.range_));
-      EXPECT_EQ(bytes, value.datum_.ptr_); EXPECT_EQ(pack, value.datum_.pack_);
+      EXPECT_EQ(0, MEMCMP(&before, &value.datum_, sizeof(before)));
       EXPECT_EQ(input, value.get_int());
     }
   }
@@ -587,11 +598,11 @@ TEST(NativeColumnCast, direct_native_pl_range_float_and_compact_number_bounds) {
         ASSERT_EQ(OB_SUCCESS, number.from(input, state.arena));
         ASSERT_EQ(OB_SUCCESS, value.set_number(number, state.arena));
       }
-      const char *bytes = value.datum_.ptr_;
+      const Datum before = value.datum_;
       const int expected = input < -2 || input > 2 ? OB_NUMERIC_OVERFLOW : OB_SUCCESS;
       EXPECT_EQ(expected, ObExprPLIntegerChecker::check_range<DatumValue>(
           value, type, range.range_));
-      EXPECT_EQ(bytes, value.datum_.ptr_);
+      EXPECT_EQ(0, MEMCMP(&before, &value.datum_, sizeof(before)));
     }
   }
   ObPLIntegerRange unsigned_range; unsigned_range.set_range(0, 2);
@@ -626,10 +637,10 @@ TEST(NativeColumnCast, direct_native_pl_range_null_and_invalid_range_do_not_read
                          ObDoubleType, ObNumberType, ObUNumberType}) {
     DatumValue value;
     value.meta_.set_type(type);
-    ASSERT_TRUE(value.is_null()); ASSERT_EQ(nullptr, value.datum_.ptr_);
+    ASSERT_TRUE(value.is_null()); ASSERT_EQ(Datum::State::Null, value.datum_.state());
     EXPECT_EQ(OB_SUCCESS, ObExprPLIntegerChecker::check_range<DatumValue>(
         value, type, range.range_));
-    EXPECT_TRUE(value.is_null()); EXPECT_EQ(nullptr, value.datum_.ptr_);
+    EXPECT_TRUE(value.is_null()); EXPECT_EQ(Datum::State::Null, value.datum_.state());
   }
   DatumValue outside;
   ASSERT_EQ(OB_SUCCESS, outside.set_int(999, state.arena));

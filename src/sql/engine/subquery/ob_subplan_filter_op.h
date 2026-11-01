@@ -133,7 +133,6 @@ private:
   int validate_stored_output_types() const;
   int get_next_row_vecrorizely();
   // for das batch spf
-  int alloc_das_batch_store();
   // for das batch spf end
   ObOperator &op_;
   bool onetime_plan_;
@@ -166,7 +165,6 @@ private:
   ObBatchResultHolder brs_holder_;
   // for vectorized end
   
-  common::ObArrayWrap<DatumParameter> das_batch_params_recovery_;
   // for das batch spf end
 };
 
@@ -251,7 +249,7 @@ public:
   ObBatchRescanCtl &get_batch_rescan_ctl() { return batch_rescan_ctl_; }
   int handle_next_batch_with_px_rescan(const int64_t op_max_batch_size);
   int handle_next_batch_with_group_rescan(const int64_t op_max_batch_size);
-  virtual const GroupParamArray *get_rescan_params_info() const { return &rescan_params_info_; }
+  virtual const GroupParamArray *get_rescan_params_info() const { return &das_batch_params_; }
 private:
   void set_param_null() { set_pushdown_param_null(MY_SPEC.rescan_params_); };
   void destroy_subplan_iters();
@@ -296,7 +294,7 @@ private:
   // for das batch rescan
   uint64_t current_group_;  //The group id in this time right iter rescan;
   
-  common::ObArrayWrap<DatumParameterArray> das_batch_params_;
+  GroupParamArray das_batch_params_;
   // for das batch rescan end
   ObChunkDatumStore left_rows_;
   ObChunkDatumStore::Iterator left_rows_iter_;
@@ -316,7 +314,6 @@ public:
   // Count of reals rescan initiated by the spf operator; for batch rescan, it was plus one for each batch;
   // For normal rescan, it was plus one  for each rescan
   int64_t group_rescan_cnt_;
-  GroupParamArray rescan_params_info_;
 };
 } // end namespace sql
 } // end namespace oceanbase

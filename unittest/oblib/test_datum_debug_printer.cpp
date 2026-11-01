@@ -23,6 +23,12 @@
 using namespace oceanbase::common;
 
 namespace {
+DatumValue native_view(const ObDatum &source, const SqlTypeMeta &meta)
+{
+  DatumValue value;
+  EXPECT_EQ(OB_SUCCESS, value.assign_legacy_borrowed(source, meta));
+  return value;
+}
 std::string debug_json(const DatumValue &value, bool smart = false)
 {
   char buffer[4096] = {};
@@ -42,7 +48,7 @@ TEST(DatumDebugPrinter, renders_scalar)
   SqlTypeMeta meta;
   datum.set_int(-17);
   meta.set_int();
-  EXPECT_EQ("{\"BIGINT\":-17}", debug_json(DatumValue(datum, meta)));
+  EXPECT_EQ("{\"BIGINT\":-17}", debug_json(native_view(datum, meta)));
 }
 
 TEST(DatumDebugPrinter, renders_decimal)
@@ -52,15 +58,15 @@ TEST(DatumDebugPrinter, renders_decimal)
   int64_t decimal_bytes = 12345;
   datum.set_decimal_int_shallow(reinterpret_cast<const ObDecimalInt *>(&decimal_bytes), sizeof(decimal_bytes));
   meta.set_decimal_int(2);
-  EXPECT_EQ("{\"DECIMAL\":123.45}", debug_json(DatumValue(datum, meta)));
+  EXPECT_EQ("{\"DECIMAL\":123.45}", debug_json(native_view(datum, meta)));
 
   datum.set_datetime(0);
   meta.set_datetime();
-  EXPECT_EQ("{\"DATETIME\":\"1970-01-01 00:00:00.000000\"}", debug_json(DatumValue(datum, meta)));
+  EXPECT_EQ("{\"DATETIME\":\"1970-01-01 00:00:00.000000\"}", debug_json(native_view(datum, meta)));
 
   datum.set_null();
   meta.set_null();
-  EXPECT_EQ("{\"NULL\":\"NULL\"}", debug_json(DatumValue(datum, meta)));
+  EXPECT_EQ("{\"NULL\":\"NULL\"}", debug_json(native_view(datum, meta)));
 }
 
 TEST(DatumDebugPrinter, renders_string_collation_and_hex_smart_fallback)
@@ -73,15 +79,15 @@ TEST(DatumDebugPrinter, renders_string_collation_and_hex_smart_fallback)
   meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
   meta.set_collation_level(CS_LEVEL_IMPLICIT);
   EXPECT_EQ("{\"VARCHAR\":\"abc\",\"collation\":\"utf8mb4_general_ci\",\"coercibility\":\"IMPLICIT\"}",
-      debug_json(DatumValue(datum, meta)));
+      debug_json(native_view(datum, meta)));
 
   const char binary[] = {static_cast<char>(0xff), 'x'};
   datum.set_string(ObString(sizeof(binary), binary));
   EXPECT_EQ("{\"VARCHAR\":X'FF78',\"collation\":\"utf8mb4_general_ci\",\"coercibility\":\"IMPLICIT\"}",
-      debug_json(DatumValue(datum, meta), true));
+      debug_json(native_view(datum, meta), true));
 
   meta.set_hex_string();
-  EXPECT_EQ("{\"HEX_STRING\":\"FF78\"}", debug_json(DatumValue(datum, meta), true));
+  EXPECT_EQ("{\"HEX_STRING\":\"FF78\"}", debug_json(native_view(datum, meta), true));
 }
 
 TEST(DatumDebugPrinter, renders_ext_sentinel)
@@ -92,7 +98,7 @@ TEST(DatumDebugPrinter, renders_ext_sentinel)
   datum.set_extend(ObActionFlag::OP_MIN_OBJ, 0);
   SqlTypeMeta meta;
   meta.set_ext();
-  EXPECT_EQ("{\"EXT\":\"__OB__MIN__\"}", debug_json(DatumValue(datum, meta), true));
+  EXPECT_EQ("{\"EXT\":\"__OB__MIN__\"}", debug_json(native_view(datum, meta), true));
 }
 
 TEST(DatumDebugPrinter, renders_text_lob_and_json)
@@ -105,7 +111,7 @@ TEST(DatumDebugPrinter, renders_text_lob_and_json)
   meta.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
   meta.set_collation_level(CS_LEVEL_IMPLICIT);
   EXPECT_EQ("{\"LONGTEXT\":\"large text\",\"collation\":\"utf8mb4_general_ci\",\"coercibility\":\"IMPLICIT\"}",
-      debug_json(DatumValue(datum, meta)));
+      debug_json(native_view(datum, meta)));
 
   ObArenaAllocator owner;
   ObJsonNode *tree = nullptr;
@@ -115,5 +121,5 @@ TEST(DatumDebugPrinter, renders_text_lob_and_json)
   ASSERT_EQ(OB_SUCCESS, serializer.serialize(tree, json_bin));
   datum.set_string(json_bin);
   meta.set_type(ObJsonType);
-  EXPECT_EQ("{\"JSON\":{\"a\": 1}}", debug_json(DatumValue(datum, meta)));
+  EXPECT_EQ("{\"JSON\":{\"a\": 1}}", debug_json(native_view(datum, meta)));
 }

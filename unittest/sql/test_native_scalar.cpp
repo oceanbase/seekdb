@@ -35,9 +35,9 @@ std::string unhex(const std::string &s) {
 }
 std::string wire(const DatumValue &value) {
   int64_t size=0,pos=0;
-  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(value.datum_,value.meta_,size));
+  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::native_value_size(value.datum_,value.meta_,size));
   std::string bytes(size,'\0');
-  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(value.datum_,value.meta_,&bytes[0],size,pos)); EXPECT_EQ(size,pos);
+  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_native_value(value.datum_,value.meta_,&bytes[0],size,pos)); EXPECT_EQ(size,pos);
   const char *digits="0123456789abcdef"; std::string result;
   for(unsigned char c:bytes) { result+=digits[c>>4]; result+=digits[c&15]; } return result;
 }
@@ -55,7 +55,7 @@ void verify_scalar_fixture(const char *inputs,const char *expected,int input_cou
     if(line.empty() || line[0]=='#') { continue; }
     const auto f=fields(line); if(f[0]!="V") { continue; }
     const std::string bytes=unhex(f[3]); int64_t pos=0; DatumValue value;
-    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(bytes.data(),bytes.size(),pos,input_owner,value.datum_,value.meta_));
+    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(bytes.data(),bytes.size(),pos,input_owner,value.datum_,value.meta_));
     ASSERT_EQ(bytes.size(),pos); values.push_back(value);
   }
   ASSERT_EQ(input_count,values.size());
@@ -101,7 +101,7 @@ TEST(NativeScalar, owned_results_survive_source_and_aliasing_and_allocation_fail
     ObArenaAllocator source_owner; DatumValue value;
     ASSERT_EQ(OB_SUCCESS,value.set_unknown(42,source_owner));
     ASSERT_EQ(OB_SUCCESS,ObOptEstObjToScalar::convert_value_to_scalar(&value,&output,owner));
-    EXPECT_NE(value.datum_.ptr_,output.datum_.ptr_);
+    EXPECT_NE(value.datum_.get_string().ptr(),output.datum_.get_string().ptr());
   }
   EXPECT_EQ(42,output.get_unknown());
   ASSERT_EQ(OB_SUCCESS,output.set_int(9,owner));
@@ -109,9 +109,16 @@ TEST(NativeScalar, owned_results_survive_source_and_aliasing_and_allocation_fail
   EXPECT_EQ(9.0,output.get_double());
   RejectAllocator reject; DatumValue input;
   ASSERT_EQ(OB_SUCCESS,input.set_int(12,owner));
-  ASSERT_EQ(OB_SUCCESS,output.set_int(99,owner)); output.set_scale(2); const char *original=output.datum_.ptr_;
+  ASSERT_EQ(OB_SUCCESS,output.set_int(99,owner)); output.set_scale(2);
+  ASSERT_EQ(OB_SUCCESS,ObOptEstObjToScalar::convert_value_to_scalar(&input,&output,reject));
+  EXPECT_EQ(12.0,output.get_double()); EXPECT_EQ(0,output.datum_.length());
+  // Generic Unknown retains its real eight-byte physical reference. Its clone
+  // exercises allocator failure without expecting an inline Double to allocate.
+  ASSERT_EQ(OB_SUCCESS,input.set_unknown(12,owner));
+  ASSERT_EQ(OB_SUCCESS,output.set_int(99,owner)); output.set_scale(2);
+  const std::string original=wire(output);
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,ObOptEstObjToScalar::convert_value_to_scalar(&input,&output,reject));
-  EXPECT_EQ(original,output.datum_.ptr_); EXPECT_EQ(99,output.get_int()); EXPECT_EQ(2,output.get_scale());
+  EXPECT_EQ(original,wire(output)); EXPECT_EQ(99,output.get_int()); EXPECT_EQ(2,output.get_scale());
   EXPECT_EQ(OB_INVALID_ARGUMENT,ObOptEstObjToScalar::convert_value_to_scalar(nullptr,&output,owner));
 }
 int main(int argc,char **argv) {

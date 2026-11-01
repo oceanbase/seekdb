@@ -45,6 +45,7 @@ class MockCacheObjectFactory;
 namespace oceanbase
 {
 
+namespace common { class SqlType; }
 namespace query
 {
 class ObIAiEndpointAdmin;
@@ -582,7 +583,7 @@ public:
   inline common::ObIAllocator *get_allocator() { return ctx_.allocator_; }
   inline const sql::ObPhysicalPlanCtx &get_physical_plan_ctx() const { return phy_plan_ctx_; }
   inline sql::ObPhysicalPlanCtx &get_physical_plan_ctx() { return phy_plan_ctx_; }
-  inline const ParamStore &get_params() const { return phy_plan_ctx_.get_param_store(); }
+  inline const ParamStore &get_params() const { return phy_plan_ctx_.pl_variable_store(); }
   inline ParamStore &get_params() { return phy_plan_ctx_.pl_variable_store(); }
   ObPLFunction &get_function() { return func_; }
   int get_var(int64_t var_idx, DatumParameter& result);
@@ -870,11 +871,13 @@ public:
               ParamStore &params,
               uint64_t stmt_id,
               const common::ObString &sql,
-              ObBitSet<OB_DEFAULT_BITSET_SIZE> &out_args);
+              ObBitSet<OB_DEFAULT_BITSET_SIZE> &out_args,
+              ObIArray<const common::SqlType *> *out_parameter_types = nullptr);
   // for anonymous
   int execute(sql::ObExecContext &ctx,
               ParamStore &params,
-              const ObStmtNodeTree *block);
+              const ObStmtNodeTree *block,
+              ObIArray<const common::SqlType *> *out_parameter_types = nullptr);
 
   // for normal routine or package routine
   int execute(sql::ObExecContext &ctx,
@@ -888,7 +891,8 @@ public:
               bool inner_call = false,
               bool in_function = false,
               uint64_t loc = 0,
-              bool is_called_from_sql = false);
+              bool is_called_from_sql = false,
+              ObIArray<const common::SqlType *> *out_parameter_types = nullptr);
   int check_exec_priv(sql::ObExecContext &ctx,
                       const ObString &database_name,
                       ObPLFunction *routine);
@@ -932,7 +936,8 @@ private:
               bool is_in_function = false,
               bool is_anonymous = false,
               uint64_t loc = 0,
-              bool is_called_from_sql = false);
+              bool is_called_from_sql = false,
+              ObIArray<const common::SqlType *> *out_parameter_types = nullptr);
 
 public:
   // for normal routine

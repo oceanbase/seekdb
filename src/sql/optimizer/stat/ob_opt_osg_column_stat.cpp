@@ -32,9 +32,10 @@ int hash_osg_value(const ObDatum &datum, const SqlTypeMeta &meta,
                    const ObDatumAccessContext *access_ctx, uint64_t &hash)
 {
   int ret = OB_SUCCESS;
-  DatumValue value(datum, meta);
+  DatumValue value;
+  ret = value.assign_legacy_borrowed(datum, meta);
   bool outrow_lob = false;
-  if (!datum.is_null() && meta.is_lob_storage() && meta.has_lob_header()) {
+  if (OB_SUCC(ret) && !datum.is_null() && meta.is_lob_storage() && meta.has_lob_header()) {
     ObLobLocatorV2 locator(datum.get_string(), true);
     // Invalid locators are treated as out-row by the old JSON/Geometry hash
     // path (it leaves the result at the seed); text hashing reports the read
@@ -42,7 +43,8 @@ int hash_osg_value(const ObDatum &datum, const SqlTypeMeta &meta,
     outrow_lob = !locator.is_valid(false) || !locator.has_inrow_data();
   }
 
-  if (outrow_lob && (meta.is_json() || meta.is_geometry())) {
+  if (OB_FAIL(ret)) {
+  } else if (outrow_lob && (meta.is_json() || meta.is_geometry())) {
     // The legacy v3 JSON and Geometry hash functions return the seed for an
     // out-row locator instead of reading its external payload.
     hash = 0;
@@ -63,10 +65,12 @@ int hash_osg_value(const ObDatum &datum, const SqlTypeMeta &meta,
 }
 } // namespace
 
-void ObMinMaxValEval::get_value(DatumValue &value) const
+int ObMinMaxValEval::get_value(DatumValue &value) const
 {
+  int ret = OB_SUCCESS;
   if (datum_ == nullptr) { value.set_null(); }
-  else { value = DatumValue(*datum_, meta_); }
+  else { ret = value.assign_legacy_borrowed(*datum_, meta_); }
+  return ret;
 }
 
 int ObMinMaxValEval::deep_copy(const ObMinMaxValEval &other, ObIAllocator &alloc)
@@ -140,9 +144,9 @@ int ObOptOSGColumnStat::publish_min_max_values()
 {
   int ret = OB_SUCCESS, cmp = 0;
   DatumValue minimum, maximum;
-  min_val_.get_value(minimum);
-  max_val_.get_value(maximum);
   if (OB_ISNULL(col_stat_)) { ret = OB_ERR_UNEXPECTED; }
+  else if (OB_FAIL(min_val_.get_value(minimum))) {}
+  else if (OB_FAIL(max_val_.get_value(maximum))) {}
   else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(minimum, allocator_, datum_access_ctx_))) {}
   else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(maximum, allocator_, datum_access_ctx_))) {}
   else {

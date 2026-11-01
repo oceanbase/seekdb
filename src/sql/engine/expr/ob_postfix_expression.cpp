@@ -92,7 +92,7 @@ int64_t ObPostExprItem::to_string(char *buf, const int64_t buf_len) const
         break;
       }
       case T_QUESTIONMARK: {
-        J_OW(J_KV(N_PARAM, get_obj().get_int(),
+        J_OW(J_KV(N_PARAM, get_obj().get_unknown(),
                   N_ACCURACY, accuracy_));
         break;
       }
@@ -120,7 +120,7 @@ DEFINE_SERIALIZE(ObPostExprItem)
       OB_UNIS_ENCODE(accuracy_);
     } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_)) {
       const DatumValue &tmp = get_obj();
-      OZ (DatumParameterCodec::encode_value(tmp.datum_, tmp.meta_, buf, buf_len, pos));
+      OZ (DatumParameterCodec::encode_native_value(tmp.datum_, tmp.meta_, buf, buf_len, pos));
       OB_UNIS_ENCODE(accuracy_);
     } else if (IS_EXPR_OP(item_type_)) {
       OB_UNIS_ENCODE(*v2_.op_);
@@ -145,7 +145,7 @@ int ObPostExprItem::deserialize(ObIAllocator &alloc,
       OB_UNIS_DECODE(accuracy_);
     } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_)) {
       DatumValue owned;
-      if (OB_FAIL(DatumParameterCodec::decode_value(buf, data_len, pos, alloc, owned.datum_, owned.meta_))) {
+      if (OB_FAIL(DatumParameterCodec::decode_native_value(buf, data_len, pos, alloc, owned.datum_, owned.meta_))) {
       } else {
         new(&v2_.value_bytes_) DatumValue(owned);
         OB_UNIS_DECODE(accuracy_);
@@ -177,7 +177,7 @@ DEFINE_GET_SERIALIZE_SIZE(ObPostExprItem)
   } else if (IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_)) {
     const DatumValue &tmp = get_obj();
     int64_t value_size = 0;
-    const int err = DatumParameterCodec::value_size(tmp.datum_, tmp.meta_, value_size);
+    const int err = DatumParameterCodec::native_value_size(tmp.datum_, tmp.meta_, value_size);
     if (OB_SUCCESS == err) { len += value_size; }
     else { LOG_WARN_RET(err, "cannot size expression constant", K(tmp)); }
     OB_UNIS_ADD_LEN(accuracy_);

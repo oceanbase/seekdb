@@ -39,9 +39,9 @@ std::string unhex(const std::string &s) {
 }
 std::string wire(const DatumValue &value) {
   int64_t size=0,pos=0;
-  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(value.datum_,value.meta_,size));
+  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::native_value_size(value.datum_,value.meta_,size));
   std::string bytes(size,'\0');
-  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(value.datum_,value.meta_,&bytes[0],size,pos));
+  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_native_value(value.datum_,value.meta_,&bytes[0],size,pos));
   EXPECT_EQ(size,pos);
   const char *digits="0123456789abcdef"; std::string encoded;
   for(unsigned char c:bytes) { encoded+=digits[c>>4]; encoded+=digits[c&15]; }
@@ -57,7 +57,7 @@ TEST(NativeSimpleRange, frozen_legacy_bounds_intersections_copies_and_scaling) {
     const auto f=fields(line);
     if(f[0]=="V") {
       const std::string bytes=unhex(f[2]); int64_t pos=0; DatumValue value;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
       ASSERT_EQ(bytes.size(),pos); ASSERT_EQ(values.size(),std::stoi(f[1])); values.push_back(value);
     } else {
       ASSERT_EQ(10,f.size()); SCOPED_TRACE(line);
@@ -89,8 +89,8 @@ TEST(NativeSimpleRange, double_bounds_survive_copy_source_destruction_and_negati
     auto source=std::make_unique<SimpleRange>();
     source->set_bound(T_OP_GE,2.0); source->set_bound(T_OP_LE,7.0);
     copied=SimpleRange(*source); assigned=*source;
-    EXPECT_NE(source->start_.datum_.ptr_,copied.start_.datum_.ptr_);
-    EXPECT_NE(source->end_.datum_.ptr_,assigned.end_.datum_.ptr_);
+    EXPECT_NE(&source->start_.datum_,&copied.start_.datum_);
+    EXPECT_NE(&source->end_.datum_,&assigned.end_.datum_);
     source->set_bound(T_OP_EQ,99.0);
   }
   EXPECT_EQ(2.0,copied.start_.get_double()); EXPECT_EQ(7.0,copied.end_.get_double());
@@ -122,9 +122,9 @@ TEST(NativeSimpleRange, bound_markers_share_immutable_lifetime_and_encode_like_l
   EXPECT_TRUE(minimum.is_min_value()); EXPECT_TRUE(maximum.is_max_value());
   EXPECT_EQ("19070000fdffffffffffffffff01",wire(minimum));
   EXPECT_EQ("19070000feffffffffffffffff01",wire(maximum));
-  const char *marker=minimum.datum_.ptr_; DatumValue other=minimum;
+  const Datum marker=minimum.datum_; DatumValue other=minimum;
   ObArenaAllocator owner; ASSERT_EQ(OB_SUCCESS,other.set_int(42,owner));
-  EXPECT_EQ(marker,minimum.datum_.ptr_); EXPECT_TRUE(minimum.is_min_value());
+  EXPECT_EQ(0,MEMCMP(&marker,&minimum.datum_,sizeof(marker))); EXPECT_TRUE(minimum.is_min_value());
 }
 int main(int argc,char **argv) {
   if(ObCharset::init_charset()!=OB_SUCCESS) { return 2; }

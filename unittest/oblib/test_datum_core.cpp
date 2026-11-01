@@ -39,7 +39,8 @@
 using namespace oceanbase::common;
 
 namespace {
-static_assert(sizeof(ObDatum) == 12, "The Datum slot ABI must stay unchanged");
+static_assert(sizeof(ObDatum) == 12, "The explicit storage boundary ABI stays unchanged");
+static_assert(sizeof(Datum) == 16, "Native wrapper value ABI");
 static_assert(sizeof(SqlTypeMeta) == 4, "The metadata ABI must stay unchanged");
 }
 
@@ -48,11 +49,11 @@ TEST(DatumCore, scalar_parameter_and_copy_need_no_legacy_definition)
   ObArenaAllocator arena;
   DatumParameter value, copy;
   SqlTypeMeta meta; meta.set_uint64(); value.set_type_meta(meta);
-  ASSERT_EQ(OB_SUCCESS, value.alloc_datum_reserved_buff(meta, -1, arena));
-  value.datum_.set_uint(UINT64_MAX);
+  ASSERT_EQ(OB_SUCCESS, value.set_uint64(UINT64_MAX, arena));
   ASSERT_EQ(OB_SUCCESS, copy.deep_copy(value, arena));
   EXPECT_EQ(UINT64_MAX, copy.datum_.get_uint());
-  EXPECT_NE(copy.datum_.ptr_, value.datum_.ptr_);
+  EXPECT_EQ(0, value.datum_.length()); EXPECT_EQ(0, copy.datum_.length());
+  value.datum_.set_uint(0); EXPECT_EQ(UINT64_MAX, copy.get_uint64());
   copy.datum_.set_null(); EXPECT_TRUE(copy.is_null());
 }
 
@@ -67,8 +68,7 @@ TEST(DatumCore, native_store_growth_preserves_payloads)
     DatumParameter value;
     value.set_type_meta(meta);
     value.set_precision(19);
-    ASSERT_EQ(OB_SUCCESS, value.alloc_datum_reserved_buff(meta, 19, arena));
-    value.datum_.set_int(i * 7);
+    ASSERT_EQ(OB_SUCCESS, value.set_int(i * 7, arena));
     ASSERT_EQ(OB_SUCCESS, store.push_back(value));
   }
   ASSERT_EQ(count, store.count());
@@ -118,11 +118,11 @@ TEST(DatumCore, parameter_flags_keep_version_one_wire_and_runtime_extension)
 
 TEST(DatumCore, native_parameter_reports_real_nop_sentinel)
 {
-  char bytes[DATUM_LEGACY_EXTEND_SIZE]; DatumParameter value;
+  ObArenaAllocator owner; DatumParameter value;
   SqlTypeMeta meta; meta.set_ext(); value.set_type_meta(meta);
-  value.datum_.ptr_ = bytes; value.datum_.set_ext_value(ObActionFlag::OP_NOP);
+  ASSERT_EQ(OB_SUCCESS, value.set_ext(ObActionFlag::OP_NOP, owner));
   EXPECT_TRUE(value.is_nop_value());
-  value.datum_.set_ext_value(DATUM_MIN_EXT_VALUE); EXPECT_FALSE(value.is_nop_value());
+  ASSERT_EQ(OB_SUCCESS, value.set_ext(DATUM_MIN_EXT_VALUE, owner)); EXPECT_FALSE(value.is_nop_value());
   value.datum_.set_null(); EXPECT_FALSE(value.is_nop_value());
 }
 
@@ -167,8 +167,7 @@ TEST(DatumCore, native_array_checks_count_and_keeps_element_metadata)
   integer.set_uint64(); text.set_varchar();
   array->data_[0].set_type_meta(integer);
   array->data_[0].set_precision(20);
-  ASSERT_EQ(OB_SUCCESS, array->data_[0].alloc_datum_reserved_buff(integer, 20, arena));
-  array->data_[0].datum_.set_uint(UINT64_MAX);
+  ASSERT_EQ(OB_SUCCESS, array->data_[0].set_uint64(UINT64_MAX, arena));
   array->data_[1].set_type_meta(text);
   array->data_[1].set_length(37);
   array->data_[1].datum_.set_string("bytes", 5);
@@ -270,19 +269,23 @@ TEST(DatumCore, owned_parameter_writers_fail_without_changing_old_output)
   DatumParameter value;
   ASSERT_EQ(OB_SUCCESS, value.set_varchar(ObString("original"), arena));
   value.set_param_meta(); value.set_precision(17); value.set_result_flag(0x1234);
-  const char *old_bytes = value.datum_.ptr_;
+  const void *old_bytes = value.datum_.get_reference();
   const SqlTypeMeta old_meta = value.get_meta();
   ParameterTestAllocator reject; reject.fail_at_ = 1;
 #define CHECK_FAILED_WRITE(expression) \
   reject.calls_ = 0; \
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, expression); \
-  EXPECT_EQ(old_bytes, value.datum_.ptr_); \
+  EXPECT_EQ(old_bytes, value.datum_.get_reference()); \
   EXPECT_EQ(ObString("original"), value.get_string()); \
   EXPECT_EQ(old_meta, value.get_meta()); \
   EXPECT_EQ(17, value.get_precision()); \
   EXPECT_EQ(0x1234, value.get_result_flag());
-  CHECK_FAILED_WRITE(value.set_int(42, reject))
-  CHECK_FAILED_WRITE(value.set_year(126, reject))
+  // Inline scalar writes require no allocation, even with a rejecting owner.
+  DatumParameter scalar = value;
+  ASSERT_EQ(OB_SUCCESS, scalar.set_int(42, reject)); EXPECT_EQ(42, scalar.get_int());
+  ASSERT_EQ(OB_SUCCESS, scalar.set_year(126, reject)); EXPECT_EQ(126, scalar.get_year());
+  EXPECT_EQ(0, reject.calls_); EXPECT_EQ(17, scalar.get_precision());
+  EXPECT_EQ(0x1234, scalar.get_result_flag());
   CHECK_FAILED_WRITE(value.set_varchar(ObString("new"), reject))
   CHECK_FAILED_WRITE(value.set_extend(42, uint8_t(1), reject, 123))
   number::ObNumber number;
@@ -292,7 +295,7 @@ TEST(DatumCore, owned_parameter_writers_fail_without_changing_old_output)
   ASSERT_EQ(OB_SUCCESS, value.set_number(number, arena));
   EXPECT_EQ(0, number.compare(value.get_number()));
   EXPECT_EQ(static_cast<int32_t>(number.d_.desc_), value.get_val_len());
-  EXPECT_EQ(0, memcmp(value.datum_.ptr_ + sizeof(number::ObCompactNumber),
+  EXPECT_EQ(0, memcmp(static_cast<const char *>(value.datum_.get_reference()) + sizeof(number::ObCompactNumber),
                       number.get_digits(), number.get_length() * sizeof(uint32_t)));
   SqlTypeMeta declared; declared.set_varchar(); value.set_param_meta(declared);
   SqlTypeMeta null_meta; null_meta.set_null(); value.set_param_meta(null_meta);
@@ -307,15 +310,13 @@ TEST(DatumCore, array_clone_failure_releases_partial_tree_and_preserves_output)
   DatumParameter input;
   SqlTypeMeta meta; meta.set_ext(); meta.set_extend_type(T_EXT_SQL_ARRAY);
   input.set_type_meta(meta);
-  ASSERT_EQ(OB_SUCCESS, input.alloc_datum_reserved_buff(meta, -1, source));
   auto *outer = DatumParameterArray::alloc(source, 2);
-  ASSERT_NE(nullptr, outer); input.set_array_address(outer);
+  ASSERT_NE(nullptr, outer); ASSERT_EQ(OB_SUCCESS, input.set_array_address(outer, source));
   ASSERT_EQ(OB_SUCCESS, outer->data_[0].set_varchar(ObString("outer"), source));
   auto *inner = DatumParameterArray::alloc(source, 1);
   ASSERT_NE(nullptr, inner);
   outer->data_[1].set_type_meta(meta);
-  ASSERT_EQ(OB_SUCCESS, outer->data_[1].alloc_datum_reserved_buff(meta, -1, source));
-  outer->data_[1].set_array_address(inner);
+  ASSERT_EQ(OB_SUCCESS, outer->data_[1].set_array_address(inner, source));
   ASSERT_EQ(OB_SUCCESS, inner->data_[0].set_int(42, source));
   for (int64_t fail_at = 1; fail_at <= 7; ++fail_at) {
     ParameterTestAllocator target; target.fail_at_ = fail_at;
@@ -451,25 +452,29 @@ TEST(DatumCore, mysql_date_parameters_preserve_native_bit_patterns)
   EXPECT_EQ(packed_date, date.get_mysql_date());
   DatumParameter copy;
   ASSERT_EQ(OB_SUCCESS, copy.deep_copy(datetime, arena));
-  EXPECT_NE(datetime.datum_.ptr_, copy.datum_.ptr_);
+  EXPECT_EQ(0, datetime.datum_.length()); EXPECT_EQ(0, copy.datum_.length());
+  datetime.datum_.set_int(0);
   EXPECT_EQ(packed_datetime, copy.get_mysql_datetime());
 }
 
 TEST(DatumCore, compact_member_setters_keep_sixteen_byte_layout_and_owned_payloads)
 {
-  EXPECT_EQ(16, sizeof(DatumValue));
+  // Preserve the historical case name; the sole native value is now 16 bytes.
+  EXPECT_EQ(24, sizeof(DatumValue)); EXPECT_EQ(16, sizeof(Datum));
   ParameterTestAllocator owner;
   DatumValue member;
   ASSERT_EQ(OB_SUCCESS, member.set_int(42, owner));
-  EXPECT_EQ(42, member.get_int()); EXPECT_EQ(8, member.datum_.len_);
+  EXPECT_EQ(42, member.get_int()); EXPECT_EQ(0, member.datum_.length());
+  EXPECT_EQ(0, owner.calls_);
   DatumParameter view; view.set_precision(19); view.set_result_flag(123); view.set_param_meta();
   view.assign_value(member);
-  EXPECT_EQ(42, view.get_int()); EXPECT_EQ(member.datum_.ptr_, view.datum_.ptr_);
+  EXPECT_EQ(42, view.get_int()); EXPECT_EQ(0, view.datum_.length());
+  member.datum_.set_int(7); EXPECT_EQ(42, view.get_int());
   EXPECT_EQ(19, view.get_precision()); EXPECT_EQ(123, view.get_result_flag());
   DatumParameterArray::release_owned(view, owner); member.set_null();
   ASSERT_EQ(OB_SUCCESS, member.set_extend(65536, 3, owner, 4096));
   EXPECT_TRUE(member.is_pl_extend()); EXPECT_EQ(65536, member.get_ext());
-  EXPECT_EQ(4096, member.get_val_len()); EXPECT_EQ(DATUM_EXTEND_PAYLOAD_SIZE, member.datum_.len_);
+  EXPECT_EQ(4096, member.get_val_len()); EXPECT_EQ(DATUM_EXTEND_PAYLOAD_SIZE, member.datum_.length());
   view.assign_value(member); DatumParameterArray::release_owned(view, owner); member.set_null();
   EXPECT_TRUE(owner.live_.empty());
 }
@@ -478,13 +483,14 @@ TEST(DatumCore, compact_member_allocation_failure_preserves_previous_value)
   ParameterTestAllocator owner;
   DatumValue member;
   ASSERT_EQ(OB_SUCCESS, member.set_int(42, owner));
-  const char *old = member.datum_.ptr_; const SqlTypeMeta meta = member.get_meta();
+  const Datum old = member.datum_; const SqlTypeMeta meta = member.get_meta();
   owner.fail_at_ = owner.calls_ + 1;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, member.set_extend(65536, 3, owner, 123));
-  EXPECT_EQ(old, member.datum_.ptr_); EXPECT_EQ(meta, member.get_meta()); EXPECT_EQ(42, member.get_int());
+  EXPECT_EQ(0, MEMCMP(&old, &member.datum_, sizeof(old))); EXPECT_EQ(meta, member.get_meta()); EXPECT_EQ(42, member.get_int());
   owner.fail_at_ = owner.calls_ + 1;
-  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, member.set_int(99, owner));
-  EXPECT_EQ(old, member.datum_.ptr_); EXPECT_EQ(42, member.get_int());
+  const int64_t before = owner.calls_;
+  EXPECT_EQ(OB_SUCCESS, member.set_int(99, owner));
+  EXPECT_EQ(before, owner.calls_); EXPECT_EQ(99, member.get_int()); EXPECT_EQ(0, member.datum_.length());
   DatumParameter view; view.assign_value(member); DatumParameterArray::release_owned(view, owner);
 }
 TEST(DatumCore, compact_member_snapshot_survives_source_arena_and_preserves_raw_metadata)
@@ -499,7 +505,7 @@ TEST(DatumCore, compact_member_snapshot_survives_source_arena_and_preserves_raw_
     DatumValue member = text.value_view();
     DatumParameter view; view.assign_value(member);
     ASSERT_EQ(OB_SUCCESS, DatumParameterArray::clone_parameter(view, snapshot, owner));
-    EXPECT_NE(member.datum_.ptr_, snapshot.datum_.ptr_);
+    EXPECT_NE(member.datum_.get_reference(), snapshot.datum_.get_reference());
     EXPECT_EQ(member.get_meta(), snapshot.get_meta());
   }
   EXPECT_EQ(ObString::make_string("客户"), snapshot.get_string());
@@ -518,9 +524,9 @@ int init_default_constants()
 std::string default_value_wire(const DatumValue &value)
 {
   int64_t size = 0, pos = 0;
-  if (DatumParameterCodec::value_size(value.datum_, value.meta_, size) != OB_SUCCESS) { return "SIZE_ERROR"; }
+  if (DatumParameterCodec::native_value_size(value.datum_, value.meta_, size) != OB_SUCCESS) { return "SIZE_ERROR"; }
   std::string bytes(size, '\0');
-  if (DatumParameterCodec::encode_value(value.datum_, value.meta_, &bytes[0], size, pos) != OB_SUCCESS) {
+  if (DatumParameterCodec::encode_native_value(value.datum_, value.meta_, &bytes[0], size, pos) != OB_SUCCESS) {
     return "ENCODE_ERROR";
   }
   const char *digits = "0123456789abcdef";
@@ -552,7 +558,7 @@ TEST(DatumCore, native_defaults_match_frozen_original_generator)
     value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     value.set_collation_level(static_cast<ObCollationLevel>(level));
     const SqlTypeMeta original_meta = value.get_meta();
-    const char *original_payload = value.datum_.ptr_;
+    const Datum original_payload = value.datum_;
     const int result = value.build_not_strict_default_value(precision,
         static_cast<ObCollationType>(collation), owner);
     ASSERT_EQ(expected, result);
@@ -560,7 +566,7 @@ TEST(DatumCore, native_defaults_match_frozen_original_generator)
       EXPECT_EQ(wire, default_value_wire(value));
     } else {
       EXPECT_EQ(original_meta, value.get_meta());
-      EXPECT_EQ(original_payload, value.datum_.ptr_);
+      EXPECT_EQ(0, MEMCMP(&original_payload, &value.datum_, sizeof(Datum)));
     }
     ++checked;
   }
@@ -586,7 +592,7 @@ TEST(DatumCore, native_default_payloads_survive_input_arena)
   EXPECT_EQ(0, results[0].get_int());
   EXPECT_TRUE(results[1].get_number().is_zero());
   ASSERT_EQ(2, results[2].get_string_len());
-  EXPECT_EQ(0, results[2].datum_.ptr_[0]); EXPECT_EQ(0, results[2].datum_.ptr_[1]);
+  EXPECT_EQ(0, results[2].get_string_ptr()[0]); EXPECT_EQ(0, results[2].get_string_ptr()[1]);
   EXPECT_TRUE(wide::is_zero(results[3].get_decimal_int(), results[3].get_int_bytes()));
   EXPECT_EQ(1, results[4].get_enum());
 }
@@ -600,15 +606,21 @@ TEST(DatumCore, native_default_owner_failure_does_not_publish_partial_state)
     DatumValue value;
     ASSERT_EQ(OB_SUCCESS, value.set_int(918, source));
     value.set_type(type);
-    const char *payload = value.datum_.ptr_;
+    const Datum payload = value.datum_;
     const SqlTypeMeta meta = value.get_meta();
     ParameterTestAllocator failure;
     failure.fail_at_ = 1;
-    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,
-        value.build_not_strict_default_value(18, CS_TYPE_UTF8MB4_BIN, failure));
-    EXPECT_EQ(payload, value.datum_.ptr_);
-    EXPECT_EQ(meta, value.get_meta());
-    EXPECT_EQ(918, value.datum_.get_int());
+    const int ret = value.build_not_strict_default_value(18, CS_TYPE_UTF8MB4_BIN, failure);
+    if (type == ObIntType || type == ObEnumType) {
+      EXPECT_EQ(OB_SUCCESS, ret); EXPECT_EQ(0, failure.calls_);
+      EXPECT_EQ(0, value.datum_.length());
+      if (type == ObIntType) { EXPECT_EQ(0, value.get_int()); }
+      else { EXPECT_EQ(1, value.get_enum()); }
+    } else {
+      EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ret);
+      EXPECT_EQ(0, MEMCMP(&payload, &value.datum_, sizeof(Datum)));
+      EXPECT_EQ(meta, value.get_meta()); EXPECT_EQ(918, value.datum_.get_int());
+    }
     EXPECT_TRUE(failure.live_.empty());
   }
 }

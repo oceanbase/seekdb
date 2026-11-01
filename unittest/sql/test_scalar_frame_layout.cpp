@@ -142,8 +142,7 @@ void load_parameters(ObPhysicalPlanCtx &plan, int64_t original, std::vector<int6
     DatumParameter parameter;
     parameter.set_type_meta(meta);
     parameter.set_accuracy(ObAccuracy(20, 0));
-    parameter.datum_.ptr_ = reinterpret_cast<const char *>(&input[i]);
-    parameter.datum_.pack_ = 8;
+    parameter.datum_.set_int(input[i]);
     if (i == null_index) { parameter.datum_.set_null(); }
     ASSERT_EQ(OB_SUCCESS, plan.append_parameter_input(parameter));
   }
@@ -345,13 +344,14 @@ TEST(ScalarFrameLayout, failed_second_original_frame_keeps_request_descriptor_un
   ObPhysicalPlanCtx &plan = *exec.get_physical_plan_ctx();
   std::vector<int64_t> input(NATIVE_SLOTS_PER_FRAME + 1);
   ASSERT_NO_FATAL_FAILURE(load_parameters(plan, input.size(), input));
-  const char *before = plan.get_param_store().at(0).datum_.ptr_;
+  const int64_t before = plan.get_parameter_inputs().at(0).get_int();
   owner.fail_size_ = NATIVE_SLOT_BYTES;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan.init_datum_param_store());
   EXPECT_EQ(0, plan.get_param_frame_ptrs().count());
   EXPECT_EQ(nullptr, plan.get_native_bigint_parameter(0));
-  EXPECT_EQ(before, plan.get_param_store().at(0).datum_.ptr_);
-  EXPECT_EQ(INT64_MIN, plan.get_param_store().at(0).get_int());
+  EXPECT_FALSE(plan.native_parameters_ready());
+  EXPECT_EQ(before, plan.get_parameter_inputs().at(0).get_int());
+  EXPECT_EQ(INT64_MIN, plan.get_parameter_inputs().at(0).get_int());
   owner.fail_size_ = 0;
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
   ASSERT_EQ(2, plan.get_param_frame_ptrs().count());
@@ -389,7 +389,7 @@ TEST_F(ScalarConstants, px_typed_scalar_wire_owns_decoded_payload)
   int32_t version = 0;
   int8_t no_data = -1;
   ASSERT_EQ(OB_SUCCESS, serialization::decode_i32(wire.data(), size, header_pos, &version));
-  ASSERT_EQ(1, version);
+  ASSERT_EQ(2, version); // The explicit frame protocol now carries typed array/metadata v2.
   ASSERT_EQ(OB_SUCCESS, serialization::decode_i8(wire.data(), size, header_pos, &no_data));
   ASSERT_EQ(0, no_data);
   ASSERT_EQ(OB_SUCCESS, serialization::decode_i64(wire.data(), size, header_pos, &records));

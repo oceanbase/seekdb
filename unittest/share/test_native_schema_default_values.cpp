@@ -55,10 +55,10 @@ std::string schema_bytes(const ObColumnSchemaV2 &column)
 std::string legacy_bytes(const DatumValue &value)
 {
   int64_t bytes = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::value_size(value.datum_, value.meta_, bytes));
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::native_value_size(value.datum_, value.meta_, bytes));
   std::string result(bytes, '\0');
   int64_t position = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(value.datum_, value.meta_,
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_native_value(value.datum_, value.meta_,
       &result[0], result.size(), position));
   EXPECT_EQ(result.size(), position);
   return result;
@@ -90,7 +90,7 @@ TEST(NativeSchemaDefaultValues, integer_defaults_are_inline_without_schema_scala
     const std::string encoded = legacy_bytes(source);
     ASSERT_EQ(OB_SUCCESS, column.set_orig_default_value(source));
     ASSERT_EQ(OB_SUCCESS, column.set_cur_default_value(source, false));
-    MEMSET(const_cast<char *>(source.datum_.ptr_), 0x5a, sizeof(number));
+    source.datum_.set_int(0x5a5a5a5a5a5a5a5aLL);
     input_owner.reset();
     EXPECT_EQ(ObIntType, column.get_orig_default_meta().get_type());
     EXPECT_EQ(number, column.get_orig_default_datum().get_int());
@@ -132,7 +132,7 @@ TEST(NativeSchemaDefaultValues, reference_defaults_own_both_slots_and_survive_so
     value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS, source.set_orig_default_value(value));
     ASSERT_EQ(OB_SUCCESS, source.set_cur_default_value(value, true));
-    EXPECT_NE(value.datum_.ptr_, source.get_cur_default_datum().get_reference());
+    EXPECT_NE(value.datum_.get_reference(), source.get_cur_default_datum().get_reference());
     EXPECT_NE(source.get_orig_default_datum().get_reference(), source.get_cur_default_datum().get_reference());
     ASSERT_EQ(OB_SUCCESS, assigned.assign(source));
     EXPECT_NE(source.get_cur_default_datum().get_reference(), assigned.get_cur_default_datum().get_reference());
@@ -142,7 +142,7 @@ TEST(NativeSchemaDefaultValues, reference_defaults_own_both_slots_and_survive_so
     ASSERT_EQ(OB_SUCCESS, decoded.deserialize(input.data(), input.size(), position));
     EXPECT_EQ(input.size(), position);
     MEMSET(&input[0], 0x5a, input.size());
-    MEMSET(const_cast<char *>(value.datum_.ptr_), 0x5a, sizeof(text));
+    MEMSET(const_cast<void *>(value.datum_.get_reference()), 0x5a, sizeof(text));
     MEMSET(const_cast<void *>(source.get_orig_default_datum().get_reference()), 0x5a, sizeof(text));
     MEMSET(const_cast<void *>(source.get_cur_default_datum().get_reference()), 0x5a, sizeof(text));
   }
@@ -181,9 +181,9 @@ TEST(NativeSchemaDefaultValues, decimal_historical_width_and_scale_do_not_follow
     EXPECT_EQ(expected, native_bytes(column.get_orig_default_datum(), column.get_orig_default_meta()));
     alignas(8) char scratch[64]; DatumValue exported;
     ASSERT_EQ(OB_SUCCESS, column.export_orig_default_value(exported, scratch, sizeof(scratch)));
-    EXPECT_EQ(width, exported.datum_.len_);
+    EXPECT_EQ(width, exported.datum_.length());
     EXPECT_EQ(5, exported.get_scale());
-    if (width > 0) { EXPECT_EQ(0, MEMCMP(coefficient, exported.datum_.ptr_, width)); }
+    if (width > 0) { EXPECT_EQ(0, MEMCMP(coefficient, exported.datum_.get_reference(), width)); }
     const std::string bytes = schema_bytes(column); int64_t position = 0;
     ASSERT_EQ(OB_SUCCESS, decoded.deserialize(bytes.data(), bytes.size(), position));
     EXPECT_EQ(18, decoded.get_data_precision()); EXPECT_EQ(2, decoded.get_data_scale());
@@ -287,14 +287,16 @@ TEST(NativeSchemaDefaultValues, malformed_import_and_short_export_do_not_publish
   ASSERT_EQ(OB_SUCCESS, column.set_cur_default_value(initial, false));
   const std::string before = schema_bytes(column);
   DatumValue malformed; malformed.meta_.set_int();
-  malformed.datum_.ptr_ = nullptr; malformed.datum_.pack_ = sizeof(int64_t);
+  const char malformed_payload = 0;
+  ASSERT_EQ(OB_SUCCESS, malformed.datum_.set_reference(&malformed_payload, 1));
   EXPECT_EQ(OB_INVALID_ARGUMENT, column.set_orig_default_value(malformed));
   EXPECT_EQ(OB_INVALID_ARGUMENT, column.set_cur_default_value(malformed, true));
   EXPECT_FALSE(column.is_default_expr_v2_column());
   EXPECT_EQ(before, schema_bytes(column));
   Datum output; output.set_int(23);
+  ObDatum malformed_legacy; malformed_legacy.ptr_ = nullptr; malformed_legacy.pack_ = sizeof(int64_t);
   EXPECT_EQ(OB_INVALID_ARGUMENT, DatumParameterCodec::import_schema_native_value(
-      malformed.datum_, malformed.meta_, owner, output));
+      malformed_legacy, malformed.meta_, owner, output));
   EXPECT_EQ(23, output.get_int()); EXPECT_EQ(0, output.length());
   alignas(8) char existing_payload[8], scratch[7];
   ObDatum old_output; old_output.ptr_ = existing_payload; old_output.set_int(42);
@@ -358,7 +360,7 @@ TEST(NativeSchemaDefaultValues, explicit_legacy_copy_retains_in_the_callers_owne
     input.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS, source.set_cur_default_value(input, false));
     ASSERT_EQ(OB_SUCCESS, source.copy_cur_default_value(retained, retained_owner));
-    EXPECT_NE(source.get_cur_default_datum().get_reference(), retained.datum_.ptr_);
+    EXPECT_NE(source.get_cur_default_datum().get_reference(), retained.datum_.get_reference());
   }
   EXPECT_EQ(ObString("retained"), retained.get_string());
   EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, retained.get_collation_type());

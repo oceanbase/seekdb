@@ -47,7 +47,7 @@ DatumValue value_from(const std::string &hex, ObIAllocator &owner)
   const auto bytes = unhex(hex);
   DatumValue result;
   int64_t pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(bytes.data(), bytes.size(),
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(),
       pos, owner, result.datum_, result.meta_));
   EXPECT_EQ(bytes.size(), pos);
   return result;
@@ -190,7 +190,7 @@ TEST_F(NativeObserverKeyFilters, converted_payloads_own_bytes_and_failed_allocat
   FilterIterator iter;
   iter.set_allocator(&owner); iter.set_session(&session);
   ASSERT_EQ(OB_SUCCESS, (iter.*access(ConvertTag{}))(input, output, targets));
-  EXPECT_NE(input_value.datum_.ptr_, output.get_cell(0).datum_.ptr_);
+  EXPECT_NE(input_value.datum_.get_string().ptr(), output.get_cell(0).datum_.get_string().ptr());
   source_owner.reset();
   EXPECT_EQ(ObString::make_string("owned key"), output.get_cell(0).get_string());
   const std::string before = wire(output);

@@ -80,8 +80,9 @@ void decode(const std::string &wire, ObSessionValMap &map) {
 }
 class RejectingSessionOwner final : public ObIAllocator {
 public:
-  void *alloc(int64_t) override { return nullptr; }
-  void *alloc(int64_t, const ObMemAttr &) override { return nullptr; }
+  int64_t calls = 0;
+  void *alloc(int64_t) override { ++calls; return nullptr; }
+  void *alloc(int64_t bytes, const ObMemAttr &) override { return alloc(bytes); }
   void free(void *) override {}
 };
 }
@@ -155,15 +156,27 @@ TEST(SessionDatumValues, failed_pending_clone_does_not_publish_compaction_or_rep
   EXPECT_EQ(index, map.*access_map(IndexTag{})); EXPECT_EQ(bytes, serialized(map));
 }
 TEST(SessionDatumValues, variable_record_decode_failure_keeps_previous_value_and_position) {
-  ObSessionValMap map; decode(fixture("int"), map); const auto *entry = map.get(ObString::make_string("variable")); ASSERT_NE(nullptr, entry);
-  std::string record(entry->get_serialize_size(), '\0'); int64_t pos = 0;
+  ObSessionValMap integer_map; decode(fixture("int"), integer_map);
+  const auto *integer_entry = integer_map.get(ObString::make_string("variable")); ASSERT_NE(nullptr, integer_entry);
+  std::string integer_record(integer_entry->get_serialize_size(), '\0'); int64_t pos = 0;
+  ASSERT_EQ(OB_SUCCESS, integer_entry->serialize(integer_record.data(), integer_record.size(), pos));
+  RejectingSessionOwner reject;
+  ObSessionVariable scalar; pos = 0;
+  ASSERT_EQ(OB_SUCCESS, scalar.deserialize(integer_record.data(), integer_record.size(), pos, reject));
+  EXPECT_EQ(918, scalar.value_.get_int()); // Independent captured 0x96,0x07 vi64.
+  EXPECT_EQ(0, scalar.value_.get_datum().length()); EXPECT_EQ(0, reject.calls);
+
+  ObSessionValMap map; decode(fixture("varchar"), map);
+  const auto *entry = map.get(ObString::make_string("variable")); ASSERT_NE(nullptr, entry);
+  std::string record(entry->get_serialize_size(), '\0'); pos = 0;
   ASSERT_EQ(OB_SUCCESS, entry->serialize(record.data(), record.size(), pos));
   ObArenaAllocator owner; ObSessionVariable existing; existing.meta_.set_varchar();
-  ASSERT_EQ(OB_SUCCESS, existing.value_.set_int(99, owner)); const char *previous = existing.value_.datum_.ptr_;
-  RejectingSessionOwner reject; pos = 0;
+  ASSERT_EQ(OB_SUCCESS, existing.value_.set_int(99, owner)); const int64_t previous = existing.value_.get_int();
+  pos = 0;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, existing.deserialize(record.data(), record.size(), pos, reject));
-  EXPECT_EQ(0, pos); EXPECT_EQ(previous, existing.value_.datum_.ptr_); EXPECT_EQ(99, existing.value_.get_int());
-  EXPECT_EQ(ObVarcharType, existing.meta_.get_type());
+  EXPECT_EQ(1, reject.calls);
+  EXPECT_EQ(0, pos); EXPECT_EQ(previous, existing.value_.get_int()); EXPECT_EQ(99, existing.value_.get_int());
+  EXPECT_EQ(0, existing.value_.get_datum().length()); EXPECT_EQ(ObVarcharType, existing.meta_.get_type());
 }
 TEST(SessionDatumValues, real_decode_failure_is_not_overwritten_by_map_insertion) {
   const std::string valid = fixture("erase_text"); ASSERT_EQ(31, valid.size());

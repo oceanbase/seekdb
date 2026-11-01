@@ -6359,7 +6359,6 @@ int ObAggregateProcessor::get_pl_agg_udf_result(const ObAggrInfo &aggr_info,
           const ObDatum datum = StoredDatumCodec::decode_legacy_view(stored_row->stored_cells()[i]);
           SqlTypeMeta meta = aggr_info.param_exprs_.at(i)->obj_meta_;
           DatumParameter param;
-          param.set_datum(datum);
           if (datum.is_null()) {
             // Preserve legacy projection behavior: a SQL NULL carries NULL type while
             // retaining the declared collation attributes.
@@ -6380,10 +6379,9 @@ int ObAggregateProcessor::get_pl_agg_udf_result(const ObAggrInfo &aggr_info,
             static_assert(sizeof(SqlTypeMeta) == 4, "legacy Ext metadata is four bytes");
             MEMCPY(&meta, datum.ptr_, sizeof(SqlTypeMeta));
           }
-          if (OB_SUCC(ret)) {
-            param.set_type_meta(meta);
-            if (OB_FAIL(datum_params.push_back(param))) {
-            }
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(param.assign_legacy_borrowed(datum, meta))) {
+          } else if (OB_FAIL(datum_params.push_back(param))) {
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(pl_agg_udf_func.process_calc_pl_agg_udf(
@@ -6397,11 +6395,17 @@ int ObAggregateProcessor::get_pl_agg_udf_result(const ObAggrInfo &aggr_info,
       DatumParameter result_param;
       if (OB_FAIL(pl_agg_udf_func.process_get_pl_agg_udf_result(pl_agg_udf_obj, result_param))) {
       } else {
-        result = result_param.datum_;
-        if (is_lob_storage(result_param.get_type())) {
+        if (!is_lob_storage(result_param.get_type())) {
+          // This accumulator still returns an explicit old Datum. Its scalar
+          // bytes must belong to the real aggregate owner, not a local slot.
+          ret = result_param.copy_legacy(result, aggr_alloc_);
+        } else {
           Datum native_origin, native_result;
           LegacyAggrValue legacy_result;
-          if (OB_FAIL(aggr_info.expr_->get_datum_copy_plan().import_legacy(result_param.datum_, native_origin))) {
+          alignas(8) char scratch[64];
+          ObDatum physical;
+          if (OB_FAIL(result_param.export_legacy(physical, scratch, sizeof(scratch)))) {
+          } else if (OB_FAIL(aggr_info.expr_->get_datum_copy_plan().import_legacy(physical, native_origin))) {
           } else if (OB_FAIL(ob_adjust_lob_datum(eval_ctx_.exec_ctx_, native_origin,
                                     result_param.get_type_meta(), aggr_info.expr_->obj_meta_,
                                     eval_ctx_.exec_ctx_.get_allocator(), native_result))) {
@@ -6476,7 +6480,10 @@ int ObAggregateProcessor::convert_datum_to_values(const ObAggrInfo &aggr_info,
     ret = OB_ERR_UNEXPECTED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < stored_row.cnt_; ++i) {
-      new (&values[i]) DatumValue(StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[i]), aggr_info.param_exprs_.at(i)->obj_meta_);
+      new (&values[i]) DatumValue();
+      ret = values[i].assign_legacy_borrowed(
+          StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[i]),
+          aggr_info.param_exprs_.at(i)->obj_meta_);
     }
   }
   return ret;
@@ -6965,10 +6972,13 @@ int ObAggregateProcessor::get_json_objectagg_result(const ObAggrInfo &aggr_info,
         if (OB_UNLIKELY(storted_row->cnt_ != aggr_info.param_exprs_.count())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          key_value = DatumValue(StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]), aggr_info.param_exprs_.at(0)->obj_meta_);
+          ret = key_value.assign_legacy_borrowed(
+              StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[0]),
+              aggr_info.param_exprs_.at(0)->obj_meta_);
           const ObDatum value_datum = StoredDatumCodec::decode_legacy_view(storted_row->stored_cells()[1]);
           const SqlTypeMeta &meta = aggr_info.param_exprs_.at(1)->obj_meta_;
-          if (!value_datum.is_null() && OB_UNLIKELY(!meta.is_valid()
+          if (OB_FAIL(ret)) {
+          } else if (!value_datum.is_null() && OB_UNLIKELY(!meta.is_valid()
               || (meta.is_decimal_int() && meta.get_scale() < 0))) {
             ret = OB_ERR_UNEXPECTED;
           } else {

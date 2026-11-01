@@ -22583,8 +22583,10 @@ int ObDDLService::drop_column_online(
         || new_column_schema->is_stored_generated_column()
         || new_column_schema->is_default_expr_v2_column()) {
       // generated column expression, generated alway as (null), generated column retrieve needed.
-      ObDatum expr_datum;
-      expr_datum.set_string(ObString::make_string("NULL"));
+      Datum expr_datum;
+      const int literal_ret = expr_datum.set_string(ObString::make_string("NULL"));
+      OB_ASSERT(literal_ret == OB_SUCCESS);
+      UNUSED(literal_ret);
       SqlTypeMeta expr_meta;
       expr_meta.set_varchar();
       expr_meta.set_collation_level(CS_LEVEL_IMPLICIT);

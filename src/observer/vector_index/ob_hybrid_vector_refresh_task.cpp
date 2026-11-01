@@ -857,8 +857,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
         const int64_t vid = task_ctx->embedding_vids_.at(row_id);
         DatumValue vid_obj;
         vid_obj.meta_.set_uint64();
-        vid_obj.datum_.ptr_ = reinterpret_cast<const char *>(&vid);
-        vid_obj.datum_.pack_ = sizeof(vid);
+        vid_obj.datum_.set_uint(static_cast<uint64_t>(vid));
         if (OB_FAIL(storage::NativeKeyValueBuffer::project_value(vid_obj, obj_ptr, embedded_rowkey_count, embedded_rowkey_count - 1))) {
         } else if (adaptor.get_is_need_vid()) {
           vid_obj.meta_.set_int();

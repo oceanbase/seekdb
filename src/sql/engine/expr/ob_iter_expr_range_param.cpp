@@ -35,15 +35,21 @@ int ObIterExprRangeParam::get_next_row(ObIterExprCtx &expr_ctx, const common::Ob
     ret = OB_ERR_UNEXPECTED;
   }
   for (int64_t i = start_index_; OB_SUCC(ret) && i <= end_index_; ++i) {
-    if (OB_UNLIKELY(i < 0) || OB_UNLIKELY(i >= plan_ctx->get_param_store().count())) {
+    if (OB_UNLIKELY(i < 0) || OB_UNLIKELY(i >= plan_ctx->get_parameter_count())) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_UNLIKELY(cur_cell_idx >= cur_row->get_count())) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      const DatumParameter &parameter = plan_ctx->get_param_store().at(i);
+      const DatumParameterMetadata *attributes = plan_ctx->get_parameter_metadata(i);
+      ObDatum legacy;
+      alignas(8) char scratch[64];
       DatumValue owned;
-      ret = clone_typed_value(parameter.value_view(), owned,
-          expr_ctx.get_exec_context().get_allocator());
+      if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else if (OB_FAIL(plan_ctx->export_runtime_parameter_legacy(i, legacy, scratch, sizeof(scratch)))) {
+      } else {
+        ret = owned.assign_legacy_owned(legacy, attributes->type_meta_,
+            expr_ctx.get_exec_context().get_allocator());
+      }
       if (OB_SUCC(ret)) { cur_row->get_cell(cur_cell_idx++) = owned; }
     }
   }

@@ -30,37 +30,49 @@ DatumValue make_inner_table_default_null()
 
 DatumValue make_inner_table_default_int(SqlValueType type, int64_t value)
 {
-  // ObDatum's scalar setters write through ptr_; generated schema defaults
-  // borrow this thread-local payload until ObColumnSchema clones it.
+  // Actual generated Int/TinyInt values import inline. Keep the historical
+  // source span stable for a physical Reference kind supplied to this helper.
   thread_local int64_t payload;
   ObDatum datum;
   datum.ptr_ = reinterpret_cast<char *>(&payload);
   datum.set_int(value);
   SqlTypeMeta meta;
   meta.set_type(type);
-  return DatumValue(datum, meta);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
 }
 
 DatumValue make_inner_table_default_uint64(uint64_t value)
 {
-  thread_local uint64_t payload;
+  uint64_t payload;
   ObDatum datum;
   datum.ptr_ = reinterpret_cast<char *>(&payload);
   datum.set_uint(value);
   SqlTypeMeta meta;
   meta.set_uint64();
-  return DatumValue(datum, meta);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
 }
 
 DatumValue make_inner_table_default_timestamp(int64_t value)
 {
-  thread_local int64_t payload;
+  int64_t payload;
   ObDatum datum;
   datum.ptr_ = reinterpret_cast<char *>(&payload);
   datum.set_timestamp(value);
   SqlTypeMeta meta;
   meta.set_timestamp();
-  return DatumValue(datum, meta);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
 }
 
 DatumValue make_inner_table_default_string(SqlValueType type, const ObString &value,
@@ -76,7 +88,11 @@ DatumValue make_inner_table_default_string(SqlValueType type, const ObString &va
   }
   if (collation == CS_TYPE_BINARY) { meta.set_collation_type(CS_TYPE_BINARY); }
   meta.set_collation_level(CS_LEVEL_IMPLICIT);
-  return DatumValue(datum, meta);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
 }
 
 DatumValue make_inner_table_default_now()
@@ -89,7 +105,11 @@ DatumValue make_inner_table_default_now()
   datum.set_extend(ObActionFlag::OP_DEFAULT_NOW_FLAG, 0);
   SqlTypeMeta meta;
   meta.set_ext();
-  return DatumValue(datum, meta);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
 }
 
 int ADD_COLUMN_SCHEMA_FULL(share::schema::ObTableSchema &table_schema,

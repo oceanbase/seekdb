@@ -29,6 +29,7 @@ class ObTimeZoneInfo;
 }
 namespace sql
 {
+class ObPhysicalPlanCtx;
 class ObRawExprPrinter
 {
 #define LEN_AND_PTR(str) (str.length()), (str.ptr())
@@ -116,6 +117,8 @@ public:
 
   void init(char *buf, int64_t buf_len, int64_t *pos, ObSchemaGetterGuard *schema_guard,
             ObValuePrintParams print_params, const ParamStore *param_store = NULL);
+  void bind_runtime_parameters(const ObPhysicalPlanCtx *parameters)
+  { parameter_context_ = parameters; if (nullptr != parameters) { param_store_ = nullptr; } }
   // stmt will contain several exprs, to avoid repeated instantiation, here expr is passed as a parameter to do_print
   int do_print(ObRawExpr *expr, ObStmtScope scope, bool only_column_namespace = false, bool print_cte = false);
 private:
@@ -175,7 +178,8 @@ private:
   bool only_column_namespace_;
   const common::ObTimeZoneInfo *tz_info_;
   ObValuePrintParams print_params_;
-  const ParamStore *param_store_;
+  const ParamStore *param_store_; // construction inputs only
+  const ObPhysicalPlanCtx *parameter_context_;
   ObSchemaGetterGuard *schema_guard_;
   bool print_cte_;
 };

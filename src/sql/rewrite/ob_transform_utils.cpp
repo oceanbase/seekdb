@@ -2979,7 +2979,7 @@ int ObTransformUtils::check_index_extract_query_range(const ObDMLStmt *stmt,
   ObRawExpr *condition_expr = NULL;
   ObArenaAllocator alloc(ObMemAttr("RewriteMinMax"));
   void *tmp_ptr = NULL;
-  const ParamStore *params = NULL;
+  const ObPhysicalPlanCtx *params = NULL;
   ObQueryCtx *query_ctx = NULL;
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx) || OB_ISNULL(ctx->exec_ctx_)
@@ -2993,7 +2993,7 @@ int ObTransformUtils::check_index_extract_query_range(const ObDMLStmt *stmt,
                                                    range_columns))) {
   } else {
     ObPreRangeGraph *pre_range_graph = NULL;
-    params = &ctx->exec_ctx_->get_physical_plan_ctx()->get_param_store();
+    params = ctx->exec_ctx_->get_physical_plan_ctx();
     if (OB_ISNULL(tmp_ptr = alloc.alloc(sizeof(ObPreRangeGraph))) ||
         OB_ISNULL(pre_range_graph = new(tmp_ptr)ObPreRangeGraph(alloc))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -7012,11 +7012,11 @@ int ObTransformUtils::merge_limit_offset(ObTransformerCtx *ctx,
   bool is_null_value = false;
   bool set_offset_null = false;
   bool trans_limit_zero = false;
-  const ParamStore *param_store = NULL;
+  const ObPhysicalPlanCtx *param_store = NULL;
   bool is_valid_zero = false;
   if (OB_ISNULL(ctx) || OB_ISNULL(ctx->expr_factory_) || OB_ISNULL(ctx->session_info_) 
       || OB_ISNULL(ctx->exec_ctx_) || OB_ISNULL(ctx->exec_ctx_->get_physical_plan_ctx())
-      || OB_ISNULL(param_store = &ctx->exec_ctx_->get_physical_plan_ctx()->get_param_store())) {
+      || OB_ISNULL(param_store = ctx->exec_ctx_->get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   // try merge
   } 
@@ -7164,7 +7164,7 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
   // This local view cannot escape: a retained constraint takes its own copy.
   DatumValue target_value;
   target_value.meta_.set_int();
-  target_value.datum_.set_string(reinterpret_cast<const char *>(&limit), sizeof(limit));
+  target_value.datum_.set_int(limit);
   int comparison = 0;
   is_equal = false;
   if (OB_ISNULL(allocator)) {
@@ -8202,7 +8202,7 @@ int ObTransformUtils::check_subquery_match_index(ObTransformerCtx *ctx,
 
 
 int ObTransformUtils::get_limit_value(ObRawExpr *limit_expr,
-                                      const ParamStore *param_store,
+                                      const ObPhysicalPlanCtx *param_store,
                                       ObExecContext *exec_ctx,
                                       ObIAllocator *allocator,
                                       int64_t &limit_value,
@@ -8217,7 +8217,7 @@ int ObTransformUtils::get_limit_value(ObRawExpr *limit_expr,
 }
 
 int ObTransformUtils::get_expr_int_value(ObRawExpr *expr,
-                                      const ParamStore *param_store,
+                                      const ObPhysicalPlanCtx *param_store,
                                       ObExecContext *exec_ctx,
                                       ObIAllocator *allocator,
                                       int64_t &value,
@@ -8268,7 +8268,7 @@ int ObTransformUtils::get_expr_int_value(ObRawExpr *expr,
 
 int ObTransformUtils::get_percentage_value(ObRawExpr *percent_expr,
                                            const ObDMLStmt *stmt,
-                                           const ParamStore *param_store,
+                                           const ObPhysicalPlanCtx *param_store,
                                            ObExecContext *exec_ctx,
                                            ObIAllocator *allocator,
                                            double &percent_value,
@@ -8337,11 +8337,10 @@ int ObTransformUtils::add_const_param_constraints(ObRawExpr *expr,
         ObPCConstParamInfo param_info;
         ObConstRawExpr *const_expr = static_cast<ObConstRawExpr*>(params.at(i));
         int64_t param_idx = const_expr->get_questionmark_index();
-        if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_param_store().count())) {
+        if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_parameter_count())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(param_info.const_idx_.push_back(param_idx))) {
-        } else if (OB_FAIL(param_info.add_parameter(
-                          plan_ctx->get_param_store().at(param_idx), ctx->exec_ctx_, *ctx->allocator_))) {
+        } else if (OB_FAIL(param_info.add_runtime_parameter(*plan_ctx, param_idx, *ctx->allocator_))) {
         } else if (OB_FAIL(ctx->plan_const_param_constraints_.push_back(param_info))) {
         } else {/*do nothing*/}
       }
@@ -10085,7 +10084,6 @@ int ObTransformUtils::check_static_expr_has_warning(ObTransformerCtx *ctx,
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   DatumParameter result;
-  const ParamStore *param_store = NULL;
   ObWarningBuffer *old_warning_buf = NULL;
   ObWarningBuffer probe_warning_buf;
   has_warning = false;
@@ -10097,15 +10095,17 @@ int ObTransformUtils::check_static_expr_has_warning(ObTransformerCtx *ctx,
   } else if (!expr->is_static_scalar_const_expr()) {
     // do nothing
   } else {
-    param_store = &ctx->exec_ctx_->get_physical_plan_ctx()->get_param_store();
     old_warning_buf = ob_get_tsi_warning_buffer();
     probe_warning_buf.reset();
     ob_setup_tsi_warning_buffer(&probe_warning_buf);
-    tmp_ret = ObSQLUtils::calc_simple_expr_without_row(ctx->session_info_,
-                                                       expr,
-                                                       result,
-                                                       param_store,
-                                                       *ctx->allocator_);
+    if (expr->is_const_raw_expr()) {
+      bool need_check = false;
+      tmp_ret = ObSQLUtils::calc_const_expr(*ctx->exec_ctx_, expr, result,
+                                           need_check, *ctx->allocator_);
+    } else {
+      tmp_ret = ObSQLUtils::se_calc_const_expr_bound(*ctx->exec_ctx_, expr,
+                                                     *ctx->allocator_, result);
+    }
     ob_setup_tsi_warning_buffer(old_warning_buf);
     if (OB_SUCCESS != tmp_ret) {
       if (IS_SPATIAL_EXPR(expr->get_expr_type())) {

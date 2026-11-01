@@ -37,7 +37,11 @@ DatumValue make_varchar_datum_view(const char *ptr, const int64_t len)
   SqlTypeMeta meta;
   meta.set_varchar();
   meta.set_collation_level(CS_LEVEL_IMPLICIT);
-  return DatumValue(datum, meta);
+  DatumValue result;
+  const int ret = result.assign_legacy_borrowed(datum, meta);
+  OB_ASSERT(ret == OB_SUCCESS);
+  UNUSED(ret);
+  return result;
 }
 }
 

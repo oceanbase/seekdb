@@ -56,9 +56,16 @@ int normalize_das_multivalue_scalar(DatumValue &value, const SqlTypeMeta &column
         value.datum_.set_string(ObString());
       } else if (target == OBJ_DATUM_8BYTE_DATA || target == OBJ_DATUM_4BYTE_DATA
                  || target == OBJ_DATUM_1BYTE_DATA) {
-        // The native Ext payload begins with the same int64 scalar bits. The
-        // decoded bytes belong to the row batch arena and survive this view.
-        value.datum_.pack_ = ObDatum::get_reserved_size(target);
+        // Preserve this historical physical reinterpretation at an explicit
+        // boundary. The destination metadata selects its native inline value;
+        // FLOAT/DATE/YEAR keep their original bit widths, not a numeric cast.
+        alignas(8) char scratch[64];
+        ObDatum physical;
+        if (OB_FAIL(value.export_legacy(physical, scratch, sizeof(scratch)))) {
+        } else {
+          physical.pack_ = ObDatum::get_reserved_size(target);
+          ret = value.assign_legacy_borrowed(physical, column_meta);
+        }
       } else {
         ret = OB_DESERIALIZE_ERROR;
       }
@@ -534,7 +541,7 @@ int ObDASDomainUtils::generate_multivalue_index_rows(ObIAllocator &allocator,
               DatumValue value;
               // Decoding owns payloads in the same batch allocator as rows;
               // variable-width storage cells may borrow them until batch reset.
-              if (OB_FAIL(DatumParameterCodec::decode_value(data, data_len, pos,
+              if (OB_FAIL(DatumParameterCodec::decode_native_value(data, data_len, pos,
                             allocator, value.datum_, value.meta_))) {
               } else {
                 is_none_unique_done = true;

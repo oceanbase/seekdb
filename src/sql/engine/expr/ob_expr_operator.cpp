@@ -69,10 +69,11 @@ int ObExprResType::export_param(DatumValue &output, void *scratch, int64_t capac
 {
   int ret = OB_SUCCESS;
   DatumValue candidate;
+  ObDatum physical;
   if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(
-          param_, param_meta_, candidate.datum_, scratch, capacity))) {
+          param_, param_meta_, physical, scratch, capacity))) {
+  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, param_meta_))) {
   } else {
-    candidate.meta_ = param_meta_;
     output = candidate;
   }
   return ret;

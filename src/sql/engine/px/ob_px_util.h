@@ -453,6 +453,9 @@ public:
     ObSEArray<char *, 4> const_pointers;
     ObSEArray<char *, 4> parameter_pages;
     ObSEArray<const common::SqlType *, 16> parameter_types;
+    ObSEArray<common::DatumParameterMetadata, 8> parameter_metadata;
+    ObSEArray<NativeParameterGroup, 2> parameter_groups;
+    int32_t parameter_wire_version = 0;
     int64_t original_count = 0;
     if (OB_SUCC(ret)) {
       ret = deserialize_frame_info<DESERIALIZE_PLAN_PART>(buf, data_len, pos, ctx.get_allocator(),
@@ -464,7 +467,8 @@ public:
     }
     if (OB_SUCC(ret)) {
       ret = NativeFrameCodec::deserialize_parameters(buf, data_len, pos, ctx.get_allocator(),
-          parameter_pages, parameter_types, original_count);
+          parameter_pages, parameter_types, original_count,
+          &parameter_metadata, &parameter_groups, &parameter_wire_version);
     }
     if (OB_SUCC(ret)) {
       ret = NativeFrameCodec::bind_parameter_pages(expr_frame_info.param_frame_, parameter_pages,
@@ -484,9 +488,21 @@ public:
       ret = const_cast<ObExprFrameInfo &>(expr_frame_info).const_frame_ptrs_.assign(const_pointers);
     }
     if (OB_SUCC(ret)) {
-      ret = plan_ctx->restore_native_parameter_frames(parameter_pages, parameter_types, original_count);
+      ret = plan_ctx->restore_native_parameter_frames(parameter_pages, parameter_types, original_count,
+          parameter_wire_version >= 2 ? &parameter_metadata : nullptr,
+          parameter_wire_version >= 2 ? &parameter_groups : nullptr);
     }
     if (OB_SUCC(ret)) {
+      // PlanCtx expands short beyond pages before publishing stable slots.
+      // Bind this newly decoded directory to the adopted pages as well.
+      for (int64_t i = 0; i < frame_count; ++i) {
+        for (int64_t j = 0; j < parameter_pages.count(); ++j) {
+          if (frames[i] == parameter_pages.at(j)) {
+            frames[i] = plan_ctx->get_param_frame_ptrs().at(j);
+            break;
+          }
+        }
+      }
       ctx.set_frames(frames);
       ctx.set_frame_cnt(frame_count);
       position = pos;

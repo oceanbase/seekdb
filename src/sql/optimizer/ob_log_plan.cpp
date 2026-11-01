@@ -5950,14 +5950,14 @@ int ObLogPlan::get_order_by_topn_expr(int64_t input_card,
              NULL != get_stmt()->get_limit_percent_expr()) {
     need_limit = true;
   } else if (OB_FAIL(ObTransformUtils::get_limit_value(stmt->get_limit_expr(),
-                                                       get_optimizer_context().get_params(),
+                                                       get_optimizer_context().get_parameter_context(),
                                                        get_optimizer_context().get_exec_ctx(),
                                                        &get_optimizer_context().get_allocator(),
                                                        limit_count,
                                                        is_null_value))) {
   } else if (!is_null_value &&
              OB_FAIL(ObTransformUtils::get_limit_value(stmt->get_offset_expr(),
-                                                       get_optimizer_context().get_params(),
+                                                       get_optimizer_context().get_parameter_context(),
                                                        get_optimizer_context().get_exec_ctx(),
                                                        &get_optimizer_context().get_allocator(),
                                                        limit_offset,
@@ -9692,7 +9692,7 @@ int ObLogPlan::gen_das_access_plans(ObLogTableScan *table_scan,
       OB_ISNULL(table_partition_info) ||
       OB_ISNULL(opt_ctx) ||
       OB_ISNULL(opt_ctx->get_exec_ctx()) ||
-      OB_ISNULL(opt_ctx->get_params()) ||
+      OB_ISNULL(opt_ctx->get_parameter_context()) ||
       OB_ISNULL(sql_schema_guard = opt_ctx->get_sql_schema_guard()) ||
       OB_ISNULL(stmt = table_scan->get_stmt()) ||
       OB_ISNULL(table_item = stmt->get_table_item_by_id(table_scan->get_table_id())) ||
@@ -9700,7 +9700,7 @@ int ObLogPlan::gen_das_access_plans(ObLogTableScan *table_scan,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FALSE_IT(table_partition_info->get_table_access_plan().set_use_das(table_scan->use_das()))) {
   } else if (OB_FAIL(table_partition_info->get_table_access_plan().set_is_das_empty_part(*opt_ctx->get_exec_ctx(),
-                                                                                      *opt_ctx->get_params(),
+                                                                                      *opt_ctx->get_parameter_context(),
                                                                                       dtc_params))) {
   } else if (!table_scan->use_das() || !table_scan->is_match_all()) {
     // do nothing
@@ -11967,7 +11967,7 @@ int ObLogPlan::construct_startup_filter_for_limit(ObRawExpr *limit_expr, ObLogic
   if (OB_ISNULL(limit_expr) || OB_ISNULL(log_op)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObTransformUtils::get_expr_int_value(limit_expr,
-                                                          get_optimizer_context().get_params(),
+                                                          get_optimizer_context().get_parameter_context(),
                                                           get_optimizer_context().get_exec_ctx(),
                                                           &get_allocator(),
                                                           limit_value,

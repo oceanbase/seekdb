@@ -97,16 +97,18 @@ int ObArrayCastUtils::cast_get_element(ObIArrayType *src, const ObCollectionBasi
   if (OB_ISNULL(src) || OB_ISNULL(elem_type) || OB_ISNULL(datum_buffer)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    // Collection element readers write scalar payloads into the caller's
-    // reserved Datum storage; string readers replace ptr_/len_ with a borrowed
-    // view into the source collection. The value remains a view for this cast.
-    src_elem.meta_ = elem_type->basic_meta_.meta_;
-    src_elem.datum_.ptr_ = datum_buffer;
-    if (OB_FAIL(src->elem_at_datum(idx, src_elem.datum_))) {
+    // The collection API writes a legacy scalar into the caller's scratch or
+    // borrows reference bytes from the collection. Import the checked physical
+    // view synchronously; scalar payloads become inline in the wrapper.
+    common::ObDatum physical;
+    physical.ptr_ = datum_buffer;
+    if (OB_FAIL(src->elem_at_datum(idx, physical))) {
       if (ret == OB_NOT_SUPPORTED) {
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "array element has no Datum accessor", K(ret), K(elem_type->basic_meta_.get_obj_type()));
       }
+    } else {
+      ret = src_elem.assign_legacy_borrowed(physical, elem_type->basic_meta_.meta_);
     }
   }
   return ret;
@@ -194,9 +196,10 @@ int ObArrayCastUtils::cast_add_element(common::ObIAllocator &alloc, const common
       }
       case ObVarcharType: {
         ObArrayBinary *dst_arr = static_cast<ObArrayBinary *>(dst);
-        ObDatum input = res.datum_;
-        ObDatum checked;
-        if (OB_FAIL(datum_varchar_accuracy_check(mode, out_acc.get_length(), cs_type,
+        alignas(8) char input_scratch[64];
+        ObDatum input, checked;
+        if (OB_FAIL(res.export_legacy(input, input_scratch, sizeof(input_scratch)))) {
+        } else if (OB_FAIL(datum_varchar_accuracy_check(mode, out_acc.get_length(), cs_type,
                                                  input, checked, cast_ctx.warning_))) {
         } else if (OB_FAIL(dst_arr->push_back(ObString(checked.len_, checked.ptr_)))) {
         }

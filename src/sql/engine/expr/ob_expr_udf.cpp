@@ -334,15 +334,28 @@ int ObExprUDF::process_singal_out_param(int64_t i,
   } else if (dones.at(i)) {
     // already process, do nothing
   } else if (params_desc.at(i).is_local_out()) { //out param in paramstore of caller
-    const ParamStore &param_store = exec_ctx.get_physical_plan_ctx()->get_param_store();
     int64_t position = params_desc.at(i).get_index();
     DatumParameter *modify = NULL;
+    const DatumParameter *previous = nullptr;
+    ObPhysicalPlanCtx *parameters = exec_ctx.get_physical_plan_ctx();
     DatumParameter result;
-    CK (position >= 0 && position < param_store.count());
-    CK (OB_NOT_NULL(modify = const_cast<DatumParameter*>(&(param_store.at(position)))));
+    // Use the caller's actual PL variable domain when present. The original
+    // no-active-PL-context path remains a checked !ready input replacement,
+    // never a mutable descriptor borrowed from an ordinary execution frame.
+    if (ctx != nullptr && ctx->params_ != nullptr) {
+      CK (position >= 0 && position < ctx->params_->count());
+      OX (previous = modify = &ctx->params_->at(position));
+    } else {
+      CK (parameters != nullptr && !parameters->native_parameters_ready());
+      if (OB_SUCC(ret)) {
+        const ParamStore &inputs = parameters->get_parameter_inputs();
+        CK (position >= 0 && position < inputs.count());
+        OX (previous = &inputs.at(position));
+      }
+    }
     ObIAllocator &caller_owner = symbol_alloc != nullptr ? *symbol_alloc : alloc;
     if (iparams.at(i).is_ext()) {
-      CK (modify->is_null() || modify->is_ext());
+      CK (previous->is_null() || previous->is_ext());
       OZ (clone_datum_value(iparams.at(i), result, caller_owner));
     } else {
       OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(), &caller_owner,
@@ -351,8 +364,13 @@ int ObExprUDF::process_singal_out_param(int64_t i,
     }
     // Previous bytes may be borrowed from a caller frame. Their arena owns
     // reclamation; replacing a binding must not free an unknown allocation.
-    OX (modify->assign_value(result));
-    OX (modify->set_param_meta());
+    if (OB_SUCC(ret)) {
+      DatumParameter replacement = *previous;
+      replacement.assign_value(result);
+      replacement.set_param_meta();
+      if (modify != nullptr) { *modify = replacement; }
+      else { ret = parameters->set_parameter_input(position, replacement); }
+    }
     OX (dones.at(i) = true);
   } else if (params_desc.at(i).is_package_var_out()) {
     OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(),
@@ -786,7 +804,10 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, Datum &res)
       if (!result.is_null() && result.get_type() != expr.datum_meta_.type_) {
         ret = OB_INVALID_ARGUMENT;
       }
-      OZ(expr.get_datum_copy_plan().import_legacy(result.datum_, res));
+      alignas(8) char result_scratch[64];
+      ObDatum legacy_result;
+      OZ(result.export_legacy(legacy_result, result_scratch, sizeof(result_scratch)));
+      OZ(expr.get_datum_copy_plan().import_legacy(legacy_result, res));
       if (is_lob_storage(result.get_type())) {
         OZ(ob_adjust_lob_datum(ctx.exec_ctx_, res, result.get_meta(), expr.obj_meta_,
                               ctx.exec_ctx_.get_allocator(), res));

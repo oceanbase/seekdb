@@ -50,6 +50,7 @@ int ObSelectStmtPrinter::do_print()
                         schema_guard_, 
                         print_params_,
                         param_store_);
+      expr_printer_.bind_runtime_parameters(parameter_context_);
       if (OB_FAIL(SMART_CALL(print()))) {
       }
     }
@@ -113,6 +114,7 @@ int ObSelectStmtPrinter::print_set_op_stmt()
                                        param_store_,
                                        /*force_col_alias*/true,
                                        session_);
+      stmt_printer.bind_runtime_parameters(parameter_context_);
       stmt_printer.set_column_list(column_list_);
       stmt_printer.set_is_first_stmt_for_hint(is_first_stmt_for_hint_);
       ObString set_op_str = ObString::make_string(

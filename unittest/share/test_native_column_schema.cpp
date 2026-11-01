@@ -70,7 +70,7 @@ TEST(NativeColumnSchema, full_frames_match_original_production_serializer) {
   while(std::getline(input,line)) {
     if(line.empty() || line[0]=='#') { continue; }const auto f=columns(line);if(f[0]!="V") { continue; }
     const auto bytes=unhex(f[3]);DatumValue value;int64_t pos=0;
-    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
+    ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
     ASSERT_EQ(bytes.size(),pos);values.push_back(value);
   }
   ASSERT_EQ(dataset.count,values.size());
@@ -129,7 +129,7 @@ TEST(NativeColumnSchema, copy_and_decode_own_payloads_after_source_is_destroyed)
     ASSERT_EQ(OB_SUCCESS,source.set_cur_default_value(text,true));
     EXPECT_EQ(0,source.get_orig_default_datum().length());
     EXPECT_EQ(918,source.get_orig_default_datum().get_int());
-    ASSERT_NE(text.datum_.ptr_,source.get_cur_default_datum().get_reference());
+    ASSERT_NE(text.datum_.get_reference(),source.get_cur_default_datum().get_reference());
     ASSERT_EQ(OB_SUCCESS,copy.assign(source));
     EXPECT_EQ(0,copy.get_orig_default_datum().length());
     EXPECT_EQ(918,copy.get_orig_default_datum().get_int());
@@ -170,12 +170,11 @@ TEST(NativeColumnSchema, nested_native_arrays_are_owned_and_counted) {
     ASSERT_EQ(OB_SUCCESS,array->data_[1].set_varchar(ObString::make_string("customer"),source));
     SqlTypeMeta meta;meta.set_ext();meta.set_extend_type(T_EXT_SQL_ARRAY);
     array->data_[0].set_type_meta(meta);
-    ASSERT_EQ(OB_SUCCESS,array->data_[0].alloc_datum_reserved_buff(meta,-1,source));
-    array->data_[0].set_array_address(nested);
+    ASSERT_EQ(OB_SUCCESS,array->data_[0].set_array_address(nested,source));
     DatumParameter value;value.set_type_meta(meta);
-    ASSERT_EQ(OB_SUCCESS,value.alloc_datum_reserved_buff(meta,-1,source));value.set_array_address(array);
+    ASSERT_EQ(OB_SUCCESS,value.set_array_address(array,source));
     ASSERT_EQ(OB_SUCCESS,column.set_orig_default_value(value));
-    EXPECT_NE(value.datum_.ptr_,column.get_orig_default_datum().get_reference());
+    EXPECT_NE(value.datum_.get_reference(),column.get_orig_default_datum().get_reference());
   }
   alignas(8) char array_scratch[64]; DatumValue array_view;
   ASSERT_EQ(OB_SUCCESS,column.export_orig_default_value(array_view,array_scratch,sizeof(array_scratch)));

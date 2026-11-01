@@ -78,8 +78,7 @@ ObSubQueryIterator::ObSubQueryIterator(ObOperator &op)
     iter_brs_(NULL),
     batch_size_(0),
     batch_row_pos_(0),
-    iter_end_(false),
-    das_batch_params_recovery_()
+    iter_end_(false)
 {
 }
 
@@ -312,8 +311,7 @@ int ObSubQueryIterator::rewind(const bool reset_onetime_plan /* = false */)
     }
   } else {
     if (parent_->enable_left_das_batch()) {
-      if (OB_FAIL(alloc_das_batch_store())) {
-      } else {
+      {
         uint64_t parent_spf_group = 0;
         int64_t parent_group_rescan_cnt = 0;
         const GroupParamArray *group_params = nullptr;
@@ -355,7 +353,6 @@ void ObSubQueryIterator::reuse()
   batch_size_ = 0;
   batch_row_pos_ = 0;
   iter_end_ = false;
-  das_batch_params_recovery_.reset();
 }
 //TODO move to the corresponding expr, set a flag to ensure it is calculated only once
 int ObSubQueryIterator::prepare_init_plan()
@@ -600,21 +597,7 @@ int ObSubQueryIterator::reset_hash_map()
   return ret;
 }
 
-int ObSubQueryIterator::alloc_das_batch_store()
-{
-  int ret = OB_SUCCESS;
-  int64_t params_count = 0;
-  params_count = parent_->get_spec().rescan_params_.count();
-  if (!das_batch_params_recovery_.empty()) {
-    //Do nothing
-    OB_ASSERT(params_count == das_batch_params_recovery_.count());
-  } else {
-    ObIAllocator& alloc = op_.get_exec_ctx().get_allocator();
-    if (OB_FAIL(das_batch_params_recovery_.allocate_array(alloc, params_count))) {
-    }
-  }
-  return ret;
-}
+
 
 ObSubPlanFilterSpec::ObSubPlanFilterSpec(ObIAllocator &alloc, const ObPhyOperatorType type)
   : ObOpSpec(alloc, type),
@@ -685,8 +668,7 @@ ObSubPlanFilterOp::ObSubPlanFilterOp(
     left_row_idx_(0),
     batch_rescan_ctl_(),
     last_store_row_mem_(NULL),
-    group_rescan_cnt_(0),
-    rescan_params_info_()
+    group_rescan_cnt_(0)
 {
 }
 
@@ -858,8 +840,9 @@ int ObSubPlanFilterOp::fill_cur_row_rescan_param()
   } else if (batch_rescan_ctl_.cur_idx_ >= batch_rescan_ctl_.params_.get_count()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    common::ObIArray<DatumParameter>& params =
-        batch_rescan_ctl_.params_.get_one_batch_params(batch_rescan_ctl_.cur_idx_);
+    const ObBatchRescanParams::Row &params =
+        batch_rescan_ctl_.params_.get_one_batch_values(batch_rescan_ctl_.cur_idx_);
+    const auto &attributes = batch_rescan_ctl_.params_.get_one_batch_metadata(batch_rescan_ctl_.cur_idx_);
     int64_t param_cnt = params.count();
     int64_t idx = OB_INVALID_ID;
     for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
@@ -867,7 +850,7 @@ int ObSubPlanFilterOp::fill_cur_row_rescan_param()
       if (OB_UNLIKELY(i >= MY_SPEC.rescan_params_.count() || MY_SPEC.rescan_params_.at(i).param_idx_ != idx)) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        ret = MY_SPEC.rescan_params_.at(i).restore_dynamic_param(eval_ctx_, params.at(i));
+        ret = MY_SPEC.rescan_params_.at(i).restore_dynamic_param(eval_ctx_, params.at(i), attributes.at(i));
       }
     }
   }
@@ -986,7 +969,6 @@ int ObSubPlanFilterOp::inner_close()
   destroy_update_set_mem();
   if (MY_SPEC.enable_das_group_rescan_) {
     das_batch_params_.reset();
-    rescan_params_info_.reset();
   }
   return OB_SUCCESS;
 }
@@ -1269,9 +1251,8 @@ int ObSubPlanFilterOp::handle_next_batch_with_group_rescan(const int64_t op_max_
     left_rows_iter_.reset();
     (void) brs_holder_.restore();
     current_group_ = 0;
-    last_store_row_mem_->get_arena_allocator().reset();
-    if(OB_FAIL(init_das_batch_params())) {
-    }
+    if (OB_FAIL(init_das_batch_params())) {
+    } else { last_store_row_mem_->get_arena_allocator().reset(); }
     while (OB_SUCC(ret) && continue_fetching(left_rows_total_cnt, stop_fetch, true)) {
       set_param_null();
       clear_evaluated_flag();
@@ -1477,19 +1458,24 @@ int ObSubPlanFilterOp::prepare_rescan_params(bool need_save, int64_t& params_siz
     common::ObSEArray<int64_t, 8> param_idxs, param_expr_idxs;
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.rescan_params_.count(); ++i) {
       const ObDynamicParamSetter &setter = MY_SPEC.rescan_params_.at(i);
-      DatumParameter value;
+      NativeTypedDatum value;
+      DatumParameterMetadata attributes;
       int64_t expr_idx = 0;
-      OZ(setter.set_dynamic_param(eval_ctx_, value));
-      OZ(builder.append(value));
-      if (OB_SUCC(ret)) { params_size += value.datum_.get_deep_copy_size(); }
+      OZ(setter.set_dynamic_param(eval_ctx_, value, attributes));
+      OZ(builder.append(value, attributes));
+      if (OB_SUCC(ret)) {
+        int64_t bytes = 0;
+        OZ(DatumCopyPlan(*value.type_).carrier_span_size(value.datum_, bytes));
+        if (OB_SUCC(ret)) { params_size += bytes; }
+      }
       OZ(param_idxs.push_back(setter.param_idx_));
       CK(OB_NOT_NULL(plan_ctx->get_phy_plan()));
       OZ(plan_ctx->get_phy_plan()->get_expr_frame_info().get_expr_idx_in_frame(setter.dst_, expr_idx));
       OZ(param_expr_idxs.push_back(expr_idx));
     }
     if (OB_SUCC(ret)) {
-      batch_rescan_ctl_.param_version_ += 1;
       ret = builder.finish(param_idxs, param_expr_idxs);
+      if (OB_SUCC(ret)) { batch_rescan_ctl_.param_version_ += 1; }
     }
   }
   return ret;
@@ -1622,33 +1608,14 @@ int ObSubPlanFilterOp::alloc_das_batch_params(uint64_t group_size)
 {
   int ret = OB_SUCCESS;
   if (das_batch_params_.empty()) {
-    ret = das_batch_params_.allocate_array(ctx_.get_allocator(),
-                                           MY_SPEC.rescan_params_.count());
-    if(OB_SUCC(ret)) {
-      uint64_t obj_buf_size = sizeof(DatumParameter) * group_size;
-      for (int64_t i = 0; OB_SUCC(ret) && i < das_batch_params_.count(); ++i) {
-        void *buf = ctx_.get_allocator().alloc(obj_buf_size);
-        if (NULL == buf) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          das_batch_params_.at(i).data_ = new(buf) DatumParameter[group_size];
-          das_batch_params_.at(i).count_ = 0;
-          ObExpr *dst_expr = MY_SPEC.rescan_params_.at(i).dst_;
-          das_batch_params_.at(i).element_.set_meta_type(dst_expr->obj_meta_);
-        }
-      }
+    GroupParamArray prepared;
+    if (OB_FAIL(prepared.allocate_array(ctx_.get_allocator(), MY_SPEC.rescan_params_.count()))) {
     } else {
-    }
-  }
-  if (OB_SUCC(ret) && !das_batch_params_.empty()) {
-    ret = rescan_params_info_.allocate_array(ctx_.get_allocator(),
-                                           MY_SPEC.rescan_params_.count());
-    if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < rescan_params_info_.count(); ++i) {
-        rescan_params_info_.at(i).param_idx_ = MY_SPEC.rescan_params_.at(i).param_idx_;
-        rescan_params_info_.at(i).gr_param_ = &das_batch_params_.at(i);
+      for (int64_t i = 0; OB_SUCC(ret) && i < prepared.count(); ++i) {
+        ret = prepared.at(i).init(MY_SPEC.rescan_params_.at(i).param_idx_, group_size, ctx_.get_allocator());
       }
     }
+    if (OB_SUCC(ret)) { das_batch_params_ = prepared; }
   }
   return ret;
 }
@@ -1658,7 +1625,11 @@ int ObSubPlanFilterOp::init_das_batch_params()
   OB_ASSERT(!das_batch_params_.empty());
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < das_batch_params_.count(); ++i) {
-    das_batch_params_.at(i).count_ = 0;
+    auto &column = das_batch_params_.at(i);
+    for (int64_t j = 0; j < column.values_.count(); ++j) {
+      column.values_.at(j) = NativeTypedDatum(); column.metadata_.at(j) = DatumParameterMetadata();
+    }
+    column.count_ = 0;
   }
   return ret;
 }
@@ -1666,53 +1637,32 @@ int ObSubPlanFilterOp::init_das_batch_params()
 int ObSubPlanFilterOp::deep_copy_dynamic_obj()
 {
   int ret = OB_SUCCESS;
-  DatumParameter param;
-  int64_t param_cnt = MY_SPEC.rescan_params_.count();
-  if (OB_ISNULL(last_store_row_mem_)) {
-    ret = OB_INVALID_ARGUMENT;
+  const int64_t count = MY_SPEC.rescan_params_.count();
+  if (OB_ISNULL(last_store_row_mem_) || count != das_batch_params_.count()) { ret = OB_INVALID_ARGUMENT; }
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    NativeTypedDatum value;
+    DatumParameterMetadata attributes;
+    if (das_batch_params_.at(i).count_ != das_batch_params_.at(0).count_) { ret = OB_ERR_UNEXPECTED; }
+    else if (OB_FAIL(MY_SPEC.rescan_params_.at(i).set_dynamic_param(eval_ctx_, value, attributes))) {
+    } else { ret = das_batch_params_.at(i).stage(value, attributes, last_store_row_mem_->get_arena_allocator()); }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
-    const ObDynamicParamSetter &rescan_param = MY_SPEC.rescan_params_.at(i);
-    if (OB_FAIL(rescan_param.set_dynamic_param(eval_ctx_, param))) {
-    } else if (OB_FAIL(DatumParameterArray::clone_parameter(param,
-                                    das_batch_params_.at(i).data_[das_batch_params_.at(i).count_],
-                                    last_store_row_mem_->get_arena_allocator()))) {
-    } else {
-      ++das_batch_params_.at(i).count_;
-    }
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; i < count; ++i) { ++das_batch_params_.at(i).count_; }
   }
   return ret;
 }
 
-int ObSubPlanFilterOp::fill_cur_row_das_batch_param(ObEvalCtx& eval_ctx, uint64_t current_group) const
+int ObSubPlanFilterOp::fill_cur_row_das_batch_param(ObEvalCtx &eval_ctx, uint64_t current_group) const
 {
   int ret = OB_SUCCESS;
-  ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
-  if (das_batch_params_.empty() || current_group >= das_batch_params_.at(0).count_) {
+  if (das_batch_params_.empty() || MY_SPEC.rescan_params_.count() != das_batch_params_.count()) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    int64_t param_cnt = das_batch_params_.count();
-    if (unlikely(MY_SPEC.rescan_params_.count() != param_cnt)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
-      const ObDynamicParamSetter &rescan_param = MY_SPEC.rescan_params_.at(i);
-      int64_t param_idx = rescan_param.param_idx_;
-      ObExpr *dst = rescan_param.dst_;
-      Datum &param_datum = dst->locate_datum_for_write(eval_ctx);
-      const DatumParameterArray &arr = das_batch_params_.at(i);
-      dst->get_eval_info(eval_ctx).clear_evaluated_flag();
-      ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *dst);
-      if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx, arr.data_[current_group]))) {
-      } else {
-        const Datum *current = plan_ctx->get_native_parameter(param_idx);
-        if (current == nullptr) { ret = OB_ERR_UNEXPECTED; }
-        else {
-          param_datum = *current;
-          dst->set_evaluated_projected(eval_ctx);
-        }
-      }
-    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < das_batch_params_.count(); ++i) {
+    const GroupRescanParam &column = das_batch_params_.at(i);
+    if (current_group >= column.count_) { ret = OB_ERR_UNEXPECTED; }
+    else { ret = MY_SPEC.rescan_params_.at(i).restore_dynamic_param(
+        eval_ctx, column.values_.at(current_group), column.metadata_.at(current_group)); }
   }
   return ret;
 }

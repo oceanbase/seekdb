@@ -39,7 +39,7 @@ uint64_t ObHashCols::inner_hash() const
           const DatumValue &cell = cells[hash_col_idx_->at(i).index_];
           if (cell.is_string_type()) {
             result = ObCharset::hash(hash_col_idx_->at(i).cs_type_,
-                cell.datum_.ptr_, cell.datum_.len_, result, false, DatumMurmurHash::hash);
+                cell.get_string_ptr(), cell.get_string_len(), result, false, DatumMurmurHash::hash);
           } else {
             (void)hash_datum_value(cell, result, result);
           }
@@ -54,7 +54,7 @@ uint64_t ObHashCols::inner_hash() const
         const DatumValue &cell = cells[real_index];
         if (cell.is_string_type()) {
           result = ObCharset::hash(hash_col_idx_->at(i).cs_type_,
-                cell.datum_.ptr_, cell.datum_.len_, result, false, DatumMurmurHash::hash);
+                cell.get_string_ptr(), cell.get_string_len(), result, false, DatumMurmurHash::hash);
         } else {
           (void)hash_datum_value(cell, result, result);
         }

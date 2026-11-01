@@ -46,8 +46,9 @@ void destruct_trigger_record(pl::ObPLRecord *record, bool keep_composite_attr)
   DatumValue value;
   value.meta_.set_ext();
   value.meta_.set_extend_type(record->get_type());
-  value.datum_.ptr_ = payload;
-  value.datum_.set_extend(reinterpret_cast<int64_t>(record), record->get_type(), record->get_init_size());
+  const int ret = value.datum_.set_extend(reinterpret_cast<int64_t>(record), record->get_type(),
+      record->get_init_size(), payload, sizeof(payload));
+  if (ret != OB_SUCCESS) { LOG_WARN("build trigger cleanup descriptor failed", K(ret)); return; }
   pl::ObUserDefinedType::destruct_obj(value, nullptr, keep_composite_attr);
 }
 
@@ -463,8 +464,8 @@ int TriggerHandle::stabilize_trigger_params(
       // is_pl_extend() itself reads the Extend payload. Check descriptor
       // shape and non-null pointers before invoking payload-reading helpers.
       // Both owners still live here: DML for initial, TriggerExec for OUT.
-      if (!saved.datum_.is_native_extend() || saved.datum_.ptr_ == nullptr
-          || !published.datum_.is_native_extend() || published.datum_.ptr_ == nullptr
+      if (!saved.datum_.has_ext_value() || saved.datum_.length() < DATUM_EXTEND_PAYLOAD_SIZE
+          || !published.datum_.has_ext_value()
           || saved.get_extend_type() != pl::PL_RECORD_TYPE
           || published.get_extend_type() != pl::PL_RECORD_TYPE
           || !saved.is_pl_extend() || !published.is_pl_extend()
@@ -484,9 +485,11 @@ int TriggerHandle::stabilize_trigger_params(
         const uint8_t subtype = published.datum_.get_extend_type();
         const uint8_t collation_level = published.datum_.get_extend_collation_level();
         const uint8_t collation = published.datum_.get_extend_collation();
-        published.datum_.ptr_ = saved.datum_.ptr_;
-        published.datum_.set_extend(reinterpret_cast<int64_t>(original),
-            subtype, size, collation_level, collation);
+        copy_ret = published.datum_.set_extend(reinterpret_cast<int64_t>(original),
+            subtype, size, const_cast<void *>(saved.get_datum().get_reference()),
+            saved.get_datum().length(), collation_level, collation);
+      }
+      if (copy_ret == OB_SUCCESS) {
         params.at(i) = published;
       } else {
         // A failed copy cannot leave a dangling temporary descriptor behind.
@@ -669,9 +672,12 @@ int TriggerHandle::check_and_update_new_row(
           } else if (OB_FAIL(copy_trigger_value(new_cells[i], current_cell,
                                                 eval_ctx.exec_ctx_.get_allocator()))) {
           }
+          alignas(8) char current_scratch[64];
+          ObDatum current_view;
           if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(current_cell.export_legacy(current_view, current_scratch, sizeof(current_scratch)))) {
           } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(
-                         current_cell.datum_, write_datum))) {
+                         current_view, write_datum))) {
           }
           if (OB_SUCC(ret) && current_cell.is_lob_storage()
               && OB_FAIL(ob_adjust_lob_datum(eval_ctx.exec_ctx_, write_datum,

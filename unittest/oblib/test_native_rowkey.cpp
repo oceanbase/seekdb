@@ -148,11 +148,15 @@ TEST(NativeRowkey, integer_fast_path_rejects_invalid_payloads) {
   DatumValue left, right;
   ASSERT_EQ(OB_SUCCESS, left.set_int(1, owner));
   ASSERT_EQ(OB_SUCCESS, right.set_int(2, owner));
-  left.datum_.len_ = sizeof(int32_t);
+  int32_t invalid_span = 1;
+  ASSERT_EQ(OB_SUCCESS, left.datum_.set_reference(&invalid_span, sizeof(invalid_span)));
   EXPECT_DEATH((void)ObRowkey(&left, 1).compare(ObRowkey(&right, 1)), "");
-  left.datum_.len_ = sizeof(int64_t);
-  left.datum_.ptr_ = nullptr;
+  ASSERT_EQ(OB_SUCCESS, left.datum_.set_reference(nullptr, 0, Datum::OutRow));
   EXPECT_DEATH((void)ObRowkey(&left, 1).compare(ObRowkey(&right, 1)), "");
+  ObDatum missing; missing.ptr_ = nullptr; missing.pack_ = 8;
+  const Datum before = right.datum_;
+  EXPECT_EQ(OB_INVALID_ARGUMENT, right.assign_legacy_borrowed(missing, right.meta_));
+  EXPECT_EQ(0, MEMCMP(&before, &right.datum_, sizeof(before)));
 }
 TEST(NativeRowkey, actual_legacy_diagnostic_printers) {
   for(const auto &c:fixture()){

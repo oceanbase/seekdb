@@ -1180,8 +1180,8 @@ int ObRangeGraphGenerator::generate_expr_final_info()
         alignas(8) char scratch[64];
         if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
         } else if (OB_FAIL(clone_typed_value(view, owned, allocator_))) {
+        } else if (OB_FAIL(owned.copy_legacy(*expr_info.const_val_, allocator_))) {
         } else {
-          *expr_info.const_val_ = owned.datum_;
           expr_info.const_meta_ = owned.meta_;
         }
       }

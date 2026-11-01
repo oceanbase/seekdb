@@ -34,7 +34,7 @@ class JsonQueryMultivalueAccess {
 public:
   static int run(bool array, ObEvalCtx &context, ObIAllocator &owner,
       ObIJsonBase *json, const ObExpr &expr, ObCollationType collation,
-      ObAccuracy &accuracy, SqlValueType type, ObDatum &result) {
+      ObAccuracy &accuracy, SqlValueType type, Datum &result) {
     ObJsonCastParam parameters(type, CS_TYPE_UTF8MB4_BIN, collation, 0);
     return ObExprJsonQuery::set_multivalue_result(array, context, owner, json,
         expr, 0, CS_TYPE_UTF8MB4_BIN, collation, nullptr, accuracy, parameters, result);
@@ -66,14 +66,15 @@ struct MviProducerState {
     returning_type.res_buf_len_ = 128; returning_type.dyn_buf_header_offset_ = 96;
     returning_type.obj_meta_.set_int(); returning_type.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
     returning_type.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 19);
-    new (frames[0]) ObDatum(); new (frames[0] + 32) ObEvalInfo();
+    EXPECT_EQ(OB_SUCCESS, returning_type.prepare_scalar_type(returning_type.obj_meta_, ObAccuracy(19,0), arena));
+    new (frames[0]) Datum(); new (frames[0] + 32) ObEvalInfo();
     output.type_ = T_FUN_SYS_JSON_QUERY;
     output.frame_idx_ = 0; output.datum_off_ = 256; output.eval_info_off_ = 288;
     output.res_buf_off_ = 512; output.res_buf_len_ = 4096; output.dyn_buf_header_offset_ = 480;
     output.obj_meta_.set_varchar(); output.obj_meta_.set_collation_type(CS_TYPE_BINARY);
     output.obj_datum_map_ = OBJ_DATUM_STRING;
     output.datum_meta_ = ObDatumMeta(ObVarcharType, CS_TYPE_BINARY, -1);
-    new (frames[0] + 256) ObDatum(); new (frames[0] + 288) ObEvalInfo();
+    new (frames[0] + 256) Datum(); new (frames[0] + 288) ObEvalInfo();
     ObDynReserveBuf *dynamic = new (frames[0] + 480) ObDynReserveBuf();
     dynamic->magic_ = ObDynReserveBuf::MAGIC_NUM;
     dynamic->len_ = output.res_buf_len_; dynamic->mem_ = frames[0] + output.res_buf_off_;
@@ -82,6 +83,19 @@ struct MviProducerState {
   ~MviProducerState() {
     eval.reset(); context.set_frames(nullptr); context.set_frame_cnt(0);
     ObSQLSessionInfo::ExecCtxSessionRegister registration(session, nullptr);
+  }
+  int prepare_output(bool array, SqlValueType type, const ObAccuracy &accuracy, ObCollationType collation) {
+    const SqlValueType result_type = array ? ObVarcharType : type;
+    output.obj_meta_.reset(); output.obj_meta_.set_type(result_type);
+    output.obj_meta_.set_collation_type(array ? CS_TYPE_BINARY : collation);
+    output.obj_meta_.set_collation_level(ob_is_numeric_type(result_type) ? CS_LEVEL_NUMERIC : CS_LEVEL_IMPLICIT);
+    output.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(result_type);
+    output.datum_meta_ = ObDatumMeta(result_type, output.obj_meta_.get_collation_type(),
+        array ? -1 : accuracy.get_scale(), array ? -1 : accuracy.get_precision());
+    output.max_length_ = array ? output.res_buf_len_ : accuracy.get_length();
+    ObAccuracy result_accuracy = accuracy;
+    if (array) { result_accuracy.reset(); result_accuracy.set_length(output.res_buf_len_); }
+    return output.prepare_scalar_type(output.obj_meta_, result_accuracy, arena);
   }
   void set_type(SqlValueType type, int32_t length, int16_t precision, int16_t scale) {
     ParseNode node; node.value_ = 0;
@@ -94,11 +108,12 @@ struct MviProducerState {
 };
 
 int produce(MviProducerState &state, const char *json_text, SqlValueType type,
-    ObAccuracy accuracy, bool array, std::string &packed, ObDatum **scalar = nullptr) {
+    ObAccuracy accuracy, bool array, std::string &packed, Datum **scalar = nullptr) {
   state.set_type(type, accuracy.get_length(), accuracy.get_precision(), accuracy.get_scale());
   ObJsonNode *tree = nullptr;
-  int ret = ObJsonParser::get_tree(&state.arena, ObString::make_string(json_text), tree);
-  ObDatum &result = state.output.locate_datum_for_write(*state.eval);
+  int ret = state.prepare_output(array, type, accuracy, CS_TYPE_UTF8MB4_BIN);
+  if (ret == OB_SUCCESS) { ret = ObJsonParser::get_tree(&state.arena, ObString::make_string(json_text), tree); }
+  Datum &result = state.output.locate_datum_for_write(*state.eval);
   if (ret == OB_SUCCESS) {
     ret = JsonQueryMultivalueAccess::run(array, *state.eval, state.arena, tree,
         state.output, CS_TYPE_UTF8MB4_BIN, accuracy, type, result);
@@ -119,7 +134,7 @@ int decode_values(const std::string &packed, ObIAllocator &owner,
   int64_t offset = sizeof(count);
   for (uint32_t i = 0; i < (count == 0 ? 1 : count); ++i) {
     DatumValue value;
-    int ret = DatumParameterCodec::decode_value(packed.data(), packed.size(), offset,
+    int ret = DatumParameterCodec::decode_native_value(packed.data(), packed.size(), offset,
                                                 owner, value.datum_, value.meta_);
     if (ret != OB_SUCCESS) { return ret; }
     values.push_back(value);
@@ -152,10 +167,9 @@ TEST(NativeJsonValueCast, scalar_cast_keeps_result_in_datum_form) {
   state.output.datum_meta_ = ObDatumMeta(ObDoubleType, CS_TYPE_BINARY, 0, 15);
   state.output.max_length_ = 8;
 
-  alignas(int64_t) char source_storage[sizeof(int64_t)] = {};
-  ObDatum source(source_storage, sizeof(source_storage), false);
-  source.set_int(17);
-  ObDatum &result = state.output.locate_datum_for_write(*state.eval);
+  ASSERT_EQ(OB_SUCCESS, state.output.prepare_scalar_type(state.output.obj_meta_, ObAccuracy(15,0), state.arena));
+  Datum source; source.set_int(17);
+  Datum &result = state.output.locate_datum_for_write(*state.eval);
   ASSERT_EQ(OB_SUCCESS, ObJsonExprHelper::cast_to_res(
       state.arena, source, state.output, state.returning_type, *state.eval,
       result, true));
@@ -188,7 +202,7 @@ TEST(NativeMviProducer, zero_count_keeps_serialized_min_or_null_sentinel) {
 TEST(NativeMviProducer, scalar_path_preserves_last_array_element_and_frame_bytes) {
   MviProducerState state;
   ObAccuracy accuracy; accuracy.set_precision(20); accuracy.set_scale(0);
-  std::string ignored; ObDatum *scalar = nullptr;
+  std::string ignored; Datum *scalar = nullptr;
   ASSERT_EQ(OB_SUCCESS, produce(state, "[2,1]", ObIntType, accuracy, false, ignored, &scalar));
   ASSERT_NE(nullptr, scalar); EXPECT_EQ(1, scalar->get_int());
 }
@@ -204,19 +218,24 @@ TEST(NativeMviProducer, json_scalar_result_owns_stack_and_source_bytes_and_faile
   ASSERT_EQ(OB_SUCCESS, ObJsonUtil::cast_json_scalar_to_sql_value(owner, *state.eval,
       &later, CS_TYPE_BINARY, accuracy, ObIntType, 0, replacement));
   EXPECT_EQ(918, integer.get_int()); EXPECT_EQ(456, replacement.get_int());
+  // String length semantics share storage with numeric precision. Do not
+  // reuse precision20 as an invalid string length-semantics enum value.
+  ObAccuracy text_accuracy; text_accuracy.set_length(64);
+  text_accuracy.set_length_semantics(LS_BYTE);
   {
     std::string source = "customer_客户";
     ObJsonString string(source.data(), source.size());
     ASSERT_EQ(OB_SUCCESS, ObJsonUtil::cast_json_scalar_to_sql_value(owner, *state.eval,
-        &string, CS_TYPE_UTF8MB4_BIN, accuracy, ObVarcharType, -1, text));
+        &string, CS_TYPE_UTF8MB4_BIN, text_accuracy, ObVarcharType, -1, text));
     source.assign(source.size(), 'x');
   }
   EXPECT_EQ(ObString::make_string("customer_客户"), text.get_string());
-  const char *previous = integer.datum_.ptr_;
+  const Datum previous = integer.datum_;
+  ObJsonString failed_text("replacement", 11);
   RejectingMviOwner reject;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObJsonUtil::cast_json_scalar_to_sql_value(reject,
-      *state.eval, &later, CS_TYPE_BINARY, accuracy, ObIntType, 0, integer));
-  EXPECT_EQ(previous, integer.datum_.ptr_); EXPECT_EQ(918, integer.get_int());
+      *state.eval, &failed_text, CS_TYPE_UTF8MB4_BIN, text_accuracy, ObVarcharType, -1, integer));
+  EXPECT_EQ(0, MEMCMP(&previous, &integer.datum_, sizeof(previous))); EXPECT_EQ(918, integer.get_int());
 }
 TEST(NativeMviProducer, decimal_scalar_coefficient_and_null_metadata_are_native) {
   MviProducerState state;
@@ -304,7 +323,8 @@ TEST(NativeMviProducer, matches_immutable_old_producer_full_wire_fixture) {
     ObJsonNode *tree = nullptr;
     int ret = json == "@absent" ? OB_SUCCESS : ObJsonParser::get_tree(
         &state.arena, json.data(), json.size(), tree);
-    ObDatum &result = state.output.locate_datum_for_write(*state.eval);
+    if (ret == OB_SUCCESS) { ret = state.prepare_output(array, type, accuracy, collation); }
+    Datum &result = state.output.locate_datum_for_write(*state.eval);
     if (ret == OB_SUCCESS) {
       ret = JsonQueryMultivalueAccess::run(array, *state.eval, state.arena, tree,
           state.output, collation, accuracy, type, result);
@@ -320,8 +340,11 @@ TEST(NativeMviProducer, matches_immutable_old_producer_full_wire_fixture) {
         EXPECT_EQ(std::strtol(fields[10].c_str(), nullptr, 10), decode_ret);
         if (decode_ret == OB_SUCCESS) { actual.assign(binary.get_data(), binary.get_data_length()); }
       } else {
-        EXPECT_EQ(std::strtoull(fields[11].c_str(), nullptr, 10), result.pack_);
-        if (!result.is_null()) { actual.assign(result.ptr_, result.len_); }
+        alignas(8) char physical_scratch[64]; ObDatum physical;
+        ASSERT_EQ(OB_SUCCESS,state.output.get_datum_copy_plan().legacy_view(
+            result,physical,physical_scratch,sizeof(physical_scratch)));
+        EXPECT_EQ(std::strtoull(fields[11].c_str(), nullptr, 10), physical.pack_);
+        if (!physical.is_null()) { actual.assign(physical.ptr_, physical.len_); }
       }
       std::string expected;
       ASSERT_TRUE(mvi_fixture_unhex(fields[12], expected));

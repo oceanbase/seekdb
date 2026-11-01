@@ -449,7 +449,7 @@ int ObTextStringIter::convert_outrow_lob_to_inrow_templob(const DatumValue &inpu
         // The locator is already validated. Copy its bytes without changing
         // the independent metadata (including unspecified raw collation).
         DatumValue candidate = input;
-        if (OB_SUCC(ret = candidate.datum_.deep_copy(input.datum_, owner))) {
+        if (OB_SUCC(ret = candidate.deep_copy(input, owner))) {
           output = candidate;
         }
       } else {

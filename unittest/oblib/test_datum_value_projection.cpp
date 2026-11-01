@@ -30,8 +30,8 @@ TEST(DatumValueProjection, decimal_int_accepts_negative_scale)
   ASSERT_EQ(OB_SUCCESS, project_datum_value_view(
       datum, meta, OBJ_DATUM_DECIMALINT, SqlTypeMeta(), output));
   EXPECT_EQ(-9, output.get_scale());
-  EXPECT_EQ(sizeof(coefficient), output.datum_.len_);
-  EXPECT_EQ(coefficient, *reinterpret_cast<const int32_t *>(output.datum_.ptr_));
+  EXPECT_EQ(sizeof(coefficient), output.datum_.length());
+  EXPECT_EQ(coefficient, *reinterpret_cast<const int32_t *>(output.datum_.get_reference()));
 }
 
 TEST(DatumValueProjection, decimal_int_rejects_unknown_scale_without_overwriting_output)
@@ -41,12 +41,13 @@ TEST(DatumValueProjection, decimal_int_rejects_unknown_scale_without_overwriting
   datum.set_decimal_int_shallow(reinterpret_cast<ObDecimalInt *>(&coefficient), sizeof(coefficient));
   SqlTypeMeta meta;
   meta.set_decimal_int(SCALE_UNKNOWN_YET);
-  DatumValue output(datum, SqlTypeMeta());
+  Datum borrowed; ASSERT_EQ(OB_SUCCESS, borrowed.set_reference(&coefficient, sizeof(coefficient)));
+  DatumValue output(borrowed, SqlTypeMeta());
   SqlTypeMeta previous_meta = output.meta_;
   EXPECT_EQ(OB_ERR_UNEXPECTED, project_datum_value_view(
       datum, meta, OBJ_DATUM_DECIMALINT, SqlTypeMeta(), output));
   EXPECT_EQ(previous_meta, output.meta_);
-  EXPECT_EQ(reinterpret_cast<char *>(&coefficient), output.datum_.ptr_);
+  EXPECT_EQ(reinterpret_cast<char *>(&coefficient), output.datum_.get_reference());
 }
 
 TEST(DatumValueProjection, native_scalar_and_reference_views_borrow_without_allocation)
@@ -61,7 +62,7 @@ TEST(DatumValueProjection, native_scalar_and_reference_views_borrow_without_allo
       OBJ_DATUM_8BYTE_DATA, SqlTypeMeta(), output, owner));
   EXPECT_EQ(0, owner.calls); EXPECT_EQ(INT64_MIN, output.get_int());
   source.set_int(77);
-  EXPECT_EQ(77, output.get_int());
+  EXPECT_EQ(INT64_MIN, output.get_int()); EXPECT_EQ(0, output.datum_.length());
 
   SqlTypeMeta string_meta; string_meta.set_varchar();
   string_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -72,7 +73,7 @@ TEST(DatumValueProjection, native_scalar_and_reference_views_borrow_without_allo
   ASSERT_EQ(OB_SUCCESS, source.set_string(text, 3));
   ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, string_type, string_meta,
       OBJ_DATUM_STRING, SqlTypeMeta(), output, owner));
-  EXPECT_EQ(0, owner.calls); EXPECT_EQ(text, output.datum_.ptr_);
+  EXPECT_EQ(0, owner.calls); EXPECT_EQ(text, output.datum_.get_reference());
   text[0] = 'z'; EXPECT_EQ('z', output.get_string().ptr()[0]);
 }
 
@@ -88,14 +89,14 @@ TEST(DatumValueProjection, native_normalized_decimal_and_marker_use_stable_owner
   DatumValue output;
   ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, type, meta,
       OBJ_DATUM_DECIMALINT, SqlTypeMeta(), output, owner));
-  ASSERT_EQ(1, owner.calls); ASSERT_EQ(32, output.datum_.len_);
-  EXPECT_EQ(owner.last, output.datum_.ptr_);
+  ASSERT_EQ(1, owner.calls); ASSERT_EQ(32, output.datum_.length());
+  EXPECT_EQ(owner.last, output.datum_.get_reference());
   coefficient = 0; source.set_null();
   // Source and scratch reuse must not alter the normalized legacy coefficient.
   volatile char poison[128];
   for (uint32_t i = 0; i < sizeof(poison); ++i) { poison[i] = 0x5a; }
   int256_t copied;
-  MEMCPY(&copied, output.datum_.ptr_, sizeof(copied));
+  MEMCPY(&copied, output.datum_.get_reference(), sizeof(copied));
   EXPECT_EQ(int256_t(-1234), copied);
 
   SqlTypeMeta integer_meta; integer_meta.set_int();
@@ -105,7 +106,7 @@ TEST(DatumValueProjection, native_normalized_decimal_and_marker_use_stable_owner
   SqlTypeMeta extended; extended.set_ext();
   ASSERT_EQ(OB_SUCCESS, project_native_datum_value_view(source, integer, extended,
       OBJ_DATUM_EXTEND, SqlTypeMeta(), output, owner));
-  EXPECT_EQ(2, owner.calls); EXPECT_EQ(owner.last, output.datum_.ptr_);
+  EXPECT_EQ(2, owner.calls); EXPECT_EQ(0, output.datum_.length());
   source.set_int(0); EXPECT_TRUE(output.datum_.is_max());
 }
 
@@ -123,21 +124,22 @@ TEST(DatumValueProjection, native_failure_preserves_destination_and_null_project
   SqlTypeMeta previous; previous.set_int();
   previous.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   previous.set_collation_level(CS_LEVEL_IMPLICIT);
-  DatumValue output(old, previous);
+  DatumValue output; ASSERT_EQ(OB_SUCCESS, output.assign_legacy_borrowed(old, previous));
+  const Datum before = output.datum_;
   owner.reject = true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, project_native_datum_value_view(source, type, meta,
       OBJ_DATUM_DECIMALINT, previous, output, owner));
-  EXPECT_EQ(previous, output.meta_); EXPECT_EQ(old.ptr_, output.datum_.ptr_);
+  EXPECT_EQ(previous, output.meta_); EXPECT_EQ(0, MEMCMP(&before, &output.datum_, sizeof(before)));
   EXPECT_EQ(91, output.get_int());
   owner.reject = false;
   EXPECT_EQ(OB_ERR_UNEXPECTED, project_native_datum_value_view(source, type, meta,
       OBJ_DATUM_MAPPING_MAX, previous, output, owner));
-  EXPECT_EQ(previous, output.meta_); EXPECT_EQ(old.ptr_, output.datum_.ptr_);
+  EXPECT_EQ(previous, output.meta_); EXPECT_EQ(0, MEMCMP(&before, &output.datum_, sizeof(before)));
   ASSERT_EQ(OB_SUCCESS, source.set_reference(&coefficient, 7));
   const int64_t calls = owner.calls;
   EXPECT_EQ(OB_INVALID_ARGUMENT, project_native_datum_value_view(source, type, meta,
       OBJ_DATUM_DECIMALINT, previous, output, owner));
-  EXPECT_EQ(calls, owner.calls); EXPECT_EQ(old.ptr_, output.datum_.ptr_);
+  EXPECT_EQ(calls, owner.calls); EXPECT_EQ(0, MEMCMP(&before, &output.datum_, sizeof(before)));
 
   source.set_null();
   SqlTypeMeta null_meta; null_meta.set_null();

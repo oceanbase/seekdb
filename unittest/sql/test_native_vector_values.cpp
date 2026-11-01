@@ -33,16 +33,13 @@ std::string hex(const char *ptr, int64_t size) {
 }
 std::string value_wire(const DatumValue &value) {
   int64_t size = 0, pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::value_size(value.datum_, value.meta_, size));
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::native_value_size(value.datum_, value.meta_, size));
   std::string bytes(size + 64, '\0');
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(value.datum_, value.meta_, &bytes[0], bytes.size(), pos));
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_native_value(value.datum_, value.meta_, &bytes[0], bytes.size(), pos));
   return hex(bytes.data(), pos);
 }
 int clone_value(const DatumValue &source, DatumValue &destination, ObIAllocator &owner) {
-  DatumValue copy;
-  const int ret = copy.datum_.deep_copy(source.datum_, owner);
-  if (ret == OB_SUCCESS) { copy.meta_ = source.meta_; destination = copy; }
-  return ret;
+  return destination.deep_copy(source, owner);
 }
 struct OldFixture {
   std::array<std::array<DatumValue, COLUMN_COUNT>, ROW_COUNT> values;
@@ -63,7 +60,7 @@ struct OldFixture {
         if (row < 0 || row >= ROW_COUNT || col < 0 || col >= COLUMN_COUNT) { return false; }
         const auto bytes = unhex(f.at(3)); int64_t pos = 0;
         DatumValue &value = values[row][col];
-        if (DatumParameterCodec::decode_value(bytes.data(), bytes.size(), pos, owner, value.datum_, value.meta_) != OB_SUCCESS || pos != bytes.size()) { return false; }
+        if (DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(), pos, owner, value.datum_, value.meta_) != OB_SUCCESS || pos != bytes.size()) { return false; }
         value_wires[row][col] = f.at(3); ++values_seen;
       } else if (f.at(0) == "W") {
         const int row = std::stoi(f.at(1)); const int64_t size = std::stoll(f.at(2));
@@ -138,7 +135,7 @@ TEST(NativeVectorValues, compact_decode_rejects_truncation_and_invalid_mapping) 
   for (int64_t col = 0; col < COLUMN_COUNT; ++col) { decoded[col].meta_ = fixture.values[0][col].meta_; }
   EXPECT_EQ(OB_INVALID_DATA, ObVecExtraInfo::extra_buf_to_values(fixture.compact[0].data(), fixture.wire_size - 1, COLUMN_COUNT, decoded));
   ASSERT_EQ(OB_SUCCESS, ObVecExtraInfo::extra_buf_to_values(fixture.compact[0].data(), fixture.wire_size, COLUMN_COUNT, decoded));
-  const int64_t string_offset = decoded[6].datum_.ptr_ - fixture.compact[0].data();
+  const int64_t string_offset = decoded[6].datum_.get_string().ptr() - fixture.compact[0].data();
   ASSERT_GE(string_offset, sizeof(int32_t));
   int32_t invalid_length = -1; MEMCPY(&fixture.compact[0][string_offset - sizeof(int32_t)], &invalid_length, sizeof(invalid_length));
   EXPECT_EQ(OB_INVALID_DATA, ObVecExtraInfo::extra_buf_to_values(fixture.compact[0].data(), fixture.wire_size, COLUMN_COUNT, decoded));
@@ -150,12 +147,40 @@ TEST(NativeVectorValues, compact_decode_rejects_truncation_and_invalid_mapping) 
 TEST(NativeVectorValues, extra_info_producer_borrows_or_owns_and_reports_oom) {
   ObArenaAllocator source_owner, retained_owner; OldFixture fixture; ASSERT_TRUE(fixture.load(source_owner));
   for (const int col : {2, 7}) {
-    const DatumValue &value = fixture.values[0][col]; ObVecExtraInfoObj borrowed, owned;
+    DatumValue &value = fixture.values[0][col]; ObVecExtraInfoObj borrowed, owned;
     ASSERT_EQ(OB_SUCCESS, borrowed.from_value(value)); ASSERT_EQ(OB_SUCCESS, owned.from_value(value, &retained_owner));
-    EXPECT_EQ(value.datum_.ptr_, borrowed.ptr_); EXPECT_NE(value.datum_.ptr_, owned.ptr_);
-    const std::string original(value.datum_.ptr_, value.datum_.len_);
-    MEMSET(const_cast<char *>(value.datum_.ptr_), 0x37, value.datum_.len_);
+    EXPECT_NE(borrowed.ptr_, owned.ptr_);
+    const std::string original(borrowed.ptr_, borrowed.len_);
+    if (col == 2) {
+      ASSERT_EQ(ObIntType, value.get_type());
+      EXPECT_EQ(0, value.datum_.length());
+      ASSERT_EQ(OB_SUCCESS, value.set_int(ObIntType, value.get_int() ^ 1, source_owner));
+    } else {
+      EXPECT_EQ(value.datum_.get_string().ptr(), borrowed.ptr_);
+      MEMSET(const_cast<char *>(value.datum_.get_string().ptr()), 0x37, value.datum_.length());
+    }
     EXPECT_NE(original, std::string(borrowed.ptr_, borrowed.len_)); EXPECT_EQ(original, std::string(owned.ptr_, owned.len_));
+    RejectAllocator reject; ObVecExtraInfoObj failed;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, failed.from_value(value, &reject));
+  }
+  for (const SqlValueType kind : {ObEnumType, ObSetType}) {
+    DatumValue value;
+    ASSERT_EQ(OB_SUCCESS, value.set_uint(kind, 7, source_owner));
+    ObVecExtraInfoObj borrowed, owned;
+    ASSERT_EQ(OB_SUCCESS, borrowed.from_value(value));
+    ASSERT_EQ(OB_SUCCESS, owned.from_value(value, &retained_owner));
+    ASSERT_EQ(static_cast<int32_t>(sizeof(uint64_t)), borrowed.len_);
+    EXPECT_EQ(OBJ_DATUM_8BYTE_DATA, borrowed.obj_map_type_);
+    EXPECT_NE(borrowed.ptr_, owned.ptr_);
+    uint64_t borrowed_value = 0, owned_value = 0;
+    MEMCPY(&borrowed_value, borrowed.ptr_, sizeof(borrowed_value));
+    EXPECT_EQ(7u, borrowed_value);
+    ASSERT_EQ(OB_SUCCESS, value.set_uint(kind, 9, source_owner));
+    EXPECT_EQ(kind, value.get_type());
+    MEMCPY(&borrowed_value, borrowed.ptr_, sizeof(borrowed_value));
+    MEMCPY(&owned_value, owned.ptr_, sizeof(owned_value));
+    EXPECT_EQ(9u, borrowed_value);
+    EXPECT_EQ(7u, owned_value);
     RejectAllocator reject; ObVecExtraInfoObj failed;
     EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, failed.from_value(value, &reject));
   }
@@ -178,14 +203,23 @@ TEST(NativeVectorValues, sql_facing_single_rows_match_old_snapshots_and_owned_va
     DatumValue borrowed[COLUMN_COUNT];
     for (int64_t col = 0; col < COLUMN_COUNT; ++col) { borrowed[col].meta_ = fixture.values[row_index][col].meta_; }
     ASSERT_EQ(OB_SUCCESS, ObVecExtraInfo::extra_buf_to_values(fixture.compact[row_index].data(), fixture.wire_size, COLUMN_COUNT, borrowed));
-    *const_cast<char *>(borrowed[0].datum_.ptr_) ^= 1;
+    // The compact stream's first field follows its actual version varint.
+    // Mutate that source byte, not the now-inline decoded scalar.
+    int64_t scalar_pos = 0, version = 0;
+    ASSERT_EQ(OB_SUCCESS, serialization::decode_vi64(fixture.compact[row_index].data(),
+        fixture.wire_size, scalar_pos, &version));
+    ASSERT_LT(scalar_pos, fixture.wire_size);
+    fixture.compact[row_index][scalar_pos] ^= 1;
     for (int64_t col = 0; col < RESULT_COLUMNS; ++col) {
       EXPECT_EQ(fixture.single[row_index][col], value_wire(row->get_cell(col)));
-      if (col < 8) { EXPECT_EQ(0, reinterpret_cast<uintptr_t>(row->get_cell(col).datum_.ptr_) % 8); }
+      if (col < 8) {
+        EXPECT_EQ(0, row->get_cell(col).datum_.length());
+        EXPECT_EQ(0, reinterpret_cast<uintptr_t>(&row->get_cell(col).datum_) % alignof(Datum));
+      }
       if (row_index == 0) { ASSERT_EQ(OB_SUCCESS, clone_value(row->get_cell(col), retained[col], retained_owner)); }
     }
     // Large strings keep the compact buffer's borrow contract.
-    const char *long_ptr = row->get_cell(9).datum_.ptr_;
+    const char *long_ptr = row->get_cell(9).datum_.get_string().ptr();
     EXPECT_GE(long_ptr, fixture.compact[row_index].data());
     EXPECT_LT(long_ptr, fixture.compact[row_index].data() + fixture.wire_size);
     std::fill(fixture.compact[row_index].begin(), fixture.compact[row_index].end(), '\x5f');
@@ -208,7 +242,13 @@ TEST(NativeVectorValues, sql_facing_batch_rows_match_old_fixed_snapshots_and_ini
     DatumValue borrowed[COLUMN_COUNT];
     for (int64_t col = 0; col < COLUMN_COUNT; ++col) { borrowed[col].meta_ = fixture.values[row_index][col].meta_; }
     ASSERT_EQ(OB_SUCCESS, ObVecExtraInfo::extra_buf_to_values(fixture.compact[row_index].data(), fixture.wire_size, COLUMN_COUNT, borrowed));
-    *const_cast<char *>(borrowed[0].datum_.ptr_) ^= 1;
+    // The compact stream's first field follows its actual version varint.
+    // Mutate that source byte, not the now-inline decoded scalar.
+    int64_t scalar_pos = 0, version = 0;
+    ASSERT_EQ(OB_SUCCESS, serialization::decode_vi64(fixture.compact[row_index].data(),
+        fixture.wire_size, scalar_pos, &version));
+    ASSERT_LT(scalar_pos, fixture.wire_size);
+    fixture.compact[row_index][scalar_pos] ^= 1;
     for (int64_t col = 0; col < RESULT_COLUMNS; ++col) {
       DatumValue actual = row->get_cell(row_index * RESULT_COLUMNS + col);
       if (col < 2) {
@@ -217,7 +257,7 @@ TEST(NativeVectorValues, sql_facing_batch_rows_match_old_fixed_snapshots_and_ini
         // bytes are uninitialized. Compare every other metadata/payload byte.
         const auto encoded = unhex(fixture.batch[row_index][col]);
         DatumValue oracle; int64_t pos = 0;
-        ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(encoded.data(), encoded.size(), pos, owner, oracle.datum_, oracle.meta_));
+        ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(encoded.data(), encoded.size(), pos, owner, oracle.datum_, oracle.meta_));
         ASSERT_EQ(encoded.size(), pos);
         ASSERT_EQ(col == 0 ? ObFloatType : ObIntType, actual.get_type());
         ASSERT_FALSE(actual.meta_.is_decimal_int());

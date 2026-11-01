@@ -117,8 +117,9 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
         } else if (OB_FAIL(temp_expr->eval_datum(ctx, allocator, value_datum))) {
         } else {
           const ObExpr &result_expr = temp_expr->rt_exprs_.at(temp_expr->expr_idx_);
-          DatumValue value(value_datum, result_expr.obj_meta_);
-          if (stmt.is_alter_system_kill()) {
+          DatumValue value;
+          OZ(value.assign_legacy_borrowed(value_datum, result_expr.obj_meta_));
+          if (OB_SUCC(ret) && stmt.is_alter_system_kill()) {
             ObString str = value.get_string();
             const char* index = str.find(',');
             if (index != NULL) {
@@ -128,7 +129,8 @@ int ObKillSessionArg::calculate_sessid(ObExecContext &ctx, const ObKillStmt &stm
           }
           EXPR_DEFINE_CAST_CTX(expr_ctx, CM_WARN_ON_FAIL);
           DatumValue res_value;
-          if (OB_FAIL(DatumValueCaster::to_type(ObIntType, cast_ctx, value,
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(DatumValueCaster::to_type(ObIntType, cast_ctx, value,
                                                  allocator, res_value))) {
           }
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD == ret ? OB_SUCCESS : ret;

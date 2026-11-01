@@ -837,7 +837,7 @@ int ObExprRangeConverter::build_decode_like_expr(ObRawExpr *pattern,
   }
 
   //generate constraint if like range is precise
-  if (OB_SUCC(ret) && ctx_.params_ != nullptr &&
+  if (OB_SUCC(ret) && ctx_.parameter_context_ != nullptr &&
       !pattern->has_flag(CNT_DYNAMIC_PARAM)) {
     DatumValue pattern_val;
     bool is_valid = false;

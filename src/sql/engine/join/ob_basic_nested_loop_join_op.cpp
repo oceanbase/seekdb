@@ -89,18 +89,19 @@ int ObBasicNestedLoopJoinOp::prepare_rescan_params(bool is_group)
     common::ObSEArray<int64_t, 8> param_idxs, param_expr_idxs;
     for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
       const ObDynamicParamSetter &setter = get_spec().rescan_params_.at(i);
-      DatumParameter value;
+      NativeTypedDatum value;
+      DatumParameterMetadata attributes;
       int64_t expr_idx = 0;
-      OZ(setter.set_dynamic_param(eval_ctx_, value));
-      OZ(builder.append(value));
+      OZ(setter.set_dynamic_param(eval_ctx_, value, attributes));
+      OZ(builder.append(value, attributes));
       OZ(param_idxs.push_back(setter.param_idx_));
       CK(OB_NOT_NULL(plan_ctx->get_phy_plan()));
       OZ(plan_ctx->get_phy_plan()->get_expr_frame_info().get_expr_idx_in_frame(setter.dst_, expr_idx));
       OZ(param_expr_idxs.push_back(expr_idx));
     }
     if (OB_SUCC(ret)) {
-      batch_rescan_ctl->param_version_ += 1;
       ret = builder.finish(param_idxs, param_expr_idxs);
+      if (OB_SUCC(ret)) { batch_rescan_ctl->param_version_ += 1; }
     }
   }
   // After each row comes out from the left side, notify the right-side GI to implement part id filtering, avoid unnecessary partition scanning in PKEY NLJ scenario

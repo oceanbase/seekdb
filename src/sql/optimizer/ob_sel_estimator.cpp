@@ -33,8 +33,8 @@ static int export_selectivity_math_bound(const Datum &value, const SqlTypeMeta &
                                          DatumValue &output, void *scratch, int64_t capacity)
 {
   ObDatum view;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, view, scratch, capacity);
-  if (ret == OB_SUCCESS) { output = DatumValue(view, meta); }
+  int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(view, meta); }
   return ret;
 }
 
@@ -125,11 +125,11 @@ int ObConstSelEstimator::get_const_sel(const OptSelectivityCtx &ctx,
                                        double &selectivity)
 {
   int ret = OB_SUCCESS;
-  const ParamStore *params = ctx.get_params();
+  const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
   const ObDMLStmt *stmt = ctx.get_stmt();
   if (OB_ISNULL(params) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ObOptEstUtils::is_calculable_expr(qual, params->count())) {
+  } else if (ObOptEstUtils::is_calculable_expr(qual, params->get_parameter_count())) {
     DatumValue const_value;
     bool got_result = false;
     bool is_true = false;
@@ -451,7 +451,7 @@ int ObEqualSelEstimator::get_ne_sel(const OptTableMetas &table_metas,
     double nns = 0;
     ObHistEqualSelHelper helper;
     bool can_use_hist = false;
-    if (OB_FAIL(ObOptEstUtils::if_expr_value_null(ctx.get_params(),
+    if (OB_FAIL(ObOptEstUtils::if_expr_value_null(ctx.get_parameter_context(),
                                                   *const_expr,
                                                   ctx.get_opt_ctx().get_exec_ctx(),
                                                   ctx.get_allocator(),
@@ -594,11 +594,11 @@ int ObEqualSelEstimator::get_equal_sel(const OptTableMetas &table_metas,
     }
   } else {
     // CONST_PARAM = CONST_PARAM
-    const ParamStore *params = ctx.get_params();
+    const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
     if (OB_ISNULL(params)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (ObOptEstUtils::is_calculable_expr(left_expr, params->count()) &&
-               ObOptEstUtils::is_calculable_expr(right_expr, params->count())) {
+    } else if (ObOptEstUtils::is_calculable_expr(left_expr, params->get_parameter_count()) &&
+               ObOptEstUtils::is_calculable_expr(right_expr, params->get_parameter_count())) {
       // 1 in (c1, 2, 3) will reach this branch
       bool equal = false;
       if (OB_FAIL(ObOptEstUtils::if_expr_value_equal(const_cast<ObOptimizerContext &>(ctx.get_opt_ctx()),
@@ -651,7 +651,7 @@ int ObEqualSelEstimator::get_simple_equal_sel(const OptTableMetas &table_metas,
                                                             &distinct_sel, &null_sel))) {
   } else if (NULL == calculable_expr) {
     selectivity = distinct_sel;
-  } else if (OB_FAIL(ObOptEstUtils::if_expr_value_null(ctx.get_params(),
+  } else if (OB_FAIL(ObOptEstUtils::if_expr_value_null(ctx.get_parameter_context(),
                                                        *calculable_expr,
                                                        ctx.get_opt_ctx().get_exec_ctx(),
                                                        ctx.get_allocator(),
@@ -940,7 +940,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   alignas(8) char min_scratch[64], max_scratch[64];
   int ret = OB_SUCCESS;
   selectivity = DEFAULT_AGG_RANGE;
-  const ParamStore *params = ctx.get_params();
+  const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
   const ObDMLStmt *stmt = ctx.get_stmt();
   ObExecContext *exec_ctx = ctx.get_opt_ctx().get_exec_ctx();
   ObIAllocator &alloc = ctx.get_allocator();
@@ -980,7 +980,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
         DatumValue tmp_result;
         if (OB_ISNULL(sub_expr = const_expr1->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (!ObOptEstUtils::is_calculable_expr(*sub_expr, params->count())) {
+        } else if (!ObOptEstUtils::is_calculable_expr(*sub_expr, params->get_parameter_count())) {
         } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                                      sub_expr,
                                                                      tmp_result,
@@ -1003,7 +1003,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
               / static_cast<double>(N);
       }
     }
-  } else if (!ObOptEstUtils::is_calculable_expr(*const_expr1, params->count())) {
+  } else if (!ObOptEstUtils::is_calculable_expr(*const_expr1, params->get_parameter_count())) {
   } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                                const_expr1,
                                                                result1,
@@ -1023,7 +1023,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   } else if (T_OP_BTW == type || T_OP_NOT_BTW == type) {
     if (OB_ISNULL(const_expr2)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (!ObOptEstUtils::is_calculable_expr(*const_expr2, params->count())) {
+    } else if (!ObOptEstUtils::is_calculable_expr(*const_expr2, params->get_parameter_count())) {
     } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                                  const_expr2,
                                                                  result2,
@@ -1261,7 +1261,7 @@ int ObLikeSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   } else  {
     like_estimator->expr_ = &expr;
     estimator = like_estimator;
-    const ParamStore *params = ctx.get_params();
+    const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
     if (3 != expr.get_param_count()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_ISNULL(params) ||
@@ -1299,7 +1299,7 @@ int ObLikeSelEstimator::can_calc_like_sel(const OptSelectivityCtx &ctx, const Ob
   int ret = OB_SUCCESS;
   can_calc_sel = false;
   if (T_OP_LIKE == expr.get_expr_type()) {
-    const ParamStore *params = ctx.get_params();
+    const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
     const ObRawExpr *variable = NULL;
     const ObRawExpr *pattern = NULL;
     const ObRawExpr *escape = NULL;
@@ -2631,14 +2631,14 @@ int ObIsSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   } else if (OB_UNLIKELY(expr.get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const ParamStore *params = ctx.get_params();
+    const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
     const ObDMLStmt *stmt = ctx.get_stmt();
     const ObRawExpr *left_expr = expr.get_param_expr(0);
     const ObRawExpr *right_expr = expr.get_param_expr(1);
     bool got_result = false;
     if (OB_ISNULL(params) || OB_ISNULL(stmt) || OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(!ObOptEstUtils::is_calculable_expr(*right_expr, params->count()))) {
+    } else if (OB_UNLIKELY(!ObOptEstUtils::is_calculable_expr(*right_expr, params->get_parameter_count()))) {
       //do nothing
     } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx.get_opt_ctx().get_exec_ctx(),
                                                                  right_expr,
@@ -2732,7 +2732,7 @@ int ObBtwSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
     const ObRawExpr *l_expr = NULL;
     const ObRawExpr *r_expr = NULL;
     const ObRawExpr *col_expr = NULL;
-    const ParamStore *params = ctx.get_params();
+    const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
     if (3 != expr.get_param_count()) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_ISNULL(params) ||
@@ -2742,17 +2742,17 @@ int ObBtwSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(cmp_expr, cmp_expr))) {
     } else if (cmp_expr->is_column_ref_expr() &&
-               ObOptEstUtils::is_calculable_expr(*l_expr, params->count()) &&
-               ObOptEstUtils::is_calculable_expr(*r_expr, params->count())) {
+               ObOptEstUtils::is_calculable_expr(*l_expr, params->get_parameter_count()) &&
+               ObOptEstUtils::is_calculable_expr(*r_expr, params->get_parameter_count())) {
       static_cast<ObBtwSelEstimator*>(estimator)->can_calc_sel_ = true;
       static_cast<ObBtwSelEstimator*>(estimator)->col_expr_ = static_cast<const ObColumnRefRawExpr*>(cmp_expr);
-    } else if (ObOptEstUtils::is_calculable_expr(*cmp_expr, params->count()) &&
+    } else if (ObOptEstUtils::is_calculable_expr(*cmp_expr, params->get_parameter_count()) &&
                l_expr->is_column_ref_expr() &&
-               ObOptEstUtils::is_calculable_expr(*r_expr, params->count())) {
+               ObOptEstUtils::is_calculable_expr(*r_expr, params->get_parameter_count())) {
       static_cast<ObBtwSelEstimator*>(estimator)->can_calc_sel_ = true;
       static_cast<ObBtwSelEstimator*>(estimator)->col_expr_ = static_cast<const ObColumnRefRawExpr*>(l_expr);
-    } else if (ObOptEstUtils::is_calculable_expr(*cmp_expr, params->count()) &&
-               ObOptEstUtils::is_calculable_expr(*l_expr, params->count()) &&
+    } else if (ObOptEstUtils::is_calculable_expr(*cmp_expr, params->get_parameter_count()) &&
+               ObOptEstUtils::is_calculable_expr(*l_expr, params->get_parameter_count()) &&
                r_expr->is_column_ref_expr()) {
       static_cast<ObBtwSelEstimator*>(estimator)->can_calc_sel_ = true;
       static_cast<ObBtwSelEstimator*>(estimator)->col_expr_ = static_cast<const ObColumnRefRawExpr*>(r_expr);

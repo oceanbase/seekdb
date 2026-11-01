@@ -173,7 +173,7 @@ bool ObOptEstUtils::is_calculable_expr(const ObRawExpr &expr, const int64_t para
   return expr.is_static_const_expr();
 }
 
-int ObOptEstUtils::get_expr_value(const ParamStore *params,
+int ObOptEstUtils::get_expr_value(const ObPhysicalPlanCtx *params,
                                   const ObRawExpr &expr,
                                   ObExecContext *exec_ctx,
                                   ObIAllocator &allocator,
@@ -184,7 +184,7 @@ int ObOptEstUtils::get_expr_value(const ParamStore *params,
   get_value = false;
   if (OB_ISNULL(params)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (is_calculable_expr(expr, params->count())) {
+  } else if (is_calculable_expr(expr, params->get_parameter_count())) {
     if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(exec_ctx,
                                                           &expr,
                                                           value,
@@ -195,7 +195,7 @@ int ObOptEstUtils::get_expr_value(const ParamStore *params,
   return ret;
 }
 
-int ObOptEstUtils::if_expr_value_null(const ParamStore *params,
+int ObOptEstUtils::if_expr_value_null(const ObPhysicalPlanCtx *params,
                                       const ObRawExpr &expr,
                                       ObExecContext *exec_ctx,
                                       ObIAllocator &allocator,
@@ -215,7 +215,7 @@ int ObOptEstUtils::if_expr_value_null(const ParamStore *params,
   return ret;
 }
 
-int ObOptEstUtils::if_expr_start_with_patten_sign(const ParamStore *params,
+int ObOptEstUtils::if_expr_start_with_patten_sign(const ObPhysicalPlanCtx *params,
                                                   const ObRawExpr *expr,
                                                   const ObRawExpr *esp_expr,
                                                   ObExecContext *exec_ctx,
@@ -296,7 +296,7 @@ int ObOptEstUtils::if_expr_value_equal(ObOptimizerContext &opt_ctx,
   bool get_second = false;
   DatumValue first_value;
   DatumValue second_value;
-  const ParamStore *params = opt_ctx.get_params();
+  const ObPhysicalPlanCtx *params = opt_ctx.get_parameter_context();
   ObSQLSessionInfo *session = opt_ctx.get_session_info();
   ObIAllocator &allocator = opt_ctx.get_allocator();
   ObExecContext *exec_ctx = opt_ctx.get_exec_ctx();

@@ -146,7 +146,7 @@ TEST(NativeUdtResult, collection_text_remains_live_after_conversion_with_freeing
   FreeingOwner result_owner;
   ASSERT_EQ(OB_SUCCESS, ObSqlUdtUtils::convert_result_for_client(value,
       &result_owner, &session, &exec, false));
-  ASSERT_TRUE(result_owner.owns_live(value.datum_.ptr_, value.datum_.len_));
+  ASSERT_TRUE(result_owner.owns_live(value.datum_.get_string().ptr(), value.datum_.length()));
   EXPECT_EQ(std::string("[7,-9,NULL]"),
       std::string(value.get_string().ptr(), value.get_string().length()));
   EXPECT_EQ(ObCollectionSQLType, value.get_type());

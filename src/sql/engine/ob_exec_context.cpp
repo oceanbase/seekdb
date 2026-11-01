@@ -1022,60 +1022,90 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
     int64_t batch_id, const sql::ObExpr::ObExprIArray &array)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(phy_plan_ctx_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (batch_id < 0 || batch_id >= params.get_count()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    common::ObIArray<DatumParameter> &one_params =
-        params.get_one_batch_params(batch_id);
-    ObEvalCtx eval_ctx(*this);
-    for (int i = 0; OB_SUCC(ret) && i < one_params.count(); ++i) {
-      if (i >= params.param_idxs_.count() || params.get_param_idx(i) < 0 ||
-          params.get_param_idx(i) >= phy_plan_ctx_->get_param_store().count()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ret = phy_plan_ctx_->set_runtime_parameter(params.get_param_idx(i), one_params.at(i));
-        if (params.param_expr_idxs_.count() == one_params.count()) {
-          const sql::ObExpr *expr = NULL;
-          int64_t idx = params.param_expr_idxs_.at(i);
-          if (OB_FAIL(ret)) {
-          } else if (OB_UNLIKELY(idx <= 0 || idx > array.count())) {
-            // do nothing.
-            LOG_TRACE("param idx out of array count", K(idx), K(array.count()));
-          } else if (FALSE_IT(expr = &array.at(idx - 1))) {
-          } else if (T_INVALID == expr->type_) {
-            // do nothing.
-          } else {
-            expr->get_eval_info(eval_ctx).clear_evaluated_flag();
-            ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *expr);
-            Datum &param_datum = expr->locate_datum_for_write(eval_ctx);
-            // Grouped input keeps its whole envelope for a later rescan, but
-            // the expression receives the selected scalar, just as the sole
-            // native parameter slot does. Never interpret an array address as
-            // an inline integer.
-            const DatumParameter *effective = &one_params.at(i);
-            if (effective->is_ext_sql_array()) {
-              const DatumParameterArray *groups = effective->get_array<DatumParameterArray>();
-              if (groups == nullptr || groups->count_ <= 0) { ret = OB_ERR_UNEXPECTED; }
-              else { effective = &groups->data_[0]; }
-            }
-            if (OB_SUCC(ret)) {
-              ret = assign_parameter_to_expr(eval_ctx, *expr, effective->datum_, effective->get_type_meta());
-            }
-            if (OB_FAIL(ret)) {
-            } else if (is_lob_storage(effective->get_type()) &&
-                       OB_FAIL(ob_adjust_lob_datum(*this, param_datum,
-                           effective->get_type_meta(), expr->obj_meta_, get_allocator(), param_datum))) {
-            } else {
-              expr->get_eval_info(eval_ctx).evaluated_ = true;
-            }
-          }
-        }
+  if (phy_plan_ctx_ == nullptr || !phy_plan_ctx_->native_parameters_ready()
+      || batch_id < 0 || batch_id >= params.get_count()) { return OB_ERR_UNEXPECTED; }
+  if (!params.native_ready()) {
+    // Historical v1 wire has physical values only. Bind to actual compiled
+    // parameter declarations, not a type inferred from payload/metadata bytes.
+    ObSEArray<ObBatchRescanParams::TypeRow, 4> declared_rows;
+    if (OB_FAIL(declared_rows.reserve(params.get_count()))) { return ret; }
+    for (int64_t row = 0; OB_SUCC(ret) && row < params.get_count(); ++row) {
+      const auto &physical = params.get_one_batch_physical_values(row);
+      ObBatchRescanParams::TypeRow declarations(4 * sizeof(const SqlType *));
+      if (physical.count() != params.param_idxs_.count()) { ret = OB_DESERIALIZE_ERROR; }
+      else { ret = declarations.reserve(physical.count()); }
+      for (int64_t col = 0; OB_SUCC(ret) && col < physical.count(); ++col) {
+        const int64_t parameter = params.get_param_idx(col);
+        const int64_t expression = params.param_expr_idxs_.count() == physical.count()
+            ? params.param_expr_idxs_.at(col) : 0;
+        const SqlType *type = expression > 0 && expression <= array.count()
+                && array.at(expression - 1).type_ != T_INVALID
+            ? &array.at(expression - 1).get_sql_type()
+            : phy_plan_ctx_->get_native_parameter_type(parameter);
+        if (type == nullptr) { ret = OB_NOT_INIT; }
+        else { ret = declarations.push_back(type); }
+      }
+      if (OB_SUCC(ret)) { ret = declared_rows.push_back(declarations); }
+    }
+    if (OB_SUCC(ret)) { ret = params.bind_received_types(declared_rows); }
+  }
+  if (OB_FAIL(ret)) { return ret; }
+  const auto &values = params.get_one_batch_values(batch_id);
+  const auto &attributes = params.get_one_batch_metadata(batch_id);
+  if (values.count() != attributes.count() || values.count() != params.param_idxs_.count()) {
+    return OB_DESERIALIZE_ERROR;
+  }
+  ObEvalCtx eval_ctx(*this);
+  for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
+    const int64_t parameter = params.get_param_idx(i);
+    const NativeTypedDatum &value = values.at(i);
+    const ObExpr *expression = nullptr;
+    if (parameter < 0 || parameter >= phy_plan_ctx_->get_parameter_count() || value.type_ == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (params.param_expr_idxs_.count() == values.count()) {
+      const int64_t index = params.param_expr_idxs_.at(i);
+      if (index > 0 && index <= array.count() && array.at(index - 1).type_ != T_INVALID) {
+        expression = &array.at(index - 1);
       }
     }
-    px_batch_id_ = batch_id;
+    Datum expression_value;
+    if (OB_SUCC(ret) && expression != nullptr) {
+      // Prepare the actual Expr representation before publishing either its
+      // flags or the PlanCtx binding. The boundary may normalize Decimal or
+      // LOB layout; a matching type name alone does not prove representation.
+      alignas(8) char scratch[64];
+      ObDatum physical;
+      Datum borrowed;
+      const DatumCopyPlan source_plan(*value.type_);
+      const DatumCopyPlan target_plan(expression->get_sql_type());
+      int64_t bytes = 0;
+      if (OB_FAIL(source_plan.legacy_view(value.datum_, physical, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(target_plan.import_legacy(physical, borrowed))) {
+      } else if (OB_FAIL(target_plan.carrier_span_size(borrowed, bytes))) {
+      } else {
+        char *buffer = bytes == 0 ? nullptr : static_cast<char *>(get_allocator().alloc(bytes));
+        if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        else {
+          int64_t position = 0;
+          ret = target_plan.copy_carrier_span_borrowing_resources(
+              borrowed, expression_value, buffer, bytes, position);
+        }
+      }
+      if (OB_SUCC(ret) && is_lob_storage(value.type_->kind())) {
+        ret = ob_adjust_lob_datum(*this, expression_value, value.type_->legacy_meta(),
+            expression->obj_meta_, get_allocator(), expression_value);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = phy_plan_ctx_->set_runtime_parameter(parameter, value.datum_, *value.type_, attributes.at(i));
+    }
+    if (OB_SUCC(ret) && expression != nullptr) {
+      ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *expression);
+      expression->locate_datum_for_write(eval_ctx) = expression_value;
+      expression->get_eval_info(eval_ctx).evaluated_ = true;
+    }
   }
+  if (OB_SUCC(ret)) { px_batch_id_ = batch_id; }
   return ret;
 }
 

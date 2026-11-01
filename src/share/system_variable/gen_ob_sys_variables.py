@@ -323,10 +323,11 @@ def make_cpp_file(pdir, cpp_file_name, sorted_list):
   cpp_file.write("{\n")
   cpp_file.write("  int ret = OB_SUCCESS;\n")
   cpp_file.write("  DatumValue candidate;\n")
+  cpp_file.write("  ObDatum physical;\n")
   cpp_file.write("  if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(\n")
-  cpp_file.write("          value, meta, candidate.datum_, scratch, capacity))) {\n")
+  cpp_file.write("          value, meta, physical, scratch, capacity))) {\n")
+  cpp_file.write("  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, meta))) {\n")
   cpp_file.write("  } else {\n")
-  cpp_file.write("    candidate.meta_ = meta;\n")
   cpp_file.write("    out = candidate;\n")
   cpp_file.write("  }\n")
   cpp_file.write("  return ret;\n")
@@ -433,10 +434,10 @@ int ObSysVariables::init_default_values()
           base_out_obj.set_collation_level(CS_LEVEL_SYSCONST);
         }
         Datum candidate, base_candidate;
-        if (OB_FAIL(DatumParameterCodec::import_schema_native_value(
+        if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
                 out_obj.datum_, out_obj.meta_, ObSysVarAllocator, candidate))) {
           LOG_WARN("fail to own system variable default", K(ret), K(i));
-        } else if (OB_FAIL(DatumParameterCodec::import_schema_native_value(
+        } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
                 base_out_obj.datum_, base_out_obj.meta_, ObBaseSysVarAllocator, base_candidate))) {
           LOG_WARN("fail to own system variable base", K(ret), K(i));
         } else {

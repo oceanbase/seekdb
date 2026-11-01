@@ -51,26 +51,21 @@ static int get_opt_selectivity_datum_access_ctx(
   return ret;
 }
 
-// The remaining mathematical libraries consume legacy coefficients synchronously.
-// Their scalar views use two caller-owned buffers, never an allocator per lookup.
+// Column owners and mathematical wrappers now share the native physical
+// domain. Caller scratch remains available to downstream legacy math ports;
+// these two bridges neither export scalars nor allocate a payload per lookup.
 static int get_column_math_bounds(const OptTableMetas &tables, const OptSelectivityCtx &ctx,
                                   const ObRawExpr &expr, DatumValue &minimum, DatumValue &maximum,
                                   void *min_scratch, void *max_scratch, int64_t capacity)
 {
-  int ret = OB_SUCCESS;
-  Datum min_native, max_native;
+  UNUSED(min_scratch); UNUSED(max_scratch); UNUSED(capacity);
+  Datum min_native = minimum.datum_, max_native = maximum.datum_;
   SqlTypeMeta min_meta = minimum.meta_, max_meta = maximum.meta_;
-  if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(minimum.datum_, min_meta, min_native))) {
-  } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(maximum.datum_, max_meta, max_native))) {
-  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(tables, ctx, expr,
-                         min_native, min_meta, max_native, max_meta))) {
-  } else if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
-                         min_native, min_meta, minimum.datum_, min_scratch, capacity))) {
-  } else {
-    minimum.meta_ = min_meta;
-    if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
-                         max_native, max_meta, maximum.datum_, max_scratch, capacity))) {
-    } else { maximum.meta_ = max_meta; }
+  const int ret = ObOptSelectivity::get_column_min_max(tables, ctx, expr,
+      min_native, min_meta, max_native, max_meta);
+  if (ret == OB_SUCCESS) {
+    minimum = DatumValue(min_native, min_meta);
+    maximum = DatumValue(max_native, max_meta);
   }
   return ret;
 }
@@ -79,18 +74,14 @@ static int calc_expr_math_bounds(const OptTableMetas &tables, const OptSelectivi
                                  const ObRawExpr *expr, DatumValue &minimum, DatumValue &maximum,
                                  void *min_scratch, void *max_scratch, int64_t capacity)
 {
-  int ret = OB_SUCCESS;
+  UNUSED(min_scratch); UNUSED(max_scratch); UNUSED(capacity);
   Datum min_native, max_native;
   SqlTypeMeta min_meta = minimum.meta_, max_meta = maximum.meta_;
-  if (OB_FAIL(ObOptSelectivity::calc_expr_min_max(tables, ctx, expr,
-                         min_native, min_meta, max_native, max_meta))) {
-  } else if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
-                         min_native, min_meta, minimum.datum_, min_scratch, capacity))) {
-  } else {
-    minimum.meta_ = min_meta;
-    if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
-                         max_native, max_meta, maximum.datum_, max_scratch, capacity))) {
-    } else { maximum.meta_ = max_meta; }
+  const int ret = ObOptSelectivity::calc_expr_min_max(tables, ctx, expr,
+      min_native, min_meta, max_native, max_meta);
+  if (ret == OB_SUCCESS) {
+    minimum = DatumValue(min_native, min_meta);
+    maximum = DatumValue(max_native, max_meta);
   }
   return ret;
 }
@@ -324,10 +315,8 @@ namespace {
 int export_optimizer_value(const Datum &value, const SqlTypeMeta &meta,
                            DatumValue &output, void *scratch, int64_t capacity)
 {
-  ObDatum view;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, view, scratch, capacity);
-  if (ret == OB_SUCCESS) { output = DatumValue(view, meta); }
-  return ret;
+  UNUSED(scratch); UNUSED(capacity);
+  return output.assign_native_borrowed(value, meta);
 }
 }
 
@@ -349,17 +338,11 @@ int OptColumnMeta::set_max_value(const Datum &value, const SqlTypeMeta &meta)
 }
 int OptColumnMeta::set_min_value(const DatumValue &value)
 {
-  Datum native;
-  const int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, native);
-  if (ret == OB_SUCCESS) { min_val_ = native; min_meta_ = value.meta_; }
-  return ret;
+  return set_min_value(value.datum_, value.meta_);
 }
 int OptColumnMeta::set_max_value(const DatumValue &value)
 {
-  Datum native;
-  const int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, native);
-  if (ret == OB_SUCCESS) { max_val_ = native; max_meta_ = value.meta_; }
-  return ret;
+  return set_max_value(value.datum_, value.meta_);
 }
 int OptColumnMeta::set_min_max_owned(const Datum &minimum, const SqlTypeMeta &min_meta,
                                      const Datum &maximum, const SqlTypeMeta &max_meta,
@@ -2747,7 +2730,7 @@ int ObOptSelectivity::get_column_query_range(const OptSelectivityCtx &ctx,
 {
   int ret = OB_SUCCESS;
   const ObLogPlan *log_plan = ctx.get_plan();
-  const ParamStore *params = ctx.get_params();
+  const ObPhysicalPlanCtx *params = ctx.get_parameter_context();
   ObExecContext *exec_ctx = ctx.get_opt_ctx().get_exec_ctx();
   ObSQLSessionInfo *session_info = ctx.get_session_info();
   ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(ctx.get_session_info());
@@ -3971,7 +3954,7 @@ int ObOptSelectivity::calculate_expr_avg_len(const OptTableMetas &table_metas,
                                                           ctx.get_allocator()))) {
     } else if (get_value) {
       avg_len = ObOptEstCostModel::DEFAULT_FIXED_OBJ_WIDTH + (value.is_null() ? 0 : value.is_string_type() || value.is_json() || value.is_geometry()
-          || value.is_decimal_int() || value.is_collection_sql_type() ? value.datum_.len_
+          || value.is_decimal_int() || value.is_collection_sql_type() ? value.datum_.length()
           : ob_is_number_tc(value.get_type())
               ? sizeof(uint32_t) * value.datum_.get_number_desc().len_ : 0);
     }
@@ -4299,10 +4282,8 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
     }
   }
   if (OB_SUCC(ret)) {
-    Datum minimum, maximum;
-    if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(min_value.datum_, min_value.meta_, minimum))) {
-    } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(max_value.datum_, max_value.meta_, maximum))) {
-    } else { min_result = minimum; min_meta = min_value.meta_; max_result = maximum; max_meta = max_value.meta_; }
+    min_result = min_value.datum_; min_meta = min_value.meta_;
+    max_result = max_value.datum_; max_meta = max_value.meta_;
   }
   return ret;
 }

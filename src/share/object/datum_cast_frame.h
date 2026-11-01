@@ -19,8 +19,8 @@
 namespace oceanbase { namespace common { namespace detail {
 // A temporary native result slot, like an expression's Datum plus result
 // buffer. There is no legacy value union or layout compatibility. Only a
-// cloned DatumValue can escape the conversion. Scalars use native widths;
-// NUMBER stores its descriptor followed by digits, exactly as ObDatum does.
+// cloned DatumValue can escape the conversion. Scalars are inline; NUMBER
+// owns its compact descriptor and digits in the bounded local result buffer.
 class DatumCastFrame : public DatumValue
 {
 public:
@@ -30,13 +30,19 @@ public:
   DatumCastFrame &operator=(const DatumCastFrame &other) {
     if (this != &other) {
       static_cast<DatumValue &>(*this) = other;
-      const uintptr_t pointer = reinterpret_cast<uintptr_t>(other.datum_.ptr_);
-      const uintptr_t begin = reinterpret_cast<uintptr_t>(other.storage_);
-      if (!other.is_null() && pointer >= begin && pointer < begin + sizeof(storage_)) {
-        const uint64_t offset = pointer - begin;
-        OB_ASSERT(other.datum_.len_ <= sizeof(storage_) - offset);
-        MEMCPY(storage_ + offset, other.datum_.ptr_, other.datum_.len_);
-        datum_.ptr_ = storage_ + offset;
+      // Only NUMBER writes this local buffer. Metadata selects Reference;
+      // inline numeric payload bits must never be inspected as an address.
+      if (!other.is_null() && other.get_type_class() == ObNumberTC) {
+        const uintptr_t pointer = reinterpret_cast<uintptr_t>(other.datum_.get_reference());
+        const uintptr_t begin = reinterpret_cast<uintptr_t>(other.storage_);
+        if (pointer >= begin && pointer < begin + sizeof(storage_)) {
+          const uint64_t offset = pointer - begin;
+          OB_ASSERT(other.datum_.length() <= sizeof(storage_) - offset);
+          MEMCPY(storage_ + offset, other.datum_.get_reference(), other.datum_.length());
+          const int ret = datum_.set_reference(storage_ + offset, other.datum_.length(),
+                                                other.datum_.reference_flags());
+          OB_ASSERT(ret == OB_SUCCESS);
+        }
       }
     }
     return *this;
@@ -58,7 +64,8 @@ public:
   void set_number(const number::ObNumber &value) { set_number(ObNumberType, value); }
   void set_number(SqlValueType type, const number::ObNumber &value) {
     static_assert(number::ObNumber::MAX_BYTE_LEN <= sizeof(storage_));
-    datum_.ptr_ = storage_; datum_.set_number(value);
+    const int ret = datum_.set_number(value, storage_, sizeof(storage_));
+    OB_ASSERT(ret == OB_SUCCESS); // MAX_BYTE_LEN is bounded by storage_ above.
     meta_.set_type(type); meta_.set_collation_level(CS_LEVEL_NUMERIC);
   }
   void set_datetime(SqlValueType type, int64_t value) { numeric(type, value); }
@@ -72,13 +79,16 @@ public:
   void set_bit(uint64_t value) { scalar(value, &SqlTypeMeta::set_bit); }
   void set_string(SqlValueType type, const char *pointer, int32_t length) {
     meta_.set_type(type); meta_.set_collation_level(CS_LEVEL_IMPLICIT);
-    datum_.set_string(pointer, length);
+    const int ret = datum_.set_string(pointer, length);
+    OB_ASSERT(ret == OB_SUCCESS);
   }
   void set_string(SqlValueType type, const ObString &value) {
     set_string(type, value.ptr(), value.length());
   }
   void set_varchar(const ObString &value) {
-    meta_.set_varchar(); meta_.set_collation_level(CS_LEVEL_IMPLICIT); datum_.set_string(value);
+    const int ret = datum_.set_string(value);
+    OB_ASSERT(ret == OB_SUCCESS);
+    meta_.set_varchar(); meta_.set_collation_level(CS_LEVEL_IMPLICIT);
   }
   void set_varchar(const char *pointer, int32_t length) {
     set_varchar(ObString(length, pointer));
@@ -86,32 +96,42 @@ public:
   void set_lob_value(SqlValueType type, const char *pointer, int32_t length) {
     meta_.set_type(type); meta_.set_inrow();
     if (type != ObCollectionSQLType) { meta_.set_collation_level(CS_LEVEL_IMPLICIT); }
-    datum_.set_string(pointer, length);
+    const int ret = datum_.set_string(pointer, length);
+    OB_ASSERT(ret == OB_SUCCESS);
   }
   void set_decimal_int(int32_t bytes, ObScale scale, ObDecimalInt *coefficient) {
-    meta_.set_decimal_int(scale); datum_.set_decimal_int_shallow(coefficient, bytes);
+    const int ret = datum_.set_reference(coefficient, bytes);
+    OB_ASSERT(ret == OB_SUCCESS);
+    meta_.set_decimal_int(scale);
   }
   // Decimal conversion scratch copies only coefficient bytes. This is a
   // native payload view owned by the cast arena until the public final clone.
-  int64_t get_deep_copy_size() const { OB_ASSERT(is_decimal_int()); return datum_.len_; }
+  int64_t get_deep_copy_size() const { OB_ASSERT(is_decimal_int()); return datum_.length(); }
   int deep_copy(const DatumCastFrame &source, char *buffer, int64_t length, int64_t &position) {
     if (!source.is_decimal_int() || position < 0 || length < position
-        || source.datum_.len_ > length - position
-        || (source.datum_.len_ != 0 && buffer == nullptr)) { return OB_INVALID_ARGUMENT; }
-    if (source.datum_.len_ != 0) { MEMMOVE(buffer + position, source.datum_.ptr_, source.datum_.len_); }
+        || source.datum_.length() > length - position
+        || (source.datum_.length() != 0 && buffer == nullptr)) { return OB_INVALID_ARGUMENT; }
+    if (source.datum_.length() != 0) { MEMMOVE(buffer + position, source.datum_.get_reference(), source.datum_.length()); }
     meta_ = source.meta_;
-    datum_.set_decimal_int_shallow(reinterpret_cast<const ObDecimalInt *>(
-        buffer == nullptr ? nullptr : buffer + position), source.datum_.len_);
-    position += source.datum_.len_;
+    const int ret = datum_.set_reference(buffer == nullptr ? nullptr : buffer + position,
+                                         source.datum_.length());
+    OB_ASSERT(ret == OB_SUCCESS);
+    position += source.datum_.length();
     return OB_SUCCESS;
   }
 private:
   template <typename T> void numeric(SqlValueType type, T value) {
-    MEMCPY(storage_, &value, sizeof(value)); datum_.set_string(storage_, sizeof(value));
+    if constexpr (std::is_same_v<T, float>) { datum_.set_float(value); }
+    else if constexpr (std::is_same_v<T, double>) { datum_.set_double(value); }
+    else if constexpr (std::is_unsigned_v<T>) { datum_.set_uint(value); }
+    else { datum_.set_int(value); }
     meta_.set_type(type); meta_.set_collation_level(CS_LEVEL_NUMERIC);
   }
   template <typename T> void scalar(T value, void (SqlTypeMeta::*setter)()) {
-    MEMCPY(storage_, &value, sizeof(value)); datum_.set_string(storage_, sizeof(value));
+    if constexpr (std::is_same_v<T, ObMySQLDate>) { datum_.set_mysql_date(value); }
+    else if constexpr (std::is_same_v<T, ObMySQLDateTime>) { datum_.set_mysql_datetime(value); }
+    else if constexpr (std::is_unsigned_v<T>) { datum_.set_uint(value); }
+    else { datum_.set_int(value); }
     (meta_.*setter)();
   }
   alignas(8) char storage_[64];

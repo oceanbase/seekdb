@@ -16,6 +16,7 @@
 
 #include "common/datum/datum_parameter_codec.h"
 #include "share/datum/datum_ndv_hash.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/rewrite/ob_query_range_define.h"
@@ -93,10 +94,10 @@ std::string encode_plan(const ObValuesTableAccessSpec &spec) {
 }
 std::string encode_value(const DatumParameter &value) {
   int64_t size = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::value_size(value.datum_, value.get_type_meta(), size));
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::native_value_size(value.datum_, value.get_type_meta(), size));
   std::string result(size, '\0');
   int64_t pos = 0;
-  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_value(value.datum_, value.get_type_meta(),
+  EXPECT_EQ(OB_SUCCESS, DatumParameterCodec::encode_native_value(value.datum_, value.get_type_meta(),
                                                          &result[0], size, pos));
   EXPECT_EQ(size, pos);
   return result;
@@ -133,7 +134,7 @@ TEST(ValuesTableDatum, plan_and_statement_constants_are_native) {
   using StatementValue = typename std::decay<decltype(std::declval<ObValuesTableDef>().access_values_.at(0))>::type;
   static_assert(std::is_same<PlanValue, DatumValue>::value, "Compact native plan constants");
   static_assert(std::is_same<StatementValue, DatumParameter>::value, "Native statement constants");
-  static_assert(sizeof(DatumValue) == 16, "Do not store full 64-byte parameters in plan constants");
+  static_assert(sizeof(DatumValue) == 24, "Native value/meta constants avoid parameter attributes");
   static_assert(ObValuesTableDef::ACCESS_VALUE == 3, "Keep the existing access enum wire value");
 }
 
@@ -159,12 +160,9 @@ TEST(ValuesTableDatum, captured_legacy_plan_wire_and_native_owned_constants_matc
         ASSERT_EQ(OB_SUCCESS, map.deserialize(f.wire.data(), f.wire.size(), pos));
         const auto &entry = map.expr_final_infos_.at(0);
         DatumParameter source;
-        source.set_datum(*entry.const_val_);
-        source.set_type_meta(entry.const_meta_);
+        ASSERT_EQ(OB_SUCCESS, source.assign_legacy_borrowed(*entry.const_val_, entry.const_meta_));
         ASSERT_EQ(OB_SUCCESS, spec.datum_values_.prepare_allocate(1));
-        ASSERT_EQ(OB_SUCCESS, clone_datum_value(source.datum_, source.get_type_meta(),
-                                              spec.datum_values_.at(0).datum_, output));
-        spec.datum_values_.at(0).meta_ = source.get_type_meta();
+        ASSERT_EQ(OB_SUCCESS, clone_typed_value(source.value_view(), spec.datum_values_.at(0), output));
         expected_value = bare_value(f.canonical); // independent captured value wire
         EXPECT_EQ(expected_value, encode_value(spec.datum_values_.at(0)));
         if (needs_declaration) {
@@ -174,14 +172,11 @@ TEST(ValuesTableDatum, captured_legacy_plan_wire_and_native_owned_constants_matc
         } else {
           ASSERT_EQ(OB_SUCCESS, spec.datum_value_types_.prepare_allocate(1));
           SqlTypeMeta type_meta = source.get_type_meta();
-          if (source.datum_.is_ext()) {
-            ASSERT_NE(nullptr, source.datum_.ptr_);
-            ASSERT_TRUE(source.datum_.is_extended_null() || source.datum_.has_ext_value());
-            if (!source.datum_.is_extended_null()) {
-              const int64_t state = source.datum_.get_ext();
-              ASSERT_TRUE(state == DATUM_MIN_EXT_VALUE || state == DATUM_MAX_EXT_VALUE || state == ObActionFlag::OP_NOP);
-            }
-            type_meta.set_extend_type(0); // no resource declaration for a state marker
+          if (type_meta.is_ext() && (source.is_null() || source.is_min_value()
+              || source.is_max_value() || source.is_nop_value())) {
+            // Checked no-resource states may retain their captured Ref15
+            // wrapper/meta instead of the canonical bare native state.
+            type_meta.set_extend_type(0);
           }
           ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(type_meta, ObAccuracy(), output, spec.datum_value_types_.at(0)));
         }
@@ -268,8 +263,7 @@ TEST(ValuesTableDatum, statement_deep_copy_owns_values_and_preserves_parameter_m
       ASSERT_EQ(OB_SUCCESS, map.deserialize(f.wire.data(), f.wire.size(), pos));
       const auto &entry = map.expr_final_infos_.at(0);
       DatumParameter parameter;
-      parameter.set_datum(*entry.const_val_);
-      parameter.set_type_meta(entry.const_meta_);
+      ASSERT_EQ(OB_SUCCESS, parameter.assign_legacy_borrowed(*entry.const_val_, entry.const_meta_));
       parameter.set_accuracy(ObAccuracy(37, 7));
       parameter.set_result_flags(0x1234);
       parameter.set_raw_text_info(13, 29);

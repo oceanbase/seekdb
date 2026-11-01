@@ -105,7 +105,7 @@ void load_parameters(ObPhysicalPlanCtx &plan, ObIAllocator &owner, int64_t count
 // remaining parameters must be recovered from PlanCtx, not inferred from Expr.
 void partial_parameter_info(ObExprFrameInfo &info, ObPhysicalPlanCtx &plan, ObIAllocator &owner)
 {
-  const int64_t count = plan.get_param_store().count();
+  const int64_t count = plan.get_parameter_count();
   ASSERT_EQ(OB_SUCCESS, info.rt_exprs_.prepare_allocate(1));
   ObExpr &expr = info.rt_exprs_.at(0);
   expr.type_ = T_QUESTIONMARK;
@@ -232,6 +232,9 @@ TEST(NativeFrameValueWire, sql_array_domain_codec_owns_nested_values_and_rebuild
   ASSERT_NE(nullptr, array);
   ASSERT_EQ(OB_SUCCESS, array->data_[0].set_int(INT64_MIN, source_owner));
   ASSERT_EQ(OB_SUCCESS, array->data_[1].set_int(91, source_owner));
+  for (int64_t i = 0; i < array->count_; ++i) {
+    ASSERT_EQ(OB_SUCCESS, array->set_element_type_borrowed(i, integer, source_owner));
+  }
   alignas(8) char wrapper[15];
   Datum source, copy;
   ASSERT_EQ(OB_SUCCESS, source.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY,
@@ -246,6 +249,11 @@ TEST(NativeFrameValueWire, sql_array_domain_codec_owns_nested_values_and_rebuild
   EXPECT_EQ(123, copy.get_extend_size()); EXPECT_EQ(CS_LEVEL_COERCIBLE, copy.get_extend_collation_level());
   source_owner.reuse(); MEMSET(wrapper, 0x8d, sizeof(wrapper)); MEMSET(wire.data(), 0x9e, wire.size());
   EXPECT_EQ(INT64_MIN, decoded->data_[0].get_int()); EXPECT_EQ(91, decoded->data_[1].get_int());
+  for (int64_t i = 0; i < decoded->count_; ++i) {
+    ASSERT_NE(nullptr, decoded->get_element_type(i));
+    EXPECT_TRUE(integer.equals(*decoded->get_element_type(i)));
+    EXPECT_NE(&integer, decoded->get_element_type(i));
+  }
 }
 
 TEST(NativeFrameValueWire, every_truncated_value_preserves_output_type_and_position)
@@ -417,9 +425,9 @@ TEST(NativeFrameWire, px_restores_all_parameters_directly_into_unique_owner_desp
     if (i == 1) { EXPECT_TRUE(value->is_null()); }
     else {
       EXPECT_EQ(i == 0 ? INT64_MIN : i + 71, value->get_int());
-      ObDatum borrowed;
-      ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*destination_plan.get_native_parameter_type(i)).borrow_legacy(*value, borrowed));
-      EXPECT_EQ(borrowed.ptr_, destination_plan.get_param_store().at(i).datum_.ptr_);
+      EXPECT_EQ(0, value->length());
+      ASSERT_NE(nullptr, destination_plan.get_parameter_metadata(i));
+      EXPECT_EQ(ObIntType, destination_plan.get_parameter_metadata(i)->type_meta_.get_type());
     }
   }
   ObEvalCtx eval(destination);

@@ -66,7 +66,7 @@ public:
   ObExecContext *exec_ctx_;
   const ExprFixedArray *output_;
   const ObExpr *group_id_expr_;
-  VIRTUAL_TO_STRING_KV(K_(type), K_(max_size), K_(eval_ctx), K_(exec_ctx), KPC_(output), K_(group_id_expr));
+  VIRTUAL_TO_STRING_KV(K_(type), K_(max_size), K_(eval_ctx), KP_(exec_ctx), KPC_(output), K_(group_id_expr));
 };
 
 class ObDASIter : public common::ObNewRowIterator
@@ -85,7 +85,7 @@ public:
   {}
   virtual ~ObDASIter() { release(); }
 
-  VIRTUAL_TO_STRING_KV(K_(type), K_(max_size), K_(eval_ctx), K_(exec_ctx), K_(output),
+  VIRTUAL_TO_STRING_KV(K_(type), K_(max_size), K_(eval_ctx), KP_(exec_ctx), K_(output),
       K_(group_id_expr), K_(children_cnt), K_(inited));
 
   void set_type(ObDASIterType type) { type_ = type; }

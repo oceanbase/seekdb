@@ -184,6 +184,8 @@ public:
   virtual ~ObPlanSet();
 
 public:
+  int match_runtime_params_info(const ObPhysicalPlanCtx *params,
+                                ObPlanCacheCtx &pc_ctx, bool &is_same);
   int match_params_info(const ParamStore *params,
                         ObPlanCacheCtx &pc_ctx,
                         bool &is_same);
@@ -258,6 +260,9 @@ private:
    * @retval is_matched Matching result
    */
   int match_constraint(const ParamStore &params, bool &is_matched);
+  int match_runtime_constraint(const ObPhysicalPlanCtx &params, bool &is_matched);
+  static int match_runtime_multi_stmt_info(const ObPhysicalPlanCtx &params,
+      const common::ObIArray<int64_t> &multi_stmt_rowkey_pos, bool &is_match);
 
   int init_pre_calc_exprs(const ObPlanCacheObject &cache_obj, common::ObIAllocator* pc_alloc_);
 

@@ -301,8 +301,9 @@ int ObVirtualTableIterator::convert_output_row(ObNewRow *&cur_row)
       const ObColumnSchemaV2 *col_schema = cols_schema_.at(i);
       if (cur_row->get_cell(i).is_null()
           || (cur_row->get_cell(i).is_string_type() && 0 == cur_row->get_cell(i).get_data_length())
-          || ob_is_empty_lob(cur_row->get_cell(i).get_type(), cur_row->get_cell(i).datum_,
-                             cur_row->get_cell(i).has_lob_header())
+          || (cur_row->get_cell(i).is_lob_storage()
+              && ObLobLocatorV2(cur_row->get_cell(i).get_string(),
+                                cur_row->get_cell(i).has_lob_header()).is_empty_lob())
           || (cur_row->get_cell(i).is_timestamp() && cur_row->get_cell(i).get_timestamp() <= 0)) {
         convert_row_.cells_[i].set_null();
       } else {
@@ -331,9 +332,12 @@ int ObVirtualTableIterator::convert_temporary_lob(DatumValue &value, ObIAllocato
   if (!value.is_null() && value.is_lob_storage() && !value.has_lob_header()) {
     SqlTypeMeta result_meta = value.meta_;
     result_meta.set_has_lob_header();
-    if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
-            value.datum_, value.meta_, result_meta, owner))) {
-    } else { value.meta_ = result_meta; }
+    ObDatum physical;
+    alignas(8) char scratch[64];
+    if (OB_FAIL(value.export_legacy(physical, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
+            physical, value.meta_, result_meta, owner))) {
+    } else { ret = value.assign_legacy_borrowed(physical, result_meta); }
   }
   return ret;
 }
@@ -420,14 +424,7 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
     if (OB_SUCC(ret)
         && is_lob_storage(col_schema->get_data_type())
         && !cur_row->cells_[i].has_lob_header()) { // cannot be json type;
-      DatumValue &value = cur_row->cells_[i];
-      SqlTypeMeta result_meta = value.meta_;
-      result_meta.set_has_lob_header();
-      if (OB_FAIL(ObTextStringResult::ob_convert_datum_temporay_lob(
-              value.datum_, value.meta_, result_meta, row_calc_buf_))) {
-      } else if (!value.is_null()) {
-        value.meta_ = result_meta;
-      }
+      ret = convert_temporary_lob(cur_row->cells_[i], row_calc_buf_);
     }
     if (OB_SUCC(ret) && ob_is_string_tc(col_schema->get_data_type())
         && (col_schema->get_data_length() < cur_row->cells_[i].get_string_len()

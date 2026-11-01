@@ -42,6 +42,7 @@ struct ObExprCtx;
 namespace sql
 {
 class ObSqlExpression;
+class ObPhysicalPlanCtx;
 struct ObPreCalcExprFrameInfo;
 struct ObPreCalcExprConstraint;
 
@@ -157,6 +158,7 @@ public:
   inline const ObOutlineState &get_outline_state() const { return outline_state_; }
   inline void set_outline_state(const ObOutlineState &state) { outline_state_ = state; }
   int set_params_info(const ParamStore &params);
+  int set_params_info(const ObPhysicalPlanCtx &parameters);
   const common::Ob2DArray<ObParamInfo,
                           common::OB_MALLOC_BIG_BLOCK_SIZE,
                           common::ObWrapperAllocator, false> &get_params_info() const { return params_info_; }

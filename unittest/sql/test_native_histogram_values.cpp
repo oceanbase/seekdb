@@ -36,8 +36,8 @@ template<class T>std::string bytes(const T &value) {
 }
 template<class T>std::string wire(const T &value) {const auto b=bytes(value);return hex(b.data(),b.size());}
 std::string value_wire(const DatumValue &v) {
-  int64_t n=0,p=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::value_size(v.datum_,v.meta_,n));
-  std::string b(n+64,'\0');EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_value(v.datum_,v.meta_,&b[0],b.size(),p));return hex(b.data(),p);
+  int64_t n=0,p=0;EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::native_value_size(v.datum_,v.meta_,n));
+  std::string b(n+64,'\0');EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::encode_native_value(v.datum_,v.meta_,&b[0],b.size(),p));return hex(b.data(),p);
 }
 std::string endpoint_wire(const ObHistBucket &bucket) {
   alignas(8) char scratch[64]; DatumValue value;
@@ -88,13 +88,13 @@ public:
 TEST(NativeHistogramValues, immutable_old_build_wire_decode_selectivity_and_hash) {
   std::ifstream input("unittest/sql/data/native_histogram_values.golden");ASSERT_TRUE(input.good());
   ObArenaAllocator owner;std::vector<DatumValue> values;std::string line;int hc=0,tc=0,bc=0,lc=0,dc=0;
-  ObGlobalHint hint;ObRawExprFactory factory(owner);ParamStore params;ObAddr addr;
-  ObOptimizerContext opt(nullptr,nullptr,nullptr,nullptr,owner,&params,addr,hint,factory,nullptr,false);OptSelectivityCtx ctx(opt,nullptr,nullptr);
+  ObGlobalHint hint;ObRawExprFactory factory(owner);ObAddr addr;
+  ObOptimizerContext opt(nullptr,nullptr,nullptr,nullptr,owner,addr,hint,factory,nullptr,false);OptSelectivityCtx ctx(opt,nullptr,nullptr);
   while(std::getline(input,line)) {
     if(line.empty()||line[0]=='#'){continue;}const auto f=split(line);SCOPED_TRACE(line);
     if(f.at(0)=="V"){
       ASSERT_EQ(values.size(),std::stoi(f.at(1)));std::string b=unhex(f.at(4));DatumValue v;int64_t p=0;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(b.data(),b.size(),p,owner,v.datum_,v.meta_));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(b.data(),b.size(),p,owner,v.datum_,v.meta_));
       ASSERT_EQ(b.size(),p);values.push_back(v);EXPECT_EQ(f.at(4),value_wire(v));
     }else if(f[0]=="H"){
       int group=std::stoi(f[1]),buckets=std::stoi(f[2]);ObSEArray<BucketNode,16> pairs;
@@ -179,7 +179,9 @@ TEST(NativeHistogramValues, endpoint_add_failure_does_not_publish_and_cache_payl
 
 TEST(NativeHistogramValues, raw_row_projection_validates_meta_and_retains_outrow) {
   ObArenaAllocator owner;DatumValue v;ASSERT_EQ(OB_SUCCESS,v.set_string(ObLongTextType,ObString("odd_payload"),owner));
-  ObDatum row=v.datum_;row.set_outrow();DatumValue projected;
+  alignas(8) char row_scratch[64];ObDatum row;
+  ASSERT_EQ(OB_SUCCESS,v.export_legacy(row,row_scratch,sizeof(row_scratch)));
+  row.set_outrow();DatumValue projected;
   ASSERT_EQ(OB_SUCCESS,ResultRowView::project_value(row,v.meta_,OBJ_DATUM_STRING,SqlTypeMeta(),projected,true));
   EXPECT_TRUE(projected.meta_.is_outrow());char extended[DATUM_EXTEND_PAYLOAD_SIZE];ObDatum rebuilt;
   ASSERT_EQ(OB_SUCCESS,projected.to_row_datum(rebuilt,extended));EXPECT_TRUE(rebuilt.is_outrow());
@@ -281,7 +283,7 @@ TEST(NativeHistogramValues, default_and_explicit_murmur_hash_keep_distinct_old_c
   // typed_values_compare.golden V62 (hash), native_histogram_values.golden V8/D8 (hash_murmur).
   const auto encoded = unhex("16022eff016100");
   ObArenaAllocator owner;DatumValue value;int64_t pos=0;
-  ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(encoded.data(),encoded.size(),pos,owner,value.datum_,value.meta_));
+  ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(encoded.data(),encoded.size(),pos,owner,value.datum_,value.meta_));
   ASSERT_EQ(encoded.size(),pos);
   uint64_t default_hash=0,murmur_hash=0;
   ASSERT_EQ(OB_SUCCESS,hash_datum_value(value,0,default_hash));
@@ -351,9 +353,9 @@ TEST(NativeHistogramValues, optimizer_extrema_pair_owns_references_and_preserves
 TEST(NativeHistogramValues, public_optimizer_extrema_lookup_keeps_native_pairs_missing_outputs_and_aliases)
 {
   SwitchAllocator owner;
-  ObGlobalHint hint; ObRawExprFactory factory(owner); ParamStore params; ObAddr address;
+  ObGlobalHint hint; ObRawExprFactory factory(owner); ObAddr address;
   ObExecContext execution(owner);
-  ObOptimizerContext optimizer(nullptr, &execution, nullptr, nullptr, owner, &params,
+  ObOptimizerContext optimizer(nullptr, &execution, nullptr, nullptr, owner,
       address, hint, factory, nullptr, false);
   OptSelectivityCtx ctx(optimizer, nullptr, nullptr);
   OptTableMetas tables;

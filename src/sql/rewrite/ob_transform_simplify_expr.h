@@ -49,12 +49,12 @@ private:
   int replace_op_null_condition(ObDMLStmt *stmt, bool &trans_happened);
   int replace_cmp_null_condition(ObRawExpr *&expr,
                                  const ObDMLStmt &stmt,
-                                 const ParamStore &param_store,
+                                 const ObPhysicalPlanCtx &param_store,
                                  bool &trans_happened);
 
   int extract_null_expr(ObRawExpr *expr,
                         const ObDMLStmt &stmt,
-                        const ParamStore &param_store,
+                        const ObPhysicalPlanCtx &param_store,
                         ObIArray<const ObRawExpr *> &null_expr_lists);
   int convert_preds_vector_to_scalar(ObDMLStmt *stmt, bool &trans_happened);
   int recursively_convert_join_preds_vector_to_scalar(TableItem *table_item, bool &trans_happened);

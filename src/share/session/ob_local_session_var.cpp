@@ -32,8 +32,13 @@ namespace share
 namespace {
 int64_t owned_native_session_value_size(const DatumValue &value, int depth = 0)
 {
-  // ObDatum's arena clone reserves one byte even for a non-NULL empty string.
-  int64_t bytes = value.is_null() ? 0 : std::max<int64_t>(1, value.datum_.get_deep_copy_size());
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (value.export_legacy(physical, scratch, sizeof(scratch)) != OB_SUCCESS) { return INT64_MAX; }
+  // Inline scalar/state values own no separate bytes. A Reference still owns
+  // at least one allocated byte when its actual physical span is empty.
+  int64_t bytes = value.is_null() || physical.ptr_ == scratch
+      ? 0 : std::max<int64_t>(1, physical.get_deep_copy_size());
   if (!value.is_null() && value.is_ext_sql_array()) {
     if (depth > 64) { return INT64_MAX; }
     const auto *array = reinterpret_cast<const DatumParameterArray *>(value.get_ext());
@@ -67,7 +72,10 @@ int ObLocalSessionVar::add_local_var(const ObSessionSysVar *var)
 int ObLocalSessionVar::add_local_var(ObSysVarClassType var_type, const DatumValue &value)
 {
   Datum native;
-  int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, native);
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  int ret = value.export_legacy(physical, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, native); }
   if (OB_SUCC(ret)) { ret = add_local_var_native(var_type, native, value.meta_); }
   return ret;
 }
@@ -255,7 +263,7 @@ int64_t ObLocalSessionVar::get_deep_copy_size() const
 int ObSessionSysVar::set_value(const DatumValue &value, ObIAllocator &owner)
 {
   Datum candidate;
-  const int ret = DatumParameterCodec::import_schema_native_value(
+  const int ret = DatumParameterCodec::clone_schema_native_value(
       value.datum_, value.meta_, owner, candidate);
   if (OB_SUCCESS == ret) { value_ = candidate; value_meta_ = value.meta_; }
   return ret;
@@ -273,9 +281,11 @@ int ObSessionSysVar::set_native_value(const Datum &value, const SqlTypeMeta &met
 int ObSessionSysVar::export_value(DatumValue &output, void *scratch, int64_t capacity) const
 {
   DatumValue candidate;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
-      value_, value_meta_, candidate.datum_, scratch, capacity);
-  if (OB_SUCCESS == ret) { candidate.meta_ = value_meta_; output = candidate; }
+  ObDatum physical;
+  int ret = DatumParameterCodec::export_schema_legacy_value(
+      value_, value_meta_, physical, scratch, capacity);
+  if (OB_SUCCESS == ret) { ret = candidate.assign_legacy_borrowed(physical, value_meta_); }
+  if (OB_SUCCESS == ret) { output = candidate; }
   return ret;
 }
 
@@ -312,10 +322,11 @@ bool ObSessionSysVar::is_equal(const Datum &other, const SqlTypeMeta &meta) cons
 {
   DatumValue view;
   alignas(8) char scratch[64];
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
-      other, meta, view.datum_, scratch, sizeof(scratch));
+  ObDatum physical;
+  int ret = DatumParameterCodec::export_schema_legacy_value(
+      other, meta, physical, scratch, sizeof(scratch));
+  if (OB_SUCCESS == ret) { ret = view.assign_legacy_borrowed(physical, meta); }
   OB_ASSERT(OB_SUCCESS == ret);
-  view.meta_ = meta;
   return is_equal(view);
 }
 
@@ -374,7 +385,7 @@ int64_t ObSessionSysVar::get_deep_copy_size() const
   OB_ASSERT(OB_SUCCESS == ret);
   // Only inline scalar/state exports use this local scratch. Reference spans,
   // including empty spans and array wrappers, retain the actual stored owner.
-  const int64_t payload = view.datum_.ptr_ == scratch ? 0 : owned_native_session_value_size(view);
+  const int64_t payload = owned_native_session_value_size(view);
   int64_t sz = payload > INT64_MAX - sizeof(*this) ? INT64_MAX : sizeof(*this) + payload;
   return sz;
 }

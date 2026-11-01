@@ -1,12 +1,13 @@
 /* Copyright (c) 2025 OceanBase. Licensed under the Apache License, Version 2.0. */
 #pragma once
 
+#include <type_traits>
 #include "common/datum/datum_value_flat.h"
 #include "lib/allocator/ob_allocator.h"
 
 namespace oceanbase { namespace common {
 
-// Reusable native descriptors and small payloads. The explicit owner must
+// Reusable native descriptors and small reference spans. The explicit owner must
 // outlive this buffer and every row borrowing it. Variable/array payloads stay
 // borrowed; retaining a complete value requires an explicit owning row clone.
 class DatumValueBuffer final
@@ -56,7 +57,6 @@ public:
   static void initialize(void *memory, int64_t count, DatumValue *&output)
   {
     auto *values = new (memory) DatumValue[count];
-    for (int64_t i = 0; i < count; ++i) { values[i].datum_.ptr_ = payload(values, count, i); }
     output = values;
   }
   int reserve(int64_t count)
@@ -87,21 +87,23 @@ public:
   DatumValue &at(int64_t index) { OB_ASSERT(index >= 0 && index < capacity_); return values_[index]; }
   const DatumValue &at(int64_t index) const { OB_ASSERT(index >= 0 && index < capacity_); return values_[index]; }
 
-  // Copies at most 16 payload bytes into the reserved scalar slot; larger
-  // bytes and a copied SQL-array address do not gain an owning lifetime.
+  // Scalars/states stay inline. At most 16 reference bytes are copied into the
+  // reserved reference slot; larger spans and array pointees remain borrowed.
   static int assign_view(const DatumValue &source, DatumValue *values, int64_t capacity, int64_t index)
   {
     int ret = OB_SUCCESS;
+    int64_t bytes = 0;
     if (values == nullptr || index < 0 || index >= capacity) { ret = OB_INVALID_ARGUMENT; }
-    else if (!source.is_null() && source.datum_.len_ > 0 && source.datum_.ptr_ == nullptr) { ret = OB_INVALID_ARGUMENT; }
+    else if (OB_FAIL(DatumParameterCodec::native_span_size(source.datum_, source.meta_, bytes))) {}
     else {
       DatumValue copy = source;
-      if (source.is_null()) { copy.datum_.ptr_ = payload(values, capacity, index); }
-      else if (source.datum_.len_ <= SCALAR_BYTES) {
-        if (source.datum_.len_ > 0) { MEMMOVE(payload(values, capacity, index), source.datum_.ptr_, source.datum_.len_); }
-        copy.datum_.ptr_ = payload(values, capacity, index);
+      if (NativeValueFlat::uses_reference(source) && bytes <= SCALAR_BYTES) {
+        const uint32_t length = source.datum_.length();
+        const uint16_t flags = source.datum_.reference_flags();
+        if (bytes > 0) { MEMMOVE(payload(values, capacity, index), source.datum_.get_reference(), bytes); }
+        ret = copy.datum_.set_reference(payload(values, capacity, index), length, flags);
       }
-      values[index] = copy;
+      if (OB_SUCC(ret)) { values[index] = copy; }
     }
     return ret;
   }
@@ -110,7 +112,7 @@ public:
   static int set_null(DatumValue *values, int64_t capacity, int64_t index)
   {
     if (values == nullptr || index < 0 || index >= capacity) { return OB_INVALID_ARGUMENT; }
-    values[index].set_null(); values[index].datum_.ptr_ = payload(values, capacity, index); return OB_SUCCESS;
+    values[index].set_null(); return OB_SUCCESS;
   }
   int set_null(int64_t index) { return set_null(values_, capacity_, index); }
 #define DATUM_BUFFER_SCALAR(name, type, storage_type, metadata_setter) \
@@ -135,8 +137,9 @@ public:
   {
     if (values == nullptr || index < 0 || index >= capacity) { return OB_INVALID_ARGUMENT; }
     DatumValue value = values[index];
-    value.meta_.set_type(type); value.meta_.set_collation_level(CS_LEVEL_IMPLICIT); value.datum_.set_string(bytes);
-    return assign_view(value, values, capacity, index);
+    value.meta_.set_type(type); value.meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    const int ret = value.datum_.set_string(bytes);
+    return ret == OB_SUCCESS ? assign_view(value, values, capacity, index) : ret;
   }
   int set_string_view(int64_t index, SqlValueType type, const ObString &bytes)
   { return set_string_view(values_, capacity_, index, type, bytes); }
@@ -151,7 +154,8 @@ public:
     DatumValue value = values[index];
     value.meta_.set_type(type); value.meta_.set_inrow();
     if (type != ObCollectionSQLType) { value.meta_.set_collation_level(CS_LEVEL_IMPLICIT); }
-    value.datum_.set_string(bytes); return assign_view(value, values, capacity, index);
+    const int ret = value.datum_.set_string(bytes);
+    return ret == OB_SUCCESS ? assign_view(value, values, capacity, index) : ret;
   }
   int set_lob_view(int64_t index, SqlValueType type, const ObString &bytes)
   { return set_lob_view(values_, capacity_, index, type, bytes); }
@@ -162,10 +166,12 @@ private:
   template<typename T> static int scalar(DatumValue *values, int64_t capacity,
       int64_t index, T value, void (SqlTypeMeta::*set_meta)())
   {
-    static_assert(sizeof(T) <= SCALAR_BYTES, "Reserved native scalar payload");
     if (values == nullptr || index < 0 || index >= capacity) { return OB_INVALID_ARGUMENT; }
-    char *bytes = payload(values, capacity, index); MEMCPY(bytes, &value, sizeof(value));
-    values[index].datum_.set_string(bytes, sizeof(value)); (values[index].meta_.*set_meta)(); return OB_SUCCESS;
+    if constexpr (std::is_same<T, float>::value) { values[index].datum_.set_float(value); }
+    else if constexpr (std::is_same<T, double>::value) { values[index].datum_.set_double(value); }
+    else if constexpr (std::is_unsigned<T>::value) { values[index].datum_.set_uint(value); }
+    else { values[index].datum_.set_int(value); }
+    (values[index].meta_.*set_meta)(); return OB_SUCCESS;
   }
   static constexpr int64_t SCALAR_BYTES = 16;
   ObIAllocator *owner_;

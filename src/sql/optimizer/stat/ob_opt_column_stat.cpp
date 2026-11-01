@@ -58,14 +58,17 @@ static_assert(alignof(DatumParameter) <= 8 && alignof(DatumParameterArray) <= 8,
 int64_t legacy_stat_value_copy_size(const DatumValue &value, int depth = 0)
 {
   int64_t size = 0;
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (value.export_legacy(physical, scratch, sizeof(scratch)) != OB_SUCCESS) { return INT64_MAX; }
   if (depth > 64 || value.get_type() < ObNullType || value.get_type() >= ObMaxType
-      || (!value.is_null() && value.datum_.len_ > 0 && value.datum_.ptr_ == nullptr)) {
+      || (!value.is_null() && physical.len_ > 0 && physical.ptr_ == nullptr)) {
     size = INT64_MAX;
   } else if (!value.is_null()) {
-    size = MAX(1, value.datum_.len_) + 7;
+    size = MAX(1, physical.len_) + 7;
     if (value.is_ext_sql_array()) {
-      if (value.datum_.ptr_ == nullptr || value.datum_.len_ != sizeof(int64_t)) { return INT64_MAX; }
-      const DatumParameterArray *array = reinterpret_cast<const DatumParameterArray *>(value.datum_.get_int());
+      if (physical.ptr_ == nullptr || physical.len_ != sizeof(int64_t)) { return INT64_MAX; }
+      const DatumParameterArray *array = reinterpret_cast<const DatumParameterArray *>(physical.get_int());
       if (array == nullptr || array->count_ < 0
           || array->count_ > (INT64_MAX - sizeof(DatumParameterArray) - 7) / sizeof(DatumParameter)
           || (array->count_ > 0 && array->data_ == nullptr)) { return INT64_MAX; }
@@ -84,10 +87,9 @@ int64_t legacy_stat_value_copy_size(const DatumValue &value, int depth = 0)
 int export_stat_value(const Datum &value, const SqlTypeMeta &meta, DatumValue &output,
                       void *scratch, int64_t capacity)
 {
-  DatumValue candidate;
-  const int ret = DatumParameterCodec::export_schema_legacy_value(
-      value, meta, candidate.datum_, scratch, capacity);
-  if (ret == OB_SUCCESS) { candidate.meta_ = meta; output = candidate; }
+  ObDatum physical;
+  int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, physical, scratch, capacity);
+  if (ret == OB_SUCCESS) { ret = output.assign_legacy_borrowed(physical, meta); }
   return ret;
 }
 int copy_stat_value(const Datum &value, const SqlTypeMeta &meta,
@@ -147,14 +149,14 @@ int64_t stat_value_wire_size(const Datum &value, const SqlTypeMeta &meta)
 int ObOptColumnStat::set_min_value(const DatumValue &value)
 {
   Datum candidate;
-  const int ret = DatumParameterCodec::import_schema_native_value(value.datum_, value.meta_, allocator_, candidate);
+  const int ret = DatumParameterCodec::clone_schema_native_value(value.datum_, value.meta_, allocator_, candidate);
   if (ret == OB_SUCCESS) { min_value_ = candidate; min_meta_ = value.meta_; }
   return ret;
 }
 int ObOptColumnStat::set_max_value(const DatumValue &value)
 {
   Datum candidate;
-  const int ret = DatumParameterCodec::import_schema_native_value(value.datum_, value.meta_, allocator_, candidate);
+  const int ret = DatumParameterCodec::clone_schema_native_value(value.datum_, value.meta_, allocator_, candidate);
   if (ret == OB_SUCCESS) { max_value_ = candidate; max_meta_ = value.meta_; }
   return ret;
 }
@@ -174,7 +176,10 @@ int ObOptColumnStat::copy_max_value(DatumValue &output, ObIAllocator &owner) con
 int ObHistBucket::set_endpoint_borrowed(const DatumValue &value)
 {
   Datum candidate;
-  const int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, candidate);
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  int ret = value.export_legacy(physical, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) { ret = DatumParameterCodec::borrow_schema_native_value(physical, value.meta_, candidate); }
   if (ret == OB_SUCCESS) { endpoint_value_ = candidate; endpoint_meta_ = value.meta_; }
   return ret;
 }

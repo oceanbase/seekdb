@@ -136,39 +136,39 @@ TEST(ContextDatumParameters,
               ctx.deserialize(frame.input.data(), frame.input.size(), p));
     EXPECT_EQ(frame.input.size(), p);
     EXPECT_EQ(frame.canonical, encode(ctx));
-    ASSERT_EQ(ctx.get_param_store().count(),
-              ctx.get_datum_param_store().count());
+    EXPECT_FALSE(ctx.native_parameters_ready());
+    ASSERT_EQ(ctx.get_parameter_count(), ctx.get_parameter_inputs().count());
     memset(&frame.input[0], 0xa5, frame.input.size());
     if (frame.name == "dense-mixed") {
-      ASSERT_EQ(5, ctx.get_datum_param_store().count());
-      EXPECT_EQ(INT64_MIN, ctx.get_datum_param_store().at(0).datum_.get_int());
+      ASSERT_EQ(5, ctx.get_parameter_inputs().count());
+      EXPECT_EQ(INT64_MIN, ctx.get_parameter_inputs().at(0).datum_.get_int());
       EXPECT_EQ(UINT64_MAX,
-                ctx.get_datum_param_store().at(1).datum_.get_uint());
+                ctx.get_parameter_inputs().at(1).datum_.get_uint());
       EXPECT_EQ(ObString(10, "a\0中文  "),
-                ctx.get_datum_param_store().at(2).datum_.get_string());
-      EXPECT_EQ(ctx.get_param_store().at(2).get_string().ptr(),
-                ctx.get_datum_param_store().at(2).datum_.ptr_);
-      EXPECT_TRUE(ctx.get_datum_param_store().at(4).is_null());
+                ctx.get_parameter_inputs().at(2).datum_.get_string());
+      EXPECT_EQ(ctx.get_parameter_inputs().at(2).get_string().ptr(),
+                static_cast<const char *>(ctx.get_parameter_inputs().at(2).datum_.get_reference()));
+      EXPECT_TRUE(ctx.get_parameter_inputs().at(4).is_null());
     }
     if (frame.name == "nested-array") {
       auto *outer =
-          ctx.get_datum_param_store().at(0).get_array<DatumParameterArray>();
+          ctx.get_parameter_inputs().at(0).get_array<DatumParameterArray>();
       ASSERT_NE(nullptr, outer);
       auto *inner = outer->data_[0].get_array<DatumParameterArray>();
       ASSERT_NE(nullptr, inner);
       EXPECT_EQ(42, inner->data_[0].datum_.get_int());
       EXPECT_EQ(ObString("nested bytes"), inner->data_[1].datum_.get_string());
       EXPECT_EQ(reinterpret_cast<int64_t>(outer),
-                ctx.get_param_store().at(0).get_ext());
+                ctx.get_parameter_inputs().at(0).get_ext());
     }
     if (frame.name == "sparse") {
-      ASSERT_EQ(5, ctx.get_datum_param_store().count());
+      ASSERT_EQ(5, ctx.get_parameter_inputs().count());
       for (int64_t i = 0; i < 5; ++i) {
         if (i % 2) {
-          EXPECT_TRUE(ctx.get_datum_param_store().at(i).is_null());
+          EXPECT_TRUE(ctx.get_parameter_inputs().at(i).is_null());
         } else {
           EXPECT_EQ(100 + i,
-                    ctx.get_datum_param_store().at(i).datum_.get_int());
+                    ctx.get_parameter_inputs().at(i).datum_.get_int());
         }
       }
     }
@@ -221,8 +221,8 @@ TEST(ContextDatumParameters,
       ObPhysicalPlanCtx ctx(arena);
       int64_t p = 0;
       EXPECT_NE(OB_SUCCESS, ctx.deserialize(frame.input.data(), n, p));
-      EXPECT_EQ(0, ctx.get_param_store().count());
-      EXPECT_EQ(0, ctx.get_datum_param_store().count());
+      EXPECT_EQ(0, ctx.get_parameter_inputs().count());
+      EXPECT_FALSE(ctx.native_parameters_ready());
     }
   }
 }
@@ -259,8 +259,8 @@ TEST(ContextDatumParameters,
       ObPhysicalPlanCtx ctx(arena);
       int64_t p = 0;
       EXPECT_NE(OB_SUCCESS, ctx.deserialize(wire.data(), wire.size(), p));
-      EXPECT_TRUE(ctx.get_param_store().empty());
-      EXPECT_TRUE(ctx.get_datum_param_store().empty());
+      EXPECT_TRUE(ctx.get_parameter_inputs().empty());
+      EXPECT_FALSE(ctx.native_parameters_ready());
     }
   }
 }
@@ -288,9 +288,9 @@ TEST(ContextDatumParameters, sparse_duplicate_indexes_preserve_last_value) {
     ObPhysicalPlanCtx ctx(arena);
     p = 0;
     ASSERT_EQ(OB_SUCCESS, ctx.deserialize(wire.data(), wire.size(), p));
-    EXPECT_EQ(102, ctx.get_datum_param_store().at(0).datum_.get_int());
-    EXPECT_TRUE(ctx.get_datum_param_store().at(2).is_null());
-    EXPECT_EQ(104, ctx.get_datum_param_store().at(4).datum_.get_int());
+    EXPECT_EQ(102, ctx.get_parameter_inputs().at(0).datum_.get_int());
+    EXPECT_TRUE(ctx.get_parameter_inputs().at(2).is_null());
+    EXPECT_EQ(104, ctx.get_parameter_inputs().at(4).datum_.get_int());
   }
 }
 
@@ -327,13 +327,13 @@ TEST(ContextDatumParameters,
     std::string wire = encode(source);
     pos = 0;
     ASSERT_EQ(OB_SUCCESS, output.deserialize(wire.data(), wire.size(), pos));
-    ASSERT_EQ(1, output.get_datum_param_store().count());
+    ASSERT_EQ(1, output.get_parameter_inputs().count());
     EXPECT_EQ(0, output.get_array_param_groups().count());
     auto *outer =
-        output.get_datum_param_store().at(0).get_array<DatumParameterArray>();
+        output.get_parameter_inputs().at(0).get_array<DatumParameterArray>();
     ASSERT_NE(nullptr, outer);
     EXPECT_NE(
-        source.get_datum_param_store().at(0).get_array<DatumParameterArray>(),
+        source.get_parameter_inputs().at(0).get_array<DatumParameterArray>(),
         outer);
     memset(&wire[0], 0xa5, wire.size());
     auto *inner = outer->data_[0].get_array<DatumParameterArray>();
@@ -366,14 +366,79 @@ TEST(ContextDatumParameters,
       continue;
     }
     covered = true;
+    // Independent accepted old ObLocalSessionVar record, captured as
+    // varchar_general_ci in local_session_values.golden (one timezone value).
+    // Append a complete valid record, not a deliberately truncated count.
+    const std::string local_snapshot = unhex(
+        "019b80808000010194808080001016022dff0d4575726f70652f4c6f6e646f6e00");
+    ObArenaAllocator parse_owner;
+    const Offsets input_at = offsets(frame.input, parse_owner);
+    const Offsets canonical_at = offsets(frame.canonical, parse_owner);
+    ASSERT_GE(frame.input.size(), 3u);
+    ASSERT_GE(frame.canonical.size(), 3u);
+    // The captured dense frame ends with array_group_count=0,
+    // local_var_array_count=0, check_pdml_affected_rows=false.
+    ASSERT_EQ(std::string(3, '\0'), frame.input.substr(frame.input.size() - 3));
+    ASSERT_EQ(std::string(3, '\0'), frame.canonical.substr(frame.canonical.size() - 3));
+    const int64_t local_count = frame.input.size() - 2;
+    const int64_t canonical_local_count = frame.canonical.size() - 2;
+    const std::string suffix = varint(1) + local_snapshot;
+    std::string input = replace_tail(frame.input, local_count, local_count + 1, suffix, input_at);
+    const std::string canonical = replace_tail(frame.canonical,
+        canonical_local_count, canonical_local_count + 1, suffix, canonical_at);
+    {
+      ObArenaAllocator accepted_owner;
+      ObPhysicalPlanCtx accepted(accepted_owner);
+      int64_t accepted_pos = 0;
+      ASSERT_EQ(OB_SUCCESS, accepted.deserialize(input.data(), input.size(), accepted_pos));
+      EXPECT_EQ(input.size(), accepted_pos);
+      ASSERT_EQ(5, accepted.get_parameter_inputs().count());
+      EXPECT_EQ(INT64_MIN, accepted.get_parameter_inputs().at(0).get_int());
+      EXPECT_FALSE(accepted.native_parameters_ready());
+      EXPECT_EQ(canonical, encode(accepted));
+      std::string saved_input = input;
+      // The successful owner is independent of the actual decode buffer.
+      memset(&input[0], 0xa5, input.size());
+      EXPECT_EQ(canonical, encode(accepted));
+      input.swap(saved_input);
+    }
     RejectContextAllocator arena;
     ObPhysicalPlanCtx ctx(arena);
     int64_t pos = 0;
+    // Dense parameters first decode into the independent construction arena.
+    // The nonempty local-context FixedArray then allocates through arena and
+    // fails; the actual deserialize error path clears the parsed prefix.
     EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,
-              ctx.deserialize(frame.input.data(), frame.input.size(), pos));
-    EXPECT_GT(arena.calls, 0);
-    EXPECT_TRUE(ctx.get_param_store().empty());
-    EXPECT_TRUE(ctx.get_datum_param_store().empty());
+              ctx.deserialize(input.data(), input.size(), pos));
+    EXPECT_EQ(1, arena.calls);
+    EXPECT_EQ(input.size(), pos); // The outer UNIS record boundary is preserved.
+    EXPECT_TRUE(ctx.get_parameter_inputs().empty());
+    EXPECT_FALSE(ctx.native_parameters_ready());
+  }
+  ASSERT_TRUE(covered);
+}
+
+TEST(ContextDatumParameters,
+     dense_decode_uses_construction_owner_without_external_allocations) {
+  bool covered = false;
+  for (auto frame : frames()) {
+    if (frame.name != "dense-mixed") { continue; }
+    covered = true;
+    RejectContextAllocator arena;
+    ObPhysicalPlanCtx ctx(arena);
+    int64_t pos = 0;
+    ASSERT_EQ(OB_SUCCESS, ctx.deserialize(frame.input.data(), frame.input.size(), pos));
+    EXPECT_EQ(frame.input.size(), pos);
+    EXPECT_EQ(0, arena.calls);
+    ASSERT_EQ(5, ctx.get_parameter_inputs().count());
+    EXPECT_EQ(INT64_MIN, ctx.get_parameter_inputs().at(0).get_int());
+    EXPECT_EQ(UINT64_MAX, ctx.get_parameter_inputs().at(1).get_uint64());
+    EXPECT_EQ(ObString(10, "a\0中文  "), ctx.get_parameter_inputs().at(2).get_string());
+    EXPECT_TRUE(ctx.get_parameter_inputs().at(4).is_null());
+    EXPECT_FALSE(ctx.native_parameters_ready());
+    memset(&frame.input[0], 0xa5, frame.input.size());
+    EXPECT_EQ(frame.canonical, encode(ctx));
+    EXPECT_EQ(0, arena.calls);
   }
   ASSERT_TRUE(covered);
 }

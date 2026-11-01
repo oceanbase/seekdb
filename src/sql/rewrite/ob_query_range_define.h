@@ -309,7 +309,7 @@ struct ObQueryRangeCtx
       refresh_max_offset_(false),
       exec_ctx_(exec_ctx),
       expr_constraints_(nullptr),
-      params_(nullptr),
+      parameter_context_(nullptr),
       expr_factory_(nullptr),
       session_info_(nullptr),
       geo_column_id_map_(nullptr),
@@ -325,7 +325,7 @@ struct ObQueryRangeCtx
   int init(ObPreRangeGraph *pre_range_graph,
            const ObIArray<ColumnItem> &range_columns,
            ExprConstrantArray *expr_constraints,
-           const ParamStore *params,
+           const ObPhysicalPlanCtx *params,
            ObRawExprFactory *expr_factory,
            const bool ignore_calc_failure,
            const int64_t index_prefix,
@@ -342,7 +342,7 @@ struct ObQueryRangeCtx
   bool refresh_max_offset_;
   ObExecContext *exec_ctx_;
   ExprConstrantArray *expr_constraints_;
-  const common::ParamStore *params_;
+  const ObPhysicalPlanCtx *parameter_context_;
   ObRawExprFactory *expr_factory_;
   ObSQLSessionInfo *session_info_;
   common::ObSEArray<const ObRawExpr *, 16> final_exprs_;
@@ -409,7 +409,7 @@ public:
                                       const ObIArray<ObRawExpr*> &root_exprs,
                                       ObExecContext *exec_ctx,
                                       ExprConstrantArray *expr_constraints = NULL,
-                                      const ParamStore *params = NULL,
+                                      const ObPhysicalPlanCtx *params = NULL,
                                       const bool ignore_calc_failure = true,
                                       const int64_t index_prefix = -1,
                                       const ObTableSchema *index_schema = NULL,
@@ -431,7 +431,7 @@ public:
   virtual int get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj_range_ctx,
                                          common::ObIAllocator &allocator,
                                          ObExecContext &exec_ctx,
-                                         const common::DatumParamStore &param_store,
+                                         const ObPhysicalPlanCtx &param_store,
                                          int64_t range_buffer_idx,
                                          void *range_buffer,
                                          ObQueryRangeArray &ranges,
@@ -514,7 +514,7 @@ public:
                       ObIArray<ObRawExpr*> &range_exprs,
                       ObExecContext *exec_ctx,
                       ObQueryCtx *query_ctx,
-                      const ParamStore *params = NULL,
+                      const ObPhysicalPlanCtx *params = NULL,
                       const int64_t index_prefix = -1);
   int get_range_exprs_by_graph(ObQueryRangeCtx &ctx,
                                ObRawExprFactory &expr_factory,
@@ -557,7 +557,7 @@ public:
   static common::ObDomainOpType get_domain_op_type(ObItemType type);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPreRangeGraph);
-  int try_get_native_bigint_point(const common::DatumParamStore &parameters,
+  int try_get_native_bigint_point(const common::DatumParamStore *parameters,
                                   const ObPhysicalPlanCtx *plan_ctx,
                                   common::Datum (&values)[3], bool &supported) const;
 private:

@@ -3904,7 +3904,10 @@ int ObRawExprUtils::build_const_obj_expr(ObRawExprFactory &expr_factory,
   int ret = OB_SUCCESS;
   Datum borrowed, owned;
   ObConstRawExpr *constant = nullptr;
-  OZ (DatumParameterCodec::borrow_raw_constant_value(value.datum_, value.get_meta(), borrowed));
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  OZ (value.export_legacy(physical, scratch, sizeof(scratch)));
+  OZ (DatumParameterCodec::borrow_raw_constant_value(physical, value.get_meta(), borrowed));
   OZ (DatumParameterCodec::clone_raw_constant_value(borrowed, value.get_meta(), expr_factory.get_allocator(), owned));
   OZ (expr_factory.create_raw_expr(static_cast<ObItemType>(value.get_type()), constant));
   CK (constant != nullptr);
@@ -7109,9 +7112,8 @@ int ObRawExprUtils::ora_cmp_integer(const ObConstRawExpr &const_expr, const int6
   } else if (const_expr.get_result_type().is_number()) {
     cmp_ret = obj.get_number().compare(v);
   } else if (const_expr.get_result_type().is_decimal_int()) {
-    ObDatum d;
-    d.ptr_ = reinterpret_cast<const char *>(&v);
-    d.pack_ = sizeof(int64_t);
+    Datum d;
+    d.set_int(v);
     SqlTypeMeta integer_meta; integer_meta.set_int();
     const DatumValue integer(d, integer_meta);
     ret = compare_datum_values(obj, integer, cmp_ret);

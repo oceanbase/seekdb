@@ -254,7 +254,7 @@ TEST_F(NativePLSQLVariable, immutable_old_evaluator_and_type_resolver_oracle) {
     const int provider_id = std::stoi(fields[4]);
     if (provider_id >= 0) {
       const std::string bytes = plsql_unhex(fields[5]); int64_t pos = 0; DatumValue value;
-      ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(bytes.data(), bytes.size(), pos,
+      ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(), pos,
           owner, value.datum_, value.meta_));
       ASSERT_EQ(bytes.size(), pos); ObBasicSysVar *provider = nullptr;
       ASSERT_EQ(OB_SUCCESS, session.get_sys_variable(static_cast<ObSysVarClassType>(provider_id), provider));

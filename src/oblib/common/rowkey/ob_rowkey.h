@@ -109,15 +109,14 @@ public:
       const DatumValue &left_cell = get_cell(i);
       const DatumValue &right_cell = right.get_cell(i);
       const SqlValueType type = left_cell.get_type();
-      // Integer Datums, including INT32, carry eight bytes. Keep malformed
-      // payloads and all other types on the checked comparison path.
+      // Prepared signed integer cells use only the inline scalar member.
+      // All other physical kinds/states keep the checked comparison path.
       if (type == right_cell.get_type()
           && (type == ObInt32Type || type == ObIntType)
-          && !left_cell.datum_.is_null() && !right_cell.datum_.is_null()
-          && !left_cell.datum_.is_ext() && !right_cell.datum_.is_ext()
-          && left_cell.datum_.len_ == sizeof(int64_t)
-          && right_cell.datum_.len_ == sizeof(int64_t)
-          && left_cell.datum_.ptr_ != nullptr && right_cell.datum_.ptr_ != nullptr) {
+          && left_cell.datum_.is_present() && right_cell.datum_.is_present()
+          && left_cell.datum_.reference_flags() == Datum::NoReferenceFlags
+          && right_cell.datum_.reference_flags() == Datum::NoReferenceFlags
+          && left_cell.datum_.length() == 0 && right_cell.datum_.length() == 0) {
         const int64_t left_value = left_cell.get_int();
         const int64_t right_value = right_cell.get_int();
         if (left_value != right_value) {

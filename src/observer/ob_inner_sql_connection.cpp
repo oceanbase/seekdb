@@ -381,7 +381,7 @@ int ObInnerSQLConnection::init_session_info(
     const uint64_t default_mode = DEFAULT_MYSQL_MODE;
     DatumValue mysql_sql_mode;
     mysql_sql_mode.meta_.set_uint64();
-    mysql_sql_mode.datum_.set_string(reinterpret_cast<const char *>(&default_mode), sizeof(default_mode));
+    mysql_sql_mode.datum_.set_uint(default_mode);
     if (!NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_essential_sys_vars_only(print_info_log, use_server_defaults))) {
     } else if (NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_default_sys_variable(print_info_log, use_server_defaults))) {
     } else if (OB_FAIL(session->update_max_packet_size())) {

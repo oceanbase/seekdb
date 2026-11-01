@@ -51,7 +51,7 @@ TEST(DatumValueSet, per_column_dedup_matches_independent_legacy_hash_and_equalit
     const auto f=fields(line);
     if(f[0]=="V") {
       DatumValue value; const std::string bytes=unhex(f[3]); int64_t pos=0;
-      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
+      ASSERT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
       ASSERT_EQ(bytes.size(),pos); ASSERT_EQ(values.size(),std::stoi(f[1]));
       values.push_back(value); ASSERT_EQ(OB_SUCCESS,std::stoi(f[4])); hashes.push_back(std::stoull(f[5]));
       if(std::stoi(f[1])!=59) { // the old pair fixture excludes its aborting empty DECIMAL

@@ -19,6 +19,7 @@
 #include "ob_pl_package_state.h"
 #include "pl/ob_pl_package.h"
 #include "pl/ob_pl_dependency_util.h"
+#include "common/datum/datum_parameter_codec.h"
 
 namespace oceanbase
 {
@@ -82,32 +83,34 @@ DatumParameter package_value_view(const DatumValue &value)
   parameter.set_type_meta(value.meta_);
   return parameter;
 }
+// The generic physical wrapper selects inline versus reference by metadata.
+// Pointer identity is meaningful only in the latter domain, including empty
+// references; never inspect an inline integer's inactive reference union.
+bool package_has_reference(const DatumParameter &value)
+{
+  if (!value.get_datum().is_present()) { return false; }
+  switch (value.get_type()) {
+    case ObTinyIntType: case ObSmallIntType: case ObMediumIntType:
+    case ObInt32Type: case ObIntType: case ObDateTimeType: case ObTimestampType:
+    case ObDateType: case ObTimeType: case ObMySQLDateType: case ObMySQLDateTimeType:
+    case ObUTinyIntType: case ObUSmallIntType: case ObUMediumIntType:
+    case ObUInt32Type: case ObUInt64Type: case ObYearType: case ObBitType:
+    case ObEnumType: case ObSetType: case ObFloatType: case ObUFloatType:
+    case ObDoubleType: case ObUDoubleType: return false;
+    default: return true;
+  }
+}
 int package_reusable_bytes(const DatumParameter &value, int64_t &bytes)
 {
   int ret = OB_SUCCESS;
   bytes = 0;
   if (!value.is_null() && value.get_meta().is_valid()) {
-    switch (ObDatum::get_sql_value_datum_map_type(value.get_type())) {
-      case OBJ_DATUM_8BYTE_DATA: bytes = 8; break;
-      case OBJ_DATUM_4BYTE_DATA: bytes = 4; break;
-      case OBJ_DATUM_1BYTE_DATA: bytes = 1; break;
-      case OBJ_DATUM_NUMBER:
-        if (value.datum_.ptr_ == nullptr || value.datum_.len_ < sizeof(number::ObNumber::Desc)
-            || value.datum_.len_ != sizeof(number::ObNumber::Desc)
-                + sizeof(uint32_t) * value.datum_.get_number_desc().len_) {
-          ret = OB_INVALID_ARGUMENT;
-        } else { bytes = value.datum_.len_; }
-        break;
-      case OBJ_DATUM_DECIMALINT:
-        if (value.datum_.len_ != 0 && value.datum_.len_ != 4 && value.datum_.len_ != 8
-            && value.datum_.len_ != 16 && value.datum_.len_ != 32 && value.datum_.len_ != 64) {
-          ret = OB_INVALID_ARGUMENT;
-        } else { bytes = value.datum_.len_; }
-        break;
-      default: break;
-    }
-    if (bytes > 0 && (value.datum_.ptr_ == nullptr || value.datum_.len_ != bytes)) {
-      ret = OB_INVALID_ARGUMENT;
+    int64_t span = 0;
+    if (OB_FAIL(DatumParameterCodec::native_span_size(value.get_datum(), value.get_meta(), span))) {
+    } else if (ob_is_number_tc(value.get_type()) || value.is_decimal_int()) {
+      // Only actual Number/Decimal reference bytes reuse a package buffer.
+      // Native scalar assignment carries its bits directly in the descriptor.
+      bytes = span;
     }
   }
   return ret;
@@ -134,7 +137,7 @@ void ObPLPackageState::reset(ObSQLSessionInfo *session_info)
         if (session_info != nullptr) { cursor->close(*session_info); }
         cursor->~ObPLCursorInfo();
       }
-      inner_allocator_.free(const_cast<char *>(value.datum_.ptr_));
+      inner_allocator_.free(const_cast<void *>(value.get_datum().get_reference()));
     } else {
       int ret = ObUserDefinedType::destruct_objparam(inner_allocator_, value, session_info);
       if (OB_SUCCESS != ret) { LOG_WARN("release native package value failed", K(ret), K(i)); }
@@ -158,12 +161,16 @@ int ObPLPackageState::set_package_var_val(const int64_t var_idx,
   int64_t reusable_bytes = 0;
   if (deep_copy_complex && OB_FAIL(package_reusable_bytes(value, reusable_bytes))) { return ret; }
   if (deep_copy_complex && reusable_bytes > 0 && !old.is_null()
-      && old.get_type() == value.get_type() && old.datum_.ptr_ != nullptr
-      && old.datum_.len_ == reusable_bytes) {
+      && old.get_type() == value.get_type() && package_has_reference(old)
+      && old.get_datum().get_reference() != nullptr && old.get_datum().length() == reusable_bytes) {
     // This slot already owns a buffer of exactly the required size. Readers
     // snapshot expression results before another assignment can change it.
-    MEMMOVE(const_cast<char *>(old.datum_.ptr_), value.datum_.ptr_, reusable_bytes);
-    old.datum_.pack_ = value.datum_.pack_;
+    void *buffer = const_cast<void *>(old.get_datum().get_reference());
+    Datum updated;
+    if (OB_FAIL(updated.set_reference(buffer, static_cast<uint32_t>(reusable_bytes),
+        value.get_datum().reference_flags()))) { return ret; }
+    MEMMOVE(buffer, value.get_datum().get_reference(), reusable_bytes);
+    old.datum_ = updated;
     old.set_type_meta(value.get_meta());
     vars_.at(var_idx) = old.value_view();
     return OB_SUCCESS;
@@ -180,17 +187,20 @@ int ObPLPackageState::set_package_var_val(const int64_t var_idx,
       // Initialization adopts a value already allocated by this package.
       replacement.assign_value(value);
     } else {
-      // Even scalars need package-owned bytes: a Datum may borrow a SQL arena.
+      // Reference spans/complex values retain their existing package clone policy;
+      // ordinary scalars copy inline and need no payload allocation.
       OZ (ObUserDefinedType::clone_parameter(inner_allocator_, value, replacement));
     }
     if (OB_SUCC(ret)) {
       vars_.at(var_idx) = replacement.value_view();
-      if (old.datum_.ptr_ != replacement.datum_.ptr_) {
+      const bool same_span = package_has_reference(old) && package_has_reference(replacement)
+          && old.get_datum().get_reference() == replacement.get_datum().get_reference();
+      if (!same_span) {
         const bool same_handle = old.is_pl_extend() && replacement.is_pl_extend()
             && old.get_ext() == replacement.get_ext();
         if (same_handle) {
           // Replacing a descriptor must not destroy the live aliased pointee.
-          inner_allocator_.free(const_cast<char *>(old.datum_.ptr_));
+          inner_allocator_.free(const_cast<void *>(old.get_datum().get_reference()));
         } else {
           const int cleanup_ret = ObUserDefinedType::destruct_objparam(inner_allocator_, old, session);
           if (OB_SUCCESS != cleanup_ret) { LOG_WARN("release replaced package value failed", K(cleanup_ret), K(var_idx)); }

@@ -257,7 +257,9 @@ TEST_F(NativeExprResType, physical_parameter_meta_survives_result_rewrite_and_ty
   ObDatum bytes; bytes.set_string(source, sizeof(source)-1);
   SqlTypeMeta text; text.set_varchar(); text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
   ObConstRawExpr owned(owner_);
-  ASSERT_EQ(OB_SUCCESS, owned.set_value_borrowed(DatumValue(bytes, text)));
+  DatumValue borrowed_bytes;
+  ASSERT_EQ(OB_SUCCESS, borrowed_bytes.assign_legacy_borrowed(bytes, text));
+  ASSERT_EQ(OB_SUCCESS, owned.set_value_borrowed(borrowed_bytes));
   ObPLExprCopier copier(factory_);
   ASSERT_EQ(OB_SUCCESS, owned.inner_deep_copy(copier));
   ASSERT_EQ(OB_SUCCESS, NativeExprResTypeTestPeer::feed(deducer_, owned, types));
@@ -350,17 +352,20 @@ TEST_F(NativeExprResType, parameter_export_failure_does_not_publish_legacy_view)
   char sentinel[] = "sentinel";
   ObDatum old; old.set_string(sentinel, sizeof(sentinel)-1);
   SqlTypeMeta text; text.set_varchar(); text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
-  DatumValue output(old, text), before = output;
+  DatumValue output;
+  ASSERT_EQ(OB_SUCCESS, output.assign_legacy_borrowed(old, text));
+  const DatumValue before = output;
   alignas(8) char first_scratch[64], second_scratch[64];
   EXPECT_EQ(OB_BUF_NOT_ENOUGH, types.at(0).export_param(output, first_scratch, 7));
-  EXPECT_EQ(before.datum_.ptr_, output.datum_.ptr_); EXPECT_EQ(before.datum_.pack_, output.datum_.pack_);
+  EXPECT_EQ(0, MEMCMP(&before.datum_, &output.datum_, sizeof(Datum)));
   same_meta(before.meta_, output.meta_);
   ASSERT_EQ(OB_SUCCESS, types.at(0).export_param(output, first_scratch, sizeof(first_scratch)));
   EXPECT_DOUBLE_EQ(1.5, output.get_double());
   same_meta(raw->get_bound_param_value_meta(), output.meta_);
   DatumValue second;
   ASSERT_EQ(OB_SUCCESS, types.at(0).export_param(second, second_scratch, sizeof(second_scratch)));
-  EXPECT_NE(output.datum_.ptr_, second.datum_.ptr_);
+  EXPECT_NE(&output.datum_, &second.datum_);
+  EXPECT_EQ(0u, second.datum_.length());
   MEMSET(first_scratch, 0xa5, sizeof(first_scratch));
   EXPECT_DOUBLE_EQ(1.5, second.get_double());
   EXPECT_DOUBLE_EQ(1.5, types.at(0).get_param_datum().get_double());
@@ -370,7 +375,7 @@ TEST_F(NativeExprResType, parameter_export_failure_does_not_publish_legacy_view)
   ObExprResTypes refs; ASSERT_EQ(OB_SUCCESS, refs.reserve(1));
   ASSERT_EQ(OB_SUCCESS, NativeExprResTypeTestPeer::feed(deducer_, *reference, refs));
   ASSERT_EQ(OB_SUCCESS, refs.at(0).export_param(output, nullptr, 0));
-  EXPECT_EQ(reference->get_bound_param_datum().get_reference(), output.datum_.ptr_);
+  EXPECT_EQ(reference->get_bound_param_datum().get_reference(), output.datum_.get_reference());
   EXPECT_EQ(ObString("reference bytes"), output.get_string());
 }
 

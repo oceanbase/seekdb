@@ -5711,7 +5711,7 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
              || OB_ISNULL(exec_ctx->get_stmt_factory()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ret = phy_plan.set_params_info(*(log_plan.get_optimizer_context().get_params()));
+    ret = phy_plan.set_params_info(*plan_ctx);
   }
 
   if (OB_SUCC(ret)) {

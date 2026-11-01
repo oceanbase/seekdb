@@ -257,7 +257,11 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
         DatumValue view;
         alignas(8) char scratch[64];
         if (OB_FAIL(column_schema->export_cur_default_value(view, scratch, sizeof(scratch)))) {
-        } else { ret = DatumParameterCodec::borrow_raw_constant_value(view.datum_, view.meta_, default_value); }
+        } else {
+          ObDatum physical;
+          if (OB_FAIL(view.export_legacy(physical, scratch, sizeof(scratch)))) {
+          } else { ret = DatumParameterCodec::borrow_raw_constant_value(physical, view.meta_, default_value); }
+        }
       } else {
         ret = DatumParameterCodec::clone_raw_constant_value(column_schema->get_cur_default_datum(),
             default_meta, expr_factory.get_allocator(), default_value);
@@ -353,8 +357,10 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
       DatumValue view;
       alignas(8) char scratch[64];
       const SqlTypeMeta &meta = column->get_default_meta();
+      ObDatum physical;
       if (OB_FAIL(column->export_default_value(view, scratch, sizeof(scratch)))) {
-      } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(view.datum_, meta, imported))) {
+      } else if (OB_FAIL(view.export_legacy(physical, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(physical, meta, imported))) {
       } else if (OB_FAIL(DatumParameterCodec::clone_raw_constant_value(imported, meta,
           params_->expr_factory_->get_allocator(), value))) {
       } else { ret = c_expr->set_value_borrowed(value, meta); }
@@ -626,7 +632,11 @@ int ObDefaultValueUtils::build_default_expr_for_timestamp(const ColumnItem *colu
     alignas(8) char scratch[64];
     default_meta = column->get_default_meta();
     if (OB_FAIL(column->export_default_value(view, scratch, sizeof(scratch)))) {
-    } else { ret = DatumParameterCodec::borrow_raw_constant_value(view.datum_, default_meta, default_value); }
+    } else {
+      ObDatum physical;
+      if (OB_FAIL(view.export_legacy(physical, scratch, sizeof(scratch)))) {
+      } else { ret = DatumParameterCodec::borrow_raw_constant_value(physical, default_meta, default_value); }
+    }
     c_expr->set_expr_type(T_TIMESTAMP);
   }
   if (OB_SUCC(ret)) {

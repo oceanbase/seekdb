@@ -89,7 +89,7 @@ DatumParameter sentinel() {
   DatumParameter p;
   SqlTypeMeta meta; meta.set_int();
   p.set_type_meta(meta);
-  p.datum_.set_string(reinterpret_cast<const char *>(&number), sizeof(number));
+  p.datum_.set_int(number);
   p.set_accuracy(ObAccuracy(37, 7));
   p.set_result_flags(0x1234);
   p.set_raw_text_info(12, 33);
@@ -183,9 +183,13 @@ TEST(LiteralDatum, all_literal_branches_preserve_values_metadata_and_flags) {
         if (OB_SUCCESS == old_ret) {
           EXPECT_EQ(bytes(native.get_type_meta()), bytes(raw_value.get_meta()));
           EXPECT_EQ(bytes(native.get_param_meta()), bytes(raw.get_expr_obj_meta()));
-          EXPECT_EQ(native.datum_.pack_, raw_value.datum_.pack_);
-          EXPECT_EQ(std::string(native.datum_.ptr_ ? native.datum_.ptr_ : "", native.datum_.len_),
-                    std::string(raw_value.datum_.ptr_ ? raw_value.datum_.ptr_ : "", raw_value.datum_.len_));
+          alignas(8) char native_physical_scratch[64], raw_physical_scratch[64];
+          ObDatum native_physical, raw_physical;
+          ASSERT_EQ(OB_SUCCESS, native.export_legacy(native_physical, native_physical_scratch, sizeof(native_physical_scratch)));
+          ASSERT_EQ(OB_SUCCESS, raw_value.export_legacy(raw_physical, raw_physical_scratch, sizeof(raw_physical_scratch)));
+          EXPECT_EQ(native_physical.pack_, raw_physical.pack_);
+          EXPECT_EQ(std::string(native_physical.ptr_ ? native_physical.ptr_ : "", native_physical.len_),
+                    std::string(raw_physical.ptr_ ? raw_physical.ptr_ : "", raw_physical.len_));
           if (!native.is_unknown()) {
             EXPECT_EQ(native.get_accuracy().get_accuracy(), raw.get_accuracy().get_accuracy());
             EXPECT_EQ(native.get_result_flag(), raw.get_result_type().get_result_flag());
@@ -240,7 +244,7 @@ TEST(LiteralDatum, owned_payload_survives_source_and_reused_result) {
     input.text.assign(20000, 'z');
   }
   for (int i = 0; i < 128; ++i) { EXPECT_EQ(i, values[i].datum_.get_int()); }
-  EXPECT_EQ(std::string(20000, 'q'), std::string(values.back().datum_.ptr_, values.back().datum_.len_));
+  EXPECT_EQ(std::string(20000, 'q'), std::string(static_cast<const char *>(values.back().datum_.get_reference()), values.back().datum_.length()));
   LiteralCase boolean{T_BOOL, "true", 1}, null{T_NULL, "NULL"};
   ASSERT_EQ(OB_SUCCESS, resolve(boolean, arena, result, prefix));
   EXPECT_TRUE(result.get_param_flag().is_boolean_);
@@ -254,14 +258,21 @@ TEST(LiteralDatum, allocation_failure_does_not_publish_partial_output) {
   std::vector<LiteralCase> inputs = {{T_INT, "7", 7}, {T_VARCHAR, "客户é"},
       {T_NUMBER, "12345678901234567890.1250000000"}, {T_NUMBER, "1e-99"},
       {T_VARCHAR, "abc", 0, "utf8mb4"}};
-  int failures = 0;
+  int failures = 0, expected_failures = 0;
   for (auto &input : inputs) {
     SCOPED_TRACE(::testing::Message() << input.type << "/" << input.text << "/" << input.charset);
     AllocationGate baseline;
     DatumParameter result;
     ObString prefix;
     ASSERT_EQ(OB_SUCCESS, resolve(input, baseline, result, prefix));
-    EXPECT_GT(baseline.calls, 0);
+    if (input.type == T_INT) {
+      EXPECT_EQ(0, baseline.calls);
+      AllocationGate exhausted; exhausted.fail_at = 1;
+      DatumParameter inline_result;
+      ASSERT_EQ(OB_SUCCESS, resolve(input, exhausted, inline_result, prefix));
+      EXPECT_EQ(7, inline_result.get_int()); EXPECT_EQ(0, exhausted.calls);
+    } else { EXPECT_GT(baseline.calls, 0); }
+    expected_failures += baseline.calls;
     for (int fail_at = 1; fail_at <= baseline.calls; ++fail_at) {
       SCOPED_TRACE(::testing::Message() << input.type << "/" << input.text << "/" << fail_at);
       AllocationGate gate; gate.fail_at = fail_at;
@@ -275,6 +286,7 @@ TEST(LiteralDatum, allocation_failure_does_not_publish_partial_output) {
       ++failures;
     }
   }
-  EXPECT_GE(failures, 7);
+  EXPECT_EQ(expected_failures, failures);
+  EXPECT_GE(failures, 4); // Each of the four reference literal inputs must allocate.
   RecordProperty("allocation_failures", failures);
 }

@@ -31,10 +31,9 @@ namespace
 // makes the new per-value declaration wire explicit without changing OpSpec.
 constexpr int64_t NATIVE_CONSTANTS_MARKER = -2;
 
-bool is_legacy_special_state(const ObDatum &value)
+bool is_legacy_special_state(const Datum &value)
 {
-  if (!value.is_ext() || value.ptr_ == nullptr) { return false; }
-  if (value.is_extended_null()) { return true; }
+  if (value.is_null() || value.is_min() || value.is_max() || value.is_nop()) { return true; }
   if (!value.has_ext_value()) { return false; }
   const int64_t marker = value.get_ext();
   return marker == DATUM_MIN_EXT_VALUE || marker == DATUM_MAX_EXT_VALUE || marker == ObActionFlag::OP_NOP;
@@ -69,7 +68,7 @@ OB_DEF_SERIALIZE_SIMPLE(ObValuesTableAccessSpec)
     if (datum_value_types_.count() != count || datum_value_types_.at(i) == nullptr) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(datum_value_types_.at(i)->serialize(buf, buf_len, pos))) {
-    } else { ret = DatumParameterCodec::encode_value(value.datum_, value.meta_, buf, buf_len, pos); }
+    } else { ret = DatumParameterCodec::encode_native_value(value.datum_, value.meta_, buf, buf_len, pos); }
   }
   return ret;
 }
@@ -108,7 +107,7 @@ OB_DEF_DESERIALIZE_SIMPLE(ObValuesTableAccessSpec)
     const SqlType *type = nullptr;
     if (native_wire) { ret = SqlType::deserialize(buf, data_len, pos, *datum_values_.get_allocator(), type); }
     if (OB_SUCC(ret)) {
-      ret = DatumParameterCodec::decode_value(buf, data_len, pos,
+      ret = DatumParameterCodec::decode_native_value(buf, data_len, pos,
                                               *datum_values_.get_allocator(), value.datum_, meta);
     }
     if (OB_SUCC(ret)) {
@@ -126,7 +125,10 @@ OB_DEF_DESERIALIZE_SIMPLE(ObValuesTableAccessSpec)
       }
       if (OB_SUCC(ret)) {
         Datum checked;
-        if (OB_FAIL(DatumCopyPlan(*type).import_legacy(value.datum_, checked))) {
+        alignas(8) char value_scratch[64];
+        ObDatum value_view;
+        if (OB_FAIL(value.export_legacy(value_view, value_scratch, sizeof(value_scratch)))) {
+        } else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(value_view, checked))) {
         } else { datum_value_types_.at(i) = type; }
       }
     }
@@ -154,7 +156,7 @@ OB_DEF_SERIALIZE_SIZE_SIMPLE(ObValuesTableAccessSpec)
     int64_t size = 0;
     const DatumValue &value = datum_values_.at(i);
     if (datum_value_types_.count() != count || datum_value_types_.at(i) == nullptr
-        || DatumParameterCodec::value_size(value.datum_, value.meta_, size) != OB_SUCCESS) {
+        || DatumParameterCodec::native_value_size(value.datum_, value.meta_, size) != OB_SUCCESS) {
       return -1;
     }
     const int64_t type_size = datum_value_types_.at(i)->get_serialize_size();
@@ -188,13 +190,13 @@ int ObValuesTableAccessOp::inner_open()
       if (ObValuesTableDef::FOLD_ACCESS_EXPR == MY_SPEC.access_type_) {
         if (OB_UNLIKELY(MY_SPEC.start_param_idx_ < 0 ||
                         MY_SPEC.start_param_idx_ > MY_SPEC.end_param_idx_ ||
-                        MY_SPEC.end_param_idx_ >= plan_ctx->get_datum_param_store().count())) {
+                        MY_SPEC.end_param_idx_ >= plan_ctx->get_parameter_count())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          const DatumParameter &first = plan_ctx->get_datum_param_store().at(MY_SPEC.start_param_idx_);
+          const DatumParameter *group = plan_ctx->get_group_parameter_input(MY_SPEC.start_param_idx_);
           row_cnt_ = 1;
-          if (first.get_type() == ObExtendType) {
-            const DatumParameterArray *array = first.get_array<DatumParameterArray>();
+          if (group != nullptr) {
+            const DatumParameterArray *array = group->get_array<DatumParameterArray>();
             if (array == nullptr || array->count_ < 0) {
               ret = OB_ERR_UNEXPECTED;
             } else {
@@ -276,11 +278,11 @@ int ObValuesTableAccessOp::get_real_src_obj_type(const int64_t row_idx,
     int64_t param_idx = src_expr.extra_;
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
     const DatumParameterArray *array_obj = NULL;
-    if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_datum_param_store().count())) {
+    if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_parameter_count())) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (plan_ctx->get_datum_param_store().at(param_idx).is_ext_sql_array()) {
+    } else if (plan_ctx->get_group_parameter_input(param_idx) != nullptr) {
       // If the parameter is is_ext_sql_array
-      if (OB_ISNULL(array_obj = plan_ctx->get_datum_param_store().at(param_idx).get_array<DatumParameterArray>())) {
+      if (OB_ISNULL(array_obj = plan_ctx->get_group_parameter_input(param_idx)->get_array<DatumParameterArray>())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (array_obj->count_ <= row_idx) {
         ret = OB_ERR_UNEXPECTED;
@@ -291,9 +293,12 @@ int ObValuesTableAccessOp::get_real_src_obj_type(const int64_t row_idx,
       }
     } else if (src_expr.frame_idx_ < spec_.plan_->get_expr_frame_info().const_frame_.count() +
                                      spec_.plan_->get_expr_frame_info().param_frame_.count()) {
-      src_obj_meta = plan_ctx->get_datum_param_store().at(param_idx).get_type_meta();
-      const ObAccuracy &src_obj_acc = plan_ctx->get_datum_param_store().at(param_idx).get_accuracy();
-      update_src_meta(src_obj_meta, src_obj_acc, src_meta);
+      const DatumParameterMetadata *attributes = plan_ctx->get_parameter_metadata(param_idx);
+      if (attributes == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else {
+        src_obj_meta = attributes->type_meta_;
+        update_src_meta(src_obj_meta, attributes->accuracy_, src_meta);
+      }
     }
   }
   return ret;
@@ -460,8 +465,11 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
           const DatumValue &param = MY_SPEC.datum_values_.at(idx);
           const SqlType *type = MY_SPEC.datum_value_types_.at(idx);
           Datum value;
+          alignas(8) char value_scratch[64];
+          ObDatum value_view;
           if (type == nullptr) { ret = OB_ERR_UNEXPECTED; }
-          else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(param.datum_, value))) {
+          else if (OB_FAIL(param.export_legacy(value_view, value_scratch, sizeof(value_scratch)))) {
+          } else if (OB_FAIL(DatumCopyPlan(*type).import_legacy(value_view, value))) {
           } else { ret = calc_datum_from_param(value, *type, col_expr); }
           break;
         }

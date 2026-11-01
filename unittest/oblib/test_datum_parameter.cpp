@@ -27,9 +27,10 @@ namespace {
 class RejectAllocator : public ObIAllocator
 {
 public:
-  void *alloc(int64_t) override { return nullptr; }
-  void *alloc(int64_t, const ObMemAttr &) override { return nullptr; }
+  void *alloc(int64_t) override { ++allocations_; return nullptr; }
+  void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
   void free(void *) override {}
+  int64_t allocations_ = 0;
 };
 
 class CountingAllocator : public ObIAllocator
@@ -97,11 +98,11 @@ TEST(DatumParameter, deep_copy_outlives_payload_arena)
     source.datum_.set_string(payload, expected.size());
     source.set_raw_text_info(3, 16);
     ASSERT_EQ(OB_SUCCESS, destination.deep_copy(source, destination_arena));
-    EXPECT_NE(source.datum_.ptr_, destination.datum_.ptr_);
+    EXPECT_NE(source.datum_.get_reference(), destination.datum_.get_reference());
     memset(payload, 0x5a, expected.size());
   }
-  EXPECT_EQ(expected.size(), destination.datum_.len_);
-  EXPECT_EQ(0, memcmp(expected.data(), destination.datum_.ptr_, expected.size()));
+  EXPECT_EQ(expected.size(), destination.datum_.length());
+  EXPECT_EQ(0, memcmp(expected.data(), destination.datum_.get_reference(), expected.size()));
   EXPECT_EQ(3, destination.get_raw_text_pos());
 }
 
@@ -112,8 +113,7 @@ TEST(DatumParameter, container_reallocation_never_points_into_moved_parameter)
   for (int64_t i = 0; i < 513; ++i) {
     DatumParameter parameter; SqlTypeMeta meta; meta.set_int();
     parameter.set_type_meta(meta);
-    ASSERT_EQ(OB_SUCCESS, parameter.alloc_datum_reserved_buff(meta, -1, arena));
-    parameter.datum_.set_int(i); parameters.push_back(parameter);
+    ASSERT_EQ(OB_SUCCESS, parameter.set_int(i, arena)); parameters.push_back(parameter);
   }
   for (int64_t i = 0; i < 513; ++i) {
     EXPECT_EQ(i, parameters[i].datum_.get_int());
@@ -126,30 +126,35 @@ TEST(DatumParameter, failed_clone_is_atomic_and_self_clone_owns_new_bytes)
   ObArenaAllocator arena;
   RejectAllocator reject;
   DatumParameter source, destination;
-  SqlTypeMeta meta; meta.set_int();
-  source.set_type_meta(meta); destination.set_type_meta(meta);
-  ASSERT_EQ(OB_SUCCESS, source.alloc_datum_reserved_buff(meta, -1, arena));
-  ASSERT_EQ(OB_SUCCESS, destination.alloc_datum_reserved_buff(meta, -1, arena));
-  source.datum_.set_int(123); destination.datum_.set_int(456);
-  const char *old = destination.datum_.ptr_;
+  ASSERT_EQ(OB_SUCCESS, source.set_varchar(ObString::make_string("123"), arena));
+  ASSERT_EQ(OB_SUCCESS, destination.set_varchar(ObString::make_string("456"), arena));
+  const void *old = destination.datum_.get_reference();
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, destination.deep_copy(source, reject));
-  EXPECT_EQ(old, destination.datum_.ptr_); EXPECT_EQ(456, destination.datum_.get_int());
-  old = source.datum_.ptr_;
+  EXPECT_EQ(1, reject.allocations_);
+  EXPECT_EQ(old, destination.datum_.get_reference()); EXPECT_EQ(ObString("456"), destination.get_string());
+  old = source.datum_.get_reference();
   ASSERT_EQ(OB_SUCCESS, source.deep_copy(source, arena));
-  EXPECT_NE(old, source.datum_.ptr_); EXPECT_EQ(123, source.datum_.get_int());
+  EXPECT_NE(old, source.datum_.get_reference()); EXPECT_EQ(ObString("123"), source.get_string());
+  // The former integer OOM seam disappeared: an actual inline scalar clone
+  // succeeds without calling even an allocator that rejects every request.
+  DatumParameter integer, integer_copy;
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(123, reject));
+  ASSERT_EQ(OB_SUCCESS, integer_copy.set_int(456, reject));
+  ASSERT_EQ(OB_SUCCESS, integer_copy.deep_copy(integer, reject));
+  EXPECT_EQ(123, integer_copy.get_int()); EXPECT_EQ(1, reject.allocations_);
 }
 
 TEST(DatumParameter, array_payload_copy_keeps_pointee_ownership_explicit)
 {
   struct Array { int count; } array{7};
-  char address[8]; DatumParameter source, copy;
+  DatumParameter source, copy;
   SqlTypeMeta meta; meta.set_ext(); meta.set_extend_type(T_EXT_SQL_ARRAY);
-  source.set_type_meta(meta); source.datum_.ptr_ = address;
-  source.set_array_address(&array);
+  source.set_type_meta(meta);
   ObArenaAllocator arena;
+  ASSERT_EQ(OB_SUCCESS, source.set_array_address(&array, arena));
   ASSERT_EQ(OB_SUCCESS, copy.deep_copy(source, arena));
   EXPECT_EQ(&array, copy.get_array<Array>());
-  EXPECT_NE(source.datum_.ptr_, copy.datum_.ptr_);
+  EXPECT_NE(source.datum_.get_reference(), copy.datum_.get_reference());
   array.count = 11; EXPECT_EQ(11, copy.get_array<Array>()->count);
 }
 
@@ -201,16 +206,18 @@ TEST(DatumParameter, prepared_payload_copy_owns_scalar_and_borrowed_string_after
   int64_t integer_size = -1, text_size = -1;
   ASSERT_EQ(OB_SUCCESS, integer_plan.payload_copy_size(integer.datum_, integer_size));
   ASSERT_EQ(OB_SUCCESS, text_plan.payload_copy_size(text.datum_, text_size));
-  EXPECT_EQ(8, integer_size); EXPECT_EQ(sizeof(expected), text_size);
-  ObDatum owned_integer, owned_text;
-  ASSERT_EQ(OB_SUCCESS, integer_plan.deep_copy(integer.datum_, owned_integer, output));
+  EXPECT_EQ(0, integer_size); EXPECT_EQ(sizeof(expected), text_size);
+  Datum owned_integer, owned_text;
+  CountingAllocator inline_owner;
+  ASSERT_EQ(OB_SUCCESS, integer_plan.deep_copy(integer.datum_, owned_integer, inline_owner));
+  EXPECT_EQ(0, inline_owner.allocations_);
   ASSERT_EQ(OB_SUCCESS, text_plan.deep_copy(text.datum_, owned_text, output));
   integer.datum_.set_int(INT64_MAX);
   memset(borrowed, 'x', sizeof(expected));
   input.reset();
   EXPECT_EQ(INT64_MIN, owned_integer.get_int());
-  EXPECT_EQ(sizeof(expected), owned_text.len_);
-  EXPECT_EQ(0, memcmp(expected, owned_text.ptr_, sizeof(expected)));
+  EXPECT_EQ(sizeof(expected), owned_text.length());
+  EXPECT_EQ(0, memcmp(expected, owned_text.get_reference(), sizeof(expected)));
 }
 
 TEST(DatumParameter, prepared_buffer_copy_and_size_fail_without_publishing_destination)
@@ -261,7 +268,7 @@ TEST(DatumParameter, unknown_decimal_precision_keeps_legacy_coefficient_width_an
     DatumParameter source, destination;
     SqlTypeMeta meta; meta.set_decimal_int(7);
     source.set_type_meta(meta); source.set_precision(PRECISION_UNKNOWN_YET); source.set_scale(7);
-    source.datum_.set_decimal_int_shallow(reinterpret_cast<ObDecimalInt *>(coefficient), width);
+    ASSERT_EQ(OB_SUCCESS, source.datum_.set_reference(coefficient, width));
     DatumCopyPlan plan(meta, source.get_accuracy());
     EXPECT_EQ(PRECISION_UNKNOWN_YET, plan.get_accuracy().get_precision());
     int64_t bytes = -1;
@@ -270,8 +277,8 @@ TEST(DatumParameter, unknown_decimal_precision_keeps_legacy_coefficient_width_an
     ASSERT_EQ(OB_SUCCESS, destination.deep_copy(source, output));
     memset(coefficient, 0, width); input.reset();
     EXPECT_EQ(PRECISION_UNKNOWN_YET, destination.get_precision());
-    EXPECT_EQ(7, destination.get_scale()); EXPECT_EQ(width, destination.datum_.len_);
-    EXPECT_EQ(0, memcmp(expected.data(), destination.datum_.ptr_, width));
+    EXPECT_EQ(7, destination.get_scale()); EXPECT_EQ(width, destination.datum_.length());
+    EXPECT_EQ(0, memcmp(expected.data(), destination.datum_.get_reference(), width));
   }
 }
 
@@ -292,6 +299,253 @@ TEST(DatumParameter, prepared_payload_copy_preserves_empty_string_and_range_sent
   DatumCopyPlan integer_plan(meta, ObAccuracy());
   ASSERT_EQ(OB_SUCCESS, integer_plan.deep_copy(marker, copy, output));
   EXPECT_TRUE(copy.is_min()); EXPECT_NE(marker.ptr_, copy.ptr_);
+}
+
+
+static_assert(sizeof(DatumParameterMetadata) == 32, "P0 metadata must occupy 32 bytes");
+static_assert(alignof(DatumParameterMetadata) == 8, "P0 metadata must be eight-byte aligned");
+
+namespace {
+void expect_parameter_metadata_equal(const DatumParameterMetadata &expected,
+                                     const DatumParameterMetadata &actual)
+{
+  EXPECT_EQ(expected.accuracy_.get_accuracy(), actual.accuracy_.get_accuracy());
+  EXPECT_EQ(expected.type_meta_, actual.type_meta_);
+  EXPECT_EQ(expected.type_meta_.get_scale(), actual.type_meta_.get_scale());
+  EXPECT_EQ(expected.res_flags_, actual.res_flags_);
+  EXPECT_EQ(expected.raw_text_pos_, actual.raw_text_pos_);
+  EXPECT_EQ(expected.raw_text_len_, actual.raw_text_len_);
+  EXPECT_EQ(expected.param_meta_, actual.param_meta_);
+  EXPECT_EQ(expected.param_meta_.get_scale(), actual.param_meta_.get_scale());
+  EXPECT_EQ(expected.flag_.flag_, actual.flag_.flag_);
+  EXPECT_EQ(expected.flag_.extend_flag_, actual.flag_.extend_flag_);
+}
+
+void expect_default_parameter_metadata(const DatumParameterMetadata &metadata)
+{
+  EXPECT_EQ(-1, metadata.accuracy_.get_accuracy());
+  EXPECT_EQ(ObNullType, metadata.type_meta_.get_type());
+  EXPECT_EQ(CS_LEVEL_INVALID, metadata.type_meta_.get_collation_level());
+  EXPECT_EQ(CS_TYPE_INVALID, metadata.type_meta_.get_collation_type());
+  EXPECT_EQ(-1, metadata.type_meta_.get_scale());
+  EXPECT_EQ(0U, metadata.res_flags_);
+  EXPECT_EQ(-1, metadata.raw_text_pos_);
+  EXPECT_EQ(-1, metadata.raw_text_len_);
+  EXPECT_EQ(ObNullType, metadata.param_meta_.get_type());
+  EXPECT_EQ(CS_LEVEL_INVALID, metadata.param_meta_.get_collation_level());
+  EXPECT_EQ(CS_TYPE_INVALID, metadata.param_meta_.get_collation_type());
+  EXPECT_EQ(-1, metadata.param_meta_.get_scale());
+  EXPECT_EQ(0x09, metadata.flag_.flag_);
+  EXPECT_EQ(0x00, metadata.flag_.extend_flag_);
+}
+}
+
+TEST(DatumParameter, metadata_assignment_preserves_destination_descriptor_and_payload)
+{
+  ObArenaAllocator owner;
+  DatumParameter source, destination;
+  ASSERT_EQ(OB_SUCCESS, source.set_int(INT64_MIN, owner));
+  ASSERT_EQ(OB_SUCCESS, destination.set_int(INT64_MAX, owner));
+  source.set_accuracy(ObAccuracy(20, 3));
+  source.set_scale(3);
+  SqlTypeMeta declared; declared.set_int(); declared.set_scale(7);
+  source.set_param_meta(declared);
+  source.set_result_flags(0xfedcba98U);
+  ParamFlag flags; flags.flag_ = 0xa5; flags.extend_flag_ = 0x5a;
+  source.set_param_flag(flags);
+  source.set_raw_text_info(31, 97);
+  const DatumParameterMetadata captured = source.get_metadata();
+  const Datum before = destination.datum_;
+  ASSERT_NE(source.get_int(), before.get_int());
+
+  destination.set_metadata(captured);
+  EXPECT_EQ(before.state(), destination.datum_.state());
+  EXPECT_EQ(before.length(), destination.datum_.length());
+  EXPECT_EQ(before.reference_flags(), destination.datum_.reference_flags());
+  EXPECT_EQ(INT64_MAX, destination.get_int());
+  EXPECT_EQ(INT64_MIN, source.get_int());
+  expect_parameter_metadata_equal(captured, destination.get_metadata());
+  EXPECT_EQ(ObIntType, destination.get_type());
+  EXPECT_EQ(20, destination.get_precision());
+  EXPECT_EQ(3, destination.get_scale());
+  EXPECT_EQ(3, destination.get_type_meta().get_scale());
+  EXPECT_EQ(7, destination.get_param_meta().get_scale());
+  EXPECT_EQ(0xfedcba98U, destination.get_result_flag());
+  EXPECT_EQ(0xa5, destination.get_param_flag().flag_);
+  EXPECT_EQ(0x5a, destination.get_param_flag().extend_flag_);
+  EXPECT_EQ(31, destination.get_raw_text_pos());
+  EXPECT_EQ(97, destination.get_raw_text_len());
+
+  // The metadata bundle is copied; it is not an alias of source metadata.
+  source.set_raw_text_info(1, 2); source.set_scale(0);
+  source.get_param_flag().extend_flag_ = 0;
+  source.datum_.set_int(17);
+  expect_parameter_metadata_equal(captured, destination.get_metadata());
+  EXPECT_EQ(INT64_MAX, destination.get_int());
+  destination.set_metadata(destination.get_metadata());
+  EXPECT_EQ(before.state(), destination.datum_.state());
+  EXPECT_EQ(before.length(), destination.datum_.length());
+  EXPECT_EQ(before.reference_flags(), destination.datum_.reference_flags());
+  EXPECT_EQ(INT64_MAX, destination.get_int());
+  expect_parameter_metadata_equal(captured, destination.get_metadata());
+}
+
+TEST(DatumParameter, metadata_copy_preserves_full_udt_accuracy_and_typed_null_declaration)
+{
+  const uint64_t declaration_id = 0x123456789abcde01ULL;
+  DatumParameter source, destination;
+  SqlTypeMeta declared; declared.set_ext();
+  source.set_type_meta(declared);
+  source.set_param_meta(declared);
+  source.set_udt_id(declaration_id);
+  source.datum_.set_null();
+  source.set_result_flags(0x80000001U);
+  source.set_raw_text_info(0x12345678, 0x23456789);
+  // Both values are NULL; copying their declaration does not create PL data.
+  const Datum before = destination.datum_;
+  destination.set_metadata(source.get_metadata());
+  EXPECT_TRUE(destination.is_null());
+  EXPECT_EQ(before.state(), destination.datum_.state());
+  EXPECT_EQ(before.length(), destination.datum_.length());
+  EXPECT_EQ(before.reference_flags(), destination.datum_.reference_flags());
+  EXPECT_EQ(declaration_id, destination.get_udt_id());
+  EXPECT_EQ(declaration_id, static_cast<uint64_t>(destination.get_accuracy().get_accuracy()));
+  EXPECT_EQ(ObExtendType, destination.get_type());
+  EXPECT_EQ(declared, destination.get_param_meta());
+  EXPECT_EQ(declared.get_scale(), destination.get_param_meta().get_scale());
+  expect_parameter_metadata_equal(source.get_metadata(), destination.get_metadata());
+
+  // A runtime NULL changes raw type only; the complete declared ID stays intact.
+  source.set_null();
+  source.set_param_meta();
+  destination.set_metadata(source.get_metadata());
+  EXPECT_TRUE(destination.is_null());
+  EXPECT_EQ(ObNullType, destination.get_type());
+  EXPECT_EQ(ObExtendType, destination.get_param_meta().get_type());
+  EXPECT_EQ(declared.get_scale(), destination.get_param_meta().get_scale());
+  EXPECT_EQ(declaration_id, static_cast<uint64_t>(destination.get_accuracy().get_accuracy()));
+  EXPECT_EQ(0x80000001U, destination.get_result_flag());
+  EXPECT_EQ(0x12345678, destination.get_raw_text_pos());
+  EXPECT_EQ(0x23456789, destination.get_raw_text_len());
+}
+
+TEST(DatumParameter, public_metadata_setters_preserve_reserved_flag_bits_and_full_source_positions)
+{
+  ObArenaAllocator owner;
+  DatumParameter parameter;
+  ASSERT_EQ(OB_SUCCESS, parameter.set_varchar(ObString::make_string("abc"), owner));
+  const Datum before = parameter.datum_;
+  parameter.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  parameter.set_collation_level(CS_LEVEL_COERCIBLE);
+  parameter.set_length(37); parameter.set_precision(20);
+  EXPECT_EQ(20, parameter.get_metadata().accuracy_.get_precision());
+  // Precision and length semantics share the original ObAccuracy union slot.
+  parameter.set_length_semantics(LS_CHAR); parameter.set_scale(7);
+  parameter.set_param_meta();
+  parameter.set_result_flags(0x80000001U);
+  parameter.set_result_flag(0x00000006U);
+  parameter.unset_result_flag(0x00000002U);
+  ParamFlag flags; flags.flag_ = 0xf8; flags.extend_flag_ = 0xfe;
+  parameter.set_param_flag(flags);
+  parameter.set_need_to_check_type(true);
+  parameter.set_need_to_check_bool_value(true);
+  parameter.set_expected_bool_value(true);
+  parameter.get_param_flag().ignore_scale_check_ = true;
+  parameter.set_raw_text_info(INT32_MAX - 4, INT32_MAX - 9);
+  const DatumParameterMetadata &metadata = parameter.get_metadata();
+  EXPECT_EQ(37, metadata.accuracy_.get_length());
+  EXPECT_EQ(LS_CHAR, metadata.accuracy_.get_precision());
+  EXPECT_EQ(LS_CHAR, metadata.accuracy_.get_length_semantics());
+  EXPECT_EQ(7, metadata.accuracy_.get_scale());
+  EXPECT_EQ(ObVarcharType, metadata.type_meta_.get_type());
+  EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, metadata.type_meta_.get_collation_type());
+  EXPECT_EQ(CS_LEVEL_COERCIBLE, metadata.type_meta_.get_collation_level());
+  EXPECT_EQ(7, metadata.type_meta_.get_scale());
+  EXPECT_EQ(7, metadata.param_meta_.get_scale());
+  EXPECT_EQ(0x80000005U, metadata.res_flags_);
+  EXPECT_TRUE(parameter.has_result_flag(0x80000000U));
+  EXPECT_FALSE(parameter.has_result_flag(0x00000002U));
+  EXPECT_EQ(0xff, metadata.flag_.flag_);
+  EXPECT_EQ(0xff, metadata.flag_.extend_flag_);
+  EXPECT_TRUE(parameter.need_to_check_type());
+  EXPECT_TRUE(parameter.need_to_check_bool_value());
+  EXPECT_TRUE(parameter.expected_bool_value());
+  EXPECT_EQ(INT32_MAX - 4, metadata.raw_text_pos_);
+  EXPECT_EQ(INT32_MAX - 9, metadata.raw_text_len_);
+  parameter.set_need_to_check_type(false);
+  parameter.set_need_to_check_bool_value(false);
+  parameter.set_expected_bool_value(false);
+  EXPECT_EQ(0xf8, metadata.flag_.flag_);  // Includes the preserved legacy reserved bit.
+  EXPECT_EQ(0xff, metadata.flag_.extend_flag_);  // All seven reserved extension bits survive.
+  EXPECT_EQ(before.state(), parameter.datum_.state());
+  EXPECT_EQ(before.length(), parameter.datum_.length());
+  EXPECT_EQ(before.reference_flags(), parameter.datum_.reference_flags());
+  EXPECT_EQ(before.get_reference(), parameter.datum_.get_reference());
+  EXPECT_EQ(0, memcmp("abc", parameter.datum_.get_reference(), 3));
+}
+
+TEST(DatumParameter, jit_offsets_address_metadata_members_and_flag_payload)
+{
+  DatumParameter parameter;
+  SqlTypeMeta meta; meta.set_ext(); parameter.set_type_meta(meta);
+  parameter.set_param_meta(meta);
+  const DatumParameterMetadata &metadata = parameter.get_metadata();
+  char *base = reinterpret_cast<char *>(&parameter);
+  const char *constant_base = base;
+  const uint32_t accuracy_bits = DatumParameter::accuracy_offset_bits();
+  const uint32_t result_bits = DatumParameter::res_flags_offset_bits();
+  const uint32_t flag_bits = DatumParameter::flag_offset_bits();
+  ASSERT_EQ(0U, accuracy_bits % 8); ASSERT_EQ(0U, result_bits % 8);
+  ASSERT_EQ(0U, flag_bits % 8);
+  EXPECT_EQ(static_cast<uint32_t>((reinterpret_cast<const char *>(&metadata.accuracy_) - constant_base) * 8),
+            accuracy_bits);
+  EXPECT_EQ(static_cast<uint32_t>((reinterpret_cast<const char *>(&metadata.res_flags_) - constant_base) * 8),
+            result_bits);
+  EXPECT_EQ(static_cast<uint32_t>((reinterpret_cast<const char *>(&metadata.flag_) - constant_base) * 8),
+            flag_bits);
+  const uint32_t flag_payload_bits = flag_bits + ParamFlag::flag_offset_bits();
+  ASSERT_EQ(0U, flag_payload_bits % 8);
+  EXPECT_EQ(static_cast<uint32_t>((reinterpret_cast<const char *>(&metadata.flag_.flag_) - constant_base) * 8),
+            flag_payload_bits);
+  const Datum before = parameter.datum_;
+  const int64_t accuracy = static_cast<int64_t>(0x123456789abcde01ULL);
+  const uint32_t result_flags = 0x8000fedcU;
+  const uint8_t flag_payload = 0xb7;
+  // Write only actual field payloads, never a ParamFlag object/vptr or padding.
+  memcpy(base + accuracy_bits / 8, &accuracy, sizeof(accuracy));
+  memcpy(base + result_bits / 8, &result_flags, sizeof(result_flags));
+  memcpy(base + flag_payload_bits / 8, &flag_payload, sizeof(flag_payload));
+  EXPECT_EQ(accuracy, parameter.get_accuracy().get_accuracy());
+  EXPECT_EQ(static_cast<uint64_t>(accuracy), parameter.get_udt_id());
+  EXPECT_EQ(result_flags, parameter.get_result_flag());
+  EXPECT_EQ(flag_payload, parameter.get_param_flag().flag_);
+  EXPECT_EQ(0, parameter.get_param_flag().extend_flag_);
+  EXPECT_EQ(before.state(), parameter.datum_.state());
+  EXPECT_EQ(before.length(), parameter.datum_.length());
+  EXPECT_EQ(before.reference_flags(), parameter.datum_.reference_flags());
+}
+
+TEST(DatumParameter, metadata_default_and_parameter_reset_restore_all_seven_groups)
+{
+  EXPECT_EQ(size_t(48), sizeof(DatumParameter));
+  EXPECT_EQ(size_t(12), sizeof(ObDatum));
+  DatumParameterMetadata metadata;
+  expect_default_parameter_metadata(metadata);
+  DatumParameter parameter;
+  expect_default_parameter_metadata(parameter.get_metadata());
+  ObArenaAllocator owner;
+  ASSERT_EQ(OB_SUCCESS, parameter.set_int(17, owner));
+  const Datum old_value = parameter.datum_;
+  parameter.set_accuracy(ObAccuracy(20, 7)); parameter.set_scale(7);
+  parameter.set_param_meta();
+  parameter.set_result_flags(0xfedcba98U);
+  ParamFlag flags; flags.flag_ = 0xff; flags.extend_flag_ = 0xff;
+  parameter.set_param_flag(flags); parameter.set_raw_text_info(1234, 5678);
+  parameter.reset();
+  EXPECT_TRUE(parameter.is_null());
+  expect_default_parameter_metadata(parameter.get_metadata());
+  EXPECT_EQ(17, old_value.get_int()); // A copied inline value remains independent after reset.
+  EXPECT_EQ(size_t(16), sizeof(Datum));
 }
 
 int main(int argc, char **argv)

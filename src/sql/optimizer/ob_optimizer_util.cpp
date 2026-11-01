@@ -849,7 +849,7 @@ int ObOptimizerUtil::get_expr_monotonicity(const ObRawExpr *expr,
                                            ObExecContext &ctx,
                                            Monotonicity &monotonicity,
                                            bool &is_strict,
-                                           const ParamStore &param_store,
+                                           const ObPhysicalPlanCtx &param_store,
                                            ObPCConstParamInfo& const_param_info)
 {
   int ret = OB_SUCCESS;
@@ -874,7 +874,7 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
                                                        ObExecContext& ctx,
                                                        Monotonicity &monotonicity,
                                                        bool &is_strict,
-                                                       const ParamStore &param_store,
+                                                       const ObPhysicalPlanCtx &param_store,
                                                        ObPCConstParamInfo& const_param_info)
 {
   int ret = OB_SUCCESS;
@@ -6102,7 +6102,7 @@ int ObOptimizerUtil::get_set_op_remain_filter(const ObSelectStmt &stmt,
   return ret;
 }
 
-int ObOptimizerUtil::check_is_null_qual(const ParamStore *params,
+int ObOptimizerUtil::check_is_null_qual(const ObPhysicalPlanCtx *params,
                                         const ObDMLStmt *stmt,
                                         ObExecContext *exec_ctx,
                                         ObIAllocator &allocator,
@@ -6125,7 +6125,7 @@ int ObOptimizerUtil::check_is_null_qual(const ParamStore *params,
     ret = OB_ERR_UNEXPECTED;
   } else if (!left_expr->is_column_ref_expr()) {
     //do nothing
-  } else if (!ObOptEstUtils::is_calculable_expr(*right_expr, params->count())) {
+  } else if (!ObOptEstUtils::is_calculable_expr(*right_expr, params->get_parameter_count())) {
     //do nothing
   } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
                     exec_ctx,

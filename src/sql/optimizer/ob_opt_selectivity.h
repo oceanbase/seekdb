@@ -199,7 +199,7 @@ class OptSelectivityCtx
   {
     return const_cast<common::ObIAllocator &>(opt_ctx_.get_allocator()); 
   }
-  const ParamStore *get_params() const { return opt_ctx_.get_params(); }
+  const ObPhysicalPlanCtx *get_parameter_context() const { return opt_ctx_.get_parameter_context(); }
   bool use_default_stat() const { return opt_ctx_.use_default_stat(); }
 
   ObJoinType get_join_type() const { return join_type_; }

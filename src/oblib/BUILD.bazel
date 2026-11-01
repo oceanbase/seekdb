@@ -333,6 +333,7 @@ cc_library(
         "common/enumset/enumset_value.h",
         "common/lob/lob_types.h",
         "common/datum/datum_parameter.h",
+        "common/datum/datum_parameter_metadata.h",
         "common/datum/datum_parameter_codec.h",
         "common/datum/datum_parameter_array.h",
         "common/enumset/ob_enum_set_meta.h",

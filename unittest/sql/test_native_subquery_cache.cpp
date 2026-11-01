@@ -128,7 +128,9 @@ int scalar_record(ObIAllocator &allocator, const SqlType &type, int64_t number, 
   if (ret == OB_SUCCESS) {
     ret = parameter.set_extend(reinterpret_cast<int64_t>(record), pl::PL_RECORD_TYPE, allocator, size);
   }
-  if (ret == OB_SUCCESS) { ret = DatumCopyPlan(type).import_legacy(parameter.datum_, output); }
+  alignas(8) char scratch[64]; ObDatum legacy;
+  if (ret == OB_SUCCESS) { ret = parameter.export_legacy(legacy, scratch, sizeof(scratch)); }
+  if (ret == OB_SUCCESS) { ret = DatumCopyPlan(type).import_legacy(legacy, output); }
   return ret;
 }
 
@@ -333,10 +335,13 @@ TEST_F(NativeSubqueryCache, pending_resource_clone_retains_sql_array_leaves_befo
   auto *array = DatumParameterArray::alloc(source_owner, 1); ASSERT_NE(nullptr, array);
   ASSERT_EQ(OB_SUCCESS, array->data_[0].set_varchar(
       ObString::make_string("resource leaf independently owned by the pending cache"), source_owner));
+  ASSERT_EQ(OB_SUCCESS, array->set_element_type_borrowed(0, element, source_owner));
   DatumParameter parameter;
   ASSERT_EQ(OB_SUCCESS, parameter.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, source_owner));
   Datum source;
-  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(parameter.datum_, source));
+  alignas(8) char source_scratch[64]; ObDatum source_view;
+  ASSERT_EQ(OB_SUCCESS, parameter.export_legacy(source_view, source_scratch, sizeof(source_scratch)));
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(source_view, source));
   ObSubQueryIterator::PendingCacheEntry pending;
   ASSERT_EQ(OB_SUCCESS, iterator_.prepare_cache_result(source, result_expr_, pending));
   source_owner.reset();
@@ -344,9 +349,13 @@ TEST_F(NativeSubqueryCache, pending_resource_clone_retains_sql_array_leaves_befo
   Datum out; ASSERT_EQ(OB_SUCCESS, lookup(out));
   ObDatum legacy;
   ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*pending.result_type_).borrow_legacy(out, legacy));
-  DatumParameter retained; retained.datum_ = legacy; retained.set_type_meta(type->legacy_meta());
+  DatumParameter retained;
+  ASSERT_EQ(OB_SUCCESS, retained.assign_legacy_borrowed(legacy, type->legacy_meta()));
   const auto *owned = retained.get_array<DatumParameterArray>(); ASSERT_NE(nullptr, owned);
   ASSERT_EQ(1, owned->count_);
+  ASSERT_NE(nullptr, owned->get_element_type(0));
+  EXPECT_TRUE(element.equals(*owned->get_element_type(0)));
+  EXPECT_NE(&element, owned->get_element_type(0));
   EXPECT_EQ(ObString::make_string("resource leaf independently owned by the pending cache"),
             owned->data_[0].get_string());
 }
@@ -582,7 +591,9 @@ TEST_F(NativeSubqueryCache, cached_record_children_are_accounted_in_the_arena_so
   ASSERT_EQ(OB_SUCCESS, parameter.set_extend(reinterpret_cast<int64_t>(record), pl::PL_RECORD_TYPE,
       source_owner, pl::ObRecordType::get_init_size(columns)));
   Datum source;
-  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(parameter.datum_, source));
+  alignas(8) char source_scratch[64]; ObDatum source_view;
+  ASSERT_EQ(OB_SUCCESS, parameter.export_legacy(source_view, source_scratch, sizeof(source_scratch)));
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).import_legacy(source_view, source));
   ObSubQueryIterator::PendingCacheEntry first;
   ASSERT_EQ(OB_SUCCESS, iterator_.prepare_cache_result(source, result_expr_, first));
   ASSERT_TRUE(first.ready_); // The historical insertion estimate only sees the root carrier span.

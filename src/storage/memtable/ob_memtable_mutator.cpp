@@ -206,7 +206,7 @@ void ObMutator::reset()
     // Short legal UNIS values retain prior metadata, but never the old
     // payload address after recycling its owner. The decoder starts bytes
     // from zero, as the historical value union did.
-    value.datum_ = ObDatum();
+    value.datum_ = Datum();
   }
   rowkey_.get_rowkey().assign(key_values_, OB_MAX_ROWKEY_COLUMN_NUMBER);
   rowkey_owner_.reuse();

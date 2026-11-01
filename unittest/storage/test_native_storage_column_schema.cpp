@@ -61,7 +61,7 @@ std::string wire(const ObStorageColumnSchema &value) {
 }
 DatumValue read_value(const std::string &bytes,ObIAllocator &owner) {
   DatumValue value;int64_t pos=0;
-  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::decode_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
+  EXPECT_EQ(OB_SUCCESS,DatumParameterCodec::decode_native_value(bytes.data(),bytes.size(),pos,owner,value.datum_,value.meta_));
   EXPECT_EQ(bytes.size(),pos);return value;
 }
 void put_old_value(ObStorageColumnSchema &column,StorageSchemaTestAllocator &owner) {
@@ -71,14 +71,19 @@ void put_old_value(ObStorageColumnSchema &column,StorageSchemaTestAllocator &own
   ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_val(owner,value));
   column.info_=7;column.meta_type_.set_int();column.default_checksum_=918;
 }
-DatumValue array_value(ObIAllocator &owner,int count) {
+DatumValue array_value(ObIAllocator &owner,int count,bool reference_leaves=false) {
   auto *array=DatumParameterArray::alloc(owner,count);
   EXPECT_NE(nullptr,array);DatumParameter value;
   if(array==nullptr)return value.value_view();
-  for(int i=0;i<count;++i)EXPECT_EQ(OB_SUCCESS,array->data_[i].set_int(i+100,owner));
+  for(int i=0;i<count;++i) {
+    if(reference_leaves) {
+      EXPECT_EQ(OB_SUCCESS,array->data_[i].set_varchar(ObString("owned array leaf"),owner));
+      array->data_[i].set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    } else { EXPECT_EQ(OB_SUCCESS,array->data_[i].set_int(i+100,owner)); }
+  }
   SqlTypeMeta meta;meta.set_ext();meta.set_extend_type(T_EXT_SQL_ARRAY);
-  value.set_type_meta(meta);EXPECT_EQ(OB_SUCCESS,value.alloc_datum_reserved_buff(meta,-1,owner));
-  value.set_array_address(array);return value.value_view();
+  value.set_type_meta(meta);EXPECT_EQ(OB_SUCCESS,value.set_array_address(array,owner));
+  return value.value_view();
 }
 }
 
@@ -148,32 +153,36 @@ TEST(NativeStorageColumnSchema, source_lifetime_and_repeated_self_replacement) {
 }
 
 TEST(NativeStorageColumnSchema, array_copy_failures_preserve_existing_default) {
-  ObArenaAllocator source;const DatumValue input=array_value(source,40);bool success=false;
-  for(int offset=1;offset<100&&!success;++offset) {
-    StorageSchemaTestAllocator owner;ObStorageColumnSchema column;put_old_value(column,owner);
-    const std::string before=wire(column);owner.fail_at=owner.calls+offset;
-    const int result=column.deep_copy_default_val(owner,input);
-    if(result==OB_SUCCESS) {success=true;EXPECT_GT(owner.live.size(),16);}
-    else {EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,result);EXPECT_EQ(before,wire(column));EXPECT_EQ(1,owner.live.size());}
-    column.destroy(owner);EXPECT_TRUE(owner.live.empty());
+  for(bool reference_leaves : {false,true}) {
+    ObArenaAllocator source;const DatumValue input=array_value(source,40,reference_leaves);bool success=false;
+    for(int offset=1;offset<100&&!success;++offset) {
+      StorageSchemaTestAllocator owner;ObStorageColumnSchema column;put_old_value(column,owner);
+      const std::string before=wire(column);owner.fail_at=owner.calls+offset;
+      const int result=column.deep_copy_default_val(owner,input);
+      if(result==OB_SUCCESS) {success=true;EXPECT_GT(owner.live.size(),reference_leaves?16:0);}
+      else {EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,result);EXPECT_EQ(before,wire(column));EXPECT_EQ(1,owner.live.size());}
+      column.destroy(owner);EXPECT_TRUE(owner.live.empty());
+    }
+    EXPECT_TRUE(success);
   }
-  EXPECT_TRUE(success);
 }
 
 TEST(NativeStorageColumnSchema, decoder_rolls_back_all_nested_payload_allocations) {
-  ObArenaAllocator source;const DatumValue input=array_value(source,40);
-  ObStorageColumnSchema original;ASSERT_EQ(OB_SUCCESS,original.deep_copy_default_val(source,input));
-  original.info_=7;original.default_checksum_=918;original.meta_type_.set_int();const std::string bytes=wire(original);
-  bool success=false;
-  for(int offset=1;offset<100&&!success;++offset) {
-    StorageSchemaTestAllocator owner;ObStorageColumnSchema column;put_old_value(column,owner);
-    const std::string before=wire(column);owner.fail_at=owner.calls+offset;int64_t pos=0;
-    const int result=column.deserialize(owner,bytes.data(),bytes.size(),pos);
-    if(result==OB_SUCCESS) {success=true;EXPECT_EQ(bytes,wire(column));EXPECT_GT(owner.live.size(),16);}
-    else {EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,result);EXPECT_EQ(before,wire(column));EXPECT_EQ(1,owner.live.size());}
-    column.destroy(owner);EXPECT_TRUE(owner.live.empty());
+  for(bool reference_leaves : {false,true}) {
+    ObArenaAllocator source;const DatumValue input=array_value(source,40,reference_leaves);
+    ObStorageColumnSchema original;ASSERT_EQ(OB_SUCCESS,original.deep_copy_default_val(source,input));
+    original.info_=7;original.default_checksum_=918;original.meta_type_.set_int();const std::string bytes=wire(original);
+    bool success=false;
+    for(int offset=1;offset<100&&!success;++offset) {
+      StorageSchemaTestAllocator owner;ObStorageColumnSchema column;put_old_value(column,owner);
+      const std::string before=wire(column);owner.fail_at=owner.calls+offset;int64_t pos=0;
+      const int result=column.deserialize(owner,bytes.data(),bytes.size(),pos);
+      if(result==OB_SUCCESS) {success=true;EXPECT_EQ(bytes,wire(column));EXPECT_GT(owner.live.size(),reference_leaves?16:0);}
+      else {EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,result);EXPECT_EQ(before,wire(column));EXPECT_EQ(1,owner.live.size());}
+      column.destroy(owner);EXPECT_TRUE(owner.live.empty());
+    }
+    EXPECT_TRUE(success);original.destroy(source);
   }
-  EXPECT_TRUE(success);original.destroy(source);
 }
 
 TEST(NativeStorageColumnSchema, typed_null_keeps_column_declaration_and_no_payload) {
@@ -292,8 +301,11 @@ TEST(NativeStorageColumnSchema, canonical_and_wrapped_extended_states_release_wi
   }
   ObArenaAllocator inputs;DatumValue boxed;
   ASSERT_EQ(OB_SUCCESS,boxed.set_extend(ObActionFlag::OP_NOP,0,inputs));
+  alignas(8) char legacy_payload[DATUM_EXTEND_PAYLOAD_SIZE];
+  ObDatum physical_marker; physical_marker.ptr_ = legacy_payload;
+  physical_marker.set_extend(ObActionFlag::OP_NOP,0,0);
   Datum wrapped;
-  ASSERT_EQ(OB_SUCCESS,wrapped.set_reference(boxed.datum_.ptr_,boxed.datum_.len_,Datum::LegacyExtended));
+  ASSERT_EQ(OB_SUCCESS,wrapped.set_reference(physical_marker.ptr_,physical_marker.len_,Datum::LegacyExtended));
   ASSERT_TRUE(wrapped.has_ext_value());
   StorageSchemaTestAllocator owner;ObStorageColumnSchema column;
   ASSERT_EQ(OB_SUCCESS,column.deep_copy_default_datum(owner,wrapped,boxed.meta_));

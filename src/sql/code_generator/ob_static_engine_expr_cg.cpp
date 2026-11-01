@@ -1110,19 +1110,17 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
         Datum *datum = new (frame_mem + ScalarFrameLayout::datum_offset(j)) Datum();
         const DatumCopyPlan plan = rt_expr->get_datum_copy_plan();
         Datum imported;
+        common::ObDatum physical;
         if (OB_FAIL(static_cast<ObConstRawExpr *>(raw_expr)->export_value(
                 source, source_scratch, sizeof(source_scratch)))) {
-        } else if (OB_FAIL(plan.import_legacy(source.datum_, imported))) {
+        } else if (OB_FAIL(source.export_legacy(physical, source_scratch, sizeof(source_scratch)))) {
+        } else if (OB_FAIL(plan.import_legacy(physical, imported))) {
         } else if (OB_FAIL(ObExpr::clone_native_value(rt_expr->get_sql_type(), imported,
                                                      allocator_, *datum))) {
         } else if (is_lob_storage(source.get_type())) {
           // The LOB helper reads the owned literal, not the shorter-lived AST.
-          common::ObDatum legacy;
-          if (OB_FAIL(plan.borrow_legacy(*datum, legacy))) {
-          } else {
-            const DatumValue owned_view(legacy, source.meta_);
-            ret = ob_adjust_in_memory_lob_datum(owned_view, rt_expr->obj_meta_, allocator_, datum);
-          }
+          const DatumValue owned_view(*datum, source.meta_);
+          ret = ob_adjust_in_memory_lob_datum(owned_view, rt_expr->obj_meta_, allocator_, datum);
         }
       }
     }
@@ -1534,7 +1532,7 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
     int64_t param_cnt =
       (session->get_cur_exec_ctx() != NULL
        && session->get_cur_exec_ctx()->get_physical_plan_ctx() != NULL) ?
-        session->get_cur_exec_ctx()->get_physical_plan_ctx()->get_param_store().count() :
+        session->get_cur_exec_ctx()->get_physical_plan_ctx()->get_parameter_count() :
         0;
     temp_expr = new(buf)ObTempExpr(allocator);
     ObStaticEngineExprCG expr_cg(allocator,

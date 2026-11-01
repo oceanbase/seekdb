@@ -1878,125 +1878,106 @@ int ObResolverUtils::resolve_stmt_type(const ParseResult &result, stmt::StmtType
 
 namespace
 {
-// One parser writes transient legacy scratch for both output boundaries. Raw
-// finish publishes inline scalars without cloning an old scalar payload; the
-// DatumParameter boundary retains its existing owning representation.
+// One parser writes a native Raw-constant value plus pure metadata. Only the
+// explicit parameter finish converts structural Unknown to generic Reference8.
 class LiteralDatumWriter
 {
 public:
   explicit LiteralDatumWriter(ObIAllocator &allocator)
-    : allocator_(allocator), value_(), status_(OB_SUCCESS), owned_(false) {}
-  const SqlTypeMeta &get_meta() const { return value_.get_type_meta(); }
-  SqlValueType get_type() const { return value_.get_type(); }
-  ObCollationType get_collation_type() const { return value_.get_collation_type(); }
-  const char *get_string_ptr() const { return value_.datum_.ptr_; }
-  int32_t get_string_len() const { return value_.datum_.len_; }
-  void set_collation_type(ObCollationType cs)
-  { SqlTypeMeta meta = get_meta(); meta.set_collation_type(cs); value_.set_type_meta(meta); }
-  void set_collation_level(ObCollationLevel level)
-  { SqlTypeMeta meta = get_meta(); meta.set_collation_level(level); value_.set_type_meta(meta); }
-  void set_length(ObLength length) { value_.set_length(length); }
-  void set_length_semantics(ObLengthSemantics semantics) { value_.set_length_semantics(semantics); }
-  void set_precision(ObPrecision precision) { value_.set_precision(precision); }
-  void set_scale(ObScale scale) { value_.set_scale(scale); }
-  void set_result_flag(uint32_t flag) { value_.set_result_flag(flag); }
-  void unset_result_flag(uint32_t flag) { value_.unset_result_flag(flag); }
-  void set_is_boolean(bool flag) { value_.get_param_flag().is_boolean_ = flag; }
-  void set_param_meta(const SqlTypeMeta &meta) { value_.set_param_meta(meta); }
+    : allocator_(allocator), value_(), metadata_(), status_(OB_SUCCESS), owned_(false) {}
+  const SqlTypeMeta &get_meta() const { return metadata_.type_meta_; }
+  SqlValueType get_type() const { return get_meta().get_type(); }
+  ObCollationType get_collation_type() const { return get_meta().get_collation_type(); }
+  const char *get_string_ptr() const { return static_cast<const char *>(value_.get_reference()); }
+  int32_t get_string_len() const { return value_.length(); }
+  void set_collation_type(ObCollationType cs) { metadata_.type_meta_.set_collation_type(cs); }
+  void set_collation_level(ObCollationLevel level) { metadata_.type_meta_.set_collation_level(level); }
+  void set_length(ObLength length) { metadata_.accuracy_.set_length(length); }
+  void set_length_semantics(ObLengthSemantics semantics) { metadata_.accuracy_.set_length_semantics(semantics); }
+  void set_precision(ObPrecision precision) { metadata_.accuracy_.set_precision(precision); }
+  void set_scale(ObScale scale) { metadata_.accuracy_.set_scale(scale); metadata_.type_meta_.set_scale(scale); }
+  void set_result_flag(uint32_t flag) { metadata_.res_flags_ |= flag; }
+  void unset_result_flag(uint32_t flag) { metadata_.res_flags_ &= ~flag; }
+  void set_is_boolean(bool flag) { metadata_.flag_.is_boolean_ = flag; }
+  void set_param_meta(const SqlTypeMeta &meta)
+  { if (metadata_.param_meta_.is_null() || !meta.is_null()) { metadata_.param_meta_ = meta; } }
 
-  void set_int(int64_t v) { scalar_meta(&SqlTypeMeta::set_int); value_.datum_.set_int(v); }
-  void set_uint64(uint64_t v) { scalar_meta(&SqlTypeMeta::set_uint64); value_.datum_.set_uint(v); }
-  void set_float(float v) { scalar_meta(&SqlTypeMeta::set_float); value_.datum_.set_float(v); }
-  void set_double(double v) { scalar_meta(&SqlTypeMeta::set_double); value_.datum_.set_double(v); }
-  void set_bool(bool v) { scalar_meta(&SqlTypeMeta::set_tinyint); value_.datum_.set_bool(v); }
-  void set_unknown(int64_t v) { scalar_meta(&SqlTypeMeta::set_unknown); value_.datum_.set_int(v); }
-  void set_date(int32_t v) { scalar_meta(&SqlTypeMeta::set_date); value_.datum_.set_date(v); }
-  void set_datetime(int64_t v) { scalar_meta(&SqlTypeMeta::set_datetime); value_.datum_.set_datetime(v); }
-  void set_time(int64_t v) { scalar_meta(&SqlTypeMeta::set_time); value_.datum_.set_time(v); }
-  void set_year(uint8_t v) { scalar_meta(&SqlTypeMeta::set_year); value_.datum_.set_year(static_cast<int8_t>(v)); }
+  void set_int(int64_t v) { scalar_meta(&SqlTypeMeta::set_int); value_.set_int(v); }
+  void set_uint64(uint64_t v) { scalar_meta(&SqlTypeMeta::set_uint64); value_.set_uint(v); }
+  void set_float(float v) { scalar_meta(&SqlTypeMeta::set_float); value_.set_float(v); }
+  void set_double(double v) { scalar_meta(&SqlTypeMeta::set_double); value_.set_double(v); }
+  void set_bool(bool v) { scalar_meta(&SqlTypeMeta::set_tinyint); value_.set_bool(v); }
+  void set_unknown(int64_t v) { scalar_meta(&SqlTypeMeta::set_unknown); value_.set_int(v); }
+  void set_date(int32_t v) { scalar_meta(&SqlTypeMeta::set_date); value_.set_date(v); }
+  void set_datetime(int64_t v) { scalar_meta(&SqlTypeMeta::set_datetime); value_.set_datetime(v); }
+  void set_time(int64_t v) { scalar_meta(&SqlTypeMeta::set_time); value_.set_time(v); }
+  void set_year(uint8_t v) { scalar_meta(&SqlTypeMeta::set_year); value_.set_year(v); }
   void set_mysql_date(ObMySQLDate v)
-  { scalar_meta(&SqlTypeMeta::set_mysql_date); value_.datum_.set_mysql_date(v); }
+  { scalar_meta(&SqlTypeMeta::set_mysql_date); value_.set_mysql_date(v); }
   void set_mysql_datetime(ObMySQLDateTime v)
-  { scalar_meta(&SqlTypeMeta::set_mysql_datetime); value_.datum_.set_mysql_datetime(v); }
-  void set_null() { value_.set_null(); owned_ = true; }
+  { scalar_meta(&SqlTypeMeta::set_mysql_datetime); value_.set_mysql_datetime(v); }
+  void set_null() { value_.set_null(); metadata_.type_meta_.set_null(); owned_ = true; }
   void set_string(SqlValueType type, const ObString &str)
   { set_string(type, str.ptr(), str.length()); }
   void set_string(SqlValueType type, const char *data, int32_t length)
   {
-    SqlTypeMeta meta = get_meta();
-    meta.set_type(type);
-    meta.set_collation_level(CS_LEVEL_IMPLICIT);
-    value_.set_type_meta(meta);
-    value_.datum_.set_string(data, length);
+    metadata_.type_meta_.set_type(type);
+    metadata_.type_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    if (status_ == OB_SUCCESS) { status_ = value_.set_string(data, length); }
     owned_ = false;
   }
   void set_hex_string(const ObString &str)
   {
-    SqlTypeMeta meta = get_meta();
-    meta.set_hex_string();
-    value_.set_type_meta(meta);
-    value_.datum_.set_string(str);
+    metadata_.type_meta_.set_hex_string();
+    if (status_ == OB_SUCCESS) { status_ = value_.set_string(str); }
     owned_ = false;
   }
   void set_decimal_int(int16_t length, ObScale scale, const ObDecimalInt *data)
   {
-    SqlTypeMeta meta = get_meta();
-    meta.set_decimal_int(scale);
-    value_.set_type_meta(meta);
-    value_.datum_.set_decimal_int_shallow(data, length);
-    owned_ = true; // wide::from_string allocated these bytes in allocator_.
+    metadata_.type_meta_.set_decimal_int(scale);
+    if (status_ == OB_SUCCESS) { status_ = value_.set_reference(data, length); }
+    owned_ = true; // wide::from_string owns these bytes in allocator_.
   }
   void set_number(const number::ObNumber &num)
   {
-    SqlTypeMeta meta = get_meta();
-    meta.set_number();
-    value_.set_type_meta(meta);
+    metadata_.type_meta_.set_number();
     const int64_t size = sizeof(number::ObCompactNumber) + num.d_.len_ * sizeof(uint32_t);
-    char *data = static_cast<char *>(allocator_.alloc(size));
-    if (OB_ISNULL(data)) {
-      status_ = OB_ALLOCATE_MEMORY_FAILED;
-      value_.datum_.set_null();
-    } else {
-      value_.datum_.ptr_ = data;
-      value_.datum_.set_number(num);
-      owned_ = true;
+    if (status_ == OB_SUCCESS) {
+      char *data = static_cast<char *>(allocator_.alloc(size));
+      if (OB_ISNULL(data)) { status_ = OB_ALLOCATE_MEMORY_FAILED; value_.set_null(); }
+      else { status_ = value_.set_number(num, data, size); owned_ = true; }
     }
   }
   void set_otimestamp_value(SqlValueType type, const ObOTimestampData &v)
   {
-    SqlTypeMeta meta = get_meta();
-    meta.set_otimestamp_type(type);
-    value_.set_type_meta(meta);
-    // The current literal timestamp parser leaves its output type NULL.
-    // Preserve that behavior and the ordinary 8-byte timestamp bridge.
-    if (type == ObNullType) {
-      value_.datum_.set_null();
-      owned_ = true;
-    } else if (type == ObTimestampType || type == ObDateTimeType) {
-      scalar_storage();
-      value_.datum_.set_int(v.time_us_);
-    } else {
-      status_ = OB_ERR_UNEXPECTED;
-      value_.datum_.set_null();
-    }
+    metadata_.type_meta_.set_otimestamp_type(type);
+    // Preserve the parser's NULL output type and ordinary timestamp bridge.
+    if (type == ObNullType) { value_.set_null(); owned_ = true; }
+    else if (type == ObTimestampType || type == ObDateTimeType) {
+      value_.set_int(v.time_us_); owned_ = true;
+    } else { status_ = OB_ERR_UNEXPECTED; value_.set_null(); }
   }
   int finish(DatumParameter &result)
   {
     int ret = status_;
-    DatumParameter candidate = value_;
-    if (OB_SUCC(ret) && !owned_) {
-      ret = clone_datum_value(value_.datum_, get_meta(), candidate.datum_, allocator_);
+    alignas(8) char scratch[64];
+    ObDatum legacy;
+    DatumParameter candidate;
+    if (OB_SUCC(ret) && OB_FAIL(DatumParameterCodec::export_raw_constant_value(
+        value_, get_meta(), legacy, scratch, sizeof(scratch)))) {
+    } else if (OB_SUCC(ret)) {
+      // Generic Unknown owns eight bytes; ordinary scalars import inline.
+      ret = !owned_ || get_meta().is_unknown()
+          ? candidate.assign_legacy_owned(legacy, get_meta(), allocator_)
+          : candidate.assign_legacy_borrowed(legacy, get_meta());
     }
-    if (OB_SUCC(ret)) { result = candidate; }
+    if (OB_SUCC(ret)) { candidate.set_metadata(metadata_); result = candidate; }
     return ret;
   }
   int finish(ObConstRawExpr &result)
   {
     int ret = status_;
-    Datum candidate;
-    if (OB_SUCC(ret)) {
-      ret = DatumParameterCodec::borrow_raw_constant_value(value_.datum_, get_meta(), candidate);
-    }
+    Datum candidate = value_;
     if (OB_SUCC(ret) && !owned_) {
       Datum owned;
       if (OB_SUCC(ret = DatumParameterCodec::clone_raw_constant_value(candidate, get_meta(), allocator_, owned))) {
@@ -2004,30 +1985,24 @@ public:
       }
     }
     if (OB_SUCC(ret) && OB_SUCC(ret = result.set_value_borrowed(candidate, get_meta()))) {
-      result.set_expr_obj_meta(value_.get_param_meta());
+      result.set_expr_obj_meta(metadata_.param_meta_);
       if (!get_meta().is_unknown()) {
-        result.set_accuracy(value_.get_accuracy());
+        result.set_accuracy(metadata_.accuracy_);
         result.unset_result_flag(UINT32_MAX);
-        result.set_result_flag(value_.get_result_flag());
+        result.set_result_flag(metadata_.res_flags_);
       }
     }
     return ret;
   }
-  TO_STRING_KV(K_(value));
+  TO_STRING_KV(K_(value), K_(metadata));
 private:
-  void scalar_storage() { value_.datum_.ptr_ = scalar_; owned_ = false; }
   void scalar_meta(void (SqlTypeMeta::*setter)())
-  {
-    scalar_storage();
-    SqlTypeMeta meta = get_meta();
-    (meta.*setter)();
-    value_.set_type_meta(meta);
-  }
+  { owned_ = true; (metadata_.type_meta_.*setter)(); }
   ObIAllocator &allocator_;
-  DatumParameter value_;
+  Datum value_;
+  DatumParameterMetadata metadata_;
   int status_;
   bool owned_;
-  alignas(16) char scalar_[sizeof(ObOTimestampData)];
 };
 
 int set_literal_charset(ObIAllocator &allocator, LiteralDatumWriter &value, ObString &charset,
@@ -2562,13 +2537,11 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
         DatumValue default_value;
-        alignas(8) char default_payload[DATUM_EXTEND_PAYLOAD_SIZE];
         default_value.meta_ = column.get_cur_default_meta();
         default_value.meta_.set_ext();
         default_value.meta_.set_extend_type(0);
-        default_value.datum_.ptr_ = default_payload;
-        default_value.datum_.set_extend(ObActionFlag::OP_DEFAULT_NOW_FLAG, 0);
-        if (OB_FAIL(column.set_cur_default_value(default_value))) {
+        if (OB_FAIL(default_value.set_extend(ObActionFlag::OP_DEFAULT_NOW_FLAG, 0, *owner))) {
+        } else if (OB_FAIL(column.set_cur_default_value(default_value))) {
         } else {
           column.set_on_update_current_timestamp(true);
         }
@@ -2587,10 +2560,8 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
             ret = OB_ALLOCATE_MEMORY_FAILED;
           } else {
             DatumValue default_value;
-            alignas(8) char default_payload[sizeof(int64_t)];
             default_value.meta_ = column.get_cur_default_meta();
             default_value.meta_.set_timestamp();
-            default_value.datum_.ptr_ = default_payload;
             default_value.datum_.set_timestamp(ObTimeConverter::ZERO_DATETIME);
             ret = column.set_cur_default_value(default_value);
           }
@@ -7063,7 +7034,7 @@ int ObResolverUtils::handle_varchar_charset(ObCharsetType charset_type,
 
 int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                                     ObSQLSessionInfo &session,
-                                    const ParamStore &phy_ctx_params,
+                                    const ObPhysicalPlanCtx &phy_ctx_params,
                                     const stmt::StmtType stmt_type,
                                     const ObCharsetType param_charset_type,
                                     const ObBitSet<> &neg_param_index,
@@ -7075,7 +7046,8 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
                                     const bool enable_mysql_compatible_dates,
                                     DatumParameter &obj_param,
                                     bool &is_param,
-                                    const bool enable_decimal_int)
+                                    const bool enable_decimal_int,
+                                    const common::SqlType **resolved_type)
 {
   int ret = OB_SUCCESS;
   ParseNode *raw_param = NULL;
@@ -7102,8 +7074,19 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
     } else if (OB_FAIL(handle_varchar_charset(param_charset_type, pc_ctx.allocator_, raw_param))) {
     } else if (T_QUESTIONMARK == raw_param->type_) {
       int64_t idx = raw_param->value_;
-      CK (idx >= 0 && idx < phy_ctx_params.count());
-      OX (obj_param.set_is_boolean(phy_ctx_params.at(idx).is_boolean()));
+      CK (idx >= 0 && idx < phy_ctx_params.get_parameter_count());
+      if (OB_SUCC(ret)) {
+        if (phy_ctx_params.native_parameters_ready()) {
+          const DatumParameterMetadata *attributes = phy_ctx_params.get_parameter_metadata(idx);
+          CK (attributes != nullptr);
+          OX (obj_param.set_is_boolean(attributes->flag_.is_boolean_));
+        } else {
+          // Explicit construction/PL inputs have not published execution pages.
+          const ParamStore &inputs = phy_ctx_params.get_parameter_inputs();
+          CK (idx < inputs.count());
+          OX (obj_param.set_is_boolean(inputs.at(idx).is_boolean()));
+        }
+      }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObResolverUtils::resolve_const(raw_param, stmt_type, pc_ctx.allocator_,
@@ -7140,6 +7123,17 @@ int ObResolverUtils::resolver_param(ObPlanCacheCtx &pc_ctx,
     is_param = true;
     LOG_DEBUG("is_param", K(param_idx), K(obj_param), K(raw_param->type_), K(raw_param->value_),
               "str_value", ObString(raw_param->str_len_, raw_param->str_value_));
+  }
+  if (OB_SUCC(ret) && resolved_type != nullptr) {
+    // This is the parser output cell before a group-wide cast. NOT_PARAM
+    // retains its existing explicit NULL placeholder; real typed NULL keeps
+    // its declaration metadata and full accuracy.
+    const SqlTypeMeta &meta = obj_param.is_null() && obj_param.get_type_meta().is_null()
+        && !obj_param.get_param_meta().is_null() ? obj_param.get_param_meta() : obj_param.get_type_meta();
+    const common::SqlType *prepared = nullptr;
+    if (OB_FAIL(common::SqlType::from_legacy(meta, obj_param.get_accuracy(),
+                                            pc_ctx.allocator_, prepared))) {
+    } else { *resolved_type = prepared; }
   }
   return ret;
 }

@@ -3790,8 +3790,8 @@ OB_DEF_SERIALIZE(ObPartition)
   int ret = OB_SUCCESS;
   BASE_SER((, ObBasePartition));
   LST_DO_CODE(OB_UNIS_ENCODE, sub_part_num_);
-  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(sub_interval_start_.datum_, sub_interval_start_.meta_, buf, buf_len, pos); }
-  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(sub_part_interval_.datum_, sub_part_interval_.meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_native_value(sub_interval_start_.datum_, sub_interval_start_.meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_native_value(sub_part_interval_.datum_, sub_part_interval_.meta_, buf, buf_len, pos); }
   if (FAILEDx(ObSchemaUtils::serialize_partition_array(
               subpartition_array_,
               subpartition_num_,
@@ -3810,8 +3810,8 @@ OB_DEF_DESERIALIZE(ObPartition)
   BASE_DESER((, ObBasePartition));
   DatumValue sub_interval_start, sub_part_interval;
   LST_DO_CODE(OB_UNIS_DECODE, sub_part_num_);
-  if (OB_SUCC(ret) && pos < data_len) { ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, *get_allocator(), sub_interval_start.datum_, sub_interval_start.meta_); }
-  if (OB_SUCC(ret) && pos < data_len) { ret = DatumParameterCodec::decode_unis_value(buf, data_len, pos, *get_allocator(), sub_part_interval.datum_, sub_part_interval.meta_); }
+  if (OB_SUCC(ret) && pos < data_len) { ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, *get_allocator(), sub_interval_start.datum_, sub_interval_start.meta_); }
+  if (OB_SUCC(ret) && pos < data_len) { ret = DatumParameterCodec::decode_unis_native_value(buf, data_len, pos, *get_allocator(), sub_part_interval.datum_, sub_part_interval.meta_); }
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(sub_interval_start_ = sub_interval_start)) {
   } else if (FALSE_IT(sub_part_interval_ = sub_part_interval)) {
@@ -3848,8 +3848,8 @@ OB_DEF_SERIALIZE_SIZE(ObPartition)
   int64_t len = ObBasePartition::get_serialize_size();
   LST_DO_CODE(OB_UNIS_ADD_LEN, sub_part_num_);
   int64_t bytes = 0;
-  if (DatumParameterCodec::value_size(sub_interval_start_.datum_, sub_interval_start_.meta_, bytes) == OB_SUCCESS) { len += bytes; }
-  if (DatumParameterCodec::value_size(sub_part_interval_.datum_, sub_part_interval_.meta_, bytes) == OB_SUCCESS) { len += bytes; }
+  if (DatumParameterCodec::native_value_size(sub_interval_start_.datum_, sub_interval_start_.meta_, bytes) == OB_SUCCESS) { len += bytes; }
+  if (DatumParameterCodec::native_value_size(sub_part_interval_.datum_, sub_part_interval_.meta_, bytes) == OB_SUCCESS) { len += bytes; }
 
   len += ObSchemaUtils::get_partition_array_serialize_size(
          subpartition_array_, subpartition_num_);
@@ -3862,8 +3862,13 @@ int64_t ObPartition::get_convert_size() const
 {
   int64_t convert_size = sizeof(*this);
   convert_size += ObBasePartition::get_deep_copy_size();
-  convert_size += sub_interval_start_.datum_.get_deep_copy_size();
-  convert_size += sub_part_interval_.datum_.get_deep_copy_size();
+  int64_t interval_bytes = 0;
+  if (DatumParameterCodec::native_span_size(sub_interval_start_.datum_,
+          sub_interval_start_.meta_, interval_bytes) != OB_SUCCESS) { return INT64_MAX; }
+  convert_size += interval_bytes;
+  if (DatumParameterCodec::native_span_size(sub_part_interval_.datum_,
+          sub_part_interval_.meta_, interval_bytes) != OB_SUCCESS) { return INT64_MAX; }
+  convert_size += interval_bytes;
   convert_size += ObSchemaUtils::get_partition_array_convert_size(
                   subpartition_array_, subpartition_num_);
   convert_size += ObSchemaUtils::get_partition_array_convert_size(

@@ -210,7 +210,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
     } else if (var_type.is_cursor_type()) {
       // State adopted the cursor handle and copied its descriptor. The
       // temporary descriptor was created in the cursor arena by initialization.
-      package_state.get_pkg_cursor_allocator().free(const_cast<char *>(value.datum_.ptr_));
+      package_state.get_pkg_cursor_allocator().free(const_cast<void *>(value.get_datum().get_reference()));
       value.set_null();
     }
   }

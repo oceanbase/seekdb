@@ -28,21 +28,26 @@ SqlTypeMeta effective_meta(const DatumValue &value)
   if (value.datum_.is_null() && !meta.is_null()) { meta.set_null(); }
   return meta;
 }
-bool bound(const DatumValue &v) { return v.datum_.is_min() || v.datum_.is_max(); }
+bool bound(const DatumValue &v) { return v.is_min_value() || v.is_max_value(); }
 bool valid(const DatumValue &v, bool check_collation = true)
 {
   const SqlValueType type = v.meta_.get_type();
   if (type < ObNullType || type >= ObMaxType) { return false; }
   if (v.datum_.is_null() || v.meta_.is_null()) { return true; }
-  const uint32_t len = v.datum_.len_;
-  if (v.datum_.ptr_ == nullptr && len > 0) { return false; }
+  // Historical comparison capability is a physical-domain contract. Export
+  // one checked scalar/span only for its existing width/flag validation.
+  alignas(8) char scratch[64];
+  ObDatum legacy;
+  if (v.export_legacy(legacy, scratch, sizeof(scratch)) != OB_SUCCESS) { return false; }
+  const uint32_t len = legacy.len_;
+  if (legacy.ptr_ == nullptr && len > 0) { return false; }
   if (v.meta_.is_ext_sql_array()) { return len == sizeof(int64_t); }
   switch (ObDatum::get_sql_value_datum_map_type(type)) {
     case OBJ_DATUM_8BYTE_DATA: return len == sizeof(int64_t);
     case OBJ_DATUM_4BYTE_DATA: return len == sizeof(int32_t);
     case OBJ_DATUM_1BYTE_DATA: return len == sizeof(uint8_t);
     case OBJ_DATUM_EXTEND:
-      return v.datum_.ptr_ != nullptr && v.datum_.has_ext_value();
+      return legacy.ptr_ != nullptr && legacy.has_ext_value();
     case OBJ_DATUM_NUMBER:
       return len >= sizeof(number::ObNumber::Desc)
           && len == sizeof(number::ObNumber::Desc) + sizeof(uint32_t) * v.datum_.get_number_desc().len_;
@@ -59,7 +64,7 @@ bool needs_external_lob(const DatumValue &value)
 {
   bool external = false;
   if (!value.datum_.is_null() && value.meta_.is_lob_storage()
-      && value.meta_.has_lob_header() && value.datum_.len_ > 0) {
+      && value.meta_.has_lob_header() && value.datum_.length() > 0) {
     ObLobLocatorV2 locator(value.datum_.get_string(), true);
     external = !locator.is_valid() || !locator.has_inrow_data();
   }
@@ -102,12 +107,12 @@ int compare_decimal_other(const DatumValue &decimal, const DatumValue &other, in
       ret = wide::from_number(number, allocator, scale, integer, bytes); break;
     }
     case ObDecimalIntTC:
-      return compare_decimals(decimal.datum_.get_decimal_int(), decimal.datum_.get_int_bytes(), decimal.meta_.get_scale(),
-                              other.datum_.get_decimal_int(), other.datum_.get_int_bytes(), other.meta_.get_scale(), cmp);
+      return compare_decimals(decimal.get_decimal_int(), decimal.get_int_bytes(), decimal.meta_.get_scale(),
+                              other.get_decimal_int(), other.get_int_bytes(), other.meta_.get_scale(), cmp);
     default: ret = OB_NOT_SUPPORTED; break;
   }
   if (OB_SUCC(ret)) {
-    ret = compare_decimals(decimal.datum_.get_decimal_int(), decimal.datum_.get_int_bytes(), decimal.meta_.get_scale(),
+    ret = compare_decimals(decimal.get_decimal_int(), decimal.get_int_bytes(), decimal.meta_.get_scale(),
                            integer, bytes, scale, cmp);
   }
   return ret;
@@ -302,14 +307,14 @@ int compare_datum_values(const DatumValue &left, const DatumValue &right, int &c
   cmp = 0;
   if (!can_compare_datum_values(left, right)) { ret = OB_NOT_SUPPORTED; }
   else if (bound(left) || bound(right)) {
-    cmp = (left.datum_.is_min() && right.datum_.is_min()) || (left.datum_.is_max() && right.datum_.is_max()) ? 0
-        : left.datum_.is_min() || right.datum_.is_max() ? -1 : 1;
+    cmp = (left.is_min_value() && right.is_min_value()) || (left.is_max_value() && right.is_max_value()) ? 0
+        : left.is_min_value() || right.is_max_value() ? -1 : 1;
   } else if (left.datum_.is_null() || left.meta_.is_null() || right.datum_.is_null() || right.meta_.is_null()) {
     const bool l = left.datum_.is_null() || left.meta_.is_null();
     const bool r = right.datum_.is_null() || right.meta_.is_null();
     cmp = l == r ? 0 : l ? -1 : 1;
   } else if (left.meta_.is_unknown() && right.meta_.is_unknown()) {
-    const int64_t l = left.datum_.get_int(), r = right.datum_.get_int();
+    const int64_t l = left.get_unknown(), r = right.get_unknown();
     cmp = (l > r) - (l < r);
   } else if (left.meta_.is_decimal_int()) { ret = compare_decimal_other(left, right, cmp); }
   else if (right.meta_.is_decimal_int()) { ret = compare_decimal_other(right, left, cmp); cmp = -cmp; }
@@ -320,7 +325,14 @@ int compare_datum_values(const DatumValue &left, const DatumValue &right, int &c
         ? MAX(left.meta_.get_scale(), right.meta_.get_scale()) : SCALE_UNKNOWN_YET;
     const auto fn = ObDatumFuncs::get_nullsafe_cmp_func(left.meta_.get_type(), right.meta_.get_type(),
         NULL_FIRST, collation(left.meta_), scale, left.meta_.has_lob_header() || right.meta_.has_lob_header());
-    ret = fn == nullptr ? compare_numeric_pair(left, right, cmp) : fn(left.datum_, right.datum_, cmp, nullptr);
+    if (fn == nullptr) { ret = compare_numeric_pair(left, right, cmp); }
+    else {
+      alignas(8) char left_scratch[64], right_scratch[64];
+      ObDatum l, r;
+      if (OB_FAIL(left.export_legacy(l, left_scratch, sizeof(left_scratch)))) {
+      } else if (OB_FAIL(right.export_legacy(r, right_scratch, sizeof(right_scratch)))) {
+      } else { ret = fn(l, r, cmp, nullptr); }
+    }
   }
   if (OB_SUCC(ret)) { cmp = (cmp > 0) - (cmp < 0); }
   return ret;
@@ -366,19 +378,20 @@ int hash_datum_value(const DatumValue &value, uint64_t seed, uint64_t &hash)
   else if (bound(value)) {
     const int64_t ext = value.datum_.get_ext(); hash = murmurhash(&ext, sizeof(ext), seed);
   } else if (value.meta_.is_decimal_int() && !value.datum_.is_null()) {
-    hash = murmurhash(value.datum_.ptr_, value.datum_.len_, seed);
+    hash = murmurhash(static_cast<const char *>(value.datum_.get_reference()), value.datum_.length(), seed);
   } else if ((value.meta_.is_ext() || value.meta_.is_unknown()) && !value.datum_.is_null()) {
     // The old value hash uses the 64-bit marker/address or question index;
     // neither the native descriptor size nor adjacent metadata is hashed.
-    const int64_t raw = value.meta_.is_ext() ? value.get_ext() : value.datum_.get_int();
+    const int64_t raw = value.meta_.is_ext() ? value.get_ext() : value.get_unknown();
     hash = murmurhash(&raw, sizeof(raw), seed);
   } else if (value.datum_.is_null() || value.meta_.is_null()) {
     const int type = ObNullType; hash = murmurhash(&type, sizeof(type), seed);
   } else if (value.meta_.get_type_class() == ObNumberTC) {
-    hash = murmurhash(&value.datum_.get_number_desc().se_, 1, seed);
-    hash = murmurhash(value.datum_.get_number_digits(), sizeof(uint32_t) * value.datum_.get_number_desc().len_, hash);
+    const number::ObNumber::Desc descriptor = value.datum_.get_number_desc();
+    hash = murmurhash(&descriptor.se_, 1, seed);
+    hash = murmurhash(value.datum_.get_number_digits(), sizeof(uint32_t) * descriptor.len_, hash);
   } else if (value.meta_.is_string_type() && !value.meta_.has_lob_header()) {
-    hash = ObCharset::hash(collation(value.meta_), value.datum_.ptr_, value.datum_.len_, seed, false, nullptr);
+    hash = ObCharset::hash(collation(value.meta_), static_cast<const char *>(value.datum_.get_reference()), value.datum_.length(), seed, false, nullptr);
   } else if (value.meta_.get_type_class() == ObDateTC || value.meta_.get_type_class() == ObYearTC) {
     const int64_t n = value.meta_.get_type_class() == ObDateTC ? value.datum_.get_date() : value.datum_.get_year();
     hash = murmurhash(&n, sizeof(n), seed);
@@ -387,8 +400,13 @@ int hash_datum_value(const DatumValue &value, uint64_t seed, uint64_t &hash)
     const ObScale scale = ob_is_double_type(meta.get_type()) && value.datum_.get_double() != 0.0
         && !isnan(value.datum_.get_double()) ? meta.get_scale() : SCALE_UNKNOWN_YET;
     auto *funcs = ObDatumFuncs::get_basic_func(meta.get_type(), collation(meta), scale, meta.has_lob_header());
-    ret = funcs == nullptr || funcs->murmur_hash_v2_ == nullptr ? OB_NOT_SUPPORTED
-        : funcs->murmur_hash_v2_(value.datum_, seed, hash, nullptr);
+    if (funcs == nullptr || funcs->murmur_hash_v2_ == nullptr) { ret = OB_NOT_SUPPORTED; }
+    else {
+      alignas(8) char scratch[64];
+      ObDatum legacy;
+      if (OB_FAIL(value.export_legacy(legacy, scratch, sizeof(scratch)))) {
+      } else { ret = funcs->murmur_hash_v2_(legacy, seed, hash, nullptr); }
+    }
   }
   return ret;
 }
@@ -402,7 +420,7 @@ int hash_datum_value_murmur(const DatumValue &value, uint64_t seed, uint64_t &ha
     // The default charset callback differs from the explicit Murmur callback
     // for both binary and case-insensitive collations. TopK historically uses
     // this explicit variant, while rowkey/default-value users use the default.
-    hash = ObCharset::hash(collation(value.meta_), value.datum_.ptr_, value.datum_.len_,
+    hash = ObCharset::hash(collation(value.meta_), static_cast<const char *>(value.datum_.get_reference()), value.datum_.length(),
                            seed, false, explicit_murmur_charset_hash);
   } else {
     ret = hash_datum_value(value, seed, hash);
@@ -423,8 +441,8 @@ int clone_typed_value(const DatumValue &source, DatumValue &target, ObIAllocator
     if (OB_FAIL(DatumParameterArray::clone_parameter(input, owned, allocator))) {}
     else { target = owned.value_view(); }
     return ret;
-  } else if (OB_FAIL(copy.datum_.deep_copy(source.datum_, allocator))) {}
-  else { copy.meta_ = source.meta_; target = copy; }
+  } else if (OB_FAIL(copy.deep_copy(source, allocator))) {}
+  else { target = copy; }
   return ret;
 }
 } }

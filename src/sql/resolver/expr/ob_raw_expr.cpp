@@ -1181,7 +1181,10 @@ int ObConstRawExpr::set_value_borrowed(const DatumValue &source)
 {
   int ret = OB_SUCCESS;
   Datum candidate;
-  if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(source.datum_, source.meta_, candidate))) {
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(physical, source.meta_, candidate))) {
   } else { ret = set_value_borrowed(candidate, source.meta_); }
   return ret;
 }
@@ -1195,7 +1198,10 @@ int ObConstRawExpr::set_bound_param_borrowed(const DatumValue &source)
 {
   int ret = OB_SUCCESS;
   Datum candidate;
-  if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(source.datum_, source.meta_, candidate))) {
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(physical, source.meta_, candidate))) {
   } else { ret = set_bound_param_borrowed(candidate, source.meta_); }
   return ret;
 }
@@ -1209,7 +1215,10 @@ int ObConstRawExpr::replace_value_borrowed(const DatumValue &source)
 {
   int ret = OB_SUCCESS;
   Datum candidate;
-  if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(source.datum_, source.meta_, candidate))) {
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  if (OB_FAIL(source.export_legacy(physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(physical, source.meta_, candidate))) {
   } else { ret = replace_value_borrowed(candidate, source.meta_); }
   return ret;
 }
@@ -1223,10 +1232,11 @@ int ObConstRawExpr::export_value(DatumValue &output, void *scratch, int64_t capa
 {
   int ret = OB_SUCCESS;
   DatumValue candidate;
+  ObDatum physical;
   if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(value_, value_meta_,
-          candidate.datum_, scratch, capacity))) {
+          physical, scratch, capacity))) {
+  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, value_meta_))) {
   } else {
-    candidate.meta_ = value_meta_;
     output = candidate;
   }
   return ret;
@@ -1236,10 +1246,11 @@ int ObConstRawExpr::export_bound_param(DatumValue &output, void *scratch, int64_
 {
   int ret = OB_SUCCESS;
   DatumValue candidate;
+  ObDatum physical;
   if (OB_FAIL(DatumParameterCodec::export_raw_constant_value(param_, param_meta_,
-          candidate.datum_, scratch, capacity))) {
+          physical, scratch, capacity))) {
+  } else if (OB_FAIL(candidate.assign_legacy_borrowed(physical, param_meta_))) {
   } else {
-    candidate.meta_ = param_meta_;
     output = candidate;
   }
   return ret;

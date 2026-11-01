@@ -68,6 +68,11 @@ public:
 // This is the exact pre-migration v2 member layout from 18f6daea's
 // ob_select_into_op.cpp. It deliberately uses the old Datum codec, not any
 // native option helper; the same fixture serves as old reader and old writer.
+struct HistoricalOptionValue {
+  ObDatum datum_;
+  SqlTypeMeta meta_;
+  ObString get_string() const { return datum_.get_string(); }
+};
 class HistoricalSelectIntoSpec final : public ObOpSpec {
   OB_UNIS_VERSION_V(2);
 public:
@@ -78,12 +83,12 @@ public:
       buffer_size_(1024 * 1024), is_overwrite_(false), external_properties_(owner) {}
   ObItemType into_type_;
   ObFixedArray<ObString, ObIAllocator> user_vars_;
-  DatumValue outfile_name_, field_str_, line_str_, closed_cht_;
+  HistoricalOptionValue outfile_name_, field_str_, line_str_, closed_cht_;
   bool is_optional_;
   ObFixedArray<ObExpr *, ObIAllocator> select_exprs_;
   bool is_single_;
   int64_t max_file_size_;
-  DatumValue escaped_cht_;
+  HistoricalOptionValue escaped_cht_;
   ObCollationType cs_type_;
   int64_t parallel_, buffer_size_;
   bool is_overwrite_;
@@ -184,7 +189,7 @@ TEST_F(NativeSelectIntoOptions, real_parser_ast_copy_and_cg_own_their_option_byt
   ObGlobalHint hint;
   ObAddr server;
   ParamStore parameters{ObWrapperAllocator(opt_owner)};
-  ObOptimizerContext opt(&session, nullptr, nullptr, nullptr, opt_owner, &parameters,
+  ObOptimizerContext opt(&session, nullptr, nullptr, nullptr, opt_owner,
                          server, hint, opt_factory, &statement, false);
   ObSelectLogPlan logical_plan(opt, &statement);
   ObLogSelectInto logical(logical_plan);
@@ -215,7 +220,7 @@ TEST_F(NativeSelectIntoOptions, version_two_matches_historical_member_codec_and_
   const SqlTypeMeta meta = varchar_meta();
   const ObString values[] = {ObString(3, "f\0x"), ObString::make_string("|"),
       ObString::make_string("\n"), ObString::make_string("\""), ObString::make_string("\\")};
-  DatumValue *old[] = {&historical.outfile_name_, &historical.field_str_, &historical.line_str_,
+  HistoricalOptionValue *old[] = {&historical.outfile_name_, &historical.field_str_, &historical.line_str_,
                        &historical.closed_cht_, &historical.escaped_cht_};
   Datum values_native[5];
   for (int i = 0; i < 5; ++i) {
@@ -294,7 +299,10 @@ TEST_F(NativeSelectIntoOptions, filename_questionmark_open_keeps_index_and_nop_e
   // A wrong lookup of slot zero must fail; the requested slot three remains a string.
   DatumParameter nop;
   ASSERT_EQ(OB_SUCCESS, nop.set_ext(ObActionFlag::OP_NOP, owner));
-  ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->set_runtime_parameter(0, nop));
+  ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->init_datum_param_store());
+  ASSERT_NE(nullptr, execution.get_physical_plan_ctx()->get_native_parameter_type(0));
+  ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->set_runtime_parameter(0, nop.get_datum(),
+      *execution.get_physical_plan_ctx()->get_native_parameter_type(0), nop.get_metadata()));
   // SELECT INTO VARIABLES has no filename, while empty and embedded-NUL
   // strings are still legal physical option values before any file-path policy.
   for (int variant = 0; variant < 3; ++variant) {
@@ -328,7 +336,9 @@ TEST_F(NativeSelectIntoOptions, filename_questionmark_open_keeps_index_and_nop_e
     ObSelectIntoOp op(execution, spec, nullptr);
     EXPECT_EQ(expected[i], op.inner_open());
   }
-  ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->set_runtime_parameter(3, nop));
+  ASSERT_NE(nullptr, execution.get_physical_plan_ctx()->get_native_parameter_type(3));
+  ASSERT_EQ(OB_SUCCESS, execution.get_physical_plan_ctx()->set_runtime_parameter(3, nop.get_datum(),
+      *execution.get_physical_plan_ctx()->get_native_parameter_type(3), nop.get_metadata()));
   ObSelectIntoSpec spec(owner, PHY_SELECT_INTO);
   spec.into_type_ = T_INTO_VARIABLES; spec.cs_type_ = CS_TYPE_UTF8MB4_BIN;
   ParseNode node = {}; node.type_ = T_QUESTIONMARK; node.value_ = 3;

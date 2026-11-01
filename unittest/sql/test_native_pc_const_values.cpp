@@ -29,6 +29,7 @@
 #include "share/datum/typed_datum_compare.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/ob_result_set.h"
 #include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
@@ -147,7 +148,9 @@ DatumParameter decimal_parameter(int64_t coefficient, int32_t width,
   value.set_type_meta(meta);
   ObAccuracy accuracy; accuracy.set_precision(precision); accuracy.set_scale(scale);
   value.set_accuracy(accuracy); value.set_param_meta(meta);
-  value.datum_.set_decimal_int_shallow(reinterpret_cast<const ObDecimalInt *>(bytes), width);
+  // Generic parameter values preserve the actual physical coefficient width;
+  // semantic inline/normalized Decimal values are prepared at their real Type boundary.
+  EXPECT_EQ(OB_SUCCESS, value.datum_.set_reference(bytes, width));
   return value;
 }
 
@@ -330,7 +333,7 @@ TEST(NativePcConstValues, typed_null_parameter_preserves_declaration_and_matches
   ASSERT_EQ(OB_SUCCESS, parameters->append_parameter_input(null));
   ASSERT_EQ(nullptr, parameters->get_native_parameter(0));
   ObPCConstParamInfo info;
-  ASSERT_EQ(OB_SUCCESS, info.add_parameter(parameters->get_param_store().at(0), &context, owner));
+  ASSERT_EQ(OB_SUCCESS, info.add_parameter(parameters->get_parameter_inputs().at(0), &context, owner));
   EXPECT_EQ(nullptr, parameters->get_native_parameter(0)); // Capture must not initialize frames.
   ASSERT_EQ(1, info.const_params_.count());
   EXPECT_TRUE(info.const_params_.at(0).datum_.is_null());
@@ -357,9 +360,18 @@ TEST(NativePcConstValues, decimal_scale_equality_is_mathematical_and_full_types_
   const DatumParameter va = decimal_parameter(120, 8, 18, 2, owner);
   const DatumParameter vb = decimal_parameter(1200, 16, 20, 3, owner);
   const DatumParameter vc = decimal_parameter(120000, 16, -1, 5, owner);
-  ASSERT_EQ(OB_SUCCESS, a.add_constant(va.datum_, narrow, owner));
-  ASSERT_EQ(OB_SUCCESS, b.add_constant(vb.datum_, wide, owner));
-  ASSERT_EQ(OB_SUCCESS, c.add_constant(vc.datum_, unknown, owner));
+  // These fixtures own generic physical coefficients. The old-ABI overload
+  // imports them using each actual prepared semantic declaration.
+  auto capture = [&](ObPCConstParamInfo &info, const DatumParameter &value,
+                      const SqlType &type) {
+    alignas(8) char scratch[64];
+    ObDatum physical;
+    const int ret = value.export_legacy(physical, scratch, sizeof(scratch));
+    return ret == OB_SUCCESS ? info.add_constant(physical, type, owner) : ret;
+  };
+  ASSERT_EQ(OB_SUCCESS, capture(a, va, narrow));
+  ASSERT_EQ(OB_SUCCESS, capture(b, vb, wide));
+  ASSERT_EQ(OB_SUCCESS, capture(c, vc, unknown));
   for (auto *info : {&a, &b, &c}) { ASSERT_EQ(OB_SUCCESS, info->const_idx_.push_back(0)); }
   EXPECT_TRUE(a == b); EXPECT_TRUE(b == c); // 1.20 == 1.200 == 1.20000.
   EXPECT_EQ(DatumRepresentation::Inline64, a.const_params_.at(0).type_->canonical_representation());
@@ -418,7 +430,9 @@ TEST(NativePcConstValues, nan_matching_and_constraint_equality_keep_their_distin
   double legacy_nan = std::numeric_limits<double>::quiet_NaN();
   ObDatum legacy; legacy.ptr_ = reinterpret_cast<const char *>(&legacy_nan); legacy.set_double(legacy_nan);
   int cmp = 77;
-  ASSERT_EQ(OB_SUCCESS, compare_datum_values(DatumValue(legacy, double_type.legacy_meta()), params.at(0).value_view(), cmp));
+  DatumValue legacy_value;
+  ASSERT_EQ(OB_SUCCESS, legacy_value.assign_legacy_borrowed(legacy, double_type.legacy_meta()));
+  ASSERT_EQ(OB_SUCCESS, compare_datum_values(legacy_value, params.at(0).value_view(), cmp));
   ASSERT_EQ(0, cmp);
   expect_match(cache, params, true);
 }
@@ -673,18 +687,111 @@ TEST(NativePcConstValues, sql_udt_without_full_type_is_cache_ineligible_even_wit
   EXPECT_EQ(0, from_raw.const_params_.count());
   EXPECT_EQ(0, owner.calls_); // No fabricated declaration/value allocation.
 
-  // Unsupported capability does not swallow malformed descriptor errors.
+  // The checked physical boundary rejects the former null-pointer/7-byte
+  // image before it can become a native wrapper. Invalid metadata still tests
+  // the actual capture preflight rather than becoming capability-ineligible.
   ObDatum malformed;
   malformed.ptr_ = nullptr; malformed.pack_ = 7;
   DatumParameter invalid = parameter;
-  invalid.set_type_meta(declaration); invalid.set_datum(malformed);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, invalid.assign_legacy_borrowed(malformed, declaration));
+  SqlTypeMeta malformed_meta; malformed_meta.set_type(ObMaxType);
+  invalid.set_type_meta(malformed_meta);
   ObPCConstParamInfo invalid_parameter, invalid_raw;
   EXPECT_EQ(OB_INVALID_ARGUMENT, invalid_parameter.add_parameter(invalid, &execution, owner));
   EXPECT_TRUE(invalid_parameter.cache_eligible_);
   EXPECT_EQ(0, invalid_parameter.const_params_.count());
-  EXPECT_EQ(OB_INVALID_ARGUMENT, invalid_raw.add_raw_constant(DatumValue(malformed, declaration),
+  EXPECT_EQ(OB_INVALID_ARGUMENT, invalid_raw.add_raw_constant(invalid.value_view(),
       original, &session, nullptr, owner));
   EXPECT_TRUE(invalid_raw.cache_eligible_);
   EXPECT_EQ(0, invalid_raw.const_params_.count());
   ObSQLSessionInfo::ExecCtxSessionRegister unregister_context(session, nullptr);
+}
+
+TEST(NativePcConstValues, cache_parameter_info_reads_final_metadata_and_sparse_group_flags)
+{
+  ObArenaAllocator source_owner, runtime_owner, statement_owner, descriptors;
+  ParamStore inputs{ObWrapperAllocator(source_owner)};
+  DatumParameter integer, typed_null, text, group;
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(INT64_MIN, source_owner));
+  integer.set_accuracy(ObAccuracy(20, 0)); integer.set_scale(0);
+  integer.set_param_meta(integer.get_type_meta());
+  ParamFlag original_flags; original_flags.flag_ = 0x59; original_flags.extend_flag_ = 0xa4;
+  integer.set_param_flag(original_flags);
+  SqlTypeMeta decimal_meta; decimal_meta.set_decimal_int(7);
+  SqlTypeMeta null_meta = decimal_meta; null_meta.set_null();
+  typed_null.set_type_meta(null_meta); typed_null.datum_.set_null();
+  typed_null.set_param_meta(decimal_meta); typed_null.set_accuracy(ObAccuracy(27, 7));
+  char source_text[] = "cache metadata reference";
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString(sizeof(source_text) - 1, source_text), source_owner));
+  text.set_collation_type(CS_TYPE_UTF8MB4_BIN); text.set_collation_level(CS_LEVEL_COERCIBLE);
+  // String precision shares its field with length semantics. Keep that
+  // attribute unspecified; 64 belongs to the independent length field.
+  text.set_length(64); text.set_scale(0); text.set_param_meta(text.get_type_meta());
+  auto *array = DatumParameterArray::alloc(source_owner, 1); ASSERT_NE(nullptr, array);
+  ASSERT_EQ(OB_SUCCESS, array->data_[0].set_int(41, source_owner));
+  array->data_[0].set_accuracy(ObAccuracy(20, 0)); array->data_[0].set_scale(0);
+  array->data_[0].set_param_meta(array->data_[0].get_type_meta());
+  SqlType leaf_type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(array->data_[0].get_type_meta(),
+      array->data_[0].get_accuracy(), leaf_type));
+  ASSERT_EQ(OB_SUCCESS, array->set_element_type_borrowed(0, leaf_type, source_owner));
+  array->element_.set_obj_type(ObIntType); array->element_.set_accuracy(ObAccuracy(20, 0));
+  ASSERT_EQ(OB_SUCCESS, group.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, source_owner));
+  group.set_param_meta(group.get_type_meta()); group.set_accuracy(ObAccuracy(20, 0));
+  group.set_param_flag(original_flags);
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(integer)); ASSERT_EQ(OB_SUCCESS, inputs.push_back(typed_null));
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(text)); ASSERT_EQ(OB_SUCCESS, inputs.push_back(group));
+  ObPhysicalPlan construction_plan;
+  ASSERT_EQ(OB_SUCCESS, construction_plan.set_params_info(inputs));
+  const auto &before = construction_plan.get_params_info(); ASSERT_EQ(4, before.count());
+  EXPECT_EQ(ObIntType, before.at(0).type_); EXPECT_EQ(20, before.at(0).precision_);
+  EXPECT_EQ(0, before.at(0).scale_); EXPECT_FALSE(before.at(0).is_typed_null_value_);
+  EXPECT_EQ(ObDecimalIntType, before.at(1).type_); EXPECT_EQ(27, before.at(1).precision_);
+  EXPECT_EQ(7, before.at(1).scale_); EXPECT_TRUE(before.at(1).is_typed_null_value_);
+  EXPECT_EQ(CS_TYPE_BINARY, before.at(1).col_type_);
+  EXPECT_EQ(ObVarcharType, before.at(2).type_); EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, before.at(2).col_type_);
+  EXPECT_EQ(PRECISION_UNKNOWN_YET, before.at(2).precision_); EXPECT_EQ(0, before.at(2).scale_);
+  EXPECT_EQ(ObExtendType, before.at(3).type_); EXPECT_EQ(ObIntType, before.at(3).ext_real_type_);
+  EXPECT_EQ(20, before.at(3).precision_); EXPECT_EQ(0, before.at(3).scale_);
+
+  ObExecContext execution(runtime_owner); ASSERT_EQ(OB_SUCCESS, execution.create_physical_plan_ctx());
+  ObPhysicalPlanCtx &parameters = *execution.get_physical_plan_ctx(); parameters.set_original_param_cnt(4);
+  ASSERT_EQ(OB_SUCCESS, parameters.assign_parameter_inputs(inputs));
+  ASSERT_EQ(OB_SUCCESS, parameters.init_datum_param_store()); ASSERT_TRUE(parameters.native_parameters_ready());
+  source_owner.reuse(); MEMSET(source_text, 'x', sizeof(source_text));
+  ASSERT_NE(nullptr, parameters.get_native_parameter(1)); EXPECT_TRUE(parameters.get_native_parameter(1)->is_null());
+  ASSERT_NE(nullptr, parameters.get_parameter_metadata(1));
+  EXPECT_EQ(ObNullType, parameters.get_parameter_metadata(1)->type_meta_.get_type());
+  EXPECT_EQ(ObDecimalIntType, parameters.get_parameter_metadata(1)->param_meta_.get_type());
+  EXPECT_EQ(7, parameters.get_parameter_metadata(1)->accuracy_.get_scale());
+  EXPECT_EQ(27, parameters.get_parameter_metadata(1)->accuracy_.get_precision());
+  EXPECT_EQ(ObString::make_string("cache metadata reference"), parameters.get_native_parameter(2)->get_string());
+  ObPhysicalPlan ready_plan;
+  ASSERT_EQ(OB_SUCCESS, ready_plan.set_params_info(parameters));
+  const auto &after = ready_plan.get_params_info(); ASSERT_EQ(4, after.count());
+  for (int64_t i = 0; i < 4; ++i) {
+    EXPECT_EQ(before.at(i).type_, after.at(i).type_); EXPECT_EQ(before.at(i).col_type_, after.at(i).col_type_);
+    EXPECT_EQ(before.at(i).ext_real_type_, after.at(i).ext_real_type_);
+    EXPECT_EQ(before.at(i).precision_, after.at(i).precision_); EXPECT_EQ(before.at(i).scale_, after.at(i).scale_);
+    EXPECT_EQ(before.at(i).is_typed_null_value_, after.at(i).is_typed_null_value_);
+    EXPECT_EQ(before.at(i).flag_.flag_, after.at(i).flag_.flag_);
+    EXPECT_EQ(before.at(i).flag_.extend_flag_, after.at(i).flag_.extend_flag_);
+  }
+  ParamStore resolution{ObWrapperAllocator(descriptors)};
+  ASSERT_EQ(OB_SUCCESS, parameters.build_resolution_inputs(resolution, statement_owner));
+  ASSERT_EQ(4, resolution.count()); ASSERT_TRUE(resolution.at(3).is_ext_sql_array());
+  ParamFlag changed_flags; changed_flags.flag_ = 0xad; changed_flags.extend_flag_ = 0x73;
+  resolution.at(3).set_param_flag(changed_flags);
+  ASSERT_EQ(OB_SUCCESS, parameters.merge_resolution_parameter_flags(resolution));
+  ASSERT_NE(nullptr, parameters.get_group_parameter_input(3));
+  EXPECT_EQ(original_flags.flag_, parameters.get_group_parameter_input(3)->get_param_flag().flag_);
+  EXPECT_EQ(changed_flags.flag_, parameters.get_parameter_metadata(3)->flag_.flag_);
+  EXPECT_EQ(41, parameters.get_native_parameter(3)->get_int());
+  ObPhysicalPlan merged_plan; ASSERT_EQ(OB_SUCCESS, merged_plan.set_params_info(parameters));
+  const auto &merged = merged_plan.get_params_info(); ASSERT_EQ(4, merged.count());
+  EXPECT_EQ(changed_flags.flag_, merged.at(3).flag_.flag_);
+  EXPECT_EQ(changed_flags.extend_flag_, merged.at(3).flag_.extend_flag_);
+  EXPECT_EQ(ObExtendType, merged.at(3).type_); EXPECT_EQ(ObIntType, merged.at(3).ext_real_type_);
+  EXPECT_EQ(20, merged.at(3).precision_); EXPECT_EQ(0, merged.at(3).scale_);
+  EXPECT_TRUE(merged.at(1).is_typed_null_value_); EXPECT_EQ(7, merged.at(1).scale_);
 }

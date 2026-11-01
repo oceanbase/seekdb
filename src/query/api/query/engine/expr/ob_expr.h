@@ -24,6 +24,7 @@
 #include "common/datum/datum.h"
 #include "common/datum/datum_copy_plan.h"
 #include "common/datum/datum_parameter.h"
+#include "common/datum/native_typed_datum.h"
 #include "common/datum/datum_param_store.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "query/engine/ob_serializable_function.h"
@@ -883,7 +884,12 @@ using common::DatumParameter;
 typedef common::ObIArray<ObExpr *> ObExprPtrIArray;
 typedef common::ObFixedArray<ObExpr *, common::ObIAllocator> ExprFixedArray;
 
-// Capture the already evaluated expression frame as a borrowed parameter.
+// Capture the one evaluated native value with its actual complete declaration.
+// A retaining consumer clones both before the frame or declaration owner retires.
+int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx,
+    common::NativeTypedDatum &value, common::DatumParameterMetadata &attributes);
+
+// Explicit physical boundary for PL/resolver consumers.
 // Preserve raw LOB/type metadata separately from declaration accuracy. The
 // caller must clone before the expression frame can be reset or overwritten.
 int capture_datum_parameter(const ObExpr &expr, ObEvalCtx &ctx, DatumParameter &value);

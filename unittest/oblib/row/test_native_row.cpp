@@ -47,7 +47,7 @@ TEST(NativeRow, actual_old_wire_projectors_and_compact_relocation) {
   ObArenaAllocator owner;DatumValueBuffer buffer(owner);ASSERT_EQ(0,buffer.reserve(count));std::vector<int32_t> projector(pc);
   ObNewRow row(buffer.data(),count);row.projector_=projector.data();row.projector_size_=pc;int64_t pos=0;
   ASSERT_EQ(0,row.deserialize(owner,bytes.data(),bytes.size(),pos));ASSERT_EQ(bytes.size(),pos);ASSERT_EQ(f[4],wire(row));
-  // The decode owner owns every payload, including scalars; wire is no longer borrowed.
+  // References are owned and scalars are inline; neither borrows wire bytes.
   std::fill(bytes.begin(),bytes.end(),char(0xa5));ASSERT_EQ(f[4],wire(row));
   const int64_t size=sizeof(ObNewRow)+row.get_deep_copy_size();std::vector<char> source(size);
   auto *header=new(source.data())ObNewRow;pos=sizeof(ObNewRow);
@@ -109,8 +109,8 @@ TEST(NativeRow, recursive_array_clone_and_relocation_do_not_keep_source_pointers
  ObArenaAllocator source_owner,owner;auto *outer=DatumParameterArray::alloc(source_owner,2);auto *inner=DatumParameterArray::alloc(source_owner,1);ASSERT_NE(nullptr,outer);ASSERT_NE(nullptr,inner);
  char text[]="source leaf has a long lifetime dependency";ASSERT_EQ(0,inner->data_[0].set_varchar(ObString::make_string(text),source_owner));
  SqlTypeMeta array_meta;array_meta.set_ext();array_meta.set_extend_type(T_EXT_SQL_ARRAY);
- ASSERT_EQ(0,outer->data_[0].alloc_datum_reserved_buff(array_meta,0,source_owner));outer->data_[0].set_type_meta(array_meta);outer->data_[0].set_array_address(inner);
- ASSERT_EQ(0,outer->data_[1].set_int(17,source_owner));DatumParameter value;ASSERT_EQ(0,value.alloc_datum_reserved_buff(array_meta,0,source_owner));value.set_type_meta(array_meta);value.set_array_address(outer);
+ outer->data_[0].set_type_meta(array_meta);ASSERT_EQ(0,outer->data_[0].set_array_address(inner,source_owner));
+ ASSERT_EQ(0,outer->data_[1].set_int(17,source_owner));DatumParameter value;value.set_type_meta(array_meta);ASSERT_EQ(0,value.set_array_address(outer,source_owner));
  DatumValue view=value.value_view();ObNewRow row(&view,1),owned;ASSERT_EQ(0,row.clone(owner,owned));
  const int64_t size=sizeof(ObNewRow)+row.get_deep_copy_size();std::vector<char> flat(size);auto *header=new(flat.data())ObNewRow;int64_t pos=sizeof(ObNewRow);
  ASSERT_EQ(0,header->deep_copy(row,flat.data(),size,pos));ASSERT_EQ(size,pos);std::vector<char> moved=flat;source_owner.reset();std::fill(flat.begin(),flat.end(),char(0xdb));
@@ -121,7 +121,7 @@ TEST(NativeRow, recursive_array_clone_and_relocation_do_not_keep_source_pointers
  const int64_t body=sizeof(ObNewRow)+sizeof(DatumValue);pos=body;
  ASSERT_EQ(0,DatumValueBuffer::make_offsets(restored->cells_[0],moved.data(),moved.size(),pos,nullptr,false));ASSERT_EQ(size,pos);
  pos=body;ASSERT_EQ(0,DatumValueBuffer::make_offsets(restored->cells_[0],moved.data(),moved.size(),pos));ASSERT_EQ(size,pos);
- ASSERT_LT(reinterpret_cast<uintptr_t>(restored->cells_[0].datum_.ptr_),moved.size());
+ ASSERT_LT(reinterpret_cast<uintptr_t>(restored->cells_[0].datum_.get_reference()),moved.size());
  std::vector<char> offsets=moved;std::fill(moved.begin(),moved.end(),char(0xcd));restored=nullptr;pos=0;
  ASSERT_EQ(0,ObNewRow::construct(offsets.data(),offsets.size(),pos,restored));ASSERT_EQ(size,pos);
  a=reinterpret_cast<DatumParameterArray *>(restored->cells_[0].get_ext());b=a->data_[0].get_array<DatumParameterArray>();ASSERT_EQ(ObString::make_string(text),b->data_[0].get_string());ASSERT_EQ(17,a->data_[1].get_int());

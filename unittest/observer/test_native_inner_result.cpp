@@ -26,11 +26,11 @@ static std::string hex(const char *p,int64_t n){const char*t="0123456789abcdef";
 static std::string wire(const DatumValue &value)
 {
   int64_t size = 0;
-  const int error = DatumParameterCodec::value_size(value.datum_, value.meta_, size);
+  const int error = DatumParameterCodec::native_value_size(value.datum_, value.meta_, size);
   if (error != OB_SUCCESS) { return "ERR" + std::to_string(error); }
   std::string bytes(size, '\0');
   int64_t pos = 0;
-  const int ret = DatumParameterCodec::encode_value(value.datum_, value.meta_, bytes.data(), bytes.size(), pos);
+  const int ret = DatumParameterCodec::encode_native_value(value.datum_, value.meta_, bytes.data(), bytes.size(), pos);
   return ret == OB_SUCCESS ? hex(bytes.data(), pos) : "ERR" + std::to_string(ret);
 }
 template<class T>static std::string bits(const T&v){return hex(reinterpret_cast<const char*>(&v),sizeof v);}
@@ -111,7 +111,7 @@ TEST(NativeInnerResult, ActualOldGettersAndProjectedNativeRows)
       const std::string bytes = unhex(parts[2]);
       DatumValue value;
       int64_t pos = 0;
-      ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_value(bytes.data(), bytes.size(), pos,
+      ASSERT_EQ(OB_SUCCESS, DatumParameterCodec::decode_native_value(bytes.data(), bytes.size(), pos,
           owner, value.datum_, value.meta_));
       ASSERT_EQ(bytes.size(), pos);
       values.push_back({parts[1], value});
@@ -159,11 +159,11 @@ TEST(NativeInnerResult, NativeViewBorrowAndExplicitOwnerClone)
   BoundResult bound; bound.bind(&row, true);
   DatumValue borrowed, owned;
   ASSERT_EQ(OB_SUCCESS, bound.result_.get_value(int64_t(0), borrowed));
-  ASSERT_EQ(source.datum_.ptr_, borrowed.datum_.ptr_);
+  ASSERT_EQ(source.datum_.get_string().ptr(), borrowed.datum_.get_string().ptr());
   ASSERT_EQ(OB_SUCCESS, bound.result_.get_native_value(0, result_owner, owned));
-  ASSERT_NE(source.datum_.ptr_, owned.datum_.ptr_);
+  ASSERT_NE(source.datum_.get_string().ptr(), owned.datum_.get_string().ptr());
   ASSERT_EQ(source.meta_, owned.meta_);
-  std::memset(const_cast<char *>(source.datum_.ptr_), 'x', source.datum_.len_);
+  std::memset(const_cast<char *>(source.datum_.get_string().ptr()), 'x', source.datum_.length());
   EXPECT_EQ('x', borrowed.get_string().ptr()[0]);
   EXPECT_EQ(text, std::string(owned.get_string().ptr(), owned.get_string().length()));
   source_owner.reuse();

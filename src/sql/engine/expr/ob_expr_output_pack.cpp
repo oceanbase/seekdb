@@ -405,7 +405,8 @@ int ObExprOutputPack::build_row_values(
     const ObField &field = extra_info->param_fields_.at(column_idx - 1);
     common::ObDatum legacy;
     OZ(ObExprUtil::export_legacy_value(*expr.args_[column_idx], datum, alloc, legacy));
-    DatumValue value(legacy, meta);
+    DatumValue value;
+    OZ(value.assign_legacy_borrowed(legacy, meta));
     ObCastMode cast_mode = CM_NONE;
     if (OB_SUCC(ret) && obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
       if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session, cast_mode))) {
@@ -443,9 +444,14 @@ int ObExprOutputPack::build_row_values(
       if (OB_SUCC(ret)) {
         obmysql::ObMySQLCellValue cell_value;
         if (can_build_output_pack_cell_from_datum(value)) {
-          ret = ObSMUtils::build_datum_cell_value(
-              value.datum_, value.meta_, encode_type, alloc, cell_value,
-              &field, dtc_params);
+          alignas(8) char cell_scratch[64];
+          common::ObDatum physical;
+          if (OB_FAIL(value.export_legacy(physical, cell_scratch, sizeof(cell_scratch)))) {
+          } else {
+            ret = ObSMUtils::build_datum_cell_value(
+                physical, value.meta_, encode_type, alloc, cell_value,
+                &field, dtc_params);
+          }
         } else {
           ret = ObSMUtils::build_cell_value(
               value, encode_type, alloc, cell_value, dtc_params, &field,

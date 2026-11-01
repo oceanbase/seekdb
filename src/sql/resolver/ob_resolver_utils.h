@@ -16,6 +16,7 @@
 
 #ifndef _OB_RESOLVER_UTILS_H
 #define _OB_RESOLVER_UTILS_H
+#include "common/datum/sql_type.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_compatibility_control.h"
 #include "lib/allocator/ob_allocator.h"
@@ -758,7 +759,7 @@ public:
   static bool is_expr_can_be_used_in_table_function(const ObRawExpr &expr);
   static int resolver_param(ObPlanCacheCtx &pc_ctx,
                             ObSQLSessionInfo &session,
-                            const ParamStore &phy_ctx_params,
+                            const ObPhysicalPlanCtx &phy_ctx_params,
                             const stmt::StmtType stmt_type,
                             const ObCharsetType param_charset_type,
                             const ObBitSet<> &neg_param_index,
@@ -770,7 +771,8 @@ public:
                             const bool enable_mysql_compatible_dates,
                             DatumParameter &obj_param,
                             bool &is_param,
-                            const bool enable_decimal_int);
+                            const bool enable_decimal_int,
+                            const common::SqlType **resolved_type = nullptr);
   static int fast_get_param_type(const ParseNode &parse_node,
                                  const ParamStore *param_store,
                                  const ObCollationType connect_collation,

@@ -55,6 +55,26 @@ public:
   static int decode_store(const char *buf, int64_t length, int64_t &pos,
                           ObIAllocator &allocator, DatumParamStore &store);
 
+  // Generic wrapper physical domain. Ordinary scalars are inline; Unknown
+  // remains Reference8 and Decimal preserves the actual coefficient span.
+  // Span copy/import owns only bytes, not an array/PL/LOB pointee. Schema graph
+  // ownership stays explicit in clone_schema_native_value below.
+  static int borrow_native_value(const ObDatum &, const SqlTypeMeta &, Datum &);
+  static int import_native_value(const ObDatum &, const SqlTypeMeta &, ObIAllocator &, Datum &);
+  static int copy_native_value_span(const Datum &, const SqlTypeMeta &, ObIAllocator &, Datum &);
+  // Bounded contiguous-buffer copy of the generic physical span. Inline and
+  // special states need zero bytes; references need their actual length (also
+  // zero for an empty reference). No pointee/array graph is retained. No output
+  // or cursor is published on failure; buffer bytes may have been overwritten.
+  static int native_span_size(const Datum &, const SqlTypeMeta &, int64_t &);
+  static int copy_native_span(const Datum &, const SqlTypeMeta &, char *buffer,
+                             int64_t length, int64_t &pos, Datum &output);
+  static int export_native_value(const Datum &, const SqlTypeMeta &, ObDatum &, void *, int64_t);
+  static int copy_legacy_value(const Datum &, const SqlTypeMeta &, ObIAllocator &, ObDatum &);
+  static int native_value_size(const Datum &, const SqlTypeMeta &, int64_t &);
+  static int encode_native_value(const Datum &, const SqlTypeMeta &, char *, int64_t, int64_t &);
+  static int decode_native_value(const char *, int64_t, int64_t &, ObIAllocator &, Datum &, SqlTypeMeta &);
+
   static int value_size(const ObDatum &value, const SqlTypeMeta &meta, int64_t &size);
   static int encode_value(const ObDatum &value, const SqlTypeMeta &meta,
                           char *buf, int64_t length, int64_t &pos);

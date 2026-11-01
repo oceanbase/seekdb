@@ -92,8 +92,8 @@ template <class DescriptorOwner, class RecordOwner>
 bool live_record_parameter(const DatumParameter &value, const DescriptorOwner &descriptor_owner,
                            const RecordOwner &record_owner)
 {
-  if (!value.datum_.is_native_extend()
-      || !descriptor_owner.owns_live(value.datum_.ptr_, DATUM_EXTEND_PAYLOAD_SIZE)
+  if (!value.datum_.has_ext_value()
+      || !descriptor_owner.owns_live(value.datum_.get_reference(), DATUM_EXTEND_PAYLOAD_SIZE)
       || value.get_extend_type() != PL_RECORD_TYPE
       || value.datum_.get_extend_type() != PL_RECORD_TYPE) { return false; }
   return record_owner.owns_live(reinterpret_cast<const void *>(value.get_ext()), sizeof(ObPLRecord));
@@ -142,9 +142,10 @@ TEST(NativeTriggerParameterLifetime, repeated_real_copyout_reuses_initial_descri
       callee[i].set_need_to_check_type(true); callee[i].set_expected_bool_value(true);
       ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(temporary, callee[i], params.at(i)));
       ASSERT_TRUE(live_record_parameter(params.at(i), temporary, dml));
-      ASSERT_NE(initial[i].datum_.ptr_, params.at(i).datum_.ptr_);
-      params.at(i).datum_.set_extend(params.at(i).get_ext(), PL_RECORD_TYPE,
-          params.at(i).get_val_len(), 0xa7, 0xef);
+      ASSERT_NE(initial[i].datum_.get_reference(), params.at(i).datum_.get_reference());
+      ASSERT_EQ(OB_SUCCESS, params.at(i).datum_.set_extend(params.at(i).get_ext(), PL_RECORD_TYPE,
+          params.at(i).get_val_len(), const_cast<void *>(params.at(i).datum_.get_reference()),
+          params.at(i).datum_.length(), 0xa7, 0xef));
       // Compare the actual copy-out publication, not a presumed clone policy.
       // Its metadata is inline; never read its borrowed payload after poison.
       published_snapshot[i] = params.at(i);
@@ -154,14 +155,14 @@ TEST(NativeTriggerParameterLifetime, repeated_real_copyout_reuses_initial_descri
     for (int i = 0; i < 2; ++i) {
       ASSERT_TRUE(live_record_parameter(initial[i], dml, dml));
       ASSERT_TRUE(live_record_parameter(params.at(i), dml, dml));
-      ASSERT_EQ(initial[i].datum_.ptr_, params.at(i).datum_.ptr_);
+      ASSERT_EQ(initial[i].datum_.get_reference(), params.at(i).datum_.get_reference());
       ASSERT_EQ(initial[i].get_ext(), params.at(i).get_ext());
       EXPECT_EQ(0xa7, params.at(i).datum_.get_extend_collation_level());
       EXPECT_EQ(0xef, params.at(i).datum_.get_extend_collation());
       EXPECT_EQ(published_snapshot[i].get_accuracy(), params.at(i).get_accuracy());
       EXPECT_EQ(0, std::memcmp(&published_snapshot[i].get_meta(), &params.at(i).get_meta(), sizeof(SqlTypeMeta)));
       EXPECT_EQ(0, std::memcmp(&published_snapshot[i].get_param_meta(), &params.at(i).get_param_meta(), sizeof(SqlTypeMeta)));
-      // ParamFlag has virtual UNIS methods. Compare its two flag bytes,
+      // Compare the two logical flag bytes rather than object representation,
       // excluding vptr/padding from object-representation comparisons.
       EXPECT_EQ(published_snapshot[i].get_param_flag().flag_, params.at(i).get_param_flag().flag_);
       EXPECT_EQ(published_snapshot[i].get_param_flag().extend_flag_, params.at(i).get_param_flag().extend_flag_);
@@ -208,7 +209,7 @@ TEST(NativeTriggerParameterLifetime, replacement_record_is_copied_back_to_origin
 {
   CountingOwner dml; ReclaimingOwner temporary; ParamStore params{ObWrapperAllocator(dml)};
   ASSERT_EQ(OB_SUCCESS, params.prepare_allocate(1));
-  auto *original = make_record(dml, 2, 1); ASSERT_NE(nullptr, original);
+  auto *original = make_record(dml, 2, 1, false); ASSERT_NE(nullptr, original);
   ASSERT_EQ(OB_SUCCESS, describe(params.at(0), *original, dml)); const DatumParameter initial = params.at(0);
   ASSERT_TRUE(live_record_parameter(initial, dml, dml));
   auto *replacement = make_record(temporary, 2, 90); ASSERT_NE(nullptr, replacement);
@@ -218,9 +219,16 @@ TEST(NativeTriggerParameterLifetime, replacement_record_is_copied_back_to_origin
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(temporary, source, params.at(0)));
   ASSERT_TRUE(live_record_parameter(params.at(0), temporary, temporary));
   ASSERT_NE(initial.get_ext(), params.at(0).get_ext());
-  ASSERT_EQ(OB_SUCCESS, NativeTriggerParameterTestAccess::stabilize(&initial, 1, params, temporary));
+  // The record's allocator forwards to DML. Inline fields must copy without
+  // allocating even when the actual destination owner rejects new payloads.
+  const int64_t dml_calls_before_copy = dml.calls;
+  dml.reject = true;
+  const int copy_ret = NativeTriggerParameterTestAccess::stabilize(&initial, 1, params, temporary);
+  dml.reject = false;
+  ASSERT_EQ(OB_SUCCESS, copy_ret);
+  EXPECT_EQ(dml_calls_before_copy, dml.calls);
   ASSERT_TRUE(live_record_parameter(params.at(0), dml, dml));
-  ASSERT_EQ(initial.datum_.ptr_, params.at(0).datum_.ptr_); ASSERT_EQ(initial.get_ext(), params.at(0).get_ext());
+  ASSERT_EQ(initial.datum_.get_reference(), params.at(0).datum_.get_reference()); ASSERT_EQ(initial.get_ext(), params.at(0).get_ext());
   EXPECT_EQ(90, original->get_element()[0].get_int()); EXPECT_EQ(91, original->get_element()[1].get_int());
   EXPECT_EQ(source.get_udt_id(), params.at(0).get_udt_id());
   EXPECT_EQ(source_allocations, temporary.outstanding());
@@ -250,7 +258,7 @@ TEST(NativeTriggerParameterLifetime, rejected_replacement_restores_every_initial
   ASSERT_EQ(OB_ERR_UNEXPECTED, NativeTriggerParameterTestAccess::stabilize(initial, 2, params, temporary));
   for (int i = 0; i < 2; ++i) {
     ASSERT_TRUE(live_record_parameter(params.at(i), dml, dml));
-    ASSERT_EQ(initial[i].datum_.ptr_, params.at(i).datum_.ptr_); ASSERT_EQ(initial[i].get_ext(), params.at(i).get_ext());
+    ASSERT_EQ(initial[i].datum_.get_reference(), params.at(i).datum_.get_reference()); ASSERT_EQ(initial[i].get_ext(), params.at(i).get_ext());
     EXPECT_EQ(30 + i, reinterpret_cast<ObPLRecord *>(params.at(i).get_ext())->get_element()[0].get_int());
   }
   ASSERT_TRUE(live_record_parameter(source, temporary, temporary));
@@ -270,18 +278,28 @@ TEST(NativeTriggerParameterLifetime, replacement_copy_oom_restores_descriptor_an
   ASSERT_EQ(OB_SUCCESS, describe(params.at(0), *original, dml)); const DatumParameter initial = params.at(0);
   ASSERT_TRUE(live_record_parameter(initial, dml, dml));
   auto *replacement = make_record(temporary, 2, 90); ASSERT_NE(nullptr, replacement);
+  // A real Reference is copied before either initial field can be replaced.
+  // Integer-only record fields no longer allocate an obsolete scalar span.
+  ASSERT_EQ(OB_SUCCESS, replacement->get_element()[0].set_varchar(
+      ObString::make_string("retained replacement payload"), *replacement->get_allocator()));
+  replacement->get_element()[0].set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ASSERT_GT(replacement->get_element()[0].datum_.length(), 0);
   DatumParameter source; ASSERT_EQ(OB_SUCCESS, describe(source, *replacement, temporary));
   ASSERT_TRUE(live_record_parameter(source, temporary, temporary));
   const int64_t source_allocations = temporary.outstanding();
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::copy_out_parameter(temporary, source, params.at(0)));
   ASSERT_TRUE(live_record_parameter(params.at(0), temporary, temporary));
+  const int64_t dml_calls_before_copy = dml.calls;
   dml.reject = true;
-  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, NativeTriggerParameterTestAccess::stabilize(&initial, 1, params, temporary));
+  const int copy_ret = NativeTriggerParameterTestAccess::stabilize(&initial, 1, params, temporary);
   dml.reject = false;
+  ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, copy_ret);
+  EXPECT_EQ(dml_calls_before_copy + 1, dml.calls);
   ASSERT_TRUE(live_record_parameter(params.at(0), dml, dml));
-  ASSERT_EQ(initial.datum_.ptr_, params.at(0).datum_.ptr_);
+  ASSERT_EQ(initial.datum_.get_reference(), params.at(0).datum_.get_reference());
   ASSERT_EQ(initial.get_ext(), params.at(0).get_ext());
   EXPECT_EQ(10, original->get_element()[0].get_int());
+  EXPECT_EQ(11, original->get_element()[1].get_int());
   EXPECT_EQ(source_allocations, temporary.outstanding());
   ASSERT_TRUE(live_record_parameter(source, temporary, temporary));
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(temporary, source));
@@ -305,12 +323,12 @@ TEST(NativeTriggerParameterLifetime, partial_out_failure_retires_published_and_p
   temporary.allocations_left = 0;
   ASSERT_EQ(OB_ALLOCATE_MEMORY_FAILED, ObUserDefinedType::copy_out_parameter(temporary, initial[1], params.at(1)));
   ASSERT_TRUE(live_record_parameter(params.at(1), dml, dml));
-  ASSERT_EQ(initial[1].datum_.ptr_, params.at(1).datum_.ptr_);
+  ASSERT_EQ(initial[1].datum_.get_reference(), params.at(1).datum_.get_reference());
   ASSERT_EQ(OB_SUCCESS, NativeTriggerParameterTestAccess::stabilize(initial, 2, params, temporary));
   temporary.allocations_left = -1; ASSERT_TRUE(poison(temporary));
   for (int i = 0; i < 2; ++i) {
     ASSERT_TRUE(live_record_parameter(params.at(i), dml, dml));
-    ASSERT_EQ(initial[i].datum_.ptr_, params.at(i).datum_.ptr_);
+    ASSERT_EQ(initial[i].datum_.get_reference(), params.at(i).datum_.get_reference());
     ASSERT_EQ(initial[i].get_ext(), params.at(i).get_ext());
     EXPECT_EQ(50 + i, reinterpret_cast<ObPLRecord *>(params.at(i).get_ext())->get_element()[0].get_int());
     ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(dml, params.at(i)));
@@ -323,10 +341,12 @@ TEST(NativeTriggerParameterLifetime, malformed_descriptor_shape_is_rejected_befo
   auto *original = make_record(dml, 2, 10); ASSERT_NE(nullptr, original);
   ASSERT_EQ(OB_SUCCESS, describe(params.at(0), *original, dml)); const DatumParameter initial = params.at(0);
   ASSERT_TRUE(live_record_parameter(initial, dml, dml));
-  params.at(0).datum_.ptr_ = nullptr; // Metadata/length are still native Extend.
+  const char malformed[1] = {0};
+  ASSERT_EQ(OB_SUCCESS, params.at(0).datum_.set_reference(malformed, sizeof(malformed), Datum::LegacyExtended));
+  // Metadata still declares Record, but a one-byte descriptor is not readable.
   ASSERT_EQ(OB_ERR_UNEXPECTED, NativeTriggerParameterTestAccess::stabilize(&initial, 1, params, temporary));
   ASSERT_TRUE(live_record_parameter(params.at(0), dml, dml));
-  ASSERT_EQ(initial.datum_.ptr_, params.at(0).datum_.ptr_);
+  ASSERT_EQ(initial.datum_.get_reference(), params.at(0).datum_.get_reference());
   ASSERT_EQ(initial.get_ext(), params.at(0).get_ext());
   ASSERT_EQ(OB_SUCCESS, ObUserDefinedType::destruct_objparam(dml, params.at(0)));
 }

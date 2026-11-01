@@ -166,18 +166,54 @@ int ObExprObjAccess::assign(const ObExprOperator &other)
     } \
   } while (0)
 
-int ObExprObjAccess::ExtraInfo::init_param_array(const ParamStore &param_store,
+int ObExprObjAccess::ExtraInfo::init_param_array(const ObPhysicalPlanCtx &param_store,
+                                                 const DatumParameter *objs_stack,
+                                                 int64_t param_num,
+                                                 ParamArray &param_array) const
+{
+  if (!param_store.native_parameters_ready()) {
+    return init_param_array(param_store.get_parameter_inputs(), objs_stack, param_num, param_array);
+  }
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs_.count(); ++i) {
+    const int64_t index = param_idxs_.at(i);
+    CK (index >= 0 && index < param_store.get_parameter_count());
+    if (OB_SUCC(ret)) {
+      const DatumParameterMetadata *attributes = param_store.get_parameter_metadata(index);
+      ObDatum legacy;
+      alignas(8) char scratch[64];
+      DatumParameter obj_param;
+      CK (attributes != nullptr);
+      OZ (param_store.export_runtime_parameter_legacy(index, legacy, scratch, sizeof(scratch)));
+      OZ (obj_param.assign_legacy_borrowed(legacy, attributes->type_meta_));
+      if (OB_SUCC(ret)) {
+        obj_param.set_metadata(*attributes);
+        GET_VALID_INT64_PARAM(obj_param, false);
+      }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
+    const DatumParameter &obj = objs_stack[i];
+    GET_VALID_INT64_PARAM(obj,
+      (i == param_num - 1
+        && (pl::ObCollectionType::NEXT_PROPERTY == property_type_
+            || pl::ObCollectionType::EXISTS_PROPERTY == property_type_
+            || pl::ObCollectionType::PRIOR_PROPERTY == property_type_)));
+  }
+  return ret;
+}
+
+
+int ObExprObjAccess::ExtraInfo::init_param_array(const ParamStore &parameters,
                                                  const DatumParameter *objs_stack,
                                                  int64_t param_num,
                                                  ParamArray &param_array) const
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < param_idxs_.count(); ++i) {
-    CK (param_idxs_.at(i) >= 0 && param_idxs_.at(i) < param_store.count());
-    if (OB_SUCC(ret)) {
-      const DatumParameter &obj_param = param_store.at(param_idxs_.at(i));
-      GET_VALID_INT64_PARAM(obj_param, false);
-    }
+    const int64_t index = param_idxs_.at(i);
+    CK (index >= 0 && index < parameters.count());
+    if (OB_SUCC(ret)) { GET_VALID_INT64_PARAM(parameters.at(index), false); }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
     const DatumParameter &obj = objs_stack[i];
@@ -195,7 +231,7 @@ int ObExprObjAccess::calc_result(DatumParameter &result,
                                  ObIAllocator &alloc,
                                  const DatumParameter *objs_stack,
                                  int64_t param_num,
-                                 const ParamStore &param_store,
+                                 const ObPhysicalPlanCtx &param_store,
                                  ObEvalCtx *ctx) const
 {
 
@@ -207,6 +243,14 @@ int ObExprObjAccess::calc_result(DatumParameter &result,
                     objs_stack,
                     param_num,
                     ctx);
+}
+
+int ObExprObjAccess::calc_result(DatumParameter &result, ObIAllocator &alloc,
+                                 const DatumParameter *objs_stack, int64_t param_num,
+                                 const ParamStore &parameters, ObEvalCtx *ctx) const
+{
+  return info_.calc(result, alloc, get_result_type(), info_.extend_size_,
+                    parameters, objs_stack, param_num, ctx);
 }
 
 int ObExprObjAccess::ExtraInfo::get_collection_attr(int64_t* params,
@@ -410,7 +454,7 @@ int ObExprObjAccess::ExtraInfo::calc(DatumParameter &result,
                                      ObIAllocator &alloc,
                                      const SqlTypeMeta &res_type,
                                      const int32_t extend_size,
-                                     const ParamStore &param_store,
+                                     const ObPhysicalPlanCtx &param_store,
                                      const common::DatumParameter *params,
                                      int64_t param_num,
                                      ObEvalCtx *ctx) const
@@ -420,6 +464,36 @@ int ObExprObjAccess::ExtraInfo::calc(DatumParameter &result,
   CK (OB_NOT_NULL(ctx));
   OZ (init_param_array(param_store, params, param_num, param_array));
 
+  if (OB_SUCC(ret)) {
+    ret = calc_with_param_array(result, alloc, res_type, extend_size, param_array, ctx);
+  }
+  return ret;
+}
+
+int ObExprObjAccess::ExtraInfo::calc(DatumParameter &result, ObIAllocator &alloc,
+                                     const SqlTypeMeta &res_type, int32_t extend_size,
+                                     const ParamStore &parameters,
+                                     const DatumParameter *params, int64_t param_num,
+                                     ObEvalCtx *ctx) const
+{
+  int ret = OB_SUCCESS;
+  ParamArray param_array;
+  CK (OB_NOT_NULL(ctx));
+  OZ (init_param_array(parameters, params, param_num, param_array));
+  if (OB_SUCC(ret)) {
+    ret = calc_with_param_array(result, alloc, res_type, extend_size, param_array, ctx);
+  }
+  return ret;
+}
+
+int ObExprObjAccess::ExtraInfo::calc_with_param_array(DatumParameter &result,
+                                                      ObIAllocator &alloc,
+                                                      const SqlTypeMeta &res_type,
+                                                      int32_t extend_size,
+                                                      ParamArray &param_array,
+                                                      ObEvalCtx *ctx) const
+{
+  int ret = OB_SUCCESS;
   if (OB_SUCC(ret)) {
     int64_t *param_ptr = const_cast<int64_t *>(param_array.head());
     int64_t attr_addr = 0;
@@ -553,7 +627,7 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   const ExtraInfo *info = static_cast<const ExtraInfo *>(expr.extra_info_);
-  const ParamStore &param_store = ctx.exec_ctx_.get_physical_plan_ctx()->get_param_store();
+  const ObPhysicalPlanCtx &param_store = *ctx.exec_ctx_.get_physical_plan_ctx();
   OZ(expr.eval_param_value(ctx));
   DatumParameter params[expr.arg_cnt_];
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i++) {
@@ -573,7 +647,10 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
                 &ctx));
 
   Datum adjusted;
-  OZ(expr.get_datum_copy_plan().import_legacy(result.datum_, adjusted));
+  alignas(8) char result_scratch[64];
+  ObDatum legacy_result;
+  OZ(result.export_legacy(legacy_result, result_scratch, sizeof(result_scratch)));
+  OZ(expr.get_datum_copy_plan().import_legacy(legacy_result, adjusted));
   if (OB_SUCC(ret) && is_lob_storage(result.get_type())) {
     OZ (ob_adjust_lob_datum(ctx.exec_ctx_, adjusted, result.get_meta(), expr.obj_meta_,
                             ctx.exec_ctx_.get_allocator(), adjusted));

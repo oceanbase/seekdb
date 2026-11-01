@@ -1182,11 +1182,13 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
               access_param_->get_op()->get_eval_ctx());
           sql::ObEvalInfo &eval_info = expr->get_eval_info(
               access_param_->get_op()->get_eval_ctx());
-          // Strings borrow the column parameter or row LOB arena. Numeric,
-          // decimal and extend payloads are copied into the expression frame,
-          // preserving its writable-buffer contract.
-          ObDatum source = def_cell.datum_;
-          if (ObDatum::get_sql_value_datum_map_type(def_cell.get_type()) == OBJ_DATUM_STRING
+          // Scalars are imported inline; references keep their column/LOB
+          // owner. Any wrapper materialized in scratch is copied to the
+          // expression's result owner before this scope ends.
+          ObDatum source;
+          alignas(8) char source_scratch[64];
+          if (OB_FAIL(def_cell.export_legacy(source, source_scratch, sizeof(source_scratch)))) {
+          } else if (ObDatum::get_sql_value_datum_map_type(def_cell.get_type()) == OBJ_DATUM_STRING
               && !def_cell.is_null()) {
             // The LOB header contract lives in meta. Match the former string
             // mapping's OUTROW flag without inheriting SQL-only Datum flags.
@@ -1194,8 +1196,11 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
             if (def_cell.get_meta().is_outrow()) { source.set_outrow(); }
           }
           common::Datum native_source;
-          if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(source, native_source))) {
-          } else { datum = native_source; }
+          if (OB_SUCC(ret) && OB_FAIL(expr->get_datum_copy_plan().import_legacy(source, native_source))) {
+          } else if (OB_SUCC(ret) && native_source.is_present() && native_source.length() > 0
+                     && native_source.get_reference() == source_scratch) {
+            ret = expr->deep_copy_datum(access_param_->get_op()->get_eval_ctx(), native_source);
+          } else if (OB_SUCC(ret)) { datum = native_source; }
           if (OB_SUCC(ret) && is_lob_storage(def_cell.get_type()) &&
               OB_FAIL(sql::ob_adjust_lob_datum(
                   access_param_->get_op()->get_eval_ctx().exec_ctx_,

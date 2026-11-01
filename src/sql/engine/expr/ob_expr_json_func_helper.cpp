@@ -427,16 +427,20 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
       alignas(8) char source_scratch[64];
       common::ObDatum legacy_source;
       OZ(default_expr.get_datum_copy_plan().legacy_view(src_datum, legacy_source, source_scratch, sizeof(source_scratch)));
-      DatumValue source(legacy_source, default_expr.obj_meta_);
+      DatumValue source;
+      OZ(source.assign_legacy_borrowed(legacy_source, default_expr.obj_meta_));
       DatumValue converted;
+      alignas(8) char converted_scratch[64];
+      common::ObDatum converted_view;
       Datum accuracy_checked;
       int warning = OB_SUCCESS;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(DatumValueCaster::to_type(obj_type, cast_ctx, source, allocator, converted))) {
+      } else if (OB_FAIL(converted.export_legacy(converted_view, converted_scratch, sizeof(converted_scratch)))) {
       } else if (FALSE_IT(get_accuracy_from_expr(expr, out_acc))) {
       } else if (OB_FAIL(datum_accuracy_check_legacy_input(expr, def_cm, ctx, out_acc,
                                                expr.obj_meta_.has_lob_header(),
-                                               converted.datum_, accuracy_checked, warning))) {
+                                               converted_view, accuracy_checked, warning))) {
         if (!xt_need_acc_check && ob_is_varchar_or_char(obj_type, cs_type)
             && ret == OB_ERR_DATA_TOO_LONG) {
           ObLengthSemantics ls = LS_CHAR;
@@ -465,11 +469,14 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
         common::ObDatum checked_view;
         if (OB_FAIL(expr.get_datum_copy_plan().legacy_view(accuracy_checked, checked_view,
             checked_scratch, sizeof(checked_scratch)))) {
-        } else if (FALSE_IT(padded.set_datum(checked_view))) {
+        } else if (OB_FAIL(padded.assign_legacy_borrowed(checked_view, expr.obj_meta_))) {
         } else if (OB_FAIL(ObSPIService::spi_pad_char_or_varchar(session, obj_type, out_acc,
                                                           &allocator, &padded))) {
         } else {
-          ret = expr.get_datum_copy_plan().import_legacy(padded.datum_, accuracy_checked);
+          alignas(8) char padded_scratch[64];
+          common::ObDatum padded_view;
+          if (OB_FAIL(padded.export_legacy(padded_view, padded_scratch, sizeof(padded_scratch)))) {
+          } else { ret = expr.get_datum_copy_plan().import_legacy(padded_view, accuracy_checked); }
         }
       }
 

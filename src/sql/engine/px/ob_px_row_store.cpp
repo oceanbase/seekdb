@@ -49,7 +49,7 @@ OB_DEF_SERIALIZE(ObPxNewRow)
   } else if (OB_LIKELY(NULL != row_)) {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_->get_count(); ++idx) {
       const DatumValue &cell = row_->get_cell(idx);
-      if (OB_FAIL(DatumParameterCodec::encode_value(cell.datum_, cell.meta_, buf, buf_len, pos))) {
+      if (OB_FAIL(DatumParameterCodec::encode_native_value(cell.datum_, cell.meta_, buf, buf_len, pos))) {
       }
     }
   }
@@ -64,7 +64,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxNewRow)
     for (int64_t idx = 0; idx < row_->get_count(); ++idx) {
       const DatumValue &cell = row_->get_cell(idx);
       int64_t bytes = 0;
-      if (DatumParameterCodec::value_size(cell.datum_, cell.meta_, bytes) != OB_SUCCESS) { return 0; }
+      if (DatumParameterCodec::native_value_size(cell.datum_, cell.meta_, bytes) != OB_SUCCESS) { return 0; }
       len += bytes;
     }
   }

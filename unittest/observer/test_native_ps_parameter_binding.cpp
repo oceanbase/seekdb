@@ -68,21 +68,11 @@ struct NativePsParameterBindingTestAccess
     handler.analysis_checker_ = ObPSAnalysisChecker();
     return ret;
   }
-  static bool active(const ObMPStmtExecute &handler)
-  { return handler.native_parameter_owner_ != nullptr; }
-  static const Datum *values(const ObMPStmtExecute &handler)
-  { return active(handler) ? handler.native_parameter_owner_->values_ : nullptr; }
-  static const SqlType *type(const ObMPStmtExecute &handler)
-  { return active(handler) ? handler.native_parameter_owner_->type_ : nullptr; }
-  static int64_t count(const ObMPStmtExecute &handler)
-  { return active(handler) ? handler.native_parameter_owner_->count_ : 0; }
-  static int64_t owner_bytes(int64_t count)
-  { return sizeof(ObMPStmtExecute::NativeParameterOwner) + count * sizeof(Datum); }
   static void poison_values(ObMPStmtExecute &handler)
   {
-    if (active(handler)) {
-      for (int64_t i = 0; i < handler.native_parameter_owner_->count_; ++i) {
-        handler.native_parameter_owner_->values_[i].set_int(INT64_C(0x5a5a5a5a5a5a5a5a));
+    if (handler.params_ != nullptr) {
+      for (int64_t i = 0; i < handler.params_->count(); ++i) {
+        handler.params_->at(i).get_datum().set_int(INT64_C(0x5a5a5a5a5a5a5a5a));
       }
     }
   }
@@ -119,6 +109,7 @@ public:
     return count;
   }
   void fail_size(int64_t size) { fail_size_ = size; }
+  int64_t first_allocation_size() const { return attempts_.empty() ? 0 : attempts_.front(); }
 private:
   ObArenaAllocator arena_;
   int64_t fail_size_;
@@ -187,7 +178,9 @@ void same_parameter(const DatumParameter &expected, const DatumParameter &actual
   EXPECT_EQ(expected.get_param_flag().extend_flag_, actual.get_param_flag().extend_flag_);
   EXPECT_EQ(expected.get_raw_text_pos(), actual.get_raw_text_pos());
   EXPECT_EQ(expected.get_raw_text_len(), actual.get_raw_text_len());
-  EXPECT_EQ(expected.datum_.pack_, actual.datum_.pack_);
+  EXPECT_EQ(expected.get_datum().state(), actual.get_datum().state());
+  EXPECT_EQ(expected.get_datum().length(), actual.get_datum().length());
+  EXPECT_EQ(expected.get_datum().reference_flags(), actual.get_datum().reference_flags());
   EXPECT_EQ(expected.get_int(), actual.get_int());
 }
 
@@ -195,7 +188,7 @@ class NativePsParameterBinding : public testing::Test
 {
 protected:
   NativePsParameterBinding()
-    : metadata_("PsBindMeta"), descriptors_("PsBindDesc"), request_(),
+    : metadata_("PsBindMeta"), descriptors_(), request_(),
       params_(ObWrapperAllocator(descriptors_)), session_(),
       handler_(ObGlobalContext::get_instance()), stmt_id_(0), info_(nullptr), prepared_(false) {}
 
@@ -245,37 +238,23 @@ protected:
   }
   void native_values(const std::vector<int64_t> &expected)
   {
-    ASSERT_TRUE(Access::active(handler_));
-    ASSERT_EQ(expected.size(), static_cast<size_t>(Access::count(handler_)));
-    const Datum *values = Access::values(handler_);
-    ASSERT_NE(nullptr, values);
-    ASSERT_NE(nullptr, Access::type(handler_));
-    EXPECT_EQ(ObIntType, Access::type(handler_)->kind());
-    EXPECT_EQ(20, Access::type(handler_)->precision());
-    EXPECT_EQ(0, Access::type(handler_)->scale());
-    EXPECT_EQ(CS_LEVEL_COERCIBLE, Access::type(handler_)->legacy_meta().get_collation_level());
-    EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(values) % alignof(Datum));
+    ASSERT_EQ(expected.size(), static_cast<size_t>(params_.count()));
     for (size_t i = 0; i < expected.size(); ++i) {
       SCOPED_TRACE(i);
-      ASSERT_TRUE(values[i].is_present());
-      EXPECT_EQ(0u, values[i].length());
-      EXPECT_EQ(Datum::NoReferenceFlags, values[i].reference_flags());
-      EXPECT_EQ(expected[i], values[i].get_int());
-      EXPECT_EQ(expected[i], params_.at(i).get_int());
-      EXPECT_EQ(ObIntType, params_.at(i).get_type());
-      EXPECT_EQ(CS_LEVEL_COERCIBLE, params_.at(i).get_collation_level());
-      EXPECT_EQ(CS_TYPE_BINARY, params_.at(i).get_collation_type());
-      EXPECT_EQ(sizeof(int64_t), params_.at(i).datum_.len_);
-      EXPECT_EQ(ObDatumDesc::NONE, params_.at(i).datum_.flag_);
-      const uintptr_t slot = reinterpret_cast<uintptr_t>(&values[i]);
-      const uintptr_t payload = reinterpret_cast<uintptr_t>(params_.at(i).datum_.ptr_);
-      EXPECT_GE(payload, slot);
-      EXPECT_LE(payload + sizeof(int64_t), slot + sizeof(Datum));
+      const DatumParameter &parameter = params_.at(i);
+      const Datum &value = parameter.get_datum();
+      ASSERT_TRUE(value.is_present());
+      EXPECT_EQ(0u, value.length()); EXPECT_EQ(Datum::NoReferenceFlags, value.reference_flags());
+      EXPECT_EQ(0u, reinterpret_cast<uintptr_t>(&value) % alignof(Datum));
+      EXPECT_EQ(expected[i], value.get_int()); EXPECT_EQ(expected[i], parameter.get_int());
+      EXPECT_EQ(ObIntType, parameter.get_type()); EXPECT_EQ(20, parameter.get_precision());
+      EXPECT_EQ(0, parameter.get_scale()); EXPECT_EQ(CS_LEVEL_COERCIBLE, parameter.get_collation_level());
+      EXPECT_EQ(CS_TYPE_BINARY, parameter.get_collation_type());
     }
   }
 
   ObArenaAllocator metadata_;
-  ObArenaAllocator descriptors_;
+  RequestAllocator descriptors_;
   RequestAllocator request_;
   ParamStore params_;
   ObSQLSessionInfo session_;
@@ -291,13 +270,12 @@ TEST_F(NativePsParameterBinding, one_parameter_rebinds_extremes_with_cached_wire
   ASSERT_NO_FATAL_FAILURE(prepare(1));
   ASSERT_NO_FATAL_FAILURE(successful({integer(INT64_MIN)}));
   ASSERT_NO_FATAL_FAILURE(native_values({INT64_MIN}));
-  const SqlType *type = Access::type(handler_);
-  const Datum *old_values = Access::values(handler_);
+  const Datum old_value = params_.at(0).get_datum();
+  const SqlTypeMeta type = params_.at(0).get_param_meta();
   ASSERT_NO_FATAL_FAILURE(successful({integer(INT64_MAX)}, false));
   ASSERT_NO_FATAL_FAILURE(native_values({INT64_MAX}));
-  EXPECT_EQ(type, Access::type(handler_));
-  EXPECT_NE(old_values, Access::values(handler_));
-  EXPECT_EQ(INT64_MIN, old_values[0].get_int());
+  EXPECT_EQ(type, params_.at(0).get_param_meta());
+  EXPECT_EQ(INT64_MIN, old_value.get_int());
   ASSERT_NO_FATAL_FAILURE(successful({integer(0)}, false));
   ASSERT_NO_FATAL_FAILURE(native_values({0}));
   EXPECT_EQ(0, request_.calls_for(sizeof(int64_t)));
@@ -307,18 +285,17 @@ TEST_F(NativePsParameterBinding, three_parameters_preserve_metadata_and_remove_s
 {
   ASSERT_NO_FATAL_FAILURE(prepare(3));
   const std::vector<WireParam> input = {integer(INT64_MIN, 0x40), integer(-7), integer(INT64_MAX)};
-  Access::cursor(handler_, true); // Same real binder, original allocating branch.
+  Access::cursor(handler_, true); // Same real NIO parser and metadata path.
   ASSERT_NO_FATAL_FAILURE(successful(input));
-  ASSERT_FALSE(Access::active(handler_));
-  EXPECT_EQ(3, request_.calls_for(sizeof(int64_t)));
+  EXPECT_EQ(0, request_.calls_for(sizeof(int64_t)));
   std::vector<DatumParameter> legacy;
   for (int64_t i = 0; i < params_.count(); ++i) { legacy.push_back(params_.at(i)); }
   Access::cursor(handler_, false);
-  const int64_t before_owner = request_.calls_for(Access::owner_bytes(3));
+  request_.fail_size(sizeof(int64_t)); // Inline I64 needs no payload allocation.
   ASSERT_NO_FATAL_FAILURE(successful(input));
   ASSERT_NO_FATAL_FAILURE(native_values({INT64_MIN, -7, INT64_MAX}));
-  EXPECT_EQ(3, request_.calls_for(sizeof(int64_t)));
-  EXPECT_EQ(before_owner + 1, request_.calls_for(Access::owner_bytes(3)));
+  EXPECT_EQ(0, request_.calls_for(sizeof(int64_t)));
+  request_.fail_size(0);
   for (int64_t i = 0; i < params_.count(); ++i) { same_parameter(legacy[i], params_.at(i)); }
   EXPECT_EQ(0x40, info_->get_param_type_flags().at(0));
   EXPECT_EQ(MYSQL_TYPE_LONGLONG, info_->get_param_types().at(0));
@@ -335,7 +312,6 @@ TEST_F(NativePsParameterBinding, many_parameters_use_one_stable_owner)
   }
   ASSERT_NO_FATAL_FAILURE(successful(input));
   ASSERT_NO_FATAL_FAILURE(native_values(expected));
-  EXPECT_EQ(1, request_.calls_for(Access::owner_bytes(65)));
   EXPECT_EQ(0, request_.calls_for(sizeof(int64_t)));
   EXPECT_EQ(65, info_->get_param_types().count());
 }
@@ -355,29 +331,23 @@ TEST_F(NativePsParameterBinding, same_statement_changes_types_and_null_then_retu
     ASSERT_NO_FATAL_FAILURE(successful({integer(7)}));
     ASSERT_NO_FATAL_FAILURE(native_values({7}));
     ASSERT_NO_FATAL_FAILURE(successful({integer32(1)}));
-    EXPECT_FALSE(Access::active(handler_));
     EXPECT_EQ(ObInt32Type, params_.at(0).get_type());
     EXPECT_EQ(1, params_.at(0).get_int());
     ASSERT_NO_FATAL_FAILURE(successful({integer(-1, 0x80)}));
-    EXPECT_FALSE(Access::active(handler_));
     EXPECT_EQ(ObUInt64Type, params_.at(0).get_type());
     EXPECT_EQ(UINT64_MAX, params_.at(0).get_uint64());
     ASSERT_NO_FATAL_FAILURE(successful({bytes(MYSQL_TYPE_VAR_STRING, "7")}));
-    EXPECT_FALSE(Access::active(handler_));
     EXPECT_EQ(ObVarcharType, params_.at(0).get_type());
     EXPECT_EQ(ObString("7"), params_.at(0).get_string());
     ASSERT_NO_FATAL_FAILURE(successful({floating(1.0)}));
-    EXPECT_FALSE(Access::active(handler_));
     EXPECT_EQ(ObDoubleType, params_.at(0).get_type());
     EXPECT_EQ(1.0, params_.at(0).get_double());
     ASSERT_NO_FATAL_FAILURE(successful({bytes(MYSQL_TYPE_NEWDECIMAL, "7.00")}));
-    EXPECT_FALSE(Access::active(handler_));
     EXPECT_EQ(ObNumberType, params_.at(0).get_type());
     int64_t decimal = 0;
     ASSERT_TRUE(params_.at(0).get_number().is_valid_int64(decimal));
     EXPECT_EQ(7, decimal);
     ASSERT_NO_FATAL_FAILURE(successful({{MYSQL_TYPE_LONGLONG, 0, true, std::string()}}));
-    EXPECT_FALSE(Access::active(handler_));
     EXPECT_TRUE(params_.at(0).is_null());
     EXPECT_EQ(ObNullType, params_.at(0).get_type());
     EXPECT_EQ(MYSQL_TYPE_LONGLONG, info_->get_param_types().at(0));
@@ -390,17 +360,14 @@ TEST_F(NativePsParameterBinding, last_mixed_or_null_parameter_uses_the_complete_
 {
   ASSERT_NO_FATAL_FAILURE(prepare(3));
   ASSERT_NO_FATAL_FAILURE(successful({integer(1), integer(2), integer(3)}));
-  ASSERT_TRUE(Access::active(handler_));
   const int64_t before = request_.calls_for(sizeof(int64_t));
   ASSERT_NO_FATAL_FAILURE(successful({integer(7), integer(8), integer32(9)}));
-  EXPECT_FALSE(Access::active(handler_));
-  EXPECT_EQ(before + 3, request_.calls_for(sizeof(int64_t)));
+  EXPECT_EQ(before, request_.calls_for(sizeof(int64_t)));
   EXPECT_EQ(7, params_.at(0).get_int());
   EXPECT_EQ(9, params_.at(2).get_int());
   ASSERT_NO_FATAL_FAILURE(successful({integer(10), integer(11),
       {MYSQL_TYPE_LONGLONG, 0, true, std::string()}}));
-  EXPECT_FALSE(Access::active(handler_));
-  EXPECT_EQ(before + 5, request_.calls_for(sizeof(int64_t)));
+  EXPECT_EQ(before, request_.calls_for(sizeof(int64_t)));
   EXPECT_TRUE(params_.at(2).is_null());
   ASSERT_NO_FATAL_FAILURE(successful({integer(12), integer(13), integer(14)}, false));
   ASSERT_NO_FATAL_FAILURE(native_values({12, 13, 14}));
@@ -412,18 +379,19 @@ TEST_F(NativePsParameterBinding, cursor_pl_and_array_modes_cannot_admit_a_native
   const std::vector<WireParam> input = {integer(99)};
   Access::cursor(handler_, true);
   ASSERT_NO_FATAL_FAILURE(successful(input));
-  EXPECT_FALSE(Access::active(handler_));
+  ASSERT_NO_FATAL_FAILURE(native_values({99}));
   Access::cursor(handler_, false);
   Access::array(handler_, true);
   ASSERT_NO_FATAL_FAILURE(successful(input));
-  EXPECT_FALSE(Access::active(handler_));
+  ASSERT_NO_FATAL_FAILURE(native_values({99}));
   Access::array(handler_, false);
   for (const auto type : {stmt::T_CALL_PROCEDURE, stmt::T_ANONYMOUS_BLOCK}) {
     Access::statement(handler_, type);
     ASSERT_NO_FATAL_FAILURE(successful(input));
-    EXPECT_FALSE(Access::active(handler_));
+    ASSERT_NO_FATAL_FAILURE(native_values({99}));
   }
-  // These are entry-gate tests, not outer PL/array request-parser execution.
+  // These are real standard-parser mode checks, not outer PL/array execution.
+  // No request mode now creates a second sidecar value array.
   Access::statement(handler_, stmt::T_SELECT);
   ASSERT_NO_FATAL_FAILURE(successful(input));
   ASSERT_NO_FATAL_FAILURE(native_values({99}));
@@ -438,7 +406,6 @@ TEST_F(NativePsParameterBinding, truncated_packet_does_not_publish_owner_or_new_
   bool handled = false;
   EXPECT_EQ(OB_ERR_MALFORMED_PS_PACKET, bind(tail, handled));
   EXPECT_TRUE(handled);
-  EXPECT_FALSE(Access::active(handler_));
   for (int64_t i = 0; i < 3; ++i) {
     EXPECT_EQ(MYSQL_TYPE_LONGLONG, info_->get_param_types().at(i));
     EXPECT_EQ(0, info_->get_param_type_flags().at(i));
@@ -451,17 +418,32 @@ TEST_F(NativePsParameterBinding, owner_allocation_failure_leaves_cached_input_ty
 {
   ASSERT_NO_FATAL_FAILURE(prepare(3));
   ASSERT_NO_FATAL_FAILURE(successful({integer32(1), integer32(2), integer32(3)}));
-  request_.fail_size(Access::owner_bytes(3));
+  // Measure the real descriptor allocation used by this ParamStore. The
+  // removed sidecar/header size is not an allocation or a failure seam.
+  const int64_t descriptor_bytes = descriptors_.first_allocation_size();
+  ASSERT_GT(descriptor_bytes, 0);
+  params_.destroy(); descriptors_.fail_size(descriptor_bytes);
+  const int64_t before = descriptors_.calls_for(descriptor_bytes);
   bool handled = false;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, bind(packet({integer(7), integer(8), integer(9)}), handled));
+  EXPECT_TRUE(handled); EXPECT_EQ(before + 1, descriptors_.calls_for(descriptor_bytes));
+  for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(MYSQL_TYPE_LONG, info_->get_param_types().at(i)); }
+  descriptors_.fail_size(0);
+  ASSERT_NO_FATAL_FAILURE(successful({integer32(11), integer32(12), integer32(13)}, false));
+  EXPECT_EQ(13, params_.at(2).get_int());
+  // A real reference payload still allocates in the request owner. Its
+  // failure must not publish new cached types after decoding the prefix.
+  const std::string payload("reference\0oom", 13);
+  request_.fail_size(payload.size());
+  const int64_t payload_before = request_.calls_for(payload.size());
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, bind(packet({integer32(21), integer32(22),
+      bytes(MYSQL_TYPE_BLOB, payload)}), handled));
   EXPECT_TRUE(handled);
-  EXPECT_FALSE(Access::active(handler_));
-  EXPECT_EQ(1, request_.calls_for(Access::owner_bytes(3)));
+  EXPECT_EQ(payload_before + 1, request_.calls_for(payload.size()));
   for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(MYSQL_TYPE_LONG, info_->get_param_types().at(i)); }
   request_.fail_size(0);
-  ASSERT_NO_FATAL_FAILURE(successful({integer32(11), integer32(12), integer32(13)}, false));
-  EXPECT_FALSE(Access::active(handler_));
-  EXPECT_EQ(13, params_.at(2).get_int());
+  ASSERT_NO_FATAL_FAILURE(successful({integer32(31), integer32(32), integer32(33)}, false));
+  EXPECT_EQ(33, params_.at(2).get_int());
 }
 
 TEST_F(NativePsParameterBinding, cache_update_failure_does_not_publish_a_prepared_owner)
@@ -476,8 +458,6 @@ TEST_F(NativePsParameterBinding, cache_update_failure_does_not_publish_a_prepare
   EXPECT_EQ(OB_EER_UNKNOWN_STMT_HANDLER, Access::bind(handler_, session_, detached,
       packet({integer(1), integer(2), integer(3)}), request_, handled));
   EXPECT_TRUE(handled);
-  EXPECT_FALSE(Access::active(handler_));
-  EXPECT_EQ(1, request_.calls_for(Access::owner_bytes(3)));
   EXPECT_EQ(3, params_.count()); // Binding completed before the real map update failed.
   for (int64_t i = 0; i < 3; ++i) { EXPECT_EQ(MYSQL_TYPE_NULL, detached.get_param_types().at(i)); }
 }
@@ -489,7 +469,6 @@ TEST_F(NativePsParameterBinding, unsupported_extension_keeps_dispatch_to_the_old
   bool handled = true;
   EXPECT_EQ(OB_SUCCESS, bind(packet({{MYSQL_TYPE_COMPLEX, 0, false, std::string()}}), handled));
   EXPECT_FALSE(handled);
-  EXPECT_FALSE(Access::active(handler_));
   EXPECT_EQ(MYSQL_TYPE_LONGLONG, info_->get_param_types().at(0));
 }
 
@@ -506,7 +485,6 @@ TEST_F(NativePsParameterBinding, real_long_data_materialization_keeps_the_old_pa
   ASSERT_EQ(OB_SUCCESS, cache->add_piece_buffer(piece, ObLastPiece, &payload));
   // LongData consumes the cache, not a length/value in this execute packet.
   ASSERT_NO_FATAL_FAILURE(successful({{MYSQL_TYPE_VAR_STRING, 0, false, std::string()}}));
-  EXPECT_FALSE(Access::active(handler_));
   EXPECT_EQ(ObVarcharType, params_.at(0).get_type());
   EXPECT_EQ(payload, params_.at(0).get_string());
   ASSERT_EQ(OB_SUCCESS, cache->close_all(session_));
@@ -520,7 +498,6 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
   ASSERT_NO_FATAL_FAILURE(prepare(3));
   const int64_t expected[] = {INT64_MIN, 7, INT64_MAX};
   ASSERT_NO_FATAL_FAILURE(successful({integer(expected[0]), integer(expected[1]), integer(expected[2])}));
-  ASSERT_TRUE(Access::active(handler_));
   ObArenaAllocator execution_arena("PsExecOwner");
   ObSqlCtx sql_ctx;
   sql_ctx.exec_type_ = MpQuery;
@@ -536,7 +513,7 @@ TEST_F(NativePsParameterBinding, execution_clone_and_questionmark_read_survive_r
   plan.set_original_param_cnt(3);
   ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
   for (int64_t i = 0; i < 3; ++i) {
-    EXPECT_NE(params_.at(i).datum_.ptr_, plan.get_param_store().at(i).datum_.ptr_);
+    EXPECT_NE(&params_.at(i).get_datum(), plan.get_native_parameter(i));
     ASSERT_NE(nullptr, plan.get_native_parameter(i));
     EXPECT_EQ(expected[i], plan.get_native_parameter(i)->get_int());
   }
@@ -588,19 +565,19 @@ TEST_F(NativePsParameterBinding, rebuilding_execution_context_does_not_modify_re
 {
   ASSERT_NO_FATAL_FAILURE(prepare(3));
   ASSERT_NO_FATAL_FAILURE(successful({integer(1), integer(7), integer(-9)}));
-  const Datum *request_values = Access::values(handler_);
+  const Datum request_value = params_.at(0).get_datum();
   for (int attempt = 0; attempt < 2; ++attempt) {
     ObArenaAllocator execution_arena("PsRetryOwner");
     ObPhysicalPlanCtx plan(execution_arena);
     ASSERT_EQ(OB_SUCCESS, plan.assign_parameter_inputs(params_));
     plan.set_original_param_cnt(3);
     ASSERT_EQ(OB_SUCCESS, plan.init_datum_param_store());
-    EXPECT_EQ(1, plan.get_param_store().at(0).get_int());
-    EXPECT_EQ(7, plan.get_param_store().at(1).get_int());
-    DatumParameter replacement = plan.get_param_store().at(0);
-    ASSERT_EQ(OB_SUCCESS, replacement.set_int(1000 + attempt, execution_arena));
-    ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, replacement));
-    EXPECT_EQ(1, request_values[0].get_int());
+    EXPECT_EQ(1, plan.get_native_parameter(0)->get_int());
+    EXPECT_EQ(7, plan.get_native_parameter(1)->get_int());
+    Datum replacement; replacement.set_int(1000 + attempt);
+    ASSERT_EQ(OB_SUCCESS, plan.set_runtime_parameter(0, replacement,
+        *plan.get_native_parameter_type(0), *plan.get_parameter_metadata(0)));
+    EXPECT_EQ(1, request_value.get_int()); EXPECT_EQ(1, params_.at(0).get_int());
   }
   // This exercises real context cloning/destruction, not a forced SQL retry.
   ASSERT_NO_FATAL_FAILURE(native_values({1, 7, -9}));
@@ -610,6 +587,5 @@ TEST_F(NativePsParameterBinding, zero_parameter_execute_preserves_the_existing_e
 {
   ASSERT_NO_FATAL_FAILURE(prepare(0));
   ASSERT_NO_FATAL_FAILURE(successful({}));
-  EXPECT_FALSE(Access::active(handler_));
   EXPECT_EQ(0, params_.count());
 }

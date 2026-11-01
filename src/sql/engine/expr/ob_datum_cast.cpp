@@ -12862,22 +12862,18 @@ int bind_caster_type(ObExpr &expr, ObEvalCtx &ctx, const SqlTypeMeta &meta,
   return ret;
 }
 
-// DatumParameter remains a legacy value/metadata boundary. Materialize that
-// representation in a temporary owner, then use its existing resource-aware
-// cloner for the single snapshot which escapes the reusable native frame.
+// Cross the prepared semantic layout to a synchronous physical view, then
+// use the existing resource-aware parameter cloner for the one snapshot
+// escaping the reusable native frame. Inline scalar wrappers own no bytes.
 int clone_caster_result(const ObExpr &expr, const Datum &value, DatumParameter &metadata,
                         ObIAllocator &owner, DatumParameter &result)
 {
   int ret = OB_SUCCESS;
   const DatumCopyPlan plan = expr.get_datum_copy_plan();
-  int64_t bytes = 0;
-  int64_t position = 0;
-  ObArenaAllocator temporary("CastLegacyOut");
-  char *buffer = nullptr;
-  if (OB_FAIL(plan.legacy_payload_size(value, bytes))) {
-  } else if (bytes > 0 && (buffer = static_cast<char *>(temporary.alloc(bytes))) == nullptr) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(plan.export_legacy(value, metadata.datum_, buffer, bytes, position))) {
+  alignas(8) char scratch[64];
+  common::ObDatum physical;
+  if (OB_FAIL(plan.legacy_view(value, physical, scratch, sizeof(scratch)))) {
+  } else if (OB_FAIL(metadata.assign_legacy_borrowed(physical, metadata.get_meta()))) {
   } else {
     if (value.is_null()) { metadata.set_null(); }
     ret = clone_datum_parameter(metadata, result, owner);
@@ -12988,15 +12984,18 @@ int ObDatumCaster::to_column(const DatumParameter &source, const ObExprResType &
       || is_invalid_sql_value_type(type.get_type()) || type.is_ext()) {
     return OB_INVALID_ARGUMENT;
   }
+  alignas(8) char source_scratch[64];
+  common::ObDatum physical_source;
+  if (OB_FAIL(source.export_legacy(physical_source, source_scratch, sizeof(source_scratch)))) { return ret; }
   const SqlValueDatumMapType mapping = common::ObDatum::get_sql_value_datum_map_type(source.get_type());
   if (!source.is_null()) {
     const bool fixed = mapping != OBJ_DATUM_STRING && mapping != OBJ_DATUM_NUMBER
         && mapping != OBJ_DATUM_DECIMALINT && mapping != OBJ_DATUM_NULL;
-    if ((source.datum_.ptr_ == nullptr && source.datum_.len_ != 0)
-        || (mapping == OBJ_DATUM_NUMBER && (source.datum_.ptr_ == nullptr
-            || source.datum_.len_ < sizeof(number::ObNumber::Desc)))
-        || (fixed && (source.datum_.ptr_ == nullptr
-            || source.datum_.len_ != common::ObDatum::get_reserved_size(mapping, source.get_precision())))) {
+    if ((physical_source.ptr_ == nullptr && physical_source.len_ != 0)
+        || (mapping == OBJ_DATUM_NUMBER && (physical_source.ptr_ == nullptr
+            || physical_source.len_ < sizeof(number::ObNumber::Desc)))
+        || (fixed && (physical_source.ptr_ == nullptr
+            || physical_source.len_ != common::ObDatum::get_reserved_size(mapping, source.get_precision())))) {
       return OB_INVALID_ARGUMENT;
     }
   }
@@ -13028,7 +13027,7 @@ int ObDatumCaster::to_column(const DatumParameter &source, const ObExprResType &
   if (source.get_meta().is_numeric_type() || source.get_meta().is_temporal_type()) {
     input_expr_->datum_meta_.scale_ = source.get_meta().get_scale();
   }
-  OZ (input_expr_->get_datum_copy_plan().import_legacy(source.datum_, input_expr_->locate_expr_datum(*eval_ctx_)));
+  OZ (input_expr_->get_datum_copy_plan().import_legacy(physical_source, input_expr_->locate_expr_datum(*eval_ctx_)));
   if (OB_SUCC(ret)) { input_expr_->get_eval_info(*eval_ctx_).evaluated_ = true; }
   OZ (set_type(*column_expr_, type.get_sql_type_meta(), type.get_accuracy(), type_infos));
   mode |= CM_COLUMN_CONVERT;
@@ -13209,8 +13208,11 @@ int ObDatumCaster::check_accuracy_and_collation(const DatumParameter &source,
     OZ (bind_caster_type(*column_expr_, *eval_ctx_, candidate.get_meta(), accuracy,
                         candidate.get_meta().get_subschema_id()));
     Datum &checked = column_expr_->locate_datum_for_write(*eval_ctx_);
+    alignas(8) char accuracy_scratch[64];
+    common::ObDatum accuracy_input;
+    OZ (candidate.export_legacy(accuracy_input, accuracy_scratch, sizeof(accuracy_scratch)));
     OZ (datum_accuracy_check_legacy_input(*column_expr_, mode, *eval_ctx_, accuracy,
-                             candidate.has_lob_header(), candidate.datum_, checked, local_warning));
+                             candidate.has_lob_header(), accuracy_input, checked, local_warning));
     if (OB_SUCC(ret)) {
       candidate.set_accuracy(accuracy);
       if (checked.is_null()) {
@@ -13816,9 +13818,8 @@ int get_datum_zero_value(const SqlValueType expect_type,
     if (OB_ISNULL(buffer)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      candidate.datum_.ptr_ = buffer;
-      candidate.datum_.set_otimestamp_tiny(ObOTimestampData());
-      candidate.meta_.set_otimestamp_type(expect_type);
+      ret = candidate.datum_.set_otimestamp_tiny(ObOTimestampData(), buffer, sizeof(ObOTimestampTinyData));
+      if (OB_SUCC(ret)) { candidate.meta_.set_otimestamp_type(expect_type); }
     }
   } else if (expect_type == ObJsonType) {
     static const ObJsonZeroVal JSON_ZERO;
@@ -13827,8 +13828,7 @@ int get_datum_zero_value(const SqlValueType expect_type,
     candidate.meta_.set_json();
     candidate.meta_.set_has_lob_header();
   } else if (expect_type == ObDecimalIntType) {
-    candidate.datum_.set_none();
-    candidate.datum_.set_decimal_int_shallow(nullptr, 0);
+    ret = candidate.datum_.set_reference(nullptr, 0);
     candidate.meta_.set_decimal_int(0);
   } else if (ob_is_mysql_date_tc(expect_type)) {
     ret = candidate.set_mysql_date(ObTimeConverter::MYSQL_ZERO_DATE, allocator);

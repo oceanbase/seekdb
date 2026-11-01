@@ -91,19 +91,20 @@ TEST(EnumSetDatum, failed_native_enum_set_text_does_not_publish) {
   ASSERT_EQ(OB_SUCCESS, labels.push_back(ObString::make_string("one")));
   DatumParameter value, output;
   ASSERT_EQ(OB_SUCCESS, output.set_int(42, owner));
-  const char *previous = output.datum_.ptr_;
+  const Datum previous = output.datum_;
   ASSERT_EQ(OB_SUCCESS, value.set_uint64(2, arena));
   value.get_meta().set_type(ObEnumType);
   EXPECT_EQ(OB_ERR_DATA_TRUNCATED, enumset_str::to_varchar(value, labels, owner, output));
   value.get_meta().set_type(ObSetType);
   EXPECT_EQ(OB_ERR_DATA_TRUNCATED, enumset_str::to_varchar(value, labels, owner, output));
-  value.datum_.len_ = 1;
+  const char malformed_ordinal = 0;
+  ASSERT_EQ(OB_SUCCESS, value.datum_.set_reference(&malformed_ordinal, 1));
   EXPECT_EQ(OB_INVALID_ARGUMENT, enumset_str::to_varchar(value, labels, owner, output));
   ASSERT_EQ(OB_SUCCESS, value.set_uint64(1, arena));
   value.get_meta().set_type(ObEnumType);
   owner.reject_ = true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, enumset_str::to_varchar(value, labels, owner, output));
-  EXPECT_EQ(42, output.get_int()); EXPECT_EQ(previous, output.datum_.ptr_);
+  EXPECT_EQ(42, output.get_int()); EXPECT_EQ(0, MEMCMP(&previous, &output.datum_, sizeof(previous)));
 }
 
 TEST(EnumSetDatum, long_labels_do_not_require_sql_expression_or_lob) {

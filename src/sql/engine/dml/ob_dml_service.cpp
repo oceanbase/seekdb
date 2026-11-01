@@ -171,7 +171,10 @@ int ObDMLService::check_column_null(
                                                                 zero_value))) {
       } else if (!is_decimal_int) {
         Datum native_zero;
-        if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(zero_value.datum_, native_zero))) {
+        alignas(8) char zero_scratch[64];
+        ObDatum zero_view;
+        if (OB_FAIL(zero_value.export_legacy(zero_view, zero_scratch, sizeof(zero_scratch)))) {
+        } else if (OB_FAIL(expr->get_datum_copy_plan().import_legacy(zero_view, native_zero))) {
         } else {
           // Number/timestamp and other reference results must outlive the
           // scratch above; strings padded in Expr memory are safe to recopy.

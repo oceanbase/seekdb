@@ -172,19 +172,33 @@ int ObUserDefinedType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, 
 
 namespace {
 void *pl_descriptor(DatumValue &value)
-{ return const_cast<char *>(value.datum_.ptr_); }
+{ return const_cast<void *>(value.get_datum().get_reference()); }
 void release_non_pl_value(DatumValue &value, ObIAllocator &allocator)
 {
   DatumParameter view; view.assign_value(value);
   DatumParameterArray::release_owned(view, allocator);
 }
 void *pl_descriptor(DatumParameter &value)
-{ return const_cast<char *>(value.datum_.ptr_); }
+{ return const_cast<void *>(value.get_datum().get_reference()); }
 void release_non_pl_value(DatumParameter &value, ObIAllocator &allocator)
 {
   // Destruction clears the value, not its declaration/accuracy/runtime flags.
   DatumParameter owned = value;
   DatumParameterArray::release_owned(owned, allocator);
+}
+
+// Every caller owns this already allocated canonical 15-byte PL carrier.
+// Pointee identity and its existing allocator/registration policy stay intact;
+// only the physical descriptor address/size bytes are updated in place.
+template <typename Value>
+int rewrite_owned_pl_descriptor(Value &value, int64_t address, uint8_t subtype, int32_t size)
+{
+  Datum &carrier = value.datum_;
+  if (!carrier.has_ext_value() || carrier.length() != DATUM_EXTEND_PAYLOAD_SIZE) {
+    return OB_INVALID_ARGUMENT;
+  }
+  return carrier.set_extend(address, subtype, size,
+      const_cast<void *>(carrier.get_reference()), carrier.length());
 }
 
 template <typename Value>
@@ -258,11 +272,11 @@ int ObUserDefinedType::deep_copy_obj(ObIAllocator &allocator,
     // old record-copy path reused this object rather than replacing it.
     if (OB_SUCC(ret) && copy != nullptr) {
       if (copy != source) {
-        CK (dst.datum_.is_native_extend());
+        CK (dst.datum_.has_ext_value() && dst.datum_.length() == DATUM_EXTEND_PAYLOAD_SIZE);
         OZ (SMART_CALL(ObPLComposite::deep_copy(*source, copy, allocator,
             nullptr, nullptr, nullptr, nullptr, need_new_allocator, ignore_del_element)));
         if (OB_SUCC(ret)) {
-          dst.datum_.set_extend(reinterpret_cast<int64_t>(copy), subtype, src.get_val_len());
+          OZ (rewrite_owned_pl_descriptor(dst, reinterpret_cast<int64_t>(copy), subtype, src.get_val_len()));
           SqlTypeMeta meta = dst.get_meta(); meta.set_ext(); meta.set_extend_type(subtype);
           dst.set_type_meta(meta);
         }
@@ -275,7 +289,7 @@ int ObUserDefinedType::deep_copy_obj(ObIAllocator &allocator,
     OZ (SMART_CALL(ObPLComposite::deep_copy(*source, copy, allocator,
         nullptr, nullptr, nullptr, nullptr, need_new_allocator, ignore_del_element)));
     if (OB_SUCC(ret)) {
-      owned.datum_.set_extend(reinterpret_cast<int64_t>(copy), subtype, src.get_val_len());
+      OZ (rewrite_owned_pl_descriptor(owned, reinterpret_cast<int64_t>(copy), subtype, src.get_val_len()));
     } else {
       DatumParameterArray::release_owned(owned, allocator);
     }
@@ -499,11 +513,12 @@ int destruct_composite_with_parent_allocator(ObPLComposite *composite,
   if (OB_SUCC(ret)) {
     DatumValue view;
     char payload[DATUM_EXTEND_PAYLOAD_SIZE];
-    view.datum_.ptr_ = payload;
-    view.datum_.set_extend(reinterpret_cast<int64_t>(composite), composite->get_type(),
-                           composite->get_init_size());
-    view.meta_.set_ext();
-    view.meta_.set_extend_type(composite->get_type());
+    ObDatum physical;
+    physical.ptr_ = payload;
+    physical.set_extend(reinterpret_cast<int64_t>(composite), composite->get_type(),
+                        composite->get_init_size());
+    SqlTypeMeta meta; meta.set_ext(); meta.set_extend_type(composite->get_type());
+    OZ (view.assign_legacy_borrowed(physical, meta));
     OZ (ObUserDefinedType::destruct_obj(view, session));
     if (OB_SUCC(ret)) {
       OX (parent_allocator->free(pl_allocator));
@@ -933,7 +948,7 @@ int ObRecordType::init_session_var(const ObPLResolveCtx &resolve_ctx,
       obj_allocator.free(data);
       DatumParameterArray::release_owned(obj, obj_allocator);
     } else {
-      obj.datum_.set_extend(reinterpret_cast<int64_t>(data), type_, init_size);
+      OZ (rewrite_owned_pl_descriptor(obj, reinterpret_cast<int64_t>(data), type_, init_size));
       for (int64_t i = 0; OB_SUCC(ret) && i < get_member_count(); ++i) {
         const ObRecordMember* record_member = get_record_member(i);
         const ObPLDataType* member_type = get_record_member_type(i);
@@ -1044,8 +1059,8 @@ int ObRecordType::init_obj(ObSchemaGetterGuard &schema_guard,
     OZ (record->init_data(allocator, true));
   }
   if (OB_SUCC(ret)) {
-    owned.datum_.set_extend(reinterpret_cast<int64_t>(record), type_, init_size);
-    obj = owned;
+    OZ (rewrite_owned_pl_descriptor(owned, reinterpret_cast<int64_t>(record), type_, init_size));
+    OX (obj = owned);
   } else {
     if (record != nullptr) { allocator.free(record); }
     DatumParameter descriptor; descriptor.assign_value(owned);
@@ -1097,10 +1112,12 @@ int ObRecordType::convert(ObPLResolveCtx &ctx, DatumValue *&src, DatumValue *&ds
       OZ (descriptor.set_extend(0, get_type(), ctx.allocator_, get_init_size(get_member_count())));
       OZ (newx(ctx.allocator_, &ctx, ptr));
       if (OB_SUCC(ret)) {
-        descriptor.datum_.set_extend(ptr, get_type(), get_init_size(get_member_count()));
-        *dst = descriptor;
+        OZ (rewrite_owned_pl_descriptor(descriptor, ptr, get_type(), get_init_size(get_member_count())));
+        OX (*dst = descriptor);
       } else {
-        ctx.allocator_.free(const_cast<char *>(descriptor.datum_.ptr_));
+        if (descriptor.datum_.has_ext_value()) {
+          ctx.allocator_.free(const_cast<void *>(descriptor.datum_.get_reference()));
+        }
       }
     }
     CK (src->is_pl_extend() && ObPLType::PL_RECORD_TYPE == src->get_meta().get_extend_type());
