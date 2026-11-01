@@ -27,6 +27,66 @@ namespace oceanbase
 namespace storage
 {
 
+namespace
+{
+// The built-in list is immutable ASCII. For ASCII letters under UTF8MB4,
+// GENERAL_CI equivalence is exactly case folding. All other input retains
+// the charset-aware lookup below, including accented letters and padding.
+struct AsciiStopWords
+{
+  static constexpr int64_t CAPACITY = 128;
+  uint64_t keys_[CAPACITY] = {};
+  bool valid_ = true;
+
+  static bool encode(const ObString &text, uint64_t &key)
+  {
+    key = 0;
+    bool ascii = text.length() > 0 && text.length() <= 8;
+    for (int64_t i = 0; ascii && i < text.length(); ++i) {
+      const unsigned char ch = static_cast<unsigned char>(text.ptr()[i]);
+      const unsigned char folded = ch >= 'A' && ch <= 'Z' ? ch + ('a' - 'A') : ch;
+      if (folded < 'a' || folded > 'z') {
+        ascii = false;
+      } else {
+        key |= static_cast<uint64_t>(folded) << (8 * i);
+      }
+    }
+    return ascii;
+  }
+
+  static uint64_t slot(const uint64_t key)
+  {
+    return (key ^ (key >> 17) ^ (key >> 33)) & (CAPACITY - 1);
+  }
+
+  AsciiStopWords()
+  {
+    static_assert(ARRAYSIZEOF(ob_stop_word_list) < CAPACITY, "stopword table needs an empty slot");
+    for (int64_t i = 0; valid_ && i < ARRAYSIZEOF(ob_stop_word_list); ++i) {
+      uint64_t key = 0;
+      valid_ = encode(ObString::make_string(ob_stop_word_list[i]), key);
+      if (valid_) {
+        uint64_t pos = slot(key);
+        while (keys_[pos] != 0 && keys_[pos] != key) { pos = (pos + 1) & (CAPACITY - 1); }
+        keys_[pos] = key;
+      }
+    }
+  }
+
+  bool lookup(const ObString &text, bool &found) const
+  {
+    uint64_t key = 0;
+    const bool supported = valid_ && encode(text, key);
+    if (supported) {
+      uint64_t pos = slot(key);
+      while (keys_[pos] != 0 && keys_[pos] != key) { pos = (pos + 1) & (CAPACITY - 1); }
+      found = keys_[pos] == key;
+    }
+    return supported;
+  }
+};
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 // class ObStopWordChecker
 ObStopWordChecker::~ObStopWordChecker()
@@ -75,6 +135,11 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
 {
   int ret = OB_SUCCESS;
   auto lookup = [&](const ObString &text) {
+    static const AsciiStopWords ascii_stopwords;
+    bool found = false;
+    if (ascii_stopwords.lookup(text, found)) {
+      return found ? OB_HASH_EXIST : OB_HASH_NOT_EXIST;
+    }
     ObFTWord converted(text.length(), text.ptr(), stopword_type_);
     return stopword_set_.exist_refactored(converted);
   };
@@ -206,17 +271,14 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
     if (OB_FAIL(word_map_.set_refactored(word, 1/*word count*/))) {
     }
   } else {
-    // Update repeated terms in place instead of hashing twice and allocating
-    // a replacement node. Preserve the original last-spelling-wins behavior
-    // for collation-equivalent terms (for example, cafe and café).
+    // One bucket lookup handles both new and repeated terms. Preserve the
+    // original last-spelling-wins behavior for collation-equivalent terms
+    // (for example, cafe and café), and the initial count of one.
     auto update = [&](auto &entry) {
       entry.first = word;
       entry.second += word_freq;
     };
-    if (OB_FAIL(word_map_.atomic_refactored(word, update)) && OB_HASH_NOT_EXIST != ret) {
-    } else if (OB_HASH_NOT_EXIST == ret) {
-      ret = word_map_.set_refactored(word, 1/*same initial count as before*/);
-    }
+    ret = word_map_.set_or_update(word, 1/*same initial count as before*/, update);
   }
   return ret;
 }
