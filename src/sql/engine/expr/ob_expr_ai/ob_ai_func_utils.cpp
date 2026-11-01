@@ -1601,6 +1601,45 @@ bool ObAIFuncPromptObjectUtils::is_valid_prompt_object(ObJsonObject *prompt_obje
   return is_valid;
 }
 
+namespace {
+
+// Parses a "{<digits>}" placeholder that starts at tpl[pos].
+// Returns true and fills end_pos (position of the closing brace) and index when the
+// placeholder is well formed, otherwise the '{' has to be treated as a literal char.
+bool parse_prompt_placeholder(const char *tpl,
+                              const int64_t len,
+                              const int64_t pos,
+                              int64_t &end_pos,
+                              int64_t &index)
+{
+  bool bret = false;
+  end_pos = -1;
+  index = 0;
+  if (OB_ISNULL(tpl) || pos < 0 || pos >= len || '{' != tpl[pos]) {
+  } else {
+    int64_t i = pos + 1;
+    bool has_digit = false;
+    bool too_large = false;
+    int64_t value = 0;
+    for (; i < len && tpl[i] >= '0' && tpl[i] <= '9'; i++) {
+      has_digit = true;
+      if (value > 100000000) {
+        too_large = true;
+      } else {
+        value = value * 10 + (tpl[i] - '0');
+      }
+    }
+    if (has_digit && !too_large && i < len && '}' == tpl[i]) {
+      end_pos = i;
+      index = value;
+      bret = true;
+    }
+  }
+  return bret;
+}
+
+} // end of anonymous namespace
+
 int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &allocator, ObJsonObject* prompt_object, ObString& replaced_prompt_str)
 {
   INIT_SUCC(ret);
@@ -1616,16 +1655,50 @@ int ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(ObIAllocator &al
     ret = OB_INVALID_ARGUMENT;
   } else {
     uint64_t args_count = args_array->element_count();
-    int64_t max_result_len = template_str.length();
+    int64_t max_result_len = 0;
     char *result_buf = NULL;
     for (uint64_t i = 0; OB_SUCC(ret) && i < args_count; i++) {
       ObJsonNode *arg_node = args_array->get_value(i);
       if (OB_NOT_NULL(arg_node) && arg_node->json_type() == ObJsonNodeType::J_STRING) {
-        ObJsonString *arg_str = static_cast<ObJsonString *>(arg_node);
-        max_result_len += arg_str->get_str().length();
       } else {
         ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: argument must be string");
       }
+    }
+    // Walk the template once to size the result buffer. A placeholder that is used
+    // more than once (for example "{0} and {0}") has to reserve room for every
+    // occurrence, otherwise a valid template would fail with OB_BUF_NOT_ENOUGH.
+    {
+      const char *size_tpl_ptr = template_str.ptr();
+      const int64_t size_tpl_len = template_str.length();
+      for (int64_t i = 0; OB_SUCC(ret) && i < size_tpl_len; i++) {
+        int64_t placeholder_end = -1;
+        int64_t placeholder_index = 0;
+        if ('{' == size_tpl_ptr[i] &&
+            parse_prompt_placeholder(size_tpl_ptr, size_tpl_len, i, placeholder_end, placeholder_index)) {
+          if (static_cast<uint64_t>(placeholder_index) < args_count) {
+            ObJsonString *arg_str = static_cast<ObJsonString *>(
+                args_array->get_value(static_cast<uint64_t>(placeholder_index)));
+            if (OB_ISNULL(arg_str)) {
+              ret = OB_INVALID_ARGUMENT;
+            } else {
+              max_result_len += arg_str->get_str().length();
+              i = placeholder_end;
+            }
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_prompt: invalid placeholder index");
+          }
+        } else {
+          max_result_len += 1;
+        }
+      }
+    }
+    // A template that consists of a single empty placeholder (for example "{0}"
+    // with an empty argument) sizes the buffer to 0, and a zero sized allocation
+    // is not guaranteed to return a valid pointer, so reserve at least one byte.
+    if (OB_SUCC(ret) && max_result_len <= 0) {
+      max_result_len = 1;
     }
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(result_buf = static_cast<char *>(allocator.alloc(max_result_len)))) {
