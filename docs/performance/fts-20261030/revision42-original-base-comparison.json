@@ -1,0 +1,10 @@
+{
+  "official_score": null,
+  "comparison": "Single sequential fresh original-binary/candidate comparison; not ABBA",
+  "reductions": {
+    "build": 0.6154874254795366,
+    "tokenize": 0.06655257023663624,
+    "query": 0.721609580050329
+  },
+  "mean_category_reduction": 0.4678831919221673
+}

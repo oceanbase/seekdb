@@ -31,3 +31,11 @@ Fresh instances ran revision41/revision42/revision42/revision41, with two CPUs, 
 Category reductions: build **45.9482%**, tokenization **1.7977%**, query **-6.3288%**. Overall additional local reduction: **13.8057%**. All query hit counts remained 8001/11000/7332/20. SELECT 1 improved 0.5450% and is not scored. Negative results have not been omitted.
 
 These are local comparisons, not an official score or proof of full marks. They cannot be added to the user's previous points. Official baseline/report inconsistencies remain unresolved; benchmark SQL, data, timing, scoring and baseline files are unchanged.
+
+## Original-binary comparison
+
+A separate sequential fresh-instance run of the unchanged original binary and revision42 used the same complete benchmark parameters and resource limits. Build improved 61.5487%, tokenization 6.6553%, and query 72.1610%; the three-category mean was **46.7883%**, below the 50% target. This single pair is not ABBA and does not establish an official score. Its original reports and `revision42-original-base-comparison.json` are retained.
+
+## Rejected follow-up
+
+Revision43 tried a bounded thread-local dictionary bucket hint with live-entry validation. Although all 16 fresh regressions passed, the complete fresh revision42/revision43/revision43/revision42 comparison showed build -7.2401%, tokenize +0.3999%, query -11.5063%, and overall **-6.1155%**. Its code was reverted. The raw reports and manifest are retained as rejected experiment evidence and are not the released source manifest.

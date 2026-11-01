@@ -1,0 +1,182 @@
+[
+  {
+    "path": "src/data_plane/api/data_plane/fts/ob_fts_struct.h",
+    "sha256": "8ec48c3280a0acc26cd46b1928e70cba1b1a076eb64934038b30446bd3dceff4"
+  },
+  {
+    "path": "src/observer/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp",
+    "sha256": "f746479966a9fc7139030dc7b30492daf3c91b39df93d95fe065bdf3a736f1c9"
+  },
+  {
+    "path": "src/rootserver/ddl_task/ob_ddl_common_rs_impl.cpp",
+    "sha256": "bf0e73ca425ee6017d746a3f62ace5b34a0398dcdbbc829b031e26a638d5c377"
+  },
+  {
+    "path": "src/share/ob_ddl_task_executor.cpp",
+    "sha256": "afcb500fe5d9738d0977aaa1268df42e344e3be1ede7f89e3f9283a657e7d5b7"
+  },
+  {
+    "path": "src/share/text_analysis/ob_token_stream.cpp",
+    "sha256": "dcc8dd95750f0e1f5d63991ddbba2e19dbb97ba45ad04a75c90eacf836379c62"
+  },
+  {
+    "path": "src/sql/code_generator/ob_static_engine_cg.cpp",
+    "sha256": "0cfa5368d222414872d4eca8efd565d8b913eda64018d621f4332f09572b9b03"
+  },
+  {
+    "path": "src/sql/code_generator/ob_tsc_cg_service.cpp",
+    "sha256": "75fdacdf16c0938d802628fd59d06baba42d85c3822ba4acea9310eaa22ce589"
+  },
+  {
+    "path": "src/sql/das/iter/ob_das_text_retrieval_merge_iter.cpp",
+    "sha256": "f7e452cb4c20a044b6d00a0547213919b7523b8d152b1f4d18858a724913bf5d"
+  },
+  {
+    "path": "src/sql/das/ob_das_domain_utils.cpp",
+    "sha256": "f17fb314405b8f6aacbf62174585dc1a625e10f797a683c55d4be36270a06d0c"
+  },
+  {
+    "path": "src/sql/das/ob_das_domain_utils.h",
+    "sha256": "4e9c9a479d7515043c20351a745f2aeb720c5a81396d4effdea16e571c6a395e"
+  },
+  {
+    "path": "src/sql/das/ob_das_ir_define.cpp",
+    "sha256": "15d3ed226e4aa5fd9f3ffee6aef650aaaf29a892f6820a8881ebfee068fefca1"
+  },
+  {
+    "path": "src/sql/das/ob_das_ir_define.h",
+    "sha256": "c4947eed73c5f95227dc1eb452d13d42a449dc06fb564923623cab7c6d3db6b3"
+  },
+  {
+    "path": "src/sql/engine/expr/ob_expr_tokenize.cpp",
+    "sha256": "76b1539006dd7f363df2691f0106512c8d8d172d8af34a6f93887ffb5d1324a0"
+  },
+  {
+    "path": "src/sql/engine/table/ob_table_scan_op.cpp",
+    "sha256": "f35ea387e6beacf54c9d7d6dc18ee79085908f6a596e34e0e260c874674e4779"
+  },
+  {
+    "path": "src/sql/engine/table/ob_table_scan_op.h",
+    "sha256": "67add7ecfd29d6c6ded71cef21168a20fa39070a0ed61c37fba42d0d8b38b6db"
+  },
+  {
+    "path": "src/sql/optimizer/ob_join_order.cpp",
+    "sha256": "6f9b14b2d65943fe70564cad070489add216c87cc4e47049a8351a556a53e1dc"
+  },
+  {
+    "path": "src/sql/optimizer/ob_log_plan.cpp",
+    "sha256": "ed1ac2540b64871ea43ba67f94792bc3dc8b61f0dccfb3782d1f138b4f5791a8"
+  },
+  {
+    "path": "src/sql/rewrite/ob_transform_simplify_orderby.cpp",
+    "sha256": "38dfc3049691f2b275122abc69f3500132ba0fdca780ef03ec935913c716ded1"
+  },
+  {
+    "path": "src/sql/rewrite/ob_transform_utils.cpp",
+    "sha256": "64ad5188215d2f36a40bfab3121794b71a065533378aa057e9552e39725794e6"
+  },
+  {
+    "path": "src/sql/rewrite/ob_transform_utils.h",
+    "sha256": "c64573b6d07e0d6ee33ca6eafa584eae48c4129ce686e79d414853b368704b45"
+  },
+  {
+    "path": "src/sql/rewrite/ob_transformer_impl.cpp",
+    "sha256": "04e708be271a54e75208210bc07bfd30565fa687eeb07258bbe1edd179663b80"
+  },
+  {
+    "path": "src/storage/blocksstable/encoding/ob_string_diff_decoder.cpp",
+    "sha256": "deeb220f959783661ef0f55381f289f807b9b1ea938a8b97cdf46c2361851d96"
+  },
+  {
+    "path": "src/storage/fts/dict/ob_ft_dat_dict.cpp",
+    "sha256": "1b0b020aca6c41b485bd3d485a250155b7f0f99d3ef50fc59aa11c83d89980b3"
+  },
+  {
+    "path": "src/storage/fts/dict/ob_ft_dict_def.cpp",
+    "sha256": "7c39dde9b294dff16e710ea652dacbf2b99f67418422e8ac16ea1e689c71b580"
+  },
+  {
+    "path": "src/storage/fts/dict/ob_ft_dict_hub.cpp",
+    "sha256": "f7a1c2bc98cefcc140d8692330ffecca1b1f13fa256b9da357fd87f73c36eed1"
+  },
+  {
+    "path": "src/storage/fts/dict/ob_ft_dict_hub.h",
+    "sha256": "2023b46c0cbd8dc3f99ce6735c7d0d3433325397b692add67d597a71111cd759"
+  },
+  {
+    "path": "src/storage/fts/dict/ob_ft_range_dict.cpp",
+    "sha256": "cb3f314b7b925ade48c6111c09d02d9b45160ddea23dab086e443b7dfbd58a31"
+  },
+  {
+    "path": "src/storage/fts/dict/ob_gen_dic_loader.cpp",
+    "sha256": "a233a8abf24b5d840a0a4448117a3f52f038b4d50fe39d4c67bf42210c518188"
+  },
+  {
+    "path": "src/storage/fts/ik/ob_ik_char_util.h",
+    "sha256": "f6e73373975a6f73a3ed872c38ca9f623fdebc06513d896bbe0689376066392b"
+  },
+  {
+    "path": "src/storage/fts/ik/ob_ik_processor.cpp",
+    "sha256": "46e67025db8dbf6f73dfdefeba96045587bf3d19e8a3a66d47476d96c42f4879"
+  },
+  {
+    "path": "src/storage/fts/ik/ob_ik_processor.h",
+    "sha256": "f3c4d6d1f092a325d56af433907edb1959d7f578b330f42956a51724bc5e2a1a"
+  },
+  {
+    "path": "src/storage/fts/ob_beng_ft_parser.cpp",
+    "sha256": "2f3b962c1faa576e2c125468ba6a42481dbcf40ff0d2c2a3a3ecccb93b73bf99"
+  },
+  {
+    "path": "src/storage/fts/ob_fts_parser_property.cpp",
+    "sha256": "bcedae26b47ce108fd1c18891337d7ac30d151f9965682707931fc55c3c4c1b7"
+  },
+  {
+    "path": "src/storage/fts/ob_fts_stop_word.cpp",
+    "sha256": "a991af89a8e8c29e1e39f3acf3c894a3ceb8f5182720cd9976a88e654b7d7e44"
+  },
+  {
+    "path": "src/storage/fts/ob_fts_struct.cpp",
+    "sha256": "ec6a58b69524b759301dd950f08ce91d08d2f153f8be941e06d86e42db3a263e"
+  },
+  {
+    "path": "src/storage/fts/ob_ik_ft_parser.cpp",
+    "sha256": "af3bcb69fb32a0e4627b7ae8d0f9ccbdc7574aa4183a35c10d13fd8025b5f5ae"
+  },
+  {
+    "path": "src/storage/fts/ob_ik_ft_parser.h",
+    "sha256": "f0d8d329b209bdc3fa1aa0ac048fef11e13470ec147243ccce8ad878fe46fa8a"
+  },
+  {
+    "path": "src/storage/ob_order_perserving_encoder.cpp",
+    "sha256": "edcc8b69f5cbe6221f402a104beff4c46f299a6b2decb02c6649e2ba33e63249"
+  },
+  {
+    "path": "src/storage/retrieval/ob_i_sparse_retrieval_iter.h",
+    "sha256": "ad2fdcfdc6aaa7f14edeb24b44405eb9c8c03b5d81da13129983bec749f22322"
+  },
+  {
+    "path": "src/storage/retrieval/ob_sparse_daat_iter.cpp",
+    "sha256": "ab64039c83e2c656aed356075735860008785724f62829ad98e29c3259f43d51"
+  },
+  {
+    "path": "src/storage/retrieval/ob_sparse_taat_iter.cpp",
+    "sha256": "20f0c1111083187a4c416c454e9a7348e3915e7378e3e8aec89319c3e3782895"
+  },
+  {
+    "path": "src/storage/retrieval/ob_text_daat_iter.cpp",
+    "sha256": "a3b82751c34ae5a49511fbf74553187081bfd83b4dd3fc7e9533418f6fc25055"
+  },
+  {
+    "path": "src/storage/retrieval/ob_text_daat_iter.h",
+    "sha256": "db072a6b81dfa7d8af2400ba368b07d8a69988f51cfb690be76bf78f7aaf87c1"
+  },
+  {
+    "path": "src/storage/retrieval/ob_text_retrieval_token_iter.cpp",
+    "sha256": "4630e6ab5b9b0373afeba0de0799d8be682c053caa92d1d2d120a44fc4dd7d6e"
+  },
+  {
+    "path": "src/storage/retrieval/ob_text_taat_iter.cpp",
+    "sha256": "d6c848a152768990315e681ff3d22ae5acbfca40b27aba83eb9aa3c43fb1981d"
+  }
+]
