@@ -20,6 +20,7 @@ mod bridge;
 pub mod compare;
 mod decimal;
 pub mod path;
+mod search;
 
 pub use binary::{
     BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType,
@@ -27,6 +28,7 @@ pub use binary::{
 pub use compare::{CompareError, CompareResult};
 pub use decimal::Decimal;
 pub use path::{Path, PathError, PathErrorKind, PathStep, Query, QueryOptions};
+pub use search::SearchOptions;
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;

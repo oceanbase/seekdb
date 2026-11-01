@@ -152,6 +152,7 @@ pub mod ffi {
         fn contains_at_path(self: &Query, candidate: &Query, path: &Path) -> BoolResult;
         fn overlaps(self: &Query, other: &Query) -> BoolResult;
         fn member_of(self: &Query, target: &Query) -> BoolResult;
+        fn search(self: &Query, target: &[u8], escape: u32, first_only: bool) -> BinaryResult;
     }
 }
 
@@ -273,6 +274,30 @@ impl Query {
             }
             (Err(error), _) | (_, Err(error)) => Err(*error),
         })
+    }
+
+    fn search(&self, target: &[u8], escape: u32, first_only: bool) -> ffi::BinaryResult {
+        let document = match &self.state {
+            Ok(document) => document,
+            Err((status, byte_offset)) => return failed_binary_result(*status, *byte_offset),
+        };
+        let target = match std::str::from_utf8(target) {
+            Ok(target) => target,
+            Err(error) => {
+                return failed_binary_result(ffi::Status::Syntax, error.valid_up_to() as u64)
+            }
+        };
+        let Some(escape) = char::from_u32(escape) else {
+            return failed_binary_result(ffi::Status::Syntax, 0);
+        };
+        optional_binary_result(document.search(
+            &self.paths,
+            crate::SearchOptions {
+                pattern: target,
+                escape,
+                first_only,
+            },
+        ))
     }
 }
 

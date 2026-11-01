@@ -42,7 +42,7 @@ pub struct Path {
 }
 
 pub struct Query {
-    document: BinaryDocument<Vec<u8>>,
+    pub(crate) document: BinaryDocument<Vec<u8>>,
 }
 
 impl Query {
@@ -193,8 +193,62 @@ impl Path {
         options: QueryOptions,
     ) -> BinaryResult<Vec<BinaryValue<'a>>> {
         let mut matches = Vec::new();
-        evaluate(root, &self.steps, 0, options, &mut matches)?;
+        let mut location = String::new();
+        evaluate(
+            root,
+            &self.steps,
+            0,
+            options,
+            &mut matches,
+            None,
+            &mut location,
+        )?;
         Ok(matches)
+    }
+
+    pub(crate) fn query_located<'a>(
+        &self,
+        root: BinaryValue<'a>,
+        options: QueryOptions,
+    ) -> BinaryResult<Vec<(BinaryValue<'a>, String)>> {
+        let mut matches = Vec::new();
+        let mut locations = Vec::new();
+        let mut location = String::from("$");
+        evaluate(
+            root,
+            &self.steps,
+            0,
+            options,
+            &mut matches,
+            Some(&mut locations),
+            &mut location,
+        )?;
+        Ok(matches.into_iter().zip(locations).collect())
+    }
+
+    pub fn to_mysql_string(&self) -> String {
+        let mut output = String::from("$");
+        for step in &self.steps {
+            match step {
+                PathStep::Member(key) => append_member(&mut output, key, true),
+                PathStep::MemberWildcard => output.push_str(".*"),
+                PathStep::ArrayCell(index) => {
+                    output.push('[');
+                    append_array_index(&mut output, *index);
+                    output.push(']');
+                }
+                PathStep::ArrayRange(first, last) => {
+                    output.push('[');
+                    append_array_index(&mut output, *first);
+                    output.push_str(" to ");
+                    append_array_index(&mut output, *last);
+                    output.push(']');
+                }
+                PathStep::ArrayWildcard => output.push_str("[*]"),
+                PathStep::RecursiveDescent => output.push_str("**"),
+            }
+        }
+        output
     }
 }
 
@@ -204,29 +258,59 @@ fn evaluate<'a>(
     index: usize,
     options: QueryOptions,
     matches: &mut Vec<BinaryValue<'a>>,
+    mut locations: Option<&mut Vec<String>>,
+    location: &mut String,
 ) -> BinaryResult<bool> {
     if index == steps.len() {
         matches.push(value);
+        if let Some(locations) = locations {
+            locations.push(location.clone());
+        }
         return Ok(options.first_only);
     }
     match &steps[index] {
         PathStep::Member(key) => {
             if value.json_type()? == JsonType::Object {
                 if let Some(member) = value.member(key.as_bytes())? {
-                    return evaluate(member, steps, index + 1, options, matches);
+                    let previous_length = location.len();
+                    if locations.is_some() {
+                        append_raw_member(location, key);
+                    }
+                    let result = evaluate(
+                        member,
+                        steps,
+                        index + 1,
+                        options,
+                        matches,
+                        locations,
+                        location,
+                    );
+                    location.truncate(previous_length);
+                    return result;
                 }
             }
         }
         PathStep::MemberWildcard => {
             if value.json_type()? == JsonType::Object {
                 for child_index in 0..value.len()? {
-                    if evaluate(
+                    let previous_length = location.len();
+                    if locations.is_some() {
+                        append_raw_member(
+                            location,
+                            &String::from_utf8_lossy(value.key(child_index)?),
+                        );
+                    }
+                    let result = evaluate(
                         value.value(child_index)?,
                         steps,
                         index + 1,
                         options,
                         matches,
-                    )? {
+                        locations.as_deref_mut(),
+                        location,
+                    );
+                    location.truncate(previous_length);
+                    if result? {
                         return Ok(true);
                     }
                 }
@@ -235,56 +319,104 @@ fn evaluate<'a>(
         PathStep::ArrayCell(cell) => {
             if value.json_type()? == JsonType::Array {
                 if let Some(child_index) = resolve_index(*cell, value.len()?) {
-                    return evaluate(
+                    let previous_length = location.len();
+                    if locations.is_some() {
+                        append_array_location(location, child_index);
+                    }
+                    let result = evaluate(
                         value.value(child_index)?,
                         steps,
                         index + 1,
                         options,
                         matches,
+                        locations,
+                        location,
                     );
+                    location.truncate(previous_length);
+                    return result;
                 }
             } else if options.auto_wrap && resolve_index(*cell, 1).is_some() {
-                return evaluate(value, steps, index + 1, options, matches);
+                return evaluate(
+                    value,
+                    steps,
+                    index + 1,
+                    options,
+                    matches,
+                    locations,
+                    location,
+                );
             }
         }
         PathStep::ArrayRange(first, last) => {
             if value.json_type()? == JsonType::Array {
                 let (begin, end) = resolve_range(*first, *last, value.len()?);
                 for child_index in begin..end {
-                    if evaluate(
+                    let previous_length = location.len();
+                    if locations.is_some() {
+                        append_array_location(location, child_index);
+                    }
+                    let result = evaluate(
                         value.value(child_index)?,
                         steps,
                         index + 1,
                         options,
                         matches,
-                    )? {
+                        locations.as_deref_mut(),
+                        location,
+                    );
+                    location.truncate(previous_length);
+                    if result? {
                         return Ok(true);
                     }
                 }
             } else if options.auto_wrap {
                 let (begin, end) = resolve_range(*first, *last, 1);
                 if begin < end {
-                    return evaluate(value, steps, index + 1, options, matches);
+                    return evaluate(
+                        value,
+                        steps,
+                        index + 1,
+                        options,
+                        matches,
+                        locations,
+                        location,
+                    );
                 }
             }
         }
         PathStep::ArrayWildcard => {
             if value.json_type()? == JsonType::Array {
                 for child_index in 0..value.len()? {
-                    if evaluate(
+                    let previous_length = location.len();
+                    if locations.is_some() {
+                        append_array_location(location, child_index);
+                    }
+                    let result = evaluate(
                         value.value(child_index)?,
                         steps,
                         index + 1,
                         options,
                         matches,
-                    )? {
+                        locations.as_deref_mut(),
+                        location,
+                    );
+                    location.truncate(previous_length);
+                    if result? {
                         return Ok(true);
                     }
                 }
             }
         }
         PathStep::RecursiveDescent => {
-            if evaluate(value, steps, index + 1, options, matches)? {
+            if evaluate(
+                value,
+                steps,
+                index + 1,
+                options,
+                matches,
+                locations.as_deref_mut(),
+                location,
+            )? {
                 return Ok(true);
             }
             let mut stack = Vec::new();
@@ -298,7 +430,15 @@ fn evaluate<'a>(
                 }
                 let child = container.value(*child_index)?;
                 *child_index += 1;
-                if evaluate(child, steps, index + 1, options, matches)? {
+                if evaluate(
+                    child,
+                    steps,
+                    index + 1,
+                    options,
+                    matches,
+                    locations.as_deref_mut(),
+                    location,
+                )? {
                     return Ok(true);
                 }
                 if child.json_type()?.is_container() {
@@ -308,6 +448,91 @@ fn evaluate<'a>(
         }
     }
     Ok(false)
+}
+
+fn append_array_location(output: &mut String, index: u64) {
+    output.push('[');
+    output.push_str(&index.to_string());
+    output.push(']');
+}
+
+fn append_raw_member(output: &mut String, key: &str) {
+    output.push('.');
+    output.push_str(key);
+}
+
+fn append_array_index(output: &mut String, index: ArrayIndex) {
+    if index.from_end {
+        output.push_str("last");
+        if index.value > 0 {
+            output.push('-');
+            output.push_str(&index.value.to_string());
+        }
+    } else {
+        output.push_str(&index.value.to_string());
+    }
+}
+
+pub(crate) fn append_member(output: &mut String, key: &str, quote_empty: bool) {
+    output.push('.');
+    if key.is_empty() && quote_empty {
+        output.push_str("\"\"");
+    } else if is_ecmascript_identifier(key) {
+        output.push_str(key);
+    } else {
+        append_quoted(output, key);
+    }
+}
+
+fn is_ecmascript_identifier(key: &str) -> bool {
+    key.chars().enumerate().all(|(index, character)| {
+        let codepoint = character as u32;
+        character.is_ascii_alphabetic()
+            || (0x2e80..=0x9fff).contains(&codepoint)
+            || matches!(character, '$' | '_')
+            || (index > 0
+                && (character.is_ascii_digit()
+                    || (0x300..=0x36f).contains(&codepoint)
+                    || matches!(
+                        codepoint,
+                        0x203f
+                            | 0x2040
+                            | 0x2054
+                            | 0xfe33
+                            | 0xfe34
+                            | 0xfe4d
+                            | 0xfe4e
+                            | 0xfe4f
+                            | 0xff3f
+                            | 0x200c
+                            | 0x200d
+                    )))
+    })
+}
+
+fn append_quoted(output: &mut String, key: &str) {
+    use std::fmt::Write;
+
+    output.push('"');
+    for character in key.chars() {
+        match character {
+            '\u{08}' => output.push_str("\\b"),
+            '\t' => output.push_str("\\t"),
+            '\n' => output.push_str("\\n"),
+            '\u{0c}' => output.push_str("\\f"),
+            '\r' => output.push_str("\\r"),
+            '"' | '\\' => {
+                output.push('\\');
+                output.push(character);
+            }
+            character if character <= '\u{1f}' => {
+                write!(output, "\\u{:04x}", character as u32)
+                    .expect("writing to String cannot fail");
+            }
+            character => output.push(character),
+        }
+    }
+    output.push('"');
 }
 
 fn resolve_index(index: ArrayIndex, length: u64) -> Option<u64> {

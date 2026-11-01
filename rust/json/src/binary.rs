@@ -664,6 +664,49 @@ pub fn serialize_array(values: &[BinaryValue<'_>]) -> BinaryResult<Vec<u8>> {
     Ok(output)
 }
 
+pub fn serialize_strings(values: &[String]) -> Vec<u8> {
+    fn write(output: &mut Vec<u8>, values: &[String], estimated_size: u64) {
+        let start = output.len();
+        let count_type = var_type(values.len() as u64);
+        let size_type = var_type(estimated_size);
+        let entry_type = size_type;
+        let entry_size = var_size(entry_type);
+        output.push(ARRAY);
+        output.push(entry_type | (count_type << 2) | (size_type << 4) | 0x40);
+        push_var(output, values.len() as u64, count_type);
+        let size_position = output.len();
+        push_var(output, estimated_size, size_type);
+        let value_entries = output.len();
+        output.resize(output.len() + values.len() * (entry_size + 1), 0);
+        for (index, value) in values.iter().enumerate() {
+            let value_offset = (output.len() - start) as u64;
+            let position = value_entries + index * (entry_size + 1);
+            set_var(output, position, value_offset, entry_type);
+            output[position + entry_size] = STRING;
+            write_string(output, value);
+        }
+        let actual_size = (output.len() - start) as u64;
+        if var_type(actual_size) > size_type {
+            output.truncate(start);
+            write(output, values, actual_size)
+        } else {
+            set_var(output, size_position, actual_size, size_type);
+        }
+    }
+
+    if values.len() == 1 {
+        let mut output = Vec::new();
+        write_string(&mut output, &values[0]);
+        output
+    } else {
+        let mut output = vec![0; 8];
+        write(&mut output, values, 0);
+        let header = DOC_HEADER as u64 | ((output.len() as u64) << 22);
+        output[..8].copy_from_slice(&header.to_le_bytes());
+        output
+    }
+}
+
 pub fn serialize_object_keys(value: BinaryValue<'_>) -> BinaryResult<Vec<u8>> {
     fn write(
         output: &mut Vec<u8>,

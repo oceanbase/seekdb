@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::bridge::{ffi, parse as parse_events};
-use crate::{binary, Query};
+use crate::{binary, Query, SearchOptions};
 use crate::{
     parse, parse_binary, validate, BinaryDocument, BinaryErrorKind, Document, DuplicatePolicy,
     ErrorKind, JsonType, Number, ParseOptions, Path, PathErrorKind, PathStep, QueryOptions,
@@ -580,6 +580,109 @@ fn extraction_builds_single_and_array_results_in_rust() {
         .object_keys(Some(&Path::parse_mysql(b"$.a").unwrap()))
         .unwrap()
         .is_none());
+}
+
+fn search_paths(document: &Query, paths: &[Path], pattern: &str, escape: char) -> Vec<String> {
+    let binary = document
+        .search(
+            paths,
+            SearchOptions {
+                pattern,
+                escape,
+                first_only: false,
+            },
+        )
+        .unwrap()
+        .unwrap();
+    let result = BinaryDocument::new(binary).unwrap();
+    let root = result.root().unwrap();
+    if root.json_type().unwrap() == JsonType::Array {
+        (0..root.len().unwrap())
+            .map(|index| {
+                String::from_utf8(root.value(index).unwrap().string_bytes().unwrap().to_vec())
+                    .unwrap()
+            })
+            .collect()
+    } else {
+        vec![String::from_utf8(root.string_bytes().unwrap().to_vec()).unwrap()]
+    }
+}
+
+#[test]
+fn search_builds_ordered_unique_paths_in_rust() {
+    let document = Query::from_text(
+        r#"{"a":"abc","b":["a%c","ab",{"x-y":"abc"}],"雪":"雪"}"#.as_bytes(),
+        ParseOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        search_paths(&document, &[], "a%", '\\'),
+        ["$.a", "$.b[0]", "$.b[1]", "$.b[2].\"x-y\""]
+    );
+    assert_eq!(search_paths(&document, &[], "_", '\\'), ["$.雪"]);
+    assert_eq!(
+        search_paths(
+            &document,
+            &[
+                Path::parse_mysql(b"$").unwrap(),
+                Path::parse_mysql(b"$.a").unwrap()
+            ],
+            "abc",
+            '\\'
+        ),
+        ["$.a", "$.b[2].\"x-y\""]
+    );
+    assert_eq!(
+        search_paths(
+            &document,
+            &[Path::parse_mysql(b"$.b[*]").unwrap()],
+            "abc",
+            '\\'
+        ),
+        ["$.b[2].\"x-y\""]
+    );
+    let first = document
+        .search(
+            &[],
+            SearchOptions {
+                pattern: "a%",
+                escape: '\\',
+                first_only: true,
+            },
+        )
+        .unwrap()
+        .unwrap();
+    let first = BinaryDocument::new(first).unwrap();
+    assert_eq!(first.root().unwrap().string_bytes().unwrap(), b"$.a");
+    assert!(document
+        .search(
+            &[],
+            SearchOptions {
+                pattern: "missing",
+                escape: '\\',
+                first_only: false,
+            },
+        )
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn search_wildcards_preserve_utf8_and_escape_rules() {
+    let document = Query::from_text(
+        "[\"a%c\",\"abc\",\"a_c\",\"a雪c\",\"ac\"]".as_bytes(),
+        ParseOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(search_paths(&document, &[], r"a\%c", '\\'), ["$[0]"]);
+    assert_eq!(
+        search_paths(&document, &[], "a_c", '\\'),
+        ["$[0]", "$[1]", "$[2]", "$[3]"]
+    );
+    assert_eq!(search_paths(&document, &[], r"a\_c", '\\'), ["$[2]"]);
+    assert_eq!(search_paths(&document, &[], "a_c", '_'), ["$[4]"]);
+    assert_eq!(search_paths(&document, &[], "a!%c", '!'), ["$[0]"]);
+    assert_eq!(search_paths(&document, &[], "a%%c", '%'), ["$[0]"]);
 }
 
 #[test]
