@@ -260,6 +260,8 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/basic/chunk_store/ob_compact_block_writer.cpp",
             "src/sql/engine/basic/chunk_store/ob_chunk_block_compressor.cpp",
             "src/sql/engine/basic/ob_values_table_access_op.cpp",
+            "src/sql/engine/file_table/ob_file_table_utils.cpp",
+            "src/sql/engine/file_table/ob_file_scan_reader.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

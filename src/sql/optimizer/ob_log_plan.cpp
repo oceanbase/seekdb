@@ -12251,18 +12251,47 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
     }
   }
   if (OB_SUCC(ret)) {
-    /*
-    if (OB_FAIL(ObTransformUtils::check_need_calc_match_score(get_optimizer_context().get_exec_ctx(),
-                                                              get_stmt(),
-                                                              match_against,
-                                                              need_calc_relevance,
-                                                              constraints))) {
-      LOG_WARN("failed to check need calc relevance", K(ret));
-    } else if (!need_calc_relevance &&
-               OB_FAIL(append_array_no_dup(get_optimizer_context().get_query_ctx()->all_expr_constraints_, constraints))) {
-      LOG_WARN("failed to append array no dup", K(ret));
+    // A scalar aggregate has no relevance ordering to preserve.  If its MATCH
+    // is used only as a boolean filter, BM25 and the aggregate scans needed to
+    // calculate it are unobservable and can be elided.  Check actual expression
+    // usage instead of is_shared_reference(): the latter is also set by
+    // intermediate planner references which do not observe the score.
+    if (NATURAL_LANGUAGE_MODE == match_against->get_mode_flag()
+        && get_stmt()->is_select_stmt()) {
+      const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(get_stmt());
+      bool score_is_observed = false;
+      if (select_stmt->get_aggr_item_size() > 0 && select_stmt->get_group_exprs().empty()) {
+        for (int64_t i = 0; OB_SUCC(ret) && !score_is_observed && i < select_stmt->get_select_item_size(); ++i) {
+          if (OB_FAIL(ObRawExprUtils::find_expr(select_stmt->get_select_item(i).expr_,
+                                                match_against, score_is_observed))) {
+          }
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && !score_is_observed && i < select_stmt->get_aggr_item_size(); ++i) {
+          if (OB_FAIL(ObRawExprUtils::find_expr(select_stmt->get_aggr_item(i),
+                                                match_against, score_is_observed))) {
+          }
+        }
+        for (int64_t i = 0; OB_SUCC(ret) && !score_is_observed && i < select_stmt->get_having_exprs().count(); ++i) {
+          if (OB_FAIL(ObRawExprUtils::find_expr(select_stmt->get_having_exprs().at(i),
+                                                match_against, score_is_observed))) {
+          }
+        }
+        if (OB_SUCC(ret) && !score_is_observed) {
+          const ObIArray<ObRawExpr *> &conditions = select_stmt->get_condition_exprs();
+          for (int64_t i = 0; i < conditions.count(); ++i) {
+            ObRawExpr *condition = conditions.at(i);
+            if (condition == match_against
+                || (OB_NOT_NULL(condition)
+                    && T_OP_BOOL == condition->get_expr_type()
+                    && 1 == condition->get_param_count()
+                    && condition->get_param_expr(0) == match_against)) {
+              need_calc_relevance = false;
+              break;
+            }
+          }
+        }
+      }
     }
-    */
     tr_info.match_expr_ = match_against;
     tr_info.inv_idx_tid_ = inv_idx_tid;
     tr_info.fwd_idx_tid_ = fwd_idx_tid;

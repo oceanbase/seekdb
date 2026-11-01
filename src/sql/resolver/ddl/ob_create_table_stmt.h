@@ -19,6 +19,7 @@
 #include "share/ob_define.h"
 #include "sql/resolver/ddl/ob_table_stmt.h"
 #include "sql/resolver/ob_stmt_resolver.h"
+#include "share/ai_column/ob_ai_column_struct.h"
 #include "sql/resolver/ddl/ob_create_index_stmt.h"
 
 namespace oceanbase
@@ -60,6 +61,7 @@ public:
   int add_view_need_priv(share::schema::ObNeedPriv &need_priv)
   { return view_need_privs_.push_back(need_priv); }
   common::ObSArray<obcall::ObCreateIndexArg> &get_index_arg_list() { return index_arg_list_; }
+  common::ObSArray<share::ObAiColumnMeta> &get_ai_column_metas() { return ai_column_metas_; }
   common::ObSArray<obcall::ObCreateForeignKeyArg> &get_foreign_key_arg_list()
   { return create_table_arg_.foreign_key_arg_list_; }
   const common::ObSArray<obcall::ObCreateForeignKeyArg> &get_read_only_foreign_key_arg_list() const
@@ -84,6 +86,7 @@ private:
   bool is_view_stmt_;
   share::schema::ObStmtNeedPrivs::NeedPrivs view_need_privs_;
   common::ObSArray<obcall::ObCreateIndexArg> index_arg_list_;
+  common::ObSArray<share::ObAiColumnMeta> ai_column_metas_;
   common::ObString masked_sql_;
   //common::ObSEArray<ObRawExpr *, OB_DEFAULT_ARRAY_SIZE, common::ModulePageAllocator, true> partition_fun_expr_; // for range fun expr
   //common::ObSEArray<ObRawExpr *, OB_DEFAULT_ARRAY_SIZE, common::ModulePageAllocator, true> range_values_exprs_; //range partition expr

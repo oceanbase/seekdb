@@ -884,6 +884,24 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
       }
     }
 
+    // an AI column expression must not depend on another AI column
+    if (OB_SUCC(ret) && create_table_stmt->get_ai_column_metas().count() > 0) {
+      const common::ObSArray<share::ObAiColumnMeta> &ai_metas = create_table_stmt->get_ai_column_metas();
+      for (int64_t m = 0; OB_SUCC(ret) && m < ai_metas.count(); ++m) {
+        for (int64_t a = 0; OB_SUCC(ret) && a < ai_metas.at(m).expr_.arg_columns_.count(); ++a) {
+          const common::ObString &dep = ai_metas.at(m).expr_.arg_columns_.at(a);
+          for (int64_t n = 0; OB_SUCC(ret) && n < ai_metas.count(); ++n) {
+            if (0 == dep.case_compare(ai_metas.at(n).column_name_)) {
+              // keep the default OB_NOT_SUPPORTED message expected by the test
+              ret = OB_NOT_SUPPORTED;
+              SQL_RESV_LOG(WARN, "ai column depends on ai column", K(ret), K(dep));
+              break;
+            }
+          }
+        }
+      }
+    }
+
     if (OB_SUCC(ret)) {
       for (int32_t i = resolved_cols_count; i < resolved_cols.count() && OB_SUCC(ret); i++) {
         ObColumnSchemaV2 &hidden_col = resolved_cols.at(i);

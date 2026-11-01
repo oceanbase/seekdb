@@ -71,6 +71,7 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
+      column_names_(alloc),
       external_properties_(alloc)
   {
   }
@@ -90,6 +91,7 @@ public:
   int64_t parallel_;
   int64_t buffer_size_;
   bool is_overwrite_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> column_names_;
   ObExternalFileFormat::StringData external_properties_;
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
@@ -115,6 +117,7 @@ public:
       has_lob_(false),
       has_json_(false),
       has_coll_(false),
+      header_written_(false),
       print_params_(),
       escape_printer_(),
       json_buf_(NULL),
@@ -198,6 +201,7 @@ private:
   int init_env_common();
   int init_csv_env();
   void set_csv_format_options();
+  int write_header_row(ObCsvFileWriter &data_writer);
 
   int get_row_str(const int64_t buf_len, bool is_first_row, char *buf, int64_t &pos);
   int into_dumpfile(ObExternalFileWriter *data_writer);
@@ -280,6 +284,7 @@ private:
   bool has_lob_;
   bool has_json_;
   bool has_coll_;
+  bool header_written_;
   common::ObObjPrintParams print_params_;
   ObEscapePrinter escape_printer_;
   char *json_buf_;  // json needs one more buffer to hold the string before escaping

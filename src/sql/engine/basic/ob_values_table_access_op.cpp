@@ -32,13 +32,50 @@ OB_SERIALIZE_MEMBER_INHERIT(ObValuesTableAccessSpec,
                             value_exprs_,
                             start_param_idx_,
                             end_param_idx_,
-                            obj_params_);
+                            obj_params_,
+                            file_path_,
+                            file_format_,
+                            file_header_,
+                            file_column_names_,
+                            file_column_pruning_);
 
 ObValuesTableAccessOp::ObValuesTableAccessOp(ObExecContext &exec_ctx,
                                              const ObOpSpec &spec,
                                              ObOpInput *input)
   : ObOperator(exec_ctx, spec, input), datum_caster_(), cm_(CM_NONE),
-    row_idx_(0), row_cnt_(0) {}
+    row_idx_(0), row_cnt_(0), file_mode_(false) {}
+
+int ObValuesTableAccessOp::open_file_reader()
+{
+  int ret = OB_SUCCESS;
+  char path_buf[OB_MAX_FILE_NAME_LENGTH];
+  file_schema_.reset();
+  file_reader_.close();
+  ObSEArray<int64_t, 16> projected_columns;
+  if (MY_SPEC.file_path_.empty()
+      || MY_SPEC.file_path_.length() >= static_cast<int64_t>(sizeof(path_buf))
+      || MY_SPEC.file_column_names_.count() != MY_SPEC.column_exprs_.count()
+      || MY_SPEC.file_column_pruning_.count() != MY_SPEC.column_exprs_.count()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    MEMCPY(path_buf, MY_SPEC.file_path_.ptr(), MY_SPEC.file_path_.length());
+    path_buf[MY_SPEC.file_path_.length()] = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.column_exprs_.count(); ++i) {
+      if (OB_FAIL(file_schema_.names_.push_back(MY_SPEC.file_column_names_.at(i)))) {
+      } else if (OB_FAIL(file_schema_.types_.push_back(MY_SPEC.column_exprs_.at(i)->obj_meta_.get_type()))) {
+      } else if (OB_FAIL(file_schema_.null_flags_.push_back(true))) {
+      } else if (0 != MY_SPEC.file_column_pruning_.at(i)
+                 && OB_FAIL(projected_columns.push_back(i))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = file_reader_.open(eval_ctx_.exec_ctx_.get_allocator(), path_buf,
+                              static_cast<ObFileTableFormat>(MY_SPEC.file_format_),
+                              MY_SPEC.file_header_, file_schema_, &projected_columns);
+    }
+  }
+  return ret;
+}
 
 int ObValuesTableAccessOp::inner_open()
 {
@@ -77,6 +114,10 @@ int ObValuesTableAccessOp::inner_open()
       }
     }
   }
+  file_mode_ = !MY_SPEC.file_path_.empty();
+  if (OB_SUCC(ret) && file_mode_) {
+    ret = open_file_reader();
+  }
   return ret;
 }
 
@@ -86,6 +127,9 @@ int ObValuesTableAccessOp::inner_rescan()
   if (OB_FAIL(ObOperator::inner_rescan())) {
   } else {
     row_idx_ = 0;
+    if (file_mode_) {
+      ret = open_file_reader();
+    }
   }
   return ret;
 }
@@ -96,6 +140,9 @@ int ObValuesTableAccessOp::switch_iterator()
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
   } else {
     row_idx_ = 0;
+    if (file_mode_) {
+      ret = open_file_reader();
+    }
   }
   return ret;
 }
@@ -266,9 +313,20 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
   int64_t col_num = MY_SPEC.column_exprs_.count();
   int64_t col_idx = 0;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
-  if (row_idx_ == row_cnt_) {
+  bool file_has_row = false;
+  if (file_mode_) {
+    // Text and JSON values only need to survive until this row is consumed.
+    // Resetting here keeps memory bounded independently of the file size.
+    file_row_allocator_.reset();
+    if (OB_FAIL(file_reader_.next_row(file_row_allocator_, file_row_, file_has_row))) {
+    } else if (!file_has_row) {
+      ret = OB_ITER_END;
+    }
+  } else if (row_idx_ == row_cnt_) {
     ret = OB_ITER_END;
-  } else if (ObValuesTableDef::FOLD_ACCESS_EXPR == MY_SPEC.access_type_ &&
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!file_mode_ && ObValuesTableDef::FOLD_ACCESS_EXPR == MY_SPEC.access_type_ &&
              OB_FAIL(plan_ctx->replace_batch_param_datum(row_idx_,
                                           MY_SPEC.start_param_idx_,
                                           MY_SPEC.end_param_idx_ - MY_SPEC.start_param_idx_ + 1))) {
@@ -298,9 +356,14 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
           break;
         }
         case ObValuesTableDef::ACCESS_OBJ: {
-          int64_t idx = row_idx_ * col_num + col_idx;
-          const ObObj &param = MY_SPEC.obj_params_.at(idx);
-          if (OB_FAIL(calc_datum_from_param(param, col_expr))) {
+          if (file_mode_) {
+            if (OB_FAIL(calc_datum_from_param(file_row_.at(col_idx), col_expr))) {
+            }
+          } else {
+            int64_t idx = row_idx_ * col_num + col_idx;
+            const ObObj &param = MY_SPEC.obj_params_.at(idx);
+            if (OB_FAIL(calc_datum_from_param(param, col_expr))) {
+            }
           }
           break;
         }
@@ -328,6 +391,7 @@ int ObValuesTableAccessOp::inner_close()
 {
   int ret = OB_SUCCESS;
   row_idx_ = 0;
+  file_reader_.close();
   if (OB_FAIL(datum_caster_.destroy())) {
   }
   return ret;

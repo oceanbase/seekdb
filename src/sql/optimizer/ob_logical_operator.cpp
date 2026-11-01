@@ -32,6 +32,7 @@
 #include "ob_log_join_filter.h"
 #include "ob_log_insert.h"
 #include "ob_log_temp_table_access.h"
+#include "ob_log_values_table_access.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
@@ -3030,13 +3031,23 @@ int ObLogicalOperator::project_pruning_pre()
   int ret = OB_SUCCESS;
   // delete exprs who appeared in current op's output_exprs
   // but not used by it's parent's output_exprs_
+  bool skip_values_pruning = false;
+  if (LOG_VALUES_TABLE_ACCESS == type_) {
+    const ObValuesTableDef *table_def =
+        static_cast<ObLogValuesTableAccess *>(this)->get_values_table_def();
+    // Ordinary VALUES keeps its historical output shape. File scans retain the
+    // complete schema separately and can prune output to drive page pruning.
+    skip_values_pruning = OB_ISNULL(table_def) || table_def->file_path_.empty();
+  }
   if (NULL != parent_ && !is_plan_root() &&
-      LOG_EXPR_VALUES != type_ &&
-      LOG_VALUES_TABLE_ACCESS != type_) {
+      LOG_EXPR_VALUES != type_ && !skip_values_pruning) {
     PPDeps deps;
     if (OB_FAIL(parent_->check_output_dependance(get_output_exprs(), deps))) {
     } else {
       do_project_pruning(get_output_exprs(), deps);
+      if (LOG_VALUES_TABLE_ACCESS == type_ && get_output_exprs().empty()
+          && OB_FAIL(static_cast<ObLogValuesTableAccess *>(this)->allocate_dummy_output())) {
+      }
     }
   } else { /* do nothing */ }
 

@@ -64,6 +64,16 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("failed to generate stmt for child stmt");
       } else {
         explain_stmt->set_explain_query_stmt(static_cast<ObDMLStmt *>(child_stmt));
+        // DESCRIBE over file table functions uses the DuckDB-style schema output
+        const ObDMLStmt *child_dml = static_cast<const ObDMLStmt *>(child_stmt);
+        bool all_file_tables = child_dml->get_table_size() > 0;
+        for (int64_t i = 0; all_file_tables && i < child_dml->get_table_size(); ++i) {
+          const TableItem *ti = child_dml->get_table_item(i);
+          all_file_tables = (NULL != ti && ti->is_values_table()
+                             && NULL != ti->values_table_def_
+                             && ti->values_table_def_->is_file_table_);
+        }
+        explain_stmt->set_is_file_describe(all_file_tables);
         ParseNode *format = parse_tree.children_[EXPLAIN_FORMAT];
         if (NULL != format) {
           switch (format->type_) {

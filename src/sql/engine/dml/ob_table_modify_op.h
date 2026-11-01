@@ -192,7 +192,11 @@ class ObTableModifyOp: public ObOperator
 {
 public:
   ObTableModifyOp(ObExecContext &ctx, const ObOpSpec &spec, ObOpInput *input);
-  virtual ~ObTableModifyOp() {}
+  virtual ~ObTableModifyOp();
+  // Opaque per-execution AI column context, explicitly destroyed by this op.
+  void *get_ai_col_ctx() { return ai_col_ctx_; }
+  void set_ai_col_ctx(void *ctx) { ai_col_ctx_ = ctx; }
+  void destroy_ai_col_ctx();
 
   virtual int inner_switch_iterator() override;
 
@@ -217,6 +221,7 @@ public:
 
   virtual void destroy() override
   {
+    destroy_ai_col_ctx();
     dml_rtctx_.cleanup();
     trigger_clear_exprs_.reset();
     fk_checkers_.reset();
@@ -316,6 +321,7 @@ public:
 private:
   ObSQLSessionInfo::StmtSavedValue *saved_session_;
   char saved_session_buf_[sizeof(ObSQLSessionInfo::StmtSavedValue)] __attribute__((aligned (16)));;
+  void *ai_col_ctx_ = nullptr; // per-execution AI column context owned by this op
 
   // used by check_rowkey_whether_distinct
   static const int64_t MIN_ROWKEY_DISTINCT_BUCKET_NUM = 1 * 1024;

@@ -547,6 +547,11 @@ protected:
                                          ObColumnResolveStat &reslove_stat);
   int resolve_srid_node(share::schema::ObColumnSchemaV2 &column,
                         const ParseNode &srid_node);
+  int resolve_ai_column_attribute(share::schema::ObColumnSchemaV2 &column,
+                                  ParseNode &attr_node);
+  int serialize_ai_prompt_expr(ParseNode *expr_node,
+                               common::ObStringBuffer &template_buf,
+                               common::ObIArray<common::ObString> &arg_columns);
   int resolve_column_skip_index(
       const ParseNode &skip_index_node,
       share::schema::ObColumnSchemaV2 &column_schema);

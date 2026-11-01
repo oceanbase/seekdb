@@ -17,8 +17,10 @@
 #ifndef OCEANBASE_SQL_ENGINE_BASIC_OB_VALUES_TABLE_ACCESS_OP_
 #define OCEANBASE_SQL_ENGINE_BASIC_OB_VALUES_TABLE_ACCESS_OP_
 
+#include "lib/allocator/page_arena.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/expr/ob_datum_cast.h"
+#include "sql/engine/file_table/ob_file_table_utils.h"
 
 namespace oceanbase
 {
@@ -32,7 +34,9 @@ class ObValuesTableAccessSpec : public ObOpSpec
 public:
   ObValuesTableAccessSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type)
     : ObOpSpec(alloc, type), access_type_(ObValuesTableDef::ACCESS_EXPR), column_exprs_(alloc),
-      value_exprs_(alloc), start_param_idx_(-1), end_param_idx_(-1), obj_params_(alloc) {}
+      value_exprs_(alloc), start_param_idx_(-1), end_param_idx_(-1), obj_params_(alloc),
+      file_format_(-1), file_header_(true), file_column_names_(alloc),
+      file_column_pruning_(alloc) {}
   INHERIT_TO_STRING_KV("op_spec", ObOpSpec, K_(access_type));
   ObValuesTableDef::TableAccessType access_type_;
   common::ObFixedArray<ObExpr *, common::ObIAllocator> column_exprs_;
@@ -40,6 +44,12 @@ public:
   int64_t start_param_idx_;
   int64_t end_param_idx_;
   common::ObFixedArray<ObObj, common::ObIAllocator> obj_params_;
+  common::ObString file_path_;
+  int64_t file_format_;
+  bool file_header_;
+  common::ObFixedArray<common::ObString, common::ObIAllocator> file_column_names_;
+  // One flag per file column: only explicitly referenced Parquet columns are decoded.
+  common::ObFixedArray<int64_t, common::ObIAllocator> file_column_pruning_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObValuesTableAccessSpec);
 };
@@ -55,6 +65,7 @@ public:
   virtual int inner_close() override;
   virtual void destroy() override { ObOperator::destroy(); }
 private:
+  int open_file_reader();
   int calc_next_row();
   int calc_datum_from_expr(const int64_t col_idx,
                            const int64_t row_idx,
@@ -76,6 +87,11 @@ private:
   common::ObCastMode cm_;
   int64_t row_idx_;
   int64_t row_cnt_;
+  bool file_mode_;
+  ObFileColumnSchema file_schema_;
+  common::ObArenaAllocator file_row_allocator_;
+  common::ObSEArray<common::ObObjParam, 16> file_row_;
+  ObFileScanReader file_reader_;
 };
 
 } // end namespace sql

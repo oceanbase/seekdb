@@ -103,7 +103,8 @@ typedef struct ObJsonTableDef {
 
 struct ObValuesTableDef {
   ObValuesTableDef() : start_param_idx_(-1), end_param_idx_(-1), column_cnt_(0), row_cnt_(0),
-                       access_type_(ACCESS_EXPR), is_const_(false) {}
+                       access_type_(ACCESS_EXPR), is_const_(false), is_file_table_(false),
+                       file_format_(-1), file_header_(true) {}
   enum TableAccessType {
     ACCESS_EXPR = 0,  // expr, one by one
     FOLD_ACCESS_EXPR, // expr, one expr->ObSqlArray
@@ -123,6 +124,11 @@ struct ObValuesTableDef {
   int64_t row_cnt_;
   TableAccessType access_type_;
   bool is_const_; // values table’s outputs are all params.
+  bool is_file_table_; // rows came from a file table function (read_csv/...), enables DESCRIBE
+  common::ObString file_path_;
+  int64_t file_format_;
+  bool file_header_;
+  common::ObArray<common::ObString, common::ModulePageAllocator, true> file_column_names_;
   common::ObArray<ObRawExprResType, common::ModulePageAllocator, true> column_types_;
   virtual TO_STRING_KV(K(column_cnt_), K(row_cnt_), K(access_exprs_), K(start_param_idx_),
                        K(end_param_idx_), K(access_objs_), K(column_ndvs_), K(column_nnvs_),

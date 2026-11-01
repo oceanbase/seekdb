@@ -19,6 +19,7 @@
 #include "ob_table_modify_op.h"
 #include "share/ob_autoincrement_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
+#include "observer/ai_column/ob_ai_column_util.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -633,6 +634,17 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
   GET_SQL_MODE_BIT(IS_NO_BACKSLASH_ESCAPES, ctx_.get_my_session()->get_sql_mode(), obj_print_params_.skip_escape_);
 }
 
+ObTableModifyOp::~ObTableModifyOp()
+{
+  destroy_ai_col_ctx();
+}
+
+void ObTableModifyOp::destroy_ai_col_ctx()
+{
+  delete static_cast<share::ObAiColumnOpCtx *>(ai_col_ctx_);
+  ai_col_ctx_ = nullptr;
+}
+
 int ObTableModifyOp::inner_open()
 {
   int ret = OB_SUCCESS;
@@ -643,6 +655,8 @@ int ObTableModifyOp::inner_open()
   } else if (OB_FAIL(check_need_exec_single_row())) {
   } else {
     init_das_dml_ctx();
+  }
+  if (OB_FAIL(ret)) {
   }
   return ret;
 }
@@ -1061,6 +1075,11 @@ int ObTableModifyOp::submit_all_dml_task()
       dml_modify_rows_.clear();
       dml_rtctx_.reuse();
     }
+  }
+  // AI column task-table writes: nested SQL on the user session is only safe
+  // after the DAS tasks ran, so the hooks collect and flush here
+  if (OB_SUCC(ret) && OB_FAIL(share::ObAiColumnUtil::flush_pending_sqls(*this))) {
+    LOG_WARN("fail to flush ai column task sqls", K(ret));
   }
   return ret;
 }

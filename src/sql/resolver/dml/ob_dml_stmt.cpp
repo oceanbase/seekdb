@@ -4484,6 +4484,17 @@ int ObValuesTableDef::deep_copy(const ObValuesTableDef &other,
     column_cnt_ = other.column_cnt_;
     row_cnt_ = other.row_cnt_;
     is_const_ = other.is_const_;
+    is_file_table_ = other.is_file_table_;
+    file_format_ = other.file_format_;
+    file_header_ = other.file_header_;
+    if (OB_FAIL(ob_write_string(*allocator, other.file_path_, file_path_))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < other.file_column_names_.count(); ++i) {
+      ObString name;
+      if (OB_FAIL(ob_write_string(*allocator, other.file_column_names_.at(i), name))) {
+      } else if (OB_FAIL(file_column_names_.push_back(name))) {
+      }
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < other.access_objs_.count(); ++i) {
       const ObObjParam &obj = other.access_objs_.at(i);
       ObObjParam tmp_obj = obj;

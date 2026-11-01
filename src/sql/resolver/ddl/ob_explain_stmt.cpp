@@ -24,6 +24,7 @@ namespace oceanbase
 namespace sql
 {
 ObExplainStmt::ObExplainStmt() : ObDMLStmt(stmt::T_EXPLAIN),
+    is_file_describe_(false),
                                  format_(EXPLAIN_UNINITIALIZED),
                                  explain_query_stmt_(NULL)
 {
