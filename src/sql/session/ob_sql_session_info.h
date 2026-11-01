@@ -626,6 +626,10 @@ public:
   {
     return inner_flag_;
   }
+  // set while the AI column helper is running its nested maintenance SQL, so
+  // that statement does not trigger the maintenance recursively
+  inline bool is_in_ai_column_maintenance() const { return in_ai_column_maintenance_; }
+  inline void set_in_ai_column_maintenance(const bool flag) { in_ai_column_maintenance_ = flag; }
   void reset_audit_record(bool need_retry = false)
   {
     if (!need_retry) {
@@ -909,6 +913,7 @@ private:
   // in_transaction_ has been merged into trans_flags_.
 //  int64_t has_write_stmt_in_trans_;
   bool inner_flag_; // whether it is a virtual session for an internal request
+  bool in_ai_column_maintenance_ = false;
   // After version 2.2, this variable is no longer used
   bool is_max_availability_mode_;
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsSessionInfo *,

@@ -20,6 +20,7 @@
 
 #include "sql/resolver/ddl/ob_table_stmt.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
+#include "sql/resolver/ddl/ob_ai_column_def.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "common/sql_mode/ob_sql_mode.h"
 #include "lib/hash/ob_placement_hashset.h"
@@ -39,6 +40,8 @@ public:
   int add_index_arg(obcall::ObIndexArg *index_arg);
   int check_drop_fk_arg_exist(obcall::ObDropForeignKeyArg *drop_fk_arg, bool &has_same_fk_arg);
   obcall::ObAlterTableArg& get_alter_table_arg(){ return alter_table_arg_; }
+  common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() { return ai_column_defs_; }
+  const common::ObSEArray<ObAiColumnDef, 4> &get_ai_column_defs() const { return ai_column_defs_; }
   //check duplicate alter of same column in one clause
   bool is_column_modified(const common::ObString &column_name);
   bool is_comment_table() const { return is_comment_table_; }
@@ -105,6 +108,7 @@ public:
   }
   void set_lock_priority();
 private:
+  common::ObSEArray<ObAiColumnDef, 4> ai_column_defs_;
   obcall::ObAlterTableArg alter_table_arg_;
   bool is_comment_table_;
   bool is_alter_system_;
