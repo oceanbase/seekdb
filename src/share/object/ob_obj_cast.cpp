@@ -6446,7 +6446,8 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
     ObJsonOpaque j_opaque(j_text, in.get_type());
     ObJsonString j_string(j_text.ptr(), j_text.length());
     ObJsonNull j_null;
-    ObJsonNode *j_tree = NULL;
+    bool has_raw_bin = false;
+    ObString raw_bin;
     uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
     ObObjType in_type = in.get_type();
     bool is_convert_jstr_type = (in_type == ObTinyTextType
@@ -6468,9 +6469,8 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
       if ((CM_IS_SQL_AS_JSON_SCALAR(cast_mode) && ob_is_string_type(in_type)) && j_text.compare("null") == 0) {
         j_base = &j_null;
       }
-    } else if (OB_FAIL(ObJsonParser::get_tree(params.allocator_v2_, j_text,
-                                              j_tree, parse_flag,
-                                              params.json_max_depth_))) {
+    } else if (OB_FAIL(ObJsonParser::get_binary(params.allocator_v2_, j_text.ptr(), j_text.length(),
+                                                raw_bin, parse_flag, params.json_max_depth_))) {
       if (CM_IS_IMPLICIT_CAST(cast_mode)
                      && !CM_IS_COLUMN_CONVERT(cast_mode)
                      && is_convert_jstr_type) {
@@ -6486,12 +6486,11 @@ static int string_json(const ObObjType expect_type, ObObjCastParams &params,
         }
       }
     } else {
-      j_base = j_tree;
+      has_raw_bin = true;
     }
 
     if (OB_SUCC(ret)) {
-      ObString raw_bin;
-      if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
+      if (!has_raw_bin && OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, params.allocator_v2_))) {
       } else if (OB_FAIL(set_json_bin_res(&params, &out, raw_bin))) {
       } else {
         res_length = out.get_val_len();

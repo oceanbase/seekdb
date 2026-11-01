@@ -194,6 +194,25 @@ int ObJsonParser::get_tree(ObIAllocator *allocator, const char *text,
                          parse_flag, max_depth_config);
 }
 
+int ObJsonParser::get_binary(ObIAllocator *allocator, const char *text,
+                             uint64_t length, ObString &binary,
+                             uint32_t parse_flag, uint32_t max_depth_config)
+{
+  binary.reset();
+  if (OB_ISNULL(allocator) || OB_ISNULL(text) || length == 0) {
+    return OB_ERR_NULL_VALUE;
+  }
+  const uint8_t *input = reinterpret_cast<const uint8_t *>(text);
+  json::BinaryResult result = json::parse_binary(
+      rust::Slice<const uint8_t>(input, length), duplicate_policy(parse_flag),
+      tree_depth_limit(max_depth_config), HAS_FLAG(parse_flag, JSN_SCHEMA_FLAG));
+  if (result.status != json::Status::Ok) {
+    return result.status == json::Status::Depth ? OB_ERR_INVALID_JSON_TEXT
+                                                : status_error(result.status);
+  }
+  return copy_text(allocator, result.binary, binary);
+}
+
 int ObJsonParser::parse_json_text(ObIAllocator *allocator,
                                   const char *text, uint64_t length,
                                   const char *&syntaxerr, uint64_t *offset,

@@ -5618,12 +5618,18 @@ int ObJsonBaseFactory::get_json_base(ObIAllocator *allocator, const char *ptr, u
   } else if (expect_type != ObJsonInType::JSON_TREE && expect_type != ObJsonInType::JSON_BIN) { // check expect_type
     ret = OB_ERR_UNEXPECTED;
   } else if (in_type == ObJsonInType::JSON_TREE) {
-    ObJsonNode *j_tree = NULL;
-    if (OB_FAIL(ObJsonParser::get_tree(t_allocator, ptr, length, j_tree, parse_flag, max_depth_config))) {
-    } else if (expect_type == ObJsonInType::JSON_TREE) {
-      out = j_tree;
+    if (expect_type == ObJsonInType::JSON_TREE) {
+      ObJsonNode *j_tree = NULL;
+      if (OB_FAIL(ObJsonParser::get_tree(t_allocator, ptr, length, j_tree, parse_flag, max_depth_config))) {
+      } else {
+        out = j_tree;
+      }
     } else { // expect json bin
-      if (OB_NOT_NULL(j_bin)) {
+      ObString data;
+      if (OB_FAIL(ObJsonParser::get_binary(allocator, ptr, length, data, parse_flag, max_depth_config))) {
+      } else if (OB_NOT_NULL(j_bin) && OB_NOT_NULL(j_bin->get_update_ctx())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_NOT_NULL(j_bin)) {
       } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObJsonBin)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
@@ -5632,7 +5638,7 @@ int ObJsonBaseFactory::get_json_base(ObIAllocator *allocator, const char *ptr, u
       if (OB_FAIL(ret)) {
       } else {
         OB_ASSERT(j_bin != nullptr && j_bin->is_bin());
-        if (OB_FAIL(j_bin->parse_tree(j_tree))) {
+        if (OB_FAIL(j_bin->reset(data, 0, nullptr))) {
         } else {
           out = j_bin;
         }

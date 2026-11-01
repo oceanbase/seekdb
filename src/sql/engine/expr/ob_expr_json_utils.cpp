@@ -1584,7 +1584,7 @@ int ObJsonUtil::get_json_doc(ObExpr *expr,
     } else if (is_null) {
     } else {
       ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
-      ObJsonInType expect_type = j_in_type;
+      ObJsonInType expect_type = ObJsonInType::JSON_BIN;
       uint32_t parse_flag = 0;
       if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type,
                                                   expect_type, j_base, parse_flag,

@@ -232,10 +232,6 @@ public:
       ObIJsonBase *&j_base);
 
 
-  static int cast_to_json_tree(ObString &text, 
-                               common::ObIAllocator *allocator, 
-                               uint32_t parse_flag = 0,
-                               uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
   /*
   get json value to JsonBase in static_typing_engine
   @param[in]  expr       the input arguments

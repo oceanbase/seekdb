@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_bin.h"
+#include "common/json_type/ob_json_diff.h"
 #include "common/json_type/ob_json_parse.h"
 #include "lib/allocator/page_arena.h"
 #include <gtest/gtest.h>
@@ -137,6 +140,22 @@ TEST_F(TestJsonParser, DepthSchemaAndByteOffsets)
           message, &offset, node));
   EXPECT_EQ(malformed.size() - 1, offset);
   ASSERT_NE(nullptr, message);
+}
+
+TEST_F(TestJsonParser, BinaryConversionRejectsActiveUpdateContext)
+{
+  ObJsonBinUpdateCtx update_ctx(&allocator_);
+  ObJsonBinCtx bin_ctx;
+  bin_ctx.update_ctx_ = &update_ctx;
+  ObJsonBin json_bin(&allocator_, &bin_ctx);
+  ObIJsonBase *result = &json_bin;
+  const std::string text = "{\"a\":1}";
+
+  EXPECT_EQ(OB_ERR_UNEXPECTED,
+      ObJsonBaseFactory::get_json_base(&allocator_, text.data(), text.size(),
+          ObJsonInType::JSON_TREE, ObJsonInType::JSON_BIN, result));
+  EXPECT_EQ(&json_bin, result);
+  EXPECT_EQ(&update_ctx, json_bin.get_update_ctx());
 }
 
 } // namespace common

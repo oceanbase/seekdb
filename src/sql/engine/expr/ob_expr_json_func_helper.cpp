@@ -138,7 +138,7 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
     } else {
       ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
 
-      ObJsonInType expect_type = need_to_tree ? ObJsonInType::JSON_TREE : j_in_type;
+      ObJsonInType expect_type = need_to_tree ? ObJsonInType::JSON_TREE : ObJsonInType::JSON_BIN;
       uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
       ADD_FLAG_IF_NEED(preserve_dup, parse_flag, ObJsonParser::JSN_PRESERVE_DUP_FLAG);
       if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type,
@@ -368,23 +368,6 @@ int ObJsonExprHelper::get_json_val(const common::ObDatum &data,
     }
   }
 
-  return ret;
-}
-
-int ObJsonExprHelper::cast_to_json_tree(ObString &text, common::ObIAllocator *allocator, uint32_t parse_flag, uint32_t max_depth_config)
-{
-  INIT_SUCC(ret);
-  ObJsonNode *j_tree = NULL;
-  if (OB_FAIL(ObJsonParser::get_tree(allocator, text, j_tree, parse_flag, max_depth_config))) {
-  } else {
-    ObJsonBuffer jbuf(allocator);
-    if (OB_FAIL(j_tree->print(jbuf, true, 0, false, 0))) {
-    } else if (jbuf.empty()) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      text.assign_ptr(jbuf.ptr(), jbuf.length());
-    }
-  }
   return ret;
 }
 
@@ -1297,24 +1280,15 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
           uint32_t parse_flag = ObJsonParser::JSN_DEFAULT_FLAG;
           uint32_t json_depth_config = ObJsonExprHelper::get_json_max_depth_config();
           ADD_FLAG_IF_NEED(flags.is_schema_, parse_flag, ObJsonParser::JSN_SCHEMA_FLAG);
-          if(OB_FAIL(ObJsonExprHelper::cast_to_json_tree(j_str, allocator, parse_flag, json_depth_config))) {
+          ObJsonInType to_type = flags.to_bin_ ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
+          if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_TREE,
+                                                      to_type, json_node, parse_flag, json_depth_config))) {
             if (flags.wrap_on_fail_) {
               if (OB_ISNULL(buf = allocator->alloc(sizeof(ObJsonString)))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
               } else {
                 ret = OB_SUCCESS;
                 json_node = (ObJsonString*)new(buf)ObJsonString(j_str.ptr(), j_str.length());
-              }
-            } else {
-            }
-          } else {
-            ObJsonInType to_type = flags.to_bin_ ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
-            if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, ObJsonInType::JSON_TREE,
-                                                        to_type, json_node, parse_flag,
-                                                        ObJsonExprHelper::get_json_max_depth_config()))) {
-              if (flags.is_schema_ && ret == OB_ERR_UNSUPPROTED_REF_IN_JSON_SCHEMA) {
-              } else {
-                ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
               }
             }
           }

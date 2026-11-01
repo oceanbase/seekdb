@@ -20,4 +20,6 @@ Duplicate object keys and JSON Schema behavior are separate from text syntax. Ca
 
 Integer `-0` remains integer zero. Floating-point forms such as `-0.0` and `-0e0` preserve the negative floating-point sign.
 
-Native Rust callers use `json::parse` or `json::validate` with byte slices and `ParseOptions`. Parsing returns an owned `Document`; validation can avoid constructing a document when no duplicate or schema policy requires one. CXX is used only by the C++ compatibility adapter, which receives a complete event stream in one call and constructs the existing `ObJsonNode` representation.
+Native Rust callers use `json::parse`, `json::parse_binary`, or `json::validate` with byte slices and `ParseOptions`. Parsing returns an owned `Document`; binary parsing returns an owned seekdb binary JSON buffer; validation avoids constructing a document when no duplicate or schema policy requires one.
+
+CXX is used only by C++ adapters and transfers each complete document in one call. Callers that need binary JSON use the Rust binary representation directly, without constructing `ObJsonNode` or running a second C++ serializer. Callers that explicitly require a mutable JSON tree still receive a complete event stream and construct `ObJsonNode` in the adapter.

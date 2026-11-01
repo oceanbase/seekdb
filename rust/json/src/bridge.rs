@@ -70,6 +70,13 @@ pub mod ffi {
         events: Vec<Event>,
     }
 
+    struct BinaryResult {
+        status: Status,
+        byte_offset: u64,
+        message: String,
+        binary: Vec<u8>,
+    }
+
     extern "Rust" {
         fn parse(input: &[u8], duplicate: Duplicate, max_depth: u32, schema: bool) -> ParseResult;
         fn validate(
@@ -78,6 +85,12 @@ pub mod ffi {
             max_depth: u32,
             schema: bool,
         ) -> ParseResult;
+        fn parse_binary(
+            input: &[u8],
+            duplicate: Duplicate,
+            max_depth: u32,
+            schema: bool,
+        ) -> BinaryResult;
     }
 }
 
@@ -371,4 +384,36 @@ pub(crate) fn validate(
         schema,
     };
     result(crate::validate(input, options), Vec::new())
+}
+
+pub(crate) fn parse_binary(
+    input: &[u8],
+    duplicate: ffi::Duplicate,
+    max_depth: u32,
+    schema: bool,
+) -> ffi::BinaryResult {
+    let options = ParseOptions {
+        duplicate_policy: policy(duplicate),
+        max_depth,
+        schema,
+    };
+    match crate::parse_binary(input, options) {
+        Ok(binary) => ffi::BinaryResult {
+            status: ffi::Status::Ok,
+            byte_offset: 0,
+            message: String::new(),
+            binary,
+        },
+        Err(error) => ffi::BinaryResult {
+            status: match error.kind {
+                crate::ErrorKind::Syntax => ffi::Status::Syntax,
+                crate::ErrorKind::DuplicateKey => ffi::Status::DuplicateKey,
+                crate::ErrorKind::Depth => ffi::Status::Depth,
+                crate::ErrorKind::UnsupportedSchemaRef => ffi::Status::UnsupportedSchemaRef,
+            },
+            byte_offset: error.byte_offset as u64,
+            message: error.message,
+            binary: Vec::new(),
+        },
+    }
 }

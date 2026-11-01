@@ -3261,8 +3261,9 @@ static int common_string_json(const ObExpr &expr,
       ObJsonOpaque j_opaque(j_text, in_type);
       ObJsonString j_string(j_text.ptr(), j_text.length());
       ObJsonNull j_null;
-      ObJsonNode *j_tree = NULL;
       bool is_null_res = false;
+      bool has_raw_bin = false;
+      ObString raw_bin;
       bool is_scalar = (j_text.length()
                         && ((j_text[0] == '\'' && j_text[j_text.length() - 1] == '\'')
                             || (j_text[0] == '\"' && j_text[j_text.length() - 1] == '\"')));
@@ -3287,9 +3288,9 @@ static int common_string_json(const ObExpr &expr,
         if ((CM_IS_SQL_AS_JSON_SCALAR(expr.extra_) && ob_is_string_type(in_type)) && j_text.compare("null") == 0) {
           j_base = &j_null;
         }
-      } else if (OB_FAIL(ObJsonParser::get_tree(&temp_allocator, j_text, j_tree,
-                                                parse_flag,
-                                                ObJsonExprHelper::get_json_max_depth_config()))) {
+      } else if (OB_FAIL(ObJsonParser::get_binary(&temp_allocator, j_text.ptr(), j_text.length(), raw_bin,
+                                                  parse_flag,
+                                                  ObJsonExprHelper::get_json_max_depth_config()))) {
         if (CM_IS_IMPLICIT_CAST(expr.extra_) && !CM_IS_COLUMN_CONVERT(expr.extra_)) {
           ret = OB_SUCCESS;
           j_base = &j_string;
@@ -3303,12 +3304,11 @@ static int common_string_json(const ObExpr &expr,
           }
         }
       } else {
-        j_base = j_tree;
+        has_raw_bin = true;
       }
 
       if (OB_SUCC(ret) && !is_null_res) {
-        ObString raw_bin;
-        if (OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
+        if (!has_raw_bin && OB_FAIL(share::ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
         } else if (OB_FAIL(common_json_bin(expr, ctx, res_datum, raw_bin))) {
         }
       }

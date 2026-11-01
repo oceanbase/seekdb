@@ -16,6 +16,7 @@
 //! Documents own all strings and values; error offsets are zero-based bytes.
 
 mod bridge;
+mod binary;
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;
@@ -89,6 +90,10 @@ pub fn parse(input: &[u8], options: ParseOptions) -> Result<Document> {
     parse_normalized(input.as_ref(), options)
 }
 
+pub fn parse_binary(input: &[u8], options: ParseOptions) -> Result<Vec<u8>> {
+    parse(input, options).map(binary::serialize)
+}
+
 fn parse_normalized(input: &[u8], options: ParseOptions) -> Result<Document> {
     let mut deserializer = serde_json::Deserializer::from_slice(input);
     deserializer.disable_recursion_limit();
@@ -99,10 +104,8 @@ fn parse_normalized(input: &[u8], options: ParseOptions) -> Result<Document> {
 }
 
 pub fn validate(input: &[u8], options: ParseOptions) -> Result<()> {
-    let input = normalized_input(input);
-    let input = input.as_ref();
     if options.schema || options.duplicate_policy != DuplicatePolicy::Overwrite {
-        return parse_normalized(input, options).map(|_| ());
+        return parse(input, options).map(|_| ());
     }
     let mut deserializer = serde_json::Deserializer::from_slice(input);
     deserializer.disable_recursion_limit();
@@ -198,6 +201,12 @@ fn byte_offset(input: &[u8], line: usize, column: usize) -> usize {
 const DUPLICATE_ERROR: &str = "duplicate object key";
 const DEPTH_ERROR: &str = "JSON document exceeds configured depth";
 const SCHEMA_REF_ERROR: &str = "external $ref is not supported in JSON schema";
+
+fn key_hash(key: &str) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    key.hash(&mut hasher);
+    hasher.finish()
+}
 
 #[derive(Clone, Copy)]
 struct DocumentSeed {
@@ -297,7 +306,7 @@ impl<'de> Visitor<'de> for DocumentVisitor {
         let nested = self.nested().map_err(serde::de::Error::custom)?;
         let policy = self.seed.options.duplicate_policy;
         let mut entries = Vec::with_capacity(map.size_hint().unwrap_or(0));
-        let mut positions: HashMap<u64, Vec<usize>> = HashMap::new();
+        let mut positions: Option<HashMap<u64, Vec<usize>>> = None;
         while let Some(key) = map.next_key::<String>()? {
             let value = map.next_value_seed(nested)?;
             if self.seed.options.schema && key == "$ref" {
@@ -311,15 +320,15 @@ impl<'de> Visitor<'de> for DocumentVisitor {
                 entries.push((key, value));
                 continue;
             }
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            key.hash(&mut hasher);
-            let hash = hasher.finish();
-            let duplicate = positions.get(&hash).and_then(|candidates| {
-                candidates
-                    .iter()
-                    .copied()
-                    .find(|index| entries[*index].0 == key)
-            });
+            let duplicate = match &positions {
+                Some(positions) => positions.get(&key_hash(&key)).and_then(|candidates| {
+                    candidates
+                        .iter()
+                        .copied()
+                        .find(|index| entries[*index].0 == key)
+                }),
+                None => entries.iter().position(|(existing, _)| existing == &key),
+            };
             if let Some(index) = duplicate {
                 match policy {
                     DuplicatePolicy::Reject => {
@@ -332,7 +341,15 @@ impl<'de> Visitor<'de> for DocumentVisitor {
             } else {
                 let index = entries.len();
                 entries.push((key, value));
-                positions.entry(hash).or_default().push(index);
+                if entries.len() == 16 {
+                    let mut indexed = HashMap::with_capacity(32);
+                    for (index, (key, _)) in entries.iter().enumerate() {
+                        indexed.entry(key_hash(key)).or_insert_with(Vec::new).push(index);
+                    }
+                    positions = Some(indexed);
+                } else if let Some(positions) = &mut positions {
+                    positions.entry(key_hash(&entries[index].0)).or_default().push(index);
+                }
             }
         }
         Ok(Document::Object(entries))

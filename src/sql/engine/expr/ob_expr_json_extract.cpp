@@ -120,7 +120,7 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObString j_str = json_datum->get_string();
     ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
     if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(json_arg, ctx, allocator, j_str, is_null_result))) {
-    } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type, j_in_type, j_base, 0, ObJsonExprHelper::get_json_max_depth_config()))) {
+    } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type, ObJsonInType::JSON_BIN, j_base, 0, ObJsonExprHelper::get_json_max_depth_config()))) {
       ret = OB_ERR_INVALID_JSON_TEXT;
     }
   }

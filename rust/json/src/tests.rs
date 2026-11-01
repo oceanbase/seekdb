@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use crate::bridge::{ffi, parse as parse_events};
-use crate::{parse, validate, Document, DuplicatePolicy, ErrorKind, Number, ParseOptions};
+use crate::{
+    parse, parse_binary, validate, Document, DuplicatePolicy, ErrorKind, Number, ParseOptions,
+};
 
 fn options(policy: DuplicatePolicy) -> ParseOptions {
     ParseOptions {
@@ -195,6 +197,15 @@ fn depth_boundary() {
     assert_eq!(
         validate(b"[[[0]]]", shallow).unwrap_err().kind,
         ErrorKind::Depth
+    );
+}
+
+#[test]
+fn binary_document() {
+    let binary = parse_binary(b"[1]", ParseOptions::default()).unwrap();
+    assert_eq!(
+        binary,
+        [0x1e, 0, 0x80, 0x03, 0, 0, 0, 0, 0x07, 0x40, 1, 6, 1, 0x82]
     );
 }
 

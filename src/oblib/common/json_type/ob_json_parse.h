@@ -47,6 +47,9 @@ public:
   static int get_tree(ObIAllocator *allocator, const char *text, uint64_t length,
                       ObJsonNode *&j_tree, uint32_t parse_flag = 0,
                       uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
+  static int get_binary(ObIAllocator *allocator, const char *text, uint64_t length,
+                        ObString &binary, uint32_t parse_flag = 0,
+                        uint32_t max_depth_config = JSON_DOCUMENT_MAX_DEPTH);
 
   // Parse one complete standard JSON document. offset is a zero-based byte
   // offset, including for input containing multibyte UTF-8 characters.
