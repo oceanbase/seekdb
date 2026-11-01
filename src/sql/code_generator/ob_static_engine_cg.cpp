@@ -5571,6 +5571,8 @@ int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
     spec.table_type_ = op.get_table_type();  // table func type
 
     if (OB_FAIL(spec.dup_origin_column_defs(op.get_origin_cols_def()))) {
+    } else if (spec.table_type_ == OB_FILE_CSV_TABLE_TYPE || spec.table_type_ == OB_FILE_JSONL_TABLE_TYPE) {
+      for (int64_t i = 0; i < spec.cols_def_.count(); ++i) spec.cols_def_.at(i)->output_column_idx_ = -1;
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {

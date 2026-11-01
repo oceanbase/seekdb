@@ -10975,5 +10975,18 @@
     "info_cn": "",
     "background_cn": "",
     "ref_url": ""
+  },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Enable local File SQL table sources for this session.",
+    "flags": "SESSION | MYSQL_ONLY | NEED_SERIALIZE | INFLUENCE_PLAN",
+    "publish_version": "1.0.0.0",
+    "info_cn": "启用当前会话的本地文件SQL查询",
+    "background_cn": "",
+    "ref_url": ""
   }
 }

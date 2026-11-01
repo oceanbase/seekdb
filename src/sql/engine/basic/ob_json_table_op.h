@@ -184,6 +184,8 @@ struct JtScanCtx {
 
 };
 
+namespace file_sql { class FileSqlScan; }
+
 class ObJsonTableOp : public ObOperator
 {
 public:
@@ -197,7 +199,8 @@ public:
       input_(nullptr),
       j_null_(),
       j_arr_(allocator_),
-      j_obj_(allocator_)
+      j_obj_(allocator_),
+      file_sql_scan_(nullptr)
   {
     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec);
     col_count_ = spec_ptr->column_exprs_.count();
@@ -219,6 +222,7 @@ public:
                K_(col_count));
 
 private:
+  int open_file_sql();
   int init();
   int reset_variable();  // reset var in rescan 
   int init_data_obj(); // allocate data_ array
@@ -246,6 +250,7 @@ private:
   ObJsonNull j_null_;
   ObJsonArray j_arr_;
   ObJsonObject j_obj_;
+  file_sql::FileSqlScan *file_sql_scan_;
 };
 
 class MulModeTableFunc {

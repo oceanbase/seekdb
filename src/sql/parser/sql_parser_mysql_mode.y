@@ -10831,6 +10831,21 @@ tbl_name
   unname_node->sql_str_off_ = @2.first_column;
   $$->value_ = 1; //lateral
 }
+| NAME_OB '(' expr_list ')' %prec LOWER_PARENS
+{
+    malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 3, $1, $3, NULL);
+    $$->is_tree_not_param_ = true;
+}
+| NAME_OB '(' expr_list ')' relation_name
+{
+    malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 3, $1, $3, $5);
+    $$->is_tree_not_param_ = true;
+}
+| NAME_OB '(' expr_list ')' AS relation_name
+{
+    malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 3, $1, $3, $6);
+    $$->is_tree_not_param_ = true;
+}
 | json_table_expr
 {
   $$ = $1;
@@ -12265,7 +12280,10 @@ explain_or_desc relation_factor opt_desc_column_option
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS, 4, $$, $2, NULL, $3);
 }
 
-| explain_or_desc explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);}
+| explain_or_desc explainable_stmt {
+  GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);
+  if ($1 != NULL && $2->type_ == T_SELECT) $$->value_ = 1; /* File SQL schema request */
+}
 | explain_or_desc PRETTY explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY, $3, NULL, NULL);}
 | explain_or_desc PRETTY_COLOR explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY_COLOR, $3, NULL, NULL);}
 
@@ -12306,8 +12324,8 @@ explain_or_desc relation_factor opt_desc_column_option
 
 explain_or_desc:
 EXPLAIN {$$ = NULL;}
-| DESCRIBE {$$ = NULL;}
-| DESC  {$$ = NULL;}
+| DESCRIBE {malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1;}
+| DESC  {malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1;}
 ;
 
 explainable_stmt:

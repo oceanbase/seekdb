@@ -568,6 +568,7 @@ public:
       all_user_variable_(),
       need_match_all_params_(false),
       has_udf_(false),
+      has_file_sql_(false),
       disable_udf_parallel_(false),
       has_is_table_(false),
       reference_obj_tables_(),
@@ -610,6 +611,7 @@ public:
     all_user_variable_.reset();
     need_match_all_params_= false;
     has_udf_ = false;
+    has_file_sql_ = false;
     disable_udf_parallel_ = false;
     has_is_table_ = false;
     sql_schema_guard_.reset();
@@ -701,6 +703,7 @@ public:
   common::hash::ObHashMap<uint64_t, ObObj, common::hash::NoPthreadDefendMode> calculable_expr_results_;
   bool need_match_all_params_; //only used for matching plans
   bool has_udf_;
+  bool has_file_sql_; // File schemas must be inferred afresh for each query.
   bool disable_udf_parallel_; //used to deterministic pl udf parallel execute
   bool has_is_table_; // used to mark query has information schema table
   ObSqlSchemaGuard sql_schema_guard_;

@@ -422,6 +422,9 @@ SQL_COMPOSITION_HEADERS = [
 ]
 
 SQL_PRIVATE_HEADERS = [
+    "engine/file_sql/jsonl_reader.h",
+    "engine/file_sql/csv_reader.h",
+    "engine/file_sql/file_sql_scan.h",
     "code_generator/ob_code_generator.h",
     "code_generator/ob_dml_cg_service.h",
     "code_generator/ob_static_engine_cg.h",

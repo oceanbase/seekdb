@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_json_table_op.h"
+#include "sql/engine/file_sql/file_sql_scan.h"
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
@@ -581,8 +582,22 @@ int ObJsonTableOp::generate_column_trees(JtColTreeNode*& root)
   return ret;
 }
 
+int ObJsonTableOp::open_file_sql()
+{
+  if (MY_SPEC.namespace_def_.count() != 3 || get_exec_ctx().get_my_session() == nullptr) return OB_ERR_UNEXPECTED;
+  if (file_sql_scan_ == nullptr) {
+    void *memory = allocator_->alloc(sizeof(file_sql::FileSqlScan));
+    if (memory == nullptr) return OB_ALLOCATE_MEMORY_FAILED;
+    file_sql_scan_ = new (memory) file_sql::FileSqlScan(MY_SPEC.table_type_ == OB_FILE_JSONL_TABLE_TYPE);
+  }
+  int ret = file_sql_scan_->open(*get_exec_ctx().get_my_session(), MY_SPEC.namespace_def_.at(0), MY_SPEC.namespace_def_.at(1));
+  if (OB_SUCC(ret)) ret = file_sql_scan_->begin(MY_SPEC.namespace_def_.at(2) == ObString("1"));
+  return ret;
+}
+
 int ObJsonTableOp::inner_open()
 {
+  if (MY_SPEC.table_type_ == OB_FILE_CSV_TABLE_TYPE || MY_SPEC.table_type_ == OB_FILE_JSONL_TABLE_TYPE) return open_file_sql();
   INIT_SUCC(ret);
   if (OB_FAIL(init())) {
   } else if (MY_SPEC.value_exprs_.empty()) {
@@ -597,6 +612,10 @@ int ObJsonTableOp::inner_open()
 
 int ObJsonTableOp::inner_rescan()
 {
+  if (MY_SPEC.table_type_ == OB_FILE_CSV_TABLE_TYPE || MY_SPEC.table_type_ == OB_FILE_JSONL_TABLE_TYPE) {
+    const int ret = ObOperator::inner_rescan();
+    return ret == OB_SUCCESS ? open_file_sql() : ret;
+  }
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
   } else {
@@ -684,6 +703,10 @@ int ObJsonTableOp::init()
 
 int ObJsonTableOp::inner_close()
 {
+  if (MY_SPEC.table_type_ == OB_FILE_CSV_TABLE_TYPE || MY_SPEC.table_type_ == OB_FILE_JSONL_TABLE_TYPE) {
+    if (file_sql_scan_ != nullptr) { file_sql_scan_->~FileSqlScan(); allocator_->free(file_sql_scan_); file_sql_scan_ = nullptr; }
+    return OB_SUCCESS;
+  }
   INIT_SUCC(ret);
   if (OB_NOT_NULL(root_)) {
     if (OB_FAIL(root_->reset(&jt_ctx_))) {
@@ -722,6 +745,7 @@ void ScanNode::reset_reg_columns(JtScanCtx* ctx)
 
 void ObJsonTableOp::destroy()
 {
+  if (file_sql_scan_ != nullptr) { file_sql_scan_->~FileSqlScan(); allocator_->free(file_sql_scan_); file_sql_scan_ = nullptr; }
   ObOperator::destroy();
 }
 
@@ -1400,6 +1424,10 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
 // json/xml table function inner
 int ObJsonTableOp::inner_get_next_row()
 {
+  if (MY_SPEC.table_type_ == OB_FILE_CSV_TABLE_TYPE || MY_SPEC.table_type_ == OB_FILE_JSONL_TABLE_TYPE) {
+    clear_evaluated_flag();
+    return file_sql_scan_ == nullptr ? OB_NOT_INIT : file_sql_scan_->next(MY_SPEC, eval_ctx_);
+  }
   INIT_SUCC(ret);
   bool is_root_null = false;
   if (!(jt_ctx_.is_json_table_func()
