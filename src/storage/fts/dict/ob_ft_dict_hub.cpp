@@ -34,6 +34,7 @@ int ObFTDictHub::init()
   int ret = OB_SUCCESS;
   if (OB_FAIL(dict_map_.create(K_MAX_DICT_BUCKET, "dict_map"))) {
   } else if (OB_FAIL(rw_dict_lock_.init(K_MAX_DICT_BUCKET))) {
+  } else if (OB_FAIL(builtin_dict_lock_.init(4))) {
   } else {
     is_inited_ = true;
   }
@@ -44,6 +45,55 @@ int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
   is_inited_ = false;
+  for (auto &dict : builtin_dicts_) {
+    std::atomic_store(&dict, std::shared_ptr<ObIFTDict>());
+  }
+  return ret;
+}
+
+int ObFTDictHub::get_builtin_dict(const ObFTDictDesc &desc, std::shared_ptr<ObIFTDict> &dict)
+{
+  int ret = OB_SUCCESS;
+  const int64_t idx = static_cast<int64_t>(desc.type_) - 1;
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (idx < 0 || idx >= ARRAYSIZEOF(builtin_dicts_)
+             || desc.charset_ != CHARSET_UTF8MB4 || desc.coll_type_ != CS_TYPE_UTF8MB4_BIN) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    dict = std::atomic_load(&builtin_dicts_[idx]);
+    if (!dict) {
+      ObBucketHashWLockGuard guard(builtin_dict_lock_, idx);
+      dict = std::atomic_load(&builtin_dicts_[idx]);
+      if (!dict) {
+        struct BuiltinDictionary
+        {
+          ObArenaAllocator allocator_;
+          ObFTCacheRangeContainer container_;
+          ObFTRangeDict dictionary_;
+          explicit BuiltinDictionary(const ObFTDictDesc &description)
+              : allocator_(lib::ObMemAttr("SharedIKDict")), container_(allocator_),
+                dictionary_(allocator_, &container_, description) {}
+        };
+        try {
+          auto holder = std::make_shared<BuiltinDictionary>(desc);
+          if (OB_FAIL(load_cache(desc, holder->container_))) {
+            if (OB_ENTRY_NOT_EXIST == ret) {
+              ret = build_cache(desc, holder->container_);
+            }
+          }
+          if (OB_SUCC(ret) && OB_FAIL(holder->dictionary_.init())) {
+          }
+          if (OB_SUCC(ret)) {
+            dict = std::shared_ptr<ObIFTDict>(holder, &holder->dictionary_);
+            std::atomic_store(&builtin_dicts_[idx], dict);
+          }
+        } catch (const std::bad_alloc &) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        }
+      }
+    }
+  }
   return ret;
 }
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)

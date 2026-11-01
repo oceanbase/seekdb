@@ -1,0 +1,32 @@
+{
+  "source": "user-provided latest platform report",
+  "submission": "5c73c72d02dc2d098dbbe256a50eb7c8ca859193",
+  "points_out_of_50": 42.7955351673393,
+  "metrics": {
+    "fts_mean_improvement": 0.42795535167339305,
+    "fts_raw_score": 85.5910703346786,
+    "build_beng_en_sec": 2.523,
+    "build_ik_all_sec": 6.054,
+    "build_ik_content_sec": 4.727,
+    "build_total_sec": 13.311,
+    "tokenize_beng_avg_ms": 0.0373,
+    "tokenize_ik_avg_ms": 0.064,
+    "query_beng_avg_ms": 0.8609,
+    "query_cn_avg_ms": 0.5758,
+    "query_limit_avg_ms": 0.1103,
+    "query_mixed_avg_ms": 0.6915,
+    "query_beng_hits": 11000,
+    "query_cn_hits": 8001,
+    "query_limit_hits": 20,
+    "query_mixed_hits": 7332,
+    "select1_avg_ms": 0.0262,
+    "rows": 20000,
+    "batch": 500,
+    "rounds": 3000,
+    "query_rounds": 200,
+    "samples": 3,
+    "warmup": 30,
+    "skip_load": 0,
+    "git_dirty": 1
+  }
+}

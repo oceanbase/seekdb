@@ -233,7 +233,14 @@ int ObDocIdExt::from_datum(const ObDatum &datum)
 {
   int ret = common::OB_SUCCESS;
   int64_t dummy_pos = 0;
-  if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
+  // Native full-text document IDs occupy 16 bytes. A fixed-size copy avoids
+  // calling the variable-length copy routine for every posting, while keeping
+  // an owning copy because other dimensions reuse the expression's batch.
+  if (!datum.is_null() && datum.len_ == 16) {
+    MEMCPY(buf_, datum.ptr_, 16);
+    datum_ = datum;
+    datum_.ptr_ = buf_;
+  } else if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
   }
   return ret;
 }

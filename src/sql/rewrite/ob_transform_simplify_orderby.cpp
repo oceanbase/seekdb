@@ -138,8 +138,24 @@ int ObTransformSimplifyOrderby::remove_order_by_for_view_stmt(ObDMLStmt *stmt, b
       } else if (1 == table_items.count()) {
         if (stmt->is_select_stmt()) {
           select_stmt = static_cast<ObSelectStmt*>(stmt);
-          if ((select_stmt->has_group_by() || select_stmt->has_distinct() ||
-                     select_stmt->has_order_by()) && !view_stmt->has_limit() &&
+          // COUNT(*) observes only the cardinality of a limited view. Sorting
+          // cannot change it unless FETCH WITH TIES is used. Filters or any
+          // value-dependent aggregate in the parent retain the original order.
+          bool count_only = select_stmt->is_scala_group_by()
+              && select_stmt->get_condition_exprs().empty()
+              && select_stmt->get_having_exprs().empty()
+              && select_stmt->get_semi_infos().empty()
+              && !select_stmt->has_window_function()
+              && !select_stmt->has_distinct()
+              && !view_stmt->is_fetch_with_ties();
+          for (int64_t j = 0; count_only && j < select_stmt->get_aggr_item_size(); ++j) {
+            const ObAggFunRawExpr *agg = select_stmt->get_aggr_item(j);
+            count_only = agg != nullptr && agg->get_expr_type() == T_FUN_COUNT
+                && agg->get_real_param_count() == 0 && !agg->is_param_distinct();
+          }
+          count_only = count_only && select_stmt->get_aggr_item_size() > 0;
+          if ((((select_stmt->has_group_by() || select_stmt->has_distinct() ||
+                     select_stmt->has_order_by()) && !view_stmt->has_limit()) || count_only) &&
                      view_stmt->has_order_by() &&
                      OB_FAIL(do_remove_stmt_order_by(view_stmt, happened))) {
           } else {

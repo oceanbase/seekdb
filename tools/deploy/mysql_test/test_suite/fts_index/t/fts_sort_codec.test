@@ -1,0 +1,67 @@
+--disable_query_log
+SET NAMES utf8mb4;
+SET group_concat_max_len=65535;
+--disable_warnings
+CREATE DATABASE IF NOT EXISTS fts_sort_codec_regression;
+USE fts_sort_codec_regression;
+DROP TABLE IF EXISTS keys_to_sort;
+--enable_warnings
+CREATE TABLE keys_to_sort(id BIGINT PRIMARY KEY, word VARCHAR(256) CHARACTER SET utf8mb4, docid VARBINARY(40));
+INSERT INTO keys_to_sort VALUES
+(1,NULL,NULL),
+(2,CONVERT(UNHEX('') USING utf8mb4),UNHEX('')),
+(3,CONVERT(UNHEX('61') USING utf8mb4),UNHEX('00')),
+(4,CONVERT(UNHEX('6120') USING utf8mb4),UNHEX('0020')),
+(5,CONVERT(UNHEX('6100') USING utf8mb4),UNHEX('0000')),
+(6,CONVERT(UNHEX('63616665') USING utf8mb4),UNHEX('20')),
+(7,CONVERT(UNHEX('636166c3a9') USING utf8mb4),UNHEX('2000')),
+(8,CONVERT(UNHEX('43414645') USING utf8mb4),UNHEX('2020')),
+(9,CONVERT(UNHEX('65cc81') USING utf8mb4),UNHEX('ff00')),
+(10,CONVERT(UNHEX('c3a9') USING utf8mb4),UNHEX('ff20')),
+(11,CONVERT(UNHEX('c39f') USING utf8mb4),UNHEX('0000000000000020')),
+(12,CONVERT(UNHEX('7373') USING utf8mb4),UNHEX('0000000000000000')),
+(13,CONVERT(UNHEX('c4b0') USING utf8mb4),UNHEX('7f80')),
+(14,CONVERT(UNHEX('69') USING utf8mb4),UNHEX('8080')),
+(15,CONVERT(UNHEX('c4b1') USING utf8mb4),UNHEX('ff')),
+(16,CONVERT(UNHEX('49') USING utf8mb4),UNHEX('00ff')),
+(17,CONVERT(UNHEX('e695b0e68daee5ba93') USING utf8mb4),UNHEX('00000000000000000000000000000020')),
+(18,CONVERT(UNHEX('e695b0') USING utf8mb4),UNHEX('00000000000000000000000000000000')),
+(19,CONVERT(UNHEX('f0a0aeb7') USING utf8mb4),UNHEX('2020')),
+(20,CONVERT(UNHEX('f0a08080') USING utf8mb4),UNHEX('ff0000')),
+(21,CONVERT(UNHEX('f09f9982') USING utf8mb4),UNHEX('01ff')),
+(22,CONVERT(UNHEX('f09f9983') USING utf8mb4),UNHEX('02ff')),
+(23,CONVERT(UNHEX('616c706861') USING utf8mb4),UNHEX('00')),
+(24,CONVERT(UNHEX('616c706861') USING utf8mb4),UNHEX('0000')),
+(25,CONVERT(UNHEX('616c706861') USING utf8mb4),UNHEX('0020')),
+(26,CONVERT(UNHEX('616c706861') USING utf8mb4),UNHEX('20')),
+(27,CONVERT(UNHEX('616c706861') USING utf8mb4),UNHEX('2000')),
+(28,CONVERT(UNHEX('616c706861') USING utf8mb4),UNHEX('')),
+(29,CONVERT(UNHEX('616c706861') USING utf8mb4),NULL),
+(30,CONVERT(UNHEX('616c706861') USING utf8mb4),UNHEX('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')),
+(31,CONVERT(UNHEX('00') USING utf8mb4),UNHEX('01')),
+(32,CONVERT(UNHEX('cea9cebcceadceb3ceb1') USING utf8mb4),UNHEX('ff20'));
+INSERT INTO keys_to_sort SELECT id+32,word,docid FROM keys_to_sort;
+INSERT INTO keys_to_sort SELECT id+64,word,docid FROM keys_to_sort;
+INSERT INTO keys_to_sort SELECT id+128,word,docid FROM keys_to_sort;
+INSERT INTO keys_to_sort SELECT id+256,word,docid FROM keys_to_sort;
+INSERT INTO keys_to_sort SELECT id+512,word,docid FROM keys_to_sort;
+SELECT /*+ opt_param('enable_newsort', 'false') */ @plain_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_general_ci ASC,docid ASC,id) AS rn FROM keys_to_sort)t;
+SELECT /*+ opt_param('enable_newsort', 'true') */ @encoded_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_general_ci ASC,docid ASC,id) AS rn FROM keys_to_sort)t;
+SELECT @plain_order=@encoded_order AS same_order;
+SELECT /*+ opt_param('enable_newsort', 'false') */ @plain_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_general_ci DESC,docid DESC,id) AS rn FROM keys_to_sort)t;
+SELECT /*+ opt_param('enable_newsort', 'true') */ @encoded_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_general_ci DESC,docid DESC,id) AS rn FROM keys_to_sort)t;
+SELECT @plain_order=@encoded_order AS same_order;
+SELECT /*+ opt_param('enable_newsort', 'false') */ @plain_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_bin ASC,docid ASC,id) AS rn FROM keys_to_sort)t;
+SELECT /*+ opt_param('enable_newsort', 'true') */ @encoded_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_bin ASC,docid ASC,id) AS rn FROM keys_to_sort)t;
+SELECT @plain_order=@encoded_order AS same_order;
+SELECT /*+ opt_param('enable_newsort', 'false') */ @plain_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_bin DESC,docid DESC,id) AS rn FROM keys_to_sort)t;
+SELECT /*+ opt_param('enable_newsort', 'true') */ @encoded_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY word COLLATE utf8mb4_bin DESC,docid DESC,id) AS rn FROM keys_to_sort)t;
+SELECT @plain_order=@encoded_order AS same_order;
+SELECT /*+ opt_param('enable_newsort', 'false') */ @plain_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY CAST(word AS BINARY) ASC,docid ASC,id) AS rn FROM keys_to_sort)t;
+SELECT /*+ opt_param('enable_newsort', 'true') */ @encoded_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY CAST(word AS BINARY) ASC,docid ASC,id) AS rn FROM keys_to_sort)t;
+SELECT @plain_order=@encoded_order AS same_order;
+SELECT /*+ opt_param('enable_newsort', 'false') */ @plain_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY CAST(word AS BINARY) DESC,docid DESC,id) AS rn FROM keys_to_sort)t;
+SELECT /*+ opt_param('enable_newsort', 'true') */ @encoded_order:=SHA2(GROUP_CONCAT(id ORDER BY rn SEPARATOR ','),256) AS order_digest FROM (SELECT id,ROW_NUMBER() OVER(ORDER BY CAST(word AS BINARY) DESC,docid DESC,id) AS rn FROM keys_to_sort)t;
+SELECT @plain_order=@encoded_order AS same_order;
+DROP DATABASE fts_sort_codec_regression;
+--enable_query_log

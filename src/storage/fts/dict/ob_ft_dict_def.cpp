@@ -24,8 +24,18 @@ namespace storage
 common::ObString ObFTSingleWord::get_word() const { return ObString(word_len, word); }
 bool ObFTSingleWord::operator==(const ObFTSingleWord &other) const
 {
-  return (this == &other)
-         || (word_len == other.word_len && 0 == memcmp(word, other.word, word_len));
+  if (this == &other) { return true; }
+  if (word_len != other.word_len) { return false; }
+  // Single-character keys usually occupy one to four bytes. Constant sizes
+  // let the compiler inline their comparison without a libc call per probe.
+  switch (word_len) {
+    case 0: return true;
+    case 1: return word[0] == other.word[0];
+    case 2: return 0 == MEMCMP(word, other.word, 2);
+    case 3: return 0 == MEMCMP(word, other.word, 3);
+    case 4: return 0 == MEMCMP(word, other.word, 4);
+    default: return 0 == MEMCMP(word, other.word, word_len);
+  }
 }
 
 int32_t ObFTSingleWord::set_word(const char *word, int32_t word_len)

@@ -51,7 +51,11 @@ private:
   ObObjMeta meta_;
 };
 
-typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+// Invocation-local scratch state: TOKENIZE, index-row generation and query-key
+// parsing create this map on their stack and consume it before returning. It is
+// never published to another worker, so bucket synchronization is unnecessary.
+typedef common::hash::ObHashMap<ObFTWord, int64_t,
+    common::hash::NoPthreadDefendMode> ObFTWordMap;
 
 class ObAddWordFlag final
 {

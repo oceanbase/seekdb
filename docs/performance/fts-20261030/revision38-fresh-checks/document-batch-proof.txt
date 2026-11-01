@@ -1,0 +1,4 @@
+[2026-11-01 21:08:53.612980] INFO  [SQL.ENG] init_fts_output_exprs (ob_table_scan_op.cpp:3768) [62167][PX_G0][Y100B427F000001-00065F36BAEDB178-0-0] [lt=18] FTS DDL output bindings(batch_size=16, output_count=4, batch_mask=15, filter_count=0)
+[2026-11-01 21:08:53.617875] INFO  [SQL.ENG] inner_get_next_batch (ob_table_scan_op.cpp:2266) [62167][PX_G0][Y100B427F000001-00065F36BAEDB178-0-0] [lt=126] FTS DDL first-document batch(rows=3, capacity=16)
+[2026-11-01 21:08:53.829016] INFO  [SQL.ENG] init_fts_output_exprs (ob_table_scan_op.cpp:3768) [62167][PX_G0][Y100B427F000001-00065F36BAEDB178-0-0] [lt=59] FTS DDL output bindings(batch_size=16, output_count=4, batch_mask=15, filter_count=0)
+[2026-11-01 21:08:53.833806] INFO  [SQL.ENG] inner_get_next_batch (ob_table_scan_op.cpp:2266) [62167][PX_G0][Y100B427F000001-00065F36BAEDB178-0-0] [lt=153] FTS DDL first-document batch(rows=3, capacity=16)

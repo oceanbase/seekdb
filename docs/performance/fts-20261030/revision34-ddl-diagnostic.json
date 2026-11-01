@@ -1,0 +1,238 @@
+{
+  "diagnostic_only": true,
+  "info_logging": true,
+  "runs": [
+    {
+      "label": "revision28",
+      "pass_id": 0,
+      "indexes": [
+        {
+          "index": "fti_all_ik",
+          "start": 1793534795.8057144,
+          "end": 1793534812.319975,
+          "elapsed": 16.5142605304718
+        },
+        {
+          "index": "fti_content_ik",
+          "start": 1793534812.320123,
+          "end": 1793534824.8996134,
+          "elapsed": 12.579490423202515
+        },
+        {
+          "index": "fti_en_beng",
+          "start": 1793534824.8997374,
+          "end": 1793534830.7094784,
+          "elapsed": 5.809741020202637
+        }
+      ],
+      "sstable_jobs": [
+        {
+          "table": "__idx_500003_fts_rowkey_doc",
+          "seconds": 0.343462
+        },
+        {
+          "table": "__idx_500003_fts_doc_rowkey",
+          "seconds": 0.30733
+        },
+        {
+          "table": "__idx_500003_fti_all_ik",
+          "seconds": 7.936198
+        },
+        {
+          "table": "__idx_500003_fti_all_ik_fts_doc_word",
+          "seconds": 7.454304
+        },
+        {
+          "table": "__idx_500003_fti_content_ik",
+          "seconds": 6.294596
+        },
+        {
+          "table": "__idx_500003_fti_content_ik_fts_doc_word",
+          "seconds": 5.996087
+        },
+        {
+          "table": "__idx_500003_fti_en_beng",
+          "seconds": 2.885985
+        },
+        {
+          "table": "__idx_500003_fti_en_beng_fts_doc_word",
+          "seconds": 2.55984
+        }
+      ]
+    },
+    {
+      "label": "revision33",
+      "pass_id": 1,
+      "indexes": [
+        {
+          "index": "fti_all_ik",
+          "start": 1793534855.356459,
+          "end": 1793534870.9361763,
+          "elapsed": 15.57971739768982
+        },
+        {
+          "index": "fti_content_ik",
+          "start": 1793534870.936251,
+          "end": 1793534883.1998968,
+          "elapsed": 12.263645887374878
+        },
+        {
+          "index": "fti_en_beng",
+          "start": 1793534883.1999846,
+          "end": 1793534889.219141,
+          "elapsed": 6.019156455993652
+        }
+      ],
+      "sstable_jobs": [
+        {
+          "table": "__idx_500003_fts_rowkey_doc",
+          "seconds": 0.335357
+        },
+        {
+          "table": "__idx_500003_fts_doc_rowkey",
+          "seconds": 0.309989
+        },
+        {
+          "table": "__idx_500003_fti_all_ik",
+          "seconds": 7.670697
+        },
+        {
+          "table": "__idx_500003_fti_all_ik_fts_doc_word",
+          "seconds": 6.792701
+        },
+        {
+          "table": "__idx_500003_fti_content_ik",
+          "seconds": 6.071306
+        },
+        {
+          "table": "__idx_500003_fti_content_ik_fts_doc_word",
+          "seconds": 5.823143
+        },
+        {
+          "table": "__idx_500003_fti_en_beng",
+          "seconds": 2.834031
+        },
+        {
+          "table": "__idx_500003_fti_en_beng_fts_doc_word",
+          "seconds": 2.880216
+        }
+      ]
+    },
+    {
+      "label": "revision33",
+      "pass_id": 2,
+      "indexes": [
+        {
+          "index": "fti_all_ik",
+          "start": 1793534913.9607024,
+          "end": 1793534929.053968,
+          "elapsed": 15.093265533447266
+        },
+        {
+          "index": "fti_content_ik",
+          "start": 1793534929.0541418,
+          "end": 1793534941.641355,
+          "elapsed": 12.587213277816772
+        },
+        {
+          "index": "fti_en_beng",
+          "start": 1793534941.6414254,
+          "end": 1793534947.7562988,
+          "elapsed": 6.11487340927124
+        }
+      ],
+      "sstable_jobs": [
+        {
+          "table": "__idx_500003_fts_rowkey_doc",
+          "seconds": 0.341178
+        },
+        {
+          "table": "__idx_500003_fts_doc_rowkey",
+          "seconds": 0.31421
+        },
+        {
+          "table": "__idx_500003_fti_all_ik",
+          "seconds": 7.296613
+        },
+        {
+          "table": "__idx_500003_fti_all_ik_fts_doc_word",
+          "seconds": 6.670069
+        },
+        {
+          "table": "__idx_500003_fti_content_ik",
+          "seconds": 6.124906
+        },
+        {
+          "table": "__idx_500003_fti_content_ik_fts_doc_word",
+          "seconds": 6.128207
+        },
+        {
+          "table": "__idx_500003_fti_en_beng",
+          "seconds": 2.927444
+        },
+        {
+          "table": "__idx_500003_fti_en_beng_fts_doc_word",
+          "seconds": 2.871112
+        }
+      ]
+    },
+    {
+      "label": "revision28",
+      "pass_id": 3,
+      "indexes": [
+        {
+          "index": "fti_all_ik",
+          "start": 1793534972.4152358,
+          "end": 1793534987.9124227,
+          "elapsed": 15.49718689918518
+        },
+        {
+          "index": "fti_content_ik",
+          "start": 1793534987.9124882,
+          "end": 1793535000.1981785,
+          "elapsed": 12.285690307617188
+        },
+        {
+          "index": "fti_en_beng",
+          "start": 1793535000.1983385,
+          "end": 1793535006.4259508,
+          "elapsed": 6.227612257003784
+        }
+      ],
+      "sstable_jobs": [
+        {
+          "table": "__idx_500003_fts_rowkey_doc",
+          "seconds": 0.336944
+        },
+        {
+          "table": "__idx_500003_fts_doc_rowkey",
+          "seconds": 0.309225
+        },
+        {
+          "table": "__idx_500003_fti_all_ik",
+          "seconds": 7.477626
+        },
+        {
+          "table": "__idx_500003_fti_all_ik_fts_doc_word",
+          "seconds": 6.78432
+        },
+        {
+          "table": "__idx_500003_fti_content_ik",
+          "seconds": 5.962878
+        },
+        {
+          "table": "__idx_500003_fti_content_ik_fts_doc_word",
+          "seconds": 5.884656
+        },
+        {
+          "table": "__idx_500003_fti_en_beng_fts_doc_word",
+          "seconds": 2.874582
+        },
+        {
+          "table": "__idx_500003_fti_en_beng",
+          "seconds": 3.051793
+        }
+      ]
+    }
+  ]
+}

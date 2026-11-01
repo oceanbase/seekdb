@@ -1,0 +1,13 @@
+SET NAMES utf8mb4;
+--echo Stable input slices must survive transient uppercase/Unicode normalization
+SELECT TOKENIZE('lowercase UPPERCASE stable MiXeD lowercase café CAFÉ stable', 'beng', '[{"output":"all"}]');
+SELECT TOKENIZE(CONCAT('stable ', REPEAT('UPPERCASE ', 1000), 'tail stable'), 'beng', '[{"output":"all"}]');
+SELECT TOKENIZE(CONCAT(REPEAT('lowercase ', 1000), 'CAFÉ ', REPEAT('SECOND ', 1000), 'end'), 'beng', '[{"output":"all"}]');
+PREPARE views_stmt FROM 'SELECT TOKENIZE(?, "beng", ''[{"output":"all"}]'')';
+SET @body='alpha ALPHA café CAFÉ omega omega';
+EXECUTE views_stmt USING @body;
+SET @body='different DIFFERENT delta DELTA';
+EXECUTE views_stmt USING @body;
+SET @body='alpha ALPHA café CAFÉ omega omega';
+EXECUTE views_stmt USING @body;
+DEALLOCATE PREPARE views_stmt;

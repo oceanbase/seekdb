@@ -1,0 +1,17 @@
+SET NAMES utf8mb4;
+--disable_warnings
+CREATE DATABASE IF NOT EXISTS fts_beng_ascii;
+USE fts_beng_ascii;
+DROP TABLE IF EXISTS codes;
+--enable_warnings
+CREATE TABLE codes(n INT PRIMARY KEY);
+INSERT INTO codes VALUES(0),(1),(2),(3),(4),(5),(6),(7);
+INSERT INTO codes SELECT n+8 FROM codes;
+INSERT INTO codes SELECT n+16 FROM codes;
+INSERT INTO codes SELECT n+32 FROM codes;
+INSERT INTO codes SELECT n+64 FROM codes;
+SELECT n,TOKENIZE(CONCAT('alpha',CONVERT(CHAR(n) USING utf8mb4),'beta'),'beng','[{"output":"all"}]') FROM codes ORDER BY n;
+SELECT TOKENIZE('lowercase LOWERCASE café CAFÉ mixed MIXED end','beng','[{"output":"all"}]');
+SELECT TOKENIZE(CONCAT(REPEAT('lowercase ',2000),'UPPERCASE café ',REPEAT('lowercase ',2000),'CAFÉ end'),'beng','[{"output":"all"}]');
+USE oceanbase;
+DROP DATABASE fts_beng_ascii;

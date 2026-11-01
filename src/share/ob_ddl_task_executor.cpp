@@ -15,6 +15,7 @@
  */
 
 #include "ob_ddl_task_executor.h"
+#include "config_bridge.h"
 #include "lib/ob_running_mode.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -350,7 +351,20 @@ int ObDDLLocalBuilder::push_task(ObAsyncTask &task)
 
 int64_t ObDDLLocalBuilder::get_thread_cnt_() const
 {
-  return lib::is_mini_mode() ? 1 : 16;
+  int64_t thread_cnt = 16;
+  if (lib::is_mini_mode()) {
+    const int64_t configured_cpu = config::cpu_count();
+    const int64_t cpu_cnt = configured_cpu > 0 ? configured_cpu : common::get_cpu_num();
+    // Reserve the minimum process-memory budget before allowing a second
+    // builder. Independent FTS auxiliary indexes can then overlap on a
+    // multi-core server, while small-memory and single-core servers stay serial.
+    const int64_t unit = lib::ObRunningModeConfig::MINI_MEM_LOWER;
+    const int64_t budget = lib::ObRunningModeConfig::instance().memory_budget_;
+    const int64_t memory_lanes = MAX(static_cast<int64_t>(1), (budget - unit) / unit);
+    thread_cnt = MIN(static_cast<int64_t>(2), MIN(cpu_cnt, memory_lanes));
+    thread_cnt = MAX(static_cast<int64_t>(1), thread_cnt);
+  }
+  return thread_cnt;
 }
 
 }  // end namespace share

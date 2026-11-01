@@ -1,0 +1,38 @@
+SET NAMES utf8mb4;
+Built-in stopwords, case variants, and ordinary words
+SELECT TOKENIZE('a about an are as at be by com de en for from how i in is it la of on or that the this to was what when where who will with und www database fulltext', 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]');
+TOKENIZE('a about an are as at be by com de en for from how i in is it la of on or that the this to was what when where who will with und www database fulltext', 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"database": 1}, {"fulltext": 1}], "doc_len": 2}
+SELECT TOKENIZE('A ABOUT An ARE AS AT BE BY COM DE EN FOR FROM HOW I IN IS IT LA OF ON OR THAT THE THIS TO WAS WHAT WHEN WHERE WHO WILL WITH UND WWW DATABASE FULLTEXT', 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]');
+TOKENIZE('A ABOUT An ARE AS AT BE BY COM DE EN FOR FROM HOW I IN IS IT LA OF ON OR THAT THE THIS TO WAS WHAT WHEN WHERE WHO WILL WITH UND WWW DATABASE FULLTEXT', 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"database": 1}, {"fulltext": 1}], "doc_len": 2}
+Accent-equivalent stopwords must retain the original collation lookup
+SELECT TOKENIZE(_utf8mb4'thé thére á à â âbout fróm und database café CAFÉ' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]');
+TOKENIZE(_utf8mb4'thé thére á à â âbout fróm und database café CAFÉ' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"database": 1}, {"thére": 1}, {"café": 2}], "doc_len": 4}
+SELECT TOKENIZE(_utf8mb4'thé thére á à â âbout fróm und database café CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]');
+TOKENIZE(_utf8mb4'thé thére á à â âbout fróm und database café CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"café": 2}, {"database": 1}, {"thére": 1}], "doc_len": 4}
+SELECT TOKENIZE('the The tHE theatre database databasex abcdefghi abcdefghijk', 'ik', '[{"output":"all"}]');
+TOKENIZE('the The tHE theatre database databasex abcdefghi abcdefghijk', 'ik', '[{"output":"all"}]')
+{"tokens": [{"abcdefghijk": 1}, {"databasex": 1}, {"database": 1}, {"abcdefghi": 1}, {"theatre": 1}, {"the": 3}], "doc_len": 8}
+SELECT TOKENIZE(CONCAT('the about ', CHAR(0), 'the ', CHAR(9), 'what database'), 'space', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]');
+TOKENIZE(CONCAT('the about ', CHAR(0), 'the ', CHAR(9), 'what database'), 'space', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"database": 1}], "doc_len": 1}
+SELECT TOKENIZE('the! about, THE? theatre thé database', 'space', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]');
+TOKENIZE('the! about, THE? theatre thé database', 'space', '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"database": 1}, {"theatre": 1}], "doc_len": 2}
+PREPARE stop_stmt FROM 'SELECT TOKENIZE(?, "beng", ''[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]'')';
+SET @words='the about database database';
+EXECUTE stop_stmt USING @words;
+TOKENIZE(?, "beng", '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"database": 2}], "doc_len": 2}
+SET @words='THÉ ÁBOUT café CAFÉ';
+EXECUTE stop_stmt USING @words;
+TOKENIZE(?, "beng", '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"café": 2}], "doc_len": 2}
+SET @words='a an i that database';
+EXECUTE stop_stmt USING @words;
+TOKENIZE(?, "beng", '[{"output":"all"},{"additional_args":[{"min_token_size":1}]}]')
+{"tokens": [{"database": 1}], "doc_len": 1}
+DEALLOCATE PREPARE stop_stmt;

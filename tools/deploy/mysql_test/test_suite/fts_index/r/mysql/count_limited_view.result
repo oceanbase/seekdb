@@ -1,0 +1,56 @@
+SET NAMES utf8mb4;
+CREATE DATABASE IF NOT EXISTS fts_count_view;
+USE fts_count_view;
+DROP TABLE IF EXISTS docs;
+CREATE TABLE docs(id INT PRIMARY KEY, body TEXT, FULLTEXT INDEX ft(body) WITH PARSER beng);
+INSERT INTO docs VALUES(1,'ocean database'),(2,'ocean ocean ocean'),(3,'ocean search'),(4,'other'),(5,'ocean database search'),(6,'ocean');
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs ORDER BY id DESC LIMIT 2 OFFSET 1) t;
+n
+2
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') LIMIT 2) t;
+n
+2
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') ORDER BY MATCH(body) AGAINST('ocean') DESC LIMIT 2 OFFSET 1) t;
+n
+2
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs ORDER BY id DESC LIMIT 0) t;
+n
+0
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs ORDER BY id DESC LIMIT 2 OFFSET 100) t;
+n
+0
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs WHERE id < 0 ORDER BY id DESC LIMIT 2) t;
+n
+0
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs ORDER BY id DESC LIMIT 3) t WHERE id <= 2;
+n
+0
+SELECT SUM(id) AS s FROM (SELECT id FROM docs ORDER BY id DESC LIMIT 2) t;
+s
+11
+SELECT COUNT(body) AS n FROM (SELECT body FROM docs ORDER BY id DESC LIMIT 2) t;
+n
+2
+SELECT COUNT(*) AS n, SUM(id) AS s FROM (SELECT id FROM docs ORDER BY id DESC LIMIT 2) t;
+n	s
+2	11
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') LIMIT 2 OFFSET 4) t;
+n
+1
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') LIMIT 2 OFFSET 5) t;
+n
+0
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('xyzunknown') LIMIT 2) t;
+n
+0
+SELECT COUNT(body) AS n FROM (SELECT CASE WHEN id = 6 THEN NULL ELSE body END AS body FROM docs ORDER BY id DESC LIMIT 2) t;
+n
+1
+SELECT id,ROUND(score,6) AS score FROM (SELECT id,MATCH(body) AGAINST('ocean') AS score FROM docs WHERE MATCH(body) AGAINST('ocean') ORDER BY score DESC,id LIMIT 2) t ORDER BY id;
+id	score
+2	0.462185
+6	0.395683
+SELECT COUNT(*) AS n FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') > 0.5 LIMIT 2) t;
+n
+0
+DROP DATABASE fts_count_view;

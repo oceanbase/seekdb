@@ -1,0 +1,15 @@
+# ASCII input views and charset fallback must preserve tokens across calls.
+SET NAMES utf8mb4;
+SELECT JSON_CONTAINS(TOKENIZE('hello world', 'beng'), '["hello","world"]') AS tokens_ok;
+SELECT JSON_CONTAINS(TOKENIZE('HELLO WORLD', 'beng'), '["hello","world"]') AS tokens_ok;
+SELECT JSON_CONTAINS(TOKENIZE('...hello!!! --world??', 'beng'), '["hello","world"]') AS tokens_ok;
+SELECT TOKENIZE(_utf8mb4'café cafe CAFÉ' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"}]');
+SELECT TOKENIZE(_utf8mb4'café cafe CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]');
+PREPARE stmt FROM 'SELECT JSON_CONTAINS(TOKENIZE(?, "beng"), ''["hello","world"]'') AS tokens_ok';
+SET @body = 'hello world';
+EXECUTE stmt USING @body;
+SET @body = 'HELLO WORLD';
+EXECUTE stmt USING @body;
+SET @body = 'hello world';
+EXECUTE stmt USING @body;
+DEALLOCATE PREPARE stmt;

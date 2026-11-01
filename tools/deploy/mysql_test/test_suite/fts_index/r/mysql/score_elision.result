@@ -1,0 +1,70 @@
+SET NAMES utf8mb4;
+SET ob_query_timeout = 100000000;
+CREATE DATABASE IF NOT EXISTS fts_score_regression;
+USE fts_score_regression;
+DROP TABLE IF EXISTS docs;
+CREATE TABLE docs (id INT PRIMARY KEY, body TEXT, FULLTEXT INDEX ft(body) WITH PARSER beng);
+INSERT INTO docs VALUES (1,'ocean database database'),(2,'ocean search'),(3,'unrelated document'),(4,''),(5,NULL);
+SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') ORDER BY id;
+id
+1
+2
+SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') > 0 ORDER BY id;
+id
+1
+2
+SELECT id FROM docs WHERE 0 < MATCH(body) AGAINST('ocean') ORDER BY id;
+id
+1
+2
+SELECT id, ROUND(MATCH(body) AGAINST('ocean'),6) AS score FROM docs WHERE MATCH(body) AGAINST('ocean') > 0 ORDER BY score DESC,id;
+id	score
+2	0.500161
+1	0.471490
+SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') > 0.5 ORDER BY id;
+id
+2
+SELECT id FROM docs WHERE MATCH(body) AGAINST('ocean') > 0 ORDER BY MATCH(body) AGAINST('ocean') DESC,id LIMIT 1;
+id
+2
+SELECT COUNT(*) AS missing_hits FROM docs WHERE MATCH(body) AGAINST('xyzunknown') > 0;
+missing_hits
+0
+SELECT COUNT(*) AS empty_hits FROM docs WHERE MATCH(body) AGAINST('') > 0;
+empty_hits
+0
+PREPARE stmt FROM 'SELECT id FROM docs WHERE MATCH(body) AGAINST(?) > ? ORDER BY id';
+SET @term = 'ocean', @threshold = 0;
+EXECUTE stmt USING @term,@threshold;
+id
+1
+2
+SET @threshold = 1;
+EXECUTE stmt USING @term,@threshold;
+id
+SET @threshold = 0;
+EXECUTE stmt USING @term,@threshold;
+id
+1
+2
+DEALLOCATE PREPARE stmt;
+SELECT TOKENIZE(_utf8mb4'café CAFE cafe' COLLATE utf8mb4_general_ci,'beng','[{"output":"all"}]');
+TOKENIZE(_utf8mb4'café CAFE cafe' COLLATE utf8mb4_general_ci,'beng','[{"output":"all"}]')
+{"tokens": [{"cafe": 3}], "doc_len": 3}
+SELECT TOKENIZE(_utf8mb4'THE thé database database' COLLATE utf8mb4_bin,'beng','[{"output":"all"}]');
+TOKENIZE(_utf8mb4'THE thé database database' COLLATE utf8mb4_bin,'beng','[{"output":"all"}]')
+{"tokens": [{"database": 2}], "doc_len": 2}
+SELECT TOKENIZE(_latin1'hello world hello','beng','[{"output":"all"}]');
+ERROR 42000: Incorrect parameters in the call to native function 'TOKENIZE'
+SELECT id FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('ocean') > 0 ORDER BY id;
+id
+1
+2
+SELECT id FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('ocean database') > 0 ORDER BY id;
+id
+1
+2
+SELECT COUNT(*) AS many_term_hits FROM docs FORCE INDEX(ft) WHERE MATCH(body) AGAINST('ocean qxaa qxab qxac qxad qxae qxaf qxag qxah qxai qxaj qxak qxal qxam qxan qxao qxap qxaq qxar qxas qxat qxau qxav qxaw qxax qxay qxaz qxba qxbb qxbc qxbd qxbe qxbf qxbg qxbh qxbi qxbj qxbk qxbl qxbm qxbn qxbo qxbp qxbq qxbr qxbs qxbt qxbu qxbv qxbw qxbx qxby qxbz qxca qxcb qxcc qxcd qxce qxcf qxcg qxch qxci qxcj qxck qxcl qxcm qxcn qxco qxcp qxcq qxcr qxcs qxct qxcu qxcv qxcw qxcx qxcy qxcz qxda qxdb qxdc qxdd qxde qxdf qxdg qxdh qxdi qxdj qxdk qxdl qxdm qxdn qxdo qxdp qxdq qxdr qxds qxdt qxdu qxdv qxdw qxdx qxdy qxdz qxea qxeb qxec qxed qxee qxef qxeg qxeh qxei qxej qxek qxel qxem qxen qxeo qxep qxeq qxer qxes qxet qxeu qxev qxew qxex qxey qxez qxfa qxfb qxfc qxfd qxfe qxff qxfg qxfh qxfi qxfj qxfk qxfl qxfm qxfn qxfo qxfp qxfq qxfr qxfs qxft qxfu qxfv qxfw qxfx qxfy qxfz qxga qxgb qxgc qxgd qxge qxgf qxgg qxgh qxgi qxgj qxgk qxgl qxgm qxgn qxgo qxgp qxgq qxgr qxgs qxgt qxgu qxgv qxgw qxgx qxgy qxgz qxha qxhb qxhc qxhd qxhe qxhf qxhg qxhh qxhi qxhj qxhk qxhl qxhm qxhn qxho qxhp qxhq qxhr qxhs qxht qxhu qxhv qxhw qxhx qxhy qxhz qxia qxib qxic qxid qxie qxif qxig qxih qxii qxij qxik qxil qxim qxin qxio qxip qxiq qxir qxis qxit qxiu qxiv qxiw qxix qxiy qxiz qxja qxjb qxjc qxjd qxje qxjf qxjg qxjh qxji qxjj qxjk qxjl qxjm qxjn qxjo qxjp qxjq qxjr qxjs qxjt qxju qxjv qxjw qxjx qxjy qxjz qxka qxkb qxkc qxkd qxke qxkf qxkg qxkh qxki qxkj qxkk qxkl qxkm qxkn qxko qxkp qxkq qxkr qxks qxkt qxku qxkv qxkw qxkx qxky qxkz qxla qxlb qxlc qxld qxle qxlf qxlg qxlh qxli qxlj qxlk qxll qxlm qxln') > 0;
+many_term_hits
+2
+DROP DATABASE fts_score_regression;

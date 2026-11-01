@@ -1,0 +1,89 @@
+SET NAMES utf8mb4;
+SET ob_query_timeout=1000000000;
+CREATE DATABASE IF NOT EXISTS fts_cardinality;
+USE fts_cardinality;
+DROP TABLE IF EXISTS docs;
+CREATE TABLE docs(id BIGINT PRIMARY KEY, body TEXT);
+INSERT INTO docs VALUES(1,'alpha beta'),(2,'beta gamma'),(3,'alpha'),(4,'unrelated'),(5,''),(6,NULL),(7,'alpha beta gamma'),(8,'delta');
+INSERT INTO docs SELECT id+8,body FROM docs;
+INSERT INTO docs SELECT id+16,body FROM docs;
+INSERT INTO docs SELECT id+32,body FROM docs;
+INSERT INTO docs SELECT id+64,body FROM docs;
+INSERT INTO docs SELECT id+128,body FROM docs;
+INSERT INTO docs SELECT id+256,body FROM docs;
+INSERT INTO docs SELECT id+512,body FROM docs;
+CREATE FULLTEXT INDEX ft ON docs(body) WITH PARSER beng;
+SELECT COUNT(*) FROM docs WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(*)
+512
+SELECT COUNT(1) FROM docs WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(1)
+512
+SELECT COUNT(*) FROM (SELECT 1 FROM docs WHERE MATCH(body) AGAINST('alpha beta') LIMIT 17 OFFSET 3)t;
+COUNT(*)
+17
+SELECT COUNT(*) FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('alpha beta') LIMIT 17 OFFSET 3)t;
+COUNT(*)
+17
+SELECT COUNT(*) FROM (SELECT 1 FROM docs WHERE MATCH(body) AGAINST('alpha beta') LIMIT 0)t;
+COUNT(*)
+0
+SELECT COUNT(*) FROM (SELECT 1 FROM docs WHERE MATCH(body) AGAINST('alpha beta') LIMIT 10 OFFSET 2000)t;
+COUNT(*)
+0
+SELECT COUNT(*) FROM (SELECT DISTINCT 1 FROM docs WHERE MATCH(body) AGAINST('alpha beta'))t;
+COUNT(*)
+1
+SELECT COUNT(DISTINCT id),COUNT(body),MIN(id),MAX(id),SUM(id) FROM docs WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(DISTINCT id)	COUNT(body)	MIN(id)	MAX(id)	SUM(id)
+512	512	1	1023	261760
+SELECT COUNT(*) FROM docs WHERE MATCH(body) AGAINST('alpha beta') AND id BETWEEN 100 AND 300;
+COUNT(*)
+100
+SELECT COUNT(*) FROM docs d JOIN docs e ON d.id=e.id WHERE MATCH(d.body) AGAINST('alpha beta');
+COUNT(*)
+512
+SELECT id FROM docs WHERE MATCH(body) AGAINST('alpha beta') ORDER BY id LIMIT 8 OFFSET 253;
+id
+506
+507
+511
+513
+514
+515
+519
+521
+SELECT COUNT(*) FROM (SELECT id FROM docs WHERE MATCH(body) AGAINST('alpha beta') ORDER BY MATCH(body) AGAINST('alpha beta') DESC,id LIMIT 17 OFFSET 3)t;
+COUNT(*)
+17
+PREPARE count_stmt FROM 'SELECT COUNT(*) FROM docs WHERE MATCH(body) AGAINST(?)';
+SET @term='alpha beta';
+EXECUTE count_stmt USING @term;
+COUNT(*)
+512
+SET @term='missing';
+EXECUTE count_stmt USING @term;
+COUNT(*)
+0
+SET @term='';
+EXECUTE count_stmt USING @term;
+COUNT(*)
+0
+SET @term='beta gamma';
+EXECUTE count_stmt USING @term;
+COUNT(*)
+384
+DEALLOCATE PREPARE count_stmt;
+START TRANSACTION;
+DELETE FROM docs WHERE id<=8;
+INSERT INTO docs VALUES(2000,'alpha beta');
+SELECT COUNT(*) FROM docs WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(*)
+509
+ROLLBACK;
+SELECT COUNT(*) FROM docs WHERE MATCH(body) AGAINST('alpha beta');
+COUNT(*)
+512
+DROP TABLE docs;
+USE oceanbase;
+DROP DATABASE fts_cardinality;

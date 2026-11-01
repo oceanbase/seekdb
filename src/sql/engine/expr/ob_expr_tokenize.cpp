@@ -375,6 +375,47 @@ int ObExprTokenize::parse_parser_properties(const ObExpr &expr,
 int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &properties)
 {
   int ret = OB_SUCCESS;
+  // Built-in defaults depend only on the versioned parser name. Rebuilding
+  // their JSON for every TOKENIZE call repeats validation and allocations.
+  // Cache only successful default configurations, never input text or tokens.
+  struct DefaultPropsEntry
+  {
+    char parser[storage::OB_FT_PARSER_NAME_LENGTH] = {};
+    char json[2048] = {};
+    int32_t parser_length = 0;
+    int32_t json_length = 0;
+  };
+  static thread_local DefaultPropsEntry defaults[8];
+  static thread_local uint32_t next_default = 0;
+  const bool default_input = properties.empty()
+      && parser_name_.length() > 0
+      && parser_name_.length() < storage::OB_FT_PARSER_NAME_LENGTH;
+  if (default_input) {
+    for (const auto &entry : defaults) {
+      if (entry.parser_length == parser_name_.length()
+          && 0 == MEMCMP(entry.parser, parser_name_.ptr(), entry.parser_length)) {
+        const int32_t cached_length = entry.json_length;
+        char cached_json[2048];
+        if (cached_length > 0) {
+          MEMCPY(cached_json, entry.json, cached_length);
+        }
+        // Own the returned bytes so another invocation/fiber cannot evict
+        // the configuration while this invocation is loading its dictionary.
+        if (cached_length == 0) {
+          properties_.reset();
+        } else {
+          char *copy = static_cast<char *>(allocator_.alloc(cached_length));
+          if (OB_ISNULL(copy)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            MEMCPY(copy, cached_json, cached_length);
+            properties_.assign_ptr(copy, cached_length);
+          }
+        }
+        return ret;
+      }
+    }
+  }
   storage::ObFTParserJsonProps parser_properties;
 
   if (OB_FAIL(parser_properties.init())) {
@@ -384,6 +425,16 @@ int ObExprTokenize::TokenizeParam::reform_parser_properties(const ObString &prop
                                                              ObCollationType::CS_TYPE_UTF8MB4_BIN,
                                                              true))) {
   } else if (OB_FAIL(parser_properties.to_format_json(allocator_, properties_))) {
+  }
+
+  if (OB_SUCC(ret) && default_input && properties_.length() <= 2048) {
+    DefaultPropsEntry &entry = defaults[next_default++ % ARRAYSIZEOF(defaults)];
+    entry.parser_length = parser_name_.length();
+    entry.json_length = properties_.length();
+    MEMCPY(entry.parser, parser_name_.ptr(), entry.parser_length);
+    if (entry.json_length > 0) {
+      MEMCPY(entry.json, properties_.ptr(), entry.json_length);
+    }
   }
 
   return ret;

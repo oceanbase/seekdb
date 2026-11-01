@@ -1,0 +1,25 @@
+SET NAMES utf8mb4;
+Stable input slices must survive transient uppercase/Unicode normalization
+SELECT TOKENIZE('lowercase UPPERCASE stable MiXeD lowercase café CAFÉ stable', 'beng', '[{"output":"all"}]');
+TOKENIZE('lowercase UPPERCASE stable MiXeD lowercase café CAFÉ stable', 'beng', '[{"output":"all"}]')
+{"tokens": [{"café": 2}, {"lowercase": 2}, {"mixed": 1}, {"stable": 2}, {"uppercase": 1}], "doc_len": 8}
+SELECT TOKENIZE(CONCAT('stable ', REPEAT('UPPERCASE ', 1000), 'tail stable'), 'beng', '[{"output":"all"}]');
+TOKENIZE(CONCAT('stable ', REPEAT('UPPERCASE ', 1000), 'tail stable'), 'beng', '[{"output":"all"}]')
+{"tokens": [], "doc_len": 0}
+SELECT TOKENIZE(CONCAT(REPEAT('lowercase ', 1000), 'CAFÉ ', REPEAT('SECOND ', 1000), 'end'), 'beng', '[{"output":"all"}]');
+TOKENIZE(CONCAT(REPEAT('lowercase ', 1000), 'CAFÉ ', REPEAT('SECOND ', 1000), 'end'), 'beng', '[{"output":"all"}]')
+{"tokens": [], "doc_len": 0}
+PREPARE views_stmt FROM 'SELECT TOKENIZE(?, "beng", ''[{"output":"all"}]'')';
+SET @body='alpha ALPHA café CAFÉ omega omega';
+EXECUTE views_stmt USING @body;
+TOKENIZE(?, "beng", '[{"output":"all"}]')
+{"tokens": [{"café": 2}, {"omega": 2}, {"alpha": 2}], "doc_len": 6}
+SET @body='different DIFFERENT delta DELTA';
+EXECUTE views_stmt USING @body;
+TOKENIZE(?, "beng", '[{"output":"all"}]')
+{"tokens": [{"delta": 2}, {"different": 2}], "doc_len": 4}
+SET @body='alpha ALPHA café CAFÉ omega omega';
+EXECUTE views_stmt USING @body;
+TOKENIZE(?, "beng", '[{"output":"all"}]')
+{"tokens": [{"café": 2}, {"omega": 2}, {"alpha": 2}], "doc_len": 6}
+DEALLOCATE PREPARE views_stmt;

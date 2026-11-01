@@ -125,6 +125,19 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
   } else {
+    // Loaders remain owned by the map for its entire lifetime. Acquire the
+    // caller's reference under a shared lock; only a cache miss needs a writer.
+    {
+      TCRLockGuard guard(lock_);
+      ret = dic_loader_map_.get_refactored(dic_loader_key, dic_loader);
+      if (OB_SUCCESS == ret) {
+        ret = loader_handle.set_loader(dic_loader);
+      }
+    }
+    if (OB_HASH_NOT_EXIST != ret) {
+      return ret;
+    }
+    // Another thread may have populated the entry while we released the reader.
     TCWLockGuard guard(lock_);
     if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
       if (OB_HASH_NOT_EXIST == ret) {

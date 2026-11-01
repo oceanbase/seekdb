@@ -1,0 +1,15 @@
+SET NAMES utf8mb4;
+--echo Dictionary ranges, quantifiers, mixed scripts and repeated loader acquisition
+SELECT TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上 一二三四五六七八九十 百千万亿', 'ik');
+SELECT TOKENIZE('阿拉伯 北京 南京 重庆 数据库 全文检索 算法 语言 字典 香港 中华 龟龄', 'ik');
+SELECT TOKENIZE('3公斤 20千米 100毫升 一百二十三个 两万亿元', 'ik');
+SELECT TOKENIZE('OceanBase 数据库 café CAFÉ Àà ß İ 你好🙂𠮷𠀀 한국어 日本語', 'ik');
+SELECT TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上', 'ik', '[{"additional_args":[{"ik_mode":"smart"}]}]');
+SELECT TOKENIZE('中华人民共和国人民大会堂 上海自来水来自海上', 'ik', '[{"additional_args":[{"ik_mode":"max_word"}]}]');
+SELECT TOKENIZE('a Z 0 空格，标点。\t\n数据库', 'ik');
+SELECT BENCHMARK(100, TOKENIZE('词典并发加载 数据库', 'ik'));
+--echo In-place counts must keep the latest collation-equivalent spelling
+SELECT TOKENIZE(_utf8mb4'cafe café cafe CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]');
+SELECT TOKENIZE(_utf8mb4'café cafe CAFÉ cafe' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]');
+SELECT TOKENIZE(_utf8mb4'café cafe café cafe' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"}]');
+SELECT TOKENIZE('数据库 数据库 全文检索 数据库', 'ik', '[{"output":"all"}]');

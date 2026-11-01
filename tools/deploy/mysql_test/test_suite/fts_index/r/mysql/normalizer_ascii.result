@@ -1,0 +1,30 @@
+SET NAMES utf8mb4;
+SELECT JSON_CONTAINS(TOKENIZE('hello world', 'beng'), '["hello","world"]') AS tokens_ok;
+tokens_ok
+1
+SELECT JSON_CONTAINS(TOKENIZE('HELLO WORLD', 'beng'), '["hello","world"]') AS tokens_ok;
+tokens_ok
+1
+SELECT JSON_CONTAINS(TOKENIZE('...hello!!! --world??', 'beng'), '["hello","world"]') AS tokens_ok;
+tokens_ok
+1
+SELECT TOKENIZE(_utf8mb4'café cafe CAFÉ' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"}]');
+TOKENIZE(_utf8mb4'café cafe CAFÉ' COLLATE utf8mb4_bin, 'beng', '[{"output":"all"}]')
+{"tokens": [{"café": 2}, {"cafe": 1}], "doc_len": 3}
+SELECT TOKENIZE(_utf8mb4'café cafe CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]');
+TOKENIZE(_utf8mb4'café cafe CAFÉ' COLLATE utf8mb4_general_ci, 'beng', '[{"output":"all"}]')
+{"tokens": [{"café": 3}], "doc_len": 3}
+PREPARE stmt FROM 'SELECT JSON_CONTAINS(TOKENIZE(?, "beng"), ''["hello","world"]'') AS tokens_ok';
+SET @body = 'hello world';
+EXECUTE stmt USING @body;
+tokens_ok
+1
+SET @body = 'HELLO WORLD';
+EXECUTE stmt USING @body;
+tokens_ok
+1
+SET @body = 'hello world';
+EXECUTE stmt USING @body;
+tokens_ok
+1
+DEALLOCATE PREPARE stmt;

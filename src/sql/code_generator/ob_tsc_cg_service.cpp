@@ -1942,6 +1942,17 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       root_ctdef = aux_lookup_ctdef;
     }
   }
+  if (OB_SUCC(ret) && root_ctdef == ir_scan_ctdef
+      && !cg_ctx.is_func_lookup_ && !cg_ctx.is_vec_iter_func_lookup_
+      && !cg_ctx.is_es_match_ && !cg_ctx.is_merge_fts_index_
+      && !op.get_index_back() && !tr_info.need_calc_relevance_
+      && op.get_output_exprs().empty() && op.get_filter_exprs().empty()
+      && match_against->get_mode_flag() == NATURAL_LANGUAGE_MODE) {
+    // The consumer only needs cardinality (for example COUNT(*)). Posting
+    // IDs still participate in the union but need no output copy/projection.
+    ir_scan_ctdef->skip_ir_projection_ = true;
+    ir_scan_ctdef->result_output_.reuse();
+  }
   return ret;
 }
 

@@ -1,0 +1,12 @@
+{
+  "revision27": {
+    "rss_kib": [
+      374124,
+      356816,
+      322576,
+      312432
+    ],
+    "cold_clients": 8,
+    "outputs_equal": true
+  }
+}

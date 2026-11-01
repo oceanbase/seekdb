@@ -538,6 +538,16 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
   } else {
     if (func.contain_geometry_values_ || func.contain_fulltext_search_ || func.contain_vec_index_approx_) {
       disable_list = ObTransformRule::ALL_TRANSFORM_RULES;
+      if (func.contain_fulltext_search_ && !func.contain_geometry_values_
+          && !func.contain_vec_index_approx_) {
+        // These rules preserve cardinality and do not rewrite MATCH filters.
+        // A count-only parent needs neither a limited view's relevance order
+        // nor its unused output columns (which otherwise force index lookup).
+        uint64_t safe_rules = 0;
+        ObTransformRule::add_trans_type(safe_rules, SIMPLIFY_ORDERBY);
+        ObTransformRule::add_trans_type(safe_rules, PROJECTION_PRUNING);
+        disable_list &= ~safe_rules;
+      }
     }
     if (func.contain_enum_set_values_) {
       uint64_t enum_set_enable_list = 0;
