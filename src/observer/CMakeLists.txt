@@ -73,6 +73,8 @@ endif()
 target_link_libraries(ob_main PUBLIC ob_base)
 
 add_executable(seekdb)
+include(${CMAKE_SOURCE_DIR}/cmake/Hipvs.cmake)
+seekdb_configure_hipvs(seekdb)
 if(WIN32)
   get_filename_component(CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
   get_filename_component(LLVM_ROOT ${CLANG_BIN_DIR} DIRECTORY)

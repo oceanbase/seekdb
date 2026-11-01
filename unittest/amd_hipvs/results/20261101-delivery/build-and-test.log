@@ -1,0 +1,1032 @@
+Sun Nov  1 10:10:22 UTC 2026
+VERIFY_BACKUP
+amd-recovery-20261031.tar: OK
+amd-delivery-update-20261101.bundle: OK
+Sun Nov  1 10:10:23 UTC 2026
+RESTORE_SOURCE_AND_TOOLCHAIN
+amd-revision-6699a29.tar.gz: OK
+amd-rust-offline.tar.gz: OK
+
+Source and offline compiler restored to: /workspace/amd-recovered-6tSVT8lO
+No database build or GPU test has been started.
+To build and test: bash "/workspace/amd-recovered-6tSVT8lO/build-and-test.sh"
+From /workspace/seekdb_hipvs_notebook/amd-delivery-update-20261101.bundle
+ * branch            HEAD       -> FETCH_HEAD
+HEAD is now at d8c84b8 fix(vector): build and locate the hipVS backend in ordinary deployments
+Sun Nov  1 10:10:32 UTC 2026
+PREPARE_BUILD_DEPENDENCIES
+Get:1 https://repo.radeon.com/rocm/apt/7.2.4 noble InRelease [2605 B]
+Get:2 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB]
+Get:3 http://archive.ubuntu.com/ubuntu noble InRelease [256 kB]
+Get:4 https://repo.radeon.com/rocm/apt/7.2.4 noble/main amd64 Packages [61.3 kB]
+Get:5 https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu noble InRelease [17.8 kB]
+Get:6 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [1412 kB]
+Get:7 http://archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB]
+Get:8 https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu noble/main amd64 Packages [60.0 kB]
+Get:9 http://archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB]
+Get:10 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages [1808 kB]
+Get:11 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [58.8 kB]
+Get:12 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [1550 kB]
+Get:13 http://archive.ubuntu.com/ubuntu noble/main amd64 Components [665 kB]
+Get:14 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [97.4 kB]
+Get:15 http://archive.ubuntu.com/ubuntu noble/universe amd64 Packages [19.3 MB]
+Get:16 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2122 kB]
+Get:17 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Components [157 B]
+Get:18 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [55.6 kB]
+Get:19 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [158 B]
+Get:20 http://archive.ubuntu.com/ubuntu noble/universe amd64 Components [5943 kB]
+Get:21 http://archive.ubuntu.com/ubuntu noble/restricted amd64 Packages [117 kB]
+Get:22 http://archive.ubuntu.com/ubuntu noble/multiverse amd64 Packages [331 kB]
+Get:23 http://archive.ubuntu.com/ubuntu noble/multiverse amd64 Components [41.9 kB]
+Get:24 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1741 kB]
+Get:25 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [242 kB]
+Get:26 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [2172 kB]
+Get:27 http://archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [533 kB]
+Get:28 http://archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [2240 kB]
+Get:29 http://archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [159 B]
+Get:30 http://archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Packages [61.7 kB]
+Get:31 http://archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [887 B]
+Get:32 http://archive.ubuntu.com/ubuntu noble-backports/main amd64 Packages [49.0 kB]
+Get:33 http://archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [6354 B]
+Get:34 http://archive.ubuntu.com/ubuntu noble-backports/universe amd64 Packages [36.0 kB]
+Get:35 http://archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [13.6 kB]
+Get:36 http://archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [160 B]
+Get:37 http://archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Packages [669 B]
+Get:38 http://archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [161 B]
+Fetched 41.4 MB in 40s (1041 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+make is already the newest version (4.3-4.1build2).
+make set to manually installed.
+g++ is already the newest version (4:13.2.0-7ubuntu1).
+g++ set to manually installed.
+python3-venv is already the newest version (3.12.3-0ubuntu2.1).
+The following additional packages will be installed:
+  liblua5.3-0 librpm9t64 librpmio9t64 rpm-common
+Suggested packages:
+  libarchive-dev rpm-i18n
+The following NEW packages will be installed:
+  cpio liblua5.3-0 librpm9t64 librpmio9t64 rpm-common rpm2cpio
+The following packages will be upgraded:
+  wget
+1 upgraded, 6 newly installed, 0 to remove and 173 not upgraded.
+Need to get 916 kB of archives.
+After this operation, 2198 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 cpio amd64 2.15+dfsg-1ubuntu2.1 [83.1 kB]
+Get:2 http://archive.ubuntu.com/ubuntu noble-updates/main amd64 wget amd64 1.21.4-1ubuntu4.5 [334 kB]
+Get:3 http://archive.ubuntu.com/ubuntu noble/universe amd64 liblua5.3-0 amd64 5.3.6-2build2 [143 kB]
+Get:4 http://archive.ubuntu.com/ubuntu noble/universe amd64 librpmio9t64 amd64 4.18.2+dfsg-2.1build2 [95.2 kB]
+Get:5 http://archive.ubuntu.com/ubuntu noble/universe amd64 librpm9t64 amd64 4.18.2+dfsg-2.1build2 [217 kB]
+Get:6 http://archive.ubuntu.com/ubuntu noble/universe amd64 rpm-common amd64 4.18.2+dfsg-2.1build2 [34.0 kB]
+Get:7 http://archive.ubuntu.com/ubuntu noble/universe amd64 rpm2cpio amd64 4.18.2+dfsg-2.1build2 [10.3 kB]
+debconf: delaying package configuration, since apt-utils is not installed
+Fetched 916 kB in 6s (152 kB/s)
+Selecting previously unselected package cpio.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 44673 files and directories currently installed.)
+Preparing to unpack .../0-cpio_2.15+dfsg-1ubuntu2.1_amd64.deb ...
+Unpacking cpio (2.15+dfsg-1ubuntu2.1) ...
+Preparing to unpack .../1-wget_1.21.4-1ubuntu4.5_amd64.deb ...
+Unpacking wget (1.21.4-1ubuntu4.5) over (1.21.4-1ubuntu4.1) ...
+Selecting previously unselected package liblua5.3-0:amd64.
+Preparing to unpack .../2-liblua5.3-0_5.3.6-2build2_amd64.deb ...
+Unpacking liblua5.3-0:amd64 (5.3.6-2build2) ...
+Selecting previously unselected package librpmio9t64.
+Preparing to unpack .../3-librpmio9t64_4.18.2+dfsg-2.1build2_amd64.deb ...
+Unpacking librpmio9t64 (4.18.2+dfsg-2.1build2) ...
+Selecting previously unselected package librpm9t64.
+Preparing to unpack .../4-librpm9t64_4.18.2+dfsg-2.1build2_amd64.deb ...
+Unpacking librpm9t64 (4.18.2+dfsg-2.1build2) ...
+Selecting previously unselected package rpm-common.
+Preparing to unpack .../5-rpm-common_4.18.2+dfsg-2.1build2_amd64.deb ...
+Unpacking rpm-common (4.18.2+dfsg-2.1build2) ...
+Selecting previously unselected package rpm2cpio.
+Preparing to unpack .../6-rpm2cpio_4.18.2+dfsg-2.1build2_amd64.deb ...
+Unpacking rpm2cpio (4.18.2+dfsg-2.1build2) ...
+Setting up cpio (2.15+dfsg-1ubuntu2.1) ...
+update-alternatives: using /usr/bin/mt-gnu to provide /usr/bin/mt (mt) in auto mode
+update-alternatives: warning: skip creation of /usr/share/man/man1/mt.1.gz because associated file /usr/share/man/man1/mt-gnu.1.gz (of link group mt) doesn't exist
+Setting up wget (1.21.4-1ubuntu4.5) ...
+Setting up liblua5.3-0:amd64 (5.3.6-2build2) ...
+Setting up librpmio9t64 (4.18.2+dfsg-2.1build2) ...
+Setting up librpm9t64 (4.18.2+dfsg-2.1build2) ...
+Setting up rpm-common (4.18.2+dfsg-2.1build2) ...
+Setting up rpm2cpio (4.18.2+dfsg-2.1build2) ...
+Processing triggers for dbus (1.14.10-4ubuntu4.1) ...
+Processing triggers for libc-bin (2.39-0ubuntu8.7) ...
+[dep_create.sh] [NOTICE] 'Ubuntu 24.04.4 LTS (x86_64)' is compatible with CentOS 9, use el9 dependencies list
+[dep_create.sh] oceanbase.el9.x86_64.deps has been not initialized, due to /workspace/amd-recovered-6tSVT8lO/amd-seekdb/deps/3rd/6cbf427016d9c5328b3f45ad0bb925b5 not exists
+[dep_create.sh] FOUND env DEP_CACHE_DIR: /opt/seekdb-deps-cache
+[dep_create.sh] cache deps /opt/seekdb-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd/DONE not exist
+[dep_create.sh] check dependencies profile for oceanbase.el9.x86_64.deps... FOUND
+[dep_create.sh] check repository address in profile...
+[dep_create.sh] target: default, repo: http://mirrors.oceanbase.com/oceanbase/development-kit/el/8/x86_64/
+[dep_create.sh] target: community, repo: http://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
+[dep_create.sh] target: el9, repo: http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/x86_64/
+[dep_create.sh] start to download dependencies...
+[dep_create.sh] downloading package <devdeps-gtest-1.8.0-242026020914.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-gtest-1.8.0-242026020914.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libcurl-static-8.12.1-132025040210.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libcurl-static-8.12.1-132025040210.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libunwind-static-1.6.2-402025072120.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libunwind-static-1.6.2-402025072120.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libaio-0.3.112-12022092915.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libaio-0.3.112-12022092915.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-relaxed-rapidjson-1.0.0-52023011719.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-relaxed-rapidjson-1.0.0-52023011719.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-openssl-static-1.1.1u-22023100710.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-openssl-static-1.1.1u-22023100710.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libxml2-2.13.6-22025032016.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libxml2-2.13.6-22025032016.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-xz-5.2.2-42022090615.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-xz-5.2.2-42022090615.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-zlib-static-1.2.13-82024102414.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-zlib-static-1.2.13-82024102414.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-boost-1.74.0-22022110914.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-boost-1.74.0-22022110914.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-abseil-cpp-20211102.0-82026020911.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-abseil-cpp-20211102.0-82026020911.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-s2geometry-0.10.0-222026021017.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-s2geometry-0.10.0-222026021017.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-icu-69.1-362026020911.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-icu-69.1-362026020911.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-grpc-abiv1-1.46.7-572026031815.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-grpc-abiv1-1.46.7-572026031815.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-roaringbitmap-croaring-3.0.0-42024042816.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-roaringbitmap-croaring-3.0.0-42024042816.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-vsag-abiv1-1.1.0-1752026041310.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-vsag-abiv1-1.1.0-1752026041310.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-fast-float-6.1.3-42024112122.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-fast-float-6.1.3-42024112122.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-binutils-2.30-12022100413.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-binutils-2.30-12022100413.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-ccache-3.7.12-12022100417.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-ccache-3.7.12-12022100417.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-cmake-3.30.3-52024111819.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-cmake-3.30.3-52024111819.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obshell-4.4.1.1-32026031914.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obshell-4.4.1.1-32026031914.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <ob-deploy-4.1.0-2.el8.x86_64.rpm>
+[dep_create.sh] unpack package <ob-deploy-4.1.0-2.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obclient-2.2.3-1.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obclient-2.2.3-1.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <libobclient-2.2.3-1.el8.x86_64.rpm>
+[dep_create.sh] unpack package <libobclient-2.2.3-1.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] generate lock file /opt/seekdb-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5.lockfile
+[dep_create.sh] unlock lock file /opt/seekdb-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5.lockfile
+[dep_create.sh] link deps /workspace/amd-recovered-6tSVT8lO/amd-seekdb/deps/3rd -> /opt/seekdb-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd
+Sun Nov  1 10:14:21 UTC 2026
+NORMAL_RELEASE_BUILD_WITH_HIPVS_ON
+[build.sh] command: build.sh release -DSEEKDB_WITH_HIPVS=ON --make -j8
+[build.sh] configuring CMake release build: /workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release
+-- ARCHITECTURE: x86_64
+-- Using C++20 standard
+-- build without pie
+-- ob-compile not found, compile locally.
+-- Ubuntu 24.04 detected, using libaio1t64
+-- The CXX compiler identification is Clang 17.0.6
+-- The C compiler identification is Clang 17.0.6
+-- The ASM compiler identification is Clang with GNU-like command-line
+-- Found assembler: /workspace/amd-recovered-6tSVT8lO/amd-seekdb/deps/3rd/usr/local/oceanbase/devtools/bin/clang-17
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /workspace/amd-recovered-6tSVT8lO/amd-seekdb/deps/3rd/usr/local/oceanbase/devtools/bin/clang++-17 - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /workspace/amd-recovered-6tSVT8lO/amd-seekdb/deps/3rd/usr/local/oceanbase/devtools/bin/clang-17 - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found Python3: /opt/venv/bin/python3.12 (found version "3.12.3") found components: Interpreter
+/workspace/amd-recovered-6tSVT8lO/amd-seekdb/tools/cmake/emit_bazel_source_inventory.py:36: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_STR = getattr(ast, "Str", None)
+/workspace/amd-recovered-6tSVT8lO/amd-seekdb/tools/cmake/emit_bazel_source_inventory.py:37: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NUM = getattr(ast, "Num", None)
+/workspace/amd-recovered-6tSVT8lO/amd-seekdb/tools/cmake/emit_bazel_source_inventory.py:38: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NAME_CONSTANT = getattr(ast, "NameConstant", None)
+/workspace/amd-recovered-6tSVT8lO/amd-seekdb/tools/cmake/emit_bazel_source_inventory.py:48: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  if _AST_STR is not None and isinstance(node, _AST_STR):
+/workspace/amd-recovered-6tSVT8lO/amd-seekdb/tools/cmake/emit_bazel_source_inventory.py:52: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NAME_CONSTANT)
+/workspace/amd-recovered-6tSVT8lO/amd-seekdb/tools/cmake/emit_bazel_source_inventory.py:64: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NUM)
+-- STDC_SHARED_LIB: /opt/seekdb-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd/usr/local/oceanbase/devtools/lib64/libstdc++.so.6.0.30
+-- [rust] cargo: /workspace/amd-recovered-6tSVT8lO/amd-toolchain/.rustup/toolchains/1.98.1-x86_64-unknown-linux-gnu/bin/cargo
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- [rust] config target ready -> /workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release/rust-target/exports/libconfig.a
+-- [rust] local target ready -> /workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release/rust-target/exports/liblocal.a
+-- [rust] sql_nio target ready -> /workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release/rust-target/exports/libsql_nio.a
+-- Performing Test COMPILER_SUPPORTS_VLA_CXX_EXTENSION
+-- Performing Test COMPILER_SUPPORTS_VLA_CXX_EXTENSION - Failed
+-- Performing Test COMPILER_SUPPORTS_ENUM_CONSTEXPR_WARNING
+-- Performing Test COMPILER_SUPPORTS_ENUM_CONSTEXPR_WARNING - Success
+-- Ubuntu 24.04 detected, using libaio1t64 package and linking to /usr/lib/x86_64-linux-gnu/libaio.so.1t64
+-- oblib_add_library compress
+-- oblib_add_library zstd_1_3_8
+-- oblib_add_library restore
+-- ob_lib_add_target oblib_lib
+-- ob_lib_add_target oblib_lib_simd
+-- ob_lib_add_target oblib_lib_bitmap
+-- ob_add_new_object_target ob_malloc_object
+-- ob_lib_add_target oblib_common
+-- ob_lib_add_target oblib_rpc
+-- oblib_add_library oblib_grpc
+-- oblib_extra_objects /workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release/src/oblib/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.o
+-- ob_add_new_object_target ob_share
+-- ob_add_new_object_target ob_share_extra
+-- observer_add_target ob_data_plane
+-- observer_add_target ob_query
+-- ob_add_new_object_target ob_sql
+-- ob_add_new_object_target ob_sql_extra
+-- observer_add_target ob_sql_simd
+-- observer_add_target ob_pl
+-- observer_add_target syspack_source
+-- observer_add_target ob_standby_runtime
+-- observer_add_target ob_standby
+-- observer_add_target ob_rootserver
+-- observer_add_target ob_logservice
+-- observer_add_target ob_storage_tablet_autoincrement_state
+-- ob_add_new_object_target ob_storage
+-- observer_add_target ob_storage_simd
+-- observer_add_target ob_server
+-- HIPVS enabled; bridge will be built next to seekdb
+-- Configuring done (2.3s)
+-- Generating done (0.4s)
+-- Build files have been written to: /workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release
+make: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[1]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[2]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  0%] Building AMD hipVS HNSW backend
+[  0%] Building CXX object src/oblib/lib/restore/CMakeFiles/restore.dir/ob_io_device.cpp.o
+[  0%] [rust] cargo build workspace (release)
+[  0%] Building jemalloc with Cargo
+[  0%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/ob_grpc_context.cpp.o
+[  0%] Building CXX object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/ob_zstd_wrapper.cpp.o
+[  0%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib_simd.dir/Unity/unity_oblib_lib_simd_oblib_lib_simd_codec_simd_0_c___cxx.cxx.o
+[  1%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib_bitmap.dir/Unity/unity_oblib_lib_bitmap_oblib_lib_bitmap_common_0_c___cxx.cxx.o
+[  1%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/debug.c.o
+[  1%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/entropy_common.c.o
+   Compiling seekdb-jemalloc-sys v0.2.2+5.3.1
+[  2%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/error_private.c.o
+     Locking 122 packages to latest compatible versions
+[  2%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/fse_compress.c.o
+[  2%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/fse_decompress.c.o
+   Compiling proc-macro2 v1.0.107
+[  2%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/hist.c.o
+[  3%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/huf_compress.c.o
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+[  3%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/huf_decompress.c.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  3%] Built target restore
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  4%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_wide_integer_0_c___cxx.cxx.o
+   Compiling syn v3.0.9
+Built /workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release/src/observer/libseekdb_hipvs_build.so
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  4%] Built target seekdb_hipvs_bridge
+[  5%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/ob_grpc_server.cpp.o
+[  5%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/pool.c.o
+[  5%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/threading.c.o
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/xxhash.c.o
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_common.c.o
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_compress.c.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  6%] Built target oblib_lib_bitmap
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  6%] Building CXX object src/oblib/rpc/CMakeFiles/oblib_rpc.dir/Unity/unity_oblib_rpc_oblib_rpc_common_0_c___cxx.cxx.o
+[  6%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/standbyservice.pb.cc.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  6%] Built target oblib_lib_simd
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  6%] Generating wrapped syspack source files
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  6%] Built target generate_syspack_source
+   Compiling find-msvc-tools v0.1.15
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_ddict.c.o
+   Compiling shlex v2.0.1
+[  7%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_decompress.c.o
+   Compiling cc v1.10.0
+[  7%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_decompress_block.c.o
+   Compiling equivalent v1.0.3
+   Compiling hashbrown v0.17.1
+[  7%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_double_fast.c.o
+[  7%] Building CXX object src/oblib/rpc/CMakeFiles/oblib_rpc.dir/Unity/unity_oblib_rpc_oblib_rpc_obmysql_packet_0_c___cxx.cxx.o
+   Compiling serde_core v1.0.229
+   Compiling syn v2.0.119
+   Compiling indexmap v2.14.2
+   Compiling serde v1.0.229
+[  7%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_udt_0_c___cxx.cxx.o
+   Compiling autocfg v1.5.1
+[  7%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/standbyservice.grpc.pb.cc.o
+[  7%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_fast.c.o
+   Compiling num-traits v0.2.19
+   Compiling serde_derive v1.0.229
+   Compiling libc v0.2.191
+[  8%] Building CXX object src/oblib/rpc/CMakeFiles/oblib_rpc.dir/Unity/unity_oblib_rpc_oblib_rpc_frame_0_c___cxx.cxx.o
+[  9%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_lazy.c.o
+   Compiling itoa v1.0.18
+   Compiling scratch v1.0.9
+   Compiling link-cplusplus v1.0.12
+   Compiling termcolor v1.4.1
+   Compiling unicode-width v0.2.3
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling codespan-reporting v0.13.1
+   Compiling anstyle v1.0.14
+   Compiling zmij v1.0.23
+   Compiling anstyle-query v1.1.5
+   Compiling memchr v2.8.3
+   Compiling getrandom v0.4.3
+   Compiling cfg-if v1.0.5
+   Compiling minimal-lexical v0.2.1
+   Compiling thiserror v2.0.21
+   Compiling num-conv v0.2.2
+   Compiling rustix v1.1.6
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling cxxbridge-flags v1.0.205
+   Compiling time-core v0.1.9
+   Compiling cxx v1.0.205
+   Compiling time-macros v0.2.32
+[  9%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_ldm.c.o
+   Compiling anstream v1.0.0
+[  9%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_opt.c.o
+   Compiling nom v7.1.3
+[  9%] Building CXX object src/oblib/rpc/CMakeFiles/oblib_rpc.dir/Unity/unity_oblib_rpc_oblib_rpc_obmysql_0_c___cxx.cxx.o
+   Compiling cxx-build v1.0.205
+   Compiling synstructure v0.13.2
+   Compiling ring v0.17.14
+   Compiling thiserror-impl v2.0.21
+   Compiling clap_lex v1.1.1
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  9%] Built target oblib_rpc
+   Compiling strsim v0.11.1
+   Compiling bitflags v2.13.2
+   Compiling linux-raw-sys v0.12.1
+   Compiling winnow v1.0.4
+   Compiling powerfmt v0.2.1
+   Compiling serde_json v1.0.154
+   Compiling deranged v0.5.9
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling clap_builder v4.6.7
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[  9%] Built target oblib_grpc
+   Compiling asn1-rs-derive v0.6.0
+   Compiling time v0.3.55
+   Compiling rusticata-macros v4.1.0
+   Compiling asn1-rs-impl v0.2.0
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling serde_spanned v1.1.2
+   Compiling displaydoc v0.2.7
+   Compiling winnow v0.7.15
+   Compiling fastrand v2.5.0
+   Compiling cbindgen v0.29.4
+   Compiling once_cell v1.21.4
+   Compiling tempfile v3.27.0
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling asn1-rs v0.7.2
+   Compiling clap v4.6.7
+   Compiling local v0.1.0 (/workspace/amd-recovered-6tSVT8lO/amd-seekdb/rust/local)
+   Compiling getrandom v0.2.17
+   Compiling num-integer v0.1.47
+   Compiling zeroize v1.9.1
+   Compiling oid-registry v0.8.1
+   Compiling heck v0.5.0
+   Compiling crc32fast v1.5.3
+   Compiling ryu v1.0.23
+   Compiling log v0.4.34
+   Compiling unsafe-libyaml v0.2.11
+   Compiling untrusted v0.9.0
+   Compiling num-bigint v0.4.8
+   Compiling serde_yaml v0.9.34+deprecated
+[ 10%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstdmt_compress.c.o
+   Compiling rustls-pki-types v1.15.1
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 10%] Built target zstd_1_3_8_objs
+   Compiling cxxbridge-macro v1.0.205
+   Compiling adler2 v2.0.1
+   Compiling foldhash v0.2.0
+   Compiling rustls v0.23.46
+   Compiling simd-adler32 v0.3.10
+   Compiling rustls-webpki v0.103.16
+   Compiling miniz_oxide v0.9.1
+   Compiling sql-nio v0.1.0 (/workspace/amd-recovered-6tSVT8lO/amd-seekdb/rust/sql-nio)
+   Compiling config v0.1.0 (/workspace/amd-recovered-6tSVT8lO/amd-seekdb/rust/config)
+   Compiling der-parser v10.0.0
+   Compiling subtle v2.6.1
+   Compiling kv v0.1.0 (/workspace/amd-recovered-6tSVT8lO/amd-seekdb/rust/kv)
+   Compiling data-encoding v2.11.1
+   Compiling lazy_static v1.5.1
+   Compiling mio v1.2.4
+   Compiling x509-parser v0.18.1
+   Compiling flate2 v1.1.10
+   Compiling socket2 v0.6.5
+   Compiling slab v0.4.12
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 11%] Generating zstd_1_3_8_objs.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 11%] Built target zstd_1_3_8
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 11%] Building CXX object src/oblib/lib/compress/CMakeFiles/compress.dir/none/ob_none_compressor.cpp.o
+[ 11%] Building CXX object src/oblib/lib/compress/CMakeFiles/compress.dir/ob_compressor.cpp.o
+[ 11%] Building CXX object src/oblib/lib/compress/CMakeFiles/compress.dir/ob_compressor_pool.cpp.o
+[ 12%] Building CXX object src/oblib/lib/compress/CMakeFiles/compress.dir/zlib/ob_zlib_compressor.cpp.o
+[ 12%] Building CXX object src/oblib/lib/compress/CMakeFiles/compress.dir/zstd_1_3_8/ob_zstd_compressor_1_3_8.cpp.o
+[ 12%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_number_0_c___cxx.cxx.o
+[ 12%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_mysqlclient_0_c___cxx.cxx.o
+[ 13%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_xml_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 13%] Built target compress
+[ 13%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_enumset_0_c___cxx.cxx.o
+[ 13%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_lob_0_c___cxx.cxx.o
+[ 13%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_datum_0_c___cxx.cxx.o
+[ 14%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_log_0_c___cxx.cxx.o
+[ 14%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_common_mixed_0_c___cxx.cxx.o
+[ 14%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_timezone_0_c___cxx.cxx.o
+[ 14%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_json_type_0_c___cxx.cxx.o
+[ 15%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_common_0_c___cxx.cxx.o
+[ 15%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_storage_0_c___cxx.cxx.o
+   Compiling seekdb-external-sources v0.0.0 (/workspace/amd-recovered-6tSVT8lO/amd-seekdb/deps/external)
+    Finished `release` profile [optimized] target(s) in 23.45s
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 15%] Built target seekdb_jemalloc_build
+[ 15%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/timezone/ob_timezone_util.cpp.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 15%] Building CXX object src/oblib/lib/CMakeFiles/ob_malloc_object.dir/Unity/unity_ob_malloc_object_ob_malloc_object_list_common_alloc_0_c___cxx.cxx.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 15%] Building CXX object src/oblib/lib/CMakeFiles/malloc_hook.dir/alloc/malloc_hook.cpp.o
+[ 16%] Building CXX object src/oblib/lib/CMakeFiles/malloc_hook.dir/alloc/malloc_hook_extended.cpp.o
+[ 17%] Building CXX object src/oblib/lib/CMakeFiles/ob_malloc_object.dir/Unity/unity_ob_malloc_object_ob_malloc_object_list_common_alloc_1_c___cxx.cxx.o
+[ 17%] Linking CXX static library libmalloc_hook.a
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 17%] Built target malloc_hook
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 17%] Built target ob_malloc_object
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 17%] Linking CXX static library libob_malloc.a
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 17%] Built target ob_malloc
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 17%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_charset_0_c___cxx.cxx.o
+[ 18%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_downsink_qt_0_c___cxx.cxx.o
+[ 18%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_utility_0_c___cxx.cxx.o
+[ 18%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_codec_0_c___cxx.cxx.o
+[ 18%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_0_c___cxx.cxx.o
+[ 19%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_downsink_0_c___cxx.cxx.o
+[ 19%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_thread_0_c___cxx.cxx.o
+[ 19%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_mixed_0_c___cxx.cxx.o
+    Finished `release` profile [optimized + debuginfo] target(s) in 31.76s
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 19%] Built target rust_staticlibs_build
+[ 19%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_lock_0_c___cxx.cxx.o
+[ 20%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_ob_vector_util_0_c___cxx.cxx.o
+[ 20%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_mixed_1_c___cxx.cxx.o
+[ 20%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_oblog_0_c___cxx.cxx.o
+[ 20%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_signal_0_c___cxx.cxx.o
+[ 21%] Building C object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_common_mixed_0_c_c.c.o
+[ 21%] Building C object src/oblib/lib/CMakeFiles/oblib_lib.dir/Unity/unity_oblib_lib_oblib_lib_signal_0_c_c.c.o
+[ 21%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib.dir/oblog/ob_log_compressor.cpp.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 21%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_2_c___cxx.cxx.o
+[ 21%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_1_c___cxx.cxx.o
+[ 21%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_config_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 21%] Built target oblib_common
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 21%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs.cpp.o
+[ 22%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_0_c___cxx.cxx.o
+[ 22%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_all.cpp.o
+[ 23%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_0.cpp.o
+[ 23%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_mixed_1_c___cxx.cxx.o
+[ 23%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_1_c___cxx.cxx.o
+[ 24%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_2_c___cxx.cxx.o
+[ 24%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_cache_0_c___cxx.cxx.o
+[ 24%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_DUMP_SCHEMA_0_c___cxx.cxx.o
+[ 24%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_1.cpp.o
+[ 24%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_SCHEMA_CPPS_0_c___cxx.cxx.o
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_mixed_0_c___cxx.cxx.o
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_LOAD_SCHEMA_0_c___cxx.cxx.o
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_transaction_id_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 25%] Built target oblib_lib
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_2.cpp.o
+[ 25%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_common_0_c___cxx.cxx.o
+[ 26%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_resource_limit_calculator_0_c___cxx.cxx.o
+[ 26%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_io_0_c___cxx.cxx.o
+[ 26%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_redolog_0_c___cxx.cxx.o
+[ 26%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_resource_0_c___cxx.cxx.o
+[ 26%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_3.cpp.o
+[ 27%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_0_c___cxx.cxx.o
+[ 27%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_1_c___cxx.cxx.o
+[ 27%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_semistruct_0_c___cxx.cxx.o
+[ 28%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_4.cpp.o
+[ 28%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_schema_2_c___cxx.cxx.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_vector_0_c___cxx.cxx.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_tablet_0_c___cxx.cxx.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_rebase_0_c___cxx.cxx.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_5.cpp.o
+[ 29%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_text_analysis_0_c___cxx.cxx.o
+[ 30%] Building CXX object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_log_protocol_0_c___cxx.cxx.o
+[ 30%] Building C object src/share/CMakeFiles/ob_share.dir/Unity/unity_ob_share_ob_share_geo_1_c_c.c.o
+[ 30%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_covered_by1.cpp.o
+[ 30%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_covered_by2.cpp.o
+[ 31%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_crosses1.cpp.o
+[ 31%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_crosses2.cpp.o
+[ 31%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_6.cpp.o
+[ 31%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_datum_funcs_compilation/ob_datum_funcs_compilation_7.cpp.o
+[ 32%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_all.cpp.o
+[ 32%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_difference1.cpp.o
+[ 32%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_0.cpp.o
+[ 32%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_1.cpp.o
+[ 32%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_2.cpp.o
+[ 32%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_difference2.cpp.o
+[ 33%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_difference3.cpp.o
+[ 34%] Building CXX object src/share/CMakeFiles/ob_share_extra.dir/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_3.cpp.o
+[ 34%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_distance.cpp.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 34%] Built target ob_share_extra
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 34%] Building CXX object src/data_plane/CMakeFiles/ob_data_plane.dir/Unity/unity_ob_data_plane_runtime/0_cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 34%] Built target ob_data_plane
+[ 34%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_equals1.cpp.o
+[ 34%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_equals2.cpp.o
+[ 35%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_equals3.cpp.o
+[ 35%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_intersects.cpp.o
+[ 35%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_overlaps1.cpp.o
+[ 35%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_overlaps2.cpp.o
+[ 36%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_overlaps3.cpp.o
+[ 36%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_symdifference1.cpp.o
+[ 36%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_symdifference2.cpp.o
+[ 37%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_symdifference3.cpp.o
+[ 37%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_touches1.cpp.o
+[ 37%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_touches2.cpp.o
+[ 37%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_touches3.cpp.o
+[ 38%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_union1.cpp.o
+[ 38%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_union2.cpp.o
+[ 38%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_within1.cpp.o
+[ 38%] Building CXX object src/share/CMakeFiles/ob_share.dir/geo/ob_geo_func_within2.cpp.o
+[ 39%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_ddl_args.cpp.o
+[ 39%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_local_device.cpp.o
+[ 39%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_lonely_table_clean_rpc_struct.cpp.o
+[ 39%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_rpc_struct.cpp.o
+[ 40%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_sql_client_decorator.cpp.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 40%] Building CXX object src/query/CMakeFiles/ob_query.dir/Unity/unity_ob_query_runtime/0_cxx.cxx.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 40%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_1_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 40%] Built target ob_query
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 41%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_datum_cast.cpp.o
+[ 41%] Building CXX object src/share/CMakeFiles/ob_share.dir/ob_timezone_mgr.cpp.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 41%] Building CXX object src/sql/CMakeFiles/ob_sql_simd.dir/Unity/unity_ob_sql_simd_ob_sql_simd_common_0_c___cxx.cxx.o
+[ 41%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_dcl_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 41%] Built target ob_sql_simd
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 41%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/sql_parser_mysql_mode_lex.c.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 41%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_common_c___cxx.cxx.o
+[ 41%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/sql_parser_mysql_mode_tab.c.o
+[ 41%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_cache_c___cxx.cxx.o
+[ 42%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_3_c___cxx.cxx.o
+[ 42%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_plan_cache_0_c___cxx.cxx.o
+[ 42%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_recompile_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 42%] Built target ob_share
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 42%] Building CXX object src/pl/CMakeFiles/syspack_source.dir/syspack_codegen/syspack_source.cpp.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 42%] Built target syspack_source
+[ 43%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/Unity/unity_ob_pl_pl_sys_package_c___cxx.cxx.o
+[ 43%] Building CXX object src/pl/CMakeFiles/ob_pl.dir/parser/ob_pl_parser.cpp.o
+[ 43%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_non_reserved_keywords_mysql_mode.c.o
+[ 43%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_8_c___cxx.cxx.o
+[ 43%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_obj_cast_runtime.cpp.o
+[ 43%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_parser_base.c.o
+[ 44%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ftsblex_lex.c.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 44%] Building CXX object src/standby/CMakeFiles/ob_standby_runtime.dir/Unity/unity_ob_standby_runtime_common/0_cxx.cxx.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 45%] Building CXX object src/standby/CMakeFiles/ob_standby.dir/Unity/unity_ob_standby_common/0_cxx.cxx.o
+[ 45%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func.cpp.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 45%] Built target ob_standby
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 45%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_base_common_0_c___cxx.cxx.o
+[ 46%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_parser_mysql_mode_lex.c.o
+[ 46%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_compile_init.cpp.o
+[ 46%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ftsparser_tab.c.o
+[ 47%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part0.cpp.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 47%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_common_0_c___cxx.cxx.o
+[ 48%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_stat_1_c___cxx.cxx.o
+[ 48%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/fts_base.c.o
+[ 48%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/fts_parse.c.o
+[ 48%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part1.cpp.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 48%] Building CXX object src/storage/CMakeFiles/ob_storage_tablet_autoincrement_state.dir/Unity/unity_ob_storage_tablet_autoincrement_state_runtime/0_cxx.cxx.o
+[ 48%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part2.cpp.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 48%] Built target ob_storage_tablet_autoincrement_state
+[ 48%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part3.cpp.o
+[ 50%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_base_maintenance_0_c___cxx.cxx.o
+[ 51%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_common_mixed_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part4.cpp.o
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_0_c___cxx.cxx.o
+[ 52%] Building C object src/pl/CMakeFiles/ob_pl.dir/parser/pl_parser_mysql_mode_tab.c.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 52%] Built target ob_pl
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_executor_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part5.cpp.o
+[ 52%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_query_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part6.cpp.o
+[ 52%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_cmp_func_compile/ob_expr_cmp_func_part7.cpp.o
+[ 52%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_common_util_0_c___cxx.cxx.o
+[ 52%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_palf_0_c___cxx.cxx.o
+[ 53%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_all.cpp.o
+[ 53%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_0.cpp.o
+[ 53%] Building CXX object src/logservice/CMakeFiles/ob_logservice.dir/Unity/unity_ob_logservice_ob_logservice_palf_1_c___cxx.cxx.o
+[ 54%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/non_reserved_keywords_mysql_mode.c.o
+[ 54%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_non_reserved_keywords.c.o
+[ 54%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_1.cpp.o
+[ 54%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_sql_parser.cpp.o
+[ 54%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parse_malloc.cpp.o
+[ 55%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parse_node.c.o
+[ 56%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_2.cpp.o
+[ 56%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parse_node_hash.cpp.o
+[ 56%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_fast_parser.cpp.o
+[ 56%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_3.cpp.o
+[ 57%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_fixed_0_c___cxx.cxx.o
+[ 57%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_2_c___cxx.cxx.o
+[ 57%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_4.cpp.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 57%] Built target ob_standby_runtime
+[ 57%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_uniform_0_c___cxx.cxx.o
+[ 57%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_discrete_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 57%] Built target ob_logservice
+[ 58%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_continuous_0_c___cxx.cxx.o
+[ 58%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_table_0_c___cxx.cxx.o
+[ 58%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_5.cpp.o
+[ 58%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_parser_charset_utils.cpp.o
+[ 59%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_6.cpp.o
+[ 60%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/sql_parser_base.c.o
+[ 60%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_common_0_c___cxx.cxx.o
+[ 60%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/parser_utility.cpp.o
+[ 60%] Building C object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/type_name.c.o
+[ 60%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_parse_simd.cpp.o
+[ 60%] Building CXX object src/sql/CMakeFiles/ob_sql_extra.dir/engine/expr/ob_expr_str_cmp_func_compile/ob_expr_str_cmp_func_part_7.cpp.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 60%] Built target ob_sql_extra
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 60%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_multi_data_source_0_c___cxx.cxx.o
+[ 61%] Building CXX object src/sql/parser/CMakeFiles/ob_sql_server_parser_objects.dir/ob_parser.cpp.o
+[ 61%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_10_c___cxx.cxx.o
+[ 61%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_cmp_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 61%] Built target ob_sql_server_parser_objects
+[ 62%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_storage_freeze_0_c___cxx.cxx.o
+[ 62%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_sql_mixed_0_c___cxx.cxx.o
+[ 62%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_1_c___cxx.cxx.o
+[ 63%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_set_0_c___cxx.cxx.o
+[ 63%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_px_1_c___cxx.cxx.o
+[ 63%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_common_0_c___cxx.cxx.o
+[ 64%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_ddl_0_c___cxx.cxx.o
+[ 64%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_px_0_c___cxx.cxx.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 64%] Building CXX object src/storage/CMakeFiles/ob_storage_simd.dir/Unity/unity_ob_storage_simd_ob_storage_simd_common_0_c___cxx.cxx.o
+[ 64%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_code_generator_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 64%] Built target ob_storage_simd
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 65%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_vector_index_0_c___cxx.cxx.o
+[ 65%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ls_0_c___cxx.cxx.o
+[ 65%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_fork_freeze_0_c___cxx.cxx.o
+[ 66%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_pdml_0_c___cxx.cxx.o
+[ 66%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/Unity/unity_ob_rootserver_ob_rootserver_runtime_services_0_c___cxx.cxx.o
+[ 66%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_join_0_c___cxx.cxx.o
+[ 66%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_stat_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_1_c___cxx.cxx.o
+[ 67%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_omt_0_c___cxx.cxx.o
+[ 67%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ddl_task/ob_ddl_redefinition_task.cpp.o
+[ 68%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service.cpp.o
+[ 68%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_lob_0_c___cxx.cxx.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 69%] Building CXX object src/observer/CMakeFiles/ob_main.dir/main.cpp.o
+[ 70%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_ai_service_0_c___cxx.cxx.o
+[ 70%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_2_c___cxx.cxx.o
+[ 70%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_net_0_c___cxx.cxx.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_1_c___cxx.cxx.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_13_c___cxx.cxx.o
+[ 71%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_ddl_service_launcher.cpp.o
+[ 71%] Building CXX object src/observer/CMakeFiles/ob_main.dir/ob_command_line_parser.cpp.o
+[ 71%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding2_0_c___cxx.cxx.o
+[ 71%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_mysql_1_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 71%] Built target ob_main
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_vector_base_0_c___cxx.cxx.o
+[ 71%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_basic_1_c___cxx.cxx.o
+[ 72%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_ddl_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_dbms_job_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_debug_sync_broadcaster_adapter.cpp.o
+[ 73%] Building CXX object src/rootserver/CMakeFiles/ob_rootserver.dir/ob_lonely_table_cleaner.cpp.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_monitor_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_fts_0_c___cxx.cxx.o
+[ 73%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 73%] Built target ob_rootserver
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 73%] Linking CXX static library liboblib.a
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 73%] Built target oblib
+[ 74%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ckpt_0_c___cxx.cxx.o
+[ 74%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_1_c___cxx.cxx.o
+[ 74%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_rewrite_1_c___cxx.cxx.o
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 74%] Linking CXX static library libob_share_static.a
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 74%] Linking CXX static library libob_sql_server_parser_static.a
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 74%] Built target ob_sql_server_parser_static
+[ 74%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_mvcc_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 74%] Built target ob_share_static
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_basic_0_c___cxx.cxx.o
+[ 75%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_cmd_0_c___cxx.cxx.o
+[ 75%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_deadlock_0_c___cxx.cxx.o
+[ 75%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_3_c___cxx.cxx.o
+[ 76%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_retrieval_0_c___cxx.cxx.o
+[ 76%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_1_c___cxx.cxx.o
+[ 76%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_0_c___cxx.cxx.o
+[ 76%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_4_c___cxx.cxx.o
+[ 76%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_7_c___cxx.cxx.o
+[ 76%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_truncate_info_0_c___cxx.cxx.o
+[ 77%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_aggregate_groupby_0_c___cxx.cxx.o
+[ 78%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_table_0_c___cxx.cxx.o
+[ 78%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_mixed_0_c___cxx.cxx.o
+[ 78%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_vector_index_0_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_executor_1_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_1_c___cxx.cxx.o
+[ 78%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_1_c___cxx.cxx.o
+[ 78%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_2_c___cxx.cxx.o
+[ 79%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_common_0_c___cxx.cxx.o
+[ 79%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ddl_0_c___cxx.cxx.o
+[ 80%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_dtl_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_filter_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_common_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_dml_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_schema_0_c___cxx.cxx.o
+[ 81%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_15_c___cxx.cxx.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_9_c___cxx.cxx.o
+[ 82%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_4_c___cxx.cxx.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_common_mixed_0_c___cxx.cxx.o
+[ 82%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_1_c___cxx.cxx.o
+[ 83%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_aggregate_core_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_change_stream_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tmp_file_0_c___cxx.cxx.o
+[ 83%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_scheduler_0_c___cxx.cxx.o
+[ 84%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_storage_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_scheduler_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/observer/CMakeFiles/ob_server.dir/Unity/unity_ob_server_ob_server_virtual_table_5_c___cxx.cxx.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_11_c___cxx.cxx.o
+[ 85%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_ik_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_access_0_c___cxx.cxx.o
+[ 85%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_server.cpp.o
+[ 85%] Building CXX object src/observer/CMakeFiles/ob_server.dir/ob_service.cpp.o
+[ 85%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_printer_0_c___cxx.cxx.o
+[ 86%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_optimizer_2_c___cxx.cxx.o
+[ 86%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_meta_store_0_c___cxx.cxx.o
+[ 87%] Building CXX object src/observer/CMakeFiles/ob_server.dir/composition/retrieval/ob_das_legacy_tr_merge_iter.cpp.o
+[ 87%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_6_c___cxx.cxx.o
+[ 88%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_0_c___cxx.cxx.o
+[ 88%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_hybrid_search_0_c___cxx.cxx.o
+[ 88%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_session_0_c___cxx.cxx.o
+[ 88%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_allocator_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 88%] Built target ob_server
+[ 88%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablelock_0_c___cxx.cxx.o
+[ 89%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_cmd_1_c___cxx.cxx.o
+[ 89%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_das_1_c___cxx.cxx.o
+[ 89%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_0_c___cxx.cxx.o
+[ 89%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_2_c___cxx.cxx.o
+[ 90%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_mixed_0_c___cxx.cxx.o
+[ 90%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_14_c___cxx.cxx.o
+[ 90%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_compaction_0_c___cxx.cxx.o
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_5_c___cxx.cxx.o
+[ 91%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_1_c___cxx.cxx.o
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_engine_expr_12_c___cxx.cxx.o
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_dml_0_c___cxx.cxx.o
+[ 91%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_expr_0_c___cxx.cxx.o
+[ 91%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_memtable_0_c___cxx.cxx.o
+[ 92%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_resolver_prepare_0_c___cxx.cxx.o
+[ 92%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_rewrite_0_c___cxx.cxx.o
+[ 92%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/Unity/unity_ob_sql_ob_sql_tablelock_0_c___cxx.cxx.o
+[ 92%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/aggregate/ob_aggregate_processor.cpp.o
+[ 93%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_encoding1_0_c___cxx.cxx.o
+[ 93%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_blocksstable_index_block_0_c___cxx.cxx.o
+[ 94%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_add.cpp.o
+[ 94%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_common_1_c___cxx.cxx.o
+[ 94%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_rebase_0_c___cxx.cxx.o
+[ 94%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_array_sort.cpp.o
+[ 95%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_slog_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_in.cpp.o
+[ 95%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tablet_1_c___cxx.cxx.o
+[ 95%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_throttle_0_c___cxx.cxx.o
+[ 95%] Building CXX object src/sql/CMakeFiles/ob_sql.dir/engine/expr/ob_expr_mul.cpp.o
+[ 95%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_0_c___cxx.cxx.o
+[ 96%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_1_c___cxx.cxx.o
+[ 96%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_tx_2_c___cxx.cxx.o
+[ 96%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_vector_type_0_c___cxx.cxx.o
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 96%] Built target ob_storage
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 97%] Linking CXX static library libob_storage_static.a
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 97%] Built target ob_storage_static
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 97%] Built target ob_sql
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 97%] Linking CXX static library libob_sql_static.a
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 97%] Built target ob_sql_static
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 98%] Building CXX object src/observer/CMakeFiles/oceanbase_static.dir/ob_version.cpp.o
+[ 98%] Linking CXX static library liboceanbase_static.a
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[ 98%] Built target oceanbase_static
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[3]: Entering directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[100%] Linking CXX executable seekdb
+make[3]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+[100%] Built target seekdb
+make[2]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make[1]: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+make: Leaving directory '/workspace/amd-recovered-6tSVT8lO/amd-seekdb/build_release'
+Sun Nov  1 10:23:01 UTC 2026
+CHECK_REAL_BRIDGE_DEPENDENCIES
+	linux-vdso.so.1 (0x00007ffd89beb000)
+	libcuvs_c.so => /opt/hipvs/lib/libcuvs_c.so (0x0000769496928000)
+	libamdhip64.so.7 => /opt/rocm/lib/libamdhip64.so.7 (0x0000769494f33000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x0000769494ca5000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x0000769494bbc000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x0000769494b8e000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x000076949497a000)
+	libcuvs.so => /opt/hipvs/lib/libcuvs.so (0x000076947b044000)
+	libhipblas.so.3 => /opt/rocm/lib/libhipblas.so.3 (0x000076947af68000)
+	libhipsolver.so.1 => /opt/rocm/lib/libhipsolver.so.1 (0x000076947af22000)
+	libhipsparse.so.4 => /opt/rocm/lib/libhipsparse.so.4 (0x000076947aedd000)
+	libhiprand.so.1 => /opt/rocm/lib/libhiprand.so.1 (0x000076947aed7000)
+	libhipblaslt.so.1 => /opt/rocm/lib/libhipblaslt.so.1 (0x000076947a8fe000)
+	libblas.so.3 => /lib/x86_64-linux-gnu/libblas.so.3 (0x000076947a891000)
+	liblapack.so.3 => /lib/x86_64-linux-gnu/liblapack.so.3 (0x000076947a214000)
+	librmm.so => /opt/hipvs/lib/librmm.so (0x000076947a205000)
+	librapids_logger.so => /opt/hipvs/lib/librapids_logger.so (0x000076947a16a000)
+	librccl.so.1 => /opt/rocm/lib/librccl.so.1 (0x0000769457f5a000)
+	libomp.so => /opt/rocm/lib/llvm/lib/libomp.so (0x0000769457e58000)
+	/lib64/ld-linux-x86-64.so.2 (0x0000769496a14000)
+	librocprofiler-register.so.0 => /opt/rocm/lib/librocprofiler-register.so.0 (0x0000769457dc9000)
+	libhsa-runtime64.so.1 => /opt/rocm/lib/libhsa-runtime64.so.1 (0x00007694579b9000)
+	librocsolver.so.0 => /opt/rocm/lib/librocsolver.so.0 (0x0000769423e31000)
+	librocblas.so.5 => /opt/rocm/lib/librocblas.so.5 (0x0000769420e8c000)
+	librocsparse.so.1 => /opt/rocm/lib/librocsparse.so.1 (0x0000769403d5c000)
+	librocrand.so.1 => /opt/rocm/lib/librocrand.so.1 (0x00007693d82d9000)
+	libroctx64.so.4 => /opt/rocm/lib/libroctx64.so.4 (0x00007693d82d4000)
+	librocroller.so.1 => /opt/rocm/lib/librocroller.so.1 (0x00007693d6282000)
+	libopenblas.so.0 => /lib/x86_64-linux-gnu/libopenblas.so.0 (0x00007693d3ea0000)
+	libgfortran.so.5 => /lib/x86_64-linux-gnu/libgfortran.so.5 (0x00007693d3b82000)
+	librocm_smi64.so.1 => /opt/rocm/lib/librocm_smi64.so.1 (0x00007693d3a2c000)
+	libelf.so.1 => /lib/x86_64-linux-gnu/libelf.so.1 (0x00007693d3a0d000)
+	libdrm.so.2 => /lib/x86_64-linux-gnu/libdrm.so.2 (0x00007693d39f6000)
+	libdrm_amdgpu.so.1 => /lib/x86_64-linux-gnu/libdrm_amdgpu.so.1 (0x00007693d39e9000)
+	libnuma.so.1 => /lib/x86_64-linux-gnu/libnuma.so.1 (0x00007693d39db000)
+	libamd_comgr.so.3 => /opt/rocm/lib/libamd_comgr.so.3 (0x00007693ca083000)
+	libz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x00007693ca067000)
+	libzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x00007693c9fad000)
+Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple
+Collecting numpy==2.2.6 (from -r unittest/amd_hipvs/requirements.txt (line 1))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/8c/3d/1e1db36cfd41f895d266b103df00ca5b3cbe965184df824dec5c08c6b803/numpy-2.2.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (16.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.5/16.5 MB 69.1 MB/s eta 0:00:00
+Collecting PyMySQL==1.1.1 (from -r unittest/amd_hipvs/requirements.txt (line 2))
+  Downloading https://pypi.tuna.tsinghua.edu.cn/packages/0c/94/e4181a1f6286f545507528c78016e00065ea913276888db2262507693ce5/PyMySQL-1.1.1-py3-none-any.whl (44 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45.0/45.0 kB 29.6 MB/s eta 0:00:00
+Installing collected packages: PyMySQL, numpy
+Successfully installed PyMySQL-1.1.1 numpy-2.2.6
+Sun Nov  1 10:23:06 UTC 2026
+GPU_SQL_WITHOUT_LIBRARY_OVERRIDE
+Sun Nov  1 10:24:12 UTC 2026
+PASSED_LOCAL_GPU_VALIDATION_NOT_OFFICIAL_GRADE

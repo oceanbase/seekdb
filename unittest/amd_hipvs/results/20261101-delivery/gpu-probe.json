@@ -1,0 +1,20 @@
+[
+  {
+    "rows": 128,
+    "dim": 8,
+    "bridge_seconds": 0.6314204512163997,
+    "bytes": 23168,
+    "all_vectors_preserved": true,
+    "all_source_labels_unique": true,
+    "scope": "GPU bridge export only; SQL integration not yet validated"
+  },
+  {
+    "rows": 1000,
+    "dim": 32,
+    "bridge_seconds": 0.9986049262806773,
+    "bytes": 276516,
+    "all_vectors_preserved": true,
+    "all_source_labels_unique": true,
+    "scope": "GPU bridge export only; SQL integration not yet validated"
+  }
+]

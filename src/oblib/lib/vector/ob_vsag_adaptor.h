@@ -120,6 +120,9 @@ int validate_create_index(const CreateIndexParam &param, std::string &err_msg);
 int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char *dtype, const char *metric,
     bool use_reorder, float doc_prune_ratio, int window_size, void *allocator, int extra_info_size = 0);
 int build_index(VectorIndexPtr& index_handler, float* vector_list, int64_t* ids, int dim, int size, char *extra_infos = nullptr);
+// Explicit GPU batch construction. Does not rebuild level zero using CPU Add.
+int build_hipvs_index(VectorIndexPtr &index_handler, const float *vectors,
+                      const int64_t *ids, int dim, int64_t rows);
 int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
     char *extra_info = nullptr);
 int add_index(VectorIndexPtr& index_handler, float* vector, int64_t* ids, int dim, int size, char *extra_info = nullptr);

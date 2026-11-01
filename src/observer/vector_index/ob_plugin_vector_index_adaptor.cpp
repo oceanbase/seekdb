@@ -1690,7 +1690,31 @@ int ObPluginVectorIndexAdaptor::add_snap_index(float *vectors, int64_t *vids, Ob
   } else if (OB_FALSE_IT(dim = param->dim_)) {
   } else if (OB_FAIL(get_extra_info_actual_size(extra_info_actual_size))) {
   } else {
-    if (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW ||
+    if (param->lib_ == VIAL_HIPVS) {
+      if (param->type_ != VIAT_HNSW || param->dist_algorithm_ != VIDA_L2 ||
+          extra_info_actual_size != 0 || dim <= 0 || num < 0) {
+        ret = OB_NOT_SUPPORTED;
+      } else if (num == 0) {
+        // An empty snapshot has no GPU work to perform.
+      } else if (OB_ISNULL(vectors) || OB_ISNULL(vids)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(init_hnswsq_mem_data())) {
+      } else {
+        TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
+        if (OB_NOT_NULL(snap_data_->index_) || OB_ISNULL(snap_data_->vid_array_) ||
+            OB_ISNULL(snap_data_->vec_array_)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          // Gather the entire snapshot; do not call CPU Add while collecting it.
+          for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
+            if (OB_FAIL(snap_data_->vid_array_->push_back(vids[i]))) {}
+          }
+          for (int64_t i = 0; OB_SUCC(ret) && i < static_cast<int64_t>(num) * dim; ++i) {
+            if (OB_FAIL(snap_data_->vec_array_->push_back(vectors[i]))) {}
+          }
+        }
+      }
+    } else if (param->type_ == ObVectorIndexAlgorithmType::VIAT_HNSW ||
         param->type_ == ObVectorIndexAlgorithmType::VIAT_HGRAPH ||
         param->type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) {
       if (OB_FAIL(try_init_mem_data(VIRT_SNAP))) {
@@ -2004,13 +2028,45 @@ int ObPluginVectorIndexAdaptor::check_snap_hnswsq_index()
   INIT_SUCC(ret);
   const char* const DATATYPE_FLOAT32 = "float32";
   ObVectorIndexParam *param = nullptr;
-  ObVecIdxVidArray *vid_array = snap_data_->vid_array_;
-  ObVecIdxVecArray *vec_array = snap_data_->vec_array_;
-  ObVecExtraInfoBuffer *extra_info_buf = snap_data_->extra_info_buf_;
+  ObVecIdxVidArray *vid_array = snap_data_ ? snap_data_->vid_array_ : nullptr;
+  ObVecIdxVecArray *vec_array = snap_data_ ? snap_data_->vec_array_ : nullptr;
+  ObVecExtraInfoBuffer *extra_info_buf = snap_data_ ? snap_data_->extra_info_buf_ : nullptr;
   if (OB_ISNULL(snap_data_) || OB_ISNULL(algo_data_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(param = static_cast<ObVectorIndexParam*>(algo_data_))) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (param->lib_ == VIAL_HIPVS) {
+    TCWLockGuard lock_guard(snap_data_->mem_data_rwlock_);
+    if (param->type_ != VIAT_HNSW || param->dist_algorithm_ != VIDA_L2 ||
+        param->extra_info_actual_size_ != 0) {
+      ret = OB_NOT_SUPPORTED;
+    } else if (OB_NOT_NULL(snap_data_->index_)) {
+      // Already built on a previous successful finalization.
+    } else if (!snap_data_->mem_ctx_->is_inited() &&
+               OB_FAIL(snap_data_->mem_ctx_->init(parent_mem_ctx_, all_vsag_use_mem_))) {
+    } else {
+      obvsag::VectorIndexPtr candidate = nullptr;
+      const int64_t rows = vid_array ? vid_array->count() : 0;
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("VIndexVsagADP"));
+      lib::ObLightBacktraceGuard light_backtrace_guard(false);
+      if (rows > INT32_MAX || (rows > 0 &&
+          (vec_array == nullptr || vec_array->count() != rows * param->dim_))) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(obvectorutil::create_index(candidate, VIAT_HNSW, DATATYPE_FLOAT32,
+          VEC_INDEX_ALGTH[param->dist_algorithm_], param->dim_, param->m_,
+          param->ef_construction_, param->ef_search_, snap_data_->mem_ctx_))) {
+      } else if (rows > 0 && OB_FAIL(obvsag::build_hipvs_index(candidate,
+          vec_array->get_data(), vid_array->get_data(), param->dim_, rows))) {
+        LOG_WARN("[HIPVS] snapshot build failed; not publishing a CPU fallback", K(ret), K(rows));
+      } else {
+        snap_data_->index_ = candidate;
+        candidate = nullptr;
+        snap_data_->set_inited();
+        LOG_INFO("[HIPVS] snapshot ready for seekdb serialization", K(rows), K(param->dim_), KPC(this));
+        free_hnswsq_array_data(snap_data_, get_allocator());
+      }
+      if (candidate != nullptr) obvsag::delete_index(candidate);
+    }
   } else if (param->type_ == VIAT_HNSW || param->type_ == VIAT_HGRAPH || snap_data_->has_build_sq_ || param->type_ == VIAT_IPIVF) {
     // do nothing
   } else if (OB_ISNULL(snap_data_->index_)) {
