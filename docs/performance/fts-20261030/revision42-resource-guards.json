@@ -1,0 +1,27 @@
+[
+  {
+    "memory": "3G",
+    "cpu": 2,
+    "expected": 2,
+    "workers": [
+      "DdlBuild0",
+      "DdlBuild1"
+    ]
+  },
+  {
+    "memory": "2G",
+    "cpu": 2,
+    "expected": 1,
+    "workers": [
+      "DdlBuild"
+    ]
+  },
+  {
+    "memory": "3G",
+    "cpu": 1,
+    "expected": 1,
+    "workers": [
+      "DdlBuild"
+    ]
+  }
+]
