@@ -1,0 +1,148 @@
+SET NAMES utf8mb4;
+CREATE DATABASE IF NOT EXISTS fts_beng_ascii;
+USE fts_beng_ascii;
+DROP TABLE IF EXISTS codes;
+CREATE TABLE codes(n INT PRIMARY KEY);
+INSERT INTO codes VALUES(0),(1),(2),(3),(4),(5),(6),(7);
+INSERT INTO codes SELECT n+8 FROM codes;
+INSERT INTO codes SELECT n+16 FROM codes;
+INSERT INTO codes SELECT n+32 FROM codes;
+INSERT INTO codes SELECT n+64 FROM codes;
+SELECT n,TOKENIZE(CONCAT('alpha',CONVERT(CHAR(n) USING utf8mb4),'beta'),'beng','[{"output":"all"}]') FROM codes ORDER BY n;
+n	TOKENIZE(CONCAT('alpha',CONVERT(CHAR(n) USING utf8mb4),'beta'),'beng','[{"output":"all"}]')
+0	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+1	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+2	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+3	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+4	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+5	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+6	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+7	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+8	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+9	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+10	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+11	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+12	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+13	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+14	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+15	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+16	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+17	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+18	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+19	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+20	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+21	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+22	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+23	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+24	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+25	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+26	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+27	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+28	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+29	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+30	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+31	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+32	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+33	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+34	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+35	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+36	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+37	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+38	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+39	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+40	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+41	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+42	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+43	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+44	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+45	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+46	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+47	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+48	{"tokens": [{"alpha0beta": 1}], "doc_len": 1}
+49	{"tokens": [{"alpha1beta": 1}], "doc_len": 1}
+50	{"tokens": [{"alpha2beta": 1}], "doc_len": 1}
+51	{"tokens": [{"alpha3beta": 1}], "doc_len": 1}
+52	{"tokens": [{"alpha4beta": 1}], "doc_len": 1}
+53	{"tokens": [{"alpha5beta": 1}], "doc_len": 1}
+54	{"tokens": [{"alpha6beta": 1}], "doc_len": 1}
+55	{"tokens": [{"alpha7beta": 1}], "doc_len": 1}
+56	{"tokens": [{"alpha8beta": 1}], "doc_len": 1}
+57	{"tokens": [{"alpha9beta": 1}], "doc_len": 1}
+58	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+59	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+60	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+61	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+62	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+63	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+64	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+65	{"tokens": [{"alphaabeta": 1}], "doc_len": 1}
+66	{"tokens": [{"alphabbeta": 1}], "doc_len": 1}
+67	{"tokens": [{"alphacbeta": 1}], "doc_len": 1}
+68	{"tokens": [{"alphadbeta": 1}], "doc_len": 1}
+69	{"tokens": [{"alphaebeta": 1}], "doc_len": 1}
+70	{"tokens": [{"alphafbeta": 1}], "doc_len": 1}
+71	{"tokens": [{"alphagbeta": 1}], "doc_len": 1}
+72	{"tokens": [{"alphahbeta": 1}], "doc_len": 1}
+73	{"tokens": [{"alphaibeta": 1}], "doc_len": 1}
+74	{"tokens": [{"alphajbeta": 1}], "doc_len": 1}
+75	{"tokens": [{"alphakbeta": 1}], "doc_len": 1}
+76	{"tokens": [{"alphalbeta": 1}], "doc_len": 1}
+77	{"tokens": [{"alphambeta": 1}], "doc_len": 1}
+78	{"tokens": [{"alphanbeta": 1}], "doc_len": 1}
+79	{"tokens": [{"alphaobeta": 1}], "doc_len": 1}
+80	{"tokens": [{"alphapbeta": 1}], "doc_len": 1}
+81	{"tokens": [{"alphaqbeta": 1}], "doc_len": 1}
+82	{"tokens": [{"alpharbeta": 1}], "doc_len": 1}
+83	{"tokens": [{"alphasbeta": 1}], "doc_len": 1}
+84	{"tokens": [{"alphatbeta": 1}], "doc_len": 1}
+85	{"tokens": [{"alphaubeta": 1}], "doc_len": 1}
+86	{"tokens": [{"alphavbeta": 1}], "doc_len": 1}
+87	{"tokens": [{"alphawbeta": 1}], "doc_len": 1}
+88	{"tokens": [{"alphaxbeta": 1}], "doc_len": 1}
+89	{"tokens": [{"alphaybeta": 1}], "doc_len": 1}
+90	{"tokens": [{"alphazbeta": 1}], "doc_len": 1}
+91	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+92	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+93	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+94	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+95	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+96	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+97	{"tokens": [{"alphaabeta": 1}], "doc_len": 1}
+98	{"tokens": [{"alphabbeta": 1}], "doc_len": 1}
+99	{"tokens": [{"alphacbeta": 1}], "doc_len": 1}
+100	{"tokens": [{"alphadbeta": 1}], "doc_len": 1}
+101	{"tokens": [{"alphaebeta": 1}], "doc_len": 1}
+102	{"tokens": [{"alphafbeta": 1}], "doc_len": 1}
+103	{"tokens": [{"alphagbeta": 1}], "doc_len": 1}
+104	{"tokens": [{"alphahbeta": 1}], "doc_len": 1}
+105	{"tokens": [{"alphaibeta": 1}], "doc_len": 1}
+106	{"tokens": [{"alphajbeta": 1}], "doc_len": 1}
+107	{"tokens": [{"alphakbeta": 1}], "doc_len": 1}
+108	{"tokens": [{"alphalbeta": 1}], "doc_len": 1}
+109	{"tokens": [{"alphambeta": 1}], "doc_len": 1}
+110	{"tokens": [{"alphanbeta": 1}], "doc_len": 1}
+111	{"tokens": [{"alphaobeta": 1}], "doc_len": 1}
+112	{"tokens": [{"alphapbeta": 1}], "doc_len": 1}
+113	{"tokens": [{"alphaqbeta": 1}], "doc_len": 1}
+114	{"tokens": [{"alpharbeta": 1}], "doc_len": 1}
+115	{"tokens": [{"alphasbeta": 1}], "doc_len": 1}
+116	{"tokens": [{"alphatbeta": 1}], "doc_len": 1}
+117	{"tokens": [{"alphaubeta": 1}], "doc_len": 1}
+118	{"tokens": [{"alphavbeta": 1}], "doc_len": 1}
+119	{"tokens": [{"alphawbeta": 1}], "doc_len": 1}
+120	{"tokens": [{"alphaxbeta": 1}], "doc_len": 1}
+121	{"tokens": [{"alphaybeta": 1}], "doc_len": 1}
+122	{"tokens": [{"alphazbeta": 1}], "doc_len": 1}
+123	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+124	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+125	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+126	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+127	{"tokens": [{"alpha": 1}, {"beta": 1}], "doc_len": 2}
+SELECT TOKENIZE('lowercase LOWERCASE café CAFÉ mixed MIXED end','beng','[{"output":"all"}]');
+TOKENIZE('lowercase LOWERCASE café CAFÉ mixed MIXED end','beng','[{"output":"all"}]')
+{"tokens": [{"café": 2}, {"lowercase": 2}, {"end": 1}, {"mixed": 2}], "doc_len": 7}
+SELECT TOKENIZE(CONCAT(REPEAT('lowercase ',2000),'UPPERCASE café ',REPEAT('lowercase ',2000),'CAFÉ end'),'beng','[{"output":"all"}]');
+TOKENIZE(CONCAT(REPEAT('lowercase ',2000),'UPPERCASE café ',REPEAT('lowercase ',2000),'CAFÉ end'),'beng','[{"output":"all"}]')
+{"tokens": [], "doc_len": 0}
+USE oceanbase;
+DROP DATABASE fts_beng_ascii;

@@ -77,6 +77,7 @@ private:
   int prepare_next_char();
 
   ObCollationType coll_type_;
+  bool is_utf8_;
   const char *fulltext_;
   int64_t fulltext_len_;
 

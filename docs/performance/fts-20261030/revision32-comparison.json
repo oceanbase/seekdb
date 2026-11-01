@@ -1,0 +1,71 @@
+{
+  "control_commit": "5c73c72d02dc2d098dbbe256a50eb7c8ca859193",
+  "candidate": "revision32",
+  "fresh_instances": true,
+  "order": [
+    "control",
+    "candidate",
+    "candidate",
+    "control"
+  ],
+  "official_score": null,
+  "metrics": {
+    "build_ik_all_sec": {
+      "control": 13.8975,
+      "candidate": 13.241,
+      "reduction": 0.047238711998561
+    },
+    "build_ik_content_sec": {
+      "control": 10.745000000000001,
+      "candidate": 11.556000000000001,
+      "reduction": -0.07547696603071197
+    },
+    "build_beng_en_sec": {
+      "control": 5.3925,
+      "candidate": 5.590999999999999,
+      "reduction": -0.036810384793694695
+    },
+    "tokenize_ik_avg_ms": {
+      "control": 0.4986,
+      "candidate": 0.4652,
+      "reduction": 0.06698756518251103
+    },
+    "tokenize_beng_avg_ms": {
+      "control": 0.3851,
+      "candidate": 0.37860000000000005,
+      "reduction": 0.016878732796676066
+    },
+    "query_cn_avg_ms": {
+      "control": 1.9093499999999999,
+      "candidate": 1.8822,
+      "reduction": 0.014219498782307993
+    },
+    "query_beng_avg_ms": {
+      "control": 2.4261999999999997,
+      "candidate": 2.4946,
+      "reduction": -0.028192234770423097
+    },
+    "query_mixed_avg_ms": {
+      "control": 2.00605,
+      "candidate": 2.06455,
+      "reduction": -0.029161785598564416
+    },
+    "query_limit_avg_ms": {
+      "control": 0.69665,
+      "candidate": 0.7252,
+      "reduction": -0.04098184167085339
+    },
+    "select1_avg_ms": {
+      "control": 0.3581,
+      "candidate": 0.3206,
+      "reduction": 0.1047193521362747
+    }
+  },
+  "category_reductions": {
+    "build": -0.02168287960861522,
+    "tokenize": 0.04193314898959355,
+    "query": -0.021029090814383228
+  },
+  "mean_category_reduction": -0.00025960714446829927,
+  "verified_source_files": 38
+}
