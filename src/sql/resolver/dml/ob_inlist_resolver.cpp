@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/dml/ob_inlist_resolver.h"
+#include "lib/hash/ob_hashset.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
@@ -263,6 +264,61 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
   return ret;
 }
 
+// Keep duplicate-heavy scalar integer lists in the ordinary IN expression.
+// This only selects an execution strategy: do not remove values or parameter
+// positions, since a cached plan may be reused with different parameter values.
+static int check_integer_inlist_cardinality(const ParseNode &in_list,
+                                          const ParamStore *param_store,
+                                          const int64_t threshold,
+                                          bool &is_enable)
+{
+  int ret = OB_SUCCESS;
+  hash::ObHashSet<int64_t> distinct_values;
+  bool has_null = false;
+  bool all_integers = true;
+  if (OB_FAIL(distinct_values.create(threshold, "InListCard", "InListCard"))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && all_integers
+         && distinct_values.size() + has_null < threshold && i < in_list.num_child_; ++i) {
+      const ParseNode *node = in_list.children_[i];
+      bool is_null = false;
+      int64_t value = 0;
+      if (OB_ISNULL(node)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (T_INT == node->type_) {
+        value = node->value_;
+      } else if (T_NULL == node->type_) {
+        is_null = true;
+      } else if (T_QUESTIONMARK == node->type_ && OB_NOT_NULL(param_store)
+                 && node->value_ >= 0 && node->value_ < param_store->count()) {
+        const ObObjParam &param = param_store->at(node->value_);
+        if (param.is_null()) {
+          is_null = true;
+        } else if (ob_is_int_tc(param.get_type())) {
+          value = param.get_int();
+        } else {
+          all_integers = false;
+        }
+      } else {
+        all_integers = false;
+      }
+      if (OB_SUCC(ret) && all_integers) {
+        if (is_null) {
+          has_null = true;
+        } else if (OB_FAIL(distinct_values.set_refactored(value, 0))) {
+          if (OB_HASH_EXIST == ret) {
+            ret = OB_SUCCESS;
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && all_integers) {
+      is_enable = distinct_values.size() + has_null >= threshold;
+    }
+  }
+  return ret;
+}
+
 int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
                                                   const ObItemType op_type,
                                                   const ObRawExpr &left_expr,
@@ -350,6 +406,9 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         }
       }
       is_question_mark = rewrite_info.is_question_mark_;
+      if (OB_SUCC(ret) && is_enable && column_cnt == 1 && !is_prepare_stmt && threshold > 1
+          && OB_FAIL(check_integer_inlist_cardinality(in_list, param_store, threshold, is_enable))) {
+      }
     }
   }
   return ret;
