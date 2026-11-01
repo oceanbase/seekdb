@@ -183,7 +183,11 @@ def verify_sql_snapshot(connection, table, index, vectors, ids, m):
                 'Required unpartitioned auxiliary tables not found')
 
         def one_column(name, prefix):
-            cursor.execute(f'SHOW COLUMNS FROM {quoted(database)}.{quoted(name)}')
+            # SHOW COLUMNS resolves is_index=false even when direct SELECT is
+            # enabled. Use the bound auxiliary table ID, as the repository's
+            # vector_index_ivfflat_basic.test does for its internal columns.
+            cursor.execute('SELECT column_name FROM oceanbase.__all_column '
+                           'WHERE table_id=%s ORDER BY column_id', (auxiliary[name][0],))
             columns = [text(row[0]) for row in cursor.fetchall()]
             matches = [col for col in columns if col.startswith(prefix)]
             require(len(matches) == 1, 'Ambiguous auxiliary column metadata')

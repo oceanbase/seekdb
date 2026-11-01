@@ -126,6 +126,10 @@ class SQLProofTests(unittest.TestCase):
         settings = [call.args for call in cursor.execute.call_args_list if call.args[0].startswith('SET ')]
         self.assertEqual(settings, [('SET SESSION ob_enable_index_direct_select=%s', (1,)),
                                    ('SET SESSION ob_enable_index_direct_select=%s', (0,))])
+        metadata = [call.args for call in cursor.execute.call_args_list
+                    if 'FROM oceanbase.__all_column ' in call.args[0]]
+        self.assertEqual([args[1] for args in metadata], [(322,), (321,), (321,)])
+        self.assertFalse(any(call.args[0].startswith('SHOW ') for call in cursor.execute.call_args_list))
         connection.commit.assert_not_called()
 
     def test_wrong_auxiliary_metadata_rejected_before_blob_read(self):
@@ -133,6 +137,8 @@ class SQLProofTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verify_sql_snapshot(connection, 'docs', 'ix', vectors, ids, m)
         self.assertFalse(any(call.args[0].startswith('SHOW ') for call in cursor.execute.call_args_list))
+        self.assertFalse(any('FROM oceanbase.__all_column ' in call.args[0]
+                             for call in cursor.execute.call_args_list))
         self.assertEqual(cursor.execute.call_args_list[-2].args,
                          ('SET SESSION ob_enable_index_direct_select=%s', (0,)))
 
