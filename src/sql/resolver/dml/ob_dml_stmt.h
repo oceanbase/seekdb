@@ -124,9 +124,14 @@ struct ObValuesTableDef {
   TableAccessType access_type_;
   bool is_const_; // values table’s outputs are all params.
   common::ObArray<ObRawExprResType, common::ModulePageAllocator, true> column_types_;
+  // user defined column names (e.g. read from the header of a local file);
+  // when it is empty the compatible names column_0, column_1, ... are used
+  common::ObArray<common::ObString, common::ModulePageAllocator, true> column_names_;
+  // 1 if the column may be null (used by DESCRIBE of a local file)
+  common::ObArray<int64_t, common::ModulePageAllocator, true> column_nullables_;
   virtual TO_STRING_KV(K(column_cnt_), K(row_cnt_), K(access_exprs_), K(start_param_idx_),
                        K(end_param_idx_), K(access_objs_), K(column_ndvs_), K(column_nnvs_),
-                       K(access_type_), K(is_const_), K(column_types_));
+                       K(access_type_), K(is_const_), K(column_types_), K(column_names_));
 };
 
 struct TableItem

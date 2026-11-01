@@ -221,6 +221,14 @@ int ObCSVGeneralFormat::to_json_kv_string(char *buf, const int64_t buf_len, int6
   OZ(databuff_printf(buf, buf_len, pos, R"("%s":%s)",
                       OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::IGNORE_LAST_EMPTY_COLUMN)],
                       STR_BOOL(ignore_last_empty_col_)));
+  OZ(J_COMMA());
+  OZ(databuff_printf(buf, buf_len, pos, R"("%s":"%s")",
+                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::NULL_STRING)],
+                      helper.convert(ObHexStringWrap(null_string_))));
+  OZ(J_COMMA());
+  OZ(databuff_printf(buf, buf_len, pos, R"("%s":%s)",
+                      OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::WITH_HEADER)],
+                      STR_BOOL(with_header_)));
   return ret;
 }
 
@@ -359,6 +367,19 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
     } else {
       ignore_last_empty_col_ = false;
     }
+    node = node->get_next();
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::NULL_STRING)])
+      && json::JT_STRING == node->value_->get_type()) {
+    ObObj obj;
+    OZ(ObHexUtilsBase::unhex(node->value_->get_string(), allocator, obj));
+    if (OB_SUCC(ret) && !obj.is_null()) {
+      null_string_ = obj.get_string();
+    }
+    node = node->get_next();
+  }
+  if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::WITH_HEADER)])) {
+    with_header_ = (json::JT_TRUE == node->value_->get_type());
     node = node->get_next();
   }
   return ret;
