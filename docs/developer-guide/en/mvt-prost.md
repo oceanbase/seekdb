@@ -49,8 +49,9 @@ Cargo commands, set that variable to the absolute generated path. Editing the
 schema invalidates its Bazel generation action. Generated Rust is not checked in.
 
 The shared `prost_generate` rule uses `services = False` for MVT. It invokes the
-existing host `protoc` and `prost-build` 0.14.3, matching the runtime `prost`
-version. `tonic-prost-build` remains a dependency of the shared host generator
+host Rust generator: `protox` 0.9.1 parses the schema into descriptors, then
+`prost-build` 0.14.3 emits Rust messages, matching the runtime `prost` version.
+No external `protoc` executable is required. `tonic-prost-build` remains a dependency of the shared host generator
 for standby services; it is not a dependency of the MVT runtime.
 
 MVT's name, keys and string values use explicit `raw_strings` storage overrides.
@@ -98,12 +99,13 @@ removed from Linux AL8/EL7/EL8/EL9 variants, macOS manifests, Android and Window
 The iOS device/simulator and Wasm build recipes and Wasm dependency lock no
 longer build or copy protobuf-c.
 
-The native `protoc` supply is independent. In the inspected Linux SDK,
-`devdeps-grpc-abiv1-1.46.7-572026031815.al8.x86_64.rpm` owns
-`deps/devel/bin/protoc`, pointing to `protoc-3.19.5.0`, and its C++ protobuf
-artifacts. The protobuf-c package owns the C runtime archive and header, with no
-host generator executable. The gRPC SDK package, host `protoc`, C++ protobuf
-definitions and host runtime files remain available for independent build tools.
+The shared Rust generator uses protox for both MVT and standby schemas. Its
+Bazel action declares the schema and the host Rust executable, with no native
+protoc executable or protobuf DLL inputs. Native gRPC/C++ protobuf SDK targets
+and protoc aliases are removed. Linux, macOS, Android and Windows no longer request the gRPC SDK package.
+Abseil remains a separate dependency. The Windows Abseil package supplies its
+headers, import archives and DLL; libcurl imports zlib and system DLLs, without
+a dependency on gRPC-bundled c-ares or RE2.
 No installed shared SDK or cache is modified by this migration.
 
 Parser commit `3e425f6d4` on `peg-parser-mvp` restores MVT row expansion into

@@ -48,7 +48,6 @@ fn raw_strings(
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = std::env::args_os().skip(1);
     let proto = PathBuf::from(args.next().ok_or("missing proto input")?);
-    let protoc = PathBuf::from(args.next().ok_or("missing protoc executable")?);
     let output = PathBuf::from(args.next().ok_or("missing Rust output")?);
     let mut services = true;
     let mut fields = HashSet::new();
@@ -73,16 +72,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let directory = output.parent().ok_or("Rust output has no parent")?;
     fs::create_dir_all(directory)?;
     let mut config = prost_build::Config::new();
-    config.protoc_executable(protoc);
+    let mut descriptors = protox::compile(std::slice::from_ref(&proto), &[include])?;
     if services {
         if !fields.is_empty() {
             return Err("raw string storage is supported only for messages".into());
         }
         tonic_prost_build::configure()
             .out_dir(directory)
-            .compile_with_config(config, std::slice::from_ref(&proto), &[include])?;
+            .compile_fds_with_config(descriptors, config)?;
     } else {
-        let mut descriptors = config.load_fds(std::slice::from_ref(&proto), &[include])?;
         for file in &mut descriptors.file {
             let prefix = format!(".{}", file.package.as_deref().unwrap_or_default());
             raw_strings(&mut file.message_type, &prefix, &mut fields)?;

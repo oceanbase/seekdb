@@ -21,7 +21,6 @@ devdeps-s2geometry-0.10.0-20260126.tar.gz
 devdeps-vsag-1.1.0-20260126.tar.gz
 devdeps-xz-5.2.2-20260126.tar.gz
 devdeps-zlib-1.2.13-20260126.tar.gz
-devdeps-grpc-1.46.7-20260319.tar.gz
 
 [tools]
 obdevtools-bison-2.4.1-20260122.tar.gz
