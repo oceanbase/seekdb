@@ -137,7 +137,6 @@ int main(int argc, char **argv)
   OB_LOGGER.set_file_name("log/observer.log", true);
   if (!persistent) OB_LOGGER.set_max_file_size(8 * 1024 * 1024);
   ObWarningBuffer::set_warn_log_on(true);
-  ObPLogWriterCfg log_config;
   lib::Worker worker;
   lib::Worker::set_worker_to_thread_local(&worker);
   auto &server = observer::ObServer::get_instance();
@@ -147,7 +146,7 @@ int main(int argc, char **argv)
     if (!startup_timeout.is_timeout_set()) {
       ret = startup_timeout.set_timeout(5LL * 60 * 1000000);
     }
-    if (ret == OB_SUCCESS) ret = server.init(options, log_config);
+    if (ret == OB_SUCCESS) ret = server.init(options);
     if (ret == OB_SUCCESS) ret = server.start();
   }
   const bool started = ret == OB_SUCCESS;

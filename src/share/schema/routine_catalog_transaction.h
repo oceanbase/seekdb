@@ -7,8 +7,23 @@
 struct seekdb_runtime_query_transaction;
 struct seekdb_runtime_invalidation_queue;
 namespace oceanbase {
-namespace transaction { class ObTxSEQ; }
 namespace share { namespace schema {
+// Value snapshot: the caller owns the transaction type. Capturing it here
+// does not retain a transaction pointer or introduce a data-plane dependency.
+class RoutineCatalogSequence
+{
+public:
+  template <typename Sequence>
+  RoutineCatalogSequence(const Sequence &value)
+      : sequence_(value.get_seq()), branch_(value.get_branch()), valid_(value.is_valid()) {}
+  bool is_valid() const noexcept { return valid_; }
+  int64_t get_seq() const noexcept { return sequence_; }
+  int16_t get_branch() const noexcept { return branch_; }
+private:
+  int64_t sequence_;
+  int16_t branch_;
+  bool valid_;
+};
 class RoutineSchemaOverlay;
 class RoutinePrivilegeOverlay;
 // Host-only effect frame for ONE operation in the caller's transaction. No
@@ -69,11 +84,11 @@ public:
   RoutineCatalogTransaction &operator=(const RoutineCatalogTransaction &) = delete;
   bool valid() const noexcept { return handle_ != nullptr; }
   // Record before mutation, after obtaining the actual root-branch data barrier.
-  int record(uint64_t transaction_id, const transaction::ObTxSEQ &barrier,
+  int record(uint64_t transaction_id, const RoutineCatalogSequence &barrier,
       std::shared_ptr<RoutineSchemaOverlay> schema,
       std::shared_ptr<RoutinePrivilegeOverlay> privileges);
   // Called only after successful data rollback.
-  int rollback(uint64_t transaction_id, const transaction::ObTxSEQ &resolved) noexcept;
+  int rollback(uint64_t transaction_id, const RoutineCatalogSequence &resolved) noexcept;
   // Unsafe host cleanup: no further operation/commit admission. Does not undo,
   // abort data or retire schema storage; the host also revokes the paired view.
   int fail(uint64_t transaction_id, int host_error) noexcept;
@@ -87,18 +102,18 @@ public:
   int begin_prepare(uint64_t transaction_id, uint64_t &version, uint64_t &operations) noexcept;
   int record_end_sign(uint64_t transaction_id, int64_t version) noexcept;
   int check_preparing(uint64_t transaction_id) const noexcept;
-  int admit_ddl(uint64_t transaction_id, const transaction::ObTxSEQ &barrier, int64_t epoch) noexcept;
+  int admit_ddl(uint64_t transaction_id, const RoutineCatalogSequence &barrier, int64_t epoch) noexcept;
   int ddl_admission(uint64_t transaction_id, uint64_t &epoch, uint64_t &sequence) const noexcept;
-  int check_ddl_write(uint64_t transaction_id, const transaction::ObTxSEQ &barrier) const noexcept;
+  int check_ddl_write(uint64_t transaction_id, const RoutineCatalogSequence &barrier) const noexcept;
   // One attempt, after SQL/MDS/watermark AND transport cleanup. Failure leaves
   // only full abort/discard legal; success seals but does not commit or publish.
   int complete_prepare(uint64_t transaction_id, uint64_t version, int host_result) noexcept;
-  int record_schema_version(uint64_t transaction_id, const transaction::ObTxSEQ &barrier,
+  int record_schema_version(uint64_t transaction_id, const RoutineCatalogSequence &barrier,
       int64_t version) noexcept;
   int schema_state(uint64_t transaction_id, uint64_t &version, uint64_t &operations) noexcept;
   // Same admitted barrier as a successful schema write. Private request only;
   // savepoint rollback removes it. Does not flush, commit, or authorize DROP.
-  int record_invalidation(uint64_t transaction_id, const transaction::ObTxSEQ &barrier,
+  int record_invalidation(uint64_t transaction_id, const RoutineCatalogSequence &barrier,
       uint64_t database, uint64_t routine) noexcept;
   int invalidation_count(uint64_t transaction_id, uint64_t &count) const noexcept;
   // Available ONLY after finish(true). Empty returns all zeros. Retain this

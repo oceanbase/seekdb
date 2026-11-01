@@ -26,14 +26,14 @@ The subdirectories of the seekdb system are as follows:
 - unittest: contains unit test code and small-scale integration test code written by developers
 - tools: contains external tools
 - docs: contains documentation
-- rpm: contains RPM spec files
-- script: contains operation and maintenance scripts for seekdb.
+- bazel: contains build rules and toolchain definitions
+- package: contains release packaging code
 
 Implementation files for C code are named ".c", header files are named ".h", implementation files for C++ code are named ".cpp", and header files are named ".h". In principle, header files and implementation files must correspond one-to-one, and directories under "src" and "unittest" must correspond one-to-one. All file names are written in lowercase English letters, with words separated by underscores ('_').
 
-For example, under the "src/common" directory, there is a header file named "ob_schema.h" and an implementation file named "ob_schema.cpp". Correspondingly, under the "unittest/common" directory, there is a unit test file named "test_schema.cpp".
+For example, allocator code under `src/oblib/lib/allocator/` is covered by `unittest/oblib/test_malloc_backend.cpp`.
 
-Of course, developers may also perform module-level or multi-module integration testing. These testing codes are also placed under the "unittest" directory, but subdirectories and file names are not required to correspond one-to-one with those under "src". For example, integration testing code for the Baseline Storage Engine is placed under the "unittest/storagetest" directory.
+Module integration tests also belong under `unittest/`; their directories and file names may reflect the combined modules they exercise.
 
 ## 2.2 Copyright Information
 
@@ -147,7 +147,7 @@ The include paths for files within a project should use relative paths, and the 
 
 # 3 Scope
 ## 3.1 Namespace
-All variables, functions, and classes in the OceanBase source code are distinguished by namespaces, with namespaces corresponding to the directories where the code is located. For example, the namespace corresponding to "ob_schema.h" in the "src/common" directory is "oceanbase::common".
+Namespaces group related declarations. For example, `src/oblib/lib/allocator/ob_malloc.h` declares allocation functions in `oceanbase::common`.
 
 ```cpp
 // .h file

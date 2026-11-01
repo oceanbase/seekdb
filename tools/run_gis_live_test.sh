@@ -23,8 +23,9 @@ PORT=${2:-${GIS_TEST_PORT:-2931}}
 MYSQL_USER=${MYSQL_USER:-root}
 MYSQL_HOST=${MYSQL_HOST:-127.0.0.1}
 MYSQL_PASSWORD=${MYSQL_PASSWORD:-}
-SEEKDB_BIN=${SEEKDB_BIN:-$REPO_ROOT/build_release/src/observer/seekdb}
-GIS_SO=${GIS_SO:-$REPO_ROOT/build_release/plugins/gis/seekdb_gis.so}
+BAZEL_BIN=${BAZEL_BIN:-$REPO_ROOT/build/bin}
+SEEKDB_BIN=${SEEKDB_BIN:-$BAZEL_BIN/src/observer/seekdb}
+GIS_SO=${GIS_SO:-$BAZEL_BIN/plugins/gis/seekdb_gis.so}
 GIS_SOURCE=${GIS_SOURCE:-$REPO_ROOT/plugins/gis}
 DB_NAME=${GIS_TEST_DB:-gis_live_$(date +%Y%m%d%H%M%S)}
 

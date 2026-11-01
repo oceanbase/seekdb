@@ -10,7 +10,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-// CMake binds to the final linked host. Cargo tracks both env! and include!
+// The build binds to the final linked host. Cargo tracks both env! and include!
 // inputs; switching hosts rebuilds this cdylib, not just its package metadata.
 mod contract {
     include!(env!("SEEKDB_SERVER_DEV_CONTRACT"));

@@ -31,6 +31,10 @@
 #define _SSIZE_T_DEFINED
 typedef intptr_t ssize_t;
 #endif
+#ifndef _MODE_T_DEFINED
+typedef int mode_t;
+#define _MODE_T_DEFINED
+#endif
 // Undefine Windows ERROR macro to avoid conflicts with log levels
 #ifdef ERROR
 #undef ERROR

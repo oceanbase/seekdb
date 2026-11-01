@@ -29,21 +29,20 @@ Use a focused branch name such as `fix/issue-123` or `feature/short-description`
 Install the supported toolchain first, then build the Release target:
 
 ```bash
-./build.sh release --init --make
+./build.py init
+./build.py build seekdb
 ```
 
-The seekdb binary is generated at `build_release/src/observer/seekdb`.
+The seekdb binary is generated at `build/bin/src/observer/seekdb`.
 
-On Linux, CMake provides unit-test targets by module. Build the affected module and run its registered CTest shards, for example:
+Build the existing C++ tests on Linux without running them:
 
 ```bash
-make -C build_release observer_tests
-./build_release/unittest/run_tests.sh \
-  -R '^observer_tests_shard_[0-9]+$' \
-  --output-on-failure
+./build.py build //unittest/oblib:test_malloc_backend
+./build.py build --sanity //unittest/oblib:test_jemalloc_hook
 ```
 
-See [Writing and running unit tests](docs/developer-guide/en/unittest.md) for module discovery, Google Test filtering, and the full test suite.
+See [Writing and running unit tests](docs/developer-guide/en/unittest.md) for target discovery and Google Test filtering.
 
 Run the affected mysqltest cases when a change alters SQL or server behavior. See [Running mysqltest](docs/developer-guide/en/mysqltest.md) for the current `obd.sh` workflow.
 

@@ -1,1 +1,0 @@
-# Transitional bridge artifacts. Each line is a repository-relative path.

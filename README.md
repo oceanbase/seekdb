@@ -56,7 +56,7 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
 
 **English** | [中文版](README_CN.md) | [日本語](README_JP.md)
 
-[30-Second Try](#30-second-try) · [Quick Start](#quick-start) · [Why seekdb](#why-seekdb-for-agents) · [Ecosystem](#ecosystem--integrations) · [Contributing](#development)
+[30-Second Try](#30-second-try) · [Quick Start](#quick-start) · [Embedded SDKs](#embedded-sdks) · [Why seekdb](#why-seekdb-for-agents) · [Ecosystem](#ecosystem--integrations) · [Contributing](#development)
 
 <sub>If you find seekdb useful, consider giving it a <a href="https://github.com/oceanbase/seekdb/stargazers">star</a> — it helps others discover the project.</sub>
 
@@ -88,7 +88,7 @@ pip install -U pyseekdb   # pyseekdb is the Python SDK for seekdb
 
 > 📋 [View demo.py source →](images/demo.py)
 
-No servers, no schemas, no embedding setup. Embedded mode runs in-process; switch to server / OceanBase mode with one line. [More examples →](#more-examples)
+No manual server deployment, schema definition, or embedding setup for this Python demo. [Run a local database with Python or JavaScript →](#embedded-sdks)
 
 ---
 
@@ -167,9 +167,111 @@ real-time writes, and the entire MySQL ecosystem out of the box.
 
 ## 🎬 Quick Start
 
-### Installation
+<a id="embedded-sdks"></a>
 
-Choose your platform:
+### Embedded use
+
+Use a local seekdb database from Python or Node.js without deploying a database service yourself. Data is stored in a local directory and remains available when you reopen it.
+
+<details open>
+<summary><b>🐍 Python</b></summary>
+
+Use [pylibseekdb](https://pypi.org/project/pylibseekdb/) to start a local seekdb database, then execute SQL with PyMySQL. Requires Python 3.11 or newer.
+
+```bash
+python3 -m pip install -U pylibseekdb pymysql
+```
+
+Save the following as `example.py`. It gets the connection arguments from `connection_options()` and passes them to PyMySQL. The context managers close the cursor and SQL connection before releasing the runtime handle:
+
+```python
+from contextlib import closing
+
+import pylibseekdb
+import pymysql
+
+with closing(pylibseekdb.open("./seekdb.db")) as db:
+    options = db.connection_options()
+    with pymysql.connect(
+        database="test",
+        autocommit=True,
+        cursorclass=pymysql.cursors.DictCursor,
+        **options,
+    ) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1 AS value")
+            print(cursor.fetchall())
+```
+
+Run it; the result is `[{'value': 1}]`:
+
+```bash
+python3 example.py
+```
+
+[Full usage guide](https://github.com/oceanbase/seekdb-bindings/blob/main/python/README.md) · [Supported platforms and requirements](https://pypi.org/project/pylibseekdb/#requirements)
+
+For a higher-level Collection API with text embedding and hybrid search, see [pyseekdb](https://github.com/oceanbase/pyseekdb).
+
+</details>
+
+<details open>
+<summary><b>🟨 JavaScript / TypeScript (Node.js)</b></summary>
+
+Use [@oceanbase/seekdb-node](https://www.npmjs.com/package/@oceanbase/seekdb-node) to start a local seekdb database, then execute SQL with `mysql2`. Requires Node.js 22 or newer and supports both JavaScript and TypeScript.
+
+```bash
+npm install @oceanbase/seekdb-node mysql2
+```
+
+Keep npm optional dependencies enabled so npm installs the matching native runtime. The binding manages a separate local seekdb process; close SQL connections before releasing its runtime handle.
+
+Save the following as `example.mjs` (ES modules; TypeScript declarations are also included):
+
+```javascript
+import { seekdb } from "@oceanbase/seekdb-node";
+import mysql from "mysql2/promise";
+
+const db = await seekdb.open("./seekdb.db");
+let connection;
+try {
+  const endpoint = db.connectionOptions();
+  const location = endpoint.transport === "tcp"
+    ? { host: endpoint.host, port: endpoint.port }
+    : { socketPath: endpoint.transport === "unix_socket"
+        ? endpoint.unixSocket : endpoint.namedPipe };
+  connection = await mysql.createConnection({
+    ...location,
+    user: endpoint.user,
+    password: "",
+    database: "test",
+  });
+  const [rows] = await connection.query("SELECT 1 AS value");
+  console.log(rows);
+} finally {
+  try {
+    if (connection) await connection.end();
+  } finally {
+    db.close();
+  }
+}
+```
+
+Run it; the result is `[ { value: 1 } ]`:
+
+```bash
+node example.mjs
+```
+
+[Full usage guide and supported platforms](https://www.npmjs.com/package/@oceanbase/seekdb-node)
+
+For a higher-level JavaScript Collection API, see [seekdb-js](https://github.com/oceanbase/seekdb-js).
+
+</details>
+
+These examples store data in `./seekdb.db` and can be rerun. The path is a database directory. Initializing a new directory can take longer than subsequent opens.
+
+### Server deployments
 
 <details open>
 <summary><b>☁️ Cloud (Zero Install)</b></summary>
@@ -181,15 +283,6 @@ curl -X POST https://d0.seekdb.ai/api/v1/instances
 ```
 
 Free for 7 days. [Learn more →](https://d0.seekdb.ai)
-
-</details>
-
-<details open>
-<summary><b>🐍 Python (Recommended for AI/ML)</b></summary>
-
-```bash
-pip install -U pyseekdb
-```
 
 </details>
 
@@ -228,9 +321,9 @@ See [deployment docs](https://docs.seekdb.ai/seekdb/deploy-by-systemd/) for DEB/
 
 ### 📝 More Examples
 
-For the full Python SDK walkthrough — connection modes, embedding functions, metadata filters — see the [pyseekdb User Guide](https://github.com/oceanbase/pyseekdb).
+Start with the runnable [Python and JavaScript examples](#embedded-sdks) above. The following application pattern assumes an existing agent implementation.
 
-<details open>
+<details>
 <summary><b>🤖 Agent Memory Pattern (continuous write + immediate retrieval)</b></summary>
 
 The canonical agent loop: write an observation, retrieve relevant context
@@ -387,9 +480,10 @@ Before building, please install the required toolchain and dependencies for your
 # Clone the repository
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
-./build.sh release --init --make
+./build.py init
+./build.py build seekdb
 mkdir -p ~/seekdb/bin
-cp build_release/src/observer/seekdb ~/seekdb/bin
+cp build/bin/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
 ./bin/seekdb
 ```

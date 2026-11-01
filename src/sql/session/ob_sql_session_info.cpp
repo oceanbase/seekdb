@@ -40,7 +40,7 @@
 #include "share/schema/routine_schema_overlay.h"
 #include "sql/engine/expr/caller_catalog_transaction.h"
 #include "sql/engine/ob_exec_context.h"
-#include "rootserver/catalog_commit_preparation.h"
+#include "share/schema/catalog_commit_preparation.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #endif

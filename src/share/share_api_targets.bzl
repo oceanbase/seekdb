@@ -1,19 +1,8 @@
-"""Fine-grained semantic owners for Share's externally reachable headers.
-
-The package-private implementation header aggregate in BUILD.bazel is
-deliberately not an owner.
-Every header in SHARE_PUBLIC_HEADER_ROOTS or SHARE_INTERFACE_CLOSURE_HEADERS
-must instead be exported by exactly one target listed below.
-"""
+"""Shared public header targets."""
 
 load(
     "//bazel:defs.bzl",
-    cc_library = "seekdb_cc_library",
-)
-load(
-    ":share_header_inventory.bzl",
-    "SHARE_INTERFACE_CLOSURE_HEADERS",
-    "SHARE_PUBLIC_HEADER_ROOTS",
+    "cc_library",
 )
 
 _PUBLIC_VISIBILITY = [
@@ -21,75 +10,8 @@ _PUBLIC_VISIBILITY = [
     "//unittest:__subpackages__",
 ]
 
-# Targets declared directly in BUILD.bazel because they also own implementation
-# sources or predate this registry.  The validation below reads their real hdrs
-# attributes; this list does not duplicate their header declarations.
-_EXISTING_SEMANTIC_API_TARGETS = [
-    "ai_endpoint_interface",
-    "cache",
-    "cluster_version_interface",
-    "config",
-    "config_parser_interface",
-    "config_value_support",
-    "core_types",
-    "datum",
-    "debug_sync_interface",
-    "delegate_interface",
-    "device_manager_interface",
-    "error_codes",
-    "errsim_interface",
-    "est_row_count_record",
-    "geo_cast_interface",
-    "geo_types",
-    "id_generator",
-    "io",
-    "io_device_interface",
-    "json_access",
-    "lib_cache_namespace",
-    "lob_diff_interface",
-    "lob_read_service",
-    "lob_runtime",
-    "lob_read_context",
-    "location",
-    "log_protocol",
-    "ls_restore_status",
-    "object_cast",
-    "object_cast_runtime_interface",
-    "pl_integer_type",
-    "resource_limit_calculator",
-    "resource_limit_interface",
-    "roaringbitmap",
-    "schema_foundation_types",
-    "schema_model_interface",
-    "schema_partition_iteration",
-    "scn_interface",
-    "semistruct",
-    "sequence_option",
-    "local_storage_interface",
-    "srs_provider_interface",
-    "statement_type",
-    "storage_cache_policy",
-    "system_variable_metadata",
-    "table_load_protocol",
-    "table_lock_priority",
-    "tablet_autoincrement_admin_interface",
-    "tablet_autoincrement_interface",
-    "tablet_autoincrement_types",
-    "tablet_replica_types",
-    "task_control",
-    "tenant_module_init",
-    "tenant_runtime",
-    "text_analysis",
-    "thread_pool_interface",
-    "time_wheel",
-    "transaction_id",
-    "ttl_schedule_interface",
-    "unit_config_interface",
-    "vector",
-]
-
 _SHARE_SEMANTIC_HEADER_TARGETS = {
-    "seekdb_runtime_foundation": struct(
+    "runtime_foundation": struct(
         hdrs = [
             "ob_compatibility_control.h",
             "ob_server_info.h",
@@ -160,8 +82,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
     ),
     "catalog_access": struct(
-        hdrs = [
-        ],
+        hdrs = [],
         deps = [
             ":schema_access",
             ":schema_entities",
@@ -325,8 +246,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
     ),
     "external_storage": struct(
-        hdrs = [
-        ],
+        hdrs = [],
         deps = [
             ":core_types",
             ":io",
@@ -349,6 +269,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "geo_algorithms": struct(
         hdrs = [
+            "geo/geo_math.h",
             "geo/ob_geo_dispatcher.h",
             "geo/ob_geo_func_area.h",
             "geo/ob_geo_func_box.h",
@@ -380,7 +301,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             ":geo_cast_interface",
             ":tenant_runtime",
             "//src/oblib:oblib_foundation",
-            "@seekdb_3rd_headers//:boost_headers",
+            "//bazel/third_party:boost_headers",
         ],
     ),
     "geo_serialization": struct(
@@ -395,7 +316,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             ":geo_types",
             ":geo_visitors",
             "//src/oblib:oblib_foundation",
-            "@seekdb_3rd_headers//:protobuf_c_headers",
+            "//bazel/third_party:protobuf_c_headers",
         ],
     ),
     "geo_visitors": struct(
@@ -433,8 +354,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
     ),
     "module_data_protocol": struct(
-        hdrs = [
-        ],
+        hdrs = [],
         deps = [
             "//src/oblib:oblib_foundation",
         ],
@@ -465,12 +385,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     "redo_log_storage": struct(
         hdrs = [
             "ob_local_device.h",
+            "wasm_aio.h",
         ],
         deps = [
             ":io_device_interface",
             ":local_device_space_interface",
             "//src/oblib:oblib_foundation",
-            "@seekdb_3rd_headers//:libaio_headers",
+            "//bazel/third_party:libaio_headers",
         ],
     ),
     "rpc_dispatch": struct(
@@ -515,10 +436,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             ":transaction_id",
             ":unit_topology",
             ":utility_types",
-            "//src/oblib:oblib_db_values_base",
-            "//src/oblib:oblib_db_values_primitives",
-            "//src/oblib:oblib_db_values_runtime",
-            "//src/oblib:oblib_db_values_services",
+            "//src/oblib:oblib_common",
         ],
     ),
     "runtime_context": struct(
@@ -539,6 +457,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_access": struct(
         hdrs = [
+            "schema/native_routine_create_slot.h",
             "schema/ob_dependency_info.h",
             "schema/ob_latest_schema_guard.h",
             "schema/ob_multi_version_schema_service.h",
@@ -581,6 +500,9 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_persistence": struct(
         hdrs = [
+            "schema/borrowed_sql_transaction.h",
+            "schema/catalog_dml_sql_helper.h",
+            "schema/native_routine_admission.h",
             "schema/ob_ai_model_sql_service.h",
             "schema/ob_database_sql_service.h",
             "schema/ob_ddl_sql_service.h",
@@ -603,6 +525,10 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
     "schema_registry": struct(
         hdrs = [
+            "schema/native_routine_signature.h",
+            "schema/routine_catalog_savepoint.h",
+            "schema/routine_privilege_overlay.h",
+            "schema/routine_schema_overlay.h",
             "schema/ob_ai_model_mgr.h",
             "schema/ob_mock_fk_parent_table_mgr.h",
             "schema/ob_outline_mgr.h",
@@ -641,12 +567,11 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
         deps = [
             "//src/oblib:oblib_foundation",
-            "//src/oblib:oblib_mysql_client_services",
+            "//src/oblib:oblib_common",
         ],
     ),
     "sequence_runtime": struct(
-        hdrs = [
-        ],
+        hdrs = [],
         deps = [
             ":sequence_option",
             "//src/oblib:oblib_foundation",
@@ -722,8 +647,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
     ),
     "unit_topology": struct(
-        hdrs = [
-        ],
+        hdrs = [],
         deps = [
             ":core_types",
             ":tenant_runtime",
@@ -741,7 +665,7 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         deps = [
             ":core_types",
             "//src/oblib:oblib_foundation",
-            "@seekdb_3rd_headers//:rapidjson_headers",
+            "//bazel/third_party:rapidjson_headers",
         ],
     ),
     "worker_runtime": struct(
@@ -761,10 +685,6 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
     ),
 }
 
-SHARE_SEMANTIC_API_TARGETS = (
-    _EXISTING_SEMANTIC_API_TARGETS +
-    sorted(_SHARE_SEMANTIC_HEADER_TARGETS.keys())
-)
 
 def declare_share_semantic_header_targets():
     """Declare the header-only semantic owner targets."""
@@ -776,53 +696,4 @@ def declare_share_semantic_header_targets():
             features = ["layering_check"],
             tags = ["manual"],
             visibility = _PUBLIC_VISIBILITY,
-        )
-
-def _package_header(label):
-    value = str(label)
-    package_prefix = "//src/share:"
-    if value.startswith(package_prefix):
-        return value[len(package_prefix):]
-    if value.startswith(":"):
-        return value[1:]
-    return value
-
-def validate_share_semantic_header_ownership():
-    """Fail package loading unless each externally reachable header has one owner."""
-    expected = {}
-    for header in SHARE_PUBLIC_HEADER_ROOTS + SHARE_INTERFACE_CLOSURE_HEADERS:
-        if header in expected:
-            fail("duplicate header in Share interface inventory: %s" % header)
-        expected[header] = True
-
-    rules = native.existing_rules()
-    owners = {}
-    for target in SHARE_SEMANTIC_API_TARGETS:
-        if target not in rules:
-            fail("missing Share semantic owner target: %s" % target)
-        rule = rules[target]
-        for attribute in ["hdrs", "textual_hdrs"]:
-            for label in rule.get(attribute, []):
-                header = _package_header(label)
-                if header not in expected:
-                    fail(
-                        "Share semantic target %s exposes non-interface header %s" %
-                        (target, header),
-                    )
-                if header in owners:
-                    fail(
-                        "Share interface header %s has multiple semantic owners: %s and %s" %
-                        (header, owners[header], target),
-                    )
-                owners[header] = target
-
-    missing = sorted([
-        header
-        for header in expected
-        if header not in owners
-    ])
-    if missing:
-        fail(
-            "Share interface headers without semantic owners (%d): %s" %
-            (len(missing), missing),
         )

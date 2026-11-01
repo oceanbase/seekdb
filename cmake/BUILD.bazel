@@ -1,0 +1,15 @@
+# Retain the standalone CMake SDK helpers for external consumers. The server
+# and in-tree plugins are built by Bazel; these Python audits are shared.
+exports_files([
+    "plugin_profile.py",
+    "plugin_boundary_check.py",
+    "plugin_binary_check.py",
+    "rust_plugin_boundary_check.py",
+    "ServerDevEntry.cpp.in",
+])
+
+filegroup(
+    name = "plugin_audit_tools",
+    srcs = ["plugin_profile.py", "plugin_boundary_check.py", "plugin_binary_check.py"],
+    visibility = ["//visibility:public"],
+)

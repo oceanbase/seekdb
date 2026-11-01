@@ -1,7 +1,6 @@
 /* Copyright (c) 2026 OceanBase. Licensed under the Apache License, Version 2.0. */
 #include "share/schema/routine_catalog_transaction.h"
 #include "share/schema/routine_catalog_savepoint.h"
-#include "data_plane/transaction/ob_tx_seq.h"
 #include "plugin_runtime.h"
 #include <new>
 namespace oceanbase { namespace share { namespace schema {
@@ -88,7 +87,7 @@ RoutineCatalogTransaction::RoutineCatalogTransaction(uint64_t transaction_id)
     : handle_(seekdb_runtime_query_transaction_create(transaction_id)) {}
 RoutineCatalogTransaction::~RoutineCatalogTransaction()
 { seekdb_runtime_query_transaction_destroy(handle_); }
-int RoutineCatalogTransaction::record(uint64_t transaction_id, const transaction::ObTxSEQ &barrier,
+int RoutineCatalogTransaction::record(uint64_t transaction_id, const RoutineCatalogSequence &barrier,
     std::shared_ptr<RoutineSchemaOverlay> schema, std::shared_ptr<RoutinePrivilegeOverlay> privileges)
 {
     using namespace common;
@@ -103,7 +102,7 @@ int RoutineCatalogTransaction::record(uint64_t transaction_id, const transaction
     if (ret != OB_SUCCESS) release(mark); // No transfer on failed admission.
     return ret;
   }
-int RoutineCatalogTransaction::rollback(uint64_t transaction_id, const transaction::ObTxSEQ &resolved) noexcept
+int RoutineCatalogTransaction::rollback(uint64_t transaction_id, const RoutineCatalogSequence &resolved) noexcept
 {
     if (!handle_) return common::OB_NOT_INIT;
     if (!resolved.is_valid()) return common::OB_INVALID_ARGUMENT;
@@ -172,7 +171,7 @@ int RoutineCatalogTransaction::check_preparing(uint64_t transaction_id) const no
   return translate(status, error);
 }
 int RoutineCatalogTransaction::admit_ddl(uint64_t transaction_id,
-    const transaction::ObTxSEQ &barrier, int64_t epoch) noexcept
+    const RoutineCatalogSequence &barrier, int64_t epoch) noexcept
 {
   if (!handle_) return common::OB_NOT_INIT;
   if (!barrier.is_valid() || epoch <= 0) return common::OB_INVALID_ARGUMENT;
@@ -189,7 +188,7 @@ int RoutineCatalogTransaction::ddl_admission(uint64_t transaction_id,
   return translate(status, error);
 }
 int RoutineCatalogTransaction::check_ddl_write(uint64_t transaction_id,
-    const transaction::ObTxSEQ &barrier) const noexcept
+    const RoutineCatalogSequence &barrier) const noexcept
 {
   if (!handle_) return common::OB_NOT_INIT;
   if (!barrier.is_valid()) return common::OB_INVALID_ARGUMENT;
@@ -222,7 +221,7 @@ int RoutineCatalogTransaction::finish(uint64_t transaction_id, bool committed) n
     return translate(status, error);
   }
 int RoutineCatalogTransaction::record_schema_version(uint64_t transaction_id,
-    const transaction::ObTxSEQ &barrier, int64_t version) noexcept
+    const RoutineCatalogSequence &barrier, int64_t version) noexcept
 {
   if (!handle_) return common::OB_NOT_INIT;
   if (!barrier.is_valid() || version <= 0) return common::OB_INVALID_ARGUMENT;
@@ -241,7 +240,7 @@ int RoutineCatalogTransaction::schema_state(uint64_t transaction_id,
   return translate(status, error);
 }
 int RoutineCatalogTransaction::record_invalidation(uint64_t transaction_id,
-    const transaction::ObTxSEQ &barrier, uint64_t database, uint64_t routine) noexcept
+    const RoutineCatalogSequence &barrier, uint64_t database, uint64_t routine) noexcept
 {
   if (!handle_) return common::OB_NOT_INIT;
   if (!barrier.is_valid()) return common::OB_INVALID_ARGUMENT;

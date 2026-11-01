@@ -8,7 +8,7 @@
 #include "sql/resolver/ddl/extension_routine_resolver.h"
 #include "sql/privilege_check/ob_privilege_check.h"
 #include "sql/ob_sql.h"
-#include "observer/ob_server_plugin_runtime.h"
+#include "share/plugin/plugin_runtime_service.h"
 #include "share/ob_server_struct.h"
 #include <new>
 #include <cstdio>

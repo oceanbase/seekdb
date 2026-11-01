@@ -69,8 +69,8 @@ def stage_assets(build_dir):
     for name in GENERATED_ASSETS:
         if not (build_dir / name).is_file():
             raise FileNotFoundError(
-                f"Missing {build_dir / name}. Build the database "
-                "CMake target, or pass --build-dir with a compatible existing build."
+                f"Missing {build_dir / name}. Run ./build.py build --config=wasm seekdb, "
+                "or pass --build-dir with a compatible existing build."
             )
     for name in SOURCE_ASSETS:
         if not (ROOT / "src/wasm" / name).is_file():
@@ -98,8 +98,8 @@ def main():
         description="Run the seekdb WebAssembly shell using an existing engine build."
     )
     parser.add_argument(
-        "--build-dir", type=Path, default=ROOT / "build_wasm_engine",
-        help="directory containing seekdb_wasm_database.mjs and .wasm (default: build_wasm_engine)",
+        "--build-dir", type=Path, default=ROOT / "build/bin/src/wasm/dist",
+        help="directory containing seekdb_wasm_database.mjs and .wasm (default: build/bin/src/wasm/dist)",
     )
     parser.add_argument("--port", type=int, default=8767, help="loopback port (default: 8767)")
     args = parser.parse_args()

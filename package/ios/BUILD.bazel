@@ -1,0 +1,1 @@
+exports_files(["package_framework.py"], visibility = ["//src/observer:__pkg__"])

@@ -793,7 +793,7 @@ int inner_main(int argc, char *argv[])
       lib::Worker worker;
       lib::Worker::set_worker_to_thread_local(&worker);
       ObServer &observer = ObServer::get_instance();
-      LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING, "embedded", opts->embedded_);
+      LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_NAME " " PACKAGE_VERSION, "embedded", opts->embedded_);
       if (OB_FAIL(observer.init(*opts))) {
       } else if (OB_MALLOC_BACKEND_UNKNOWN == malloc_backend) {
         LOG_WARN("invalid malloc backend",
@@ -827,7 +827,7 @@ int inner_main(int argc, char *argv[])
     unlink(PID_FILE_NAME);
   }
 
-  LOG_INFO("seekdb exits", "seekdb_version", PACKAGE_STRING);
+  LOG_INFO("seekdb exits", "seekdb_version", PACKAGE_NAME " " PACKAGE_VERSION);
   return ret;
 }
 

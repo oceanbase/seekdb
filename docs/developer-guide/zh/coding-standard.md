@@ -23,16 +23,15 @@ title: 编程规范
 seekdb系统的子目录说明如下：
 - src：存放源代码，包含头文件和实现文件
 - unittest：存放单元测试代码和开发人员编写的小规模集成测试代码
-- tests：存放测试团队的测试框架和用例
 - tools：存放外部工具
-- doc：存放文档
-- rpm：存放rpm spec文件
-- script：存放seekdb的运维脚本
+- docs：存放文档
+- bazel：存放构建规则和工具链定义
+- package：存放发布打包代码
 
 C代码的实现文件命名为.c，头文件命名为.h，C++代码的实现文件命名为.cpp，头文件命名为.h。原则上头文件和实现文件必须一一对应，src下的目录和unittest下的目录一一对应。所有文件命名统一使用全部英文小写字母，单词之间使用'_'分割。
-例如，src下的common目录有一个头文件ob_schema.h和实现文件ob_schema.cpp，相应地，在unittest目录下也有一个common目录，其中有一个名字叫做test_schema.cpp的单元测试文件。
+例如，`src/oblib/lib/allocator/` 下的分配器代码由 `unittest/oblib/test_malloc_backend.cpp` 覆盖。
 
-当然，开发人员也会做一些模块内或者多个模块的集成测试，这些测试代码也放到unittest，但是所在的子目录和文件名不要求和src一一对应。例如，基线存储引擎的集成测试代码放到unittest/storagetest目录中。
+模块集成测试也放在 `unittest/` 下，子目录和文件名可以按被测模块组合组织。
 
 ## 2.2 版权信息
 目前（2021-3），seekdb 所有源代码文件头中必须使用如下版权信息：
@@ -133,7 +132,7 @@ C代码的实现文件命名为.c，头文件命名为.h，C++代码的实现文
 
 # 3 作用域
 ## 3.1 命名空间
-seekdb源代码中的所有变量、函数以及类都通过命名空间区分开来，命名空间和代码所处的目录一一对应。例如，`src/common`目录下的`ob_schema.h`对应的命名空间为 `oceanbase::common`。
+命名空间用于组织相关声明。例如，`src/oblib/lib/allocator/ob_malloc.h` 中的分配函数位于 `oceanbase::common` 命名空间。
 
 ```cpp
 // .h文件

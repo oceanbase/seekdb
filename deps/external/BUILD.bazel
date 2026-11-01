@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//deps/external/bazel:jemalloc.bzl", "seekdb_jemalloc")
+load("//deps/external/bazel:jemalloc.bzl", "jemalloc")
 
 package(default_visibility = ["//visibility:private"])
 
-seekdb_jemalloc(
+jemalloc(
     name = "jemalloc",
     external_src = "src/lib.rs",
     lockfile = "Cargo.lock",

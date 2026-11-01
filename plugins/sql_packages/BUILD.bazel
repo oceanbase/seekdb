@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "packages",
+    srcs = glob(["**/*.sql", "**/*.control"]),
+    tools = ["@host_tools//:python", "//bazel:plugin_tools.py", "//cmake:plugin_audit_tools"],
+    outs = ["sql_packages.tar"],
+    cmd = "$(location @host_tools//:python) $(location //bazel:plugin_tools.py) sql --output $@ --sql $(SRCS)",
+)

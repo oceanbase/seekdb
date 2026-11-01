@@ -5,29 +5,27 @@
 ## 前置条件
 
 - macOS 或 Linux 主机
-- Emscripten 6.0.12（即 `tools/wasm/emscripten-version` 中的版本），且其 `emcc` 在 `PATH` 中，例如通过 `brew install emscripten` 安装
-- 已将 `rustup`、CMake 3.20 及以上、Python 3.12 及以上和 `curl` 加入 `PATH`
+- Emscripten 6.0.12（即 `deps/init/wasm/emscripten-version` 中的版本），且其 `emcc` 在 `PATH` 中
+- 已将 `rustup`、Python 3.12 及以上和 `curl` 加入 `PATH`
 - 运行测试需要 Node.js 24 及以上
-- 约 5 GB 可用磁盘空间，用于依赖和构建目录
+- 建议至少 20 GB 可用磁盘空间，用于依赖、SDK 和构建目录
 
 ## 构建
 
-使用 WebAssembly 构建入口，一次完成依赖初始化、配置和编译：
+激活固定版本的 Emscripten SDK，准备依赖后用 Bazel 编译：
 
 ```bash
-./build.sh release --wasm --init --make
+# emcc 使用项目固定版本的 Emscripten SDK。
+export EMSCRIPTEN=/path/to/emsdk/upstream/emscripten
+export PATH="$EMSCRIPTEN:$PATH"
+
+python3 build.py init --wasm
+python3 build.py build --config=wasm seekdb
 ```
 
-`--init` 只从原生依赖列表中下载 WebAssembly 构建需要的 bison、flex 和源码头文件，`deps/3rd` 中已经有这些包时跳过；安装 `tools/wasm/rust-toolchain-version` 中固定版本的 Rust nightly 及 `wasm32-unknown-emscripten` target；并用 `tools/wasm/dependencies.json` 中固定版本的源码编译第三方库，安装到 `build_wasm_deps`。每次执行还会用 `rust/build.py` 把 Rust crate（memory NIO、`config` 和 `local`）编译到 `build_wasm_rust_runtime`。依赖准备好后可以去掉 `--init`。不加 `--make` 时，`build.sh` 只生成构建规则。
+`init --wasm` 准备本机依赖、固定版本的 Rust 工具链，以及 `deps/wasm` 下的 Wasm 基础库、适配后的头文件和 Emscripten sysroot。后续只需重复最后一条构建命令，其余源码库和 Rust 库由 Bazel 编译、缓存。只有需要更换 SDK 目录时，才为两条命令设置 `SEEKDB_WASM_DEPS`；它不负责选择目标平台。
 
-引擎位于：
-
-```text
-build_wasm_engine/seekdb_wasm_database.mjs    # Emscripten 模块
-build_wasm_engine/seekdb_wasm_database.wasm   # 引擎
-```
-
-CMake 选项写在 `--make` 之前，make 选项写在它之后，例如 `--make -j8`。`./build.sh clean` 会删除 `build_wasm_engine` 和 `build_wasm_rust_runtime`，保留 `build_wasm_deps`。
+引擎和配套 JS、HTML、CSS 文件位于 `build/bin/src/wasm/dist/`。`python3 build.py clean` 清理 Bazel 编译产物，保留 `deps/wasm`。
 
 ## 构建目录内容
 
@@ -43,7 +41,7 @@ CMake 选项写在 `--make` 之前，make 选项写在它之后，例如 `--make
 用构建目录启动 shell，打开它输出的 URL：
 
 ```bash
-python3 tools/wasm/serve-shell.py --build-dir build_wasm_engine
+python3 tools/wasm/serve-shell.py --build-dir build/bin/src/wasm/dist
 ```
 
 shell 的命令和存储模式见 `docs/webassembly-shell.md`。

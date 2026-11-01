@@ -22,11 +22,24 @@ exports_files(
     visibility = ["//deps/external:__pkg__"],
 )
 exports_files(["exports.json"])
+exports_files(["Cargo.lock"], visibility = ["//src/observer:__pkg__"])
+
+filegroup(
+    name = "plugin_host_sources",
+    srcs = glob(["**/*.rs", "**/*.h", "**/*.py", "**/*.toml", "**/*.json", "**/*.yaml", "**/*.yml", "*.lock"], exclude = ["target/**"], allow_empty = True),
+    visibility = ["//plugins:__subpackages__"],
+)
+
+filegroup(
+    name = "extension_sdk_sources",
+    srcs = glob(["extension-sdk/src/**/*.rs", "extension-sdk/Cargo.toml", "extension-sdk/Cargo.lock"], allow_empty = True),
+    visibility = ["//plugins:__subpackages__"],
+)
 
 # Cargo resolves dependencies and exports one production Rust runtime.
 cargo_workspace(
     exports = EXPORTS,
-    cargo_args = "--features seekdb-rust/plugins",
+    cargo_args = ["--features", "seekdb-rust/plugins"],
     srcs = glob(
         ["**/*.rs", "**/*.h", "**/*.py", "**/*.toml", "**/*.yaml", "**/*.yml", "**/*.json", "*.lock"],
         exclude = ["target/**"],

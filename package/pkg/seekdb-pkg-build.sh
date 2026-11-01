@@ -9,22 +9,20 @@
 #   ./package/pkg/seekdb-pkg-build.sh [options] PROJECT_NAME VERSION RELEASE
 #
 # Example:
-#   ./package/pkg/seekdb-pkg-build.sh --pkg seekdb 1.4.0 1
+#   ./package/pkg/seekdb-pkg-build.sh seekdb 1.4.0 1
 #   # produces: package/pkg/seekdb-1.4.0-1-macos15-arm64.pkg
 #
 # Env:
-#   SEEKDB_BUILD   Build directory (default: <repo>/build_release)
+#   SEEKDB_BUILD   Build directory (default: <repo>/build/bin)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOPDIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-MACPKG_DIR="$TOPDIR/tools/macpkg"
+MACPKG_DIR="$TOPDIR/package/pkg"
 
-SEEKDB_BUILD="${SEEKDB_BUILD:-$TOPDIR/build_release}"
+SEEKDB_BUILD="${SEEKDB_BUILD:-$TOPDIR/build/bin}"
 
-DO_BUILD=false
-DO_PKG=false
 DO_MENUBAR=true
 
 usage() {
@@ -36,26 +34,22 @@ Usage: seekdb-pkg-build.sh [options] PROJECT_NAME VERSION RELEASE
   RELEASE         Release number (e.g. 1)
 
 Options:
-  --build         Unsupported; the Bazel release launcher is Linux-only
-  --pkg           Assemble the .pkg installer
   --no-menubar    Skip building the menu bar app
   -h, --help      Show this help
 
 Environment:
   SEEKDB_BUILD    Directory containing existing macOS artifacts
-                  (default: <repo>/build_release)
+                  (default: <repo>/build/bin)
 
 Typical workflow:
   cd <oceanbase-lite>
   SEEKDB_BUILD=/path/to/macos-artifacts \
-    ./package/pkg/seekdb-pkg-build.sh --pkg seekdb 1.4.0 1
+    ./package/pkg/seekdb-pkg-build.sh seekdb 1.4.0 1
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --build)      DO_BUILD=true;   shift ;;
-    --pkg)        DO_PKG=true;     shift ;;
     --no-menubar) DO_MENUBAR=false; shift ;;
     -h|--help)    usage; exit 0 ;;
     -*)           echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
@@ -67,23 +61,18 @@ PROJECT_NAME="${1:-}"
 VERSION="${2:-}"
 RELEASE="${3:-}"
 
-if [[ "$DO_PKG" == true ]]; then
-  if [[ -z "$PROJECT_NAME" || -z "$VERSION" || -z "$RELEASE" ]]; then
-    echo "Error: PROJECT_NAME VERSION RELEASE are required when using --pkg." >&2
-    usage >&2
-    exit 1
-  fi
+if [[ $# != 3 ]]; then
+  usage >&2
+  exit 64
 fi
 
 info() { printf '[seekdb-pkg-build] %s\n' "$*"; }
 die()  { printf '[seekdb-pkg-build][ERROR] %s\n' "$*" >&2; exit 1; }
 
-if [[ "$DO_BUILD" == true ]]; then
-  die "--build is not supported because the Bazel release launcher currently supports Linux only. Set SEEKDB_BUILD to existing macOS artifacts and omit --build."
-fi
-
-[[ "$DO_PKG" == true ]] || { info "No --pkg flag; done."; exit 0; }
-
+[[ "$PROJECT_NAME" == seekdb ]] || die "only seekdb is packaged"
+[[ "$(uname -s)" == Darwin ]] || die "PKG assembly requires macOS"
+PKG_WORK="$(mktemp -d "${TMPDIR:-/tmp}/seekdb-pkg.XXXXXX")"
+trap 'rm -rf "$PKG_WORK"' EXIT
 MACOS_ARCH="$(uname -m)"
 MACOS_VERSION_MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 
@@ -97,13 +86,13 @@ SEEKDB_BIN="$SEEKDB_BUILD/src/observer/seekdb"
 # Step 1: Build menu bar app
 # ---------------------------------------------------------------------------
 MENUBAR_SRC="$MACPKG_DIR/seekdbctl/menubar"
-MENUBAR_BIN="$SEEKDB_BUILD/seekdb-menubar"
+MENUBAR_BIN="$PKG_WORK/seekdb-menubar"
 
-HELPER_BIN="$SEEKDB_BUILD/seekdb-helper"
+HELPER_BIN="$PKG_WORK/seekdb-helper"
 ICON_ASSETS_DIR="$MACPKG_DIR/assets"
-SVG2PNG_BIN="$SEEKDB_BUILD/svg2png"
-APP_ICONSET="$SEEKDB_BUILD/AppIcon.iconset"
-APP_ICON_ICNS="$SEEKDB_BUILD/AppIcon.icns"
+SVG2PNG_BIN="$PKG_WORK/svg2png"
+APP_ICONSET="$PKG_WORK/AppIcon.iconset"
+APP_ICON_ICNS="$PKG_WORK/AppIcon.icns"
 
 if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
   info "Compiling seekdb menu bar app ..."
@@ -111,7 +100,7 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
     -o "$MENUBAR_BIN" \
     -framework AppKit \
     -framework Security \
-    -target arm64-apple-macosx13.0 \
+    -target "${MACOS_ARCH}-apple-macosx13.0" \
     -O \
     "$MENUBAR_SRC/SeekDBMenuBar.swift"
   codesign --force --sign - "$MENUBAR_BIN"
@@ -121,7 +110,7 @@ if [[ "$DO_MENUBAR" == true && -f "$MENUBAR_SRC/SeekDBMenuBar.swift" ]]; then
   swiftc \
     -o "$HELPER_BIN" \
     -framework Foundation \
-    -target arm64-apple-macosx13.0 \
+    -target "${MACOS_ARCH}-apple-macosx13.0" \
     -O \
     "$MENUBAR_SRC/SeekDBHelper.swift"
   codesign --force --sign - "$HELPER_BIN"
@@ -132,110 +121,20 @@ fi
 # Step 2: Assemble staging directory (the on-disk layout after install)
 # ---------------------------------------------------------------------------
 PKG_NAME="${PROJECT_NAME}-${VERSION}-${RELEASE}-macos${MACOS_VERSION_MAJOR}-${MACOS_ARCH}"
-STAGING="$SEEKDB_BUILD/_pkg_staging"
+STAGING="$PKG_WORK/_pkg_staging"
 APP_BUNDLE_NAME="seekdb Monitor.app"
 APP_EXECUTABLE="seekdb-menubar"
-rm -rf "$STAGING"
 
 info "Assembling staging directory ..."
 
-# --- binaries ---
-install -d "$STAGING/opt/seekdb/bin"
-install -d "$STAGING/opt/seekdb/lib/seekdb"
-install -m 755 "$SEEKDB_BIN" "$STAGING/opt/seekdb/bin/seekdb"
+python3 "$TOPDIR/package/package.py" stage --layout macos \
+  --artifacts "$SEEKDB_BUILD" --version "$VERSION" --release "$RELEASE" --output "$STAGING"
+python3 "$SCRIPT_DIR/bundle_dylibs.py" "$STAGING/opt/seekdb" "$SEEKDB_BIN"
 
-# --- bundle non-system dylibs (recursive) ---
-info "Bundling dynamic libraries ..."
-DYLIB_DIR="$STAGING/opt/seekdb/lib/seekdb"
-
-# An executable may only depend on system libraries, leaving this directory
-# empty. Expand unmatched dylib globs to an empty list instead of a literal
-# "*.dylib" path.
-shopt -s nullglob
-
-collect_non_system_deps() {
-  otool -L "$1" 2>/dev/null | awk '/^\t/ {print $1}' | while read -r dep; do
-    case "$dep" in
-      /usr/lib/*|/System/*|*:) ;;
-      *) echo "$dep" ;;
-    esac
-  done
-}
-
-# seed with seekdb's direct deps
-for dep in $(collect_non_system_deps "$SEEKDB_BIN"); do
-  dep_name="$(basename "$dep")"
-  if [[ -f "$dep" && ! -f "$DYLIB_DIR/$dep_name" ]]; then
-    cp "$dep" "$DYLIB_DIR/$dep_name"
-    chmod 644 "$DYLIB_DIR/$dep_name"
-  fi
-done
-
-# recursively resolve transitive deps
-changed=1
-while [[ "$changed" -eq 1 ]]; do
-  changed=0
-  for lib in "$DYLIB_DIR"/*.dylib; do
-    for dep in $(collect_non_system_deps "$lib"); do
-      dep_name="$(basename "$dep")"
-      if [[ -f "$dep" && ! -f "$DYLIB_DIR/$dep_name" ]]; then
-        cp "$dep" "$DYLIB_DIR/$dep_name"
-        chmod 644 "$DYLIB_DIR/$dep_name"
-        changed=1
-      fi
-    done
-  done
-done
-
-BUNDLED_COUNT=$(find "$DYLIB_DIR" -maxdepth 1 -type f -name '*.dylib' | wc -l | tr -d ' ')
-info "  bundled $BUNDLED_COUNT dylibs"
-
-# rewrite paths: seekdb binary
-for dep in $(collect_non_system_deps "$STAGING/opt/seekdb/bin/seekdb"); do
-  dep_name="$(basename "$dep")"
-  install_name_tool -change "$dep" "@executable_path/../lib/seekdb/$dep_name" \
-    "$STAGING/opt/seekdb/bin/seekdb" 2>/dev/null
-done
-
-# rewrite paths: each dylib's deps + id
-for lib in "$DYLIB_DIR"/*.dylib; do
-  lib_name="$(basename "$lib")"
-  install_name_tool -id "@loader_path/$lib_name" "$lib" 2>/dev/null || true
-  for dep in $(collect_non_system_deps "$lib"); do
-    dep_name="$(basename "$dep")"
-    install_name_tool -change "$dep" "@loader_path/$dep_name" "$lib" 2>/dev/null
-  done
-done
-
-# re-sign everything
-info "Re-signing binaries ..."
-for lib in "$DYLIB_DIR"/*.dylib; do
-  codesign --force --sign - "$lib" 2>/dev/null || true
-done
-shopt -u nullglob
-codesign --force --sign - "$STAGING/opt/seekdb/bin/seekdb" 2>/dev/null || true
 for script in seekdbctl seekdb_start seekdb_stop seekdb_status seekdb_config \
               seekdb_setup seekdb_paths seekdb_uninstall; do
   src="$MACPKG_DIR/seekdbctl/$script"
   if [[ -f "$src" ]]; then install -m 755 "$src" "$STAGING/opt/seekdb/bin/$script"; fi
-done
-
-# --- ob_admin / ob_error (optional, relink dylibs) ---
-for tool_bin in "$SEEKDB_BUILD/tools/ob_admin/ob_admin" "$SEEKDB_BUILD/tools/ob_error/src/ob_error"; do
-  if [[ -x "$tool_bin" ]]; then
-    tool_name="$(basename "$tool_bin")"
-    install -m 755 "$tool_bin" "$STAGING/opt/seekdb/bin/$tool_name"
-    for dep in $(collect_non_system_deps "$tool_bin"); do
-      dep_name="$(basename "$dep")"
-      if [[ -f "$dep" && ! -f "$DYLIB_DIR/$dep_name" ]]; then
-        cp "$dep" "$DYLIB_DIR/$dep_name"
-        chmod 644 "$DYLIB_DIR/$dep_name"
-      fi
-      install_name_tool -change "$dep" "@executable_path/../lib/seekdb/$dep_name" \
-        "$STAGING/opt/seekdb/bin/$tool_name" 2>/dev/null
-    done
-    codesign --force --sign - "$STAGING/opt/seekdb/bin/$tool_name" 2>/dev/null || true
-  fi
 done
 
 # --- LaunchDaemon plists ---
@@ -251,48 +150,9 @@ if [[ -x "$HELPER_BIN" ]]; then
     "$STAGING/Library/LaunchDaemons/com.seekdb.helper.plist"
 fi
 
-# --- helper scripts ---
 install -d "$STAGING/opt/seekdb/libexec/seekdb/scripts"
 install -m 755 "$MACPKG_DIR/launchd/profile/seekdb_launchd_start" \
-  "$STAGING/opt/seekdb/libexec/seekdb/scripts/"
-install -m 755 "$MACPKG_DIR/launchd/profile/seekdb_launchd_stop" \
-  "$STAGING/opt/seekdb/libexec/seekdb/scripts/"
-for py in import_time_zone_info.py import_srs_data.py; do
-  if [[ -f "$TOPDIR/tools/$py" ]]; then
-    install -m 755 "$TOPDIR/tools/$py" "$STAGING/opt/seekdb/libexec/seekdb/"
-  fi
-done
-
-# --- config ---
-install -d "$STAGING/opt/seekdb/etc/seekdb"
-install -m 644 "$MACPKG_DIR/launchd/profile/seekdb.cnf" "$STAGING/opt/seekdb/etc/seekdb/"
-# ob_system_variable_init.json (generated at build time)
-if [[ -f "$SEEKDB_BUILD/src/share/ob_system_variable_init.json" ]]; then
-  install -m 644 "$SEEKDB_BUILD/src/share/ob_system_variable_init.json" "$STAGING/opt/seekdb/etc/seekdb/"
-fi
-
-# --- share: admin SQL ---
-install -d "$STAGING/opt/seekdb/share/seekdb/admin"
-SYS_PACK_DIR="$SEEKDB_BUILD/syspack_release"
-if [[ -d "$SYS_PACK_DIR" ]]; then
-  cp -R "$SYS_PACK_DIR/"* "$STAGING/opt/seekdb/share/seekdb/admin/" 2>/dev/null || true
-fi
-
-# --- share: timezone ---
-install -d "$STAGING/opt/seekdb/share/seekdb/timezone"
-for f in timezone_V1.log; do
-  if [[ -f "$TOPDIR/tools/$f" ]]; then
-    install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/seekdb/share/seekdb/timezone/"
-  fi
-done
-
-# --- share: srs ---
-install -d "$STAGING/opt/seekdb/share/seekdb/srs"
-for f in default_srs_data_mysql.sql; do
-  if [[ -f "$TOPDIR/tools/$f" ]]; then
-    install -m 644 "$TOPDIR/tools/$f" "$STAGING/opt/seekdb/share/seekdb/srs/"
-  fi
-done
+  "$MACPKG_DIR/launchd/profile/seekdb_launchd_stop" "$STAGING/opt/seekdb/libexec/seekdb/scripts/"
 
 # --- seekdb Monitor .app bundle ---
 if [[ "$DO_MENUBAR" == true && -x "$MENUBAR_BIN" ]]; then
@@ -307,7 +167,7 @@ if [[ "$DO_MENUBAR" == true && -x "$MENUBAR_BIN" ]]; then
   swiftc \
     -o "$SVG2PNG_BIN" \
     -framework AppKit \
-    -target arm64-apple-macosx13.0 \
+    -target "${MACOS_ARCH}-apple-macosx13.0" \
     "$MACPKG_DIR/svg2png.swift"
   rm -rf "$APP_ICONSET" "$APP_ICON_ICNS"
   mkdir -p "$APP_ICONSET"
@@ -341,12 +201,12 @@ info "Staging complete: $(find "$STAGING" -type f | wc -l | tr -d ' ') files"
 # ---------------------------------------------------------------------------
 # Step 3: Build .pkg with pkgbuild + productbuild
 # ---------------------------------------------------------------------------
-COMPONENT_PKG="$SEEKDB_BUILD/_pkg_component.pkg"
+COMPONENT_PKG="$PKG_WORK/_pkg_component.pkg"
 OUTPUT_PKG="$SCRIPT_DIR/${PKG_NAME}.pkg"
 
 info "Building component package ..."
 # Disable relocation for the .app bundle so it installs to /Applications
-COMPONENT_PLIST="$SEEKDB_BUILD/_pkg_component.plist"
+COMPONENT_PLIST="$PKG_WORK/_pkg_component.plist"
 cat > "$COMPONENT_PLIST" <<'CPEOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
@@ -365,17 +225,17 @@ cat > "$COMPONENT_PLIST" <<'CPEOF'
 </plist>
 CPEOF
 
-pkgbuild \
-  --root "$STAGING" \
-  --identifier "com.seekdb.server" \
-  --version "$VERSION" \
-  --scripts "$MACPKG_DIR/launchd/profile" \
-  --component-plist "$COMPONENT_PLIST" \
-  "$COMPONENT_PKG"
+component_command=(pkgbuild --root "$STAGING" --identifier com.seekdb.server
+                   --version "$VERSION" --scripts "$MACPKG_DIR/launchd/profile")
+if [[ -d "$STAGING/Applications/$APP_BUNDLE_NAME" ]]; then
+  component_command+=(--component-plist "$COMPONENT_PLIST")
+fi
+component_command+=("$COMPONENT_PKG")
+"${component_command[@]}"
 
 info "Building product archive ..."
 # Create a minimal distribution.xml
-DIST_XML="$SEEKDB_BUILD/_pkg_distribution.xml"
+DIST_XML="$PKG_WORK/_pkg_distribution.xml"
 cat > "$DIST_XML" <<DISTEOF
 <?xml version="1.0" encoding="utf-8"?>
 <installer-gui-script minSpecVersion="2">
@@ -398,7 +258,7 @@ cat > "$DIST_XML" <<DISTEOF
 DISTEOF
 
 # Prepare resources directory with license
-RESOURCES_DIR="$SEEKDB_BUILD/_pkg_resources"
+RESOURCES_DIR="$PKG_WORK/_pkg_resources"
 rm -rf "$RESOURCES_DIR"
 mkdir -p "$RESOURCES_DIR"
 cp "$TOPDIR/LICENSE" "$RESOURCES_DIR/LICENSE"
@@ -411,9 +271,5 @@ productbuild \
 
 info "Package created: $OUTPUT_PKG"
 ls -lh "$OUTPUT_PKG"
-
-# Cleanup temp files
-rm -f "$COMPONENT_PKG" "$DIST_XML" "$COMPONENT_PLIST" "$SVG2PNG_BIN" "$APP_ICON_ICNS"
-rm -rf "$STAGING" "$RESOURCES_DIR" "$APP_ICONSET"
 
 info "Done."

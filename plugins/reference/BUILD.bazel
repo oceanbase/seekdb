@@ -1,0 +1,52 @@
+load("//bazel:plugin.bzl", "native_plugin")
+
+native_plugin(
+    name = "seekdb_reference_plugin",
+    srcs = ["seekdb_reference_plugin.c"],
+    output_name = "seekdb_reference.so",
+)
+
+native_plugin(
+    name = "seekdb_reference_blocked_plugin",
+    srcs = ["seekdb_reference_blocked_plugin.c"],
+    manifest = "blocked_plugin.toml",
+    output_name = "seekdb_reference_blocked.so",
+)
+
+native_plugin(
+    name = "seekdb_reference_invalid_extensions_plugin",
+    srcs = ["seekdb_reference_invalid_extensions_plugin.c"],
+    manifest = "invalid_extensions_plugin.toml",
+    output_name = "seekdb_reference_invalid_extensions.so",
+)
+
+native_plugin(
+    name = "seekdb_reference_invalid_manifest_plugin",
+    srcs = ["seekdb_reference_invalid_extensions_plugin.c"],
+    manifest = "invalid_manifest_plugin.toml",
+    output_name = "seekdb_reference_invalid_manifest.so",
+    local_defines = [
+        'SEEKDB_INVALID_EXTENSIONS_PLUGIN_ID="org.seekdb.reference.invalid-manifest"',
+        'SEEKDB_INVALID_EXTENSIONS_PLUGIN_BUILD_ID="reference-invalid-manifest-abi-v1"',
+        "SEEKDB_INVALID_EXTENSIONS_MANIFEST_CAPABILITIES=SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG",
+    ],
+)
+
+native_plugin(
+    name = "seekdb_reference_stop_blocked_plugin",
+    srcs = ["seekdb_reference_blocked_plugin.c"],
+    manifest = "stop_blocked_plugin.toml",
+    output_name = "seekdb_reference_stop_blocked.so",
+    local_defines = [
+        'SEEKDB_BLOCKED_PLUGIN_ID="org.seekdb.reference.stop-blocked"',
+        'SEEKDB_BLOCKED_PLUGIN_BUILD_ID="reference-stop-blocked-abi-v1"',
+        "SEEKDB_BLOCKED_PLUGIN_FAIL_START=0",
+    ],
+)
+
+native_plugin(
+    name = "seekdb_reference_registration_conflict_plugin",
+    srcs = ["seekdb_reference_registration_conflict_plugin.c"],
+    manifest = "registration_conflict_plugin.toml",
+    output_name = "seekdb_reference_registration_conflict.so",
+)

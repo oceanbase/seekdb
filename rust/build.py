@@ -35,7 +35,7 @@ def main():
     exports = json.loads((workspace / "exports.json").read_text())
     output = Path(args.output).resolve()
     target_dir = Path(args.target_dir).resolve()
-    command = [args.cargo, "build", "--workspace", "--profile", args.profile,
+    command = [args.cargo, "build", "--locked", "--workspace", "--profile", args.profile,
                "--manifest-path", str(workspace / "Cargo.toml"),
                "--target-dir", str(target_dir), "--message-format=json-render-diagnostics"]
     if args.target:
@@ -44,9 +44,8 @@ def main():
     libraries = {}
     packages = {}
     build_dirs = {}
-    # Preserve inherited GNU Make jobserver descriptors when CMake provides them.
     with subprocess.Popen(command, cwd=workspace, stdout=subprocess.PIPE,
-                          text=True, close_fds=False) as cargo:
+                          text=True) as cargo:
         for line in cargo.stdout:
             message = json.loads(line)
             if message["reason"] == "build-script-executed":
@@ -60,18 +59,18 @@ def main():
         if cargo.wait():
             raise SystemExit(cargo.returncode)
     output.mkdir(parents=True, exist_ok=True)
+    copied = set()
     for name, export in exports.items():
         archive = libraries[export.get("library", name)]
-        library_name = name + ".lib" if archive.suffix == ".lib" else "lib" + name + ".a"
-        shutil.copyfile(archive, output / library_name)
+        library_name = archive.name
+        if library_name not in copied:
+            shutil.copyfile(archive, output / library_name)
+            copied.add(library_name)
         for header, source in export["headers"].items():
             package = packages[export["crate"].replace("-", "_")]
             destination = output / "include" / header
             destination.parent.mkdir(parents=True, exist_ok=True)
-            contents = (build_dirs[package] / source).read_bytes()
-            # Preserve header mtimes when only Rust implementation changed.
-            if not destination.exists() or destination.read_bytes() != contents:
-                destination.write_bytes(contents)
+            shutil.copyfile(build_dirs[package] / source, destination)
 
 
 if __name__ == "__main__":

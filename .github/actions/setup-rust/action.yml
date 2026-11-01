@@ -16,14 +16,6 @@ name: Setup Rust
 description: Install the Rust toolchain required by the seekdb build
 
 inputs:
-  crates-mirror:
-    description: >-
-      Route crates.io downloads through the rsproxy.cn mirror. Set to 'true'
-      on runners that already need the rsproxy rustup mirror (RUSTUP_DIST_SERVER
-      etc.); without this, `cargo build` still fetches crates from
-      static.crates.io over the unmirrored path.
-    required: false
-    default: 'false'
   cache:
     description: Cache the cargo registry (and installed cargo tools) keyed on Cargo.lock.
     required: false
@@ -37,6 +29,13 @@ runs:
       working-directory: ${{ github.workspace }}/rust
       run: |
         set -euo pipefail
+
+        # Jobs sharing Cargo's tool binaries must serialize Rust installation.
+        if [[ -n "${CARGO_HOME:-}" ]]; then
+          mkdir -p "$CARGO_HOME"
+          exec 9>"$CARGO_HOME/.rustup-install.lock"
+          flock 9
+        fi
 
         if ! command -v rustup >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
           install_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/seekdb-rust"
@@ -61,8 +60,7 @@ runs:
 
         fi
 
-        # Export the homes unconditionally so later steps (mirror config,
-        # registry cache) can rely on them even when rustup pre-existed.
+        # Export the homes so cache steps can rely on them even when rustup pre-existed.
         export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
         export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
         {
@@ -76,21 +74,6 @@ runs:
         RUSTUP_AUTO_INSTALL=1 cargo --version
         rustc --version
 
-    - name: Route cargo through the rsproxy crates mirror
-      if: inputs.crates-mirror == 'true'
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$CARGO_HOME"
-        cat >> "$CARGO_HOME/config.toml" <<'EOF'
-        [source.crates-io]
-        replace-with = "rsproxy-sparse"
-        [source.rsproxy-sparse]
-        registry = "sparse+https://rsproxy.cn/index/"
-        EOF
-
-    # NOTE: needs a node20-capable runner (same constraint as the ccache action
-    # pin in buildbase); disable via `cache: 'false'` on runners that cannot.
     - name: Cache cargo registry
       if: inputs.cache == 'true'
       uses: actions/cache@v4

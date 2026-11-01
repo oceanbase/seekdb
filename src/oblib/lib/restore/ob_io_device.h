@@ -22,6 +22,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/utility/ob_print_utils.h"
+#include "lib/utility/ob_platform_utils.h"
 
 namespace oceanbase
 {

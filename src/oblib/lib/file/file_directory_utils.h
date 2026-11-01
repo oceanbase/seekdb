@@ -22,10 +22,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #ifdef _WIN32
-#ifndef _MODE_T_DEFINED
-typedef int mode_t;
-#define _MODE_T_DEFINED
-#endif
+#include "lib/utility/ob_platform_utils.h"
 #endif
 
 namespace oceanbase

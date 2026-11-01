@@ -14,7 +14,7 @@ From this checkout, pass an engine build made from this branch (see
 
 ```sh
 python3 tools/wasm/serve-shell.py \
-  --build-dir build_wasm_engine \
+  --build-dir build/bin/src/wasm/dist \
   --port 8767
 ```
 
@@ -134,54 +134,16 @@ without OPFS or Web Locks can use Memory only.
 
 ## Build from source
 
-Requirements: Git, CMake 3.20 or newer, curl, Python 3.12 or newer, rustup, and
-[Emscripten](https://emscripten.org/docs/getting_started/downloads.html) 6.0.12
-with its `emcc` on `PATH`. The host needs a dependency list in `deps/init/`
-(`oceanbase.<os>.<arch>.deps`), which provides bison 2.4.1, flex, and the
-native dependency headers; see
-[Build seekdb for WebAssembly](developer-guide/en/webassembly.md).
-Homebrew installs only its newest Emscripten; once that moves past the version
-in `tools/wasm/emscripten-version`, `build.sh` stops and prints the version it
-found until the pin is rebuilt, retested, and updated.
+Follow [Build seekdb for WebAssembly](developer-guide/en/webassembly.md) to install the pinned SDK, prepare dependencies and build `seekdb` with `./build.py`.
+
+After changing engine sources, rebuild and serve the generated assets:
 
 ```sh
-git clone -b feature/webassembly-shell https://github.com/oceanbase/seekdb.git
-cd seekdb
-brew install emscripten
-./build.sh release --wasm --init --make
-python3 tools/wasm/serve-shell.py --build-dir build_wasm_engine
+./build.py build --config=wasm seekdb
+python3 tools/wasm/serve-shell.py --build-dir build/bin/src/wasm/dist
 ```
 
-`--init` prepares the dependencies. When bison, flex, or the Boost, curl,
-fast_float, RapidJSON, and CRoaring headers are missing from `deps/3rd`, it runs
-`deps/init/dep_create.sh` with `DEP_PACKAGES` set to just those packages instead
-of downloading the whole native dependency list (which includes a 1 GB LLVM); a
-later native `./build.sh release --init` still downloads the complete list. It
-then installs the pinned Rust nightly with `rust-src` and the
-`wasm32-unknown-emscripten` target, and builds the WebAssembly third-party
-libraries into `build_wasm_deps/` with `tools/wasm/build-deps.sh`.
-
-Every `./build.sh release --wasm` run builds the Rust crates (the memory NIO,
-`config` and `local`, which generate `config_bridge.h` and `local_bridge.h`) with
-`tools/wasm/build-rust-nio.sh` and configures `build_wasm_engine/`. `--make`
-then builds the `database` target with `make -j<CPU count>`, or with the make
-options that follow it, such as `--make -j4` to use less memory. After changing
-engine sources, run `./build.sh release --wasm --make` again.
-`./build.sh clean` removes `build_wasm_engine/` and `build_wasm_rust_runtime/`
-and keeps `build_wasm_deps/`. The CMake build generates the SQL and PL parsers
-in the build directory, so parser files that a native build leaves in the source
-tree are not used.
-
-When the host tools or headers are outside this checkout's `deps/3rd`, pass
-`-DSEEKDB_HOST_DEVTOOLS=/path/to/devtools` and
-`-DSEEKDB_HEADER_DEPS=/path/to/devel/include` before `--make`.
-
-CMake copies the shell, API, and Worker assets beside the generated engine module.
-That build directory can also be served with the existing server:
-
-```sh
-python3 tools/wasm/serve.py build_wasm_engine --port 8767
-```
+`./build.py clean` clears Bazel outputs and preserves `deps/wasm/`.
 
 Open `/shell.html` when using this server. A static host must send
 `Cross-Origin-Opener-Policy: same-origin` and
@@ -197,10 +159,10 @@ generated engine and all shell/API assets from that directory, without rebuildin
 the engine or reading live source files:
 
 ```sh
-cmake --build build_wasm_engine --target database --parallel 3
-python3 tools/wasm/release-shell.py package build_wasm_release \
-  --build-dir build_wasm_engine
-python3 tools/wasm/release-shell.py serve build_wasm_release --port 0
+./build.py build --config=wasm --jobs=3 seekdb
+python3 package/wasm/release-shell.py package build_wasm_release \
+  --build-dir build/bin/src/wasm/dist
+python3 package/wasm/release-shell.py serve build_wasm_release --port 0
 ```
 
 Open the printed loopback URL. This preview serves the packaged snapshot and uses

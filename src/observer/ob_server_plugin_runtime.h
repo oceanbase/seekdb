@@ -23,6 +23,7 @@
 #include "seekdb/plugin/optimizer_spi.h"
 #include "seekdb/plugin/server_dev_planner.h"
 #include "share/plugin/custom_executor.h"
+#include "share/plugin/plugin_runtime_service.h"
 
 struct seekdb_plugin_execution_context_v1;
 struct seekdb_plugin_batch_context_v1;
@@ -60,7 +61,7 @@ namespace observer
 // catalog. It deliberately does not perform signature/trust-chain checks;
 // the loader still owns path confinement, manifest reconciliation and
 // lifecycle recovery.
-class ObServerPluginRuntime final
+class ObServerPluginRuntime final : public share::plugin::IPluginRuntimeService
 {
 public:
   ObServerPluginRuntime();

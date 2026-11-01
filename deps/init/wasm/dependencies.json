@@ -1,0 +1,194 @@
+{
+  "openssl": {
+    "version": "1.1.1u",
+    "url": "https://codeload.github.com/openssl/openssl/tar.gz/refs/tags/OpenSSL_1_1_1u",
+    "sha256": "fafe27202bde4238dce258d82ec8a8592a657842e5431264620a933a0c9436b7",
+    "source_directory": "openssl-OpenSSL_1_1_1u"
+  },
+  "boost_mpl_backport": {
+    "version": "1.74.0 native header bundle",
+    "path": "boost/mpl/aux_/integral_wrapper.hpp",
+    "upstream": "https://github.com/boostorg/mpl/pull/77",
+    "input_sha256": "9e88ab8791933e27dd184f746510d04e812edcd963b6384a32d462e26d4cb199",
+    "output_sha256": "b6f5acf813c67aeead4835f5c7fa147212c14e8e842b01a4f82b40d7280da081",
+    "variants": [
+      {
+        "bundle": "devdeps-boost-1.74.0-20251205 (macOS), which adds an unreachable Clang 15 branch after the patched condition",
+        "input_sha256": "6399a14439b4a88877a5c76d4c314714a91c85a607d2c4f6c3e2aec70c6134c2",
+        "output_sha256": "759203325fa5bd9fb3b93017cd061e9a80f0351e7fa9665fb2bb48363bef3290"
+      }
+    ]
+  },
+  "boost_numeric_backport": {
+    "upstream": "https://github.com/boostorg/numeric_conversion/commit/50a1eae942effb0",
+    "headers": [
+      {
+        "path": "boost/numeric/conversion/detail/int_float_mixture.hpp",
+        "input_sha256": "27c3475c909925114434dd06a9dce8228a433899314ba7b80b2c717e9305c838",
+        "output_sha256": "6d0510d03fccd15fe504ce8fce9fe10662988e9dccc8b99c50f0d82c27b7dd0b"
+      },
+      {
+        "path": "boost/numeric/conversion/detail/sign_mixture.hpp",
+        "input_sha256": "51f43c2007a1ab463260103b25e9bd830419371cb137598d94964d5a59deb6d3",
+        "output_sha256": "b36cdb6028c474c0729b1df348fc47857824797f1973af99e33f01a37fb146f9"
+      },
+      {
+        "path": "boost/numeric/conversion/detail/udt_builtin_mixture.hpp",
+        "input_sha256": "8dffa1ad10dd7bc7a78afddab0325e8cecf951e94fb2820c7ecc2fc7dd2d9d62",
+        "output_sha256": "46e8dc074a944aa61a161fb3cfdd035367fa236c3ae307f4358b071a10a462d1"
+      }
+    ]
+  },
+  "boost_geometry_math": {
+    "description": "Evaluate double atan2 and cos through the SDK binary128 functions in Cartesian round joins, geocentric conversions and extended transverse Mercator projections. Other numeric types retain their standard or ADL math overloads.",
+    "headers": [
+      {
+        "path": "boost/geometry/strategies/cartesian/buffer_join_round.hpp",
+        "input_sha256": "663bad23dc6d88648d2ec866b6e03e6421c25992fc7a751143eec9ce143cb6de",
+        "output_sha256": "3c51a1a05e9081e8311f3e15e13dd01c69d9ffb3b77e40f723d6d6f1e4b82ccd",
+        "replacements": [
+          [
+            "#define BOOST_GEOMETRY_STRATEGIES_CARTESIAN_BUFFER_JOIN_ROUND_HPP\n",
+            "#define BOOST_GEOMETRY_STRATEGIES_CARTESIAN_BUFFER_JOIN_ROUND_HPP\n\n#include \"share/geo/geo_math.h\"\n"
+          ],
+          [
+            "\n        PromotedType const angle1 = atan2(dy1, dx1);\n",
+            "\n        PromotedType const angle1 = oceanbase::common::geometry_math::atan2(dy1, dx1);\n"
+          ],
+          [
+            "\n        PromotedType angle2 = atan2(dy2, dx2);\n",
+            "\n        PromotedType angle2 = oceanbase::common::geometry_math::atan2(dy2, dx2);\n"
+          ],
+          [
+            "\n            set<0>(p, get<0>(vertex) + buffer_distance * cos(a));\n",
+            "\n            set<0>(p, get<0>(vertex) + buffer_distance * oceanbase::common::geometry_math::cos(a));\n"
+          ]
+        ]
+      },
+      {
+        "path": "boost/geometry/srs/projections/impl/geocent.hpp",
+        "input_sha256": "e1050706a6b7cfd086a9f8a7f6fe63180202e002f5f1f493da41c0470d6f4331",
+        "output_sha256": "b7defa1c3409051d13595736eb1b8a58c976908de4da211edcf7a7e7b7e37282",
+        "replacements": [
+          [
+            "#define BOOST_GEOMETRY_SRS_PROJECTIONS_IMPL_GEOCENT_HPP\n",
+            "#define BOOST_GEOMETRY_SRS_PROJECTIONS_IMPL_GEOCENT_HPP\n\n#include \"share/geo/geo_math.h\"\n"
+          ],
+          [
+            "\n    return cos(T(67.5) * math::d2r<T>());  /* cosine of 67.5 degrees */\n",
+            "\n    return oceanbase::common::geometry_math::cos(T(67.5) * math::d2r<T>());  /* cosine of 67.5 degrees */\n"
+          ],
+          [
+            "\n    Cos_Lat = cos(Latitude);\n",
+            "\n    Cos_Lat = oceanbase::common::geometry_math::cos(Latitude);\n"
+          ],
+          [
+            "\n    X = (Rn + Height) * Cos_Lat * cos(Longitude);\n",
+            "\n    X = (Rn + Height) * Cos_Lat * oceanbase::common::geometry_math::cos(Longitude);\n"
+          ],
+          [
+            "\n        Longitude = atan2(Y,X);\n",
+            "\n        Longitude = oceanbase::common::geometry_math::atan2(Y,X);\n"
+          ],
+          [
+            "\n        Longitude=atan2(Y,X);\n",
+            "\n        Longitude=oceanbase::common::geometry_math::atan2(Y,X);\n"
+          ]
+        ]
+      },
+      {
+        "path": "boost/geometry/srs/projections/proj/etmerc.hpp",
+        "input_sha256": "4cb29001413597a733bd9ece8a14a15993335e4bd610e25f6a58178676aa338e",
+        "output_sha256": "bb2232ebd884ff63a0b8778109eaeca61e76b858f40b840392d79a2724a71126",
+        "replacements": [
+          [
+            "#define BOOST_GEOMETRY_PROJECTIONS_ETMERC_HPP\n",
+            "#define BOOST_GEOMETRY_PROJECTIONS_ETMERC_HPP\n\n#include \"share/geo/geo_math.h\"\n"
+          ],
+          [
+            "\n                cos_2B = 2*cos(2*B);\n",
+            "\n                cos_2B = 2*oceanbase::common::geometry_math::cos(2*B);\n"
+          ],
+          [
+            "\n                cos_arg_r  = cos(arg_r);\n",
+            "\n                cos_arg_r  = oceanbase::common::geometry_math::cos(arg_r);\n"
+          ],
+          [
+            "\n                    cos_Cn = cos(Cn);\n",
+            "\n                    cos_Cn = oceanbase::common::geometry_math::cos(Cn);\n"
+          ],
+          [
+            "\n                    cos_Ce = cos(Ce);\n",
+            "\n                    cos_Ce = oceanbase::common::geometry_math::cos(Ce);\n"
+          ],
+          [
+            "\n                    Cn     = atan2(sin_Cn, cos_Ce*cos_Cn);\n",
+            "\n                    Cn     = oceanbase::common::geometry_math::atan2(sin_Cn, cos_Ce*cos_Cn);\n"
+          ],
+          [
+            "\n                    Ce     = atan2(sin_Ce*cos_Cn, boost::math::hypot(sin_Cn, cos_Cn*cos_Ce));\n",
+            "\n                    Ce     = oceanbase::common::geometry_math::atan2(sin_Ce*cos_Cn, boost::math::hypot(sin_Cn, cos_Cn*cos_Ce));\n"
+          ],
+          [
+            "\n                        cos_Cn = cos(Cn);\n",
+            "\n                        cos_Cn = oceanbase::common::geometry_math::cos(Cn);\n"
+          ],
+          [
+            "\n                        cos_Ce = cos(Ce);\n",
+            "\n                        cos_Ce = oceanbase::common::geometry_math::cos(Ce);\n"
+          ],
+          [
+            "\n                        Ce     = atan2(sin_Ce, cos_Ce*cos_Cn);\n",
+            "\n                        Ce     = oceanbase::common::geometry_math::atan2(sin_Ce, cos_Ce*cos_Cn);\n"
+          ],
+          [
+            "\n                        Cn     = atan2(sin_Cn*cos_Ce, boost::math::hypot(sin_Ce, cos_Ce*cos_Cn));\n",
+            "\n                        Cn     = oceanbase::common::geometry_math::atan2(sin_Cn*cos_Ce, boost::math::hypot(sin_Ce, cos_Ce*cos_Cn));\n"
+          ]
+        ]
+      }
+    ]
+  },
+  "libxml2": {
+    "version": "2.10.4",
+    "url": "https://download.gnome.org/sources/libxml2/2.10/libxml2-2.10.4.tar.xz",
+    "sha256": "ed0c91c5845008f1936739e4eee2035531c1c94742c6541f44ee66d885948d45",
+    "checksum_url": "https://download.gnome.org/sources/libxml2/2.10/libxml2-2.10.4.sha256sum",
+    "source_directory": "libxml2-2.10.4"
+  },
+  "protobuf_c": {
+    "version": "1.4.1",
+    "url": "https://codeload.github.com/protobuf-c/protobuf-c/tar.gz/refs/tags/v1.4.1",
+    "sha256": "99be336cdb15dfc5827efe34e5ac9aaa962e2485db547dd254d2a122a7d23102",
+    "source_directory": "protobuf-c-1.4.1"
+  },
+  "rust_std_tls_patch": {
+    "toolchain": "nightly-2026-09-07",
+    "rustc": "rustc 1.100.0-nightly (5a2be9f5f 2026-09-06)",
+    "path": "rust/library/std/src/sys/thread_local/mod.rs",
+    "input_sha256": "b8e407313093a89008fd0fbdd4805f2da8c7bb7711f0d36c03d858d6f0de5e4a",
+    "output_sha256": "4e45d3f2d4428cb5e2e94af6b2bf315a23ad389a9179ece45ba87528bfa18728",
+    "replacements": [
+      [
+        "all(target_family = \"wasm\", not(target_env = \"p3\")),",
+        "all(target_family = \"wasm\", not(target_os = \"emscripten\"), not(target_env = \"p3\")),"
+      ],
+      [
+        "all(not(target_vendor = \"apple\"), not(target_family = \"wasm\"), target_family = \"unix\"),",
+        "all(not(target_vendor = \"apple\"), any(not(target_family = \"wasm\"), target_os = \"emscripten\"), target_family = \"unix\"),"
+      ]
+    ]
+  },
+  "spdlog_rs_emscripten": {
+    "version": "0.5.3",
+    "path": "src/record.rs",
+    "input_sha256": "81f9b24c1f0b17b96355a3d168885f360195b64cd8b5b8da84412d73cf087b3d",
+    "output_sha256": "b1ad646964d9f4a72b0042a48a8e14e39e92cc1d668722971dcd3821f397b288",
+    "replacements": [
+      [
+        "    #[cfg(target_os = \"freebsd\")]\n",
+        "    #[cfg(target_os = \"emscripten\")]\n    #[must_use]\n    fn get_current_tid_inner() -> u64 {\n        // Emscripten represents a pthread by its address in shared Wasm memory.\n        unsafe { libc::pthread_self() as u64 }\n    }\n\n    #[cfg(target_os = \"freebsd\")]\n"
+      ]
+    ]
+  }
+}

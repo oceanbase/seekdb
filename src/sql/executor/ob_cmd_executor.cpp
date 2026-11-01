@@ -107,7 +107,7 @@
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 #include "sql/engine/cmd/ob_merge_table_executor.h"
 #include "sql/resolver/cmd/ob_empty_query_stmt.h"
-#include "observer/ob_server_plugin_runtime.h"
+#include "share/plugin/plugin_runtime_service.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase

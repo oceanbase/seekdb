@@ -1,21 +1,5 @@
 """Query-owned build topology exposed to its BUILD file."""
 
-QUERY_MYSQL_PROTOCOL_UTIL_SOURCES = [
-    "protocol/ob_mysql_protocol_util.cpp",
-]
-
-QUERY_SCHEDULER_SOURCES = [
-    "scheduler/ob_scheduler_job.cpp",
-]
-
-QUERY_VECTOR_EMBEDDING_SOURCES = [
-    "vector/ob_vector_embedding_handler.cpp",
-]
-
-QUERY_SQL_EXPRESSION_INTERFACE_HEADERS = [
-    "api/query/engine/expr/ob_sql_expression.h",
-]
-
 QUERY_API_INTERFACE_HEADERS = [
     "api/query/das/ob_block_max_spec_access.h",
     "api/query/das/ob_das_id_protocol.h",
@@ -99,9 +83,4 @@ QUERY_API_INTERFACE_HEADERS = [
     "api/query/session/ob_session_access.h",
     "api/query/session/ob_session_inner_sql.h",
     "api/query/tablelock/ob_table_lock_runtime.h",
-]
-
-QUERY_SQL_PARSER_TYPE_HEADERS = [
-    "api/query/parser/ob_item_type.h",
-    "api/query/parser/parse_node.h",
 ]

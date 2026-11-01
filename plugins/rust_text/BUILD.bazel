@@ -1,0 +1,3 @@
+load("//bazel:rust_plugin.bzl", "rust_plugin")
+
+rust_plugin(name = "seekdb_rust_text_plugin", library = "seekdb_rust_text")

@@ -15,6 +15,8 @@
  */
 
 %parse-param {FtsParserResult *ftsParserResult}
+%expect 0
+%lex-param {void *YYLEX_PARAM}
 %define api.pure
 %name-prefix "obsql_fts_yy"
 
@@ -28,6 +30,10 @@ extern  int obsql_fts_yylex(YYSTYPE*, YYLTYPE*, void *);
 #define YYERROR_VERBOSE
 typedef struct FtsNode FtsNode;
 %}
+
+%code requires {
+#include "fts_base.h"
+}
 
 %locations
 %union {

@@ -26,6 +26,7 @@
 #include <sys/file.h>
 #else
 #include <windows.h>
+#include <direct.h>
 #endif
 #include <thread>
 #include <cstdio>
@@ -662,20 +663,90 @@ private:
   ObService &service_;
 };
 
+#ifdef _WIN32
+static int create_redo_path(const char *redo_dir, bool &created_leaf)
+{
+  int ret = OB_SUCCESS;
+  created_leaf = false;
+  if (OB_ISNULL(redo_dir) || '\0' == redo_dir[0]) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    // A trailing separator must not cause the parent creation to create the
+    // leaf first and lose its provenance. Normalize before splitting the path.
+    char absolute_dir[PATH_MAX] = {0};
+    if (NULL == _fullpath(absolute_dir, redo_dir, sizeof(absolute_dir))) {
+      return OB_IO_ERROR;
+    }
+    size_t length = strlen(absolute_dir);
+    while (length > 3 && ('/' == absolute_dir[length - 1] || '\\' == absolute_dir[length - 1])) {
+      absolute_dir[--length] = '\0';
+    }
+    redo_dir = absolute_dir;
+    ObSqlString parent_dir;
+    const char *last_slash = strrchr(redo_dir, '/');
+    const char *last_backslash = strrchr(redo_dir, '\\');
+    const char *separator = OB_ISNULL(last_slash) ? last_backslash
+        : (OB_ISNULL(last_backslash) || last_slash > last_backslash ? last_slash : last_backslash);
+    if (OB_ISNULL(separator) || separator == redo_dir) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(parent_dir.assign(redo_dir, separator - redo_dir + (separator == redo_dir + 2 && ':' == redo_dir[1] ? 1 : 0)))) {
+    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(parent_dir.ptr()))) {
+    } else if (0 == _mkdir(redo_dir)) {
+      created_leaf = true;
+    } else if (EEXIST != errno) {
+      ret = OB_IO_ERROR;
+    }
+  }
+  return ret;
+}
+#endif
+
 static int check_need_initialize(const char *base_dir, const char *data_dir, const char *redo_dir, bool &need_initialize)
 {
   int ret = OB_SUCCESS;
   need_initialize = false;
   bool data_file_exists = false;
   bool redo_empty = true;
+#ifdef _WIN32
+  bool created_redo_leaf = false;
+#endif
   ObSqlString data_file_path;
   ObSqlString redo_file_path;
   if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
   }
+#ifdef _WIN32
+  if (OB_FAIL(ret)) {
+  } else {
+    const DWORD attributes = GetFileAttributesA(data_file_path.ptr());
+    if (INVALID_FILE_ATTRIBUTES != attributes) {
+      data_file_exists = true;
+    } else {
+      const DWORD error = GetLastError();
+      if (ERROR_FILE_NOT_FOUND != error && ERROR_PATH_NOT_FOUND != error) {
+        ret = OB_IO_ERROR;
+        LOG_WARN("Failed to query data file", K(data_file_path), K(error), K(ret));
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+#else
   if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
+#endif
+#ifdef _WIN32
+  } else if (OB_FAIL(create_redo_path(redo_dir, created_redo_leaf))) {
+    LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
+  } else if (OB_FAIL(ObServerLogBlockMgr::check_clog_directory_is_empty(redo_dir, redo_empty))) {
+  } else if (!data_file_exists && created_redo_leaf && redo_empty) {
+    // Creation provenance never overrides a real nonempty redo scan.
+    // Never persist this fact or infer it from directory names.
+    need_initialize = true;
+  } else if (data_file_exists && created_redo_leaf) {
+    ret = OB_ERR_UNEXPECTED;
+#else
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
   } else if (OB_FAIL(ObServerLogBlockMgr::check_clog_directory_is_empty(redo_dir, redo_empty))) {
+#endif
   } else if (!data_file_exists && redo_empty) {
     need_initialize = true;
   } else if (data_file_exists && !redo_empty) {
@@ -2200,8 +2271,12 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
   }
   if (OB_FAIL(ret)) {
   } else if (!redo_dir.empty()) {
+#ifdef _WIN32
+    if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+#else
     if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir.ptr()))) {
     } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+#endif
     } else {
       ObString tmp_redo_dir(redo_dir.length(), redo_dir.ptr());
       if (tmp_redo_dir.prefix_match(current_dir)) {
@@ -2315,7 +2390,7 @@ int ObServer::init_pre_setting()
     LOG_INFO("set stack_size", K(stack_size));
     global_thread_stack_size = stack_size - THREAD_STACK_RESERVED_SIZE - ACHUNK_PRESERVE_SIZE;
 #ifdef __APPLE__
-    const int ps = getpagesize();
+    const long ps = sysconf(_SC_PAGESIZE);
     global_thread_stack_size = (global_thread_stack_size + ps - 1) & ~(ps - 1);
 #endif
   }

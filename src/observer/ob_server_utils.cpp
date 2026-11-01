@@ -196,7 +196,7 @@ const char *ObServerUtils::build_syslog_file_info()
     int n = snprintf(info, max_info_len,
                      "observer version: %s, revision: %s, "
                      "sysname: %s, os release: %s, machine: %s, tz GMT offset: %02d:%02d",
-                     PACKAGE_STRING, build_version(),
+                     PACKAGE_NAME " " PACKAGE_VERSION, build_version(),
                      os_sysname, os_release, os_machine, gmtoff_hour, gmtoff_minute);
     if (n <= 0) {
       ret = OB_ERR_SYS;

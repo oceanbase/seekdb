@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STANDBY_GRPC_STREAM_UTIL_H_
 #define OCEANBASE_STANDBY_GRPC_STREAM_UTIL_H_
 
-#include "grpc/standbyservice.grpc.pb.h"
+#include "grpc/proto/standbyservice.grpc.pb.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 
 namespace oceanbase

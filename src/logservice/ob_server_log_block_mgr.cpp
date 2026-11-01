@@ -78,6 +78,53 @@ namespace logservice
 int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, bool &result)
 {
   int ret = OB_SUCCESS;
+#ifdef _WIN32
+  result = false;
+  ObSqlString pattern;
+  if (OB_ISNULL(clog_dir)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const DWORD attributes = GetFileAttributesA(clog_dir);
+    if (INVALID_FILE_ATTRIBUTES == attributes
+        || 0 == (attributes & FILE_ATTRIBUTE_DIRECTORY)
+        || 0 != (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+      ret = OB_IO_ERROR;
+    } else if (OB_FAIL(pattern.assign_fmt("%s/*", clog_dir))) {
+    } else {
+      WIN32_FIND_DATAA entry;
+      HANDLE find = FindFirstFileA(pattern.ptr(), &entry);
+      if (INVALID_HANDLE_VALUE == find) {
+        if (ERROR_FILE_NOT_FOUND == GetLastError()) {
+          result = true;
+        } else {
+          ret = OB_IO_ERROR;
+        }
+      } else {
+        result = true;
+        do {
+          if (0 != strcmp(entry.cFileName, ".") && 0 != strcmp(entry.cFileName, "..")) {
+            bool exists = false;
+            if (OB_FAIL(check_log_directory_entry(clog_dir, entry.cFileName, exists))) {
+              result = false;
+              break;
+            } else if (exists) {
+              result = false;
+            }
+          }
+        } while (FindNextFileA(find, &entry));
+        // Only the documented end-of-enumeration code proves a complete scan.
+        if (ERROR_NO_MORE_FILES != GetLastError()) {
+          result = false;
+          ret = OB_IO_ERROR;
+        }
+        if (!FindClose(find)) {
+          result = false;
+          ret = OB_IO_ERROR;
+        }
+      }
+    }
+  }
+#else
   DIR *dir = NULL;
   struct dirent *entry = NULL;
   result = false;
@@ -99,6 +146,7 @@ int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, boo
   if (NULL != dir) {
     closedir(dir);
   }
+#endif
   return ret;
 }
 
@@ -417,9 +465,12 @@ int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(log_disk_path, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                log_disk_path, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
@@ -462,9 +513,12 @@ int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_runtime_(const char *l
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(log_disk_path, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                log_disk_path, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
@@ -526,9 +580,12 @@ int ObServerLogBlockMgr::scan_runtime_dir_(const char *runtime_dir,
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(runtime_dir, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                runtime_dir, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
@@ -572,9 +629,12 @@ int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
     char current_file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
     while ((entry = readdir(dir)) != NULL && OB_SUCC(ret)) {
       bool is_dir = false;
+      bool exists = false;
       MEMSET(current_file_path, '\0', OB_MAX_FILE_NAME_LENGTH);
       if (0 == strcmp(entry->d_name, ".") || 0 == strcmp(entry->d_name, "..")) {
         // do nothing
+      } else if (OB_FAIL(check_log_directory_entry(ls_dir, entry->d_name, exists))) {
+      } else if (!exists) {
       } else if (0 >= snprintf(current_file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s",
                                ls_dir, entry->d_name)) {
         ret = OB_ERR_UNEXPECTED;
