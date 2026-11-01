@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include <sys/stat.h>
+
 #include <cmath>
 #include <memory>
 
@@ -38,7 +40,7 @@ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
 OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
     escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+    external_properties_, header_names_, null_str_, has_header_);
 
 
 int ObSelectIntoOp::inner_open()
@@ -181,8 +183,16 @@ int ObSelectIntoOp::calc_outfile_path()
   if (T_INTO_OUTFILE == into_type && !MY_SPEC.is_single_ && OB_FAIL(calc_first_file_path(path))) {
   } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), path, basic_url_, true))) {
   }
-  if (OB_SUCC(ret) && (T_INTO_OUTFILE == into_type || T_INTO_DUMPFILE == into_type)
+  if (OB_SUCC(ret) && (T_INTO_OUTFILE == into_type || T_INTO_DUMPFILE == into_type
+                        || T_INTO_FILE_COPY == into_type)
       && OB_FAIL(check_secure_file_path(basic_url_))) {
+  } else if (OB_SUCC(ret) && T_INTO_FILE_COPY == into_type) {
+    // the file of a copy must not exist yet
+    struct stat file_stat;
+    if (0 == stat(basic_url_.ptr(), &file_stat)) {
+      ret = OB_ENTRY_EXIST;
+      LOG_USER_ERROR(OB_ENTRY_EXIST, "the file of the copy already exists");
+    }
   }
   return ret;
 }
@@ -211,7 +221,7 @@ int ObSelectIntoOp::inner_get_next_row()
       if (T_INTO_VARIABLES == into_type) {
         if (OB_FAIL(into_varlist())) {
         }
-      } else if (T_INTO_OUTFILE == into_type) {
+      } else if (T_INTO_OUTFILE == into_type || T_INTO_FILE_COPY == into_type) {
         if (OB_FAIL(into_outfile(data_writer))) {
         }
       } else {
@@ -921,6 +931,14 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
   char char_n = 'N';
+  if (T_INTO_FILE_COPY == MY_SPEC.into_type_ && obj.is_null()) {
+    // a null value is written as the null text of the copy
+    ObObj null_obj;
+    null_obj.set_varchar(MY_SPEC.null_str_);
+    null_obj.set_collation_type(cs_type_);
+    OZ(write_obj_to_file(null_obj, data_writer, false));
+    return ret;
+  }
   const bool need_enclose = has_enclose_ && !obj.is_null()
                             && (!is_optional_ || obj.is_string_type() || obj.is_collection_sql_type()
                                 || obj.is_json() || obj.is_geometry() || obj.is_date()
@@ -939,6 +957,27 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
   }
   if (need_enclose) {
     OZ(write_single_char_to_file(&char_enclose_, data_writer));
+  }
+  return ret;
+}
+
+int ObSelectIntoOp::write_copy_header(ObCsvFileWriter *data_writer)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(data_writer)) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.header_names_.count(); ++i) {
+    ObObj obj;
+    obj.set_varchar(MY_SPEC.header_names_.at(i));
+    obj.set_collation_type(cs_type_);
+    if (i > 0) {
+      OZ(write_obj_to_file(field_str_, *data_writer));
+    }
+    OZ(write_obj_to_file(obj, *data_writer, false));
+  }
+  if (OB_SUCC(ret)) {
+    OZ(write_obj_to_file(line_str_, *data_writer));
   }
   return ret;
 }
@@ -1239,11 +1278,15 @@ int ObSelectIntoOp::create_the_only_data_writer(ObExternalFileWriter *&data_writ
     data_writer_ = data_writer;
   }
   if (OB_FAIL(ret)) {
-  } else if (T_INTO_OUTFILE == MY_SPEC.into_type_ && MY_SPEC.is_single_
-             && OB_FAIL(data_writer->open_file())) {
+  } else if ((T_INTO_OUTFILE == MY_SPEC.into_type_ || T_INTO_FILE_COPY == MY_SPEC.into_type_)
+             && MY_SPEC.is_single_ && OB_FAIL(data_writer->open_file())) {
   } else if (ObExternalFileFormat::FormatType::CSV_FORMAT == format_type_ && MY_SPEC.buffer_size_ > 0) {
     csv_data_writer = static_cast<ObCsvFileWriter*>(data_writer);
     if (OB_FAIL(csv_data_writer->alloc_buf(ctx_.get_allocator(), MY_SPEC.buffer_size_))) {
+    } else if (T_INTO_FILE_COPY == MY_SPEC.into_type_ && MY_SPEC.has_header_) {
+      // the names of the exported columns are the first line of the file
+      if (OB_FAIL(write_copy_header(csv_data_writer))) {
+      }
     }
   }
   return ret;

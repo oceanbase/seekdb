@@ -1659,6 +1659,12 @@ int ObSelectResolver::expand_target_list(
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(append(column_items, get_stmt()->get_column_items()))) {
     }
+  } else if (table_item.is_file_table()) {
+    // the star of a file table expands to the columns of the file
+    if (OB_ISNULL(get_stmt())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(get_stmt()->get_column_items(table_item.table_id_, column_items))) {
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
   }
@@ -3081,6 +3087,108 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
   return ret;
 }
 
+int ObSelectResolver::resolve_into_file_copy(const ParseNode *node,
+                                              ObSelectIntoItem &into_item)
+{
+  int ret = OB_SUCCESS;
+  // the csv defaults of an exported file
+  into_item.field_str_.set_varchar(",");
+  into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
+  into_item.line_str_.set_varchar("\n");
+  into_item.line_str_.set_collation_type(ObCharset::get_system_collation());
+  char quote_char = '"';
+  into_item.closed_cht_.meta_.set_char();
+  into_item.closed_cht_.set_char_value(&quote_char, 1);
+  into_item.closed_cht_.set_collation_type(ObCharset::get_system_collation());
+  into_item.escaped_cht_.meta_.set_char();
+  into_item.escaped_cht_.set_char_value(&quote_char, 1);
+  into_item.escaped_cht_.set_collation_type(ObCharset::get_system_collation());
+  into_item.is_optional_ = true;
+  if (OB_ISNULL(node) || 2 != node->num_child_) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
+  } else {
+    // the options of the copy
+    const ParseNode *opt_node = node->children_[1];
+    while (OB_SUCC(ret) && OB_NOT_NULL(opt_node)) {
+      if (T_LINK_NODE != opt_node->type_ || OB_ISNULL(opt_node->children_[0])) {
+        ret = OB_ERR_UNEXPECTED;
+        break;
+      }
+      if (OB_FAIL(ret = resolve_file_copy_option(opt_node->children_[0], into_item))) {
+        break;
+      }
+      opt_node = opt_node->children_[1];
+    }
+  }
+  return ret;
+}
+
+int ObSelectResolver::resolve_file_copy_option(const ParseNode *node,
+                                               ObSelectIntoItem &into_item)
+{
+  int ret = OB_SUCCESS;
+  ObString name;
+  ObString value;
+  bool has_value = false;
+  if (OB_ISNULL(node) || T_FILE_COPY_OPT != node->type_ || node->num_child_ < 1
+      || OB_ISNULL(node->children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    name = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_);
+    if (node->num_child_ > 1 && OB_NOT_NULL(node->children_[1])) {
+      has_value = true;
+      if (OB_FAIL(ret = resolve_str_const(*node->children_[1], value))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (0 == name.case_compare("format")) {
+      // only the csv format is supported
+      if (!has_value || 0 != value.case_compare("csv")) {
+        ret = OB_ERR_PARSER_SYNTAX;
+      }
+    } else if (0 == name.case_compare("header")) {
+      into_item.has_header_ = true;
+    } else if (0 == name.case_compare("delimiter")) {
+      if (!has_value || 1 != value.length()) {
+        ret = OB_ERR_PARSER_SYNTAX;
+      } else {
+        into_item.field_str_.set_varchar(value);
+        into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
+      }
+    } else if (0 == name.case_compare("quote")) {
+      if (!has_value || 1 != value.length()) {
+        ret = OB_ERR_PARSER_SYNTAX;
+      } else {
+        char quote_char = value.ptr()[0];
+        into_item.closed_cht_.meta_.set_char();
+        into_item.closed_cht_.set_char_value(&quote_char, 1);
+        into_item.closed_cht_.set_collation_type(ObCharset::get_system_collation());
+      }
+    } else if (0 == name.case_compare("escape")) {
+      if (!has_value || 1 != value.length()) {
+        ret = OB_ERR_PARSER_SYNTAX;
+      } else {
+        char escape_char = value.ptr()[0];
+        into_item.escaped_cht_.meta_.set_char();
+        into_item.escaped_cht_.set_char_value(&escape_char, 1);
+        into_item.escaped_cht_.set_collation_type(ObCharset::get_system_collation());
+      }
+    } else if (0 == name.case_compare("nullstr")) {
+      if (!has_value) {
+        ret = OB_ERR_PARSER_SYNTAX;
+      } else {
+        into_item.null_str_ = value;
+      }
+    } else {
+      ret = OB_ERR_PARSER_SYNTAX;
+      LOG_USER_ERROR(OB_ERR_PARSER_SYNTAX);
+    }
+  }
+  return ret;
+}
+
 int ObSelectResolver::resolve_into_clause(const ParseNode *node)
 {
   int ret = OB_SUCCESS;
@@ -3119,6 +3227,9 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
         if (is_in_set_query()) {
           ret = OB_INAPPROPRIATE_INTO;
         } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item->outfile_name_))) {
+        }
+      } else if (T_INTO_FILE_COPY == node->type_) { // copy (query) to 'file'
+        if (OB_FAIL(resolve_into_file_copy(node, *into_item))) {
         }
       } else if (T_INTO_VARIABLES == node->type_) { // into @x,@y....
         if (OB_FAIL(resolve_into_variables(node,

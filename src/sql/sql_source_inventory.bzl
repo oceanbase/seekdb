@@ -20,6 +20,8 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_common_0",
         language = "c++",
         srcs = [
+            "src/sql/engine/basic/ob_file_scan_utils.cpp",
+            "src/sql/engine/basic/ob_file_table_op.cpp",
             "src/sql/ob_end_trans_callback.cpp",
             "src/sql/ob_end_trans_cb_packet_param.cpp",
             "src/sql/ob_phy_table_location.cpp",
@@ -35,6 +37,7 @@ SQL_UNITY_GROUPS = [
             "src/sql/ob_sql_trans_control.cpp",
             "src/sql/ob_sql_utils.cpp",
             "src/sql/ob_optimizer_trace_impl.cpp",
+            "src/sql/optimizer/ob_log_file_table.cpp",
             "src/sql/pl/ob_routine_param_type.cpp",
         ],
         generated_srcs = [],

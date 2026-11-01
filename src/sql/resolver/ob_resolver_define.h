@@ -379,6 +379,7 @@ struct ObResolverParams
        package_guard_(NULL),
        star_expansion_infos_(),
        is_resolve_fake_cte_table_(false),
+       is_file_sql_describe_(false),
        is_in_view_(false)
   {}
   bool is_force_trace_log() { return force_trace_log_; }
@@ -454,6 +455,8 @@ public:
   pl::ObPLPackageGuard *package_guard_;
   common::ObArray<ObStarExpansionInfo> star_expansion_infos_;
   bool is_resolve_fake_cte_table_;
+  // DESCRIBE SELECT describes the select instead of explaining it
+  bool is_file_sql_describe_;
   bool is_in_view_;
 };
 } // end namespace sql
