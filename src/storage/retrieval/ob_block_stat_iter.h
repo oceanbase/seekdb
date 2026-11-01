@@ -65,7 +65,6 @@ private:
 // "Block" here means a collection of contunious stored data in a specific key range.
 class ObBlockStatIterator
 {
-  friend class BlockStatRangeTest;
 public:
   ObBlockStatIterator();
   virtual ~ObBlockStatIterator() { reset(); }
