@@ -97,6 +97,10 @@ public:
   virtual ~ObTokenNormalizer() {}
   virtual void reset();
   virtual void reuse() override;
+  // Refresh the charset info for a reused pipeline: the normalizer caches
+  // cs_ at init() time, so a collation change between two documents on a
+  // reused analyzer must be propagated here.
+  void set_cs(const ObCharsetInfo *cs) { cs_ = cs; }
   virtual int init(const ObCharsetInfo *cs, ObITokenStream &in_stream);
   VIRTUAL_TO_STRING_KV(KPC_(in_stream), KP_(cs), K_(is_inited));
 protected:

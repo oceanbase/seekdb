@@ -19,6 +19,7 @@
 #include "src/storage/fts/ob_ik_ft_parser.h"
 
 #include "lib/charset/ob_charset.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -61,6 +62,7 @@ int ObIKFTParser::init(const ObFTParserParam &param)
       reset();
     } else {
       is_inited_ = true;
+      built_ = true;
     }
   }
 
@@ -190,14 +192,137 @@ int ObIKFTParser::process_next_batch()
   return ret;
 }
 
+
+namespace
+{
+// Thread-local reuse pool for ObIKFTParser (official blueprint reuse_parser).
+//
+// Scope: strictly per-thread (thread_local storage), so a pooled parser is
+// never touched by two threads at once and no lock is needed on the hot path.
+// Bound: IK_REUSE_POOL_SLOT_CNT slots per thread per parser kind; when all
+// slots are busy the descriptor falls back to the legacy per-call path, so
+// the pool bounds reuse, never availability. The pool is placement-new'd
+// into a thread_local POD buffer and intentionally never destroyed: its
+// purpose is to outlive calls, and skipping the destructor avoids the
+// thread-exit ordering hazards against the global module allocator and the
+// dict KVCache; the pages are reclaimed by the OS with the thread/process.
+constexpr int64_t IK_REUSE_POOL_SLOT_CNT = 2;
+
+struct ObIKParserSlot
+{
+  ObArenaAllocator obj_alloc_;
+  ObArenaAllocator scratch_alloc_;
+  ObIKFTParser *parser_;
+  bool in_use_;
+  ObIKParserSlot()
+      : obj_alloc_(lib::ObMemAttr("FTIkParserMeta")),
+        scratch_alloc_(lib::ObMemAttr("FTIkScratch")),
+        parser_(nullptr),
+        in_use_(false)
+  {
+  }
+};
+
+struct ObIKParserPool
+{
+  ObIKParserSlot slots_[IK_REUSE_POOL_SLOT_CNT];
+
+  ObIKParserSlot *find_free_slot()
+  {
+    ObIKParserSlot *slot = nullptr;
+    for (int64_t i = 0; OB_ISNULL(slot) && i < IK_REUSE_POOL_SLOT_CNT; ++i) {
+      if (!slots_[i].in_use_) {
+        slot = &slots_[i];
+      }
+    }
+    return slot;
+  }
+
+  void release_slot(ObIKFTParser *parser)
+  {
+    for (int64_t i = 0; i < IK_REUSE_POOL_SLOT_CNT; ++i) {
+      if (slots_[i].parser_ == parser) {
+        slots_[i].in_use_ = false;
+      }
+    }
+  }
+};
+
+ObIKParserPool *get_tl_ik_pool()
+{
+  static thread_local ObIKParserPool *pool = nullptr;
+  if (OB_ISNULL(pool)) {
+    alignas(alignof(ObIKParserPool)) static thread_local char buf[sizeof(ObIKParserPool)];
+    pool = new (buf) ObIKParserPool();
+  }
+  return pool;
+}
+
+// Acquire a pooled parser for this thread. Returns:
+//   OB_SUCCESS with pooled=true  - parser ready for use (fresh or reused)
+//   OB_SUCCESS with pooled=false - pool busy/full: caller uses the legacy
+//                                  per-call path
+//   other ret                    - the pooled path failed; the slot is free
+//                                  for the next acquire
+int acquire_reuse_parser(ObFTParserParam *param, ObFTDictHub *hub,
+                         ObIKFTParser *&parser, bool &pooled)
+{
+  int ret = OB_SUCCESS;
+  parser = nullptr;
+  pooled = false;
+  ObIKParserPool *pool = get_tl_ik_pool();
+  ObIKParserSlot *slot = pool->find_free_slot();
+  if (OB_ISNULL(slot)) {
+    // all slots busy: fall back to the legacy per-call path
+  } else {
+    slot->in_use_ = true;
+    if (OB_ISNULL(slot->parser_)) {
+      ObIKFTParser *new_parser = OB_NEWx(ObIKFTParser,
+                                         &(slot->obj_alloc_),
+                                         slot->scratch_alloc_,
+                                         slot->obj_alloc_,
+                                         hub);
+      if (OB_ISNULL(new_parser)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        slot->parser_ = new_parser;
+        new_parser->set_pooled();
+      }
+    }
+    if (OB_SUCC(ret)) {
+      parser = slot->parser_;
+      // reuse_parser() runs a full init() on the first use of the slot (or
+      // after a reset()) and the cheap re-apply path afterwards. init() has
+      // already reset() the partial state when it fails.
+      if (OB_FAIL(parser->reuse_parser(*param))) {
+        parser->release_to_pool();
+      }
+    }
+    if (OB_FAIL(ret)) {
+      parser = nullptr;
+      slot->in_use_ = false;
+    } else {
+      pooled = true;
+    }
+  }
+  return ret;
+}
+} // anonymous namespace
+
 int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) const
 {
   int ret = OB_SUCCESS;
   ObIKFTParser *parser = nullptr;
   ObFTDictHub *hub = nullptr;
+  bool pooled = false;
   if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObFTParseData::instance().get_dict_hub(hub))) {
+  } else if (OB_FAIL(acquire_reuse_parser(param, hub, parser, pooled))) {
+    // real error from the pooled path: same visible behavior as a legacy
+    // init failure (no iterator handed out, error propagated)
+  } else if (pooled) {
+    iter = parser;
   } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(parser->init(*param))) {
@@ -205,7 +330,7 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
     iter = parser;
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) && !pooled) {
     OB_DELETEx(ObIKFTParser, param->allocator_, parser);
   }
 
@@ -215,8 +340,17 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
 void ObIKFTParserDesc::free_token_iter(ObFTParserParam *param,
                                        ObITokenIterator *&iter) const
 {
-  iter->~ObITokenIterator();
-  param->allocator_->free(iter);
+  if (OB_NOT_NULL(iter)) {
+    ObIKFTParser *parser = static_cast<ObIKFTParser *>(iter);
+    if (parser->is_pooled()) {
+      // drop the per-call scratch state and let the parser sleep in its slot
+      parser->release_to_pool();
+      get_tl_ik_pool()->release_slot(parser);
+    } else {
+      iter->~ObITokenIterator();
+      param->allocator_->free(iter);
+    }
+  }
 }
 
 
@@ -292,7 +426,7 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   if (coll_type_ == common::CS_TYPE_INVALID) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(ctx_ = OB_NEWx(TokenizeContext,
-                                      &allocator_,
+                                      &obj_alloc_,
                                       coll_type_,
                                       allocator_,
                                       param.fulltext_,
@@ -302,7 +436,7 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
   } else if (OB_FAIL(ctx_->init())) {
   }
   if (OB_FAIL(ret)) {
-    OB_DELETEx(TokenizeContext, &allocator_, ctx_);
+    OB_DELETEx(TokenizeContext, &obj_alloc_, ctx_);
   }
   return ret;
 }
@@ -315,17 +449,17 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   ObIKQuantifierProcessor *cnqsg = nullptr;
   ObIKCJKProcessor *cjksg = nullptr;
   ObIKSurrogateProcessor *surrogate_seg = nullptr;
-  if (OB_ISNULL(letter_seg = OB_NEWx(ObIKLetterProcessor, &allocator_))) {
+  if (OB_ISNULL(letter_seg = OB_NEWx(ObIKLetterProcessor, &obj_alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(dict_quan_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &allocator_, *dict_quan_, allocator_))) {
+  } else if (OB_ISNULL(cnqsg = OB_NEWx(ObIKQuantifierProcessor, &obj_alloc_, *dict_quan_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(dict_main_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &allocator_, *dict_main_, allocator_))) {
+  } else if (OB_ISNULL(cjksg = OB_NEWx(ObIKCJKProcessor, &obj_alloc_, *dict_main_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &allocator_))) {
+  } else if (OB_ISNULL(surrogate_seg = OB_NEWx(ObIKSurrogateProcessor, &obj_alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
   } else if (FALSE_IT(letter_seg = nullptr)) {
@@ -339,10 +473,10 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
   // push back by order, quantifier is before cjk
 
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObIKLetterProcessor, &allocator_, letter_seg);
-    OB_DELETEx(ObIKQuantifierProcessor, &allocator_, cnqsg);
-    OB_DELETEx(ObIKCJKProcessor, &allocator_, cjksg);
-    OB_DELETEx(ObIKSurrogateProcessor, &allocator_, surrogate_seg);
+    OB_DELETEx(ObIKLetterProcessor, &obj_alloc_, letter_seg);
+    OB_DELETEx(ObIKQuantifierProcessor, &obj_alloc_, cnqsg);
+    OB_DELETEx(ObIKCJKProcessor, &obj_alloc_, cjksg);
+    OB_DELETEx(ObIKSurrogateProcessor, &obj_alloc_, surrogate_seg);
   }
   return ret;
 }
@@ -351,13 +485,13 @@ void ObIKFTParser::reset()
 {
   if (!OB_ISNULL(ctx_)) {
     ctx_->~TokenizeContext();
-    allocator_.free(ctx_);
+    obj_alloc_.free(ctx_);
   }
 
   for (ObIIKProcessor *segmenter : segmenters_) {
     if (!OB_ISNULL(segmenter)) {
       segmenter->~ObIIKProcessor();
-      allocator_.free(segmenter);
+      obj_alloc_.free(segmenter);
     }
   }
   segmenters_.clear();
@@ -368,16 +502,98 @@ void ObIKFTParser::reset()
 
   if (!OB_ISNULL(dict_main_)) {
     dict_main_->~ObIFTDict();
-    allocator_.free(dict_main_);
+    obj_alloc_.free(dict_main_);
   }
   if (!OB_ISNULL(dict_quan_)) {
     dict_quan_->~ObIFTDict();
-    allocator_.free(dict_quan_);
+    obj_alloc_.free(dict_quan_);
   }
   if (!OB_ISNULL(dict_stop_)) {
     dict_stop_->~ObIFTDict();
-    allocator_.free(dict_stop_);
+    obj_alloc_.free(dict_stop_);
   }
+
+  is_inited_ = false;
+  built_ = false;
+}
+
+int ObIKFTParser::reuse_parser(const ObFTParserParam &param)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(IS_INIT)) {
+    // stale checkout without a release: drop the per-call state first
+    release_to_pool();
+  }
+
+  if (OB_UNLIKELY(!built_)) {
+    // first use of the slot (or the persistent objects were torn down by a
+    // failed init): build them through the regular init() path
+    return init(param);
+  }
+
+  if (OB_ISNULL(param.cs_) || OB_ISNULL(param.cs_->name)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (CS_TYPE_INVALID == (coll_type_ = ObCharset::collation_type(param.cs_->name))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(ctx_) || OB_UNLIKELY(segmenters_.empty())) {
+    // persistent objects were never built (or were torn down): fall back to
+    // a full init() on the next acquire
+    built_ = false;
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ctx_->reinit(coll_type_,
+                                  param.fulltext_,
+                                  param.ft_length_,
+                                  param.ik_param_.mode_ == ObFTIKParam::Mode::SMART))) {
+  } else {
+    // the pending-token state of every segmenter was already dropped by
+    // release_to_pool(); reset it here as well so reuse_parser alone never
+    // carries cross-call state even when called without a prior release.
+    for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
+         iter != segmenters_.end();
+         iter++) {
+      if (OB_NOT_NULL(*iter)) {
+        (*iter)->reset_state();
+      }
+    }
+    is_inited_ = true;
+  }
+
+  return ret;
+}
+
+void ObIKFTParser::release_to_pool()
+{
+  if (OB_UNLIKELY(!pooled_)) {
+    // legacy per-call parser: its scratch is the eval arena and the object
+    // is destroyed by free_token_iter as before; nothing to recycle here.
+    return;
+  }
+
+  // 1. segmenters first: drop the pending-token state; the quantifier/cjk
+  //    hit lists live in the scratch arena and are walked here while their
+  //    memory is still valid.
+  for (ObList<ObIIKProcessor *, ObIAllocator>::iterator iter = segmenters_.begin();
+       iter != segmenters_.end();
+       iter++) {
+    if (OB_NOT_NULL(*iter)) {
+      (*iter)->reset_state();
+    }
+  }
+
+  // 2. context: walk-and-clear the per-call token/result containers and drop
+  //    the per-character cache table (char_infos_) so no stale entry can leak
+  //    into the next fulltext.
+  if (OB_NOT_NULL(ctx_)) {
+    ctx_->release_scratch();
+  }
+
+  // 3. recycle the per-call scratch memory. reset() (not reuse()): the
+  //    retained-page path of reuse() was measured to grow RSS linearly with
+  //    large documents (page list bookkeeping vs. the per-call big-page
+  //    churn), while reset() returns every page to the module allocator, so
+  //    the per-call footprint is exactly what a fresh parser would have
+  //    allocated. The pool still saves the parser/ctx/segmenter/dict builds.
+  allocator_.reset();
 
   is_inited_ = false;
 }
@@ -390,12 +606,12 @@ int ObIKFTParser::build_dict_from_cache(const ObFTDictDesc &desc,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(hub_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &allocator_, allocator_, &container, desc))) {
+  } else if (OB_ISNULL(dict = OB_NEWx(ObFTRangeDict, &obj_alloc_, allocator_, &container, desc))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(dict->init())) {
   }
   if (OB_FAIL(ret)) {
-    OB_DELETEx(ObIFTDict, &allocator_, dict);
+    OB_DELETEx(ObIFTDict, &obj_alloc_, dict);
   }
   return ret;
 }

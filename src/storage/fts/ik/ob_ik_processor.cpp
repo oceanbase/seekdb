@@ -61,8 +61,25 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
 
 int TokenizeContext::init()
 {
+  return reinit(coll_type_, fulltext_, fulltext_len_, is_smart_);
+}
+
+int TokenizeContext::reinit(ObCollationType coll_type,
+                            const char *fulltext,
+                            int64_t fulltext_len,
+                            bool is_smart)
+{
   int ret = OB_SUCCESS;
 
+  coll_type_ = coll_type;
+  fulltext_ = fulltext;
+  fulltext_len_ = fulltext_len;
+  is_smart_ = is_smart;
+  cursor_ = 0;
+  next_char_len_ = 0;
+  next_char_type_ = ObFTCharUtil::CharType::USELESS;
+  handle_size_ = 0;
+  char_info_cnt_ = 0;
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(coll_type_ <= CS_TYPE_INVALID || coll_type_ >= CS_TYPE_MAX)) {
@@ -78,6 +95,26 @@ int TokenizeContext::init()
     }
   }
   return ret;
+}
+
+void TokenizeContext::release_scratch()
+{
+  reset_resource();
+  // drop the per-character cache table: the buffer lives in the per-call
+  // scratch allocator which is recycled after this point, and a stale table
+  // must never be visible to the next fulltext (see Task-2 char_infos_ note).
+  if (OB_NOT_NULL(char_infos_)) {
+    allocator_.free(char_infos_);
+    char_infos_ = nullptr;
+    char_info_cnt_ = 0;
+    char_info_cap_ = 0;
+  }
+  fulltext_ = nullptr;
+  fulltext_len_ = 0;
+  cursor_ = 0;
+  next_char_len_ = 0;
+  next_char_type_ = ObFTCharUtil::CharType::USELESS;
+  handle_size_ = 0;
 }
 
 int TokenizeContext::reset_resource()

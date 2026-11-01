@@ -57,6 +57,10 @@ public:
 
   virtual void reset();
   virtual int init(const ObTextAnalysisCtx &ctx, ObIAllocator &allocator);
+  // Re-apply the per-document analysis context on top of an already built
+  // pipeline (pooled reuse): refreshes the charset info cached by every
+  // normalizer. Builds the pipeline via init() when it is not up yet.
+  int refresh(const ObTextAnalysisCtx &ctx);
   virtual int analyze(const ObDatum &document, ObITokenStream *&token_stream) = 0;
   VIRTUAL_TO_STRING_KV(KPC_(ctx), K_(analyze_pipeline), K_(is_inited));
 protected:
@@ -73,6 +77,8 @@ protected:
   ObIAllocator *allocator_;
   const ObTextAnalysisCtx *ctx_;
   ObSEArray<ObITokenStream *, 4> analyze_pipeline_;
+  // normalizer views of analyze_pipeline_, for per-call charset refresh
+  ObSEArray<ObTokenNormalizer *, 4> normalizers_;
   bool is_inited_;
 };
 

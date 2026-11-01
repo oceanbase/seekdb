@@ -1,0 +1,218 @@
+========= alternating ik/beng on the same and different texts =========
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'ik');
+tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'ik')
+["full-text", "oceanbase", "稳定", "是", "支持", "的", "一款", "search", "分布式数据库"]
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'beng');
+tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'beng')
+["text", "oceanbase是一款稳定的分布式数据库，支持full", "search"]
+select tokenize('数据库全文索引', 'ik');
+tokenize('数据库全文索引', 'ik')
+["数据库", "全文索引"]
+select tokenize('数据库全文索引', 'beng');
+tokenize('数据库全文索引', 'beng')
+["数据库全文索引"]
+select tokenize('The quick brown fox jumps over the lazy dog', 'beng');
+tokenize('The quick brown fox jumps over the lazy dog', 'beng')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps"]
+select tokenize('The quick brown fox jumps over the lazy dog', 'ik');
+tokenize('The quick brown fox jumps over the lazy dog', 'ik')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps", "the"]
+select tokenize('数据库全文索引', 'ik');
+tokenize('数据库全文索引', 'ik')
+["数据库", "全文索引"]
+select tokenize('数据库全文索引', 'beng');
+tokenize('数据库全文索引', 'beng')
+["数据库全文索引"]
+select tokenize('Full-text search indexing requires efficient tokenization', 'beng');
+tokenize('Full-text search indexing requires efficient tokenization', 'beng')
+["text", "efficient", "tokenization", "full", "requires", "indexing", "search"]
+select tokenize('Full-text search indexing requires efficient tokenization', 'ik');
+tokenize('Full-text search indexing requires efficient tokenization', 'ik')
+["full-text", "efficient", "tokenization", "requires", "indexing", "search"]
+========= same parser repeated twice, byte-stable =========
+select tokenize('倒排索引与检索系统设计是海量文档场景下的核心问题', 'ik');
+tokenize('倒排索引与检索系统设计是海量文档场景下的核心问题', 'ik')
+["海量", "检索系统", "核心问题", "倒排", "下", "索引", "与", "是", "场景", "设计", "的", "文档"]
+select tokenize('倒排索引与检索系统设计是海量文档场景下的核心问题', 'ik');
+tokenize('倒排索引与检索系统设计是海量文档场景下的核心问题', 'ik')
+["海量", "检索系统", "核心问题", "倒排", "下", "索引", "与", "是", "场景", "设计", "的", "文档"]
+select tokenize('Performance tuning of the tokenizer hot path', 'beng');
+tokenize('Performance tuning of the tokenizer hot path', 'beng')
+["tuning", "tokenizer", "hot", "performance", "path"]
+select tokenize('Performance tuning of the tokenizer hot path', 'beng');
+tokenize('Performance tuning of the tokenizer hot path', 'beng')
+["tuning", "tokenizer", "hot", "performance", "path"]
+========= ik smart vs max_word alternation (properties re-applied) =========
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]')
+["人民大会堂", "中华人民共和国"]
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]')
+["大会", "人民大会堂", "大会堂", "共和国", "人民大会", "人民共和国", "中华人民", "共和", "会堂", "中华", "中华人民共和国", "国人", "华人", "人民"]
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]')
+["人民大会堂", "中华人民共和国"]
+select tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]')
+["研究生", "研究", "起源", "生命"]
+select tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]')
+["研究", "起源", "生命"]
+select tokenize('研究生命起源', 'ik');
+tokenize('研究生命起源', 'ik')
+["研究", "起源", "生命"]
+select tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]')
+["研究生", "研究", "起源", "生命"]
+========= stale-state traps: connectors, CJK numbers, surrogates =========
+select tokenize('3-4', 'ik');
+tokenize('3-4', 'ik')
+["3-4"]
+select tokenize('56', 'ik');
+tokenize('56', 'ik')
+["56"]
+select tokenize('第1名和第2名', 'ik');
+tokenize('第1名和第2名', 'ik')
+["2名", "第", "1名", "和"]
+select tokenize('一二三四五六', 'ik');
+tokenize('一二三四五六', 'ik')
+["一二三四五六"]
+select tokenize('七', 'ik');
+tokenize('七', 'ik')
+["七"]
+select tokenize('12一二三', 'ik');
+tokenize('12一二三', 'ik')
+["12一二三"]
+select tokenize('45六七八', 'ik');
+tokenize('45六七八', 'ik')
+["45六七八"]
+select tokenize('a,,b;;;c', 'ik');
+tokenize('a,,b;;;c', 'ik')
+["a", "c", "b"]
+select tokenize('d,e', 'ik');
+tokenize('d,e', 'ik')
+["e", "d"]
+select tokenize('🔥数据库检索🔥', 'ik');
+tokenize('🔥数据库检索🔥', 'ik')
+["数据库", "检索"]
+select tokenize('🔥 again 😀 tests', 'ik');
+tokenize('🔥 again 😀 tests', 'ik')
+["tests", "again"]
+select tokenize('🔥数据库检索🔥', 'beng');
+tokenize('🔥数据库检索🔥', 'beng')
+["🔥数据库检索🔥"]
+select tokenize('state-of-the-art peer-to-peer', 'ik');
+tokenize('state-of-the-art peer-to-peer', 'ik')
+["peer-to-peer", "state-of-the-art"]
+select tokenize('full-text', 'ik');
+tokenize('full-text', 'ik')
+["full-text"]
+select tokenize('x1y2z3', 'ik');
+tokenize('x1y2z3', 'ik')
+["x1y2z3"]
+select tokenize('another english text', 'beng');
+tokenize('another english text', 'beng')
+["text", "another", "english"]
+select tokenize('x1y2z3', 'ik');
+tokenize('x1y2z3', 'ik')
+["x1y2z3"]
+========= empty / single char / non-ascii / long batch boundary =========
+select tokenize('', 'ik');
+tokenize('', 'ik')
+[]
+select tokenize('a', 'ik');
+tokenize('a', 'ik')
+["a"]
+select tokenize('词', 'ik');
+tokenize('词', 'ik')
+["词"]
+select tokenize('   ', 'beng');
+tokenize('   ', 'beng')
+[]
+select tokenize('龘靐齉爩鱻麤龗灪', 'ik');
+tokenize('龘靐齉爩鱻麤龗灪', 'ik')
+["麤", "鱻", "爩", "齉", "灪", "龗", "靐", "龘"]
+select tokenize('hello   world   with   multiple   spaces', 'beng');
+tokenize('hello   world   with   multiple   spaces', 'beng')
+["multiple", "world", "hello", "spaces"]
+select tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第一句。' , 'ik');
+tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第一句。' , 'ik')
+["倒排", "全文索引", "缓存", "长句", "与", "第一句", "优化", "环节", "分词", "涉及", "数据库", "压缩", "这是", "性能", "等", "超"]
+select tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第一句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第二句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第三句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第四句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第五句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第六句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第七句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第八句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第九句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十一句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十二句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十三句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十四句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十五句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十六句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十七句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十八句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十九句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第二十句。', 'ik');
+tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第一句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第二句。数据库全文索引性能�
+["环节", "第十句", "这是", "涉及", "优化", "第六句", "第三句", "第四句", "超", "十句", "第二", "八句", "句", "性能", "第五句", "第十七", "第一句", "第八句", "全文索引", "第十五", "倒排", "二句", "长句", "数据库", "一句", "第九句", "缓存", "三句", "四句", "第十九", "六句", "第七句", "分词", "第二句", "与", "第十", "压缩", "等"]
+select tokenize('database performance tuning ' , 'beng');
+tokenize('database performance tuning ' , 'beng')
+["tuning", "database", "performance"]
+select tokenize('database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning', 'beng');
+tokenize('database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance 
+["tuning", "database", "performance"]
+========= two sessions interleaved (thread-local pools, no cross-talk) =========
+select tokenize('会话一：中文分词', 'ik');
+tokenize('会话一：中文分词', 'ik')
+["会话", "分词", "中文", "一"]
+select tokenize('session two: english tokenization', 'beng');
+tokenize('session two: english tokenization', 'beng')
+["session", "tokenization", "two", "english"]
+select tokenize('会话一：中文分词', 'ik');
+tokenize('会话一：中文分词', 'ik')
+["会话", "分词", "中文", "一"]
+select tokenize('session two: english tokenization', 'beng');
+tokenize('session two: english tokenization', 'beng')
+["session", "tokenization", "two", "english"]
+select tokenize('并发会话一：ik', 'ik');;
+select tokenize('并发会话二：beng english', 'beng');
+tokenize('并发会话二：beng english', 'beng')
+["并发会话二：beng", "english"]
+tokenize('并发会话一：ik', 'ik')
+["会话", "并发", "一", "ik"]
+select tokenize('并发会话二：ik', 'ik');;
+select tokenize('并发会话一：beng english', 'beng');
+tokenize('并发会话一：beng english', 'beng')
+["并发会话一：beng", "english"]
+tokenize('并发会话二：ik', 'ik')
+["二", "会话", "并发", "ik"]
+========= output mode and other parser kinds still fine =========
+select tokenize('hello world', 'ik', '[{"output": "all"}]');
+tokenize('hello world', 'ik', '[{"output": "all"}]')
+{"tokens": [{"world": 1}, {"hello": 1}], "doc_len": 2}
+select tokenize('a b c', 'space');
+tokenize('a b c', 'space')
+[]
+select tokenize('你好，世界！这是一个测试：分词器，能处理标点吗？', 'ik');
+tokenize('你好，世界！这是一个测试：分词器，能处理标点吗？', 'ik')
+["吗", "处理", "能", "分词器", "世界", "一个", "这是", "测试", "你好", "标点"]
+========= repeat of the alternating block (run-to-run stability) =========
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'ik');
+tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'ik')
+["full-text", "oceanbase", "稳定", "是", "支持", "的", "一款", "search", "分布式数据库"]
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'beng');
+tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'beng')
+["text", "oceanbase是一款稳定的分布式数据库，支持full", "search"]
+select tokenize('数据库全文索引', 'ik');
+tokenize('数据库全文索引', 'ik')
+["数据库", "全文索引"]
+select tokenize('数据库全文索引', 'beng');
+tokenize('数据库全文索引', 'beng')
+["数据库全文索引"]
+select tokenize('The quick brown fox jumps over the lazy dog', 'beng');
+tokenize('The quick brown fox jumps over the lazy dog', 'beng')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps"]
+select tokenize('The quick brown fox jumps over the lazy dog', 'ik');
+tokenize('The quick brown fox jumps over the lazy dog', 'ik')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps", "the"]
+select tokenize('第1名和第2名', 'ik');
+tokenize('第1名和第2名', 'ik')
+["2名", "第", "1名", "和"]
+select tokenize('12一二三', 'ik');
+tokenize('12一二三', 'ik')
+["12一二三"]
+select tokenize('🔥数据库检索🔥', 'ik');
+tokenize('🔥数据库检索🔥', 'ik')
+["数据库", "检索"]
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]')
+["人民大会堂", "中华人民共和国"]
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]')
+["大会", "人民大会堂", "大会堂", "共和国", "人民大会", "人民共和国", "中华人民", "共和", "会堂", "中华", "中华人民共和国", "国人", "华人", "人民"]

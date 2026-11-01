@@ -39,6 +39,20 @@ public:
   ~TokenizeContext();
 
   int init();
+  // Re-apply the per-fulltext state on top of a reused context: cursor
+  // position, charset resolution and the per-character cache cursor are all
+  // re-derived from the new fulltext, and the cross-call caches are emptied
+  // (char_infos_ entries are dropped when the parser is released, see
+  // release_scratch()). This is the reuse counterpart of init().
+  int reinit(ObCollationType coll_type,
+             const char *fulltext,
+             int64_t fulltext_len,
+             bool is_smart);
+  // Walk-and-clear every per-call container while their memory is still
+  // valid, then drop the per-character cache table so no stale entry can be
+  // read by the next fulltext. Must be called before the scratch allocator
+  // backing the containers is recycled.
+  void release_scratch();
   int reset_resource();
 
   int get_next_token(const char *&word, int64_t &word_len, int64_t &offset, int64_t &char_cnt);
@@ -133,6 +147,11 @@ public:
   virtual ~ObIIKProcessor() {}
 
   int process(TokenizeContext &ctx);
+
+  // Reset the cross-call mutable state of this processor so that a reused
+  // processor never carries pending-token state from one fulltext into the
+  // next. Default: the processor keeps no cross-call state.
+  virtual void reset_state() {}
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

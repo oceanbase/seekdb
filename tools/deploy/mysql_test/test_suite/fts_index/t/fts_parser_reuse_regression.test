@@ -1,0 +1,113 @@
+# owner: seekdb-task4
+# owner group: storage
+# tags: fts
+# description: parser reuse (reuse_parser) regression. The tokenize parser
+#   objects (ik context/segmenters, beng analyzer pipeline) are now pooled
+#   per-thread and reused across TOKENIZE calls, so every block below
+#   interleaves parser kinds, ik modes and texts that are adversarial for
+#   stale cross-call state: pending connector counts, pending CJK numbers,
+#   pending surrogate pairs, the >1000-char ik batch boundary and collation
+#   switches. A stale char_infos_ table or a dirty segmenter would change
+#   one of these outputs. The fixed-literal block runs twice; any
+#   run-to-run difference fails the byte comparison.
+
+--echo ========= alternating ik/beng on the same and different texts =========
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'ik');
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'beng');
+select tokenize('数据库全文索引', 'ik');
+select tokenize('数据库全文索引', 'beng');
+select tokenize('The quick brown fox jumps over the lazy dog', 'beng');
+select tokenize('The quick brown fox jumps over the lazy dog', 'ik');
+select tokenize('数据库全文索引', 'ik');
+select tokenize('数据库全文索引', 'beng');
+select tokenize('Full-text search indexing requires efficient tokenization', 'beng');
+select tokenize('Full-text search indexing requires efficient tokenization', 'ik');
+
+--echo ========= same parser repeated twice, byte-stable =========
+select tokenize('倒排索引与检索系统设计是海量文档场景下的核心问题', 'ik');
+select tokenize('倒排索引与检索系统设计是海量文档场景下的核心问题', 'ik');
+select tokenize('Performance tuning of the tokenizer hot path', 'beng');
+select tokenize('Performance tuning of the tokenizer hot path', 'beng');
+
+--echo ========= ik smart vs max_word alternation (properties re-applied) =========
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+select tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+select tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+select tokenize('研究生命起源', 'ik');
+select tokenize('研究生命起源', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+
+--echo ========= stale-state traps: connectors, CJK numbers, surrogates =========
+select tokenize('3-4', 'ik');
+select tokenize('56', 'ik');
+select tokenize('第1名和第2名', 'ik');
+select tokenize('一二三四五六', 'ik');
+select tokenize('七', 'ik');
+select tokenize('12一二三', 'ik');
+select tokenize('45六七八', 'ik');
+select tokenize('a,,b;;;c', 'ik');
+select tokenize('d,e', 'ik');
+select tokenize('🔥数据库检索🔥', 'ik');
+select tokenize('🔥 again 😀 tests', 'ik');
+select tokenize('🔥数据库检索🔥', 'beng');
+select tokenize('state-of-the-art peer-to-peer', 'ik');
+select tokenize('full-text', 'ik');
+select tokenize('x1y2z3', 'ik');
+select tokenize('another english text', 'beng');
+select tokenize('x1y2z3', 'ik');
+
+--echo ========= empty / single char / non-ascii / long batch boundary =========
+select tokenize('', 'ik');
+select tokenize('a', 'ik');
+select tokenize('词', 'ik');
+select tokenize('   ', 'beng');
+select tokenize('龘靐齉爩鱻麤龗灪', 'ik');
+select tokenize('hello   world   with   multiple   spaces', 'beng');
+select tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第一句。' , 'ik');
+select tokenize('超长句：数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第一句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第二句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第三句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第四句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第五句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第六句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第七句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第八句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第九句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十一句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十二句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十三句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十四句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十五句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十六句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十七句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十八句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第十九句。数据库全文索引性能优化涉及分词、倒排、压缩与缓存等环节，这是第二十句。', 'ik');
+select tokenize('database performance tuning ' , 'beng');
+select tokenize('database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning database performance tuning', 'beng');
+
+--echo ========= two sessions interleaved (thread-local pools, no cross-talk) =========
+connect (reuse_conn2, $OBMYSQL_MS0,admin,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection default;
+select tokenize('会话一：中文分词', 'ik');
+connection reuse_conn2;
+select tokenize('session two: english tokenization', 'beng');
+connection default;
+select tokenize('会话一：中文分词', 'ik');
+connection reuse_conn2;
+select tokenize('session two: english tokenization', 'beng');
+connection default;
+--send select tokenize('并发会话一：ik', 'ik');
+connection reuse_conn2;
+select tokenize('并发会话二：beng english', 'beng');
+connection default;
+--reap
+connection reuse_conn2;
+--send select tokenize('并发会话二：ik', 'ik');
+connection default;
+select tokenize('并发会话一：beng english', 'beng');
+connection reuse_conn2;
+--reap
+connection default;
+disconnect reuse_conn2;
+
+--echo ========= output mode and other parser kinds still fine =========
+select tokenize('hello world', 'ik', '[{"output": "all"}]');
+select tokenize('a b c', 'space');
+select tokenize('你好，世界！这是一个测试：分词器，能处理标点吗？', 'ik');
+
+--echo ========= repeat of the alternating block (run-to-run stability) =========
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'ik');
+select tokenize('OceanBase是一款稳定的分布式数据库，支持Full-text search', 'beng');
+select tokenize('数据库全文索引', 'ik');
+select tokenize('数据库全文索引', 'beng');
+select tokenize('The quick brown fox jumps over the lazy dog', 'beng');
+select tokenize('The quick brown fox jumps over the lazy dog', 'ik');
+select tokenize('第1名和第2名', 'ik');
+select tokenize('12一二三', 'ik');
+select tokenize('🔥数据库检索🔥', 'ik');
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');

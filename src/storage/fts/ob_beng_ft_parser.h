@@ -33,17 +33,40 @@ public:
   static const int64_t FT_MIN_WORD_LEN = 3;
   static const int64_t FT_MAX_WORD_LEN = 84;
 public:
+  // Single-allocator form (per-call usage): object and pipeline share one
+  // allocator (historically the eval arena passed via ObFTParserParam).
   explicit ObBEngFTParser(common::ObIAllocator &allocator)
-    : allocator_(allocator),
+    : ObBEngFTParser(allocator, allocator)
+  {}
+  // Two-allocator form (pooled reuse): pipeline_alloc_ owns the analyzer
+  // pipeline streams that live for the whole pool-slot lifetime; allocator_
+  // is the per-call scratch arena, recycled by release_to_pool().
+  ObBEngFTParser(common::ObIAllocator &scratch_alloc, common::ObIAllocator &pipeline_alloc)
+    : allocator_(scratch_alloc),
+      pipeline_alloc_(pipeline_alloc),
       analysis_ctx_(),
       english_analyzer_(),
       doc_(),
       token_stream_(nullptr),
-      is_inited_(false)
+      is_inited_(false),
+      pooled_(false),
+      built_(false)
   {}
   ~ObBEngFTParser() { reset(); }
 
   int init(ObFTParserParam *param);
+  // Re-apply the per-fulltext state on top of the persistent analyzer
+  // pipeline: document, charset info and the stream cursors (the pipeline's
+  // own reuse() path resets the streams inside analyze()).
+  int reuse_parser(ObFTParserParam *param);
+  // Drop the per-call state so the parser can sleep in its pool slot without
+  // referencing stale text. No-op for a non-pooled parser.
+  void release_to_pool();
+
+  bool is_built() const { return built_; }
+  bool is_inited() const { return is_inited_; }
+  bool is_pooled() const { return pooled_; }
+  void set_pooled() { pooled_ = true; }
   void reset();
   virtual int get_next_token(
       const char *&word,
@@ -58,11 +81,17 @@ private:
       share::ObITokenStream *&token_stream);
 private:
   common::ObIAllocator &allocator_;
+  // long-lived pipeline storage; equals allocator_ in the legacy layout
+  common::ObIAllocator &pipeline_alloc_;
   share::ObTextAnalysisCtx analysis_ctx_;
   share::ObEnglishTextAnalyzer english_analyzer_;
   common::ObDatum doc_;
   share::ObITokenStream *token_stream_;
   bool is_inited_;
+  bool pooled_;
+  // the analyzer pipeline is built and usable; cleared only by reset(),
+  // never by release_to_pool()
+  bool built_;
 
   DISALLOW_COPY_AND_ASSIGN(ObBEngFTParser);
 };
