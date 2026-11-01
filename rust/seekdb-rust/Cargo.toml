@@ -12,7 +12,6 @@ default = ["native-network"]
 native-network = ["sql-nio/native-network"]
 
 [dependencies]
-standby-rpc = { path = "../standby-rpc" }
 sql-nio = { path = "../sql-nio", default-features = false }
 logger = { path = "../logger" }
 config = { path = "../config" }
@@ -20,3 +19,6 @@ local = { path = "../local" }
 in-process = { path = "../in-process" }
 regex-engine = { path = "../regex-engine" }
 uuid-generator = { path = "../uuid-generator" }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+standby-rpc = { path = "../standby-rpc" }

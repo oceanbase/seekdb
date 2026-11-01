@@ -35,7 +35,7 @@ namespace oceanbase
 namespace standby
 {
 
-using StandbyGrpcServer = rpc::RpcServer;
+using rpc::RpcServer;
 
 class StandbyModule::Impl final
 {
@@ -67,7 +67,7 @@ private:
   StandbyConfig config_;
   IStandbyHost *host_;
   StandbyStateStore state_store_;
-  StandbyGrpcServer *grpc_server_;
+  RpcServer *rpc_server_;
   ObStandbySchemaRefreshTrigger schema_refresh_trigger_;
   ObStandbyLogSyncService log_sync_service_;
   ObStandbyRoleTransitionService role_transition_service_;
@@ -82,7 +82,7 @@ StandbyModule::Impl::Impl()
     config_(),
     host_(nullptr),
     state_store_(),
-    grpc_server_(nullptr),
+    rpc_server_(nullptr),
     schema_refresh_trigger_(),
     log_sync_service_(),
     role_transition_service_()
@@ -186,12 +186,12 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
   } else if (FALSE_IT(host_ = &host)) {
   } else if (OB_FAIL(state_store_.init(*config_.config_manager_, config_.boot_role_))) {
     LOG_WARN("failed to initialize standby state store", KR(ret));
-  } else if (OB_ISNULL(grpc_server_ = OB_NEW(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK))) {
+  } else if (OB_ISNULL(rpc_server_ = OB_NEW(RpcServer, ObModIds::OB_COMMON_NETWORK))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate standby gRPC server", KR(ret));
+    LOG_WARN("failed to allocate standby RPC server", KR(ret));
   } else if (OB_FAIL(create_and_register_standby_grpc_service(
-      *grpc_server_, config_, state_store_, *host_))) {
-    LOG_WARN("failed to register standby gRPC service", KR(ret));
+      *rpc_server_, config_, state_store_, *host_))) {
+    LOG_WARN("failed to register standby RPC service", KR(ret));
   } else if (OB_FAIL(schema_refresh_trigger_.init(config_, *host_))) {
     LOG_WARN("failed to init standby schema refresh trigger", KR(ret));
   } else if (OB_FAIL(log_sync_service_.init(config_, *host_))) {
@@ -207,9 +207,9 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
     share::bind_server_service<share::ObITenantRoleTransitionService>(&role_transition_service_);
     is_inited_ = true;
   }
-  if (OB_FAIL(ret) && nullptr != grpc_server_) {
-    OB_DELETE(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK, grpc_server_);
-    grpc_server_ = nullptr;
+  if (OB_FAIL(ret) && nullptr != rpc_server_) {
+    OB_DELETE(RpcServer, ObModIds::OB_COMMON_NETWORK, rpc_server_);
+    rpc_server_ = nullptr;
   }
   if (OB_FAIL(ret)) {
     config_ = StandbyConfig();
@@ -226,8 +226,8 @@ int StandbyModule::Impl::stop()
   {
     lib::ObMutexGuard guard(listener_lock_);
     listener_ready_ = false;
-    if (nullptr != grpc_server_) {
-      grpc_server_->stop();
+    if (nullptr != rpc_server_) {
+      rpc_server_->stop();
       host_->publish_rpc_cert_expire_time(0);
     }
   }
@@ -275,9 +275,9 @@ void StandbyModule::Impl::destroy()
   if (share::server_service<share::IServerRoleStateProvider>() == &state_store_) {
     share::unbind_server_service<share::IServerRoleStateProvider>();
   }
-  if (nullptr != grpc_server_) {
-    OB_DELETE(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK, grpc_server_);
-    grpc_server_ = nullptr;
+  if (nullptr != rpc_server_) {
+    OB_DELETE(RpcServer, ObModIds::OB_COMMON_NETWORK, rpc_server_);
+    rpc_server_ = nullptr;
   }
   state_store_.reset();
   config_ = StandbyConfig();
@@ -473,7 +473,7 @@ int StandbyModule::Impl::reload_config(const bool rpc_service_enabled)
   } else if (rpc_service_enabled) {
     config_.rpc_service_enabled_ = true;
     if (OB_FAIL(start_listener_if_enabled_())) {
-      LOG_WARN("failed to enable standby gRPC service", KR(ret));
+      LOG_WARN("failed to enable standby RPC service", KR(ret));
     }
   }
   return ret;
@@ -488,7 +488,7 @@ int StandbyModule::Impl::start_listener()
   } else {
     listener_ready_ = true;
     if (OB_FAIL(start_listener_if_enabled_())) {
-      LOG_WARN("failed to start configured standby gRPC service", KR(ret),
+      LOG_WARN("failed to start configured standby RPC service", KR(ret),
           K(config_.rpc_service_enabled_));
     }
   }
@@ -500,12 +500,12 @@ int StandbyModule::Impl::start_listener_if_enabled_()
   int ret = OB_SUCCESS;
   if (config_.embedded_mode_ || !config_.rpc_service_enabled_) {
     host_->publish_rpc_cert_expire_time(0);
-  } else if (nullptr == grpc_server_) {
+  } else if (nullptr == rpc_server_) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(grpc_server_->start(config_.rpc_port_, config_.rpc_tls_enabled_))) {
-    LOG_WARN("failed to start standby gRPC service", KR(ret), K(config_.rpc_port_));
+  } else if (OB_FAIL(rpc_server_->start(config_.rpc_port_, config_.rpc_tls_enabled_))) {
+    LOG_WARN("failed to start standby RPC service", KR(ret), K(config_.rpc_port_));
   } else {
-    host_->publish_rpc_cert_expire_time(grpc_server_->cert_expire_time());
+    host_->publish_rpc_cert_expire_time(rpc_server_->cert_expire_time());
   }
   return ret;
 }
