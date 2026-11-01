@@ -28,9 +28,14 @@ prost_codegen_tool = rule(
 )
 
 def _prost_generate_impl(ctx):
+    arguments = [ctx.file.src.path, ctx.file._protoc.path, ctx.outputs.out.path]
+    if not ctx.attr.services:
+        arguments.append("--messages-only")
+    for field in ctx.attr.raw_strings:
+        arguments += ["--raw-string", field]
     ctx.actions.run(
         executable = ctx.executable._generator,
-        arguments = [ctx.file.src.path, ctx.file._protoc.path, ctx.outputs.out.path],
+        arguments = arguments,
         inputs = depset([ctx.file.src, ctx.file._protoc] + ctx.files._protoc_runtime),
         outputs = [ctx.outputs.out],
         mnemonic = "ProstGenerate",
@@ -43,6 +48,8 @@ prost_generate = rule(
     attrs = {
         "src": attr.label(allow_single_file = [".proto"], mandatory = True),
         "out": attr.output(mandatory = True),
+        "services": attr.bool(default = True),
+        "raw_strings": attr.string_list(),
         "_generator": attr.label(default = "//bazel:prost_codegen", executable = True, cfg = "exec"),
         "_protoc": attr.label(default = "//bazel/third_party:protoc", allow_single_file = True, cfg = "exec"),
         "_protoc_runtime": attr.label(default = "//bazel/third_party:protoc_runtime", cfg = "exec"),

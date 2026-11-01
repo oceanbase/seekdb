@@ -226,6 +226,7 @@ name = "prost-codegen"
 version = "0.1.0"
 dependencies = [
  "prost-build",
+ "prost-types",
  "tonic-prost-build",
 ]
 
