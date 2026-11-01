@@ -27,6 +27,23 @@ select json_depth(cast('{"a":[1,{"b":2}]}' as json));
 select json_depth('{"a":[1,{"b":2}]}');
 select json_depth(null);
 select json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x');
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json));
+select json_length('{"a":[0,1,2,3],"b":{"a":5}}', '$.a');
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$.a[1 to 2]');
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$**.a');
+select json_length(cast('{"a":1}' as json), '$.missing');
+select json_length(cast('1' as json), '$[0]');
+select json_length(cast('1' as json), '$[*]');
+select json_length('{"雪":{"x":true}}', '$.雪');
+select json_contains_path(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), 'one', '$**.a');
+select json_contains_path('{"a":[0,1,2,3],"b":{"a":5}}', 'all', '$.a', '$.b.a');
+select json_contains_path(cast('{"a":1}' as json), 'all', '$.a', '$.missing');
+select json_contains_path('{"雪":{"x":true},"a.b":9}', 'one', '$.雪.x', '$."a.b"');
+select json_contains_path(cast('{"a":1}' as json), 'one', '$.missing', '$.a');
+--error ER_INVALID_JSON_PATH
+select json_length(cast('{"a":1}' as json), '$**');
+--error ER_INVALID_JSON_PATH
+select json_contains_path(cast('{"a":1}' as json), 'one', '$.0a');
 select json_schema_valid('{"type":"object"}', '{"a":1}');
 --error ER_INVALID_JSON_TEXT_IN_PARAM
 select json_schema_valid('{"type":"object"}', '{a:1}');

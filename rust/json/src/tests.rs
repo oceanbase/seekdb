@@ -15,8 +15,9 @@
 use crate::bridge::{ffi, parse as parse_events};
 use crate::{
     parse, parse_binary, validate, BinaryDocument, BinaryErrorKind, Document, DuplicatePolicy,
-    ErrorKind, JsonType, Number, ParseOptions,
+    ErrorKind, JsonType, Number, ParseOptions, Path, PathErrorKind, PathStep, QueryOptions,
 };
+use crate::{binary, Extraction};
 
 fn options(policy: DuplicatePolicy) -> ParseOptions {
     ParseOptions {
@@ -383,4 +384,164 @@ fn direct_bridge_numbers_schema_and_offsets() {
     let malformed = parse_events(input, ffi::Duplicate::Overwrite, 100, false);
     assert_eq!(malformed.status, ffi::Status::Syntax);
     assert_eq!(malformed.byte_offset as usize, input.len() - 1);
+}
+
+#[test]
+fn mysql_path_parser_covers_standard_steps_and_errors() {
+    let path = Path::parse_mysql(
+        " $ . \"a\\u002eb\" [ 0 ] [last-1] [1 to last-2] .* [*] **.雪 ".as_bytes(),
+    )
+    .unwrap();
+    assert_eq!(path.steps().len(), 8);
+    assert_eq!(path.steps()[0], PathStep::Member("a.b".to_owned()));
+    assert!(path.can_match_many());
+    for (text, expected) in [
+        ("$.a]", "a]"),
+        ("$.a}b", "a}b"),
+        ("$.😀", "😀"),
+        ("$.①", "①"),
+        ("$.\\u0061", "a"),
+    ] {
+        let path = Path::parse_mysql(text.as_bytes()).unwrap();
+        assert_eq!(path.steps(), &[PathStep::Member(expected.to_owned())]);
+    }
+
+    for invalid in [
+        "",
+        "a",
+        "$.",
+        "$.0a",
+        "$.a-b",
+        "$.a(b",
+        "$.a\x01b",
+        "$.\"unterminated",
+        "$.\"\\ud800\"",
+        "$[",
+        "$[]",
+        "$[1",
+        "$[1to2]",
+        "$[2 to 1]",
+        "$[last-1 to last-2]",
+        "$[4294967296]",
+        "$**",
+        "$** ",
+        "$***.a",
+    ] {
+        assert!(Path::parse_mysql(invalid.as_bytes()).is_err(), "{invalid}");
+    }
+    let too_long = "$".to_owned() + &".a".repeat(101);
+    assert_eq!(
+        Path::parse_mysql(too_long.as_bytes()).unwrap_err().kind,
+        PathErrorKind::TooManyNodes
+    );
+}
+
+#[test]
+fn mysql_path_query_preserves_binary_values_and_result_order() {
+    let bytes = parse_binary(
+        "{\"a\":[0,1,2,3],\"b\":{\"a\":5},\"雪\":{\"x\":true},\"a.b\":9}".as_bytes(),
+        ParseOptions::default(),
+    )
+    .unwrap();
+    let document = BinaryDocument::new(bytes).unwrap();
+    let root = document.root().unwrap();
+
+    let query = |path: &str| {
+        Path::parse_mysql(path.as_bytes())
+            .unwrap()
+            .query(root, QueryOptions::default())
+            .unwrap()
+    };
+    let single = |path: &str| {
+        let values = query(path);
+        assert_eq!(values.len(), 1, "{path}");
+        values[0].clone()
+    };
+
+    assert_eq!(single("$.a[1]").number().unwrap(), Number::I64(1));
+    assert_eq!(single("$.a[last-1]").number().unwrap(), Number::I64(2));
+    assert_eq!(single("$[0]").json_type().unwrap(), JsonType::Object);
+    assert_eq!(single("$.\"a.b\"").number().unwrap(), Number::I64(9));
+    assert!(single("$.雪.x").boolean().unwrap());
+    assert_eq!(query("$.a[1 to 2]").len(), 2);
+    assert_eq!(query("$.a[*]").len(), 4);
+    assert_eq!(query("$.b.*").len(), 1);
+    let recursive = query("$**.a");
+    assert_eq!(recursive.len(), 2);
+    assert_eq!(recursive[0].json_type().unwrap(), JsonType::Array);
+    assert_eq!(recursive[1].number().unwrap(), Number::I64(5));
+    assert_eq!(query("$.missing").len(), 0);
+    assert_eq!(query("$.a[99]").len(), 0);
+
+    let first = Path::parse_mysql(b"$**.a")
+        .unwrap()
+        .query(
+            root,
+            QueryOptions {
+                first_only: true,
+                ..QueryOptions::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(first.len(), 1);
+}
+
+#[test]
+fn extraction_builds_single_and_array_results_in_rust() {
+    let text = "{\"a\":[-1000,1,2,300],\"b\":{\"a\":5},\"s\":\"雪\"}".as_bytes();
+    let single = |path: &str| {
+        let mut extraction = Extraction::from_text(text, ParseOptions::default()).unwrap();
+        extraction.add_path(&Path::parse_mysql(path.as_bytes()).unwrap());
+        let bytes = extraction.finish().unwrap().unwrap();
+        BinaryDocument::new(bytes).unwrap()
+    };
+    assert_eq!(
+        single("$.a[0]").root().unwrap().number().unwrap(),
+        Number::I64(-1000)
+    );
+    assert_eq!(
+        single("$.a[3]").root().unwrap().number().unwrap(),
+        Number::I64(300)
+    );
+    assert_eq!(single("$.s").root().unwrap().string_bytes().unwrap(), "雪".as_bytes());
+    let array = single("$.a[*]");
+    assert_eq!(array.root().unwrap().len().unwrap(), 4);
+    assert_eq!(array.root().unwrap().value(3).unwrap().number().unwrap(), Number::I64(300));
+
+    let mut multiple = Extraction::from_text(text, ParseOptions::default()).unwrap();
+    multiple.add_path(&Path::parse_mysql(b"$.a[1]").unwrap());
+    multiple.add_path(&Path::parse_mysql(b"$.b.a").unwrap());
+    let bytes = multiple.finish().unwrap().unwrap();
+    let array = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(array.root().unwrap().len().unwrap(), 2);
+    assert_eq!(array.root().unwrap().value(1).unwrap().number().unwrap(), Number::I64(5));
+
+    let mut missing = Extraction::from_text(text, ParseOptions::default()).unwrap();
+    missing.add_path(&Path::parse_mysql(b"$.missing").unwrap());
+    assert!(missing.finish().unwrap().is_none());
+}
+
+#[test]
+fn binary_value_serialization_round_trips_document_shapes() {
+    for text in [
+        &br#"null"#[..],
+        &br#"true"#[..],
+        &br#"-9223372036854775808"#[..],
+        &br#"18446744073709551615"#[..],
+        &br#"-0.0"#[..],
+        &"\"雪\"".as_bytes()[..],
+        &br#"[0,127,128,-128,-129,32767,32768]"#[..],
+        &br#"{"a":[0,1,{"b":false}],"c":"d"}"#[..],
+    ] {
+        let bytes = parse_binary(text, ParseOptions::default()).unwrap();
+        let document = BinaryDocument::new(bytes.clone()).unwrap();
+        let serialized = binary::serialize_value(document.root().unwrap()).unwrap();
+        assert_eq!(serialized, bytes, "{:?}", String::from_utf8_lossy(text));
+        BinaryDocument::new(serialized).unwrap();
+    }
+
+    let large = format!("[{}]", (0..1000).map(|value| value.to_string()).collect::<Vec<_>>().join(","));
+    let bytes = parse_binary(large.as_bytes(), ParseOptions::default()).unwrap();
+    let document = BinaryDocument::new(bytes.clone()).unwrap();
+    assert_eq!(binary::serialize_value(document.root().unwrap()).unwrap(), bytes);
 }

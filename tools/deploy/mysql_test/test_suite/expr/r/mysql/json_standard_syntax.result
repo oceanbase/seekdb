@@ -82,6 +82,49 @@ NULL
 select json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x');
 json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x')
 3
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json));
+json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json))
+2
+select json_length('{"a":[0,1,2,3],"b":{"a":5}}', '$.a');
+json_length('{"a":[0,1,2,3],"b":{"a":5}}', '$.a')
+4
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$.a[1 to 2]');
+json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$.a[1 to 2]')
+2
+select json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$**.a');
+json_length(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), '$**.a')
+2
+select json_length(cast('{"a":1}' as json), '$.missing');
+json_length(cast('{"a":1}' as json), '$.missing')
+NULL
+select json_length(cast('1' as json), '$[0]');
+json_length(cast('1' as json), '$[0]')
+1
+select json_length(cast('1' as json), '$[*]');
+json_length(cast('1' as json), '$[*]')
+NULL
+select json_length('{"雪":{"x":true}}', '$.雪');
+json_length('{"雪":{"x":true}}', '$.雪')
+1
+select json_contains_path(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), 'one', '$**.a');
+json_contains_path(cast('{"a":[0,1,2,3],"b":{"a":5}}' as json), 'one', '$**.a')
+1
+select json_contains_path('{"a":[0,1,2,3],"b":{"a":5}}', 'all', '$.a', '$.b.a');
+json_contains_path('{"a":[0,1,2,3],"b":{"a":5}}', 'all', '$.a', '$.b.a')
+1
+select json_contains_path(cast('{"a":1}' as json), 'all', '$.a', '$.missing');
+json_contains_path(cast('{"a":1}' as json), 'all', '$.a', '$.missing')
+0
+select json_contains_path('{"雪":{"x":true},"a.b":9}', 'one', '$.雪.x', '$."a.b"');
+json_contains_path('{"雪":{"x":true},"a.b":9}', 'one', '$.雪.x', '$."a.b"')
+1
+select json_contains_path(cast('{"a":1}' as json), 'one', '$.missing', '$.a');
+json_contains_path(cast('{"a":1}' as json), 'one', '$.missing', '$.a')
+1
+select json_length(cast('{"a":1}' as json), '$**');
+ERROR 42000: Invalid JSON path expression.
+select json_contains_path(cast('{"a":1}' as json), 'one', '$.0a');
+ERROR 42000: Invalid JSON path expression.
 select json_schema_valid('{"type":"object"}', '{"a":1}');
 json_schema_valid('{"type":"object"}', '{"a":1}')
 1

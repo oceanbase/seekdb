@@ -87,8 +87,7 @@ int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
             ctx.exec_ctx_, temp_allocator, *json_datum, json_arg->datum_meta_,
             json_arg->obj_meta_.has_lob_header(), data))) {
     } else if (OB_FAIL(ObJsonExprHelper::get_json_metadata(
-                   &temp_allocator, data, ObJsonExprHelper::get_json_internal_type(val_type),
-                   true, 0, metadata))) {
+                   data, ObJsonExprHelper::get_json_internal_type(val_type), true, 0, metadata))) {
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
     }

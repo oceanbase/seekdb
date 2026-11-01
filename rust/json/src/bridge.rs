@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{DuplicatePolicy, ParseOptions};
+use crate::{DuplicatePolicy, ParseOptions, Path};
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::collections::HashMap;
 use std::fmt;
@@ -37,6 +37,7 @@ pub mod ffi {
         Depth = 3,
         UnsupportedSchemaRef = 4,
         InvalidBinary = 5,
+        InvalidPath = 6,
     }
 
     #[repr(u32)]
@@ -84,6 +85,14 @@ pub mod ffi {
         value_type: u8,
         depth: u32,
         opaque_field_type: u16,
+        length: u64,
+    }
+
+    struct PathQueryResult {
+        status: Status,
+        byte_offset: u64,
+        match_count: u64,
+        single_length: u64,
     }
 
     extern "Rust" {
@@ -101,7 +110,113 @@ pub mod ffi {
             schema: bool,
         ) -> BinaryResult;
         fn inspect_binary(input: &[u8], with_depth: bool) -> BinaryMetadataResult;
+        fn inspect_text(input: &[u8], with_depth: bool, max_depth: u32) -> BinaryMetadataResult;
+        type Path;
+        type PathParseResult;
+        fn parse_mysql_path(input: &[u8]) -> Box<PathParseResult>;
+        fn status(self: &PathParseResult) -> Status;
+        fn byte_offset(self: &PathParseResult) -> u64;
+        fn path(self: &PathParseResult) -> &Path;
+        fn can_match_many(self: &Path) -> bool;
+        fn query_binary(
+            path: &Path,
+            input: &[u8],
+            auto_wrap: bool,
+            first_only: bool,
+        ) -> PathQueryResult;
+        fn query_text(
+            path: &Path,
+            input: &[u8],
+            auto_wrap: bool,
+            first_only: bool,
+            max_depth: u32,
+        ) -> PathQueryResult;
+        type Extraction;
+        fn new_extraction(input: &[u8], text: bool, max_depth: u32) -> Box<Extraction>;
+        fn status(self: &Extraction) -> Status;
+        fn byte_offset(self: &Extraction) -> u64;
+        fn add_path(self: &mut Extraction, path: &Path) -> Status;
+        fn finish(self: &mut Extraction) -> BinaryResult;
     }
+}
+
+pub struct Extraction {
+    state: Result<crate::Extraction, (ffi::Status, u64)>,
+}
+
+impl Extraction {
+    fn status(&self) -> ffi::Status {
+        match &self.state {
+            Ok(_) => ffi::Status::Ok,
+            Err((status, _)) => *status,
+        }
+    }
+
+    fn byte_offset(&self) -> u64 {
+        match &self.state {
+            Ok(_) => 0,
+            Err((_, offset)) => *offset,
+        }
+    }
+
+    fn add_path(&mut self, path: &Path) -> ffi::Status {
+        match &mut self.state {
+            Ok(extraction) => {
+                extraction.add_path(path);
+                ffi::Status::Ok
+            }
+            Err((status, _)) => *status,
+        }
+    }
+
+    fn finish(&mut self) -> ffi::BinaryResult {
+        let state = std::mem::replace(&mut self.state, Err((ffi::Status::InvalidBinary, 0)));
+        match state {
+            Ok(extraction) => match extraction.finish() {
+                Ok(Some(binary)) => ffi::BinaryResult {
+                    status: ffi::Status::Ok,
+                    byte_offset: 0,
+                    message: String::new(),
+                    binary,
+                },
+                Ok(None) => ffi::BinaryResult {
+                    status: ffi::Status::Ok,
+                    byte_offset: 0,
+                    message: String::new(),
+                    binary: Vec::new(),
+                },
+                Err(error) => ffi::BinaryResult {
+                    status: ffi::Status::InvalidBinary,
+                    byte_offset: error.byte_offset as u64,
+                    message: error.to_string(),
+                    binary: Vec::new(),
+                },
+            },
+            Err((status, byte_offset)) => ffi::BinaryResult {
+                status,
+                byte_offset,
+                message: String::new(),
+                binary: Vec::new(),
+            },
+        }
+    }
+}
+
+fn new_extraction(input: &[u8], text: bool, max_depth: u32) -> Box<Extraction> {
+    let state = if text {
+        crate::Extraction::from_text(
+            input,
+            ParseOptions {
+                max_depth,
+                ..ParseOptions::default()
+            },
+        )
+        .map_err(|error| (parse_status(&error), error.byte_offset as u64))
+    } else {
+        crate::Extraction::from_binary(input.to_vec())
+            .map_err(|error| (ffi::Status::InvalidBinary, error.byte_offset as u64))
+    };
+    Box::new(Extraction { state })
 }
 
 fn policy(duplicate: ffi::Duplicate) -> DuplicatePolicy {
@@ -431,6 +546,7 @@ pub(crate) fn parse_binary(
 pub(crate) fn inspect_binary(input: &[u8], with_depth: bool) -> ffi::BinaryMetadataResult {
     match crate::BinaryDocument::new(input).and_then(|document| {
         let root = document.root()?;
+        let length = root.len()?;
         let value_type = root.json_type()? as u8;
         let opaque_field_type = if value_type == crate::JsonType::Opaque as u8 {
             root.opaque_field_type()?
@@ -438,14 +554,15 @@ pub(crate) fn inspect_binary(input: &[u8], with_depth: bool) -> ffi::BinaryMetad
             0
         };
         let depth = if with_depth { document.depth()? } else { 0 };
-        Ok((value_type, depth, opaque_field_type))
+        Ok((value_type, depth, opaque_field_type, length))
     }) {
-        Ok((value_type, depth, opaque_field_type)) => ffi::BinaryMetadataResult {
+        Ok((value_type, depth, opaque_field_type, length)) => ffi::BinaryMetadataResult {
             status: ffi::Status::Ok,
             byte_offset: 0,
             value_type,
             depth,
             opaque_field_type,
+            length,
         },
         Err(error) => ffi::BinaryMetadataResult {
             status: ffi::Status::InvalidBinary,
@@ -453,6 +570,139 @@ pub(crate) fn inspect_binary(input: &[u8], with_depth: bool) -> ffi::BinaryMetad
             value_type: 0,
             depth: 0,
             opaque_field_type: 0,
+            length: 0,
+        },
+    }
+}
+
+fn parse_status(error: &crate::ParseError) -> ffi::Status {
+    match error.kind {
+        crate::ErrorKind::Syntax => ffi::Status::Syntax,
+        crate::ErrorKind::DuplicateKey => ffi::Status::DuplicateKey,
+        crate::ErrorKind::Depth => ffi::Status::Depth,
+        crate::ErrorKind::UnsupportedSchemaRef => ffi::Status::UnsupportedSchemaRef,
+    }
+}
+
+pub(crate) fn inspect_text(
+    input: &[u8],
+    with_depth: bool,
+    max_depth: u32,
+) -> ffi::BinaryMetadataResult {
+    let options = ParseOptions {
+        max_depth,
+        ..ParseOptions::default()
+    };
+    match crate::parse_binary(input, options) {
+        Ok(binary) => inspect_binary(&binary, with_depth),
+        Err(error) => ffi::BinaryMetadataResult {
+            status: parse_status(&error),
+            byte_offset: error.byte_offset as u64,
+            value_type: 0,
+            depth: 0,
+            opaque_field_type: 0,
+            length: 0,
+        },
+    }
+}
+
+pub struct PathParseResult {
+    path: Option<crate::Path>,
+    error: Option<crate::PathError>,
+}
+
+impl PathParseResult {
+    fn status(&self) -> ffi::Status {
+        if self.path.is_some() {
+            ffi::Status::Ok
+        } else {
+            ffi::Status::InvalidPath
+        }
+    }
+
+    fn byte_offset(&self) -> u64 {
+        self.error.as_ref().map_or(0, |error| error.byte_offset as u64)
+    }
+
+    fn path(&self) -> &crate::Path {
+        self.path.as_ref().expect("valid paths are checked before use")
+    }
+}
+
+pub(crate) fn parse_mysql_path(input: &[u8]) -> Box<PathParseResult> {
+    Box::new(match crate::Path::parse_mysql(input) {
+        Ok(path) => PathParseResult {
+            path: Some(path),
+            error: None,
+        },
+        Err(error) => PathParseResult {
+            path: None,
+            error: Some(error),
+        },
+    })
+}
+
+fn query_result(
+    result: crate::BinaryResult<(u64, u64)>,
+) -> ffi::PathQueryResult {
+    match result {
+        Ok((match_count, single_length)) => ffi::PathQueryResult {
+            status: ffi::Status::Ok,
+            byte_offset: 0,
+            match_count,
+            single_length,
+        },
+        Err(error) => ffi::PathQueryResult {
+            status: ffi::Status::InvalidBinary,
+            byte_offset: error.byte_offset as u64,
+            match_count: 0,
+            single_length: 0,
+        },
+    }
+}
+
+pub(crate) fn query_binary(
+    path: &crate::Path,
+    input: &[u8],
+    auto_wrap: bool,
+    first_only: bool,
+) -> ffi::PathQueryResult {
+    let result = crate::BinaryDocument::new(input).and_then(|document| {
+        let matches = path.query(
+            document.root()?,
+            crate::QueryOptions {
+                auto_wrap,
+                first_only,
+            },
+        )?;
+        let single_length = if matches.len() == 1 {
+            matches[0].len()?
+        } else {
+            0
+        };
+        Ok((matches.len() as u64, single_length))
+    });
+    query_result(result)
+}
+
+pub(crate) fn query_text(
+    path: &crate::Path,
+    input: &[u8],
+    auto_wrap: bool,
+    first_only: bool,
+    max_depth: u32,
+) -> ffi::PathQueryResult {
+    let options = ParseOptions {
+        max_depth,
+        ..ParseOptions::default()
+    };
+    match crate::parse_binary(input, options) {
+        Ok(binary) => query_binary(path, &binary, auto_wrap, first_only),
+        Err(error) => ffi::PathQueryResult {
+            status: parse_status(&error),
+            byte_offset: error.byte_offset as u64,
+            match_count: 0,
+            single_length: 0,
         },
     }
 }

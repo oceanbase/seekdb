@@ -147,7 +147,7 @@ struct ContainerMeta {
     value_entries: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct BinaryValue<'a> {
     bytes: &'a [u8],
     extend_seg_offset: usize,
@@ -157,6 +157,34 @@ pub struct BinaryValue<'a> {
 }
 
 impl<'a> BinaryValue<'a> {
+    fn inline_encoding(&self, entry_type: u8) -> BinaryResult<Option<(u64, u8)>> {
+        let kind = self.json_type()?;
+        let encoded = match kind {
+            JsonType::Null => Some((0, NULL | INLINE)),
+            JsonType::Boolean => Some((u64::from(self.boolean()?), BOOLEAN | INLINE)),
+            JsonType::Int => match self.number()? {
+                Number::I64(value) if signed_var_type(value) <= entry_type => {
+                    let encoded = match signed_var_type(value) {
+                        0 => value as i8 as u8 as u64,
+                        1 => value as i16 as u16 as u64,
+                        2 => value as i32 as u32 as u64,
+                        _ => value as u64,
+                    };
+                    Some((encoded, INT | INLINE))
+                }
+                _ => None,
+            },
+            JsonType::Uint => match self.number()? {
+                Number::U64(value) if var_type(value) <= entry_type => {
+                    Some((value, UINT | INLINE))
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        Ok(encoded)
+    }
+
     pub fn json_type(&self) -> BinaryResult<JsonType> {
         JsonType::from_binary(self.raw_type & !INLINE, self.offset)
     }
@@ -424,6 +452,186 @@ impl<'a> BinaryValue<'a> {
             _ => Ok(()),
         }
     }
+}
+
+fn write_binary_value(output: &mut Vec<u8>, value: BinaryValue<'_>) -> BinaryResult<()> {
+    let kind = value.json_type()?;
+    match kind {
+        JsonType::Null => output.push(NULL),
+        JsonType::Boolean => output.push(u8::from(value.boolean()?)),
+        JsonType::Int | JsonType::Uint | JsonType::OInt | JsonType::OLong => {
+            let number = value.number()?;
+            let encoded = match number {
+                Number::I64(number) => number as u64,
+                Number::U64(number) => number,
+                Number::F64(_) => return Err(BinaryError::new(BinaryErrorKind::InvalidType, value.offset)),
+            };
+            push_vi64(output, encoded);
+        }
+        JsonType::Double | JsonType::ODouble => {
+            output.extend_from_slice(read_bytes(value.bytes, value.offset, 8)?);
+        }
+        JsonType::OFloat => {
+            output.extend_from_slice(read_bytes(value.bytes, value.offset, 4)?);
+        }
+        JsonType::String => {
+            let (length, payload) = read_vi64(value.bytes, value.offset + 1)?;
+            let length = to_usize(length, payload)?;
+            let bytes = read_bytes(value.bytes, value.offset, payload - value.offset + length)?;
+            output.extend_from_slice(bytes);
+        }
+        JsonType::Object | JsonType::Array => write_binary_container(output, value, 0)?,
+        JsonType::Opaque => {
+            let length = i64::from_le_bytes(
+                read_bytes(value.bytes, value.offset + 3, 8)?
+                    .try_into()
+                    .expect("eight bytes were requested"),
+            );
+            let length = usize::try_from(length)
+                .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, value.offset + 3))?;
+            let size = 11usize
+                .checked_add(length)
+                .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, value.offset))?;
+            output.extend_from_slice(read_bytes(value.bytes, value.offset, size)?);
+        }
+        JsonType::Date | JsonType::MySqlDate | JsonType::JsonDateExt => {
+            output.extend_from_slice(read_bytes(value.bytes, value.offset, 4)?);
+        }
+        JsonType::Time
+        | JsonType::Datetime
+        | JsonType::MySqlDatetime
+        | JsonType::Timestamp
+        | JsonType::ODate
+        | JsonType::OTimestamp
+        | JsonType::OTimestampTz => {
+            output.extend_from_slice(read_bytes(value.bytes, value.offset, 8)?);
+        }
+        _ => return Err(BinaryError::new(BinaryErrorKind::InvalidType, value.offset)),
+    }
+    Ok(())
+}
+
+fn write_binary_container(
+    output: &mut Vec<u8>,
+    value: BinaryValue<'_>,
+    estimated_size: u64,
+) -> BinaryResult<()> {
+    let container = value
+        .container()?
+        .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidType, value.offset))?;
+    let start = output.len();
+    let count = to_usize(container.count, value.offset)?;
+    let count_type = var_type(container.count);
+    let size_type = var_type(estimated_size);
+    let entry_type = size_type;
+    let entry_size = var_size(entry_type);
+    output.push(container.kind as u8);
+    output.push(entry_type | (count_type << 2) | (size_type << 4) | 0x40);
+    push_var(output, container.count, count_type);
+    let size_position = output.len();
+    push_var(output, estimated_size, size_type);
+    let key_entries = output.len();
+    if container.kind == JsonType::Object {
+        output.resize(output.len() + count * entry_size * 2, 0);
+    }
+    let value_entries = output.len();
+    output.resize(output.len() + count * (entry_size + 1), 0);
+
+    if container.kind == JsonType::Object {
+        for index in 0..count {
+            let key = value.key(index as u64)?;
+            let key_offset = (output.len() - start) as u64;
+            let position = key_entries + index * entry_size * 2;
+            set_var(output, position, key_offset, entry_type);
+            set_var(output, position + entry_size, key.len() as u64, entry_type);
+            output.extend_from_slice(key);
+        }
+    }
+    for index in 0..count {
+        let child = value.value(index as u64)?;
+        let value_offset = (output.len() - start) as u64;
+        let position = value_entries + index * (entry_size + 1);
+        if let Some((encoded, kind)) = child.inline_encoding(entry_type)? {
+            set_var(output, position, encoded, entry_type);
+            output[position + entry_size] = kind;
+        } else {
+            set_var(output, position, value_offset, entry_type);
+            output[position + entry_size] = child.raw_type & !INLINE;
+            write_binary_value(output, child)?;
+        }
+    }
+
+    let actual_size = (output.len() - start) as u64;
+    if var_type(actual_size) > size_type {
+        output.truncate(start);
+        write_binary_container(output, value, actual_size)
+    } else {
+        set_var(output, size_position, actual_size, size_type);
+        Ok(())
+    }
+}
+
+pub fn serialize_value(value: BinaryValue<'_>) -> BinaryResult<Vec<u8>> {
+    let mut output = Vec::new();
+    if value.json_type()?.is_container() {
+        output.resize(8, 0);
+        write_binary_value(&mut output, value)?;
+        let header = DOC_HEADER as u64 | ((output.len() as u64) << 22);
+        output[..8].copy_from_slice(&header.to_le_bytes());
+    } else {
+        if !needs_type_prefix(value.raw_type & !INLINE) {
+            output.push(value.raw_type & !INLINE);
+        }
+        write_binary_value(&mut output, value)?;
+    }
+    Ok(output)
+}
+
+pub fn serialize_array(values: &[BinaryValue<'_>]) -> BinaryResult<Vec<u8>> {
+    fn write(
+        output: &mut Vec<u8>,
+        values: &[BinaryValue<'_>],
+        estimated_size: u64,
+    ) -> BinaryResult<()> {
+        let start = output.len();
+        let count_type = var_type(values.len() as u64);
+        let size_type = var_type(estimated_size);
+        let entry_type = size_type;
+        let entry_size = var_size(entry_type);
+        output.push(ARRAY);
+        output.push(entry_type | (count_type << 2) | (size_type << 4) | 0x40);
+        push_var(output, values.len() as u64, count_type);
+        let size_position = output.len();
+        push_var(output, estimated_size, size_type);
+        let value_entries = output.len();
+        output.resize(output.len() + values.len() * (entry_size + 1), 0);
+        for (index, child) in values.iter().copied().enumerate() {
+            let value_offset = (output.len() - start) as u64;
+            let position = value_entries + index * (entry_size + 1);
+            if let Some((encoded, kind)) = child.inline_encoding(entry_type)? {
+                set_var(output, position, encoded, entry_type);
+                output[position + entry_size] = kind;
+            } else {
+                set_var(output, position, value_offset, entry_type);
+                output[position + entry_size] = child.raw_type & !INLINE;
+                write_binary_value(output, child)?;
+            }
+        }
+        let actual_size = (output.len() - start) as u64;
+        if var_type(actual_size) > size_type {
+            output.truncate(start);
+            write(output, values, actual_size)
+        } else {
+            set_var(output, size_position, actual_size, size_type);
+            Ok(())
+        }
+    }
+
+    let mut output = vec![0; 8];
+    write(&mut output, values, 0)?;
+    let header = DOC_HEADER as u64 | ((output.len() as u64) << 22);
+    output[..8].copy_from_slice(&header.to_le_bytes());
+    Ok(output)
 }
 
 #[derive(Clone, Debug)]

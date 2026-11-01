@@ -170,11 +170,44 @@ TEST_F(TestJsonParser, BinaryMetadata)
   ASSERT_EQ(json::Status::Ok, metadata.status);
   EXPECT_EQ(static_cast<uint8_t>(ObJsonNodeType::J_OBJECT), metadata.value_type);
   EXPECT_EQ(4, metadata.depth);
+  EXPECT_EQ(1, metadata.length);
 
   json::BinaryMetadataResult type_only = json::inspect_binary(
       rust::Slice<const uint8_t>(input, binary.length()), false);
   ASSERT_EQ(json::Status::Ok, type_only.status);
   EXPECT_EQ(0, type_only.depth);
+}
+
+TEST_F(TestJsonParser, RustPathQuery)
+{
+  const std::string text = "{\"a\":[0,1,2,3],\"b\":{\"a\":5}}";
+  ObString binary;
+  ASSERT_EQ(OB_SUCCESS, ObJsonParser::get_binary(&allocator_, text.data(), text.size(), binary));
+  const uint8_t *input = reinterpret_cast<const uint8_t *>(binary.ptr());
+  rust::Slice<const uint8_t> slice(input, binary.length());
+  rust::Box<json::PathParseResult> parsed = json::parse_mysql_path(
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.data()), 0));
+  EXPECT_EQ(json::Status::InvalidPath, parsed->status());
+
+  const std::string path_text = "$**.a";
+  parsed = json::parse_mysql_path(rust::Slice<const uint8_t>(
+      reinterpret_cast<const uint8_t *>(path_text.data()), path_text.size()));
+  ASSERT_EQ(json::Status::Ok, parsed->status());
+  EXPECT_TRUE(parsed->path().can_match_many());
+  json::PathQueryResult result = json::query_binary(parsed->path(), slice, true, false);
+  ASSERT_EQ(json::Status::Ok, result.status);
+  EXPECT_EQ(2, result.match_count);
+
+  result = json::query_binary(parsed->path(), slice, true, true);
+  ASSERT_EQ(json::Status::Ok, result.status);
+  EXPECT_EQ(1, result.match_count);
+  EXPECT_EQ(4, result.single_length);
+
+  result = json::query_text(parsed->path(),
+      rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(text.data()), text.size()),
+      true, false, 101);
+  ASSERT_EQ(json::Status::Ok, result.status);
+  EXPECT_EQ(2, result.match_count);
 }
 
 } // namespace common

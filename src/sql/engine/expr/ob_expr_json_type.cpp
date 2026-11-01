@@ -149,7 +149,7 @@ int ObExprJsonType::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta, 
           LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);
         } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
         } else if (OB_FAIL(ObJsonExprHelper::get_json_metadata(
-                       allocator, j_str, j_in_type, false,
+                       j_str, j_in_type, false,
                        ObJsonExprHelper::get_json_max_depth_config(), metadata))) {
           if (ret == OB_ERR_INVALID_JSON_TEXT_IN_PARAM) {
             ret = OB_ERR_INVALID_JSON_TEXT;

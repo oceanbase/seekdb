@@ -17,8 +17,10 @@
 
 mod bridge;
 pub mod binary;
+pub mod path;
 
-pub use binary::{BinaryDocument, BinaryError, BinaryErrorKind, BinaryValue, JsonType};
+pub use binary::{BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType};
+pub use path::{Extraction, Path, PathError, PathErrorKind, PathStep, QueryOptions};
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;

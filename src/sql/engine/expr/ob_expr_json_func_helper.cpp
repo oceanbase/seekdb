@@ -18,6 +18,7 @@
 #include "rust/config.h"
 #include "rust/json.h"
 #include "ob_expr_json_func_helper.h"
+#include "ob_expr_json_native_path.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_cast.h"
@@ -34,17 +35,25 @@ namespace oceanbase
 namespace sql
 {
 
-int ObJsonExprHelper::get_json_metadata(ObIAllocator *allocator, const ObString &data,
-                                        ObJsonInType input_type, bool with_depth,
+uint32_t ObJsonExprHelper::get_json_text_depth_limit(uint32_t configured)
+{
+  const uint32_t limit = configured < JSON_DOCUMENT_MAX_DEPTH ? JSON_DOCUMENT_MAX_DEPTH : configured;
+  return limit == UINT32_MAX ? limit : limit + 1;
+}
+
+int ObJsonExprHelper::get_json_metadata(const ObString &data, ObJsonInType input_type, bool with_depth,
                                         uint32_t max_depth_config, JsonMetadata &metadata)
 {
   INIT_SUCC(ret);
   if (data.empty() || OB_ISNULL(data.ptr())) {
     ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
-  } else if (input_type == ObJsonInType::JSON_BIN) {
+  } else {
     const uint8_t *input = reinterpret_cast<const uint8_t *>(data.ptr());
-    oceanbase::common::json::BinaryMetadataResult result = oceanbase::common::json::inspect_binary(
-        rust::Slice<const uint8_t>(input, data.length()), with_depth);
+    rust::Slice<const uint8_t> slice(input, data.length());
+    oceanbase::common::json::BinaryMetadataResult result = input_type == ObJsonInType::JSON_BIN
+        ? oceanbase::common::json::inspect_binary(slice, with_depth)
+        : oceanbase::common::json::inspect_text(
+              slice, with_depth, get_json_text_depth_limit(max_depth_config));
     if (result.status != oceanbase::common::json::Status::Ok) {
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_WARN("fail to inspect binary JSON", K(ret), K(result.byte_offset));
@@ -52,15 +61,34 @@ int ObJsonExprHelper::get_json_metadata(ObIAllocator *allocator, const ObString 
       metadata.type_ = static_cast<ObJsonNodeType>(result.value_type);
       metadata.field_type_ = static_cast<ObObjType>(result.opaque_field_type);
       metadata.depth_ = result.depth;
+      metadata.length_ = result.length;
     }
+  }
+  return ret;
+}
+
+int query_native_json_path(const ObString &data, ObJsonInType input_type,
+                           const common::json::Path &path, bool auto_wrap,
+                           bool first_only, uint32_t max_depth_config,
+                           JsonPathMatches &matches)
+{
+  INIT_SUCC(ret);
+  if (data.empty() || OB_ISNULL(data.ptr())) {
+    ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
   } else {
-    ObIJsonBase *base = nullptr;
-    if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, data, input_type, input_type,
-                                                 base, 0, max_depth_config))) {
+    const uint8_t *input = reinterpret_cast<const uint8_t *>(data.ptr());
+    rust::Slice<const uint8_t> slice(input, data.length());
+    common::json::PathQueryResult result = input_type == ObJsonInType::JSON_BIN
+        ? common::json::query_binary(path, slice, auto_wrap, first_only)
+        : common::json::query_text(
+              path, slice, auto_wrap, first_only,
+              ObJsonExprHelper::get_json_text_depth_limit(max_depth_config));
+    if (result.status != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to query JSON path", K(ret), K(result.byte_offset));
     } else {
-      metadata.type_ = base->json_type();
-      metadata.field_type_ = base->field_type();
-      metadata.depth_ = with_depth ? base->depth() : 0;
+      matches.count_ = result.match_count;
+      matches.single_length_ = result.single_length;
     }
   }
   return ret;
@@ -829,6 +857,36 @@ ObJsonPathCache* ObJsonExprHelper::get_path_cache_ctx(const uint64_t& id, ObExec
   return (cache_ctx == NULL) ? NULL : cache_ctx->get_path_cache();
 }
 
+namespace
+{
+class ObJsonNativePathCacheCtx : public ObExprOperatorCtx
+{
+public:
+  ObJsonNativePathCacheCtx() : ObExprOperatorCtx(), path_cache_() {}
+  virtual ~ObJsonNativePathCacheCtx() {}
+  JsonPathCache *get_path_cache() { return &path_cache_; }
+private:
+  JsonPathCache path_cache_;
+};
+}
+
+JsonPathCache* get_native_path_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx)
+{
+  INIT_SUCC(ret);
+  ObJsonNativePathCacheCtx* cache_ctx = NULL;
+  if (ObExpr::INVALID_EXP_CTX_ID != id) {
+    cache_ctx = static_cast<ObJsonNativePathCacheCtx*>(exec_ctx->get_expr_op_ctx(id));
+    if (OB_ISNULL(cache_ctx)) {
+      void *cache_ctx_buf = NULL;
+      ret = exec_ctx->create_expr_op_ctx(id, sizeof(ObJsonNativePathCacheCtx), cache_ctx_buf);
+      if (OB_SUCC(ret) && OB_NOT_NULL(cache_ctx_buf)) {
+        cache_ctx = new (cache_ctx_buf) ObJsonNativePathCacheCtx();
+      }
+    }
+  }
+  return (cache_ctx == NULL) ? NULL : cache_ctx->get_path_cache();
+}
+
 // get json expr schema cache context, if not exists cache context do nothing
 ObJsonSchemaCache* ObJsonExprHelper::get_schema_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx)
 {
@@ -867,6 +925,62 @@ int ObJsonExprHelper::find_and_add_cache(ObJsonPathCache* path_cache, ObJsonPath
 {
   INIT_SUCC(ret);
   if (OB_FAIL(path_cache->find_and_add_cache(res_path, path_str, arg_idx, is_const))) {
+    ret = OB_ERR_INVALID_JSON_PATH;
+    LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
+  } else if (!enable_wildcard && res_path->can_match_many()) {
+    ret = OB_ERR_INVALID_JSON_PATH_WILDCARD;
+    LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH_WILDCARD);
+  }
+  return ret;
+}
+
+int JsonPathCache::find_and_add(ObString &path_text, int64_t arg_idx, bool is_const,
+                                const common::json::Path *&path)
+{
+  INIT_SUCC(ret);
+  if (arg_idx < 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const size_t index = static_cast<size_t>(arg_idx);
+    bool found = false;
+    if (index < entries_.size() && entries_[index].has_value()) {
+      const Entry &entry = entries_[index].value();
+      found = is_const || (entry.text_.size() == static_cast<size_t>(path_text.length())
+          && (path_text.length() == 0
+              || MEMCMP(entry.text_.data(), path_text.ptr(), path_text.length()) == 0));
+      if (found) {
+        path = &entry.parsed_->path();
+      }
+    }
+    if (OB_SUCC(ret) && !found) {
+      std::string text;
+      if (path_text.length() > 0) {
+        text.assign(path_text.ptr(), path_text.length());
+      }
+      const uint8_t *input = reinterpret_cast<const uint8_t *>(path_text.ptr());
+      rust::Box<common::json::PathParseResult> parsed = common::json::parse_mysql_path(
+          rust::Slice<const uint8_t>(input, path_text.length()));
+      if (parsed->status() != common::json::Status::Ok) {
+        ret = OB_ERR_INVALID_JSON_PATH;
+      } else {
+        path = &parsed->path();
+        if (index >= entries_.size()) {
+          entries_.resize(index + 1);
+        }
+        entries_[index].emplace(std::move(text), std::move(parsed));
+      }
+    }
+  }
+  return ret;
+}
+
+int find_and_add_native_path_cache(JsonPathCache* path_cache,
+                                   const common::json::Path*& res_path,
+                                   ObString& path_str, int64_t arg_idx, bool enable_wildcard,
+                                   bool is_const)
+{
+  INIT_SUCC(ret);
+  if (OB_FAIL(path_cache->find_and_add(path_str, arg_idx, is_const, res_path))) {
     ret = OB_ERR_INVALID_JSON_PATH;
     LOG_USER_ERROR(OB_ERR_INVALID_JSON_PATH);
   } else if (!enable_wildcard && res_path->can_match_many()) {
