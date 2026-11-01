@@ -1,0 +1,182 @@
+DROP TABLE IF EXISTS fts_query_regression;
+create table fts_query_regression(
+id bigint auto_increment primary key,
+title varchar(256) not null,
+content text not null,
+title_en varchar(256) not null,
+content_en text not null,
+fulltext key fts_qr_cn(title, content) with parser ik PARSER_PROPERTIES=(ik_mode='smart'),
+fulltext key fts_qr_content(content) with parser ik PARSER_PROPERTIES=(ik_mode='smart'),
+fulltext key fts_qr_en(title_en, content_en) with parser beng PARSER_PROPERTIES=(min_token_size=3,max_token_size=84)
+);
+insert into fts_query_regression(title, content, title_en, content_en) values
+('数据库全文索引入门', '全文索引是数据库的核心能力，倒排索引支撑快速检索。', 'fulltext index intro', 'full text index is a core database capability'),
+('分词器概述', '分词器 tokenizer 把文本切分成词项，倒排索引由词项指向文档。', 'tokenizer overview', 'the tokenizer splits text into terms for the index'),
+('OceanBase 全文检索', 'OceanBase 数据库内置全文索引与分词器，检索稳定高效。', 'oceanbase fulltext', 'oceanbase database ships a tokenizer and a fulltext search engine'),
+('倒排索引原理', '倒排索引记录词项到文档列表的映射关系。', 'inverted index', 'an inverted index maps terms to document lists'),
+('检索性能优化', '数据库检索性能取决于索引结构与分词器实现。', 'search performance', 'search performance depends on the index structure'),
+('分词器与检索', '分词器质量直接影响全文检索的召回与排序。', 'tokenizer and search', 'tokenizer quality drives the recall of fulltext search'),
+('稳定的核心', '分布式数据库需要稳定的全文索引实现。', 'stable core', 'a distributed database needs a stable fulltext index'),
+('性能审计报告', '性能审计发现检索延迟主要来自倒排索引扫描。', 'performance audit report', 'the performance audit blamed the index scan latency'),
+('搜索引擎架构', '现代搜索引擎以倒排索引与分词器为基石。', 'search engine internals', 'modern search engines are built on inverted indexes'),
+('数据库与大数据', '数据库与大数据平台共享检索与聚合技术。', 'database and big data', 'databases and big data systems share retrieval techniques'),
+('全文索引进阶', '全文索引支持布尔模式、相关性排序与分词器扩展。', 'fulltext advanced', 'fulltext index supports boolean mode and relevance ranking'),
+('倒排索引压缩', '倒排索引的压缩编码显著降低存储成本。', 'index compression', 'compression encodings reduce the index storage cost'),
+('数据库事务与索引', '事务与索引是数据库的两大支柱。', 'transactions and index', 'transactions and indexes are database pillars'),
+('分词器评测', '对 ik 与 beng 分词器 tokenizer 进行召回与性能评测。', 'tokenizer benchmark', 'benchmark the ik and beng tokenizer implementations'),
+('检索相关性排序', 'BM25 为全文检索提供相关性排序能力。', 'relevance ranking', 'bm25 provides relevance ranking for fulltext search'),
+('OceanBase 检索实战', '在 OceanBase 中用全文索引加速日志检索。', 'oceanbase in action', 'accelerate log search with the oceanbase fulltext index'),
+('数据库内核月报', '内核月报解读全文索引与倒排索引的实现细节。', 'kernel monthly', 'the kernel monthly explains fulltext index internals'),
+('分布式检索挑战', '分布式检索面临数据分布与一致性挑战。', 'distributed search', 'distributed search faces data placement challenges'),
+('索引构建流水线', '全文索引构建包括分词、正排与倒排构建阶段。', 'index build pipeline', 'the index build pipeline tokenizes and inverts documents'),
+('全文索引未来', '全文索引将与向量检索共同演进。', 'fulltext future', 'fulltext index will evolve together with vector search');
+========= multi token natural language: hit set and output order =========
+select id from fts_query_regression where match(title, content) against('分词器 数据库');
+id
+3
+5
+13
+1
+10
+6
+14
+17
+2
+9
+11
+select count(*) from fts_query_regression where match(title, content) against('分词器 数据库');
+count(*)
+11
+select id from fts_query_regression where match(title, content) against('OceanBase 稳定 数据库');
+id
+3
+7
+16
+13
+1
+10
+5
+17
+========= match + limit without order by (row order is semantics) =========
+select id from fts_query_regression where match(content) against('倒排索引 tokenizer') limit 5;
+id
+2
+14
+12
+9
+8
+select id from fts_query_regression where match(content) against('倒排索引 tokenizer') limit 20;
+id
+2
+14
+12
+9
+17
+8
+1
+4
+19
+13
+5
+select count(*) from (select id from fts_query_regression where match(content) against('倒排索引 tokenizer') limit 3) t;
+count(*)
+3
+select id from fts_query_regression where match(content) against('倒排索引 tokenizer') limit 4 offset 2;
+id
+9
+12
+8
+17
+========= single token with limit =========
+select id from fts_query_regression where match(title, content) against('全文索引') limit 4;
+id
+20
+11
+1
+7
+select id from fts_query_regression where match(title, content) against('全文索引') limit 30;
+id
+20
+11
+1
+7
+16
+3
+19
+17
+select id, title from fts_query_regression where match(title, content) against('全文索引') limit 2 offset 3;
+id	title
+7	稳定的核心
+16	OceanBase 检索实战
+select count(*) from fts_query_regression where match(title, content) against('全文索引');
+count(*)
+8
+========= order by id with match =========
+select id from fts_query_regression where match(title, content) against('全文索引') order by id limit 3;
+id
+1
+3
+7
+select id from fts_query_regression where match(title, content) against('全文索引') order by id desc limit 3;
+id
+20
+19
+17
+========= boolean mode: and / or / not =========
+select id from fts_query_regression where match(content) against('+数据库 +倒排' in boolean mode);
+id
+1
+select id from fts_query_regression where match(content) against('分词器 倒排' in boolean mode);
+id
+9
+2
+3
+5
+6
+11
+14
+12
+19
+8
+17
+1
+4
+select id from fts_query_regression where match(title_en, content_en) against('+tokenizer -audit' in boolean mode);
+id
+14
+2
+6
+3
+select count(*) from fts_query_regression where match(content) against('+全文索引 +分词器' in boolean mode);
+count(*)
+2
+========= beng english path =========
+select id from fts_query_regression where match(title_en, content_en) against('database performance');
+id
+5
+8
+7
+13
+1
+3
+10
+select id from fts_query_regression where match(title_en, content_en) against('database performance') limit 4;
+id
+5
+8
+7
+13
+select count(*) from fts_query_regression where match(title_en, content_en) against('database tokenizer');
+count(*)
+8
+========= empty hit set edge =========
+select id from fts_query_regression where match(content) against('不存在的词条') limit 5;
+id
+7
+13
+12
+6
+17
+select count(*) from fts_query_regression where match(content) against('不存在的词条');
+count(*)
+7
