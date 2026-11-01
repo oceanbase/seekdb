@@ -10886,6 +10886,19 @@
     "background_cn": "",
     "ref_url": "https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html"
   },
+  "enable_file_sql": {
+    "id": 10754,
+    "name": "enable_file_sql",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "bool",
+    "info": "Enable SQL over local files (read_csv/read_json/read_parquet/glob) for the current session.",
+    "flags": "GLOBAL | SESSION ",
+    "publish_version": "",
+    "info_cn": "开启后可对本地数据文件直接执行 SQL（read_csv/read_json/read_parquet/glob）",
+    "background_cn": "文件即数据库：允许 SQL 直接查询本地数据文件",
+    "ref_url": ""
+  },
   "enable_optimizer_rowgoal": {
     "id": 10747,
     "name": "enable_optimizer_rowgoal",
