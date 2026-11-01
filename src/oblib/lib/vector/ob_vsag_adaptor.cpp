@@ -28,6 +28,17 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"
+#include "hipvs_build_api.h"
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <dlfcn.h>
+#include <unistd.h>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <mutex>
+#include <thread>
+#endif
 
 namespace oceanbase {
 namespace common {
@@ -231,6 +242,95 @@ int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
     ret = OB_ERR_VSAG_RETURN_ERROR;
     LOG_WARN("[OBVSAG] unknown exception caught in build_index");
   }
+  return ret;
+}
+
+int build_hipvs_index(VectorIndexPtr &index_handler, const float *vectors,
+                     const int64_t *ids, int64_t dim, int64_t count,
+                     int64_t max_degree, int64_t ef_construction)
+{
+  int ret = OB_SUCCESS;
+#if defined(__linux__) && !defined(__ANDROID__)
+  if (nullptr == index_handler || nullptr == vectors || nullptr == ids ||
+      dim <= 0 || count <= 0 || max_degree < 2 || count <= 2 * max_degree) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    HnswIndexHandler *handler = static_cast<HnswIndexHandler *>(index_handler);
+    if (handler->get_index_type() != HNSW_TYPE || handler->get_extra_info_size() != 0 ||
+        0 != strcmp(handler->get_metric(), "l2") || handler->get_index_number() != 0) {
+      return OB_NOT_SUPPORTED;
+    }
+    // One backend build at a time also bounds GPU workspace usage. Retain the DSO
+    // for process lifetime: HIP and RAFT can retain thread-local callbacks.
+    static std::mutex backend_mutex;
+    static std::once_flag backend_once;
+    static void *backend = nullptr;
+    static SeekdbHipvsBuildV1 build = nullptr;
+    std::lock_guard<std::mutex> lock(backend_mutex);
+    std::call_once(backend_once, []() {
+      const char *library = std::getenv("SEEKDB_HIPVS_LIBRARY");
+      backend = dlopen(library && library[0] ? library : "libseekdb_hipvs.so", RTLD_NOW | RTLD_LOCAL);
+      if (backend) build = reinterpret_cast<SeekdbHipvsBuildV1>(dlsym(backend, "seekdb_hipvs_build_v1"));
+    });
+    if (nullptr == build) {
+      LOG_WARN("HIPVS backend unavailable; gpu_compute=false, cpu_fallback=false");
+      return OB_NOT_SUPPORTED;
+    }
+    char directory[] = "/tmp/seekdb-hipvs-XXXXXX";
+    if (nullptr == mkdtemp(directory)) return OB_IO_ERROR;
+    struct HipvsWorkspace {
+      const char *directory_;
+      char output_[128];
+      char raw_[128];
+      char part_[128];
+      explicit HipvsWorkspace(const char *dir) : directory_(dir) {
+        std::snprintf(output_, sizeof(output_), "%s/index.bin", dir);
+        std::snprintf(raw_, sizeof(raw_), "%s/index.bin.raw", dir);
+        std::snprintf(part_, sizeof(part_), "%s/index.bin.part", dir);
+      }
+      ~HipvsWorkspace() {
+        unlink(raw_);
+        unlink(part_);
+        unlink(output_);
+        rmdir(directory_);
+      }
+    } workspace(directory);
+    char error[512] = {0};
+    int backend_ret = -1;
+    try {
+      // ROCm libraries need an OS-thread stack rather than a coroutine stack.
+      std::thread gpu_worker([&]() {
+        backend_ret = build(vectors, ids, count, dim, max_degree, ef_construction,
+                            workspace.output_, error, sizeof(error));
+      });
+      gpu_worker.join();
+      if (backend_ret != 0) {
+        LOG_WARN("HIPVS build failed; cpu_fallback=false", K(backend_ret), KCSTRING(error));
+        ret = OB_ERR_VSAG_RETURN_ERROR;
+      } else {
+        std::ifstream input(workspace.output_, std::ios::binary);
+        if (!input) {
+          ret = OB_IO_ERROR;
+        } else if (OB_FAIL(fdeserialize(index_handler, input))) {
+          LOG_WARN("HIPVS graph import failed", K(ret));
+        } else if (static_cast<HnswIndexHandler *>(index_handler)->get_index_number() != count) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          LOG_INFO("HIPVS snapshot ready; gpu_compute=true, cpu_fallback=false", K(count), K(dim));
+        }
+      }
+    } catch (const std::exception &exception) {
+      LOG_WARN("HIPVS worker failed", "error", exception.what());
+      ret = OB_ERR_VSAG_RETURN_ERROR;
+    } catch (...) {
+      ret = OB_ERR_VSAG_RETURN_ERROR;
+    }
+  }
+#else
+  UNUSED(index_handler); UNUSED(vectors); UNUSED(ids); UNUSED(dim); UNUSED(count);
+  UNUSED(max_degree); UNUSED(ef_construction);
+  ret = OB_NOT_SUPPORTED;
+#endif
   return ret;
 }
 

@@ -1900,6 +1900,8 @@ OBLIB_PRIVATE_HEADERS = [
     "lib/thread/ob_map_queue.h",
     "lib/thread/ob_map_queue_thread_pool.h",
     "lib/thread_local/thread_buffer.h",
+    "lib/vector/hipvs_backend/hnsw_stream.hpp",
+    "lib/vector/hipvs_build_api.h",
     "rpc/frame/ob_rpc_checksum.h",
     "rpc/obmysql/ob_mysql_packet_storage.h",
     ]

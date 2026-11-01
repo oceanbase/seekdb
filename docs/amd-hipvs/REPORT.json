@@ -1,0 +1,17 @@
+{
+  "status": "not_run",
+  "date": "2026-11-01",
+  "reason": "User requested implementation for direct external evaluation without local tests. Available server has NVIDIA A100, no AMD/ROCm.",
+  "compiled": false,
+  "gpu_execution_verified": false,
+  "vsag_import_verified": false,
+  "restart_verified": false,
+  "cpu_build_seconds": null,
+  "hipvs_build_seconds": null,
+  "speedup": null,
+  "cpu_recall_at_k": null,
+  "hipvs_recall_at_k": null,
+  "query_latency_ms": null,
+  "peak_memory_bytes": null,
+  "collector": "unittest/vector_index/benchmark_hipvs.py"
+}
