@@ -1,0 +1,114 @@
+DROP DATABASE IF EXISTS fts_reg;
+CREATE DATABASE fts_reg;
+USE fts_reg;
+CREATE TABLE fts_reg_main(
+id      BIGINT PRIMARY KEY,
+title   VARCHAR(256),
+content VARCHAR(512));
+INSERT INTO fts_reg_main(id, title, content) VALUES
+(1,  'OceanBase 数据库', 'OceanBase 是一款分布式数据库，支持全文索引与检索。'),
+(2,  '全文索引原理', '全文索引通过倒排索引加速关键词检索。'),
+(3,  'database engine', 'The database engine processes queries efficiently.'),
+(4,  '倒排索引', '倒排索引将词项映射到文档列表，是搜索引擎的核心结构。'),
+(5,  'search engine', 'A search engine ranks documents by relevance and freshness.'),
+(6,  '分布式系统', '分布式系统需要处理一致性、可用性与分区容错。'),
+(7,  'query optimizer', 'The query optimizer rewrites plans to reduce cost.'),
+(8,  '数据检索', '海量数据检索依赖索引结构与缓存优化。'),
+(9,  'inverted index', 'An inverted index is the core of modern search systems.'),
+(10, '高可用架构', '高可用架构通过多副本与自动切换保障服务。'),
+(11, 'tokenizer', 'The tokenizer splits text into tokens for indexing.'),
+(12, '分词器', '分词器决定中文全文索引的质量与性能。'),
+(13, 'full text search', 'Full text search combines tokenization, indexing and ranking.');
+ALTER SYSTEM SET _ENABLE_ADD_FULLTEXT_INDEX_TO_EXISTING_TABLE = TRUE;
+CREATE FULLTEXT INDEX fts_reg_idx ON fts_reg_main(title, content) WITH PARSER ik;
+set ob_enable_index_direct_select = 'ON';
+table_name
+__idx_DATA_TABLE_ID_fts_doc_rowkey
+__idx_DATA_TABLE_ID_fts_reg_idx
+__idx_DATA_TABLE_ID_fts_reg_idx_fts_doc_word
+__idx_DATA_TABLE_ID_fts_rowkey_doc
+COUNT(*)
+13
+COUNT(*)
+13
+COUNT(*)
+116
+COUNT(*)
+116
+===== single cn word, ordered =====
+SELECT id FROM fts_reg_main WHERE MATCH(title, content) AGAINST('索引') ORDER BY id;
+id
+2
+4
+8
+===== single en word, ordered =====
+SELECT id FROM fts_reg_main WHERE MATCH(title, content) AGAINST('index') ORDER BY id;
+id
+9
+===== multi word, ordered =====
+SELECT id FROM fts_reg_main WHERE MATCH(title, content) AGAINST('database search') ORDER BY id;
+id
+3
+5
+9
+13
+===== ordered desc =====
+SELECT id, title FROM fts_reg_main WHERE MATCH(title, content) AGAINST('倒排索引') ORDER BY id DESC;
+id	title
+8	数据检索
+4	倒排索引
+2	全文索引原理
+===== hit count =====
+SELECT COUNT(*) FROM fts_reg_main WHERE MATCH(title, content) AGAINST('全文索引');
+COUNT(*)
+3
+===== ordered with limit =====
+SELECT id FROM fts_reg_main WHERE MATCH(title, content) AGAINST('the') ORDER BY id LIMIT 3;
+id
+3
+7
+9
+===== boolean mode, ordered =====
+SELECT id FROM fts_reg_main WHERE MATCH(title, content) AGAINST('检索' IN BOOLEAN MODE) ORDER BY id;
+id
+1
+2
+===== mixed cn en words, ordered =====
+SELECT id FROM fts_reg_main WHERE MATCH(title, content) AGAINST('全文索引 数据库') ORDER BY id;
+id
+1
+2
+12
+CREATE TABLE fts_reg_part(
+id     BIGINT PRIMARY KEY,
+detail VARCHAR(512),
+FULLTEXT INDEX fts_reg_part_idx(detail) WITH PARSER ik
+) PARTITION BY HASH(id) PARTITIONS 2;
+INSERT INTO fts_reg_part(id, detail) VALUES
+(1, 'The quick brown fox jumps over the lazy dog'),
+(2, '全文索引支持分区表的文档检索'),
+(3, 'A distributed database spans multiple servers'),
+(4, '倒排索引在分区场景下按分区构建与合并'),
+(5, 'Search relevance depends on tokenization quality'),
+(6, '分区表的全文索引为每个分区维护独立倒排'),
+(7, 'OceanBase stores data in distributed tablets'),
+(8, '检索系统需要统一处理多分区的查询结果');
+===== partitioned: cn word, ordered =====
+SELECT id FROM fts_reg_part WHERE MATCH(detail) AGAINST('全文索引') ORDER BY id;
+id
+2
+6
+===== partitioned: en word, ordered =====
+SELECT id FROM fts_reg_part WHERE MATCH(detail) AGAINST('database') ORDER BY id;
+id
+3
+===== partitioned: hit count =====
+SELECT COUNT(*) FROM fts_reg_part WHERE MATCH(detail) AGAINST('distributed');
+COUNT(*)
+2
+===== partitioned: ordered desc with limit =====
+SELECT id FROM fts_reg_part WHERE MATCH(detail) AGAINST('倒排') ORDER BY id DESC LIMIT 2;
+id
+6
+4
+DROP DATABASE fts_reg;
