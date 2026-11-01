@@ -17,8 +17,11 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 
+#include <atomic>
+
 #include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_bucket_lock.h"
+#include "lib/lock/ob_mutex.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 
 namespace oceanbase
@@ -98,10 +101,10 @@ class ObIFTDict;
 class ObFTDictHub
 {
 public:
-  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), shared_dict_lock_()
+  ObFTDictHub() : is_inited_(false), dict_map_(), rw_dict_lock_(), shared_dict_mutex_()
   {
     for (int64_t i = 0; i < MAX_DICT_TYPE_NUM; ++i) {
-      shared_dicts_[i] = nullptr;
+      shared_dicts_[i].store(nullptr, std::memory_order_relaxed);
     }
   }
   ~ObFTDictHub() {}
@@ -145,10 +148,11 @@ private:
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
   ObBucketLock rw_dict_lock_;
-  // Guards the shared dictionary table below. It is a separate lock from
-  // rw_dict_lock_ because building a dictionary takes rw_dict_lock_ itself.
-  ObBucketLock shared_dict_lock_;
-  ObFTSharedDict *shared_dicts_[MAX_DICT_TYPE_NUM];
+  // Publication is protected by shared_dict_mutex_, while the steady-state
+  // lookup is lock-free. Dictionary construction takes rw_dict_lock_, so it
+  // must use a separate mutex to avoid recursive locking.
+  lib::ObMutex shared_dict_mutex_;
+  std::atomic<ObFTSharedDict *> shared_dicts_[MAX_DICT_TYPE_NUM];
 };
 
 } //  namespace storage

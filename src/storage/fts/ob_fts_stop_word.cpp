@@ -84,8 +84,8 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
   } else {
     common::ObString cmp_str;
     const ObString &word_str = word.get_word().get_string();
-    if (ObCharset::charset_type_by_coll(word.get_collation_type()) == CHARSET_UTF8MB4) {
-      // UTF8MB4 collations share the same encoding; only collation semantics differ.
+    if (word.get_collation_type() == stopword_type_.get_collation_type()) {
+      // The common path needs neither charset conversion nor an allocation.
       cmp_str = word_str;
     } else {
       common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
@@ -169,19 +169,50 @@ int ObAddWord::casedown_word(const ObFTWord &src, ObFTWord &dst)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src.empty())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (flag_.casedown()) {
-    ObString dst_str;
-    if (OB_FAIL(ObCharset::tolower(
-                    word_meta_.get_collation_type(),
-                    src.get_word().get_string(),
-                    dst_str,
-                    allocator_))) {
-    } else {
-      ObFTWord tmp(dst_str.length(), dst_str.ptr(), word_meta_);
-      dst = tmp;
-    }
-  } else {
+  } else if (!flag_.casedown()) {
     dst = src;
+  } else {
+    const ObString src_str = src.get_word().get_string();
+    const ObCharsetInfo *cs_info = ObCharset::get_charset(word_meta_.get_collation_type());
+    constexpr int64_t STACK_CASE_BUF_SIZE = 256;
+    char stack_buf[STACK_CASE_BUF_SIZE];
+    bool used_stack_buffer = false;
+
+    if (nullptr != cs_info && nullptr != cs_info->cset && cs_info->casedn_multiply > 0
+        && src_str.length() <= STACK_CASE_BUF_SIZE / cs_info->casedn_multiply) {
+      const size_t dst_len = cs_info->cset->casedn(
+          cs_info,
+          const_cast<char *>(src_str.ptr()),
+          src_str.length(),
+          stack_buf,
+          STACK_CASE_BUF_SIZE);
+      if (dst_len == static_cast<size_t>(src_str.length())
+          && 0 == MEMCMP(stack_buf, src_str.ptr(), dst_len)) {
+        // CJK and normalized lowercase tokens take this allocation-free path.
+        dst = src;
+      } else {
+        char *dst_ptr = static_cast<char *>(allocator_.alloc(dst_len));
+        if (OB_ISNULL(dst_ptr)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          MEMCPY(dst_ptr, stack_buf, dst_len);
+          dst = ObFTWord(static_cast<int32_t>(dst_len), dst_ptr, word_meta_);
+        }
+      }
+      used_stack_buffer = true;
+    }
+
+    if (OB_SUCC(ret) && !used_stack_buffer) {
+      ObString dst_str;
+      if (OB_FAIL(ObCharset::tolower(
+                      word_meta_.get_collation_type(),
+                      src_str,
+                      dst_str,
+                      allocator_))) {
+      } else {
+        dst = ObFTWord(dst_str.length(), dst_str.ptr(), word_meta_);
+      }
+    }
   }
   return ret;
 }

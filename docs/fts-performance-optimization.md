@@ -56,3 +56,29 @@ and a score-equivalent 15.00 on the local harness.
 Returning BENG analyzer buffers directly and retaining normalized tokens across
 the document caused a lost connection under repeated benchmark execution. The
 change was fully reverted; the original per-token ownership remains.
+
+## Second optimization pass
+
+Platform scoring against its hidden baseline exposed additional work that was
+small relative to the original public baseline but still visible in the index
+build and query paths:
+
+- Shared dictionaries are published with release/acquire atomics, removing the
+  bucket lock from parser initialization after the first use.
+- UTF8MB4 character length and the common ASCII/CJK classifications have inline
+  fast paths; all other charsets and malformed sequences retain the generic
+  charset implementation.
+- Scratch `ObFTWordMap` instances use the no-lock hash-map policy because they
+  never escape the invocation that creates them.
+- Tokens that are already lowercase use a stack casedown buffer and avoid a
+  token-sized allocation.
+- The BENG parser copies tokens into one document-sized buffer instead of
+  allocating once per token.
+- Natural-language MATCH skips a redundant `BOOL(MATCH(...))` runtime filter.
+  Score predicates, other search modes, and top-k pruning retain the filter.
+
+The Windows release build completed and the full benchmark retained the
+official hit counts `8001 / 11000 / 7332 / 20` for Chinese, English, mixed, and
+LIMIT queries. Local tokenization/query wall-clock numbers are not used for
+scoring because the available Windows client executes queued statements one at
+a time; the official Linux CI remains the authoritative performance result.

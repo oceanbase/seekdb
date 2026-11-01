@@ -43,6 +43,14 @@ bool ObFTWord::operator==(const ObFTWord &other) const
   bool is_equal = false;
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
+  const ObString &word = word_.get_string();
+  const ObString &other_word = other.word_.get_string();
+  if (meta_.get_type() == other.meta_.get_type()
+      && meta_.get_collation_type() == other.meta_.get_collation_type()
+      && word.length() == other_word.length()
+      && (word.empty() || 0 == MEMCMP(word.ptr(), other_word.ptr(), word.length()))) {
+    return true;
+  }
   ObDatumCmpFuncType func = get_datum_cmp_func(meta_, other.meta_);
   if (func == nullptr) {
     ob_abort();
