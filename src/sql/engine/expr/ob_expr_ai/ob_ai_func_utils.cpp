@@ -258,7 +258,12 @@ int ObOllamaUtils::get_header(common::ObIAllocator &allocator,
                               common::ObArray<ObString> &headers) 
 {
   int ret = OB_SUCCESS;
-  // ollama header is empty, do nothing
+  // Ollama does not need an api key, but the request still carries a json body
+  // and the http client requires at least one header.
+  ObString content_type_str("Content-Type: application/json");
+  if (OB_FAIL(headers.push_back(content_type_str))) {
+    LOG_WARN("failed to push back content type header", K(ret));
+  }
   return ret;
 }
 
@@ -1063,6 +1068,8 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
     complete_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIComplete, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     complete_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeComplete, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    complete_provider = OB_NEWx(ObOllamaUtils::ObOllamaComplete, &allocator);
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "this provider current is");
@@ -1086,6 +1093,8 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
     embed_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIEmbed, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     embed_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeEmbed, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OLLAMA)) {
+    embed_provider = OB_NEWx(ObOllamaUtils::ObOllamaEmbed, &allocator);
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "this provider current is");
@@ -1165,6 +1174,18 @@ int ObAIFuncUtils::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   } else if (OB_FAIL(text_result.append(res_str))) {
   } else {
     text_result.set_result();
+  }
+  return ret;
+}
+
+int ObAIFuncUtils::set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum *res, ObString &res_str)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(res)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("result datum is null", K(ret));
+  } else if (OB_FAIL(set_string_result(expr, ctx, *res, res_str))) {
+    LOG_WARN("failed to set string result", K(ret));
   }
   return ret;
 }

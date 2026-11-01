@@ -37,8 +37,27 @@ const char *VALID_PROVIDERS[] = {
   "SILICONFLOW",
   "COHERE",
   "HUNYUAN-OPENAI",
-  "OPENAI"
+  "OPENAI",
+  "OLLAMA"
 };
+
+// Providers whose endpoint can be reached without authentication, e.g. a local
+// Ollama server, so an empty access_key is accepted for them.
+const char *PROVIDERS_WITHOUT_ACCESS_KEY[] = {
+  "OLLAMA"
+};
+
+static bool is_provider_without_access_key(const ObString &provider)
+{
+  bool is_without = false;
+  for (int i = 0; i < ARRAYSIZEOF(PROVIDERS_WITHOUT_ACCESS_KEY); i++) {
+    if (provider.case_compare(PROVIDERS_WITHOUT_ACCESS_KEY[i]) == 0) {
+      is_without = true;
+      break;
+    }
+  }
+  return is_without;
+}
 
 #define EXTRACT_JSON_ELEM_STR(json_key, member) \
   EXTRACT_JSON_ELEM_STR_WITH_PROCESS(json_key, member, "void")
@@ -115,7 +134,7 @@ int ObAiModelEndpointInfo::check_valid() const
   } else if (!url_.prefix_match_ci("http://") && !url_.prefix_match_ci("https://")) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("url"), "url");
-  } else if (access_key_.empty()) {
+  } else if (access_key_.empty() && !is_provider_without_access_key(provider_)) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("access_key"), "access_key");
     LOG_WARN("access_key is empty", K(ret), K(*this));
