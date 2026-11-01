@@ -76,12 +76,33 @@ int ObStopWordChecker::check_stopword(const ObFTWord &word, bool &is_stopword)
   int ret = OB_SUCCESS;
   
   
-  common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(word.empty())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (CHARSET_UTF8MB4
+             == common::ObCharset::charset_type_by_coll(word.get_collation_type())) {
+    // Same-charset fast path: with equal charsets charset_convert() aliases the
+    // input bytes (no copy), so hashing the raw bytes under the stopword
+    // collation yields exactly the same hash and comparison result as the
+    // converted word. This keeps the per-token check allocation free while
+    // preserving the case-insensitive semantics of the GENERAL_CI lookup.
+    ObFTWord converted(word.get_word().get_string().length(),
+                       word.get_word().get_string().ptr(),
+                       stopword_type_);
+    ret = stopword_set_.exist_refactored(converted);
+    if (OB_HASH_NOT_EXIST == ret) {
+      is_stopword = false;
+      ret = OB_SUCCESS;
+    } else if (OB_HASH_EXIST == ret) {
+      is_stopword = true;
+      ret = OB_SUCCESS;
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+    }
   } else {
+    common::ObArenaAllocator allocator(lib::ObMemAttr("ChkStopWord"));
     common::ObString cmp_str;
     // do nothing set out with in if type is the same.
     if (OB_FAIL(common::ObCharset::charset_convert(
@@ -208,11 +229,42 @@ int ObAddWord::groupby_word(const ObFTWord &word, const int64_t word_freq)
   } else {
     if (OB_HASH_NOT_EXIST == ret) {
       word_count = 1;
+      // First insertion of a distinct word: the token bytes may live in a
+      // parser-owned buffer that is reused by the next get_next_token() call
+      // (e.g. the beng normalizer buffer). Materialize the key into the parse
+      // allocator once per distinct word instead of once per occurrence.
+      ObFTWord stable_word;
+      if (OB_FAIL(dup_word(word, stable_word))) {
+      } else if (OB_FAIL(word_map_.set_refactored(stable_word, word_count, 1/*overwrite*/))) {
+      }
     } else {
+      // Update the aggregate in place. set_refactored() with the cover flag
+      // replaces the whole (key, value) pair, which would re-point the stored
+      // key at the transient token buffer and corrupt it after reuse.
       word_count += word_freq;
+      int64_t *count_ptr = word_map_.get(word);
+      if (OB_ISNULL(count_ptr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        *count_ptr = word_count;
+      }
     }
-    if (OB_FAIL(word_map_.set_refactored(word, word_count, 1/*overwrite*/))) {
-    }
+  }
+  return ret;
+}
+
+int ObAddWord::dup_word(const ObFTWord &src, ObFTWord &dst)
+{
+  int ret = OB_SUCCESS;
+  const ObString src_str = src.get_word().get_string();
+  char *buf = nullptr;
+  if (OB_UNLIKELY(0 >= src_str.length())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(src_str.length())))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    MEMCPY(buf, src_str.ptr(), src_str.length());
+    dst = ObFTWord(src_str.length(), buf, word_meta_);
   }
   return ret;
 }
