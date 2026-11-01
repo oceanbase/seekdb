@@ -50,6 +50,18 @@ public:
 
   int step_next();
 
+  // Reuse table of per-character (offset, len, type) recorded while the
+  // cursor advances, so that ObIKArbitrator::output_result() can look the
+  // classification up instead of re-decoding the fulltext a second time.
+  // byte_offset must be a character start boundary; hint_idx is a monotonic
+  // lookup cursor owned by the caller. Positions beyond the prepared region
+  // fall back to the original first_valid_char + classify_first_char path.
+  int get_char_info(int64_t byte_offset,
+                    int64_t &hint_idx,
+                    int64_t &char_len,
+                    ObFTCharUtil::CharType &type) const;
+  int get_char_len(int64_t byte_offset, int64_t &hint_idx, int64_t &char_len) const;
+
   ObCollationType collation() const;
   int64_t get_end_cursor() const;
   const char *fulltext() const;
@@ -74,15 +86,34 @@ public:
   int32_t handle_size() const { return handle_size_; }
 
 private:
+  struct CharInfo
+  {
+    int64_t offset_;
+    int64_t len_;
+    ObFTCharUtil::CharType type_;
+  };
+
   int prepare_next_char();
+  int record_char_info();
+  int lookup_char_info(int64_t byte_offset, int64_t &hint_idx, CharInfo &info) const;
 
   ObCollationType coll_type_;
   const char *fulltext_;
   int64_t fulltext_len_;
 
+  ObIAllocator &allocator_;
+  CharInfo *char_infos_;
+  int64_t char_info_cnt_;
+  int64_t char_info_cap_;
+
   int64_t cursor_;
   int64_t next_char_len_;
   ObFTCharUtil::CharType next_char_type_;
+
+  // charset resolved once in init() so that the per-character hot path is free
+  // of repeated get_charset()/charset_type_by_coll() lookups
+  const ObCharsetInfo *cs_;
+  ObCharsetType cs_type_;
 
   uint32_t handle_size_;
   bool is_smart_;

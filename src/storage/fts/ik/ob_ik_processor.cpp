@@ -51,9 +51,11 @@ TokenizeContext::TokenizeContext(ObCollationType coll_type,
                                  const char *fulltext,
                                  int64_t fulltext_len,
                                  bool is_smart)
-    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len), cursor_(0),
-      next_char_len_(0), handle_size_(0), is_smart_(is_smart), token_list_(allocator),
-      result_list_(allocator)
+    : coll_type_(coll_type), fulltext_(fulltext), fulltext_len_(fulltext_len),
+      allocator_(allocator), char_infos_(nullptr), char_info_cnt_(0), char_info_cap_(0),
+      cursor_(0), next_char_len_(0), next_char_type_(ObFTCharUtil::CharType::USELESS),
+      cs_(nullptr), cs_type_(CHARSET_INVALID), handle_size_(0), is_smart_(is_smart),
+      token_list_(allocator), result_list_(allocator)
 {
 }
 
@@ -63,7 +65,17 @@ int TokenizeContext::init()
 
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(prepare_next_char())) {
+  } else if (OB_UNLIKELY(coll_type_ <= CS_TYPE_INVALID || coll_type_ >= CS_TYPE_MAX)) {
+    // same validation as ObCharset::first_valid_char(), resolved once here
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(cs_ = ObCharset::get_charset(coll_type_))) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_ISNULL(cs_->cset)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    cs_type_ = ObCharset::charset_type_by_coll(coll_type_);
+    if (OB_FAIL(prepare_next_char())) {
+    }
   }
   return ret;
 }
@@ -102,14 +114,137 @@ int TokenizeContext::current_char_type(ObFTCharUtil::CharType &type)
 int TokenizeContext::prepare_next_char()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
-                                          fulltext_ + cursor_,
-                                          fulltext_len_ - cursor_,
-                                          next_char_len_))) {
-  } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
-                                                       fulltext_ + cursor_,
-                                                       next_char_len_,
-                                                       next_char_type_))) {
+  const char *cur = fulltext_ + cursor_;
+  const int64_t buf_size = fulltext_len_ - cursor_;
+  // merged ObCharset::first_valid_char() + ObFTCharUtil::classify_first_char():
+  // the charset info is cached in init() and the character is decoded once
+  // instead of once per predicate. The well_formed_len behavior and the
+  // classification predicate order are kept identical to the two-step path.
+  if (buf_size <= 0) {
+    // same as first_valid_char(): empty remainder yields a zero-length char
+    next_char_len_ = 0;
+  } else {
+    int error = 0;
+    int64_t len = cs_->cset->well_formed_len(cs_, cur, cur + buf_size, 1, &error);
+    if (OB_LIKELY(0 == error)) {
+      next_char_len_ = len;
+    } else {
+      ret = OB_INVALID_ARGUMENT;
+      STORAGE_FTS_LOG(WARN, "invalid encoding found");
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ob_wc_t unicode = 0;
+    if (OB_FAIL(ObFTCharUtil::decode_unicode_by_charset(
+                    cs_type_, cur, static_cast<uint8_t>(next_char_len_), unicode))) {
+    } else if (OB_FAIL(ObFTCharUtil::classify_decoded_by_charset(
+                           cs_type_, unicode, next_char_type_))) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ret = record_char_info();
+  }
+  return ret;
+}
+
+int TokenizeContext::record_char_info()
+{
+  int ret = OB_SUCCESS;
+  // append-only: the cursor only moves forward, so every character start is
+  // prepared exactly once over the lifetime of this context. A re-prepare of
+  // the current position (cannot happen today) overwrites in place.
+  if (char_info_cnt_ > 0) {
+    CharInfo &last = char_infos_[char_info_cnt_ - 1];
+    if (cursor_ == last.offset_) {
+      last.len_ = next_char_len_;
+      last.type_ = next_char_type_;
+      return ret;
+    } else if (cursor_ < last.offset_) {
+      // stale re-prepare, keep the monotonic table untouched
+      return ret;
+    }
+  }
+  if (char_info_cnt_ >= char_info_cap_) {
+    const int64_t new_cap = (0 == char_info_cap_) ? 256 : char_info_cap_ * 2;
+    CharInfo *new_buf = static_cast<CharInfo *>(allocator_.alloc(sizeof(CharInfo) * new_cap));
+    if (OB_ISNULL(new_buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_NOT_NULL(char_infos_)) {
+      MEMCPY(new_buf, char_infos_, sizeof(CharInfo) * char_info_cnt_);
+      allocator_.free(char_infos_);
+      char_infos_ = new_buf;
+      char_info_cap_ = new_cap;
+    } else {
+      char_infos_ = new_buf;
+      char_info_cap_ = new_cap;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    CharInfo &info = char_infos_[char_info_cnt_++];
+    info.offset_ = cursor_;
+    info.len_ = next_char_len_;
+    info.type_ = next_char_type_;
+  }
+  return ret;
+}
+
+int TokenizeContext::lookup_char_info(int64_t byte_offset, int64_t &hint_idx, CharInfo &info) const
+{
+  int ret = OB_SUCCESS;
+  bool found = false;
+  while (hint_idx + 1 < char_info_cnt_ && char_infos_[hint_idx + 1].offset_ <= byte_offset) {
+    ++hint_idx;
+  }
+  if (hint_idx < char_info_cnt_ && char_infos_[hint_idx].offset_ == byte_offset) {
+    info = char_infos_[hint_idx];
+    found = true;
+  }
+  if (!found) {
+    // position beyond the prepared region (the arbitrator scans the whole
+    // fulltext while only part of it has been segmented so far): fall back to
+    // the original two-step classification, which yields identical results.
+    if (OB_FAIL(ObCharset::first_valid_char(coll_type_,
+                                            fulltext_ + byte_offset,
+                                            fulltext_len_ - byte_offset,
+                                            info.len_))) {
+    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
+                                                         fulltext_ + byte_offset,
+                                                         static_cast<uint8_t>(info.len_),
+                                                         info.type_))) {
+    }
+    info.offset_ = byte_offset;
+  }
+  return ret;
+}
+
+int TokenizeContext::get_char_info(int64_t byte_offset,
+                                   int64_t &hint_idx,
+                                   int64_t &char_len,
+                                   ObFTCharUtil::CharType &type) const
+{
+  int ret = OB_SUCCESS;
+  CharInfo info;
+  info.offset_ = 0;
+  info.len_ = 0;
+  info.type_ = ObFTCharUtil::CharType::USELESS;
+  if (OB_FAIL(lookup_char_info(byte_offset, hint_idx, info))) {
+  } else {
+    char_len = info.len_;
+    type = info.type_;
+  }
+  return ret;
+}
+
+int TokenizeContext::get_char_len(int64_t byte_offset, int64_t &hint_idx, int64_t &char_len) const
+{
+  int ret = OB_SUCCESS;
+  CharInfo info;
+  info.offset_ = 0;
+  info.len_ = 0;
+  info.type_ = ObFTCharUtil::CharType::USELESS;
+  if (OB_FAIL(lookup_char_info(byte_offset, hint_idx, info))) {
+  } else {
+    char_len = info.len_;
   }
   return ret;
 }
@@ -172,6 +307,12 @@ int TokenizeContext::add_token(const char *fulltext,
 
 TokenizeContext::~TokenizeContext()
 {
+  if (OB_NOT_NULL(char_infos_)) {
+    allocator_.free(char_infos_);
+    char_infos_ = nullptr;
+    char_info_cnt_ = 0;
+    char_info_cap_ = 0;
+  }
   token_list_.reset();
   result_list_.reset();
 }
