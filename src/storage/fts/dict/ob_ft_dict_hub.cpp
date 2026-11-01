@@ -43,9 +43,90 @@ int ObFTDictHub::init()
 int ObFTDictHub::destroy()
 {
   int ret = OB_SUCCESS;
+  // The shared dictionaries keep the kv cache entries pinned, release the
+  // containers before the memory goes away.
+  for (int64_t i = 0; i < MAX_SHARED_DICT_CNT; ++i) {
+    ObIFTDict *dict = shared_dicts_[i].dict_.load(std::memory_order_acquire);
+    if (OB_NOT_NULL(dict)) {
+      // ObFTRangeDict owns an arena allocator for the range dictionaries;
+      // invoke its destructor before reclaiming the hub arena.
+      dict->~ObIFTDict();
+    }
+    if (OB_NOT_NULL(shared_dicts_[i].container_)) {
+      shared_dicts_[i].container_->~ObFTCacheRangeContainer();
+      shared_dicts_[i].container_ = nullptr;
+    }
+    shared_dicts_[i].dict_.store(nullptr, std::memory_order_release);
+  }
+  shared_alloc_.reset();
   is_inited_ = false;
   return ret;
 }
+
+int ObFTDictHub::build_shared_dict(const ObFTDictDesc &desc, int64_t slot_idx)
+{
+  int ret = OB_SUCCESS;
+  ObFTCacheRangeContainer *container = nullptr;
+  ObFTRangeDict *range_dict = nullptr;
+  if (OB_ISNULL(container = OB_NEWx(ObFTCacheRangeContainer, &shared_alloc_, shared_alloc_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(load_cache(desc, *container))) {
+    if (OB_ENTRY_NOT_EXIST != ret) {
+      // already logged
+    } else {
+      // The cache does not hold the dictionary yet, build it once.
+      ret = OB_SUCCESS;
+      if (OB_FAIL(build_cache(desc, *container))) {
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(range_dict = OB_NEWx(ObFTRangeDict, &shared_alloc_, shared_alloc_, container, desc))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(range_dict->init())) {
+      OB_DELETEx(ObFTRangeDict, &shared_alloc_, range_dict);
+    } else {
+      shared_dicts_[slot_idx].container_ = container;
+      // publish the dictionary, the container is visible to the readers that
+      // observe the dictionary
+      shared_dicts_[slot_idx].dict_.store(range_dict, std::memory_order_release);
+    }
+  }
+  if (OB_FAIL(ret) && OB_NOT_NULL(container)) {
+    OB_DELETEx(ObFTCacheRangeContainer, &shared_alloc_, container);
+  }
+  return ret;
+}
+
+int ObFTDictHub::get_dict(const ObFTDictDesc &desc, ObIFTDict *&dict)
+{
+  int ret = OB_SUCCESS;
+  dict = nullptr;
+  const int64_t slot_idx = static_cast<int64_t>(desc.type_);
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(slot_idx < 0 || slot_idx >= MAX_SHARED_DICT_CNT)) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    dict = shared_dicts_[slot_idx].dict_.load(std::memory_order_acquire);
+    if (OB_ISNULL(dict)) {
+      // Build the dictionary once and share it with all the other callers.
+      lib::ObMutexGuard build_guard(dict_build_lock_);
+      dict = shared_dicts_[slot_idx].dict_.load(std::memory_order_acquire);
+      if (OB_SUCC(ret) && OB_ISNULL(dict)) {
+        if (OB_FAIL(build_shared_dict(desc, slot_idx))) {
+        } else {
+          dict = shared_dicts_[slot_idx].dict_.load(std::memory_order_acquire);
+        }
+      }
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(dict)) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  return ret;
+}
+
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;

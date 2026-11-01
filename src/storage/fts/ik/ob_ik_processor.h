@@ -48,6 +48,20 @@ public:
   int current_char(const char *&ch, uint8_t &char_len);
   int current_char_type(ObFTCharUtil::CharType &type);
 
+  // The code point of the current character. It is decoded once per
+  // character and shared by all the processors.
+  inline ob_wc_t current_unicode() const { return next_unicode_; }
+
+  // The code point level predicates are only equivalent to the buffer based
+  // ones for utf8mb4. The other charsets keep using the original path so
+  // that their error behaviour stays the same.
+  inline bool use_codepoint_predicates() const { return is_utf8mb4_; }
+
+  int check_cn_number(const char *ch, const uint8_t char_len, bool &is_cn_number);
+  int check_num_connector(const char *ch, const uint8_t char_len, bool &is_connector);
+  int check_letter_connector(const char *ch, const uint8_t char_len, bool &is_connector);
+  int check_ignore_single_cjk(const char *ch, const uint8_t char_len, bool &ignore);
+
   int step_next();
 
   ObCollationType collation() const;
@@ -83,9 +97,11 @@ private:
   int64_t cursor_;
   int64_t next_char_len_;
   ObFTCharUtil::CharType next_char_type_;
+  ob_wc_t next_unicode_;
 
   uint32_t handle_size_;
   bool is_smart_;
+  bool is_utf8mb4_;
 
   ObFTSortList token_list_;
   ObList<ObIKToken, ObIAllocator> result_list_;
@@ -101,7 +117,10 @@ public:
 
   virtual ~ObIIKProcessor() {}
 
-  int process(TokenizeContext &ctx);
+  int process(TokenizeContext &ctx,
+              const char *ch,
+              const uint8_t char_len,
+              const ObFTCharUtil::CharType type);
 
   virtual int do_process(TokenizeContext &ctx,
                          const char *ch,

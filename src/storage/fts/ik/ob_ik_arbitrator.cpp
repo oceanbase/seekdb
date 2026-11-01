@@ -113,17 +113,24 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
 
   int64_t char_len = 0;
   ObIKTokenChain *chain = nullptr;
+  const ObCollationType collation = ctx.collation();
+  // The code point level predicates are only equivalent to the buffer based
+  // ones for utf8mb4. The other charsets keep using the original path so
+  // that their error behaviour stays the same.
+  const bool use_codepoint = (CHARSET_UTF8MB4 == ObCharset::charset_type_by_coll(collation));
   for (int64_t current = 0; OB_SUCC(ret) && current < ctx.fulltext_len();) {
     ObFTCharUtil::CharType type;
+    ob_wc_t unicode = 0;
     // maybe not so good to keep single, check it later
-    if (OB_FAIL(ObCharset::first_valid_char(ctx.collation(),
+    if (OB_FAIL(ObCharset::first_valid_char(collation,
                                             ctx.fulltext() + current,
                                             ctx.fulltext_len() - current,
                                             char_len))) {
-    } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         type))) {
+    } else if (OB_FAIL(ObFTCharUtil::classify_char(collation,
+                                                  ctx.fulltext() + current,
+                                                  char_len,
+                                                  unicode,
+                                                  type))) {
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -144,10 +151,13 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
           if (OB_FAIL(ctx.result_list().push_back(token))) {
           }
         } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
-          if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(ctx.collation(),
-                                                         ctx.fulltext() + current,
-                                                         char_len,
-                                                         is_ignore))) {
+          if (OB_FAIL(check_ignore_single_cjk(collation,
+                                               ctx.fulltext() + current,
+                                               char_len,
+                                               unicode,
+                                               true,
+                                               use_codepoint,
+                                               is_ignore))) {
           } else if (!is_ignore && !FALSE_IT(token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN)
                      && OB_FAIL(ctx.result_list().push_back(token))) {
           } else {
@@ -182,10 +192,14 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
                 token.type_ = ObIKTokenType::IK_CHINESE_TOKEN;
                 ctx.result_list().push_back(token);
               } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
-                if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(ctx.collation(),
-                                                               ctx.fulltext() + current,
-                                                               char_len,
-                                                               is_ignore))) {
+                ob_wc_t inner_unicode = 0;
+                if (OB_FAIL(check_ignore_single_cjk(collation,
+                                                     ctx.fulltext() + current,
+                                                     char_len,
+                                                     inner_unicode,
+                                                     false,
+                                                     use_codepoint,
+                                                     is_ignore))) {
                 } else if (!is_ignore) {
                   token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN;
                   ctx.result_list().push_back(token);
@@ -211,6 +225,30 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
     }
   }
 
+  return ret;
+}
+
+int ObIKArbitrator::check_ignore_single_cjk(ObCollationType collation,
+                                             const char *ch,
+                                             const uint8_t char_len,
+                                             ob_wc_t &unicode,
+                                             const bool unicode_ready,
+                                             const bool use_codepoint,
+                                             bool &is_ignore)
+{
+  int ret = OB_SUCCESS;
+  if (use_codepoint) {
+    if (unicode_ready) {
+      is_ignore = ObFTCharUtil::is_ignore_single_cjk(unicode);
+    } else {
+      ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
+      if (OB_FAIL(ObFTCharUtil::classify_char(collation, ch, char_len, unicode, type))) {
+      } else {
+        is_ignore = ObFTCharUtil::is_ignore_single_cjk(unicode);
+      }
+    }
+  } else if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(collation, ch, char_len, is_ignore))) {
+  }
   return ret;
 }
 

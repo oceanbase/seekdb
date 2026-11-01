@@ -18,8 +18,12 @@
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_DICT_HUB_H_
 
 #include "lib/charset/ob_charset.h"
+#include "lib/allocator/page_arena.h"
+#include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_bucket_lock.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
+
+#include <atomic>
 
 namespace oceanbase
 {
@@ -93,6 +97,9 @@ private:
 };
 
 class ObFTCacheRangeContainer;
+class ObFTRangeDict;
+class ObIFTDict;
+
 class ObFTDictHub
 {
 public:
@@ -107,16 +114,43 @@ public:
 
   int load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container);
 
+  // Get the dictionary of the given type. The dictionary is built on the
+  // first call and then shared by all the callers. Building the dictionary
+  // is expensive, so it must not be done once per parser instance.
+  int get_dict(const ObFTDictDesc &desc, ObIFTDict *&dict);
+
 private:
   int get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info);
 
   int put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &info);
 
+  int build_shared_dict(const ObFTDictDesc &desc, int64_t slot_idx);
+
+private:
+  // A dictionary that is built once and shared by every parser instance.
+  // The container keeps the kv cache entries pinned, so that the dictionary
+  // stays valid for the whole life time of the hub.
+  struct ObFTSharedDict
+  {
+    std::atomic<ObIFTDict *> dict_;
+    ObFTCacheRangeContainer *container_;
+
+    ObFTSharedDict() : dict_(nullptr), container_(nullptr) {}
+  };
+
+  static constexpr int64_t MAX_SHARED_DICT_CNT = 4;
 
 private:
   bool is_inited_;
   // holds info of dict
   hash::ObHashMap<ObFTDictInfoKey, ObFTDictInfo> dict_map_;
+  // holds the dictionaries shared by all the parser instances, indexed by the
+  // dictionary type
+  ObFTSharedDict shared_dicts_[MAX_SHARED_DICT_CNT];
+  // serializes the dictionary construction
+  lib::ObMutex dict_build_lock_;
+  // holds the shared dictionaries and their cache containers
+  ObArenaAllocator shared_alloc_;
   ObBucketLock rw_dict_lock_;
 };
 
