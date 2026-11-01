@@ -10,11 +10,11 @@ create table column_identifier_backtick (
   `中文``列` varchar(20),
   unique key `uk``quoted` (`plain``name`)
 );
+insert into column_identifier_backtick values
+  (1, 10, 'one', 'red,blue', 'value');
 alter table column_identifier_backtick add unique key `uk``enum` (```leading`);
 alter table column_identifier_backtick add unique key `uk``set` (`trailing```);
 alter table column_identifier_backtick add unique key `uk``utf8` (`中文``列`);
-insert into column_identifier_backtick values
-  (1, 10, 'one', 'red,blue', 'value');
 select id,
        `plain``name` as plain_name,
        ```leading` as leading_value,
