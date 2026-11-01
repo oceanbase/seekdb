@@ -672,12 +672,13 @@ int ObServerRuntime::timeup()
         check_worker_count();
       }
       // Rescue expansion: if request completion stalls for 3s while
-      // queue is non-empty and workers are at min_worker_cnt, workers
-      // may be deadlocked — expand up to max_worker_cnt.
+      // queue is non-empty, workers may be deadlocked even below
+      // min_worker_cnt after idle workers shrink. Expansion remains
+      // bounded by max_worker_cnt.
       if (REACH_TIME_INTERVAL(3 * 1000 * 1000L)) {
         static int64_t last_completion_cnt = 0;
         int64_t completion_cnt = completion_cnt_.load(std::memory_order_relaxed);
-        if (worker_count() >= min_worker_cnt() && queue_size() > 0
+        if (queue_size() > 0
             && completion_cnt == last_completion_cnt) {
           try_expand_one(max_worker_cnt());
         }
