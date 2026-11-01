@@ -32,6 +32,8 @@
 #include "data_plane/fts/dict/ob_gen_dic_loader.h"
 #include "data_plane/fts/ob_fts_parser_property.h"
 
+#include "lib/utility/ob_print_utils.h"
+
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_json_func_helper.h" // file not self-contained, there're logs inside.
 
@@ -86,8 +88,6 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   int64_t doc_len = 0;
   storage::ObFTWordMap token_map;
 
-  ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
-
   if (TokenizeParam::OUTPUT_MODE::DEFAULT != mode && TokenizeParam::OUTPUT_MODE::ALL != mode) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(tokenize_helper.init(&allocator, param.parser_name_, param.properties_))) {
@@ -128,7 +128,10 @@ ObExprTokenize::TokenizeParam ::TokenizeParam()
     parser_name_(ObString(OB_DEFAULT_FULLTEXT_PARSER_NAME)),
     meta_(),
     fulltext_(),
-    output_mode_(OUTPUT_MODE::DEFAULT)
+    output_mode_(OUTPUT_MODE::DEFAULT),
+    parser_name_buf_(),
+    default_props_buf_(),
+    parser_is_ik_(false)
 {
 }
 
@@ -212,6 +215,30 @@ int ObExprTokenize::parse_param(const ObExpr &expr,
   } else if (OB_FAIL(parse_fulltext(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_name(expr, ctx, param))) {
   } else if (OB_FAIL(parse_parser_properties(expr, ctx, temp_allocator, param))) {
+  } else if (expr.arg_cnt_ < 3) {
+    // No user properties: skip the parse+rebuild+serialize JSON round trip
+    // and feed the helper the same effective defaults that
+    // reform_parser_properties() would have produced for an empty input:
+    //  - ik requires an explicit ik_mode, otherwise parse_for_parser_helper()
+    //    fails with OB_SEARCH_NOT_FOUND; the ik rebuild injects "smart" when
+    //    the key is absent, so compose exactly that.
+    //  - every other builtin parser reads its defaults from the empty-string
+    //    branch of ObFTParserProperty::parse_for_parser_helper(), which equals
+    //    what the per-parser rebuild injects, so an empty properties string
+    //    yields the identical property state.
+    if (param.parser_is_ik_) {
+      char *buf = param.default_props_buf_;
+      int64_t pos = 0;
+      if (OB_FAIL(common::databuff_printf(buf,
+                                          sizeof(param.default_props_buf_),
+                                          pos,
+                                          "{\"%s\":\"%s\"}",
+                                          storage::ObFTSLiteral::CONFIG_NAME_IK_MODE,
+                                          storage::ObFTSLiteral::FT_IK_MODE_SMART))) {
+      } else {
+        param.properties_ = ObString(static_cast<int32_t>(pos), buf);
+      }
+    }
   } else if (OB_FAIL(param.reform_parser_properties(param.properties_))) {
   } else if (OB_FAIL(param.try_load_dictionary_for_ik())) {
   }
@@ -223,14 +250,15 @@ int ObExprTokenize::construct_ft_parser_inner_name(const ObString &input_str, To
   int ret = OB_SUCCESS;
   storage::ObFTParser parser;
 
-  char *parser_name_buf = nullptr;
-  if (OB_ISNULL(parser_name_buf
-                = static_cast<char *>(param.allocator_.alloc(storage::OB_FT_PARSER_NAME_LENGTH)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(parser.init(input_str))) {
+  // compose into the param-owned fixed buffer: serialize_to_str() writes the
+  // name verbatim and every consumer re-parses it within this evaluation, so
+  // the per-call heap allocation is unnecessary.
+  char *parser_name_buf = param.parser_name_buf_;
+  if (OB_FAIL(parser.init(input_str))) {
   } else if (OB_FAIL(parser.serialize_to_str(parser_name_buf, storage::OB_FT_PARSER_NAME_LENGTH))) {
   } else {
     param.parser_name_ = ObString::make_string(parser_name_buf);
+    param.parser_is_ik_ = parser.is_ik();
   }
   return ret;
 }

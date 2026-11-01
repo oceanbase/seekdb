@@ -21,6 +21,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "sql/engine/expr/ob_expr_operator.h"
+#include "data_plane/fts/ob_fts_parser_name.h"
 #include "data_plane/fts/ob_fts_parser_property.h"
 
 namespace oceanbase
@@ -78,6 +79,15 @@ private:
       DEFAULT,
       ALL,
     } output_mode_;
+    // fixed buffers so the per-call hot path needs no heap allocation: the
+    // serialized "<parser>.<version>" name and the composed default ik
+    // properties live as long as this param object, which covers every
+    // consumer within one tokenize() evaluation.
+    static constexpr int64_t PARSER_NAME_BUF_LEN = storage::OB_FT_PARSER_NAME_LENGTH;
+    static constexpr int64_t DEFAULT_PROPS_BUF_LEN = 64;
+    char parser_name_buf_[PARSER_NAME_BUF_LEN];
+    char default_props_buf_[DEFAULT_PROPS_BUF_LEN];
+    bool parser_is_ik_;
   };
 
 private:

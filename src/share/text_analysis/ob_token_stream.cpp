@@ -136,9 +136,16 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
 
 bool ObTextWhitespaceTokenizer::found_delimiter()
 {
+  // the three ob_is*() macros below each load the very same per-charset table
+  // byte ((cs->ctype+1)[c]), so fuse them into a single load and mask test.
+  // the fused mask _MY_SPC | _MY_CTR | _MY_PNT is bit-identical to
+  // isspace(c) || iscntrl(c) || ispunct(c) for every table entry.
   bool found = false;
-  const char *curr_char = input_doc_->ptr_ + trav_pos_;
-  found = ob_isspace(cs_, *curr_char) || ob_iscntrl(cs_, *curr_char) || ob_ispunct(cs_, *curr_char);
+  if (OB_NOT_NULL(cs_) && OB_NOT_NULL(cs_->ctype)) {
+    const char *curr_char = input_doc_->ptr_ + trav_pos_;
+    const unsigned char ctype_flag = (cs_->ctype + 1)[static_cast<unsigned char>(*curr_char)];
+    found = 0 != (ctype_flag & (_MY_SPC | _MY_CTR | _MY_PNT));
+  }
   return found;
 }
 
