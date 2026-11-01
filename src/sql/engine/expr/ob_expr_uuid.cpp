@@ -25,6 +25,8 @@
 #else
 #include <sys/ioctl.h>
 #include <net/if.h>
+#include <fcntl.h>
+#include <unistd.h>
 #ifdef __APPLE__
 #include <ifaddrs.h>
 #include <net/if_dl.h>
@@ -79,6 +81,44 @@ ObUUIDNode::ObUUIDNode()
   (void)init();
 }
 
+
+// RFC 9562 section 6.10 (and RFC 4122 section 4.5 for UUID v1): the node id
+// must be unique, but a host may not expose any usable MAC address. In that
+// case derive the node id from the OS entropy source and mark it as random by
+// setting the multicast bit, instead of failing the whole server startup.
+static int init_random_node_id(unsigned char *node)
+{
+  int ret = OB_SUCCESS;
+  const int64_t node_len = 6;
+  int fd = -1;
+  int64_t read_bytes = 0;
+  if (OB_ISNULL(node)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (-1 == (fd = ::open("/dev/urandom", O_RDONLY))) {
+    ret = OB_IO_ERROR;
+    LOG_WARN("failed to open /dev/urandom for uuid node id", K(ret), K(errno));
+  } else {
+    while (OB_SUCC(ret) && read_bytes < node_len) {
+      const ssize_t n = ::read(fd, node + read_bytes, node_len - read_bytes);
+      if (n > 0) {
+        read_bytes += n;
+      } else if (0 == n) {
+        ret = OB_IO_ERROR;
+        LOG_WARN("unexpected eof while reading /dev/urandom", K(ret));
+      } else if (EINTR == errno) {
+        continue;
+      } else {
+        ret = OB_IO_ERROR;
+        LOG_WARN("failed to read /dev/urandom for uuid node id", K(ret), K(errno));
+      }
+    }
+    ::close(fd);
+  }
+  if (OB_SUCC(ret)) {
+    node[0] |= 0x01;
+  }
+  return ret;
+}
 
 /*
  * get and set mac address
@@ -186,24 +226,25 @@ int ObUUIDNode::init()
     }
   }
 #else
-  // Linux: Use ioctl to get MAC address
+  // Linux: Use ioctl to get MAC address. A restricted sandbox may deny
+  // interface enumeration or expose no interface with a MAC address, so fall
+  // back to a random node id instead of aborting the server startup.
   struct ifreq ifr;
   struct ifconf ifc;
   char buf[1024];
+  bool mac_addr_found = false;
   int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-  if (sock == -1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("socket failed", K(ret), K(errno));
+  if (-1 == sock) {
+    LOG_WARN("failed to create socket for mac address detection", K(errno));
   } else {
     ifc.ifc_len = sizeof(buf);
     ifc.ifc_buf = buf;
-    if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
-      ret = OB_ERR_UNEXPECTED;
+    if (0 > ioctl(sock, SIOCGIFCONF, &ifc)) {
+      LOG_WARN("ioctl failed, SIOCGIFCONF", K(errno));
     } else {
       ifreq *it = ifc.ifc_req;
       ifreq *end = it + (ifc.ifc_len / sizeof(ifreq));
-      bool mac_addr_found = false;
-      for (; it != end && OB_SUCC(ret); ++it) {
+      for (; it != end && !mac_addr_found; ++it) {
         if (OB_ISNULL(it) || OB_ISNULL(it->ifr_name) || OB_ISNULL(ifr.ifr_name)) {
           continue;
         } else {
@@ -223,14 +264,15 @@ int ObUUIDNode::init()
           }
         }
       }//end for
-      if (OB_FAIL(ret)) {
-      } else if (!mac_addr_found) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        is_inited_ = true;
-      }
     }
     close(sock);
+  }
+  if (mac_addr_found) {
+    is_inited_ = true;
+  } else if (OB_FAIL(init_random_node_id(mac_addr_))) {
+    LOG_WARN("failed to initialize uuid node id from /dev/urandom", K(ret));
+  } else {
+    is_inited_ = true;
   }
 #endif
   return ret;
