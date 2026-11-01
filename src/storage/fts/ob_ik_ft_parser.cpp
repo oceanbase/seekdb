@@ -513,6 +513,14 @@ void ObIKFTParser::reset()
     obj_alloc_.free(dict_stop_);
   }
 
+  // null the torn-down pointers: release_to_pool() guards on ctx_ after a
+  // failed init(), and a dangling non-null ctx_ there would re-enter the
+  // destroyed object (formal UB on the pooled failure path)
+  ctx_ = nullptr;
+  dict_main_ = nullptr;
+  dict_quan_ = nullptr;
+  dict_stop_ = nullptr;
+
   is_inited_ = false;
   built_ = false;
 }
