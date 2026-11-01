@@ -1,0 +1,228 @@
+========= ik fixed literals =========
+select tokenize('数据库全文索引','ik');
+tokenize('数据库全文索引','ik')
+["数据库", "全文索引"]
+select tokenize('The quick brown fox jumps over the lazy dog','ik');
+tokenize('The quick brown fox jumps over the lazy dog','ik')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps", "the"]
+select tokenize('OceanBase是一款稳定的分布式数据库，支持全文索引！','ik');
+tokenize('OceanBase是一款稳定的分布式数据库，支持全文索引！','ik')
+["oceanbase", "稳定", "是", "支持", "全文索引", "的", "一款", "分布式数据库"]
+select tokenize('你好，世界！这是一个测试：分词器，能处理标点吗？','ik');
+tokenize('你好，世界！这是一个测试：分词器，能处理标点吗？','ik')
+["吗", "处理", "能", "分词器", "世界", "一个", "这是", "测试", "你好", "标点"]
+select tokenize('Database DATABASE database Content CONTENT','ik');
+tokenize('Database DATABASE database Content CONTENT','ik')
+["database", "content"]
+select tokenize('🔥数据库检索🔥生僻字龘靜齉','ik');
+tokenize('🔥数据库检索🔥生僻字龘靜齉','ik')
+["靜", "齉", "生僻字", "数据库", "检索", "龘"]
+select tokenize('full-text well-known state-of-the-art peer-to-peer','ik');
+tokenize('full-text well-known state-of-the-art peer-to-peer','ik')
+["peer-to-peer", "full-text", "state-of-the-art", "well-known"]
+select tokenize("it's don't O'Brien's can't","ik");
+tokenize("it's don't O'Brien's can't","ik")
+["s", "can", "brien", "o", "t", "it", "don"]
+select tokenize('visit https://example.com/path?q=1&x=2 or mail user@example.com','ik');
+tokenize('visit https://example.com/path?q=1&x=2 or mail user@example.com','ik')
+["2", "q", "visit", "or", "https", "user@example.com", "mail", "example.com", "1&x", "path"]
+select tokenize('2026 11 01 1234567890 3.14159','ik');
+tokenize('2026 11 01 1234567890 3.14159','ik')
+["01", "3.14159", "1234567890", "11", "2026"]
+select tokenize('   ','ik');
+tokenize('   ','ik')
+[]
+select tokenize('','ik');
+tokenize('','ik')
+[]
+select tokenize('a','ik');
+tokenize('a','ik')
+["a"]
+select tokenize('词','ik');
+tokenize('词','ik')
+["词"]
+========= beng fixed literals =========
+select tokenize('数据库全文索引','beng');
+tokenize('数据库全文索引','beng')
+["数据库全文索引"]
+select tokenize('The quick brown fox jumps over the lazy dog','beng');
+tokenize('The quick brown fox jumps over the lazy dog','beng')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps"]
+select tokenize('Full-text search indexing requires efficient tokenization on the hot path','beng');
+tokenize('Full-text search indexing requires efficient tokenization on the hot path','beng')
+["text", "efficient", "tokenization", "hot", "full", "requires", "indexing", "path", "search"]
+select tokenize('中文.English!混合？测试,test；分号','beng');
+tokenize('中文.English!混合？测试,test；分号','beng')
+["中文", "test；分号", "混合？测试", "english"]
+select tokenize('Database DATABASE database Content CONTENT','beng');
+tokenize('Database DATABASE database Content CONTENT','beng')
+["database", "content"]
+select tokenize('🔥数据库检索🔥生僻字龘靜齉','beng');
+tokenize('🔥数据库检索🔥生僻字龘靜齉','beng')
+["🔥数据库检索🔥生僻字龘靜齉"]
+select tokenize('2026 11 01 1234567890 3.14159','beng');
+tokenize('2026 11 01 1234567890 3.14159','beng')
+["1234567890", "14159", "2026"]
+select tokenize('   ','beng');
+tokenize('   ','beng')
+[]
+select tokenize('','beng');
+tokenize('','beng')
+[]
+select tokenize('a','beng');
+tokenize('a','beng')
+[]
+========= beng stopword path (case and non-ascii variants) =========
+select tokenize('The quick THE fox tHe the THE about ABOUT und www com','beng');
+tokenize('The quick THE fox tHe the THE about ABOUT und www com','beng')
+["quick", "fox"]
+select tokenize('i I of OF to TO was WHAT where WHO will WITH','beng');
+tokenize('i I of OF to TO was WHAT where WHO will WITH','beng')
+[]
+select tokenize('ＴＨＥ ｔｈｅ the, the. the? the!','beng');
+tokenize('ＴＨＥ ｔｈｅ the, the. the? the!','beng')
+["ｔｈｅ"]
+select tokenize('database the database about the www the','beng');
+tokenize('database the database about the www the','beng')
+["database"]
+select tokenize('a about are as at be by com de en for from how i in is it la of on or that this to was what when where who will with und the www','beng');
+tokenize('a about are as at be by com de en for from how i in is it la of on or that this to was what when where who will with und the www','beng')
+[]
+========= explicit parser properties (3-arg path) =========
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]');
+tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "smart"}]}]')
+["人民大会堂", "中华人民共和国"]
+select tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]');
+tokenize('中华人民共和国人民大会堂', 'ik', '[{"additional_args": [{"ik_mode": "max_word"}]}]')
+["大会", "人民大会堂", "大会堂", "共和国", "人民大会", "人民共和国", "中华人民", "共和", "会堂", "中华", "中华人民共和国", "国人", "华人", "人民"]
+select tokenize('hello world', 'beng', '[{"additional_args": [{"min_token_size": 3}, {"max_token_size": 84}]}]');
+tokenize('hello world', 'beng', '[{"additional_args": [{"min_token_size": 3}, {"max_token_size": 84}]}]')
+["world", "hello"]
+select tokenize('ab cd tokenization', 'beng', '[{"additional_args": [{"min_token_size": 2}, {"max_token_size": 10}]}]');
+tokenize('ab cd tokenization', 'beng', '[{"additional_args": [{"min_token_size": 2}, {"max_token_size": 10}]}]')
+["ab", "cd"]
+select tokenize('hello world', 'ik', '[{"output": "all"}]');
+tokenize('hello world', 'ik', '[{"output": "all"}]')
+{"tokens": [{"world": 1}, {"hello": 1}], "doc_len": 2}
+select tokenize('一二三四五', 'ik', '[{"output": "default"}]');
+tokenize('一二三四五', 'ik', '[{"output": "default"}]')
+["一二三四五"]
+select tokenize('hello world', 'space', '[{"output": "all"}]');
+tokenize('hello world', 'space', '[{"output": "all"}]')
+{"tokens": [{"world": 1}, {"hello": 1}], "doc_len": 2}
+========= long texts crossing the 1000-char ik batch boundary =========
+select tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。','ik');
+tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与�
+["检索", "全文索引", "倒排", "数据库", "与"]
+select tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。','ik');
+tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与�
+["据", "检索", "全文索引", "全", "倒排", "引", "排", "数据库", "索", "文", "库", "与", "数", "检", "倒"]
+select tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。','ik');
+tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与�
+["据", "检索", "全文索引", "全", "倒排", "引", "排", "数据库", "索", "文", "库", "与", "数", "检", "倒"]
+select tokenize('The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ','beng');
+tokenize('The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox 
+["jumps", "over", "lazy", "fox", "dog", "quick", "brown"]
+select tokenize('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa。测试','ik');
+tokenize('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "测试"]
+select tokenize('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa。测试','ik');
+tokenize('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "测试"]
+select tokenize('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa。测试','ik');
+tokenize('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "试", "测", "测试"]
+========= determinism: repeat of the fixed literal blocks =========
+select tokenize('数据库全文索引','ik');
+tokenize('数据库全文索引','ik')
+["数据库", "全文索引"]
+select tokenize('The quick brown fox jumps over the lazy dog','ik');
+tokenize('The quick brown fox jumps over the lazy dog','ik')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps", "the"]
+select tokenize('OceanBase是一款稳定的分布式数据库，支持全文索引！','ik');
+tokenize('OceanBase是一款稳定的分布式数据库，支持全文索引！','ik')
+["oceanbase", "稳定", "是", "支持", "全文索引", "的", "一款", "分布式数据库"]
+select tokenize('你好，世界！这是一个测试：分词器，能处理标点吗？','ik');
+tokenize('你好，世界！这是一个测试：分词器，能处理标点吗？','ik')
+["吗", "处理", "能", "分词器", "世界", "一个", "这是", "测试", "你好", "标点"]
+select tokenize('Database DATABASE database Content CONTENT','ik');
+tokenize('Database DATABASE database Content CONTENT','ik')
+["database", "content"]
+select tokenize('🔥数据库检索🔥生僻字龘靜齉','ik');
+tokenize('🔥数据库检索🔥生僻字龘靜齉','ik')
+["靜", "齉", "生僻字", "数据库", "检索", "龘"]
+select tokenize('full-text well-known state-of-the-art peer-to-peer','ik');
+tokenize('full-text well-known state-of-the-art peer-to-peer','ik')
+["peer-to-peer", "full-text", "state-of-the-art", "well-known"]
+select tokenize("it's don't O'Brien's can't","ik");
+tokenize("it's don't O'Brien's can't","ik")
+["s", "can", "brien", "o", "t", "it", "don"]
+select tokenize('visit https://example.com/path?q=1&x=2 or mail user@example.com','ik');
+tokenize('visit https://example.com/path?q=1&x=2 or mail user@example.com','ik')
+["2", "q", "visit", "or", "https", "user@example.com", "mail", "example.com", "1&x", "path"]
+select tokenize('2026 11 01 1234567890 3.14159','ik');
+tokenize('2026 11 01 1234567890 3.14159','ik')
+["01", "3.14159", "1234567890", "11", "2026"]
+select tokenize('   ','ik');
+tokenize('   ','ik')
+[]
+select tokenize('','ik');
+tokenize('','ik')
+[]
+select tokenize('a','ik');
+tokenize('a','ik')
+["a"]
+select tokenize('词','ik');
+tokenize('词','ik')
+["词"]
+select tokenize('数据库全文索引','beng');
+tokenize('数据库全文索引','beng')
+["数据库全文索引"]
+select tokenize('The quick brown fox jumps over the lazy dog','beng');
+tokenize('The quick brown fox jumps over the lazy dog','beng')
+["lazy", "over", "quick", "dog", "brown", "fox", "jumps"]
+select tokenize('Full-text search indexing requires efficient tokenization on the hot path','beng');
+tokenize('Full-text search indexing requires efficient tokenization on the hot path','beng')
+["text", "efficient", "tokenization", "hot", "full", "requires", "indexing", "path", "search"]
+select tokenize('中文.English!混合？测试,test；分号','beng');
+tokenize('中文.English!混合？测试,test；分号','beng')
+["中文", "test；分号", "混合？测试", "english"]
+select tokenize('Database DATABASE database Content CONTENT','beng');
+tokenize('Database DATABASE database Content CONTENT','beng')
+["database", "content"]
+select tokenize('🔥数据库检索🔥生僻字龘靜齉','beng');
+tokenize('🔥数据库检索🔥生僻字龘靜齉','beng')
+["🔥数据库检索🔥生僻字龘靜齉"]
+select tokenize('2026 11 01 1234567890 3.14159','beng');
+tokenize('2026 11 01 1234567890 3.14159','beng')
+["1234567890", "14159", "2026"]
+select tokenize('   ','beng');
+tokenize('   ','beng')
+[]
+select tokenize('','beng');
+tokenize('','beng')
+[]
+select tokenize('a','beng');
+tokenize('a','beng')
+[]
+select tokenize('The quick THE fox tHe the THE about ABOUT und www com','beng');
+tokenize('The quick THE fox tHe the THE about ABOUT und www com','beng')
+["quick", "fox"]
+select tokenize('i I of OF to TO was WHAT where WHO will WITH','beng');
+tokenize('i I of OF to TO was WHAT where WHO will WITH','beng')
+[]
+select tokenize('ＴＨＥ ｔｈｅ the, the. the? the!','beng');
+tokenize('ＴＨＥ ｔｈｅ the, the. the? the!','beng')
+["ｔｈｅ"]
+select tokenize('database the database about the www the','beng');
+tokenize('database the database about the www the','beng')
+["database"]
+select tokenize('a about are as at be by com de en for from how i in is it la of on or that this to was what when where who will with und the www','beng');
+tokenize('a about are as at be by com de en for from how i in is it la of on or that this to was what when where who will with und the www','beng')
+[]
+select tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。','ik');
+tokenize('数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与检索。数据库全文索引，倒排与�
+["据", "检索", "全文索引", "全", "倒排", "引", "排", "数据库", "索", "文", "库", "与", "数", "检", "倒"]
+select tokenize('The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. ','beng');
+tokenize('The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox 
+["jumps", "over", "lazy", "fox", "dog", "quick", "brown"]
