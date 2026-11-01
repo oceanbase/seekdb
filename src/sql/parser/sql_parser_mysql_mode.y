@@ -16729,15 +16729,14 @@ read_file_arg_list:
 }
 | read_file_arg_list ',' read_file_arg
 {
-  ParseNode *exprs = NULL;
   ParseNode **children = NULL;
-  children = static_cast<ParseNode **>(parse_malloc(sizeof(ParseNode *) * ($1->num_child_ + 1),
-                                                   result->malloc_pool_));
+  children = (ParseNode **)(parse_malloc(sizeof(ParseNode *) * ($1->num_child_ + 1),
+                                        result->malloc_pool_));
   if (OB_UNLIKELY(NULL == children)) {
     yyerror(NULL, result, "No more space for malloc\n");
     YYABORT_NO_MEMORY;
   } else {
-    MEMCPY(children, $1->children_, sizeof(ParseNode *) * $1->num_child_);
+    memcpy(children, $1->children_, sizeof(ParseNode *) * $1->num_child_);
     children[$1->num_child_] = $3;
     $1->children_ = children;
     $1->num_child_ += 1;

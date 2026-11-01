@@ -19,7 +19,7 @@
 #include "sql/engine/basic/ob_parquet_reader.h"
 
 #include "lib/charset/ob_charset.h"
-#include "lib/log/ob_log.h"
+#include "lib/oblog/ob_log.h"
 #include "lib/file/file_directory_utils.h"
 
 namespace oceanbase
@@ -152,7 +152,7 @@ public:
     } else if (0 == byte) {
       type = 0;
       field_id = 0;
-      last_field_id_ = last_field_id_stack_.back();
+      last_field_id_ = last_field_id_stack_.at(last_field_id_stack_.count() - 1);
     } else {
       type = byte & 0x0F;
       const int16_t delta = (byte >> 4) & 0x0F;
@@ -176,7 +176,7 @@ public:
   void pop_field_scope()
   {
     last_field_id_stack_.pop_back();
-    last_field_id_ = last_field_id_stack_.back();
+    last_field_id_ = last_field_id_stack_.at(last_field_id_stack_.count() - 1);
   }
 
   int read_byte(uint8_t &val)
@@ -468,7 +468,7 @@ int ObParquetFile::open(const ObString &path)
   if (OB_FAIL(file_.open(path, false))) {
     LOG_USER_ERROR(OB_FILE_NOT_EXIST, static_cast<int32_t>(path.length()), path.ptr());
     LOG_WARN("open parquet file failed", K(ret), K(path));
-  } else if (OB_FAIL(FileDirectoryUtils::get_file_size(to_cstring(path), file_size_))) {
+  } else if (OB_FAIL(FileDirectoryUtils::get_file_size(path.ptr(), file_size_))) {
     LOG_WARN("get file size failed", K(ret));
   } else if (file_size_ < 12) {
     ret = OB_ERR_UNEXPECTED;
@@ -1585,7 +1585,7 @@ public:
   ObParquetRowReader(ObIAllocator &alloc, const ObIArray<ObString> &paths,
                      const ObIArray<int64_t> &needed_cols)
     : ObIFileRowReader(alloc), file_(struct_arena_), cur_file_(-1), cur_rg_(-1),
-      col_readers_(), row_idx_(0), rg_rows_(0), needed_cols_()
+      col_readers_(), needed_cols_(), row_idx_(0), rg_rows_(0)
   {
     for (int64_t i = 0; i < paths.count(); ++i) {
       ObString s;

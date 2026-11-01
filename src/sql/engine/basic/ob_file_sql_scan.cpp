@@ -32,7 +32,7 @@
 #include "lib/charset/ob_charset.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/file/file_directory_utils.h"
-#include "lib/log/ob_log.h"
+#include "lib/oblog/ob_log.h"
 #include "sql/engine/basic/ob_parquet_reader.h"
 
 namespace oceanbase
@@ -130,7 +130,7 @@ int get_file_fingerprint(const ObString &path, ReadFileFingerprint &fp)
     LOG_WARN("invalid path", K(ret));
   } else {
     char buf[OB_MAX_FILE_NAME_LENGTH];
-    const int64_t len = std::min(path.length(), static_cast<int64_t>(sizeof(buf) - 1));
+    const int64_t len = std::min(static_cast<int64_t>(path.length()), static_cast<int64_t>(sizeof(buf) - 1));
     MEMCPY(buf, path.ptr(), len);
     buf[len] = '\0';
 #ifdef _WIN32
@@ -200,7 +200,7 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
   } else if (!has_wildcard(pattern)) {
     // plain path: keep as is if it exists
     char buf[OB_MAX_FILE_NAME_LENGTH];
-    const int64_t len = std::min(pattern.length(), static_cast<int64_t>(sizeof(buf) - 1));
+    const int64_t len = std::min(static_cast<int64_t>(pattern.length()), static_cast<int64_t>(sizeof(buf) - 1));
     MEMCPY(buf, pattern.ptr(), len);
     buf[len] = '\0';
     bool exists = false;
@@ -245,7 +245,7 @@ int discover_files(ObIAllocator &alloc, const ObString &pattern,
                      "wildcard in directory part");
     } else {
       char dir_buf[OB_MAX_FILE_NAME_LENGTH];
-      const int64_t dlen = std::min(dir_part.length(), static_cast<int64_t>(sizeof(dir_buf) - 1));
+      const int64_t dlen = std::min(static_cast<int64_t>(dir_part.length()), static_cast<int64_t>(sizeof(dir_buf) - 1));
       MEMCPY(dir_buf, dir_part.ptr(), dlen);
       dir_buf[dlen] = '\0';
 #ifdef _WIN32
@@ -336,6 +336,7 @@ public:
 private:
   int open_cur_file();
   int fill_buffer();  // append next chunk into pend_buf_ or move to next file
+  int ensure_pend_capacity(int64_t need);
   int skip_utf8_bom();
 
   ObIAllocator &alloc_;
@@ -409,7 +410,7 @@ int ObFileLineFeeder::open_cur_file()
                      paths_.at(cur_file_).ptr());
       LOG_WARN("open file failed", K(ret), K(paths_.at(cur_file_)));
     } else if (OB_FAIL(FileDirectoryUtils::get_file_size(
-                   to_cstring(paths_.at(cur_file_)), file_size_))) {
+                   paths_.at(cur_file_).ptr(), file_size_))) {
       LOG_WARN("get file size failed", K(ret), K(paths_.at(cur_file_)));
     } else if (OB_FAIL(skip_utf8_bom())) {
       LOG_WARN("skip bom failed", K(ret));
@@ -669,14 +670,14 @@ static CellKind classify_text(const ObString &text, int64_t &int_val, double &db
     ObMySQLDate mdate;
     if (OB_SUCCESS == ObTimeConverter::str_to_mdate(text, mdate)) {
       kind = CK_DATE;
-      date_val = mdate.store_;
+      date_val = mdate.date_;
     } else {
       ObTimeConvertCtx cvrt_ctx(NULL, false);
       ObMySQLDateTime mdt;
       int16_t scale = 0;
       if (OB_SUCCESS == ObTimeConverter::str_to_mdatetime(text, cvrt_ctx, mdt, &scale)) {
         kind = CK_DATETIME;
-        dt_val = mdt.store_;
+        dt_val = mdt.datetime_;
       }
     }
   }
@@ -936,7 +937,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         int64_t val = 0;
         if (!parse_int_text(text, val)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-          LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("BIGINT")), "BIGINT",
+          LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("BIGINT")), "BIGINT",
                          static_cast<int32_t>(text.length()), text.ptr(), line_no);
         } else {
           out.set_int(val);
@@ -947,7 +948,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         double val = 0;
         if (!parse_double_text(text, val)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-          LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("DOUBLE")), "DOUBLE",
+          LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("DOUBLE")), "DOUBLE",
                          static_cast<int32_t>(text.length()), text.ptr(), line_no);
         } else {
           out.set_double(val);
@@ -960,7 +961,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
           out.set_tinyint(val ? 1 : 0);
         } else {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-          LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("BOOLEAN")), "BOOLEAN",
+          LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("BOOLEAN")), "BOOLEAN",
                          static_cast<int32_t>(text.length()), text.ptr(), line_no);
         }
         break;
@@ -969,7 +970,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         ObMySQLDate mdate;
         if (OB_SUCCESS != ObTimeConverter::str_to_mdate(text, mdate)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-          LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("DATE")), "DATE",
+          LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("DATE")), "DATE",
                          static_cast<int32_t>(text.length()), text.ptr(), line_no);
         } else {
           out.set_mysql_date(mdate);
@@ -982,7 +983,7 @@ int ObCsvFileRowReader::convert_field(const CsvField &f, const ReadFileColumn &c
         int16_t scale = 0;
         if (OB_SUCCESS != ObTimeConverter::str_to_mdatetime(text, cvrt_ctx, mdt, &scale)) {
           ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-          LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("DATETIME")), "DATETIME",
+          LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("DATETIME")), "DATETIME",
                          static_cast<int32_t>(text.length()), text.ptr(), line_no);
         } else {
           out.set_mysql_datetime(mdt);
@@ -1036,7 +1037,7 @@ int ObCsvFileRowReader::read_batch(ObObj *cells, int64_t max_rows, int64_t &n_ro
         continue;
       } else {
         ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-        LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("CSV")), "CSV",
+        LOG_USER_ERROR(OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD, static_cast<int32_t>(strlen("CSV")), "CSV",
                        static_cast<int32_t>(strlen("column count")), "column count", line_no);
         break;
       }
@@ -1150,7 +1151,7 @@ int ObNdjsonFileRowReader::convert_json_value(const ObIJsonBase *value,
   const ObJsonNodeType jt = value->json_type();
   if (ObJsonNodeType::J_OBJECT == jt || ObJsonNodeType::J_ARRAY == jt) {
     ret = OB_ERR_INVALID_JSON_TEXT;
-    LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("nested object or array is not supported")),
+    LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT, static_cast<int32_t>(strlen("nested object or array is not supported")),
                    "nested object or array is not supported");
     return ret;
   }
@@ -1285,7 +1286,7 @@ int ObNdjsonFileRowReader::read_batch(ObObj *cells, int64_t max_rows, int64_t &n
         continue;
       }
       ret = OB_ERR_INVALID_JSON_TEXT;
-      LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("each ndjson line must be a flat object")),
+      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT, static_cast<int32_t>(strlen("each ndjson line must be a flat object")),
                      "each ndjson line must be a flat object");
       LOG_WARN("ndjson line is not an object", K(ret), K(line_no));
       break;
@@ -1649,7 +1650,7 @@ static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &pa
     }
     if (OB_ISNULL(root) || ObJsonNodeType::J_OBJECT != root->json_type()) {
       ret = OB_ERR_INVALID_JSON_TEXT;
-      LOG_USER_ERROR(ret, static_cast<int32_t>(strlen("each ndjson line must be a flat object")),
+      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT, static_cast<int32_t>(strlen("each ndjson line must be a flat object")),
                      "each ndjson line must be a flat object");
       LOG_WARN("ndjson line is not an object", K(ret), K(line_no));
       break;
@@ -1689,7 +1690,7 @@ static int infer_ndjson_schema(ObIAllocator &alloc, const ObIArray<ObString> &pa
         } else if (ObJsonNodeType::J_OBJECT == value->json_type()
                    || ObJsonNodeType::J_ARRAY == value->json_type()) {
           ret = OB_ERR_INVALID_JSON_TEXT;
-          LOG_USER_ERROR(ret,
+          LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT,
                          static_cast<int32_t>(strlen("nested object or array is not supported")),
                          "nested object or array is not supported");
           LOG_WARN("nested value found", K(ret), K(line_no), K(key));

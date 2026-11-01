@@ -16,12 +16,12 @@
 
 #pragma once
 
-#include "common/object/ob_accuracy.h"
+#include "common/ob_accuracy.h"
 #include "common/object/ob_obj_type.h"
 #include "common/object/ob_object.h"
 #include "common/timezone/ob_timezone_info.h"
 #include "lib/allocator/ob_allocator.h"
-#include "lib/allocator/ob_arena_allocator.h"
+#include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/file/ob_file.h"
 #include "lib/string/ob_string.h"

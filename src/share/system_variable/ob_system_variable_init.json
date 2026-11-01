@@ -10979,8 +10979,8 @@
   "enable_file_sql": {
     "id": 10754,
     "name": "enable_file_sql",
-    "default_value": "OFF",
-    "base_value": "OFF",
+    "default_value": "0",
+    "base_value": "0",
     "data_type": "enum",
     "info": "Enable the file-as-database feature (read_csv/read_json/read_ndjson/read_parquet/glob).",
     "flags": "GLOBAL | SESSION ",

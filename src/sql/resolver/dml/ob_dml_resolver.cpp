@@ -11167,7 +11167,7 @@ static int resolve_read_file_arg_obj(const ParseNode &value_node,
                      enable_mysql_compatible_dates))) {
   } else {
     length_semantics = session_info->get_actual_length_semantics();
-    timezone_info = GET_TIMEZONE_INFO(session_info);
+    timezone_info = session_info->get_timezone_info();
     nchar_collation = session_info->get_nls_collation_nation();
   }
   if (OB_SUCC(ret)) {
@@ -11236,21 +11236,21 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
       if (OB_FAIL(resolve_read_file_arg_obj(*value_node, session_info_, *allocator_, obj_param))) {
         // error already logged
       } else if (0 == name.case_compare("header")) {
-        if (!obj_param.is_bool() && !obj_param.is_int()) {
+        if (!obj_param.is_tinyint() && !obj_param.is_int()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "header", "boolean expected");
         } else {
           options.header_ = obj_param.get_bool();
         }
       } else if (0 == name.case_compare("delim") || 0 == name.case_compare("delimiter")) {
-        if (!obj_param.is_string()) {
+        if (!obj_param.is_string_type()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "delim", "string expected");
         } else {
           options.field_delimiter_ = obj_param.get_string();
         }
       } else if (0 == name.case_compare("quote")) {
-        if (!obj_param.is_string()) {
+        if (!obj_param.is_string_type()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "quote", "string expected");
         } else if (obj_param.get_string().empty()) {
@@ -11259,7 +11259,7 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
           options.quote_char_ = obj_param.get_string().ptr()[0];
         }
       } else if (0 == name.case_compare("escape")) {
-        if (!obj_param.is_string()) {
+        if (!obj_param.is_string_type()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "escape", "string expected");
         } else if (obj_param.get_string().empty()) {
@@ -11268,21 +11268,21 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
           options.escape_char_ = obj_param.get_string().ptr()[0];
         }
       } else if (0 == name.case_compare("nullstr") || 0 == name.case_compare("null")) {
-        if (!obj_param.is_string()) {
+        if (!obj_param.is_string_type()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "nullstr", "string expected");
         } else {
           options.null_text_ = obj_param.get_string();
         }
       } else if (0 == name.case_compare("ignore_errors")) {
-        if (!obj_param.is_bool() && !obj_param.is_int()) {
+        if (!obj_param.is_tinyint() && !obj_param.is_int()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ignore_errors", "boolean expected");
         } else {
           options.ignore_errors_ = obj_param.get_bool();
         }
       } else if (0 == name.case_compare("sample_size") || 0 == name.case_compare("samplesize")) {
-        if (!obj_param.is_int() && !obj_param.is_bool()) {
+        if (!obj_param.is_int() && !obj_param.is_tinyint()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sample_size", "integer expected");
         } else if (obj_param.get_int() != -1) {
@@ -11294,7 +11294,7 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
           options.sample_size_ = -1;
         }
       } else if (0 == name.case_compare("format")) {
-        if (!obj_param.is_string()) {
+        if (!obj_param.is_string_type()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "format", "string expected");
         } else {
@@ -11326,7 +11326,7 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
                        "more than one path argument");
       } else if (OB_FAIL(resolve_read_file_arg_obj(*arg, session_info_, *allocator_, obj_param))) {
         // error already logged
-      } else if (!obj_param.is_string()) {
+      } else if (!obj_param.is_string_type()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "path", "string expected");
       } else {
@@ -11394,7 +11394,7 @@ int ObDMLResolver::resolve_read_file_item(const ParseNode &table_node, TableItem
 
   // infer schema
   if (OB_SUCC(ret)) {
-    const common::ObTimeZoneInfo *tz_info = GET_TIMEZONE_INFO(session_info_);
+    const common::ObTimeZoneInfo *tz_info = session_info_->get_timezone_info();
     if (ReadFileFormat::PARQUET == format) {
       if (OB_FAIL(infer_parquet_schema(*allocator_, paths.at(0), cols))) {
         LOG_WARN("infer parquet schema failed", K(ret), K(path_pattern));
@@ -11476,7 +11476,7 @@ int ObDMLResolver::fill_read_file_values_table(ReadFileFormat format,
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(session_info_->get_collation_connection(coll_type))) {
   } else {
-    const common::ObTimeZoneInfo *tz_info = GET_TIMEZONE_INFO(session_info_);
+    const common::ObTimeZoneInfo *tz_info = session_info_->get_timezone_info();
     if (ReadFileFormat::PARQUET == format) {
       if (OB_FAIL(create_parquet_row_reader(*allocator_, paths, cols, tz_info, reader))) {
         LOG_WARN("create parquet row reader failed", K(ret));
@@ -11553,7 +11553,7 @@ int ObDMLResolver::fill_read_file_values_table(ReadFileFormat format,
       }
       res_type.set_accuracy(acc);
       if (!col.nullable_) {
-        res_type.set_result_flag(ObNotNullFlag::NOT_NULL_FLAG);
+        res_type.set_result_flag(NOT_NULL_FLAG);
       }
       if (OB_FAIL(table_def.column_types_.push_back(res_type))) {
         LOG_WARN("push back column type failed", K(ret));
