@@ -34,6 +34,8 @@ namespace math_compat
 double sin(double x);
 double asin(double x);
 double cos(double x);
+double tan(double x);
+double atan(double x);
 double atanh(double x);
 // True only when atanh() above is served by the CORE-MATH backend for the
 // current FP environment. Callers that need to tell "the value this layer
@@ -44,6 +46,8 @@ bool atanh_uses_core_math();
 inline double sin(double x) { return ::sin(x); }
 inline double asin(double x) { return ::asin(x); }
 inline double cos(double x) { return ::cos(x); }
+inline double tan(double x) { return ::tan(x); }
+inline double atan(double x) { return ::atan(x); }
 inline double atanh(double x) { return ::atanh(x); }
 inline bool atanh_uses_core_math() { return false; }
 #endif

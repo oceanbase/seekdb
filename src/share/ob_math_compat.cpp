@@ -64,6 +64,14 @@ namespace cos_backend
 #undef U128
 #undef roundeven_finite
 }
+namespace tan_backend
+{
+#include "share/tan_core_math.ipp"
+}
+namespace atan_backend
+{
+#include "share/atan_core_math.ipp"
+}
 namespace atanh_backend
 {
 #include "share/atanh_core_math.ipp"
@@ -127,6 +135,34 @@ double cos(double x)
   }
 #endif
   return ::cos(x);
+}
+
+double tan(double x)
+{
+#if defined(__clang__) && __clang_major__ >= 18 && defined(_M_X64)
+  const uint64_t ax = magnitude_bits(x);
+  // Below 0x1.d12ed0af1a27ep-27, tan(x) rounds to x; keep the CRT handling of
+  // signed zero, tiny-value exception flags, poles and nonfinite operands.
+  if (ax >= UINT64_C(0x3e40000000000000)
+      && ax < UINT64_C(0x7ff0000000000000) && use_nearest_backend()) {
+    return tan_backend::cr_tan(x);
+  }
+#endif
+  return ::tan(x);
+}
+
+double atan(double x)
+{
+#if defined(__clang__) && __clang_major__ >= 18 && defined(_M_X64)
+  const uint64_t ax = magnitude_bits(x);
+  // atan is defined on the whole line; keep CRT handling of signed zero,
+  // tiny values and nonfinite operands.
+  if (ax >= UINT64_C(0x3e40000000000000)
+      && ax < UINT64_C(0x7ff0000000000000) && use_nearest_backend()) {
+    return atan_backend::cr_atan(x);
+  }
+#endif
+  return ::atan(x);
 }
 
 double atanh(double x)
