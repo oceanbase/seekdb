@@ -65,7 +65,7 @@ python3 tools/benchmark/fts_large_bench_score.py /tmp/fts-after.txt
 - `handoff/fts-tuning/changes.patch`
 - `handoff/fts-tuning/benchmark-before.json`、`benchmark-after.json`（3 对运行的指标与中位数）
 - `handoff/fts-tuning/ab-summary.json`（逐指标 before/after 中位数与变化率、hits 明细）
-- `handoff/fts-tuning/logs/{build,verify,verify-baseline,verify-diff,verify.sql,test,notes,score}.log`
+- `handoff/fts-tuning/logs/{build,verify,verify-baseline,verify-diff,test,notes,score}.log` 与 `logs/verify.sql`
 
 未改动 `tools/benchmark/**`、基线 json、计时逻辑、测试 SQL、数据量与金样。
 
@@ -161,7 +161,7 @@ after 为 78.77% / 78.99% / 79.65%；两者 score 均为 **100.00**。
 - `logs/score.log`：对 6 份报告逐一运行官方计分脚本的输出
 - `benchmark-before.json` / `benchmark-after.json`：每指标的 3 次原始值与中位数
 - `ab-summary.json`：逐指标变化率与 hits 明细
-- `changes.patch`：本分支相对 `5bce9e0` 的完整补丁
+- `changes.patch`：本分支相对 `5bce9e0` 的源码补丁（仅 `src/storage/fts/ob_fts_stop_word.cpp`）
 
 ## 7. 已知风险
 
