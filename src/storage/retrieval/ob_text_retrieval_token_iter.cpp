@@ -501,8 +501,12 @@ int ObTextRetrievalDaaTTokenIter::save_relevances_and_docids()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(relevance_expr_) || OB_ISNULL(inv_scan_domain_id_col_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(relevance_expr_->eval_batch(*eval_ctx_, *token_iter_->get_skip(), count_))) {
   } else {
+    // The inner token iter has already evaluated the relevance expr for these
+    // rows: its need_calc_relevance() (agg iter exists) is true exactly when
+    // relevance_expr_ is generated, and save_relevances_and_docids() is only
+    // called after the inner iter produced the batch. Re-evaluating here only
+    // repeats the evaluated-flag scan per row, so it is skipped entirely.
     cur_idx_ = 0;
     const ObDatumVector &relevance_datum = relevance_expr_->locate_expr_datumvector(*eval_ctx_);
     const ObDatumVector &doc_id_datum = inv_scan_domain_id_col_->locate_expr_datumvector(*eval_ctx_);

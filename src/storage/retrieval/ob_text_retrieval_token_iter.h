@@ -90,9 +90,11 @@ private:
   int eval_relevance_expr();
   int batch_eval_relevance_expr(const int64_t count);
   int estimate_token_doc_cnt();
+public:
+  // exposed for the DaaT wrapper iter to know whether the inner token iter
+  // already evaluated the relevance expr for the rows it returned
   inline bool need_inv_idx_agg() { return inv_idx_agg_iter_ != nullptr; }
   inline bool need_calc_relevance() { return inv_idx_agg_iter_ != nullptr; }
-public:
   static const int64_t INV_IDX_ROWKEY_COL_CNT = 2;
 private:
   lib::MemoryContext mem_context_;
