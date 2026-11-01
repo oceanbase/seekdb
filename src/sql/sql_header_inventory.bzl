@@ -422,6 +422,7 @@ SQL_COMPOSITION_HEADERS = [
 ]
 
 SQL_PRIVATE_HEADERS = [
+    "engine/file_sql/parquet_reader.h",
     "engine/file_sql/jsonl_reader.h",
     "engine/file_sql/csv_reader.h",
     "engine/file_sql/file_sql_scan.h",

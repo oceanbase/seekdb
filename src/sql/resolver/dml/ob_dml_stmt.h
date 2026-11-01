@@ -49,6 +49,8 @@ enum MulModeTableType {
   OB_UNNEST_TABLE_TYPE = 3,
   OB_FILE_CSV_TABLE_TYPE = 4,
   OB_FILE_JSONL_TABLE_TYPE = 5,
+  OB_FILE_PARQUET_TABLE_TYPE = 6,
+  OB_FILE_GLOB_TABLE_TYPE = 7,
 };
 
 typedef struct ObJtColBaseInfo

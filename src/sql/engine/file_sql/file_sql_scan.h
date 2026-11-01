@@ -6,6 +6,8 @@
 #include <memory>
 #include <optional>
 #include <streambuf>
+#include <string>
+#include <vector>
 
 namespace oceanbase::sql {
 class ObSQLSessionInfo;
@@ -14,6 +16,10 @@ class ObEvalCtx;
 
 namespace file_sql {
 class JsonlReader;
+class ParquetReader;
+
+enum class FileSqlFormat { csv, jsonl, parquet, glob };
+
 class FileBuffer : public std::streambuf {
 public:
   void reset(int fd) { fd_ = fd; failed_ = false; status_ = 0; setg(buffer_.data(), buffer_.data(), buffer_.data()); }
@@ -33,7 +39,7 @@ private:
 
 class FileSqlScan {
 public:
-  explicit FileSqlScan(bool jsonl = false);
+  explicit FileSqlScan(FileSqlFormat format = FileSqlFormat::csv);
   ~FileSqlScan();
   FileSqlScan(const FileSqlScan &) = delete;
   FileSqlScan &operator=(const FileSqlScan &) = delete;
@@ -47,12 +53,18 @@ public:
   const std::string &fingerprint() const { return fingerprint_; }
 private:
   int check_identity();
+  int open_glob(ObSQLSessionInfo &session, const std::string &pattern);
+  int infer_glob(Schema &schema);
+  int next_glob(Row &row);
   int fd_ = -1;
+  FileSqlFormat format_ = FileSqlFormat::csv;
   FileBuffer buffer_;
   std::istream input_;
   std::optional<CsvReader> reader_;
   std::unique_ptr<JsonlReader> json_reader_;
-  bool jsonl_ = false;
+  std::unique_ptr<ParquetReader> parquet_reader_;
+  std::vector<std::string> glob_files_;
+  size_t glob_pos_ = 0;
   Row row_;
   std::string canonical_path_;
   std::string fingerprint_;

@@ -3942,11 +3942,18 @@ int ObDMLResolver::resolve_file_sql_item(const ParseNode &node, TableItem *&tabl
   const ParseNode *name = node.children_[0], *args = node.children_[1];
   if (OB_ISNULL(name) || OB_ISNULL(args) || args->num_child_ < 1) return OB_INVALID_ARGUMENT;
   const ObString function_name(name->str_len_, name->str_value_);
-  const bool jsonl = function_name.case_compare("read_json") == 0;
-  if (!jsonl && function_name.case_compare("read_csv") != 0) {
+  file_sql::FileSqlFormat format = file_sql::FileSqlFormat::csv;
+  if (function_name.case_compare("read_json") == 0) {
+    format = file_sql::FileSqlFormat::jsonl;
+  } else if (function_name.case_compare("read_parquet") == 0) {
+    format = file_sql::FileSqlFormat::parquet;
+  } else if (function_name.case_compare("glob") == 0) {
+    format = file_sql::FileSqlFormat::glob;
+  } else if (function_name.case_compare("read_csv") != 0) {
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL source format");
     return OB_NOT_SUPPORTED;
   }
+  const bool jsonl = format == file_sql::FileSqlFormat::jsonl;
   bool header = !jsonl, seen_header = false, seen_sample = false, seen_format = false;
   for (int64_t i = 1; i < args->num_child_; ++i) {
     const ParseNode *option = args->children_[i];
@@ -3986,7 +3993,7 @@ int ObDMLResolver::resolve_file_sql_item(const ParseNode &node, TableItem *&tabl
     return OB_NOT_SUPPORTED;
   }
   if (OB_FAIL(resolve_str_const(*args->children_[0], path))) return ret;
-  FileSqlScan input(jsonl);
+  FileSqlScan input(format);
   Schema schema;
   if (OB_FAIL(input.open(*session_info_, path))) return ret;
   if (OB_FAIL(input.infer(header, schema))) return ret;
@@ -3995,13 +4002,16 @@ int ObDMLResolver::resolve_file_sql_item(const ParseNode &node, TableItem *&tabl
   else if (OB_FAIL(get_stmt()->generate_func_table_name(*allocator_, alias))) return ret;
   if (OB_FAIL(create_unnest_table_item(table_item, alias))) return ret;
   ObJsonTableDef &definition = *table_item->json_table_def_;
-  definition.table_type_ = jsonl ? OB_FILE_JSONL_TABLE_TYPE : OB_FILE_CSV_TABLE_TYPE;
+  definition.table_type_ = file_sql::FileSqlFormat::jsonl == format ? OB_FILE_JSONL_TABLE_TYPE :
+      (file_sql::FileSqlFormat::parquet == format ? OB_FILE_PARQUET_TABLE_TYPE :
+       (file_sql::FileSqlFormat::glob == format ? OB_FILE_GLOB_TABLE_TYPE : OB_FILE_CSV_TABLE_TYPE));
   get_stmt()->get_query_ctx()->has_file_sql_ = true;
   ObRawExpr *path_expr = nullptr;
   OZ (resolve_sql_expr(*args->children_[0], path_expr));
   if (OB_SUCC(ret)) OZ (path_expr->deduce_type(session_info_));
   OZ (definition.doc_exprs_.push_back(path_expr));
-  for (const std::string &metadata : {input.canonical_path(), input.fingerprint(), std::string(header ? "1" : "0")}) {
+  const bool csv_header = file_sql::FileSqlFormat::csv == format && header;
+  for (const std::string &metadata : {input.canonical_path(), input.fingerprint(), std::string(csv_header ? "1" : "0")}) {
     ObString copied;
     if (OB_FAIL(ret)) break;
     OZ (ob_write_string(*allocator_, ObString(metadata.size(), metadata.data()), copied));

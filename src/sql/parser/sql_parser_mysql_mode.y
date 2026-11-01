@@ -469,6 +469,7 @@ END_P SET_VAR DELIMITER
 %type <node> recyclebin_restore_stmt purge_stmt opt_recyclebin_restore_rename_table opt_recyclebin_restore_rename_database
 %type <node> cache_type
 %type <node> into_opt into_clause field_opt field_term field_term_list line_opt line_term line_term_list into_var_list into_var file_opt file_option_list file_option file_size_const binary_format
+%type <node> file_sql_copy_stmt opt_file_sql_copy_options file_sql_copy_option_list file_sql_copy_option
 %type <node> string_list text_string string_val_list
 %type <node> list_expr list_partition_element list_partition_expr list_partition_list list_partition_option opt_list_partition_list opt_list_subpartition_list list_subpartition_list list_subpartition_element drop_partition_name_list
 %type <node> distribute_method distribute_method_list opt_distribute_method_list
@@ -556,6 +557,7 @@ opt_end_p:
 /* only preparable statement will set question mark size */
 stmt:
     select_stmt             { $$ = $1; question_mark_issue($$, result); }
+  | file_sql_copy_stmt      { $$ = $1; question_mark_issue($$, result); }
   | insert_stmt             { $$ = $1; question_mark_issue($$, result); }
   | create_table_stmt       {
     $$ = $1;
@@ -8475,6 +8477,67 @@ select_with_parens:
 | '(' select_with_parens ')'  { $$ = $2; }
 | '(' with_select ')'         { $$ = $2; };
 
+// File SQL: COPY (query) TO 'path' (format csv, header, nullstr 'NULL')
+file_sql_copy_stmt:
+COPY '(' select_stmt ')' TO STRING_VALUE opt_file_sql_copy_options
+{
+  ParseNode *options_node = NULL;
+  ParseNode *into_node = NULL;
+  if (NULL == $3 || T_SELECT != $3->type_) {
+    yyerror(&@1, result, "invalid COPY statement");
+    YYERROR;
+  } else {
+    merge_nodes(options_node, result, T_FILE_SQL_COPY_OPTIONS, $7);
+    if (NULL == options_node) {
+      malloc_non_terminal_node(options_node, result->malloc_pool_, T_FILE_SQL_COPY_OPTIONS, 0);
+    }
+    malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_OUTFILE, 3, $6, options_node, NULL);
+    $3->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
+    $$ = $3;
+  }
+}
+;
+
+opt_file_sql_copy_options:
+{
+  $$ = NULL;
+}
+| '(' file_sql_copy_option_list ')'
+{
+  $$ = $2;
+}
+;
+
+file_sql_copy_option_list:
+file_sql_copy_option
+{
+  $$ = $1;
+}
+| file_sql_copy_option_list ',' file_sql_copy_option
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+file_sql_copy_option:
+FORMAT NAME_OB
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_FORMAT, 1, $2);
+}
+| column_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_OPTION, 2, $1, NULL);
+}
+| column_name STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_OPTION, 2, $1, $2);
+}
+| column_name COMP_EQ expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_OPTION, 2, $1, $3);
+}
+;
+
 select_no_parens:
 select_clause opt_lock_type
 {
@@ -12281,8 +12344,13 @@ explain_or_desc relation_factor opt_desc_column_option
 }
 
 | explain_or_desc explainable_stmt {
-  GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);
-  if ($1 != NULL && $2->type_ == T_SELECT) $$->value_ = 1; /* File SQL schema request */
+  if ($1 != NULL && $2->type_ == T_SELECT) {
+    /* DESCRIBE SELECT: keep the describe marker in the format slot. */
+    ParseNode *describe_display = NULL;
+    malloc_non_terminal_node($$, result->malloc_pool_, T_EXPLAIN, 5, $1, describe_display, NULL, NULL, $2);
+  } else {
+    GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);
+  }
 }
 | explain_or_desc PRETTY explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY, $3, NULL, NULL);}
 | explain_or_desc PRETTY_COLOR explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY_COLOR, $3, NULL, NULL);}

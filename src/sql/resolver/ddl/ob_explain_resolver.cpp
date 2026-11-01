@@ -18,7 +18,6 @@
 #include "sql/resolver/ddl/ob_explain_resolver.h"
 #include "sql/resolver/ob_resolver.h"
 #include "sql/parser/ob_parser.h"
-#include "sql/rewrite/ob_transform_utils.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -62,15 +61,12 @@ static const char *file_metadata_type(ObObjType type)
 static int resolve_file_metadata(ObResolverParams &params, ObSelectStmt &source, ObStmt *&result)
 {
   int ret = OB_SUCCESS;
-  ObNotNullContext nulls(params.session_info_->get_cur_exec_ctx(), params.allocator_, &source);
-  if (OB_FAIL(nulls.generate_stmt_context())) return ret;
   ObSqlString sql;
   OZ (sql.append("SELECT column_name,column_type,`null`,`key`,`default`,extra FROM ("));
   for (int64_t i = 0; OB_SUCC(ret) && i < source.get_select_item_size(); ++i) {
     const SelectItem &item = source.get_select_item(i);
     if (item.expr_ == nullptr) return OB_ERR_UNEXPECTED;
-    bool not_null = false;
-    OZ (ObTransformUtils::is_expr_not_null(nulls, item.expr_, not_null, nullptr));
+    const bool not_null = item.expr_->get_result_type().has_result_flag(NOT_NULL_FLAG);
     OZ (sql.append(i == 0 ? "SELECT " : " UNION ALL SELECT "));
     OZ (sql.append_fmt("%ld AS __file_sql_pos,", i));
     OZ (append_file_metadata_text(sql, item.alias_name_.empty() ? item.expr_name_ : item.alias_name_));
@@ -95,6 +91,12 @@ static int resolve_file_metadata(ObResolverParams &params, ObSelectStmt &source,
     }
   }
   return ret;
+}
+
+static bool is_file_sql_describe(const ParseNode &parse_tree)
+{
+  const ParseNode *marker = parse_tree.children_[EXPLAIN_FORMAT];
+  return marker != nullptr && T_INT == marker->type_ && 1 == marker->value_;
 }
 
 int ObExplainResolver::resolve(const ParseNode &parse_tree)
@@ -133,7 +135,7 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_ISNULL(child_stmt)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to generate stmt for child stmt");
-      } else if (parse_tree.value_ == 1 && child_stmt->is_select_stmt() &&
+      } else if (is_file_sql_describe(parse_tree) && child_stmt->is_select_stmt() &&
                  static_cast<ObSelectStmt *>(child_stmt)->get_query_ctx()->has_file_sql_) {
         ObStmt *metadata = nullptr;
         ret = resolve_file_metadata(params_, *static_cast<ObSelectStmt *>(child_stmt), metadata);
@@ -142,6 +144,10 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
       } else {
         explain_stmt->set_explain_query_stmt(static_cast<ObDMLStmt *>(child_stmt));
         ParseNode *format = parse_tree.children_[EXPLAIN_FORMAT];
+        if (is_file_sql_describe(parse_tree)) {
+          // Plain DESCRIBE SELECT marker: no display format was requested.
+          format = NULL;
+        }
         if (NULL != format) {
           switch (format->type_) {
           case T_OUTLINE:

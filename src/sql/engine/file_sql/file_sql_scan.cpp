@@ -1,6 +1,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "file_sql_scan.h"
 #include "jsonl_reader.h"
+#include "parquet_reader.h"
 #include "sql/engine/basic/ob_json_table_op.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -12,6 +13,7 @@
 #include <unordered_map>
 #if defined(__linux__)
 #include <fcntl.h>
+#include <glob.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -61,12 +63,15 @@ static std::string identity(const struct stat &value)
 }
 #endif
 
-FileSqlScan::FileSqlScan(bool jsonl) : input_(&buffer_), jsonl_(jsonl) {}
+FileSqlScan::FileSqlScan(FileSqlFormat format) : format_(format), input_(&buffer_) {}
 FileSqlScan::~FileSqlScan() { close(); }
 void FileSqlScan::close()
 {
   reader_.reset();
   json_reader_.reset();
+  parquet_reader_.reset();
+  glob_files_.clear();
+  glob_pos_ = 0;
 #if defined(__linux__)
   if (fd_ >= 0) ::close(fd_);
 #endif
@@ -96,6 +101,8 @@ int FileSqlScan::open(ObSQLSessionInfo &session, const ObString &path, const ObS
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL path");
   } else if (OB_FAIL(session.get_secure_file_priv(secure))) {
+  } else if (FileSqlFormat::glob == format_) {
+    ret = open_glob(session, pathname);
   } else if (::realpath(pathname.c_str(), resolved) == nullptr) {
     ret = OB_FILE_NOT_EXIST;
   } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure, ObString(resolved)))) {
@@ -117,6 +124,14 @@ int FileSqlScan::open(ObSQLSessionInfo &session, const ObString &path, const ObS
         if (!expected_fingerprint.empty() && fingerprint_ != std::string(expected_fingerprint.ptr(), expected_fingerprint.length())) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "File changed after schema inference");
+        } else if (FileSqlFormat::parquet == format_) {
+          parquet_reader_.reset(new (std::nothrow) ParquetReader());
+          if (parquet_reader_ == nullptr) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else {
+            auto keep_running = [this] { return buffer_.check_status() == OB_SUCCESS; };
+            ret = parquet_reader_->open(fd_, info.st_size, keep_running);
+          }
         }
       }
     }
@@ -131,8 +146,49 @@ int FileSqlScan::open(ObSQLSessionInfo &session, const ObString &path, const ObS
   return ret;
 }
 
+int FileSqlScan::open_glob(ObSQLSessionInfo &session, const std::string &pattern)
+{
+  int ret = OB_SUCCESS;
+#if defined(__linux__)
+  ObString secure;
+  if (OB_FAIL(session.get_secure_file_priv(secure))) return ret;
+  // Only literal paths are accepted; every resolved match still goes through
+  // the regular secure-path check below.
+  if (pattern.find('\'') != std::string::npos || pattern.find('\n') != std::string::npos) {
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL glob pattern");
+    return OB_NOT_SUPPORTED;
+  }
+  glob_t matches;
+  memset(&matches, 0, sizeof(matches));
+  const int result = ::glob(pattern.c_str(), GLOB_NOSORT | GLOB_ERR, nullptr, &matches);
+  if (0 != result && GLOB_NOMATCH != result) {
+    ::globfree(&matches);
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL glob pattern");
+    return OB_NOT_SUPPORTED;
+  }
+  for (size_t i = 0; OB_SUCC(ret) && i < matches.gl_pathc; ++i) {
+    char resolved[PATH_MAX];
+    struct stat info;
+    if (::realpath(matches.gl_pathv[i], resolved) == nullptr) {
+      continue;
+    } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure, ObString(resolved)))) {
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL glob path");
+      ret = OB_ERR_NO_PRIVILEGE;
+      break;
+    } else if (::stat(resolved, &info) != 0 || !S_ISREG(info.st_mode)) {
+      continue;
+    } else {
+      glob_files_.emplace_back(resolved);
+    }
+  }
+  if (OB_SUCC(ret)) canonical_path_ = pattern;
+#endif
+  return ret;
+}
+
 int FileSqlScan::check_identity()
 {
+  if (FileSqlFormat::glob == format_) return OB_SUCCESS;
 #if defined(__linux__)
   struct stat value;
   if (fd_ < 0 || ::fstat(fd_, &value) != 0) return OB_IO_ERROR;
@@ -149,7 +205,12 @@ int FileSqlScan::check_identity()
 int FileSqlScan::infer(bool header, Schema &schema)
 {
   int ret = OB_SUCCESS;
-  if (jsonl_) {
+  if (FileSqlFormat::glob == format_) {
+    ret = infer_glob(schema);
+  } else if (FileSqlFormat::parquet == format_) {
+    if (parquet_reader_ == nullptr) ret = OB_NOT_INIT;
+    else ret = parquet_reader_->infer(schema);
+  } else if (FileSqlFormat::jsonl == format_) {
     JsonlReader reader(input_);
     ret = reader.infer(schema, [this] { return buffer_.check_status() == OB_SUCCESS; });
   } else {
@@ -160,7 +221,7 @@ int FileSqlScan::infer(bool header, Schema &schema)
   }
   if (buffer_.status() != OB_SUCCESS) return buffer_.status();
   if (buffer_.failed()) return OB_IO_ERROR;
-  if (ret != OB_SUCCESS) return ret == OB_ERR_PARSE_SQL ? malformed(jsonl_) : ret;
+  if (ret != OB_SUCCESS) return ret == OB_ERR_PARSE_SQL ? malformed(FileSqlFormat::jsonl == format_) : ret;
   // SQL resolves identifiers with GENERAL_CI, including accent equivalence.
   // Finalize each name against all prior finalized names, including suffixes.
   for (size_t i = 0; i < schema.size(); ++i) {
@@ -188,6 +249,13 @@ int FileSqlScan::infer(bool header, Schema &schema)
 
 int FileSqlScan::begin(bool header)
 {
+  if (FileSqlFormat::glob == format_) {
+    glob_pos_ = 0;
+    return OB_SUCCESS;
+  }
+  if (FileSqlFormat::parquet == format_) {
+    return parquet_reader_ == nullptr ? OB_NOT_INIT : parquet_reader_->begin();
+  }
 #if defined(__linux__)
   if (::lseek(fd_, 0, SEEK_SET) < 0) return OB_IO_ERROR;
 #else
@@ -195,7 +263,7 @@ int FileSqlScan::begin(bool header)
 #endif
   input_.clear();
   buffer_.reset(fd_);
-  if (jsonl_) {
+  if (FileSqlFormat::jsonl == format_) {
     json_reader_.reset(new (std::nothrow) JsonlReader(input_));
     return json_reader_ == nullptr ? OB_ALLOCATE_MEMORY_FAILED : buffer_.check_status();
   }
@@ -211,10 +279,20 @@ int FileSqlScan::begin(bool header)
 
 int FileSqlScan::next(const ObJsonTableSpec &spec, ObEvalCtx &ctx)
 {
-  if ((!jsonl_ && !reader_) || (jsonl_ && !json_reader_)) return OB_NOT_INIT;
+  if (FileSqlFormat::parquet == format_) {
+    if (parquet_reader_ == nullptr) return OB_NOT_INIT;
+  } else if (FileSqlFormat::glob == format_) {
+  } else if ((FileSqlFormat::jsonl == format_ && !json_reader_) ||
+             (FileSqlFormat::csv == format_ && !reader_)) {
+    return OB_NOT_INIT;
+  }
   if (buffer_.check_status() != OB_SUCCESS) return buffer_.status();
   int read_ret = OB_SUCCESS;
-  if (jsonl_) {
+  if (FileSqlFormat::glob == format_) {
+    read_ret = next_glob(row_);
+  } else if (FileSqlFormat::parquet == format_) {
+    read_ret = parquet_reader_->next(row_);
+  } else if (FileSqlFormat::jsonl == format_) {
     NamedRow source;
     read_ret = json_reader_->next(source);
     if (read_ret == OB_SUCCESS) {
@@ -240,7 +318,7 @@ int FileSqlScan::next(const ObJsonTableSpec &spec, ObEvalCtx &ctx)
     const int checked = check_identity();
     return checked == OB_SUCCESS ? OB_ITER_END : checked;
   }
-  if (read_ret != OB_SUCCESS) return read_ret == OB_ERR_PARSE_SQL ? malformed(jsonl_) : read_ret;
+  if (read_ret != OB_SUCCESS) return read_ret == OB_ERR_PARSE_SQL ? malformed(FileSqlFormat::jsonl == format_) : read_ret;
   // The first definition is the multimode table's structural root.
   if (row_.size() + 1 != static_cast<size_t>(spec.cols_def_.count())) return malformed();
   int ret = OB_SUCCESS;
@@ -282,5 +360,28 @@ int FileSqlScan::next(const ObJsonTableSpec &spec, ObEvalCtx &ctx)
     expr.get_eval_info(ctx).evaluated_ = true;
   }
   return ret;
+}
+int FileSqlScan::infer_glob(Schema &schema)
+{
+  schema.clear();
+  Column column;
+  column.name = "file";
+  column.type = Type::text;
+  column.nullable = false;
+  column.max_bytes = 4096;
+  column.source_name = "file";
+  schema.push_back(std::move(column));
+  return OB_SUCCESS;
+}
+
+int FileSqlScan::next_glob(Row &row)
+{
+  if (glob_pos_ >= glob_files_.size()) return OB_ITER_END;
+  row.clear();
+  Field field;
+  field.text = glob_files_[glob_pos_++];
+  field.quoted = true;
+  row.push_back(std::move(field));
+  return OB_SUCCESS;
 }
 } // namespace oceanbase::sql::file_sql
