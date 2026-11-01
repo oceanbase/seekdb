@@ -300,6 +300,8 @@ END_P SET_VAR DELIMITER
 
         JOB JSON JSON_ARRAYAGG JSON_OBJECTAGG JSON_QUERY JSON_VALUE JSON_TABLE
 
+        READ_CSV READ_JSON READ_NDJSON READ_PARQUET GLOB
+
         KEYWORD KEY_BLOCK_SIZE KEY_VERSION KVCACHE
 
         LAG LANGUAGE LAST LAST_VALUE LATERAL LEAD LEADER LEAVES LESS LIB LINESTRING
@@ -498,6 +500,7 @@ END_P SET_VAR DELIMITER
 %type <node> skip_index_type opt_skip_index_type_list
 %type <node> vec_index_params vec_index_param vec_index_param_value opt_with_vector_index_parameters
 %type <node> json_table_expr unnest_expr mock_jt_on_error_on_empty jt_column_list json_table_column_def
+%type <node> read_file_expr read_file_func_name read_file_arg_list read_file_arg
 %type <node> json_table_ordinality_column_def json_table_exists_column_def json_table_value_column_def json_table_nested_column_def
 %type <node> opt_value_on_empty_or_error_or_mismatch opt_on_mismatch
 %type <node> table_values_clause table_values_clause_with_order_by_and_limit values_row_list row_value
@@ -10855,6 +10858,10 @@ relation_factor %prec LOWER_PARENS
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_ORG, 4, $1, NULL, NULL, NULL);
 }
+| read_file_expr
+{
+  $$ = $1;
+}
 | relation_factor use_partition %prec LOWER_PARENS
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_ORG, 4, $1, NULL, $2, NULL);
@@ -16665,6 +16672,88 @@ mock_jt_on_error_on_empty:
   err_node->value_ = 3;
   err_node->is_hidden_const_ = 1;
   malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, err_node, emp_node);
+}
+;
+
+read_file_expr:
+read_file_func_name '(' read_file_arg_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_READ_FILE_EXPRESSION, 3, $1, $3, NULL);
+}
+| read_file_func_name '(' read_file_arg_list ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_READ_FILE_EXPRESSION, 3, $1, $3, $5);
+}
+| read_file_func_name '(' read_file_arg_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_READ_FILE_EXPRESSION, 3, $1, $3, $6);
+}
+;
+
+read_file_func_name:
+READ_CSV
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 0; /* ReadFileFormat::CSV */
+}
+| READ_JSON
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 1; /* ReadFileFormat::JSON */
+}
+| READ_NDJSON
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 2; /* ReadFileFormat::NDJSON */
+}
+| READ_PARQUET
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 3; /* ReadFileFormat::PARQUET */
+}
+| GLOB
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->value_ = 4; /* ReadFileFormat::GLOB_LIST */
+}
+;
+
+read_file_arg_list:
+/* empty */
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 0);
+}
+| read_file_arg
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 1, $1);
+}
+| read_file_arg_list ',' read_file_arg
+{
+  ParseNode *exprs = NULL;
+  ParseNode **children = NULL;
+  children = static_cast<ParseNode **>(parse_malloc(sizeof(ParseNode *) * ($1->num_child_ + 1),
+                                                   result->malloc_pool_));
+  if (OB_UNLIKELY(NULL == children)) {
+    yyerror(NULL, result, "No more space for malloc\n");
+    YYABORT_NO_MEMORY;
+  } else {
+    MEMCPY(children, $1->children_, sizeof(ParseNode *) * $1->num_child_);
+    children[$1->num_child_] = $3;
+    $1->children_ = children;
+    $1->num_child_ += 1;
+    $$ = $1;
+  }
+}
+;
+
+read_file_arg:
+simple_expr
+{
+  $$ = $1;
+}
+| NAME_OB '=' simple_expr
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
 ;
 

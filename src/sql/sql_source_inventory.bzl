@@ -223,6 +223,8 @@ SQL_UNITY_GROUPS = [
             "src/sql/engine/basic/ob_temp_column_spill_spool.cpp",
             "src/sql/engine/basic/ob_chunk_datum_store.cpp",
             "src/sql/engine/basic/ob_chunk_row_store.cpp",
+            "src/sql/engine/basic/ob_file_sql_scan.cpp",
+            "src/sql/engine/basic/ob_parquet_reader.cpp",
             "src/sql/engine/basic/ob_expr_values_op.cpp",
             "src/sql/engine/basic/ob_function_table_op.cpp",
             "src/sql/engine/basic/ob_group_join_buffer.cpp",
