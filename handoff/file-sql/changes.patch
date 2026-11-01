@@ -1,0 +1,3569 @@
+diff --git a/src/query/api/query/parser/ob_item_type.h b/src/query/api/query/parser/ob_item_type.h
+index 791ab8b..1e3eea1 100644
+--- a/src/query/api/query/parser/ob_item_type.h
++++ b/src/query/api/query/parser/ob_item_type.h
+@@ -2150,6 +2150,10 @@ typedef enum ObItemType
+   T_NO_TRANSFORM_DISTINCT_AGG = 4744,
+ 
+   T_UNNEST_EXPRESSION = 4745,
++  T_FILE_SQL_TABLE = 4746,
++  T_FILE_SQL_COPY_OPTIONS = 4747,
++  T_FILE_SQL_COPY_FORMAT = 4748,
++  T_FILE_SQL_COPY_OPTION = 4749,
+   T_TG_DB_SCHEMA = 4752,
+   T_TG_SYS_EVENT_OPTION = 4753,
+   T_TG_SYS_EVENT = 4754,
+diff --git a/src/share/system_variable/ob_sys_var_class_type.h b/src/share/system_variable/ob_sys_var_class_type.h
+index ed8d26e..5263502 100644
+--- a/src/share/system_variable/ob_sys_var_class_type.h
++++ b/src/share/system_variable/ob_sys_var_class_type.h
+@@ -744,6 +744,7 @@ enum ObSysVarClassType
+   SYS_VAR_OB_HNSW_EXTRA_INFO_MAX_SIZE = 10751,
+   SYS_VAR__PUSH_JOIN_PREDICATE = 10752,
+   SYS_VAR_OB_SPARSE_DROP_RATIO_SEARCH = 10753,
++  SYS_VAR_ENABLE_FILE_SQL = 10754,
+ };
+ 
+ }
+diff --git a/src/share/system_variable/ob_sys_var_meta.cpp b/src/share/system_variable/ob_sys_var_meta.cpp
+index 4a380d3..0185ecf 100644
+--- a/src/share/system_variable/ob_sys_var_meta.cpp
++++ b/src/share/system_variable/ob_sys_var_meta.cpp
+@@ -108,6 +108,7 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
+   "disabled_storage_engines",
+   "disconnect_on_expired_password",
+   "div_precision_increment",
++  "enable_file_sql",
+   "enable_optimizer_rowgoal",
+   "enforce_gtid_consistency",
+   "eq_range_index_dive_limit",
+@@ -830,6 +831,7 @@ const ObSysVarClassType ObSysVarMeta::SYS_VAR_IDS_SORTED_BY_NAME[] = {
+   SYS_VAR_DISABLED_STORAGE_ENGINES,
+   SYS_VAR_DISCONNECT_ON_EXPIRED_PASSWORD,
+   SYS_VAR_DIV_PRECISION_INCREMENT,
++  SYS_VAR_ENABLE_FILE_SQL,
+   SYS_VAR_ENABLE_OPTIMIZER_ROWGOAL,
+   SYS_VAR_ENFORCE_GTID_CONSISTENCY,
+   SYS_VAR_EQ_RANGE_INDEX_DIVE_LIMIT,
+@@ -2189,7 +2191,8 @@ const char *ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[] = {
+   "ob_ivf_nprobes",
+   "ob_hnsw_extra_info_max_size",
+   "_push_join_predicate",
+-  "ob_sparse_drop_ratio_search"
++  "ob_sparse_drop_ratio_search",
++  "enable_file_sql"
+ };
+ 
+ bool ObSysVarMeta::sys_var_name_case_cmp(const char *name1, const ObString &name2)
+@@ -2248,6 +2251,9 @@ int ObSysVarMeta::calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &
+     real_idx = ObSysVarsToIdxMap::get_store_idx(var_id);
+     if (real_idx < 0) {
+       ret = OB_SYS_VARS_MAYBE_DIFF_VERSION;
++      LOG_WARN("invalid sys var id, maybe sys vars version is different", K(ret), K(var_id), K(real_idx),
++          LITERAL_K(ObSysVarMeta::OB_SPECIFIC_SYS_VAR_ID_OFFSET),
++          LITERAL_K(ObSysVarMeta::OB_SYS_VARS_COUNT));
+     }
+   }
+ 
+@@ -2264,6 +2270,7 @@ int ObSysVarMeta::calc_sys_var_store_idx_by_name(const common::ObString &sys_var
+   int ret = OB_SUCCESS;
+   ObSysVarClassType sys_var_id = find_sys_var_id_by_name(sys_var_name);
+   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
++    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_name), K(lbt()));
+   }
+   return ret;
+ }
+@@ -2278,6 +2285,7 @@ int ObSysVarMeta::get_sys_var_name_by_id(ObSysVarClassType sys_var_id, ObString
+   int ret = OB_SUCCESS;
+   int64_t store_idx = -1;
+   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
++    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
+   } else {
+     sys_var_name = ObString::make_string(ObSysVarMeta::SYS_VAR_NAMES_SORTED_BY_ID[store_idx]);
+   }
+@@ -2290,6 +2298,7 @@ const ObString ObSysVarMeta::get_sys_var_name_by_id(ObSysVarClassType sys_var_id
+   int ret = OB_SUCCESS;
+   if (OB_FAIL(get_sys_var_name_by_id(sys_var_id, sys_var_name))) {
+     sys_var_name = ObString::make_string("invalid_sys_var_name");
++    LOG_WARN("invalid sys var id", K(ret), K(sys_var_id));
+   }
+   return sys_var_name;
+ }
+diff --git a/src/share/system_variable/ob_sys_var_meta.h b/src/share/system_variable/ob_sys_var_meta.h
+index ce2c3f5..b571a31 100644
+--- a/src/share/system_variable/ob_sys_var_meta.h
++++ b/src/share/system_variable/ob_sys_var_meta.h
+@@ -29,7 +29,7 @@ class ObSysVarMeta
+ {
+ public:
+   const static int64_t MYSQL_SYS_VARS_COUNT = 99;
+-  const static int64_t OB_SYS_VARS_COUNT = 620;
++  const static int64_t OB_SYS_VARS_COUNT = 621;
+   const static int64_t ALL_SYS_VARS_COUNT = MYSQL_SYS_VARS_COUNT + OB_SYS_VARS_COUNT;
+   const static int64_t INVALID_MAX_READ_STALE_TIME = -1;
+ 
+diff --git a/src/share/system_variable/ob_system_variable_alias.h b/src/share/system_variable/ob_system_variable_alias.h
+index 7f9eee9..3fb029f 100644
+--- a/src/share/system_variable/ob_system_variable_alias.h
++++ b/src/share/system_variable/ob_system_variable_alias.h
+@@ -739,6 +739,7 @@ namespace share
+   static const char* const OB_SV_HNSW_EXTRA_INFO_MAX_SIZE = "ob_hnsw_extra_info_max_size";
+   static const char* const OB_SV__PUSH_JOIN_PREDICATE = "_push_join_predicate";
+   static const char* const OB_SV_SPARSE_DROP_RATIO_SEARCH = "ob_sparse_drop_ratio_search";
++  static const char* const OB_SV_ENABLE_FILE_SQL = "enable_file_sql";
+ 
+ }
+ }
+diff --git a/src/share/system_variable/ob_system_variable_init.cpp b/src/share/system_variable/ob_system_variable_init.cpp
+index 4d6d72f..c3af18e 100644
+--- a/src/share/system_variable/ob_system_variable_init.cpp
++++ b/src/share/system_variable/ob_system_variable_init.cpp
+@@ -74,6 +74,7 @@ const ObSysVarClassType ESSENTIAL_SYS_VARS[] = {
+   SYS_VAR_CARDINALITY_ESTIMATION_MODEL,        // cardinality_estimation_model
+   SYS_VAR_DEFAULT_COLLATION_FOR_UTF8MB4,        // default_collation_for_utf8mb4
+   SYS_VAR__PUSH_JOIN_PREDICATE,        // _push_join_predicate
++  SYS_VAR_ENABLE_FILE_SQL,        // enable_file_sql
+ };
+ 
+ const int64_t ESSENTIAL_SYS_VARS_COUNT = sizeof(ESSENTIAL_SYS_VARS) / sizeof(ESSENTIAL_SYS_VARS[0]);
+@@ -9911,13 +9912,26 @@ static struct VarsInit{
+     ObSysVars[718].alias_ = "OB_SV_SPARSE_DROP_RATIO_SEARCH" ;
+     }();
+ 
++    [&] (){
++      ObSysVars[719].id_ = SYS_VAR_ENABLE_FILE_SQL ;
++      cur_max_var_id = MAX(cur_max_var_id, static_cast<int64_t>(SYS_VAR_ENABLE_FILE_SQL)) ;
++      ObSysVarsIdToArrayIdx[SYS_VAR_ENABLE_FILE_SQL] = 719 ;
++      ObSysVars[719].name_ = "enable_file_sql" ;
++      ObSysVars[719].default_value_ = "0" ;
++      ObSysVars[719].base_value_ = "0" ;
++      ObSysVars[719].data_type_ = ObIntType ;
++      ObSysVars[719].info_ = "Enable local File SQL table sources for this session." ;
++      ObSysVars[719].flags_ = ObSysVarFlag::SESSION_SCOPE | ObSysVarFlag::MYSQL_ONLY | ObSysVarFlag::NEED_SERIALIZE | ObSysVarFlag::INFLUENCE_PLAN ;
++    ObSysVars[719].alias_ = "OB_SV_ENABLE_FILE_SQL" ;
++    }();
++
+     if (cur_max_var_id >= ObSysVarMeta::OB_MAX_SYS_VAR_ID) {
+       HasInvalidSysVar = true;
+     }
+   }
+ }vars_init;
+ 
+-static int64_t var_amount = 719;
++static int64_t var_amount = 720;
+ 
+ int64_t ObSysVariables::get_all_sys_var_count(){ return ObSysVarMeta::ALL_SYS_VARS_COUNT;}
+ ObSysVarClassType ObSysVariables::get_sys_var_id(int64_t i){ return ObSysVars[i].id_;}
+diff --git a/src/share/system_variable/ob_system_variable_init.json b/src/share/system_variable/ob_system_variable_init.json
+index 80f1b01..9f5de98 100644
+--- a/src/share/system_variable/ob_system_variable_init.json
++++ b/src/share/system_variable/ob_system_variable_init.json
+@@ -10975,5 +10975,18 @@
+     "info_cn": "",
+     "background_cn": "",
+     "ref_url": ""
++  },
++  "enable_file_sql": {
++    "id": 10754,
++    "name": "enable_file_sql",
++    "default_value": "0",
++    "base_value": "0",
++    "data_type": "bool",
++    "info": "Enable local File SQL table sources for this session.",
++    "flags": "SESSION | MYSQL_ONLY | NEED_SERIALIZE | INFLUENCE_PLAN",
++    "publish_version": "1.0.0.0",
++    "info_cn": "启用当前会话的本地文件SQL查询",
++    "background_cn": "",
++    "ref_url": ""
+   }
+ }
+diff --git a/src/sql/code_generator/ob_static_engine_cg.cpp b/src/sql/code_generator/ob_static_engine_cg.cpp
+index 3c0e701..d2e33eb 100644
+--- a/src/sql/code_generator/ob_static_engine_cg.cpp
++++ b/src/sql/code_generator/ob_static_engine_cg.cpp
+@@ -5487,6 +5487,22 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
+       spec.parallel_ = op.get_parallel();
+       spec.is_overwrite_ = op.get_is_overwrite();
+       spec.plan_->need_drive_dml_query_ = true;
++      spec.with_header_ = op.get_with_header();
++      if (op.get_null_string().empty() || OB_FAIL(ob_write_string(alloc, op.get_null_string(), spec.null_string_))) {
++      } else if (spec.with_header_ && op.get_stmt() != nullptr && op.get_stmt()->is_select_stmt()) {
++        const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(op.get_stmt());
++        const int64_t count = select_stmt->get_select_item_size();
++        if (OB_FAIL(spec.header_names_.init(count))) {
++        }
++        for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
++          const SelectItem &item = select_stmt->get_select_item(i);
++          ObString name = item.alias_name_.empty() ? item.expr_name_ : item.alias_name_;
++          ObString copied;
++          if (OB_FAIL(ob_write_string(alloc, name, copied))) {
++          } else if (OB_FAIL(spec.header_names_.push_back(copied))) {
++          }
++        }
++      }
+     }
+   }
+   return ret;
+@@ -5571,6 +5587,8 @@ int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
+     spec.table_type_ = op.get_table_type();  // table func type
+ 
+     if (OB_FAIL(spec.dup_origin_column_defs(op.get_origin_cols_def()))) {
++    } else if (spec.table_type_ == OB_FILE_CSV_TABLE_TYPE || spec.table_type_ == OB_FILE_JSONL_TABLE_TYPE) {
++      for (int64_t i = 0; i < spec.cols_def_.count(); ++i) spec.cols_def_.at(i)->output_column_idx_ = -1;
+     }
+ 
+     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
+diff --git a/src/sql/engine/basic/ob_json_table_op.cpp b/src/sql/engine/basic/ob_json_table_op.cpp
+index 41af0f1..640b490 100644
+--- a/src/sql/engine/basic/ob_json_table_op.cpp
++++ b/src/sql/engine/basic/ob_json_table_op.cpp
+@@ -16,6 +16,7 @@
+ 
+ #define USING_LOG_PREFIX SQL_ENG
+ #include "ob_json_table_op.h"
++#include "sql/engine/file_sql/file_sql_scan.h"
+ #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
+ #include "sql/engine/expr/ob_expr_json_value.h"
+ #include "sql/engine/expr/ob_expr_json_query.h"
+@@ -581,8 +582,32 @@ int ObJsonTableOp::generate_column_trees(JtColTreeNode*& root)
+   return ret;
+ }
+ 
++static bool is_file_sql_table_type(const MulModeTableType type)
++{
++  return OB_FILE_CSV_TABLE_TYPE == type || OB_FILE_JSONL_TABLE_TYPE == type ||
++         OB_FILE_PARQUET_TABLE_TYPE == type || OB_FILE_GLOB_TABLE_TYPE == type;
++}
++
++int ObJsonTableOp::open_file_sql()
++{
++  if (MY_SPEC.namespace_def_.count() != 3 || get_exec_ctx().get_my_session() == nullptr) return OB_ERR_UNEXPECTED;
++  if (file_sql_scan_ == nullptr) {
++    void *memory = allocator_->alloc(sizeof(file_sql::FileSqlScan));
++    if (memory == nullptr) return OB_ALLOCATE_MEMORY_FAILED;
++    file_sql::FileSqlFormat format = file_sql::FileSqlFormat::csv;
++    if (OB_FILE_JSONL_TABLE_TYPE == MY_SPEC.table_type_) format = file_sql::FileSqlFormat::jsonl;
++    else if (OB_FILE_PARQUET_TABLE_TYPE == MY_SPEC.table_type_) format = file_sql::FileSqlFormat::parquet;
++    else if (OB_FILE_GLOB_TABLE_TYPE == MY_SPEC.table_type_) format = file_sql::FileSqlFormat::glob;
++    file_sql_scan_ = new (memory) file_sql::FileSqlScan(format);
++  }
++  int ret = file_sql_scan_->open(*get_exec_ctx().get_my_session(), MY_SPEC.namespace_def_.at(0), MY_SPEC.namespace_def_.at(1));
++  if (OB_SUCC(ret)) ret = file_sql_scan_->begin(MY_SPEC.namespace_def_.at(2) == ObString("1"));
++  return ret;
++}
++
+ int ObJsonTableOp::inner_open()
+ {
++  if (is_file_sql_table_type(MY_SPEC.table_type_)) return open_file_sql();
+   INIT_SUCC(ret);
+   if (OB_FAIL(init())) {
+   } else if (MY_SPEC.value_exprs_.empty()) {
+@@ -597,6 +622,10 @@ int ObJsonTableOp::inner_open()
+ 
+ int ObJsonTableOp::inner_rescan()
+ {
++  if (is_file_sql_table_type(MY_SPEC.table_type_)) {
++    const int ret = ObOperator::inner_rescan();
++    return ret == OB_SUCCESS ? open_file_sql() : ret;
++  }
+   int ret = OB_SUCCESS;
+   if (OB_FAIL(ObOperator::inner_rescan())) {
+   } else {
+@@ -684,6 +713,10 @@ int ObJsonTableOp::init()
+ 
+ int ObJsonTableOp::inner_close()
+ {
++  if (is_file_sql_table_type(MY_SPEC.table_type_)) {
++    if (file_sql_scan_ != nullptr) { file_sql_scan_->~FileSqlScan(); allocator_->free(file_sql_scan_); file_sql_scan_ = nullptr; }
++    return OB_SUCCESS;
++  }
+   INIT_SUCC(ret);
+   if (OB_NOT_NULL(root_)) {
+     if (OB_FAIL(root_->reset(&jt_ctx_))) {
+@@ -722,6 +755,7 @@ void ScanNode::reset_reg_columns(JtScanCtx* ctx)
+ 
+ void ObJsonTableOp::destroy()
+ {
++  if (file_sql_scan_ != nullptr) { file_sql_scan_->~FileSqlScan(); allocator_->free(file_sql_scan_); file_sql_scan_ = nullptr; }
+   ObOperator::destroy();
+ }
+ 
+@@ -1400,6 +1434,10 @@ int UnionNode::get_next_row(void* in, JtScanCtx* ctx, bool& is_null_value)
+ // json/xml table function inner
+ int ObJsonTableOp::inner_get_next_row()
+ {
++  if (is_file_sql_table_type(MY_SPEC.table_type_)) {
++    clear_evaluated_flag();
++    return file_sql_scan_ == nullptr ? OB_NOT_INIT : file_sql_scan_->next(MY_SPEC, eval_ctx_);
++  }
+   INIT_SUCC(ret);
+   bool is_root_null = false;
+   if (!(jt_ctx_.is_json_table_func()
+diff --git a/src/sql/engine/basic/ob_json_table_op.h b/src/sql/engine/basic/ob_json_table_op.h
+index af8051d..a13f821 100644
+--- a/src/sql/engine/basic/ob_json_table_op.h
++++ b/src/sql/engine/basic/ob_json_table_op.h
+@@ -184,6 +184,8 @@ struct JtScanCtx {
+ 
+ };
+ 
++namespace file_sql { class FileSqlScan; }
++
+ class ObJsonTableOp : public ObOperator
+ {
+ public:
+@@ -197,7 +199,8 @@ public:
+       input_(nullptr),
+       j_null_(),
+       j_arr_(allocator_),
+-      j_obj_(allocator_)
++      j_obj_(allocator_),
++      file_sql_scan_(nullptr)
+   {
+     const ObJsonTableSpec* spec_ptr = reinterpret_cast<const ObJsonTableSpec*>(&spec);
+     col_count_ = spec_ptr->column_exprs_.count();
+@@ -219,6 +222,7 @@ public:
+                K_(col_count));
+ 
+ private:
++  int open_file_sql();
+   int init();
+   int reset_variable();  // reset var in rescan 
+   int init_data_obj(); // allocate data_ array
+@@ -246,6 +250,7 @@ private:
+   ObJsonNull j_null_;
+   ObJsonArray j_arr_;
+   ObJsonObject j_obj_;
++  file_sql::FileSqlScan *file_sql_scan_;
+ };
+ 
+ class MulModeTableFunc {
+diff --git a/src/sql/engine/basic/ob_select_into_op.cpp b/src/sql/engine/basic/ob_select_into_op.cpp
+index eaafba6..994c449 100644
+--- a/src/sql/engine/basic/ob_select_into_op.cpp
++++ b/src/sql/engine/basic/ob_select_into_op.cpp
+@@ -37,8 +37,8 @@ namespace sql
+ OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
+ OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_, outfile_name_,
+     field_str_, line_str_, closed_cht_, is_optional_, select_exprs_, is_single_, max_file_size_,
+-    escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_,
+-    external_properties_);
++    escaped_cht_, cs_type_, parallel_, buffer_size_, is_overwrite_, with_header_, null_string_,
++    header_names_, external_properties_);
+ 
+ 
+ int ObSelectIntoOp::inner_open()
+@@ -932,8 +932,15 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
+   if (!has_escape_) {
+     OZ(write_obj_to_file(obj, data_writer, false));
+   } else if (obj.is_null()) {
+-    OZ(write_single_char_to_file(&char_escape_, data_writer));
+-    OZ(write_single_char_to_file(&char_n, data_writer));
++    if (!MY_SPEC.null_string_.empty()) {
++      ObObj null_obj;
++      null_obj.set_varchar(MY_SPEC.null_string_);
++      null_obj.set_collation_type(cs_type_);
++      OZ(write_obj_to_file(null_obj, data_writer, false));
++    } else {
++      OZ(write_single_char_to_file(&char_escape_, data_writer));
++      OZ(write_single_char_to_file(&char_n, data_writer));
++    }
+   } else {
+     OZ(write_obj_to_file(obj, data_writer, true));
+   }
+@@ -943,6 +950,27 @@ int ObSelectIntoOp::print_field(const ObObj &obj, ObCsvFileWriter &data_writer)
+   return ret;
+ }
+ 
++int ObSelectIntoOp::write_header(ObCsvFileWriter &data_writer)
++{
++  int ret = OB_SUCCESS;
++  if (!MY_SPEC.with_header_ || header_written_) return ret;
++  header_written_ = true;
++  if (MY_SPEC.header_names_.count() != MY_SPEC.select_exprs_.count()) return OB_ERR_UNEXPECTED;
++  for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.header_names_.count(); ++i) {
++    ObObj name;
++    name.set_varchar(MY_SPEC.header_names_.at(i));
++    name.set_collation_type(cs_type_);
++    if (OB_FAIL(print_field(name, data_writer))) {
++    } else if (i != MY_SPEC.header_names_.count() - 1) {
++      OZ(write_obj_to_file(field_str_, data_writer));
++    }
++  }
++  if (OB_SUCC(ret)) {
++    OZ(write_obj_to_file(line_str_, data_writer));
++  }
++  return ret;
++}
++
+ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
+ {
+   int ret = OB_SUCCESS;
+@@ -952,6 +980,7 @@ int ObSelectIntoOp::into_outfile(ObExternalFileWriter *data_writer)
+   ObCsvFileWriter *csv_data_writer = NULL;
+   if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
+     ret = OB_ERR_UNEXPECTED;
++  } else if (OB_FAIL(write_header(*csv_data_writer))) {
+   }
+   for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); ++i) {
+     if (OB_ISNULL(select_exprs.at(i))) {
+@@ -1002,6 +1031,7 @@ int ObSelectIntoOp::into_outfile_batch_csv(const ObBatchRows &brs, ObExternalFil
+       // do nothing
+     } else if (OB_ISNULL(csv_data_writer = static_cast<ObCsvFileWriter *>(data_writer))) {
+       ret = OB_ERR_UNEXPECTED;
++    } else if (OB_FAIL(write_header(*csv_data_writer))) {
+     } else if (has_compress_ && OB_ISNULL(csv_data_writer->get_compress_stream_writer())
+                && OB_FAIL(csv_data_writer->init_compress_writer(ctx_.get_allocator(),
+                                                                 external_properties_.csv_format_.compression_algorithm_,
+diff --git a/src/sql/engine/basic/ob_select_into_op.h b/src/sql/engine/basic/ob_select_into_op.h
+index 81eb850..9b59a6b 100644
+--- a/src/sql/engine/basic/ob_select_into_op.h
++++ b/src/sql/engine/basic/ob_select_into_op.h
+@@ -71,6 +71,9 @@ public:
+       parallel_(1),
+       buffer_size_(DEFAULT_BUFFER_SIZE),
+       is_overwrite_(false),
++      with_header_(false),
++      null_string_(),
++      header_names_(alloc),
+       external_properties_(alloc)
+   {
+   }
+@@ -90,6 +93,9 @@ public:
+   int64_t parallel_;
+   int64_t buffer_size_;
+   bool is_overwrite_;
++  bool with_header_;
++  common::ObString null_string_;
++  common::ObFixedArray<common::ObString, common::ObIAllocator> header_names_;
+   ObExternalFileFormat::StringData external_properties_;
+   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
+   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
+@@ -126,7 +132,8 @@ public:
+       external_properties_(),
+       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
+       block_id_(0),
+-      need_commit_(true)
++      need_commit_(true),
++      header_written_(false)
+   {
+   }
+ 
+@@ -211,6 +218,7 @@ private:
+                          ObString &str,
+                          ObCollationType coll_type);
+   int print_field(const ObObj &obj, ObCsvFileWriter &data_writer);
++  int write_header(ObCsvFileWriter &data_writer);
+   int print_lob_field(const ObObj &obj,
+                       const ObExpr &expr,
+                       const ObDatum &datum,
+@@ -292,6 +300,7 @@ private:
+   ObExternalFileFormat::FormatType format_type_;
+   uint32_t block_id_;
+   bool need_commit_;
++  bool header_written_;
+   static const int64_t SHARED_BUFFER_SIZE = 2LL * 1024 * 1024;
+ 
+ };
+diff --git a/src/sql/engine/file_sql/csv_reader.cpp b/src/sql/engine/file_sql/csv_reader.cpp
+new file mode 100644
+index 0000000..aa1ba82
+--- /dev/null
++++ b/src/sql/engine/file_sql/csv_reader.cpp
+@@ -0,0 +1,186 @@
++#include "csv_reader.h"
++#include <algorithm>
++#include <charconv>
++#include <cmath>
++#include <cstdint>
++#include <limits>
++#include <unordered_set>
++
++namespace oceanbase::sql::file_sql {
++
++CsvReader::CsvReader(std::istream &input, size_t max_record_bytes)
++  : input_(input), max_record_bytes_(max_record_bytes)
++{
++  if (input_.peek() == 0xef) {
++    for (int i = 0; i < 3; ++i) {
++      const int ch = input_.get();
++      if (ch == std::char_traits<char>::eof()) break;
++      prefix_.push_back(static_cast<char>(ch));
++    }
++    if (prefix_ == "\xef\xbb\xbf") prefix_.clear();
++    if (input_.eof()) input_.clear(input_.rdstate() & ~std::ios::eofbit & ~std::ios::failbit);
++  }
++}
++
++int CsvReader::get()
++{
++  return prefix_pos_ < prefix_.size() ? static_cast<unsigned char>(prefix_[prefix_pos_++]) : input_.get();
++}
++int CsvReader::peek()
++{
++  return prefix_pos_ < prefix_.size() ? static_cast<unsigned char>(prefix_[prefix_pos_]) : input_.peek();
++}
++
++ReadResult CsvReader::next(Row &row)
++{
++  row.clear();
++  if (ended_) return ReadResult::end;
++  enum State { start, unquoted, quoted, closed } state = start;
++  Field field;
++  size_t bytes = 0;
++  for (;;) {
++    const int ch = get();
++    if (ch == std::char_traits<char>::eof()) {
++      ended_ = true;
++      if (input_.bad()) return ReadResult::io_error;
++      if (state == quoted) return ReadResult::invalid;
++      if (bytes == 0) return ReadResult::end;
++      if (row.size() == 4096) return ReadResult::too_large;
++      row.push_back(std::move(field));
++      return ReadResult::row;
++    }
++    if (++bytes > max_record_bytes_) { ended_ = true; return ReadResult::too_large; }
++    if (state == quoted) {
++      if (ch == '"') state = closed;
++      else field.text.push_back(static_cast<char>(ch));
++    } else if (state == closed && ch == '"') {
++      field.text.push_back('"');
++      state = quoted;
++    } else if (ch == ',' || ch == '\n' || ch == '\r') {
++      if (row.size() == 4096) { ended_ = true; return ReadResult::too_large; }
++      row.push_back(std::move(field));
++      field = Field{};
++      state = start;
++      if (ch != ',') {
++        if (ch == '\r' && peek() == '\n') get();
++        return ReadResult::row;
++      }
++    } else if (state == closed) {
++      ended_ = true;
++      return ReadResult::invalid;
++    } else if (ch == '"') {
++      if (state != start) { ended_ = true; return ReadResult::invalid; }
++      state = quoted;
++      field.quoted = true;
++    } else {
++      field.text.push_back(static_cast<char>(ch));
++      state = unquoted;
++    }
++  }
++}
++
++static int digits(const std::string &value, size_t pos, size_t count)
++{
++  int result = 0;
++  if (pos + count > value.size()) return -1;
++  for (size_t i = 0; i < count; ++i) {
++    const unsigned char ch = value[pos + i];
++    if (ch < '0' || ch > '9') return -1;
++    result = result * 10 + ch - '0';
++  }
++  return result;
++}
++
++static bool valid_date(const std::string &value)
++{
++  if (value.size() < 10 || value[4] != '-' || value[7] != '-') return false;
++  const int year = digits(value, 0, 4), month = digits(value, 5, 2), day = digits(value, 8, 2);
++  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
++  const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
++  const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
++  return day <= days[month - 1] + (month == 2 && leap ? 1 : 0);
++}
++
++Type classify(const std::string &value)
++{
++  if (value.empty()) return Type::text;
++  std::string lower = value;
++  for (char &ch : lower) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
++  if (lower == "true" || lower == "false") return Type::boolean;
++  int64_t integer = 0;
++  const auto int_result = std::from_chars(value.data(), value.data() + value.size(), integer);
++  if (int_result.ec == std::errc() && int_result.ptr == value.data() + value.size()) return Type::integer;
++  double real = 0;
++  const auto real_result = std::from_chars(value.data(), value.data() + value.size(), real);
++  if (real_result.ec == std::errc() && real_result.ptr == value.data() + value.size() && std::isfinite(real)) return Type::real;
++  if (valid_date(value)) {
++    if (value.size() == 10) return Type::date;
++    if (value.size() == 19 && (value[10] == ' ' || value[10] == 'T') && value[13] == ':' && value[16] == ':') {
++      const int hour = digits(value, 11, 2), minute = digits(value, 14, 2), second = digits(value, 17, 2);
++      if (hour >= 0 && hour < 24 && minute >= 0 && minute < 60 && second >= 0 && second < 60) return Type::datetime;
++    }
++  }
++  return Type::text;
++}
++
++Type widen(Type before, Type after)
++{
++  if (before == Type::null) return after;
++  if (after == Type::null || before == after) return before;
++  if ((before == Type::integer && after == Type::real) || (before == Type::real && after == Type::integer)) return Type::real;
++  if ((before == Type::date && after == Type::datetime) || (before == Type::datetime && after == Type::date)) return Type::datetime;
++  return Type::text;
++}
++
++ReadResult infer_csv(std::istream &input, bool header, Schema &schema,
++                     const std::function<bool()> &keep_running)
++{
++  schema.clear();
++  if (keep_running && !keep_running()) return ReadResult::cancelled;
++  CsvReader reader(input);
++  Row row;
++  ReadResult result = reader.next(row);
++  if (result != ReadResult::row) return result == ReadResult::end ? ReadResult::invalid : result;
++  if (row.size() > 4096) return ReadResult::too_large;
++  std::unordered_set<std::string> names;
++  for (size_t i = 0; i < row.size(); ++i) {
++    std::string base = header ? row[i].text : "column" + std::to_string(i);
++    if (base.empty()) base = "column" + std::to_string(i);
++    std::string name = base;
++    for (size_t suffix = 2;; ++suffix) {
++      if (keep_running && !keep_running()) return ReadResult::cancelled;
++      std::string key = name;
++      for (char &ch : key) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
++      if (names.insert(key).second) break;
++      name = base + "__" + std::to_string(suffix);
++    }
++    schema.push_back({name, Type::null, false});
++  }
++  if (header) result = reader.next(row);
++  size_t rows = 0;
++  while (result == ReadResult::row) {
++    if ((rows++ % 1024) == 0 && keep_running && !keep_running()) return ReadResult::cancelled;
++    if (row.size() != schema.size()) return ReadResult::invalid;
++    for (size_t i = 0; i < row.size(); ++i) {
++      schema[i].nullable |= row[i].is_null();
++      schema[i].max_bytes = std::max(schema[i].max_bytes, row[i].text.size());
++      if (!row[i].is_null()) schema[i].type = widen(schema[i].type, classify(row[i].text));
++    }
++    result = reader.next(row);
++  }
++  return result;
++}
++
++const char *type_name(Type type)
++{
++  switch (type) {
++    case Type::null: return "NULL";
++    case Type::integer: return "BIGINT";
++    case Type::real: return "DOUBLE";
++    case Type::boolean: return "BOOLEAN";
++    case Type::date: return "DATE";
++    case Type::datetime: return "DATETIME";
++    default: return "VARCHAR";
++  }
++}
++} // namespace oceanbase::sql::file_sql
+diff --git a/src/sql/engine/file_sql/csv_reader.h b/src/sql/engine/file_sql/csv_reader.h
+new file mode 100644
+index 0000000..e4170a8
+--- /dev/null
++++ b/src/sql/engine/file_sql/csv_reader.h
+@@ -0,0 +1,51 @@
++#pragma once
++
++#include <cstddef>
++#include <functional>
++#include <istream>
++#include <string>
++#include <vector>
++
++namespace oceanbase::sql::file_sql {
++
++enum class ReadResult { row, end, invalid, io_error, too_large, cancelled };
++enum class Type { null, integer, real, boolean, date, datetime, text };
++
++struct Field {
++  std::string text;
++  bool quoted = false;
++  bool is_null() const { return !quoted && (text.empty() || text == "NULL"); }
++};
++using Row = std::vector<Field>;
++struct Column {
++  std::string name;
++  Type type = Type::null;
++  bool nullable = false;
++  size_t max_bytes = 0;
++  std::string source_name = {};
++};
++using Schema = std::vector<Column>;
++
++// Storage is bounded by one record, independent of the number of records.
++// An oversized record fails explicitly rather than exhausting the process.
++class CsvReader {
++public:
++  explicit CsvReader(std::istream &input, size_t max_record_bytes = 64 * 1024 * 1024);
++  ReadResult next(Row &row);
++private:
++  int get();
++  int peek();
++  std::istream &input_;
++  size_t max_record_bytes_;
++  std::string prefix_;
++  size_t prefix_pos_ = 0;
++  bool ended_ = false;
++};
++
++Type classify(const std::string &value);
++Type widen(Type before, Type after);
++ReadResult infer_csv(std::istream &input, bool header, Schema &schema,
++                     const std::function<bool()> &keep_running = {});
++const char *type_name(Type type);
++
++} // namespace oceanbase::sql::file_sql
+diff --git a/src/sql/engine/file_sql/file_sql_scan.cpp b/src/sql/engine/file_sql/file_sql_scan.cpp
+new file mode 100644
+index 0000000..ea5c61b
+--- /dev/null
++++ b/src/sql/engine/file_sql/file_sql_scan.cpp
+@@ -0,0 +1,387 @@
++#define USING_LOG_PREFIX SQL_ENG
++#include "file_sql_scan.h"
++#include "jsonl_reader.h"
++#include "parquet_reader.h"
++#include "sql/engine/basic/ob_json_table_op.h"
++#include "sql/resolver/ob_resolver_utils.h"
++#include "sql/session/ob_sql_session_info.h"
++#include "common/timezone/ob_time_convert.h"
++#include "lib/charset/ob_charset.h"
++#include <charconv>
++#include <cerrno>
++#include <string_view>
++#include <unordered_map>
++#if defined(__linux__)
++#include <fcntl.h>
++#include <glob.h>
++#include <limits.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#endif
++
++namespace oceanbase::sql::file_sql {
++using namespace common;
++using namespace share;
++
++int FileBuffer::check_status()
++{
++  if (status_ == OB_SUCCESS) status_ = THIS_WORKER.check_status();
++  if (status_ == OB_SUCCESS && session_ != nullptr) status_ = session_->check_session_status();
++  return status_;
++}
++
++FileBuffer::int_type FileBuffer::underflow()
++{
++#if defined(__linux__)
++  if (gptr() < egptr()) return traits_type::to_int_type(*gptr());
++  ssize_t size = 0;
++  do {
++    if (check_status() != OB_SUCCESS) return traits_type::eof();
++    size = ::read(fd_, buffer_.data(), buffer_.size());
++  } while (size < 0 && errno == EINTR);
++  if (size <= 0) { failed_ = size < 0; return traits_type::eof(); }
++  setg(buffer_.data(), buffer_.data(), buffer_.data() + size);
++  return traits_type::to_int_type(*gptr());
++#else
++  return traits_type::eof();
++#endif
++}
++
++static int malformed(bool jsonl = false)
++{
++  LOG_USER_ERROR(OB_ERR_PARSE_SQL, jsonl ? "malformed JSONL input" : "malformed CSV input", 8, "file_sql", 1);
++  return OB_ERR_PARSE_SQL;
++}
++
++#if defined(__linux__)
++static std::string identity(const struct stat &value)
++{
++  return std::to_string(value.st_dev) + ":" + std::to_string(value.st_ino) + ":" +
++      std::to_string(value.st_size) + ":" + std::to_string(value.st_mtim.tv_sec) + ":" +
++      std::to_string(value.st_mtim.tv_nsec) + ":" + std::to_string(value.st_ctim.tv_sec) + ":" +
++      std::to_string(value.st_ctim.tv_nsec);
++}
++#endif
++
++FileSqlScan::FileSqlScan(FileSqlFormat format) : format_(format), input_(&buffer_) {}
++FileSqlScan::~FileSqlScan() { close(); }
++void FileSqlScan::close()
++{
++  reader_.reset();
++  json_reader_.reset();
++  parquet_reader_.reset();
++  glob_files_.clear();
++  glob_pos_ = 0;
++#if defined(__linux__)
++  if (fd_ >= 0) ::close(fd_);
++#endif
++  fd_ = -1;
++  buffer_.reset(-1);
++  buffer_.set_session(nullptr);
++  input_.clear();
++  row_.clear();
++}
++
++int FileSqlScan::open(ObSQLSessionInfo &session, const ObString &path, const ObString &expected_fingerprint)
++{
++  close();
++  int ret = OB_SUCCESS;
++  bool enabled = false;
++  if (OB_FAIL(session.get_sys_variable(SYS_VAR_ENABLE_FILE_SQL, enabled))) {
++  } else if (!enabled) {
++    ret = OB_NOT_SUPPORTED;
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL is disabled");
++  }
++#if defined(__linux__)
++  ObString secure;
++  std::string pathname(path.ptr() == nullptr ? "" : std::string(path.ptr(), path.length()));
++  char resolved[PATH_MAX];
++  if (OB_FAIL(ret)) {
++  } else if (pathname.empty() || pathname.find('\0') != std::string::npos) {
++    ret = OB_NOT_SUPPORTED;
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL path");
++  } else if (OB_FAIL(session.get_secure_file_priv(secure))) {
++  } else if (FileSqlFormat::glob == format_) {
++    ret = open_glob(session, pathname);
++  } else if (::realpath(pathname.c_str(), resolved) == nullptr) {
++    ret = OB_FILE_NOT_EXIST;
++  } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure, ObString(resolved)))) {
++  } else {
++    canonical_path_ = resolved;
++    fd_ = ::open(resolved, O_RDONLY | O_CLOEXEC | O_NONBLOCK | O_NOFOLLOW);
++    struct stat info;
++    if (fd_ < 0 || ::fstat(fd_, &info) != 0 || !S_ISREG(info.st_mode)) {
++      ret = OB_ERR_NO_PRIVILEGE;
++    } else {
++      // Validate the object actually opened, closing the path/symlink race.
++      const std::string descriptor = "/proc/self/fd/" + std::to_string(fd_);
++      if (::realpath(descriptor.c_str(), resolved) == nullptr) {
++        ret = OB_ERR_NO_PRIVILEGE;
++      } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure, ObString(resolved)))) {
++      } else {
++        canonical_path_ = resolved;
++        fingerprint_ = identity(info);
++        if (!expected_fingerprint.empty() && fingerprint_ != std::string(expected_fingerprint.ptr(), expected_fingerprint.length())) {
++          ret = OB_NOT_SUPPORTED;
++          LOG_USER_ERROR(OB_NOT_SUPPORTED, "File changed after schema inference");
++        } else if (FileSqlFormat::parquet == format_) {
++          parquet_reader_.reset(new (std::nothrow) ParquetReader());
++          if (parquet_reader_ == nullptr) {
++            ret = OB_ALLOCATE_MEMORY_FAILED;
++          } else {
++            auto keep_running = [this] { return buffer_.check_status() == OB_SUCCESS; };
++            ret = parquet_reader_->open(fd_, info.st_size, keep_running);
++          }
++        }
++      }
++    }
++  }
++  if (OB_SUCC(ret)) { buffer_.reset(fd_); buffer_.set_session(&session); input_.clear(); }
++#else
++  UNUSED(path);
++  UNUSED(expected_fingerprint);
++  ret = OB_NOT_SUPPORTED;
++#endif
++  if (OB_FAIL(ret)) close();
++  return ret;
++}
++
++int FileSqlScan::open_glob(ObSQLSessionInfo &session, const std::string &pattern)
++{
++  int ret = OB_SUCCESS;
++#if defined(__linux__)
++  ObString secure;
++  if (OB_FAIL(session.get_secure_file_priv(secure))) return ret;
++  // Only literal paths are accepted; every resolved match still goes through
++  // the regular secure-path check below.
++  if (pattern.find('\'') != std::string::npos || pattern.find('\n') != std::string::npos) {
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL glob pattern");
++    return OB_NOT_SUPPORTED;
++  }
++  glob_t matches;
++  memset(&matches, 0, sizeof(matches));
++  const int result = ::glob(pattern.c_str(), GLOB_NOSORT | GLOB_ERR, nullptr, &matches);
++  if (0 != result && GLOB_NOMATCH != result) {
++    ::globfree(&matches);
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL glob pattern");
++    return OB_NOT_SUPPORTED;
++  }
++  for (size_t i = 0; OB_SUCC(ret) && i < matches.gl_pathc; ++i) {
++    char resolved[PATH_MAX];
++    struct stat info;
++    if (::realpath(matches.gl_pathv[i], resolved) == nullptr) {
++      continue;
++    } else if (OB_FAIL(ObResolverUtils::check_secure_path(secure, ObString(resolved)))) {
++      LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL glob path");
++      ret = OB_ERR_NO_PRIVILEGE;
++      break;
++    } else if (::stat(resolved, &info) != 0 || !S_ISREG(info.st_mode)) {
++      continue;
++    } else {
++      glob_files_.emplace_back(resolved);
++    }
++  }
++  if (OB_SUCC(ret)) canonical_path_ = pattern;
++#endif
++  return ret;
++}
++
++int FileSqlScan::check_identity()
++{
++  if (FileSqlFormat::glob == format_) return OB_SUCCESS;
++#if defined(__linux__)
++  struct stat value;
++  if (fd_ < 0 || ::fstat(fd_, &value) != 0) return OB_IO_ERROR;
++  if (identity(value) != fingerprint_) {
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File changed during scan");
++    return OB_NOT_SUPPORTED;
++  }
++  return OB_SUCCESS;
++#else
++  return OB_NOT_SUPPORTED;
++#endif
++}
++
++int FileSqlScan::infer(bool header, Schema &schema)
++{
++  int ret = OB_SUCCESS;
++  if (FileSqlFormat::glob == format_) {
++    ret = infer_glob(schema);
++  } else if (FileSqlFormat::parquet == format_) {
++    if (parquet_reader_ == nullptr) ret = OB_NOT_INIT;
++    else ret = parquet_reader_->infer(schema);
++  } else if (FileSqlFormat::jsonl == format_) {
++    JsonlReader reader(input_);
++    ret = reader.infer(schema, [this] { return buffer_.check_status() == OB_SUCCESS; });
++  } else {
++    const ReadResult result = infer_csv(input_, header, schema, [this] { return buffer_.check_status() == OB_SUCCESS; });
++    if (result == ReadResult::io_error) ret = OB_IO_ERROR;
++    else if (result == ReadResult::too_large) ret = OB_SIZE_OVERFLOW;
++    else if (result != ReadResult::end) ret = OB_ERR_PARSE_SQL;
++  }
++  if (buffer_.status() != OB_SUCCESS) return buffer_.status();
++  if (buffer_.failed()) return OB_IO_ERROR;
++  if (ret != OB_SUCCESS) return ret == OB_ERR_PARSE_SQL ? malformed(FileSqlFormat::jsonl == format_) : ret;
++  // SQL resolves identifiers with GENERAL_CI, including accent equivalence.
++  // Finalize each name against all prior finalized names, including suffixes.
++  for (size_t i = 0; i < schema.size(); ++i) {
++    const std::string base = schema[i].name;
++    size_t suffix = 2;
++    for (;;) {
++      if (buffer_.check_status() != OB_SUCCESS) return buffer_.status();
++      bool duplicate = false;
++      const std::string &name = schema[i].name;
++      for (size_t j = 0; !duplicate && j < i; ++j) {
++        const std::string &prior = schema[j].name;
++        duplicate = ObCharset::strcmp(CS_TYPE_UTF8MB4_GENERAL_CI,
++            ObString(name.size(), name.data()), ObString(prior.size(), prior.data())) == 0;
++      }
++      if (!duplicate) break;
++      schema[i].name = base + "__" + std::to_string(suffix++);
++    }
++    if (schema[i].name.size() > 128) {
++      LOG_USER_ERROR(OB_WRONG_COLUMN_NAME, static_cast<int>(schema[i].name.size()), schema[i].name.data());
++      return OB_WRONG_COLUMN_NAME;
++    }
++  }
++  return check_identity();
++}
++
++int FileSqlScan::begin(bool header)
++{
++  if (FileSqlFormat::glob == format_) {
++    glob_pos_ = 0;
++    return OB_SUCCESS;
++  }
++  if (FileSqlFormat::parquet == format_) {
++    return parquet_reader_ == nullptr ? OB_NOT_INIT : parquet_reader_->begin();
++  }
++#if defined(__linux__)
++  if (::lseek(fd_, 0, SEEK_SET) < 0) return OB_IO_ERROR;
++#else
++  return OB_NOT_SUPPORTED;
++#endif
++  input_.clear();
++  buffer_.reset(fd_);
++  if (FileSqlFormat::jsonl == format_) {
++    json_reader_.reset(new (std::nothrow) JsonlReader(input_));
++    return json_reader_ == nullptr ? OB_ALLOCATE_MEMORY_FAILED : buffer_.check_status();
++  }
++  reader_.emplace(input_);
++  if (buffer_.status() != OB_SUCCESS) return buffer_.status();
++  if (header) {
++    const ReadResult result = reader_->next(row_);
++    if (buffer_.status() != OB_SUCCESS) return buffer_.status();
++    if (result != ReadResult::row) return malformed();
++  }
++  return OB_SUCCESS;
++}
++
++int FileSqlScan::next(const ObJsonTableSpec &spec, ObEvalCtx &ctx)
++{
++  if (FileSqlFormat::parquet == format_) {
++    if (parquet_reader_ == nullptr) return OB_NOT_INIT;
++  } else if (FileSqlFormat::glob == format_) {
++  } else if ((FileSqlFormat::jsonl == format_ && !json_reader_) ||
++             (FileSqlFormat::csv == format_ && !reader_)) {
++    return OB_NOT_INIT;
++  }
++  if (buffer_.check_status() != OB_SUCCESS) return buffer_.status();
++  int read_ret = OB_SUCCESS;
++  if (FileSqlFormat::glob == format_) {
++    read_ret = next_glob(row_);
++  } else if (FileSqlFormat::parquet == format_) {
++    read_ret = parquet_reader_->next(row_);
++  } else if (FileSqlFormat::jsonl == format_) {
++    NamedRow source;
++    read_ret = json_reader_->next(source);
++    if (read_ret == OB_SUCCESS) {
++      row_.assign(spec.cols_def_.count() - 1, Field{});
++      std::unordered_map<std::string_view, Field *> fields;
++      for (NamedField &field : source) fields.emplace(field.name, &field.value);
++      for (int64_t i = 1; i < spec.cols_def_.count(); ++i) {
++        const ObString &key = spec.cols_def_.at(i)->path_;
++        const auto field = fields.find(std::string_view(key.ptr(), key.length()));
++        if (field != fields.end()) row_[i - 1] = std::move(*field->second);
++      }
++    }
++  } else {
++    const ReadResult result = reader_->next(row_);
++    if (result == ReadResult::end) read_ret = OB_ITER_END;
++    else if (result == ReadResult::io_error) read_ret = OB_IO_ERROR;
++    else if (result == ReadResult::too_large) read_ret = OB_SIZE_OVERFLOW;
++    else if (result != ReadResult::row) read_ret = OB_ERR_PARSE_SQL;
++  }
++  if (buffer_.status() != OB_SUCCESS) return buffer_.status();
++  if (buffer_.failed()) return OB_IO_ERROR;
++  if (read_ret == OB_ITER_END) {
++    const int checked = check_identity();
++    return checked == OB_SUCCESS ? OB_ITER_END : checked;
++  }
++  if (read_ret != OB_SUCCESS) return read_ret == OB_ERR_PARSE_SQL ? malformed(FileSqlFormat::jsonl == format_) : read_ret;
++  // The first definition is the multimode table's structural root.
++  if (row_.size() + 1 != static_cast<size_t>(spec.cols_def_.count())) return malformed();
++  int ret = OB_SUCCESS;
++  for (int64_t i = 1; OB_SUCC(ret) && i < spec.cols_def_.count(); ++i) {
++    const ObJtColInfo &column = *spec.cols_def_.at(i);
++    if (column.output_column_idx_ < 0) continue;
++    if (column.output_column_idx_ >= spec.column_exprs_.count()) return OB_ERR_UNEXPECTED;
++    ObExpr &expr = *spec.column_exprs_.at(column.output_column_idx_);
++    ObDatum &datum = expr.locate_datum_for_write(ctx);
++    Field &field = row_[i - 1];
++    if (field.is_null()) {
++      datum.set_null();
++    } else {
++      const char *first = field.text.data(), *last = first + field.text.size();
++      const ObObjType type = expr.datum_meta_.type_;
++      if (type == ObIntType) {
++        int64_t value = 0;
++        auto parsed = std::from_chars(first, last, value);
++        if (parsed.ec != std::errc() || parsed.ptr != last) ret = malformed();
++        else datum.set_int(value);
++      } else if (type == ObDoubleType) {
++        double value = 0;
++        auto parsed = std::from_chars(first, last, value);
++        if (parsed.ec != std::errc() || parsed.ptr != last) ret = malformed();
++        else datum.set_double(value);
++      } else if (type == ObTinyIntType) {
++        datum.set_int(field.text[0] == 't' || field.text[0] == 'T' ? 1 : 0);
++      } else if (type == ObDateType) {
++        int32_t value = 0;
++        if (OB_FAIL(ObTimeConverter::str_to_date(ObString(field.text.size(), first), value))) {} else datum.set_date(value);
++      } else if (type == ObDateTimeType) {
++        int64_t value = 0;
++        ObTimeConvertCtx convert(nullptr, false);
++        if (OB_FAIL(ObTimeConverter::str_to_datetime(ObString(field.text.size(), first), convert, value))) {} else datum.set_datetime(value);
++      } else {
++        datum.set_string(first, field.text.size());
++      }
++    }
++    expr.get_eval_info(ctx).evaluated_ = true;
++  }
++  return ret;
++}
++int FileSqlScan::infer_glob(Schema &schema)
++{
++  schema.clear();
++  Column column;
++  column.name = "file";
++  column.type = Type::text;
++  column.nullable = false;
++  column.max_bytes = 4096;
++  column.source_name = "file";
++  schema.push_back(std::move(column));
++  return OB_SUCCESS;
++}
++
++int FileSqlScan::next_glob(Row &row)
++{
++  if (glob_pos_ >= glob_files_.size()) return OB_ITER_END;
++  row.clear();
++  Field field;
++  field.text = glob_files_[glob_pos_++];
++  field.quoted = true;
++  row.push_back(std::move(field));
++  return OB_SUCCESS;
++}
++} // namespace oceanbase::sql::file_sql
+diff --git a/src/sql/engine/file_sql/file_sql_scan.h b/src/sql/engine/file_sql/file_sql_scan.h
+new file mode 100644
+index 0000000..537f556
+--- /dev/null
++++ b/src/sql/engine/file_sql/file_sql_scan.h
+@@ -0,0 +1,73 @@
++#pragma once
++
++#include "sql/engine/file_sql/csv_reader.h"
++#include "lib/string/ob_string.h"
++#include <array>
++#include <memory>
++#include <optional>
++#include <streambuf>
++#include <string>
++#include <vector>
++
++namespace oceanbase::sql {
++class ObSQLSessionInfo;
++class ObJsonTableSpec;
++class ObEvalCtx;
++
++namespace file_sql {
++class JsonlReader;
++class ParquetReader;
++
++enum class FileSqlFormat { csv, jsonl, parquet, glob };
++
++class FileBuffer : public std::streambuf {
++public:
++  void reset(int fd) { fd_ = fd; failed_ = false; status_ = 0; setg(buffer_.data(), buffer_.data(), buffer_.data()); }
++  bool failed() const { return failed_; }
++  void set_session(ObSQLSessionInfo *session) { session_ = session; }
++  int check_status();
++  int status() const { return status_; }
++protected:
++  int_type underflow() override;
++private:
++  int fd_ = -1;
++  bool failed_ = false;
++  int status_ = 0;
++  ObSQLSessionInfo *session_ = nullptr;
++  std::array<char, 65536> buffer_;
++};
++
++class FileSqlScan {
++public:
++  explicit FileSqlScan(FileSqlFormat format = FileSqlFormat::csv);
++  ~FileSqlScan();
++  FileSqlScan(const FileSqlScan &) = delete;
++  FileSqlScan &operator=(const FileSqlScan &) = delete;
++  int open(ObSQLSessionInfo &session, const common::ObString &path,
++           const common::ObString &expected_fingerprint = common::ObString());
++  int infer(bool header, Schema &schema);
++  int begin(bool header);
++  int next(const ObJsonTableSpec &spec, ObEvalCtx &ctx);
++  void close();
++  const std::string &canonical_path() const { return canonical_path_; }
++  const std::string &fingerprint() const { return fingerprint_; }
++private:
++  int check_identity();
++  int open_glob(ObSQLSessionInfo &session, const std::string &pattern);
++  int infer_glob(Schema &schema);
++  int next_glob(Row &row);
++  int fd_ = -1;
++  FileSqlFormat format_ = FileSqlFormat::csv;
++  FileBuffer buffer_;
++  std::istream input_;
++  std::optional<CsvReader> reader_;
++  std::unique_ptr<JsonlReader> json_reader_;
++  std::unique_ptr<ParquetReader> parquet_reader_;
++  std::vector<std::string> glob_files_;
++  size_t glob_pos_ = 0;
++  Row row_;
++  std::string canonical_path_;
++  std::string fingerprint_;
++};
++} // namespace file_sql
++} // namespace oceanbase::sql
+diff --git a/src/sql/engine/file_sql/jsonl_reader.cpp b/src/sql/engine/file_sql/jsonl_reader.cpp
+new file mode 100644
+index 0000000..dc2b1b8
+--- /dev/null
++++ b/src/sql/engine/file_sql/jsonl_reader.cpp
+@@ -0,0 +1,131 @@
++#define USING_LOG_PREFIX SQL_ENG
++#include "jsonl_reader.h"
++#include "share/ob_errno.h"
++#include "common/json_type/ob_json_base.h"
++#include <algorithm>
++#include <cstring>
++#include <limits>
++#include <unordered_map>
++
++namespace oceanbase::sql::file_sql {
++using namespace common;
++
++void *JsonlArena::alloc(const int64_t size)
++{
++  constexpr int64_t limit = 64 * 1024 * 1024;
++  if (size < 0 || size > limit - requested_) { exhausted_ = true; return nullptr; }
++  requested_ += size;
++  return arena_.alloc(size);
++}
++
++static int malformed_jsonl()
++{
++  return OB_ERR_PARSE_SQL;
++}
++
++int JsonlReader::next(NamedRow &row)
++{
++  row.clear();
++  arena_.reuse();
++  if (ended_) return OB_ITER_END;
++  for (;;) {
++    line_.clear();
++    for (;;) {
++      const int ch = input_.get();
++      if (ch == std::char_traits<char>::eof()) {
++        ended_ = true;
++        if (input_.bad()) return OB_IO_ERROR;
++        break;
++      }
++      if (ch == '\n') break;
++      if (line_.size() == 64 * 1024 * 1024) return OB_SIZE_OVERFLOW;
++      line_.push_back(static_cast<char>(ch));
++    }
++    if (first_line_) {
++      first_line_ = false;
++      if (line_.compare(0, 3, "\xef\xbb\xbf") == 0) line_.erase(0, 3);
++    }
++    if (line_.find_first_not_of(" \t\r") != std::string::npos) break;
++    if (ended_) return OB_ITER_END;
++  }
++  if (line_.find('\0') != std::string::npos) return malformed_jsonl();
++  ObIJsonBase *object = nullptr;
++  int ret = ObJsonBaseFactory::get_json_base(&arena_, ObString(line_.size(), line_.data()),
++      ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, object);
++  if (arena_.exhausted()) return OB_SIZE_OVERFLOW;
++  if (ret == OB_ALLOCATE_MEMORY_FAILED) return ret;
++  if (ret != OB_SUCCESS || object == nullptr || object->json_type() != ObJsonNodeType::J_OBJECT) return malformed_jsonl();
++  if (object->element_count() > 4096) return OB_SIZE_OVERFLOW;
++  for (uint64_t i = 0; i < object->element_count(); ++i) {
++    ObString key;
++    ObIJsonBase *value = nullptr;
++    if (OB_FAIL(object->get_object_value(i, key, value))) return ret;
++    if (value == nullptr) return OB_ERR_UNEXPECTED;
++    if (key.length() > 128 || (key.length() > 0 && std::memchr(key.ptr(), 0, key.length()) != nullptr)) {
++      LOG_USER_ERROR(OB_WRONG_COLUMN_NAME, key.length(), key.ptr());
++      return OB_WRONG_COLUMN_NAME;
++    }
++    NamedField field;
++    field.name.assign(key.ptr(), key.length());
++    const ObJsonNodeType kind = value->json_type();
++    if (kind != ObJsonNodeType::J_NULL) {
++      field.value.quoted = true; // JSON string "NULL" and empty strings are values.
++      if (kind == ObJsonNodeType::J_STRING) {
++        field.value.text.assign(value->get_data(), value->get_data_length());
++        const Type inferred = classify(field.value.text);
++        field.type = inferred == Type::date || inferred == Type::datetime ? inferred : Type::text;
++      } else {
++        ObJsonBuffer encoded(&arena_);
++        if (OB_FAIL(value->print(encoded, false))) return arena_.exhausted() ? OB_SIZE_OVERFLOW : ret;
++        const ObString text = encoded.string();
++        field.value.text.assign(text.ptr(), text.length());
++        if (kind == ObJsonNodeType::J_BOOLEAN) field.type = Type::boolean;
++        else if (kind == ObJsonNodeType::J_INT || kind == ObJsonNodeType::J_UINT ||
++                 kind == ObJsonNodeType::J_DOUBLE || kind == ObJsonNodeType::J_DECIMAL) field.type = classify(field.value.text);
++        else field.type = Type::text; // Nested values retain their compact JSON.
++      }
++    }
++    row.push_back(std::move(field));
++  }
++  return OB_SUCCESS;
++}
++
++int JsonlReader::infer(Schema &schema, const std::function<bool()> &keep_running)
++{
++  schema.clear();
++  std::unordered_map<std::string, size_t> columns;
++  std::vector<uint64_t> seen;
++  uint64_t rows = 0;
++  NamedRow row;
++  for (;;) {
++    if (!keep_running()) return OB_CANCELED;
++    int ret = next(row);
++    if (ret == OB_ITER_END) break;
++    if (ret != OB_SUCCESS) return ret;
++    ++rows;
++    for (const NamedField &field : row) {
++      if (!keep_running()) return OB_CANCELED;
++      auto found = columns.find(field.name);
++      if (found == columns.end()) {
++        if (schema.size() == 4096) return OB_SIZE_OVERFLOW;
++        const size_t index = schema.size();
++        columns.emplace(field.name, index);
++        Column column;
++        column.name = field.name.empty() ? "column" + std::to_string(index) : field.name;
++        column.source_name = field.name;
++        schema.push_back(std::move(column));
++        seen.push_back(0);
++        found = columns.find(field.name);
++      }
++      const size_t index = found->second;
++      ++seen[index];
++      schema[index].nullable |= field.value.is_null();
++      schema[index].max_bytes = std::max(schema[index].max_bytes, field.value.text.size());
++      schema[index].type = widen(schema[index].type, field.type);
++    }
++  }
++  if (schema.empty()) return malformed_jsonl();
++  for (size_t i = 0; i < schema.size(); ++i) schema[i].nullable |= seen[i] < rows;
++  return OB_SUCCESS;
++}
++} // namespace oceanbase::sql::file_sql
+diff --git a/src/sql/engine/file_sql/jsonl_reader.h b/src/sql/engine/file_sql/jsonl_reader.h
+new file mode 100644
+index 0000000..f44a19b
+--- /dev/null
++++ b/src/sql/engine/file_sql/jsonl_reader.h
+@@ -0,0 +1,44 @@
++#pragma once
++
++#include "sql/engine/file_sql/csv_reader.h"
++#include "lib/allocator/page_arena.h"
++
++namespace oceanbase::sql::file_sql {
++
++struct NamedField {
++  std::string name;
++  Field value;
++  Type type = Type::null;
++};
++using NamedRow = std::vector<NamedField>;
++
++// Bound parser allocations as well as input bytes: dense nested arrays can
++// otherwise allocate far more tree nodes than their encoded size suggests.
++class JsonlArena : public common::ObIAllocator {
++public:
++  JsonlArena() : arena_("FileSqlJsonl") {}
++  void *alloc(const int64_t size) override;
++  void *alloc(const int64_t size, const common::ObMemAttr &) override { return alloc(size); }
++  void free(void *) override {}
++  void reuse() { arena_.reuse(); requested_ = 0; exhausted_ = false; }
++  bool exhausted() const { return exhausted_; }
++private:
++  common::ObArenaAllocator arena_;
++  int64_t requested_ = 0;
++  bool exhausted_ = false;
++};
++
++class JsonlReader {
++public:
++  explicit JsonlReader(std::istream &input) : input_(input) {}
++  int next(NamedRow &row);
++  int infer(Schema &schema, const std::function<bool()> &keep_running);
++private:
++  std::istream &input_;
++  JsonlArena arena_;
++  std::string line_;
++  bool first_line_ = true;
++  bool ended_ = false;
++};
++
++} // namespace oceanbase::sql::file_sql
+diff --git a/src/sql/engine/file_sql/parquet_reader.cpp b/src/sql/engine/file_sql/parquet_reader.cpp
+new file mode 100644
+index 0000000..a47efcd
+--- /dev/null
++++ b/src/sql/engine/file_sql/parquet_reader.cpp
+@@ -0,0 +1,1118 @@
++#define USING_LOG_PREFIX SQL_ENG
++#include "sql/engine/file_sql/parquet_reader.h"
++#include "share/ob_errno.h"
++#include "lib/oblog/ob_log_module.h"
++#include <algorithm>
++#include <cmath>
++#include <cstdio>
++#include <cstring>
++#include <string>
++#include <vector>
++#if defined(__linux__)
++#include <unistd.h>
++#endif
++
++
++namespace oceanbase::sql::file_sql {
++using namespace common;
++
++namespace {
++
++// ---------------------------------------------------------------------------
++// Thrift compact protocol (only the subset used by the Parquet footer/pages).
++// ---------------------------------------------------------------------------
++class Compact {
++public:
++  Compact(const unsigned char *data, size_t size) : p_(data), end_(data + size) {}
++  const unsigned char *pos() const { return p_; }
++  bool ok() const { return ok_; }
++  bool at_end() const { return p_ == end_; }
++
++  uint64_t varint()
++  {
++    uint64_t value = 0;
++    int shift = 0;
++    while (ok_ && p_ < end_) {
++      const unsigned char c = *p_++;
++      value |= static_cast<uint64_t>(c & 0x7f) << shift;
++      if (0 == (c & 0x80)) return value;
++      shift += 7;
++      if (shift > 63) break;
++    }
++    ok_ = false;
++    return 0;
++  }
++  int64_t zigzag()
++  {
++    const uint64_t value = varint();
++    return static_cast<int64_t>((value >> 1) ^ -(value & 1));
++  }
++  int32_t i32() { return static_cast<int32_t>(zigzag()); }
++  int64_t i64() { return zigzag(); }
++  bool boolean() { return varint() != 0 || true; }
++
++  // Returns false when the struct ended; sets type/id for a real field.
++  bool field(int32_t &type, int32_t &id)
++  {
++    if (!ok_ || p_ >= end_) { ok_ = false; return false; }
++    const unsigned char header = *p_++;
++    if (0 == header) return false;
++    type = header & 0x0f;
++    const int32_t delta = (header >> 4) & 0x0f;
++    id = 0 == delta ? static_cast<int32_t>(zigzag()) : last_ + delta;
++    last_ = id;
++    return true;
++  }
++  void reset_struct() { last_ = 0; }
++  int32_t last() const { return last_; }
++  void set_last(int32_t value) { last_ = value; }
++
++  bool bytes(std::string &out)
++  {
++    const uint64_t size = varint();
++    if (!ok_ || p_ + size > end_) { ok_ = false; return false; }
++    out.assign(reinterpret_cast<const char *>(p_), size);
++    p_ += size;
++    return true;
++  }
++  bool list(int32_t &size, int32_t &elem_type)
++  {
++    if (!ok_ || p_ >= end_) { ok_ = false; return false; }
++    const unsigned char header = *p_++;
++    size = (header >> 4) & 0x0f;
++    elem_type = header & 0x0f;
++    if (15 == size) size = static_cast<int32_t>(varint());
++    return ok_;
++  }
++  bool skip(int32_t type)
++  {
++    // Nested structs restart the field-id delta tracking; preserve the
++    // enclosing struct's state.
++    const int32_t saved = last_;
++    const bool result = skip_impl(type);
++    last_ = saved;
++    return result;
++  }
++  bool skip_impl(int32_t type)
++  {
++    switch (type) {
++      case 1: case 2: return true;                        // bool value is in the header
++      case 3: if (p_ < end_) { ++p_; return true; } ok_ = false; return false;
++      case 4: case 5: case 6: varint(); return ok_;
++      case 7: if (p_ + 8 <= end_) { p_ += 8; return true; } ok_ = false; return false;
++      case 8: { std::string ignored; return bytes(ignored); }
++      case 9: case 10: {
++        int32_t size = 0, elem = 0;
++        if (!list(size, elem)) return false;
++        for (int32_t i = 0; ok_ && i < size; ++i) skip(elem);
++        return ok_;
++      }
++      case 11: {
++        const uint64_t size = varint();
++        if (!ok_ || 0 == size) return ok_;
++        if (p_ >= end_) { ok_ = false; return false; }
++        const unsigned char kinds = *p_++;
++        const int32_t key_type = kinds >> 4, value_type = kinds & 0x0f;
++        for (uint64_t i = 0; ok_ && i < size; ++i) {
++          skip(key_type);
++          skip(value_type);
++        }
++        return ok_;
++      }
++      case 12: {
++        reset_struct();
++        int32_t field_type = 0, field_id = 0;
++        while (ok_ && field(field_type, field_id)) skip(field_type);
++        return ok_;
++      }
++      default: ok_ = false; return false;
++    }
++  }
++
++private:
++  const unsigned char *p_;
++  const unsigned char *end_;
++  bool ok_ = true;
++  int32_t last_ = 0;
++};
++
++// ---------------------------------------------------------------------------
++// Snappy raw decompression (Parquet's default codec).
++// ---------------------------------------------------------------------------
++int snappy_decompress(const unsigned char *src, size_t size, std::string &out)
++{
++  size_t i = 0;
++  uint64_t expected = 0;
++  int shift = 0;
++  while (i < size) {
++    const unsigned char c = src[i++];
++    expected |= static_cast<uint64_t>(c & 0x7f) << shift;
++    if (0 == (c & 0x80)) break;
++    shift += 7;
++    if (shift > 63) return OB_INVALID_DATA;
++  }
++  if (i >= size) return OB_INVALID_DATA;
++  out.clear();
++  out.reserve(expected);
++  while (i < size && out.size() < expected) {
++    const unsigned char tag = src[i++];
++    const int type = tag & 0x03;
++    if (0 == type) {
++      size_t length = tag >> 2;
++      if (length < 60) {
++        ++length;
++      } else {
++        const size_t extra = length - 59;
++        if (i + extra > size) return OB_INVALID_DATA;
++        length = 0;
++        for (size_t k = 0; k < extra; ++k) length |= static_cast<size_t>(src[i + k]) << (8 * k);
++        length += 1;
++        i += extra;
++      }
++      if (i + length > size) return OB_INVALID_DATA;
++      out.append(reinterpret_cast<const char *>(src + i), length);
++      i += length;
++    } else {
++      size_t length = 0, offset = 0;
++      if (1 == type) {
++        length = ((tag >> 2) & 0x07) + 4;
++        if (i >= size) return OB_INVALID_DATA;
++        offset = (static_cast<size_t>(tag >> 5) << 8) | src[i++];
++      } else if (2 == type) {
++        length = (tag >> 2) + 1;
++        if (i + 2 > size) return OB_INVALID_DATA;
++        offset = src[i] | (static_cast<size_t>(src[i + 1]) << 8);
++        i += 2;
++      } else {
++        length = (tag >> 2) + 1;
++        if (i + 4 > size) return OB_INVALID_DATA;
++        offset = src[i] | (static_cast<size_t>(src[i + 1]) << 8) |
++                 (static_cast<size_t>(src[i + 2]) << 16) |
++                 (static_cast<size_t>(src[i + 3]) << 24);
++        i += 4;
++      }
++      if (0 == offset || offset > out.size()) return OB_INVALID_DATA;
++      for (size_t k = 0; k < length; ++k) out.push_back(out[out.size() - offset]);
++    }
++  }
++  if (out.size() != expected) return OB_INVALID_DATA;
++  return OB_SUCCESS;
++}
++
++// ---------------------------------------------------------------------------
++// Value formatting helpers.
++// ---------------------------------------------------------------------------
++std::string civil_date(int64_t days)
++{
++  int64_t z = days + 719468;
++  const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
++  const uint32_t doe = static_cast<uint32_t>(z - era * 146097);
++  const uint32_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
++  int64_t year = static_cast<int64_t>(yoe) + era * 400;
++  const uint32_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
++  const uint32_t mp = (5 * doy + 2) / 153;
++  const uint32_t day = doy - (153 * mp + 2) / 5 + 1;
++  const uint32_t month = mp + (mp < 10 ? 3 : -9);
++  year += (month <= 2);
++  char buffer[32];
++  snprintf(buffer, sizeof(buffer), "%04lld-%02u-%02u", static_cast<long long>(year), month, day);
++  return buffer;
++}
++
++std::string date_time_text(int64_t seconds)
++{
++  int64_t days = seconds / 86400;
++  int64_t rest = seconds % 86400;
++  if (rest < 0) { rest += 86400; --days; }
++  char time[16];
++  snprintf(time, sizeof(time), "%02lld:%02lld:%02lld",
++           static_cast<long long>(rest / 3600),
++           static_cast<long long>((rest / 60) % 60),
++           static_cast<long long>(rest % 60));
++  return civil_date(days) + " " + time;
++}
++
++enum PhysicalType {
++  PARQUET_BOOLEAN = 0,
++  PARQUET_INT32 = 1,
++  PARQUET_INT64 = 2,
++  PARQUET_INT96 = 3,
++  PARQUET_FLOAT = 4,
++  PARQUET_DOUBLE = 5,
++  PARQUET_BYTE_ARRAY = 6,
++  PARQUET_FIXED = 7,
++};
++
++struct ColumnInfo {
++  std::string name;
++  Type type = Type::text;
++  bool nullable = true;
++  int32_t physical = -1;
++  int32_t converted = -1;
++  bool logical_date = false;
++  bool logical_timestamp = false;
++  bool logical_time = false;
++  bool logical_string = false;
++  int32_t time_unit = 0;  // 1 millis, 2 micros, 3 nanos
++  int32_t fixed_length = 0;
++};
++
++struct ChunkMeta {
++  int64_t start_offset = -1;
++  int64_t data_offset = -1;
++  int64_t dict_offset = -1;
++  int64_t compressed_size = 0;
++  int64_t num_values = 0;
++  int32_t codec = 0;
++  int32_t physical = -1;
++};
++
++struct PageHeader {
++  int32_t type = -1;
++  int32_t uncompressed_size = 0;
++  int32_t compressed_size = 0;
++  int32_t num_values = 0;
++  int32_t num_rows = 0;
++  int32_t encoding = 0;
++  int32_t def_encoding = 2;
++  int32_t rep_encoding = 2;
++  bool v2_compressed = false;
++  int32_t dict_num_values = 0;
++};
++
++struct RowGroup {
++  int64_t num_rows = 0;
++  std::vector<ChunkMeta> chunks;
++};
++
++struct Cursor {
++  ChunkMeta meta;
++  int64_t page_offset = 0;
++  int64_t end_offset = 0;
++  int64_t rows_read = 0;
++  std::vector<std::string> dictionary;
++  std::vector<Field> values;
++  int64_t page_start_row = 0;
++};
++
++bool is_plain_encoding(int32_t encoding) { return 0 == encoding; }
++bool is_dictionary_encoding(int32_t encoding) { return 2 == encoding || 7 == encoding; }
++
++}  // namespace
++
++struct ParquetReader::Impl {
++  int fd_ = -1;
++  int64_t file_size_ = 0;
++  std::function<bool()> keep_running_;
++  std::vector<ColumnInfo> columns_;
++  std::vector<RowGroup> groups_;
++  int64_t num_rows_ = 0;
++  bool loaded_ = false;
++  size_t group_index_ = 0;
++  int64_t row_in_group_ = 0;
++  bool begun_ = false;
++  std::vector<Cursor> cursors_;
++
++  bool stopped() { return keep_running_ && !keep_running_(); }
++
++  int read_at(int64_t offset, size_t size, std::string &out)
++  {
++#if defined(__linux__)
++    if (offset < 0 || offset + static_cast<int64_t>(size) > file_size_) return OB_INVALID_DATA;
++    out.resize(size);
++    size_t done = 0;
++    while (done < size) {
++      const ssize_t n = ::pread(fd_, out.data() + done, size - done, offset + static_cast<int64_t>(done));
++      if (n < 0) return OB_IO_ERROR;
++      if (0 == n) return OB_INVALID_DATA;
++      done += static_cast<size_t>(n);
++    }
++    return OB_SUCCESS;
++#else
++    return OB_NOT_SUPPORTED;
++#endif
++  }
++
++  int parse_page_header(int64_t offset, PageHeader &header, size_t &header_size)
++  {
++    int ret = OB_SUCCESS;
++    (void)ret;
++    size_t window = 4096;
++    for (int attempt = 0; attempt < 4; ++attempt, window *= 4) {
++      if (offset + static_cast<int64_t>(window) > file_size_) {
++        window = static_cast<size_t>(file_size_ - offset);
++      }
++      std::string buffer;
++      if (OB_FAIL(read_at(offset, window, buffer))) return OB_INVALID_DATA;
++      Compact reader(reinterpret_cast<const unsigned char *>(buffer.data()), buffer.size());
++      reader.reset_struct();
++      int32_t field_type = 0, field_id = 0;
++      bool complete = false;
++      while (reader.ok() && reader.field(field_type, field_id)) {
++        switch (field_id) {
++          case 1: header.type = reader.i32(); break;
++          case 2: header.uncompressed_size = reader.i32(); break;
++          case 3: header.compressed_size = reader.i32(); break;
++          case 5: {
++            const int32_t saved = reader.last();
++            reader.reset_struct();
++            int32_t t = 0, id = 0;
++            while (reader.ok() && reader.field(t, id)) {
++              switch (id) {
++                case 1: header.num_values = reader.i32(); break;
++                case 2: header.encoding = reader.i32(); break;
++                case 3: header.def_encoding = reader.i32(); break;
++                case 4: header.rep_encoding = reader.i32(); break;
++                default: reader.skip(t);
++              }
++            }
++            if (reader.ok()) complete = true;
++            reader.set_last(saved);
++            break;
++          }
++          case 7: {
++            const int32_t saved = reader.last();
++            reader.reset_struct();
++            int32_t t = 0, id = 0;
++            while (reader.ok() && reader.field(t, id)) {
++              if (1 == id) header.dict_num_values = reader.i32();
++              else reader.skip(t);
++            }
++            reader.set_last(saved);
++            break;
++          }
++          case 8: {
++            const int32_t saved = reader.last();
++            reader.reset_struct();
++            int32_t t = 0, id = 0;
++            while (reader.ok() && reader.field(t, id)) {
++              switch (id) {
++                case 1: header.num_values = reader.i32(); break;
++                case 3: header.num_rows = reader.i32(); break;
++                case 4: header.encoding = reader.i32(); break;
++                case 5: header.def_encoding = reader.i32(); break;
++                case 6: header.rep_encoding = reader.i32(); break;
++                case 7: header.v2_compressed = true; if (1 == t || 2 == t) header.v2_compressed = 1 == t; else reader.skip(t); break;
++                default: reader.skip(t);
++              }
++            }
++            reader.set_last(saved);
++            break;
++          }
++          default: reader.skip(field_type);
++        }
++      }
++      if (reader.ok()) {
++        complete = true;
++        // The outer struct is terminated by a zero byte; `field` returns
++        // false at that point and the reader still has a valid position.
++      }
++      if (complete) {
++        header_size = static_cast<size_t>(reader.pos() - reinterpret_cast<const unsigned char *>(buffer.data()));
++        return OB_SUCCESS;
++      }
++      if (window >= static_cast<size_t>(file_size_ - offset)) break;
++    }
++    return OB_INVALID_DATA;
++  }
++
++  int decode_plain(const unsigned char *data, size_t size, size_t &pos,
++                   int64_t count, const ColumnInfo &column, std::vector<std::string> &out)
++  {
++    out.clear();
++    out.reserve(static_cast<size_t>(count));
++    switch (column.physical) {
++      case PARQUET_INT32: {
++        if (pos + static_cast<size_t>(count) * 4 > size) return OB_INVALID_DATA;
++        for (int64_t i = 0; i < count; ++i) {
++          int32_t value = 0;
++          memcpy(&value, data + pos, 4); pos += 4;
++          if (column.logical_date || 6 == column.converted) {
++            out.push_back(civil_date(value));
++          } else if (column.logical_time || 7 == column.converted || 8 == column.converted) {
++            char buffer[32];
++            if (7 == column.converted || 1 == column.time_unit) {
++              snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", value / 3600000,
++                       (value / 60000) % 60, (value / 1000) % 60);
++            } else {
++              const int64_t seconds = value / 1000000;
++              snprintf(buffer, sizeof(buffer), "%02lld:%02lld:%02lld",
++                       static_cast<long long>(seconds / 3600),
++                       static_cast<long long>((seconds / 60) % 60),
++                       static_cast<long long>(seconds % 60));
++            }
++            out.emplace_back(buffer);
++          } else {
++            out.push_back(std::to_string(value));
++          }
++        }
++        break;
++      }
++      case PARQUET_INT64: {
++        if (pos + static_cast<size_t>(count) * 8 > size) return OB_INVALID_DATA;
++        for (int64_t i = 0; i < count; ++i) {
++          int64_t value = 0;
++          memcpy(&value, data + pos, 8); pos += 8;
++          if (column.logical_timestamp || 9 == column.converted || 10 == column.converted) {
++            int64_t seconds = value;
++            const int32_t unit = 9 == column.converted ? 1 : (10 == column.converted ? 2 : column.time_unit);
++            if (1 == unit) seconds /= 1000;
++            else if (2 == unit) seconds /= 1000000;
++            else if (3 == unit) seconds /= 1000000000;
++            out.push_back(date_time_text(seconds));
++          } else if (column.logical_time) {
++            const int64_t seconds = value / (1 == column.time_unit ? 1000 :
++                                           (2 == column.time_unit ? 1000000 : 1000000000));
++            char buffer[32];
++            snprintf(buffer, sizeof(buffer), "%02lld:%02lld:%02lld",
++                     static_cast<long long>(seconds / 3600),
++                     static_cast<long long>((seconds / 60) % 60),
++                     static_cast<long long>(seconds % 60));
++            out.emplace_back(buffer);
++          } else {
++            out.push_back(std::to_string(value));
++          }
++        }
++        break;
++      }
++      case PARQUET_INT96: {
++        if (pos + static_cast<size_t>(count) * 12 > size) return OB_INVALID_DATA;
++        for (int64_t i = 0; i < count; ++i) {
++          int64_t nanos = 0;
++          int32_t julian = 0;
++          memcpy(&nanos, data + pos, 8);
++          memcpy(&julian, data + pos + 8, 4);
++          pos += 12;
++          const int64_t seconds = nanos / 1000000000 + (static_cast<int64_t>(julian) - 2440588) * 86400;
++          out.push_back(date_time_text(seconds));
++        }
++        break;
++      }
++      case PARQUET_FLOAT: {
++        if (pos + static_cast<size_t>(count) * 4 > size) return OB_INVALID_DATA;
++        for (int64_t i = 0; i < count; ++i) {
++          float value = 0;
++          memcpy(&value, data + pos, 4); pos += 4;
++          char buffer[64];
++          snprintf(buffer, sizeof(buffer), "%.9g", static_cast<double>(value));
++          out.emplace_back(buffer);
++        }
++        break;
++      }
++      case PARQUET_DOUBLE: {
++        if (pos + static_cast<size_t>(count) * 8 > size) return OB_INVALID_DATA;
++        for (int64_t i = 0; i < count; ++i) {
++          double value = 0;
++          memcpy(&value, data + pos, 8); pos += 8;
++          char buffer[64];
++          snprintf(buffer, sizeof(buffer), "%.17g", value);
++          out.emplace_back(buffer);
++        }
++        break;
++      }
++      case PARQUET_BOOLEAN: {
++        if (pos + static_cast<size_t>((count + 7) / 8) > size) return OB_INVALID_DATA;
++        for (int64_t i = 0; i < count; ++i) {
++          const bool value = 0 != (data[pos + static_cast<size_t>(i / 8)] & (1 << (i % 8)));
++          out.push_back(value ? "true" : "false");
++        }
++        pos += static_cast<size_t>((count + 7) / 8);
++        break;
++      }
++      case PARQUET_BYTE_ARRAY: {
++        for (int64_t i = 0; i < count; ++i) {
++          if (pos + 4 > size) return OB_INVALID_DATA;
++          int32_t length = 0;
++          memcpy(&length, data + pos, 4); pos += 4;
++          if (length < 0 || pos + static_cast<size_t>(length) > size) return OB_INVALID_DATA;
++          out.emplace_back(reinterpret_cast<const char *>(data + pos), static_cast<size_t>(length));
++          pos += static_cast<size_t>(length);
++        }
++        break;
++      }
++      case PARQUET_FIXED: {
++        const size_t length = static_cast<size_t>(column.fixed_length);
++        if (length == 0 || pos + length * static_cast<size_t>(count) > size) return OB_INVALID_DATA;
++        for (int64_t i = 0; i < count; ++i) {
++          out.emplace_back(reinterpret_cast<const char *>(data + pos), length);
++          pos += length;
++        }
++        break;
++      }
++      default: return OB_NOT_SUPPORTED;
++    }
++    return OB_SUCCESS;
++  }
++
++  int decode_rle(const unsigned char *data, size_t size, size_t &pos,
++                 int32_t bit_width, int64_t count, std::vector<int32_t> &out)
++  {
++    out.clear();
++    out.reserve(static_cast<size_t>(count));
++    while (out.size() < static_cast<size_t>(count)) {
++      if (stopped()) return OB_ERR_INTERRUPTED;
++      if (pos >= size) return OB_INVALID_DATA;
++      uint64_t header = 0;
++      int shift = 0;
++      const size_t header_start = pos;
++      while (pos < size) {
++        const unsigned char c = data[pos++];
++        header |= static_cast<uint64_t>(c & 0x7f) << shift;
++        if (0 == (c & 0x80)) break;
++        shift += 7;
++        if (shift > 63) return OB_INVALID_DATA;
++      }
++      if (pos > size) return OB_INVALID_DATA;
++      if (header & 1) {
++        const size_t groups = static_cast<size_t>(header >> 1);
++        if (bit_width <= 0 || bit_width > 32) return OB_INVALID_DATA;
++        const size_t bytes = groups * static_cast<size_t>(bit_width);
++        if (pos + bytes > size) return OB_INVALID_DATA;
++        for (size_t group = 0; group < groups; ++group) {
++          uint32_t value = 0;
++          for (int32_t byte = 0; byte < bit_width; ++byte) {
++            value |= static_cast<uint32_t>(data[pos + group * bit_width + byte]) << (8 * byte);
++          }
++          for (int32_t bit = 0; bit < 8 && out.size() < static_cast<size_t>(count); ++bit) {
++            out.push_back(static_cast<int32_t>((value >> bit) & 1u));
++          }
++        }
++        pos += bytes;
++      } else {
++        const size_t run = static_cast<size_t>(header >> 1);
++        int64_t value = 0;
++        if (bit_width > 0) {
++          if (pos + static_cast<size_t>(bit_width) > size) return OB_INVALID_DATA;
++          for (int32_t byte = 0; byte < bit_width; ++byte) {
++            value |= static_cast<int64_t>(data[pos++]) << (8 * byte);
++          }
++        }
++        for (size_t i = 0; i < run && out.size() < static_cast<size_t>(count); ++i) {
++          out.push_back(static_cast<int32_t>(value));
++        }
++      }
++      if (pos == header_start) return OB_INVALID_DATA;
++    }
++    return OB_SUCCESS;
++  }
++
++  int decode_values(const unsigned char *data, size_t size, size_t &pos, int32_t encoding,
++                    int64_t count, const ColumnInfo &column, Cursor &cursor,
++                    std::vector<std::string> &out)
++  {
++    int ret = OB_SUCCESS;
++    (void)ret;
++    if (is_plain_encoding(encoding)) {
++      return decode_plain(data, size, pos, count, column, out);
++    }
++    if (!is_dictionary_encoding(encoding)) return OB_NOT_SUPPORTED;
++    if (pos >= size) return OB_INVALID_DATA;
++    const int32_t bit_width = static_cast<int32_t>(data[pos++]);
++    std::vector<int32_t> indexes;
++    if (OB_FAIL(decode_rle(data, size, pos, bit_width, count, indexes))) return OB_INVALID_DATA;
++    out.clear();
++    out.reserve(static_cast<size_t>(count));
++    for (size_t i = 0; i < indexes.size(); ++i) {
++      const int32_t index = indexes[i];
++      if (index < 0 || static_cast<size_t>(index) >= cursor.dictionary.size()) return OB_INVALID_DATA;
++      out.push_back(cursor.dictionary[static_cast<size_t>(index)]);
++    }
++    return OB_SUCCESS;
++  }
++
++  int load_page(Cursor &cursor, const ColumnInfo &column)
++  {
++    int ret = OB_SUCCESS;
++    (void)ret;
++    PageHeader header;
++    size_t header_size = 0;
++    while (cursor.page_offset > 0 && cursor.page_offset < cursor.end_offset) {
++      if (stopped()) return OB_ERR_INTERRUPTED;
++      if (OB_FAIL(parse_page_header(cursor.page_offset, header, header_size))) return OB_INVALID_DATA;
++      std::string payload;
++      if (OB_FAIL(read_at(cursor.page_offset + static_cast<int64_t>(header_size),
++                          static_cast<size_t>(header.compressed_size), payload))) {
++        return OB_INVALID_DATA;
++      }
++      const int64_t next_offset = cursor.page_offset + static_cast<int64_t>(header_size) +
++                                  static_cast<int64_t>(header.compressed_size);
++      if (next_offset <= cursor.page_offset) return OB_INVALID_DATA;
++      cursor.page_offset = next_offset;
++      if (2 == header.type) {  // dictionary page
++        std::string raw;
++        if (0 == cursor.meta.codec) {
++          raw = std::move(payload);
++        } else if (1 == cursor.meta.codec) {
++          int code = snappy_decompress(reinterpret_cast<const unsigned char *>(payload.data()),
++                                       payload.size(), raw);
++          if (OB_SUCCESS != code) return code;
++        } else {
++          return OB_NOT_SUPPORTED;
++        }
++        size_t pos = 0;
++        if (OB_FAIL(decode_plain(reinterpret_cast<const unsigned char *>(raw.data()), raw.size(),
++                                 pos, header.dict_num_values, column, cursor.dictionary))) {
++          return OB_INVALID_DATA;
++        }
++        continue;
++      }
++      if (0 == header.type) {
++        std::string raw;
++        if (0 == cursor.meta.codec) {
++          raw = std::move(payload);
++        } else if (1 == cursor.meta.codec) {
++          int code = snappy_decompress(reinterpret_cast<const unsigned char *>(payload.data()),
++                                       payload.size(), raw);
++          if (OB_SUCCESS != code) return code;
++        } else {
++          return OB_NOT_SUPPORTED;
++        }
++        const unsigned char *data = reinterpret_cast<const unsigned char *>(raw.data());
++        size_t pos = 0;
++        std::vector<int32_t> defs;
++        if (column.nullable) {
++          if (pos + 4 > raw.size()) return OB_INVALID_DATA;
++          int32_t level_length = 0;
++          memcpy(&level_length, data + pos, 4); pos += 4;
++          if (level_length < 0 || pos + static_cast<size_t>(level_length) > raw.size()) return OB_INVALID_DATA;
++          size_t level_pos = 0;
++          if (OB_FAIL(decode_rle(data + pos, static_cast<size_t>(level_length), level_pos, 1,
++                                 header.num_values, defs))) return OB_INVALID_DATA;
++          pos = 4 + static_cast<size_t>(level_length);
++        }
++        int64_t present = 0;
++        for (size_t i = 0; i < defs.size(); ++i) if (defs[i] == 1) ++present;
++        if (!column.nullable) present = header.num_values;
++        std::vector<std::string> raw_values;
++        if (OB_FAIL(decode_values(data, raw.size(), pos, header.encoding, present, column,
++                                  cursor, raw_values))) return OB_INVALID_DATA;
++        cursor.values.clear();
++        cursor.values.reserve(static_cast<size_t>(header.num_values));
++        int64_t next_value = 0;
++        for (int64_t i = 0; i < header.num_values; ++i) {
++          Field field;
++          const bool is_null = column.nullable && !defs.empty() &&
++                               defs[static_cast<size_t>(i)] != 1;
++          if (!is_null) {
++            if (next_value >= static_cast<int64_t>(raw_values.size())) return OB_INVALID_DATA;
++            field.text = std::move(raw_values[static_cast<size_t>(next_value++)]);
++            field.quoted = true;
++          }
++          cursor.values.push_back(std::move(field));
++        }
++        cursor.page_start_row = cursor.rows_read;
++        cursor.rows_read += header.num_values;
++        return OB_SUCCESS;
++      }
++      if (3 == header.type) {
++        const unsigned char *data = reinterpret_cast<const unsigned char *>(payload.data());
++        size_t pos = 0;
++        std::vector<int32_t> defs;
++        if (column.nullable) {
++          if (OB_FAIL(decode_rle(data, payload.size(), pos, 1, header.num_values, defs))) {
++            return OB_INVALID_DATA;
++          }
++        }
++        int64_t present = header.num_values;
++        if (column.nullable) {
++          present = 0;
++          for (size_t i = 0; i < defs.size(); ++i) if (defs[i] == 1) ++present;
++        }
++        std::string raw;
++        const size_t value_size = payload.size() - pos;
++        if (0 == cursor.meta.codec || !header.v2_compressed) {
++          raw.assign(payload.data() + pos, value_size);
++        } else if (1 == cursor.meta.codec) {
++          int code = snappy_decompress(data + pos, value_size, raw);
++          if (OB_SUCCESS != code) return code;
++        } else {
++          return OB_NOT_SUPPORTED;
++        }
++        size_t value_pos = 0;
++        std::vector<std::string> raw_values;
++        if (OB_FAIL(decode_values(reinterpret_cast<const unsigned char *>(raw.data()), raw.size(),
++                                  value_pos, header.encoding, present, column, cursor, raw_values))) {
++          return OB_INVALID_DATA;
++        }
++        cursor.values.clear();
++        cursor.values.reserve(static_cast<size_t>(header.num_values));
++        int64_t next_value = 0;
++        for (int64_t i = 0; i < header.num_values; ++i) {
++          Field field;
++          const bool is_null = column.nullable && !defs.empty() && defs[static_cast<size_t>(i)] != 1;
++          if (!is_null) {
++            if (next_value >= static_cast<int64_t>(raw_values.size())) return OB_INVALID_DATA;
++            field.text = std::move(raw_values[static_cast<size_t>(next_value++)]);
++            field.quoted = true;
++          }
++          cursor.values.push_back(std::move(field));
++        }
++        cursor.page_start_row = cursor.rows_read;
++        cursor.rows_read += header.num_values;
++        return OB_SUCCESS;
++      }
++      // Skip index pages and unknown page kinds.
++    }
++    return OB_ITER_END;
++  }
++
++  int value_at(Cursor &cursor, const ColumnInfo &column, int64_t row, Field &out)
++  {
++    while (row >= cursor.page_start_row + static_cast<int64_t>(cursor.values.size())) {
++      if (cursor.rows_read >= cursor.meta.num_values) return OB_INVALID_DATA;
++      const int code = load_page(cursor, column);
++      if (OB_ITER_END == code) return OB_INVALID_DATA;
++      if (OB_SUCCESS != code) return code;
++      if (0 == cursor.values.size()) return OB_INVALID_DATA;
++    }
++    const int64_t offset = row - cursor.page_start_row;
++    if (offset < 0 || offset >= static_cast<int64_t>(cursor.values.size())) return OB_INVALID_DATA;
++    out = cursor.values[static_cast<size_t>(offset)];
++    return OB_SUCCESS;
++  }
++
++  int parse_logical_type(Compact &reader, int32_t field_type, ColumnInfo &column)
++  {
++    if (12 != field_type) {
++      reader.skip(field_type);
++      return reader.ok() ? OB_SUCCESS : OB_INVALID_DATA;
++    }
++    reader.reset_struct();
++    int32_t type = 0, id = 0;
++    while (reader.ok() && reader.field(type, id)) {
++      switch (id) {
++        case 1: column.logical_string = true; reader.skip(type); break;
++        case 6: column.logical_date = true; reader.skip(type); break;
++        case 7: column.logical_time = true; reader.skip(type); break;
++        case 8: {
++          reader.reset_struct();
++          int32_t t = 0, i = 0;
++          while (reader.ok() && reader.field(t, i)) {
++            if (2 == i && 12 == t) {
++              column.logical_timestamp = true;
++              reader.reset_struct();
++              int32_t ut = 0, uid = 0;
++              while (reader.ok() && reader.field(ut, uid)) {
++                if (1 == uid) column.time_unit = 1;
++                else if (2 == uid) column.time_unit = 2;
++                else if (3 == uid) column.time_unit = 3;
++                reader.skip(ut);
++              }
++            } else {
++              reader.skip(t);
++            }
++          }
++          break;
++        }
++        default: reader.skip(type);
++      }
++    }
++    return reader.ok() ? OB_SUCCESS : OB_INVALID_DATA;
++  }
++
++  int parse_schema_element(Compact &reader, ColumnInfo &column, int32_t &num_children,
++                           int32_t &repetition)
++  {
++    int ret = OB_SUCCESS;
++    (void)ret;
++    reader.reset_struct();
++    int32_t type = 0, id = 0;
++    num_children = 0;
++    repetition = -1;
++    while (reader.ok() && reader.field(type, id)) {
++      switch (id) {
++        case 1: column.physical = reader.i32(); break;
++        case 2: column.fixed_length = reader.i32(); break;
++        case 3: repetition = reader.i32(); break;
++        case 4: reader.bytes(column.name); break;
++        case 5: num_children = reader.i32(); break;
++        case 6: column.converted = reader.i32(); break;
++        case 10: {
++          const int32_t saved = reader.last();
++          if (OB_FAIL(parse_logical_type(reader, type, column))) return OB_INVALID_DATA;
++          reader.set_last(saved);
++          break;
++        }
++        default: reader.skip(type);
++      }
++    }
++    return reader.ok() ? OB_SUCCESS : OB_INVALID_DATA;
++  }
++
++  int parse_column_meta(Compact &reader, ChunkMeta &meta)
++  {
++    reader.reset_struct();
++    int32_t type = 0, id = 0;
++    while (reader.ok() && reader.field(type, id)) {
++      switch (id) {
++        case 1: meta.physical = reader.i32(); break;
++        case 4: meta.codec = reader.i32(); break;
++        case 5: meta.num_values = reader.i64(); break;
++        case 7: meta.compressed_size = reader.i64(); break;
++        case 9: meta.data_offset = reader.i64(); break;
++        case 11: meta.dict_offset = reader.i64(); break;
++        default: reader.skip(type);
++      }
++    }
++    return reader.ok() ? OB_SUCCESS : OB_INVALID_DATA;
++  }
++
++  int parse_row_group(Compact &reader, RowGroup &group)
++  {
++    int ret = OB_SUCCESS;
++    (void)ret;
++    reader.reset_struct();
++    int32_t type = 0, id = 0;
++    while (reader.ok() && reader.field(type, id)) {
++      if (1 == id && 9 == type) {
++        int32_t size = 0, elem = 0;
++        if (!reader.list(size, elem)) return OB_INVALID_DATA;
++        for (int32_t i = 0; ok_reader(reader) && i < size; ++i) {
++          if (12 != elem) return OB_NOT_SUPPORTED;
++          ChunkMeta meta;
++          const int32_t chunk_saved = reader.last();
++          reader.reset_struct();
++          int32_t t = 0, fid = 0;
++          while (reader.ok() && reader.field(t, fid)) {
++            if (2 == fid) meta.start_offset = reader.i64();
++            else if (3 == fid && 12 == t) {
++              const int32_t meta_saved = reader.last();
++              if (OB_FAIL(parse_column_meta(reader, meta))) return OB_INVALID_DATA;
++              reader.set_last(meta_saved);
++            } else reader.skip(t);
++          }
++          reader.set_last(chunk_saved);
++          group.chunks.push_back(meta);
++        }
++      } else if (2 == id) {
++        reader.skip(type);
++      } else if (3 == id) {
++        group.num_rows = reader.i64();
++      } else {
++        reader.skip(type);
++      }
++    }
++    return reader.ok() ? OB_SUCCESS : OB_INVALID_DATA;
++  }
++
++  static bool ok_reader(const Compact &reader) { return reader.ok(); }
++
++  int parse_footer(std::vector<std::pair<ColumnInfo, int32_t>> &schema, int32_t &repetitions)
++  {
++    int ret = OB_SUCCESS;
++    (void)ret;
++    std::string footer;
++    int64_t footer_size = -1;
++    {
++      std::string tail;
++      int read_ret = read_at(file_size_ - 8, 8, tail);
++      if (OB_SUCCESS != read_ret) return OB_INVALID_DATA;
++      if (0 != memcmp(tail.data() + 4, "PAR1", 4)) return OB_INVALID_DATA;
++      int32_t size = 0;
++      memcpy(&size, tail.data(), 4);
++      footer_size = static_cast<int64_t>(size);
++    }
++    if (footer_size < 0) return OB_INVALID_DATA;
++    if (OB_FAIL(read_at(file_size_ - 8 - footer_size, static_cast<size_t>(footer_size), footer))) {
++      return OB_INVALID_DATA;
++    }
++    Compact reader(reinterpret_cast<const unsigned char *>(footer.data()), footer.size());
++    reader.reset_struct();
++    int32_t type = 0, id = 0;
++    int32_t schema_fields = 0;
++    bool flat = true;
++    while (reader.ok() && reader.field(type, id)) {
++      switch (id) {
++        case 2: {
++          int32_t size = 0, elem = 0;
++          if (!reader.list(size, elem)) return OB_INVALID_DATA;
++          if (12 != elem) return OB_INVALID_DATA;
++          for (int32_t i = 0; i < size; ++i) {
++            ColumnInfo column;
++            int32_t children = 0, repetition = -1;
++            const int32_t saved = reader.last();
++            if (OB_FAIL(parse_schema_element(reader, column, children, repetition))) {
++              return OB_INVALID_DATA;
++            }
++            reader.set_last(saved);
++            if (0 == i) {
++              if (children <= 0) flat = false;
++            } else if (children > 0 || repetition == 2) {
++              flat = false;
++            }
++            if (i > 0) {
++              schema.emplace_back(column, repetition);
++              repetitions++;
++            }
++            if (!reader.ok()) return OB_INVALID_DATA;
++          }
++          schema_fields = size;
++          break;
++        }
++        case 3: num_rows_ = reader.i64(); break;
++        case 4: {
++          int32_t size = 0, elem = 0;
++          if (!reader.list(size, elem)) return OB_INVALID_DATA;
++          if (12 != elem) return OB_INVALID_DATA;
++          for (int32_t i = 0; i < size; ++i) {
++            RowGroup group;
++            const int32_t saved = reader.last();
++            if (OB_FAIL(parse_row_group(reader, group))) return OB_INVALID_DATA;
++            reader.set_last(saved);
++            groups_.push_back(group);
++          }
++          break;
++        }
++        default: reader.skip(type);
++      }
++    }
++    if (!reader.ok()) return OB_INVALID_DATA;
++    if (!flat) {
++      return OB_NOT_SUPPORTED;
++    }
++    if (schema.empty() || schema_fields != static_cast<int32_t>(schema.size()) + 1) {
++      return OB_INVALID_DATA;
++    }
++    for (size_t i = 0; i < schema.size(); ++i) {
++      ColumnInfo &column = schema[i].first;
++      const int32_t repetition = schema[i].second;
++      ColumnInfo info = column;
++      info.nullable = repetition != 0;
++      switch (info.physical) {
++        case PARQUET_BOOLEAN: info.type = Type::boolean; break;
++        case PARQUET_INT32:
++          if (info.logical_date || 6 == info.converted) info.type = Type::date;
++          else if (info.logical_time) info.type = Type::text;
++          else info.type = Type::integer;
++          break;
++        case PARQUET_INT64:
++          if (info.logical_timestamp || 9 == info.converted || 10 == info.converted) info.type = Type::datetime;
++          else if (info.logical_time) info.type = Type::text;
++          else info.type = Type::integer;
++          break;
++        case PARQUET_INT96: info.type = Type::datetime; break;
++        case PARQUET_FLOAT: case PARQUET_DOUBLE: info.type = Type::real; break;
++        case PARQUET_BYTE_ARRAY: case PARQUET_FIXED: info.type = Type::text; break;
++        default: return OB_NOT_SUPPORTED;
++      }
++      columns_.push_back(info);
++    }
++    return OB_SUCCESS;
++  }
++
++  int load_metadata()
++  {
++    int ret = OB_SUCCESS;
++    if (loaded_) return OB_SUCCESS;
++    std::string head;
++    if (OB_FAIL(read_at(0, 4, head)) || memcmp(head.data(), "PAR1", 4) != 0) {
++      return OB_INVALID_DATA;
++    }
++    std::vector<std::pair<ColumnInfo, int32_t>> parsed;
++    int32_t repetitions = 0;
++    if (OB_FAIL(parse_footer(parsed, repetitions))) return ret;
++    loaded_ = true;
++    return OB_SUCCESS;
++  }
++};
++
++ParquetReader::ParquetReader() : impl_(new (std::nothrow) Impl()) {}
++ParquetReader::~ParquetReader() { close(); delete impl_; impl_ = nullptr; }
++
++void ParquetReader::close()
++{
++  if (nullptr != impl_) {
++    impl_->columns_.clear();
++    impl_->groups_.clear();
++    impl_->cursors_.clear();
++    impl_->fd_ = -1;
++    impl_->begun_ = false;
++    impl_->loaded_ = false;
++  }
++}
++
++int ParquetReader::open(int fd, int64_t file_size, const std::function<bool()> &keep_running)
++{
++  if (nullptr == impl_) return OB_ALLOCATE_MEMORY_FAILED;
++  if (fd < 0 || file_size < 12) return OB_INVALID_DATA;
++  impl_->fd_ = fd;
++  impl_->file_size_ = file_size;
++  impl_->keep_running_ = keep_running;
++  return OB_SUCCESS;
++}
++
++int ParquetReader::infer(Schema &schema)
++{
++  int ret = OB_SUCCESS;
++  if (nullptr == impl_) return OB_ALLOCATE_MEMORY_FAILED;
++  if (OB_FAIL(impl_->load_metadata())) return ret;
++  schema.clear();
++  for (size_t i = 0; i < impl_->columns_.size(); ++i) {
++    const ColumnInfo &info = impl_->columns_[i];
++    Column column;
++    column.name = info.name;
++    column.type = info.type;
++    column.nullable = info.nullable;
++    column.max_bytes = Type::text == info.type ? 65535 : 0;
++    column.source_name = info.name;
++    schema.push_back(std::move(column));
++  }
++  return OB_SUCCESS;
++}
++
++int ParquetReader::begin()
++{
++  if (nullptr == impl_) return OB_ALLOCATE_MEMORY_FAILED;
++  int ret = impl_->load_metadata();
++  if (OB_FAIL(ret)) return ret;
++  impl_->group_index_ = 0;
++  impl_->row_in_group_ = 0;
++  impl_->begun_ = true;
++  impl_->cursors_.clear();
++  return OB_SUCCESS;
++}
++
++int ParquetReader::next(Row &row)
++{
++  int ret = OB_SUCCESS;
++  if (nullptr == impl_) return OB_ALLOCATE_MEMORY_FAILED;
++  if (!impl_->begun_) return OB_NOT_INIT;
++  for (;;) {
++    if (impl_->group_index_ >= impl_->groups_.size()) return OB_ITER_END;
++    RowGroup &group = impl_->groups_[impl_->group_index_];
++    if (impl_->row_in_group_ >= group.num_rows) {
++      ++impl_->group_index_;
++      impl_->row_in_group_ = 0;
++      impl_->cursors_.clear();
++      continue;
++    }
++    if (impl_->cursors_.empty()) {
++      if (group.chunks.size() != impl_->columns_.size()) return OB_INVALID_DATA;
++      impl_->cursors_.resize(group.chunks.size());
++      for (size_t i = 0; i < group.chunks.size(); ++i) {
++        Cursor &cursor = impl_->cursors_[i];
++        cursor.meta = group.chunks[i];
++        const ChunkMeta &meta = cursor.meta;
++        cursor.page_offset = meta.dict_offset >= 0 && meta.dict_offset < meta.data_offset
++                             ? meta.dict_offset : meta.data_offset;
++        if (cursor.page_offset < 0) return OB_INVALID_DATA;
++        cursor.end_offset = meta.data_offset + meta.compressed_size;
++        if (cursor.end_offset <= cursor.page_offset && meta.num_values > 0) return OB_INVALID_DATA;
++        if (meta.num_values != group.num_rows) return OB_INVALID_DATA;
++      }
++    }
++    if (impl_->stopped()) return OB_ERR_INTERRUPTED;
++    row.assign(impl_->columns_.size(), Field());
++    for (size_t i = 0; OB_SUCC(ret) && i < impl_->columns_.size(); ++i) {
++      Field field;
++      if (OB_FAIL(impl_->value_at(impl_->cursors_[i], impl_->columns_[i],
++                                  impl_->row_in_group_, field))) {
++      } else {
++        row[i] = std::move(field);
++      }
++    }
++    if (OB_SUCC(ret)) ++impl_->row_in_group_;
++    return ret;
++  }
++}
++} // namespace oceanbase::sql::file_sql
+diff --git a/src/sql/engine/file_sql/parquet_reader.h b/src/sql/engine/file_sql/parquet_reader.h
+new file mode 100644
+index 0000000..23c1e13
+--- /dev/null
++++ b/src/sql/engine/file_sql/parquet_reader.h
+@@ -0,0 +1,27 @@
++#pragma once
++
++#include "sql/engine/file_sql/csv_reader.h"
++#include <functional>
++
++namespace oceanbase::sql::file_sql {
++
++// Minimal read-only Parquet reader for flat, non-repeated schemas.
++// Values are exposed as text so FileSqlScan can reuse one conversion path.
++class ParquetReader {
++public:
++  ParquetReader();
++  ~ParquetReader();
++  ParquetReader(const ParquetReader &) = delete;
++  ParquetReader &operator=(const ParquetReader &) = delete;
++
++  int open(int fd, int64_t file_size, const std::function<bool()> &keep_running);
++  int infer(Schema &schema);
++  int begin();
++  int next(Row &row);
++  void close();
++
++private:
++  struct Impl;
++  Impl *impl_;
++};
++} // namespace oceanbase::sql::file_sql
+diff --git a/src/sql/ob_sql.cpp b/src/sql/ob_sql.cpp
+index bb9e618..cab1410 100644
+--- a/src/sql/ob_sql.cpp
++++ b/src/sql/ob_sql.cpp
+@@ -3528,7 +3528,8 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
+   } else if (OB_ISNULL(result.get_exec_context().get_stmt_factory())
+              || OB_ISNULL(result.get_exec_context().get_stmt_factory()->get_query_ctx())) {
+     ret = OB_ERR_UNEXPECTED;
+-  } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
++  } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_file_sql_
++             || result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
+     need_add_plan = false;
+   }
+   return ret;
+diff --git a/src/sql/ob_sql_context.h b/src/sql/ob_sql_context.h
+index 983042e..9948567 100644
+--- a/src/sql/ob_sql_context.h
++++ b/src/sql/ob_sql_context.h
+@@ -568,6 +568,7 @@ public:
+       all_user_variable_(),
+       need_match_all_params_(false),
+       has_udf_(false),
++      has_file_sql_(false),
+       disable_udf_parallel_(false),
+       has_is_table_(false),
+       reference_obj_tables_(),
+@@ -610,6 +611,7 @@ public:
+     all_user_variable_.reset();
+     need_match_all_params_= false;
+     has_udf_ = false;
++    has_file_sql_ = false;
+     disable_udf_parallel_ = false;
+     has_is_table_ = false;
+     sql_schema_guard_.reset();
+@@ -701,6 +703,7 @@ public:
+   common::hash::ObHashMap<uint64_t, ObObj, common::hash::NoPthreadDefendMode> calculable_expr_results_;
+   bool need_match_all_params_; //only used for matching plans
+   bool has_udf_;
++  bool has_file_sql_; // File schemas must be inferred afresh for each query.
+   bool disable_udf_parallel_; //used to deterministic pl udf parallel execute
+   bool has_is_table_; // used to mark query has information schema table
+   ObSqlSchemaGuard sql_schema_guard_;
+diff --git a/src/sql/optimizer/ob_log_plan.cpp b/src/sql/optimizer/ob_log_plan.cpp
+index ae1d745..8488d4f 100644
+--- a/src/sql/optimizer/ob_log_plan.cpp
++++ b/src/sql/optimizer/ob_log_plan.cpp
+@@ -6830,6 +6830,8 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
+       select_into->set_escaped_cht(into_item->escaped_cht_);
+       select_into->set_cs_type(into_item->cs_type_);
+       select_into->set_external_properties(into_item->external_properties_);
++      select_into->set_with_header(into_item->with_header_);
++      select_into->set_null_string(into_item->null_string_);
+       select_into->set_child(ObLogicalOperator::first_child, old_top);
+       // compute property
+       if (OB_FAIL(select_into->compute_property())) {
+diff --git a/src/sql/optimizer/ob_log_select_into.h b/src/sql/optimizer/ob_log_select_into.h
+index 1a26628..fcbac19 100644
+--- a/src/sql/optimizer/ob_log_select_into.h
++++ b/src/sql/optimizer/ob_log_select_into.h
+@@ -44,6 +44,8 @@ public:
+         escaped_cht_(),
+         cs_type_(CS_TYPE_INVALID),
+         is_overwrite_(false),
++        with_header_(false),
++        null_string_(),
+         external_properties_()
+   {
+   }
+@@ -164,6 +166,22 @@ public:
+   {
+     return external_properties_;
+   }
++  inline void set_with_header(bool with_header)
++  {
++    with_header_ = with_header;
++  }
++  inline bool get_with_header() const
++  {
++    return with_header_;
++  }
++  inline void set_null_string(const common::ObString &null_string)
++  {
++    null_string_ = null_string;
++  }
++  inline common::ObString get_null_string() const
++  {
++    return null_string_;
++  }
+   const common::ObIArray<ObRawExpr*> &get_select_exprs() const { return select_exprs_; }
+   common::ObIArray<ObRawExpr*> &get_select_exprs() { return select_exprs_; }
+   virtual int est_cost() override;
+@@ -187,6 +205,8 @@ private:
+   common::ObObj escaped_cht_;
+   common::ObCollationType cs_type_;
+   bool is_overwrite_;
++  bool with_header_;
++  common::ObString null_string_;
+   common::ObString external_properties_;
+ };
+ }
+diff --git a/src/sql/parser/sql_parser_mysql_mode.y b/src/sql/parser/sql_parser_mysql_mode.y
+index b60d1d6..e691711 100644
+--- a/src/sql/parser/sql_parser_mysql_mode.y
++++ b/src/sql/parser/sql_parser_mysql_mode.y
+@@ -469,6 +469,7 @@ END_P SET_VAR DELIMITER
+ %type <node> recyclebin_restore_stmt purge_stmt opt_recyclebin_restore_rename_table opt_recyclebin_restore_rename_database
+ %type <node> cache_type
+ %type <node> into_opt into_clause field_opt field_term field_term_list line_opt line_term line_term_list into_var_list into_var file_opt file_option_list file_option file_size_const binary_format
++%type <node> file_sql_copy_stmt opt_file_sql_copy_options file_sql_copy_option_list file_sql_copy_option
+ %type <node> string_list text_string string_val_list
+ %type <node> list_expr list_partition_element list_partition_expr list_partition_list list_partition_option opt_list_partition_list opt_list_subpartition_list list_subpartition_list list_subpartition_element drop_partition_name_list
+ %type <node> distribute_method distribute_method_list opt_distribute_method_list
+@@ -556,6 +557,7 @@ opt_end_p:
+ /* only preparable statement will set question mark size */
+ stmt:
+     select_stmt             { $$ = $1; question_mark_issue($$, result); }
++  | file_sql_copy_stmt      { $$ = $1; question_mark_issue($$, result); }
+   | insert_stmt             { $$ = $1; question_mark_issue($$, result); }
+   | create_table_stmt       {
+     $$ = $1;
+@@ -8475,6 +8477,67 @@ select_with_parens:
+ | '(' select_with_parens ')'  { $$ = $2; }
+ | '(' with_select ')'         { $$ = $2; };
+ 
++// File SQL: COPY (query) TO 'path' (format csv, header, nullstr 'NULL')
++file_sql_copy_stmt:
++COPY '(' select_stmt ')' TO STRING_VALUE opt_file_sql_copy_options
++{
++  ParseNode *options_node = NULL;
++  ParseNode *into_node = NULL;
++  if (NULL == $3 || T_SELECT != $3->type_) {
++    yyerror(&@1, result, "invalid COPY statement");
++    YYERROR;
++  } else {
++    merge_nodes(options_node, result, T_FILE_SQL_COPY_OPTIONS, $7);
++    if (NULL == options_node) {
++      malloc_non_terminal_node(options_node, result->malloc_pool_, T_FILE_SQL_COPY_OPTIONS, 0);
++    }
++    malloc_non_terminal_node(into_node, result->malloc_pool_, T_INTO_OUTFILE, 3, $6, options_node, NULL);
++    $3->children_[PARSE_SELECT_INTO_EXTRA] = into_node;
++    $$ = $3;
++  }
++}
++;
++
++opt_file_sql_copy_options:
++{
++  $$ = NULL;
++}
++| '(' file_sql_copy_option_list ')'
++{
++  $$ = $2;
++}
++;
++
++file_sql_copy_option_list:
++file_sql_copy_option
++{
++  $$ = $1;
++}
++| file_sql_copy_option_list ',' file_sql_copy_option
++{
++  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
++}
++;
++
++file_sql_copy_option:
++FORMAT NAME_OB
++{
++  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_FORMAT, 1, $2);
++}
++| column_name
++{
++  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_OPTION, 2, $1, NULL);
++}
++| column_name STRING_VALUE
++{
++  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_OPTION, 2, $1, $2);
++}
++| column_name COMP_EQ expr
++{
++  malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_COPY_OPTION, 2, $1, $3);
++}
++;
++
+ select_no_parens:
+ select_clause opt_lock_type
+ {
+@@ -10831,6 +10894,21 @@ tbl_name
+   unname_node->sql_str_off_ = @2.first_column;
+   $$->value_ = 1; //lateral
+ }
++| NAME_OB '(' expr_list ')' %prec LOWER_PARENS
++{
++    malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 3, $1, $3, NULL);
++    $$->is_tree_not_param_ = true;
++}
++| NAME_OB '(' expr_list ')' relation_name
++{
++    malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 3, $1, $3, $5);
++    $$->is_tree_not_param_ = true;
++}
++| NAME_OB '(' expr_list ')' AS relation_name
++{
++    malloc_non_terminal_node($$, result->malloc_pool_, T_FILE_SQL_TABLE, 3, $1, $3, $6);
++    $$->is_tree_not_param_ = true;
++}
+ | json_table_expr
+ {
+   $$ = $1;
+@@ -12265,7 +12343,15 @@ explain_or_desc relation_factor opt_desc_column_option
+   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_COLUMNS, 4, $$, $2, NULL, $3);
+ }
+ 
+-| explain_or_desc explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);}
++| explain_or_desc explainable_stmt {
++  if ($1 != NULL && $2->type_ == T_SELECT) {
++    /* DESCRIBE SELECT: keep the describe marker in the format slot. */
++    ParseNode *describe_display = NULL;
++    malloc_non_terminal_node($$, result->malloc_pool_, T_EXPLAIN, 5, $1, describe_display, NULL, NULL, $2);
++  } else {
++    GEN_EXPLAN_STMT($1, $$, 0, 0, $2, NULL, NULL);
++  }
++}
+ | explain_or_desc PRETTY explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY, $3, NULL, NULL);}
+ | explain_or_desc PRETTY_COLOR explainable_stmt { GEN_EXPLAN_STMT($1, $$, 0, T_PRETTY_COLOR, $3, NULL, NULL);}
+ 
+@@ -12306,8 +12392,8 @@ explain_or_desc relation_factor opt_desc_column_option
+ 
+ explain_or_desc:
+ EXPLAIN {$$ = NULL;}
+-| DESCRIBE {$$ = NULL;}
+-| DESC  {$$ = NULL;}
++| DESCRIBE {malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1;}
++| DESC  {malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1;}
+ ;
+ 
+ explainable_stmt:
+diff --git a/src/sql/printer/ob_dml_stmt_printer.cpp b/src/sql/printer/ob_dml_stmt_printer.cpp
+index 125a7fc..31b3164 100644
+--- a/src/sql/printer/ob_dml_stmt_printer.cpp
++++ b/src/sql/printer/ob_dml_stmt_printer.cpp
+@@ -319,6 +319,21 @@ int ObDMLStmtPrinter::print_table(const TableItem *table_item,
+           DATA_PRINTF(" %.*s", LEN_AND_PTR(table_item->alias_name_));
+           break;
+         }
++        case MulModeTableType::OB_FILE_CSV_TABLE_TYPE :
++        case MulModeTableType::OB_FILE_JSONL_TABLE_TYPE :
++        case MulModeTableType::OB_FILE_PARQUET_TABLE_TYPE :
++        case MulModeTableType::OB_FILE_GLOB_TABLE_TYPE : {
++          const int table_type = table_item->json_table_def_->table_type_;
++          if (OB_FILE_PARQUET_TABLE_TYPE == table_type) DATA_PRINTF("read_parquet(");
++          else if (OB_FILE_GLOB_TABLE_TYPE == table_type) DATA_PRINTF("glob(");
++          else DATA_PRINTF(OB_FILE_JSONL_TABLE_TYPE == table_type ? "read_json(" : "read_csv(");
++          OZ (expr_printer_.do_print(table_item->json_table_def_->doc_exprs_.at(0), T_FROM_SCOPE));
++          if (OB_FILE_JSONL_TABLE_TYPE == table_type) DATA_PRINTF(",format='newline_delimited') ");
++          else if (OB_FILE_CSV_TABLE_TYPE == table_type) DATA_PRINTF(",header=%s,sample_size=-1) ", table_item->json_table_def_->namespace_arr_.at(2) == ObString("1") ? "true" : "false");
++          else DATA_PRINTF(") ");
++          PRINT_IDENT_WITH_QUOT(table_item->alias_name_);
++          break;
++        }
+         case MulModeTableType::OB_UNNEST_TABLE_TYPE : {
+           DATA_PRINTF("UNNEST(");
+           for (int64_t i = 0; OB_SUCC(ret) && i < table_item->json_table_def_->doc_exprs_.count(); ++i) {
+diff --git a/src/sql/resolver/ddl/ob_explain_resolver.cpp b/src/sql/resolver/ddl/ob_explain_resolver.cpp
+index baa0f4d..1ba53d0 100644
+--- a/src/sql/resolver/ddl/ob_explain_resolver.cpp
++++ b/src/sql/resolver/ddl/ob_explain_resolver.cpp
+@@ -17,6 +17,7 @@
+ #define USING_LOG_PREFIX SQL_RESV
+ #include "sql/resolver/ddl/ob_explain_resolver.h"
+ #include "sql/resolver/ob_resolver.h"
++#include "sql/parser/ob_parser.h"
+ 
+ using namespace oceanbase;
+ using namespace sql;
+@@ -26,6 +27,78 @@ const static int64_t EXPLAIN_DISPLAY_OPTION = 1;
+ const static int64_t EXPLAIN_INTO_TABLE = 2;
+ const static int64_t EXPLAIN_STMT_ID = 3;
+ const static int64_t EXPLAIN_CHILD_STMT = 4;
++
++static int append_file_metadata_text(ObSqlString &sql, const ObString &value)
++{
++  if (value.empty()) return sql.append("CONVERT('' USING utf8mb4)");
++  int ret = sql.append("CONVERT(0x");
++  const char digits[] = "0123456789abcdef";
++  for (int64_t i = 0; OB_SUCC(ret) && i < value.length(); ++i) {
++    const unsigned char byte = value.ptr()[i];
++    const char encoded[] = {digits[byte >> 4], digits[byte & 15]};
++    ret = sql.append(ObString(2, encoded));
++  }
++  if (OB_SUCC(ret)) ret = sql.append(" USING utf8mb4)");
++  return ret;
++}
++
++static const char *file_metadata_type(ObObjType type)
++{
++  switch (type) {
++    case ObNullType: return "NULL";
++    case ObIntType: return "BIGINT";
++    case ObUInt64Type: return "UBIGINT";
++    case ObDoubleType: return "DOUBLE";
++    case ObTinyIntType: return "BOOLEAN";
++    case ObVarcharType: return "VARCHAR";
++    case ObDateType: return "DATE";
++    case ObDateTimeType: return "DATETIME";
++    case ObNumberType: case ObUNumberType: case ObDecimalIntType: return "DECIMAL";
++    default: return ob_obj_type_str(type);
++  }
++}
++
++static int resolve_file_metadata(ObResolverParams &params, ObSelectStmt &source, ObStmt *&result)
++{
++  int ret = OB_SUCCESS;
++  ObSqlString sql;
++  OZ (sql.append("SELECT column_name,column_type,`null`,`key`,`default`,extra FROM ("));
++  for (int64_t i = 0; OB_SUCC(ret) && i < source.get_select_item_size(); ++i) {
++    const SelectItem &item = source.get_select_item(i);
++    if (item.expr_ == nullptr) return OB_ERR_UNEXPECTED;
++    const bool not_null = item.expr_->get_result_type().has_result_flag(NOT_NULL_FLAG);
++    OZ (sql.append(i == 0 ? "SELECT " : " UNION ALL SELECT "));
++    OZ (sql.append_fmt("%ld AS __file_sql_pos,", i));
++    OZ (append_file_metadata_text(sql, item.alias_name_.empty() ? item.expr_name_ : item.alias_name_));
++    OZ (sql.append(" AS column_name,"));
++    OZ (append_file_metadata_text(sql, ObString(file_metadata_type(item.expr_->get_data_type()))));
++    OZ (sql.append(" AS column_type,"));
++    OZ (append_file_metadata_text(sql, ObString(not_null ? "NO" : "YES")));
++    OZ (sql.append(" AS `null`,NULL AS `key`,NULL AS `default`,NULL AS extra"));
++    if (sql.length() > 16 * 1024 * 1024) return OB_SIZE_OVERFLOW;
++  }
++  OZ (sql.append(") __file_sql_metadata ORDER BY __file_sql_pos"));
++  if (OB_SUCC(ret)) {
++    ParseResult parsed;
++    ObParser parser(*params.allocator_, params.session_info_->get_sql_mode());
++    if (OB_FAIL(parser.parse(sql.string(), parsed))) {
++    } else if (parsed.result_tree_ == nullptr || parsed.result_tree_->num_child_ != 1 ||
++               parsed.result_tree_->children_ == nullptr || parsed.result_tree_->children_[0] == nullptr) {
++      ret = OB_ERR_UNEXPECTED;
++    } else {
++      ObResolver resolver(params);
++      ret = resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *parsed.result_tree_->children_[0], result);
++    }
++  }
++  return ret;
++}
++
++static bool is_file_sql_describe(const ParseNode &parse_tree)
++{
++  const ParseNode *marker = parse_tree.children_[EXPLAIN_FORMAT];
++  return marker != nullptr && T_INT == marker->type_ && 1 == marker->value_;
++}
++
+ int ObExplainResolver::resolve(const ParseNode &parse_tree)
+ {
+   int ret = OB_SUCCESS;
+@@ -62,9 +135,19 @@ int ObExplainResolver::resolve(const ParseNode &parse_tree)
+       } else if (OB_ISNULL(child_stmt)) {
+         ret = OB_ERR_UNEXPECTED;
+         LOG_WARN("failed to generate stmt for child stmt");
++      } else if (is_file_sql_describe(parse_tree) && child_stmt->is_select_stmt() &&
++                 static_cast<ObSelectStmt *>(child_stmt)->get_query_ctx()->has_file_sql_) {
++        ObStmt *metadata = nullptr;
++        ret = resolve_file_metadata(params_, *static_cast<ObSelectStmt *>(child_stmt), metadata);
++        if (OB_SUCC(ret)) set_basic_stmt(metadata);
++        return ret;
+       } else {
+         explain_stmt->set_explain_query_stmt(static_cast<ObDMLStmt *>(child_stmt));
+         ParseNode *format = parse_tree.children_[EXPLAIN_FORMAT];
++        if (is_file_sql_describe(parse_tree)) {
++          // Plain DESCRIBE SELECT marker: no display format was requested.
++          format = NULL;
++        }
+         if (NULL != format) {
+           switch (format->type_) {
+           case T_OUTLINE:
+diff --git a/src/sql/resolver/dml/ob_dml_resolver.cpp b/src/sql/resolver/dml/ob_dml_resolver.cpp
+index f3eb7a8..7bf08e3 100644
+--- a/src/sql/resolver/dml/ob_dml_resolver.cpp
++++ b/src/sql/resolver/dml/ob_dml_resolver.cpp
+@@ -16,6 +16,7 @@
+ 
+ #define USING_LOG_PREFIX SQL_RESV
+ #include "config_bridge.h"
++#include "sql/engine/file_sql/file_sql_scan.h"
+ #include "ob_dml_resolver.h"
+ #include "sql/resolver/dml/ob_view_table_resolver.h"
+ #include "sql/optimizer/ob_optimizer_util.h"
+@@ -2701,6 +2702,10 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
+         OZ (resolve_function_table_item(*table_node, table_item));
+         break;
+       }
++      case T_FILE_SQL_TABLE: {
++        OZ (resolve_file_sql_item(*table_node, table_item));
++        break;
++      }
+       case T_JSON_TABLE_EXPRESSION: {
+         OZ (resolve_json_table_item(*table_node, table_item));
+         break;
+@@ -3923,6 +3928,133 @@ int ObDMLResolver::resolve_json_table_item(const ParseNode &parse_tree, TableIte
+   return ret;
+ }
+ 
++int ObDMLResolver::resolve_file_sql_item(const ParseNode &node, TableItem *&table_item)
++{
++  using namespace file_sql;
++  int ret = OB_SUCCESS;
++  bool enabled = false;
++  if (OB_ISNULL(session_info_) || OB_ISNULL(get_stmt()) || node.num_child_ != 3) return OB_ERR_UNEXPECTED;
++  if (OB_FAIL(session_info_->get_sys_variable(SYS_VAR_ENABLE_FILE_SQL, enabled))) return ret;
++  if (!enabled) {
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL is disabled");
++    return OB_NOT_SUPPORTED;
++  }
++  const ParseNode *name = node.children_[0], *args = node.children_[1];
++  if (OB_ISNULL(name) || OB_ISNULL(args) || args->num_child_ < 1) return OB_INVALID_ARGUMENT;
++  const ObString function_name(name->str_len_, name->str_value_);
++  file_sql::FileSqlFormat format = file_sql::FileSqlFormat::csv;
++  if (function_name.case_compare("read_json") == 0) {
++    format = file_sql::FileSqlFormat::jsonl;
++  } else if (function_name.case_compare("read_parquet") == 0) {
++    format = file_sql::FileSqlFormat::parquet;
++  } else if (function_name.case_compare("glob") == 0) {
++    format = file_sql::FileSqlFormat::glob;
++  } else if (function_name.case_compare("read_csv") != 0) {
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL source format");
++    return OB_NOT_SUPPORTED;
++  }
++  const bool jsonl = format == file_sql::FileSqlFormat::jsonl;
++  bool header = !jsonl, seen_header = false, seen_sample = false, seen_format = false;
++  for (int64_t i = 1; i < args->num_child_; ++i) {
++    const ParseNode *option = args->children_[i];
++    if (OB_ISNULL(option) || option->type_ != T_OP_EQ || option->num_child_ != 2) {
++      LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid read_csv option", 8, "read_csv", 1);
++      return OB_ERR_PARSE_SQL;
++    }
++    const ParseNode *key = option->children_[0], *value = option->children_[1];
++    if (OB_ISNULL(key) || key->type_ != T_COLUMN_REF || key->num_child_ != 3 ||
++        OB_ISNULL(key->children_[2]) || key->children_[0] != nullptr || key->children_[1] != nullptr || OB_ISNULL(value)) return OB_NOT_SUPPORTED;
++    const ObString option_name(key->children_[2]->str_len_, key->children_[2]->str_value_);
++    if (jsonl && option_name.case_compare("format") == 0 && !seen_format) {
++      ObString format;
++      if ((value->type_ != T_VARCHAR && value->type_ != T_CHAR) || OB_FAIL(resolve_str_const(*value, format))) return OB_ERR_PARSE_SQL;
++      if (format.case_compare("newline_delimited") != 0) {
++        LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid read_json format", 9, "read_json", 1);
++        return OB_ERR_PARSE_SQL;
++      }
++      seen_format = true;
++    } else if (!jsonl && option_name.case_compare("header") == 0 && !seen_header && value->type_ == T_BOOL) {
++      header = value->value_ != 0;
++      seen_header = true;
++    } else if (!jsonl && option_name.case_compare("sample_size") == 0 && !seen_sample) {
++      bool all = value->type_ == T_INT && value->value_ == -1;
++      all |= value->type_ == T_OP_NEG && value->num_child_ == 1 && value->children_[0] != nullptr &&
++          value->children_[0]->type_ == T_INT && value->children_[0]->value_ == 1;
++      if (!all) { LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_csv sample_size must be -1"); return OB_NOT_SUPPORTED; }
++      seen_sample = true;
++    } else {
++      LOG_USER_ERROR(OB_NOT_SUPPORTED, "read_csv option");
++      return OB_NOT_SUPPORTED;
++    }
++  }
++  ObString path;
++  if (args->children_[0] == nullptr || (args->children_[0]->type_ != T_VARCHAR && args->children_[0]->type_ != T_CHAR)) {
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL requires a literal path");
++    return OB_NOT_SUPPORTED;
++  }
++  if (OB_FAIL(resolve_str_const(*args->children_[0], path))) return ret;
++  FileSqlScan input(format);
++  Schema schema;
++  if (OB_FAIL(input.open(*session_info_, path))) return ret;
++  if (OB_FAIL(input.infer(header, schema))) return ret;
++  ObString alias;
++  if (node.children_[2] != nullptr) alias.assign_ptr(node.children_[2]->str_value_, node.children_[2]->str_len_);
++  else if (OB_FAIL(get_stmt()->generate_func_table_name(*allocator_, alias))) return ret;
++  if (OB_FAIL(create_unnest_table_item(table_item, alias))) return ret;
++  ObJsonTableDef &definition = *table_item->json_table_def_;
++  definition.table_type_ = file_sql::FileSqlFormat::jsonl == format ? OB_FILE_JSONL_TABLE_TYPE :
++      (file_sql::FileSqlFormat::parquet == format ? OB_FILE_PARQUET_TABLE_TYPE :
++       (file_sql::FileSqlFormat::glob == format ? OB_FILE_GLOB_TABLE_TYPE : OB_FILE_CSV_TABLE_TYPE));
++  get_stmt()->get_query_ctx()->has_file_sql_ = true;
++  ObRawExpr *path_expr = nullptr;
++  OZ (resolve_sql_expr(*args->children_[0], path_expr));
++  if (OB_SUCC(ret)) OZ (path_expr->deduce_type(session_info_));
++  OZ (definition.doc_exprs_.push_back(path_expr));
++  const bool csv_header = file_sql::FileSqlFormat::csv == format && header;
++  for (const std::string &metadata : {input.canonical_path(), input.fingerprint(), std::string(csv_header ? "1" : "0")}) {
++    ObString copied;
++    if (OB_FAIL(ret)) break;
++    OZ (ob_write_string(*allocator_, ObString(metadata.size(), metadata.data()), copied));
++    OZ (definition.namespace_arr_.push_back(copied));
++  }
++  for (size_t i = 0; OB_SUCC(ret) && i < schema.size(); ++i) {
++    if (schema[i].name.size() > 128) { ret = OB_WRONG_COLUMN_NAME; break; }
++    void *memory = allocator_->alloc(sizeof(ObJtColBaseInfo));
++    if (OB_ISNULL(memory)) { ret = OB_ALLOCATE_MEMORY_FAILED; break; }
++    auto *info = new (memory) ObJtColBaseInfo();
++    info->col_type_ = COL_TYPE_VALUE;
++    info->id_ = i + 1;
++    info->parent_id_ = 0;
++    info->output_column_idx_ = OB_APP_MIN_COLUMN_ID + i;
++    OZ (ob_write_string(*allocator_, ObString(schema[i].name.size(), schema[i].name.data()), info->col_name_));
++    if (jsonl) OZ (ob_write_string(*allocator_, ObString(schema[i].source_name.size(), schema[i].source_name.data()), info->path_));
++    ObObjType type = ObVarcharType;
++    switch (schema[i].type) {
++      case Type::integer: type = ObIntType; break;
++      case Type::real: type = ObDoubleType; break;
++      case Type::boolean: type = ObTinyIntType; break;
++      case Type::date: type = ObDateType; break;
++      case Type::datetime: type = ObDateTimeType; break;
++      case Type::null: type = ObNullType; break;
++      default: break;
++    }
++    info->data_type_.set_obj_type(type);
++    info->data_type_.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[type]);
++    if (type == ObDateTimeType) info->data_type_.set_scale(0);
++    info->data_type_.set_collation_type(type == ObVarcharType ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_BINARY);
++    info->data_type_.set_collation_level(type == ObVarcharType ? CS_LEVEL_IMPLICIT : CS_LEVEL_NUMERIC);
++    if (type == ObVarcharType) info->data_type_.set_length(std::max(size_t(1), schema[i].max_bytes));
++    ColumnItem *column = nullptr;
++    OZ (generate_json_table_output_column_item(table_item, info->data_type_, info->col_name_, info->output_column_idx_, column));
++    if (OB_SUCC(ret)) {
++      column->col_idx_ = definition.all_cols_.count();
++      if (!schema[i].nullable) column->expr_->set_result_flag(NOT_NULL_FLAG);
++      OZ (definition.all_cols_.push_back(info));
++    }
++  }
++  return ret;
++}
++
+ int ObDMLResolver::resolve_function_table_item(const ParseNode &parse_tree,
+                                                TableItem *&tbl_item)
+ {
+diff --git a/src/sql/resolver/dml/ob_dml_resolver.h b/src/sql/resolver/dml/ob_dml_resolver.h
+index 527320d..01f4b8d 100644
+--- a/src/sql/resolver/dml/ob_dml_resolver.h
++++ b/src/sql/resolver/dml/ob_dml_resolver.h
+@@ -207,6 +207,7 @@ public:
+                                   TableItem *&table_item);
+   int resolve_json_table_item(const ParseNode &table_node,
+                               TableItem *&table_item);
++  int resolve_file_sql_item(const ParseNode &table_node, TableItem *&table_item);
+   int resolve_unnest_item(const ParseNode &table_node, TableItem *&table_item);
+   int create_unnest_table_item(TableItem *&table_item, ObString table_name);
+   int unnest_table_add_column(TableItem *&table_item, ColumnItem *&col_item, ObString col_name);
+diff --git a/src/sql/resolver/dml/ob_dml_stmt.h b/src/sql/resolver/dml/ob_dml_stmt.h
+index bd3380e..a3ce8ea 100644
+--- a/src/sql/resolver/dml/ob_dml_stmt.h
++++ b/src/sql/resolver/dml/ob_dml_stmt.h
+@@ -47,6 +47,10 @@ enum MulModeTableType {
+   OB_ORA_JSON_TABLE_TYPE, // 1
+   OB_ORA_XML_TABLE_TYPE = 2,
+   OB_UNNEST_TABLE_TYPE = 3,
++  OB_FILE_CSV_TABLE_TYPE = 4,
++  OB_FILE_JSONL_TABLE_TYPE = 5,
++  OB_FILE_PARQUET_TABLE_TYPE = 6,
++  OB_FILE_GLOB_TABLE_TYPE = 7,
+ };
+ 
+ typedef struct ObJtColBaseInfo
+diff --git a/src/sql/resolver/dml/ob_select_resolver.cpp b/src/sql/resolver/dml/ob_select_resolver.cpp
+index 8999dba..9f0ed9c 100644
+--- a/src/sql/resolver/dml/ob_select_resolver.cpp
++++ b/src/sql/resolver/dml/ob_select_resolver.cpp
+@@ -2986,6 +2986,72 @@ int ObSelectResolver::resolve_into_file_node(const ParseNode *list_node, ObSelec
+   return ret;
+ }
+ 
++int ObSelectResolver::resolve_file_sql_copy_options(const ParseNode &node, ObSelectIntoItem &into_item)
++{
++  int ret = OB_SUCCESS;
++  bool enabled = false;
++  if (OB_FAIL(session_info_->get_sys_variable(SYS_VAR_ENABLE_FILE_SQL, enabled))) {
++  } else if (!enabled) {
++    ret = OB_NOT_SUPPORTED;
++    LOG_USER_ERROR(OB_NOT_SUPPORTED, "File SQL is disabled");
++  } else {
++    into_item.field_str_.set_varchar(",");
++    into_item.field_str_.set_collation_type(ObCharset::get_system_collation());
++    into_item.line_str_.set_varchar("\n");
++    into_item.line_str_.set_collation_type(ObCharset::get_system_collation());
++  }
++  for (int64_t i = 0; OB_SUCC(ret) && i < node.num_child_; ++i) {
++    const ParseNode *option = node.children_[i];
++    if (OB_ISNULL(option)) {
++      ret = OB_ERR_UNEXPECTED;
++    } else if (T_FILE_SQL_COPY_FORMAT == option->type_) {
++      if (1 != option->num_child_ || OB_ISNULL(option->children_[0])) {
++        ret = OB_ERR_UNEXPECTED;
++      } else {
++        const ObString format(option->children_[0]->str_len_, option->children_[0]->str_value_);
++        if (format.case_compare("csv") != 0) {
++          LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid COPY format", 10, "COPY", 1);
++          ret = OB_ERR_PARSE_SQL;
++        }
++      }
++    } else if (T_FILE_SQL_COPY_OPTION == option->type_) {
++      if (2 != option->num_child_ || OB_ISNULL(option->children_[0])) {
++        ret = OB_ERR_UNEXPECTED;
++      } else {
++        const ObString key(option->children_[0]->str_len_, option->children_[0]->str_value_);
++        const ParseNode *value = option->children_[1];
++        if (key.case_compare("header") == 0) {
++          bool header = true;
++          if (NULL != value) {
++            if (T_BOOL != value->type_) {
++              LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid COPY header option", 10, "COPY", 1);
++              ret = OB_ERR_PARSE_SQL;
++            } else {
++              header = value->value_ != 0;
++            }
++          }
++          if (OB_SUCC(ret)) into_item.with_header_ = header;
++        } else if (key.case_compare("nullstr") == 0) {
++          if (NULL == value || NULL == value->str_value_ || value->str_len_ < 0) {
++            LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid COPY nullstr option", 10, "COPY", 1);
++            ret = OB_ERR_PARSE_SQL;
++          } else if (OB_FAIL(ob_write_string(*allocator_,
++                                             ObString(value->str_len_, value->str_value_),
++                                             into_item.null_string_))) {
++          }
++        } else {
++          LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid COPY option", 10, "COPY", 1);
++          ret = OB_ERR_PARSE_SQL;
++        }
++      }
++    } else {
++      LOG_USER_ERROR(OB_ERR_PARSE_SQL, "invalid COPY option", 10, "COPY", 1);
++      ret = OB_ERR_PARSE_SQL;
++    }
++  }
++  return ret;
++}
++
+ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item)
+ {
+   int ret = OB_SUCCESS;
+@@ -2998,7 +3064,13 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
+     ret = OB_ERR_UNEXPECTED;
+   } else if (OB_FAIL(resolve_into_const_node(node->children_[0], into_item.outfile_name_))) {
+   }
+-  if (OB_SUCC(ret) && NULL != (format_node = node->children_[1])) { // format
++  bool copy_options = false;
++  if (OB_SUCC(ret) && NULL != (format_node = node->children_[1]) &&
++      T_FILE_SQL_COPY_OPTIONS == format_node->type_) {
++    ret = resolve_file_sql_copy_options(*format_node, into_item);
++    copy_options = true;
++  }
++  if (OB_SUCC(ret) && !copy_options && NULL != (format_node = node->children_[1])) { // format
+     for (int i = 0; OB_SUCC(ret) && i < format_node->num_child_; ++i) {
+       if (OB_ISNULL(option_node = format_node->children_[i])) {
+         ret = OB_ERR_UNEXPECTED;
+@@ -3108,7 +3180,8 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
+         if (is_in_set_query()) {
+           ret = OB_INAPPROPRIATE_INTO;
+         } else if (node->num_child_ == 3 && NULL != node->children_[1]
+-            && T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_) { // Handle with `FORMAT`
++            && (T_EXTERNAL_FILE_FORMAT == node->children_[1]->type_
++                || T_FILE_SQL_COPY_OPTIONS == node->children_[1]->type_)) { // Handle with `FORMAT`
+           if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {
+           }
+         } else { // Be compatible with grammar before
+diff --git a/src/sql/resolver/dml/ob_select_resolver.h b/src/sql/resolver/dml/ob_select_resolver.h
+index 8e2517b..389f893 100644
+--- a/src/sql/resolver/dml/ob_select_resolver.h
++++ b/src/sql/resolver/dml/ob_select_resolver.h
+@@ -170,6 +170,7 @@ protected:
+   int resolve_into_variable_node(const ParseNode *node, ObSelectIntoItem &into_item);
+   int resolve_into_file_node(const ParseNode *node, ObSelectIntoItem &into_item);
+   int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
++  int resolve_file_sql_copy_options(const ParseNode &node, ObSelectIntoItem &into_item);
+   int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
+   // resolve_star related functions
+   int resolve_star_for_table_groups();
+diff --git a/src/sql/resolver/dml/ob_select_stmt.h b/src/sql/resolver/dml/ob_select_stmt.h
+index 7c75999..055e23f 100644
+--- a/src/sql/resolver/dml/ob_select_stmt.h
++++ b/src/sql/resolver/dml/ob_select_stmt.h
+@@ -128,6 +128,8 @@ struct ObSelectIntoItem
+         max_file_size_(DEFAULT_MAX_FILE_SIZE),
+         escaped_cht_(),
+         buffer_size_(DEFAULT_BUFFER_SIZE),
++        with_header_(false),
++        null_string_(),
+         external_properties_()
+   {
+     field_str_.set_varchar(DEFAULT_FIELD_TERM_STR);
+@@ -154,6 +156,8 @@ struct ObSelectIntoItem
+     escaped_cht_ = other.escaped_cht_;
+     cs_type_ = other.cs_type_;
+     buffer_size_ = other.buffer_size_;
++    with_header_ = other.with_header_;
++    null_string_ = other.null_string_;
+     external_properties_ = other.external_properties_;
+     return user_vars_.assign(other.user_vars_);
+   }
+@@ -171,6 +175,8 @@ struct ObSelectIntoItem
+                K_(escaped_cht),
+                K_(cs_type),
+                K_(buffer_size),
++               K_(with_header),
++               K_(null_string),
+                K_(external_properties));
+   ObItemType into_type_;
+   common::ObObj outfile_name_;
+@@ -185,6 +191,8 @@ struct ObSelectIntoItem
+   common::ObObj escaped_cht_;
+   common::ObCollationType cs_type_;
+   int64_t buffer_size_;
++  bool with_header_; // File SQL COPY: write the select item names first
++  common::ObString null_string_; // File SQL COPY nullstr option
+   common::ObString external_properties_;
+ 
+   static const char* const DEFAULT_FIELD_TERM_STR;
+diff --git a/src/sql/rewrite/ob_transform_utils.cpp b/src/sql/rewrite/ob_transform_utils.cpp
+index 0bc1b9d..909a8d9 100644
+--- a/src/sql/rewrite/ob_transform_utils.cpp
++++ b/src/sql/rewrite/ob_transform_utils.cpp
+@@ -1982,6 +1982,12 @@ int ObTransformUtils::is_column_expr_not_null(ObNotNullContext &ctx,
+     } else {
+       is_not_null = expr->get_result_type().has_result_flag(NOT_NULL_FLAG);
+     }
++  } else if (table->is_json_table() && table->json_table_def_ != nullptr &&
++             (table->json_table_def_->table_type_ == OB_FILE_CSV_TABLE_TYPE ||
++              table->json_table_def_->table_type_ == OB_FILE_JSONL_TABLE_TYPE)) {
++    // File SQL inferred every row and errors on a changed file or failed cast.
++    // The outer-join NULL-extension check above still takes precedence.
++    is_not_null = expr->get_result_type().has_result_flag(NOT_NULL_FLAG);
+   } else if (table->is_generated_table() || table->is_temp_table() || table->is_lateral_table()) {
+     // TODO RUINAO NOTE : every col expr will go this path, and we can modify this logic oneday
+     int64_t idx = expr->get_column_id() - OB_APP_MIN_COLUMN_ID;
+diff --git a/src/sql/session/ob_system_variable_factory.cpp b/src/sql/session/ob_system_variable_factory.cpp
+index 7c337ce..564da68 100644
+--- a/src/sql/session/ob_system_variable_factory.cpp
++++ b/src/sql/session/ob_system_variable_factory.cpp
+@@ -475,6 +475,7 @@ int ObSysVarFactory::try_init_store_mem()
+     void *store_ptr = NULL;
+     if (OB_ISNULL(store_ptr = allocator_.alloc(sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT))) {
+       ret = OB_ALLOCATE_MEMORY_FAILED;
++      LOG_WARN("fail to alloc store_.", K(ret));
+     } else {
+       store_ = static_cast<ObBasicSysVar **>(store_ptr);
+       MEMSET(store_, 0, sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT);
+@@ -484,6 +485,7 @@ int ObSysVarFactory::try_init_store_mem()
+     void *store_buf_ptr = NULL;
+     if (OB_ISNULL(store_buf_ptr = allocator_.alloc(sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT))) {
+       ret = OB_ALLOCATE_MEMORY_FAILED;
++      LOG_WARN("fail to alloc store_buf_.", K(ret));
+     } else {
+       store_buf_ = static_cast<ObBasicSysVar **>(store_buf_ptr);
+       MEMSET(store_buf_, 0, sizeof(ObBasicSysVar *) * share::ObSysVarMeta::ALL_SYS_VARS_COUNT);
+@@ -550,6 +552,7 @@ int ObSysVarFactory::create_all_sys_vars_()
+ {
+   int ret = OB_SUCCESS;
+   if (OB_FAIL(try_init_store_mem())) {
++    LOG_WARN("Fail to init", K(ret));
+   } else if (!all_sys_vars_created_) {
+     int64_t store_idx = -1;
+     ObBasicSysVar *sys_var_ptr = NULL;
+@@ -1273,6 +1276,7 @@ int ObSysVarFactory::create_all_sys_vars_()
+         + sizeof(ObSysVarObHnswExtraInfoMaxSize)
+         + sizeof(ObSysVarPushJoinPredicate)
+         + sizeof(ObSysVarObSparseDropRatioSearch)
++        + sizeof(ObSysVarEnableFileSql)
+         ;
+     void *ptr = NULL;
+     if (OB_ISNULL(ptr = allocator_.alloc(total_mem_size))) {
+@@ -7752,6 +7756,15 @@ int ObSysVarFactory::create_all_sys_vars_()
+         ptr = (void *)((char *)ptr + sizeof(ObSysVarObSparseDropRatioSearch));
+       }
+     }
++    if (OB_SUCC(ret)) {
++      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarEnableFileSql())) {
++        ret = OB_ALLOCATE_MEMORY_FAILED;
++        LOG_ERROR("fail to new ObSysVarEnableFileSql", K(ret));
++      } else {
++        store_buf_[share::ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(share::SYS_VAR_ENABLE_FILE_SQL))] = sys_var_ptr;
++        ptr = (void *)((char *)ptr + sizeof(ObSysVarEnableFileSql));
++      }
++    }
+ 
+   }
+   return ret;
+@@ -10653,6 +10666,10 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, share::ObSysVarCla
+       ret = create_one_sys_var<ObSysVarObSparseDropRatioSearch>(allocator_, sys_var_ptr, "ObSysVarObSparseDropRatioSearch");
+       break;
+     }
++    case share::SYS_VAR_ENABLE_FILE_SQL: {
++      ret = create_one_sys_var<ObSysVarEnableFileSql>(allocator_, sys_var_ptr, "ObSysVarEnableFileSql");
++      break;
++    }
+ 
+     default: {
+       ret = OB_ERR_UNEXPECTED;
+@@ -10668,11 +10685,15 @@ int ObSysVarFactory::create_sys_var(share::ObSysVarClassType sys_var_id, ObBasic
+   int ret = OB_SUCCESS;
+   ObBasicSysVar *sys_var_ptr = NULL;
+   if (OB_FAIL(try_init_store_mem())) {
++    LOG_WARN("fail to init", K(ret));
+   } else if (-1 == store_idx && OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(sys_var_id, store_idx))) {
++    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
+   } else if (store_idx < 0 || store_idx >= share::ObSysVarMeta::ALL_SYS_VARS_COUNT) {
+     ret = OB_ERR_UNEXPECTED;
++    LOG_WARN("unexpected store idx", K(ret), K(store_idx), K(sys_var_id));
+   } else if (OB_NOT_NULL(store_[store_idx])) {
+     ret = OB_ERR_UNEXPECTED;
++    LOG_WARN("store ptr shoule be null", K(ret), K(store_idx), K(sys_var_id));
+   } else {
+     if (OB_NOT_NULL(store_buf_[store_idx])) {
+       sys_var_ptr = store_buf_[store_idx];
+@@ -10681,6 +10702,7 @@ int ObSysVarFactory::create_sys_var(share::ObSysVarClassType sys_var_id, ObBasic
+   }
+   if (OB_SUCC(ret) && OB_ISNULL(sys_var_ptr)) {
+     if (OB_FAIL(create_sys_var(allocator_, sys_var_id, sys_var_ptr))) {
++      LOG_WARN("fail to calc sys var", K(ret), K(sys_var_id));
+     }
+   }
+   if (OB_SUCC(ret)) {
+@@ -10689,6 +10711,7 @@ int ObSysVarFactory::create_sys_var(share::ObSysVarClassType sys_var_id, ObBasic
+       LOG_ERROR("ret is OB_SUCCESS, but sys_var_ptr is NULL", K(ret), K(sys_var_id));
+     } else if (OB_NOT_NULL(store_[store_idx])) {
+       ret = OB_ERR_UNEXPECTED;
++      LOG_WARN("store_[store_idx] should be NULL", K(ret), K(sys_var_id));
+     } else {
+       store_[store_idx] = sys_var_ptr;
+       sys_var = sys_var_ptr;
+diff --git a/src/sql/session/ob_system_variable_factory.h b/src/sql/session/ob_system_variable_factory.h
+index f418bb4..3535012 100644
+--- a/src/sql/session/ob_system_variable_factory.h
++++ b/src/sql/session/ob_system_variable_factory.h
+@@ -5208,6 +5208,13 @@ public:
+   inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_OB_SPARSE_DROP_RATIO_SEARCH; }
+   inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(718); }
+ };
++class ObSysVarEnableFileSql : public ObBoolSysVar
++{
++public:
++  ObSysVarEnableFileSql() : ObBoolSysVar(NULL, NULL, NULL, NULL, NULL) {}
++  inline virtual share::ObSysVarClassType get_type() const { return share::SYS_VAR_ENABLE_FILE_SQL; }
++  inline virtual const common::ObObj &get_global_default_value() const { return share::ObSysVariables::get_default_value(719); }
++};
+ 
+ 
+ class ObSysVarFactory
+diff --git a/src/sql/sql_header_inventory.bzl b/src/sql/sql_header_inventory.bzl
+index 0c44270..0f2cc4a 100644
+--- a/src/sql/sql_header_inventory.bzl
++++ b/src/sql/sql_header_inventory.bzl
+@@ -422,6 +422,10 @@ SQL_COMPOSITION_HEADERS = [
+ ]
+ 
+ SQL_PRIVATE_HEADERS = [
++    "engine/file_sql/parquet_reader.h",
++    "engine/file_sql/jsonl_reader.h",
++    "engine/file_sql/csv_reader.h",
++    "engine/file_sql/file_sql_scan.h",
+     "code_generator/ob_code_generator.h",
+     "code_generator/ob_dml_cg_service.h",
+     "code_generator/ob_static_engine_cg.h",
+diff --git a/src/sql/sql_source_inventory.bzl b/src/sql/sql_source_inventory.bzl
+index 5dc93bf..7c910b2 100644
+--- a/src/sql/sql_source_inventory.bzl
++++ b/src/sql/sql_source_inventory.bzl
+@@ -1661,6 +1661,10 @@ SQL_SIMD_UNITY_GROUPS = [
+ ]
+ 
+ SQL_STANDALONE_SOURCES = [
++    struct(path = "src/sql/engine/file_sql/parquet_reader.cpp", language = "c++", kind = "source"),
++    struct(path = "src/sql/engine/file_sql/jsonl_reader.cpp", language = "c++", kind = "source"),
++    struct(path = "src/sql/engine/file_sql/csv_reader.cpp", language = "c++", kind = "source"),
++    struct(path = "src/sql/engine/file_sql/file_sql_scan.cpp", language = "c++", kind = "source"),
+     struct(path = "src/sql/engine/aggregate/ob_aggregate_processor.cpp", language = "c++", kind = "source"),
+     struct(path = "src/sql/engine/expr/ob_expr_add.cpp", language = "c++", kind = "source"),
+     struct(path = "src/sql/engine/expr/ob_expr_array_sort.cpp", language = "c++", kind = "source"),
+diff --git a/unittest/sql/engine/file_sql/test_csv_cancellation.cpp b/unittest/sql/engine/file_sql/test_csv_cancellation.cpp
+new file mode 100644
+index 0000000..c13d555
+--- /dev/null
++++ b/unittest/sql/engine/file_sql/test_csv_cancellation.cpp
+@@ -0,0 +1,25 @@
++#include "sql/engine/file_sql/csv_reader.h"
++#include <cassert>
++#include <sstream>
++
++using namespace oceanbase::sql::file_sql;
++
++int main()
++{
++  std::string content = "id,name\n";
++  for (int i = 0; i < 10000; ++i) content += "1,test\n";
++  std::istringstream input(content);
++  Schema schema;
++  int polls = 0;
++  const auto result = infer_csv(input, true, schema, [&] { return ++polls < 3; });
++  assert(result == ReadResult::cancelled);
++  assert(polls == 3);
++  assert(input.tellg() > 0 && input.tellg() < static_cast<std::streampos>(content.size()));
++
++  std::string headers = "same";
++  for (int i = 1; i < 1024; ++i) headers += ",same";
++  std::istringstream header_input(headers + "\n");
++  polls = 0;
++  assert(infer_csv(header_input, true, schema, [&] { return ++polls < 3; }) == ReadResult::cancelled);
++  assert(polls == 3);
++}
+diff --git a/unittest/sql/engine/file_sql/test_csv_reader.cpp b/unittest/sql/engine/file_sql/test_csv_reader.cpp
+new file mode 100644
+index 0000000..22c4540
+--- /dev/null
++++ b/unittest/sql/engine/file_sql/test_csv_reader.cpp
+@@ -0,0 +1,82 @@
++#include "sql/engine/file_sql/csv_reader.h"
++#include <cassert>
++#include <iostream>
++#include <sstream>
++#include <random>
++using namespace oceanbase::sql::file_sql;
++
++int main()
++{
++  std::istringstream input("\xef\xbb\xbfid,name,note,id\r\n1,Alice,\"hello,\nworld\",101\r\n2,Bob,\"say \"\"hi\"\"\",102\n");
++  CsvReader reader(input);
++  Row row;
++  assert(reader.next(row) == ReadResult::row);
++  assert(row.size() == 4 && row[0].text == "id");
++  assert(reader.next(row) == ReadResult::row);
++  assert(row[2].text == "hello,\nworld" && row[2].quoted);
++  assert(reader.next(row) == ReadResult::row && row[2].text == "say \"hi\"");
++  assert(reader.next(row) == ReadResult::end);
++  assert(reader.next(row) == ReadResult::end);
++
++  std::istringstream empty_fields(",\"\",NULL,\"NULL\"\n");
++  CsvReader null_reader(empty_fields);
++  assert(null_reader.next(row) == ReadResult::row && row.size() == 4);
++  assert(row[0].is_null() && !row[1].is_null() && row[2].is_null() && !row[3].is_null());
++
++  for (const std::string bad : {"\"unfinished", "a,\"b\"junk\n", "ab\"cd\n"}) {
++    std::istringstream malformed(bad);
++    CsvReader parser(malformed);
++    assert(parser.next(row) == ReadResult::invalid);
++  }
++  std::istringstream oversized("abcdefghij\n");
++  CsvReader small(oversized, 8);
++  assert(small.next(row) == ReadResult::too_large);
++  std::istringstream too_many_columns(std::string(5000, ','));
++  CsvReader wide(too_many_columns);
++  assert(wide.next(row) == ReadResult::too_large);
++  std::istringstream trailing("a,b,");
++  CsvReader trailing_reader(trailing);
++  assert(trailing_reader.next(row) == ReadResult::row && row.size() == 3 && row[2].is_null());
++
++  std::istringstream typed("id,score,active,day,created,id,missing\n1,98.5,true,2026-08-01,2026-08-01T10:11:12,2,\n2,87,false,,,3,\n");
++  Schema schema;
++  assert(infer_csv(typed, true, schema) == ReadResult::end);
++  assert(schema.size() == 7 && schema[0].type == Type::integer && schema[1].type == Type::real);
++  assert(schema[2].type == Type::boolean && schema[3].type == Type::date && schema[3].nullable);
++  assert(schema[4].type == Type::datetime && schema[5].name == "id__2" && schema[6].type == Type::null);
++  assert(classify("9223372036854775808") == Type::real);
++  assert(classify("2026-02-29") == Type::text && classify("2024-02-29") == Type::date);
++  assert(classify("2026-01-01T25:00:00") == Type::text);
++  std::istringstream ragged("a,b\n1\n");
++  assert(infer_csv(ragged, true, schema) == ReadResult::invalid);
++  std::istringstream collisions("id,id,id__2\n1,2,3\n");
++  assert(infer_csv(collisions, true, schema) == ReadResult::end);
++  assert(schema[0].name != schema[1].name && schema[1].name != schema[2].name);
++  std::istringstream no_header("1,x\n2,y\n");
++  assert(infer_csv(no_header, false, schema) == ReadResult::end);
++  assert(schema[0].name == "column0" && schema[0].type == Type::integer);
++  std::mt19937 random(20261101);
++  const std::string alphabet = "abc123,\"\n\r\t 数据库";
++  for (int sample = 0; sample < 10000; ++sample) {
++    std::vector<std::string> expected;
++    std::string encoded;
++    const int columns = 1 + random() % 9;
++    for (int c = 0; c < columns; ++c) {
++      std::string text;
++      const int length = random() % 80;
++      for (int k = 0; k < length; ++k) text.push_back(alphabet[random() % alphabet.size()]);
++      expected.push_back(text);
++      if (c) encoded += ',';
++      encoded += '"';
++      for (char ch : text) { encoded += ch; if (ch == '"') encoded += ch; }
++      encoded += '"';
++    }
++    encoded += sample % 2 ? "\r\n" : "\n";
++    std::istringstream source(encoded);
++    CsvReader roundtrip(source);
++    assert(roundtrip.next(row) == ReadResult::row && row.size() == expected.size());
++    for (size_t i = 0; i < row.size(); ++i) assert(row[i].text == expected[i] && row[i].quoted);
++    assert(roundtrip.next(row) == ReadResult::end);
++  }
++  std::cout << "CSV record, quoting, null, schema, overflow, date, width and bound checks passed\n";
++}
+diff --git a/unittest/sql/engine/file_sql/test_csv_streaming.cpp b/unittest/sql/engine/file_sql/test_csv_streaming.cpp
+new file mode 100644
+index 0000000..d0f999f
+--- /dev/null
++++ b/unittest/sql/engine/file_sql/test_csv_streaming.cpp
+@@ -0,0 +1,39 @@
++#include "sql/engine/file_sql/csv_reader.h"
++#include <array>
++#include <cassert>
++#include <iostream>
++#include <streambuf>
++#include <string>
++
++class RepeatedCsv : public std::streambuf {
++public:
++  explicit RepeatedCsv(size_t bytes) : remaining_(bytes) {
++    const std::string line = "1," + std::string(61, 'x') + "\n";
++    for (size_t i = 0; i < buffer_.size(); ++i) buffer_[i] = line[i % line.size()];
++    setg(buffer_.data(), buffer_.data(), buffer_.data());
++  }
++protected:
++  int_type underflow() override {
++    if (remaining_ == 0) return traits_type::eof();
++    const size_t amount = std::min(remaining_, buffer_.size());
++    remaining_ -= amount;
++    setg(buffer_.data(), buffer_.data(), buffer_.data() + amount);
++    return traits_type::to_int_type(*gptr());
++  }
++private:
++  size_t remaining_;
++  std::array<char, 65536> buffer_;
++};
++
++int main(int argc, char **argv) {
++  assert(argc == 2);
++  const size_t bytes = std::stoull(argv[1]) * 1024 * 1024;
++  RepeatedCsv source(bytes);
++  std::istream input(&source);
++  oceanbase::sql::file_sql::Schema schema;
++  const auto result = oceanbase::sql::file_sql::infer_csv(input, false, schema);
++  assert(result == oceanbase::sql::file_sql::ReadResult::end);
++  assert(schema.size() == 2 && schema[0].type == oceanbase::sql::file_sql::Type::integer);
++  assert(schema[1].type == oceanbase::sql::file_sql::Type::text && schema[1].max_bytes == 61);
++  std::cout << "Streamed " << bytes << " bytes without retaining input rows\n";
++}

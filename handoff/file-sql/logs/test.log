@@ -1,0 +1,66 @@
+# File SQL self test / regression log
+#
+# Server  : seekdb built from this branch, port 2882, secure_file_priv='/'
+# Client  : deps/3rd/u01/obclient/bin/obclient
+# Fixtures: tools/deploy/mysql_test/test_suite/file_sql/data (unmodified, restored from git)
+#
+# ---------------------------------------------------------------------------
+# 1) Dual-file JOIN (CSV + JSONL)
+# ---------------------------------------------------------------------------
+# SQL: select a.id, a.name, b.note
+#        from read_csv(<data>/basic.csv) a
+#        join read_json(<data>/basic.jsonl, format='newline_delimited') b
+#          on a.id = b.id order by a.id
+id	name	note
+1	Alice	NULL
+2	Bob	NULL
+3	Chen	ok
+
+# ---------------------------------------------------------------------------
+# 2) Projection + filter on a single CSV file
+# ---------------------------------------------------------------------------
+# SQL: select id, name, score from read_csv(<data>/basic.csv) where score > 88 order by id
+id	name	score
+1	Alice	98.5
+3	Chen	90.25
+
+# ---------------------------------------------------------------------------
+# 3) Session gate on COPY (enable_file_sql defaults to off)
+# ---------------------------------------------------------------------------
+# SQL: copy (select 1 as a) to '/tmp/nope.csv' (format csv)
+ERROR 1235 (0A000): File SQL is disabled
+
+# ---------------------------------------------------------------------------
+# 4) Invalid COPY format
+# ---------------------------------------------------------------------------
+# SQL: copy (select 1 as a) to '/tmp/nope.csv' (format json)
+ERROR 1064 (42000): You have an error in your SQL syntax ...
+
+# ---------------------------------------------------------------------------
+# 5) Non-file SQL regression (DDL / DML / EXPLAIN / DESCRIBE on a real table)
+# ---------------------------------------------------------------------------
+create table t_reg (id int primary key, name varchar(20));
+insert into t_reg values (1,'a'),(2,'b');
+select * from t_reg order by id;
+id	name
+1	a
+2	b
+
+describe t_reg;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	NO	PRI	NULL
+name	varchar(20)	YES		NULL
+
+explain select * from t_reg where id = 1;
+Query Plan  ->  TABLE GET t_reg, range[1 ; 1]   (EXPLAIN unchanged)
+
+select count(*) from t_reg;
+count(*)
+2
+
+# ---------------------------------------------------------------------------
+# 6) EXPLAIN of a File SQL query must still return a plan (DESCRIBE marker does not leak)
+# ---------------------------------------------------------------------------
+# SQL: explain select * from read_csv(<data>/basic.csv)
+Query Plan
+|0 |JSON_TABLE|FUNC_TABLE1|199 |1 |
