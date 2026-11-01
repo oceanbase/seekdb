@@ -1,34 +1,40 @@
-# Follow-up to the reported 42.7955/50 platform result
+# Document-batched streaming FTS index construction
 
-Control: submitted 5c73c72d02dc2d098dbbe256a50eb7c8ca859193 (revision28). The latest user report gives mean improvement 0.42795535167339305 and 42.7955351673393/50; key metrics are archived in platform-5c73c72-20261101.json. This follow-up has no official score and does not establish full marks. Previous implementation and measurements are preserved in REVISION28.md.
+This candidate has no official score. Control: 5c73c72d02dc2d098dbbe256a50eb7c8ca859193, previously reported at 42.795535/50. A subsequent user report after revision33 delivery gave 28.656890/50, dominated by IK content-index time 4.727 -> 7.430 seconds. That report does not identify its submitted SHA; see platform-reported-28points-20261101.json. The local checked-in scoring baseline does not reproduce platform scores, so no official full-mark prediction is made.
 
-## Changes
+## Implementation
 
-- IK character classification decodes the first code point once, retaining the original classification priority and UTF16 surrogate conditions. TokenizeContext computes its charset identity once; valid UTF8 ASCII bytes take an equivalent letter/digit/other path. Multibyte validation remains on the original charset implementation.
-- The English whitespace tokenizer bypasses the generic character-length call only for ASCII in charsets with minimum length one. Normalization scratch storage is reset when conversion is actually needed; caller-owned lowercase ASCII views need no scratch storage. Uppercase and Unicode conversion remain charset-aware.
-- Immutable dictionary character-map probes replace the repeated modulo-by-capacity with an equivalent single wrap subtraction (the existing minimum capacity is 101). Constant-size single-character comparisons avoid general memcmp calls. Hashes, probe order, table layout and dictionary contents remain unchanged.
+- Resolve four generated FTS output expressions once per operator, preserving their immutable spec lifetime across rescans.
+- Enable document-scoped term batches for plain and row/block/DDL-sample scans with four batch-compatible outputs and no filters. Actual sampling retains its existing raw scan path. A batch never advances to another document, preserving the source doc ID and term-buffer lifetime.
+- Initialize result-slot pointers with locate_datums_for_update before numeric storage-datum copies. The rejected prototype used the read accessor and crashed; it is not the implementation in this candidate.
+- Keep one document input copy until its terms have been consumed, including temporary out-of-row LOB input.
+- Allocate FtsDocumentRowState only for FTS DDL. Retain the current document term map and materialize one reusable ObDatumRow per call. The consumer copies the row before requesting another. This removes per-term row-object/array allocation; ordinary scans retain only a null state pointer. Bucket sizing, iteration order, token frequencies and document lengths follow the original path. The generic DML generate_fulltext_word_rows implementation is unchanged.
 
-## Correctness and scope
+## Validation
 
-Complete observer build and 14 mysqltest suites passed against revision28. New differential cases cover every ASCII byte, NUL/control characters, full-width letters/numbers, Unicode classification boundaries, over 4000 deterministic random scalar values, and long alternations between borrowed and converted English tokens. Eight concurrent clients, 100 same-index projected scores and the original counts 8001/11000/7332/20 all matched. The 38 changed C++ sources/headers match the VM build tree after LF normalization. UTF16 classification conditions are preserved by construction; the new SQL differential cases use UTF8 and do not establish independent UTF16 coverage.
+Complete observer build passed. All 16 regression groups passed on a fresh, exclusively owned instance against results recorded by immutable revision28. Coverage includes all ASCII bytes and Unicode boundary/random cases, null/empty and long LOB documents, composite keys, both auxiliary-index layouts, DML/update/delete/rebuild, projected relevance and a document with 2048 unique terms crossing batch boundaries. Live INFO trace confirms batch_size=16, output_count=4, batch_mask=15 and multiple terms in one actual batch; see revision39-fresh-checks/document-batch-proof.txt. Independent exhaustive UTF-16 coverage is not claimed.
 
-No benchmark data, SQL, rounds, timing, scoring or baseline was changed. Four original full benchmarks used fresh temporary instances in control/candidate/candidate/control order, CPU=2/memory=3G/datafile=2G/log_disk=2G, rows=20000, batch=500, rounds=3000, query_rounds=200, samples=3, warmup=30, SKIP_LOAD=0. Startup was outside timing with the same 20-second readiness wait as revision28. No compilation or profiler ran concurrently. Temporary instances were removed after termination.
+All 43 changed C++ sources/headers matched the VM build by normalized SHA256. The VM git HEAD remains the base with dirty source, so the manifest, rather than that base HEAD, binds these measurements to the candidate. Original benchmark SQL, data generation, rounds, score rules and baseline files are unchanged. All hit counts remained 8001/11000/7332/20.
 
-| Metric | Control | Candidate | Reduction |
+## Complete local comparison
+
+Four fresh temporary instances ran control/candidate/candidate/control, each with CPU=2, memory=3G, datafile=2G, log_disk=2G and the same 20-second startup readiness wait outside measurement. Official parameters remained rows=20000, batch=500, rounds=3000, query_rounds=200, samples=3, warmup=30, SKIP_LOAD=0. Compilation, GDB and profiling did not overlap timing. All temporary instances were stopped and removed afterward.
+
+| Metric | Control | Candidate | Elapsed-time reduction |
 | --- | ---: | ---: | ---: |
-| build_ik_all_sec | 13.885500 | 13.430500 | 3.28% |
-| build_ik_content_sec | 10.031000 | 11.099500 | -10.65% |
-| build_beng_en_sec | 5.756000 | 5.438500 | 5.52% |
-| tokenize_ik_avg_ms | 0.487200 | 0.481550 | 1.16% |
-| tokenize_beng_avg_ms | 0.469250 | 0.383000 | 18.38% |
-| query_cn_avg_ms | 2.014000 | 1.824700 | 9.40% |
-| query_beng_avg_ms | 2.882400 | 2.460900 | 14.62% |
-| query_mixed_avg_ms | 2.200050 | 2.073550 | 5.75% |
-| query_limit_avg_ms | 0.707050 | 0.746250 | -5.54% |
-| select1_avg_ms | 0.327500 | 0.325350 | 0.66% |
+| build_ik_all_sec | 13.914000 | 12.791500 | 8.07% |
+| build_ik_content_sec | 10.253500 | 9.471500 | 7.63% |
+| build_beng_en_sec | 5.488500 | 4.793000 | 12.67% |
+| tokenize_ik_avg_ms | 0.482000 | 0.475750 | 1.30% |
+| tokenize_beng_avg_ms | 0.410700 | 0.385100 | 6.23% |
+| query_cn_avg_ms | 1.896850 | 2.001000 | -5.49% |
+| query_beng_avg_ms | 2.585200 | 2.554500 | 1.19% |
+| query_mixed_avg_ms | 2.134900 | 2.050950 | 3.93% |
+| query_limit_avg_ms | 0.759200 | 0.692300 | 8.81% |
+| select1_avg_ms | 0.328550 | 0.349000 | -6.22% |
 
-The equally weighted category reductions are build **-0.62%**, tokenization **9.77%**, query **6.06%**, for **5.07% additional local time reduction**. IK content-index construction regressed 10.65%, and LIMIT regressed 5.54%; these are retained in the table rather than omitted. The VM has considerable statement overhead and variation. These results cannot be converted into a predicted official score or added directly to the current 42.7955 points.
+Category means: build 9.4553%, tokenization 3.7650%, query 2.1103%. Overall additional local elapsed-time reduction: **5.1102%**. Chinese query elapsed time regressed 5.49%; SELECT 1 regressed 6.22%. These regressions are retained rather than omitted. Local improvements cannot be added directly to official points or treated as proof of full marks.
 
-## Rejected experiment
+## Experiments not published as submission candidates
 
-A bounded thread-local cache of short CI collation encodings was tested with additional repeated/evicted sort-key regressions. Its full ABBA result was approximately -0.026% overall (revision32-comparison.json), so the entire cache change was removed before the final revision33 build and validation. The released implementation contains no such sort-key cache. Prototype character/tokenizer microbenchmarks are retained in revision29-micro.json and revision30-micro.json; they do not replace full benchmark metrics.
+Revision34 passed correctness but had only 2.8641% overall local improvement, with IK-all construction and some queries slower. Revision38 passed all 16 fresh regressions and live batching, but its full local benchmark regressed 1.6022% overall despite 2.3173% build improvement. Their positive and negative raw results are retained. Earlier disabled-path prototypes were not benchmarked as successful optimizations. The revision37 crash was reproduced under GDB and fixed before revision38. A reused fixture also stalled at a transaction barrier; subsequent correctness and measurements used fresh isolated instances. Historical revision33 results and limitations remain in REVISION33.md.

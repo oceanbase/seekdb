@@ -31,6 +31,7 @@ namespace oceanbase
 namespace sql
 {
 
+class FtsDocumentRowState;
 
 class ObFTIndexRowCache final
 {
@@ -48,13 +49,14 @@ public:
       const common::ObString &parser_properties);
   int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
   int get_next_row(blocksstable::ObDatumRow *&row);
+  int64_t get_row_count() const;
   void reset();
   void reuse();
   TO_STRING_KV(K_(row_idx), K_(is_fts_index_aux), K_(helper), K_(is_inited),
-               "row_count", rows_.count());
+               "row_count", get_row_count());
 private:
   lib::MemoryContext merge_memctx_;
-  ObDomainIndexRow rows_;
+  FtsDocumentRowState *document_;
   uint64_t row_idx_;
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
