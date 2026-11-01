@@ -759,3 +759,175 @@ TEST_F(NativeRawConstantBuilders, inner_is_true_range_marker_survives_real_deduc
   SqlType incomplete_pl_type;
   EXPECT_EQ(OB_NOT_SUPPORTED, SqlType::from_legacy(pl_meta, ObAccuracy(), incomplete_pl_type));
 }
+
+TEST_F(NativeRawConstantBuilders, public_codegen_reuses_functions_with_complete_type_semantics)
+{
+  ObArenaAllocator source, execution_owner;
+  RawAllocationGate plan;
+  ObRawExprFactory factory(source);
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObExecContext execution(execution_owner);
+  execution.set_my_session(&session);
+  ASSERT_EQ(OB_SUCCESS, execution.create_physical_plan_ctx());
+  ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &execution);
+  DEFER(ObSQLSessionInfo::ExecCtxSessionRegister unregister(session, nullptr));
+
+  ObConstRawExpr *integer = nullptr, *ci = nullptr, *binary = nullptr;
+  ObConstRawExpr *small = nullptr, *wide = nullptr;
+  ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(factory, ObIntType, -17, integer));
+  integer->set_precision(20); integer->set_scale(0);
+  ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_string_expr(factory, ObVarcharType,
+      ObString::make_string("AbC"), CS_TYPE_UTF8MB4_GENERAL_CI, ci));
+  ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_string_expr(factory, ObVarcharType,
+      ObString::make_string("AbC"), CS_TYPE_UTF8MB4_BIN, binary));
+  ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_NUMBER, small));
+  ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_NUMBER, wide));
+  std::string small_text("12.34"), wide_text("12345678901234567890.12345");
+  ParseNode small_node = literal_node(T_NUMBER, small_text);
+  ParseNode wide_node = literal_node(T_NUMBER, wide_text);
+  ObString prefix;
+  ASSERT_EQ(OB_SUCCESS, parse_literal(small_node, source, *small, prefix));
+  ASSERT_EQ(OB_SUCCESS, parse_literal(wide_node, source, *wide, prefix));
+  small->set_precision(8); small->set_scale(2);
+  wide->set_precision(30); wide->set_scale(5);
+
+  // Use the actual request SubSchema declaration, not four-byte scalar
+  // metadata, for the non-scalar preparation branch.
+  uint16_t array_id = 0;
+  ASSERT_EQ(OB_SUCCESS, execution.get_subschema_id_by_type_string(
+      ObString::make_string("ARRAY(INT)"), array_id));
+  ObColumnRefRawExpr *array_column = nullptr;
+  ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_REF_COLUMN, array_column));
+  array_column->set_ref_id(500100, 16);
+  array_column->set_column_attr(ObString::make_string("source"), ObString::make_string("array_value"));
+  ObRawExprResType array_type;
+  array_type.set_type(ObCollectionSQLType);
+  array_type.set_subschema_id(array_id); array_type.set_has_lob_header();
+  array_type.set_length(LENGTH_UNKNOWN_YET);
+  array_column->set_result_type(array_type);
+
+  ObRawExpr *raw[] = {integer, ci, binary, small, wide, array_column};
+  ObRawExprUniqueSet roots(false);
+  for (ObRawExpr *expr : raw) { ASSERT_EQ(OB_SUCCESS, roots.append(expr)); }
+  ObExprFrameInfo info(plan);
+  ObStaticEngineExprCG generator(plan, &session, nullptr, 0, 0);
+  ASSERT_EQ(OB_SUCCESS, generator.generate(roots, info));
+  // Collection columns also contribute attribute expressions to this directory.
+  ASSERT_GE(info.rt_exprs_.count(), roots.get_expr_array().count());
+  int64_t function_allocations = 0;
+  for (int64_t bytes : plan.sizes_) {
+    if (bytes == static_cast<int64_t>(sizeof(DatumBasicFuncs))) { ++function_allocations; }
+  }
+  // The old successful CG allocates this same owner object twice per Expr.
+  // Keep this check nonfatal so its semantic controls run on that old body.
+  EXPECT_EQ(info.rt_exprs_.count(), function_allocations);
+  ObExpr *runtime[6] = {};
+  for (int64_t i = 0; i < 6; ++i) {
+    runtime[i] = static_cast<ObExpr *>(generator.get_left_value_rt_expr(*raw[i]));
+    ASSERT_NE(nullptr, runtime[i]);
+    int64_t directory_matches = 0;
+    for (int64_t entry = 0; entry < info.rt_exprs_.count(); ++entry) {
+      if (runtime[i] == &info.rt_exprs_.at(entry)) { ++directory_matches; }
+    }
+    ASSERT_EQ(1, directory_matches);
+    for (int64_t previous = 0; previous < i; ++previous) {
+      EXPECT_NE(runtime[previous], runtime[i]);
+    }
+    ASSERT_NE(nullptr, runtime[i]->basic_funcs_);
+    EXPECT_EQ(&runtime[i]->get_sql_type(), runtime[i]->basic_funcs_->default_hash_.type());
+    EXPECT_TRUE(runtime[i]->basic_funcs_->default_hash_.is_valid());
+  }
+  EXPECT_EQ(ObIntType, runtime[0]->get_sql_type().kind());
+  EXPECT_EQ(CS_TYPE_UTF8MB4_GENERAL_CI, runtime[1]->get_sql_type().collation());
+  EXPECT_EQ(CS_TYPE_UTF8MB4_BIN, runtime[2]->get_sql_type().collation());
+  EXPECT_EQ(8, runtime[3]->get_sql_type().precision());
+  EXPECT_EQ(2, runtime[3]->get_sql_type().scale());
+  EXPECT_EQ(30, runtime[4]->get_sql_type().precision());
+  EXPECT_EQ(5, runtime[4]->get_sql_type().scale());
+  EXPECT_EQ(SqlTypeForm::Array, runtime[5]->get_sql_type().form());
+  ASSERT_NE(nullptr, runtime[5]->get_sql_type().element());
+  EXPECT_EQ(ObInt32Type, runtime[5]->get_sql_type().element()->kind());
+
+  ObSEArray<char *, 1> no_parameters;
+  uint64_t frame_count = 0; char **frames = nullptr;
+  ASSERT_EQ(OB_SUCCESS, info.alloc_frame(plan, no_parameters, frame_count, frames));
+  factory.destory(); source.reuse();
+  small_text.assign(small_text.size(), 'x'); wide_text.assign(wide_text.size(), 'x');
+  execution.set_frames(frames); execution.set_frame_cnt(frame_count);
+  ObEvalCtx context(execution);
+  for (int64_t i = 0; i < 6; ++i) {
+    SCOPED_TRACE(i);
+    Datum *value = nullptr;
+    if (i == 5) {
+      // A typed column starts as SQL NULL. Complex declaration/functions must
+      // remain complete even when no collection payload is being evaluated.
+      value = &runtime[i]->locate_expr_datum(context);
+      ASSERT_TRUE(value->is_null());
+    } else {
+      ASSERT_EQ(OB_SUCCESS, runtime[i]->eval(context, value));
+      ASSERT_NE(nullptr, value);
+    }
+    if (i == 0) { EXPECT_EQ(-17, value->get_int()); }
+    if (i == 1 || i == 2) {
+      EXPECT_EQ(std::string("AbC"), std::string(value->get_string().ptr(), value->length()));
+    }
+    if (i == 3) { EXPECT_EQ(0U, value->length()); EXPECT_EQ(1234, value->get_int()); }
+    if (i == 4) { EXPECT_EQ(16U, value->length()); }
+
+    DatumBasicFuncs independent;
+    ASSERT_EQ(OB_SUCCESS, ObDatumFuncs::prepare_basic(runtime[i]->get_sql_type(), independent));
+    const DatumBasicFuncs &functions = *runtime[i]->basic_funcs_;
+    EXPECT_EQ(independent.legacy_functions(), functions.legacy_functions());
+    const DatumHashOp actual_hashes[] = {functions.default_hash_, functions.default_hash_batch_,
+        functions.murmur_hash_, functions.murmur_hash_batch_, functions.xx_hash_, functions.xx_hash_batch_,
+        functions.wy_hash_, functions.wy_hash_batch_, functions.murmur_hash_v2_, functions.murmur_hash_v2_batch_};
+    const DatumHashOp expected_hashes[] = {independent.default_hash_, independent.default_hash_batch_,
+        independent.murmur_hash_, independent.murmur_hash_batch_, independent.xx_hash_, independent.xx_hash_batch_,
+        independent.wy_hash_, independent.wy_hash_batch_, independent.murmur_hash_v2_, independent.murmur_hash_v2_batch_};
+    for (int64_t hash = 0; hash < 10; ++hash) {
+      uint64_t actual = 0, expected = 0;
+      ASSERT_EQ(OB_SUCCESS, actual_hashes[hash](*value, 73, actual));
+      ASSERT_EQ(OB_SUCCESS, expected_hashes[hash](*value, 73, expected));
+      EXPECT_EQ(expected, actual);
+    }
+    Datum null;
+    int actual = 9, expected = 8;
+    ASSERT_EQ(OB_SUCCESS, functions.null_first_cmp_(*value, null, actual));
+    ASSERT_EQ(OB_SUCCESS, independent.null_first_cmp_(*value, null, expected));
+    EXPECT_EQ(expected, actual); EXPECT_EQ(i == 5 ? 0 : 1, actual);
+    ASSERT_EQ(OB_SUCCESS, functions.null_last_cmp_(*value, null, actual));
+    ASSERT_EQ(OB_SUCCESS, independent.null_last_cmp_(*value, null, expected));
+    EXPECT_EQ(expected, actual); EXPECT_EQ(i == 5 ? 0 : -1, actual);
+    if (i == 1 || i == 2) {
+      Datum lower; ASSERT_EQ(OB_SUCCESS, lower.set_string("aBc", 3));
+      ASSERT_EQ(OB_SUCCESS, functions.null_first_cmp_(*value, lower, actual));
+      if (i == 1) { EXPECT_EQ(0, actual); } else { EXPECT_LT(actual, 0); }
+    }
+  }
+}
+
+TEST_F(NativeRawConstantBuilders, public_codegen_retains_actual_function_owner_oom)
+{
+  ObArenaAllocator source;
+  RawAllocationGate plan;
+  plan.fail_size_ = sizeof(DatumBasicFuncs);
+  ObRawExprFactory factory(source);
+  ObConstRawExpr *integer = nullptr;
+  ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(factory, ObIntType, 17, integer));
+  ObRawExprUniqueSet roots(false);
+  ASSERT_EQ(OB_SUCCESS, roots.append(integer));
+  ObExprFrameInfo info(plan);
+  ObStaticEngineExprCG generator(plan, nullptr, nullptr, 0, 0);
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, generator.generate(roots, info));
+  int64_t function_requests = 0;
+  for (int64_t bytes : plan.sizes_) {
+    if (bytes == static_cast<int64_t>(sizeof(DatumBasicFuncs))) { ++function_requests; }
+  }
+  EXPECT_EQ(1, function_requests);
+  ASSERT_EQ(1, info.rt_exprs_.count());
+  EXPECT_EQ(nullptr, info.rt_exprs_.at(0).sql_type_);
+  EXPECT_EQ(nullptr, info.rt_exprs_.at(0).basic_funcs_);
+  EXPECT_EQ(0, info.const_frame_ptrs_.count());
+}

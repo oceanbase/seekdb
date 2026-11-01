@@ -1138,7 +1138,12 @@ int ObStaticEngineExprCG::cg_expr_basic_funcs(const ObIArray<ObRawExpr *> &raw_e
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(i));
     if (OB_ISNULL(rt_expr)) {
       ret = OB_ERR_UNEXPECTED;
-    } else {
+    } else if (rt_expr->basic_funcs_ == nullptr
+               || !rt_expr->basic_funcs_->default_hash_.is_valid()
+               || rt_expr->basic_funcs_->default_hash_.type() != rt_expr->sql_type_) {
+      // cg_expr_basic has already bound the complete Type and its functions.
+      // No operator or metadata mutation occurs before this stage. Reuse that
+      // binding; retain initialization for an absent or differently bound one.
       ret = rt_expr->init_runtime_functions(allocator_);
     }
   }
