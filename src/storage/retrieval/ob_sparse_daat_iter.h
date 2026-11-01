@@ -106,6 +106,10 @@ protected:
   ObFixedArray<int64_t, ObIAllocator> next_round_iter_idxes_;
   int64_t next_round_cnt_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
+  // true iff the pushed-down filter is exactly a bool-cast of the relevance
+  // projection column over a double datum, so the per-candidate filter decision
+  // is bit-identical to the inline comparison (relevance != 0.0); see cpp.
+  bool use_fast_filter_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSRDaaTIterImpl);
 };

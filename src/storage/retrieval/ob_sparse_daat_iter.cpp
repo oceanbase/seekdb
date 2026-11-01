@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_sparse_daat_iter.h"
+#include "query/engine/expr/ob_expr.h"
 
 namespace oceanbase
 {
@@ -82,7 +83,8 @@ ObSRDaaTIterImpl::ObSRDaaTIterImpl()
     buffered_relevances_(),
     next_round_iter_idxes_(),
     next_round_cnt_(0),
-    set_datum_func_(nullptr)
+    set_datum_func_(nullptr),
+    use_fast_filter_(false)
 {
 }
 
@@ -132,6 +134,23 @@ int ObSRDaaTIterImpl::init(
     }
 
     if (OB_SUCC(ret)) {
+      // Fast filter shape check: the pushed-down match filter is an exact
+      // bool-cast of the relevance projection column. ObExprBool cg selects
+      // calc_bool_expr_for_double_type for a double child, whose result is
+      // (0.0 == datum) ? 0 : 1 with a never-null datum (written from the
+      // collector value). Evaluating it per candidate is then bit-identical
+      // to the inline comparison (relevance != 0.0), for every double bit
+      // pattern incl. NaN and -0.0. Any other shape keeps the expr path.
+      ObExpr *filter_expr = iter_param_->filter_expr_;
+      ObExpr *rel_proj_expr = iter_param_->relevance_proj_expr_;
+      use_fast_filter_ = iter_param_->need_filter()
+          && iter_param_->eval_ctx_->is_vectorized()
+          && nullptr != filter_expr && nullptr != rel_proj_expr
+          && T_OP_BOOL == filter_expr->type_
+          && 1 == filter_expr->arg_cnt_
+          && filter_expr->args_[0] == rel_proj_expr
+          && (ObDoubleType == rel_proj_expr->datum_meta_.type_
+              || ObUDoubleType == rel_proj_expr->datum_meta_.type_);
       next_round_cnt_ = dim_iters.count();
       input_row_cnt_ = 0;
       output_row_cnt_ = 0;
@@ -263,8 +282,13 @@ int ObSRDaaTIterImpl::do_one_merge_round(int64_t &count)
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
     }
   } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, need_project))) {
-  } else if (need_project && OB_FAIL(filter_on_demand(count, relevance, need_project))) {
-  } else if (need_project && OB_FAIL(cache_result(count, *id_datum, relevance))) {
+  } else if (need_project && !use_fast_filter_ && OB_FAIL(filter_on_demand(count, relevance, need_project))) {
+  }
+  if (OB_SUCC(ret) && need_project && use_fast_filter_) {
+    // bit-identical to eval of the bool-cast filter checked at init, see init()
+    need_project = (0.0 != relevance);
+  }
+  if (OB_SUCC(ret) && need_project && OB_FAIL(cache_result(count, *id_datum, relevance))) {
     if (OB_ITER_END != ret) {
     }
   }
