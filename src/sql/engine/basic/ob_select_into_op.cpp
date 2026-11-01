@@ -29,6 +29,7 @@
 #include "common/udt/ob_collection_type.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_lob_access_utils.h"
+#include "common/datum/datum_parameter_codec.h"
 
 namespace oceanbase
 {
@@ -49,15 +50,160 @@ int outfile_value_view(const ObExpr &expr, const Datum &source, void *scratch,
   }
   return ret;
 }
+int encode_into_option(const Datum &value, const SqlTypeMeta &meta,
+                       char *buf, int64_t buf_len, int64_t &pos)
+{
+  ObDatum legacy;
+  alignas(8) char scratch[64];
+  int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, legacy, scratch, sizeof(scratch));
+  OB_UNIS_ENCODE(legacy);
+  OB_UNIS_ENCODE(meta);
+  return ret;
+}
+
+int decode_into_option(const char *buf, int64_t data_len, int64_t &pos,
+                       ObIAllocator &owner, Datum &value, SqlTypeMeta &meta)
+{
+  int ret = OB_SUCCESS;
+  if (pos < data_len) {
+    ObDatum legacy;
+    alignas(8) char scratch[64];
+    SqlTypeMeta candidate_meta = meta;
+    Datum candidate;
+    if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+                    value, meta, legacy, scratch, sizeof(scratch)))) {
+    }
+    OB_UNIS_DECODE(legacy);
+    OB_UNIS_DECODE(candidate_meta);
+    if (OB_SUCC(ret) && OB_FAIL(DatumParameterCodec::import_schema_native_value(
+                                  legacy, candidate_meta, owner, candidate))) {
+    }
+    if (OB_SUCC(ret)) { value = candidate; meta = candidate_meta; }
+  }
+  return ret;
+}
+
+int64_t into_option_size(const Datum &value, const SqlTypeMeta &meta)
+{
+  ObDatum legacy;
+  alignas(8) char scratch[64];
+  const int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, legacy, scratch, sizeof(scratch));
+  OB_ASSERT(OB_SUCCESS == ret);
+  return serialization::encoded_length(legacy) + serialization::encoded_length(meta);
+}
+
 }
 
 OB_SERIALIZE_MEMBER(ObSelectIntoOpInput, task_id_, sqc_id_);
-OB_SERIALIZE_MEMBER((ObSelectIntoSpec, ObOpSpec), into_type_, user_vars_,
-    outfile_name_.datum_, outfile_name_.meta_,
-    field_str_.datum_, field_str_.meta_, line_str_.datum_, line_str_.meta_,
-    closed_cht_.datum_, closed_cht_.meta_, is_optional_, select_exprs_, is_single_, max_file_size_,
-    escaped_cht_.datum_, escaped_cht_.meta_, cs_type_, parallel_, buffer_size_, is_overwrite_,
-    external_properties_);
+int ObSelectIntoSpec::set_outfile_name_native_value(const Datum &value, const SqlTypeMeta &meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, value_owner_, candidate);
+  if (OB_SUCCESS == ret) { outfile_name_ = candidate; outfile_name_meta_ = meta; }
+  return ret;
+}
+
+int ObSelectIntoSpec::set_field_str_native_value(const Datum &value, const SqlTypeMeta &meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, value_owner_, candidate);
+  if (OB_SUCCESS == ret) { field_str_ = candidate; field_str_meta_ = meta; }
+  return ret;
+}
+
+int ObSelectIntoSpec::set_line_str_native_value(const Datum &value, const SqlTypeMeta &meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, value_owner_, candidate);
+  if (OB_SUCCESS == ret) { line_str_ = candidate; line_str_meta_ = meta; }
+  return ret;
+}
+
+int ObSelectIntoSpec::set_closed_cht_native_value(const Datum &value, const SqlTypeMeta &meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, value_owner_, candidate);
+  if (OB_SUCCESS == ret) { closed_cht_ = candidate; closed_cht_meta_ = meta; }
+  return ret;
+}
+
+int ObSelectIntoSpec::set_escaped_cht_native_value(const Datum &value, const SqlTypeMeta &meta)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, value_owner_, candidate);
+  if (OB_SUCCESS == ret) { escaped_cht_ = candidate; escaped_cht_meta_ = meta; }
+  return ret;
+}
+
+OB_DEF_SERIALIZE(ObSelectIntoSpec)
+{
+  int ret = OB_SUCCESS;
+  BASE_SER((ObSelectIntoSpec, ObOpSpec));
+  OB_UNIS_ENCODE(into_type_);
+  OB_UNIS_ENCODE(user_vars_);
+  if (OB_SUCC(ret)) { ret = encode_into_option(outfile_name_, outfile_name_meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = encode_into_option(field_str_, field_str_meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = encode_into_option(line_str_, line_str_meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = encode_into_option(closed_cht_, closed_cht_meta_, buf, buf_len, pos); }
+  OB_UNIS_ENCODE(is_optional_);
+  OB_UNIS_ENCODE(select_exprs_);
+  OB_UNIS_ENCODE(is_single_);
+  OB_UNIS_ENCODE(max_file_size_);
+  if (OB_SUCC(ret)) { ret = encode_into_option(escaped_cht_, escaped_cht_meta_, buf, buf_len, pos); }
+  OB_UNIS_ENCODE(cs_type_);
+  OB_UNIS_ENCODE(parallel_);
+  OB_UNIS_ENCODE(buffer_size_);
+  OB_UNIS_ENCODE(is_overwrite_);
+  OB_UNIS_ENCODE(external_properties_);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObSelectIntoSpec)
+{
+  int ret = OB_SUCCESS;
+  BASE_DESER((ObSelectIntoSpec, ObOpSpec));
+  OB_UNIS_DECODE(into_type_);
+  OB_UNIS_DECODE(user_vars_);
+  if (OB_SUCC(ret)) { ret = decode_into_option(buf, data_len, pos, value_owner_, outfile_name_, outfile_name_meta_); }
+  if (OB_SUCC(ret)) { ret = decode_into_option(buf, data_len, pos, value_owner_, field_str_, field_str_meta_); }
+  if (OB_SUCC(ret)) { ret = decode_into_option(buf, data_len, pos, value_owner_, line_str_, line_str_meta_); }
+  if (OB_SUCC(ret)) { ret = decode_into_option(buf, data_len, pos, value_owner_, closed_cht_, closed_cht_meta_); }
+  OB_UNIS_DECODE(is_optional_);
+  OB_UNIS_DECODE(select_exprs_);
+  OB_UNIS_DECODE(is_single_);
+  OB_UNIS_DECODE(max_file_size_);
+  if (OB_SUCC(ret)) { ret = decode_into_option(buf, data_len, pos, value_owner_, escaped_cht_, escaped_cht_meta_); }
+  OB_UNIS_DECODE(cs_type_);
+  OB_UNIS_DECODE(parallel_);
+  OB_UNIS_DECODE(buffer_size_);
+  OB_UNIS_DECODE(is_overwrite_);
+  OB_UNIS_DECODE(external_properties_);
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObSelectIntoSpec)
+{
+  int64_t len = 0;
+  BASE_ADD_LEN((ObSelectIntoSpec, ObOpSpec));
+  OB_UNIS_ADD_LEN(into_type_);
+  OB_UNIS_ADD_LEN(user_vars_);
+  len += into_option_size(outfile_name_, outfile_name_meta_);
+  len += into_option_size(field_str_, field_str_meta_);
+  len += into_option_size(line_str_, line_str_meta_);
+  len += into_option_size(closed_cht_, closed_cht_meta_);
+  OB_UNIS_ADD_LEN(is_optional_);
+  OB_UNIS_ADD_LEN(select_exprs_);
+  OB_UNIS_ADD_LEN(is_single_);
+  OB_UNIS_ADD_LEN(max_file_size_);
+  len += into_option_size(escaped_cht_, escaped_cht_meta_);
+  OB_UNIS_ADD_LEN(cs_type_);
+  OB_UNIS_ADD_LEN(parallel_);
+  OB_UNIS_ADD_LEN(buffer_size_);
+  OB_UNIS_ADD_LEN(is_overwrite_);
+  OB_UNIS_ADD_LEN(external_properties_);
+  return len;
+}
+
 
 
 int ObSelectIntoOp::inner_open()
@@ -138,13 +284,13 @@ int ObSelectIntoOp::init_csv_env()
 void ObSelectIntoOp::set_csv_format_options()
 {
   if (MY_SPEC.external_properties_.str_.empty()) {
-    field_str_ = MY_SPEC.field_str_.get_varchar();
-    line_str_ = MY_SPEC.line_str_.get_varchar();
-    has_enclose_ = MY_SPEC.closed_cht_.get_val_len() > 0;
-    char_enclose_ = has_enclose_ ? MY_SPEC.closed_cht_.get_varchar().ptr()[0] : 0;
+    field_str_ = MY_SPEC.field_str_.get_string();
+    line_str_ = MY_SPEC.line_str_.get_string();
+    has_enclose_ = MY_SPEC.closed_cht_.length() > 0;
+    char_enclose_ = has_enclose_ ? MY_SPEC.closed_cht_.get_string().ptr()[0] : 0;
     is_optional_ = MY_SPEC.is_optional_;
-    has_escape_ = MY_SPEC.escaped_cht_.get_val_len() > 0;
-    char_escape_ = has_escape_ ? MY_SPEC.escaped_cht_.get_varchar().ptr()[0] : 0;
+    has_escape_ = MY_SPEC.escaped_cht_.length() > 0;
+    char_escape_ = has_escape_ ? MY_SPEC.escaped_cht_.get_string().ptr()[0] : 0;
     cs_type_ = MY_SPEC.cs_type_;
   } else {
     is_optional_ = external_properties_.csv_format_.is_optional_;
@@ -173,13 +319,17 @@ int ObSelectIntoOp::init_env_common()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   bool need_check = false;
-  file_name_.assign_value(MY_SPEC.outfile_name_);
+  DatumValue option;
+  DatumParameter resolved;
+  alignas(8) char scratch[64];
   if (OB_ISNULL(phy_plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ObSQLUtils::get_param_value(MY_SPEC.outfile_name_,
-                                                 phy_plan_ctx->get_param_store(),
-                                                 file_name_,
-                                                 need_check))) {
+  } else if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+                 MY_SPEC.outfile_name_, MY_SPEC.outfile_name_meta_, option.datum_, scratch, sizeof(scratch)))) {
+  } else if (OB_FALSE_IT(option.meta_ = MY_SPEC.outfile_name_meta_)) {
+  } else if (OB_FALSE_IT(resolved.assign_value(option))) {
+  } else if (OB_FAIL(ObSQLUtils::get_param_value(option, phy_plan_ctx->get_param_store(), resolved, need_check))) {
+  } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), resolved.value_view().get_varchar(), file_name_))) {
   } else if (OB_FAIL(calc_outfile_path())) {
   } else if (OB_FAIL(check_has_lob_or_json())) {
   } else if (has_coll_ && MY_SPEC.into_type_ == T_INTO_VARIABLES) {
@@ -194,7 +344,7 @@ int ObSelectIntoOp::calc_outfile_path()
 {
   int ret = OB_SUCCESS;
   const ObItemType into_type = MY_SPEC.into_type_;
-  ObString path = file_name_.value_view().get_varchar().trim();
+  ObString path = file_name_.trim();
   if (T_INTO_OUTFILE == into_type && !MY_SPEC.is_single_ && OB_FAIL(calc_first_file_path(path))) {
   } else if (OB_FAIL(ob_write_string(ctx_.get_allocator(), path, basic_url_, true))) {
   }
@@ -1159,7 +1309,7 @@ int ObSelectIntoOp::into_dumpfile(ObExternalFileWriter *data_writer)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_row_str(buf_len, is_first_, buf, pos))) {
   } else if (is_first_) { // create file
-    if (OB_FAIL(data_writer->file_appender_.create(file_name_.value_view().get_varchar(), true))) {
+    if (OB_FAIL(data_writer->file_appender_.create(file_name_, true))) {
     } else {
       is_first_ = false;
     }

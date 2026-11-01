@@ -18,6 +18,8 @@
 #define SRC_SQL_ENGINE_BASIC_OB_SELECT_INTO_OP_H_
 
 #include "sql/engine/ob_operator.h"
+#include "common/datum/datum.h"
+#include "common/object/ob_type_metadata.h"
 #include "lib/file/ob_file.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/engine/basic/ob_select_into_basic.h"
@@ -72,28 +74,41 @@ public:
       parallel_(1),
       buffer_size_(DEFAULT_BUFFER_SIZE),
       is_overwrite_(false),
-      external_properties_(alloc)
+      external_properties_(alloc),
+      value_owner_(alloc)
   {
   }
 
   ObItemType into_type_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> user_vars_;
-  common::DatumValue outfile_name_;
-  common::DatumValue field_str_;
-  common::DatumValue line_str_;
-  common::DatumValue closed_cht_;
+  common::Datum outfile_name_;
+  common::Datum field_str_;
+  common::Datum line_str_;
+  common::Datum closed_cht_;
   bool is_optional_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> select_exprs_;
   bool is_single_;
   int64_t max_file_size_;
-  common::DatumValue escaped_cht_;
+  common::Datum escaped_cht_;
+  common::SqlTypeMeta outfile_name_meta_;
+  common::SqlTypeMeta field_str_meta_;
+  common::SqlTypeMeta line_str_meta_;
+  common::SqlTypeMeta closed_cht_meta_;
+  common::SqlTypeMeta escaped_cht_meta_;
   common::ObCollationType cs_type_;
   int64_t parallel_;
   int64_t buffer_size_;
   bool is_overwrite_;
   ObExternalFileFormat::StringData external_properties_;
+  int set_outfile_name_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_field_str_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_line_str_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_closed_cht_native_value(const common::Datum &, const common::SqlTypeMeta &);
+  int set_escaped_cht_native_value(const common::Datum &, const common::SqlTypeMeta &);
   static const int64_t DEFAULT_MAX_FILE_SIZE = 256LL * 1024 * 1024;
   static const int64_t DEFAULT_BUFFER_SIZE = 1LL * 1024 * 1024;
+private:
+  common::ObIAllocator &value_owner_;
 };
 
 class ObSelectIntoOp : public ObOperator
@@ -280,7 +295,7 @@ private:
   bool is_first_;
   common::ObString field_str_;
   common::ObString line_str_;
-  common::DatumParameter file_name_;
+  common::ObString file_name_;
   common::ObCollationType cs_type_;
   ObString basic_url_; // url without partition expr
   ObExternalFileWriter* data_writer_;

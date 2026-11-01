@@ -6706,8 +6706,6 @@ int ObOptimizerUtil::generate_rowkey_expr(ObDMLStmt *stmt,
                                           ObSQLSessionInfo *session,
                                           ObIArray<ColumnItem> *column_items)
 {
-  common::DatumValue schema_default_value;
-  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   /* Now, let's create the raw expr */
   const TableItem *table_item = NULL;
@@ -6730,8 +6728,7 @@ int ObOptimizerUtil::generate_rowkey_expr(ObDMLStmt *stmt,
     dummy_col_item.base_cid_ = rowkey->get_column_id();
     dummy_col_item.column_name_ = rowkey->get_column_name();
     dummy_col_item.is_geo_ = column_schema.is_geometry();
-    if ((OB_FAIL(column_schema.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
-        || OB_FAIL(dummy_col_item.set_default_value(schema_default_value)))) {
+    if (OB_FAIL(dummy_col_item.set_default_native_value(column_schema.get_cur_default_datum(), column_schema.get_cur_default_meta()))) {
     } else if (OB_FAIL(stmt->add_column_item(dummy_col_item))) {
     } else if (FALSE_IT(rowkey->clear_explicited_referece())) {
       /*do nothing*/

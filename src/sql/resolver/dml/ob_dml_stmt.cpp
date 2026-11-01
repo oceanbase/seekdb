@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_dml_stmt.h"
 #include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_logical_operator.h"
 using namespace oceanbase::sql;
@@ -93,29 +94,48 @@ bool JoinedTable::same_as(const JoinedTable &other) const
 
 int ColumnItem::set_default_value(const DatumValue &val, ObIAllocator *owner)
 {
+  Datum native;
+  const int ret = DatumParameterCodec::borrow_schema_native_value(val.datum_, val.meta_, native);
+  return ret == OB_SUCCESS ? set_default_native_value(native, val.meta_, owner) : ret;
+}
+
+int ColumnItem::set_default_native_value(const Datum &val, const SqlTypeMeta &meta,
+                                         ObIAllocator *owner)
+{
   int ret = OB_SUCCESS;
-  DatumValue copy;
+  Datum copy;
+  SqlTypeMeta copy_meta = meta;
   if (owner == nullptr && expr_ != nullptr) {
     owner = expr_->get_value_allocator();
   }
   if (val.is_null()) {
     copy = val;
-    if (!copy.meta_.is_null()) { copy.meta_.set_null(); }
+    if (!copy_meta.is_null()) { copy_meta.set_null(); }
   } else if (owner == nullptr) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ret = clone_typed_value(val, copy, *owner);
+    ret = DatumParameterCodec::clone_schema_native_value(val, meta, *owner, copy);
   }
   if (OB_SUCC(ret)) {
     if (!copy.is_null() && expr_ != nullptr
-        && (ob_is_enumset_tc(val.get_type()) || val.is_collection_sql_type())) {
-      copy.set_subschema_id(expr_->get_subschema_id());
+        && (ob_is_enumset_tc(meta.get_type()) || meta.is_collection_sql_type())) {
+      copy_meta.set_subschema_id(expr_->get_subschema_id());
       if (expr_->is_enum_set_with_subschema()) {
-        copy.set_scale(ObEnumSetMeta::MetaState::SQL);
+        copy_meta.set_scale(ObEnumSetMeta::MetaState::SQL);
       }
     }
     default_value_ = copy;
+    default_meta_ = copy_meta;
   }
+  return ret;
+}
+
+int ColumnItem::export_default_value(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      default_value_, default_meta_, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { output = DatumValue(view, default_meta_); }
   return ret;
 }
 
@@ -143,7 +163,7 @@ int ColumnItem::deep_copy(ObIRawExprCopier &expr_copier,
   if (OB_FAIL(ret)) {
   } else {
     col_idx_= other.col_idx_;
-    if (OB_FAIL(set_default_value(other.default_value_))) {
+    if (OB_FAIL(set_default_native_value(other.get_default_datum(), other.get_default_meta()))) {
     } else if (OB_NOT_NULL(other.default_value_expr_)
         && OB_FAIL(expr_copier.copy(other.default_value_expr_, default_value_expr_))) {
       ret = OB_ERR_UNEXPECTED;

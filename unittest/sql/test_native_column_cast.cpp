@@ -111,7 +111,7 @@ TEST(NativeColumnCast, datum_zero_values_and_fixed_string_padding) {
   EXPECT_EQ(ObFloatType, value.get_type());
   EXPECT_FLOAT_EQ(0.0f, value.datum_.get_float());
   ASSERT_EQ(OB_SUCCESS, get_datum_zero_value(ObDateType, CS_TYPE_BINARY, allocator, value));
-  EXPECT_EQ(ObTimeConverter::ZERO_DATE, value.datum_.get_date());
+  EXPECT_EQ(static_cast<int32_t>(ObTimeConverter::ZERO_DATE), value.datum_.get_date());
   ASSERT_EQ(OB_SUCCESS, get_datum_zero_value(ObDecimalIntType, CS_TYPE_BINARY, allocator, value));
   EXPECT_FALSE(value.is_null());
   EXPECT_TRUE(value.is_decimal_int());
@@ -230,12 +230,14 @@ TEST(NativeColumnCast, expression_caster_keeps_original_parent_frames) {
   expression.eval_info_off_ = 32; expression.res_buf_off_ = 128; expression.res_buf_len_ = 128;
   expression.obj_meta_.set_int(); expression.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
   expression.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 19);
+  ASSERT_EQ(OB_SUCCESS, expression.prepare_scalar_type(
+      expression.obj_meta_, ObAccuracy(19, 0), state.arena));
   ObEvalCtx input_context(state.context);
-  new (frames[0]) ObDatum(); new (frames[0] + 32) ObEvalInfo();
+  new (frames[0]) Datum(); new (frames[0] + 32) ObEvalInfo();
   expression.locate_datum_for_write(input_context).set_int(42);
   expression.get_eval_info(input_context).evaluated_ = true;
   ObDatumCaster caster; ASSERT_EQ(OB_SUCCESS, caster.init(state.context));
-  ObDatum *output = nullptr;
+  Datum *output = nullptr;
   ASSERT_EQ(OB_SUCCESS, caster.to_type(ObDatumMeta(ObVarcharType, CS_TYPE_UTF8MB4_BIN, -1),
                                       expression, CM_NONE, output));
   EXPECT_EQ(ObString::make_string("42"), output->get_string());
@@ -350,17 +352,18 @@ TEST(NativeColumnItem, default_payload_uses_plan_owner_and_failed_replace_is_ato
     ASSERT_EQ(OB_SUCCESS, value.set_varchar(ObString::make_string("customer_客户"), input_owner));
     value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS, item.set_default_value(value));
-    EXPECT_NE(value.datum_.ptr_, item.default_value_.datum_.ptr_);
+    EXPECT_NE(value.datum_.ptr_, item.get_default_datum().get_reference());
   }
-  EXPECT_EQ(ObString::make_string("customer_客户"), item.default_value_.get_string());
-  const char *before = item.default_value_.datum_.ptr_;
+  EXPECT_EQ(ObString::make_string("customer_客户"), item.get_default_datum().get_string());
+  const void *before = item.get_default_datum().get_reference();
   ObArenaAllocator input_owner;
   DatumValue replacement;
-  ASSERT_EQ(OB_SUCCESS, replacement.set_int(918, input_owner));
+  // Inline I64 no longer allocates payload; reject a real reference clone.
+  ASSERT_EQ(OB_SUCCESS, replacement.set_varchar(ObString::make_string("replacement"), input_owner));
   owner.reject = true;
   EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, item.set_default_value(replacement));
-  EXPECT_EQ(before, item.default_value_.datum_.ptr_);
-  EXPECT_EQ(ObString::make_string("customer_客户"), item.default_value_.get_string());
+  EXPECT_EQ(before, item.get_default_datum().get_reference());
+  EXPECT_EQ(ObString::make_string("customer_客户"), item.get_default_datum().get_string());
 }
 TEST(NativeColumnItem, nonnull_defaults_require_a_plan_arena_and_null_does_not) {
   ColumnItem item;
@@ -368,7 +371,7 @@ TEST(NativeColumnItem, nonnull_defaults_require_a_plan_arena_and_null_does_not) 
   ObArenaAllocator owner;
   ASSERT_EQ(OB_SUCCESS, value.set_int(42, owner));
   EXPECT_EQ(OB_ERR_UNEXPECTED, item.set_default_value(value));
-  EXPECT_TRUE(item.default_value_.is_null());
+  EXPECT_TRUE(item.get_default_datum().is_null());
   EXPECT_EQ(OB_SUCCESS, item.set_default_value(DatumValue()));
 }
 
@@ -383,8 +386,8 @@ TEST(NativeColumnItem, typed_null_default_does_not_become_an_enum_payload) {
   value.meta_.set_enum();
   ASSERT_TRUE(value.is_null());
   ASSERT_EQ(OB_SUCCESS, item.set_default_value(value));
-  EXPECT_TRUE(item.default_value_.is_null());
-  EXPECT_EQ(ObNullType, item.default_value_.get_type());
+  EXPECT_TRUE(item.get_default_datum().is_null());
+  EXPECT_EQ(ObNullType, item.get_default_meta().get_type());
   EXPECT_EQ(ObEnumType, value.get_type());
   EXPECT_EQ(ObEnumType, expr.get_data_type());
 }
@@ -634,4 +637,22 @@ TEST(NativeColumnCast, direct_native_pl_range_null_and_invalid_range_do_not_read
   EXPECT_FALSE(invalid.valid());
   EXPECT_EQ(OB_SUCCESS, ObExprPLIntegerChecker::check_range<DatumValue>(
       outside, outside.get_type(), invalid.range_));
+}
+
+
+TEST(NativeColumnItem, inline_default_self_replacement_and_explicit_owner_keep_native_metadata) {
+  FailingCastAllocator owner;
+  ColumnItem item;
+  Datum value; value.set_int(INT64_MIN);
+  SqlTypeMeta meta; meta.set_int(); meta.set_collation_level(CS_LEVEL_COERCIBLE);
+  ASSERT_EQ(OB_SUCCESS, item.set_default_native_value(value, meta, &owner));
+  EXPECT_EQ(0, owner.allocations);
+  owner.reject = true;
+  ASSERT_EQ(OB_SUCCESS, item.set_default_native_value(item.get_default_datum(), item.get_default_meta(), &owner));
+  EXPECT_EQ(INT64_MIN, item.get_default_datum().get_int());
+  EXPECT_EQ(meta, item.get_default_meta());
+  EXPECT_EQ(0, owner.allocations);
+  alignas(8) char scratch[64]; DatumValue exported;
+  ASSERT_EQ(OB_SUCCESS, item.export_default_value(exported, scratch, sizeof(scratch)));
+  EXPECT_EQ(INT64_MIN, exported.get_int()); EXPECT_EQ(meta, exported.meta_);
 }

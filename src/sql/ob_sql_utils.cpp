@@ -2277,7 +2277,7 @@ int ObSQLUtils::merge_solidified_var_into_collation(const ObLocalSessionVar &ses
     ObSessionSysVar *local_var = NULL;
     if (OB_FAIL(session_vars_snapshot.get_local_var(SYS_VAR_COLLATION_CONNECTION, local_var))) {
     } else if (NULL != local_var) {
-      cs_type = static_cast<ObCollationType>(local_var->val_.get_int());
+      cs_type = static_cast<ObCollationType>(local_var->get_value_datum().get_int());
     }
   }
   return ret;
@@ -2336,7 +2336,7 @@ int ObSQLUtils::merge_solidified_vars_into_type_ctx(ObExprTypeCtx &type_ctx,
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(session_vars_snapshot.get_local_var(SYS_VAR_TIME_ZONE, local_var))) {
     } else if (NULL != local_var) {
-      if (OB_FAIL(type_ctx.get_local_tz_wrap().init_time_zone(local_var->val_.get_string(),
+      if (OB_FAIL(type_ctx.get_local_tz_wrap().init_time_zone(local_var->get_value_datum().get_string(),
                                                               OB_INVALID_VERSION,
                                                               *(const_cast<ObTZInfoMap *>(tz_info_map))))) {
       }
@@ -2389,10 +2389,10 @@ int ObSQLUtils::merge_solidified_var_into_sql_mode(const ObLocalSessionVar *loca
     //do nothing
   } else if (OB_FAIL(local_vars->get_local_var(SYS_VAR_SQL_MODE, local_var))) {
   } else if (NULL != local_var) {
-    if (ObUInt64Type == local_var->val_.get_type()) {
-      sql_mode = local_var->val_.get_uint64();
-    } else if (ObIntType == local_var->val_.get_type()) {
-      sql_mode = static_cast<uint64_t>(local_var->val_.get_int());
+    if (ObUInt64Type == local_var->get_value_meta().get_type()) {
+      sql_mode = local_var->get_value_datum().get_uint64();
+    } else if (ObIntType == local_var->get_value_meta().get_type()) {
+      sql_mode = static_cast<uint64_t>(local_var->get_value_datum().get_int());
     } else {
       ret = OB_ERR_UNEXPECTED;
     }
@@ -2409,8 +2409,8 @@ int ObSQLUtils::merge_solidified_var_into_max_allowed_packet(const ObLocalSessio
     //do nothing
   } else if (OB_FAIL(local_vars->get_local_var(SYS_VAR_MAX_ALLOWED_PACKET, local_var))) {
   } else if (NULL != local_var) {
-    if (ObIntType == local_var->val_.get_type()) {
-      max_allowed_packet = local_var->val_.get_int();
+    if (ObIntType == local_var->get_value_meta().get_type()) {
+      max_allowed_packet = local_var->get_value_datum().get_int();
     } else {
       ret = OB_ERR_UNEXPECTED;
     }

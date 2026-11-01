@@ -977,6 +977,8 @@ int ObOptimizerTraceImpl::trace_static(const ObDMLStmt *stmt, OptTableMetas &tab
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < column_items.count(); ++j) {
         ColumnItem &col = column_items.at(j);
+        DatumValue bound;
+        alignas(8) char bound_scratch[64];
         if (OB_ISNULL(col_meta = table_metas.get_column_meta_by_table_id(table->table_id_, col.column_id_))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(new_line())) {
@@ -991,9 +993,11 @@ int ObOptimizerTraceImpl::trace_static(const ObDMLStmt *stmt, OptTableMetas &tab
         } else if (OB_FAIL(new_line())) {
         } else if (OB_FAIL(append("hist scale:", col_meta->get_hist_scale()))) {
         } else if (OB_FAIL(new_line())) {
-        } else if (OB_FAIL(append("Min:", col_meta->get_min_value()))) {
+        } else if (OB_FAIL(col_meta->export_min_value(bound, bound_scratch, sizeof(bound_scratch)))) {
+        } else if (OB_FAIL(append("Min:", bound))) {
         } else if (OB_FAIL(new_line())) {
-        } else if (OB_FAIL(append("Max:", col_meta->get_max_value()))) {
+        } else if (OB_FAIL(col_meta->export_max_value(bound, bound_scratch, sizeof(bound_scratch)))) {
+        } else if (OB_FAIL(append("Max:", bound))) {
         } else if (OB_FAIL(new_line())) {
         } else {
           decrease_section();

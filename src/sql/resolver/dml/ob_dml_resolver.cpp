@@ -1907,11 +1907,11 @@ int ObDMLResolver::resolve_basic_column_item(const TableItem &table_item,
       col_expr->set_lob_column(is_lob_column);
       column_item.expr_ = col_expr;
       if (session_info_->get_ddl_info().is_ddl()) {
-        ret = col_schema->export_orig_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch));
-        if (OB_SUCC(ret)) { ret = column_item.set_default_value(schema_default_value); }
+        ret = column_item.set_default_native_value(col_schema->get_orig_default_datum(),
+                                                     col_schema->get_orig_default_meta());
       } else {
-        ret = col_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch));
-        if (OB_SUCC(ret)) { ret = column_item.set_default_value(schema_default_value); }
+        ret = column_item.set_default_native_value(col_schema->get_cur_default_datum(),
+                                                     col_schema->get_cur_default_meta());
       }
     }
     if (OB_SUCC(ret)) {
@@ -6263,11 +6263,14 @@ int ObDMLResolver::resolve_generated_column_expr(const ObString &expr_str,
         SMART_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH],val_buf) {
           for (int64_t i = 0; OB_SUCC(ret) && i < var_array.count(); ++i) {
             ObString var_name;
+            alignas(8) char value_scratch[64];
+            DatumValue value;
             int64_t pos = 0;
             if (OB_ISNULL(var_array.at(i))) {
               ret = OB_ERR_UNEXPECTED;
             } else if (OB_FAIL(share::ObSysVarMeta::get_sys_var_name_by_id(var_array.at(i)->type_, var_name))) {
-            } else if (OB_FAIL(var_array.at(i)->val_.print_sql_literal(val_buf, 100, pos))) {
+            } else if (OB_FAIL(var_array.at(i)->export_value(value, value_scratch, sizeof(value_scratch)))) {
+            } else if (OB_FAIL(value.print_sql_literal(val_buf, 100, pos))) {
             } else {
               LOG_USER_WARN(OB_ERR_SESSION_VAR_CHANGED,
                             var_name.length(), var_name.ptr(),

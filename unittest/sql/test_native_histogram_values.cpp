@@ -5,6 +5,7 @@
 #include "sql/optimizer/stat/ob_stat_item.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
 #include "sql/optimizer/ob_optimizer_context.h"
+#include "sql/engine/ob_exec_context.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/executor/ob_execute_result.h"
 #include "common/datum/datum_parameter_codec.h"
@@ -288,4 +289,108 @@ TEST(NativeHistogramValues, default_and_explicit_murmur_hash_keep_distinct_old_c
   EXPECT_EQ(4927921873964597621ULL,default_hash);
   EXPECT_EQ(510903276987443985ULL,murmur_hash);
   EXPECT_NE(default_hash,murmur_hash);
+}
+
+
+TEST(NativeHistogramValues, optimizer_extrema_pair_owns_references_and_preserves_failed_replacement)
+{
+  SwitchAllocator owner;
+  OptColumnMeta column;
+  EXPECT_TRUE(column.get_min_value_datum().is_min());
+  EXPECT_TRUE(column.get_max_value_datum().is_max());
+  SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  {
+    ObArenaAllocator source;
+    char *low = static_cast<char *>(source.alloc(3)); MEMCPY(low, "a\0b", 3);
+    char *high = static_cast<char *>(source.alloc(5)); MEMCPY(high, "z_end", 5);
+    Datum minimum, maximum;
+    ASSERT_EQ(OB_SUCCESS, minimum.set_string(low, 3));
+    ASSERT_EQ(OB_SUCCESS, maximum.set_string(high, 5));
+    ASSERT_EQ(OB_SUCCESS, column.set_min_max_owned(minimum, meta, maximum, meta, owner));
+    EXPECT_NE(low, column.get_min_value_datum().get_reference());
+    EXPECT_NE(high, column.get_max_value_datum().get_reference());
+    source.reuse(); MEMSET(source.alloc(65536), 0x7e, 65536);
+  }
+  EXPECT_EQ(std::string("a\0b", 3), std::string(column.get_min_value_datum().get_string().ptr(), 3));
+  EXPECT_EQ(ObString("z_end"), column.get_max_value_datum().get_string());
+  const void *low = column.get_min_value_datum().get_reference();
+  const void *high = column.get_max_value_datum().get_reference();
+  Datum scalar; scalar.set_int(INT64_MIN);
+  SqlTypeMeta integer_meta; integer_meta.set_int();
+  owner.reject_ = true;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, column.set_min_max_owned(scalar, integer_meta,
+      column.get_max_value_datum(), column.get_max_value_meta(), owner));
+  EXPECT_EQ(low, column.get_min_value_datum().get_reference());
+  EXPECT_EQ(high, column.get_max_value_datum().get_reference());
+  EXPECT_EQ(meta, column.get_min_value_meta());
+  OptColumnMeta alias; ASSERT_EQ(OB_SUCCESS, alias.assign(column));
+  EXPECT_EQ(low, alias.get_min_value_datum().get_reference()); // Original context-owned shallow assign.
+  alias.init(16, 4, 0, 3);
+  EXPECT_EQ(low, alias.get_min_value_datum().get_reference()); // init changes statistics, not extrema.
+  alignas(8) char min_scratch[64], max_scratch[64]; DatumValue minimum, maximum;
+  ASSERT_EQ(OB_SUCCESS, alias.export_min_value(minimum, min_scratch, sizeof(min_scratch)));
+  ASSERT_EQ(OB_SUCCESS, alias.export_max_value(maximum, max_scratch, sizeof(max_scratch)));
+  EXPECT_EQ(std::string("a\0b", 3), std::string(minimum.get_string().ptr(), 3));
+  EXPECT_EQ(ObString("z_end"), maximum.get_string());
+  EXPECT_EQ(meta, minimum.meta_); EXPECT_EQ(meta, maximum.meta_);
+  owner.reject_ = false;
+  Datum signed_value, floating_value; signed_value.set_int(-9); floating_value.set_double(21.5);
+  SqlTypeMeta floating_meta; floating_meta.set_double();
+  ASSERT_EQ(OB_SUCCESS, column.set_min_max_owned(signed_value, integer_meta,
+      floating_value, floating_meta, owner));
+  ASSERT_EQ(OB_SUCCESS, column.set_min_max_owned(column.get_max_value_datum(), column.get_max_value_meta(),
+      column.get_min_value_datum(), column.get_min_value_meta(), owner));
+  EXPECT_EQ(ObDoubleType, column.get_min_value_meta().get_type());
+  EXPECT_EQ(21.5, column.get_min_value_datum().get_double());
+  EXPECT_EQ(ObIntType, column.get_max_value_meta().get_type());
+  EXPECT_EQ(-9, column.get_max_value_datum().get_int());
+}
+
+
+TEST(NativeHistogramValues, public_optimizer_extrema_lookup_keeps_native_pairs_missing_outputs_and_aliases)
+{
+  SwitchAllocator owner;
+  ObGlobalHint hint; ObRawExprFactory factory(owner); ParamStore params; ObAddr address;
+  ObExecContext execution(owner);
+  ObOptimizerContext optimizer(nullptr, &execution, nullptr, nullptr, owner, &params,
+      address, hint, factory, nullptr, false);
+  OptSelectivityCtx ctx(optimizer, nullptr, nullptr);
+  OptTableMetas tables;
+  OptTableMeta table; table.set_table_id(1001);
+  OptColumnMeta column; column.init(16, 2, 0, 8);
+  Datum low, high; low.set_int(-9); high.set_int(21);
+  SqlTypeMeta meta; meta.set_int(); meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  ASSERT_EQ(OB_SUCCESS, column.set_min_value(low, meta));
+  ASSERT_EQ(OB_SUCCESS, column.set_max_value(high, meta));
+  column.set_min_max_inited(true);
+  ASSERT_EQ(OB_SUCCESS, table.get_column_metas().push_back(column));
+  ASSERT_EQ(OB_SUCCESS, tables.get_table_metas().push_back(table));
+  ObColumnRefRawExpr expression; expression.set_ref_id(1001, 16); expression.set_data_type(ObIntType);
+  Datum minimum, maximum; SqlTypeMeta min_meta, max_meta;
+  const int64_t before = owner.arena_.used();
+  owner.reject_ = true;
+  for (int i = 0; i < 8; ++i) {
+    ASSERT_EQ(OB_SUCCESS, ObOptSelectivity::get_column_min_max(tables, ctx, expression,
+        minimum, min_meta, maximum, max_meta));
+    EXPECT_EQ(-9, minimum.get_int()); EXPECT_EQ(21, maximum.get_int());
+    EXPECT_EQ(meta, min_meta); EXPECT_EQ(meta, max_meta);
+  }
+  EXPECT_EQ(before, owner.arena_.used()); // Lookup adds no payload to the context arena.
+  ASSERT_EQ(OB_SUCCESS, ObOptSelectivity::get_column_min_max(tables, ctx, expression,
+      minimum, min_meta, minimum, min_meta));
+  EXPECT_EQ(21, minimum.get_int()); // Historical alias order: max is published last.
+  expression.set_ref_id(1001, 999);
+  minimum.set_int(101); maximum.set_int(202);
+  min_meta.set_uint64(); max_meta.set_double();
+  ASSERT_EQ(OB_SUCCESS, ObOptSelectivity::get_column_min_max(tables, ctx, expression,
+      minimum, min_meta, maximum, max_meta));
+  EXPECT_EQ(101, minimum.get_int()); EXPECT_EQ(202, maximum.get_int());
+  EXPECT_EQ(ObUInt64Type, min_meta.get_type()); EXPECT_EQ(ObDoubleType, max_meta.get_type());
+  owner.reject_ = false;
+  expression.set_ref_id(1001, 16);
+  ASSERT_EQ(OB_SUCCESS, ObOptSelectivity::calc_expr_min_max(tables, ctx, &expression,
+      minimum, min_meta, maximum, max_meta));
+  EXPECT_EQ(-9, minimum.get_int()); EXPECT_EQ(21, maximum.get_int());
+  EXPECT_EQ(meta, min_meta); EXPECT_EQ(meta, max_meta);
 }

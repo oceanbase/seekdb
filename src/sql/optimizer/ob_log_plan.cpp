@@ -6823,16 +6823,16 @@ int ObLogPlan::allocate_select_into_as_top(ObLogicalOperator *&old_top)
     }
     if (OB_SUCC(ret)) {
       select_into->set_into_type(into_item->into_type_);
-      select_into->set_outfile_name(into_item->outfile_name_);
-      select_into->set_field_str(into_item->field_str_);
-      select_into->set_line_str(into_item->line_str_);
+      select_into->set_outfile_name(into_item->outfile_name_, into_item->outfile_name_meta_);
+      select_into->set_field_str(into_item->field_str_, into_item->field_str_meta_);
+      select_into->set_line_str(into_item->line_str_, into_item->line_str_meta_);
       select_into->set_user_vars(into_item->user_vars_);
       select_into->set_is_optional(into_item->is_optional_);
-      select_into->set_closed_cht(into_item->closed_cht_);
+      select_into->set_closed_cht(into_item->closed_cht_, into_item->closed_cht_meta_);
       select_into->set_is_single(into_item->is_single_);
       select_into->set_max_file_size(into_item->max_file_size_);
       select_into->set_buffer_size(into_item->buffer_size_);
-      select_into->set_escaped_cht(into_item->escaped_cht_);
+      select_into->set_escaped_cht(into_item->escaped_cht_, into_item->escaped_cht_meta_);
       select_into->set_cs_type(into_item->cs_type_);
       select_into->set_external_properties(into_item->external_properties_);
       select_into->set_child(ObLogicalOperator::first_child, old_top);
@@ -10514,8 +10514,6 @@ int ObLogPlan::generate_column_expr(ObRawExprFactory &expr_factory,
                                     const ObColumnSchemaV2 &column_schema,
                                     ColumnItem &column_item)
 {
-  common::DatumValue schema_default_value;
-  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   const TableItem *table_item = NULL;
   ObColumnRefRawExpr *rowkey;
@@ -10543,8 +10541,7 @@ int ObLogPlan::generate_column_expr(ObRawExprFactory &expr_factory,
     column_item.base_tid_ = table_item->ref_id_;
     column_item.base_cid_ = rowkey->get_column_id();
     column_item.column_name_ = rowkey->get_column_name();
-    if ((OB_FAIL(column_schema.export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
-        || OB_FAIL(column_item.set_default_value(schema_default_value)))) {
+    if (OB_FAIL(column_item.set_default_native_value(column_schema.get_cur_default_datum(), column_schema.get_cur_default_meta()))) {
     } else if (OB_FAIL(rowkey->add_relation_id(stmt->get_table_bit_index(table_id)))) {
     } else if (OB_FAIL(rowkey->formalize(optimizer_context_.get_session_info()))) {
     } else if (OB_FAIL(rowkey->pull_relation_id())) {

@@ -3,6 +3,9 @@
 #include "common/datum/datum_parameter_codec.h"
 #include "common/datum/datum_parameter_array.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
+#include "sql/session/ob_local_session_var.h"
+#include "sql/session/ob_sql_session_info.h"
+#include "share/system_variable/ob_system_variable_init.h"
 #include <gtest/gtest.h>
 #include <fstream>
 #include <string>
@@ -75,7 +78,8 @@ class BudgetOwner final : public ObIAllocator {
 public:
   ObArenaAllocator arena;
   int64_t budget = INT64_MAX;
-  void *alloc(int64_t size) override { return budget-- > 0 ? arena.alloc(size) : nullptr; }
+  int64_t calls = 0;
+  void *alloc(int64_t size) override { ++calls; return budget-- > 0 ? arena.alloc(size) : nullptr; }
   void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
   void free(void *ptr) override { arena.free(ptr); }
 };
@@ -115,7 +119,7 @@ TEST(NativeLocalSessionValues, actual_old_binary_and_collation_exception_compari
     SCOPED_TRACE(line);
     ObSessionSysVar variable;
     variable.type_ = SYS_VAR_SQL_MODE;
-    variable.val_ = decoded(cols[1], owner);
+    ASSERT_EQ(OB_SUCCESS, variable.set_value(decoded(cols[1], owner), owner));
     const DatumValue right = decoded(cols[2], owner);
     EXPECT_EQ(std::stoi(cols[3]) != 0, variable.is_equal(right));
     ++checked;
@@ -129,7 +133,9 @@ TEST(NativeLocalSessionValues, legal_omitted_value_reuses_previous_value_and_con
   ASSERT_EQ(4, omitted.size());
   ObSessionSysVar leaf;
   leaf.type_ = SYS_VAR_SQL_MODE;
-  ASSERT_EQ(OB_SUCCESS, leaf.val_.set_uint64(99, owner));
+  Datum initial; initial.set_uint(99);
+  SqlTypeMeta initial_meta; initial_meta.set_uint64();
+  ASSERT_EQ(OB_SUCCESS, leaf.set_native_value(initial, initial_meta, owner));
   const auto input = unhex(omitted[1]);
   int64_t pos = 0;
   ASSERT_EQ(std::stoi(omitted[2]), leaf.deserialize(input.data(), input.size(), pos, owner));
@@ -184,7 +190,7 @@ TEST(NativeLocalSessionValues, failed_payload_clone_does_not_publish_new_record)
   source.reset();
   ObSessionSysVar *entry = nullptr;
   ASSERT_EQ(OB_SUCCESS, value.get_local_var(SYS_VAR_TIME_ZONE, entry));
-  ASSERT_NE(nullptr, entry); EXPECT_EQ(ObString::make_string("payload must allocate"), entry->val_.get_string());
+  ASSERT_NE(nullptr, entry); EXPECT_EQ(ObString::make_string("payload must allocate"), entry->get_value_datum().get_string());
 }
 TEST(NativeLocalSessionValues, cache_key_equality_hash_and_text_match_actual_old)
 {
@@ -233,7 +239,10 @@ TEST(NativeLocalSessionValues, recursive_native_array_clone_and_cache_buffer_own
   ObSessionSysVar *entry = nullptr;
   ASSERT_EQ(OB_SUCCESS, local.get_local_var(SYS_VAR_SQL_MODE, entry));
   ASSERT_NE(nullptr, entry);
-  const auto *owned_array = reinterpret_cast<const DatumParameterArray *>(entry->val_.get_ext());
+  DatumValue array_view;
+  alignas(8) char array_scratch[64];
+  ASSERT_EQ(OB_SUCCESS, entry->export_value(array_view, array_scratch, sizeof(array_scratch)));
+  const auto *owned_array = reinterpret_cast<const DatumParameterArray *>(array_view.get_ext());
   EXPECT_EQ(UINT64_MAX, owned_array->data_[0].get_uint64());
   EXPECT_EQ(ObString::make_string("array leaf"), owned_array->data_[1].get_string());
   const auto *cache_array = reinterpret_cast<const DatumParameterArray *>(copied.system_variables_.at(0).get_ext());
@@ -242,5 +251,84 @@ TEST(NativeLocalSessionValues, recursive_native_array_clone_and_cache_buffer_own
   EXPECT_EQ(ObString::make_string("array leaf"), cache_array->data_[1].get_string());
   EXPECT_GE(entry->get_deep_copy_size(), sizeof(*entry) + sizeof(DatumParameterArray)
       + 2 * sizeof(DatumParameter) + 8 + 10);
+}
+
+TEST(NativeLocalSessionValues, native_inline_entry_has_no_payload_allocation_and_failed_reference_keeps_pair)
+{
+  BudgetOwner owner;
+  ObSessionSysVar entry;
+  Datum value;
+  value.set_int(INT64_MIN);
+  SqlTypeMeta meta;
+  meta.set_int(); meta.set_scale(6);
+  owner.budget = 0;
+  const int64_t calls = owner.calls;
+  ASSERT_EQ(OB_SUCCESS, entry.set_native_value(value, meta, owner));
+  EXPECT_EQ(calls, owner.calls);
+  EXPECT_EQ(INT64_MIN, entry.get_value_datum().get_int());
+  EXPECT_EQ(0, entry.get_value_datum().length());
+  EXPECT_EQ(sizeof(entry), entry.get_deep_copy_size());
+  const std::string old_wire = wire(entry);
+  Datum reference;
+  ASSERT_EQ(OB_SUCCESS, reference.set_string(ObString::make_string("must own the snapshot")));
+  SqlTypeMeta text_meta; text_meta.set_varchar(); text_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, entry.set_native_value(reference, text_meta, owner));
+  EXPECT_EQ(old_wire, wire(entry));
+  EXPECT_EQ(6, entry.get_value_meta().get_scale());
+
+  // The container still allocates its entry and pointer array. Isolate the
+  // entry allocation after reserving capacity; no scalar payload is allocated.
+  owner.budget = INT64_MAX;
+  ObLocalSessionVar snapshot(&owner);
+  ASSERT_EQ(OB_SUCCESS, snapshot.set_local_var_capacity(1));
+  const int64_t before = owner.calls;
+  owner.budget = 1;
+  ASSERT_EQ(OB_SUCCESS, snapshot.add_local_var_native(SYS_VAR_MAX_ALLOWED_PACKET, value, meta));
+  EXPECT_EQ(before + 1, owner.calls);
+  ObSessionSysVar *stored = nullptr;
+  ASSERT_EQ(OB_SUCCESS, snapshot.get_local_var(SYS_VAR_MAX_ALLOWED_PACKET, stored));
+  ASSERT_NE(nullptr, stored);
+  EXPECT_EQ(INT64_MIN, stored->get_value_datum().get_int());
+}
+
+class NativeLocalSessionCapture : public ::testing::Test {
+protected:
+  static void SetUpTestCase()
+  {
+    ASSERT_EQ(OB_SUCCESS, ObCharset::init_charset());
+    ASSERT_EQ(OB_SUCCESS, ObSysVariables::init_default_values());
+  }
+};
+
+TEST_F(NativeLocalSessionCapture, actual_session_capture_assign_and_copy_keep_distinct_owner_contracts)
+{
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObArenaAllocator source("LocalSnapSrc"), target("LocalSnapDst");
+  ObLocalSessionVar original(&source), borrowed(&target), owned(&target);
+  ASSERT_EQ(OB_SUCCESS, ObLocalSessionVarHelper::load_session_vars(&session, original));
+  ASSERT_EQ(4, original.get_var_count());
+  ASSERT_EQ(OB_SUCCESS, borrowed.assign(original));
+  ASSERT_EQ(OB_SUCCESS, owned.deep_copy(original));
+  ObSessionSysVar *origin = nullptr, *alias = nullptr, *clone = nullptr;
+  ASSERT_EQ(OB_SUCCESS, original.get_local_var(SYS_VAR_TIME_ZONE, origin));
+  ASSERT_EQ(OB_SUCCESS, borrowed.get_local_var(SYS_VAR_TIME_ZONE, alias));
+  ASSERT_EQ(OB_SUCCESS, owned.get_local_var(SYS_VAR_TIME_ZONE, clone));
+  ASSERT_NE(nullptr, origin); ASSERT_NE(nullptr, clone);
+  EXPECT_EQ(origin, alias);
+  EXPECT_NE(origin, clone);
+  EXPECT_NE(origin->get_value_datum().get_reference(), clone->get_value_datum().get_reference());
+  const std::string saved = wire(owned);
+  bool same = false;
+  ASSERT_EQ(OB_SUCCESS, ObLocalSessionVarHelper::check_var_same_with_session(session, clone, same));
+  EXPECT_TRUE(same);
+  borrowed.reset(); original.reset(); source.reset();
+  EXPECT_EQ(saved, wire(owned));
+  ObString hex;
+  ASSERT_EQ(OB_SUCCESS, owned.gen_local_session_var_str(target, hex));
+  ObLocalSessionVar restored(&target);
+  ASSERT_EQ(OB_SUCCESS, restored.fill_local_session_var_from_str(hex));
+  EXPECT_TRUE(restored == owned);
 }
 } // namespace

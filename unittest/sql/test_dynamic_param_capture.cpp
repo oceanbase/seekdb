@@ -393,6 +393,27 @@ TEST(DynamicParamCapture, native_update_preserves_value_type_and_slot_metadata) 
   EXPECT_EQ(ObIntType, f.parameters().get_param_meta().get_type());
   EXPECT_EQ(0xa5, f.parameters().get_result_flag());
   EXPECT_EQ(0x5a, f.parameters().get_param_flag().flag_);
+
+  // A Decimal update uses its complete target accuracy rather than the old
+  // integer envelope. The stack coefficient must not escape into the slot.
+  SqlTypeMeta decimal_meta; decimal_meta.set_decimal_int(5);
+  f.expr.obj_meta_ = decimal_meta;
+  f.expr.datum_meta_.type_ = ObDecimalIntType;
+  ASSERT_EQ(OB_SUCCESS, f.expr.prepare_scalar_type(decimal_meta, ObAccuracy(19, 5), f.arena));
+  const int128_t coefficient = -12345;
+  ASSERT_EQ(OB_SUCCESS, input.set_reference(&coefficient, sizeof(coefficient)));
+  ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, input));
+  EXPECT_EQ(ObDecimalIntType, f.parameters().get_param_meta().get_type());
+  EXPECT_EQ(ObAccuracy(19, 5), f.parameters().get_accuracy());
+  EXPECT_NE(&coefficient, f.exec.get_physical_plan_ctx()->get_native_parameter(0)->get_reference());
+  int128_t actual = 0;
+  ASSERT_EQ(OB_SUCCESS, f.exec.get_physical_plan_ctx()->get_native_parameter(0)->get_decimal_int128(actual));
+  EXPECT_TRUE(coefficient == actual);
+  input.set_null();
+  ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, input));
+  EXPECT_TRUE(f.parameters().is_null());
+  EXPECT_EQ(ObDecimalIntType, f.parameters().get_param_meta().get_type());
+  EXPECT_EQ(ObAccuracy(19, 5), f.parameters().get_accuracy());
 }
 
 TEST(DynamicParamCapture, execution_slots_grow_after_input_frames_are_initialized) {
@@ -1056,5 +1077,65 @@ TEST(DynamicParamCapture, pl_frame_capture_preserves_complete_declaration_id_for
     EXPECT_EQ(meta, captured.get_type_meta()); EXPECT_EQ(meta, captured.get_param_meta());
     // A NULL has no payload from which the capture could recover an ID.
     EXPECT_EQ(nullptr, captured.datum_.ptr_);
+
+    // The real DynamicSetter consumes the prepared declaration directly.
+    // No PL stack is installed: it must not rediscover this local declaration
+    // in whichever caller namespace happens to be current.
+    EXPECT_EQ(nullptr, f.exec.get_pl_stack_ctx());
+    ObDynamicParamSetter setter(0, nullptr, &f.expr);
+    ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, f.expr.locate_expr_datum(ctx)));
+    auto &plan = *f.exec.get_physical_plan_ctx();
+    EXPECT_TRUE(plan.get_native_parameter(0)->is_null());
+    EXPECT_EQ(declaration_id, plan.get_native_parameter_type(0)->pl_declaration().declaration_id);
+    EXPECT_EQ(declaration_id, static_cast<uint64_t>(f.parameters().get_accuracy().get_accuracy()));
+    EXPECT_EQ(meta, f.parameters().get_param_meta());
+    ASSERT_EQ(OB_SUCCESS, f.expr.get_datum_copy_plan().import_legacy(
+        source.datum_, f.expr.locate_expr_datum(ctx)));
+    ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, f.expr.locate_expr_datum(ctx)));
+    EXPECT_EQ(reinterpret_cast<int64_t>(record), plan.get_native_parameter(0)->get_ext());
+    EXPECT_NE(source.datum_.ptr_, plan.get_native_parameter(0)->get_reference());
+    EXPECT_EQ(declaration_id, f.parameters().get_udt_id());
+    EXPECT_EQ(57, record->get_element()[0].get_int());
+    record->get_element()[0].datum_.set_int(58);
+    EXPECT_EQ(58, record->get_element()[0].get_int()); // Pointee/lvalue identity is deliberately borrowed.
   }
+}
+
+
+TEST(DynamicParamCapture, typed_update_failure_keeps_destination_parent_and_parameter_flags) {
+  Frame f;
+  ObEvalCtx ctx(f.exec);
+  DatumParameter previous = f.integer(42);
+  previous.set_param_meta(); f.bind(previous);
+  f.expr.locate_expr_datum(ctx).set_int(77);
+  f.expr.get_eval_info(ctx).evaluated_ = true;
+  f.expr.get_eval_info(ctx).projected_ = true;
+  ObExpr parent;
+  parent.frame_idx_ = 0; parent.eval_info_off_ = 512;
+  ObExpr *parents[] = {&parent};
+  f.expr.parents_ = parents; f.expr.parent_cnt_ = 1;
+  parent.get_eval_info(ctx).evaluated_ = true;
+  auto &plan = *f.exec.get_physical_plan_ctx();
+  const Datum *old_slot = plan.get_native_parameter(0);
+  const SqlType *old_type = plan.get_native_parameter_type(0);
+  const DatumParameter old_view = f.parameters();
+  auto *info = reinterpret_cast<ObEvalInfo *>(plan.get_param_frame_ptrs().at(0)
+      + ScalarFrameLayout::eval_info_offset(0));
+  info->evaluated_ = true; info->projected_ = true;
+  Datum invalid; ASSERT_EQ(OB_SUCCESS, invalid.set_string("bad", 3));
+  ObDynamicParamSetter setter(0, nullptr, &f.expr);
+  EXPECT_EQ(OB_INVALID_ARGUMENT, setter.update_dynamic_param(ctx, invalid));
+  EXPECT_EQ(old_type, plan.get_native_parameter_type(0));
+  EXPECT_EQ(old_slot, plan.get_native_parameter(0)); EXPECT_EQ(42, old_slot->get_int());
+  EXPECT_EQ(old_view.datum_.ptr_, f.parameters().datum_.ptr_);
+  EXPECT_TRUE(info->evaluated_); EXPECT_TRUE(info->projected_);
+  EXPECT_EQ(77, f.expr.locate_expr_datum(ctx).get_int());
+  EXPECT_TRUE(f.expr.get_eval_info(ctx).evaluated_); EXPECT_TRUE(f.expr.get_eval_info(ctx).projected_);
+  EXPECT_TRUE(parent.get_eval_info(ctx).evaluated_);
+  Datum valid; valid.set_int(-8);
+  ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(ctx, valid));
+  EXPECT_EQ(-8, plan.get_native_parameter(0)->get_int());
+  EXPECT_EQ(-8, f.expr.locate_expr_datum(ctx).get_int());
+  EXPECT_TRUE(f.expr.get_eval_info(ctx).evaluated_);
+  EXPECT_FALSE(parent.get_eval_info(ctx).evaluated_);
 }

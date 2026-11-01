@@ -159,6 +159,7 @@ class ObStaticEngineCG
 {
   friend class ObDmlCgService;
   friend class ObTscCgService;
+  friend struct NativeSelectIntoOptionsTestPeer;
 public:
   template <int TYPE>
   friend struct GenSpecHelper;

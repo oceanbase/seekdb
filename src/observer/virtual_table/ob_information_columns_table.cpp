@@ -1042,6 +1042,8 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
         case COLUMN_DEFAULT: {
             cells[cell_idx].reset();
             ColumnItem column_item;
+            const Datum &default_datum = column_item.get_default_datum();
+            const SqlTypeMeta &default_meta = column_item.get_default_meta();
             SqlValueType column_type = ObMaxType;
             const ObColumnSchemaV2 *tmp_column_schema = NULL;
             if (OB_ISNULL(table_schema_) ||
@@ -1051,20 +1053,26 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               SERVER_LOG(WARN, "table or column schema or allocator is null", KR(ret), KP(table_schema_), KP(tmp_column_schema), KP(allocator_));
             } else if (FALSE_IT(column_type = tmp_column_schema->get_meta_type().get_type())) {
             } else if (OB_FAIL(ObResolverUtils::resolve_default_value_and_expr_from_select_item(select_item, column_item, select_stmt))) {
-            } else if (IS_DEFAULT_NOW_OBJ(column_item.default_value_)) {
+            } else if (default_meta.is_ext() && !default_meta.is_ext_sql_array()
+                       && default_datum.has_ext_value()
+                       && default_datum.get_ext() == ObActionFlag::OP_DEFAULT_NOW_FLAG) {
               if (OB_FAIL(DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx,
                       column_type, ObString::make_string(N_UPPERCASE_CUR_TIMESTAMP)))) {
               } else if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
-            } else if (column_item.default_value_.get_type() == ObBitType || ob_is_enum_or_set_type(column_item.default_value_.get_type())) {
+            } else if (default_meta.get_type() == ObBitType || ob_is_enum_or_set_type(default_meta.get_type())) {
+              alignas(8) char default_scratch[64];
+              DatumValue default_value;
               char *buf = NULL;
               int64_t buf_len = number::ObNumber::MAX_PRINTABLE_SIZE;
               int64_t pos = 0;
               if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(allocator_->alloc(buf_len))))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
                 SERVER_LOG(WARN, "fail to allocate memory", K(ret));
-              } else if (column_item.default_value_.get_type() == ObBitType) {
-                if (OB_FAIL(column_item.default_value_.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
+              } else if (OB_FAIL(column_item.export_default_value(
+                                      default_value, default_scratch, sizeof(default_scratch)))) {
+              } else if (default_meta.get_type() == ObBitType) {
+                if (OB_FAIL(default_value.print_varchar_literal(buf, buf_len, pos, TZ_INFO(session_)))) {
                 } else {
                   (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString(static_cast<int32_t>(pos), buf)) : ret);
                 }
@@ -1074,7 +1082,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
                 if (OB_FAIL(ObRawExprUtils::extract_extended_type_info(select_item.expr_,
                                                                        session_,
                                                                        extended_type_info))) {
-                } else if (OB_FAIL(column_item.default_value_.print_plain_str_literal(extended_type_info, buf, buf_len, pos))) {
+                } else if (OB_FAIL(default_value.print_plain_str_literal(extended_type_info, buf, buf_len, pos))) {
                 } else {
                   (OB_SUCC(ret) ? ret = DatumValueBuffer::set_string_view(cells, cur_row_.count_, cell_idx, column_type, ObString(static_cast<int32_t>(pos), buf)) : ret);
                 }
@@ -1083,9 +1091,12 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const common::ObString &database_na
               } else if (OB_FAIL(convert_temporary_lob(cells[cell_idx], *allocator_))) {
               }
             } else {
-              DatumValue casted_value;
-              if (OB_FAIL(DatumValueCaster::to_type(column_type, cast_ctx,
-                                                    column_item.default_value_, *allocator_, casted_value))) {
+              alignas(8) char default_scratch[64];
+              DatumValue default_value, casted_value;
+              if (OB_FAIL(column_item.export_default_value(
+                              default_value, default_scratch, sizeof(default_scratch)))) {
+              } else if (OB_FAIL(DatumValueCaster::to_type(column_type, cast_ctx,
+                                                         default_value, *allocator_, casted_value))) {
               } else if (casted_value.is_null()) {
                 cells[cell_idx].set_null();
               } else {

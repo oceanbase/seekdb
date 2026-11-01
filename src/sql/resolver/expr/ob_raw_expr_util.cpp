@@ -7089,10 +7089,11 @@ int ObRawExprUtils::extract_local_vars_for_gencol(ObRawExpr *expr,
     if (has_char_dep_col) {
       //add sql mode
       const uint64_t sql_mode = session->get_sql_mode();
-      DatumValue obj;
-      obj.meta_.set_uint64();
-      obj.datum_.set_string(reinterpret_cast<const char *>(&sql_mode), sizeof(sql_mode));
-      if (OB_FAIL(gen_col.get_local_session_var().add_local_var(share::SYS_VAR_SQL_MODE, obj))) {
+      Datum obj;
+      obj.set_uint(sql_mode);
+      SqlTypeMeta meta;
+      meta.set_uint64();
+      if (OB_FAIL(gen_col.get_local_session_var().add_local_var_native(share::SYS_VAR_SQL_MODE, obj, meta))) {
       }
     }
   }

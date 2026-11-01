@@ -59,17 +59,30 @@ int ObLocalSessionVar::add_local_var(const ObSessionSysVar *var)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(var)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(add_local_var(var->type_, var->val_))) {
+  } else if (OB_FAIL(add_local_var_native(var->type_, var->get_value_datum(), var->get_value_meta()))) {
   }
   return ret;
 }
 
 int ObLocalSessionVar::add_local_var(ObSysVarClassType var_type, const DatumValue &value)
 {
+  Datum native;
+  int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, native);
+  if (OB_SUCC(ret)) { ret = add_local_var_native(var_type, native, value.meta_); }
+  return ret;
+}
+
+int ObLocalSessionVar::add_local_var_native(ObSysVarClassType var_type, const Datum &value,
+                                           const SqlTypeMeta &meta)
+{
   int ret = OB_SUCCESS;
   ObSessionSysVar *cur_var = NULL;
+  ObDatum checked;
+  alignas(8) char scratch[64];
   if (OB_ISNULL(alloc_)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+                 value, meta, checked, scratch, sizeof(scratch)))) {
   } else if (OB_FAIL(get_local_var(var_type, cur_var))) {
   } else if (NULL == cur_var) {
     ObSessionSysVar *new_var = OB_NEWx(ObSessionSysVar, alloc_);
@@ -77,12 +90,12 @@ int ObLocalSessionVar::add_local_var(ObSysVarClassType var_type, const DatumValu
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       new_var->type_ = var_type;
-      if (OB_FAIL(clone_typed_value(value, new_var->val_, *alloc_))) {
+      if (OB_FAIL(new_var->set_native_value(value, meta, *alloc_))) {
       } else if (OB_FAIL(local_session_vars_.push_back(new_var))) {
       }
       if (OB_FAIL(ret)) { new_var->~ObSessionSysVar(); alloc_->free(new_var); }
     }
-  } else if (!cur_var->is_equal(value)) {
+  } else if (!cur_var->is_equal(value, meta)) {
     ret = OB_ERR_UNEXPECTED;
   }
   return ret;
@@ -219,7 +232,7 @@ bool ObLocalSessionVar::operator == (const ObLocalSessionVar& other) const
       } else if (other_val == NULL) {
         is_equal = false;
       } else {
-        is_equal = var->is_equal(other_val->val_);
+        is_equal = var->is_equal(other_val->get_value_datum(), other_val->get_value_meta());
       }
     }
   }
@@ -239,35 +252,85 @@ int64_t ObLocalSessionVar::get_deep_copy_size() const
   return sz;
 }
 
+int ObSessionSysVar::set_value(const DatumValue &value, ObIAllocator &owner)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::import_schema_native_value(
+      value.datum_, value.meta_, owner, candidate);
+  if (OB_SUCCESS == ret) { value_ = candidate; value_meta_ = value.meta_; }
+  return ret;
+}
+
+int ObSessionSysVar::set_native_value(const Datum &value, const SqlTypeMeta &meta,
+                                      ObIAllocator &owner)
+{
+  Datum candidate;
+  const int ret = DatumParameterCodec::clone_schema_native_value(value, meta, owner, candidate);
+  if (OB_SUCCESS == ret) { value_ = candidate; value_meta_ = meta; }
+  return ret;
+}
+
+int ObSessionSysVar::export_value(DatumValue &output, void *scratch, int64_t capacity) const
+{
+  DatumValue candidate;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      value_, value_meta_, candidate.datum_, scratch, capacity);
+  if (OB_SUCCESS == ret) { candidate.meta_ = value_meta_; output = candidate; }
+  return ret;
+}
+
+int ObSessionSysVar::copy_value(DatumValue &output, ObIAllocator &owner) const
+{
+  DatumValue view;
+  alignas(8) char scratch[64];
+  int ret = export_value(view, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = clone_typed_value(view, output, owner); }
+  return ret;
+}
+
 bool ObSessionSysVar::is_equal(const DatumValue &other) const
 {
+  DatumValue value;
+  alignas(8) char scratch[64];
+  const int ret = export_value(value, scratch, sizeof(scratch));
+  OB_ASSERT(OB_SUCCESS == ret);
   bool bool_ret = false;
-  if (val_.get_meta() != other.get_meta()) {
-    bool_ret = false;
-    if (ob_is_string_type(val_.get_type())
-        && val_.get_type() == other.get_type()
-        && val_.get_collation_type() != other.get_collation_type()) {
-      // The collation type of string system variables is rewritten by session collation on update.
-      bool_ret = common::ObCharset::case_sensitive_equal(val_.get_string(), other.get_string());
+  if (value.get_meta() != other.get_meta()) {
+    if (ob_is_string_type(value.get_type())
+        && value.get_type() == other.get_type()
+        && value.get_collation_type() != other.get_collation_type()) {
+      // Session updates rewrite the collation of string system variables.
+      bool_ret = ObCharset::case_sensitive_equal(value.get_string(), other.get_string());
     }
-  } else if (binary_equal_datum_values(val_, other)) {
+  } else if (binary_equal_datum_values(value, other)) {
     bool_ret = true;
   }
   return bool_ret;
+}
+
+bool ObSessionSysVar::is_equal(const Datum &other, const SqlTypeMeta &meta) const
+{
+  DatumValue view;
+  alignas(8) char scratch[64];
+  const int ret = DatumParameterCodec::export_schema_legacy_value(
+      other, meta, view.datum_, scratch, sizeof(scratch));
+  OB_ASSERT(OB_SUCCESS == ret);
+  view.meta_ = meta;
+  return is_equal(view);
 }
 
 OB_DEF_SERIALIZE(ObSessionSysVar)
 {
   int ret = OB_SUCCESS;
   OB_UNIS_ENCODE(type_);
-  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_value(val_.datum_, val_.meta_, buf, buf_len, pos); }
+  if (OB_SUCC(ret)) { ret = DatumParameterCodec::encode_schema_native_value(value_, value_meta_, buf, buf_len, pos); }
   return ret;
 }
 
 OB_DEF_SERIALIZE_SIZE(ObSessionSysVar)
 {
   int64_t len = 0, value_size = 0;
-  if (DatumParameterCodec::value_size(val_.datum_, val_.meta_, value_size) != OB_SUCCESS) { return 0; }
+  if (DatumParameterCodec::schema_native_value_size(value_, value_meta_, value_size) != OB_SUCCESS) { return 0; }
   OB_UNIS_ADD_LEN(type_);
   len += value_size;
   return len;
@@ -285,17 +348,19 @@ int ObSessionSysVar::deserialize(const char *buf, int64_t data_len, int64_t &pos
     const int64_t body_start = pos;
     int64_t body_pos = 0;
     auto type = type_;
-    DatumValue candidate;
+    Datum candidate;
+    SqlTypeMeta candidate_meta;
     if (body_pos < len) { ret = serialization::decode(buf + body_start, len, body_pos, type); }
     if (OB_SUCC(ret) && body_pos < len) {
-      ret = DatumParameterCodec::decode_unis_value(buf + body_start, len, body_pos,
-                                                  owner, candidate.datum_, candidate.meta_);
+      ret = DatumParameterCodec::decode_unis_native_value(buf + body_start, len, body_pos,
+                                                  owner, candidate, candidate_meta);
     } else if (OB_SUCC(ret)) {
       // A legal omitted final value retains the record's previous value, and
       // the result still has a caller-owned lifetime after this decode.
-      ret = clone_typed_value(val_, candidate, owner);
+      ret = DatumParameterCodec::clone_schema_native_value(value_, value_meta_, owner, candidate);
+      candidate_meta = value_meta_;
     }
-    if (OB_SUCC(ret)) { type_ = type; val_ = candidate; }
+    if (OB_SUCC(ret)) { type_ = type; value_ = candidate; value_meta_ = candidate_meta; }
     pos = body_start + len;
   }
   return ret;
@@ -303,7 +368,13 @@ int ObSessionSysVar::deserialize(const char *buf, int64_t data_len, int64_t &pos
 
 int64_t ObSessionSysVar::get_deep_copy_size() const
 {
-  const int64_t payload = owned_native_session_value_size(val_);
+  DatumValue view;
+  alignas(8) char scratch[64];
+  const int ret = export_value(view, scratch, sizeof(scratch));
+  OB_ASSERT(OB_SUCCESS == ret);
+  // Only inline scalar/state exports use this local scratch. Reference spans,
+  // including empty spans and array wrappers, retain the actual stored owner.
+  const int64_t payload = view.datum_.ptr_ == scratch ? 0 : owned_native_session_value_size(view);
   int64_t sz = payload > INT64_MAX - sizeof(*this) ? INT64_MAX : sizeof(*this) + payload;
   return sz;
 }
@@ -368,7 +439,8 @@ DEF_TO_STRING(ObLocalSessionVar)
     }
     if (OB_NOT_NULL(local_session_vars_.at(i))) {
       J_KV("type", local_session_vars_.at(i)->type_,
-            "val", local_session_vars_.at(i)->val_);
+            "val", local_session_vars_.at(i)->get_value_datum(),
+            "meta", local_session_vars_.at(i)->get_value_meta());
     }
   }
   J_OBJ_END();

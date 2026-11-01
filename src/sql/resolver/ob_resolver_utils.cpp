@@ -6477,7 +6477,8 @@ int ObResolverUtils::resolve_default_value_and_expr_from_select_item(const Selec
     } else if (NULL == (tmp_column_item = stmt->get_column_item_by_id(column_expr->get_table_id(), column_expr->get_column_id()))) {
       ret = OB_ERR_BAD_FIELD_ERROR;
     } else {
-      ret = column_item.set_default_value(tmp_column_item->default_value_,
+      ret = column_item.set_default_native_value(tmp_column_item->get_default_datum(),
+                                          tmp_column_item->get_default_meta(),
                                           select_item.expr_->get_value_allocator());
       if (OB_SUCC(ret)) {
         column_item.set_default_value_expr(tmp_column_item->default_value_expr_);
@@ -6488,17 +6489,15 @@ int ObResolverUtils::resolve_default_value_and_expr_from_select_item(const Selec
     if (T_WIN_FUN_RANK == win_expr->get_func_type() ||
         T_WIN_FUN_DENSE_RANK == win_expr->get_func_type() ||
         T_WIN_FUN_ROW_NUMBER == win_expr->get_func_type()) {
-      static const uint64_t zero = 0;
-      ObDatum datum; datum.set_string(reinterpret_cast<const char *>(&zero), sizeof(zero));
+      Datum datum; datum.set_uint(0);
       SqlTypeMeta meta; meta.set_uint64();
-      ret = column_item.set_default_value(DatumValue(datum, meta),
+      ret = column_item.set_default_native_value(datum, meta,
                                           select_item.expr_->get_value_allocator());
     } else if (T_WIN_FUN_CUME_DIST == win_expr->get_func_type() ||
                T_WIN_FUN_PERCENT_RANK == win_expr->get_func_type()) {
-      static const double zero = 0.0;
-      ObDatum datum; datum.set_string(reinterpret_cast<const char *>(&zero), sizeof(zero));
+      Datum datum; datum.set_double(0);
       SqlTypeMeta meta; meta.set_double();
-      ret = column_item.set_default_value(DatumValue(datum, meta),
+      ret = column_item.set_default_native_value(datum, meta,
                                           select_item.expr_->get_value_allocator());
     } else {
       //do nothing

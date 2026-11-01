@@ -111,7 +111,7 @@ int ObLocalSessionVarHelper::check_var_same_with_session(const ObBasicSessionInf
   } else if (diff_val != nullptr && owner == nullptr) {
     ret = OB_INVALID_ARGUMENT;
   } else if (SYS_VAR_SQL_MODE == local_var->type_) {
-    is_same = local_var->val_.get_uint64() == session.get_sql_mode();
+    is_same = local_var->get_value_datum().get_uint64() == session.get_sql_mode();
     if (!is_same && NULL != diff_val) {
       OZ(diff_val->set_uint64(session.get_sql_mode(), *owner));
     }
@@ -138,11 +138,10 @@ int ObLocalSessionVarHelper::load_session_vars(const ObBasicSessionInfo *session
   } else if (OB_FAIL(local_vars.set_local_var_capacity(var_num))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < var_num; ++i) {
-      DatumValue var;
-      alignas(8) char value_scratch[64];
-      if (OB_FAIL(session->export_sys_variable(
-              ALL_LOCAL_VARS[i], var, value_scratch, sizeof(value_scratch)))) {
-      } else if (OB_FAIL(local_vars.add_local_var(ALL_LOCAL_VARS[i], var))) {
+      Datum var;
+      SqlTypeMeta meta;
+      if (OB_FAIL(session->get_sys_variable(ALL_LOCAL_VARS[i], var, meta))) {
+      } else if (OB_FAIL(local_vars.add_local_var_native(ALL_LOCAL_VARS[i], var, meta))) {
       }
     }
   }
@@ -168,9 +167,12 @@ int ObLocalSessionVarHelper::update_session_vars_with_local(const ObLocalSession
   if (OB_FAIL(local_vars.get_local_vars(var_array))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < var_array.count(); ++i) {
+    DatumValue value;
+    alignas(8) char scratch[64];
     if (OB_ISNULL(var_array.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(session.update_sys_variable(var_array.at(i)->type_, var_array.at(i)->val_))) {
+    } else if (OB_FAIL(var_array.at(i)->export_value(value, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(session.update_sys_variable(var_array.at(i)->type_, value))) {
     }
   }
   return ret;

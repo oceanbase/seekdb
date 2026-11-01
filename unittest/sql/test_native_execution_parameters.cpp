@@ -748,6 +748,142 @@ TEST(NativeHashPartitionValue, result_allocation_failure_preserves_input_includi
   }
 }
 
+TEST_F(NativeExecutionParameters, supplied_type_binding_reuses_exact_type_and_ignores_attribute_payload)
+{
+  ASSERT_NO_FATAL_FAILURE(load({11}));
+  Datum value; value.set_int(INT64_MIN);
+  DatumParameter attributes = store().at(0);
+  EXPECT_EQ(OB_NOT_INIT, plan().set_runtime_parameter(0, value, request_type_, attributes));
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  attributes = store().at(0);
+  attributes.set_precision(9);
+  attributes.set_result_flags(0x1234);
+  attributes.set_raw_text_info(7, 13);
+  // This descriptor is deliberately unusable. The typed API consumes metadata
+  // only, never imports a second legacy value.
+  attributes.datum_.ptr_ = nullptr;
+  attributes.datum_.pack_ = 8;
+  ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(0, value, request_type_, attributes));
+  EXPECT_EQ(INT64_MIN, plan().get_native_parameter(0)->get_int());
+  EXPECT_EQ(9, store().at(0).get_precision());
+  EXPECT_EQ(0x1234, store().at(0).get_result_flag());
+  EXPECT_EQ(7, store().at(0).get_raw_text_pos());
+  EXPECT_EQ(13, store().at(0).get_raw_text_len());
+  const Datum *slot = plan().get_native_parameter(0);
+  const SqlType *type = plan().get_native_parameter_type(0);
+  owner_.clear_calls();
+  ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(0, *slot, *type, store().at(0)));
+  EXPECT_EQ(slot, plan().get_native_parameter(0));
+  EXPECT_EQ(type, plan().get_native_parameter_type(0));
+  EXPECT_TRUE(owner_.sizes_.empty());
+  ObDatum view;
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*type).borrow_legacy(*slot, view));
+  EXPECT_EQ(view.ptr_, store().at(0).datum_.ptr_);
+
+  // Coercibility is deliberately ignored by SqlType::equals, but execution
+  // metadata must not be silently reused from the old declaration.
+  SqlTypeMeta changed_meta = request_type_.legacy_meta();
+  changed_meta.set_collation_level(CS_LEVEL_IMPLICIT);
+  changed_meta.set_scale(17); // SqlTypeMeta::operator== deliberately omits this byte.
+  SqlType changed;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(changed_meta, request_type_.accuracy(), changed));
+  ASSERT_TRUE(type->equals(changed));
+  Datum null; null.set_null();
+  ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(0, null, changed, store().at(0)));
+  EXPECT_NE(type, plan().get_native_parameter_type(0));
+  EXPECT_EQ(CS_LEVEL_IMPLICIT, plan().get_native_parameter_type(0)->legacy_meta().get_collation_level());
+  EXPECT_EQ(17, plan().get_native_parameter_type(0)->legacy_meta().get_scale());
+  EXPECT_TRUE(plan().get_native_parameter(0)->is_null());
+  EXPECT_EQ(ObNullType, store().at(0).get_type());
+  EXPECT_EQ(ObIntType, store().at(0).get_param_meta().get_type());
+  EXPECT_EQ(9, store().at(0).get_precision());
+}
+
+TEST_F(NativeExecutionParameters, supplied_reference_and_type_failures_preserve_the_published_binding)
+{
+  ASSERT_NO_FATAL_FAILURE(load({42}));
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  const SqlType *old_type = plan().get_native_parameter_type(0);
+  const DatumParameter before = store().at(0);
+  auto *info = reinterpret_cast<ObEvalInfo *>(plan().get_param_frame_ptrs().at(0)
+      + ScalarFrameLayout::eval_info_offset(0));
+  info->evaluated_ = true; info->projected_ = true;
+  // State compatibility requires an owned legacy wrapper. Its allocation is
+  // also staged before any native value/type/info publication.
+  Datum state; state.set_min();
+  int64_t wrapper_size = 0;
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(*old_type).legacy_payload_size(state, wrapper_size));
+  ASSERT_GT(wrapper_size, 0);
+  owner_.clear_calls();
+  owner_.fail_size_ = wrapper_size;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan().set_runtime_parameter(0, state, *old_type, before));
+  EXPECT_EQ(1, owner_.calls_for(wrapper_size));
+  EXPECT_EQ(0, owner_.calls_for(sizeof(SqlType)));
+  EXPECT_EQ(42, plan().get_native_parameter(0)->get_int());
+  EXPECT_EQ(old_type, plan().get_native_parameter_type(0));
+  EXPECT_EQ(before.datum_.ptr_, store().at(0).datum_.ptr_);
+  EXPECT_TRUE(info->evaluated_); EXPECT_TRUE(info->projected_);
+  owner_.fail_size_ = 0;
+  const std::string text(409, 'x');
+  {
+    ObArenaAllocator source_owner;
+    SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    const SqlType *type = nullptr;
+    ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(409), source_owner, type));
+    Datum input; ASSERT_EQ(OB_SUCCESS, input.set_string(text.data(), text.size()));
+    for (int64_t rejected : {int64_t(sizeof(SqlType)), int64_t(text.size())}) {
+      owner_.clear_calls();
+      owner_.fail_size_ = rejected;
+      EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, plan().set_runtime_parameter(0, input, *type, before));
+      EXPECT_EQ(1, owner_.calls_for(sizeof(SqlType)));
+      EXPECT_EQ(rejected == int64_t(text.size()) ? 1 : 0, owner_.calls_for(text.size()));
+      EXPECT_EQ(old_type, plan().get_native_parameter_type(0));
+      EXPECT_EQ(42, plan().get_native_parameter(0)->get_int());
+      EXPECT_EQ(before.datum_.ptr_, store().at(0).datum_.ptr_);
+      EXPECT_TRUE(info->evaluated_); EXPECT_TRUE(info->projected_);
+      expect_metadata(before, store().at(0));
+    }
+    owner_.fail_size_ = 0;
+    ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(0, input, *type, before));
+    EXPECT_NE(type, plan().get_native_parameter_type(0));
+    EXPECT_NE(input.get_reference(), plan().get_native_parameter(0)->get_reference());
+    EXPECT_FALSE(info->evaluated_); EXPECT_FALSE(info->projected_);
+  }
+  EXPECT_EQ(ObVarcharType, plan().get_native_parameter_type(0)->kind());
+  EXPECT_EQ(409, plan().get_native_parameter_type(0)->length());
+  EXPECT_EQ(text, std::string(plan().get_native_parameter(0)->get_string().ptr(), text.size()));
+  const SqlType *type = plan().get_native_parameter_type(0);
+  const DatumParameter stable = store().at(0);
+  Datum invalid; ASSERT_EQ(OB_SUCCESS, invalid.set_string("bad", 3));
+  // An inline declaration must reject a nonempty reference span.
+  EXPECT_EQ(OB_INVALID_ARGUMENT, plan().set_runtime_parameter(0, invalid, request_type_, stable));
+  EXPECT_EQ(type, plan().get_native_parameter_type(0));
+  EXPECT_EQ(stable.datum_.ptr_, store().at(0).datum_.ptr_);
+}
+
+TEST_F(NativeExecutionParameters, supplied_binding_respects_original_and_appended_page_boundaries)
+{
+  const int64_t per_page = ScalarFrameLayout::slots_per_frame();
+  ASSERT_NO_FATAL_FAILURE(load(std::vector<int64_t>(per_page + 1, 17)));
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  ASSERT_EQ(OB_SUCCESS, plan().reserve_param_space(2 * per_page + 2));
+  for (int64_t index : {per_page - 1, per_page, per_page + 1, 2 * per_page + 1}) {
+    Datum value; value.set_int(-index);
+    ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(index, value, request_type_, store().at(index)));
+    expect_questionmark(index, -index);
+    int64_t page = 0, slot = 0;
+    ScalarFrameLayout::locate_parameter(per_page + 1, index, page, slot);
+    EXPECT_EQ(reinterpret_cast<const Datum *>(plan().get_param_frame_ptrs().at(page)
+        + ScalarFrameLayout::datum_offset(slot)), plan().get_native_parameter(index));
+  }
+  const int64_t count = store().count();
+  Datum value; value.set_int(99);
+  for (int64_t index : {int64_t(-1), count}) {
+    EXPECT_EQ(OB_INVALID_ARGUMENT, plan().set_runtime_parameter(index, value, request_type_, store().at(0)));
+  }
+  EXPECT_EQ(count, store().count());
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

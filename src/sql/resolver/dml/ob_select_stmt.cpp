@@ -19,6 +19,7 @@
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "share/datum/typed_datum_compare.h"
+#include "common/datum/datum_parameter_codec.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -51,17 +52,24 @@ int ObSelectIntoItem::deep_copy(ObIAllocator &allocator,
                                 const ObSelectIntoItem &other)
 {
   int ret = OB_SUCCESS;
+  auto copy_option = [&](const Datum &source, const SqlTypeMeta &meta,
+                         Datum &target, SqlTypeMeta &target_meta) {
+    Datum candidate;
+    const int result = DatumParameterCodec::clone_schema_native_value(source, meta, allocator, candidate);
+    if (OB_SUCCESS == result) { target = candidate; target_meta = meta; }
+    return result;
+  };
   into_type_ = other.into_type_;
-  if (OB_FAIL(clone_typed_value(other.outfile_name_, outfile_name_, allocator))) {
-  } else if (OB_FAIL(clone_typed_value(other.field_str_, field_str_, allocator))) {
-  } else if (OB_FAIL(clone_typed_value(other.line_str_, line_str_, allocator))) {
-  } else if (OB_FAIL(clone_typed_value(other.closed_cht_, closed_cht_, allocator))) {
+  if (OB_FAIL(copy_option(other.outfile_name_, other.outfile_name_meta_, outfile_name_, outfile_name_meta_))) {
+  } else if (OB_FAIL(copy_option(other.field_str_, other.field_str_meta_, field_str_, field_str_meta_))) {
+  } else if (OB_FAIL(copy_option(other.line_str_, other.line_str_meta_, line_str_, line_str_meta_))) {
+  } else if (OB_FAIL(copy_option(other.closed_cht_, other.closed_cht_meta_, closed_cht_, closed_cht_meta_))) {
   }
   is_optional_ = other.is_optional_;
   is_single_ = other.is_single_;
   max_file_size_ = other.max_file_size_;
   if (OB_SUCC(ret)) {
-    ret = clone_typed_value(other.escaped_cht_, escaped_cht_, allocator);
+    ret = copy_option(other.escaped_cht_, other.escaped_cht_meta_, escaped_cht_, escaped_cht_meta_);
   }
   cs_type_ = other.cs_type_;
   buffer_size_ = other.buffer_size_;

@@ -325,8 +325,8 @@ public:
     min_max_inited_(false),
     base_ndv_(-1.0)
   {
-    min_val_.set_min_value();
-    max_val_.set_max_value();
+    reset_min_value();
+    reset_max_value();
   }
   int assign(const OptColumnMeta &other);
   void init(const uint64_t column_id,
@@ -344,12 +344,21 @@ public:
   void set_avg_len(const double avg_len) { avg_len_ = avg_len; }
   double get_hist_scale() const { return hist_scale_; }
   void set_hist_scale(const double hist_scale) { hist_scale_ = hist_scale; }
-  DatumValue& get_min_value() { return min_val_; }
-  const DatumValue& get_min_value() const { return min_val_; }
-  void set_min_value(const DatumValue& min_val) { min_val_ = min_val; }
-  DatumValue& get_max_value() { return max_val_; }
-  const DatumValue& get_max_value() const { return max_val_; }
-  void set_max_value(const DatumValue& max_val) { max_val_ = max_val; }
+  const common::Datum &get_min_value_datum() const { return min_val_; }
+  const common::SqlTypeMeta &get_min_value_meta() const { return min_meta_; }
+  const common::Datum &get_max_value_datum() const { return max_val_; }
+  const common::SqlTypeMeta &get_max_value_meta() const { return max_meta_; }
+  int set_min_value(const common::Datum &value, const common::SqlTypeMeta &meta);
+  int set_max_value(const common::Datum &value, const common::SqlTypeMeta &meta);
+  int set_min_value(const DatumValue &value);
+  int set_max_value(const DatumValue &value);
+  int set_min_max_owned(const common::Datum &minimum, const common::SqlTypeMeta &min_meta,
+                         const common::Datum &maximum, const common::SqlTypeMeta &max_meta,
+                         ObIAllocator &owner);
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  void reset_min_value() { min_val_.set_min(); min_meta_.set_ext(); }
+  void reset_max_value() { max_val_.set_max(); max_meta_.set_ext(); }
   bool get_min_max_inited() const { return min_max_inited_; }
   void set_min_max_inited(const bool inited) { min_max_inited_ = inited; }
   void set_default_meta(double rows)
@@ -362,7 +371,7 @@ public:
   void set_base_ndv(double ndv) { base_ndv_ = ndv; } 
 
   TO_STRING_KV(K_(column_id), K_(ndv), K_(num_null), K_(avg_len), K_(hist_scale),
-               K_(min_val), K_(max_val) , K_(min_max_inited), K_(base_ndv));
+               K_(min_val), K_(min_meta), K_(max_val), K_(max_meta), K_(min_max_inited), K_(base_ndv));
 private:
   uint64_t column_id_;
   double ndv_;
@@ -371,8 +380,10 @@ private:
   // the percentage of the histogram sample size that is available. For example, hist_scale = 0.5
   // means that current sample size of histogram is 50% of origin sample size.
   double hist_scale_;
-  DatumValue min_val_;
-  DatumValue max_val_;
+  common::Datum min_val_;
+  common::SqlTypeMeta min_meta_;
+  common::Datum max_val_;
+  common::SqlTypeMeta max_meta_;
   bool min_max_inited_;
   double base_ndv_;
 };
@@ -892,8 +903,8 @@ public:
   static int get_column_min_max(const OptTableMetas &table_metas,
                                 const OptSelectivityCtx &ctx,
                                 const ObRawExpr &expr,  
-                                DatumValue &min_obj,
-                                DatumValue &max_obj);
+                                common::Datum &min_obj, common::SqlTypeMeta &min_meta,
+                                common::Datum &max_obj, common::SqlTypeMeta &max_meta);
 
   static int get_column_basic_info(const OptTableMetas &table_metas,
                                    const OptSelectivityCtx &ctx,
@@ -1132,8 +1143,8 @@ public:
   static int calc_expr_min_max(const OptTableMetas &table_metas,
                                const OptSelectivityCtx &ctx,
                                const ObRawExpr *expr,
-                               DatumValue &min_value,
-                               DatumValue &max_value);
+                               common::Datum &min_value, common::SqlTypeMeta &min_meta,
+                               common::Datum &max_value, common::SqlTypeMeta &max_meta);
   static int calc_year_min_max(const OptTableMetas &table_metas,
                                const OptSelectivityCtx &ctx,
                                const ObRawExpr *expr,
@@ -1288,8 +1299,12 @@ public:
     return ranges_.assign(ranges);
   }
 
-  DatumValue &get_min_value() { return hist_min_value_; }
-  DatumValue &get_max_value() { return hist_max_value_; }
+  const common::Datum &get_min_value_datum() const { return hist_min_value_; }
+  const common::SqlTypeMeta &get_min_value_meta() const { return hist_min_meta_; }
+  const common::Datum &get_max_value_datum() const { return hist_max_value_; }
+  const common::SqlTypeMeta &get_max_value_meta() const { return hist_max_meta_; }
+  int export_min_value(DatumValue &output, void *scratch, int64_t capacity) const;
+  int export_max_value(DatumValue &output, void *scratch, int64_t capacity) const;
 protected:
   virtual int inner_get_sel(const OptSelectivityCtx &ctx,
                             const ObHistogram &histogram,
@@ -1297,8 +1312,10 @@ protected:
                             bool &is_rare_value) override;
 private:
   ObQueryRangeArray ranges_;
-  DatumValue hist_min_value_;
-  DatumValue hist_max_value_;
+  common::Datum hist_min_value_;
+  common::SqlTypeMeta hist_min_meta_;
+  common::Datum hist_max_value_;
+  common::SqlTypeMeta hist_max_meta_;
 
   DISALLOW_COPY_AND_ASSIGN(ObHistRangeSelHelper);
 };

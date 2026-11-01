@@ -288,6 +288,14 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
   return ret;
 }
 
+// ColumnItem uses the generic physical domain; SQL-array wrappers are not NOW markers.
+static bool is_default_now(const ColumnItem &column)
+{
+  return column.get_default_meta().is_ext() && !column.get_default_meta().is_ext_sql_array()
+      && !column.get_default_datum().is_null() && column.get_default_datum().has_ext_value()
+      && column.get_default_datum().get_ext() == ObActionFlag::OP_DEFAULT_NOW_FLAG;
+}
+
 int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -298,7 +306,7 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
   } else if (OB_ISNULL(resolver_) || OB_ISNULL(stmt_) || OB_ISNULL(params_) || OB_ISNULL(params_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid resolver", K(resolver_), K(stmt_), KP_(params));
-  } else if (IS_DEFAULT_NOW_OBJ(column->default_value_)) {
+  } else if (is_default_now(*column)) {
     if (OB_FAIL(build_now_expr(column, expr))) {
     }
   } else if (NULL != column->default_value_expr_) {
@@ -317,14 +325,14 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
                                                       column->get_expr()->get_column_name()))) {
     }
   } else if (OB_FAIL(params_->expr_factory_->create_raw_expr(
-              static_cast<ObItemType>(column->default_value_.get_type()), c_expr))) {
+              static_cast<ObItemType>(column->get_default_meta().get_type()), c_expr))) {
   } else if (OB_ISNULL(column->get_column_type())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     c_expr->set_accuracy(column->get_column_type()->get_accuracy());
     if (column->get_column_type()->is_enum()
         && column->is_not_null_for_write()
-        && column->default_value_.is_null()) {
+        && column->get_default_datum().is_null()) {
       const ObColumnRefRawExpr *column_expr = column->get_expr();
       if (OB_ISNULL(column_expr)) {
         ret = OB_ERR_UNEXPECTED;
@@ -342,8 +350,11 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
       }
     } else {
       Datum imported, value;
-      const SqlTypeMeta &meta = column->default_value_.meta_;
-      if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(column->default_value_.datum_, meta, imported))) {
+      DatumValue view;
+      alignas(8) char scratch[64];
+      const SqlTypeMeta &meta = column->get_default_meta();
+      if (OB_FAIL(column->export_default_value(view, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(DatumParameterCodec::borrow_raw_constant_value(view.datum_, meta, imported))) {
       } else if (OB_FAIL(DatumParameterCodec::clone_raw_constant_value(imported, meta,
           params_->expr_factory_->get_allocator(), value))) {
       } else { ret = c_expr->set_value_borrowed(value, meta); }
@@ -464,11 +475,11 @@ int ObDefaultValueUtils::get_default_type_for_insert(const ColumnItem *column, O
              && !column->is_auto_increment()) {
     if (column->base_cid_ == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
       op = OB_NORMAL_DEFAULT_OP;
-    } else if (!column->default_value_.is_null()) {
+    } else if (!column->get_default_datum().is_null()) {
       op = OB_NORMAL_DEFAULT_OP;
     } else if (OB_ISNULL(column->get_column_type())) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (column->default_value_.is_null()
+    } else if (column->get_default_datum().is_null()
                && column->get_column_type()->is_enum()) {
       op = OB_NORMAL_DEFAULT_OP;
     } else {
@@ -537,9 +548,9 @@ int ObDefaultValueUtils::get_default_type_for_default_function(const ColumnItem 
     op = OB_NOT_STRICT_DEFAULT_OP;
   } else if (column->get_column_type()->is_enum()
              && column->is_not_null_for_write()
-             && column->default_value_.is_null()) {
+             && column->get_default_datum().is_null()) {
     op = OB_NORMAL_DEFAULT_OP;
-  } else if (column->is_not_null_for_write() && column->default_value_.is_null()) {
+  } else if (column->is_not_null_for_write() && column->get_default_datum().is_null()) {
     ret = OB_ERR_NO_DEFAULT_FOR_FIELD;
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_ERR_NO_DEFAULT_FOR_FIELD, helper.convert(column->column_name_));
@@ -571,7 +582,7 @@ int ObDefaultValueUtils::get_default_type_for_default_expr(const ColumnItem *col
     op = OB_NORMAL_DEFAULT_OP;
   } else if (column->get_column_type()->is_enum()
              && column->is_not_null_for_write()
-             && column->default_value_.is_null()) {
+             && column->get_default_datum().is_null()) {
     op = OB_NORMAL_DEFAULT_OP;
   } else if (is_strict_mode(params_->session_info_->get_sql_mode())) {
     op = OB_NORMAL_DEFAULT_OP;
@@ -600,7 +611,7 @@ int ObDefaultValueUtils::build_default_expr_for_timestamp(const ColumnItem *colu
   } else if (OB_ISNULL(c_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("create raw expr fail", K(c_expr));
-  } else if (IS_DEFAULT_NOW_OBJ(column->default_value_)) {
+  } else if (is_default_now(*column)) {
     if (column->is_not_null_for_write()) {
       default_value.set_int(ObTimeConverter::ZERO_DATETIME);
       default_meta.set_timestamp();
@@ -611,8 +622,11 @@ int ObDefaultValueUtils::build_default_expr_for_timestamp(const ColumnItem *colu
       c_expr->set_expr_type(T_NULL);
     }
   } else {
-    default_meta = column->default_value_.meta_;
-    ret = DatumParameterCodec::borrow_raw_constant_value(column->default_value_.datum_, default_meta, default_value);
+    DatumValue view;
+    alignas(8) char scratch[64];
+    default_meta = column->get_default_meta();
+    if (OB_FAIL(column->export_default_value(view, scratch, sizeof(scratch)))) {
+    } else { ret = DatumParameterCodec::borrow_raw_constant_value(view.datum_, default_meta, default_value); }
     c_expr->set_expr_type(T_TIMESTAMP);
   }
   if (OB_SUCC(ret)) {
@@ -707,10 +721,11 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
   int ret = OB_SUCCESS;
   ObConstRawExpr *c_expr = NULL;
   DatumValue default_value;
+  alignas(8) char default_scratch[64];
   if (OB_ISNULL(column) || OB_ISNULL(params_) || OB_ISNULL(params_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (!column->default_value_.is_null()) {
-    default_value = column->default_value_;
+  } else if (!column->get_default_datum().is_null()) {
+    ret = column->export_default_value(default_value, default_scratch, sizeof(default_scratch));
   } else if (!column->is_not_null_for_write()) {
     default_value.set_null();
   } else {

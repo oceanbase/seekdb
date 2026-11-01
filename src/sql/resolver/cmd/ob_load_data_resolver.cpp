@@ -942,8 +942,6 @@ int ObLoadDataResolver::resolve_set_clause(const ParseNode &node, const ObNameCa
 
 int ObLoadDataResolver::build_column_ref_expr(ObQualifiedName &q_name, ObRawExpr *&column_expr)
 {
-  common::DatumValue schema_default_value;
-  alignas(8) char schema_default_scratch[64];
   int ret = OB_SUCCESS;
   ObLoadDataStmt* load_stmt = static_cast<ObLoadDataStmt*>(stmt_);
   uint64_t table_id = load_stmt->get_load_arguments().table_id_;
@@ -982,8 +980,7 @@ int ObLoadDataResolver::build_column_ref_expr(ObQualifiedName &q_name, ObRawExpr
     column_item.column_id_ = col_expr->get_column_id();
     column_item.column_name_ = col_expr->get_column_name();
     column_item.is_geo_ = col_schema->is_geometry();
-    if ((OB_FAIL(col_schema->export_cur_default_value(schema_default_value, schema_default_scratch, sizeof(schema_default_scratch)))
-        || OB_FAIL(column_item.set_default_value(schema_default_value)))) {
+    if (OB_FAIL(column_item.set_default_native_value(col_schema->get_cur_default_datum(), col_schema->get_cur_default_meta()))) {
     } else if (OB_FAIL(load_stmt->add_column_item(column_item))) {
     }
   }

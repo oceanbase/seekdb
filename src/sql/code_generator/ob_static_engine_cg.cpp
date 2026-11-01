@@ -5469,11 +5469,11 @@ int ObStaticEngineCG::generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != op.get_num_of_child())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(clone_typed_value(op.get_outfile_name(), spec.outfile_name_, alloc))) {
-  } else if (OB_FAIL(clone_typed_value(op.get_field_str(), spec.field_str_, alloc))) {
-  } else if (OB_FAIL(clone_typed_value(op.get_line_str(), spec.line_str_, alloc))) {
-  } else if (OB_FAIL(clone_typed_value(op.get_closed_cht(), spec.closed_cht_, alloc))) {
-  } else if (OB_FAIL(clone_typed_value(op.get_escaped_cht(), spec.escaped_cht_, alloc))) {
+  } else if (OB_FAIL(spec.set_outfile_name_native_value(op.get_outfile_name(), op.get_outfile_name_meta()))) {
+  } else if (OB_FAIL(spec.set_field_str_native_value(op.get_field_str(), op.get_field_str_meta()))) {
+  } else if (OB_FAIL(spec.set_line_str_native_value(op.get_line_str(), op.get_line_str_meta()))) {
+  } else if (OB_FAIL(spec.set_closed_cht_native_value(op.get_closed_cht(), op.get_closed_cht_meta()))) {
+  } else if (OB_FAIL(spec.set_escaped_cht_native_value(op.get_escaped_cht(), op.get_escaped_cht_meta()))) {
   } else if (OB_FAIL(spec.external_properties_.store_str(op.get_external_properties()))) {
   } else if (OB_FAIL(spec.user_vars_.init(op.get_user_vars().count()))) {
   } else if (OB_FAIL(spec.select_exprs_.init(op.get_select_exprs().count()))) {

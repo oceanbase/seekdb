@@ -108,44 +108,16 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, const Datum 
       || param_idx_ >= plan_ctx->get_param_store().count()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const DatumCopyPlan plan = dst_->get_datum_copy_plan();
-    int64_t checked_size = 0;
-    // The generator has already cast the source to the target declaration.
-    // Validate its canonical shape before publishing either destination.
-    Datum candidate = datum;
-    if (OB_FAIL(plan.carrier_span_size(candidate, checked_size))) {
+    // The generator has already cast the value to this complete declaration.
+    // Keep the old envelope attributes, but do not rediscover the Type from its
+    // legacy metadata or from whichever PL namespace happens to be current.
+    const Datum candidate = datum;
+    const DatumParameter attributes = plan_ctx->get_param_store().at(param_idx_);
+    if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, candidate, dst_->get_sql_type(), attributes))) {
     } else {
-      DatumParameter updated = plan_ctx->get_param_store().at(param_idx_);
-      common::ObDatum legacy;
-      ret = plan.borrow_legacy(candidate, legacy);
-      if (ret == OB_NOT_SUPPORTED) {
-        int64_t bytes = 0;
-        ret = plan.legacy_payload_size(candidate, bytes);
-        if (OB_SUCC(ret)) {
-          char *buffer = bytes == 0 ? nullptr
-              : static_cast<char *>(eval_ctx.exec_ctx_.get_allocator().alloc(bytes));
-          if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-          else {
-            int64_t position = 0;
-            ret = plan.export_legacy(candidate, legacy, buffer, bytes, position);
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        updated.set_datum(legacy);
-        if (candidate.is_null()) { updated.set_null(); }
-        else { updated.set_type_meta(dst_->obj_meta_); }
-        if (dst_->obj_meta_.is_decimal_int()) {
-          updated.set_accuracy(dst_->get_sql_type().accuracy());
-          updated.set_param_meta(dst_->obj_meta_);
-        } else { updated.set_param_meta(); }
-        if (OB_FAIL(plan_ctx->set_runtime_parameter(param_idx_, updated))) {
-        } else {
-          clear_parent_evaluated_flag(eval_ctx, *dst_);
-          dst_->locate_datum_for_write(eval_ctx) = *plan_ctx->get_native_parameter(param_idx_);
-          dst_->get_eval_info(eval_ctx).evaluated_ = true;
-        }
-      }
+      clear_parent_evaluated_flag(eval_ctx, *dst_);
+      dst_->locate_datum_for_write(eval_ctx) = *plan_ctx->get_native_parameter(param_idx_);
+      dst_->get_eval_info(eval_ctx).evaluated_ = true;
     }
   }
   return ret;

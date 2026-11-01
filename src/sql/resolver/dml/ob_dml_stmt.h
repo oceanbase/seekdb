@@ -316,6 +316,7 @@ struct ColumnItem
        column_name_(),
        expr_(NULL),
        default_value_(),
+       default_meta_(),
        auto_filled_timestamp_(false),
        default_value_expr_(NULL),
        default_empty_expr_(NULL),
@@ -331,6 +332,11 @@ struct ColumnItem
   // An explicit owner also supports temporary column items before expr_ is set.
   int set_default_value(const common::DatumValue &val,
                         common::ObIAllocator *owner = nullptr);
+  const common::Datum &get_default_datum() const { return default_value_; }
+  const common::SqlTypeMeta &get_default_meta() const { return default_meta_; }
+  int set_default_native_value(const common::Datum &val, const common::SqlTypeMeta &meta,
+                               common::ObIAllocator *owner = nullptr);
+  int export_default_value(common::DatumValue &output, void *scratch, int64_t capacity) const;
   void set_default_value_expr(ObRawExpr *expr)
   {
     default_value_expr_ = expr;
@@ -345,7 +351,8 @@ struct ColumnItem
     column_id_ = common::OB_INVALID_ID;
     table_id_ = common::OB_INVALID_ID;
     column_name_.reset();
-    default_value_.reset();
+    default_value_.set_null();
+    default_meta_.reset();
     expr_ = NULL;
     auto_filled_timestamp_ = false;
     default_value_expr_ = NULL;
@@ -374,7 +381,7 @@ struct ColumnItem
                N_TID, table_id_,
                N_COLUMN, column_name_,
                K_(auto_filled_timestamp),
-               N_DEFAULT_VALUE, default_value_,
+               N_DEFAULT_VALUE, default_value_, K_(default_meta),
                K_(base_tid),
                K_(base_cid),
                N_EXPR, expr_);
@@ -384,7 +391,8 @@ struct ColumnItem
   common::ObString column_name_;
   ObColumnRefRawExpr *expr_;
   // the following two are used by DML operations, such as insert or update
-  common::DatumValue default_value_;
+  common::Datum default_value_;
+  common::SqlTypeMeta default_meta_;
   bool auto_filled_timestamp_;
   // json table reuse default_value_expr_ for on error default
   ObRawExpr *default_value_expr_;

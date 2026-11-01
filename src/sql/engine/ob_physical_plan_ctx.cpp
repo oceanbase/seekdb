@@ -31,6 +31,29 @@ using namespace share;
 using namespace transaction;
 namespace sql
 {
+namespace
+{
+// SQL equality intentionally ignores display attributes. An execution binding
+// must retain those attributes too, including on nested child declarations.
+bool same_parameter_type(const SqlType &left, const SqlType &right)
+{
+  const ObDataType &a = left.attributes();
+  const ObDataType &b = right.attributes();
+  bool same = left.equals(right) && a.meta_ == b.meta_
+      && a.meta_.get_scale() == b.meta_.get_scale()
+      && a.accuracy_.get_accuracy() == b.accuracy_.get_accuracy()
+      && a.is_zero_fill_ == b.is_zero_fill_ && a.charset_ == b.charset_
+      && a.is_binary_collation_ == b.is_binary_collation_;
+  if (same && left.element() != nullptr) { same = same_parameter_type(*left.element(), *right.element()); }
+  if (same && left.key_type() != nullptr) { same = same_parameter_type(*left.key_type(), *right.key_type()); }
+  if (same && left.value_type() != nullptr) { same = same_parameter_type(*left.value_type(), *right.value_type()); }
+  for (int64_t i = 0; same && i < left.member_count(); ++i) {
+    same = same_parameter_type(*left.member(i).type, *right.member(i).type);
+  }
+  return same;
+}
+} // namespace
+
 ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
     : allocator_(allocator),
       tsc_snapshot_timestamp_(0),
@@ -376,6 +399,66 @@ int ObPhysicalPlanCtx::set_runtime_parameter(int64_t index, const DatumParameter
     } else if (OB_SUCC(ret)) {
       ret = publish_runtime_parameter(index, input, value, *type, input.is_ext_sql_array());
       if (OB_SUCC(ret) && input.is_ext_sql_array()) { param_store_.at(index) = input; }
+    }
+  }
+  return ret;
+}
+
+int ObPhysicalPlanCtx::set_runtime_parameter(int64_t index, const Datum &source,
+    const SqlType &supplied_type, const DatumParameter &attributes)
+{
+  int ret = OB_SUCCESS;
+  int64_t frame = 0;
+  int64_t frame_slot = 0;
+  if (!native_parameters_ready_) {
+    ret = OB_NOT_INIT;
+  } else if (index < 0 || index >= param_store_.count() || index >= param_frame_capacity_
+      || index >= native_parameter_types_.count() || native_parameter_types_.at(index) == nullptr) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ScalarFrameLayout::locate_parameter(original_param_cnt_, index, frame, frame_slot);
+    if (frame < 0 || frame >= param_frame_ptrs_.count() || param_frame_ptrs_.at(frame) == nullptr) {
+      return OB_INVALID_ARGUMENT;
+    }
+    // Both arguments may alias the current binding. Snapshot them before any
+    // publication; the attributes' old Datum is never read or imported.
+    const Datum input = source;
+    DatumParameter compatibility = attributes;
+    const SqlType *type = get_native_parameter_type(index);
+    if (!same_parameter_type(*type, supplied_type)) {
+      // clone_to validates the entire declaration even for a NULL value. An
+      // exact match reuses a previously validated, execution-owned type tree.
+      ret = supplied_type.clone_to(allocator_, type);
+    }
+    Datum owned;
+    if (OB_SUCC(ret)) {
+      const DatumCopyPlan plan(*type);
+      if (type->requires_resource_clone()) {
+        int64_t bytes = 0;
+        if (OB_FAIL(plan.carrier_span_size(input, bytes))) {
+        } else {
+          char *buffer = bytes == 0 ? nullptr : static_cast<char *>(allocator_.alloc(bytes));
+          if (bytes > 0 && buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+          else {
+            int64_t position = 0;
+            ret = plan.copy_carrier_span_borrowing_resources(input, owned, buffer, bytes, position);
+          }
+        }
+      } else { ret = plan.deep_copy(input, owned, allocator_); }
+      if (OB_SUCC(ret)) {
+        if (owned.is_null()) { compatibility.set_null(); }
+        else { compatibility.set_type_meta(type->legacy_meta()); }
+        if (type->legacy_meta().is_pl_extend_type()) {
+          // Preserve the complete declaration id, including its high bits,
+          // for typed NULL as well as present PL values.
+          compatibility.set_accuracy(type->accuracy());
+          compatibility.set_param_meta(type->legacy_meta());
+        } else if (type->kind() == ObDecimalIntType) {
+          compatibility.set_accuracy(type->accuracy());
+          compatibility.set_param_meta(type->legacy_meta());
+        } else { compatibility.set_param_meta(); }
+        ret = publish_runtime_parameter(index, compatibility, owned, *type, false);
+      }
     }
   }
   return ret;

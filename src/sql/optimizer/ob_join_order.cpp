@@ -13802,14 +13802,9 @@ int ObJoinOrder::init_est_info_for_index(const uint64_t table_id,
               col_meta->set_ndv(rows < global_ndv ? rows : global_ndv);
               col_meta->set_num_null(rows < num_null ? rows : num_null);
               col_meta->set_avg_len(col_stats.at(i).avglen_val_);
-              DatumValue minimum, maximum;
-              if (OB_FAIL(col_stats.at(i).copy_min_value(minimum, OPT_CTX.get_allocator()))) {
-              } else if (OB_FAIL(col_stats.at(i).copy_max_value(maximum, OPT_CTX.get_allocator()))) {
-              } else {
-                col_meta->set_min_value(minimum);
-                col_meta->set_max_value(maximum);
-                col_meta->set_min_max_inited(true);
-              }
+              if (OB_FAIL(col_meta->set_min_max_owned(col_stats.at(i).get_min_datum(), col_stats.at(i).get_min_meta(),
+                             col_stats.at(i).get_max_datum(), col_stats.at(i).get_max_meta(), OPT_CTX.get_allocator()))) {
+              } else { col_meta->set_min_max_inited(true); }
             }
           }
         }

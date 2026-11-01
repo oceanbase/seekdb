@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "common/datum/datum_parameter_codec.h"
 #include "share/datum/datum_value_cast.h"
 #include "share/datum/datum_value_set.h"
 #include "share/datum/typed_datum_compare.h"
@@ -28,6 +29,15 @@ namespace oceanbase
 {
 namespace sql
 {
+static int export_selectivity_math_bound(const Datum &value, const SqlTypeMeta &meta,
+                                         DatumValue &output, void *scratch, int64_t capacity)
+{
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { output = DatumValue(view, meta); }
+  return ret;
+}
+
 inline double revise_sel_ndv(double ndv) { return ndv < 1.0 ? 1.0 : ndv; }
 
 
@@ -925,6 +935,9 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
                                                double &selectivity,
                                                const double rows_per_group)
 {
+  Datum native_min, native_max;
+  SqlTypeMeta native_min_meta, native_max_meta;
+  alignas(8) char min_scratch[64], max_scratch[64];
   int ret = OB_SUCCESS;
   selectivity = DEFAULT_AGG_RANGE;
   const ParamStore *params = ctx.get_params();
@@ -939,6 +952,8 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   DatumValue minobj;
   maxobj.set_max_value();
   minobj.set_min_value();
+  native_min.set_min(); native_min_meta = minobj.meta_;
+  native_max.set_max(); native_max_meta = maxobj.meta_;
   if (OB_ISNULL(aggr_expr.get_param_expr(0)) || OB_ISNULL(params) ||
       OB_ISNULL(stmt) || OB_ISNULL(const_expr1)) {
     ret = OB_ERR_UNEXPECTED;
@@ -947,7 +962,9 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   } else if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *aggr_expr.get_param_expr(0),
                                                             &distinct_sel, NULL))) {
   } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, *aggr_expr.get_param_expr(0),
-                                                          minobj, maxobj))) {
+                  native_min, native_min_meta, native_max, native_max_meta)) ||
+             OB_FAIL(export_selectivity_math_bound(native_min, native_min_meta, minobj, min_scratch, sizeof(min_scratch))) ||
+             OB_FAIL(export_selectivity_math_bound(native_max, native_max_meta, maxobj, max_scratch, sizeof(max_scratch)))) {
   } else if (minobj.is_min_value() || maxobj.is_max_value()) {
     // do nothing
   } else if (T_OP_IN == type || T_OP_NOT_IN == type) {
@@ -2300,6 +2317,9 @@ int ObInequalJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
                                        double &selectivity,
                                        ObIArray<ObExprSelPair> &all_predicate_sel)
 {
+  Datum native_min, native_max;
+  SqlTypeMeta native_min_meta, native_max_meta;
+  alignas(8) char min_scratch[64], max_scratch[64];
   int ret = OB_SUCCESS;
   DatumValue obj_min, obj_max, tmp_obj;
   selectivity = 1.0;
@@ -2337,7 +2357,10 @@ int ObInequalJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
       selectivity = DEFAULT_INEQ_JOIN_SEL;
       use_default_ = true;
     }
-  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, *term_.col1_, obj_min, obj_max))) {
+  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, *term_.col1_,
+                  native_min, native_min_meta, native_max, native_max_meta)) ||
+             OB_FAIL(export_selectivity_math_bound(native_min, native_min_meta, obj_min, min_scratch, sizeof(min_scratch))) ||
+             OB_FAIL(export_selectivity_math_bound(native_max, native_max_meta, obj_max, max_scratch, sizeof(max_scratch)))) {
   } else if (obj_min.is_min_value() || obj_min.is_max_value() ||
              obj_max.is_max_value() || obj_max.is_min_value()) {
     selectivity = DEFAULT_INEQ_JOIN_SEL;
@@ -2346,7 +2369,10 @@ int ObInequalJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
   } else if (FALSE_IT(min1 = tmp_obj.get_double() * term_.coefficient1_)) {
   } else if (OB_FAIL(ObOptEstObjToScalar::convert_value_to_scalar(&obj_max, &tmp_obj, ctx.get_allocator()))) {
   } else if (FALSE_IT(max1 = tmp_obj.get_double() * term_.coefficient1_)) {
-  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, *term_.col2_, obj_min, obj_max))) {
+  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, *term_.col2_,
+                  native_min, native_min_meta, native_max, native_max_meta)) ||
+             OB_FAIL(export_selectivity_math_bound(native_min, native_min_meta, obj_min, min_scratch, sizeof(min_scratch))) ||
+             OB_FAIL(export_selectivity_math_bound(native_max, native_max_meta, obj_max, max_scratch, sizeof(max_scratch)))) {
   } else if (obj_min.is_min_value() || obj_min.is_max_value() ||
              obj_max.is_max_value() || obj_max.is_min_value()) {
     selectivity = DEFAULT_INEQ_JOIN_SEL;
@@ -2845,6 +2871,9 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
                                         double &selectivity,
                                         ObIArray<ObExprSelPair> &all_predicate_sel)
 {
+  Datum native_min, native_max;
+  SqlTypeMeta native_min_meta, native_max_meta;
+  alignas(8) char min_scratch[64], max_scratch[64];
   int ret = OB_SUCCESS;
   ObArenaAllocator scalar_owner("OptSelScalar");
   selectivity = DEFAULT_INEQ_SEL;
@@ -2870,7 +2899,9 @@ int ObUniformRangeSelEstimator::get_sel(const OptTableMetas &table_metas,
   if (!range_.is_valid_range()) {
     selectivity = 0.0;
   } else if (OB_FAIL(ObOptSelectivity::calc_expr_min_max(table_metas, ctx, expr_,
-                                                         expr_min, expr_max))) {
+                  native_min, native_min_meta, native_max, native_max_meta)) ||
+             OB_FAIL(export_selectivity_math_bound(native_min, native_min_meta, expr_min, min_scratch, sizeof(min_scratch))) ||
+             OB_FAIL(export_selectivity_math_bound(native_max, native_max_meta, expr_max, max_scratch, sizeof(max_scratch)))) {
   } else if (expr_min.is_min_value() || expr_min.is_max_value() || expr_min.is_null() ||
              expr_max.is_min_value() || expr_max.is_max_value() || expr_max.is_null()) {
     // do nothing

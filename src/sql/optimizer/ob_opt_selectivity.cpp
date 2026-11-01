@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "share/datum/typed_datum_compare.h"
 #include "share/datum/datum_value_cast.h"
+#include "common/datum/datum_parameter_codec.h"
 #include "ob_opt_selectivity.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -46,6 +47,50 @@ static int get_opt_selectivity_datum_access_ctx(
   } else if (OB_FAIL(exec_ctx->get_datum_access_ctx(datum_access_ctx))) {
   } else if (OB_ISNULL(datum_access_ctx)) {
     ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+// The remaining mathematical libraries consume legacy coefficients synchronously.
+// Their scalar views use two caller-owned buffers, never an allocator per lookup.
+static int get_column_math_bounds(const OptTableMetas &tables, const OptSelectivityCtx &ctx,
+                                  const ObRawExpr &expr, DatumValue &minimum, DatumValue &maximum,
+                                  void *min_scratch, void *max_scratch, int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  Datum min_native, max_native;
+  SqlTypeMeta min_meta = minimum.meta_, max_meta = maximum.meta_;
+  if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(minimum.datum_, min_meta, min_native))) {
+  } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(maximum.datum_, max_meta, max_native))) {
+  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(tables, ctx, expr,
+                         min_native, min_meta, max_native, max_meta))) {
+  } else if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+                         min_native, min_meta, minimum.datum_, min_scratch, capacity))) {
+  } else {
+    minimum.meta_ = min_meta;
+    if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+                         max_native, max_meta, maximum.datum_, max_scratch, capacity))) {
+    } else { maximum.meta_ = max_meta; }
+  }
+  return ret;
+}
+
+static int calc_expr_math_bounds(const OptTableMetas &tables, const OptSelectivityCtx &ctx,
+                                 const ObRawExpr *expr, DatumValue &minimum, DatumValue &maximum,
+                                 void *min_scratch, void *max_scratch, int64_t capacity)
+{
+  int ret = OB_SUCCESS;
+  Datum min_native, max_native;
+  SqlTypeMeta min_meta = minimum.meta_, max_meta = maximum.meta_;
+  if (OB_FAIL(ObOptSelectivity::calc_expr_min_max(tables, ctx, expr,
+                         min_native, min_meta, max_native, max_meta))) {
+  } else if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+                         min_native, min_meta, minimum.datum_, min_scratch, capacity))) {
+  } else {
+    minimum.meta_ = min_meta;
+    if (OB_FAIL(DatumParameterCodec::export_schema_legacy_value(
+                         max_native, max_meta, maximum.datum_, max_scratch, capacity))) {
+    } else { maximum.meta_ = max_meta; }
   }
   return ret;
 }
@@ -275,6 +320,64 @@ double ObFullCorrelationModel::combine_ndvs(double rows, ObIArray<double> &ndvs)
   return max_ndv;
 }
 
+namespace {
+int export_optimizer_value(const Datum &value, const SqlTypeMeta &meta,
+                           DatumValue &output, void *scratch, int64_t capacity)
+{
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, view, scratch, capacity);
+  if (ret == OB_SUCCESS) { output = DatumValue(view, meta); }
+  return ret;
+}
+}
+
+int OptColumnMeta::set_min_value(const Datum &value, const SqlTypeMeta &meta)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, view, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) { min_val_ = value; min_meta_ = meta; }
+  return ret;
+}
+int OptColumnMeta::set_max_value(const Datum &value, const SqlTypeMeta &meta)
+{
+  alignas(8) char scratch[64];
+  ObDatum view;
+  const int ret = DatumParameterCodec::export_schema_legacy_value(value, meta, view, scratch, sizeof(scratch));
+  if (ret == OB_SUCCESS) { max_val_ = value; max_meta_ = meta; }
+  return ret;
+}
+int OptColumnMeta::set_min_value(const DatumValue &value)
+{
+  Datum native;
+  const int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, native);
+  if (ret == OB_SUCCESS) { min_val_ = native; min_meta_ = value.meta_; }
+  return ret;
+}
+int OptColumnMeta::set_max_value(const DatumValue &value)
+{
+  Datum native;
+  const int ret = DatumParameterCodec::borrow_schema_native_value(value.datum_, value.meta_, native);
+  if (ret == OB_SUCCESS) { max_val_ = native; max_meta_ = value.meta_; }
+  return ret;
+}
+int OptColumnMeta::set_min_max_owned(const Datum &minimum, const SqlTypeMeta &min_meta,
+                                     const Datum &maximum, const SqlTypeMeta &max_meta,
+                                     ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  Datum min_copy, max_copy;
+  const SqlTypeMeta min_copy_meta = min_meta, max_copy_meta = max_meta;
+  if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(minimum, min_copy_meta, owner, min_copy))) {
+  } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(maximum, max_copy_meta, owner, max_copy))) {
+  } else { min_val_ = min_copy; min_meta_ = min_copy_meta; max_val_ = max_copy; max_meta_ = max_copy_meta; }
+  return ret;
+}
+int OptColumnMeta::export_min_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_optimizer_value(min_val_, min_meta_, output, scratch, capacity); }
+int OptColumnMeta::export_max_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_optimizer_value(max_val_, max_meta_, output, scratch, capacity); }
+
 int OptColumnMeta::assign(const OptColumnMeta &other)
 {
   int ret = OB_SUCCESS;
@@ -284,7 +387,9 @@ int OptColumnMeta::assign(const OptColumnMeta &other)
   avg_len_ = other.avg_len_;
   hist_scale_ = other.hist_scale_;
   min_val_ = other.min_val_;
+  min_meta_ = other.min_meta_;
   max_val_ = other.max_val_;
+  max_meta_ = other.max_meta_;
   min_max_inited_ = other.min_max_inited_;
   base_ndv_ = other.base_ndv_;
   return ret;
@@ -788,19 +893,17 @@ int OptTableMetas::add_generate_table_meta_info(const ObDMLStmt *parent_stmt,
         } else {
           column_meta->init(column_item.column_id_, revise_selectivity_ndv(ndv), num_null, avg_len);
           column_meta->set_min_max_inited(true);
-          DatumValue maxobj;
-          DatumValue minobj;
-          maxobj.set_max_value();
-          minobj.set_min_value();
+          Datum maxobj, minobj;
+          SqlTypeMeta min_meta, max_meta;
           avg_len = 0;
           if (OB_FAIL(ObOptSelectivity::calculate_expr_avg_len(child_table_metas, child_ctx, select_expr, avg_len))) {
-          } else if (OB_FAIL(ObOptSelectivity::calc_expr_min_max(child_table_metas, child_ctx, select_expr, minobj, maxobj))) {
+          } else if (OB_FAIL(ObOptSelectivity::calc_expr_min_max(child_table_metas, child_ctx, select_expr, minobj, min_meta, maxobj, max_meta))) {
           }
 
           if (OB_SUCC(ret)) {
-            column_meta->set_min_value(minobj);
-            column_meta->set_max_value(maxobj);
-            column_meta->set_avg_len(avg_len);
+            if (OB_FAIL(column_meta->set_min_value(minobj, min_meta))) {
+            } else if (OB_FAIL(column_meta->set_max_value(maxobj, max_meta))) {
+            } else { column_meta->set_avg_len(avg_len); }
           }
           if (OB_SUCC(ret) && is_child_single_spj) {
             double base_ndv = ndv;
@@ -1541,25 +1644,29 @@ int ObOptSelectivity::update_table_meta_info(const OptTableMetas &base_table_met
           int cmp_colmax_colmin = 0;
           int cmp_selmin_colmin = 0;
           int cmp_selmax_colmax = 0;
-          if (OB_FAIL(compare_datum_values(sel_info->max_, sel_info->min_, cmp_selmax_selmin)) ||
-              OB_FAIL(compare_datum_values(sel_info->max_, column_meta.get_min_value(), cmp_selmax_colmin)) ||
-              OB_FAIL(compare_datum_values(column_meta.get_max_value(), sel_info->min_, cmp_colmax_colmin)) ||
-              OB_FAIL(compare_datum_values(sel_info->min_, column_meta.get_min_value(), cmp_selmin_colmin)) ||
-              OB_FAIL(compare_datum_values(sel_info->max_, column_meta.get_max_value(), cmp_selmax_colmax))) {
+          DatumValue column_min, column_max;
+          alignas(8) char column_min_scratch[64], column_max_scratch[64];
+          if (OB_FAIL(column_meta.export_min_value(column_min, column_min_scratch, sizeof(column_min_scratch))) ||
+              OB_FAIL(column_meta.export_max_value(column_max, column_max_scratch, sizeof(column_max_scratch))) ||
+              OB_FAIL(compare_datum_values(sel_info->max_, sel_info->min_, cmp_selmax_selmin)) ||
+              OB_FAIL(compare_datum_values(sel_info->max_, column_min, cmp_selmax_colmin)) ||
+              OB_FAIL(compare_datum_values(column_max, sel_info->min_, cmp_colmax_colmin)) ||
+              OB_FAIL(compare_datum_values(sel_info->min_, column_min, cmp_selmin_colmin)) ||
+              OB_FAIL(compare_datum_values(sel_info->max_, column_max, cmp_selmax_colmax))) {
           } else if (cmp_selmax_selmin < 0 || cmp_selmax_colmin < 0 || cmp_colmax_colmin < 0) {
             is_valid = false;
           } else {
             if (!sel_info->min_.is_null() && cmp_selmin_colmin > 0) {
-              column_meta.set_min_value(sel_info->min_);
+              ret = column_meta.set_min_value(sel_info->min_);
             }
-            if (!sel_info->max_.is_null() && cmp_selmax_colmax < 0) {
-              column_meta.set_max_value(sel_info->max_);
+            if (OB_SUCC(ret) && !sel_info->max_.is_null() && cmp_selmax_colmax < 0) {
+              ret = column_meta.set_max_value(sel_info->max_);
             }
           }
           if (OB_FAIL(ret) || !is_valid) {
             ret = OB_SUCCESS;
-            column_meta.get_min_value().set_min_value();
-            column_meta.get_max_value().set_max_value();
+            column_meta.reset_min_value();
+            column_meta.reset_max_value();
           }
         }
       }
@@ -1649,11 +1756,14 @@ int ObOptSelectivity::get_column_range_sel(const OptTableMetas &table_metas,
   if (OB_SUCC(ret) && need_out_of_bounds) {
     DatumValue min_value;
     DatumValue max_value;
+    alignas(8) char min_scratch[64], max_scratch[64];
     if (use_hist) {
-      min_value = helper.get_min_value();
-      max_value = helper.get_max_value();
+      if (OB_FAIL(helper.export_min_value(min_value, min_scratch, sizeof(min_scratch)))) {
+      } else if (OB_FAIL(helper.export_max_value(max_value, max_scratch, sizeof(max_scratch)))) {
+      }
     } else {
-      if (OB_FAIL(get_column_min_max(table_metas, ctx, col_expr, min_value, max_value))) {
+      if (OB_FAIL(get_column_math_bounds(table_metas, ctx, col_expr, min_value, max_value,
+                                          min_scratch, max_scratch, sizeof(min_scratch)))) {
       }
     }
     if (FAILEDx(refine_out_of_bounds_sel(table_metas, ctx, col_expr, ranges,
@@ -1789,6 +1899,7 @@ int ObOptSelectivity::calc_column_range_selectivity(const OptTableMetas &table_m
   selectivity = DEFAULT_SEL;
   double ndv = 0;
   double not_null_sel = 0;
+  alignas(8) char min_scratch[64], max_scratch[64];
   DatumValue maxobj;
   DatumValue minobj;
   maxobj.set_max_value();
@@ -1801,7 +1912,8 @@ int ObOptSelectivity::calc_column_range_selectivity(const OptTableMetas &table_m
     last_column = true;
     selectivity = 1.0;
   } else if (OB_FAIL(get_column_ndv_and_nns(table_metas, ctx, column_expr, &ndv, &not_null_sel))) {
-  } else if (OB_FAIL(get_column_min_max(table_metas, ctx, column_expr, minobj, maxobj))) {
+  } else if (OB_FAIL(get_column_math_bounds(table_metas, ctx, column_expr, minobj, maxobj,
+                                            min_scratch, max_scratch, sizeof(min_scratch)))) {
   } else if (!minobj.is_min_value() && !maxobj.is_max_value()) {
     DatumValue minscalar;
     DatumValue maxscalar;
@@ -2149,8 +2261,8 @@ int ObOptSelectivity::get_column_ndv_and_nns(const OptTableMetas &table_metas,
 int ObOptSelectivity::get_column_min_max(const OptTableMetas &table_metas,
                                          const OptSelectivityCtx &ctx,
                                          const ObRawExpr &expr,
-                                         DatumValue &min_obj,
-                                         DatumValue &max_obj)
+                                         Datum &min_obj, SqlTypeMeta &min_meta,
+                                         Datum &max_obj, SqlTypeMeta &max_meta)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!expr.is_column_ref_expr())) {
@@ -2167,8 +2279,10 @@ int ObOptSelectivity::get_column_min_max(const OptTableMetas &table_metas,
     ObGlobalColumnStat stat;
     if (OB_NOT_NULL(table_meta) && OB_NOT_NULL(column_meta)) {
       if (column_meta->get_min_max_inited()) {
-        min_obj = column_meta->get_min_value();
-        max_obj = column_meta->get_max_value();
+        min_obj = column_meta->get_min_value_datum();
+        min_meta = column_meta->get_min_value_meta();
+        max_obj = column_meta->get_max_value_datum();
+        max_meta = column_meta->get_max_value_meta();
       } else if (OB_ISNULL(ctx.get_opt_stat_manager()) || OB_ISNULL(ctx.get_session_info())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (table_meta->use_opt_stat() && 
@@ -2180,15 +2294,14 @@ int ObOptSelectivity::get_column_min_max(const OptTableMetas &table_metas,
                                                                      stat,
                                                                      &ctx.get_allocator()))) {
       } else {
-        DatumValue minimum, maximum;
-        if (OB_FAIL(stat.copy_min_value(minimum, ctx.get_allocator()))) {
-        } else if (OB_FAIL(stat.copy_max_value(maximum, ctx.get_allocator()))) {
+        if (OB_FAIL(column_meta->set_min_max_owned(stat.get_min_datum(), stat.get_min_meta(),
+                       stat.get_max_datum(), stat.get_max_meta(), ctx.get_allocator()))) {
         } else {
-          column_meta->set_min_value(minimum);
-          column_meta->set_max_value(maximum);
           column_meta->set_min_max_inited(true);
-          min_obj = minimum;
-          max_obj = maximum;
+          min_obj = column_meta->get_min_value_datum();
+          min_meta = column_meta->get_min_value_meta();
+          max_obj = column_meta->get_max_value_datum();
+          max_meta = column_meta->get_max_value_meta();
         }
       }
     }
@@ -3072,16 +3185,14 @@ int ObOptSelectivity::calculate_special_ndv(const OptTableMetas &table_metas,
     } else {
       param_expr = expr->get_param_expr(0);
     }
+    alignas(8) char min_scratch[64], max_scratch[64];
     DatumValue min_value;
     DatumValue max_value;
     bool use_default = false;
     double min_scalar = 0.0;
     double max_scalar = 0.0;
-    if (OB_FAIL(calc_expr_min_max(table_metas,
-                                  ctx,
-                                  expr,
-                                  min_value,
-                                  max_value))) {
+    if (OB_FAIL(calc_expr_math_bounds(table_metas, ctx, expr, min_value, max_value,
+                                       min_scratch, max_scratch, sizeof(min_scratch)))) {
     } else if (min_value.is_min_value() || max_value.is_max_value() ||
                !(min_value.is_integer_type() || min_value.is_number() || min_value.is_date() || min_value.is_mysql_date()) ||
                !(max_value.is_integer_type() || max_value.is_number() || max_value.is_date() || max_value.is_mysql_date())) {
@@ -4036,19 +4147,25 @@ int ObOptSelectivity::calculate_expr_nns(const OptTableMetas &table_metas,
 int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
                                         const OptSelectivityCtx &ctx,
                                         const ObRawExpr *expr,
-                                        DatumValue &min_value,
-                                        DatumValue &max_value)
+                                        Datum &min_result, SqlTypeMeta &min_meta,
+                                        Datum &max_result, SqlTypeMeta &max_meta)
 {
   int ret = OB_SUCCESS;
+  DatumValue min_value, max_value;
+  alignas(8) char min_scratch[64], max_scratch[64];
+  min_value.meta_ = min_meta;
+  max_value.meta_ = max_meta;
   min_value.set_min_value();
   max_value.set_max_value();
+  min_result.set_min(); min_meta = min_value.meta_;
+  max_result.set_max(); max_meta = max_value.meta_;
   if (OB_ISNULL(expr) || OB_ISNULL(ctx.get_opt_ctx().get_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (expr->get_result_type().is_ext()) {
     // do nothing
   } else if (expr->is_column_ref_expr()) {
-    if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, *expr,
-                                                     min_value, max_value))) {
+    if (OB_FAIL(get_column_math_bounds(table_metas, ctx, *expr,
+                                                     min_value, max_value, min_scratch, max_scratch, sizeof(min_scratch)))) {
     }
   } else if (expr->is_static_scalar_const_expr()) {
     DatumValue result;
@@ -4072,8 +4189,8 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
     if (OB_FAIL(ObTypeCastRules::is_cast_monotonic(param_expr->get_data_type(), expr->get_data_type(), is_monotonic))) {
     } else if (!is_monotonic) {
       // do nothing
-    } else if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx, param_expr,
-                                                    min_value, max_value)))) {
+    } else if (OB_FAIL(SMART_CALL(calc_expr_math_bounds(table_metas, ctx, param_expr,
+                                                    min_value, max_value, min_scratch, max_scratch, sizeof(min_scratch))))) {
     } else if (min_value.is_min_value() || max_value.is_min_value() ||
                min_value.is_max_value() || max_value.is_max_value() ||
                min_value.is_null() || max_value.is_null()) {
@@ -4086,8 +4203,8 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
       max_value.set_max_value();
     }
   } else if (T_FUN_SYS_DATE == expr->get_expr_type()) {
-    if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas, ctx, expr->get_param_expr(0),
-                                             min_value, max_value)))) {
+    if (OB_FAIL(SMART_CALL(calc_expr_math_bounds(table_metas, ctx, expr->get_param_expr(0),
+                                             min_value, max_value, min_scratch, max_scratch, sizeof(min_scratch))))) {
     }
   } else if (is_dense_time_expr_type(expr->get_expr_type()) ||
              T_FUN_SYS_EXTRACT == expr->get_expr_type()) {
@@ -4181,6 +4298,12 @@ int ObOptSelectivity::calc_expr_min_max(const OptTableMetas &table_metas,
       max_value.set_max_value();
     }
   }
+  if (OB_SUCC(ret)) {
+    Datum minimum, maximum;
+    if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(min_value.datum_, min_value.meta_, minimum))) {
+    } else if (OB_FAIL(DatumParameterCodec::borrow_schema_native_value(max_value.datum_, max_value.meta_, maximum))) {
+    } else { min_result = minimum; min_meta = min_value.meta_; max_result = maximum; max_meta = max_value.meta_; }
+  }
   return ret;
 }
 
@@ -4192,6 +4315,7 @@ int ObOptSelectivity::calc_year_min_max(const OptTableMetas &table_metas,
                                         bool &use_default)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char min_scratch[64], max_scratch[64];
   DatumValue min_value;
   DatumValue max_value;
   DatumValue min_year_obj;
@@ -4208,11 +4332,8 @@ int ObOptSelectivity::calc_year_min_max(const OptTableMetas &table_metas,
              ObMySQLDateTimeTC != expr->get_type_class() &&
              ObOTimestampTC != expr->get_type_class()) {
     use_default = true;
-  } else if (OB_FAIL(SMART_CALL(calc_expr_min_max(table_metas,
-                                                  ctx,
-                                                  expr,
-                                                  min_value,
-                                                  max_value)) )) {
+  } else if (OB_FAIL(SMART_CALL(calc_expr_math_bounds(table_metas, ctx, expr, min_value, max_value,
+                                                       min_scratch, max_scratch, sizeof(min_scratch))))) {
   } else if (min_value.is_min_value() || max_value.is_max_value()) {
     use_default = true;
   } else if (FALSE_IT(date_sql_mode.init(ctx.get_session_info()->get_sql_mode()))) {
@@ -4458,7 +4579,8 @@ int ObHistSelHelper::init(const OptTableMetas &table_metas,
   is_valid_ = false;
   handlers_.reuse();
   part_rows_.reuse();
-  DatumValue dummy1, dummy2;
+  Datum dummy1;
+  SqlTypeMeta dummy_meta;
   bool is_frequency = true;
   if (OB_ISNULL(table_meta) || OB_INVALID_ID == table_meta->get_ref_table_id()) {
     // do nothing
@@ -4469,7 +4591,7 @@ int ObHistSelHelper::init(const OptTableMetas &table_metas,
   } else if (OB_ISNULL(ctx.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
   // load column min max into column meta from statistics
-  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, col, dummy1, dummy1))) {
+  } else if (OB_FAIL(ObOptSelectivity::get_column_min_max(table_metas, ctx, col, dummy1, dummy_meta, dummy1, dummy_meta))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_meta->get_hist_parts().count(); i ++) {
       ObOptColumnStatHandle column_stat;
@@ -4603,11 +4725,15 @@ int ObHistEqualSelHelper::refine_out_of_bounds_sel(const OptSelectivityCtx &ctx,
   int value_cmp_min = 0;
   int value_cmp_max = 0;
   const OptColumnMeta *column_meta_ = NULL;
+  DatumValue minimum, maximum;
+  alignas(8) char min_scratch[64], max_scratch[64];
   if (OB_ISNULL(column_expr_) || OB_ISNULL(column_expr_) || OB_ISNULL(table_meta_) ||
       OB_ISNULL(column_meta_ = table_meta_->get_column_meta(column_expr_->get_column_id()))) {
     // do nothing
-  } else if (OB_FAIL(compare_datum_values(value, column_meta_->get_min_value(), value_cmp_min)) ||
-             OB_FAIL(compare_datum_values(value, column_meta_->get_max_value(), value_cmp_max))) {
+  } else if (OB_FAIL(column_meta_->export_min_value(minimum, min_scratch, sizeof(min_scratch))) ||
+             OB_FAIL(column_meta_->export_max_value(maximum, max_scratch, sizeof(max_scratch))) ||
+             OB_FAIL(compare_datum_values(value, minimum, value_cmp_min)) ||
+             OB_FAIL(compare_datum_values(value, maximum, value_cmp_max))) {
     ret = OB_SUCCESS;
   } else if (value_cmp_min >= 0 && value_cmp_max <= 0) {
     // do nothing
@@ -4627,8 +4753,8 @@ int ObHistRangeSelHelper::init(const OptTableMetas &table_metas,
                                const ObColumnRefRawExpr &col)
 {
   int ret = OB_SUCCESS;
-  hist_min_value_.set_max_value();
-  hist_max_value_.set_min_value();
+  hist_min_value_.set_max(); hist_min_meta_.set_ext();
+  hist_max_value_.set_min(); hist_max_meta_.set_ext();
   if (OB_FAIL(ObHistSelHelper::init(table_metas, ctx, col))) {
   } else if (!is_valid_) {
     // do nothing
@@ -4638,18 +4764,33 @@ int ObHistRangeSelHelper::init(const OptTableMetas &table_metas,
       ObOptColumnStatHandle &column_stat = handlers_.at(i);
       const ObHistogram &histogram = column_stat.stat_->get_histogram();
       int64_t cnt = histogram.get_bucket_size();
-      DatumValue cur_min_value, cur_max_value;
+      Datum cur_min, cur_max;
+      SqlTypeMeta cur_min_meta, cur_max_meta;
+      DatumValue cur_min_value, cur_max_value, hist_min, hist_max;
+      alignas(8) char cur_min_scratch[64], cur_max_scratch[64], hist_min_scratch[64], hist_max_scratch[64];
       int cmp_res = 0;
       if (OB_UNLIKELY(cnt < 0)) {
-      } else if (OB_FAIL(histogram.get(0).copy_endpoint_value(cur_min_value, ctx.get_allocator()))) {
-      } else if (OB_FAIL(histogram.get(cnt - 1).copy_endpoint_value(cur_max_value, ctx.get_allocator()))) {
-      } else if (OB_FAIL(compare_datum_values(hist_min_value_, cur_min_value, cmp_res))) {
+      } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
+              histogram.get(0).get_endpoint_datum(), histogram.get(0).get_endpoint_meta(), ctx.get_allocator(), cur_min))) {
+      } else if (OB_FAIL(DatumParameterCodec::clone_schema_native_value(
+              histogram.get(cnt - 1).get_endpoint_datum(), histogram.get(cnt - 1).get_endpoint_meta(), ctx.get_allocator(), cur_max))) {
+      } else if (FALSE_IT(cur_min_meta = histogram.get(0).get_endpoint_meta())) {
+      } else if (FALSE_IT(cur_max_meta = histogram.get(cnt - 1).get_endpoint_meta())) {
+      } else if (OB_FAIL(export_optimizer_value(cur_min, cur_min_meta,
+                           cur_min_value, cur_min_scratch, sizeof(cur_min_scratch)))) {
+      } else if (OB_FAIL(export_optimizer_value(cur_max, cur_max_meta,
+                           cur_max_value, cur_max_scratch, sizeof(cur_max_scratch)))) {
+      } else if (OB_FAIL(export_min_value(hist_min, hist_min_scratch, sizeof(hist_min_scratch)))) {
+      } else if (OB_FAIL(compare_datum_values(hist_min, cur_min_value, cmp_res))) {
       } else if (cmp_res > 0) {
-        hist_min_value_ = cur_min_value;
+        hist_min_value_ = cur_min;
+        hist_min_meta_ = cur_min_meta;
       }
-      if (FAILEDx(compare_datum_values(hist_max_value_, cur_max_value, cmp_res))) {
-      } else if (cmp_res < 0) {
-        hist_max_value_ = cur_max_value;
+      if (FAILEDx(export_max_value(hist_max, hist_max_scratch, sizeof(hist_max_scratch)))) {
+      } else if (OB_SUCC(ret) && OB_FAIL(compare_datum_values(hist_max, cur_max_value, cmp_res))) {
+      } else if (OB_SUCC(ret) && cmp_res < 0) {
+        hist_max_value_ = cur_max;
+        hist_max_meta_ = cur_max_meta;
       }
     }
   }
@@ -4658,6 +4799,11 @@ int ObHistRangeSelHelper::init(const OptTableMetas &table_metas,
   }
   return ret;
 }
+
+int ObHistRangeSelHelper::export_min_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_optimizer_value(hist_min_value_, hist_min_meta_, output, scratch, capacity); }
+int ObHistRangeSelHelper::export_max_value(DatumValue &output, void *scratch, int64_t capacity) const
+{ return export_optimizer_value(hist_max_value_, hist_max_meta_, output, scratch, capacity); }
 
 int ObHistRangeSelHelper::inner_get_sel(const OptSelectivityCtx &ctx,
                                         const ObHistogram &histogram,

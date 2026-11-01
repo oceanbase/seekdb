@@ -210,6 +210,11 @@ public:
   // Prepare type/payload ownership before publishing a replacement slot and
   // its compatibility descriptor. Failure preserves the previous binding.
   int set_runtime_parameter(int64_t index, const DatumParameter &parameter);
+  // Bind an already cast effective value using its prepared declaration. The
+  // attributes carry only compatibility metadata; their payload is ignored.
+  // Resource carriers keep the existing PL/array pointee owner and identity.
+  int set_runtime_parameter(int64_t index, const common::Datum &value,
+      const common::SqlType &supplied_type, const DatumParameter &attributes);
   // Typed PX decode writes directly into these final execution-arena pages.
   // Complete preflight precedes publication; no second value array is built.
   int restore_native_parameter_frames(const common::ObIArray<char *> &frames,

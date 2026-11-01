@@ -936,16 +936,19 @@ int ObCreateViewResolver::resolve_column_default_value(const sql::ObSelectStmt *
 {
   int ret = OB_SUCCESS;
   UNUSED(alloc);
+  alignas(8) char default_scratch[64];
+  DatumValue default_value;
   ColumnItem column_item;
   if (OB_FAIL(column_schema.set_cur_default_value_v2(DatumValue()))) {
   } else if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObResolverUtils::resolve_default_value_and_expr_from_select_item(select_item, column_item, select_stmt))) {
-  } else if (OB_FAIL(column_schema.set_cur_default_value_v2(column_item.default_value_))) {
+  } else if (OB_FAIL(column_item.export_default_value(default_value, default_scratch, sizeof(default_scratch)))) {
+  } else if (OB_FAIL(column_schema.set_cur_default_value_v2(default_value))) {
   } else if (OB_ISNULL(select_item.expr_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (ob_is_enum_or_set_type(column_item.default_value_.get_type())
-             || ob_is_collection_sql_type(column_item.default_value_.get_type())) {
+  } else if (ob_is_enum_or_set_type(column_item.get_default_meta().get_type())
+             || ob_is_collection_sql_type(column_item.get_default_meta().get_type())) {
     if (OB_FAIL(fill_column_with_subschema(*select_item.expr_, session_info, column_schema))) {
     }
   }
