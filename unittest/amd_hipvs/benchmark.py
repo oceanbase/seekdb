@@ -18,6 +18,8 @@ import uuid
 
 import numpy as np
 
+from sql_snapshot_integrity import KEY as SNAPSHOT_KEY, verify_sql_snapshot
+
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
 OPTION = re.compile(r"([a-z_][a-z0-9_]*)\s*=\s*([a-z_][a-z0-9_]*|[0-9]+(?:\.[0-9]+)?)\Z", re.I)
 HARDWARE_FIELDS = ("cpu_model", "cpu_threads", "cpu_affinity", "gpu_model", "gpu_architecture",
@@ -211,6 +213,46 @@ def match_evidence(round_result: dict, records: list[dict], rows: int, dim: int)
     return clean, None
 
 
+def storage_integrity_error(item: dict, config: dict) -> str | None:
+    """Require the actual SQL snapshot proof for this exact measured index."""
+    proof = item.get("storage_integrity")
+    if not isinstance(proof, dict):
+        return "missing actual SQL snapshot integrity proof"
+    try:
+        m = int(item["with"]["m"])
+    except (KeyError, TypeError, ValueError):
+        return "missing measured index M"
+    expected = {"method": "sql_snapshot_native_hnsw", "source_table": item["table_name"],
+                "index_name": item["index_name"], "stored_count": config["rows"],
+                "mapped_count": config["rows"], "dim": config["dim"], "m": m,
+                "vectors_exact": True, "all_ids_present": True}
+    for key, value in expected.items():
+        if type(proof.get(key)) is not type(value) or proof[key] != value:
+            return f"SQL snapshot proof mismatch: {key}"
+    for key in ("snapshot_sha256", "mapping_sha256"):
+        if not isinstance(proof.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", proof[key]):
+            return f"SQL snapshot proof missing digest: {key}"
+    for key in ("data_table_id", "snapshot_tablet_id", "snapshot_bytes"):
+        if type(proof.get(key)) is not int or proof[key] <= 0:
+            return f"SQL snapshot proof invalid metadata: {key}"
+    expected_snapshot = f"__idx_{proof['data_table_id']}_{item['index_name']}_index_snapshot_data_table"
+    expected_mapping = f"__idx_{proof['data_table_id']}_rowkey_vid_table"
+    if proof.get("snapshot_table") != expected_snapshot or proof.get("mapping_table") != expected_mapping:
+        return "SQL snapshot proof auxiliary tables do not belong to this measured index"
+    if not isinstance(proof.get("chunk_keys"), list) or not proof["chunk_keys"]:
+        return "SQL snapshot proof has no chunks"
+    version = None
+    for position, key in enumerate(proof["chunk_keys"]):
+        match = SNAPSHOT_KEY.fullmatch(key) if isinstance(key, str) else None
+        if not match or int(match[1]) != proof["snapshot_tablet_id"] or int(match[3]) != position:
+            return "SQL snapshot proof chunk sequence/tablet mismatch"
+        if version is None:
+            version = int(match[2])
+        if version <= 0 or int(match[2]) != version:
+            return "SQL snapshot proof contains mixed or invalid versions"
+    return None
+
+
 def summarize(report: dict, records: list[dict]) -> dict:
     rounds = report["rounds"]
     cpu = [item for item in rounds if item["mode"] == "cpu"]
@@ -222,10 +264,19 @@ def summarize(report: dict, records: list[dict]) -> dict:
         return summary
     if any(not math.isfinite(item["build_sec"]) or item["build_sec"] <= 0 for item in rounds):
         raise ValueError("Build durations must be finite and positive")
-    if any(item["quality"]["recall_at_k"] < report["config"]["min_recall"]
-           or item["coverage_found"] != report["config"]["rows"]
-           or not item.get("vector_plan_verified") for item in rounds):
+    quality_failures = []
+    for item in rounds:
+        recall = item["quality"]["recall_at_k"]
+        if not math.isfinite(recall) or not report["config"]["min_recall"] <= recall <= 1:
+            quality_failures.append(f"{item['index_name']}: recall below threshold or invalid")
+        if item.get("vector_plan_verified") is not True:
+            quality_failures.append(f"{item['index_name']}: requested vector index plan is not verified")
+        error = storage_integrity_error(item, report["config"])
+        if error:
+            quality_failures.append(f"{item['index_name']}: {error}")
+    if quality_failures:
         summary["status"] = "QUALITY_OR_FUNCTION_FAILED"
+        summary["reasons"] = quality_failures
         return summary
     if report["config"]["cpu_only"]:
         summary["status"] = "CPU_ONLY"
@@ -363,11 +414,11 @@ def run_round(connection, report, mode, number, vectors, queries, ids, truth, op
             results.append(cursor.fetchall())
         query_sec = time.perf_counter() - query_started
         quality = assess_results(results, truth, ids, cfg["k"])
-        # Probe every input vector, not a sampled row count. ID mapping and omissions
-        # must pass even when average Recall@K happens to meet its threshold.
+        # Probe every input vector as an ANN reachability diagnostic. Approximate
+        # misses alone cannot establish omitted storage; inspect SQL snapshots below.
         coverage_started = time.perf_counter()
-        report["active_operation"] = f"{mode}/{number}: full ID coverage"
-        # Coverage is a completeness diagnostic, distinct from Recall@K at the
+        report["active_operation"] = f"{mode}/{number}: all-vector self ANN diagnostic"
+        # Self ANN reachability is distinct from Recall@K at the
         # configured search breadth. Every input is still queried in both modes.
         coverage_ef, coverage_k = coverage_retry_settings(cfg["rows"], int(options["ef_search"]))
         found = 0
@@ -423,10 +474,19 @@ def run_round(connection, report, mode, number, vectors, queries, ids, truth, op
                   "query_plan": plan, "with": options}
         if evidence:
             result["raw_gpu_evidence"] = evidence
+        # Preserve ANN diagnostics even when direct snapshot verification fails.
         report["rounds"].append(result)
+        report["active_operation"] = f"{mode}/{number}: SQL snapshot integrity"
+        storage_started = time.perf_counter()
+        try:
+            result["storage_integrity"] = verify_sql_snapshot(
+                connection, table, index, vectors, ids, int(options["m"]))
+        finally:
+            result["storage_verification_sec"] = time.perf_counter() - storage_started
         report["active_operation"] = None
         print(json.dumps({"mode": mode, "round": number, "index_name": index, "build_sec": build_sec,
-                          "recall_at_k": quality["recall_at_k"], "coverage_found": found}), flush=True)
+                          "recall_at_k": quality["recall_at_k"], "coverage_found": found,
+                          "stored_count": result["storage_integrity"]["stored_count"]}), flush=True)
     finally:
         try:
             if created:
@@ -442,14 +502,17 @@ def save_report(report: dict, destination: Path) -> None:
     summary = report["summary"]
     lines = ["# AMD hipVS 端到端构建实测", "", f"状态：**{summary['status']}**", "",
              "计时范围：CREATE VECTOR INDEX 开始至首条指定索引 ANN 查询完成；数据生成、原始导入及质量检查另计。", "",
-             "|路径|轮次|导入秒|DDL秒|端到端构建秒|Recall@K|全部输入ID自检|", "|---|---:|---:|---:|---:|---:|---:|"]
+             "|路径|轮次|导入秒|DDL秒|端到端构建秒|Recall@K|自身ANN命中（诊断）|快照精确存储校验|", "|---|---:|---:|---:|---:|---:|---:|---|"]
     for row in report["rounds"]:
-        lines.append(f"|{row['mode']}|{row['round']}|{row['raw_load_sec']:.6f}|{row['ddl_sec']:.6f}|{row['build_sec']:.6f}|{row['quality']['recall_at_k']:.6f}|{row['coverage_found']}/{report['config']['rows']}|")
+        storage = (f"{row['storage_integrity']['stored_count']}/{report['config']['rows']}，FP32/ID一致"
+                   if storage_integrity_error(row, report["config"]) is None else "未验证/失败")
+        lines.append(f"|{row['mode']}|{row['round']}|{row['raw_load_sec']:.6f}|{row['ddl_sec']:.6f}|{row['build_sec']:.6f}|{row['quality']['recall_at_k']:.6f}|{row['coverage_found']}/{report['config']['rows']}|{storage}|")
     lines += ["", f"CPU中位数：{summary.get('cpu_median_build_sec')} 秒。",
               f"GPU中位数：{summary.get('gpu_median_build_sec')} 秒。",
               f"有效构建加速比：{summary.get('speedup') if summary.get('speedup') is not None else '未验证，不给出加速成绩'}。",
               f"配置的质量门槛：{report['config']['min_recall']}；配置的性能目标：{report['config']['target_speedup']}。",
               "目标值由操作者按统一评测配置提供，本工具不声称其即为赛事已公布标准。",
+              "自身ANN未命中作为可达性诊断保留；完整性要求实际SQL索引快照包含全部输入ID及逐字节一致的FP32向量，正式Recall门槛仍独立生效。",
               "", "GPU路径证明必须来自对应seekdb构建过程的原始日志/分析证据；同名库、GPU查询耗时或CPU回退不能代替。",
               "完整配置、每轮原始记录、数据指纹、服务器环境及校验原因见同名JSON。"]
     if report.get("failure"):

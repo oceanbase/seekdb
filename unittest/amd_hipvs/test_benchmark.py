@@ -11,7 +11,8 @@ import numpy as np
 from benchmark import (assess_results, exact_neighbors, fingerprint, generate_data,
                        identifier, match_evidence, parse_options, query_sql,
                        summarize, validate_comparable, log_position, evidence_from_log,
-                       first_query_when_ready, coverage_retry_settings, coverage_query_result)
+                       first_query_when_ready, coverage_retry_settings, coverage_query_result,
+                       run_round)
 
 
 class CoverageDiagnosticTests(unittest.TestCase):
@@ -200,14 +201,25 @@ class AcceptanceGateTests(unittest.TestCase):
     @staticmethod
     def report():
         # Deliberately no GPU evidence: fictitious timings are unit-test inputs only.
-        return {"config": {"repeats": 3, "cpu_only": False, "min_recall": .9,
+        report = {"config": {"repeats": 3, "cpu_only": False, "min_recall": .9,
                            "rows": 100, "dim": 8, "target_speedup": 2},
                 "server_environment": {}, "rounds": [
                     {"mode": mode, "build_sec": duration, "index_name": f"idx_{mode}_{i}",
                      "table_name": f"table_{mode}_{i}", "coverage_found": 100,
-                     "quality": {"recall_at_k": .99}, "vector_plan_verified": True}
+                     "quality": {"recall_at_k": .99}, "vector_plan_verified": True, "with": {"m": "16"}}
                     for mode, times in (("cpu", [10., 20., 90.]), ("gpu", [4., 5., 12.]))
                     for i, duration in enumerate(times)]}
+        for row in report["rounds"]:
+            # Synthetic proof fields are confined to acceptance-unit-test inputs.
+            row["storage_integrity"] = {
+                "method": "sql_snapshot_native_hnsw", "source_table": row["table_name"],
+                "index_name": row["index_name"], "stored_count": 100, "mapped_count": 100,
+                "dim": 8, "m": 16, "vectors_exact": True, "all_ids_present": True,
+                "snapshot_sha256": "a" * 64, "mapping_sha256": "b" * 64,
+                "snapshot_bytes": 17696, "data_table_id": 900, "snapshot_tablet_id": 1000,
+                "snapshot_table": f"__idx_900_{row['index_name']}_index_snapshot_data_table",
+                "mapping_table": "__idx_900_rowkey_vid_table", "chunk_keys": ["1000_10_hnsw_data_part00000"]}
+        return report
 
     def test_no_gpu_evidence_never_produces_speedup(self):
         result = summarize(self.report(), [])
@@ -227,10 +239,65 @@ class AcceptanceGateTests(unittest.TestCase):
         report["rounds"][-1]["quality"]["recall_at_k"] = .8
         self.assertEqual(summarize(report, [])["status"], "QUALITY_OR_FUNCTION_FAILED")
 
-    def test_quality_does_not_hide_a_missing_id_or_unused_index(self):
-        for key, value in (("coverage_found", 99), ("vector_plan_verified", False)):
+    def test_quality_does_not_hide_unused_index(self):
+        for value in (False, 1, None):
             report = self.report()
-            report["rounds"][0][key] = value
+            report["rounds"][0]["vector_plan_verified"] = value
+            self.assertEqual(summarize(report, [])["status"], "QUALITY_OR_FUNCTION_FAILED")
+
+    def test_self_ann_miss_is_diagnostic_when_storage_is_exact(self):
+        report = self.report()
+        report["rounds"][0]["coverage_found"] = 99
+        # Still UNVERIFIED without GPU evidence; storage completeness itself passed.
+        self.assertEqual(summarize(report, [])["status"], "UNVERIFIED")
+        self.assertEqual(report["rounds"][0]["coverage_found"], 99)
+
+    def test_both_modes_require_actual_sql_snapshot_proof(self):
+        for mode in ("cpu", "gpu"):
+            report = self.report()
+            row = next(row for row in report["rounds"] if row["mode"] == mode)
+            del row["storage_integrity"]
+            self.assertEqual(summarize(report, [])["status"], "QUALITY_OR_FUNCTION_FAILED")
+
+    def test_storage_omissions_corruption_and_wrong_index_fail_closed(self):
+        for key, value in (("stored_count", 99), ("mapped_count", 99), ("vectors_exact", False),
+                           ("all_ids_present", False), ("vectors_exact", 1), ("dim", 7), ("m", 8),
+                           ("method", "standalone_native_probe"), ("source_table", "another_table"),
+                           ("index_name", "another_index"), ("snapshot_sha256", ""),
+                           ("mapping_sha256", "not-a-hash"), ("data_table_id", 901),
+                           ("snapshot_tablet_id", 0), ("snapshot_bytes", -1),
+                           ("snapshot_table", "unrelated_table"), ("mapping_table", "unrelated_map"),
+                           ("chunk_keys", []), ("chunk_keys", ["1001_10_hnsw_data_part00000"]),
+                           ("chunk_keys", ["1000_10_hnsw_data_part00001"]),
+                           ("chunk_keys", ["1000_10_hnsw_data_part00000", "1000_11_hnsw_data_part00001"]),
+                           ("chunk_keys", [True])):
+            with self.subTest(key=key, value=value):
+                report = self.report()
+                report["rounds"][0]["storage_integrity"][key] = value
+                summary = summarize(report, [])
+                self.assertEqual(summary["status"], "QUALITY_OR_FUNCTION_FAILED")
+                self.assertIsNone(summary["speedup"])
+
+    def test_all_gates_can_pass_with_preserved_self_ann_miss(self):
+        report = self.report()
+        report["server_environment"] = {key: "unit-test-only" for key in (
+            "cpu_model", "cpu_threads", "cpu_affinity", "gpu_model", "gpu_architecture",
+            "rocm_version", "hipvs_version", "seekdb_commit")}
+        report["rounds"][0]["coverage_found"] = 99
+        records = [{"producer": "seekdb-hipvs-build", "backend": "hipvs", "device_vendor": "AMD",
+                    "gpu_compute": True, "cpu_fallback": False, "completed": True,
+                    "rows": 100, "dim": 8, "gpu_name": "unit-test-only",
+                    "table_name": row["table_name"], "index_name": row["index_name"]}
+                   for row in report["rounds"] if row["mode"] == "gpu"]
+        result = summarize(report, records)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["speedup"], 4)
+        self.assertEqual(report["rounds"][0]["coverage_found"], 99)
+
+    def test_invalid_recall_cannot_pass_with_complete_storage(self):
+        for recall in (math.nan, math.inf, 1.01, -1):
+            report = self.report()
+            report["rounds"][0]["quality"]["recall_at_k"] = recall
             self.assertEqual(summarize(report, [])["status"], "QUALITY_OR_FUNCTION_FAILED")
 
     def test_cpu_only_never_claims_gpu_acceptance(self):
@@ -262,6 +329,45 @@ class AcceptanceGateTests(unittest.TestCase):
                 verified, reason = match_evidence(row, [evidence], 100, 8)
                 self.assertIsNone(verified)
                 self.assertTrue(reason)
+
+
+class RoundSnapshotIntegrationTests(unittest.TestCase):
+    @staticmethod
+    def fixture():
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = (200,)
+        cursor.fetchall.side_effect = [
+            [(101,), (103,)], [(None, None, "PRIMARY")], [(101, 0.0)],
+            [("VECTOR INDEX ahb_idx_test_cpu_1",)], [(101, 0.0)],
+            [(101, 0.0)], [(103, 0.0)]]
+        report = {"run_id": "test", "config": {"rows": 2, "dim": 2, "k": 1, "batch": 2}, "rounds": []}
+        values = (np.array([[0, 0], [1, 1]], np.float32), np.array([[0, 0]], np.float32),
+                  np.array([101, 103], np.int64), [[101]],
+                  parse_options("distance=l2,type=hnsw,lib=vsag,m=5,ef_construction=200,ef_search=200"))
+        return connection, report, values
+
+    @patch("benchmark.verify_sql_snapshot")
+    def test_actual_connection_and_complete_input_are_used(self, verify):
+        connection, report, values = self.fixture()
+        verify.return_value = {"stored_count": 2}
+        run_round(connection, report, "cpu", 1, *values)
+        verify.assert_called_once_with(connection, "ahb_test_cpu_1", "ahb_idx_test_cpu_1",
+                                       values[0], values[2], 5)
+        self.assertEqual(report["rounds"][0]["storage_integrity"], verify.return_value)
+        self.assertEqual(report["rounds"][0]["coverage_found"], 2)
+        self.assertIn("storage_verification_sec", report["rounds"][0])
+        connection.cursor.return_value.execute.assert_called_with("DROP TABLE `ahb_test_cpu_1`")
+
+    @patch("benchmark.verify_sql_snapshot", side_effect=ValueError("stored vector corruption"))
+    def test_snapshot_failure_preserves_diagnostics_but_cannot_pass(self, verify):
+        connection, report, values = self.fixture()
+        with self.assertRaisesRegex(ValueError, "stored vector corruption"):
+            run_round(connection, report, "cpu", 1, *values)
+        self.assertEqual(report["rounds"][0]["coverage_found"], 2)
+        self.assertNotIn("storage_integrity", report["rounds"][0])
+        self.assertEqual(report["active_operation"], "cpu/1: SQL snapshot integrity")
+        connection.cursor.return_value.execute.assert_called_with("DROP TABLE `ahb_test_cpu_1`")
 
 
 if __name__ == "__main__":

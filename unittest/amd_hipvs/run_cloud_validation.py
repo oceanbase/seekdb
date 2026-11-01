@@ -16,9 +16,29 @@ parser.add_argument('--workspace', type=Path, default=Path('/workspace'))
 parser.add_argument('--output', type=Path, required=True,
                     help='New report directory; existing results are never overwritten')
 parser.add_argument('--port', type=int, default=2883)
+parser.add_argument('--m', type=int, default=16,
+                    help='Identical HNSW M for CPU, GPU, and lifecycle checks')
+parser.add_argument('--ef-construction', type=int, default=200)
+parser.add_argument('--ef-search', type=int, default=200)
+parser.add_argument('--min-recall', type=float, default=0.90,
+                    help='Local test quality threshold, not a published competition target')
 args = parser.parse_args()
 if not 1024 <= args.port <= 65535:
     parser.error('Use an unoccupied unprivileged port')
+if not 5 <= args.m <= 64:
+    parser.error('m must be in [5,64]')
+if not args.m < args.ef_construction <= 1000:
+    parser.error('ef-construction must be greater than m and at most 1000')
+if not 10 <= args.ef_search <= 160000:
+    parser.error('ef-search must be between K=10 and 160000')
+if not 0 < args.min_recall <= 1:
+    parser.error('min-recall must be finite and in (0,1]')
+INDEX_WITH = (f'distance=l2,type=hnsw,m={args.m},'
+              f'ef_construction={args.ef_construction},ef_search={args.ef_search}')
+CPU_WITH = INDEX_WITH + ',lib=vsag'
+GPU_WITH = INDEX_WITH + ',lib=hipvs'
+LIFECYCLE_ROWS = max(128, 4 * args.m)
+SMOKE_ROWS = max(200, 4 * args.m)
 ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE = args.workspace.resolve()
 WORKSPACE.mkdir(parents=True, exist_ok=True)
@@ -35,7 +55,14 @@ PORT = args.port
 process = None
 console = None
 connection = None
-summary = {'status': 'RUNNING', 'runtime': str(RUNTIME), 'port': PORT}
+summary = {'status': 'RUNNING', 'runtime': str(RUNTIME), 'port': PORT,
+           'config': {'m': args.m, 'ef_construction': args.ef_construction,
+                      'ef_search': args.ef_search, 'min_recall': args.min_recall,
+                      'cpu_with': CPU_WITH, 'gpu_with': GPU_WITH,
+                      'lifecycle_rows': LIFECYCLE_ROWS, 'smoke_rows': SMOKE_ROWS,
+                      'performance_rows': 10000, 'performance_dim': 128,
+                      'repeats': 3, 'k': 10}}
+print('CONFIG', json.dumps(summary['config']), flush=True)
 
 
 def save():
@@ -143,7 +170,7 @@ try:
                     cur.execute('SELECT 1')
                     require(cur.fetchone()[0] == 1, 'Database readiness query returned an unexpected result')
                     cur.execute('SET SESSION ob_query_timeout=300000000')
-                    cur.execute('SET SESSION ob_hnsw_ef_search=200')
+                    cur.execute('SET SESSION ob_hnsw_ef_search=%s', (args.ef_search,))
                 ready = candidate
                 candidate = None
                 return ready
@@ -165,8 +192,8 @@ try:
     summary['phase'] = 'SQL_LIFECYCLE'
     save()
     rng = np.random.default_rng(20261031)
-    vectors = rng.normal(size=(128, 8)).astype(np.float32)
-    ids = [1000000000001 + i * 7 for i in range(128)]
+    vectors = rng.normal(size=(LIFECYCLE_ROWS, 8)).astype(np.float32)
+    ids = [1000000000001 + i * 7 for i in range(LIFECYCLE_ROWS)]
     query = benchmark.query_sql('lifecycle', 'lifecycle_gpu', 10)
     q = benchmark.vector_json(vectors[3] * .9)
     with connection.cursor() as cur:
@@ -177,12 +204,12 @@ try:
                         [(doc_id, benchmark.vector_json(v)) for doc_id, v in zip(ids, vectors)])
         pos = benchmark.log_position(stderr_path)
         cur.execute('CREATE VECTOR INDEX lifecycle_gpu ON lifecycle(v) WITH '
-                    '(distance=l2,type=hnsw,lib=hipvs,m=16,ef_construction=200,ef_search=200)')
+                    f'({GPU_WITH})')
         cur.execute(query, (q, q))
         before = cur.fetchall()
         require(len(before) == 10, 'Lifecycle query returned fewer than 10 neighbors')
         summary['lifecycle_gpu_evidence'] = benchmark.evidence_from_log(
-            stderr_path, pos, 'lifecycle', 'lifecycle_gpu', 128, 8)
+            stderr_path, pos, 'lifecycle', 'lifecycle_gpu', LIFECYCLE_ROWS, 8)
         cur.execute('EXPLAIN ' + query, (q, q))
         summary['lifecycle_plan'] = '\n'.join(str(row[0]) for row in cur.fetchall())
         require('VECTOR INDEX' in summary['lifecycle_plan'].upper(), 'Lifecycle query did not use a vector index')
@@ -227,10 +254,10 @@ try:
                       AMD_BENCH_USER='root', AMD_BENCH_PASSWORD='',
                       AMD_BENCH_DATABASE='amd_hipvs_validation')
     stderr_path = Path(os.readlink(f'/proc/{process.pid}/fd/2'))
-    common = ['--gpu-with', 'distance=l2,type=hnsw,lib=hipvs,m=16,ef_construction=200,ef_search=200',
-              '--repeats', '3', '--min-recall', '0.90', '--environment-json', str(OUT / 'environment.json'),
+    common = ['--cpu-with', CPU_WITH, '--gpu-with', GPU_WITH,
+              '--repeats', '3', '--min-recall', str(args.min_recall), '--environment-json', str(OUT / 'environment.json'),
               '--server-stderr', str(stderr_path)]
-    for label, shape in [('smoke', ['--rows', '200', '--dim', '16', '--queries', '20']),
+    for label, shape in [('smoke', ['--rows', str(SMOKE_ROWS), '--dim', '16', '--queries', '20']),
                          ('build-10000x128', ['--rows', '10000', '--dim', '128', '--queries', '100'])]:
         result = benchmark.main(common + shape + ['--output', str(OUT / (label + '.json'))])
         summary[label] = json.loads((OUT / (label + '.json')).read_text())['summary']
