@@ -170,6 +170,7 @@ protected:
   int resolve_into_variable_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_file_node(const ParseNode *node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_without_format(const ParseNode *node, ObSelectIntoItem &into_item);
+  int resolve_file_sql_copy_options(const ParseNode &node, ObSelectIntoItem &into_item);
   int resolve_into_outfile_with_format(const ParseNode *node, ObSelectIntoItem &into_item);
   // resolve_star related functions
   int resolve_star_for_table_groups();
