@@ -36,6 +36,7 @@ pub mod ffi {
         DuplicateKey = 2,
         Depth = 3,
         UnsupportedSchemaRef = 4,
+        InvalidBinary = 5,
     }
 
     #[repr(u32)]
@@ -77,6 +78,14 @@ pub mod ffi {
         binary: Vec<u8>,
     }
 
+    struct BinaryMetadataResult {
+        status: Status,
+        byte_offset: u64,
+        value_type: u8,
+        depth: u32,
+        opaque_field_type: u16,
+    }
+
     extern "Rust" {
         fn parse(input: &[u8], duplicate: Duplicate, max_depth: u32, schema: bool) -> ParseResult;
         fn validate(
@@ -91,6 +100,7 @@ pub mod ffi {
             max_depth: u32,
             schema: bool,
         ) -> BinaryResult;
+        fn inspect_binary(input: &[u8], with_depth: bool) -> BinaryMetadataResult;
     }
 }
 
@@ -414,6 +424,35 @@ pub(crate) fn parse_binary(
             byte_offset: error.byte_offset as u64,
             message: error.message,
             binary: Vec::new(),
+        },
+    }
+}
+
+pub(crate) fn inspect_binary(input: &[u8], with_depth: bool) -> ffi::BinaryMetadataResult {
+    match crate::BinaryDocument::new(input).and_then(|document| {
+        let root = document.root()?;
+        let value_type = root.json_type()? as u8;
+        let opaque_field_type = if value_type == crate::JsonType::Opaque as u8 {
+            root.opaque_field_type()?
+        } else {
+            0
+        };
+        let depth = if with_depth { document.depth()? } else { 0 };
+        Ok((value_type, depth, opaque_field_type))
+    }) {
+        Ok((value_type, depth, opaque_field_type)) => ffi::BinaryMetadataResult {
+            status: ffi::Status::Ok,
+            byte_offset: 0,
+            value_type,
+            depth,
+            opaque_field_type,
+        },
+        Err(error) => ffi::BinaryMetadataResult {
+            status: ffi::Status::InvalidBinary,
+            byte_offset: error.byte_offset as u64,
+            value_type: 0,
+            depth: 0,
+            opaque_field_type: 0,
         },
     }
 }

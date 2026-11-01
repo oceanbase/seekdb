@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::{Document, Number};
+use std::fmt;
 
 const NULL: u8 = 0;
 const INT: u8 = 2;
@@ -23,7 +24,554 @@ const OBJECT: u8 = 6;
 const ARRAY: u8 = 7;
 const BOOLEAN: u8 = 8;
 const DOC_HEADER: u8 = 30;
+const FORWARD: u8 = 31;
 const INLINE: u8 = 0x80;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum JsonType {
+    Null = 0,
+    Decimal = 1,
+    Int = 2,
+    Uint = 3,
+    Double = 4,
+    String = 5,
+    Object = 6,
+    Array = 7,
+    Boolean = 8,
+    Date = 9,
+    Time = 10,
+    Datetime = 11,
+    Timestamp = 12,
+    Opaque = 13,
+    OFloat = 15,
+    ODouble = 16,
+    ODecimal = 17,
+    OInt = 18,
+    OLong = 19,
+    OBinary = 20,
+    OOid = 21,
+    ORawHex = 22,
+    ORawId = 23,
+    JsonDateExt = 24,
+    ODate = 25,
+    OTimestamp = 26,
+    OTimestampTz = 27,
+    ODaySecond = 28,
+    OYearMonth = 29,
+    MySqlDate = 30,
+    MySqlDatetime = 31,
+}
+
+impl JsonType {
+    fn from_binary(value: u8, offset: usize) -> Result<Self, BinaryError> {
+        let kind = match value {
+            0 => Self::Null,
+            1 => Self::Decimal,
+            2 => Self::Int,
+            3 => Self::Uint,
+            4 => Self::Double,
+            5 => Self::String,
+            6 => Self::Object,
+            7 => Self::Array,
+            8 => Self::Boolean,
+            9 => Self::Date,
+            10 => Self::Time,
+            11 => Self::Datetime,
+            12 => Self::Timestamp,
+            13 => Self::Opaque,
+            15 => Self::OFloat,
+            16 => Self::ODouble,
+            17 => Self::ODecimal,
+            18 => Self::OInt,
+            19 => Self::OLong,
+            20 => Self::OBinary,
+            21 => Self::OOid,
+            22 => Self::ORawHex,
+            23 => Self::ORawId,
+            24 => Self::JsonDateExt,
+            25 => Self::ODate,
+            26 => Self::OTimestamp,
+            27 => Self::OTimestampTz,
+            28 => Self::ODaySecond,
+            29 => Self::OYearMonth,
+            32 => Self::MySqlDate,
+            33 => Self::MySqlDatetime,
+            _ => return Err(BinaryError::new(BinaryErrorKind::InvalidType, offset)),
+        };
+        Ok(kind)
+    }
+
+    pub fn is_container(self) -> bool {
+        matches!(self, Self::Array | Self::Object)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BinaryErrorKind {
+    Truncated,
+    InvalidType,
+    InvalidHeader,
+    InvalidOffset,
+    InvalidDepth,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BinaryError {
+    pub kind: BinaryErrorKind,
+    pub byte_offset: usize,
+}
+
+impl BinaryError {
+    fn new(kind: BinaryErrorKind, byte_offset: usize) -> Self {
+        Self { kind, byte_offset }
+    }
+}
+
+impl fmt::Display for BinaryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "invalid binary JSON at byte {}: {:?}", self.byte_offset, self.kind)
+    }
+}
+
+impl std::error::Error for BinaryError {}
+
+pub type BinaryResult<T> = std::result::Result<T, BinaryError>;
+
+#[derive(Clone, Copy, Debug)]
+struct ContainerMeta {
+    kind: JsonType,
+    count: u64,
+    entry_type: u8,
+    key_entries: usize,
+    value_entries: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct BinaryValue<'a> {
+    bytes: &'a [u8],
+    extend_seg_offset: usize,
+    offset: usize,
+    raw_type: u8,
+    entry_type: u8,
+}
+
+impl<'a> BinaryValue<'a> {
+    pub fn json_type(&self) -> BinaryResult<JsonType> {
+        JsonType::from_binary(self.raw_type & !INLINE, self.offset)
+    }
+
+    pub fn is_inline(&self) -> bool {
+        self.raw_type & INLINE != 0
+    }
+
+    fn container(&self) -> BinaryResult<Option<ContainerMeta>> {
+        let kind = self.json_type()?;
+        if !kind.is_container() {
+            return Ok(None);
+        }
+        if self.is_inline() {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidType, self.offset));
+        }
+        let header = read_bytes(self.bytes, self.offset, 2)?;
+        if header[0] != kind as u8 {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidHeader, self.offset));
+        }
+        let flags = header[1];
+        let entry_type = flags & 0x03;
+        let count_type = (flags >> 2) & 0x03;
+        let size_type = (flags >> 4) & 0x03;
+        let count_offset = self.offset + 2;
+        let count = read_var(self.bytes, count_offset, count_type)?;
+        let size_offset = count_offset
+            .checked_add(var_size(count_type))
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, count_offset))?;
+        let size = to_usize(read_var(self.bytes, size_offset, size_type)?, size_offset)?;
+        let entries_offset = size_offset
+            .checked_add(var_size(size_type))
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, size_offset))?;
+        let container_end = self
+            .offset
+            .checked_add(size)
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset))?;
+        if container_end > self.bytes.len() || entries_offset > container_end {
+            return Err(BinaryError::new(BinaryErrorKind::Truncated, self.offset));
+        }
+        let count_usize = usize::try_from(count)
+            .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, count_offset))?;
+        let key_entries = if kind == JsonType::Object {
+            count_usize.checked_mul(var_size(entry_type) * 2)
+        } else {
+            Some(0)
+        }
+        .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, entries_offset))?;
+        let value_entries = entries_offset
+            .checked_add(key_entries)
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, entries_offset))?;
+        let value_entries_size = count_usize
+            .checked_mul(var_size(entry_type) + 1)
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, value_entries))?;
+        if value_entries
+            .checked_add(value_entries_size)
+            .is_none_or(|end| end > container_end)
+        {
+            return Err(BinaryError::new(BinaryErrorKind::Truncated, value_entries));
+        }
+        Ok(Some(ContainerMeta {
+            kind,
+            count,
+            entry_type,
+            key_entries: entries_offset,
+            value_entries,
+        }))
+    }
+
+    pub fn len(&self) -> BinaryResult<u64> {
+        Ok(self.container()?.map_or(1, |container| container.count))
+    }
+
+    pub fn value(&self, index: u64) -> BinaryResult<BinaryValue<'a>> {
+        let container = self
+            .container()?
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidType, self.offset))?;
+        if index >= container.count {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset));
+        }
+        let index = usize::try_from(index)
+            .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset))?;
+        let entry_size = var_size(container.entry_type);
+        let entry_offset = container.value_entries + index * (entry_size + 1);
+        let value_offset = to_usize(
+            read_var(self.bytes, entry_offset, container.entry_type)?,
+            entry_offset,
+        )?;
+        let raw_type = *read_bytes(self.bytes, entry_offset + entry_size, 1)?
+            .first()
+            .expect("one byte was requested");
+        let (offset, raw_type, entry_type) = if raw_type & INLINE != 0 {
+            (entry_offset, raw_type, container.entry_type)
+        } else if raw_type == FORWARD {
+            let offset = self
+                .extend_seg_offset
+                .checked_add(value_offset)
+                .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, entry_offset))?;
+            let raw_type = read_bytes(self.bytes, offset, 1)?[0];
+            let payload_offset = if needs_type_prefix(raw_type) {
+                offset
+            } else {
+                offset + 1
+            };
+            (payload_offset, raw_type, container.entry_type)
+        } else {
+            let offset = self
+                .offset
+                .checked_add(value_offset)
+                .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, entry_offset))?;
+            (offset, raw_type, container.entry_type)
+        };
+        let value = BinaryValue {
+            bytes: self.bytes,
+            extend_seg_offset: self.extend_seg_offset,
+            offset,
+            raw_type,
+            entry_type,
+        };
+        value.validate_scalar()?;
+        Ok(value)
+    }
+
+    pub fn key(&self, index: u64) -> BinaryResult<&'a [u8]> {
+        let container = self
+            .container()?
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidType, self.offset))?;
+        if container.kind != JsonType::Object || index >= container.count {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset));
+        }
+        let index = usize::try_from(index)
+            .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, self.offset))?;
+        let entry_size = var_size(container.entry_type);
+        let entry_offset = container.key_entries + index * entry_size * 2;
+        let key_offset = to_usize(
+            read_var(self.bytes, entry_offset, container.entry_type)?,
+            entry_offset,
+        )?;
+        let key_length = to_usize(
+            read_var(self.bytes, entry_offset + entry_size, container.entry_type)?,
+            entry_offset + entry_size,
+        )?;
+        let key_offset = self
+            .offset
+            .checked_add(key_offset)
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, entry_offset))?;
+        read_bytes(self.bytes, key_offset, key_length)
+    }
+
+    pub fn member(&self, key: &[u8]) -> BinaryResult<Option<BinaryValue<'a>>> {
+        let count = self.len()?;
+        for index in 0..count {
+            if self.key(index)? == key {
+                return self.value(index).map(Some);
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn boolean(&self) -> BinaryResult<bool> {
+        if self.json_type()? != JsonType::Boolean {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidType, self.offset));
+        }
+        if self.is_inline() {
+            Ok(read_var(self.bytes, self.offset, self.entry_type)? != 0)
+        } else {
+            Ok(read_bytes(self.bytes, self.offset, 1)?[0] != 0)
+        }
+    }
+
+    pub fn number(&self) -> BinaryResult<Number> {
+        let kind = self.json_type()?;
+        match kind {
+            JsonType::Int | JsonType::OInt => {
+                let value = if self.is_inline() {
+                    let value = read_var(self.bytes, self.offset, self.entry_type)?;
+                    match self.entry_type {
+                        0 => value as u8 as i8 as i64,
+                        1 => value as u16 as i16 as i64,
+                        2 => value as u32 as i32 as i64,
+                        _ => value as i64,
+                    }
+                } else {
+                    read_vi64(self.bytes, self.offset)?.0 as i64
+                };
+                Ok(Number::I64(value))
+            }
+            JsonType::Uint | JsonType::OLong => {
+                let value = if self.is_inline() {
+                    read_var(self.bytes, self.offset, self.entry_type)?
+                } else {
+                    read_vi64(self.bytes, self.offset)?.0
+                };
+                Ok(Number::U64(value))
+            }
+            JsonType::Double | JsonType::ODouble => {
+                let bytes = read_bytes(self.bytes, self.offset, 8)?;
+                Ok(Number::F64(f64::from_le_bytes(
+                    bytes.try_into().expect("eight bytes were requested"),
+                )))
+            }
+            JsonType::OFloat => {
+                let bytes = read_bytes(self.bytes, self.offset, 4)?;
+                Ok(Number::F64(f32::from_le_bytes(
+                    bytes.try_into().expect("four bytes were requested"),
+                ) as f64))
+            }
+            _ => Err(BinaryError::new(BinaryErrorKind::InvalidType, self.offset)),
+        }
+    }
+
+    pub fn string_bytes(&self) -> BinaryResult<&'a [u8]> {
+        if self.json_type()? != JsonType::String || self.is_inline() {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidType, self.offset));
+        }
+        let (length, payload) = read_vi64(self.bytes, self.offset + 1)?;
+        let length = usize::try_from(length)
+            .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, payload))?;
+        read_bytes(self.bytes, payload, length)
+    }
+
+    pub fn opaque_field_type(&self) -> BinaryResult<u16> {
+        if self.json_type()? != JsonType::Opaque || self.is_inline() {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidType, self.offset));
+        }
+        let bytes = read_bytes(self.bytes, self.offset + 1, 2)?;
+        Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn validate_scalar(&self) -> BinaryResult<()> {
+        let kind = self.json_type()?;
+        if kind.is_container() {
+            self.container()?;
+            return Ok(());
+        }
+        if self.is_inline() {
+            read_var(self.bytes, self.offset, self.entry_type)?;
+            return Ok(());
+        }
+        match kind {
+            JsonType::Null => Ok(()),
+            JsonType::Boolean => {
+                read_bytes(self.bytes, self.offset, 1)?;
+                Ok(())
+            }
+            JsonType::Int | JsonType::Uint | JsonType::OInt | JsonType::OLong => {
+                read_vi64(self.bytes, self.offset)?;
+                Ok(())
+            }
+            JsonType::Double | JsonType::ODouble => {
+                read_bytes(self.bytes, self.offset, 8)?;
+                Ok(())
+            }
+            JsonType::OFloat => {
+                read_bytes(self.bytes, self.offset, 4)?;
+                Ok(())
+            }
+            JsonType::String => {
+                let (length, payload) = read_vi64(self.bytes, self.offset + 1)?;
+                let length = usize::try_from(length)
+                    .map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, payload))?;
+                read_bytes(self.bytes, payload, length)?;
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct BinaryDocument<B> {
+    bytes: B,
+    extend_seg_offset: usize,
+    root_offset: usize,
+    root_type: u8,
+}
+
+impl<B: AsRef<[u8]>> BinaryDocument<B> {
+    pub fn new(bytes: B) -> BinaryResult<Self> {
+        let input = bytes.as_ref();
+        let first = *input
+            .first()
+            .ok_or_else(|| BinaryError::new(BinaryErrorKind::Truncated, 0))?;
+        let (extend_seg_offset, root_offset) = if first == DOC_HEADER {
+            let header = u64::from_le_bytes(
+                read_bytes(input, 0, 8)?.try_into().expect("eight bytes were requested"),
+            );
+            let extend = to_usize((header >> 22) & ((1u64 << 42) - 1), 0)?;
+            if extend > input.len() {
+                return Err(BinaryError::new(BinaryErrorKind::InvalidOffset, 0));
+            }
+            (extend, 8)
+        } else {
+            (0, 0)
+        };
+        let root_type = read_bytes(input, root_offset, 1)?[0];
+        let root_payload = if needs_type_prefix(root_type) {
+            root_offset
+        } else {
+            root_offset + 1
+        };
+        let document = Self {
+            bytes,
+            extend_seg_offset,
+            root_offset: root_payload,
+            root_type,
+        };
+        document.root()?.validate_scalar()?;
+        Ok(document)
+    }
+
+    pub fn root(&self) -> BinaryResult<BinaryValue<'_>> {
+        Ok(BinaryValue {
+            bytes: self.bytes.as_ref(),
+            extend_seg_offset: self.extend_seg_offset,
+            offset: self.root_offset,
+            raw_type: self.root_type,
+            entry_type: 0,
+        })
+    }
+
+    pub fn depth(&self) -> BinaryResult<u32> {
+        let root = self.root()?;
+        let depth_bound = self.bytes.as_ref().len().saturating_add(1);
+        struct Frame<'a> {
+            value: BinaryValue<'a>,
+            container: ContainerMeta,
+            next_index: u64,
+            depth: u32,
+        }
+        let mut stack = Vec::new();
+        let mut maximum = 1;
+        if let Some(container) = root.container()? {
+            stack.push(Frame {
+                value: root,
+                container,
+                next_index: 0,
+                depth: 1,
+            });
+        }
+        while !stack.is_empty() {
+            let child = {
+                let frame = stack.last_mut().expect("stack is not empty");
+                if frame.next_index == frame.container.count {
+                    stack.pop();
+                    continue;
+                }
+                let index = frame.next_index;
+                frame.next_index += 1;
+                (frame.value.value(index)?, frame.depth + 1)
+            };
+            let (child, depth) = child;
+            if depth as usize > depth_bound {
+                return Err(BinaryError::new(BinaryErrorKind::InvalidDepth, child.offset));
+            }
+            maximum = maximum.max(depth);
+            if let Some(container) = child.container()? {
+                stack.push(Frame {
+                    value: child,
+                    container,
+                    next_index: 0,
+                    depth,
+                });
+            }
+        }
+        Ok(maximum)
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.bytes.as_ref()
+    }
+
+    pub fn into_bytes(self) -> B {
+        self.bytes
+    }
+}
+
+fn needs_type_prefix(value_type: u8) -> bool {
+    matches!(value_type, STRING | OBJECT | ARRAY | 13 | 20 | 21 | 22 | 23 | 28 | 29)
+}
+
+fn read_bytes(bytes: &[u8], offset: usize, length: usize) -> BinaryResult<&[u8]> {
+    let end = offset
+        .checked_add(length)
+        .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, offset))?;
+    bytes
+        .get(offset..end)
+        .ok_or_else(|| BinaryError::new(BinaryErrorKind::Truncated, offset))
+}
+
+fn read_var(bytes: &[u8], offset: usize, kind: u8) -> BinaryResult<u64> {
+    let input = read_bytes(bytes, offset, var_size(kind))?;
+    let mut buffer = [0u8; 8];
+    buffer[..input.len()].copy_from_slice(input);
+    Ok(u64::from_le_bytes(buffer))
+}
+
+fn to_usize(value: u64, offset: usize) -> BinaryResult<usize> {
+    usize::try_from(value).map_err(|_| BinaryError::new(BinaryErrorKind::InvalidOffset, offset))
+}
+
+fn read_vi64(bytes: &[u8], offset: usize) -> BinaryResult<(u64, usize)> {
+    let mut value = 0u64;
+    for index in 0..10 {
+        let byte = read_bytes(bytes, offset + index, 1)?[0];
+        if index == 9 && byte > 1 {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidOffset, offset + index));
+        }
+        value |= u64::from(byte & 0x7f) << (index * 7);
+        if byte & 0x80 == 0 {
+            return Ok((value, offset + index + 1));
+        }
+    }
+    Err(BinaryError::new(BinaryErrorKind::InvalidOffset, offset + 9))
+}
 
 fn var_type(value: u64) -> u8 {
     if value <= u8::MAX as u64 {

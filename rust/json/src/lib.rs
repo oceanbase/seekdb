@@ -16,7 +16,9 @@
 //! Documents own all strings and values; error offsets are zero-based bytes.
 
 mod bridge;
-mod binary;
+pub mod binary;
+
+pub use binary::{BinaryDocument, BinaryError, BinaryErrorKind, BinaryValue, JsonType};
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use std::borrow::Cow;

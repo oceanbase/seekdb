@@ -20,6 +20,12 @@ select json_type(cast('9223372036854775808' as json));
 select json_type(cast('18446744073709551616' as json));
 select json_type(cast('-0' as json));
 select json_type(cast('-0.0' as json));
+select json_type(cast('{"a":[1]}' as json));
+select json_depth(cast('null' as json));
+select json_depth(cast('[]' as json));
+select json_depth(cast('{"a":[1,{"b":2}]}' as json));
+select json_depth('{"a":[1,{"b":2}]}');
+select json_depth(null);
 select json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x');
 select json_schema_valid('{"type":"object"}', '{"a":1}');
 --error ER_INVALID_JSON_TEXT_IN_PARAM

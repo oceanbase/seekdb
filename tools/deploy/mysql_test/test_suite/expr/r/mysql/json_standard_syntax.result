@@ -61,6 +61,24 @@ INTEGER
 select json_type(cast('-0.0' as json));
 json_type(cast('-0.0' as json))
 DOUBLE
+select json_type(cast('{"a":[1]}' as json));
+json_type(cast('{"a":[1]}' as json))
+OBJECT
+select json_depth(cast('null' as json));
+json_depth(cast('null' as json))
+1
+select json_depth(cast('[]' as json));
+json_depth(cast('[]' as json))
+1
+select json_depth(cast('{"a":[1,{"b":2}]}' as json));
+json_depth(cast('{"a":[1,{"b":2}]}' as json))
+4
+select json_depth('{"a":[1,{"b":2}]}');
+json_depth('{"a":[1,{"b":2}]}')
+4
+select json_depth(null);
+json_depth(null)
+NULL
 select json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x');
 json_extract(cast('{"a":[1,2],"a":{"x":3}}' as json), '$.a.x')
 3

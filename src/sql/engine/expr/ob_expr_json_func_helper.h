@@ -158,6 +158,13 @@ struct ObConv2JsonParam {
   bool wrap_on_fail_ = false;
 };
 
+struct JsonMetadata
+{
+  ObJsonNodeType type_;
+  ObObjType field_type_;
+  uint32_t depth_;
+};
+
 class ObJsonExprHelper final
 {
   class ObJsonPathCacheCtx : public ObExprOperatorCtx
@@ -185,6 +192,12 @@ class ObJsonExprHelper final
     ObJsonSchemaCache schema_cache_;
   };
 public:
+  static int get_json_metadata(common::ObIAllocator *allocator,
+                               const common::ObString &data,
+                               common::ObJsonInType input_type,
+                               bool with_depth,
+                               uint32_t max_depth_config,
+                               JsonMetadata &metadata);
   static ObJsonParamCacheCtx* get_param_cache_ctx(const uint64_t& id, ObExecContext *exec_ctx);
   static int get_json_or_str_data(ObExpr *expr, ObEvalCtx &ctx,
                                   MultimodeAlloctor &allocator,

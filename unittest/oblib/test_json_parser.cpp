@@ -18,6 +18,7 @@
 #include "common/json_type/ob_json_bin.h"
 #include "common/json_type/ob_json_diff.h"
 #include "common/json_type/ob_json_parse.h"
+#include "rust/json.h"
 #include "lib/allocator/page_arena.h"
 #include <gtest/gtest.h>
 #include <cmath>
@@ -156,6 +157,24 @@ TEST_F(TestJsonParser, BinaryConversionRejectsActiveUpdateContext)
           ObJsonInType::JSON_TREE, ObJsonInType::JSON_BIN, result));
   EXPECT_EQ(&json_bin, result);
   EXPECT_EQ(&update_ctx, json_bin.get_update_ctx());
+}
+
+TEST_F(TestJsonParser, BinaryMetadata)
+{
+  const std::string text = "{\"a\":[1,{\"b\":2}]}";
+  ObString binary;
+  ASSERT_EQ(OB_SUCCESS, ObJsonParser::get_binary(&allocator_, text.data(), text.size(), binary));
+  const uint8_t *input = reinterpret_cast<const uint8_t *>(binary.ptr());
+  json::BinaryMetadataResult metadata = json::inspect_binary(
+      rust::Slice<const uint8_t>(input, binary.length()), true);
+  ASSERT_EQ(json::Status::Ok, metadata.status);
+  EXPECT_EQ(static_cast<uint8_t>(ObJsonNodeType::J_OBJECT), metadata.value_type);
+  EXPECT_EQ(4, metadata.depth);
+
+  json::BinaryMetadataResult type_only = json::inspect_binary(
+      rust::Slice<const uint8_t>(input, binary.length()), false);
+  ASSERT_EQ(json::Status::Ok, type_only.status);
+  EXPECT_EQ(0, type_only.depth);
 }
 
 } // namespace common

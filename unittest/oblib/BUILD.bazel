@@ -30,6 +30,7 @@ cc_library(
     deps = [
         "//src/oblib:oblib_unit_test_internal_headers",
         "//bazel/third_party:gtest",
+        "//rust:json",
     ],
 )
 

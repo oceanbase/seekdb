@@ -14,7 +14,8 @@
 
 use crate::bridge::{ffi, parse as parse_events};
 use crate::{
-    parse, parse_binary, validate, Document, DuplicatePolicy, ErrorKind, Number, ParseOptions,
+    parse, parse_binary, validate, BinaryDocument, BinaryErrorKind, Document, DuplicatePolicy,
+    ErrorKind, JsonType, Number, ParseOptions,
 };
 
 fn options(policy: DuplicatePolicy) -> ParseOptions {
@@ -139,6 +140,75 @@ fn numeric_classification_and_boundaries() {
         panic!("not an object")
     };
     assert_eq!(object[1].1, Document::Number(Number::I64(0)));
+}
+
+#[test]
+fn binary_document_reads_borrowed_and_owned_documents() {
+    let input = br#"{"a":[1,-2,3.5,true,null,"x"],"b":{"c":18446744073709551615}}"#;
+    let bytes = parse_binary(input, ParseOptions::default()).unwrap();
+    let borrowed = BinaryDocument::new(bytes.as_slice()).unwrap();
+    assert_eq!(borrowed.root().unwrap().json_type().unwrap(), JsonType::Object);
+    assert_eq!(borrowed.depth().unwrap(), 3);
+    let owned = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(owned.depth().unwrap(), 3);
+    let array = owned.root().unwrap().value(0).unwrap();
+    assert_eq!(array.json_type().unwrap(), JsonType::Array);
+    assert_eq!(array.len().unwrap(), 6);
+    assert_eq!(array.value(0).unwrap().json_type().unwrap(), JsonType::Int);
+    assert_eq!(array.value(5).unwrap().json_type().unwrap(), JsonType::String);
+    assert_eq!(array.value(0).unwrap().number().unwrap(), Number::I64(1));
+    assert_eq!(array.value(1).unwrap().number().unwrap(), Number::I64(-2));
+    assert_eq!(array.value(2).unwrap().number().unwrap(), Number::F64(3.5));
+    assert!(array.value(3).unwrap().boolean().unwrap());
+    assert_eq!(array.value(5).unwrap().string_bytes().unwrap(), b"x");
+    let root = owned.root().unwrap();
+    assert_eq!(root.key(0).unwrap(), b"a");
+    assert_eq!(root.key(1).unwrap(), b"b");
+    let nested = root.member(b"b").unwrap().unwrap();
+    assert_eq!(
+        nested.value(0).unwrap().number().unwrap(),
+        Number::U64(u64::MAX)
+    );
+    assert!(root.member(b"missing").unwrap().is_none());
+}
+
+#[test]
+fn binary_document_reads_forward_values() {
+    let mut bytes = vec![0; 8];
+    bytes.extend_from_slice(&[7, 0x40, 1, 6, 0, 31, 2, 42]);
+    let header = 30u64 | (14u64 << 22);
+    bytes[..8].copy_from_slice(&header.to_le_bytes());
+    let document = BinaryDocument::new(bytes).unwrap();
+    assert_eq!(document.depth().unwrap(), 2);
+    let child = document.root().unwrap().value(0).unwrap();
+    assert_eq!(child.json_type().unwrap(), JsonType::Int);
+}
+
+#[test]
+fn binary_type_numbers_match_sql_node_types() {
+    assert_eq!(BinaryDocument::new([32]).unwrap().root().unwrap().json_type().unwrap(), JsonType::MySqlDate);
+    assert_eq!(BinaryDocument::new([33]).unwrap().root().unwrap().json_type().unwrap(), JsonType::MySqlDatetime);
+    assert_eq!(JsonType::MySqlDate as u8, 30);
+    assert_eq!(JsonType::MySqlDatetime as u8, 31);
+}
+
+#[test]
+fn binary_document_rejects_malformed_input() {
+    for bytes in [
+        Vec::new(),
+        vec![30],
+        vec![6, 0x40, 1, 4],
+        vec![7, 0x40, 1, 5, 0, 0, 2],
+        vec![200],
+    ] {
+        assert!(BinaryDocument::new(bytes).is_err());
+    }
+    let mut bad_forward = vec![0; 8];
+    bad_forward.extend_from_slice(&[7, 0x40, 1, 6, 0, 31]);
+    let header = 30u64 | (14u64 << 22);
+    bad_forward[..8].copy_from_slice(&header.to_le_bytes());
+    let error = BinaryDocument::new(bad_forward).unwrap().depth().unwrap_err();
+    assert_eq!(error.kind, BinaryErrorKind::Truncated);
 }
 
 #[test]

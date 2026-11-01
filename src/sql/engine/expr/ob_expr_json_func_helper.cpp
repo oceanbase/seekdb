@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "rust/config.h"
+#include "rust/json.h"
 #include "ob_expr_json_func_helper.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
@@ -32,6 +33,38 @@ namespace oceanbase
 {
 namespace sql
 {
+
+int ObJsonExprHelper::get_json_metadata(ObIAllocator *allocator, const ObString &data,
+                                        ObJsonInType input_type, bool with_depth,
+                                        uint32_t max_depth_config, JsonMetadata &metadata)
+{
+  INIT_SUCC(ret);
+  if (data.empty() || OB_ISNULL(data.ptr())) {
+    ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+  } else if (input_type == ObJsonInType::JSON_BIN) {
+    const uint8_t *input = reinterpret_cast<const uint8_t *>(data.ptr());
+    oceanbase::common::json::BinaryMetadataResult result = oceanbase::common::json::inspect_binary(
+        rust::Slice<const uint8_t>(input, data.length()), with_depth);
+    if (result.status != oceanbase::common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to inspect binary JSON", K(ret), K(result.byte_offset));
+    } else {
+      metadata.type_ = static_cast<ObJsonNodeType>(result.value_type);
+      metadata.field_type_ = static_cast<ObObjType>(result.opaque_field_type);
+      metadata.depth_ = result.depth;
+    }
+  } else {
+    ObIJsonBase *base = nullptr;
+    if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, data, input_type, input_type,
+                                                 base, 0, max_depth_config))) {
+    } else {
+      metadata.type_ = base->json_type();
+      metadata.field_type_ = base->field_type();
+      metadata.depth_ = with_depth ? base->depth() : 0;
+    }
+  }
+  return ret;
+}
 
 ObJsonInType ObJsonExprHelper::get_json_internal_type(ObObjType type)
 {
