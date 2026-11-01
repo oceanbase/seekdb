@@ -703,6 +703,7 @@ private:
 
   int inner_get_next_fts_index_row();
   int fetch_next_fts_index_rows();
+  int init_fts_output_exprs();
   int fill_generated_fts_cols(blocksstable::ObDatumRow *row);
   int get_output_fts_col_expr_by_type(const ObExprOperatorType &type, ObExpr *&expr);
   bool is_resume_point_saved();
@@ -735,6 +736,9 @@ protected:
   bool in_rescan_;
   ObDomainIndexCache domain_index_;
   ObFTIndexRowCache fts_index_;
+  // Expressions belong to the immutable spec and outlive this operator,
+  // including rescans. Resolve their positions once, not for every token.
+  ObExpr *fts_output_exprs_[4];
 
   // output_ is used to output data, TSC operator directly invokes output_::get_next_row(s),
   // it points to fold_iter_ in group rescan and iter_tree_ in normal scan.

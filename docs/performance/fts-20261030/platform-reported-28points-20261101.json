@@ -1,0 +1,33 @@
+{
+  "source": "User report after revision33 delivery; actual submitted commit not independently visible",
+  "submission": null,
+  "points_out_of_50": 28.6568897304692,
+  "metrics": {
+    "fts_mean_improvement": 0.286568897304692,
+    "fts_raw_score": 57.3137794609384,
+    "build_beng_en_sec": 2.522,
+    "build_ik_all_sec": 6.053,
+    "build_ik_content_sec": 7.43,
+    "build_total_sec": 16.01,
+    "tokenize_beng_avg_ms": 0.0372,
+    "tokenize_ik_avg_ms": 0.063,
+    "query_beng_avg_ms": 0.8629,
+    "query_cn_avg_ms": 0.5748,
+    "query_limit_avg_ms": 0.1123,
+    "query_mixed_avg_ms": 0.6886,
+    "query_beng_hits": 11000,
+    "query_cn_hits": 8001,
+    "query_limit_hits": 20,
+    "query_mixed_hits": 7332,
+    "select1_avg_ms": 0.0267,
+    "rows": 20000,
+    "batch": 500,
+    "rounds": 3000,
+    "query_rounds": 200,
+    "samples": 3,
+    "warmup": 30,
+    "skip_load": 0,
+    "git_dirty": 1
+  },
+  "delivered_commit": "d4adab89b56c1cc18a03a3230c3c0c1cbc66c446"
+}

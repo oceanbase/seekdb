@@ -1,0 +1,52 @@
+SET NAMES utf8mb4;
+SET ob_query_timeout=1000000000;
+DROP DATABASE IF EXISTS fts_ddl_bindings;
+CREATE DATABASE fts_ddl_bindings;
+USE fts_ddl_bindings;
+CREATE TABLE docs(k1 BIGINT, k2 VARCHAR(30), title VARCHAR(128), body LONGTEXT,
+PRIMARY KEY(k1,k2)) DEFAULT CHARSET=utf8mb4;
+INSERT INTO docs VALUES
+(1,'a','alpha 数据库','数据库 beta beta'),
+(2,'b','beta','alpha alpha 数据库'),
+(3,'c','empty',''),
+(4,'d',NULL,NULL),
+(5,'e','long',REPEAT('数据库 alpha beta ',2000));
+CREATE FULLTEXT INDEX ft_all ON docs(title,body) WITH PARSER ik;
+CREATE FULLTEXT INDEX ft_body ON docs(body) WITH PARSER ik;
+CREATE FULLTEXT INDEX ft_en ON docs(body) WITH PARSER beng;
+Warnings:
+Warning	1831	Duplicate index 'ft_en' defined on the table 'fts_ddl_bindings.docs'
+SELECT k1,k2 FROM docs FORCE INDEX(ft_all) WHERE MATCH(title,body) AGAINST('数据库') ORDER BY k1,k2;
+k1	k2
+1	a
+2	b
+5	e
+SELECT k1,k2,ROUND(MATCH(body) AGAINST('alpha beta'),6) FROM docs FORCE INDEX(ft_en) WHERE MATCH(body) AGAINST('alpha beta') ORDER BY k1,k2;
+k1	k2	ROUND(MATCH(body) AGAINST('alpha beta'),6)
+1	a	0.643665
+2	b	0.643665
+5	e	1.476933
+SELECT COUNT(*) FROM docs FORCE INDEX(ft_body) WHERE MATCH(body) AGAINST('数据库');
+COUNT(*)
+3
+UPDATE docs SET body='gamma 数据库' WHERE k1=1;
+DELETE FROM docs WHERE k1=2;
+INSERT INTO docs VALUES(6,'f','alpha','alpha beta 数据库');
+SELECT k1,k2 FROM docs FORCE INDEX(ft_body) WHERE MATCH(body) AGAINST('数据库') ORDER BY k1,k2;
+k1	k2
+1	a
+5	e
+6	f
+SELECT k1,k2 FROM docs FORCE INDEX(ft_en) WHERE MATCH(body) AGAINST('gamma') ORDER BY k1,k2;
+k1	k2
+1	a
+ALTER TABLE docs DROP INDEX ft_body;
+CREATE FULLTEXT INDEX ft_body ON docs(body) WITH PARSER ik;
+Warnings:
+Warning	1831	Duplicate index 'ft_body' defined on the table 'fts_ddl_bindings.docs'
+SELECT k1,k2 FROM docs FORCE INDEX(ft_body) WHERE MATCH(body) AGAINST('数据库') ORDER BY k1,k2;
+k1	k2
+1	a
+5	e
+6	f
+DROP DATABASE fts_ddl_bindings;

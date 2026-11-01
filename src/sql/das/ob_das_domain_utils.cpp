@@ -85,14 +85,19 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
                                const ObString &fulltext)
 {
   int ret = OB_SUCCESS;
+  ObString owned_fulltext;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
   } else if (FALSE_IT(reuse())) {
+  // Parsers may return slices of their input. The caller can have materialized
+  // an out-of-row LOB in a temporary arena which dies before get_next_row().
+  // Keep one document copy until the cached rows have all been consumed.
+  } else if (OB_FAIL(ob_write_string(merge_memctx_->get_arena_allocator(), fulltext, owned_fulltext))) {
   } else if (OB_FAIL(ObDASDomainUtils::generate_fulltext_word_rows(merge_memctx_->get_arena_allocator(),
                                                                    &helper_,
                                                                    ft_obj_meta,
                                                                    doc_id_datum,
-                                                                   fulltext,
+                                                                   owned_fulltext,
                                                                    is_fts_index_aux_,
                                                                    rows_))) {
   } else {
