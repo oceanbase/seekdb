@@ -1,0 +1,53 @@
+# Regression for #1512: repeated integer values must not trigger an unnecessary
+# IN-to-values-subquery rewrite. Keep every original value/parameter for reuse.
+--disable_warnings
+DROP TABLE IF EXISTS inlist_cardinality;
+--enable_warnings
+CREATE TABLE inlist_cardinality (id INT PRIMARY KEY, c INT);
+INSERT INTO inlist_cardinality VALUES (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,NULL);
+
+# Three distinct integers stay in the ordinary IN path even with six elements.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1,2,3,1,2,3);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1,2,3,1,2,3) ORDER BY id;
+
+# Reaching the distinct threshold still permits the existing rewrite.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1,2,3,4,1,2);
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1,2,3,4,1,2) ORDER BY id;
+
+# NULL remains an IN-list member; NOT IN must retain SQL three-valued logic.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1,NULL,1,NULL,1,NULL) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c NOT IN (1,NULL,1,NULL,1,NULL) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c NOT IN (1,2,3,1,2,3) ORDER BY id;
+
+SET @saved_plan_cache = @@ob_enable_plan_cache;
+SET ob_enable_plan_cache = TRUE;
+
+# Literal/parameter positions are retained when an otherwise identical query
+# is reused with a larger distinct set.
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1,1,1,1,1,1) ORDER BY id;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1,2,3,4,5,6) ORDER BY id;
+
+# Unknown prepared-statement values retain the previous strategy.
+PREPARE inlist_stmt FROM "SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (?,?,?,?,?,?) ORDER BY id";
+SET @a=1,@b=1,@c=1,@d=1,@e=1,@f=1;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+SET @a=1,@b=2,@c=3,@d=4,@e=5,@f=6;
+EXECUTE inlist_stmt USING @a,@b,@c,@d,@e,@f;
+DEALLOCATE PREPARE inlist_stmt;
+SET ob_enable_plan_cache = @saved_plan_cache;
+
+# Unsupported (non-integer and tuple) lists keep the existing rewrite path.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE c IN (1.5,2.5,1.5,2.5);
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_cardinality WHERE (c,id) IN ((1,1),(2,2),(1,1),(2,2));
+
+# An explicit threshold of one still forces a rewrite.
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 1) */ id FROM inlist_cardinality WHERE c IN (1,1,1,1);
+
+# Exercise the vector-search plan from the reported issue as well.
+CREATE TABLE inlist_vector (id INT PRIMARY KEY, c INT, v VECTOR(3)) ORGANIZATION HEAP;
+INSERT INTO inlist_vector VALUES (1,1,'[1,0,0]'),(2,2,'[2,0,0]'),(3,3,'[3,0,0]'),(4,4,'[4,0,0]'),(5,5,'[5,0,0]'),(6,1,'[6,0,0]');
+CREATE VECTOR INDEX inlist_hnsw ON inlist_vector(v) WITH (distance=l2,type=hnsw,lib=vsag,sync_mode=immediate);
+EXPLAIN BASIC SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_vector WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[0.1,0.2,0.3]') APPROXIMATE LIMIT 3;
+SELECT /*+ OPT_PARAM('inlist_rewrite_threshold', 4) */ id FROM inlist_vector WHERE c IN (1,2,3,1,2,3) ORDER BY l2_distance(v,'[0.1,0.2,0.3]') APPROXIMATE LIMIT 3;
+DROP TABLE inlist_vector;
+DROP TABLE inlist_cardinality;
