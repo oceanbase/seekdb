@@ -11987,6 +11987,121 @@ int ObLogPlan::construct_startup_filter_for_limit(ObRawExpr *limit_expr, ObLogic
   return ret;
 }
 
+/**
+ * The relevance score of a full text match is only required when its value is
+ * really consumed by the query, e.g. the score is selected, ordered by or
+ * compared with a threshold. When the match expression is only used as a
+ * boolean predicate, the exact score is irrelevant: the retrieval only has to
+ * tell whether a document matches or not. The bm25 relevance is positive if
+ * and only if the query token occurs in the document, so a positive constant
+ * keeps the boolean match semantics while the score calculation, which is the
+ * most expensive part of a full text scan, can be skipped.
+ */
+static bool has_match_against_expr(const ObRawExpr *expr)
+{
+  bool has_match = false;
+  if (nullptr != expr) {
+    if (T_FUN_MATCH_AGAINST == expr->get_expr_type()) {
+      has_match = true;
+    } else {
+      for (int64_t i = 0; !has_match && i < expr->get_param_count(); ++i) {
+        has_match = has_match_against_expr(expr->get_param_expr(i));
+      }
+    }
+  }
+  return has_match;
+}
+
+/**
+ * Checks whether the match expression is only used as a boolean predicate in
+ * the given expression. The boolean predicate of a match expression is
+ * equivalent to the test of the relevance score against zero, so the value of
+ * the score itself is not needed.
+ */
+static bool is_bool_predicate_of_match(const ObRawExpr *expr, const ObRawExpr *match_expr)
+{
+  bool is_bool = true;
+  if (nullptr == expr || nullptr == match_expr) {
+    is_bool = false;
+  } else if (expr == match_expr) {
+    // the match expression is read as a value
+    is_bool = false;
+  } else if (T_OP_BOOL == expr->get_expr_type()
+             && 1 == expr->get_param_count()
+             && expr->get_param_expr(0) == match_expr) {
+    // the match expression is used as a boolean predicate
+    is_bool = true;
+  } else {
+    for (int64_t i = 0; i < expr->get_param_count(); ++i) {
+      if (!is_bool_predicate_of_match(expr->get_param_expr(i), match_expr)) {
+        is_bool = false;
+        break;
+      }
+    }
+  }
+  return is_bool;
+}
+
+/**
+ * The match score is not needed when the match expression is only used as a
+ * boolean predicate of the where clause and its value is not consumed by any
+ * other part of the statement.
+ */
+static bool match_score_value_required(const ObDMLStmt *stmt,
+                                       const ObRawExpr *match_expr,
+                                       const ObRawExpr *match_filter)
+{
+  bool required = true;
+  if (nullptr == stmt || nullptr == match_expr) {
+    // be conservative when the statement is unknown
+    required = true;
+  } else if (!is_bool_predicate_of_match(match_filter, match_expr)) {
+    // the match expression is not a pure boolean predicate of the filter
+    required = true;
+  } else {
+    required = false;
+    // the score value must not be consumed by the order by clause
+    const common::ObIArray<OrderItem> &order_items = stmt->get_order_items();
+    for (int64_t i = 0; !required && i < order_items.count(); ++i) {
+      required = has_match_against_expr(order_items.at(i).expr_);
+    }
+    // the score value must not be consumed by the select list, the having
+    // clause or the group by clause
+    if (!required && stmt->is_select_stmt()) {
+      const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt *>(stmt);
+      const common::ObIArray<SelectItem> &select_items = select_stmt->get_select_items();
+      for (int64_t i = 0; !required && i < select_items.count(); ++i) {
+        required = has_match_against_expr(select_items.at(i).expr_);
+      }
+      if (!required) {
+        const common::ObIArray<ObRawExpr *> &having_exprs = select_stmt->get_having_exprs();
+        for (int64_t i = 0; !required && i < having_exprs.count(); ++i) {
+          required = has_match_against_expr(having_exprs.at(i));
+        }
+      }
+      if (!required) {
+        const common::ObIArray<ObRawExpr *> &group_exprs = select_stmt->get_group_exprs();
+        for (int64_t i = 0; !required && i < group_exprs.count(); ++i) {
+          required = has_match_against_expr(group_exprs.at(i));
+        }
+      }
+    }
+    // the match expression must not be used by any other condition of the
+    // where clause in a way that consumes the value of the score
+    if (!required) {
+      const common::ObIArray<ObRawExpr *> &condition_exprs = stmt->get_condition_exprs();
+      for (int64_t i = 0; !required && i < condition_exprs.count(); ++i) {
+        const ObRawExpr *condition = condition_exprs.at(i);
+        if (nullptr != condition && has_match_against_expr(condition)
+            && !is_bool_predicate_of_match(condition, match_expr)) {
+          required = true;
+        }
+      }
+    }
+  }
+  return required;
+}
+
 int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_match_exprs,
                                            const ObIArray<ObRawExpr *> &scan_match_filters,
                                            const ObIArray<ObRawExpr *> &all_match_filters,
@@ -12034,6 +12149,7 @@ int ObLogPlan::prepare_text_retrieval_scan(const ObIArray<ObRawExpr *> &scan_mat
   } else if (OB_FAIL(prepare_text_retrieval_info(table_scan->get_real_ref_table_id(),
                                                  table_scan->get_index_table_id(),
                                                  match_against,
+                                                 match_score_value_required(get_stmt(), match_against, match_pred),
                                                  table_scan->get_text_retrieval_info()))) {
   } else {
     ObTextRetrievalInfo &tr_info = table_scan->get_text_retrieval_info();
@@ -12077,6 +12193,7 @@ int ObLogPlan::prepare_text_retrieval_lookup(const ObIArray<ObRawExpr *> &lookup
     } else if (OB_FAIL(prepare_text_retrieval_info(table_scan->get_real_ref_table_id(),
                                                    lookup_index_ids.at(i),
                                                    curr_match_expr,
+                                                   true /*need_calc_relevance*/,
                                                    tr_info))) {
     } else if (OB_FAIL(table_scan->get_lookup_tr_infos().push_back(tr_info))) {
     }
@@ -12113,6 +12230,7 @@ int ObLogPlan::prepare_text_retrieval_match_score(const ObIArray<ObRawExpr *> &m
     } else if (OB_FAIL(prepare_text_retrieval_info(table_scan->get_real_ref_table_id(),
                                                    match_score_index_ids.at(i),
                                                    curr_match_expr,
+                                                   true /*need_calc_relevance*/,
                                                    tr_info))) {
     } else if (prev_match_expr == curr_match_expr && FALSE_IT(column_boost_idx = column_boost_idx + 1)) {
     } else if (prev_match_expr != curr_match_expr && FALSE_IT(column_boost_idx = 0)) {
@@ -12148,6 +12266,7 @@ int ObLogPlan::prepare_text_retrieval_merge(const ObIArray<ObRawExpr *> &merge_m
     } else if (OB_FAIL(prepare_text_retrieval_info(table_scan->get_real_ref_table_id(),
                                                    merge_index_ids.at(i),
                                                    curr_match_expr,
+                                                   true /*need_calc_relevance*/,
                                                    tr_info))) {
     } else if (OB_FAIL(table_scan->get_merge_tr_infos().push_back(tr_info))) {
     }
@@ -12170,6 +12289,7 @@ int ObLogPlan::prepare_text_retrieval_merge(const ObIArray<ObRawExpr *> &merge_m
 int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
                                            const uint64_t index_table_id,
                                            ObMatchFunRawExpr *match_against,
+                                           const bool need_calc_relevance,
                                            ObTextRetrievalInfo &tr_info)
 {
   int ret = OB_SUCCESS;
@@ -12183,7 +12303,6 @@ int ObLogPlan::prepare_text_retrieval_info(const uint64_t ref_table_id,
   uint64_t fwd_idx_tid = OB_INVALID_ID;
   uint64_t inv_idx_tid = OB_INVALID_ID;
   ObSEArray<ObAuxTableMetaInfo, 4> index_infos;
-  bool need_calc_relevance = true;
   ObSEArray<ObExprConstraint, 2> constraints;
   uint64_t docid_col_id = OB_INVALID_ID;
   if (OB_ISNULL(match_against) || OB_ISNULL(get_stmt()) || OB_ISNULL(get_optimizer_context().get_query_ctx())) {

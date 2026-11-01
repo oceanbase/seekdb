@@ -1888,7 +1888,7 @@ int ObTscCgService::generate_text_ir_ctdef(const ObLogTableScan &op,
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       ir_scan_ctdef->children_cnt_ = 1;
-      ir_scan_ctdef->children_[0] = &scan_ctdef;
+      ir_scan_ctdef->children_[0] = inv_idx_scan_ctdef;
     }
   }
 
@@ -2999,7 +2999,8 @@ int ObTscCgService::generate_text_ir_spec_exprs(const ObTextRetrievalInfo &tr_in
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObExpr *, 4> result_output;
-  if (OB_ISNULL(tr_info.match_expr_) || OB_ISNULL(tr_info.relevance_expr_) ||
+  if (OB_ISNULL(tr_info.match_expr_) ||
+      (tr_info.need_calc_relevance_ && OB_ISNULL(tr_info.relevance_expr_)) ||
       OB_ISNULL(tr_info.docid_or_rowkey_column_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(cg_.mark_expr_self_produced(tr_info.match_expr_))) {

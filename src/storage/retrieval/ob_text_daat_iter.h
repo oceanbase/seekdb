@@ -55,7 +55,8 @@ public:
   ObTextDaaTIter() : ObSRDaaTIterImpl(),
       bm25_param_estimator_(),
       mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
-      function_lookup_mode_(false) {}
+      function_lookup_mode_(false),
+      need_bm25_estimation_(false) {}
   virtual ~ObTextDaaTIter() { reset(); }
 
   int init(const ObTextDaaTParam &param);
@@ -67,6 +68,8 @@ protected:
   ObBM25ParamEstimator bm25_param_estimator_;
   sql::ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
+  // the bm25 parameters are only needed when the relevance score is calculated
+  bool need_bm25_estimation_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTextDaaTIter);
 };

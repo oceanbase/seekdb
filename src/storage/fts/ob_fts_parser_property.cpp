@@ -1017,8 +1017,9 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
 {
   int ret = OB_SUCCESS;
   ObFTParserJsonProps props;
-  if (OB_FAIL(props.init())) {
-  } else if (OB_FAIL(props.parse_from_valid_str(json_str))) {
+  const bool has_props = !json_str.empty();
+  if (has_props && OB_FAIL(props.init())) {
+  } else if (has_props && OB_FAIL(props.parse_from_valid_str(json_str))) {
   } else {
     if (parser.is_ik()) {
       // set dict tables and copy dict name
@@ -1026,7 +1027,15 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
       stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
       quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
       ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      if (!has_props) {
+        // no parser property is specified, use the default ik mode
+        ik_mode_smart_ = true;
+      } else if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          // the ik mode is not specified, use the default one
+          ret = OB_SUCCESS;
+          ik_mode_smart_ = true;
+        }
       } else {
         if (0 == ik_smart.case_compare(ObString(ObFTSLiteral::FT_IK_MODE_SMART))) {
           ik_mode_smart_ = true;
