@@ -64,6 +64,10 @@ namespace cos_backend
 #undef U128
 #undef roundeven_finite
 }
+namespace atanh_backend
+{
+#include "share/atanh_core_math.ipp"
+}
 
 uint64_t magnitude_bits(double x)
 {
@@ -123,6 +127,29 @@ double cos(double x)
   }
 #endif
   return ::cos(x);
+}
+
+double atanh(double x)
+{
+#if defined(__clang__) && __clang_major__ >= 18 && defined(_M_X64)
+  const uint64_t ax = magnitude_bits(x);
+  // Below 2^-27, atanh(x) rounds to x; keep CRT handling of the |x|=1 pole,
+  // out-of-domain values, signed zero and nonfinite operands.
+  if (ax >= UINT64_C(0x3e40000000000000)
+      && ax < UINT64_C(0x3ff0000000000000) && use_nearest_backend()) {
+    return atanh_backend::cr_atanh(x);
+  }
+#endif
+  return ::atanh(x);
+}
+
+bool atanh_uses_core_math()
+{
+#if defined(__clang__) && __clang_major__ >= 18 && defined(_M_X64)
+  return use_nearest_backend();
+#else
+  return false;
+#endif
 }
 } // namespace math_compat
 } // namespace oceanbase
