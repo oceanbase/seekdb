@@ -19,6 +19,23 @@ ROCm 7.2.4, gfx1100, and its preinstalled `/opt/hipvs` C API. Both headers and
 the library must provide `cuvsHnswFromCagraWithDataset` and `cuvsHnswSerialize`.
 The AMD hipVS project retains `cuvs` symbol/header names.
 
+The normal Linux CMake build now detects this SDK and builds the bridge next to
+`build_release/src/observer/seekdb`. Packaging installs it under `usr/lib/seekdb`.
+The loader resolves these locations relative to the executable, without requiring
+a launch-time environment variable or searching the current directory.
+
+```sh
+bash build.sh release -DSEEKDB_WITH_HIPVS=ON --make -j8
+```
+
+`SEEKDB_WITH_HIPVS=AUTO` (default) leaves CPU-only hosts unchanged when the SDK is
+absent. `ON` fails during configuration if dependencies are missing; use it for
+an AMD validation build. `OFF` disables the bridge. Custom SDK locations use
+`-DSEEKDB_HIPVS_PREFIX=/path/to/hipvs -DSEEKDB_ROCM_PATH=/path/to/rocm`.
+The bridge link checks undefined symbols instead of deferring them to startup.
+
+For a manual diagnostic installation, the explicit override remains available:
+
 ```sh
 bash tools/hipvs_bridge_build/build.sh /workspace/amd-build
 export SEEKDB_HIPVS_BUILD_LIBRARY=/workspace/amd-build/libseekdb_hipvs_build.so
@@ -26,7 +43,7 @@ export SEEKDB_HIPVS_BUILD_THREADS=8
 export LD_LIBRARY_PATH=/opt/hipvs/lib:/opt/rocm/lib:${LD_LIBRARY_PATH:-}
 ```
 
-These variables must be inherited by the **modified seekdb process**, before
+When using an override, these variables must be inherited by the **modified seekdb process**, before
 its first HIPVS build. The Notebook's original binary does not implement
 `lib=hipvs`. Build this checkout using the repository's normal Release workflow;
 installing the bridge alone does not change the database executable.
@@ -54,5 +71,9 @@ The local real-VSAG format test validates graph rejection, signed/non-contiguous
 64-bit VIDs, L2 distances, filtering, stream persistence, and incremental Add
 after restore. `unittest/amd_hipvs` also provides SQL end-to-end timing and quality
 checks. Follow its README for at least three CPU/GPU trials and raw evidence.
-Final SQL integration and performance acceptance must be established separately;
-do not use the reference Notebook's batch-query speedup as a build result.
+The original SQL integration and performance results are recorded in
+`unittest/amd_hipvs/RESULTS_20261101.md`. They used a manually built bridge and
+explicit launch environment; they do not validate the new automatic delivery.
+Run `run_cloud_validation.py` in its default `--bridge-mode installed` mode to
+validate ordinary build output without the environment override. The legacy
+manual mode is diagnostic only. Neither mode proves official competition acceptance.

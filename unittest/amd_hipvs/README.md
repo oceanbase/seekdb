@@ -102,7 +102,7 @@ bash unittest/amd_hipvs/test_gpu_export.sh /workspace/amd-build
 ```bash
 apt-get update
 apt-get install -y --no-install-recommends rpm2cpio cpio wget make g++ python3-venv
-bash build.sh release --init --make -j8
+bash build.sh release --init -DSEEKDB_WITH_HIPVS=ON --make -j8
 python3 -m venv --system-site-packages /workspace/amd-validation-python
 /workspace/amd-validation-python/bin/python -m pip install -r unittest/amd_hipvs/requirements.txt
 /workspace/amd-validation-python/bin/python unittest/amd_hipvs/run_cloud_validation.py \

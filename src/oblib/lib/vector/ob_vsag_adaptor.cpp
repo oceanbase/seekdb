@@ -18,7 +18,7 @@
 
 #include "ob_vsag_adaptor.h"
 #include "hipvs_native_hnsw.h"
-#include <dlfcn.h>
+#include "hipvs_backend.h"
 #include <fstream>
 #include <unistd.h>
 #include <cstdlib>
@@ -974,24 +974,9 @@ int build_hipvs_index(VectorIndexPtr &index_handler, const float *vectors,
       hnsw->get_index()->GetNumElements() != 0) {
     return OB_INVALID_ARGUMENT;
   }
-  typedef int (*BuildFn)(const float *, int64_t, int32_t, int32_t, int32_t,
-                         int32_t, const char *, char *, size_t);
-  struct Backend {
-    void *library = nullptr;
-    BuildFn build = nullptr;
-    Backend() {
-      const char *path = std::getenv("SEEKDB_HIPVS_BUILD_LIBRARY");
-      if (path && path[0] == '/') {
-        library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-        if (library) build = reinterpret_cast<BuildFn>(dlsym(library, "seekdb_hipvs_build_hnsw_v1"));
-      }
-      // Keep ROCm loaded for process lifetime: unloading while its internal
-      // worker/TLS state is alive is unsafe. CPU-only servers never load it.
-    }
-  };
-  static const Backend backend;
+  static const HipvsBackend backend;
   if (!backend.build) {
-    LOG_WARN("[HIPVS] missing build backend; set absolute SEEKDB_HIPVS_BUILD_LIBRARY before starting seekdb; no CPU fallback");
+    LOG_WARN("[HIPVS] build backend unavailable; no CPU fallback", KCSTRING(backend.error));
     return OB_NOT_SUPPORTED;
   }
   struct ExportFile {

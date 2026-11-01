@@ -16,6 +16,8 @@ parser.add_argument('--workspace', type=Path, default=Path('/workspace'))
 parser.add_argument('--output', type=Path, required=True,
                     help='New report directory; existing results are never overwritten')
 parser.add_argument('--port', type=int, default=2883)
+parser.add_argument('--bridge-mode', choices=('installed', 'manual'), default='installed',
+                    help='Validate the ordinary build artifact by default; manual is a legacy diagnostic')
 parser.add_argument('--m', type=int, default=16,
                     help='Identical HNSW M for CPU, GPU, and lifecycle checks')
 parser.add_argument('--ef-construction', type=int, default=200)
@@ -56,7 +58,8 @@ process = None
 console = None
 connection = None
 summary = {'status': 'RUNNING', 'runtime': str(RUNTIME), 'port': PORT,
-           'config': {'server_log_level': 'WARN', 'm': args.m, 'ef_construction': args.ef_construction,
+           'config': {'server_log_level': 'WARN', 'bridge_mode': args.bridge_mode,
+                      'm': args.m, 'ef_construction': args.ef_construction,
                       'ef_search': args.ef_search, 'min_recall': args.min_recall,
                       'cpu_with': CPU_WITH, 'gpu_with': GPU_WITH,
                       'lifecycle_rows': LIFECYCLE_ROWS, 'smoke_rows': SMOKE_ROWS,
@@ -131,13 +134,22 @@ try:
         ['git', 'status', '--porcelain', '--untracked-files=all'], cwd=ROOT).strip())
     summary['controller_sha256'] = sha256_file(__file__)
     summary['benchmark_sha256'] = sha256_file(ROOT / 'unittest/amd_hipvs/benchmark.py')
-    summary['phase'] = 'BUILD_BRIDGE'
+    summary['phase'] = 'CHECK_BRIDGE_DELIVERY'
     save()
-    run(['bash', str(ROOT / 'tools/hipvs_bridge_build/build.sh'), str(BUILD)])
-    run([sys.executable, str(ROOT / 'unittest/amd_hipvs/probe_gpu.py'), '--output-dir', str(BUILD)])
+    if args.bridge_mode == 'manual':
+        run(['bash', str(ROOT / 'tools/hipvs_bridge_build/build.sh'), str(BUILD)])
+        bridge_library = BUILD / 'libseekdb_hipvs_build.so'
+    else:
+        bridge_library = binary.resolve().parent / 'libseekdb_hipvs_build.so'
+        require(bridge_library.is_file(),
+                'Ordinary build did not deliver hipVS bridge; build with -DSEEKDB_WITH_HIPVS=ON')
+    run([sys.executable, str(ROOT / 'unittest/amd_hipvs/probe_gpu.py'),
+         '--output-dir', str(BUILD), '--library', str(bridge_library)])
     devel = ROOT / 'deps/3rd/usr/local/oceanbase/deps/devel'
     env = os.environ.copy()
-    env['SEEKDB_HIPVS_BUILD_LIBRARY'] = str(BUILD / 'libseekdb_hipvs_build.so')
+    env.pop('SEEKDB_HIPVS_BUILD_LIBRARY', None)
+    if args.bridge_mode == 'manual':
+        env['SEEKDB_HIPVS_BUILD_LIBRARY'] = str(bridge_library)
     env['SEEKDB_HIPVS_BUILD_THREADS'] = '8'
     env['LD_LIBRARY_PATH'] = ':'.join([str(devel / 'lib/vsag_lib'), str(devel / 'lib'),
         '/opt/hipvs/lib', '/opt/rocm/lib', env.get('LD_LIBRARY_PATH', '')])
@@ -187,7 +199,9 @@ try:
     stderr_path = Path(os.readlink(f'/proc/{process.pid}/fd/2'))
     summary['server_stderr'] = str(stderr_path)
     summary['binary_sha256'] = sha256_file(binary)
-    summary['bridge_sha256'] = sha256_file(BUILD / 'libseekdb_hipvs_build.so')
+    summary['bridge_sha256'] = sha256_file(bridge_library)
+    summary['bridge_library'] = str(bridge_library)
+    summary['bridge_override_set'] = 'SEEKDB_HIPVS_BUILD_LIBRARY' in env
     summary['binary_version'] = subprocess.check_output(
         [str(binary), '--version'], env=env, stderr=subprocess.STDOUT, text=True, timeout=30).strip()
     summary['phase'] = 'SQL_LIFECYCLE'
