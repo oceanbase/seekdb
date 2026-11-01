@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{binary, BinaryDocument, BinaryResult, BinaryValue, JsonType, ParseOptions};
+use crate::{
+    binary, BinaryDocument, BinaryResult, BinaryValue, CompareResult, JsonType, ParseOptions,
+};
 use std::fmt;
 
 pub const MAX_PATH_NODES: usize = 100;
@@ -99,6 +101,27 @@ impl Query {
             return Ok(None);
         }
         binary::serialize_object_keys(value).map(Some)
+    }
+
+    pub fn contains(&self, candidate: &Query, path: Option<&Path>) -> CompareResult<Option<bool>> {
+        let target = if let Some(path) = path {
+            let matches = self.query(path, QueryOptions::default())?;
+            let Some(target) = matches.first() else {
+                return Ok(None);
+            };
+            *target
+        } else {
+            self.document.root()?
+        };
+        crate::compare::contains(target, candidate.document.root()?).map(Some)
+    }
+
+    pub fn overlaps(&self, other: &Query) -> CompareResult<bool> {
+        crate::compare::overlaps(self.document.root()?, other.document.root()?)
+    }
+
+    pub fn member_of(&self, target: &Query) -> CompareResult<bool> {
+        crate::compare::member_of(self.document.root()?, target.document.root()?)
     }
 }
 

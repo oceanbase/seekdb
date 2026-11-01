@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{Document, Number};
+use crate::{decimal::Decimal, Document, Number};
 use std::fmt;
 
 const NULL: u8 = 0;
@@ -114,6 +114,7 @@ pub enum BinaryErrorKind {
     InvalidHeader,
     InvalidOffset,
     InvalidDepth,
+    InvalidNumber,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -123,7 +124,7 @@ pub struct BinaryError {
 }
 
 impl BinaryError {
-    fn new(kind: BinaryErrorKind, byte_offset: usize) -> Self {
+    pub(crate) fn new(kind: BinaryErrorKind, byte_offset: usize) -> Self {
         Self { kind, byte_offset }
     }
 }
@@ -407,6 +408,14 @@ impl<'a> BinaryValue<'a> {
         }
     }
 
+    pub fn decimal(&self) -> BinaryResult<Decimal> {
+        if !matches!(self.json_type()?, JsonType::Decimal | JsonType::ODecimal) || self.is_inline()
+        {
+            return Err(BinaryError::new(BinaryErrorKind::InvalidType, self.offset));
+        }
+        Decimal::decode(self.bytes, self.offset)
+    }
+
     pub fn string_bytes(&self) -> BinaryResult<&'a [u8]> {
         if self.json_type()? != JsonType::String || self.is_inline() {
             return Err(BinaryError::new(BinaryErrorKind::InvalidType, self.offset));
@@ -453,6 +462,10 @@ impl<'a> BinaryValue<'a> {
                 read_bytes(self.bytes, self.offset, 4)?;
                 Ok(())
             }
+            JsonType::Decimal | JsonType::ODecimal => {
+                self.decimal()?;
+                Ok(())
+            }
             JsonType::String => {
                 let (length, payload) = read_vi64(self.bytes, self.offset + 1)?;
                 let length = usize::try_from(length)
@@ -486,6 +499,10 @@ fn write_binary_value(output: &mut Vec<u8>, value: BinaryValue<'_>) -> BinaryRes
         }
         JsonType::OFloat => {
             output.extend_from_slice(read_bytes(value.bytes, value.offset, 4)?);
+        }
+        JsonType::Decimal | JsonType::ODecimal => {
+            let size = value.decimal()?.serialized_size();
+            output.extend_from_slice(read_bytes(value.bytes, value.offset, size)?);
         }
         JsonType::String => {
             let (length, payload) = read_vi64(value.bytes, value.offset + 1)?;
@@ -816,7 +833,7 @@ fn needs_type_prefix(value_type: u8) -> bool {
     )
 }
 
-fn read_bytes(bytes: &[u8], offset: usize, length: usize) -> BinaryResult<&[u8]> {
+pub(crate) fn read_bytes(bytes: &[u8], offset: usize, length: usize) -> BinaryResult<&[u8]> {
     let end = offset
         .checked_add(length)
         .ok_or_else(|| BinaryError::new(BinaryErrorKind::InvalidOffset, offset))?;

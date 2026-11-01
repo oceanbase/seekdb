@@ -38,6 +38,7 @@ pub mod ffi {
         UnsupportedSchemaRef = 4,
         InvalidBinary = 5,
         InvalidPath = 6,
+        NumericOverflow = 7,
     }
 
     #[repr(u32)]
@@ -95,6 +96,13 @@ pub mod ffi {
         single_length: u64,
     }
 
+    struct BoolResult {
+        status: Status,
+        byte_offset: u64,
+        value: bool,
+        is_null: bool,
+    }
+
     extern "Rust" {
         fn parse(input: &[u8], duplicate: Duplicate, max_depth: u32, schema: bool) -> ParseResult;
         fn validate(
@@ -140,6 +148,10 @@ pub mod ffi {
         fn query(self: &Query, path: &Path, auto_wrap: bool, first_only: bool) -> PathQueryResult;
         fn object_keys(self: &Query) -> BinaryResult;
         fn object_keys_at_path(self: &Query, path: &Path) -> BinaryResult;
+        fn contains(self: &Query, candidate: &Query) -> BoolResult;
+        fn contains_at_path(self: &Query, candidate: &Query, path: &Path) -> BoolResult;
+        fn overlaps(self: &Query, other: &Query) -> BoolResult;
+        fn member_of(self: &Query, target: &Query) -> BoolResult;
     }
 }
 
@@ -229,6 +241,66 @@ impl Query {
             Ok(document) => optional_binary_result(document.object_keys(Some(path))),
             Err((status, byte_offset)) => failed_binary_result(*status, *byte_offset),
         }
+    }
+
+    fn contains(&self, candidate: &Query) -> ffi::BoolResult {
+        bool_result(match (&self.state, &candidate.state) {
+            (Ok(target), Ok(candidate)) => target.contains(candidate, None).map_err(compare_error),
+            (Err(error), _) | (_, Err(error)) => Err(*error),
+        })
+    }
+
+    fn contains_at_path(&self, candidate: &Query, path: &Path) -> ffi::BoolResult {
+        bool_result(match (&self.state, &candidate.state) {
+            (Ok(target), Ok(candidate)) => target
+                .contains(candidate, Some(path))
+                .map_err(compare_error),
+            (Err(error), _) | (_, Err(error)) => Err(*error),
+        })
+    }
+
+    fn overlaps(&self, other: &Query) -> ffi::BoolResult {
+        bool_result(match (&self.state, &other.state) {
+            (Ok(left), Ok(right)) => left.overlaps(right).map(Some).map_err(compare_error),
+            (Err(error), _) | (_, Err(error)) => Err(*error),
+        })
+    }
+
+    fn member_of(&self, target: &Query) -> ffi::BoolResult {
+        bool_result(match (&self.state, &target.state) {
+            (Ok(candidate), Ok(target)) => {
+                candidate.member_of(target).map(Some).map_err(compare_error)
+            }
+            (Err(error), _) | (_, Err(error)) => Err(*error),
+        })
+    }
+}
+
+fn binary_error(error: crate::BinaryError) -> (ffi::Status, u64) {
+    (ffi::Status::InvalidBinary, error.byte_offset as u64)
+}
+
+fn compare_error(error: crate::CompareError) -> (ffi::Status, u64) {
+    match error {
+        crate::CompareError::Binary(error) => binary_error(error),
+        crate::CompareError::NumericOverflow => (ffi::Status::NumericOverflow, 0),
+    }
+}
+
+fn bool_result(result: Result<Option<bool>, (ffi::Status, u64)>) -> ffi::BoolResult {
+    match result {
+        Ok(value) => ffi::BoolResult {
+            status: ffi::Status::Ok,
+            byte_offset: 0,
+            value: value.unwrap_or(false),
+            is_null: value.is_none(),
+        },
+        Err((status, byte_offset)) => ffi::BoolResult {
+            status,
+            byte_offset,
+            value: false,
+            is_null: false,
+        },
     }
 }
 

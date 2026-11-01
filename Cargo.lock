@@ -850,6 +850,7 @@ version = "0.1.0"
 dependencies = [
  "cxx",
  "memchr",
+ "ryu",
  "serde",
  "serde_json",
 ]

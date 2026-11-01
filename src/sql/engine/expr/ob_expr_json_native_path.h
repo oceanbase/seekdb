@@ -28,6 +28,7 @@ namespace oceanbase
 namespace sql
 {
 class ObExecContext;
+class MultimodeAlloctor;
 
 struct JsonPathMatches
 {
@@ -58,6 +59,12 @@ int query_native_json_path(const common::ObString &data,
                            bool first_only,
                            uint32_t max_depth_config,
                            JsonPathMatches &matches);
+int get_native_json_query(const ObExpr &expr,
+                          ObEvalCtx &ctx,
+                          MultimodeAlloctor &allocator,
+                          uint16_t index,
+                          std::optional<rust::Box<common::json::Query>> &query,
+                          bool &is_null);
 JsonPathCache *get_native_path_cache_ctx(const uint64_t &id, ObExecContext *exec_ctx);
 int find_and_add_native_path_cache(JsonPathCache *path_cache,
                                    const common::json::Path *&res_path,

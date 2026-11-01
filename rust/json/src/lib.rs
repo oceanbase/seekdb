@@ -17,11 +17,15 @@
 
 pub mod binary;
 mod bridge;
+pub mod compare;
+mod decimal;
 pub mod path;
 
 pub use binary::{
     BinaryDocument, BinaryError, BinaryErrorKind, BinaryResult, BinaryValue, JsonType,
 };
+pub use compare::{CompareError, CompareResult};
+pub use decimal::Decimal;
 pub use path::{Path, PathError, PathErrorKind, PathStep, Query, QueryOptions};
 
 use serde::de::{DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};

@@ -583,6 +583,165 @@ fn extraction_builds_single_and_array_results_in_rust() {
 }
 
 #[test]
+fn containment_membership_and_overlap_preserve_sql_semantics() {
+    let query = |text: &str| Query::from_text(text.as_bytes(), ParseOptions::default()).unwrap();
+    let target = query(r#"{"a":[1,{"b":2},[3,4]],"c":{"d":5}}"#);
+    assert!(target
+        .contains(&query(r#"{"a":[1,[3]]}"#), None)
+        .unwrap()
+        .unwrap());
+    assert!(target
+        .contains(&query(r#"{"c":{"d":5}}"#), None)
+        .unwrap()
+        .unwrap());
+    assert!(!target
+        .contains(&query(r#"{"missing":1}"#), None)
+        .unwrap()
+        .unwrap());
+    assert!(target
+        .contains(&query("5"), Some(&Path::parse_mysql(b"$.c.d").unwrap()))
+        .unwrap()
+        .unwrap());
+    assert!(target
+        .contains(&query("5"), Some(&Path::parse_mysql(b"$.missing").unwrap()))
+        .unwrap()
+        .is_none());
+
+    assert!(query("[1,2,3]").overlaps(&query("[4,2]")).unwrap());
+    assert!(query("[1,2,3]").overlaps(&query("2")).unwrap());
+    assert!(!query("[1,2,3]").overlaps(&query("[4,5]")).unwrap());
+    assert!(query(r#"{"a":[1]}"#)
+        .overlaps(&query(r#"{"a":[1]}"#))
+        .unwrap());
+    assert!(query("2").member_of(&query("[1,2,3]")).unwrap());
+    assert!(!query("2").member_of(&query("[1,3]")).unwrap());
+    assert!(query("2").member_of(&query("2.0")).unwrap());
+
+    let ordered = query(r#"{"a":1,"b":2}"#);
+    let reversed = query(r#"{"b":2,"a":1}"#);
+    assert!(ordered.member_of(&reversed).unwrap());
+    assert!(ordered.contains(&reversed, None).unwrap().unwrap());
+    assert!(!ordered.contains(&query("{}"), None).unwrap().unwrap());
+    assert!(query("{}").contains(&query("{}"), None).unwrap().unwrap());
+    assert!(!query("[1]")
+        .contains(&query("null"), None)
+        .unwrap()
+        .unwrap());
+    assert!(query(r#"[1,{"a":3}]"#)
+        .contains(&query("{}"), None)
+        .unwrap()
+        .unwrap());
+    assert!(query(r#"[{}]"#)
+        .contains(&query(r#"{"a":1}"#), None)
+        .unwrap()
+        .unwrap());
+    assert!(query(r#"{"a":1,"b":{"x":2}}"#)
+        .contains(&query(r#"{"a":1,"b":{}}"#), None)
+        .unwrap()
+        .unwrap());
+    assert!(query(r#"{"a":1,"b":{}}"#)
+        .contains(&query(r#"{"a":1,"b":{"x":2}}"#), None)
+        .unwrap()
+        .unwrap());
+    assert!(query("{}").overlaps(&query("{}")).unwrap());
+}
+
+#[test]
+fn numeric_equality_checks_exact_integer_boundaries() {
+    let query = |text: &str| Query::from_text(text.as_bytes(), ParseOptions::default()).unwrap();
+    assert!(query("1").member_of(&query("1.0")).unwrap());
+    assert!(query("-0").member_of(&query("-0.0")).unwrap());
+    assert!(!query("9007199254740993")
+        .member_of(&query("9007199254740992.0"))
+        .unwrap());
+    assert!(query("9007199254740992")
+        .member_of(&query("9007199254740992.0"))
+        .unwrap());
+    assert!(!query("18446744073709551615")
+        .member_of(&query("18446744073709551616.0"))
+        .unwrap());
+    assert!(!query("9223372036854775807")
+        .member_of(&query("9223372036854775808.0"))
+        .unwrap());
+}
+
+fn decimal_document(negative: bool, exponent: i32, digits: &[u32]) -> BinaryDocument<Vec<u8>> {
+    let sign_exponent = if negative {
+        0x40 - exponent
+    } else {
+        0xc0 + exponent
+    };
+    let desc = digits.len() as u32 | ((sign_exponent as u32) << 24);
+    let mut bytes = vec![JsonType::Decimal as u8, 0, 0, 0, 0];
+    bytes.extend_from_slice(&desc.to_be_bytes());
+    for digit in digits {
+        bytes.extend_from_slice(&digit.to_le_bytes());
+    }
+    BinaryDocument::new(bytes).unwrap()
+}
+
+#[test]
+fn decimal_equality_preserves_sql_number_semantics() {
+    let query = |text: &str| {
+        BinaryDocument::new(parse_binary(text.as_bytes(), ParseOptions::default()).unwrap())
+            .unwrap()
+    };
+    let one = decimal_document(false, 0, &[1]);
+    assert!(crate::compare::equal(one.root().unwrap(), query("1").root().unwrap()).unwrap());
+    assert!(crate::compare::equal(one.root().unwrap(), query("1.0").root().unwrap()).unwrap());
+    assert!(crate::compare::equal(
+        one.root().unwrap(),
+        decimal_document(false, 0, &[1, 0]).root().unwrap()
+    )
+    .unwrap());
+
+    let tenth = decimal_document(false, -1, &[100_000_000]);
+    assert!(crate::compare::equal(tenth.root().unwrap(), query("0.1").root().unwrap()).unwrap());
+    assert!(!crate::compare::equal(
+        tenth.root().unwrap(),
+        decimal_document(false, -1, &[100_000_000, 5])
+            .root()
+            .unwrap()
+    )
+    .unwrap());
+
+    let negative = decimal_document(true, 0, &[1]);
+    assert!(crate::compare::equal(negative.root().unwrap(), query("-1").root().unwrap()).unwrap());
+    assert!(!crate::compare::equal(negative.root().unwrap(), query("1").root().unwrap()).unwrap());
+
+    let uint_max = decimal_document(false, 2, &[18, 446_744_073, 709_551_615]);
+    assert!(crate::compare::equal(
+        uint_max.root().unwrap(),
+        query("18446744073709551615").root().unwrap()
+    )
+    .unwrap());
+    assert!(!crate::compare::equal(
+        uint_max.root().unwrap(),
+        query("18446744073709551616.0").root().unwrap()
+    )
+    .unwrap());
+
+    assert_eq!(
+        crate::compare::equal(one.root().unwrap(), query("1e126").root().unwrap()),
+        Err(crate::CompareError::NumericOverflow)
+    );
+
+    let int_min = decimal_document(true, 2, &[9, 223_372_036, 854_775_808]);
+    assert!(crate::compare::equal(
+        int_min.root().unwrap(),
+        query("-9223372036854775808").root().unwrap()
+    )
+    .unwrap());
+
+    let mut malformed = tenth.into_bytes();
+    malformed[8] = 10;
+    assert_eq!(
+        BinaryDocument::new(malformed).unwrap_err().kind,
+        BinaryErrorKind::InvalidNumber
+    );
+}
+
+#[test]
 fn binary_value_serialization_round_trips_document_shapes() {
     for text in [
         &br#"null"#[..],

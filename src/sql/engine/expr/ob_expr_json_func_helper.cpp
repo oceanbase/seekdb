@@ -94,6 +94,60 @@ int query_native_json_path(const ObString &data, ObJsonInType input_type,
   return ret;
 }
 
+int get_native_json_query(const ObExpr &expr,
+                          ObEvalCtx &ctx,
+                          MultimodeAlloctor &allocator,
+                          uint16_t index,
+                          std::optional<rust::Box<common::json::Query>> &query,
+                          bool &is_null)
+{
+  INIT_SUCC(ret);
+  ObDatum *json_datum = NULL;
+  ObExpr *json_arg = expr.args_[index];
+  ObObjType val_type = json_arg->datum_meta_.type_;
+  ObCollationType cs_type = json_arg->datum_meta_.cs_type_;
+  bool allow_partial_update = false;
+  ObString json_doc;
+  ObJsonInType input_type = ObJsonInType::JSON_TREE;
+  query.reset();
+  if (OB_FAIL(allocator.eval_arg(json_arg, ctx, json_datum))) {
+  } else if (val_type == ObNullType || json_datum->is_null()) {
+    is_null = true;
+  } else if (val_type != ObJsonType && !ob_is_string_type(val_type)) {
+    ret = OB_ERR_INVALID_TYPE_FOR_OP;
+    LOG_WARN("input type error", K(val_type));
+  } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
+  } else if (ob_is_json(val_type)
+      && OB_FAIL(ObJsonExprHelper::is_allow_partial_update(
+             expr, ctx, json_datum->get_string(), allow_partial_update))) {
+  } else if (allow_partial_update) {
+    ObIJsonBase *json_target = NULL;
+    if (OB_FAIL(ObJsonExprHelper::get_json_for_partial_update(
+            expr, *json_arg, ctx, allocator, *json_datum, json_target))) {
+    } else if (OB_FAIL(json_target->get_raw_binary(json_doc, &allocator))) {
+    } else {
+      input_type = ObJsonInType::JSON_BIN;
+    }
+  } else if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(
+                 json_arg, ctx, allocator, json_doc, is_null))) {
+  } else {
+    input_type = ObJsonExprHelper::get_json_internal_type(val_type);
+  }
+  if (OB_SUCC(ret) && !is_null) {
+    query.emplace(common::json::new_query(
+        rust::Slice<const uint8_t>(reinterpret_cast<const uint8_t *>(json_doc.ptr()), json_doc.length()),
+        input_type != ObJsonInType::JSON_BIN,
+        ObJsonExprHelper::get_json_text_depth_limit(
+            ObJsonExprHelper::get_json_max_depth_config())));
+    if ((*query)->status() != common::json::Status::Ok) {
+      ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
+      LOG_WARN("fail to parse JSON", K(ret), K((*query)->byte_offset()));
+      LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+    }
+  }
+  return ret;
+}
+
 ObJsonInType ObJsonExprHelper::get_json_internal_type(ObObjType type)
 {
   return type == ObJsonType ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
