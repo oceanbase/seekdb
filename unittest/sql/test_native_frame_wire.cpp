@@ -25,6 +25,7 @@
 #include "sql/engine/px/ob_dfo.h"
 #include "sql/engine/px/exchange/ob_px_transmit_op.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "query/engine/ob_operator.h"
 #include <initializer_list>
 #include "sql/ob_sql_context.h"
 #include <gtest/gtest.h>
@@ -351,6 +352,137 @@ TEST(NativeFrameWire, unselected_placeholder_uses_native_expression_envelope_and
   EXPECT_EQ(nullptr, restored.sql_type_);
   EXPECT_EQ(nullptr, restored.basic_funcs_);
   EXPECT_EQ(0U, restored.arg_cnt_);
+}
+
+TEST(NativeFrameWire, px_empty_parent_cannot_clear_constant_payload_during_dynamic_update)
+{
+  ObArenaAllocator source_owner("PxParentSrc"), destination_owner("PxParentDst");
+  ObSqlCtx source_sql, destination_sql;
+  ObExecContext source(source_owner), destination(destination_owner);
+  ASSERT_NO_FATAL_FAILURE(setup_context(source, source_sql));
+  ASSERT_NO_FATAL_FAILURE(setup_context(destination, destination_sql));
+  auto &source_plan = *source.get_physical_plan_ctx();
+  ASSERT_NO_FATAL_FAILURE(load_parameters(source_plan, source_owner, 1, 1, true));
+  ObArray<ObExpr> global_expressions;
+  ObExprFrameInfo source_info(source_owner, global_expressions), destination_info(destination_owner);
+  ASSERT_EQ(OB_SUCCESS, global_expressions.prepare_allocate(5));
+  for (int64_t i = 0; i < global_expressions.count(); ++i) {
+    ObExpr &expr = global_expressions.at(i);
+    expr.type_ = i == 0 ? T_INT : (i == 1 ? T_QUESTIONMARK : T_OP_ADD);
+    expr.obj_meta_.set_int(); expr.datum_meta_.type_ = ObIntType;
+    expr.datum_meta_.precision_ = 20; expr.datum_meta_.scale_ = 0;
+    expr.frame_idx_ = i < 2 ? i : 2;
+    const int64_t slot = i < 2 ? 0 : i - 2;
+    expr.datum_off_ = ScalarFrameLayout::datum_offset(slot);
+    expr.eval_info_off_ = ScalarFrameLayout::eval_info_offset(slot);
+    ASSERT_EQ(OB_SUCCESS, expr.bind_sql_type(*source_plan.get_native_parameter_type(0), source_owner));
+  }
+  global_expressions.at(1).extra_ = 0;
+  ObExpr *parent_args[] = {&global_expressions.at(1), &global_expressions.at(0)};
+  ObExpr *ancestor_args[] = {&global_expressions.at(2), &global_expressions.at(0)};
+  ObExpr *unselected_args[] = {&global_expressions.at(1), &global_expressions.at(3)};
+  global_expressions.at(2).args_ = parent_args; global_expressions.at(2).arg_cnt_ = 2;
+  global_expressions.at(3).args_ = ancestor_args; global_expressions.at(3).arg_cnt_ = 2;
+  global_expressions.at(4).args_ = unselected_args; global_expressions.at(4).arg_cnt_ = 2;
+  ObExpr *parameter_parents[] = {&global_expressions.at(2), &global_expressions.at(4)};
+  ObExpr *parent_parents[] = {&global_expressions.at(3)};
+  ObExpr *ancestor_parents[] = {&global_expressions.at(4)};
+  global_expressions.at(1).parents_ = parameter_parents;
+  global_expressions.at(1).parent_cnt_ = 2;
+  global_expressions.at(2).parents_ = parent_parents;
+  global_expressions.at(2).parent_cnt_ = 1;
+  global_expressions.at(3).parents_ = ancestor_parents;
+  global_expressions.at(3).parent_cnt_ = 1;
+  ASSERT_EQ(OB_SUCCESS, source_info.ser_expr_marks_.prepare_allocate(5));
+  for (int64_t i = 0; i < 5; ++i) { source_info.ser_expr_marks_.at(i) = i != 4; }
+  const int64_t slot_size = ScalarFrameLayout::slot_size();
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_.push_back(ObFrameInfo(1, 0, slot_size, 0, slot_size)));
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_ptrs_.reserve(1));
+  char *constant_frame = static_cast<char *>(source_owner.alloc(slot_size));
+  ASSERT_NE(nullptr, constant_frame);
+  MEMSET(constant_frame, 0, slot_size);
+  new (constant_frame) Datum();
+  reinterpret_cast<Datum *>(constant_frame)->set_int(1); // TEXT mode must remain one.
+  new (constant_frame + ScalarFrameLayout::eval_info_offset(0)) ObEvalInfo{};
+  ASSERT_EQ(OB_SUCCESS, source_info.const_frame_ptrs_.push_back(constant_frame));
+  ASSERT_EQ(OB_SUCCESS, source_info.param_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, source_info.param_frame_.push_back(ObFrameInfo(1, 1, slot_size, 0, slot_size)));
+  ASSERT_EQ(OB_SUCCESS, source_info.datum_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, source_info.datum_frame_.push_back(ObFrameInfo(3, 2, 3 * slot_size, 0, 3 * slot_size)));
+  ASSERT_EQ(OB_SUCCESS, source_info.pre_alloc_exec_memory(source));
+  const int64_t bytes = ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(source, source_info);
+  ASSERT_GT(bytes, 0);
+  std::vector<char> wire(bytes);
+  int64_t pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::serialize_expr_frame_info<true>(
+      wire.data(), bytes, pos, source, source_info));
+  ASSERT_EQ(bytes, pos);
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::deserialize_expr_frame_info<true>(
+      wire.data(), bytes, pos, destination, destination_info));
+  ASSERT_EQ(bytes, pos);
+  ASSERT_EQ(5, destination_info.rt_exprs_.count());
+  ASSERT_TRUE(destination.get_physical_plan_ctx()->native_parameters_ready());
+  ObExpr &mode = destination_info.rt_exprs_.at(0);
+  ObExpr &parameter = destination_info.rt_exprs_.at(1);
+  ObExpr &parent = destination_info.rt_exprs_.at(2);
+  ObExpr &ancestor = destination_info.rt_exprs_.at(3);
+  ObExpr &empty = destination_info.rt_exprs_.at(4);
+  ASSERT_EQ(T_INVALID, empty.type_); ASSERT_EQ(nullptr, empty.sql_type_);
+  ASSERT_EQ(0U, empty.frame_idx_); ASSERT_EQ(0U, empty.eval_info_off_);
+  ASSERT_EQ(0U, empty.parent_cnt_);
+  ASSERT_EQ(&parent, parameter.parents_[0]); ASSERT_EQ(&empty, parameter.parents_[1]);
+  ASSERT_EQ(&ancestor, parent.parents_[0]); ASSERT_EQ(&empty, ancestor.parents_[0]);
+  ObEvalCtx eval(destination);
+  ASSERT_EQ(1, mode.locate_expr_datum(eval).get_int());
+  for (ObExpr *expr : {&mode, &parameter, &parent, &ancestor}) {
+    expr->get_eval_info(eval).evaluated_ = true;
+    expr->get_eval_info(eval).projected_ = true;
+    expr->get_eval_info(eval).notnull_ = true;
+    expr->get_eval_info(eval).cnt_ = 7;
+  }
+  const std::string constant_before(destination.get_frames()[0], slot_size);
+  Datum replacement; replacement.set_int(901);
+  ObDynamicParamSetter setter(0, nullptr, &parameter);
+  ASSERT_EQ(OB_SUCCESS, setter.update_dynamic_param(eval, replacement));
+  EXPECT_EQ(901, destination.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+  EXPECT_EQ(901, parameter.locate_expr_datum(eval).get_int());
+  EXPECT_TRUE(parameter.get_eval_info(eval).evaluated_);
+  EXPECT_FALSE(parameter.get_eval_info(eval).projected_);
+  for (ObExpr *expr : {&parent, &ancestor}) {
+    EXPECT_FALSE(expr->get_eval_info(eval).evaluated_);
+    EXPECT_FALSE(expr->get_eval_info(eval).projected_);
+    EXPECT_TRUE(expr->get_eval_info(eval).notnull_);
+    EXPECT_EQ(7, expr->get_eval_info(eval).cnt_);
+  }
+  EXPECT_EQ(0, MEMCMP(constant_before.data(), destination.get_frames()[0], slot_size));
+  EXPECT_EQ(1, mode.locate_expr_datum(eval).get_int());
+  ObDynamicParamSetter::clear_parent_evaluated_flag(eval, empty);
+  EXPECT_EQ(0, MEMCMP(constant_before.data(), destination.get_frames()[0], slot_size));
+
+  // A selected constant still has a real EvalInfo. It is not a placeholder.
+  ObDynamicParamSetter::clear_parent_evaluated_flag(eval, mode);
+  EXPECT_FALSE(mode.get_eval_info(eval).evaluated_);
+  EXPECT_FALSE(mode.get_eval_info(eval).projected_);
+  EXPECT_TRUE(mode.get_eval_info(eval).notnull_);
+  EXPECT_EQ(7, mode.get_eval_info(eval).cnt_);
+  EXPECT_EQ(1, mode.locate_expr_datum(eval).get_int());
+
+  // Either a real expression kind or a prepared Type prevents empty-slot
+  // classification; retain the existing non-placeholder traversal behavior.
+  ObExpr typed_parent;
+  ASSERT_EQ(OB_SUCCESS, typed_parent.bind_sql_type(ancestor.get_sql_type(), destination_owner));
+  typed_parent.frame_idx_ = ancestor.frame_idx_; typed_parent.eval_info_off_ = ancestor.eval_info_off_;
+  ancestor.get_eval_info(eval).evaluated_ = true;
+  ObDynamicParamSetter::clear_parent_evaluated_flag(eval, typed_parent);
+  EXPECT_FALSE(ancestor.get_eval_info(eval).evaluated_);
+  ObExpr kind_parent;
+  kind_parent.type_ = T_OP_ADD;
+  kind_parent.frame_idx_ = ancestor.frame_idx_; kind_parent.eval_info_off_ = ancestor.eval_info_off_;
+  ancestor.get_eval_info(eval).evaluated_ = true;
+  ObDynamicParamSetter::clear_parent_evaluated_flag(eval, kind_parent);
+  EXPECT_FALSE(ancestor.get_eval_info(eval).evaluated_);
 }
 
 TEST(NativeFrameWire, no_data_batch_constructs_actual_offsets_without_copying_source_values)

@@ -128,6 +128,12 @@ int ObDynamicParamSetter::update_dynamic_param(ObEvalCtx &eval_ctx, const Datum 
 
 void ObDynamicParamSetter::clear_parent_evaluated_flag(ObEvalCtx &eval_ctx, const ObExpr &expr)
 {
+  // Marked PX directories retain global parent indices, but unselected Exprs
+  // decode as empty placeholders. They have no EvalInfo; their default offset
+  // zero may instead address a selected constant's Datum payload.
+  if (expr.type_ == T_INVALID && expr.sql_type_ == nullptr) {
+    return;
+  }
   for (int64_t i = 0; i < expr.parent_cnt_; i++) {
     clear_parent_evaluated_flag(eval_ctx, *expr.parents_[i]);
   }

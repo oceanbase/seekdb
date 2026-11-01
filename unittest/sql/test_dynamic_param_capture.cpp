@@ -1172,6 +1172,8 @@ TEST(DynamicParamCapture, typed_update_failure_keeps_destination_parent_and_para
   f.expr.get_eval_info(ctx).projected_ = true;
   ObExpr parent;
   parent.frame_idx_ = 0; parent.eval_info_off_ = 512;
+  parent.type_ = T_OP_ADD;
+  ASSERT_EQ(OB_SUCCESS, parent.bind_sql_type(f.expr.get_sql_type(), f.arena));
   ObExpr *parents[] = {&parent};
   f.expr.parents_ = parents; f.expr.parent_cnt_ = 1;
   parent.get_eval_info(ctx).evaluated_ = true;
