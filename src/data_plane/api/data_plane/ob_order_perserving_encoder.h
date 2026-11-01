@@ -137,10 +137,12 @@ public:
          // has been proven equivalent to the collation comparator:
          //   - CS_TYPE_UTF8MB4_GENERAL_CI: var-len sortkey (space-run escape +
          //     trailing-space strip + 0x20 0x20 terminator) matches
-         //     ob_strnncollsp_utf8mb4 exactly on all valid utf8mb4 input
-         //     (3.6M-pair differential test, see fts task-5 report)
+         //     ob_strnncollsp_utf8mb4 on the tested valid-utf8mb4 domain
+         //     (3.6M-pair differential test incl. the real token corpus; not
+         //     a formal proof over all inputs; see fts task-5 report)
          //   - CS_TYPE_BINARY: raw bytes + 0x00-escape + 0x00 0x00 terminator
-         //     is trivially order-preserving for memcmp compare
+         //     is order-preserving for memcmp compare (0.6M-pair differential
+         //     test with variable-length and embedded-0x00 inputs)
          // every other collation keeps the legacy compare path unchanged.
          || (type == ObVarcharType
              && (cs == CS_TYPE_UTF8MB4_GENERAL_CI || cs == CS_TYPE_BINARY));
