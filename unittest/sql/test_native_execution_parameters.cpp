@@ -2129,3 +2129,216 @@ TEST_F(NativeExecutionParameters, live_pl_questionmark_uses_only_matching_privat
   EXPECT_EQ(1, sql_parameters.get_parameter_count());
   EXPECT_EQ(2, state.get_params().count());
 }
+
+
+#include "sql/das/iter/ob_das_domain_id_merge_iter.h"
+#include "sql/das/ob_das_scan_op.h"
+#include "sql/engine/basic/ob_chunk_datum_store.h"
+#include "data_plane/access/ob_table_read_info.h"
+#include "lib/container/ob_array_helper.h"
+
+namespace
+{
+using DomainIdUtils = oceanbase::share::ObDomainIdUtils;
+struct DomainSourceCtTag {
+  using type = const ObDASScanCtDef *ObDASDomainIdMergeIter::*;
+  friend type access(DomainSourceCtTag);
+};
+struct DomainSourceRtTag {
+  using type = ObDASScanRtDef *ObDASDomainIdMergeIter::*;
+  friend type access(DomainSourceRtTag);
+};
+struct DomainReadTag {
+  using type = int (ObDASDomainIdMergeIter::*)(const ObDASScanCtDef *, ObDASScanRtDef *,
+      ObIAllocator &, DomainIdUtils::DomainIds &);
+  friend type access(DomainReadTag);
+};
+struct DomainBatchReadTag {
+  using type = int (ObDASDomainIdMergeIter::*)(int64_t, const ObDASScanCtDef *, ObDASScanRtDef *,
+      ObIAllocator &, ObIArray<DomainIdUtils::DomainIds> &);
+  friend type access(DomainBatchReadTag);
+};
+template struct SpiPrivateAccess<DomainSourceCtTag, &ObDASDomainIdMergeIter::data_table_ctdef_>;
+template struct SpiPrivateAccess<DomainSourceRtTag, &ObDASDomainIdMergeIter::data_table_rtdef_>;
+template struct SpiPrivateAccess<DomainReadTag, &ObDASDomainIdMergeIter::get_domain_id>;
+template struct SpiPrivateAccess<DomainBatchReadTag, &ObDASDomainIdMergeIter::get_domain_ids>;
+
+class DomainIdRejectOwner : public ObIAllocator
+{
+public:
+  void *alloc(int64_t) override { ++calls_; return nullptr; }
+  void *alloc(int64_t, const ObMemAttr &) override { ++calls_; return nullptr; }
+  void free(void *) override {}
+  int64_t calls_ = 0;
+};
+
+class NativeDomainIdProducer : public testing::Test
+{
+protected:
+  NativeDomainIdProducer()
+    : owner_("DomainIdTest"), exec_(owner_), eval_(exec_), source_(owner_), data_(owner_), iter_(nullptr)
+  {}
+  void SetUp() override
+  {
+    frames_[0] = static_cast<char *>(owner_.alloc(4096));
+    ASSERT_NE(nullptr, frames_[0]);
+    MEMSET(frames_[0], 0, 4096);
+    exec_.set_frames(frames_); exec_.set_frame_cnt(1);
+    eval_.frames_ = frames_; eval_.max_batch_size_ = 6;
+    runtime_.eval_ctx_ = &eval_;
+    source_.ref_table_id_ = 100001;
+    // This post-scan port only needs its real output directory/read metadata;
+    // no table scan, storage service or synthetic row-reader is substituted.
+    ASSERT_EQ(0, source_.table_param_.get_read_info().get_schema_rowkey_count());
+    ASSERT_EQ(0, source_.semantic_index_info_.part_key_num_);
+    ASSERT_EQ(OB_SUCCESS, source_.result_output_.init(1));
+    ASSERT_EQ(OB_SUCCESS, source_.result_output_.push_back(&expressions_[0]));
+    ASSERT_EQ(OB_SUCCESS, data_.domain_tids_.init(1));
+    ASSERT_EQ(OB_SUCCESS, data_.domain_tids_.push_back(source_.ref_table_id_));
+    ASSERT_EQ(OB_SUCCESS, data_.domain_types_.init(1));
+    ASSERT_EQ(OB_SUCCESS, data_.domain_types_.push_back(DomainIdUtils::VID));
+    ASSERT_EQ(OB_SUCCESS, data_.domain_id_idxs_.init(1));
+    oceanbase::share::DomainIdxs indices;
+    ASSERT_EQ(OB_SUCCESS, indices.push_back(0));
+    ASSERT_EQ(OB_SUCCESS, data_.domain_id_idxs_.push_back(indices));
+    void *iter_memory = owner_.alloc(sizeof(ObDASDomainIdMergeIter));
+    ASSERT_NE(nullptr, iter_memory);
+    iter_ = new (iter_memory) ObDASDomainIdMergeIter();
+    iter_->*access(DomainSourceCtTag{}) = &data_;
+    iter_->*access(DomainSourceRtTag{}) = &runtime_;
+    for (int64_t col = 0; col < 2; ++col) {
+      ObExpr &expr = expressions_[col];
+      expr.type_ = T_REF_COLUMN; expr.frame_idx_ = 0;
+      expr.datum_off_ = col * 512; expr.eval_info_off_ = col * 512 + 384;
+      expr.res_buf_off_ = 1024 + col * 512; expr.res_buf_len_ = 256;
+      expr.batch_result_ = true; expr.batch_idx_mask_ = UINT64_MAX;
+      for (int64_t row = 0; row < 6; ++row) {
+        new (frames_[0] + expr.datum_off_ + row * sizeof(Datum)) Datum();
+      }
+      new (frames_[0] + expr.eval_info_off_) ObEvalInfo{};
+    }
+    ASSERT_NO_FATAL_FAILURE(configure(DomainIdUtils::VID, ObIntType));
+  }
+  void TearDown() override
+  {
+    // Match arena-owned DAS iterators: release while the dynamic type is live.
+    if (iter_ != nullptr) { EXPECT_EQ(OB_SUCCESS, iter_->release()); }
+  }
+  void configure(DomainIdUtils::ObDomainIDType domain, SqlValueType kind)
+  {
+    data_.domain_types_.at(0) = domain;
+    for (auto &expr : expressions_) {
+      expr.obj_meta_.set_type(kind); expr.obj_meta_.set_collation_type(CS_TYPE_BINARY);
+      expr.obj_meta_.set_scale(0);
+      expr.datum_meta_ = ObDatumMeta(kind, CS_TYPE_BINARY, 0, 19);
+      expr.obj_datum_map_ = kind == ObIntType ? OBJ_DATUM_8BYTE_DATA : OBJ_DATUM_STRING;
+      ObAccuracy accuracy;
+      if (kind == ObIntType) { accuracy = ObAccuracy(19, 0); }
+      else { accuracy.set_full_length(256, LS_BYTE); accuracy.set_scale(0); }
+      ASSERT_EQ(OB_SUCCESS, expr.prepare_scalar_type(expr.obj_meta_, accuracy, owner_));
+    }
+  }
+  Datum &value(int64_t column, int64_t row = 0)
+  { return expressions_[column].locate_batch_datums(eval_)[row]; }
+  int read(ObIAllocator &owner, DomainIdUtils::DomainIds &ids)
+  { return (iter_->*access(DomainReadTag{}))(&source_, &runtime_, owner, ids); }
+  int read_batch(ObIAllocator &owner, ObIArray<DomainIdUtils::DomainIds> &ids)
+  { return (iter_->*access(DomainBatchReadTag{}))(6, &source_, &runtime_, owner, ids); }
+  ObArenaAllocator owner_;
+  ObExecContext exec_;
+  ObEvalCtx eval_;
+  char *frames_[1] = {};
+  ObExpr expressions_[2];
+  ObDASScanCtDef source_, data_;
+  ObDASScanRtDef runtime_;
+  ObDASDomainIdMergeIter *iter_;
+};
+
+TEST_F(NativeDomainIdProducer, scalar_and_batch_vid_survive_fill_and_stored_row_materialization)
+{
+  const int64_t expected[] = {0, -1, INT64_MIN, INT64_MAX, 17, 4096};
+  ObArenaAllocator captured("DomainIdCopy");
+  ObSEArray<DomainIdUtils::DomainIds, 6> batch_ids;
+  for (int64_t i = 0; i < 6; ++i) { value(0, i).set_int(expected[i]); }
+  ASSERT_EQ(OB_SUCCESS, read_batch(captured, batch_ids));
+  ASSERT_EQ(6, batch_ids.count());
+  for (int64_t i = 0; i < 6; ++i) {
+    SCOPED_TRACE(i);
+    ASSERT_EQ(1, batch_ids.at(i).count());
+    ASSERT_EQ(sizeof(int64_t), batch_ids.at(i).at(0).length());
+    int64_t bits = 0;
+    MEMCPY(&bits, batch_ids.at(i).at(0).ptr(), sizeof(bits));
+    EXPECT_EQ(expected[i], bits);
+    value(0, i).set_null();
+  }
+  // Re-enter the real producer with other values, overwriting its stack scratch.
+  // The first batch must still own every physical VID independently.
+  for (int64_t i = 0; i < 6; ++i) {
+    SCOPED_TRACE(i);
+    value(0).set_int(expected[i]);
+    DomainIdUtils::DomainIds one;
+    ASSERT_EQ(OB_SUCCESS, read(captured, one));
+    ASSERT_EQ(1, one.count()); ASSERT_EQ(sizeof(int64_t), one.at(0).length());
+    value(0).set_null();
+    ASSERT_EQ(OB_SUCCESS, DomainIdUtils::fill_domain_id_datum(DomainIdUtils::VID,
+        &expressions_[1], &eval_, batch_ids.at(i).at(0)));
+    ASSERT_FALSE(value(1).is_null()); EXPECT_EQ(expected[i], value(1).get_int());
+    Datum row_values[2]; row_values[0] = value(1); row_values[1].set_int(101 + i);
+    DatumCopyPlan plans[] = {expressions_[1].get_datum_copy_plan(), expressions_[1].get_datum_copy_plan()};
+    ObArrayHelper<DatumCopyPlan> plan_array(2, plans, 2);
+    char memory[sizeof(ObChunkDatumStore::StoredRow) + 2 * sizeof(StoredDatumCell) + 16];
+    ObChunkDatumStore::StoredRow *stored = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObChunkDatumStore::StoredRow::build_native(stored, row_values, 2,
+        plan_array, memory, sizeof(memory), 0));
+    row_values[0].set_null(); row_values[1].set_null(); value(1).set_null();
+    const ObDatum old_id = StoredDatumCodec::decode_legacy_view(stored->stored_cells()[0]);
+    const ObDatum new_id = StoredDatumCodec::decode_legacy_view(stored->stored_cells()[1]);
+    ASSERT_FALSE(old_id.is_null()); ASSERT_FALSE(new_id.is_null());
+    EXPECT_EQ(expected[i], old_id.get_int()); EXPECT_EQ(101 + i, new_id.get_int());
+  }
+  value(0).set_null();
+  DomainIdRejectOwner reject;
+  DomainIdUtils::DomainIds null_id;
+  ASSERT_EQ(OB_SUCCESS, read(reject, null_id)); ASSERT_EQ(1, null_id.count());
+  EXPECT_TRUE(null_id.at(0).empty()); EXPECT_EQ(0, reject.calls_);
+  value(1).set_int(99);
+  ASSERT_EQ(OB_SUCCESS, DomainIdUtils::fill_domain_id_datum(DomainIdUtils::VID,
+      &expressions_[1], &eval_, null_id.at(0)));
+  EXPECT_TRUE(value(1).is_null());
+  value(0).set_int(0);
+  DomainIdUtils::DomainIds unchanged;
+  ASSERT_EQ(OB_SUCCESS, unchanged.push_back(ObString::make_string("prefix")));
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, read(reject, unchanged));
+  EXPECT_EQ(1, reject.calls_); ASSERT_EQ(1, unchanged.count());
+  EXPECT_EQ(ObString::make_string("prefix"), unchanged.at(0));
+}
+
+TEST_F(NativeDomainIdProducer, reference_doc_id_retains_bytes_and_preserves_empty_and_null)
+{
+  ASSERT_NO_FATAL_FAILURE(configure(DomainIdUtils::DOC_ID, ObVarcharType));
+  char source[] = {'d', '\0', 'o', 'c'};
+  value(0).set_string(source, sizeof(source));
+  ObArenaAllocator captured("DomainDocCopy");
+  DomainIdUtils::DomainIds ids;
+  ASSERT_EQ(OB_SUCCESS, read(captured, ids)); ASSERT_EQ(1, ids.count());
+  ASSERT_EQ(sizeof(source), ids.at(0).length()); EXPECT_NE(source, ids.at(0).ptr());
+  MEMSET(source, 'x', sizeof(source)); value(0).set_null();
+  EXPECT_EQ(std::string("d\0oc", 4), std::string(ids.at(0).ptr(), ids.at(0).length()));
+  ASSERT_EQ(OB_SUCCESS, DomainIdUtils::fill_domain_id_datum(DomainIdUtils::DOC_ID,
+      &expressions_[1], &eval_, ids.at(0)));
+  EXPECT_EQ(std::string("d\0oc", 4), std::string(value(1).get_string().ptr(), value(1).length()));
+  for (bool is_null : {false, true}) {
+    SCOPED_TRACE(is_null);
+    if (is_null) { value(0).set_null(); } else { value(0).set_string(source, 0); }
+    DomainIdRejectOwner reject;
+    DomainIdUtils::DomainIds empty;
+    ASSERT_EQ(OB_SUCCESS, read(reject, empty)); ASSERT_EQ(1, empty.count());
+    EXPECT_TRUE(empty.at(0).empty()); EXPECT_EQ(0, reject.calls_);
+  }
+  value(0).set_string(source, sizeof(source));
+  DomainIdRejectOwner reject;
+  DomainIdUtils::DomainIds empty;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, read(reject, empty));
+  EXPECT_TRUE(empty.empty()); EXPECT_EQ(1, reject.calls_);
+}
+} // namespace

@@ -848,17 +848,22 @@ int ObDASDomainIdMergeIter::get_domain_id(
         ret = OB_ERR_UNEXPECTED;
       } else {
         common::Datum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-        if (datum.get_string().length() == 0) {
+        // DomainIds is a legacy byte-span boundary. Inline execution values
+        // must be exported using the actual expression type before copying.
+        alignas(8) char scratch[64];
+        ObDatum physical;
+        if (OB_FAIL(expr->get_datum_copy_plan().legacy_view(datum, physical, scratch, sizeof(scratch)))) {
+        } else if (physical.is_null() || physical.len_ == 0) {
           if (OB_FAIL(domain_id.push_back(ObString()))) {
           }
         } else {
-          void *buf = allocator.alloc(datum.get_string().length());
+          void *buf = allocator.alloc(physical.len_);
           if (OB_ISNULL(buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
           } else {
-            memcpy(buf, datum.get_string().ptr(), datum.get_string().length());
+            memcpy(buf, physical.ptr_, physical.len_);
             ObString tmp_domain_id;
-            tmp_domain_id.assign_ptr(reinterpret_cast<char*>(buf), datum.get_string().length());
+            tmp_domain_id.assign_ptr(reinterpret_cast<char*>(buf), physical.len_);
             if (OB_FAIL(domain_id.push_back(tmp_domain_id))) {
             }
           }
