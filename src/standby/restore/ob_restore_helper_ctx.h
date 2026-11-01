@@ -19,7 +19,7 @@
 
 #include "lib/container/ob_array.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
-#include "standby/ob_standby_grpc.h"
+#include "standby/standby_rpc.h"
 #ifdef _WIN32
 #include <winsock2.h>
 #include <windows.h>
@@ -93,7 +93,7 @@ public:
   virtual void reset() override;
   virtual void destroy() override;
   bool ls_meta_fetched_;
-  standby::ObStandbyGrpcClient *grpc_client_;
+  standby::StandbyRpcClient *rpc_client_;
   rpc::Context *ls_view_context_;
   std::unique_ptr<rpc::Reader> ls_view_reader_;
 };
@@ -107,7 +107,7 @@ public:
   virtual bool is_valid() const override;
   virtual void reset() override;
   virtual void destroy() override;
-  standby::ObStandbyGrpcClient *grpc_client_;
+  standby::StandbyRpcClient *rpc_client_;
   rpc::Context *tablet_info_context_;
   std::unique_ptr<rpc::Reader> tablet_info_reader_;
 };
@@ -123,7 +123,7 @@ public:
   virtual void destroy() override;
 
   // Stream reader related members
-  standby::ObStandbyGrpcClient *grpc_client_;
+  standby::StandbyRpcClient *rpc_client_;
   rpc::Context *sstable_info_context_;
   std::unique_ptr<rpc::Reader> sstable_info_reader_;
   int64_t pending_sstable_count_;
@@ -140,7 +140,7 @@ public:
   virtual void reset() override;
   virtual void destroy() override;
 
-  standby::ObStandbyGrpcClient *grpc_client_;
+  standby::StandbyRpcClient *rpc_client_;
   rpc::Context *macro_info_context_;
   std::unique_ptr<rpc::Reader> macro_info_reader_;
 };
@@ -155,7 +155,7 @@ public:
   virtual void reset() override;
   virtual void destroy() override;
 
-  standby::ObStandbyGrpcClient *grpc_client_;
+  standby::StandbyRpcClient *rpc_client_;
   rpc::Context *macro_block_context_;
   std::unique_ptr<rpc::Reader> macro_block_reader_;
   int64_t data_version_;
@@ -166,17 +166,17 @@ public:
 class ObRestoreHelperCtxUtil
 {
 public:
-  static int close_reader(std::unique_ptr<rpc::Reader> &reader, standby::ObStandbyGrpcClient *grpc_client)
+  static int close_reader(std::unique_ptr<rpc::Reader> &reader, standby::StandbyRpcClient *rpc_client)
   {
     int ret = OB_SUCCESS;
-    if (!reader || OB_ISNULL(grpc_client)) {
+    if (!reader || OB_ISNULL(rpc_client)) {
       ret = OB_INVALID_ARGUMENT;
-      STORAGE_LOG(WARN, "reader or grpc_client is nullptr", KR(ret), KP(grpc_client));
+      STORAGE_LOG(WARN, "reader or rpc_client is nullptr", KR(ret), KP(rpc_client));
     } else {
       int status = reader->finish();
       reader.reset();
-      if (OB_FAIL(grpc_client->translate_error(status))) {
-        STORAGE_LOG(ERROR, "failed to translate grpc stream status", KR(ret),
+      if (OB_FAIL(rpc_client->translate_error(status))) {
+        STORAGE_LOG(ERROR, "failed to translate RPC stream status", KR(ret),
             K(status));
       }
     }

@@ -25,7 +25,7 @@
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
 #include "standby/restore/ob_tablet_copy_finish_task.h"
 #include "standby/restore/ob_sstable_copy_finish_task.h"
-#include "standby/ob_standby_grpc.h"
+#include "standby/standby_rpc.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_meta.h"
@@ -116,7 +116,7 @@ int ObStandbySSTableCopier::prepare_replay_base(
   static const int64_t RPC_TIMEOUT_US = 60L * 1000L * 1000L;
   standby::ObFetchStandbyPalfBaseInfoArg arg;
   standby::ObFetchStandbyPalfBaseInfoResult result;
-  standby::ObStandbyGrpcClient client;
+  standby::StandbyRpcClient client;
   restore_checkpoint_scn.reset();
   palf_base_info.reset();
   source_end_scn.reset();
@@ -140,7 +140,7 @@ int ObStandbySSTableCopier::prepare_replay_base(
     LOG_WARN("source returned invalid restore checkpoint", K(ret), K(source_ls_meta_));
   } else if (FALSE_IT(arg.replay_start_scn_ = restore_checkpoint_scn)) {
   } else if (OB_FAIL(client.init(src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
-    LOG_WARN("failed to init grpc client for replay base", K(ret), K_(src));
+    LOG_WARN("failed to init RPC client for replay base", K(ret), K_(src));
   } else if (OB_FAIL(client.fetch_standby_palf_base_info(arg, result))) {
     LOG_WARN("failed to fetch source palf replay base", K(ret), K_(src), K(arg));
   } else if (!result.is_valid()) {

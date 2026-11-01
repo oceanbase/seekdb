@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "standby/ob_standby_grpc_stream_util.h"
+#include "standby/standby_rpc_stream_util.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log.h"
-#include "standby/ob_standby_grpc.h"
+#include "standby/standby_rpc.h"
 #include "standby/restore/ob_standby_restore_reader.h"
 
 namespace oceanbase
@@ -32,7 +32,7 @@ using storage::ObCopyMacroRangeInfo;
 using storage::ObCopySSTableMacroRangeObProducer;
 using storage::ObICopySSTableMacroRangeObProducer;
 
-int ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
+int StandbyRpcStreamUtil::build_tablet_sstable_info(
     rpc::ServerContext *context,
     const obcall::ObCopyTabletSSTableInfoArg &tablet_arg,
     storage::ObLS *ls,
@@ -88,7 +88,7 @@ int ObStandbyGrpcStreamUtil::build_tablet_sstable_info(
   return ret;
 }
 
-int ObStandbyGrpcStreamUtil::build_sstable_macro_info(
+int StandbyRpcStreamUtil::build_sstable_macro_info(
     rpc::ServerContext *context,
     const obcall::ObCopySSTableMacroRangeInfoHeader &header,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,

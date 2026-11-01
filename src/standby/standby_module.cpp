@@ -25,7 +25,7 @@
 #include "standby/control/ob_standby_timestamp_provider.h"
 #include "standby/control/ob_standby_role_transition_service.h"
 #include "standby/control/standby_state_store.h"
-#include "standby/ob_standby_grpc_service.h"
+#include "standby/standby_rpc_service.h"
 #include "standby/ob_standby_log_sync_service.h"
 #include "standby/standby_host.h"
 #include "share/rc/ob_server_runtime.h"
@@ -189,7 +189,7 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
   } else if (OB_ISNULL(rpc_server_ = OB_NEW(RpcServer, ObModIds::OB_COMMON_NETWORK))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate standby RPC server", KR(ret));
-  } else if (OB_FAIL(create_and_register_standby_grpc_service(
+  } else if (OB_FAIL(create_and_register_standby_rpc_service(
       *rpc_server_, config_, state_store_, *host_))) {
     LOG_WARN("failed to register standby RPC service", KR(ret));
   } else if (OB_FAIL(schema_refresh_trigger_.init(config_, *host_))) {

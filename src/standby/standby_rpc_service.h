@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STANDBY_GRPC_SERVICE_H_
-#define OCEANBASE_STANDBY_GRPC_SERVICE_H_
+#pragma once
 
 #include "standby/rpc_transport.h"
 namespace oceanbase::standby {
 struct StandbyConfig;
 class IStandbyHost;
 class StandbyStateStore;
-int create_and_register_standby_grpc_service(rpc::RpcServer &server,
+int create_and_register_standby_rpc_service(rpc::RpcServer &server,
     const StandbyConfig &config, StandbyStateStore &state_store, IStandbyHost &host);
 }
-#endif

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STANDBY_GRPC_STREAM_UTIL_H_
-#define OCEANBASE_STANDBY_GRPC_STREAM_UTIL_H_
+#pragma once
 
 #include "standby/rpc_transport.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
@@ -29,7 +28,7 @@ class ObLS;
 namespace standby
 {
 
-class ObStandbyGrpcStreamUtil final
+class StandbyRpcStreamUtil final
 {
 public:
   static int build_tablet_sstable_info(
@@ -46,5 +45,3 @@ public:
 
 } // namespace standby
 } // namespace oceanbase
-
-#endif // OCEANBASE_STANDBY_GRPC_STREAM_UTIL_H_

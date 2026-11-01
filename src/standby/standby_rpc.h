@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STANDBY_GRPC_H_
-#define OCEANBASE_STANDBY_GRPC_H_
+#pragma once
 
 #include "lib/ob_define.h"
 #include "lib/allocator/ob_malloc.h"
@@ -75,7 +74,7 @@ int serialize_message(const ObType &obj, ProtoType *proto)
     LOG_WARN("invalid encoded length", K(ret), K(buf_len));
   } else if (FALSE_IT(buf = proto->mutable_buf(buf_len))) {
   } else if (OB_FAIL(serialization::encode(buf, buf_len, pos, obj))) {
-    LOG_WARN("failed to encode object for grpc", K(ret), K(buf_len), K(pos));
+    LOG_WARN("failed to encode object for RPC", K(ret), K(buf_len), K(pos));
   } else {
     proto->set_size(pos);
   }
@@ -93,9 +92,9 @@ int deserialize_message(const ProtoType &proto, ObType &obj)
   if (size > static_cast<uint64_t>(buf.size())
       || size > static_cast<uint64_t>(INT64_MAX)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid grpc payload", K(ret), K(size), "buf_size", buf.size());
+    LOG_WARN("invalid RPC payload", K(ret), K(size), "buf_size", buf.size());
   } else if (OB_FAIL(serialization::decode(buf.data(), static_cast<int64_t>(size), pos, obj))) {
-    LOG_WARN("failed to decode object from grpc", K(ret), K(size), K(pos));
+    LOG_WARN("failed to decode object from RPC", K(ret), K(size), K(pos));
   }
   return ret;
 }
@@ -195,13 +194,13 @@ public:
   common::ObSEArray<common::ObAddr, 4> visited_;
 };
 
-class ObStandbyGrpcClient;
+class StandbyRpcClient;
 
-class ObStandbyGrpcClient
+class StandbyRpcClient
 {
 public:
-  ObStandbyGrpcClient();
-  ~ObStandbyGrpcClient();
+  StandbyRpcClient();
+  ~StandbyRpcClient();
 
   int init(const common::ObAddr& addr, int64_t timeout, bool rpc_tls_enabled);
   int get_ls_view_tablet_count(ObStandbyLSViewTabletCountResult& result);
@@ -277,10 +276,8 @@ public:
 
 private:
   bool is_inited_;
-  rpc::Client grpc_client_;
+  rpc::Client rpc_client_;
 };
 
 } // namespace standby
 } // oceanbase
-
-#endif // OCEANBASE_STANDBY_GRPC_H_
