@@ -636,6 +636,252 @@ TEST(NativeFrameWire, sqc_parts2_keeps_selected_expression_directory_through_tre
   }
 }
 
+namespace
+{
+class FrameInitAllocator final : public ObIAllocator
+{
+public:
+  explicit FrameInitAllocator(int64_t frame_bytes)
+    : owner_("FrameInitTest"), frame_bytes_(frame_bytes), calls_(0), fail_call_(0),
+      rejected_(0), last_frame_(nullptr) {}
+  void *alloc(int64_t size) override
+  {
+    ++calls_;
+    if (calls_ == fail_call_) { ++rejected_; return nullptr; }
+    void *memory = owner_.alloc(size);
+    if (memory != nullptr) {
+      MEMSET(memory, 0xA5, size);
+      if (size == frame_bytes_) { last_frame_ = static_cast<char *>(memory); }
+    }
+    return memory;
+  }
+  void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
+  void free(void *memory) override { owner_.free(memory); }
+  void begin_attempt(int64_t fail_call = 0)
+  { calls_ = 0; fail_call_ = fail_call; rejected_ = 0; last_frame_ = nullptr; }
+  ObArenaAllocator owner_;
+  int64_t frame_bytes_;
+  int64_t calls_;
+  int64_t fail_call_;
+  int64_t rejected_;
+  char *last_frame_;
+};
+
+void make_init_info(ObExprFrameInfo &info, ObIAllocator &owner,
+                    const std::vector<int64_t> &slots)
+{
+  ASSERT_FALSE(slots.empty());
+  ASSERT_EQ(OB_SUCCESS, info.rt_exprs_.prepare_allocate(slots.size()));
+  SqlType type;
+  ASSERT_NO_FATAL_FAILURE(scalar_type(ObIntType, type, ObAccuracy(20, 0)));
+  int64_t max_slot = 0;
+  for (int64_t i = 0; i < static_cast<int64_t>(slots.size()); ++i) {
+    max_slot = std::max(max_slot, slots[i]);
+    ObExpr &expr = info.rt_exprs_.at(i);
+    expr.type_ = T_REF_COLUMN;
+    expr.datum_meta_.type_ = ObIntType;
+    expr.datum_meta_.precision_ = 20;
+    expr.datum_meta_.scale_ = 0;
+    expr.obj_meta_.set_int();
+    expr.frame_idx_ = 0;
+    expr.datum_off_ = ScalarFrameLayout::datum_offset(slots[i]);
+    expr.eval_info_off_ = ScalarFrameLayout::eval_info_offset(slots[i]);
+    ASSERT_EQ(OB_SUCCESS, expr.bind_sql_type(type, owner));
+  }
+  ASSERT_EQ(OB_SUCCESS, info.datum_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, info.datum_frame_.push_back(ObFrameInfo(slots.size(), 0,
+      (max_slot + 1) * ScalarFrameLayout::slot_size(), 0, 0)));
+}
+
+void expect_init_failure_without_writes(const ObExprFrameInfo &info, int expected)
+{
+  const int64_t bytes = info.datum_frame_.at(0).frame_size_;
+  FrameInitAllocator exec_owner(bytes);
+  ObSEArray<char *, 1> no_parameters;
+  char previous_bytes[8]; char *previous = previous_bytes;
+  char **frames = &previous; uint64_t count = 77;
+  EXPECT_EQ(expected, info.alloc_frame(exec_owner, no_parameters, count, frames));
+  EXPECT_EQ(&previous, frames); EXPECT_EQ(77, count); EXPECT_EQ(previous_bytes, previous);
+  ASSERT_NE(nullptr, exec_owner.last_frame_);
+  EXPECT_TRUE(std::all_of(exec_owner.last_frame_, exec_owner.last_frame_ + bytes,
+      [](char byte) { return static_cast<unsigned char>(byte) == 0xA5; }));
+}
+
+void expect_valid_init_matches_wire_initializer(const ObExprFrameInfo &info)
+{
+  const ObFrameInfo &frame = info.datum_frame_.at(0);
+  FrameInitAllocator exec_owner(frame.frame_size_);
+  ObSEArray<char *, 1> no_parameters;
+  char **frames = nullptr; uint64_t count = 0;
+  ASSERT_EQ(OB_SUCCESS, info.alloc_frame(exec_owner, no_parameters, count, frames));
+  ASSERT_EQ(1, count); ASSERT_NE(nullptr, frames); ASSERT_NE(nullptr, frames[0]);
+  std::vector<char> reference(frame.frame_size_, static_cast<char>(0xA5));
+  ASSERT_EQ(OB_SUCCESS, NativeFrameCodec::initialize_frame(frame, info, reference.data()));
+  EXPECT_EQ(0, MEMCMP(reference.data(), frames[0], frame.frame_size_));
+  for (int64_t i = 0; i < info.rt_exprs_.count(); ++i) {
+    if (!info.is_mark_serialize() || (i < info.ser_expr_marks_.count() && info.ser_expr_marks_.at(i))) {
+      const ObExpr &expr = info.rt_exprs_.at(i);
+      EXPECT_TRUE(reinterpret_cast<const Datum *>(frames[0] + expr.datum_off_)->is_null());
+      EXPECT_EQ(0, reinterpret_cast<const ObEvalInfo *>(frames[0] + expr.eval_info_off_)->flag_);
+    }
+  }
+}
+} // namespace
+
+TEST(NativeFrameWire, execution_layout_accepts_shuffled_aliases_and_shared_result_regions)
+{
+  ObArenaAllocator owner("InitAliases");
+  ObExprFrameInfo info(owner);
+  ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, {2, 0, 2, 1, 0}));
+  ASSERT_NO_FATAL_FAILURE(expect_valid_init_matches_wire_initializer(info));
+
+  // Result buffers and dynamic headers may be shared. The existing overlap
+  // policy concerns Datum/EvalInfo regions; this optimization must not widen it.
+  SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_BINARY);
+  SqlType text;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(meta, ObAccuracy(), text));
+  ObExprFrameInfo shared(owner);
+  ASSERT_NO_FATAL_FAILURE(make_init_info(shared, owner, {1, 0}));
+  shared.datum_frame_.at(0).frame_size_ = 256;
+  for (int64_t i = 0; i < shared.rt_exprs_.count(); ++i) {
+    ObExpr &expr = shared.rt_exprs_.at(i);
+    expr.datum_meta_.type_ = ObVarcharType;
+    expr.datum_meta_.cs_type_ = CS_TYPE_BINARY;
+    expr.obj_meta_ = meta;
+    expr.res_buf_len_ = 16; expr.res_buf_off_ = 160; expr.dyn_buf_header_offset_ = 128;
+    ASSERT_EQ(OB_SUCCESS, expr.bind_sql_type(text, owner));
+  }
+  ASSERT_NO_FATAL_FAILURE(expect_valid_init_matches_wire_initializer(shared));
+}
+
+TEST(NativeFrameWire, execution_layout_rejects_alias_type_eval_and_batch_count_mismatches)
+{
+  ObArenaAllocator owner("BadInitAlias");
+  {
+    ObExprFrameInfo info(owner);
+    ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, {0, 0}));
+    SqlType different;
+    ASSERT_NO_FATAL_FAILURE(scalar_type(ObIntType, different, ObAccuracy(19, 0)));
+    info.rt_exprs_.at(1).datum_meta_.precision_ = 19;
+    ASSERT_EQ(OB_SUCCESS, info.rt_exprs_.at(1).bind_sql_type(different, owner));
+    ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(info, OB_DESERIALIZE_ERROR));
+  }
+  {
+    ObExprFrameInfo info(owner);
+    ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, {0, 0}));
+    info.datum_frame_.at(0).frame_size_ = 96;
+    info.rt_exprs_.at(1).eval_info_off_ = 40;
+    ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(info, OB_DESERIALIZE_ERROR));
+  }
+  {
+    ObExprFrameInfo info(owner);
+    ASSERT_NO_FATAL_FAILURE(make_batch_info(info, owner));
+    ObExpr &alias = info.rt_exprs_.at(1);
+    alias.batch_result_ = true; alias.datum_off_ = 16;
+    alias.pvt_skip_off_ = 48; alias.eval_info_off_ = 104; alias.eval_flags_off_ = 120;
+    ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(info, OB_DESERIALIZE_ERROR));
+  }
+}
+
+TEST(NativeFrameWire, execution_layout_rejects_each_cross_slot_overlap_without_writes)
+{
+  ObArenaAllocator owner("InitOverlap");
+  for (int kind = 0; kind < 3; ++kind) {
+    ObExprFrameInfo info(owner);
+    ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, {2, 0, 1}));
+    if (kind == 0) { info.rt_exprs_.at(0).datum_off_ = 8; } // Datum/Datum
+    else if (kind == 1) { info.rt_exprs_.at(0).eval_info_off_ = 0; } // EvalInfo/Datum
+    else { info.rt_exprs_.at(0).eval_info_off_ = 40; } // EvalInfo/EvalInfo, nonadjacent Exprs
+    ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(info, OB_DESERIALIZE_ERROR));
+  }
+}
+
+TEST(NativeFrameWire, execution_layout_preserves_pair_and_extent_error_precedence)
+{
+  ObArenaAllocator owner("InitErrorOrder");
+  {
+    ObExprFrameInfo info(owner);
+    ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, {0, 1, 2}));
+    info.rt_exprs_.at(1).eval_info_off_ = 0; // invalid earlier pair
+    info.rt_exprs_.at(2).sql_type_ = nullptr; // later independent extent error
+    ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(info, OB_DESERIALIZE_ERROR));
+  }
+  {
+    ObExprFrameInfo info(owner);
+    ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, {0, 1, 2}));
+    info.rt_exprs_.at(0).sql_type_ = nullptr; // first failure must win
+    info.rt_exprs_.at(2).eval_info_off_ = 0;
+    ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(info, OB_ERR_UNEXPECTED));
+  }
+}
+
+TEST(NativeFrameWire, execution_layout_honors_partial_selection_and_batch_offsets)
+{
+  ObArenaAllocator owner("InitPartial");
+  ObExprFrameInfo global(owner);
+  ASSERT_NO_FATAL_FAILURE(make_init_info(global, owner, {1, 100, 0}));
+  ObExprFrameInfo partial(owner, global.rt_exprs_);
+  ASSERT_EQ(OB_SUCCESS, partial.ser_expr_marks_.init(3));
+  ASSERT_EQ(OB_SUCCESS, partial.ser_expr_marks_.prepare_allocate(3));
+  partial.ser_expr_marks_.at(0) = true; partial.ser_expr_marks_.at(1) = false;
+  partial.ser_expr_marks_.at(2) = true;
+  ASSERT_EQ(OB_SUCCESS, partial.datum_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, partial.datum_frame_.push_back(ObFrameInfo(3, 0, 48, 0, 2424)));
+  // The unselected Expr lies outside the shrunk frame and is not a bound.
+  ASSERT_NO_FATAL_FAILURE(expect_valid_init_matches_wire_initializer(partial));
+  partial.ser_expr_marks_.at(1) = true;
+  ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(partial, OB_DESERIALIZE_ERROR));
+
+  ObExprFrameInfo batch(owner);
+  ASSERT_NO_FATAL_FAILURE(make_batch_info(batch, owner));
+  ASSERT_NO_FATAL_FAILURE(expect_valid_init_matches_wire_initializer(batch));
+  batch.rt_exprs_.at(0).pvt_skip_off_ = UINT32_MAX;
+  ASSERT_NO_FATAL_FAILURE(expect_init_failure_without_writes(batch, OB_DESERIALIZE_ERROR));
+}
+
+TEST(NativeFrameWire, execution_layout_large_shuffled_frame_initializes_every_native_slot)
+{
+  ObArenaAllocator owner("LargeInit");
+  std::vector<int64_t> slots;
+  for (int64_t i = 0; i < 257; ++i) { slots.push_back((i * 73) % 257); }
+  slots.push_back(0); slots.push_back(128);
+  ObExprFrameInfo info(owner);
+  ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, slots));
+  ASSERT_NO_FATAL_FAILURE(expect_valid_init_matches_wire_initializer(info));
+}
+
+TEST(NativeFrameWire, execution_layout_spill_oom_keeps_frame_and_published_outputs_unchanged)
+{
+  ObArenaAllocator owner("InitOomInfo");
+  std::vector<int64_t> slots;
+  for (int64_t i = 0; i < 65; ++i) { slots.push_back((i * 17) % 65); }
+  ObExprFrameInfo info(owner);
+  ASSERT_NO_FATAL_FAILURE(make_init_info(info, owner, slots));
+  const int64_t bytes = info.datum_frame_.at(0).frame_size_;
+  FrameInitAllocator exec_owner(bytes);
+  ObSEArray<char *, 1> no_parameters;
+  // Directory and frame are the first two real allocations. Fail each of the
+  // cell/interval spills in turn, after the frame exists but before any write.
+  for (int64_t fail_call : {int64_t(3), int64_t(4)}) {
+    exec_owner.begin_attempt(fail_call);
+    char previous_bytes[8]; char *previous = previous_bytes;
+    char **frames = &previous; uint64_t count = 77;
+    EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, info.alloc_frame(exec_owner, no_parameters, count, frames));
+    EXPECT_EQ(fail_call, exec_owner.calls_); EXPECT_EQ(1, exec_owner.rejected_);
+    EXPECT_EQ(&previous, frames); EXPECT_EQ(77, count); EXPECT_EQ(previous_bytes, previous);
+    ASSERT_NE(nullptr, exec_owner.last_frame_);
+    EXPECT_TRUE(std::all_of(exec_owner.last_frame_, exec_owner.last_frame_ + bytes,
+        [](char byte) { return static_cast<unsigned char>(byte) == 0xA5; }));
+    exec_owner.begin_attempt();
+    ASSERT_EQ(OB_SUCCESS, info.alloc_frame(exec_owner, no_parameters, count, frames));
+    ASSERT_EQ(1, count); ASSERT_NE(nullptr, frames);
+    for (int64_t slot = 0; slot < 65; ++slot) {
+      EXPECT_TRUE(reinterpret_cast<const Datum *>(frames[0]
+          + ScalarFrameLayout::datum_offset(slot))->is_null());
+    }
+  }
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

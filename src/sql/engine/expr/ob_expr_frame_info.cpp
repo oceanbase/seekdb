@@ -19,6 +19,7 @@
 #include "native_frame_value_codec.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/px/ob_px_util.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -142,6 +143,130 @@ int wire_record_count(const ObFrameInfo &info, const ObExprFrameInfo &expression
             }
           }
         }
+      }
+    }
+  }
+  return ret;
+}
+
+// Ordinary execution needs the same layout checks as the wire codec, but does
+// not need to rediscover every preceding alias for each expression. This
+// worklist is private to one allocation call and never becomes plan state.
+struct FrameInitCell
+{
+  int64_t expr_index_;
+  uint64_t count_;
+  uint32_t datum_off_;
+  uint32_t eval_info_off_;
+  bool first_;
+};
+
+struct FrameInitInterval
+{
+  uint64_t begin_;
+  uint64_t end_;
+};
+
+int initialize_execution_frame(const ObFrameInfo &info,
+    const ObExprFrameInfo &expressions, char *frame, ObIAllocator &exec_owner)
+{
+  int ret = OB_SUCCESS;
+  int extent_ret = OB_SUCCESS;
+  int64_t selected = 0;
+  ModulePageAllocator scratch_allocator(exec_owner);
+  ObSEArray<FrameInitCell, 16> cells(0, scratch_allocator);
+  ObSEArray<FrameInitInterval, 32> intervals(0, scratch_allocator);
+  for (int64_t i = 0; OB_SUCC(ret) && i < expressions.rt_exprs_.count(); ++i) {
+    if (wire_expr_selected(expressions, i, info.frame_idx_)) {
+      if (selected == INT64_MAX / static_cast<int64_t>(sizeof(FrameInitCell))) {
+        ret = OB_SIZE_OVERFLOW;
+      } else { ++selected; }
+    }
+  }
+  if (OB_SUCC(ret)) { ret = cells.reserve(selected); }
+  for (int64_t i = 0; OB_SUCC(ret) && extent_ret == OB_SUCCESS
+      && i < expressions.rt_exprs_.count(); ++i) {
+    if (wire_expr_selected(expressions, i, info.frame_idx_)) {
+      const ObExpr &expr = expressions.rt_exprs_.at(i);
+      uint64_t count = 0;
+      extent_ret = wire_expr_extent(info, expr, count);
+      if (extent_ret == OB_SUCCESS) {
+        const FrameInitCell cell = {i, count, expr.datum_off_, expr.eval_info_off_, true};
+        ret = cells.push_back(cell);
+      }
+    }
+  }
+  if (OB_SUCC(ret) && cells.count() > 1) {
+    std::sort(cells.get_data(), cells.get_data() + cells.count(),
+        [](const FrameInitCell &left, const FrameInitCell &right) {
+          return left.datum_off_ < right.datum_off_
+              || (left.datum_off_ == right.datum_off_ && left.expr_index_ < right.expr_index_);
+        });
+  }
+  int64_t unique = 0;
+  for (int64_t i = 0; OB_SUCC(ret) && i < cells.count();) {
+    const FrameInitCell &first = cells.at(i);
+    ++unique;
+    int64_t j = i + 1;
+    for (; OB_SUCC(ret) && j < cells.count() && cells.at(j).datum_off_ == first.datum_off_; ++j) {
+      FrameInitCell &alias = cells.at(j);
+      if (alias.eval_info_off_ != first.eval_info_off_ || alias.count_ != first.count_
+          || !expressions.rt_exprs_.at(first.expr_index_).get_sql_type().equals(
+              expressions.rt_exprs_.at(alias.expr_index_).get_sql_type())) {
+        ret = OB_DESERIALIZE_ERROR;
+      } else { alias.first_ = false; }
+    }
+    i = j;
+  }
+  if (OB_SUCC(ret) && unique > INT64_MAX / (2 * static_cast<int64_t>(sizeof(FrameInitInterval)))) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (OB_SUCC(ret)) { ret = intervals.reserve(2 * unique); }
+  for (int64_t i = 0; OB_SUCC(ret) && i < cells.count(); ++i) {
+    const FrameInitCell &cell = cells.at(i);
+    if (cell.first_) {
+      // wire_expr_extent already checked the arithmetic, individual bounds,
+      // and each expression's own Datum/EvalInfo non-overlap. Only these two
+      // regions participate in the existing cross-expression overlap policy.
+      const FrameInitInterval datum = {cell.datum_off_, cell.datum_off_ + cell.count_ * sizeof(Datum)};
+      const FrameInitInterval eval = {cell.eval_info_off_, cell.eval_info_off_ + sizeof(ObEvalInfo)};
+      if (OB_FAIL(intervals.push_back(datum))) {
+      } else { ret = intervals.push_back(eval); }
+    }
+  }
+  if (OB_SUCC(ret) && intervals.count() > 1) {
+    std::sort(intervals.get_data(), intervals.get_data() + intervals.count(),
+        [](const FrameInitInterval &left, const FrameInitInterval &right) {
+          return left.begin_ < right.begin_ || (left.begin_ == right.begin_ && left.end_ < right.end_);
+        });
+    uint64_t end = intervals.at(0).end_;
+    for (int64_t i = 1; OB_SUCC(ret) && i < intervals.count(); ++i) {
+      if (intervals.at(i).begin_ < end) { ret = OB_DESERIALIZE_ERROR; }
+      else { end = intervals.at(i).end_; }
+    }
+  }
+  // The old loop rejects an invalid earlier pair before reaching a later
+  // extent failure. Check only the successfully validated prefix above, then
+  // propagate that later failure if the prefix itself was valid.
+  if (OB_SUCC(ret)) { ret = extent_ret; }
+  if (OB_SUCC(ret) && (info.frame_size_ > INT64_MAX || (info.frame_size_ > 0 && frame == nullptr))) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_SUCC(ret)) {
+    if (cells.count() > 1) {
+      std::sort(cells.get_data(), cells.get_data() + cells.count(),
+          [](const FrameInitCell &left, const FrameInitCell &right) {
+            return left.expr_index_ < right.expr_index_;
+          });
+    }
+    // Every fallible check and scratch allocation precedes the first write.
+    if (info.frame_size_ > 0) { MEMSET(frame, 0, info.frame_size_); }
+    for (int64_t i = 0; i < cells.count(); ++i) {
+      const FrameInitCell &cell = cells.at(i);
+      if (cell.first_) {
+        for (uint64_t row = 0; row < cell.count_; ++row) {
+          new (frame + cell.datum_off_ + row * sizeof(Datum)) Datum();
+        }
+        new (frame + cell.eval_info_off_) ObEvalInfo{};
       }
     }
   }
@@ -790,7 +915,7 @@ int ObExprFrameInfo::alloc_frame(ObIAllocator &exec_allocator,
       else {
         char *frame = static_cast<char *>(exec_allocator.alloc(info.frame_size_));
         if (frame == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-        else if (OB_FAIL(NativeFrameCodec::initialize_frame(info, *this, frame))) {
+        else if (OB_FAIL(initialize_execution_frame(info, *this, frame, exec_allocator))) {
         } else { candidate[info.frame_idx_] = frame; }
       }
     }
