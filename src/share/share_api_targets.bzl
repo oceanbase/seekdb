@@ -376,6 +376,10 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         hdrs = ["ob_i_local_device_space_provider.h"],
         deps = [],
     ),
+    "math_compat": struct(
+        hdrs = ["ob_math_compat.h"],
+        deps = [],
+    ),
     "memory_support": struct(
         hdrs = ["allocator/ob_reserve_arena.h"],
         deps = ["//src/oblib:oblib_foundation"],
