@@ -18,6 +18,11 @@
 #include "common/wide_integer/ob_wide_integer_helper.h"
 #include "common/datum/datum_parameter_codec.h"
 #include "share/datum/typed_datum_compare.h"
+#include "sql/engine/ob_physical_plan_ctx.h"
+#include "sql/engine/expr/ob_expr_util.h"
+#include "common/udt/ob_array_fixed_size.h"
+#include "common/lob/lob_types.h"
+#include "share/ob_i_lob_read_service.h"
 #include <gtest/gtest.h>
 #include <fstream>
 #include <cstring>
@@ -489,4 +494,222 @@ TEST(SessionNativeResult, output_pack_row_builder_keeps_outer_join_null_distinct
                                  arguments[3].locate_expr_datum(eval).get_string().length()));
     }
   }
+}
+
+
+namespace {
+// The input is a real inline LOB. No external LOB read is allowed by this test;
+// these transport methods satisfy the actual execution-context service port.
+class OutputPackNoIoLobService final : public ObILobReadService {
+public:
+  int calls_ = 0;
+  int get_outrow_lob_full_data(ObLobTextIterCtx &, ObCollationType, bool, bool, ObIAllocator *) override
+    { ++calls_; return OB_NOT_SUPPORTED; }
+  int get_delta_lob_full_data(ObLobTextIterCtx &, SqlValueType, ObCollationType,
+      ObLobLocatorV2 &, ObIAllocator *, ObString &) override { ++calls_; return OB_NOT_SUPPORTED; }
+  int get_outrow_prefix_data(ObLobTextIterCtx &, ObCollationType, bool, bool, ObIAllocator *, uint32_t) override
+    { ++calls_; return OB_NOT_SUPPORTED; }
+  int get_first_block(ObLobTextIterCtx &, ObCollationType, bool, bool, ObIAllocator *,
+      ObString &, ObTextStringIterState &) override { ++calls_; return OB_NOT_SUPPORTED; }
+  int get_next_block_inner(ObLobTextIterCtx &, ObCollationType, bool, bool,
+      ObString &, ObTextStringIterState &) override { ++calls_; return OB_NOT_SUPPORTED; }
+  int get_outrow_char_len(ObLobTextIterCtx &, ObCollationType, ObIAllocator *, int64_t &) override
+    { ++calls_; return OB_NOT_SUPPORTED; }
+  void free_lob_query_iter(ObLobTextIterCtx &) override { ++calls_; }
+};
+class OutputPackInlineLobContext final : public ObILobAccessContext { public: ~OutputPackInlineLobContext() = default; };
+struct OutputPackLobContextTag {
+  using type = ObILobAccessContext *ObExecContext::*;
+  friend type access(OutputPackLobContextTag);
+};
+template<class Tag, typename Tag::type Member> struct OutputPackTestAccess {
+  friend typename Tag::type access(Tag) { return Member; }
+};
+template struct OutputPackTestAccess<OutputPackLobContextTag, &ObExecContext::lob_access_ctx_>;
+class OutputPackInlineContextGuard {
+public:
+  OutputPackInlineContextGuard(ObExecContext &exec, ObILobAccessContext &context) : exec_(exec) {
+    exec_.*access(OutputPackLobContextTag{}) = &context;
+  }
+  ~OutputPackInlineContextGuard() { exec_.*access(OutputPackLobContextTag{}) = nullptr; }
+private: ObExecContext &exec_;
+};
+}
+
+TEST(SessionNativeResult, output_pack_collection_null_and_present_array_use_distinct_paths)
+{
+  using namespace oceanbase::obmysql;
+  ObArenaAllocator owner;
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObExecContext exec(owner);
+  exec.set_my_session(&session);
+  OutputPackNoIoLobService service;
+  OutputPackInlineLobContext context;
+  exec.set_lob_read_service(&service);
+  OutputPackInlineContextGuard context_guard(exec, context);
+  ASSERT_EQ(OB_SUCCESS, exec.create_physical_plan_ctx());
+  uint16_t id = 0;
+  ASSERT_EQ(OB_SUCCESS, exec.get_subschema_id_by_type_string(
+      ObString::make_string("ARRAY(INT)"), id));
+  ASSERT_FALSE(ob_is_reserved_subschema_id(id));
+  ObSubSchemaValue definition;
+  ASSERT_EQ(OB_SUCCESS, exec.get_sqludt_meta_by_subschema_id(id, definition));
+  ASSERT_EQ(OB_SUBSCHEMA_COLLECTION_TYPE, definition.type_);
+  const auto *collection = static_cast<const ObSqlCollectionInfo *>(definition.value_);
+  ASSERT_NE(nullptr, collection);
+  ASSERT_NE(nullptr, collection->collection_meta_);
+  auto *array_type = static_cast<ObCollectionArrayType *>(collection->collection_meta_);
+  ObIArrayType *array = nullptr;
+  ASSERT_EQ(OB_SUCCESS, ObArrayTypeObjFactory::construct(owner, *array_type, array, false));
+  ASSERT_EQ(OB_SUCCESS, array->init());
+  // The real ARRAY(INT) parser declares 32-bit elements.
+  auto *numbers = dynamic_cast<ObArrayFixedSize<int32_t> *>(array);
+  ASSERT_NE(nullptr, numbers);
+  ASSERT_EQ(OB_SUCCESS, numbers->push_back(7));
+  ASSERT_EQ(OB_SUCCESS, numbers->push_back(-9));
+  ASSERT_EQ(OB_SUCCESS, numbers->push_null());
+  ASSERT_EQ(OB_SUCCESS, array->init());
+  std::string raw(array->get_raw_binary_len(), '\0');
+  ASSERT_FALSE(raw.empty());
+  ASSERT_EQ(OB_SUCCESS, array->get_raw_binary(&raw[0], raw.size()));
+  ObLobCommon header;
+  std::string lob(sizeof(header) + raw.size(), '\0');
+  MEMCPY(&lob[0], &header, sizeof(header));
+  MEMCPY(&lob[sizeof(header)], raw.data(), raw.size());
+
+  alignas(8) char frame[256]{};
+  char *frames[] = {frame};
+  exec.set_frames(frames);
+  ObEvalCtx eval(exec);
+  ObExpr pack, arguments[3];
+  ObExpr *argument_ptrs[] = {&arguments[0], &arguments[1], &arguments[2]};
+  pack.args_ = argument_ptrs;
+  pack.arg_cnt_ = 3;
+  ObOutputPackInfo info(owner, T_OP_OUTPUT_PACK);
+  ASSERT_EQ(OB_SUCCESS, info.param_fields_.reserve(2));
+  ObAccuracy accuracy;
+  accuracy.set_length(LENGTH_UNKNOWN_YET);
+  SqlTypeMeta meta;
+  meta.set_type(ObCollectionSQLType);
+  meta.set_subschema_id(id);
+  meta.set_has_lob_header();
+  const SqlType *type = nullptr;
+  ASSERT_EQ(OB_SUCCESS, ObExprUtil::resolve_sql_type(exec, meta, accuracy, id, owner, type));
+  ASSERT_NE(nullptr, type);
+  for (int i = 1; i <= 2; ++i) {
+    ObExpr &arg = arguments[i];
+    arg.type_ = T_REF_COLUMN;
+    arg.frame_idx_ = 0;
+    arg.datum_off_ = i * 64;
+    arg.obj_meta_ = meta;
+    arg.datum_meta_ = ObDatumMeta(ObCollectionSQLType, static_cast<ObCollationType>(id), -1);
+    arg.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(ObCollectionSQLType);
+    arg.max_length_ = LENGTH_UNKNOWN_YET;
+    ASSERT_EQ(OB_SUCCESS, arg.bind_sql_type(*type, owner));
+    new (frame + arg.datum_off_) Datum();
+    ObField field;
+    field.type_meta_ = meta;
+    field.accuracy_ = accuracy;
+    ASSERT_EQ(OB_SUCCESS, info.param_fields_.push_back(field));
+  }
+  Datum &null_input = arguments[1].locate_expr_datum(eval);
+  Datum &present_input = arguments[2].locate_expr_datum(eval);
+  null_input.set_null();
+  ASSERT_EQ(OB_SUCCESS, present_input.set_string(lob.data(), lob.size()));
+  for (const auto protocol : {TEXT, BINARY}) {
+    SCOPED_TRACE(static_cast<int>(protocol));
+    ObSEArray<ObMySQLCellValue, 2> cells;
+    ASSERT_EQ(OB_SUCCESS, result_member(OutputPackRowTag())(
+        pack, eval, &session, owner, &info, nullptr, protocol, cells));
+    ASSERT_EQ(2, cells.count());
+    EXPECT_EQ(ObMySQLCellValueKind::NULL_VALUE, cells.at(0).kind_);
+    EXPECT_EQ(ObMySQLCellValueKind::LENENC_BYTES, cells.at(1).kind_);
+    EXPECT_EQ(std::string("[7,-9,NULL]"),
+        std::string(cells.at(1).get_bytes(), cells.at(1).get_bytes_len()));
+    EXPECT_TRUE(null_input.is_null());
+    EXPECT_FALSE(present_input.is_null());
+    EXPECT_EQ(lob, std::string(present_input.get_string().ptr(), present_input.get_string().length()));
+    EXPECT_EQ(meta, arguments[1].obj_meta_);
+    EXPECT_EQ(ObCollectionSQLType, arguments[1].get_sql_type().kind());
+    EXPECT_EQ(id, arguments[1].obj_meta_.get_subschema_id());
+  }
+  EXPECT_EQ(0, service.calls_);
+  // A present but empty collection payload is malformed, not SQL NULL.
+  // It must still reach the existing decoder and fail without publishing a cell.
+  pack.arg_cnt_ = 2;
+  ASSERT_EQ(OB_SUCCESS, null_input.set_string(nullptr, 0));
+  ASSERT_FALSE(null_input.is_null());
+  for (const auto protocol : {TEXT, BINARY}) {
+    SCOPED_TRACE(static_cast<int>(protocol));
+    ObSEArray<ObMySQLCellValue, 2> cells;
+    EXPECT_EQ(OB_ERR_UNEXPECTED, result_member(OutputPackRowTag())(
+        pack, eval, &session, owner, &info, nullptr, protocol, cells));
+    EXPECT_EQ(0, cells.count());
+    EXPECT_FALSE(null_input.is_null());
+  }
+  EXPECT_EQ(0, service.calls_);
+  exec.set_frames(nullptr);
+}
+
+TEST(SessionNativeResult, output_pack_typed_lob_json_geometry_null_keeps_null_cell)
+{
+  using namespace oceanbase::obmysql;
+  ObArenaAllocator owner;
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObExecContext exec(owner);
+  exec.set_my_session(&session);
+  OutputPackNoIoLobService service;
+  OutputPackInlineLobContext context;
+  exec.set_lob_read_service(&service);
+  OutputPackInlineContextGuard context_guard(exec, context);
+  alignas(8) char frame[256]{};
+  char *frames[] = {frame};
+  exec.set_frames(frames);
+  ObEvalCtx eval(exec);
+  for (const SqlValueType kind : {ObLongTextType, ObJsonType, ObGeometryType}) {
+    SCOPED_TRACE(static_cast<int>(kind));
+    ObExpr pack, argument;
+    ObExpr *argument_ptrs[] = {nullptr, &argument};
+    pack.args_ = argument_ptrs;
+    pack.arg_cnt_ = 2;
+    argument.type_ = T_REF_COLUMN;
+    argument.frame_idx_ = 0;
+    argument.datum_off_ = 64;
+    argument.obj_meta_.set_type(kind);
+    argument.obj_meta_.set_collation_type(CS_TYPE_BINARY);
+    argument.obj_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    argument.obj_meta_.set_has_lob_header();
+    argument.datum_meta_ = ObDatumMeta(kind, CS_TYPE_BINARY, -1);
+    argument.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(kind);
+    ObAccuracy accuracy;
+    accuracy.set_full_length(1024, LS_BYTE);
+    accuracy.set_scale(0);
+    ASSERT_EQ(OB_SUCCESS, argument.prepare_scalar_type(argument.obj_meta_, accuracy, owner));
+    new (frame + argument.datum_off_) Datum();
+    argument.locate_expr_datum(eval).set_null();
+    const SqlTypeMeta original_meta = argument.obj_meta_;
+    ObOutputPackInfo info(owner, T_OP_OUTPUT_PACK);
+    ASSERT_EQ(OB_SUCCESS, info.param_fields_.reserve(1));
+    ObField field;
+    field.type_meta_ = original_meta;
+    field.accuracy_ = accuracy;
+    ASSERT_EQ(OB_SUCCESS, info.param_fields_.push_back(field));
+    for (const auto protocol : {TEXT, BINARY}) {
+      SCOPED_TRACE(static_cast<int>(protocol));
+      ObSEArray<ObMySQLCellValue, 1> cells;
+      ASSERT_EQ(OB_SUCCESS, result_member(OutputPackRowTag())(
+          pack, eval, &session, owner, &info, nullptr, protocol, cells));
+      ASSERT_EQ(1, cells.count());
+      EXPECT_EQ(ObMySQLCellValueKind::NULL_VALUE, cells.at(0).kind_);
+      EXPECT_TRUE(argument.locate_expr_datum(eval).is_null());
+      EXPECT_EQ(original_meta, argument.obj_meta_);
+      EXPECT_EQ(kind, argument.get_sql_type().kind());
+    }
+  }
+  EXPECT_EQ(0, service.calls_);
+  exec.set_frames(nullptr);
 }

@@ -427,13 +427,15 @@ int ObExprOutputPack::build_row_values(
     }
 
     if (OB_SUCC(ret)) {
-      if (ob_is_string_tc(value.get_type()) && CS_TYPE_INVALID != value.get_collation_type()) {
+      if (value.is_null()) {
+        // Typed NULL has no payload to convert; keep it for the NULL cell builder.
+      } else if (ob_is_string_tc(value.get_type()) && CS_TYPE_INVALID != value.get_collation_type()) {
         OZ(convert_string_value_charset(value, alloc, *session));
       } else if (ob_is_text_tc(value.get_type())) {
         OZ(convert_text_value_charset(value, expr.obj_meta_.has_lob_header(), alloc,
                                       *session, ctx.exec_ctx_));
       }
-      if (OB_SUCC(ret)) {
+      if (OB_SUCC(ret) && !value.is_null()) {
         if ((value.meta_.is_lob() || value.is_json() || value.is_geometry())
             && OB_FAIL(process_lob_locator_results(value, alloc, ctx.exec_ctx_))) {
         } else if ((value.is_collection_sql_type() || value.is_geometry())
