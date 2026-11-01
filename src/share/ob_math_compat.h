@@ -22,7 +22,7 @@ namespace oceanbase
 {
 namespace math_compat
 {
-// Single-owner numerical compatibility layer for sin/asin/cos.
+// Single-owner numerical compatibility layer for sin/asin/cos/atanh.
 //
 // On Windows with Clang 18+ on x86-64 the CORE-MATH backends are used when the
 // FP environment is exactly round-to-nearest with no FTZ/DAZ and every FP
@@ -34,10 +34,18 @@ namespace math_compat
 double sin(double x);
 double asin(double x);
 double cos(double x);
+double atanh(double x);
+// True only when atanh() above is served by the CORE-MATH backend for the
+// current FP environment. Callers that need to tell "the value this layer
+// defines" apart from "the system libm value" must test this first instead of
+// assuming atanh() always means the same thing.
+bool atanh_uses_core_math();
 #else
 inline double sin(double x) { return ::sin(x); }
 inline double asin(double x) { return ::asin(x); }
 inline double cos(double x) { return ::cos(x); }
+inline double atanh(double x) { return ::atanh(x); }
+inline bool atanh_uses_core_math() { return false; }
 #endif
 } // namespace math_compat
 } // namespace oceanbase
