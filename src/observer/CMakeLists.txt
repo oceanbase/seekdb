@@ -73,6 +73,12 @@ endif()
 target_link_libraries(ob_main PUBLIC ob_base)
 
 add_executable(seekdb)
+if(OB_BUILD_HIPVS)
+  add_dependencies(seekdb seekdb_hipvs_hnsw_worker)
+endif()
+# Install the main executable alongside the GPU worker in Release builds.
+include("${CMAKE_SOURCE_DIR}/cmake/InstallReleaseServer.cmake")
+seekdb_install_release_server(seekdb)
 if(WIN32)
   get_filename_component(CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
   get_filename_component(LLVM_ROOT ${CLANG_BIN_DIR} DIRECTORY)

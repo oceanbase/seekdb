@@ -1,0 +1,10 @@
+{
+  "source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+  "passed": true,
+  "rpm_packages_extracted": 29,
+  "system_rpm2cpio_present": false,
+  "system_cpio_present": false,
+  "system_packages_installed": false,
+  "network_downloads": true,
+  "manifest_md5": "6cbf427016d9c5328b3f45ad0bb925b5"
+}

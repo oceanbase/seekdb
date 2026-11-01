@@ -1,0 +1,34 @@
+{"command": ["/opt/venv/bin/python", "-m", "unittest", "test_hipvs_compile_entry", "test_hipvs_rust_setup", "test_hipvs_obtest_copy", "test_hipvs_dependency_extract", "-v"]}
+test_build_failure_is_preserved (test_hipvs_compile_entry.CompileEntryTest.test_build_failure_is_preserved) ... ok
+test_configure_failure_is_preserved (test_hipvs_compile_entry.CompileEntryTest.test_configure_failure_is_preserved) ... ok
+test_default_enables_gpu_and_preserves_paths (test_hipvs_compile_entry.CompileEntryTest.test_default_enables_gpu_and_preserves_paths) ... ok
+test_explicit_cpu_clears_gpu_flags_without_requiring_artifacts (test_hipvs_compile_entry.CompileEntryTest.test_explicit_cpu_clears_gpu_flags_without_requiring_artifacts) ... ok
+test_farm_default_reaches_release_with_gpu_enabled (test_hipvs_compile_entry.CompileEntryTest.test_farm_default_reaches_release_with_gpu_enabled) ... ok
+test_farm_legacy_debug_uses_relwithdebinfo_profile (test_hipvs_compile_entry.CompileEntryTest.test_farm_legacy_debug_uses_relwithdebinfo_profile) ... ok
+test_farm_preserves_cpu_choice_and_build_failure (test_hipvs_compile_entry.CompileEntryTest.test_farm_preserves_cpu_choice_and_build_failure) ... ok
+test_ignored_gpu_flag_stops_before_make (test_hipvs_compile_entry.CompileEntryTest.test_ignored_gpu_flag_stops_before_make) ... ok
+test_invalid_mode_fails_before_configuration (test_hipvs_compile_entry.CompileEntryTest.test_invalid_mode_fails_before_configuration) ... ok
+test_missing_build_entry_cannot_report_success (test_hipvs_compile_entry.CompileEntryTest.test_missing_build_entry_cannot_report_success) ... ok
+test_missing_gpu_artifacts_cannot_report_success (test_hipvs_compile_entry.CompileEntryTest.test_missing_gpu_artifacts_cannot_report_success) ... ok
+test_bootstrap_exports_private_toolchain_and_keeps_system_pair (test_hipvs_rust_setup.RustSetupTest.test_bootstrap_exports_private_toolchain_and_keeps_system_pair) ... ok
+test_download_failure_is_preserved_without_using_old_compiler (test_hipvs_rust_setup.RustSetupTest.test_download_failure_is_preserved_without_using_old_compiler) ... ok
+test_exact_standalone_pair_needs_no_rustup_or_download (test_hipvs_rust_setup.RustSetupTest.test_exact_standalone_pair_needs_no_rustup_or_download) ... ok
+test_existing_rustup_install_failure_is_preserved (test_hipvs_rust_setup.RustSetupTest.test_existing_rustup_install_failure_is_preserved) ... ok
+test_malformed_pin_stops_before_installer (test_hipvs_rust_setup.RustSetupTest.test_malformed_pin_stops_before_installer) ... ok
+test_mismatched_compiler_cannot_pass_after_install (test_hipvs_rust_setup.RustSetupTest.test_mismatched_compiler_cannot_pass_after_install) ... ok
+test_copy_failure_is_propagated (test_hipvs_obtest_copy.ObtestCopyTest.test_copy_failure_is_propagated) ... ok
+test_cpu_ignores_stale_gpu_artifacts (test_hipvs_obtest_copy.ObtestCopyTest.test_cpu_ignores_stale_gpu_artifacts) ... ok
+test_cuvs_alias_and_explicit_build_directory (test_hipvs_obtest_copy.ObtestCopyTest.test_cuvs_alias_and_explicit_build_directory) ... ok
+test_gpu_copies_main_worker_and_bridge (test_hipvs_obtest_copy.ObtestCopyTest.test_gpu_copies_main_worker_and_bridge) ... ok
+test_missing_gpu_bridge_fails_before_main_copy (test_hipvs_obtest_copy.ObtestCopyTest.test_missing_gpu_bridge_fails_before_main_copy) ... ok
+test_missing_main_fails (test_hipvs_obtest_copy.ObtestCopyTest.test_missing_main_fails) ... ok
+test_absolute_path_is_rejected (test_hipvs_dependency_extract.DependencyExtractionTest.test_absolute_path_is_rejected) ... ok
+test_archive_cannot_write_through_external_symlink (test_hipvs_dependency_extract.DependencyExtractionTest.test_archive_cannot_write_through_external_symlink) ... ok
+test_file_modes_symlink_and_hardlink_are_preserved (test_hipvs_dependency_extract.DependencyExtractionTest.test_file_modes_symlink_and_hardlink_are_preserved) ... ok
+test_invalid_archive_fails (test_hipvs_dependency_extract.DependencyExtractionTest.test_invalid_archive_fails) ... ok
+test_parent_path_does_not_escape_destination (test_hipvs_dependency_extract.DependencyExtractionTest.test_parent_path_does_not_escape_destination) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 1.212s
+
+OK

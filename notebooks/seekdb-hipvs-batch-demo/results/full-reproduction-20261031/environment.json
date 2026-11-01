@@ -1,0 +1,65 @@
+{
+  "captured_utc": "2026-10-31T15:44:32.177233+00:00",
+  "scope": "Actual Docker deployment attempt and cloud container capabilities",
+  "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.39",
+  "docker_available": false,
+  "podman_available": false,
+  "docker_socket_exists": false,
+  "kfd_exists": true,
+  "original_renderD135_exists": false,
+  "available_render_devices": [
+    "/dev/dri/renderD128"
+  ],
+  "original_docker_run_attempt": {
+    "argv": [
+      "docker",
+      "run",
+      "-d",
+      "--device=/dev/kfd",
+      "--device=/dev/dri/renderD135",
+      "--group-add",
+      "44",
+      "--group-add",
+      "993",
+      "--security-opt",
+      "seccomp=unconfined",
+      "-p",
+      "18890:8888",
+      "-v",
+      "/workspace/seekdb_hipvs_notebook/seekdb-fixed-z5egtaos/seekdb-hipvs-notebook-demo/notebooks/seekdb-hipvs-batch-demo/notebook_workspace:/workspace",
+      "crpi-a7t9nblyxh55vyd2.cn-shanghai.personal.cr.aliyuncs.com/muzihao2/work:seekdb-hipvs-nb-demo"
+    ],
+    "returncode": 127,
+    "error": "[Errno 2] No such file or directory: 'docker'"
+  },
+  "user_namespace_probe": {
+    "argv": [
+      "unshare",
+      "-Ur",
+      "true"
+    ],
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "unshare: unshare failed: Operation not permitted\n"
+  },
+  "docker_recipe_attempt": {
+    "argv": [
+      "bash",
+      "/workspace/seekdb_hipvs_notebook/seekdb-fixed-z5egtaos/seekdb-hipvs-notebook-demo/notebooks/seekdb-hipvs-batch-demo/reproduce_docker.sh"
+    ],
+    "returncode": 127,
+    "stdout": "",
+    "stderr": "Docker CLI is missing. Run this on a Linux AMD GPU host with Docker Engine.\n"
+  },
+  "gpu_info": {
+    "argv": [
+      "rocm-smi",
+      "--showproductname"
+    ],
+    "returncode": 0,
+    "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Product Info ======================================\nGPU[0]\t\t: Card Series: \t\tAMD Radeon Graphics\nGPU[0]\t\t: Card Model: \t\t0x744b\nGPU[0]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[0]\t\t: Card SKU: \t\tD7070910\nGPU[0]\t\t: Subsystem ID: \t0x0e0c\nGPU[0]\t\t: Device Rev: \t\t0x00\nGPU[0]\t\t: Node ID: \t\t2\nGPU[0]\t\t: GUID: \t\t6853\nGPU[0]\t\t: GFX Version: \t\tgfx1100\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+    "stderr": ""
+  },
+  "docker_deployment_completed": false,
+  "limitation": "No Docker CLI/daemon/socket is available; user namespaces are denied. The host render device is renderD128 rather than renderD135."
+}

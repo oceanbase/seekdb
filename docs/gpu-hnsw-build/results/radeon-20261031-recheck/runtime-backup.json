@@ -1,0 +1,13 @@
+{
+  "archive": "seekdb-hipvs-tested-linux-20261031.tar.gz",
+  "bytes": 377924848,
+  "sha256": "ed848d6c1f65aed8b6ee7417261e011058124769b96c50deced6d26b64807e7d",
+  "source_commit": "0e86b8c38afaf8fe3359041645c9b53c5a8524fe",
+  "verified_payloads": {
+    "artifacts/bin/seekdb_hipvs_hnsw_worker": "851dfcdb9505c60dd5399e32fceded3819e08e19bbbbbbfd2de8fbd74a8965ff",
+    "artifacts/bin/seekdb": "32f2262de09ce8a29f07de7039fda72dad2c292656bef7047589defdb85397f7",
+    "artifacts/lib/libseekdb_hipvs_hnsw.so": "8b482b5246f185b567753ee5f8b689c60ab0ee5dddf135ae4a0e9dd055035faa"
+  },
+  "scope": "original tested Linux binaries; requires matching hipVS/ROCm image libraries",
+  "storage": "separate local backup; large runtime archive is not committed to Git"
+}

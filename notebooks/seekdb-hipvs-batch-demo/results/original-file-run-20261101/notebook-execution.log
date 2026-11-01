@@ -1,0 +1,22 @@
+[IPKernelApp] WARNING | Kernel is running over TCP without encryption. All communication (including code and outputs) is sent in plain text and is susceptible to eavesdropping. Use IPC transport or launch with kernel manager-provisioned CurveZMQ keys to enable transport encryption.
+cell 0
+cell 1
+cell 2
+cell 3
+cell 4
+cell 5
+cell 6
+cell 7
+cell 8
+cell 9
+cell 10
+cell 11
+cell 12
+cell 13
+cell 14
+cell 15
+cell 16
+cell 17
+cell 18
+cell 19
+{"completed": true, "scope": "original-directory single-Notebook repair; course preinstalled GPU query demo", "source_notebook_sha256": "0f8575d11f36a8d562f69bc58aaeba4f5bc8f831a25be347d4567f9ed25b5a1b", "original_helper_sha256_before": "adfcc0f0a44c075327716497218beeb9c95fccd63bf10eeab44ba73f547497cb", "working_directory": "/workspace/seekdb_hipvs_notebook", "database_directory": "/workspace/run/obs1", "started_utc": "2026-11-01T03:16:25Z", "original_helper_sha256_after": "adfcc0f0a44c075327716497218beeb9c95fccd63bf10eeab44ba73f547497cb", "original_helper_file_unchanged": true, "finished_utc": "2026-11-01T03:17:29Z"}

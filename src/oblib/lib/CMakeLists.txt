@@ -9,6 +9,41 @@ set_source_files_properties(
   PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 ob_lib_add_target(oblib_lib)
 
+if(OB_BUILD_HIPVS)
+  set(HIPVS_ROOT "/opt/hipvs" CACHE PATH "hipVS installation prefix")
+  set(ROCM_ROOT "/opt/rocm" CACHE PATH "ROCm installation prefix")
+  find_library(HIPVS_C_LIBRARY NAMES cuvs_c PATHS "${HIPVS_ROOT}/lib" REQUIRED NO_DEFAULT_PATH)
+  add_library(seekdb_hipvs_hnsw SHARED vector/hipvs_hnsw_bridge.c)
+  # The database invokes a separate worker; it never loads ROCm/hipVS itself.
+  set_target_properties(seekdb_hipvs_hnsw PROPERTIES
+    C_VISIBILITY_PRESET hidden
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    BUILD_RPATH "${HIPVS_ROOT}/lib;${ROCM_ROOT}/lib"
+    INSTALL_RPATH "${HIPVS_ROOT}/lib;${ROCM_ROOT}/lib")
+  target_compile_definitions(seekdb_hipvs_hnsw PRIVATE __HIP_PLATFORM_AMD__)
+  target_include_directories(seekdb_hipvs_hnsw PRIVATE "${HIPVS_ROOT}/include" "${ROCM_ROOT}/include")
+  target_link_libraries(seekdb_hipvs_hnsw PRIVATE "${HIPVS_C_LIBRARY}")
+  include(CheckSymbolExists)
+  set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+  check_symbol_exists(posix_spawn_file_actions_addclosefrom_np "spawn.h" HIPVS_HAVE_SPAWN_CLOSEFROM)
+  unset(CMAKE_REQUIRED_DEFINITIONS)
+  if(NOT HIPVS_HAVE_SPAWN_CLOSEFROM)
+    message(FATAL_ERROR "hipVS worker isolation requires glibc 2.34 or newer")
+  endif()
+  add_executable(seekdb_hipvs_hnsw_worker vector/hipvs_hnsw_worker.c)
+  target_link_libraries(seekdb_hipvs_hnsw_worker PRIVATE seekdb_hipvs_hnsw)
+  set_target_properties(seekdb_hipvs_hnsw_worker PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/observer"
+    BUILD_RPATH "$ORIGIN/../lib"
+    INSTALL_RPATH "$ORIGIN/../libexec/seekdb/lib")
+  # Package the worker beside seekdb so /proc/self/exe-based discovery also
+  # works outside the build tree. CPack selects the server component.
+  install(TARGETS seekdb_hipvs_hnsw_worker
+    RUNTIME DESTINATION usr/bin COMPONENT server)
+  install(TARGETS seekdb_hipvs_hnsw
+    LIBRARY DESTINATION usr/libexec/seekdb/lib COMPONENT server)
+endif()
+
 seekdb_apply_unity_inventory(oblib_lib_simd SEEKDB_OBLIB_SIMD_UNITY)
 ob_lib_add_target(oblib_lib_simd)
 if(ARCHITECTURE STREQUAL "x86_64")

@@ -1,0 +1,2 @@
+{"command": ["/opt/venv/bin/python", "/workspace/amd-acceptance-20261101-6dc14ba3/src/unittest/sql/vector_index/check_hipvs_sql.py", "--port", "2897", "--database", "hipvs_package_contract_20261101", "--output", "/workspace/amd-acceptance-20261101-6dc14ba3/evidence/package-contract.json"]}
+{"completed": true, "checks": 27, "output": "/workspace/amd-acceptance-20261101-6dc14ba3/evidence/package-contract.json"}

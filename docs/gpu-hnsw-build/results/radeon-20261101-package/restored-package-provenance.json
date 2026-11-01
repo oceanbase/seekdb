@@ -1,0 +1,77 @@
+{
+  "platform_previous_commit": "6dc14ba31001c7e6b1db2fdf7acba0f7c60a6f41",
+  "compiled_source_commit": "cfae4ba92b14d3010f7c7aa6a87d064dfd7c0075",
+  "package_source_commit": "f18737e699ad0b29e38759fa821fec79e3940545",
+  "upstream_commit": "706253423cfbc7e907ebfe577109d74b152d6dbe",
+  "restored_files": {
+    "tools/systemd/profile/oceanbase-pre.json": {
+      "sha256": "dce43cb1188a815dff650f70718ebfd9ed36b8a4b2ed14c2e030db09153e80b2",
+      "bytes": 506,
+      "upstream_git_blob": "9472bb5b0d65a9563b12b2a1448a78d2f71df347"
+    },
+    "tools/systemd/profile/post_install.sh.template": {
+      "sha256": "6d1fcb23cc6fe255704edc96096c471c8230adf37130c0d31acf9f03aa485778",
+      "bytes": 870,
+      "upstream_git_blob": "a1d7d73dd4bfd8c9863ad60b4ab75ee2f04d8e67"
+    },
+    "tools/systemd/profile/post_uninstall.sh.template": {
+      "sha256": "4ac1cdd0c13cb3cf69e83b11d295d7e793c3dfdd29519fae1ba33ca185caa14b",
+      "bytes": 905,
+      "upstream_git_blob": "60a4409ab6a3f5a608c9e20c39988ef219d0feb6"
+    },
+    "tools/systemd/profile/pre_install.sh.template": {
+      "sha256": "089de5a17c40d7281e8a95d491737975104c10d821b0489dca454f8ab32b7ceb",
+      "bytes": 291,
+      "upstream_git_blob": "ef16966a4a9d0784225860086112fd508df3e432"
+    },
+    "tools/systemd/profile/pre_uninstall.sh.template": {
+      "sha256": "9c5713144be11820c660ef107c704517ce081e8f146d9e5b7533b2b1a178da92",
+      "bytes": 1396,
+      "upstream_git_blob": "dc4363d2592c323c4f201c367c422d732ed6ac7f"
+    },
+    "tools/systemd/profile/seekdb.cnf": {
+      "sha256": "28af2e5f763324c6f7b2907ce16c9e00feaee9d84c4e3b8f12009fac1aeacc5a",
+      "bytes": 212,
+      "upstream_git_blob": "59b60df211230645364a9e0ca3dd5780949f5d4b"
+    },
+    "tools/systemd/profile/seekdb.service": {
+      "sha256": "4cea7b25850483566c1b19397ecd63e91eea98ce15ab6d2be6bb1c64b296ec86",
+      "bytes": 389,
+      "upstream_git_blob": "7fb3404735069e55df5f9a7576e6858503092440"
+    },
+    "tools/systemd/profile/seekdb_systemd_start": {
+      "sha256": "d289a62927c4fb0d13905c555e17537ea373a7d3d08a13587c777be0135486f0",
+      "bytes": 2593,
+      "upstream_git_blob": "a8664cbc5bab9c252717d175bcd91a8d88c74953"
+    },
+    "tools/systemd/profile/seekdb_systemd_stop": {
+      "sha256": "3f859bc736225a008c0ef9f1193a26465a6fa11af9d7e0c4cf44dbcbb468c776",
+      "bytes": 1555,
+      "upstream_git_blob": "0d65914a074eb715f835f06bfa429586790c504b"
+    },
+    "tools/systemd/profile/seekdb_win.cnf": {
+      "sha256": "13e4d6250478f82944c8a5c409efe4e4b480d2501f7ac9492ecc5c3600ef9a6c",
+      "bytes": 287,
+      "upstream_git_blob": "6132ac8275e994f215c996da38fc8d03d71ced6f"
+    },
+    "tools/systemd/profile/telemetry-pre.json": {
+      "sha256": "3fbad7e5dbea2d3dac66c5eb19a6c95b320d1dc48a0888d4bf988e1d957211dc",
+      "bytes": 369,
+      "upstream_git_blob": "2b7ad415ba115c3ff573ed7e9f1f3b2e3ab619d5"
+    },
+    "tools/systemd/profile/telemetry.sh.template": {
+      "sha256": "e679da82c0ce343c3c44f01a4b8c0fd8708bee1e1f39a10f21aec73123550c98",
+      "bytes": 3454,
+      "upstream_git_blob": "58810d6f59d644315d884154f7d6f4ecc63b524d"
+    },
+    "tools/timezone_V1.log": {
+      "sha256": "84bb2c709e06b6f62623dacac0f5cb870c88df6562bc347cce318c58b1d7e9d8",
+      "bytes": 4182391,
+      "upstream_git_blob": "6758bf5d9e2963fafb6d798b1528ba76c3cf44dc"
+    }
+  },
+  "compiled_to_packaged_tree_delta": [
+    "tools/timezone_V1.log"
+  ],
+  "changes_gpu_algorithm": false
+}

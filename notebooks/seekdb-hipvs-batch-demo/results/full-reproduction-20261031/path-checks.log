@@ -1,0 +1,57 @@
+{
+  "completed": true,
+  "scope": "course preinstalled query paths; not Docker deployment or HNSW construction",
+  "gpu_selection": "SQL lib=cuvs; this script does not set GPU selection environment variables",
+  "platform_gpu_visibility_variable_names": [],
+  "server_version": "5.7.25-OceanBase seekdb-v1.4.0.0",
+  "data_counts": {
+    "t_cuvs": 10000,
+    "t_vsag": 10000,
+    "probes_100": 100
+  },
+  "source_vectors_equal": true,
+  "cpu_lateral_ms": 321.74595445394516,
+  "gpu_batch_ms": 902.7401525527239,
+  "agreement": {
+    "cpu_vs_gpu_single": {
+      "queries": 100,
+      "identical_topk_sets": 0,
+      "mean_topk_overlap": 0.642
+    },
+    "cpu_vs_gpu_batch": {
+      "queries": 100,
+      "identical_topk_sets": 3,
+      "mean_topk_overlap": 0.648
+    },
+    "cpu_single_vs_lateral": {
+      "queries": 100,
+      "identical_topk_sets": 100,
+      "mean_topk_overlap": 1.0
+    },
+    "gpu_single_vs_batch": {
+      "queries": 100,
+      "identical_topk_sets": 18,
+      "mean_topk_overlap": 0.866
+    },
+    "gpu_batch_repeat": {
+      "queries": 100,
+      "identical_topk_sets": 21,
+      "mean_topk_overlap": 0.857
+    }
+  },
+  "recall_at_10": {
+    "cpu_single": 0.64,
+    "gpu_single": 0.877,
+    "cpu_lateral": 0.64,
+    "gpu_batch": 0.881
+  },
+  "cpu_index_same_batch_procedure": {
+    "supported": true,
+    "elapsed_ms": 1024.9005369842052,
+    "agreement_with_cpu_lateral": {
+      "queries": 100,
+      "identical_topk_sets": 2,
+      "mean_topk_overlap": 0.662
+    }
+  }
+}

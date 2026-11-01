@@ -1,0 +1,36 @@
+{
+  "competition_base": "5bce9e06d1281347ad61344e4b01fab9158c58a2",
+  "headers": [
+    {
+      "header": "grpc/ob_grpc_context.h",
+      "exists_in_baseline": true,
+      "declared_in_baseline_inventory": false
+    },
+    {
+      "header": "grpc/ob_grpc_server.h",
+      "exists_in_baseline": true,
+      "declared_in_baseline_inventory": false
+    },
+    {
+      "header": "grpc/standbyservice.grpc.pb.h",
+      "exists_in_baseline": true,
+      "declared_in_baseline_inventory": false
+    },
+    {
+      "header": "grpc/standbyservice.pb.h",
+      "exists_in_baseline": true,
+      "declared_in_baseline_inventory": false
+    },
+    {
+      "header": "lib/charset/ob_ctype_uca_tab.h",
+      "exists_in_baseline": true,
+      "declared_in_baseline_inventory": false
+    },
+    {
+      "header": "lib/charset/str_uca_type.h",
+      "exists_in_baseline": true,
+      "declared_in_baseline_inventory": false
+    }
+  ],
+  "fixed_in_this_change": false
+}

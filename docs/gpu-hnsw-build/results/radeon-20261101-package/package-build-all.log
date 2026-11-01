@@ -1,0 +1,142 @@
+{"command": ["make", "-C", "/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz", "-j2"]}
+make: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[1]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[  0%] Built target seekdb_jemalloc_build
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[  1%] Built target oblib_grpc
+[  1%] Built target restore
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[  7%] Built target zstd_1_3_8_objs
+[  8%] Built target ob_malloc_object
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[  8%] Built target oblib_lib_simd
+[  8%] Built target oblib_lib_bitmap
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[  9%] Built target oblib_rpc
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[  9%] Built target seekdb_hipvs_hnsw
+[ 12%] Built target oblib_common
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 13%] Built target rust_staticlibs_build
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 14%] Built target malloc_hook
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 14%] Built target generate_syspack_source
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 14%] Built target ob_standby
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 14%] Built target ob_standby_runtime
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 15%] Built target ob_logservice
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 15%] Built target ob_storage_tablet_autoincrement_state
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 15%] Built target ob_storage_simd
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 19%] Built target ob_rootserver
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 20%] Built target ob_main
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 26%] Built target ob_server
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 29%] Built target ob_share_extra
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 45%] Built target ob_share
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 50%] Built target ob_sql_extra
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 69%] Built target ob_sql
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 69%] Built target ob_malloc
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 70%] Built target zstd_1_3_8
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 71%] Built target seekdb_hipvs_hnsw_worker
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 71%] Built target ob_data_plane
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 71%] Built target ob_query
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 72%] Built target ob_sql_simd
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 77%] Built target ob_sql_server_parser_objects
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 79%] Built target ob_pl
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 91%] Built target ob_storage
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 91%] Built target syspack_source
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 92%] Built target ob_share_static
+[ 92%] Built target ob_sql_server_parser_static
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 92%] Built target ob_storage_static
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 92%] Built target ob_sql_static
+[ 93%] Built target compress
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[ 98%] Built target oblib_lib
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[100%] Built target oblib
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[100%] Built target oceanbase_static
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[100%] Built target seekdb
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+[100%] Built target observer
+make[1]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'

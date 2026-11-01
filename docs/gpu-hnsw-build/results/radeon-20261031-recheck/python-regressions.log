@@ -1,0 +1,19 @@
+test_failure_cannot_leave_campaign_completed (test_hipvs_benchmark.HipvsBenchmarkTest.test_failure_cannot_leave_campaign_completed) ... ok
+test_filter_low_recall_is_a_failure (test_hipvs_benchmark.HipvsBenchmarkTest.test_filter_low_recall_is_a_failure) ... ok
+test_filter_passes_only_after_quality_checks (test_hipvs_benchmark.HipvsBenchmarkTest.test_filter_passes_only_after_quality_checks) ... ok
+test_filter_rejects_duplicate_or_missing_results (test_hipvs_benchmark.HipvsBenchmarkTest.test_filter_rejects_duplicate_or_missing_results) ... ok
+test_filter_rejects_unknown_and_unfiltered_ids (test_hipvs_benchmark.HipvsBenchmarkTest.test_filter_rejects_unknown_and_unfiltered_ids) ... ok
+test_restart_failure_clears_previous_success_and_preserves_build (test_hipvs_benchmark.HipvsBenchmarkTest.test_restart_failure_clears_previous_success_and_preserves_build) ... ok
+test_restart_rejects_incomplete_campaign_or_different_dataset (test_hipvs_benchmark.HipvsBenchmarkTest.test_restart_rejects_incomplete_campaign_or_different_dataset) ... ok
+test_changed_median_or_speedup_is_rejected (test_hipvs_evidence.HipvsEvidenceTest.test_changed_median_or_speedup_is_rejected) ... ok
+test_failed_restart_cannot_reuse_previous_recall (test_hipvs_evidence.HipvsEvidenceTest.test_failed_restart_cannot_reuse_previous_recall) ... ok
+test_low_filter_recall_is_rejected (test_hipvs_evidence.HipvsEvidenceTest.test_low_filter_recall_is_rejected) ... ok
+test_missing_round_is_rejected (test_hipvs_evidence.HipvsEvidenceTest.test_missing_round_is_rejected) ... ok
+test_nonfinite_recall_is_rejected (test_hipvs_evidence.HipvsEvidenceTest.test_nonfinite_recall_is_rejected) ... ok
+test_recorded_results_recompute (test_hipvs_evidence.HipvsEvidenceTest.test_recorded_results_recompute) ... ok
+test_wrong_dataset_gpu_event_is_rejected (test_hipvs_evidence.HipvsEvidenceTest.test_wrong_dataset_gpu_event_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.004s
+
+OK

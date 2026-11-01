@@ -1,0 +1,45 @@
+{
+  "completed": true,
+  "runs": [
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "unittest/sql/vector_index",
+        "-p",
+        "test_hipvs_*.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "log": "hipvs-regressions.log"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "unittest/sql/vector_index",
+        "-p",
+        "test_batch_demo.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "log": "notebook-regressions.log"
+    }
+  ],
+  "recorded_utc": "2026-10-31T07:03:08.110965+00:00",
+  "scope": "Linux CPU-only tests, including compiled install-contract executables; not a full seekdb/GPU build",
+  "source_sha256": {
+    "cmake/InstallReleaseServer.cmake": "9336f10b72538119fba14057d88730541dd0276f78e1faf103ae444c6fae9380",
+    "src/observer/CMakeLists.txt": "5818c5b71d649a4104ba115aba0c25324e55e5bac5d6bd64900ea808158d7532",
+    "unittest/sql/vector_index/check_hipvs_install.py": "9da6423a7b71f68fd413b3d25474febfc4c00e53f3f84af8c63c2b05593151ea",
+    "unittest/sql/vector_index/test_hipvs_install.py": "12966857ef3ab5f0b930a781a1dbb5a6c0f31819f6b5e99904e6d705afdf32f9",
+    "deps/external/cmake/CargoExternal.cmake": "a94375bae07dd647d4f013f3fe4b89a2e4b1281023005e334f7edb41896c5ae5",
+    "unittest/sql/vector_index/test_hipvs_build_jobs.py": "6be05095299e1153060e8f86cd6dba6509d8f2cf3aea2945f06e576ccd481fca"
+  }
+}

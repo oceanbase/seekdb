@@ -1,0 +1,2 @@
+{"command": ["git", "fsck", "--full"]}
+{"command": ["git", "fsck", "--full"]}

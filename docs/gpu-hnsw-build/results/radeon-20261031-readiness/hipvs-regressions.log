@@ -1,0 +1,25 @@
+test_failure_cannot_leave_campaign_completed (test_hipvs_benchmark.HipvsBenchmarkTest) ... ok
+test_filter_low_recall_is_a_failure (test_hipvs_benchmark.HipvsBenchmarkTest) ... ok
+test_filter_passes_only_after_quality_checks (test_hipvs_benchmark.HipvsBenchmarkTest) ... ok
+test_filter_rejects_duplicate_or_missing_results (test_hipvs_benchmark.HipvsBenchmarkTest) ... ok
+test_filter_rejects_unknown_and_unfiltered_ids (test_hipvs_benchmark.HipvsBenchmarkTest) ... ok
+test_restart_failure_clears_previous_success_and_preserves_build (test_hipvs_benchmark.HipvsBenchmarkTest) ... ok
+test_restart_rejects_incomplete_campaign_or_different_dataset (test_hipvs_benchmark.HipvsBenchmarkTest) ... ok
+test_existing_default_is_preserved (test_hipvs_build_jobs.ExternalCargoJobsTest) ... ok
+test_invalid_job_counts_are_rejected (test_hipvs_build_jobs.ExternalCargoJobsTest) ... ok
+test_single_job_reaches_nested_cargo (test_hipvs_build_jobs.ExternalCargoJobsTest) ... ok
+test_changed_median_or_speedup_is_rejected (test_hipvs_evidence.HipvsEvidenceTest) ... ok
+test_failed_restart_cannot_reuse_previous_recall (test_hipvs_evidence.HipvsEvidenceTest) ... ok
+test_low_filter_recall_is_rejected (test_hipvs_evidence.HipvsEvidenceTest) ... ok
+test_missing_round_is_rejected (test_hipvs_evidence.HipvsEvidenceTest) ... ok
+test_nonfinite_recall_is_rejected (test_hipvs_evidence.HipvsEvidenceTest) ... ok
+test_recorded_results_recompute (test_hipvs_evidence.HipvsEvidenceTest) ... ok
+test_wrong_dataset_gpu_event_is_rejected (test_hipvs_evidence.HipvsEvidenceTest) ... ok
+test_package_layout_is_left_to_pack_cmake (test_hipvs_install.ReleaseInstallTest) ... ok
+test_server_component_contains_runnable_main (test_hipvs_install.ReleaseInstallTest) ... ok
+test_unbuilt_main_cannot_produce_successful_install (test_hipvs_install.ReleaseInstallTest) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 6.637s
+
+OK

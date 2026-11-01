@@ -1,0 +1,13 @@
+{"command": ["/opt/venv/bin/cpack", "--config", "/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz/CPackConfig.cmake", "-G", "TGZ", "-B", "/workspace/amd-acceptance-20261101-6dc14ba3/packages"]}
+CPack: Create package using TGZ
+CPack: Install projects
+CPack: - Run preinstall target for: OceanBase
+CPack: - Install project: OceanBase []
+CPack: -   Install component: server
+CMake Error at /workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz/cmake_install.cmake:95 (file):
+  file INSTALL cannot find
+  "/workspace/amd-acceptance-20261101-6dc14ba3/src/tools/timezone_V1.log": No
+  such file or directory.
+
+
+CPack Error: Error when generating package: seekdb

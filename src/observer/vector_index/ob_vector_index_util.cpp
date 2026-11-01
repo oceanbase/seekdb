@@ -255,6 +255,10 @@ int ObVectorIndexUtil::parser_params_from_string(
         } else if (new_param_name == "LIB") {
           if (new_param_value == "VSAG") {
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_VSAG;
+          } else if (new_param_value == "HIPVS" || new_param_value == "CUVS") {
+            // hipVS preserves the cuVS library/API names used by the AMD demo.
+            // Both spellings select the AMD construction backend, never CUDA.
+            param.lib_ = ObVectorIndexAlgorithmLib::VIAL_HIPVS;
           } else if (new_param_value == "OB") {
             param.lib_ = ObVectorIndexAlgorithmLib::VIAL_OB;
           } else {
@@ -1028,6 +1032,8 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
       ObString tmp_lib;
       if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_VSAG) {
         tmp_lib = ObString("VSAG");
+      } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_HIPVS) {
+        tmp_lib = ObString("HIPVS");
       } else if (old_vec_param.lib_ == ObVectorIndexAlgorithmLib::VIAL_OB) {
         tmp_lib = ObString("OB");
       } else {
@@ -2990,10 +2996,13 @@ int ObVectorIndexUtil::check_index_param(
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index distance algorithm is");
           }
         } else if (last_variable == "LIB") {
-          if (new_parser_name == "VSAG" ||
+          if (new_parser_name == "VSAG" || new_parser_name == "HIPVS" ||
+              new_parser_name == "CUVS" ||
               new_parser_name == "OB") {
             lib_is_set = true;
-            lib_name = new_parser_name;
+            // Apply the exact same metric/type/build-feature checks to the
+            // course's LIB=CUVS spelling and the explicit LIB=HIPVS spelling.
+            lib_name = new_parser_name == "CUVS" ? ObString("HIPVS") : new_parser_name;
           } else {
             ret = OB_NOT_SUPPORTED;
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this type of vector index lib is");
@@ -3293,9 +3302,9 @@ int ObVectorIndexUtil::check_index_param(
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index m is");
         }
         if (OB_FAIL(ret)) {
-        } else if (lib_is_set && lib_name != "VSAG") {
+        } else if (lib_is_set && lib_name != "VSAG" && lib_name != "HIPVS") {
           ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name not equal to 'VSAG' is");
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hnsw vector index lib name must be VSAG or HIPVS");
         }
         if (OB_FAIL(ret)) {
         } else if (ef_construction_value <= m_value) {
@@ -3352,6 +3361,17 @@ int ObVectorIndexUtil::check_index_param(
                                            ", NBITS=%ld", default_nbits_value))) {
         } else if (hnsw_is_set && OB_FAIL(check_extra_info_size(tbl_schema, session_info, extra_info_max_size_is_set,
                                                                 extra_info_max_size, extra_info_actual_size))) {
+        } else if (lib_name == "HIPVS" &&
+                   (vsag_index_type != ObVectorIndexAlgorithmType::VIAT_HNSW ||
+                    distance_name != "L2" || is_text_col || is_sparse_vec ||
+                    extra_info_actual_size != 0 || (m_value != 16 && m_value != 32 && m_value != 64))) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64)");
+#ifndef OB_BUILD_HIPVS
+        } else if (lib_name == "HIPVS") {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "hipVS construction requires an OB_BUILD_HIPVS enabled binary");
+#endif
         } else if (hnsw_is_set && (!is_text_col || type_hybrid_vec_is_set) &&
                    OB_FAIL(validate_vector_index_vsag_create_index_param(vsag_index_type,
                                                                         distance_name,

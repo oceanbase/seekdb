@@ -1,0 +1,62 @@
+{
+  "actual-rust-bootstrap.log": {
+    "bytes": 1890,
+    "sha256": "077c0bd08d21d510c7e8db2944f5352115a79101887fd4bcf85609c8f398d29d"
+  },
+  "channel-rust-1.98.1.toml": {
+    "bytes": 898637,
+    "sha256": "a7c8774a5fd8441c997d94c029776cbc5eb111e9d72ab5d256fa69866644347e"
+  },
+  "deps-driver.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "driver-cwd-error-exact-dependency-initialization.log": {
+    "bytes": 681,
+    "sha256": "83960c2619d99f0ee1fac6d14fc3815131e0401e13f93e730c4f2f61974c40a7"
+  },
+  "driver-guard-error.log": {
+    "bytes": 5511,
+    "sha256": "9f3f7fd29e550b4fa203e461d9a867213a82b2c0cde2eea81d6184128cbaa92d"
+  },
+  "exact-dependency-initialization.log": {
+    "bytes": 6955,
+    "sha256": "0dfcd6b6ca300080d947199d28bda386f92bca72ad0dee0a1e423efb4299eab7"
+  },
+  "install-system-build-prerequisites.log": {
+    "bytes": 6872,
+    "sha256": "5fc490259ec3a2767c829155ab1d6da7519e60b3a7eb26b9a9aa75b28c1d1a8f"
+  },
+  "native-compile-entry.log": {
+    "bytes": 9918,
+    "sha256": "f8f1acaf9372eef1c897db0e059c6f7bf164d5f0341955826fe305555a4e1b3a"
+  },
+  "native-entry-driver.log": {
+    "bytes": 1198,
+    "sha256": "f6f62dade22ae2b4ed34193b69ff237a1ad061ae94a304bdb4a36fc60842d624"
+  },
+  "original-compile-entry.log": {
+    "bytes": 2988,
+    "sha256": "f9447e7e9b2c40ab51e6a2c10c447a1ff1de82b3d58487f26974b6ca7c304eb7"
+  },
+  "original-rust-init.log": {
+    "bytes": 40,
+    "sha256": "d6e22ddc4bfb83db96532d547aa2df2c182c0146f53e31d18c7d9712ca203d74"
+  },
+  "rust-script-host-failure.log": {
+    "bytes": 164,
+    "sha256": "5a65466d9dd39dcf9815c9a8be5c151d41b07b8af1fb6cc30bc44005683e907a"
+  },
+  "test_hipvs_compile_entry.py.log": {
+    "bytes": 1676,
+    "sha256": "99ccf3eed8112b8fe1009b3dde201eaea9e673119e45503d65c84291e7de40f3"
+  },
+  "test_hipvs_obtest_copy.py.log": {
+    "bytes": 828,
+    "sha256": "c1d1a8aae348a625b85bb378353bebc15bee3e07b430c38cb9a789225f527688"
+  },
+  "test_hipvs_rust_setup.py.log": {
+    "bytes": 1014,
+    "sha256": "dbdd8585429720ff47bdcbdc0467043181ea10ff31074ce8603446047a615005"
+  }
+}

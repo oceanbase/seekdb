@@ -1,0 +1,10 @@
+{"command": ["make", "-C", "/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz", "-j2", "generate_syspack_source"]}
+make: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[1]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[2]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[3]: Entering directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[3]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+Built target generate_syspack_source
+make[2]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make[1]: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'
+make: Leaving directory '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz'

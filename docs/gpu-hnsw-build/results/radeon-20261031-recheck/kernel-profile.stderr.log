@@ -1,0 +1,14 @@
+W20261031 02:49:12.305276 124282140680704 simple_timer.cpp:55] [rocprofv3] tool initialization ::     0.000064 sec
+W20261031 02:49:12.305495 124282140680704 simple_timer.cpp:55] [rocprofv3] 'bash -c exec 3</workspace/hipvs-recheck-20261031/evidence/profile-50000x128-input.f32; exec 4>/workspace/hipvs-recheck-20261031/evidence/profile-50000x128-reply.bin; exec /workspace/hipvs-recheck-20261031/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200' ::     0.000000 sec
+W20261031 02:49:12.389051 129236859747136 simple_timer.cpp:55] [rocprofv3] tool initialization ::     0.000802 sec
+W20261031 02:49:12.486561 129236859747136 simple_timer.cpp:55] [rocprofv3] '/workspace/hipvs-recheck-20261031/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200' ::     0.000000 sec
+W20261031 02:49:12.556558 129236859747136 tool.cpp:2422] HSA version 8.20.4 initialized (instance=0)
+W20261031 02:49:15.055797 129236859747136 simple_timer.cpp:55] [rocprofv3] '/workspace/hipvs-recheck-20261031/artifacts/bin/seekdb_hipvs_hnsw_worker 50000 128 32 200' ::     2.569236 sec
+E20261031 02:49:15.098103 129236859747136 output_stream.cpp:111] Opened result file: /workspace/hipvs-recheck-20261031/evidence/kernel-trace-50000x128/hipvs-build_kernel_stats.csv
+E20261031 02:49:15.098345 129236859747136 output_stream.cpp:111] Opened result file: /workspace/hipvs-recheck-20261031/evidence/kernel-trace-50000x128/hipvs-build_kernel_trace.csv
+E20261031 02:49:15.112771 129236859747136 output_stream.cpp:111] Opened result file: /workspace/hipvs-recheck-20261031/evidence/kernel-trace-50000x128/hipvs-build_memory_copy_stats.csv
+E20261031 02:49:15.112973 129236859747136 output_stream.cpp:111] Opened result file: /workspace/hipvs-recheck-20261031/evidence/kernel-trace-50000x128/hipvs-build_memory_copy_trace.csv
+E20261031 02:49:15.116569 129236859747136 output_stream.cpp:111] Opened result file: /workspace/hipvs-recheck-20261031/evidence/kernel-trace-50000x128/hipvs-build_agent_info.csv
+E20261031 02:49:15.116778 129236859747136 output_stream.cpp:111] Opened result file: /workspace/hipvs-recheck-20261031/evidence/kernel-trace-50000x128/hipvs-build_domain_stats.csv
+W20261031 02:49:15.120722 129236859747136 simple_timer.cpp:55] [rocprofv3] output generation ::     0.039454 sec
+W20261031 02:49:15.131815 129236859747136 simple_timer.cpp:55] [rocprofv3] tool finalization ::     0.050608 sec

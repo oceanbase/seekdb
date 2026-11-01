@@ -143,10 +143,18 @@ function do_init
   if [[ "${platform}" == ios* ]]; then
     python3 "${TOPDIR}/deps/ios-build/build.py" "${ios_args[@]}" || return $?
   fi
-  (
-    cd "${TOPDIR}/rust" &&
-      rustup toolchain install --no-self-update
-  ) || return $?
+  if [[ "${platform}" == host ]]; then
+    # Native builds can also use a matching standalone official toolchain.
+    # Cross builds retain the manifest's target/component installation.
+    source "${DEP_INIT_DIR}/setup_rust.sh"
+    seekdb_prepare_rust "${TOPDIR}" \
+      "${SEEKDB_RUST_INSTALL_ROOT:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/seekdb-rust}" || return $?
+  else
+    (
+      cd "${TOPDIR}/rust" &&
+        rustup toolchain install --no-self-update
+    ) || return $?
+  fi
 
   end_time="$(date +%s)"
   elapsed=$((end_time - start_time))

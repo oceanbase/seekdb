@@ -56,39 +56,59 @@ SOURCE_RESTORE_DIR=$OCEANBASE_DIR/tools/ObRestore
 
 if [ $# -lt 2 ]
 then
-  mkdir -p $BIN_DIR
-  mkdir -p $LIB_DIR
-  mkdir -p $ADMIN_DIR
-  mkdir -p $ETC_DIR
-  mkdir -p $TARGET_AGENT_DIR
+  mkdir -p "$BIN_DIR" "$LIB_DIR" "$ADMIN_DIR" "$ETC_DIR" "$TARGET_AGENT_DIR" || exit $?
   #for system package
-  cp $OCEANBASE_DIR/src/share/inner_table/sys_package/* $ADMIN_DIR
+  cp "$OCEANBASE_DIR"/src/share/inner_table/sys_package/* "$ADMIN_DIR" || exit $?
 
-  if [ -d "../../build_debug" ]
-  then
-    OBSERVER_BIN=`pwd`/../../build_debug
-  elif [ -d "../../build_release" ]
-  then
-    OBSERVER_BIN=`pwd`/../../build_release
-  elif [ -d "../../build_release_coverage" ]
-  then
-    OBSERVER_BIN=`pwd`/../../build_release_coverage
-  elif [ -d "../../build_errsim" ]
-  then
-    OBSERVER_BIN=`pwd`/../../build_errsim
-  elif [ -d "../../build_errsim_debug" ]
-  then
-    OBSERVER_BIN=`pwd`/../../build_errsim_debug
-  elif [ -d "../../build_errsim_sanity" ]
-  then 
-    OBSERVER_BIN=`pwd`/../../build_errsim_sanity
+  OBSERVER_BIN="${SEEKDB_BUILD_DIR:-}"
+  if [[ -z "$OBSERVER_BIN" ]]; then
+    # Honor the source directory argument and prefer maintained profiles over
+    # an obsolete build_debug directory left by an earlier checkout.
+    for profile in release sanity debug release_coverage errsim errsim_debug errsim_sanity; do
+      if [[ -d "$OCEANBASE_DIR/build_$profile" ]]; then
+        OBSERVER_BIN="$OCEANBASE_DIR/build_$profile"
+        break
+      fi
+    done
+  fi
+  if [[ -z "$OBSERVER_BIN" || ! -d "$OBSERVER_BIN" ]]; then
+    echo "No build directory found; set SEEKDB_BUILD_DIR or build release first" >&2
+    exit 1
   fi
 
   if [ $COMPILE_LOCAL_COPY -eq 1 ]; then
-    (pushd $OBSERVER_BIN && ob-make -j $COMPILE_CONCURRENCY seekdb && popd) || exit $?
+    (cd "$OBSERVER_BIN" && ob-make -j "$COMPILE_CONCURRENCY" seekdb) || exit $?
   fi
 
-  libtool --mode=install cp $OBSERVER_BIN/src/observer/seekdb $BIN_DIR/observer
+  if [[ ! -x "$OBSERVER_BIN/src/observer/seekdb" ]]; then
+    echo "Missing executable: $OBSERVER_BIN/src/observer/seekdb" >&2
+    exit 1
+  fi
+  hipvs_build=false
+  if [[ -f "$OBSERVER_BIN/CMakeCache.txt" ]]; then
+    hipvs_option=$(sed -n 's/^OB_BUILD_HIPVS:[^=]*=//p' "$OBSERVER_BIN/CMakeCache.txt" | tr '[:lower:]' '[:upper:]')
+    if [[ -z "$hipvs_option" ]]; then
+      hipvs_option=$(sed -n 's/^OB_BUILD_CUVS:[^=]*=//p' "$OBSERVER_BIN/CMakeCache.txt" | tr '[:lower:]' '[:upper:]')
+    fi
+    case "$hipvs_option" in
+      ""|0|OFF|NO|FALSE|N|IGNORE|NOTFOUND|*-NOTFOUND) ;;
+      *) hipvs_build=true ;;
+    esac
+  elif [[ -f "$OBSERVER_BIN/src/observer/seekdb_hipvs_hnsw_worker" ]]; then
+    hipvs_build=true
+  fi
+  if [[ "$hipvs_build" == true ]]; then
+    if [[ ! -x "$OBSERVER_BIN/src/observer/seekdb_hipvs_hnsw_worker" ||
+          ! -s "$OBSERVER_BIN/lib/libseekdb_hipvs_hnsw.so" ]]; then
+      echo "Incomplete GPU build: worker or bridge missing in $OBSERVER_BIN" >&2
+      exit 1
+    fi
+  fi
+  libtool --mode=install cp "$OBSERVER_BIN/src/observer/seekdb" "$BIN_DIR/observer" || exit $?
+  if [[ "$hipvs_build" == true ]]; then
+    libtool --mode=install cp "$OBSERVER_BIN/src/observer/seekdb_hipvs_hnsw_worker" "$BIN_DIR/" || exit $?
+    libtool --mode=install cp "$OBSERVER_BIN/lib/libseekdb_hipvs_hnsw.so" "$LIB_DIR/" || exit $?
+  fi
 fi
 
 if [ $ONLY_LOCAL_COPY -eq 0 ]; then

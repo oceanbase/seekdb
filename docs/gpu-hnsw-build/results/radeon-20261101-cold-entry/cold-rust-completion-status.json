@@ -1,0 +1,26 @@
+{
+  "source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+  "stage": "passed",
+  "original_driver_status": {
+    "stage": "failed",
+    "source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+    "no_preseeded_download_cache": true,
+    "started_at": "2026-11-01T12:17:08.701761+00:00",
+    "updated_at": "2026-11-01T13:17:08.703815+00:00",
+    "error": "TimeoutExpired(['bash', '-c', 'source \"$1\"; seekdb_prepare_rust \"$2\" \"$3\"', 'cold-probe', '/workspace/amd-acceptance-20261101-4855acac/cold-rust/setup_rust.sh', '/workspace/amd-acceptance-20261101-4855acac/cold-rust/source', '/workspace/amd-acceptance-20261101-4855acac/cold-rust/install'], 3599.9999925800366)",
+    "elapsed_seconds": 3600.0018823860446
+  },
+  "no_preseeded_download_cache": true,
+  "no_second_installer_started": true,
+  "original_installer_pid": 12743,
+  "updated_at": "2026-11-01T13:18:31.011952+00:00",
+  "original_installer_wait_status": 0,
+  "elapsed_seconds": 3682.310178,
+  "compiler_hashes": {
+    "rustc": "859254978c0a0402c32f949f6de0d99aee73be8d15f45aac00ae1448aac51e74",
+    "cargo": "da77c8b33849312255ccde3179198ada4c8deb370488d050286146b1d1b27e14"
+  },
+  "verified_retained_downloads": {},
+  "version_check_returncode": 0,
+  "note": "The one-hour audit wrapper timed out; its original rustup child continued. No replacement download or installer was started. The same cold-downloaded toolchain finished and matches the full-build compiler byte for byte; the original helper then passed a reuse-only version check."
+}

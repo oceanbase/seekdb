@@ -1,0 +1,12 @@
+{
+  "completed": true,
+  "scope": "original-directory single-Notebook repair; course preinstalled GPU query demo",
+  "source_notebook_sha256": "0f8575d11f36a8d562f69bc58aaeba4f5bc8f831a25be347d4567f9ed25b5a1b",
+  "original_helper_sha256_before": "adfcc0f0a44c075327716497218beeb9c95fccd63bf10eeab44ba73f547497cb",
+  "working_directory": "/workspace/seekdb_hipvs_notebook",
+  "database_directory": "/workspace/run/obs1",
+  "started_utc": "2026-11-01T03:16:25Z",
+  "original_helper_sha256_after": "adfcc0f0a44c075327716497218beeb9c95fccd63bf10eeab44ba73f547497cb",
+  "original_helper_file_unchanged": true,
+  "finished_utc": "2026-11-01T03:17:29Z"
+}

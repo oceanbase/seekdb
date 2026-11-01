@@ -28,6 +28,10 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/worker.h"
+#ifdef OB_BUILD_HIPVS
+#include "hipvs_hnsw_builder.h"
+#include <chrono>
+#endif
 
 namespace oceanbase {
 namespace common {
@@ -144,6 +148,8 @@ public:
     index_ = nullptr;
     LOG_INFO("[OBVSAG] after deconstruction, hnsw index", KP(allocator_), K(index_.use_count()), K(lbt()));
   }
+  int enable_hipvs_build();
+  int finish_hipvs_build();
   int build_index(const vsag::DatasetPtr &base);
   int get_index_number();
   int add_index(const vsag::DatasetPtr &incremental);
@@ -170,7 +176,12 @@ public:
   int immutable_optimize();
 
   std::shared_ptr<vsag::Index> &get_index() { return index_; }
-  void set_index(std::shared_ptr<vsag::Index> hnsw) { index_ = hnsw; }
+  void set_index(std::shared_ptr<vsag::Index> hnsw) {
+    index_ = hnsw;
+#ifdef OB_BUILD_HIPVS
+    if (hipvs_builder_) hipvs_builder_->loaded();
+#endif
+  }
   vsag::Allocator *get_allocator() const { return allocator_; }
   inline bool get_use_static() const { return use_static_; }
   inline int get_max_degree() const { return max_degree_; }
@@ -194,6 +205,9 @@ public:
       K_(refine_type), K_(bq_bits_query), K_(bq_use_fht));
 
 private:
+#ifdef OB_BUILD_HIPVS
+  std::unique_ptr<HipvsHnswBuilder> hipvs_builder_;
+#endif
   bool is_created_;
   bool is_build_;
   bool use_static_;
@@ -215,10 +229,55 @@ private:
   int window_size_;
 };
 
+int HnswIndexHandler::enable_hipvs_build()
+{
+#ifdef OB_BUILD_HIPVS
+  if (index_type_ != HNSW_TYPE || extra_info_size_ != 0 ||
+      std::strcmp(dtype_, "float32") != 0 || std::strcmp(metric_, "l2") != 0 ||
+      (max_degree_ != 16 && max_degree_ != 32 && max_degree_ != 64)) return OB_NOT_SUPPORTED;
+  if (index_->GetNumElements() != 0 || hipvs_builder_) return OB_ERR_UNEXPECTED;
+  try { hipvs_builder_.reset(new HipvsHnswBuilder(allocator_));
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  return OB_SUCCESS;
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int HnswIndexHandler::finish_hipvs_build()
+{
+  int ret = OB_SUCCESS;
+#ifdef OB_BUILD_HIPVS
+  if (hipvs_builder_) {
+    const int64_t rows = hipvs_builder_->count(index_->GetNumElements());
+    const auto start = std::chrono::steady_clock::now();
+    SeekdbHipvsBuildStats stats{};
+    try {
+      const int path = hipvs_builder_->finish(*index_, dim_, max_degree_, ef_construction_, stats);
+      const double total_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+      if (path == 1) {
+        LOG_INFO("[HIPVS_BUILD] complete gpu=true fallback=false", K(rows), K_(dim), K_(max_degree),
+                 K(total_ms), "cagra_ms", stats.cagra_ms, "hierarchy_ms", stats.hierarchy_ms,
+                 "serialize_ms", stats.serialize_ms);
+      } else if (path == 0) {
+        LOG_INFO("[HIPVS_BUILD] tiny_index gpu=false fallback=true", K(rows), K_(dim));
+      }
+    } catch (const std::exception &e) {
+      ret = OB_ERR_VSAG_RETURN_ERROR;
+      LOG_WARN("[HIPVS_BUILD] failed requested_gpu=true fallback=false", K(ret), K(rows), "what", e.what());
+    }
+  }
+#endif
+  return ret;
+}
+
 int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
 {
   int ret = OB_SUCCESS;
   try {
+#ifdef OB_BUILD_HIPVS
+    if (hipvs_builder_ && hipvs_builder_->append(base, dim_)) return finish_hipvs_build();
+#endif
     tl::expected<std::vector<int64_t>, Error> result = index_->Build(base);
     if (result.has_value()) {
     } else {
@@ -236,12 +295,24 @@ int HnswIndexHandler::build_index(const vsag::DatasetPtr &base)
 
 int HnswIndexHandler::get_index_number()
 {
+#ifdef OB_BUILD_HIPVS
+  if (hipvs_builder_) return hipvs_builder_->count(index_->GetNumElements());
+#endif
   return index_->GetNumElements();
 }
 
 int HnswIndexHandler::add_index(const vsag::DatasetPtr &incremental)
 {
   int ret = OB_SUCCESS;
+#ifdef OB_BUILD_HIPVS
+  try {
+    if (hipvs_builder_ && hipvs_builder_->append(incremental, dim_)) return OB_SUCCESS;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED;
+  } catch (const std::exception &e) {
+    LOG_WARN("[HIPVS_BUILD] input buffering failed fallback=false", "what", e.what());
+    return OB_ERR_VSAG_RETURN_ERROR;
+  }
+#endif
   tl::expected<std::vector<int64_t>, Error> result = index_->Add(incremental);
   if (result.has_value()) {
     LOG_DEBUG("add index success", K(get_index_number()));
@@ -285,6 +356,7 @@ int HnswIndexHandler::cal_distance_by_id(const float *vector,
                                          const float *&dist)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(finish_hipvs_build())) return ret;
   tl::expected<DatasetPtr, Error> result = index_->CalDistanceById(vector, ids, count);
   if (result.has_value()) {
     result.value()->Owner(false);
@@ -299,6 +371,7 @@ int HnswIndexHandler::get_extra_info_by_ids(const int64_t *ids, int64_t count,
                                             char *extra_infos)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(finish_hipvs_build())) return ret;
   tl::expected<void, Error> result = index_->GetExtraInfoByIds(ids, count, extra_infos);
   if (result.has_value()) {
   } else {
@@ -310,6 +383,9 @@ int HnswIndexHandler::get_extra_info_by_ids(const int64_t *ids, int64_t count,
 int HnswIndexHandler::get_vid_bound(int64_t &min_vid, int64_t &max_vid)
 {
   int ret = OB_SUCCESS;
+#ifdef OB_BUILD_HIPVS
+  if (hipvs_builder_ && hipvs_builder_->bounds(min_vid, max_vid)) return OB_SUCCESS;
+#endif
   int64_t element_cnt = index_->GetNumElements();
   if (element_cnt == 0) {
   } else {
@@ -352,6 +428,7 @@ uint64_t HnswIndexHandler::estimate_memory(const uint64_t row_count, const bool 
 int HnswIndexHandler::immutable_optimize()
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(finish_hipvs_build())) return ret;
   if (index_type_ == IPIVF_TYPE) {
     // TODO(ningxin.ning): support SetImmutable for sparse vector index
   } else {
@@ -376,6 +453,7 @@ int HnswIndexHandler::knn_search(const vsag::DatasetPtr &query, int64_t topk,
                                  float distance_threshold)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(finish_hipvs_build())) return ret;
   std::function<bool(int64_t)> vid_filter = [bitmap, reverse_filter](int64_t id) -> bool {
     if (!reverse_filter) {
       return bitmap->test(id);
@@ -428,6 +506,7 @@ int HnswIndexHandler::knn_search(const vsag::DatasetPtr &query, int64_t topk,
                                  bool is_last_search, void *allocator)
 {
   int ret = OB_SUCCESS;
+  if (OB_FAIL(finish_hipvs_build())) return ret;
   std::function<bool(int64_t)> filter = [bitmap, reverse_filter](int64_t id) -> bool {
     if (!reverse_filter) {
       return bitmap->test(id);
@@ -842,6 +921,11 @@ int create_index(VectorIndexPtr &index_handler,
     }
   }
   return ret;
+}
+
+int enable_hipvs_build(VectorIndexPtr index_handler)
+{
+  return index_handler ? static_cast<HnswIndexHandler *>(index_handler)->enable_hipvs_build() : OB_INVALID_ARGUMENT;
 }
 
 int validate_create_index(const CreateIndexParam &param, std::string &err_msg)
@@ -1273,6 +1357,7 @@ int fserialize(VectorIndexPtr &index_handler, std::ostream &out_stream)
     ret = OB_INVALID_ARGUMENT;
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
+    if (OB_FAIL(hnsw->finish_hipvs_build())) return ret;
     tl::expected<void, Error> bs = hnsw->get_index()->Serialize(out_stream);
     if (bs.has_value()) {
       LOG_INFO("[OBVSAG] serialize index success");

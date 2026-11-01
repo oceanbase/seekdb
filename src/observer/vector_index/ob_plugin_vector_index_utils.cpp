@@ -668,7 +668,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
       }
     } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (adapter->get_snapshot_key_prefix().empty() || 
+    } else if (adapter->get_snap_data_()->rb_flag_ || adapter->get_snapshot_key_prefix().empty() ||
                !row->storage_datums_[0].get_string().prefix_match(adapter->get_snapshot_key_prefix())) {
       ObString key_prefix;
       ObString target_prefix;

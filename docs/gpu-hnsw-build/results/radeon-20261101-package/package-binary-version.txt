@@ -1,0 +1,11 @@
+Starting seekdb (OceanBase seekdb 1.4.0.0) source revision 1-cfae4ba92b14d3010f7c7aa6a87d064dfd7c0075.
+seekdb (OceanBase seekdb 1.4.0.0)
+
+REVISION: 1-cfae4ba92b14d3010f7c7aa6a87d064dfd7c0075
+BUILD_BRANCH: HEAD
+BUILD_TIME: Nov  1 2026 08:31:28
+BUILD_FLAGS: RelWithDebInfo
+BUILD_INFO: 
+
+Copyright (c) 2011-present OceanBase Inc.
+

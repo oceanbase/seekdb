@@ -1,0 +1,74 @@
+{
+  "README.md": {
+    "bytes": 2385,
+    "sha256": "b3019b44ab358962b65db0ad313afaaab453f3b0fffa222d63cf13f443e56fcf"
+  },
+  "candidate-source-provenance.json": {
+    "bytes": 1567,
+    "sha256": "9dea12493aadc442d3e9ae7e0d32a626e184a17a29169d2e38ded2b6df45a30e"
+  },
+  "compile_init.output": {
+    "bytes": 1487,
+    "sha256": "cec58164cd6c5efed9723c411bbdb2904bd47dce24f5c86f820cb9bd6f8ce4a3"
+  },
+  "driver-cwd-error-exact-dependency-initialization.json": {
+    "bytes": 118,
+    "sha256": "5125346fd0b08bcc3bcbdbb21a6e7c833c418d2b1dfafa71b1b74308f9325577"
+  },
+  "driver-guard-error-status.json": {
+    "bytes": 4534,
+    "sha256": "9b55a7138674c1e1564631793dee263460ef0e3c92509de9ab949aeb0a42ad8c"
+  },
+  "exact-dependency-initialization.json": {
+    "bytes": 116,
+    "sha256": "22585f4c3a1c05e50933b84b14cec24308b975bc80f7acfdb1145a0e4c7126c0"
+  },
+  "native-compile/compile.output": {
+    "bytes": 148,
+    "sha256": "3b5896952b3786cd21ae5e15828f28cf59b3f012b80d34e1a5d46201049e1ec6"
+  },
+  "native-compile/compile_configure.output": {
+    "bytes": 6202,
+    "sha256": "b8222109ab5091bd33fb5e1baa2fd37877f6369e0a2cc9321465a23764e20567"
+  },
+  "native-compile/compile_init.output": {
+    "bytes": 597,
+    "sha256": "4115f7b7ec1ef5299de72efeb551ead4c2827d71d081c9412b55f93d615c8f5d"
+  },
+  "native-entry-status.json": {
+    "bytes": 744,
+    "sha256": "5cc643ff5f909c37e8d2abb609b5b382987f7ffefa82e69f943733207385d3d6"
+  },
+  "original-compile-entry.json": {
+    "bytes": 292,
+    "sha256": "59a9f9ca8082d5ff7cfd16dbb3b433ba1bcc7037d8e3882139b6ecf31c0a7e66"
+  },
+  "platform-log-interface-audit.json": {
+    "bytes": 587,
+    "sha256": "0c2f59c1653f774463453b12e25b7b8a2ff742602bf066878e3840d133ce34ed"
+  },
+  "raw-evidence.tar.gz": {
+    "bytes": 89238,
+    "sha256": "e4fbc16ff105e5b8e9f61d926569927451fe2927cf2c1e20bd7b89581750a6de"
+  },
+  "raw-file-manifest.json": {
+    "bytes": 2114,
+    "sha256": "7eceed5641e9460484bc4fb2bd3a813eeb2427cf66c84090ff0135d344000d5e"
+  },
+  "regression-status.json": {
+    "bytes": 214,
+    "sha256": "16fe1ff3a4db9bea708f36d8e374d24885bdd6eadc13a4c3d189d55453b1e996"
+  },
+  "rust-download-cache.json": {
+    "bytes": 1001,
+    "sha256": "8521abf8ecd51ce6a9345e9a94998b08a96bfd47a30611d07f108f346a5e163e"
+  },
+  "stop-before-cpp-build.sh": {
+    "bytes": 247,
+    "sha256": "13d0b7278da57ab4eea8109c427d731106cdc88e4d5489384b36999357cb055e"
+  },
+  "verify-native-entry.py": {
+    "bytes": 3386,
+    "sha256": "52fc3d656ac451d96e4742c7c8361c94a71ff7bc819dc0f6b8accdce7a1f8cae"
+  }
+}

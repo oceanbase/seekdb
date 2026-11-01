@@ -1,6 +1,13 @@
 .gitattributes export-ignore
 .gitignore export-ignore
 
+# The contest build entry is executed by Linux Bash, including after a
+# Windows checkout or archive upload.
+.github/script/seekdb/compile.sh text eol=lf
+.github/script/seekdb/scripts/farm_compile.sh text eol=lf
+tools/obtest/copy.sh text eol=lf
+deps/init/setup_rust.sh text eol=lf
+
 # All OceanBase code is auto-formatted using clang-format.
 *.c filter=codeformat
 *.cc filter=codeformat

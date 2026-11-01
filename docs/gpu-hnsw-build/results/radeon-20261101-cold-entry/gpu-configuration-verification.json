@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "course_alias_on": true,
+  "observer_hipvs_macro": true,
+  "worker_and_bridge_targets_present": true,
+  "harness_correction": "Course alias is UNINITIALIZED; internal HIPVS variable is not a cache entry. Validate actual compiler definitions and generated GPU targets.",
+  "source_modified": false,
+  "configure_repeated": false
+}

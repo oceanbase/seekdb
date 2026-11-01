@@ -1,0 +1,41 @@
+# hipVS declaration checks require no GPU and run in both ON and OFF builds.
+--disable_warnings
+DROP TABLE IF EXISTS hipvs_contract;
+--enable_warnings
+CREATE TABLE hipvs_contract(id INT PRIMARY KEY, vec VECTOR(3));
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=cosine,type=hnsw,lib=hipvs,m=16);
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_sq,lib=hipvs,m=16);
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_bq,lib=hipvs,m=16);
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,lib=hipvs,m=20);
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=ivf_flat,lib=hipvs);
+# The lecture's cuVS name is an alias for the same AMD backend. These errors
+# must come from the HIPVS capability checks, not unknown-library rejection.
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=cosine,type=hnsw,lib=cuvs,m=16);
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_sq,lib=cuvs,m=16);
+--error 1235
+CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,lib=cuvs,m=20);
+INSERT INTO hipvs_contract VALUES (11,'[1,0,0]'),(29,'[2,0,0]');
+CREATE VECTOR INDEX cpu_idx ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,lib=vsag,m=16);
+SELECT id FROM hipvs_contract ORDER BY l2_distance(vec,'[1,0,0]') APPROXIMATE LIMIT 1;
+DROP INDEX cpu_idx ON hipvs_contract;
+# Repeated fresh builds exercise snapshot serialization, renewal, and reuse.
+# The first query must see the persisted graph even if a background adapter
+# still shares the memory that the DDL builder has just renewed.
+let $rounds = 12;
+--disable_query_log
+while ($rounds)
+{
+  CREATE VECTOR INDEX cpu_idx ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,lib=vsag,m=16);
+  SELECT id FROM hipvs_contract ORDER BY l2_distance(vec,'[1,0,0]') APPROXIMATE LIMIT 1;
+  DROP INDEX cpu_idx ON hipvs_contract;
+  dec $rounds;
+}
+--enable_query_log
+DROP TABLE hipvs_contract;

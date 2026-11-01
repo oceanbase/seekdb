@@ -1,0 +1,22 @@
+{
+  "completed": true,
+  "rows": 10000,
+  "probe_sizes": [100, 500, 1000, 2000, 4000],
+  "single_query_ms": {
+    "cpu": 7.881045341491699,
+    "gpu": 13.030871748924255
+  },
+  "batch_runs": [
+    {"N": 100, "cpu_ms": 318.9, "gpu_ms": 1057.0, "speedup": 0.3, "cpu_probes_s": 314, "gpu_probes_s": 95},
+    {"N": 500, "cpu_ms": 1504.4, "gpu_ms": 1000.9, "speedup": 1.5, "cpu_probes_s": 332, "gpu_probes_s": 500},
+    {"N": 1000, "cpu_ms": 2982.4, "gpu_ms": 1050.2, "speedup": 2.84, "cpu_probes_s": 335, "gpu_probes_s": 952},
+    {"N": 2000, "cpu_ms": 5899.5, "gpu_ms": 1041.7, "speedup": 5.66, "cpu_probes_s": 339, "gpu_probes_s": 1920},
+    {"N": 4000, "cpu_ms": 11708.5, "gpu_ms": 1437.2, "speedup": 8.15, "cpu_probes_s": 342, "gpu_probes_s": 2783}
+  ],
+  "recall_at_10": {"cpu": 0.64, "gpu": 0.88},
+  "sql_results_validated": true,
+  "gpu_single_batch_identical_queries": 16,
+  "gpu_single_batch_checked_queries": 100,
+  "gpu_single_query_recall_at_10": 0.893,
+  "scope": "course preinstalled batch-query demo; not HNSW construction"
+}

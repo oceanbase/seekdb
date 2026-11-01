@@ -1,0 +1,17 @@
+[build.sh] command: /workspace/amd-acceptance-20261101-6dc14ba3/entry-environment-audit/source/build.sh init
+[dep_create.sh] [NOTICE] 'Ubuntu 24.04.4 LTS (x86_64)' is compatible with CentOS 9, use el9 dependencies list
+[dep_create.sh] oceanbase.el9.x86_64.deps has been not initialized, due to /workspace/amd-acceptance-20261101-6dc14ba3/entry-environment-audit/source/deps/3rd/6cbf427016d9c5328b3f45ad0bb925b5 not exists
+[dep_create.sh] FOUND env DEP_CACHE_DIR: /opt/seekdb-deps-cache
+[dep_create.sh] cache deps /opt/seekdb-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd/DONE not exist
+[dep_create.sh] check dependencies profile for oceanbase.el9.x86_64.deps... FOUND
+[dep_create.sh] check repository address in profile...
+[dep_create.sh] target: default, repo: http://mirrors.oceanbase.com/oceanbase/development-kit/el/8/x86_64/
+[dep_create.sh] target: community, repo: http://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
+[dep_create.sh] target: el9, repo: http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/x86_64/
+[dep_create.sh] start to download dependencies...
+[dep_create.sh] downloading package <devdeps-gtest-1.8.0-242026020914.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-gtest-1.8.0-242026020914.el8.x86_64.rpm>... dep_create.sh: line 469: rpm2cpio: command not found
+dep_create.sh: line 469: cpio: command not found
+FAILED
+[dep_create.sh] [ERROR] Failed to init rpm deps
+[build.sh][ERROR] dependency initialization failed with status 5

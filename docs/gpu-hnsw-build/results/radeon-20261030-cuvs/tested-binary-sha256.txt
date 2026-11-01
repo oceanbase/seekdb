@@ -1,0 +1,3 @@
+ebb014c6b66ea2c3675aee07a8fb489b731d34a9b36b293851c8ce8842988d13  /workspace/hipvs-competition-20261030/artifacts/bin/seekdb
+5889aaf2dfd6e68357c3b337d6663bc5770497a86f12ee99939a2f327a6d1eed  /workspace/hipvs-competition-20261030/artifacts/bin/seekdb_hipvs_hnsw_worker
+8b482b5246f185b567753ee5f8b689c60ab0ee5dddf135ae4a0e9dd055035faa  /workspace/hipvs-competition-20261030/artifacts/lib/libseekdb_hipvs_hnsw.so

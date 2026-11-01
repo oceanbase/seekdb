@@ -1,0 +1,11 @@
+{
+  "source_commit": "b35b7d4c824d13c71737332b1c5ce333b5f1ff28",
+  "completed": true,
+  "stage": "full-build-passed",
+  "configured_gpu_flag": "OB_BUILD_CUVS=ON",
+  "fresh_build_directory": true,
+  "updated_utc": "2026-10-30T21:37:18.462169+00:00",
+  "binary_sha256": "cf20664c40464ddb204bb36f64f3e1a3e1308eb211bad5b200a9beca1167c04e",
+  "tracked_files_unchanged": 9248,
+  "binary_embeds_full_candidate_sha": true
+}

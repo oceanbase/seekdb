@@ -1,0 +1,28 @@
+{
+  "source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+  "benchmark_gpu_events": [
+    {
+      "round": 1,
+      "event": "[2026-11-01 12:52:13.113662] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [15422][DDL_9398][Y100B427F000001-00065F367D026790-0-0] [lt=6] [HIPVS_BUILD] complete gpu=true fallback=false(rows=50000, dim=128, max_degree=32, total_ms=2.149105430000000069e+03, cagra_ms=1.681767496943473816e+03, hierarchy_ms=1.771489000320434570e+02, serialize_ms=3.249042904376983643e+01)",
+      "retained_original_server_log_match": false,
+      "recall_at_10": 1.0
+    },
+    {
+      "round": 2,
+      "event": "[2026-11-01 12:52:18.420350] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [15047][PX_G0][Y100B427F000001-00065F367D026A11-0-0] [lt=9] [HIPVS_BUILD] complete gpu=true fallback=false(rows=50000, dim=128, max_degree=32, total_ms=2.060241789000000153e+03, cagra_ms=1.623260791063308716e+03, hierarchy_ms=1.502764320373535156e+02, serialize_ms=3.256876802444458008e+01)",
+      "retained_original_server_log_match": false,
+      "recall_at_10": 0.999
+    },
+    {
+      "round": 3,
+      "event": "[2026-11-01 12:53:18.132387] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [15047][PX_G0][Y100B427F000001-00065F367D027197-0-0] [lt=10] [HIPVS_BUILD] complete gpu=true fallback=false(rows=50000, dim=128, max_degree=32, total_ms=2.038648527000000058e+03, cagra_ms=1.608608382940292358e+03, hierarchy_ms=1.498497669696807861e+02, serialize_ms=3.226122105121612549e+01)",
+      "retained_original_server_log_match": true,
+      "recall_at_10": 1.0
+    }
+  ],
+  "retained_raw_gpu_success_events": [
+    "[2026-11-01 12:53:18.132387] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [15047][PX_G0][Y100B427F000001-00065F367D027197-0-0] [lt=10] [HIPVS_BUILD] complete gpu=true fallback=false(rows=50000, dim=128, max_degree=32, total_ms=2.038648527000000058e+03, cagra_ms=1.608608382940292358e+03, hierarchy_ms=1.498497669696807861e+02, serialize_ms=3.226122105121612549e+01)",
+    "[2026-11-01 12:53:23.542037] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [16175][DDL_21310][Y100B427F000001-00065F367D027419-0-0] [lt=7] [HIPVS_BUILD] complete gpu=true fallback=false(rows=50000, dim=128, max_degree=32, total_ms=2.139667268000000149e+03, cagra_ms=1.713714102983474731e+03, hierarchy_ms=1.372621330022811890e+02, serialize_ms=3.465141201019287109e+01)"
+  ],
+  "archive_limitation": "Server log rotation retained the third timed GPU build and the later DML rebuild. Benchmark JSON captured the first two success events before rotation; those two entire raw log files are no longer available. No benchmark was rerun to replace evidence."
+}

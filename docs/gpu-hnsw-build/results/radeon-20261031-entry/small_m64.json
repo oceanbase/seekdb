@@ -1,0 +1,605 @@
+{
+  "configuration": {
+    "host": "127.0.0.1",
+    "port": 2893,
+    "user": "root",
+    "client": "mysql",
+    "database": "hipvs_input_small_m64",
+    "rows": 257,
+    "dim": 7,
+    "queries": 20,
+    "rounds": 3,
+    "m": 64,
+    "gpu_lib": "cuvs",
+    "ef_construction": 200,
+    "ef_search": 1000,
+    "min_recall": 0.99,
+    "verify_existing": false,
+    "seed": 20261030,
+    "dtype": "float32",
+    "distance": "l2",
+    "data_sha256": "25c45813e5e50afb0f1e0bb91dfa7ee0193571c2432bbf491e84018e844462a4",
+    "data_scale": 1.0,
+    "scale_scope": "all corpus and query vectors; original float32 values retained"
+  },
+  "runs": [
+    {
+      "round": 1,
+      "backend": "vsag",
+      "status": "passed",
+      "ddl_seconds": 0.5277177938260138,
+      "build_seconds": 0.5484027909114957,
+      "availability_ids": [
+        1000003900,
+        1000000177,
+        1000001554,
+        1000001707,
+        1000000806,
+        1000002132,
+        1000003016,
+        1000003271,
+        1000002931,
+        1000001741
+      ],
+      "gpu_events": [],
+      "recall_at_10": 1.0,
+      "queries": 20,
+      "per_query_recall": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "exact_sql_crosscheck": true,
+      "explain": [
+        [
+          "========================================================"
+        ],
+        [
+          "|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------"
+        ],
+        [
+          "|0 |VECTOR INDEX SCAN|corpus(idx)|1       |7           |"
+        ],
+        [
+          "========================================================"
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([corpus.id]), filter(nil), rowset=16"
+        ],
+        [
+          "      access([corpus.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([corpus.__vid_1793395489846515], [corpus.__type_17_1793395490047550]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "round": 1,
+      "backend": "hipvs",
+      "status": "passed",
+      "ddl_seconds": 0.9336936469189823,
+      "build_seconds": 0.9550574482418597,
+      "availability_ids": [
+        1000003900,
+        1000000177,
+        1000001554,
+        1000001707,
+        1000000806,
+        1000002132,
+        1000003016,
+        1000003271,
+        1000002931,
+        1000001741
+      ],
+      "gpu_events": [
+        "[2026-10-30 21:24:51.706431] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [32685][PX_G0][Y100B427F000001-00065F156E1EE25A-0-0] [lt=4] [HIPVS_BUILD] complete gpu=true fallback=false(rows=257, dim=7, max_degree=64, total_ms=4.232605100000000107e+02, cagra_ms=2.552287592887878418e+02, hierarchy_ms=1.529381418228149414e+01, serialize_ms=2.465376853942871094e-01)"
+      ],
+      "recall_at_10": 1.0,
+      "queries": 20,
+      "per_query_recall": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "exact_sql_crosscheck": true,
+      "explain": [
+        [
+          "========================================================"
+        ],
+        [
+          "|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------"
+        ],
+        [
+          "|0 |VECTOR INDEX SCAN|corpus(idx)|1       |7           |"
+        ],
+        [
+          "========================================================"
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([corpus.id]), filter(nil), rowset=16"
+        ],
+        [
+          "      access([corpus.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([corpus.__vid_1793395491022313], [corpus.__type_17_1793395491237081]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "round": 2,
+      "backend": "hipvs",
+      "status": "passed",
+      "ddl_seconds": 0.9320999411866069,
+      "build_seconds": 0.9527857177890837,
+      "availability_ids": [
+        1000003900,
+        1000000177,
+        1000001554,
+        1000001707,
+        1000000806,
+        1000002132,
+        1000003016,
+        1000003271,
+        1000002931,
+        1000001741
+      ],
+      "gpu_events": [
+        "[2026-10-30 21:24:53.257931] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [32685][PX_G0][Y100B427F000001-00065F156E1EE2FC-0-0] [lt=3] [HIPVS_BUILD] complete gpu=true fallback=false(rows=257, dim=7, max_degree=64, total_ms=4.030520789999999920e+02, cagra_ms=2.481890211105346680e+02, hierarchy_ms=1.528658437728881836e+01, serialize_ms=2.142381668090820312e-01)"
+      ],
+      "recall_at_10": 1.0,
+      "queries": 20,
+      "per_query_recall": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "exact_sql_crosscheck": true,
+      "explain": [
+        [
+          "========================================================"
+        ],
+        [
+          "|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------"
+        ],
+        [
+          "|0 |VECTOR INDEX SCAN|corpus(idx)|1       |7           |"
+        ],
+        [
+          "========================================================"
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([corpus.id]), filter(nil), rowset=16"
+        ],
+        [
+          "      access([corpus.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([corpus.__vid_1793395492602709], [corpus.__type_17_1793395492807772]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "round": 2,
+      "backend": "vsag",
+      "status": "passed",
+      "ddl_seconds": 0.5309730949811637,
+      "build_seconds": 0.5525563238188624,
+      "availability_ids": [
+        1000003900,
+        1000000177,
+        1000001554,
+        1000001707,
+        1000000806,
+        1000002132,
+        1000003016,
+        1000003271,
+        1000002931,
+        1000001741
+      ],
+      "gpu_events": [],
+      "recall_at_10": 1.0,
+      "queries": 20,
+      "per_query_recall": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "exact_sql_crosscheck": true,
+      "explain": [
+        [
+          "========================================================"
+        ],
+        [
+          "|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------"
+        ],
+        [
+          "|0 |VECTOR INDEX SCAN|corpus(idx)|1       |7           |"
+        ],
+        [
+          "========================================================"
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([corpus.id]), filter(nil), rowset=16"
+        ],
+        [
+          "      access([corpus.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([corpus.__vid_1793395494187866], [corpus.__type_17_1793395494393362]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "round": 3,
+      "backend": "vsag",
+      "status": "passed",
+      "ddl_seconds": 0.5316650299355388,
+      "build_seconds": 0.5521041490137577,
+      "availability_ids": [
+        1000003900,
+        1000000177,
+        1000001554,
+        1000001707,
+        1000000806,
+        1000002132,
+        1000003016,
+        1000003271,
+        1000002931,
+        1000001741
+      ],
+      "gpu_events": [],
+      "recall_at_10": 1.0,
+      "queries": 20,
+      "per_query_recall": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "exact_sql_crosscheck": true,
+      "explain": [
+        [
+          "========================================================"
+        ],
+        [
+          "|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------"
+        ],
+        [
+          "|0 |VECTOR INDEX SCAN|corpus(idx)|1       |7           |"
+        ],
+        [
+          "========================================================"
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([corpus.id]), filter(nil), rowset=16"
+        ],
+        [
+          "      access([corpus.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([corpus.__vid_1793395495367585], [corpus.__type_17_1793395495573719]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    },
+    {
+      "round": 3,
+      "backend": "hipvs",
+      "status": "passed",
+      "ddl_seconds": 0.9330473528243601,
+      "build_seconds": 0.9546023020520806,
+      "availability_ids": [
+        1000003900,
+        1000000177,
+        1000001554,
+        1000001707,
+        1000000806,
+        1000002132,
+        1000003016,
+        1000003271,
+        1000002931,
+        1000001741
+      ],
+      "gpu_events": [
+        "[2026-10-30 21:24:57.213295] INFO  [LIB] finish_hipvs_build (ob_vsag_adaptor.cpp:261) [32685][PX_G0][Y100B427F000001-00065F156E1EE4E2-0-0] [lt=2] [HIPVS_BUILD] complete gpu=true fallback=false(rows=257, dim=7, max_degree=64, total_ms=4.131469290000000001e+02, cagra_ms=2.505684599876403809e+02, hierarchy_ms=1.578923988342285156e+01, serialize_ms=2.481670379638671875e-01)"
+      ],
+      "recall_at_10": 1.0,
+      "queries": 20,
+      "per_query_recall": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "exact_sql_crosscheck": true,
+      "explain": [
+        [
+          "========================================================"
+        ],
+        [
+          "|ID|OPERATOR         |NAME       |EST.ROWS|EST.TIME(us)|"
+        ],
+        [
+          "--------------------------------------------------------"
+        ],
+        [
+          "|0 |VECTOR INDEX SCAN|corpus(idx)|1       |7           |"
+        ],
+        [
+          "========================================================"
+        ],
+        [
+          "Outputs & filters:"
+        ],
+        [
+          "-------------------------------------"
+        ],
+        [
+          "  0 - output([corpus.id]), filter(nil), rowset=16"
+        ],
+        [
+          "      access([corpus.id]), partitions(p0)"
+        ],
+        [
+          "      is_index_back=true, is_global_index=false, "
+        ],
+        [
+          "      range_key([corpus.__vid_1793395496547202], [corpus.__type_17_1793395496752280]), range(MIN,MIN ; MAX,MAX)always true"
+        ]
+      ]
+    }
+  ],
+  "official_target_known": false,
+  "completed": true,
+  "build_completed": true,
+  "timing": "CREATE VECTOR INDEX through completion of the same first availability query",
+  "ground_truth_seconds": 0.0004305257461965084,
+  "server_version": [
+    [
+      "5.7.25-OceanBase seekdb-v1.4.0.0"
+    ]
+  ],
+  "server_settings": [
+    [
+      "observer",
+      "memory_limit",
+      "CAPACITY",
+      "0M",
+      "deprecated compatibility parameter. The configured value is accepted and persisted, but is ignored by memory sizing and memory control. Range: 0, [1G,).",
+      "OBSERVER",
+      "CLUSTER",
+      "DEFAULT",
+      "DYNAMIC_EFFECTIVE",
+      "0M",
+      "1"
+    ],
+    [
+      "observer",
+      "vector_memory_limit",
+      "CAPACITY",
+      "0M",
+      "the maximum memory used by the vector module. 0 derives the limit from effective memory, which is the smaller of physical memory and a finite cgroup memory limit. The automatic value is 50% of effective memory. The Vector allocator enforces this module limit independently of the TxShare aggregate limit. Range: [0M,).",
+      "RUNTIME",
+      "CLUSTER",
+      "DEFAULT",
+      "DYNAMIC_EFFECTIVE",
+      "0M",
+      "1"
+    ],
+    [
+      "observer",
+      "cpu_count",
+      "INT",
+      "16",
+      "the number of CPU\\'s in the system. If this parameter is set to zero, the number will be set according to sysconf; otherwise, this parameter is used. Range: [0,+\u221e) in integer",
+      "OBSERVER",
+      "CLUSTER",
+      "DEFAULT",
+      "DYNAMIC_EFFECTIVE",
+      "0",
+      "0"
+    ]
+  ],
+  "import_seconds": 0.020250030793249607,
+  "medians_seconds": {
+    "vsag": 0.5521041490137577,
+    "hipvs": 0.9546023020520806
+  },
+  "speedup": 0.5783603787953534,
+  "dml_and_filter": {
+    "update": true,
+    "delete": true,
+    "reinsert": true,
+    "filter_recall_at_10": 1.0,
+    "all_filter_ids_valid": true
+  },
+  "restart_verification": {
+    "status": "passed",
+    "recall_at_10": 1.0,
+    "queries": 20,
+    "per_query_recall": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "exact_sql_crosscheck": true
+  }
+}

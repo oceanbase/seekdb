@@ -1,0 +1,20 @@
+{
+  "stopped_old_driver": 3072,
+  "cpp_jobs_before": 2,
+  "cpp_jobs_after": 4,
+  "external_cargo_jobs": 1,
+  "reason": "Observed cgroup memory peak below 10 GiB of 55 GiB limit, OOM events zero; preserve completed objects.",
+  "source_unchanged": true,
+  "stopped_process_tree": [
+    3072,
+    5321,
+    5324,
+    5328,
+    12893,
+    14011,
+    14143,
+    14144,
+    14172,
+    14173
+  ]
+}

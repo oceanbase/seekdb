@@ -1,0 +1,20 @@
+{
+  "fresh_kernel_code_cells": 11,
+  "execution_counts": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "source_notebook_archive": "../user-run-20261031/downloaded.ipynb",
+  "final_notebook_report_matches_summary_json": true,
+  "verifier_sha256": "bfaebe7daf269d70cf3ac1c56b7d5c7654953f10e988bdb3bf725c05dbdbdf93",
+  "scope": "fresh course-image Notebook run; Docker deployment blocked, see environment.json"
+}

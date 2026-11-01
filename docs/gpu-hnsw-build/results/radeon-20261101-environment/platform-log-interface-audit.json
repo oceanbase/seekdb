@@ -1,0 +1,19 @@
+{
+  "record_page_bundle_sha256": "a8c6807a35b54ae665042ee4b4081de5e04e0000327bfcc74a4726350b159a05",
+  "failure_reason_display_field": "errorMessage",
+  "contains_failMsg_decoder": false,
+  "details_endpoint": "queryTaskRecordDetail?taskId=",
+  "details_table_fields": [
+    "questionScore",
+    "score",
+    "message",
+    "gmtCreate",
+    "gitRepo",
+    "branch",
+    "commitId",
+    "taskStatus",
+    "strMachineScore",
+    "successCount"
+  ],
+  "result": "The public record UI displays errorMessage and detail results only; no decoder for failMsg=8 was found in this page bundle."
+}

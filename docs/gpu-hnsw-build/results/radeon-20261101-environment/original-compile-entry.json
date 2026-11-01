@@ -1,0 +1,8 @@
+{
+  "source_commit": "bb488f7cfcdf102d8d11c5f44ac7f2fd02d86cec",
+  "returncode": 5,
+  "elapsed_seconds": 0.7150728199630976,
+  "path": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+  "dependency_cache": "existing image cache",
+  "manually_prepared_rust_not_on_path": true
+}

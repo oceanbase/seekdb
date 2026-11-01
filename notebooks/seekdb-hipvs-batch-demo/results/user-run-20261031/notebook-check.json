@@ -1,0 +1,71 @@
+{
+  "scope": "Inspection of user-downloaded Notebook; not an independent GPU rerun",
+  "downloaded_notebook": "downloaded.ipynb",
+  "downloaded_file_sha256": "302c8f1a5c042e100690b1b42b075c0d5692b2e792ded41ccd89db41a7826c61",
+  "repository_lf_file_sha256": "302c8f1a5c042e100690b1b42b075c0d5692b2e792ded41ccd89db41a7826c61",
+  "source_code_matches_repository": true,
+  "code_cells": 11,
+  "error_output_count": 0,
+  "execution_counts_in_cell_order": [
+    1,
+    2,
+    3,
+    4,
+    12,
+    13,
+    15,
+    16,
+    9,
+    10,
+    11
+  ],
+  "execution_order_monotonic": false,
+  "outputs_consistent_with_saved_summary": false,
+  "section_5_batch_execution_count": 15,
+  "final_report_execution_count": 11,
+  "latest_displayed_batch_runs": [
+    {
+      "N": 100,
+      "cpu_ms": 319.2,
+      "gpu_ms": 1071.2,
+      "speedup": 0.3,
+      "cpu_probes_s": 313,
+      "gpu_probes_s": 93
+    },
+    {
+      "N": 500,
+      "cpu_ms": 1501.2,
+      "gpu_ms": 891.9,
+      "speedup": 1.68,
+      "cpu_probes_s": 333,
+      "gpu_probes_s": 561
+    },
+    {
+      "N": 1000,
+      "cpu_ms": 2950.6,
+      "gpu_ms": 972.1,
+      "speedup": 3.04,
+      "cpu_probes_s": 339,
+      "gpu_probes_s": 1029
+    },
+    {
+      "N": 2000,
+      "cpu_ms": 5897.8,
+      "gpu_ms": 1040.8,
+      "speedup": 5.67,
+      "cpu_probes_s": 339,
+      "gpu_probes_s": 1922
+    },
+    {
+      "N": 4000,
+      "cpu_ms": 11676.4,
+      "gpu_ms": 1239.3,
+      "speedup": 9.42,
+      "cpu_probes_s": 343,
+      "gpu_probes_s": 3228
+    }
+  ],
+  "previous_report_peak_speedup": 8.15,
+  "finding": "Sections 3, 4 and 5 were rerun after the recall, scoreboard and final JSON cells. Latest batch output reports 9.42x; the saved final report still reports 8.15x.",
+  "next_step": "Rerun section 6, section 7 and the final validation/export cell in order, then save and download again. Do not edit the measured values manually."
+}

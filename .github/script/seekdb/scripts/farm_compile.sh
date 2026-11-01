@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Farm compile: build seekdb/observer in workspace.
-# Expects: WORKSPACE, SEEKDB_TASK_DIR, PACKAGE_TYPE (debug|release), REPO=server
-set -e
+# Expects: WORKSPACE, SEEKDB_TASK_DIR; optional PACKAGE_TYPE (default release).
+# Reuse the checked AMD compile entry instead of maintaining a second set of
+# flags, initialization, and artifact checks.
+set -euo pipefail
 
-cd "$WORKSPACE"
-# Use repo build.sh; debug or release from PACKAGE_TYPE
-build_type="${PACKAGE_TYPE:-debug}"
-if [[ -x "$WORKSPACE/build.sh" ]]; then
-  bash "$WORKSPACE/build.sh" "$build_type" --init --make
-else
-  echo "[farm_compile.sh] No build.sh in $WORKSPACE, skip."
+export GITHUB_WORKSPACE="${WORKSPACE:?}"
+export PACKAGE_TYPE="${PACKAGE_TYPE:-release}"
+# The maintained release profile uses RelWithDebInfo. Legacy farm callers may
+# still request debug, which the root build command no longer accepts.
+if [[ "$PACKAGE_TYPE" == debug ]]; then
+  echo "[farm_compile.sh] legacy debug profile uses release (RelWithDebInfo)"
+  export PACKAGE_TYPE=release
 fi
+exec bash "$GITHUB_WORKSPACE/.github/script/seekdb/compile.sh"

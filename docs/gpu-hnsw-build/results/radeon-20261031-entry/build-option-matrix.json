@@ -1,0 +1,48 @@
+{
+  "course_on": {
+    "requested_flags": [
+      "-DOB_BUILD_CUVS=ON"
+    ],
+    "configure_returncode": 0,
+    "gpu_macro": true,
+    "worker_target": true
+  },
+  "course_off": {
+    "requested_flags": [
+      "-DOB_BUILD_CUVS=OFF"
+    ],
+    "configure_returncode": 0,
+    "gpu_macro": false,
+    "worker_target": false
+  },
+  "native_on": {
+    "requested_flags": [
+      "-DOB_BUILD_HIPVS=ON"
+    ],
+    "configure_returncode": 0,
+    "gpu_macro": true,
+    "worker_target": true
+  },
+  "both_on": {
+    "requested_flags": [
+      "-DOB_BUILD_CUVS=ON",
+      "-DOB_BUILD_HIPVS=ON"
+    ],
+    "configure_returncode": 0,
+    "gpu_macro": true,
+    "worker_target": true
+  },
+  "conflict": {
+    "requested_flags": [
+      "-DOB_BUILD_CUVS=ON",
+      "-DOB_BUILD_HIPVS=OFF"
+    ],
+    "configure_returncode": 1
+  },
+  "default": {
+    "requested_flags": [],
+    "configure_returncode": 0,
+    "gpu_macro": false,
+    "worker_target": false
+  }
+}

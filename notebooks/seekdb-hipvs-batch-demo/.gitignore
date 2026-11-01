@@ -1,0 +1,6 @@
+run/
+notebook_workspace/
+__pycache__/
+lib/__pycache__/
+.ipynb_checkpoints/
+.seekdb_telemetry_instance_id

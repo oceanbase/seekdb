@@ -324,6 +324,27 @@ if [ ${NEED_SHARE_CACHE} == "ON" ]; then
     fi
 fi
 
+# A warm dependency cache does not need extraction tools. The Radeon image
+# also supports private extraction via system libarchive without installing
+# rpm2cpio/cpio or modifying the system package database.
+RPM_EXTRACTOR=system
+if [[ "${IS_TAR_PLATFORM}" != "true" && "$ID" != "arch" && "$ID" != "garuda" ]]; then
+    missing_extractors=()
+    for extractor in rpm2cpio cpio; do
+        command -v "$extractor" >/dev/null 2>&1 || missing_extractors+=("$extractor")
+    done
+    if (( ${#missing_extractors[@]} > 0 )); then
+        if command -v python3 >/dev/null 2>&1 && python3 "${PWD}/extract_rpm.py" --check; then
+            RPM_EXTRACTOR=libarchive
+            echo_log "using Python/system libarchive for RPM extraction"
+        else
+            echo_err "missing RPM extraction tools: ${missing_extractors[*]}"
+            echo_err "provide Python 3 with system libarchive, or install rpm2cpio and cpio"
+            exit 1
+        fi
+    fi
+fi
+
 if [[ ! -f "${DEP_FILE}" ]]; then
     echo_err "check dependencies profile for ${DEP_FILE}... NOT FOUND"
     exit 2
@@ -465,8 +486,10 @@ do
           (cd ${TARGET_DIR_3RD} && tar -xzf "${TARGET_DIR_3RD}/pkg/${pkg}" --strip-components=1)
         elif [[ "$ID" = "arch" || "$ID" = "garuda" ]]; then
           (cd ${TARGET_DIR_3RD} && rpmextract.sh "${TARGET_DIR_3RD}/pkg/${pkg}")
+        elif [[ "$RPM_EXTRACTOR" == "libarchive" ]]; then
+          python3 "${PWD}/extract_rpm.py" "${TARGET_DIR_3RD}/pkg/${pkg}" "${TARGET_DIR_3RD}"
         else
-          (cd ${TARGET_DIR_3RD} && rpm2cpio "${TARGET_DIR_3RD}/pkg/${pkg}" | cpio -di -u --quiet)
+          (set -o pipefail; cd ${TARGET_DIR_3RD} && rpm2cpio "${TARGET_DIR_3RD}/pkg/${pkg}" | cpio -di -u --quiet)
         fi
         if [[ $? -eq 0 ]]; then
           echo "SUCCESS"

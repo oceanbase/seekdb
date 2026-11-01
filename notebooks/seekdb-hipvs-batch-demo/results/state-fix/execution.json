@@ -1,0 +1,17 @@
+{
+  "started_utc": "2026-10-31T10:37:31Z",
+  "completed": true,
+  "python": "3.12.3",
+  "notebook_sha256": "f9c2610781dfe483f5375ae9d622776a5a8828dfed5a62aaf20b622381b58dd1",
+  "helper_sha256": "9bcf8793c80ebe62d61b8d40fb4d7a05df34a08c38200493266098873d1d6fac",
+  "scope": "course-image batch-query demonstration, not HNSW construction",
+  "binary_version": "",
+  "measured_files": {
+    "/seekdb_workspace/bin/seekdb": "74dc22b805519dcff14bc1dfe1928bdfe351e0b7feeb8a993797173380e80bee",
+    "/seekdb_workspace/bridge/libseekdb_cuvs_bridge.so": "9b597306871e3edf5bbaf932d2bcecaebeb18d475010774d6a9f38c3170c8cd6",
+    "/seekdb_workspace/datasets/base.f32": "87adaaad625b3bd309a8292e43d342a3dfb4094e990a404b2290d8880269a442",
+    "/seekdb_workspace/datasets/query.f32": "b51c0999f4e93ad1aa03b2e9b3185f38f2873f43a3ba1dca119825637e8f26f4",
+    "/seekdb_workspace/datasets/gt_100x10.i32": "574a1ac9a79f0534656b6f6bccbeb5c582ad8a2f41f1a80c37f460d18e89eebc"
+  },
+  "finished_utc": "2026-10-31T10:38:34Z"
+}

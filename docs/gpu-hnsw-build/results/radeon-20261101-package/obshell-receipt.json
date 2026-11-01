@@ -1,0 +1,11 @@
+{
+  "file": "obshell-4.4.1.1-32026031914.el8.x86_64.rpm",
+  "sha256": "6ab27e0f2cd7a0152120e948fcbc47e5a0c8478b47a88e3d7ec7438adee096fa",
+  "bytes": 15789560,
+  "url": "https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/obshell-4.4.1.1-32026031914.el8.x86_64.rpm",
+  "official_metadata_checksum_verified": true,
+  "extracted_binary_sha256": "608693d5493afb9b8acd08557efe916c053f57692036b1a7686594cb729819eb",
+  "extracted_bytes": 64406528,
+  "install_hooks_executed": false,
+  "binary_executed": false
+}

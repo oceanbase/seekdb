@@ -1,0 +1,8 @@
+{
+  "base_commit": "0e86b8c38afaf8fe3359041645c9b53c5a8524fe",
+  "branch": "competition/amd-hipvs-build",
+  "dirty_overlay": {},
+  "line_endings": "Linux Git checkout with core.autocrlf=false",
+  "bundle_sha256": "5d7e9b71812ba4c54f2fa8de9e1efe245b13d33c6f70f92a02806e91590b6518",
+  "scope": "genuine depth-1 Git clone of the published commit, transferred as .git and checked out on Linux"
+}

@@ -1,0 +1,110 @@
+{
+  "source_commit": "f18737e699ad0b29e38759fa821fec79e3940545",
+  "binary_source_commit": "cfae4ba92b14d3010f7c7aa6a87d064dfd7c0075",
+  "build_reused_for_data_only_change": true,
+  "completed": false,
+  "no_system_install": true,
+  "package_install_hooks_executed": false,
+  "steps": [
+    {
+      "label": "cpack-tgz",
+      "returncode": 0
+    },
+    {
+      "label": "package-ldd-seekdb",
+      "returncode": 0
+    },
+    {
+      "label": "package-ldd-seekdb_hipvs_hnsw_worker",
+      "returncode": 0
+    },
+    {
+      "label": "package-start",
+      "returncode": 0
+    },
+    {
+      "label": "package-start-ready",
+      "returncode": 0
+    },
+    {
+      "label": "package-contract",
+      "returncode": 0
+    },
+    {
+      "label": "package-benchmark",
+      "returncode": 1
+    },
+    {
+      "label": "package-stop-after-error",
+      "returncode": 0
+    }
+  ],
+  "stage": "failed",
+  "updated_utc": "2026-11-01T08:51:33.050682+00:00",
+  "obshell": {
+    "file": "obshell-4.4.1.1-32026031914.el8.x86_64.rpm",
+    "sha256": "6ab27e0f2cd7a0152120e948fcbc47e5a0c8478b47a88e3d7ec7438adee096fa",
+    "bytes": 15789560,
+    "url": "https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/obshell-4.4.1.1-32026031914.el8.x86_64.rpm",
+    "official_metadata_checksum_verified": true,
+    "extracted_binary_sha256": "608693d5493afb9b8acd08557efe916c053f57692036b1a7686594cb729819eb",
+    "extracted_bytes": 64406528,
+    "install_hooks_executed": false,
+    "binary_executed": false
+  },
+  "package_data": {
+    "upstream_commit": "706253423cfbc7e907ebfe577109d74b152d6dbe",
+    "restored_files": [
+      {
+        "path": "tools/timezone_V1.log",
+        "bytes": 4182391,
+        "sha256": "84bb2c709e06b6f62623dacac0f5cb870c88df6562bc347cce318c58b1d7e9d8",
+        "git_blob": "6758bf5d9e2963fafb6d798b1528ba76c3cf44dc"
+      }
+    ],
+    "existing_data_files": [
+      {
+        "path": "tools/default_srs_data_mysql.sql",
+        "bytes": 6748938,
+        "sha256": "ee7d83632689caebb2fa7b9c3f9592c60299725c53e5501c68ab1910288734a5",
+        "git_blob": "6843a48bd190a3d2779f41a0a28c346a81940673"
+      }
+    ],
+    "pack_cmake_static_files": {
+      "tools/default_srs_data_mysql.sql": true,
+      "tools/import_srs_data.py": true,
+      "tools/import_time_zone_info.py": true,
+      "tools/systemd/profile/oceanbase-pre.json": true,
+      "tools/systemd/profile/seekdb.cnf": true,
+      "tools/systemd/profile/seekdb.service": true,
+      "tools/systemd/profile/seekdb_systemd_start": true,
+      "tools/systemd/profile/seekdb_systemd_stop": true,
+      "tools/systemd/profile/seekdb_win.cnf": true,
+      "tools/systemd/profile/telemetry-pre.json": true,
+      "tools/timezone_V1.log": true
+    }
+  },
+  "unpackaged_binary_sha256": "37d0e7c44c0395c1353fc84578199af2c04b44eca4329114d806b0ff65f5c61d",
+  "packages": [
+    {
+      "name": "seekdb-1.4.0.0-1-linux-x86_64.tar.gz",
+      "bytes": 317319220,
+      "sha256": "097c0e5ba1eb153e8f49456c046040b5f41e188446c4201bb7234e3fa5a7488d"
+    },
+    {
+      "name": "seekdb-libs-1.4.0.0-1-linux-x86_64.tar.gz",
+      "bytes": 9860,
+      "sha256": "c18457d9d98c4232d66fa742d51d7304fda22cc973949e69f4bf5fd944dc88bc"
+    }
+  ],
+  "required_package_files": {
+    "usr/bin/seekdb": "37d0e7c44c0395c1353fc84578199af2c04b44eca4329114d806b0ff65f5c61d",
+    "usr/bin/obshell": "608693d5493afb9b8acd08557efe916c053f57692036b1a7686594cb729819eb",
+    "usr/bin/seekdb_hipvs_hnsw_worker": "8179afd099825d6657a8ab21a65c72b6ef1c24fda2aafb51d821e10dbdf50879",
+    "usr/libexec/seekdb/lib/libseekdb_hipvs_hnsw.so": "e74a8a572882a8445b57db6c0b4d6548fe80879f89f360acbeea16e312b1e91e",
+    "usr/libexec/seekdb/lib/libaio.so.1": "034b3bc6b8ccf407f3b68a9c2efacc5beed470cc086a6119e563b0695531a553",
+    "etc/seekdb/seekdb.cnf": "28af2e5f763324c6f7b2907ce16c9e00feaee9d84c4e3b8f12009fac1aeacc5a",
+    "usr/lib/systemd/system/seekdb.service": "4cea7b25850483566c1b19397ecd63e91eea98ce15ab6d2be6bb1c64b296ec86"
+  },
+  "error": "CalledProcessError(1, ['/opt/venv/bin/python', '/workspace/amd-acceptance-20261101-6dc14ba3/src/docs/gpu-hnsw-build/benchmark.py', '--port', '2897', '--gpu-lib', 'cuvs', '--rows', '50000', '--dim', '128', '--m', '32', '--queries', '100', '--rounds', '3', '--min-recall', '0.99', '--database', 'hipvs_package_benchmark_20261101', '--server-log', '/var/tmp/amd-package-20261101-cfae4ba9/log/seekdb.log', '--output', '/workspace/amd-acceptance-20261101-6dc14ba3/evidence/package-sql.json'], None, None)"
+}

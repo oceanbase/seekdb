@@ -1,0 +1,6 @@
+{
+  "verified_registry_packages": 123,
+  "versions_unchanged": true,
+  "workspace_lock_source": "docs/gpu-hnsw-build/results/radeon-20261031-recheck/rust-workspace-Cargo.lock",
+  "offline": true
+}

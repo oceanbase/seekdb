@@ -1,0 +1,10 @@
+Starting seekdb (OceanBase seekdb 1.4.0.0) source revision 1-4855acac7314df7d43f405b9c73c04ee4d40d562.
+seekdb (OceanBase seekdb 1.4.0.0)
+
+REVISION: 1-4855acac7314df7d43f405b9c73c04ee4d40d562
+BUILD_BRANCH: fix/amd-cold-entry-47237054
+BUILD_TIME: Nov  1 2026 12:37:10
+BUILD_FLAGS: RelWithDebInfo
+BUILD_INFO:
+
+Copyright (c) 2011-present OceanBase Inc.

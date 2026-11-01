@@ -1,0 +1,32 @@
+{
+  "upstream_commit": "706253423cfbc7e907ebfe577109d74b152d6dbe",
+  "restored_files": [
+    {
+      "path": "tools/timezone_V1.log",
+      "bytes": 4182391,
+      "sha256": "84bb2c709e06b6f62623dacac0f5cb870c88df6562bc347cce318c58b1d7e9d8",
+      "git_blob": "6758bf5d9e2963fafb6d798b1528ba76c3cf44dc"
+    }
+  ],
+  "existing_data_files": [
+    {
+      "path": "tools/default_srs_data_mysql.sql",
+      "bytes": 6748938,
+      "sha256": "ee7d83632689caebb2fa7b9c3f9592c60299725c53e5501c68ab1910288734a5",
+      "git_blob": "6843a48bd190a3d2779f41a0a28c346a81940673"
+    }
+  ],
+  "pack_cmake_static_files": {
+    "tools/default_srs_data_mysql.sql": true,
+    "tools/import_srs_data.py": true,
+    "tools/import_time_zone_info.py": true,
+    "tools/systemd/profile/oceanbase-pre.json": true,
+    "tools/systemd/profile/seekdb.cnf": true,
+    "tools/systemd/profile/seekdb.service": true,
+    "tools/systemd/profile/seekdb_systemd_start": true,
+    "tools/systemd/profile/seekdb_systemd_stop": true,
+    "tools/systemd/profile/seekdb_win.cnf": true,
+    "tools/systemd/profile/telemetry-pre.json": true,
+    "tools/timezone_V1.log": true
+  }
+}

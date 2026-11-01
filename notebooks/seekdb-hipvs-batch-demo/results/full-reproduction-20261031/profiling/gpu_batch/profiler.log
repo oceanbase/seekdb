@@ -1,0 +1,10 @@
+E20261031 15:45:24.148959 139532979529408 ptrace_session.cpp:261] ptrace call failed. errno: 1 - Operation not permitted params(PTRACE_SEIZE(16902), 1103, 0, 0)
+E20261031 15:45:24.149012 139532979529408 rocprofv3_attach.cpp:156] Attachment failed to pid 1103
+E20261031 15:45:24.149017 139532986056832 rocprofv3_attach.cpp:241] ptrace session failed with error code 19
+Attaching to PID 1103 using library /opt/rocm-7.2.4/lib/rocprofiler-sdk/librocprofv3-attach.so
+Traceback (most recent call last):
+  File "/opt/rocm-7.2.4/bin/rocprofv3-attach", line 88, in <module>
+    main()
+  File "/opt/rocm-7.2.4/bin/rocprofv3-attach", line 58, in main
+    raise RuntimeError(
+RuntimeError: Calling attach in /opt/rocm-7.2.4/lib/rocprofiler-sdk/librocprofv3-attach.so returned non-zero status 19

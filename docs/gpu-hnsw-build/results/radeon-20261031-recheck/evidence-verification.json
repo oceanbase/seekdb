@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "scope": "archived evidence consistency only; no SQL or GPU execution",
+  "source_ref": "working tree (LF normalized)",
+  "source_files": 16,
+  "build_runs": 6,
+  "medians_seconds": {
+    "vsag": 26.48734787851572,
+    "hipvs": 3.3029871862381697
+  },
+  "speedup": 8.019210001441946,
+  "kernel_dispatches": 158,
+  "nn_descent_dispatches": 61
+}

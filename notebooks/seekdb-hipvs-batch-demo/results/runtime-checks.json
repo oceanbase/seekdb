@@ -1,0 +1,22 @@
+{
+  "completed": true,
+  "foreign_port": {
+    "returncode": 1,
+    "message": "Traceback (most recent call last):\n  File \"/workspace/seekdb-hipvs-batch-demo/lib/start_server.py\", line 62, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"/workspace/seekdb-hipvs-batch-demo/lib/start_server.py\", line 33, in main\n    raise RuntimeError('Port 2881 belongs to another server; stop that instance explicitly first.')\nRuntimeError: Port 2881 belongs to another server; stop that instance explicitly first.\n",
+    "directory_created": false
+  },
+  "stop": {
+    "returncode": 0,
+    "stdout": "stopped\n",
+    "stderr": "[sdb][WARN] not sending SIGKILL to pid=20033: process no longer matches this instance\n"
+  },
+  "restart": {
+    "returncode": 0,
+    "stdout": "stopped\nstarted pid=21503\nready\n",
+    "stderr": ""
+  },
+  "restart_data_counts": [
+    10000,
+    10000
+  ]
+}

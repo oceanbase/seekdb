@@ -1,0 +1,16 @@
+{
+  "stage": "passed",
+  "completed": true,
+  "source_base": "bb488f7cfcdf102d8d11c5f44ac7f2fd02d86cec",
+  "full_cpp_build_repeated": false,
+  "make_guard_expected_exit": 42,
+  "updated_utc": "2026-11-01T09:49:10.802449+00:00",
+  "starting_path": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+  "entry_exit": 42,
+  "entry_seconds": 3.419717252254486,
+  "actual_dependency_init_passed": true,
+  "actual_gpu_configure_passed": true,
+  "toolchain_version": "1.98.1",
+  "rustup_installer_sha256": "5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4",
+  "note": "Real init and GPU CMake configuration; deliberate make guard stops before C++ compilation. Earlier full GPU/TGZ/SQL acceptance is separately recorded."
+}

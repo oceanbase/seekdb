@@ -1,0 +1,23 @@
+{
+  "source_base_commit": "bb488f7cfcdf102d8d11c5f44ac7f2fd02d86cec",
+  "verified_remote_source_and_regression_files": {
+    "source": {
+      ".github/script/seekdb/compile.sh": "690edb5f884e7d84d8e8f565a6e8a0c91236432232d68b24f731985ab1e69bb5",
+      "build.sh": "b2f28ca43aabc3b015e6dca826ce6c445a0546e29943bb19605c2b5ed3d4de41",
+      "deps/init/dep_create.sh": "59c8402b11bf99717144b8229a937ca212e1b2b78428f30154a93092e72ad313",
+      "deps/init/setup_rust.sh": "94567a52d10a0d6298dd593708079d6594560b37ff87d77fb862129c624c1a30",
+      "rust/rust-toolchain.toml": "dea699fff88f1e55719843796e926fe0743d271761d82cef28a973a0592f7847"
+    },
+    "regressions": {
+      ".github/script/seekdb/compile.sh": "690edb5f884e7d84d8e8f565a6e8a0c91236432232d68b24f731985ab1e69bb5",
+      ".github/script/seekdb/scripts/farm_compile.sh": "a7750bf0a9809a27c0217bb420a2051d076b5c87d9ba7060d0c4198b6d6b03d5",
+      "deps/init/setup_rust.sh": "94567a52d10a0d6298dd593708079d6594560b37ff87d77fb862129c624c1a30",
+      "tools/obtest/copy.sh": "6304345fdf521a3f6518f004dbabba4f87985ba67ae650b9f4d8b02e3f66da91",
+      "unittest/sql/vector_index/test_hipvs_compile_entry.py": "2f35527ade95b25aafd6961e9dcb23494e45225b431088cd71f0bf1d7028cba0",
+      "unittest/sql/vector_index/test_hipvs_rust_setup.py": "b8b319604ecbd87c8f5cf53d02fe04fd6694432cc412cfe271deab90ef3ca215",
+      "unittest/sql/vector_index/test_hipvs_obtest_copy.py": "6880c8c3ca64f4934f644a12bb74c5e98c2bbcfe691f2ce2e057e6aa1fb36683"
+    }
+  },
+  "local_files_match_remote": true,
+  "full_cpp_build_repeated": false
+}

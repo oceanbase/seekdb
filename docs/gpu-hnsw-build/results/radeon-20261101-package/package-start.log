@@ -1,0 +1,2 @@
+{"command": ["/opt/venv/bin/python", "/workspace/amd-acceptance-20261101-6dc14ba3/src/.github/script/seekdb/sdb.py", "start", "--binary", "/workspace/amd-acceptance-20261101-6dc14ba3/unpacked/usr/bin/seekdb", "--base-dir", "/var/tmp/amd-package-20261101-cfae4ba9-info", "--port", "2897", "--parameter", "cpu_count=16", "--parameter", "syslog_level=INFO", "--parameter", "datafile_size=2G", "--parameter", "datafile_maxsize=8G", "--parameter", "log_disk_size=2G"]}
+started pid=19246

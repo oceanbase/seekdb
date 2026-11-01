@@ -1,0 +1,9 @@
+{
+  "stage": "failed",
+  "source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+  "no_preseeded_download_cache": true,
+  "started_at": "2026-11-01T12:17:08.701761+00:00",
+  "updated_at": "2026-11-01T13:17:08.703815+00:00",
+  "error": "TimeoutExpired(['bash', '-c', 'source \"$1\"; seekdb_prepare_rust \"$2\" \"$3\"', 'cold-probe', '/workspace/amd-acceptance-20261101-4855acac/cold-rust/setup_rust.sh', '/workspace/amd-acceptance-20261101-4855acac/cold-rust/source', '/workspace/amd-acceptance-20261101-4855acac/cold-rust/install'], 3599.9999925800366)",
+  "elapsed_seconds": 3600.0018823860446
+}

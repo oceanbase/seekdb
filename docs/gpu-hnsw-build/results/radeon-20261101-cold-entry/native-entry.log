@@ -1,0 +1,148 @@
+[compile.sh] WORKSPACE=/workspace/amd-acceptance-20261101-4855acac/native-entry/source
+[compile.sh] pwd=/workspace/amd-acceptance-20261101-4855acac/native-entry/source
+total 388
+drwxr-xr-x 22 root root  4096 Nov  1 13:18 .
+drwxr-xr-x  3 root root  4096 Nov  1 13:18 ..
+drwxr-xr-x  3 root root  4096 Nov  1 13:18 .agents
+-rw-r--r--  1 root root   280 Nov  1 13:18 .akfarm
+-rw-r--r--  1 root root    71 Nov  1 13:18 .akperformancetest
+-rw-r--r--  1 root root   729 Nov  1 13:18 .bazelrc
+-rw-r--r--  1 root root     6 Nov  1 13:18 .bazelversion
+drwxr-xr-x  2 root root  4096 Nov  1 13:18 .devcontainer
+drwxr-xr-x  8 root root  4096 Nov  1 13:18 .git
+-rw-r--r--  1 root root   579 Nov  1 13:18 .gitattributes
+drwxr-xr-x  6 root root  4096 Nov  1 13:18 .github
+-rw-r--r--  1 root root 10521 Nov  1 13:18 .gitignore
+-rw-r--r--  1 root root  2638 Nov  1 13:18 .gitlab-ci.yml
+-rw-r--r--  1 root root 23169 Nov  1 13:18 .secignore
+-rw-r--r--  1 root root 12842 Nov  1 13:18 .secignore.opensource
+-rw-r--r--  1 root root   851 Nov  1 13:18 AGENTS.md
+-rw-r--r--  1 root root 13881 Nov  1 13:18 CMakeLists.txt
+-rw-r--r--  1 root root  3256 Nov  1 13:18 CODE_OF_CONDUCT.md
+-rw-r--r--  1 root root  2878 Nov  1 13:18 CONTRIBUTING.md
+[compile.sh] build.sh: -f=1 -x=1
+[compile.sh] AMD backend=ON (no automatic CPU fallback at build time)
+[compile.sh] nproc=128
+[compile.sh] cgroup cpu.max=1600000 100000
+[compile.sh] cgroup memory.max=59055800320
+info: syncing channel updates for 1.98.1-x86_64-unknown-linux-gnu
+
+  1.98.1-x86_64-unknown-linux-gnu unchanged - rustc 1.98.1 (48a229cea 2026-09-01)
+
+[setup-rust] Selected Rust/Cargo 1.98.1
+[compile.sh] cargo=/workspace/amd-acceptance-20261101-4855acac/cold-rust/install/cargo/bin/cargo rustc=/workspace/amd-acceptance-20261101-4855acac/cold-rust/install/cargo/bin/rustc
+cargo 1.98.1 (797e8a9bc 2026-08-05)
+rustc 1.98.1 (48a229cea 2026-09-01)
+[compile.sh] rust setup elapsed=3s
+[build.sh] command: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build.sh init
+[dep_create.sh] [NOTICE] 'Ubuntu 24.04.4 LTS (x86_64)' is compatible with CentOS 9, use el9 dependencies list
+[dep_create.sh] oceanbase.el9.x86_64.deps has been not initialized, due to /workspace/amd-acceptance-20261101-4855acac/native-entry/source/deps/3rd/6cbf427016d9c5328b3f45ad0bb925b5 not exists
+[dep_create.sh] FOUND env DEP_CACHE_DIR: /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache
+[dep_create.sh] use cache deps /workspace/amd-acceptance-20261101-4855acac/native-entry/source/deps/3rd -> /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd
+[setup-rust] Reusing Rust/Cargo 1.98.1
+[build.sh] dependency initialization completed in 0m0s
+[compile.sh] dependency init elapsed=0s
+Set cache size limit to 3.0 GB
+Cleaned cache
+[build.sh] command: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build.sh tgz -DOB_USE_CCACHE=ON -DNEED_PARSER_CACHE=OFF -DOB_BUILD_CUVS=ON -DOB_BUILD_HIPVS=ON -DHIPVS_ROOT=/opt/hipvs -DROCM_ROOT=/opt/rocm
+[build.sh] configuring CMake tgz build: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build_tgz
+-- ARCHITECTURE: x86_64
+-- Using C++20 standard
+-- build without pie
+-- ob-compile not found, compile locally.
+-- Ubuntu 24.04 detected, using libaio1t64
+-- The CXX compiler identification is Clang 17.0.6
+-- The C compiler identification is Clang 17.0.6
+-- The ASM compiler identification is Clang with GNU-like command-line
+-- Found assembler: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/deps/3rd/usr/local/oceanbase/devtools/bin/clang-17
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/deps/3rd/usr/local/oceanbase/devtools/bin/clang++-17 - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/deps/3rd/usr/local/oceanbase/devtools/bin/clang-17 - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found Python3: /usr/bin/python3.12 (found version "3.12.3") found components: Interpreter
+/workspace/amd-acceptance-20261101-4855acac/native-entry/source/tools/cmake/emit_bazel_source_inventory.py:36: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_STR = getattr(ast, "Str", None)
+/workspace/amd-acceptance-20261101-4855acac/native-entry/source/tools/cmake/emit_bazel_source_inventory.py:37: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NUM = getattr(ast, "Num", None)
+/workspace/amd-acceptance-20261101-4855acac/native-entry/source/tools/cmake/emit_bazel_source_inventory.py:38: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NAME_CONSTANT = getattr(ast, "NameConstant", None)
+/workspace/amd-acceptance-20261101-4855acac/native-entry/source/tools/cmake/emit_bazel_source_inventory.py:48: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  if _AST_STR is not None and isinstance(node, _AST_STR):
+/workspace/amd-acceptance-20261101-4855acac/native-entry/source/tools/cmake/emit_bazel_source_inventory.py:52: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NAME_CONSTANT)
+/workspace/amd-acceptance-20261101-4855acac/native-entry/source/tools/cmake/emit_bazel_source_inventory.py:64: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NUM)
+-- STDC_SHARED_LIB: /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd/usr/local/oceanbase/devtools/lib64/libstdc++.so.6.0.30
+-- [rust] cargo: /workspace/amd-acceptance-20261101-4855acac/cold-rust/install/cargo/bin/cargo
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- [rust] config target ready -> /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build_tgz/rust-target/exports/libconfig.a
+-- [rust] local target ready -> /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build_tgz/rust-target/exports/liblocal.a
+-- [rust] sql_nio target ready -> /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build_tgz/rust-target/exports/libsql_nio.a
+-- Performing Test COMPILER_SUPPORTS_VLA_CXX_EXTENSION
+-- Performing Test COMPILER_SUPPORTS_VLA_CXX_EXTENSION - Failed
+-- Performing Test COMPILER_SUPPORTS_ENUM_CONSTEXPR_WARNING
+-- Performing Test COMPILER_SUPPORTS_ENUM_CONSTEXPR_WARNING - Success
+-- Ubuntu 24.04 detected, using libaio1t64 package and linking to /usr/lib/x86_64-linux-gnu/libaio.so.1t64
+-- oblib_add_library compress
+-- oblib_add_library zstd_1_3_8
+-- oblib_add_library restore
+-- ob_lib_add_target oblib_lib
+-- Looking for posix_spawn_file_actions_addclosefrom_np
+-- Looking for posix_spawn_file_actions_addclosefrom_np - found
+-- ob_lib_add_target oblib_lib_simd
+-- ob_lib_add_target oblib_lib_bitmap
+-- ob_add_new_object_target ob_malloc_object
+-- ob_lib_add_target oblib_common
+-- ob_lib_add_target oblib_rpc
+-- oblib_add_library oblib_grpc
+-- oblib_extra_objects /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build_tgz/src/oblib/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.o
+-- ob_add_new_object_target ob_share
+-- ob_add_new_object_target ob_share_extra
+-- observer_add_target ob_data_plane
+-- observer_add_target ob_query
+-- ob_add_new_object_target ob_sql
+-- ob_add_new_object_target ob_sql_extra
+-- observer_add_target ob_sql_simd
+-- observer_add_target ob_pl
+-- observer_add_target syspack_source
+-- observer_add_target ob_standby_runtime
+-- observer_add_target ob_standby
+-- observer_add_target ob_rootserver
+-- observer_add_target ob_logservice
+-- observer_add_target ob_storage_tablet_autoincrement_state
+-- ob_add_new_object_target ob_storage
+-- observer_add_target ob_storage_simd
+-- observer_add_target ob_server
+-- system package release directory: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build_tgz/syspack_release
+-- CPack generator: TGZ
+-- CPack components: server;libs
+-- Configuring done (2.6s)
+-- Generating done (0.4s)
+-- Build files have been written to: /workspace/amd-acceptance-20261101-4855acac/native-entry/source/build_tgz
+[compile.sh] configure elapsed=3s
+Statistics zeroed
+[native-entry-probe] reached main make: -j2 seekdb
+[compile.sh] make elapsed=0s
+cache directory                     /root/.ccache
+primary config                      /root/.ccache/ccache.conf
+secondary config      (readonly)    /home/jenkins/agent/workspace/rpm-obdevtools-ccache-3.7.12-1.1.8/ob_source_code_dir/rpm/.rpm_build/BUILDROOT/obdevtools-ccache-3.7.12-12022100417.el8.x86_64/ccache.conf
+stats updated                       Sun Nov  1 13:18:55 2026
+stats zeroed                        Sun Nov  1 13:18:55 2026
+cache hit (direct)                     0
+cache hit (preprocessed)               0
+cache miss                             0
+cache hit rate                      0.00 %
+cleanups performed                     0
+files in cache                         0
+cache size                           0.0 kB
+max cache size                       3.0 GB
+[compile.sh] total elapsed=6s
+[compile.sh] final phase=build exit=42

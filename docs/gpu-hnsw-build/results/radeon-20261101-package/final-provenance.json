@@ -1,0 +1,10 @@
+{
+  "created_utc": "2026-11-01T08:57:16.769506+00:00",
+  "compiled_source_commit": "cfae4ba92b14d3010f7c7aa6a87d064dfd7c0075",
+  "package_source_commit": "f18737e699ad0b29e38759fa821fec79e3940545",
+  "tracked_files_unchanged_through_acceptance": 9408,
+  "binary_sha256": "37d0e7c44c0395c1353fc84578199af2c04b44eca4329114d806b0ff65f5c61d",
+  "initial_source_manifest": "source-sha256.json",
+  "git_status": "",
+  "dedicated_port_closed_after_acceptance": true
+}

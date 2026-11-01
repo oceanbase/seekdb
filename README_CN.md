@@ -1,3 +1,7 @@
+> **赛事提交：使用 hipVS 加速 HNSW 索引构建**：[编译、安装与 SQL 验证](docs/gpu-hnsw-build/SUBMISSION.md) · [最新排查与未通过项目](docs/gpu-hnsw-build/READINESS_AUDIT_20261031.md)。
+>
+> **独立的批量查询 Notebook 展示**：[七章流程与文件清单](notebooks/seekdb-hipvs-batch-demo/) · [最新全新内核已执行 Notebook](notebooks/seekdb-hipvs-batch-demo/results/full-reproduction-20261031/executed.ipynb) · [Docker 部署状态及一致性核对](notebooks/seekdb-hipvs-batch-demo/results/full-reproduction-20261031/)。该演示依赖课程镜像的预装程序；验收本仓库的 HNSW 构建源码请使用上方赛事入口。
+
 <div align="center">
 
 <picture>

@@ -1,0 +1,103 @@
+make: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+-- GLOB mismatch!
+-- ARCHITECTURE: x86_64
+-- Using C++20 standard
+-- build without pie
+-- Using OB_CC compiler: /workspace/hipvs-competition-20261030/src/deps/3rd/usr/local/oceanbase/devtools/bin/clang-17
+-- Using OB_CXX compiler: /workspace/hipvs-competition-20261030/src/deps/3rd/usr/local/oceanbase/devtools/bin/clang++-17
+-- ob-compile not found, compile locally.
+-- Ubuntu 24.04 detected, using libaio1t64
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:36: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_STR = getattr(ast, "Str", None)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:37: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NUM = getattr(ast, "Num", None)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:38: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  _AST_NAME_CONSTANT = getattr(ast, "NameConstant", None)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:48: DeprecationWarning: ast.Str is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  if _AST_STR is not None and isinstance(node, _AST_STR):
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:52: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NAME_CONSTANT)
+/workspace/hipvs-competition-20261030/src/tools/cmake/emit_bazel_source_inventory.py:64: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  and isinstance(node, _AST_NUM)
+-- STDC_SHARED_LIB: /opt/seekdb-deps-cache/ac032efc6b707fc0273e6b553db53011/3rd/usr/local/oceanbase/devtools/lib64/libstdc++.so.6.0.30
+-- [rust] cargo: /usr/local/bin/cargo
+-- [rust] config target ready -> /workspace/hipvs-competition-20261030/src/build_release/rust-target/exports/libconfig.a
+-- [rust] local target ready -> /workspace/hipvs-competition-20261030/src/build_release/rust-target/exports/liblocal.a
+-- [rust] sql_nio target ready -> /workspace/hipvs-competition-20261030/src/build_release/rust-target/exports/libsql_nio.a
+-- Ubuntu 24.04 detected, using libaio1t64 package and linking to /usr/lib/x86_64-linux-gnu/libaio.so.1t64
+-- oblib_add_library compress
+-- oblib_add_library zstd_1_3_8
+-- oblib_add_library restore
+-- ob_lib_add_target oblib_lib
+-- ob_lib_add_target oblib_lib_simd
+-- ob_lib_add_target oblib_lib_bitmap
+-- ob_add_new_object_target ob_malloc_object
+-- ob_lib_add_target oblib_common
+-- ob_lib_add_target oblib_rpc
+-- oblib_add_library oblib_grpc
+-- oblib_extra_objects /workspace/hipvs-competition-20261030/src/build_release/src/oblib/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.o
+-- ob_add_new_object_target ob_share
+-- ob_add_new_object_target ob_share_extra
+-- observer_add_target ob_data_plane
+-- observer_add_target ob_query
+-- ob_add_new_object_target ob_sql
+-- ob_add_new_object_target ob_sql_extra
+-- observer_add_target ob_sql_simd
+-- observer_add_target ob_pl
+-- observer_add_target syspack_source
+-- observer_add_target ob_standby_runtime
+-- observer_add_target ob_standby
+-- observer_add_target ob_rootserver
+-- observer_add_target ob_logservice
+-- observer_add_target ob_storage_tablet_autoincrement_state
+-- ob_add_new_object_target ob_storage
+-- observer_add_target ob_storage_simd
+-- observer_add_target ob_server
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+-- Configuring done (0.3s)
+-- Generating done (1.0s)
+-- Build files have been written to: /workspace/hipvs-competition-20261030/src/build_release
+make[1]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[2]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[3]: Entering directory '/root/hipvs-competition-build-20261030/build_release'
+Building jemalloc with Cargo
+    Updating `mirror` index
+warning: spurious network error (3 tries remaining): [7] Could not connect to server (CONNECT tunnel failed, response 403)
+warning: spurious network error (2 tries remaining): [7] Could not connect to server (CONNECT tunnel failed, response 403)
+warning: spurious network error (1 try remaining): [7] Could not connect to server (CONNECT tunnel failed, response 403)
+error: failed to get `seekdb-jemalloc-sys` as a dependency of package `seekdb-external-sources v0.0.0 (/workspace/hipvs-competition-20261030/src/deps/external)`
+
+Caused by:
+  failed to load source for dependency `seekdb-jemalloc-sys`
+
+Caused by:
+  unable to update registry `crates-io`
+
+Caused by:
+  failed to query replaced source registry `crates-io`
+
+Caused by:
+  download of config.json failed
+
+Caused by:
+  [7] Could not connect to server (CONNECT tunnel failed, response 403)
+CMake Error at seekdb_jemalloc-cargo.cmake:1 (execute_process):
+  execute_process failed command indexes:
+
+    1: "Child return code: 101"
+
+
+
+make[3]: *** [deps/external/CMakeFiles/seekdb_jemalloc_build.dir/build.make:79: third-party/jemalloc/lib/libjemalloc_pic.a] Error 1
+make[3]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[2]: *** [CMakeFiles/Makefile2:551: deps/external/CMakeFiles/seekdb_jemalloc_build.dir/all] Error 2
+make[2]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make[1]: *** [CMakeFiles/Makefile2:558: deps/external/CMakeFiles/seekdb_jemalloc_build.dir/rule] Error 2
+make[1]: Leaving directory '/root/hipvs-competition-build-20261030/build_release'
+make: *** [Makefile:183: seekdb_jemalloc_build] Error 2
+make: Leaving directory '/root/hipvs-competition-build-20261030/build_release'

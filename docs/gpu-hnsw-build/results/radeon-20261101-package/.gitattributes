@@ -1,0 +1,2 @@
+# Preserve the exact version command output, including its original whitespace.
+package-binary-version.txt -whitespace

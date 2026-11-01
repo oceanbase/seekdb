@@ -1,0 +1,8 @@
+test_partial_batch_results_are_rejected (test_batch_demo.BatchDemoTest) ... ok
+test_successful_batch_keeps_the_measured_sql_time (test_batch_demo.BatchDemoTest) ... ok
+test_timed_sql_failure_cannot_be_a_speedup (test_batch_demo.BatchDemoTest) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.002s
+
+OK

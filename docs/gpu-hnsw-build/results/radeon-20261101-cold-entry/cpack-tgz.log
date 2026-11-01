@@ -1,0 +1,10 @@
+{"command": ["/opt/venv/bin/cpack", "--config", "/workspace/amd-acceptance-20261101-4855acac/src/build_tgz/CPackConfig.cmake", "-G", "TGZ", "-B", "/workspace/amd-acceptance-20261101-4855acac/packages"]}
+CPack: Create package using TGZ
+CPack: Install projects
+CPack: - Run preinstall target for: OceanBase
+CPack: - Install project: OceanBase []
+CPack: -   Install component: server
+CPack: -   Install component: libs
+CPack: Create package
+CPack: - package: /workspace/amd-acceptance-20261101-4855acac/packages/seekdb-libs-1.4.0.0-1-linux-x86_64.tar.gz generated.
+CPack: - package: /workspace/amd-acceptance-20261101-4855acac/packages/seekdb-1.4.0.0-1-linux-x86_64.tar.gz generated.

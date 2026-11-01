@@ -1,0 +1,16 @@
+test_build_failure_is_preserved (test_hipvs_compile_entry.CompileEntryTest.test_build_failure_is_preserved) ... ok
+test_configure_failure_is_preserved (test_hipvs_compile_entry.CompileEntryTest.test_configure_failure_is_preserved) ... ok
+test_default_enables_gpu_and_preserves_paths (test_hipvs_compile_entry.CompileEntryTest.test_default_enables_gpu_and_preserves_paths) ... ok
+test_explicit_cpu_clears_gpu_flags_without_requiring_artifacts (test_hipvs_compile_entry.CompileEntryTest.test_explicit_cpu_clears_gpu_flags_without_requiring_artifacts) ... ok
+test_farm_default_reaches_release_with_gpu_enabled (test_hipvs_compile_entry.CompileEntryTest.test_farm_default_reaches_release_with_gpu_enabled) ... ok
+test_farm_legacy_debug_uses_relwithdebinfo_profile (test_hipvs_compile_entry.CompileEntryTest.test_farm_legacy_debug_uses_relwithdebinfo_profile) ... ok
+test_farm_preserves_cpu_choice_and_build_failure (test_hipvs_compile_entry.CompileEntryTest.test_farm_preserves_cpu_choice_and_build_failure) ... ok
+test_ignored_gpu_flag_stops_before_make (test_hipvs_compile_entry.CompileEntryTest.test_ignored_gpu_flag_stops_before_make) ... ok
+test_invalid_mode_fails_before_configuration (test_hipvs_compile_entry.CompileEntryTest.test_invalid_mode_fails_before_configuration) ... ok
+test_missing_build_entry_cannot_report_success (test_hipvs_compile_entry.CompileEntryTest.test_missing_build_entry_cannot_report_success) ... ok
+test_missing_gpu_artifacts_cannot_report_success (test_hipvs_compile_entry.CompileEntryTest.test_missing_gpu_artifacts_cannot_report_success) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.980s
+
+OK

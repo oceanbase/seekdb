@@ -1,0 +1,33 @@
+[IPKernelApp] WARNING | Kernel is running over TCP without encryption. All communication (including code and outputs) is sent in plain text and is susceptible to eavesdropping. Use IPC transport or launch with kernel manager-provisioned CurveZMQ keys to enable transport encryption.
+{"cell": 0, "type": "markdown"}
+{"cell": 1, "type": "code"}
+{"cell": 2, "type": "code"}
+{"cell": 3, "type": "markdown"}
+{"cell": 4, "type": "code"}
+{"cell": 5, "type": "markdown"}
+{"cell": 6, "type": "markdown"}
+{"cell": 7, "type": "code"}
+{"cell": 8, "type": "code"}
+{"cell": 9, "type": "markdown"}
+{"cell": 10, "type": "code"}
+{"cell": 11, "type": "markdown"}
+{"cell": 12, "type": "code"}
+{"cell": 13, "type": "code"}
+{"cell": 14, "type": "markdown"}
+{"cell": 15, "type": "code"}
+{"cell": 16, "type": "markdown"}
+{"cell": 17, "type": "code"}
+{"cell": 18, "type": "markdown"}
+{"cell": 19, "type": "code"}
+Starting seekdb (OceanBase seekdb 1.4.0.0) source revision 1-de17949d57b9cd2240f141f8116d29bcd495d8d9.
+seekdb (OceanBase seekdb 1.4.0.0)
+
+REVISION: 1-de17949d57b9cd2240f141f8116d29bcd495d8d9
+BUILD_BRANCH: build/v1.4.0-pr1314-20260915
+BUILD_TIME: Sep 15 2026 02:42:31
+BUILD_FLAGS: RelWithDebInfo
+BUILD_INFO: 
+
+Copyright (c) 2011-present OceanBase Inc.
+
+{"completed": true, "notebook": "/workspace/seekdb_hipvs_notebook/seekdb-fixed-z5egtaos/seekdb-hipvs-notebook-demo/notebooks/seekdb-hipvs-batch-demo/results/full-reproduction-20261031/executed.ipynb"}

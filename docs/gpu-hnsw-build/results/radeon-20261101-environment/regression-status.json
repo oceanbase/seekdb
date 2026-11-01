@@ -1,0 +1,14 @@
+[
+  {
+    "test": "test_hipvs_compile_entry.py",
+    "returncode": 0
+  },
+  {
+    "test": "test_hipvs_rust_setup.py",
+    "returncode": 0
+  },
+  {
+    "test": "test_hipvs_obtest_copy.py",
+    "returncode": 0
+  }
+]

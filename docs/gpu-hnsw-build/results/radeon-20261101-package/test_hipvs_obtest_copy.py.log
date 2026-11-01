@@ -1,0 +1,11 @@
+test_copy_failure_is_propagated (test_hipvs_obtest_copy.ObtestCopyTest.test_copy_failure_is_propagated) ... ok
+test_cpu_ignores_stale_gpu_artifacts (test_hipvs_obtest_copy.ObtestCopyTest.test_cpu_ignores_stale_gpu_artifacts) ... ok
+test_cuvs_alias_and_explicit_build_directory (test_hipvs_obtest_copy.ObtestCopyTest.test_cuvs_alias_and_explicit_build_directory) ... ok
+test_gpu_copies_main_worker_and_bridge (test_hipvs_obtest_copy.ObtestCopyTest.test_gpu_copies_main_worker_and_bridge) ... ok
+test_missing_gpu_bridge_fails_before_main_copy (test_hipvs_obtest_copy.ObtestCopyTest.test_missing_gpu_bridge_fails_before_main_copy) ... ok
+test_missing_main_fails (test_hipvs_obtest_copy.ObtestCopyTest.test_missing_main_fails) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.082s
+
+OK

@@ -1,0 +1,2 @@
+{"command": ["/opt/venv/bin/python", "/workspace/amd-acceptance-20261101-6dc14ba3/src/.github/script/seekdb/sdb.py", "wait-ready", "--client", "mysql", "--base-dir", "/var/tmp/amd-package-20261101-cfae4ba9-info", "--port", "2897", "--timeout", "240"]}
+ready

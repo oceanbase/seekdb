@@ -1,0 +1,66 @@
+{
+  "completed": true,
+  "rows": 10000,
+  "probe_sizes": [
+    100,
+    500,
+    1000,
+    2000,
+    4000
+  ],
+  "single_query_ms": {
+    "cpu": 8.54232907295227,
+    "gpu": 12.67133466899395
+  },
+  "batch_runs": [
+    {
+      "N": 100,
+      "cpu_ms": 326.0,
+      "gpu_ms": 999.9,
+      "speedup": 0.33,
+      "cpu_probes_s": 307,
+      "gpu_probes_s": 100
+    },
+    {
+      "N": 500,
+      "cpu_ms": 1474.2,
+      "gpu_ms": 909.3,
+      "speedup": 1.62,
+      "cpu_probes_s": 339,
+      "gpu_probes_s": 550
+    },
+    {
+      "N": 1000,
+      "cpu_ms": 2924.4,
+      "gpu_ms": 912.2,
+      "speedup": 3.21,
+      "cpu_probes_s": 342,
+      "gpu_probes_s": 1096
+    },
+    {
+      "N": 2000,
+      "cpu_ms": 5816.8,
+      "gpu_ms": 1116.0,
+      "speedup": 5.21,
+      "cpu_probes_s": 344,
+      "gpu_probes_s": 1792
+    },
+    {
+      "N": 4000,
+      "cpu_ms": 11581.6,
+      "gpu_ms": 1318.6,
+      "speedup": 8.78,
+      "cpu_probes_s": 345,
+      "gpu_probes_s": 3033
+    }
+  ],
+  "recall_at_10": {
+    "cpu": 0.64,
+    "gpu": 0.884
+  },
+  "sql_results_validated": true,
+  "gpu_single_batch_identical_queries": 19,
+  "gpu_single_batch_checked_queries": 100,
+  "gpu_single_query_recall_at_10": 0.882,
+  "scope": "course preinstalled batch-query demo; not HNSW construction"
+}

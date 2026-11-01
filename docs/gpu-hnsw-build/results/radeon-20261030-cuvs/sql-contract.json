@@ -1,0 +1,147 @@
+{
+  "started_utc": "2026-10-30T11:59:05Z",
+  "completed": true,
+  "checks": [
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=cosine,type=hnsw,m=16,lib=hipvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_sq,m=16,lib=hipvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_bq,m=16,lib=hipvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,m=20,lib=hipvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=cosine,type=hnsw,m=16,lib=cuvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_sq,m=16,lib=cuvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_bq,m=16,lib=cuvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,m=20,lib=cuvs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=cosine,type=hnsw,m=16,lib=CuVs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_sq,m=16,lib=CuVs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw_bq,m=16,lib=CuVs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "sql": "CREATE VECTOR INDEX bad ON hipvs_contract(vec) WITH (distance=l2,type=hnsw,m=20,lib=CuVs)",
+      "passed": true,
+      "expected_error": "ERROR 1235 (0A000) at line 1: hipVS requires dense float32 L2 HNSW without extra info, m in (16,32,64) not supported"
+    },
+    {
+      "lib": "cuvs",
+      "passed": true,
+      "tiny_snapshot_query_id": 11,
+      "ddl": "hipvs_contract\tCREATE TABLE `hipvs_contract` (\n  `id` int(11) NOT NULL,\n  `vec` VECTOR(3) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  VECTOR KEY `alias_idx` (`vec`) WITH (DISTANCE=L2,TYPE=HNSW,LIB=CUVS,M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"
+    },
+    {
+      "lib": "CuVs",
+      "passed": true,
+      "tiny_snapshot_query_id": 11,
+      "ddl": "hipvs_contract\tCREATE TABLE `hipvs_contract` (\n  `id` int(11) NOT NULL,\n  `vec` VECTOR(3) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  VECTOR KEY `alias_idx` (`vec`) WITH (DISTANCE=L2,TYPE=HNSW,LIB=CUVS,M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"
+    },
+    {
+      "lib": "hipvs",
+      "passed": true,
+      "tiny_snapshot_query_id": 11,
+      "ddl": "hipvs_contract\tCREATE TABLE `hipvs_contract` (\n  `id` int(11) NOT NULL,\n  `vec` VECTOR(3) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  VECTOR KEY `alias_idx` (`vec`) WITH (DISTANCE=L2,TYPE=HNSW,LIB=HIPVS,M=16, EF_CONSTRUCTION=200, EF_SEARCH=64) BLOCK_SIZE 16384\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0"
+    },
+    {
+      "cpu_rebuild_round": 1,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 2,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 3,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 4,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 5,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 6,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 7,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 8,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 9,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 10,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 11,
+      "passed": true,
+      "id": 11
+    },
+    {
+      "cpu_rebuild_round": 12,
+      "passed": true,
+      "id": 11
+    }
+  ],
+  "scope": "actual SQL assertions; not the mysqltest runner",
+  "server_version": "5.7.25-OceanBase seekdb-v1.4.0.0",
+  "finished_utc": "2026-10-30T11:59:17Z"
+}

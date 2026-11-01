@@ -1,0 +1,216 @@
+make: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[1]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[2]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  0%] Building jemalloc with Cargo
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  1%] [rust] cargo build workspace (release)
+[  2%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/ob_grpc_context.cpp.o
+make[3]: Entering directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  2%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib_simd.dir/Unity/unity_oblib_lib_simd_oblib_lib_simd_codec_simd_0_c___cxx.cxx.o
+[  2%] Building CXX object src/oblib/lib/restore/CMakeFiles/restore.dir/ob_io_device.cpp.o
+[  2%] Building CXX object src/oblib/lib/CMakeFiles/oblib_lib_bitmap.dir/Unity/unity_oblib_lib_bitmap_oblib_lib_bitmap_common_0_c___cxx.cxx.o
+[  2%] Building CXX object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/ob_zstd_wrapper.cpp.o
+[  2%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_wide_integer_0_c___cxx.cxx.o
+[  2%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/debug.c.o
+    Blocking waiting for file lock on package cache
+[  2%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/entropy_common.c.o
+error: no matching package named `seekdb-jemalloc-sys` found
+location searched: directory source `/workspace/hipvs-readiness-final-20261031/build-area/vendor` (which is replacing registry `crates-io`)
+required by package `seekdb-external-sources v0.0.0 (/workspace/hipvs-readiness-final-20261031/src/deps/external)`
+note: offline mode (via `--offline`) can sometimes cause surprising resolution failures
+help: if this error is too confusing you may wish to retry without `--offline`
+CMake Error at seekdb_jemalloc-cargo.cmake:1 (execute_process):
+  execute_process failed command indexes:
+
+    1: "Child return code: 101"
+
+
+
+make[3]: *** [deps/external/CMakeFiles/seekdb_jemalloc_build.dir/build.make:79: third-party/jemalloc/lib/libjemalloc_pic.a] Error 1
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[2]: *** [CMakeFiles/Makefile2:551: deps/external/CMakeFiles/seekdb_jemalloc_build.dir/all] Error 2
+make[2]: *** Waiting for unfinished jobs....
+[  3%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/error_private.c.o
+[  3%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/fse_compress.c.o
+[  3%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/fse_decompress.c.o
+[  3%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/hist.c.o
+[  4%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/huf_compress.c.o
+[  4%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/huf_decompress.c.o
+   Compiling proc-macro2 v1.0.107
+[  4%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/ob_grpc_server.cpp.o
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  4%] Built target restore
+[  4%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/pool.c.o
+   Compiling find-msvc-tools v0.1.15
+[  4%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/threading.c.o
+[  5%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/xxhash.c.o
+   Compiling syn v3.0.9
+   Compiling shlex v2.0.1
+[  5%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_common.c.o
+[  5%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_compress.c.o
+   Compiling cc v1.10.0
+[  5%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_ddict.c.o
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_decompress.c.o
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  6%] Built target oblib_lib_bitmap
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_decompress_block.c.o
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_double_fast.c.o
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  6%] Built target oblib_lib_simd
+[  6%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_fast.c.o
+   Compiling hashbrown v0.17.1
+   Compiling serde_core v1.0.229
+   Compiling equivalent v1.0.3
+[  6%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/standbyservice.pb.cc.o
+   Compiling indexmap v2.14.2
+   Compiling syn v2.0.119
+[  7%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_lazy.c.o
+[  7%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_udt_0_c___cxx.cxx.o
+   Compiling autocfg v1.5.1
+[  7%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_ldm.c.o
+   Compiling serde v1.0.229
+[  7%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstd_opt.c.o
+   Compiling serde_derive v1.0.229
+   Compiling num-traits v0.2.19
+   Compiling scratch v1.0.9
+   Compiling itoa v1.0.18
+   Compiling libc v0.2.191
+   Compiling link-cplusplus v1.0.12
+   Compiling unicode-width v0.2.3
+   Compiling termcolor v1.4.1
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling codespan-reporting v0.13.1
+[  7%] Building CXX object src/oblib/grpc/CMakeFiles/oblib_grpc.dir/standbyservice.grpc.pb.cc.o
+   Compiling minimal-lexical v0.2.1
+   Compiling getrandom v0.4.3
+   Compiling zmij v1.0.23
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstyle-query v1.1.5
+   Compiling num-conv v0.2.2
+   Compiling rustix v1.1.6
+   Compiling anstyle v1.0.14
+[  8%] Building C object src/oblib/lib/compress/zstd_1_3_8/CMakeFiles/zstd_1_3_8_objs.dir/zstd_src/zstdmt_compress.c.o
+   Compiling time-core v0.1.9
+   Compiling thiserror v2.0.21
+   Compiling colorchoice v1.0.5
+   Compiling memchr v2.8.3
+   Compiling cxxbridge-flags v1.0.205
+   Compiling cfg-if v1.0.5
+   Compiling cxx v1.0.205
+   Compiling time-macros v0.2.32
+   Compiling anstream v1.0.0
+[  8%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_number_0_c___cxx.cxx.o
+   Compiling nom v7.1.3
+   Compiling cxx-build v1.0.205
+   Compiling synstructure v0.13.2
+   Compiling thiserror-impl v2.0.21
+   Compiling ring v0.17.14
+   Compiling powerfmt v0.2.1
+   Compiling bitflags v2.13.2
+   Compiling linux-raw-sys v0.12.1
+   Compiling deranged v0.5.9
+   Compiling winnow v1.0.4
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling serde_json v1.0.154
+   Compiling clap_builder v4.6.7
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling time v0.3.55
+   Compiling rusticata-macros v4.1.0
+   Compiling asn1-rs-derive v0.6.0
+   Compiling asn1-rs-impl v0.2.0
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling serde_spanned v1.1.2
+   Compiling displaydoc v0.2.7
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  8%] Built target zstd_1_3_8_objs
+   Compiling fastrand v2.5.0
+   Compiling once_cell v1.21.4
+   Compiling cbindgen v0.29.4
+   Compiling winnow v0.7.15
+   Compiling tempfile v3.27.0
+[  9%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_mysqlclient_0_c___cxx.cxx.o
+   Compiling asn1-rs v0.7.2
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[  9%] Built target oblib_grpc
+   Compiling clap v4.6.7
+   Compiling local v0.1.0 (/workspace/hipvs-readiness-final-20261031/src/rust/local)
+   Compiling getrandom v0.2.17
+   Compiling num-integer v0.1.47
+   Compiling unsafe-libyaml v0.2.11
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling crc32fast v1.5.3
+   Compiling oid-registry v0.8.1
+   Compiling zeroize v1.9.1
+   Compiling untrusted v0.9.0
+   Compiling ryu v1.0.23
+   Compiling heck v0.5.0
+   Compiling log v0.4.34
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling rustls-pki-types v1.15.1
+   Compiling num-bigint v0.4.8
+   Compiling cxxbridge-macro v1.0.205
+   Compiling foldhash v0.2.0
+   Compiling rustls v0.23.46
+   Compiling simd-adler32 v0.3.10
+   Compiling adler2 v2.0.1
+   Compiling miniz_oxide v0.9.1
+   Compiling der-parser v10.0.0
+   Compiling rustls-webpki v0.103.16
+   Compiling config v0.1.0 (/workspace/hipvs-readiness-final-20261031/src/rust/config)
+   Compiling data-encoding v2.11.1
+   Compiling sql-nio v0.1.0 (/workspace/hipvs-readiness-final-20261031/src/rust/sql-nio)
+   Compiling lazy_static v1.5.1
+   Compiling kv v0.1.0 (/workspace/hipvs-readiness-final-20261031/src/rust/kv)
+   Compiling subtle v2.6.1
+   Compiling x509-parser v0.18.1
+   Compiling mio v1.2.4
+   Compiling flate2 v1.1.10
+   Compiling socket2 v0.6.5
+   Compiling slab v0.4.12
+[  9%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_xml_0_c___cxx.cxx.o
+[  9%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_enumset_0_c___cxx.cxx.o
+[  9%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_lob_0_c___cxx.cxx.o
+[ 10%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_datum_0_c___cxx.cxx.o
+[ 10%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_log_0_c___cxx.cxx.o
+[ 10%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_common_mixed_0_c___cxx.cxx.o
+[ 10%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_timezone_0_c___cxx.cxx.o
+[ 11%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_reloc_json_type_0_c___cxx.cxx.o
+[ 11%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_common_0_c___cxx.cxx.o
+[ 11%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/Unity/unity_oblib_common_oblib_common_storage_0_c___cxx.cxx.o
+[ 11%] Building CXX object src/oblib/common/CMakeFiles/oblib_common.dir/timezone/ob_timezone_util.cpp.o
+    Finished `release` profile [optimized + debuginfo] target(s) in 28.04s
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[ 11%] Built target rust_staticlibs_build
+make[3]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+[ 11%] Built target oblib_common
+make[2]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make[1]: *** [CMakeFiles/Makefile2:1811: src/observer/CMakeFiles/seekdb.dir/rule] Error 2
+make[1]: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'
+make: *** [Makefile:742: seekdb] Error 2
+make: Leaving directory '/workspace/hipvs-readiness-final-20261031/build-area/build_release'

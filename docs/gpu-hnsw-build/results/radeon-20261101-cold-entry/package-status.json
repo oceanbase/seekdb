@@ -1,0 +1,208 @@
+{
+  "source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+  "binary_source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+  "build_reused_for_data_only_change": false,
+  "completed": true,
+  "no_system_install": true,
+  "package_install_hooks_executed": false,
+  "syslog_level": "INFO",
+  "steps": [
+    {
+      "label": "cpack-tgz",
+      "returncode": 0
+    },
+    {
+      "label": "package-ldd-seekdb",
+      "returncode": 0
+    },
+    {
+      "label": "package-ldd-seekdb_hipvs_hnsw_worker",
+      "returncode": 0
+    },
+    {
+      "label": "package-start",
+      "returncode": 0
+    },
+    {
+      "label": "package-start-ready",
+      "returncode": 0
+    },
+    {
+      "label": "package-contract",
+      "returncode": 0
+    },
+    {
+      "label": "package-benchmark",
+      "returncode": 0
+    },
+    {
+      "label": "package-stop-before-restart",
+      "returncode": 0
+    },
+    {
+      "label": "package-hidden-gpu-restart",
+      "returncode": 0
+    },
+    {
+      "label": "package-hidden-gpu-restart-ready",
+      "returncode": 0
+    },
+    {
+      "label": "package-restart-query",
+      "returncode": 0
+    },
+    {
+      "label": "package-stop-final",
+      "returncode": 0
+    },
+    {
+      "label": "package-final-source-check",
+      "returncode": 0
+    }
+  ],
+  "stage": "passed",
+  "updated_utc": "2026-11-01T12:54:11.930829+00:00",
+  "dependency_init": {
+    "source_commit": "4855acac7314df7d43f405b9c73c04ee4d40d562",
+    "passed": true,
+    "rpm_packages_extracted": 29,
+    "system_rpm2cpio_present": false,
+    "system_cpio_present": false,
+    "system_packages_installed": false,
+    "network_downloads": true,
+    "manifest_md5": "6cbf427016d9c5328b3f45ad0bb925b5"
+  },
+  "unpackaged_binary_sha256": "28793cd4fb6a17d90f77061c5bebc7e757aee0717f3aa24ee69f7dd760a9fad2",
+  "packages": [
+    {
+      "name": "seekdb-1.4.0.0-1-linux-x86_64.tar.gz",
+      "bytes": 317314924,
+      "sha256": "4936c4534e47f4f667beae5d207742f7d4c17c040c6c4d479e0c5e0961150f14"
+    },
+    {
+      "name": "seekdb-libs-1.4.0.0-1-linux-x86_64.tar.gz",
+      "bytes": 9858,
+      "sha256": "0fc12c0606e887df1c2ed0561f0ddc8355d9d5179836f852bc00e9f38377308e"
+    }
+  ],
+  "required_package_files": {
+    "usr/bin/seekdb": "28793cd4fb6a17d90f77061c5bebc7e757aee0717f3aa24ee69f7dd760a9fad2",
+    "usr/bin/obshell": "608693d5493afb9b8acd08557efe916c053f57692036b1a7686594cb729819eb",
+    "usr/bin/seekdb_hipvs_hnsw_worker": "8ceb0e03d3345d5fd9da69734be2aa2c4beef005f2db5e84c2b260a90becf97c",
+    "usr/libexec/seekdb/lib/libseekdb_hipvs_hnsw.so": "4b98179dbacf5232b075a74d9adefb20bf898011ea97242606d57c0ddf0227c4",
+    "usr/libexec/seekdb/lib/libaio.so.1": "034b3bc6b8ccf407f3b68a9c2efacc5beed470cc086a6119e563b0695531a553",
+    "etc/seekdb/seekdb.cnf": "28af2e5f763324c6f7b2907ce16c9e00feaee9d84c4e3b8f12009fac1aeacc5a",
+    "usr/lib/systemd/system/seekdb.service": "4cea7b25850483566c1b19397ecd63e91eea98ce15ab6d2be6bb1c64b296ec86"
+  },
+  "contract_checks": 27,
+  "fresh_build_runs": 6,
+  "restart": {
+    "status": "passed",
+    "recall_at_10": 1.0,
+    "queries": 100,
+    "per_query_recall": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "exact_sql_crosscheck": true
+  },
+  "ld_library_path_unset": true
+}

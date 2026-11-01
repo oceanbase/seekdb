@@ -1,0 +1,46 @@
+{
+  "completed": true,
+  "script_sha256": "771c0f5ab56b4b6eb943a968eb4374c78c47084f2264f118526b1175ada2d31c",
+  "full_cpp_build_commit": "b35b7d4c824d13c71737332b1c5ce333b5f1ff28",
+  "scope": "one real GPU artifact deployment; isolated fixtures for configuration/error branches",
+  "cases": {
+    "real-gpu": {
+      "returncode": 0,
+      "expected_returncode": 0,
+      "worker_copied": true,
+      "bridge_copied": true
+    },
+    "gpu-missing-worker": {
+      "returncode": 1,
+      "expected_returncode": 1,
+      "worker_copied": false,
+      "bridge_copied": false
+    },
+    "gpu-missing-bridge": {
+      "returncode": 1,
+      "expected_returncode": 1,
+      "worker_copied": true,
+      "bridge_copied": false
+    },
+    "cpu-stale-worker": {
+      "returncode": 0,
+      "expected_returncode": 0,
+      "worker_copied": false,
+      "bridge_copied": false
+    },
+    "cpu-clean": {
+      "returncode": 0,
+      "expected_returncode": 0,
+      "worker_copied": false,
+      "bridge_copied": false
+    },
+    "missing-main": {
+      "returncode": 1,
+      "expected_returncode": 1,
+      "worker_copied": false,
+      "bridge_copied": false
+    }
+  },
+  "real_binary_version_verified": true,
+  "real_worker_resolves_deployed_bridge": true
+}

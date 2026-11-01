@@ -1,0 +1,5 @@
+[build.sh] command: /workspace/amd-acceptance-20261101-6dc14ba3/entry-environment-audit/source/build.sh init
+[dep_create.sh] [NOTICE] 'Ubuntu 24.04.4 LTS (x86_64)' is compatible with CentOS 9, use el9 dependencies list
+[dep_create.sh] oceanbase.el9.x86_64.deps has been initialized due to /workspace/amd-acceptance-20261101-6dc14ba3/entry-environment-audit/source/deps/3rd/6cbf427016d9c5328b3f45ad0bb925b5, /workspace/amd-acceptance-20261101-6dc14ba3/entry-environment-audit/source/deps/3rd/DONE exists
+[setup-rust] Reusing Rust/Cargo 1.98.1
+[build.sh] dependency initialization completed in 0m0s

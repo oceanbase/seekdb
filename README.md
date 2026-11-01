@@ -1,3 +1,7 @@
+> **Competition entry — hipVS-accelerated HNSW construction:** [Build, install and SQL verification](docs/gpu-hnsw-build/SUBMISSION.md) · [Latest readiness audit and remaining gaps](docs/gpu-hnsw-build/READINESS_AUDIT_20261031.md).
+>
+> **Separate batch-query Notebook showcase:** [Instructions and file inventory](notebooks/seekdb-hipvs-batch-demo/) · [Latest fresh-kernel notebook](notebooks/seekdb-hipvs-batch-demo/results/full-reproduction-20261031/executed.ipynb) · [Docker deployment status and result agreement checks](notebooks/seekdb-hipvs-batch-demo/results/full-reproduction-20261031/). This demonstration uses the course image's preinstalled binary; use the competition instructions above to evaluate this repository's HNSW construction code.
+
 <div align="center">
 
 <picture>

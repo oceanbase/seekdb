@@ -1,0 +1,11 @@
+{
+  "original_file_sha256": "53c8b4a61c1c15e44497d06ceeb47d4796bcfd61920b72cb808f00dd0fcfbbda",
+  "fixed_file_sha256": "0f8575d11f36a8d562f69bc58aaeba4f5bc8f831a25be347d4567f9ed25b5a1b",
+  "backup_file": "seekdb_hipvs_batch_demo_executed.before-fix-20261101-111526.ipynb",
+  "cloud_original_directory": "/workspace/seekdb_hipvs_notebook",
+  "cloud_original_notebook_filename": "seekdb_hipvs_batch_demo_executed.ipynb",
+  "database_base_directory": "/workspace/run/obs1",
+  "existing_helper_file_modified": false,
+  "fix_implementation": "Repair definitions embedded in the Notebook are installed into the loaded helper module at runtime",
+  "code_cells": 11
+}

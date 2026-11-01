@@ -1,0 +1,35 @@
+{
+  "source_commit": "cfae4ba92b14d3010f7c7aa6a87d064dfd7c0075",
+  "completed": false,
+  "no_system_install": true,
+  "package_install_hooks_executed": false,
+  "steps": [
+    {
+      "label": "package-generate-admin",
+      "returncode": 0
+    },
+    {
+      "label": "package-build-all",
+      "returncode": 0
+    },
+    {
+      "label": "cpack-tgz",
+      "returncode": 1
+    }
+  ],
+  "stage": "failed",
+  "updated_utc": "2026-11-01T08:44:51.907843+00:00",
+  "obshell": {
+    "file": "obshell-4.4.1.1-32026031914.el8.x86_64.rpm",
+    "sha256": "6ab27e0f2cd7a0152120e948fcbc47e5a0c8478b47a88e3d7ec7438adee096fa",
+    "bytes": 15789560,
+    "url": "https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/obshell-4.4.1.1-32026031914.el8.x86_64.rpm",
+    "official_metadata_checksum_verified": true,
+    "extracted_binary_sha256": "608693d5493afb9b8acd08557efe916c053f57692036b1a7686594cb729819eb",
+    "extracted_bytes": 64406528,
+    "install_hooks_executed": false,
+    "binary_executed": false
+  },
+  "unpackaged_binary_sha256": "37d0e7c44c0395c1353fc84578199af2c04b44eca4329114d806b0ff65f5c61d",
+  "error": "CalledProcessError(1, ['/opt/venv/bin/cpack', '--config', '/workspace/amd-acceptance-20261101-6dc14ba3/src/build_tgz/CPackConfig.cmake', '-G', 'TGZ', '-B', '/workspace/amd-acceptance-20261101-6dc14ba3/packages'], None, None)"
+}

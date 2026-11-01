@@ -1,0 +1,1 @@
+{"command": ["git", "diff", "--exit-code"]}

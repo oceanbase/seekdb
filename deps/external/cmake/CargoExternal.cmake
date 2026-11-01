@@ -14,6 +14,12 @@
 
 include_guard(GLOBAL)
 
+set(SEEKDB_EXTERNAL_CARGO_JOBS 4 CACHE STRING
+  "Maximum parallel Cargo jobs for external native dependencies")
+if(NOT SEEKDB_EXTERNAL_CARGO_JOBS MATCHES "^[1-9][0-9]*$")
+  message(FATAL_ERROR "SEEKDB_EXTERNAL_CARGO_JOBS must be a positive integer")
+endif()
+
 function(seekdb_external_cargo_toolchain cargo_variable toolchain_variable)
   get_property(_cargo GLOBAL PROPERTY SEEKDB_EXTERNAL_CARGO_EXECUTABLE)
   get_property(_toolchain GLOBAL PROPERTY SEEKDB_EXTERNAL_RUST_TOOLCHAIN)
@@ -79,7 +85,7 @@ function(seekdb_external_add_cargo_artifacts)
   set(_runner_content "execute_process(COMMAND [==[${CMAKE_COMMAND}]==] -E env\n")
   foreach(_argument IN ITEMS "RUSTUP_TOOLCHAIN=${_rust_toolchain}"
       "CARGO_TARGET_DIR=${_cargo_target}" "MAKEFLAGS=" ${ARG_ENV}
-      "${_cargo}" build --locked --release --jobs 4 ${_target_args}
+      "${_cargo}" build --locked --release --jobs "${SEEKDB_EXTERNAL_CARGO_JOBS}" ${_target_args}
       --manifest-path "${ARG_MANIFEST}")
     string(APPEND _runner_content "  [==[${_argument}]==]\n")
   endforeach()

@@ -1,0 +1,20 @@
+Captured terminal output excerpt from this development session.
+Source: 4e2fc5b5e59bda3b21d1fe31f8dcc448b5f86a66, Linux Release, OB_BUILD_CUVS=ON.
+This is an excerpt, not a downloaded full remote log.
+
+Command:
+env -u LD_LIBRARY_PATH /opt/venv/bin/cmake --install /workspace/hipvs-audit-20261031/src/build_release --component server --prefix /workspace/hipvs-audit-20261031/install-before
+
+install_rc=0
+-- Install configuration: "RelWithDebInfo"
+-- Installing: /workspace/hipvs-audit-20261031/install-before/usr/bin/seekdb_hipvs_hnsw_worker
+-- Set non-toolchain portion of runtime path of "/workspace/hipvs-audit-20261031/install-before/usr/bin/seekdb_hipvs_hnsw_worker" to "$ORIGIN/../libexec/seekdb/lib"
+-- Installing: /workspace/hipvs-audit-20261031/install-before/usr/libexec/seekdb/lib/libseekdb_hipvs_hnsw.so
+-- Set non-toolchain portion of runtime path of "/workspace/hipvs-audit-20261031/install-before/usr/libexec/seekdb/lib/libseekdb_hipvs_hnsw.so" to "/opt/hipvs/lib:/opt/rocm/lib"
+
+The subsequent test -f .../usr/bin/seekdb returned 1 (absent).
+
+The new check_hipvs_install.py, run against the same old configuration and a separate empty prefix, printed:
+{"completed": false, "error": "server component is incomplete: usr/bin/seekdb", "output": "/workspace/hipvs-audit-20261031/evidence/install-check-before.json"}
+
+The complete seekdb build and the planned validation of the fixed installed server were interrupted later when SSH and direct TCP connections to the instance were refused.

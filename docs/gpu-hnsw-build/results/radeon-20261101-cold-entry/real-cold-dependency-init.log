@@ -1,0 +1,73 @@
+{"command": ["bash", "dep_create.sh"]}
+[dep_create.sh] [NOTICE] 'Ubuntu 24.04.4 LTS (x86_64)' is compatible with CentOS 9, use el9 dependencies list
+[dep_create.sh] oceanbase.el9.x86_64.deps has been not initialized, due to /workspace/amd-acceptance-20261101-4855acac/src/deps/3rd/6cbf427016d9c5328b3f45ad0bb925b5 not exists
+[dep_create.sh] FOUND env DEP_CACHE_DIR: /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache
+[dep_create.sh] cache deps /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd/DONE not exist
+[dep_create.sh] using Python/system libarchive for RPM extraction
+[dep_create.sh] check dependencies profile for oceanbase.el9.x86_64.deps... FOUND
+[dep_create.sh] check repository address in profile...
+[dep_create.sh] target: default, repo: http://mirrors.oceanbase.com/oceanbase/development-kit/el/8/x86_64/
+[dep_create.sh] target: community, repo: http://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
+[dep_create.sh] target: el9, repo: http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/x86_64/
+[dep_create.sh] start to download dependencies...
+[dep_create.sh] downloading package <devdeps-gtest-1.8.0-242026020914.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-gtest-1.8.0-242026020914.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libcurl-static-8.12.1-132025040210.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libcurl-static-8.12.1-132025040210.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libunwind-static-1.6.2-402025072120.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libunwind-static-1.6.2-402025072120.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libaio-0.3.112-12022092915.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libaio-0.3.112-12022092915.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-relaxed-rapidjson-1.0.0-52023011719.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-relaxed-rapidjson-1.0.0-52023011719.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-openssl-static-1.1.1u-22023100710.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-openssl-static-1.1.1u-22023100710.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-libxml2-2.13.6-22025032016.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-libxml2-2.13.6-22025032016.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-xz-5.2.2-42022090615.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-xz-5.2.2-42022090615.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-zlib-static-1.2.13-82024102414.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-zlib-static-1.2.13-82024102414.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-boost-1.74.0-22022110914.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-boost-1.74.0-22022110914.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-abseil-cpp-20211102.0-82026020911.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-abseil-cpp-20211102.0-82026020911.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-s2geometry-0.10.0-222026021017.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-s2geometry-0.10.0-222026021017.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-icu-69.1-362026020911.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-icu-69.1-362026020911.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-protobuf-c-abiv1-1.4.1-100000202026031815.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-grpc-abiv1-1.46.7-572026031815.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-grpc-abiv1-1.46.7-572026031815.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-roaringbitmap-croaring-3.0.0-42024042816.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-roaringbitmap-croaring-3.0.0-42024042816.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-vsag-abiv1-1.1.0-1752026041310.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-vsag-abiv1-1.1.0-1752026041310.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <devdeps-fast-float-6.1.3-42024112122.el8.x86_64.rpm>
+[dep_create.sh] unpack package <devdeps-fast-float-6.1.3-42024112122.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-binutils-2.30-12022100413.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-binutils-2.30-12022100413.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-bison-2.4.1-12022100413.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-ccache-3.7.12-12022100417.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-ccache-3.7.12-12022100417.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-cmake-3.30.3-52024111819.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-cmake-3.30.3-52024111819.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-flex-2.5.35-12022100417.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obshell-4.4.1.1-32026031914.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obshell-4.4.1.1-32026031914.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <ob-deploy-4.1.0-2.el8.x86_64.rpm>
+[dep_create.sh] unpack package <ob-deploy-4.1.0-2.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <obclient-2.2.3-1.el8.x86_64.rpm>
+[dep_create.sh] unpack package <obclient-2.2.3-1.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] downloading package <libobclient-2.2.3-1.el8.x86_64.rpm>
+[dep_create.sh] unpack package <libobclient-2.2.3-1.el8.x86_64.rpm>... SUCCESS
+[dep_create.sh] generate lock file /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5.lockfile
+[dep_create.sh] unlock lock file /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5.lockfile
+[dep_create.sh] link deps /workspace/amd-acceptance-20261101-4855acac/src/deps/3rd -> /workspace/amd-acceptance-20261101-4855acac/exact-deps-cache/6cbf427016d9c5328b3f45ad0bb925b5/3rd

@@ -1,0 +1,3 @@
+{"command": ["/opt/venv/bin/python", "/workspace/amd-acceptance-20261101-6dc14ba3/src/.github/script/seekdb/sdb.py", "stop", "--base-dir", "/var/tmp/amd-package-20261101-cfae4ba9-info"]}
+[sdb][WARN] not sending SIGKILL to pid=20574: process no longer matches this instance
+stopped
