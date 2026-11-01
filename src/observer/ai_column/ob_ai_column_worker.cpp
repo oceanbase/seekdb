@@ -46,13 +46,33 @@ namespace share
 
 using namespace common;
 
-static const int64_t WORKER_SQL_TIMEOUT_US = 60L * 1000L * 1000L;
+static const int64_t WORKER_SQL_TIMEOUT_US = 30L * 1000L * 1000L;
+static const int64_t WORKER_HTTP_TIMEOUT_SEC = 30;
 
-// run write statements on a dedicated job session, replicating the
-// dbms_scheduler background execution pattern (fresh session +
-// ObWorkerSessionGuard + SPI connection). plain proxy writes from a timer
-// thread fail with -4016 on user tables / do not persist in transactions.
-static int exec_sqls_in_job_session(ObIArray<ObString> &sqls)
+// Timer callbacks must not inherit an expired SQL/HTTP deadline from a prior call.
+class AiWorkerTimeoutGuard
+{
+public:
+  explicit AiWorkerTimeoutGuard(int64_t timeout_us)
+      : saved_timeout_(THIS_WORKER.get_timeout_ts())
+  {
+    THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + timeout_us);
+  }
+  ~AiWorkerTimeoutGuard() { THIS_WORKER.set_timeout_ts(saved_timeout_); }
+private:
+  int64_t saved_timeout_;
+};
+
+struct ObAiWorkerTask;
+struct ObAiWorkerTableInfo;
+
+// Use the scheduler's dedicated job-session/SPI path for background writes.
+// When publishing results, lock and validate the complete request group in this
+// transaction, then UPDATE the business row before deleting its task rows.
+static int exec_sqls_in_job_session(ObIArray<ObString> &sqls,
+                                   const ObAiWorkerTableInfo *info = nullptr,
+                                   const ObIArray<ObAiWorkerTask> *rows = nullptr,
+                                   const ObIArray<int64_t> *members = nullptr)
 {
   int ret = OB_SUCCESS;
   ObFreeSessionCtx free_session_ctx;
@@ -63,7 +83,7 @@ static int exec_sqls_in_job_session(ObIArray<ObString> &sqls)
   const schema::ObDatabaseSchema *db_schema = nullptr;
   ObInnerSQLConnection *conn = nullptr;
   int64_t affected_rows = 0;
-  THIS_WORKER.set_timeout_ts(INT64_MAX);
+  AiWorkerTimeoutGuard timeout_guard(WORKER_SQL_TIMEOUT_US);
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
@@ -133,13 +153,37 @@ static int exec_sqls_in_job_session(ObIArray<ObString> &sqls)
     } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()))) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < sqls.count(); ++i) {
-        // ObString is length-delimited and is not necessarily NUL-terminated.
-        // The SQL executor accepts a C string, so materialize a terminated copy.
-        ObSqlString terminated_sql;
-        if (OB_FAIL(terminated_sql.assign(sqls.at(i)))) {
-        } else if (OB_FAIL(conn->execute_write(terminated_sql.ptr(), affected_rows))) {
-          LOG_WARN("ai worker job session write failed", K(ret), K(sqls.at(i)));
+      bool transaction_started = false;
+      if (OB_FAIL(conn->set_session_timeout(WORKER_SQL_TIMEOUT_US, WORKER_SQL_TIMEOUT_US))) {
+      } else if (OB_FAIL(conn->execute_write("START TRANSACTION", affected_rows))) {
+        LOG_WARN("ai worker cannot start write transaction", K(ret));
+      } else {
+        transaction_started = true;
+        for (int64_t i = 0; OB_SUCC(ret) && i < sqls.count(); ++i) {
+          ObSqlString terminated_sql;
+          if (OB_FAIL(terminated_sql.assign(sqls.at(i)))) {
+          } else if (OB_FAIL(conn->execute_write(terminated_sql.ptr(), affected_rows))) {
+            LOG_WARN("ai worker job session write failed", K(ret), K(i));
+          } else if (nullptr != info && 1 != affected_rows) {
+            // Both the business UPDATE and each exact task DELETE must affect
+            // one row. A stale/missing task must never consume partial results.
+            ret = OB_STATE_NOT_MATCH;
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(conn->execute_write("COMMIT", affected_rows))) {
+            LOG_WARN("ai worker write commit failed", K(ret));
+          } else {
+            transaction_started = false;
+          }
+        }
+      }
+      if (transaction_started) {
+        // Rollback needs its own finite cleanup budget even after a timeout.
+        AiWorkerTimeoutGuard rollback_timeout(WORKER_SQL_TIMEOUT_US);
+        int rollback_ret = conn->execute_write("ROLLBACK", affected_rows);
+        if (OB_SUCCESS != rollback_ret) {
+          LOG_WARN("ai worker write rollback failed", K(rollback_ret));
         }
       }
     }
@@ -191,6 +235,7 @@ struct ObAiWorkerTableInfo
   ObString table_name_;
   ObArenaAllocator allocator_;
   ObSEArray<ObAiColumnMeta, 2> metas_;
+  ObSEArray<uint64_t, 8> column_ids_;
 };
 
 
@@ -208,9 +253,12 @@ static int append_sql_escaped(ObStringBuffer &buf, const ObString &src)
     char c = src.ptr()[i];
     if ('\'' == c) {
       ret = buf.append("''");
+    } else if ('\\' == c) {
+      ret = buf.append("\\\\");
+    } else if ('\0' == c) {
+      ret = buf.append("\\0");
     } else {
-      char one[2] = {c, '\0'};
-      ret = buf.append(one);
+      ret = buf.append(src.ptr() + i, 1);
     }
   }
   return ret;
@@ -223,8 +271,7 @@ static int sql_quote_escaped(ObIAllocator &allocator, const ObString &src, ObStr
   if (OB_FAIL(buf.append("'"))) {
   } else if (OB_FAIL(append_sql_escaped(buf, src))) {
   } else if (OB_FAIL(buf.append("'"))) {
-  } else {
-    dst = buf.string();
+  } else if (OB_FAIL(ob_write_string(allocator, buf.string(), dst, true))) {
   }
   return ret;
 }
@@ -238,8 +285,8 @@ ObAiColumnWorker &ObAiColumnWorker::get_instance()
 int ObAiColumnWorker::ensure_started()
 {
   int ret = OB_SUCCESS;
-  if (is_started_) {
-    // already running
+  ObSpinLockGuard guard(lifecycle_lock_);
+  if (is_started_.load(std::memory_order_acquire)) {
   } else if (OB_FAIL(timer_.init("AiColWorker", ObMemAttr("AiColWorker")))) {
     LOG_WARN("fail to init ai column worker timer", K(ret));
   } else if (OB_FAIL(timer_.start())) {
@@ -247,28 +294,34 @@ int ObAiColumnWorker::ensure_started()
   } else if (OB_FAIL(timer_.schedule(*this, SCAN_PERIOD_US, true))) {
     LOG_WARN("fail to schedule ai column worker", K(ret));
   } else {
-    is_started_ = true;
+    is_started_.store(true, std::memory_order_release);
     LOG_INFO("ai column worker started");
+  }
+  if (OB_FAIL(ret)) {
+    // A failed schedule/start must allow a subsequent ensure_started to retry.
+    timer_.destroy();
+    is_started_.store(false, std::memory_order_release);
   }
   return ret;
 }
 
 void ObAiColumnWorker::destroy()
 {
-  if (timer_.inited()) {
-    timer_.stop();
-  }
+  ObSpinLockGuard guard(lifecycle_lock_);
+  is_started_.store(false, std::memory_order_release);
+  timer_.destroy();
 }
 
 void ObAiColumnWorker::runTimerTask()
 {
-  if (is_started_ && !ATOMIC_LOAD(&busy_)) {
-    ATOMIC_STORE(&busy_, true);
+  // A repeating timer runs this task serially; publication is the only state
+  // shared with concurrent callers of ensure_started().
+  if (is_started_.load(std::memory_order_acquire)) {
+    AiWorkerTimeoutGuard timeout_guard(WORKER_SQL_TIMEOUT_US);
     int ret = process_round();
     if (OB_FAIL(ret)) {
       LOG_WARN("ai column worker round failed", K(ret));
     }
-    ATOMIC_STORE(&busy_, false);
   }
 }
 
@@ -279,11 +332,14 @@ static int load_table_info(uint64_t table_id, ObAiWorkerTableInfo &info)
   const schema::ObTableSchema *table_schema = nullptr;
   const schema::ObDatabaseSchema *db_schema = nullptr;
   info.table_id_ = table_id;
+  AiWorkerTimeoutGuard timeout_guard(WORKER_SQL_TIMEOUT_US);
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(guard.get_table_schema(table_id, table_schema)) || OB_ISNULL(table_schema)) {
+  } else if (OB_FAIL(guard.get_table_schema(table_id, table_schema))) {
+    LOG_WARN("ai column business table schema lookup failed", K(ret), K(table_id));
+  } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("ai column business table not found", K(ret), K(table_id));
+    LOG_INFO("ai column business table no longer exists", K(table_id));
   } else if (OB_FAIL(ob_write_string(info.allocator_, table_schema->get_table_name(),
                                      info.table_name_))) {
   } else if (OB_FAIL(guard.get_database_schema(table_schema->get_database_id(), db_schema))
@@ -294,6 +350,15 @@ static int load_table_info(uint64_t table_id, ObAiWorkerTableInfo &info)
                                      info.db_name_))) {
   } else if (OB_FAIL(ObAiColumnUtil::select_metas_by_table(table_id, info.allocator_, info.metas_))) {
     LOG_WARN("fail to load ai metas in worker", K(ret), K(table_id));
+  }
+  if (OB_SUCC(ret)) {
+    for (schema::ObTableSchema::const_column_iterator it = table_schema->column_begin();
+         OB_SUCC(ret) && it != table_schema->column_end(); ++it) {
+      if (OB_ISNULL(*it)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(info.column_ids_.push_back((*it)->get_column_id()))) {
+      }
+    }
   }
   return ret;
 }
@@ -484,10 +549,11 @@ int ObAiColumnWorker::process_round()
                 OB_ALL_AI_COLUMN_TASK_TNAME, table_id,
                 static_cast<int>(pb.length()), pb.ptr(),
                 static_cast<int>(qb.length()), qb.ptr()))) {
-        ObString del_copy;
-        if (OB_FAIL(ob_write_string(arena, del_sql.string(), del_copy))) {
-        } else if (OB_FAIL(stale_del_sqls.push_back(del_copy))) {
-        }
+        } else {
+          ObString del_copy;
+          if (OB_FAIL(ob_write_string(arena, del_sql.string(), del_copy))) {
+          } else if (OB_FAIL(stale_del_sqls.push_back(del_copy))) {
+          }
         }
       }
       continue;
@@ -520,10 +586,11 @@ int ObAiColumnWorker::process_round()
                 OB_ALL_AI_COLUMN_TASK_TNAME, table_id,
                 static_cast<int>(pb.length()), pb.ptr(),
                 static_cast<int>(qb.length()), qb.ptr()))) {
-        ObString del_copy;
-        if (OB_FAIL(ob_write_string(arena, del_sql.string(), del_copy))) {
-        } else if (OB_FAIL(stale_del_sqls.push_back(del_copy))) {
-        }
+        } else {
+          ObString del_copy;
+          if (OB_FAIL(ob_write_string(arena, del_sql.string(), del_copy))) {
+          } else if (OB_FAIL(stale_del_sqls.push_back(del_copy))) {
+          }
         }
       }
       continue;
@@ -696,6 +763,7 @@ int ObAiColumnWorker::process_round()
       // by the task DELETEs
       if (OB_SUCC(ret) && ok_tasks.count() > 0) {
         ObSEArray<ObString, 8> write_sqls;
+        ObSEArray<ObString, 8> delete_sqls;
         // pass A: staleness check on the plain proxy (reads work from timer threads)
         for (int64_t i = 0; OB_SUCC(ret) && i < ok_tasks.count(); ++i) {
           ObAiWorkerTask &tr = rows.at(ok_tasks.at(i));
@@ -733,7 +801,9 @@ int ObAiColumnWorker::process_round()
             }
           }
         }
-        // pass B: one DELETE per alive task, built now
+        // pass B: one DELETE per alive task, built now; these are appended
+        // after the merged business UPDATEs below so a failed update leaves
+        // the task available for the next scan.
         for (int64_t i = 0; OB_SUCC(ret) && i < ok_tasks.count(); ++i) {
           ObAiWorkerTask &tr = rows.at(ok_tasks.at(i));
           if (!tr.request_ok_) {
@@ -752,7 +822,7 @@ int ObAiColumnWorker::process_round()
                   tr.column_id_,
                   static_cast<int>(qb.length()), qb.ptr()))) {
           } else if (OB_FAIL(ob_write_string(arena, del_sql.string(), del_copy))) {
-          } else if (OB_FAIL(write_sqls.push_back(del_copy))) {
+          } else if (OB_FAIL(delete_sqls.push_back(del_copy))) {
           }
         }
         // pass C: one merged UPDATE per distinct rowkey; all columns of the
@@ -790,6 +860,12 @@ int ObAiColumnWorker::process_round()
                     static_cast<int>(tr.rowkey_pred_.length()), tr.rowkey_pred_.ptr()))) {
             } else if (OB_FAIL(ob_write_string(arena, upd_sql.string(), upd_copy))) {
             } else if (OB_FAIL(write_sqls.push_back(upd_copy))) {
+            }
+          }
+        }
+        if (OB_SUCC(ret) && delete_sqls.count() > 0) {
+          for (int64_t i = 0; OB_SUCC(ret) && i < delete_sqls.count(); ++i) {
+            if (OB_FAIL(write_sqls.push_back(delete_sqls.at(i)))) {
             }
           }
         }

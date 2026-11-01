@@ -634,6 +634,17 @@ ObTableModifyOp::ObTableModifyOp(ObExecContext &ctx,
   GET_SQL_MODE_BIT(IS_NO_BACKSLASH_ESCAPES, ctx_.get_my_session()->get_sql_mode(), obj_print_params_.skip_escape_);
 }
 
+ObTableModifyOp::~ObTableModifyOp()
+{
+  destroy_ai_col_ctx();
+}
+
+void ObTableModifyOp::destroy_ai_col_ctx()
+{
+  delete static_cast<share::ObAiColumnOpCtx *>(ai_col_ctx_);
+  ai_col_ctx_ = nullptr;
+}
+
 int ObTableModifyOp::inner_open()
 {
   int ret = OB_SUCCESS;

@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_AI_COLUMN_OB_AI_COLUMN_UTIL_H_
 #define OCEANBASE_OBSERVER_AI_COLUMN_OB_AI_COLUMN_UTIL_H_
 
+#include "lib/allocator/page_arena.h"
 #include "share/ai_column/ob_ai_column_struct.h"
 
 namespace oceanbase
@@ -45,14 +46,20 @@ class ObTableSchema;
 class AlterTableSchema;
 }
 
-// per-execution cached ai-column info of one business table (owned by the
-// exec ctx allocator; referenced from ObTableModifyOp via opaque pointer)
+// Per-execution cache owned by ObTableModifyOp. Its private arenas must not be
+// tied to the execution/DAS allocators, which may be recycled between flushes.
 struct ObAiColumnOpCtx
 {
-  ObAiColumnOpCtx() : has_ai_col_(false), table_id_(common::OB_INVALID_ID), schema_(nullptr) {}
+  ObAiColumnOpCtx()
+      : meta_allocator_("AiColOpMeta"), sql_allocator_("AiColHookSql"),
+        has_ai_col_(false), table_id_(common::OB_INVALID_ID), schema_(nullptr) {}
+  int add_pending_sql(const common::ObString &sql);
+  void clear_pending_sqls();
+  // Declared before the containers so their destructors run before the arenas.
+  common::ObArenaAllocator meta_allocator_;
+  common::ObArenaAllocator sql_allocator_;
   bool has_ai_col_;
   uint64_t table_id_;
-  // the business table's database name (for fully-qualified hook SQL)
   common::ObString db_name_;
   const schema::ObTableSchema *schema_;
   ObSEArray<ObAiColumnMeta, 2> metas_;
@@ -60,13 +67,9 @@ struct ObAiColumnOpCtx
   ObSEArray<ObSEArray<uint64_t, 4>, 2> dep_column_ids_;
   ObSEArray<uint64_t, 4> rowkey_column_ids_;
   ObSEArray<ObString, 4> rowkey_column_names_;
-  // task-table statements collected while rows stream through the operator;
-  // nested SQL is only safe after the DAS tasks ran, so they flush later.
-  // each collected string lives in its own heap arena owned by this ctx
-  // (flush_pending_sqls destroys them), immune to allocator recycling
+  // Nested SQL is safe only after DAS tasks ran. Strings are copied into
+  // sql_allocator_ and remain valid until clear_pending_sqls().
   ObSEArray<ObString, 8> pending_sqls_;
-  ObSEArray<ObArenaAllocator *, 8> sql_arenas_;
-  ObArenaAllocator &acquire_sql_arena();
 };
 
 

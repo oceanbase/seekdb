@@ -17,7 +17,9 @@
 #ifndef OCEANBASE_OBSERVER_AI_COLUMN_OB_AI_COLUMN_WORKER_H_
 #define OCEANBASE_OBSERVER_AI_COLUMN_OB_AI_COLUMN_WORKER_H_
 
+#include <atomic>
 #include "lib/container/ob_array.h"
+#include "lib/lock/ob_spin_lock.h"
 #include "lib/task/ob_timer.h"
 #include "observer/ai_column/ob_ai_column_util.h"
 
@@ -43,18 +45,16 @@ public:
 
 private:
   ObAiColumnWorker()
-      : is_inited_(false),
-        is_started_(false),
-        busy_(false),
+      : is_started_(false),
+        lifecycle_lock_(),
         timer_()
   {}
   ~ObAiColumnWorker() { destroy(); }
   void destroy();
   int process_round();
 
-  bool is_inited_;
-  bool is_started_;
-  volatile bool busy_;
+  std::atomic<bool> is_started_;
+  common::ObSpinLock lifecycle_lock_;
   common::ObTimer timer_;
 };
 
