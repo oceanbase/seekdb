@@ -1,5 +1,6 @@
 """Numeric correctness and rejection cases; these tests never claim GPU execution."""
 import copy
+import json
 import math
 from pathlib import Path
 import tempfile
@@ -12,7 +13,7 @@ from benchmark import (assess_results, exact_neighbors, fingerprint, generate_da
                        identifier, match_evidence, parse_options, query_sql,
                        summarize, validate_comparable, log_position, evidence_from_log,
                        first_query_when_ready, coverage_retry_settings, coverage_query_result,
-                       run_round)
+                       run_round, safe_failure_detail)
 
 
 class CoverageDiagnosticTests(unittest.TestCase):
@@ -368,6 +369,40 @@ class RoundSnapshotIntegrationTests(unittest.TestCase):
         self.assertNotIn("storage_integrity", report["rounds"][0])
         self.assertEqual(report["active_operation"], "cpu/1: SQL snapshot integrity")
         connection.cursor.return_value.execute.assert_called_with("DROP TABLE `ahb_test_cpu_1`")
+
+
+class SafeFailureDetailTests(unittest.TestCase):
+    def test_missing_table_keeps_exact_safe_identifier(self):
+        detail = safe_failure_detail(Exception(1146, "Table 'test.__idx_900_rowkey_vid_table' doesn't exist"))
+        self.assertEqual(detail["message"], "Table 'test.__idx_900_rowkey_vid_table' doesn't exist")
+
+    def test_unknown_column_keeps_safe_identifier_and_scope(self):
+        detail = safe_failure_detail(Exception(1054, "Unknown column 't.tablet_id' in 'field list'"))
+        self.assertEqual(detail["message"], "Unknown column 't.tablet_id' in 'field list'")
+
+    def test_untrusted_driver_text_is_never_echoed(self):
+        for code in (1045, 1064, 1146, 1054, 2003):
+            error = Exception(code, "user=secret-user password=secret-password https://secret-user:secret-token@host")
+            text = json.dumps(safe_failure_detail(error))
+            self.assertNotIn("secret-", text)
+            self.assertNotIn("https://", text)
+
+    def test_local_validation_keeps_message_and_locations_without_source_or_locals(self):
+        try:
+            identifier("unsafe`sql")
+        except ValueError as error:
+            detail = safe_failure_detail(error)
+        self.assertEqual(detail["message"], "Unsafe SQL identifier")
+        self.assertEqual(detail["trace"][-1]["file"], "benchmark.py")
+        self.assertEqual(detail["trace"][-1]["function"], "identifier")
+        self.assertIsInstance(detail["trace"][-1]["line"], int)
+        self.assertNotIn("unsafe`sql", json.dumps(detail))
+        self.assertTrue(all(set(frame) == {"file", "line", "function"} for frame in detail["trace"]))
+
+    @patch.dict("os.environ", {"AMD_BENCH_PASSWORD": "test_password"})
+    def test_configured_password_is_redacted_even_in_an_identifier(self):
+        detail = safe_failure_detail(Exception(1146, "Table 'test.test_password' doesn't exist"))
+        self.assertNotIn("test_password", json.dumps(detail))
 
 
 if __name__ == "__main__":

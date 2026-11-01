@@ -13,6 +13,7 @@ import re
 import statistics
 import sys
 import time
+import traceback
 from datetime import datetime, timezone
 import uuid
 
@@ -517,9 +518,45 @@ def save_report(report: dict, destination: Path) -> None:
               "完整配置、每轮原始记录、数据指纹、服务器环境及校验原因见同名JSON。"]
     if report.get("failure"):
         lines += ["", "运行发生错误；报告仅保留已经完成的轮次，不视为完成评测。", report["failure"]]
+        if report.get("failure_detail"):
+            lines += ["", "安全诊断（不含连接凭据或完整SQL）：", "```json",
+                      json.dumps(report["failure_detail"], ensure_ascii=False, indent=2), "```"]
     if summary.get("reasons") or summary.get("missing_server_environment"):
         lines += ["", "未验证原因：", json.dumps({key: summary.get(key) for key in ("reasons", "missing_server_environment")}, ensure_ascii=False)]
     destination.with_suffix(".md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def safe_failure_detail(error: Exception) -> dict:
+    """Keep useful locations and allowlisted SQL identifiers, never raw DB errors.
+
+    Driver exceptions can echo a connection URI, user account or SQL literals.
+    Tracebacks therefore contain frame metadata only (no source or locals).
+    """
+    code = error.args[0] if error.args and type(error.args[0]) is int else None
+    frames = traceback.extract_tb(error.__traceback__)
+    detail = {"exception_type": type(error).__name__, "error_code": code,
+              "trace": [{"file": Path(frame.filename).name, "line": frame.lineno,
+                         "function": frame.name} for frame in frames]}
+    message = error.args[1] if len(error.args) > 1 and isinstance(error.args[1], str) else ""
+    name = r"[A-Za-z_][A-Za-z0-9_]{0,255}"
+    if code == 1146:
+        match = re.fullmatch(rf"Table '({name})\.({name})' doesn't exist", message)
+        detail["message"] = (f"Table '{match[1]}.{match[2]}' doesn't exist" if match
+                             else "Requested SQL table does not exist; raw driver text omitted")
+    elif code == 1054:
+        match = re.fullmatch(rf"Unknown column '({name}(?:\.{name})?)' in '(field list|where clause|on clause|order clause|group statement)'", message)
+        detail["message"] = (f"Unknown column '{match[1]}' in '{match[2]}'" if match
+                             else "Requested SQL column does not exist; raw driver text omitted")
+    elif (type(error) in (ValueError, RuntimeError) and frames
+          and Path(frames[-1].filename).name in ("benchmark.py", "sql_snapshot_integrity.py")
+          and len(error.args) == 1 and isinstance(error.args[0], str)
+          and re.fullmatch(r"[A-Za-z0-9_ @().,:;/+=\-\[\]]{1,500}", error.args[0])):
+        # These modules raise fixed diagnostic messages, not connection strings.
+        detail["message"] = error.args[0]
+    password = os.environ.get("AMD_BENCH_PASSWORD")
+    if password and password in detail.get("message", ""):
+        detail["message"] = "Diagnostic message omitted because it contains a configured credential"
+    return detail
 
 
 def arguments(argv=None):
@@ -600,12 +637,14 @@ def main(argv=None):
         if args.evidence_jsonl:
             report["evidence_sha256"] = hashlib.sha256(args.evidence_jsonl.read_bytes()).hexdigest()
     except Exception as error:
-        # Connection errors may include account/host information; report type+numeric code
-        # instead of echoing credentials, arbitrary SQL, or complete driver exceptions.
+        # Keep safe frame locations and allowlisted identifiers for diagnosis;
+        # never echo arbitrary connection or SQL text from the driver.
         code = error.args[0] if error.args and isinstance(error.args[0], int) else None
         report["failure"] = f"{type(error).__name__}; error_code={code}; completed_rounds={len(report['rounds'])}"
+        report["failure_detail"] = safe_failure_detail(error)
         report["summary"] = {"status": "ERROR", "speedup": None, "meets_target": False}
         print(report["failure"], file=sys.stderr)
+        print(json.dumps(report["failure_detail"], ensure_ascii=False), file=sys.stderr)
     finally:
         if connection:
             connection.close()

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from sql_snapshot_integrity import chunk_order, validate_native_graph, verify_sql_snapshot
+from sql_snapshot_integrity import chunk_order, direct_index_reads, validate_native_graph, verify_sql_snapshot
 
 
 def fixture():
@@ -106,7 +106,7 @@ class SQLProofTests(unittest.TestCase):
         columns = [('__key_17_100',), ('__data_17_100',), ('__vid_100',)]
         key = '456_999_hnsw_data_part00000'
         cursor = MagicMock()
-        cursor.fetchone.return_value = ('test',)
+        cursor.fetchone.side_effect = [(0,), (1,), ('test',), (0,)]
         cursor.fetchall.side_effect = [
             [(123,)], [(321, 'unrelated' if wrong_aux else snapshot, 456), (322, rowkeys, 457)],
             [('id',), ('__vid_100',)], [(pk, vid) for vid, pk in mapping.items()],
@@ -121,21 +121,60 @@ class SQLProofTests(unittest.TestCase):
         self.assertEqual(proof['stored_count'], 3)
         self.assertEqual(proof['source_table'], 'docs')
         self.assertEqual(proof['snapshot_tablet_id'], 456)
-        self.assertTrue(all(call.args[0].startswith(('SELECT ', 'SHOW '))
+        self.assertTrue(all(call.args[0].startswith(('SELECT ', 'SHOW ', 'SET SESSION '))
                             for call in cursor.execute.call_args_list))
+        settings = [call.args for call in cursor.execute.call_args_list if call.args[0].startswith('SET ')]
+        self.assertEqual(settings, [('SET SESSION ob_enable_index_direct_select=%s', (1,)),
+                                   ('SET SESSION ob_enable_index_direct_select=%s', (0,))])
         connection.commit.assert_not_called()
 
     def test_wrong_auxiliary_metadata_rejected_before_blob_read(self):
         connection, cursor, vectors, ids, m = self.connection(wrong_aux=True)
         with self.assertRaises(ValueError):
             verify_sql_snapshot(connection, 'docs', 'ix', vectors, ids, m)
-        self.assertEqual(cursor.execute.call_count, 3)
+        self.assertFalse(any(call.args[0].startswith('SHOW ') for call in cursor.execute.call_args_list))
+        self.assertEqual(cursor.execute.call_args_list[-2].args,
+                         ('SET SESSION ob_enable_index_direct_select=%s', (0,)))
 
     def test_unsafe_table_name_rejected_without_sql(self):
         connection, cursor, vectors, ids, m = self.connection()
         with self.assertRaises(ValueError):
             verify_sql_snapshot(connection, 'docs` WHERE 1=1', 'ix', vectors, ids, m)
         cursor.execute.assert_not_called()
+
+
+class DirectReadSessionTests(unittest.TestCase):
+    def test_already_enabled_is_not_changed(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (1,)
+        with direct_index_reads(cursor):
+            pass
+        self.assertEqual(cursor.execute.call_count, 1)
+
+    def test_original_session_value_restored_after_sql_error(self):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [(0,), (1,), (0,)]
+        with self.assertRaisesRegex(RuntimeError, 'missing metadata'):
+            with direct_index_reads(cursor):
+                raise RuntimeError('missing metadata')
+        self.assertEqual(cursor.execute.call_args_list[-2].args,
+                         ('SET SESSION ob_enable_index_direct_select=%s', (0,)))
+
+    def test_failed_enable_readback_still_restores_original_value(self):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [(0,), (0,), (0,)]
+        with self.assertRaisesRegex(ValueError, 'did not take effect'):
+            with direct_index_reads(cursor):
+                self.fail('Payload reads must not run when the switch failed')
+        self.assertEqual(cursor.execute.call_args_list[-2].args,
+                         ('SET SESSION ob_enable_index_direct_select=%s', (0,)))
+
+    def test_restore_readback_failure_cannot_be_silently_ignored(self):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [(0,), (1,), (1,)]
+        with self.assertRaisesRegex(ValueError, 'was not restored'):
+            with direct_index_reads(cursor):
+                pass
 
 
 if __name__ == '__main__':

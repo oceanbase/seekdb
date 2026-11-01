@@ -8,6 +8,7 @@ import hashlib
 import math
 import re
 import struct
+from contextlib import contextmanager
 
 import numpy as np
 
@@ -123,6 +124,30 @@ def validate_native_graph(data, vectors, ids, mapping, m):
             'snapshot_bytes': len(data), 'dim': dim, 'm': m}
 
 
+@contextmanager
+def direct_index_reads(cursor):
+    """Temporarily allow reads of this index's auxiliary SQL tables.
+
+    The repository's vector_index_basic/rebuild tests require this session
+    switch. Restore it even on metadata, payload or validation failure.
+    """
+    cursor.execute('SELECT @@session.ob_enable_index_direct_select')
+    original = int(cursor.fetchone()[0])
+    require(original in (0, 1), 'Unexpected index direct-select session value')
+    changed = original != 1
+    try:
+        if changed:
+            cursor.execute('SET SESSION ob_enable_index_direct_select=%s', (1,))
+            cursor.execute('SELECT @@session.ob_enable_index_direct_select')
+            require(int(cursor.fetchone()[0]) == 1, 'Index direct-select session switch did not take effect')
+        yield
+    finally:
+        if changed:
+            cursor.execute('SET SESSION ob_enable_index_direct_select=%s', (original,))
+            cursor.execute('SELECT @@session.ob_enable_index_direct_select')
+            require(int(cursor.fetchone()[0]) == original, 'Index direct-select session switch was not restored')
+
+
 def verify_sql_snapshot(connection, table, index, vectors, ids, m):
     """Only inspect auxiliary tables attached to the named current-database table."""
     require(len(table) <= 63 and len(index) <= 63, 'Unexpected public table/index name length')
@@ -135,7 +160,7 @@ def verify_sql_snapshot(connection, table, index, vectors, ids, m):
             'Unsupported expected graph shape or M')
     expected_ids = {int(pk) for pk in ids}
     require(len(expected_ids) == rows, 'Duplicate expected primary keys')
-    with connection.cursor() as cursor:
+    with connection.cursor() as cursor, direct_index_reads(cursor):
         cursor.execute('SELECT DATABASE()')
         database = text(cursor.fetchone()[0])
         quoted(database)
