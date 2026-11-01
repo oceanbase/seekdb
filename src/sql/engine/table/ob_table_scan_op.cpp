@@ -2201,7 +2201,72 @@ ERRSIM_POINT_DEF(EN_TABLE_SCAN_RETRY_WAIT_EVENT_ERRSIM);
 int ObTableScanOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(rand_scan_processor_.use_rand_scan())) {
+  if (MY_SPEC.is_fts_ddl_ && nullptr == tsc_rtdef_.scan_rtdef_.sample_info_) {
+    clear_evaluated_flag();
+    const int64_t capacity = min(max_row_cnt, MY_SPEC.max_batch_size_);
+    brs_.size_ = 0;
+    brs_.end_ = false;
+    brs_.skip_->reset(capacity);
+    blocksstable::ObDatumRow *row = nullptr;
+    ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
+    batch_info_guard.set_batch_idx(0);
+    batch_info_guard.set_batch_size(1);
+    if (capacity <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(fts_index_.get_next_row(row))) {
+      if (OB_ITER_END == ret) {
+        if (OB_FAIL(fetch_next_fts_index_rows())) {
+          if (OB_ITER_END == ret) {
+            brs_.end_ = true;
+            ret = OB_SUCCESS;
+          }
+        } else if (OB_FAIL(fts_index_.get_next_row(row))) {
+        }
+      }
+    }
+    const ObObjDatumMapType *types = MY_SPEC.is_fts_index_aux_
+        ? ObFTIndexRowCache::FTS_INDEX_TYPES : ObFTIndexRowCache::FTS_DOC_WORD_TYPES;
+    ObDatum *output_datums[4] = {nullptr, nullptr, nullptr, nullptr};
+    if (OB_SUCC(ret) && !brs_.end_) {
+      for (int64_t i = 0; i < 4; ++i) {
+        // Numeric storage-datum conversion writes through ptr_. Restoring the
+        // per-slot result buffers is required after a prior batch used views.
+        output_datums[i] = fts_output_exprs_[i]->locate_datums_for_update(eval_ctx_, capacity);
+      }
+    }
+    // Do not advance the source document inside a batch: its decoded doc ID
+    // and the owned term slices stay valid until the parent consumes it.
+    while (OB_SUCC(ret) && !brs_.end_ && brs_.size_ < capacity) {
+      if (OB_ISNULL(row)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+          ObDatum *datums = output_datums[i];
+          if (OB_FAIL(datums[brs_.size_].from_storage_datum(row->storage_datums_[i], types[i]))) {
+          }
+        }
+        if (OB_SUCC(ret)) {
+          ++brs_.size_;
+          if (brs_.size_ < capacity && OB_FAIL(fts_index_.get_next_row(row))) {
+            if (OB_ITER_END == ret) {
+              ret = OB_SUCCESS;
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && brs_.size_ > 0) {
+      for (int64_t i = 0; i < 4; ++i) {
+        fts_output_exprs_[i]->set_evaluated_projected(eval_ctx_);
+        fts_output_exprs_[i]->get_evaluated_flags(eval_ctx_).set_all(brs_.size_);
+        fts_output_exprs_[i]->get_eval_info(eval_ctx_).cnt_ = brs_.size_;
+      }
+      if (input_row_cnt_ == 1) {
+        LOG_INFO("FTS DDL first-document batch", "rows", brs_.size_, K(capacity));
+      }
+    }
+  } else if (OB_UNLIKELY(rand_scan_processor_.use_rand_scan())) {
     if (OB_FAIL(rand_scan_processor_.inner_get_next_batch(max_row_cnt))) {
     }
   } else if (OB_FAIL(inner_get_next_batch_for_tsc(max_row_cnt))) {
@@ -3690,12 +3755,17 @@ int ObTableScanOp::fetch_next_fts_index_rows()
 int ObTableScanOp::init_fts_output_exprs()
 {
   int ret = OB_SUCCESS;
+  uint64_t batch_mask = 0;
   const ObExprOperatorType *expr_types = MY_SPEC.is_fts_index_aux_
       ? ObFTIndexRowCache::FTS_INDEX_EXPR_TYPE : ObFTIndexRowCache::FTS_DOC_WORD_EXPR_TYPE;
   for (int64_t i = 0; OB_SUCC(ret) && i < share::ObFtsIndexBuilderUtil::OB_FTS_INDEX_OR_DOC_WORD_TABLE_COL_CNT; ++i) {
     if (OB_FAIL(get_output_fts_col_expr_by_type(expr_types[i], fts_output_exprs_[i]))) {
+    } else if (fts_output_exprs_[i]->is_batch_result()) {
+      batch_mask |= 1ULL << i;
     }
   }
+  LOG_INFO("FTS DDL output bindings", "batch_size", MY_SPEC.max_batch_size_,
+      "output_count", MY_SPEC.output_.count(), K(batch_mask), "filter_count", MY_SPEC.filters_.count());
   return ret;
 }
 

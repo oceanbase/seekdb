@@ -592,6 +592,21 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
     OZ(generate_rt_exprs(op.get_filter_exprs(), spec.filters_));
   }
   OZ(generate_rt_exprs(op.get_output_exprs(), spec.output_));
+  if (OB_SUCC(ret) && (PHY_TABLE_SCAN == spec.type_ || PHY_DDL_BLOCK_SAMPLE_SCAN == spec.type_
+      || PHY_ROW_SAMPLE_SCAN == spec.type_ || PHY_BLOCK_SAMPLE_SCAN == spec.type_)) {
+    ObTableScanSpec &tsc_spec = static_cast<ObTableScanSpec &>(spec);
+    if (tsc_spec.is_fts_ddl_ && spec.max_batch_size_ > 0) {
+      // The document-batch path only produces the four generated FTS columns.
+      // Keep the scalar path for other projections and expression layouts.
+      bool batch_supported = spec.output_.count() == 4 && spec.filters_.empty();
+      for (int64_t i = 0; batch_supported && i < spec.output_.count(); ++i) {
+        batch_supported = nullptr != spec.output_.at(i) && spec.output_.at(i)->is_batch_result();
+      }
+      if (!batch_supported) {
+        spec.max_batch_size_ = 0;
+      }
+    }
+  }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_exprs_columnlized(op))) {
     }
@@ -3681,7 +3696,12 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
       } else if (ddl_table_schema->is_fts_index_aux() || ddl_table_schema->is_fts_doc_word_aux()) {
         spec.is_fts_ddl_ = true;
         spec.is_fts_index_aux_ = ddl_table_schema->is_fts_index_aux();
-        spec.max_batch_size_ = 0; // TODO: @jinzhu, remove me later after support post-building fts index vectorization.
+        // Plain and DDL scans can emit terms from one document. Expression
+        // compatibility is checked after generate_spec_basic builds output_.
+        if (PHY_TABLE_SCAN != spec.type_ && PHY_DDL_BLOCK_SAMPLE_SCAN != spec.type_
+            && PHY_ROW_SAMPLE_SCAN != spec.type_ && PHY_BLOCK_SAMPLE_SCAN != spec.type_) {
+          spec.max_batch_size_ = 0;
+        }
         if (OB_UNLIKELY(ddl_table_schema->get_parser_name_str().empty())) {
           ret = OB_ERR_UNEXPECTED;
         } else {

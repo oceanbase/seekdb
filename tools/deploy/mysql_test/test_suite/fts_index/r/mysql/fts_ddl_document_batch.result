@@ -1,0 +1,42 @@
+SET NAMES utf8mb4;
+SET ob_query_timeout=1000000000;
+SET SESSION group_concat_max_len=1048576;
+DROP DATABASE IF EXISTS fts_document_batch;
+CREATE DATABASE fts_document_batch;
+USE fts_document_batch;
+CREATE TABLE nums(n INT PRIMARY KEY);
+INSERT INTO nums VALUES(1);
+INSERT INTO nums SELECT n+1 FROM nums;
+INSERT INTO nums SELECT n+2 FROM nums;
+INSERT INTO nums SELECT n+4 FROM nums;
+INSERT INTO nums SELECT n+8 FROM nums;
+INSERT INTO nums SELECT n+16 FROM nums;
+INSERT INTO nums SELECT n+32 FROM nums;
+INSERT INTO nums SELECT n+64 FROM nums;
+INSERT INTO nums SELECT n+128 FROM nums;
+INSERT INTO nums SELECT n+256 FROM nums;
+INSERT INTO nums SELECT n+512 FROM nums;
+INSERT INTO nums SELECT n+1024 FROM nums;
+CREATE TABLE docs(id BIGINT PRIMARY KEY,body LONGTEXT) DEFAULT CHARSET=utf8mb4;
+INSERT INTO docs SELECT 1,GROUP_CONCAT(CONCAT('term',n) ORDER BY n SEPARATOR ' ') FROM nums;
+INSERT INTO docs VALUES(2,'tailword term2049'),(3,''),(4,NULL),(5,'term1024 term2048');
+CREATE FULLTEXT INDEX ft ON docs(body) WITH PARSER beng;
+SELECT id FROM docs WHERE MATCH(body) AGAINST('term1') ORDER BY id;
+id
+1
+SELECT id FROM docs WHERE MATCH(body) AGAINST('term1024') ORDER BY id;
+id
+1
+5
+SELECT id FROM docs WHERE MATCH(body) AGAINST('term2048') ORDER BY id;
+id
+1
+5
+SELECT id FROM docs WHERE MATCH(body) AGAINST('term2049') ORDER BY id;
+id
+2
+SELECT id,ROUND(MATCH(body) AGAINST('term1 term129 term257 term385 term513 term641 term769 term897 term1024 term1153 term1281 term1409 term1537 term1665 term1793 term1921 term2048'),8) FROM docs WHERE MATCH(body) AGAINST('term1 term129 term257 term385 term513 term641 term769 term897 term1024 term1153 term1281 term1409 term1537 term1665 term1793 term1921 term2048') ORDER BY id;
+id	ROUND(MATCH(body) AGAINST('term1 term129 term257 term385 term513 term641 term769 term897 term1024 term1153 term1281 term1409 term1537 term1665 term1793 term1921 term2048'),8)
+1	6.51583445
+5	1.13499982
+DROP DATABASE fts_document_batch;
