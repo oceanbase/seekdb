@@ -1,0 +1,51 @@
+# FTS 调优交付备注（环境、命令、口径）
+
+## 环境
+- 工作区：/opt/codex-seekdb-20261030，分支 feat/fts-tuning，基线 5bce9e0
+- 构建目录：build_release，命令 make -j8；重编得到的 seekdb 与评测用 after 二进制 sha256 完全一致
+- 实例：/opt/seekdb-fts-20261101，端口 2881
+  启动参数：memory_budget=4G datafile_size=4G datafile_maxsize=8G log_disk_size=2G cpu_count=4
+- 每次测量前删除 store 并重启，保证建索引/查询指标不受残留数据影响
+- 测试依赖：admin/admin 账号；set global recyclebin=ON（fts_index 的 basic_dml 用例需要）
+
+## 二进制
+| 用途 | 文件 | sha256 |
+| --- | --- | --- |
+| 优化前 | saved-binaries/final-before | a918d84ec684562225b586482c17247f474a15b10d0d23f1ef83fbbd09612dbe |
+| 优化后 | saved-binaries/fts-after-20261101 | 5044bda810fb4873984c47c17a482b61b554d709f277d44986c803f97f963563 |
+重编 build_release/src/observer/seekdb 后 sha256 同为 5044bda8…，即基准报告与源码一致。
+
+## 测试命令（正确性）
+mysqltest 驱动：tools/deploy/mysql_test/test_suite/fts_index/t/*.test
+环境变量：OBMYSQL_MS0=127.0.0.1 OBMYSQL_PORT=2881 OBMYSQL_PWD=admin
+结果：15 例中 14 例通过；partitioned_simple_query 失败。
+
+## 性能命令
+LABEL=before|after ROWS=20000 BATCH=500 ROUNDS=3000 QUERY_ROUNDS=200 \
+  SAMPLES=3 WARMUP=30 SKIP_LOAD=0 OUTPUT=<report.txt> bash tools/benchmark/fts_large_bench.sh
+python3 tools/benchmark/fts_large_bench_score.py <report.txt>
+
+## 测量口径
+- before/after 交替执行 3 对，每对独立重启实例并重建 20000 行数据
+- 计数契约：query_cn_hits / query_beng_hits / query_mixed_hits / query_limit_hits
+  必须分别为 8001 / 11000 / 7332 / 20，6 次运行全部满足
+- 控制项 select1_avg_ms（空查询往返）用于检测系统漂移：0.1846ms → 0.1847ms，可视为持平
+- 官方计分以 2026-07-07 CI 五轮基线为参照（build_ik_all 35.28s / query_cn 16.66ms 量级）；
+  本机绝对值远低于该基线，before 与 after 的 mean_improvement 均约 78%～80%，
+  score 被 clamp 到 100，无法在官方分数上区分优化前后。
+  因此本交付的有效信号是同机成对中位数比较：
+  tokenize 约 +9.0%，build 约 +0.8%，query 约 +0.6%。
+
+## 已知差异与风险
+- partitioned_simple_query 的失败点仅为 EXPLAIN 中 nl_params 编号（金样 :0，本机 :1）；
+  用 baseline 二进制 a918d84e… 复跑得到同一处差异，判定为 pre-existing，与本次改动无关。
+- 语义等价性：重复词负载（24 行英文 + 12 行中文，含 1～4 次重复 token）在
+  baseline 与 after 二进制上输出逐字节一致（verify-diff.log 中 diff_exit=0）。
+- 本次只改 ObAddWord::groupby_word 的哈希更新路径；issue 中列出的其他候选
+  （Beng 每 token 分配、tokenize 每次新建 arena、字典缓存等）未改动，
+  避免引入无法用现有用例覆盖的行为变化。
+- 单点改动的收益有限：建索引与查询指标处于测量噪声范围内，仅分词指标有稳定提升。
+
+## 临时产物（不随仓库交付）
+- /tmp/fts-ab/：原始 before/after 报告与 .log
+- /mnt/d/tmp/*.sh：本轮执行脚本（build_fts.sh、corr_check.sh、score_all.sh 等）

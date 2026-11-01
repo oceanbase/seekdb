@@ -1,0 +1,53 @@
+# FTS tuning incremental rebuild
+# branch: feat/fts-tuning  head: 5bce9e0
+# command: make -j8 (after touching src/storage/fts/ob_fts_stop_word.cpp)
+# started: 2026-11-01T19:05:33+08:00
+[  0%] Built target seekdb_jemalloc_build
+[  1%] Built target rust_staticlibs_build
+[  7%] Built target zstd_1_3_8_objs
+[  7%] Built target generate_syspack_source
+[  7%] Built target oblib_lib_simd
+[  7%] Built target restore
+[  8%] Built target oblib_lib_bitmap
+[  9%] Built target oblib_rpc
+[ 10%] Built target oblib_grpc
+[ 14%] Built target oblib_common
+[ 14%] Built target ob_standby
+[ 14%] Built target ob_storage_tablet_autoincrement_state
+[ 15%] Built target ob_logservice
+[ 16%] Built target ob_storage_simd
+[ 16%] Built target ob_standby_runtime
+[ 20%] Built target ob_share_extra
+[ 21%] Built target ob_main
+[ 22%] Built target zstd_1_3_8
+[ 23%] Built target ob_malloc_object
+[ 24%] Built target malloc_hook
+[ 24%] Built target ob_data_plane
+[ 24%] Built target ob_query
+[ 24%] Built target ob_sql_simd
+[ 29%] Built target ob_sql_extra
+[ 35%] Built target ob_sql_server_parser_objects
+[ 35%] Built target syspack_source
+[ 35%] Built target ob_malloc
+[ 36%] Built target compress
+[ 40%] Built target ob_rootserver
+[ 40%] Built target ob_sql_server_parser_static
+[ 42%] Built target ob_pl
+[ 46%] Built target oblib_lib
+[ 46%] Built target oblib
+[ 52%] Built target ob_server
+[ 53%] Building CXX object src/storage/CMakeFiles/ob_storage.dir/Unity/unity_ob_storage_ob_storage_fts_0_c___cxx.cxx.o
+[ 69%] Built target ob_share
+[ 69%] Built target ob_share_static
+[ 88%] Built target ob_sql
+[ 89%] Built target ob_sql_static
+[100%] Built target ob_storage
+[100%] Linking CXX static library libob_storage_static.a
+[100%] Built target ob_storage_static
+[100%] Built target oceanbase_static
+[100%] Linking CXX executable seekdb
+[100%] Built target seekdb
+[100%] Built target observer
+# exit: 0
+# finished: 2026-11-01T19:05:44+08:00
+# binary: 1332326688 Nov 1 19:05
