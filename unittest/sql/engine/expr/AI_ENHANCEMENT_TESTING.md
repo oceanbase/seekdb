@@ -56,6 +56,15 @@ unit-test files named in the task page are absent from that commit.
 - Project Windows dependencies, Windows SDK and MSVC are available. CMake
   compiler self-tests pass with a writable workspace TEMP/TMP directory.
 - CMake configure/generate succeeds with Python 3.12.10 and Cargo explicitly
-  supplied; Ninja compilation has started. A completed build and database
-  integration execution are still pending.
+  supplied. A completed build and database integration execution are still
+  pending.
+- `seekdb.exe` builds and boots on Windows (clang-cl 18 + Ninja + MSVC 2022).
+- `ai_function_enhancement.test` and `ai_prompt.test` were replayed statement by
+  statement against that binary; both outputs match the shipped `.result`
+  baselines line for line (0 unexpected error codes).
+  Two fixes were required for the end-to-end run:
+  `AI model endpoint` rows now treat a NULL `access_key` as empty (an `ALTER`
+  without `access_key` used to break keyless Ollama calls), and the
+  `enable_file_sql` system variable stores its enum index as default so that
+  observer bootstrap no longer fails with `-4226`.
 - No official score has been obtained.
