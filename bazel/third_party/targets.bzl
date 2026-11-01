@@ -24,7 +24,6 @@ SDK_HEADERS = {
     "libxml2_headers": _headers("libxml2", ["include/libxml2"]),
     "mariadb_headers": _headers("mariadb", ["include", "include/mariadb"]),
     "openssl_headers": _headers("openssl"),
-    "protobuf_c_headers": _headers("protobuf-c"),
     "protobuf_cpp_headers": _headers("google/protobuf"),
     "grpc_headers": {
         "hdrs": ["include/" + directory + "/**/*." + extension for directory in ["grpc", "grpc++", "grpcpp"] for extension in _HEADER_EXTENSIONS],
@@ -58,7 +57,6 @@ SDK_IMPORTS.update({
     name: {"static_library": "lib/" + archive}
     for name, archive in {
         "libxml2": "libxml2.a",
-        "protobuf_c": "libprotobuf-c.a",
         "curl": "libcurl.a",
         "lzma": "liblzma.a",
     }.items()
@@ -88,7 +86,6 @@ _WINDOWS_SHARED = {
     "zlib": ("lib/zlib.lib", "bin/zlib1.dll", []),
     "iconv": ("lib/iconv.lib", "bin/iconv-2.dll", []),
     "libxml2": ("lib/libxml2.lib", "bin/libxml2.dll", [":zlib", ":iconv"]),
-    "protobuf_c": ("lib/protobuf-c.lib", "bin/protobuf-c.dll", []),
     "curl": ("lib/libcurl.lib", "bin/libcurl.dll", [":zlib"]),
     "abseil_dll": ("lib/abseil_dll.lib", "bin/abseil_dll.dll", []),
     "protobuf_cpp": ("lib/libprotobuf.lib", "bin/libprotobuf.dll", [":absl", ":utf8_range"]),
@@ -104,7 +101,6 @@ _WINDOWS_HEADER_LIBRARIES = {
     "curl_headers": [":curl"],
     "libxml2_headers": [":libxml2"],
     "openssl_headers": [":libssl"],
-    "protobuf_c_headers": [":protobuf_c"],
     "protobuf_cpp_headers": [":protobuf_cpp"],
     "grpc_headers": [":grpc"],
     "roaring_headers": [":roaring"],
@@ -192,7 +188,7 @@ def sdk_aliases():
     native.alias(name = "protoc_runtime", actual = "@third_party_native//:protoc_runtime")
     cc_library(
         name = "base_libraries",
-        deps = [":libcrypto", ":libssl", ":libxml2", ":protobuf_c"] + select({
+        deps = [":libcrypto", ":libssl", ":libxml2"] + select({
             "@platforms//os:emscripten": [],
             "@platforms//os:windows": [":curl", ":zlib"],
             "//conditions:default": [":curl", ":lzma", ":zlib"],

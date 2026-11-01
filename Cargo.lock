@@ -899,6 +899,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mvt"
+version = "0.1.0"
+dependencies = [
+ "cxx",
+ "prost",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1218,6 +1226,7 @@ dependencies = [
  "in-process",
  "local",
  "logger",
+ "mvt",
  "regex-engine",
  "sql-nio",
  "standby-rpc",

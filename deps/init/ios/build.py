@@ -11,15 +11,13 @@ import shlex
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_PACKAGES = ("zlib", "openssl", "curl", "lzma", "libxml2", "protobuf-c")
+DEFAULT_PACKAGES = ("zlib", "openssl", "curl", "lzma", "libxml2")
 
 PACKAGES = {
     "lzma": ("5.4.7", "https://codeload.github.com/tukaani-project/xz/tar.gz/refs/tags/v5.4.7",
              "87ef1bb0183ce477ba3ddb2700000b4c1e723f8d984e8f678dddcb11c5bf4f99"),
     "libxml2": ('2.10.4', 'https://codeload.github.com/GNOME/libxml2/tar.gz/refs/tags/v2.10.4',
         '6f6fb27f91bb65f9d7196e3c616901b3e18a7dea31ccc2ae857940b125faa780'),
-    "protobuf-c": ('1.4.1', 'https://codeload.github.com/protobuf-c/protobuf-c/tar.gz/refs/tags/v1.4.1',
-        '99be336cdb15dfc5827efe34e5ac9aaa962e2485db547dd254d2a122a7d23102'),
 
     "curl": ("8.12.1", "https://curl.se/download/curl-8.12.1.tar.gz",
              "7b40ea64947e0b440716a4d7f0b7aa56230a5341c8377d7b609649d4aea8dbcf"),
@@ -188,28 +186,6 @@ def build_libxml2(source, build, prefix, sdk, options, environment):
     run(["make", "-C", "include", "install"], build, environment)
 
 
-def build_protobuf_c(source, build, prefix, sdk, options, environment):
-    """Compile the C runtime without running host protocol generators."""
-    implementation = source / "protobuf-c/protobuf-c.c"
-    headers = [source / "protobuf-c/protobuf-c.h"]
-    destination = prefix / "lib/libprotobuf-c.a"
-    header_directory = prefix / "include/protobuf-c"
-    triple = "arm64-apple-ios" + options.deployment_target
-    if options.simulator:
-        triple += "-simulator"
-    obj = build / "protobuf-c.o"
-    archive = build / destination.name
-    run(["xcrun", "clang", "-target", triple, "-isysroot", sdk, "-O2", "-fPIC",
-         "-I" + str(source), "-c", implementation, "-o", obj], ROOT, environment)
-    run(["xcrun", "ar", "rcs", archive, obj], ROOT, environment)
-    verify_archive(archive, options.simulator, environment)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    header_directory.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(archive, destination)
-    for header in headers:
-        shutil.copy2(header, header_directory / header.name)
-
-
 PACKAGE_OUTPUTS = {
     "zlib": ("lib/libz.a", "include/zlib.h", "include/zconf.h"),
     "openssl": ("lib/libssl.a", "lib/libcrypto.a", "include/openssl/ssl.h"),
@@ -217,7 +193,6 @@ PACKAGE_OUTPUTS = {
     "lzma": ("lib/liblzma.a", "include/lzma.h"),
     "libxml2": ("lib/libxml2.a", "include/libxml2/libxml/parser.h",
                 "include/libxml2/libxml/xmlversion.h"),
-    "protobuf-c": ("lib/libprotobuf-c.a", "include/protobuf-c/protobuf-c.h"),
 }
 
 
@@ -315,8 +290,7 @@ def main():
         source = source_package(name, environment)
         build.mkdir(parents=True, exist_ok=True)
         {"zlib": build_zlib, "openssl": build_openssl, "curl": build_curl,
-         "lzma": build_lzma, "libxml2": build_libxml2,
-         "protobuf-c": build_protobuf_c}[name](source, build, prefix, sdk, options, environment)
+         "lzma": build_lzma, "libxml2": build_libxml2}[name](source, build, prefix, sdk, options, environment)
         outputs = installed_output_hashes(name, prefix)
         if outputs is None:
             raise RuntimeError("Missing installed dependency outputs: " + name)

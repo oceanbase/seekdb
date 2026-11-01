@@ -12,6 +12,7 @@ default = ["native-network"]
 native-network = ["sql-nio/native-network"]
 
 [dependencies]
+mvt = { path = "../mvt" }
 sql-nio = { path = "../sql-nio", default-features = false }
 logger = { path = "../logger" }
 config = { path = "../config" }

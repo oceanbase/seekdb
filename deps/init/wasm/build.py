@@ -68,21 +68,6 @@ def build_libxml2(prefix, spec, jobs):
     subprocess.run(["emmake", "make", "-C", "include", "install"], cwd=build, check=True)
 
 
-def build_protobuf_c(prefix, spec):
-    source = locked_source(prefix, spec, ".tar.gz", "protobuf-c archive checksum mismatch")
-    obj = source / "protobuf-c.o"
-    subprocess.run([
-        "emcc", "-Oz", "-pthread", "-c", str(source / "protobuf-c/protobuf-c.c"),
-        "-o", str(obj),
-    ], check=True)
-    lib = prefix / "lib"
-    lib.mkdir(exist_ok=True)
-    subprocess.run(["emar", "rcs", str(lib / "libprotobuf-c.a"), str(obj)], check=True)
-    headers = prefix / "include/protobuf-c"
-    headers.mkdir(parents=True, exist_ok=True)
-    (headers / "protobuf-c.h").write_bytes((source / "protobuf-c/protobuf-c.h").read_bytes())
-
-
 def header_variant(patch, digest, fields):
     # Native bundles for different hosts may carry differently packaged copies.
     for variant in [patch] + patch.get("variants", []):
@@ -99,11 +84,11 @@ def copy_headers(source, prefix, manifest):
     patched = {patch["path"]: patch for patch in patches}
     trees = [(name, name) for name in (
         "fast_float", "rapidjson", "curl",
-        "boost", "protobuf-c", "libxml2")]
+        "boost", "libxml2")]
     trees += [("libxml2/libxml", "libxml")]
     for source_tree, target_tree in trees:
         tree = source / source_tree
-        if source_tree.startswith("libxml2") or source_tree == "protobuf-c":
+        if source_tree.startswith("libxml2"):
             # xmlversion.h describes compiled features. Never pair the native
             # configuration header with the Wasm library.
             tree = prefix / "include" / source_tree
@@ -200,7 +185,6 @@ def main():
     dependencies = json.loads(Path(__file__).with_name("dependencies.json").read_text())
     build_openssl(prefix, dependencies["openssl"], args.jobs)
     build_libxml2(prefix, dependencies["libxml2"], args.jobs)
-    build_protobuf_c(prefix, dependencies["protobuf_c"])
     prepare_headers(repo / "deps/3rd/usr/local/oceanbase/deps/devel/include", prefix, dependencies)
 
     # Bazel consumes this prepared thread/exception ABI cache read-only.

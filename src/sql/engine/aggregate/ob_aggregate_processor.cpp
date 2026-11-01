@@ -7340,7 +7340,7 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
         } else if (mvt_res.geom_name_.case_compare(tmp_obj[i + 1].get_string()) == 0) {
           mvt_res.geom_idx_ = i;
         } else if (OB_FAIL(ob_write_string(allocator, tmp_obj[i + 1].get_string(), key_name, true))) {
-        } else if (OB_FAIL(mvt_res.keys_.push_back(key_name))) {
+        } else if (OB_FAIL(mvt_res.add_key(key_name))) {
         }
       } else if (!mvt_res.feature_id_name_.empty() && mvt_res.feat_id_idx_ == UINT32_MAX
                 && mvt_res.feature_id_name_.case_compare(tmp_obj[i + 1].get_string()) == 0
@@ -7350,7 +7350,7 @@ int ObAggregateProcessor::init_asmvt_result(ObIAllocator &allocator,
       } else if (!expr->obj_meta_.is_json() // json type will be expanded
                 && !expr->obj_meta_.is_enum_or_set()
                 && OB_FAIL(ob_write_string(allocator, tmp_obj[i + 1].get_string(), key_name, true))) {
-      } else if (!expr->obj_meta_.is_json() && !expr->obj_meta_.is_enum_or_set() && OB_FAIL(mvt_res.keys_.push_back(key_name))) {
+      } else if (!expr->obj_meta_.is_json() && !expr->obj_meta_.is_enum_or_set() && OB_FAIL(mvt_res.add_key(key_name))) {
       }
     } else if (!is_param_done) {
       ObObjType type = tmp_obj[i].get_type();
