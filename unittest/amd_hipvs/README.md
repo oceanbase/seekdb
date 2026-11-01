@@ -44,7 +44,9 @@ python benchmark.py --cpu-only --rows 200 --dim 16 --queries 20 --k 10 \
 
 JSON保存每轮耗时、SQL参数、查询计划、Recall、ID覆盖、数据指纹及服务器软件/硬件信息，同名Markdown便于阅读。不能把本工具随机资料换成更少数据/更低精度来宣称满足统一评测。
 
-每轮显式设置并回读会话变量 `ob_hnsw_ef_search`，因为会话默认值 64 会覆盖索引声明中的搜索宽度。正式 Recall@K 和首查询使用双方共同配置的值，不自适应提高召回分数。全部 ID 自检使用同一搜索宽度，只有未命中的自身向量会以 `min(160000, max(ef_search, rows))` 重试；报告记录重试数量。这项完整性诊断不计入构建耗时，也不代替正常搜索宽度下的 Recall@K。
+每轮显式设置并回读会话变量 `ob_hnsw_ef_search`，因为会话默认值 64 会覆盖索引声明中的搜索宽度。正式 Recall@K 和首查询使用双方共同配置的值，不自适应提高召回分数。全部 ID 自检先使用同一搜索宽度；只有未命中的自身向量才提高诊断搜索宽度重试。
+
+seekdb 的 VSAG 适配层还将实际搜索宽度限制为 `min(ef_search, max(1000, 10*K))`，所以仅把会话变量设为 10000、仍查询 `LIMIT 1`，实际宽度只有 1000。重试设置 `ef=min(160000,max(配置值,rows))`，并使用 `K=min(rows,max(1,ceil(ef/10)))` 取回足够候选，仍要求首个返回项为自身准确 ID 且距离为 0，同时校验所有候选 ID、距离、排序及查询计划。报告分别记录请求宽度、适配层生效宽度、重试 K、重试数量和最多 20 个未命中样本。两条路径使用同一规则；这项完整性诊断不计入构建耗时，也不代替配置宽度下的 Recall@K。不将近似查询未命中直接断言为存储中缺少向量。
 
 基线在 DDL 刚结束时可能尚未读取到新的快照 LOB。首查询只针对 4016/4138 重置事务快照后有限重试，所有重试时间均计入构建耗时，两条路径使用同一规则。最终仍必须取得真实 ANN 结果并通过质量检查。
 
@@ -84,6 +86,24 @@ bash unittest/amd_hipvs/test_gpu_export.sh /workspace/amd-build
 该检查实际生成两份 GPU 图，再用 seekdb 相同版本的 VSAG 加载；验证全部输入 ID、
 精确 L2 的 Recall@10、流序列化恢复及恢复后的新增向量。0.95 是该检查自定的功能阈值，
 不是赛事评分门槛。该程序不测量 SQL 端到端构建加速比。
+
+## 独立实例完整复现
+
+在赛事 `seekdb-hipvs` 工作区使用本提交构建数据库。新启动的模板可能没有 RPM 解包工具，Ubuntu 中先安装：
+
+```bash
+apt-get update
+apt-get install -y --no-install-recommends rpm2cpio cpio wget make g++ python3-venv
+bash build.sh release --init --make -j8
+python3 -m venv --system-site-packages /workspace/amd-validation-python
+/workspace/amd-validation-python/bin/python -m pip install -r unittest/amd_hipvs/requirements.txt
+/workspace/amd-validation-python/bin/python unittest/amd_hipvs/run_cloud_validation.py \
+  --workspace /workspace --output /workspace/amd-validation-results --port 2883
+```
+
+构建另需仓库要求的 Rust 工具链；网络受限时可使用对应工具链及公开 Cargo 缓存离线构建。完整控制器在随机新数据目录运行本仓库二进制，固定 8 个 CPU、8 GiB 内存预算和 4 GiB 日志盘；拒绝占用中的端口和已有输出目录。它验证真实 GPU 图、SQL 创建索引、进程重启后的结果一致性、增量插入/删除，以及 200×16 和 10000×128 各三轮 CPU/GPU 构建。样例门槛 0.90、规模及参数为本地复现配置，非赛事统一评分配置。
+
+`status.json` 保存阶段、进程、源码/脚本/二进制哈希，`driver.log` 保存进度，逐轮 JSON/Markdown 保留原始测量。发生错误仍保留报告并返回非零退出码；进程退出后数据目录留存。运行完成后应把报告与环境记录下载到本地，云端实例工作盘的保留策略需以平台为准。
 
 ## 退出状态与限制
 

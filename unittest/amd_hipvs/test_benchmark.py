@@ -11,7 +11,42 @@ import numpy as np
 from benchmark import (assess_results, exact_neighbors, fingerprint, generate_data,
                        identifier, match_evidence, parse_options, query_sql,
                        summarize, validate_comparable, log_position, evidence_from_log,
-                       first_query_when_ready)
+                       first_query_when_ready, coverage_retry_settings, coverage_query_result)
+
+
+class CoverageDiagnosticTests(unittest.TestCase):
+    def test_ten_thousand_node_retry_reaches_requested_breadth(self):
+        ef, k = coverage_retry_settings(10000, 200)
+        self.assertEqual((ef, k), (10000, 1000))
+        # Regression: LIMIT 1 had silently capped the purported full traversal
+        # at 1000. This assertion uses the actual seekdb adaptor's constraint.
+        self.assertLess(min(ef, max(1000, 10 * 1)), 10000)
+        self.assertEqual(min(ef, max(1000, 10 * k)), 10000)
+
+    def test_diagnostic_query_stays_within_input_and_sql_limits(self):
+        for rows, configured, expected_effective in ((128, 200, 200), (2, 200, 200),
+                                                    (10001, 200, 10001), (200000, 200, 160000),
+                                                    (10000, 160000, 100000)):
+            with self.subTest(rows=rows, configured=configured):
+                ef, k = coverage_retry_settings(rows, configured)
+                self.assertGreaterEqual(k, 1)
+                self.assertLessEqual(k, min(rows, 16384))
+                self.assertEqual(min(ef, max(1000, 10 * k)), expected_effective)
+                self.assertGreaterEqual(expected_effective, min(rows, 160000))
+
+    def test_self_match_requires_correct_first_id_and_zero_distance(self):
+        doc_id = 2**53 + 99
+        matched, detail = coverage_query_result([(doc_id, 0), (17, 1)], doc_id, 2, {doc_id, 17})
+        self.assertTrue(matched)
+        self.assertEqual(detail, {"returned_id": doc_id, "distance": 0.0})
+        self.assertFalse(coverage_query_result([(17, .2), (doc_id, .4)], doc_id, 2, {doc_id, 17})[0])
+        self.assertFalse(coverage_query_result([(doc_id, .01), (17, 1)], doc_id, 2, {doc_id, 17})[0])
+
+    def test_wider_retry_rejects_invalid_rows_including_later_neighbors(self):
+        for own in ([(17, 0)], [(17, 0), (99, 1)], [(17, 0), (17, 1)],
+                    [(17, 0), (21.0, 1)], [(17, 0), (21, math.nan)]):
+            with self.subTest(own=own), self.assertRaises(ValueError):
+                coverage_query_result(own, 17, 2, {17, 21})
 
 
 class IndexReadinessTests(unittest.TestCase):

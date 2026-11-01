@@ -151,7 +151,7 @@ def exact_neighbors(vectors, queries, ids, k: int):
 def assess_results(results, truth, allowed_ids, k: int) -> dict:
     if not truth or len(results) != len(truth):
         raise ValueError("Result/query count mismatch")
-    allowed = set(map(int, allowed_ids))
+    allowed = allowed_ids if isinstance(allowed_ids, set) else set(map(int, allowed_ids))
     recalls = []
     for rows, expected in zip(results, truth):
         if len(rows) != k:
@@ -262,6 +262,29 @@ def vector_json(value) -> str:
     return json.dumps(np.asarray(value, dtype=np.float32).tolist(), separators=(",", ":"), allow_nan=False)
 
 
+def coverage_retry_settings(rows: int, configured_ef: int) -> tuple[int, int]:
+    """Diagnostic breadth and result count for seekdb's min(ef,max(1000,10*K)) cap.
+
+    A LIMIT 1 query cannot exercise ef > 1000 even if the session variable is
+    larger. Widen only the completeness diagnostic, never the timed/recall query.
+    """
+    if rows < 1 or not 1 <= configured_ef <= 160000:
+        raise ValueError("Invalid coverage diagnostic shape or search breadth")
+    ef = min(160000, max(configured_ef, rows))
+    k = min(rows, max(1, (ef + 9) // 10))
+    return ef, k
+
+
+def coverage_query_result(rows, expected_id: int, expected_count: int, allowed_ids: set[int]):
+    """Validate a self-query completely and return its exact first ID/distance."""
+    # Recall is not used here: this diagnostic's one truth item is the input
+    # itself, but every returned row still needs the normal safety checks.
+    assess_results([rows], [[expected_id]], allowed_ids, expected_count)
+    actual_id, distance = int(rows[0][0]), float(rows[0][1])
+    return actual_id == expected_id and abs(distance) < 1e-6, {
+        "returned_id": actual_id, "distance": distance}
+
+
 def first_query_when_ready(connection, cursor, sql, values, max_retries=10):
     """Bound the baseline's post-DDL snapshot visibility retries inside the timer."""
     failures = []
@@ -345,34 +368,56 @@ def run_round(connection, report, mode, number, vectors, queries, ids, truth, op
         coverage_started = time.perf_counter()
         report["active_operation"] = f"{mode}/{number}: full ID coverage"
         # Coverage is a completeness diagnostic, distinct from Recall@K at the
-        # configured search breadth. Retry only missed self matches at full
-        # breadth; every input is still queried, with the same rules in both modes.
-        coverage_ef = min(160000, max(int(options["ef_search"]), cfg["rows"]))
+        # configured search breadth. Every input is still queried in both modes.
+        coverage_ef, coverage_k = coverage_retry_settings(cfg["rows"], int(options["ef_search"]))
         found = 0
         missed = []
+        missed_examples = []
+        coverage_plan = None
+        allowed_ids = set(map(int, ids))
         self_sql = query_sql(table, index, 1)
         for position, (vector, doc_id) in enumerate(zip(vectors, ids), 1):
             parameter = vector_json(vector)
             cursor.execute(self_sql, (parameter, parameter))
             own = cursor.fetchall()
-            if len(own) == 1 and int(own[0][0]) == int(doc_id) and abs(float(own[0][1])) < 1e-6:
+            matched, detail = coverage_query_result(own, int(doc_id), 1, allowed_ids)
+            if matched:
                 found += 1
             else:
                 missed.append((parameter, int(doc_id)))
+                if len(missed_examples) < 20:
+                    missed_examples.append({"expected_id": int(doc_id), "initial": detail})
             if position % 1000 == 0:
                 print(f"{mode}/{number}: checked {position}/{len(ids)} input IDs", flush=True)
         if missed:
             cursor.execute("SET SESSION ob_hnsw_ef_search=%s", (coverage_ef,))
-            for parameter, doc_id in missed:
-                cursor.execute(self_sql, (parameter, parameter))
+            cursor.execute("SELECT @@session.ob_hnsw_ef_search")
+            if int(cursor.fetchone()[0]) != coverage_ef:
+                raise RuntimeError("Coverage diagnostic session search breadth did not take effect")
+            retry_sql = query_sql(table, index, coverage_k)
+            parameter = missed[0][0]
+            cursor.execute("EXPLAIN " + retry_sql, (parameter, parameter))
+            coverage_plan = "\n".join(str(row[0]) for row in cursor.fetchall())
+            if "VECTOR INDEX" not in coverage_plan.upper() or index.lower() not in coverage_plan.lower():
+                raise RuntimeError("Coverage retry does not use the requested vector index")
+            for position, (parameter, doc_id) in enumerate(missed):
+                cursor.execute(retry_sql, (parameter, parameter))
                 own = cursor.fetchall()
-                if len(own) == 1 and int(own[0][0]) == doc_id and abs(float(own[0][1])) < 1e-6:
+                matched, detail = coverage_query_result(own, doc_id, coverage_k, allowed_ids)
+                if position < len(missed_examples):
+                    missed_examples[position]["retry"] = detail
+                    missed_examples[position]["retry_matched"] = matched
+                if matched:
                     found += 1
         result = {"mode": mode, "round": number, "table_name": table, "index_name": index,
                   "raw_load_sec": load_sec, "ddl_sec": ddl_sec, "build_sec": build_sec,
                   "readiness_retry_codes": readiness_retries,
                   "query_ef_search": int(options["ef_search"]), "coverage_ef_search": coverage_ef,
                   "coverage_retry_count": len(missed),
+                  "coverage_initial_effective_ef_search": min(int(options["ef_search"]), 1000),
+                  "coverage_retry_limit": coverage_k,
+                  "coverage_retry_effective_ef_search": min(coverage_ef, max(1000, 10 * coverage_k)),
+                  "coverage_missed_examples": missed_examples, "coverage_query_plan": coverage_plan,
                   "query_sec": query_sec, "coverage_sec": time.perf_counter() - coverage_started,
                   "coverage_found": found, "quality": quality, "vector_plan_verified": vector_plan,
                   "query_plan": plan, "with": options}
