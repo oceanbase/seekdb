@@ -341,6 +341,10 @@ public:
   struct ExprArrayScope
   {
     ExprArrayScope() : saved_(ObExpr::get_serialize_array()) {}
+    // A frame and its following tree/input records share this pointer-index
+    // directory. Nested frame helpers restore to this same outer binding.
+    explicit ExprArrayScope(const ObExprFrameInfo &info) : ExprArrayScope()
+    { ObExpr::get_serialize_array() = &info.rt_exprs_; }
     ~ExprArrayScope() { ObExpr::get_serialize_array() = saved_; }
     ObIArray<ObExpr> *saved_;
   };

@@ -28,6 +28,16 @@ namespace oceanbase
 namespace common
 {
 
+namespace {
+bool same_topk_physical_meta(const SqlTypeMeta &left, const SqlTypeMeta &right)
+{
+  return left.get_type() == right.get_type()
+      && left.get_cs_level() == right.get_cs_level()
+      && left.get_cs_type() == right.get_cs_type()
+      && left.get_scale() == right.get_scale();
+}
+}
+
 struct Compare
 {
   Compare(): ret_(OB_SUCCESS) {}
@@ -66,6 +76,43 @@ struct CopyableComparer
 int ObTopKFrequencyHistograms::create_topk_fre_items(const SqlTypeMeta *obj_meta/*default null*/)
 {
   int ret = OB_SUCCESS;
+  if (!is_need_merge_topk_hist()) {
+    ObSEArray<ObTopkItem, 16> staged;
+    if (!used_list_.empty() && (!has_datum_meta_ || obj_meta == nullptr
+        || !same_topk_physical_meta(datum_meta_, *obj_meta))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(staged.reserve(used_list_.count()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
+      ObTopkDatumItem *item = static_cast<ObTopkDatumItem *>(used_list_.at(i));
+      alignas(8) char scratch[64];
+      ObDatum physical;
+      DatumValue view;
+      ObTopkItem output;
+      if (item == nullptr) { ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(DatumParameterCodec::export_native_value(item->datum_, datum_meta_,
+          physical, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(sql::ResultRowView::project_value(physical, datum_meta_,
+          ObDatum::get_sql_value_datum_map_type(datum_meta_.get_type()), SqlTypeMeta(), view, true))) {
+      } else if (OB_FAIL(clone_typed_value(view, output.col_obj_, topk_buf_))) {
+      } else {
+        output.fre_times_ = item->fre_times_;
+        output.delta_ = item->delta_;
+        ret = staged.push_back(output);
+      }
+    }
+    if (OB_SUCC(ret) && !staged.empty()) { ret = sort_topk_fre_items(staged); }
+    while (OB_SUCC(ret) && staged.count() > item_size_) { staged.pop_back(); }
+    topk_fre_items_.set_allocator(&topk_buf_);
+    if (OB_SUCC(ret)) { ret = topk_fre_items_.reserve(staged.count()); }
+    if (OB_SUCC(ret)) {
+      topk_fre_items_.clear();
+      for (int64_t i = 0; OB_SUCC(ret) && i < staged.count(); ++i) {
+        ret = topk_fre_items_.push_back(staged.at(i)); // Capacity is already reserved.
+      }
+    }
+    return ret;
+  }
   topk_fre_items_.set_allocator(&topk_buf_);
   if (OB_FAIL(topk_fre_items_.prepare_allocate(used_list_.count()))) {
   }
@@ -77,22 +124,6 @@ int ObTopKFrequencyHistograms::create_topk_fre_items(const SqlTypeMeta *obj_meta
       } else {
         topk_fre_items_.at(i) = *topk_item;
         ret = clone_typed_value(topk_item->col_obj_, topk_fre_items_.at(i).col_obj_, topk_buf_);
-      }
-    } else {
-      ObTopkDatumItem *datum_item = NULL;
-      if (OB_ISNULL(datum_item = static_cast<ObTopkDatumItem *>(used_list_.at(i))) ||
-          OB_ISNULL(datum_item->datum_) ||
-          OB_ISNULL(obj_meta)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        DatumValue view;
-        if (OB_FAIL(sql::ResultRowView::project_value(*datum_item->datum_, *obj_meta,
-                ObDatum::get_sql_value_datum_map_type(obj_meta->get_type()), SqlTypeMeta(), view, true))) {
-        } else if (OB_FAIL(clone_typed_value(view, topk_fre_items_.at(i).col_obj_, topk_buf_))) {
-        } else {
-          topk_fre_items_.at(i).fre_times_ = datum_item->fre_times_;
-          topk_fre_items_.at(i).delta_ = datum_item->delta_;
-        }
       }
     }
   }
@@ -129,6 +160,8 @@ void ObTopKFrequencyHistograms::reset_memory_usage()
   topk_buf_.reset();
   obj_buf1_.reset();
   obj_buf2_.reset();
+  datum_meta_.reset();
+  has_datum_meta_ = false;
 }
 
 int ObTopKFrequencyHistograms::merge_distribute_top_k_fre_items(const DatumValue &obj)
@@ -190,85 +223,106 @@ int ObTopKFrequencyHistograms::merge_distribute_top_k_fre_items(const DatumValue
   return ret;
 }
 
-int ObTopKFrequencyHistograms::add_top_k_frequency_item(uint64_t datum_hash, const ObDatum &datum)
+int ObTopKFrequencyHistograms::add_top_k_frequency_item(
+    uint64_t datum_hash, const ObDatum &datum, const SqlTypeMeta &actual_meta)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(window_size_ <= 0 ||
-                  item_size_ <= 0 ||
-                  get_max_reserved_item_size() >= window_size_ ||
-                  is_need_merge_topk_hist())) {
+  Datum borrowed;
+  const int64_t reserved = get_max_reserved_item_size();
+  if (window_size_ <= 0 || item_size_ <= 0 || reserved >= window_size_
+      || is_need_merge_topk_hist() || N_ < 0) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (reserved > INT64_MAX - window_size_ || window_size_ > INT64_MAX / 100000
+      || N_ == INT64_MAX) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if ((actual_meta.is_null() && !datum.is_null())
+      || (has_datum_meta_ && !same_topk_physical_meta(datum_meta_, actual_meta))) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(DatumParameterCodec::borrow_native_value(datum, actual_meta, borrowed))) {
   } else if (!datum.is_null()) {
-    if (OB_UNLIKELY(!topk_map_.created())) {
-      int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
-      if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode"))) {
-      } else {
-        set_the_obj_memory_use_limit();
-      }
+    if (!by_pass_ && !topk_map_.created()) {
+      if (OB_FAIL(topk_map_.create(window_size_ + reserved, "TopkMap", "TopkNode"))) {
+      } else { set_the_obj_memory_use_limit(); }
     }
-    if (OB_SUCC(ret)) {
-      ++ N_;
-      if (!by_pass_) {
-        ObTopkBaseItem *item = NULL;
-        if (NULL != (item = get_entry(datum_hash))) {
-          item->fre_times_ ++;
-        } else if (OB_FAIL(add_entry(datum_hash, datum, 1L, bucket_num_ - 1))) {
-        }
-        if (OB_SUCC(ret) && N_ % window_size_ == 0) {
-          if (OB_FAIL(shrink_topk_items())) {
-          }
-        }
-      } else {
-        ++ disuse_cnt_;
-      }
-    }
+    if (OB_SUCC(ret)) { ret = add_datum_item(datum_hash, borrowed, actual_meta); }
   }
   return ret;
 }
 
-int ObTopKFrequencyHistograms::add_batch_items(const char **payloads, int32_t *lens, uint64_t *hash_val, int64_t batch_cnt)
+int ObTopKFrequencyHistograms::add_batch_items(
+    const char **payloads, int32_t *lens, uint64_t *hash_val, int64_t batch_cnt,
+    const SqlTypeMeta &actual_meta)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(window_size_ <= 0 ||
-                  item_size_ <= 0 ||
-                  get_max_reserved_item_size() >= window_size_ ||
-                  is_need_merge_topk_hist())) {
+  const int64_t reserved = get_max_reserved_item_size();
+  if (window_size_ <= 0 || item_size_ <= 0 || reserved >= window_size_
+      || is_need_merge_topk_hist() || batch_cnt < 0 || N_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(payloads) ||
-             OB_ISNULL(lens) ||
-             OB_ISNULL(hash_val)) {
+  } else if (reserved > INT64_MAX - window_size_ || window_size_ > INT64_MAX / 100000
+      || batch_cnt > INT64_MAX - N_) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (OB_ISNULL(payloads) || OB_ISNULL(lens) || OB_ISNULL(hash_val)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(!by_pass_ && !topk_map_.created())) {
-    int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
-    if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode"))) {
-    } else {
-      set_the_obj_memory_use_limit();
-    }
+  } else if (has_datum_meta_ && !same_topk_physical_meta(datum_meta_, actual_meta)) {
+    ret = OB_INVALID_ARGUMENT;
   }
-  if (OB_SUCC(ret)) {
-    if (!by_pass_) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < batch_cnt; ++i) {
-        ++N_;
-        if (!by_pass_) {
-          ObTopkBaseItem *item = NULL;
-          ObDatum datum;
-          datum.ptr_ = payloads[i];
-          datum.pack_ = lens[i];
-          if (NULL != (item = get_entry(hash_val[i]))) {
-            item->fre_times_ ++;
-          } else if (OB_FAIL(add_entry(hash_val[i], datum, 1L, bucket_num_ - 1))) {
-          }
-          if (OB_SUCC(ret) && N_ % window_size_ == 0) {
-            if (OB_FAIL(shrink_topk_items())) {
+  // Keep the historical successful-prefix policy; each cell validates before
+  // its own publication, and a later error does not roll back earlier cells.
+  if (OB_SUCC(ret) && !by_pass_ && !topk_map_.created()) {
+    if (OB_FAIL(topk_map_.create(window_size_ + reserved, "TopkMap", "TopkNode"))) {
+    } else { set_the_obj_memory_use_limit(); }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < batch_cnt; ++i) {
+    ObDatum physical; physical.ptr_ = payloads[i]; physical.pack_ = lens[i];
+    Datum borrowed;
+    if (actual_meta.is_null() && !physical.is_null()) { ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(DatumParameterCodec::borrow_native_value(physical, actual_meta, borrowed))) {
+    } else { ret = add_datum_item(hash_val[i], borrowed, actual_meta); }
+  }
+  return ret;
+}
+
+int ObTopKFrequencyHistograms::add_datum_item(
+    uint64_t hash, const Datum &datum, const SqlTypeMeta &meta)
+{
+  int ret = OB_SUCCESS;
+  const int64_t previous_count = N_;
+  const bool previous_has_meta = has_datum_meta_;
+  const SqlTypeMeta previous_meta = datum_meta_;
+  ObTopkBaseItem *previous = by_pass_ ? nullptr : get_entry(hash);
+  const int64_t previous_frequency = previous == nullptr ? 0 : previous->fre_times_;
+  if (N_ == INT64_MAX || (previous != nullptr && previous_frequency == INT64_MAX)) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (by_pass_) {
+    ++N_; ++disuse_cnt_;
+  } else {
+    if (previous != nullptr) { ++previous->fre_times_; }
+    else { ret = add_entry(hash, datum, meta, 1L, bucket_num_ - 1); }
+    if (OB_SUCC(ret)) {
+      ++N_;
+      if (N_ % window_size_ == 0) { ret = shrink_topk_items(); }
+      if (OB_FAIL(ret)) {
+        // Datum-mode window shrinking stages all failing work before it drops
+        // an item. Roll back this cell, not earlier successful batch cells.
+        N_ = previous_count;
+        if (previous != nullptr) { previous->fre_times_ = previous_frequency; }
+        else {
+          ObTopkBaseItem *inserted = get_entry(hash);
+          if (used_list_.empty() || used_list_.at(used_list_.count() - 1) != inserted) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            const int erase_ret = topk_map_.erase_refactored(hash);
+            if (erase_ret != OB_SUCCESS) { ret = erase_ret; }
+            else {
+              used_list_.pop_back();
+              const int free_ret = free_list_.push_back(inserted); // Reserved by add_entry.
+              if (free_ret != OB_SUCCESS) { ret = free_ret; }
             }
           }
-        } else {
-          ++disuse_cnt_;
+          datum_meta_ = previous_meta;
+          has_datum_meta_ = previous_has_meta;
         }
       }
-    } else {
-      N_ += batch_cnt;
-      disuse_cnt_ += batch_cnt;
     }
   }
   return ret;
@@ -326,22 +380,41 @@ ObTopkBaseItem* ObTopKFrequencyHistograms::get_entry(const uint64_t hash_val)
 }
 
 int ObTopKFrequencyHistograms::add_entry(const uint64_t &datum_hash,
-                                         const ObDatum &datum,
+                                         const Datum &datum,
+                                         const SqlTypeMeta &actual_meta,
                                          const int64_t fre_time,
                                          const int64_t delta)
 {
   int ret = OB_SUCCESS;
-  ObTopkDatumItem *item = NULL;
-  if (OB_ISNULL(item = alloc_topk_datum_item()) ||
-      OB_ISNULL(item->datum_ = OB_NEWx(ObDatum, (&get_allocator())))) {
+  Datum owned;
+  ObTopkDatumItem *item = nullptr;
+  if (has_datum_meta_ && !same_topk_physical_meta(datum_meta_, actual_meta)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (used_list_.count() == INT64_MAX) { ret = OB_SIZE_OVERFLOW;
+  } else if (OB_FAIL(used_list_.reserve(used_list_.count() + 1))) {
+  } else if (free_list_.count() == INT64_MAX) { ret = OB_SIZE_OVERFLOW;
+  } else if (OB_FAIL(free_list_.reserve(free_list_.count() + 1))) {
+  } else if (OB_FAIL(DatumParameterCodec::copy_native_value_span(
+      datum, actual_meta, get_allocator(), owned))) {
+  } else if (OB_ISNULL(item = alloc_topk_datum_item())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     item->fre_times_ = fre_time;
     item->delta_ = delta;
     item->datum_hash_ = datum_hash;
-    if (OB_FAIL(item->datum_->deep_copy(datum, get_allocator()))) {
-    } else if (OB_FAIL(topk_map_.set_refactored(datum_hash, reinterpret_cast<uint64_t>(item)))) {
+    item->datum_ = owned;
+    if (OB_FAIL(topk_map_.set_refactored(datum_hash, reinterpret_cast<uint64_t>(item)))) {
     } else if (OB_FAIL(used_list_.push_back(item))) {
+      (void)topk_map_.erase_refactored(datum_hash);
+    } else if (!has_datum_meta_) {
+      datum_meta_ = actual_meta;
+      has_datum_meta_ = true;
+    }
+    if (OB_FAIL(ret)) {
+      // An item taken from the free list must remain reusable after failed
+      // insertion. This slot was reserved before payload ownership changed.
+      const int free_ret = free_list_.push_back(item);
+      if (free_ret != OB_SUCCESS) { ret = free_ret; }
     }
   }
   return ret;
@@ -423,12 +496,28 @@ int ObTopKFrequencyHistograms::shrink_topk_items()
   int64_t pos = 0;
   int64_t rm_cnt = 0;
   int64_t max_rm_cnt = used_list_.count() - get_max_reserved_item_size();
+  if (!is_need_merge_topk_hist()) {
+    if (obj_memory_limit_ < MIN_OBJ_MEMORY_LIMIT || obj_memory_limit_ > MAX_OBJ_MEMORY_LIMIT) {
+      return OB_ERR_UNEXPECTED;
+    }
+    if (free_list_.count() > INT64_MAX - used_list_.count()) { return OB_SIZE_OVERFLOW; }
+    if (OB_FAIL(free_list_.reserve(free_list_.count() + used_list_.count()))) { return ret; }
+    for (int64_t i = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
+      ObTopkDatumItem *item = static_cast<ObTopkDatumItem *>(used_list_.at(i));
+      if (item == nullptr || item->fre_times_ < 0 || item->delta_ < 0
+          || get_entry(item->datum_hash_) != item) { ret = OB_ERR_UNEXPECTED; }
+    }
+    if (OB_SUCC(ret) && get_allocator().used() > obj_memory_limit_) { ret = shrink_memory_usage(); }
+    if (OB_FAIL(ret)) { return ret; }
+    // After these checks, filtering uses existing map nodes and reserved list
+    // capacity only. Failed compaction has not changed counters or entries.
+  }
   for (int64_t i  = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
     ObTopkBaseItem *item = NULL;
     if (OB_ISNULL(item = used_list_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (item->fre_times_ + item->delta_ > bucket_num_ ||
-               rm_cnt >= max_rm_cnt) {
+    } else if ((!is_need_merge_topk_hist() && item->delta_ > INT64_MAX - item->fre_times_)
+               || item->fre_times_ + item->delta_ > bucket_num_ || rm_cnt >= max_rm_cnt) {
       used_list_.at(pos++) = item;
     } else if (OB_FAIL(remove_entry(item))) {
     } else {
@@ -447,7 +536,7 @@ int ObTopKFrequencyHistograms::shrink_topk_items()
       if (OB_UNLIKELY(obj_memory_limit_ < MIN_OBJ_MEMORY_LIMIT ||
                       obj_memory_limit_ > MAX_OBJ_MEMORY_LIMIT)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_UNLIKELY(get_allocator().used() > obj_memory_limit_)) {
+      } else if (is_need_merge_topk_hist() && OB_UNLIKELY(get_allocator().used() > obj_memory_limit_)) {
         if (OB_FAIL(shrink_memory_usage())) {
         }
       }
@@ -522,6 +611,31 @@ int ObTopKFrequencyHistograms::shrink_memory_usage()
   int ret = OB_SUCCESS;
   ObIAllocator &next_allocator = get_next_allocator();
   ObIAllocator &curr_allocator = get_allocator();
+  if (!is_need_merge_topk_hist()) {
+    ObSEArray<Datum, 16> staged;
+    if (!used_list_.empty() && !has_datum_meta_) { ret = OB_ERR_UNEXPECTED; }
+    if (OB_SUCC(ret)) { ret = staged.reserve(used_list_.count()); }
+    for (int64_t i = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
+      ObTopkDatumItem *item = static_cast<ObTopkDatumItem *>(used_list_.at(i));
+      Datum owned;
+      if (item == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else if (OB_FAIL(DatumParameterCodec::copy_native_value_span(
+          item->datum_, datum_meta_, next_allocator, owned))) {
+      } else { ret = staged.push_back(owned); }
+    }
+    if (OB_FAIL(ret)) {
+      next_allocator.reset(); // This inactive arena has no published values.
+    } else {
+      // Hash keys and topk_buf_ item addresses did not change. Keep the map;
+      // no allocation or callback remains after native payload publication.
+      for (int64_t i = 0; i < used_list_.count(); ++i) {
+        static_cast<ObTopkDatumItem *>(used_list_.at(i))->datum_ = staged.at(i);
+      }
+      curr_allocator.reset();
+      swap_allocator();
+    }
+    return ret;
+  }
   ObSEArray<DatumValue, 16> candidates;
   if (is_need_merge_topk_hist()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
@@ -544,18 +658,6 @@ int ObTopKFrequencyHistograms::shrink_memory_usage()
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(topk_map_.set_refactored(topk_item->obj_hash_,
                                                   reinterpret_cast<uint64_t>(topk_item)))) {
-      }
-    } else {
-      ObTopkDatumItem *datum_item = NULL;
-      ObDatum *tmp_datum = NULL;
-      if (OB_ISNULL(datum_item = static_cast<ObTopkDatumItem *>(used_list_.at(i))) ||
-          OB_ISNULL(tmp_datum = datum_item->datum_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_ISNULL(datum_item->datum_ = OB_NEWx(ObDatum, (&next_allocator)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(datum_item->datum_->deep_copy(*tmp_datum, next_allocator))) {
-      } else if (OB_FAIL(topk_map_.set_refactored(datum_item->datum_hash_,
-                                                  reinterpret_cast<uint64_t>(datum_item)))) {
       }
     }
   }

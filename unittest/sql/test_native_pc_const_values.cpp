@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 #include <gtest/gtest.h>
+#include "lib/charset/ob_charset.h"
 #include "common/datum/datum_copy_plan.h"
 #include "common/datum/datum_parameter_array.h"
 #include "common/datum/native_typed_datum.h"
@@ -42,6 +43,14 @@ namespace oceanbase { namespace sql {
 // No fixture implementation of either production algorithm.
 struct NativePcConstValuesTestPeer
 {
+  static int install_parameter_info(ObPlanSet &set, const ObPhysicalPlan &plan)
+  { return set.params_info_.assign(plan.get_params_info()); }
+  static ObParamInfo &parameter_info(ObPlanSet &set, int64_t index)
+  { return set.params_info_.at(index); }
+  static void match_all_parameters(ObPlanSet &set, bool enabled)
+  { set.need_match_all_params_ = enabled; }
+  static int install_equal(ObPlanSet &set, common::ObIArray<ObPCParamEqualInfo> &equal)
+  { return set.set_equal_param_constraint(equal); }
   static int install(ObPlanSet &set, common::ObIArray<ObPCConstParamInfo> &values, bool possible)
   { return set.set_const_param_constraint(values, possible); }
   static int match(ObPlanSet &set, const ParamStore &values, bool &matched)
@@ -794,4 +803,365 @@ TEST(NativePcConstValues, cache_parameter_info_reads_final_metadata_and_sparse_g
   EXPECT_EQ(ObExtendType, merged.at(3).type_); EXPECT_EQ(ObIntType, merged.at(3).ext_real_type_);
   EXPECT_EQ(20, merged.at(3).precision_); EXPECT_EQ(0, merged.at(3).scale_);
   EXPECT_TRUE(merged.at(1).is_typed_null_value_); EXPECT_EQ(7, merged.at(1).scale_);
+}
+
+
+namespace {
+class NativePcRuntimeMatch : public ::testing::Test
+{
+public:
+  static void SetUpTestCase() { ASSERT_EQ(OB_SUCCESS, ObCharset::init_charset()); }
+};
+
+// Real ResultSet/ExecContext/PlanCtx lifetimes and the existing cache epoch seam.
+// The generic matcher remains an independent control for the runtime entry.
+class RuntimeParameterMatchContext
+{
+public:
+  RuntimeParameterMatchContext()
+      : result_(session_, owner_, access_),
+        cache_context_(ObString("SELECT ?"), PC_PS_MODE, owner_, sql_context_, result_.get_exec_context()),
+        controls_(ObWrapperAllocator(&owner_))
+  {
+    sql_context_.session_info_ = &session_;
+    result_.get_exec_context().set_my_session(&session_);
+  }
+
+  int install_info(const ParamStore &inputs)
+  {
+    ObPhysicalPlan plan;
+    int ret = plan.set_params_info(inputs);
+    if (ret == OB_SUCCESS) { ret = NativePcConstValuesTestPeer::install_parameter_info(set_, plan); }
+    return ret;
+  }
+
+  int bind(const ParamStore &inputs)
+  {
+    int ret = result_.get_exec_context().create_physical_plan_ctx();
+    if (ret == OB_SUCCESS) { ret = install_info(inputs); }
+    if (ret == OB_SUCCESS) { ret = controls_.reserve(inputs.count()); }
+    for (int64_t i = 0; ret == OB_SUCCESS && i < inputs.count(); ++i) {
+      DatumParameter owned;
+      // Own the control's physical array graph as well as scalar/reference
+      // spans; its generic matcher needs no runtime Type sidecar.
+      ret = DatumParameterArray::clone_parameter(inputs.at(i), owned, owner_);
+      if (ret == OB_SUCCESS) { ret = controls_.push_back(owned); }
+    }
+    if (ret == OB_SUCCESS) {
+      parameters().set_original_param_cnt(inputs.count());
+      ret = parameters().assign_parameter_inputs(inputs);
+    }
+    if (ret == OB_SUCCESS) { ret = parameters().init_datum_param_store(); }
+    return ret;
+  }
+
+  ObPhysicalPlanCtx &parameters() { return *result_.get_exec_context().get_physical_plan_ctx(); }
+  int native_match(bool &same) { return set_.match_runtime_params_info(&parameters(), cache_context_, same); }
+  int generic_match(bool &same) { return set_.match_params_info(&controls_, cache_context_, same); }
+
+  ConstValueAllocator owner_;
+  ObSQLSessionInfo session_;
+  CountingCacheAccessService access_;
+  ObResultSet result_;
+  ObSqlCtx sql_context_;
+  ObPlanCacheCtx cache_context_;
+  ParamStore controls_;
+  ObSqlPlanSet set_;
+};
+
+void expect_runtime_and_generic(RuntimeParameterMatchContext &context, int status, bool expected)
+{
+  bool generic = !expected;
+  bool runtime = !expected;
+  EXPECT_EQ(status, context.generic_match(generic));
+  EXPECT_EQ(status, context.native_match(runtime));
+  EXPECT_EQ(expected, generic);
+  EXPECT_EQ(expected, runtime);
+}
+
+void finish_parameter_declaration(DatumParameter &value, ObPrecision precision, ObScale scale)
+{
+  value.set_accuracy(ObAccuracy(precision, scale));
+  value.set_scale(scale);
+  value.set_param_meta(value.get_type_meta());
+}
+}
+
+TEST_F(NativePcRuntimeMatch, prepared_ordinary_values_match_after_source_retirement)
+{
+  ObArenaAllocator source, descriptors;
+  ParamStore inputs{ObWrapperAllocator(descriptors)};
+  DatumParameter integer, unsigned_integer, real, number, text, binary;
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(INT64_MIN, source));
+  finish_parameter_declaration(integer, 19, 0);
+  ASSERT_EQ(OB_SUCCESS, unsigned_integer.set_uint64(UINT64_MAX, source));
+  finish_parameter_declaration(unsigned_integer, 20, 0);
+  ASSERT_EQ(OB_SUCCESS, real.set_double(1.5, source));
+  finish_parameter_declaration(real, 17, 1);
+  ASSERT_EQ(OB_SUCCESS, add_number("123.25", number, source));
+  finish_parameter_declaration(number, 65, 2);
+  char text_bytes[] = "metadata-owned";
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString(sizeof(text_bytes) - 1, text_bytes), source));
+  text.set_collation_type(CS_TYPE_UTF8MB4_BIN); text.set_collation_level(CS_LEVEL_COERCIBLE);
+  text.set_length(64); text.set_scale(0); text.set_param_meta(text.get_type_meta());
+  char binary_bytes[] = {'a', '\0', 'b'};
+  ASSERT_EQ(OB_SUCCESS, binary.set_varchar(ObString(sizeof(binary_bytes), binary_bytes), source));
+  binary.set_collation_type(CS_TYPE_BINARY); binary.set_length(16); binary.set_scale(0);
+  binary.set_param_meta(binary.get_type_meta());
+  for (const DatumParameter *input : {&integer, &unsigned_integer, &real, &number, &text, &binary}) {
+    ASSERT_EQ(OB_SUCCESS, inputs.push_back(*input));
+  }
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(decimal_parameter(12345, 4, 9, 2, source)));
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(decimal_parameter(-12345, 16, 27, 7, source)));
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(decimal_parameter(123, 8, PRECISION_UNKNOWN_YET, 2, source)));
+  DatumParameter untyped_null;
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(untyped_null));
+  RuntimeParameterMatchContext context;
+  ASSERT_EQ(OB_SUCCESS, context.bind(inputs));
+  ASSERT_TRUE(context.parameters().native_parameters_ready());
+  source.reset(); MEMSET(text_bytes, 'x', sizeof(text_bytes)); MEMSET(binary_bytes, 'x', sizeof(binary_bytes));
+  EXPECT_EQ(INT64_MIN, context.parameters().get_native_parameter(0)->get_int());
+  EXPECT_EQ(UINT64_MAX, context.parameters().get_native_parameter(1)->get_uint());
+  EXPECT_EQ(ObString("metadata-owned"), context.parameters().get_native_parameter(4)->get_string());
+  EXPECT_EQ(ObString(3, "a\0b"), context.parameters().get_native_parameter(5)->get_string());
+  EXPECT_EQ(DatumRepresentation::Inline64, context.parameters().get_native_parameter_type(6)->canonical_representation());
+  EXPECT_EQ(0, context.parameters().get_native_parameter(6)->length());
+  EXPECT_EQ(DatumRepresentation::Reference, context.parameters().get_native_parameter_type(7)->canonical_representation());
+  EXPECT_EQ(16, context.parameters().get_native_parameter(7)->length());
+  const int64_t calls = context.owner_.calls_;
+  context.owner_.fail_at_ = calls + 1;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+  EXPECT_EQ(calls, context.owner_.calls_);
+  EXPECT_EQ(DatumRepresentation::Reference, context.parameters().get_native_parameter_type(8)->canonical_representation());
+  EXPECT_EQ(8, context.parameters().get_native_parameter(8)->length());
+  EXPECT_EQ(PRECISION_UNKNOWN_YET, context.parameters().get_parameter_metadata(8)->accuracy_.get_precision());
+  EXPECT_TRUE(context.parameters().get_native_parameter(9)->is_null());
+  EXPECT_EQ(ObNullType, context.parameters().get_parameter_metadata(9)->param_meta_.get_type());
+  auto &integer_info = NativePcConstValuesTestPeer::parameter_info(context.set_, 0);
+  integer_info.is_typed_null_value_ = true;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+}
+
+TEST_F(NativePcRuntimeMatch, original_typed_null_metadata_and_cached_gates_remain_distinct)
+{
+  ObArenaAllocator source, descriptors;
+  ParamStore inputs{ObWrapperAllocator(descriptors)};
+  DatumParameter input;
+  SqlTypeMeta declared; declared.set_decimal_int(7);
+  input.set_type_meta(declared); input.set_null(); input.set_param_meta(declared);
+  input.set_accuracy(ObAccuracy(27, 7));
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(input));
+  RuntimeParameterMatchContext context;
+  ASSERT_EQ(OB_SUCCESS, context.bind(inputs));
+  const auto *metadata = context.parameters().get_parameter_metadata(0);
+  ASSERT_NE(nullptr, metadata);
+  EXPECT_EQ(ObNullType, metadata->type_meta_.get_type());
+  EXPECT_EQ(CS_TYPE_BINARY, metadata->type_meta_.get_collation_type());
+  EXPECT_EQ(ObDecimalIntType, metadata->param_meta_.get_type());
+  EXPECT_EQ(27, metadata->accuracy_.get_precision()); EXPECT_EQ(7, metadata->accuracy_.get_scale());
+  auto &cached = NativePcConstValuesTestPeer::parameter_info(context.set_, 0);
+  const ObParamInfo original = cached;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+  cached.is_typed_null_value_ = false;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  cached = original; cached.type_ = ObIntType;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  cached = original; cached.col_type_ = CS_TYPE_UTF8MB4_BIN;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  cached = original; ++cached.precision_;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  cached = original; ++cached.scale_;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  cached.flag_.ignore_scale_check_ = true;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+  ++cached.precision_;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  cached = original; cached.flag_.is_boolean_ = true;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  cached.flag_.need_to_check_type_ = false;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+  NativePcConstValuesTestPeer::match_all_parameters(context.set_, true);
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+}
+
+TEST_F(NativePcRuntimeMatch, cached_boolean_flag_controls_the_existing_payload_cast)
+{
+  ObArenaAllocator source, descriptors;
+  // These producers include semantic inline Decimal, which must be exported
+  // through its real Type before the existing physical boolean evaluator.
+  std::vector<DatumParameter> cases;
+  std::vector<bool> truth;
+  for (int64_t v : {int64_t(0), int64_t(-2)}) {
+    DatumParameter input; ASSERT_EQ(OB_SUCCESS, input.set_int(v, source));
+    finish_parameter_declaration(input, 19, 0); cases.push_back(input); truth.push_back(v != 0);
+  }
+  for (const char *v : {"0", "7"}) {
+    DatumParameter input; ASSERT_EQ(OB_SUCCESS, input.set_varchar(ObString::make_string(v), source));
+    input.set_collation_type(CS_TYPE_UTF8MB4_BIN); input.set_collation_level(CS_LEVEL_COERCIBLE);
+    input.set_length(16); input.set_scale(0); input.set_param_meta(input.get_type_meta());
+    cases.push_back(input); truth.push_back(*v != '0');
+  }
+  DatumParameter null_integer;
+  ASSERT_EQ(OB_SUCCESS, null_integer.set_int(1, source)); finish_parameter_declaration(null_integer, 19, 0);
+  null_integer.set_null(); cases.push_back(null_integer); truth.push_back(false);
+  cases.push_back(decimal_parameter(123, 4, 9, 2, source)); truth.push_back(true);
+  for (size_t i = 0; i < cases.size(); ++i) {
+    SCOPED_TRACE(i);
+    ParamStore inputs{ObWrapperAllocator(descriptors)};
+    ASSERT_EQ(OB_SUCCESS, inputs.push_back(cases[i]));
+    RuntimeParameterMatchContext context;
+    ASSERT_EQ(OB_SUCCESS, context.bind(inputs));
+    auto &cached = NativePcConstValuesTestPeer::parameter_info(context.set_, 0);
+    cached.flag_.need_to_check_bool_value_ = false;
+    cached.flag_.expected_bool_value_ = !truth[i];
+    ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+    cached.flag_.need_to_check_bool_value_ = true;
+    ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+    cached.flag_.expected_bool_value_ = truth[i];
+    ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+  }
+}
+
+TEST_F(NativePcRuntimeMatch, sparse_group_uses_its_envelope_and_special_values_keep_fallback)
+{
+  ObArenaAllocator source, descriptors;
+  ParamStore inputs{ObWrapperAllocator(descriptors)};
+  auto *array = DatumParameterArray::alloc(source, 2); ASSERT_NE(nullptr, array);
+  SqlType leaf_types[2];
+  for (int64_t i = 0; i < 2; ++i) {
+    ASSERT_EQ(OB_SUCCESS, array->data_[i].set_int(41 + i, source));
+    finish_parameter_declaration(array->data_[i], 19, 0);
+    ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(array->data_[i].get_type_meta(), array->data_[i].get_accuracy(), leaf_types[i]));
+    ASSERT_EQ(OB_SUCCESS, array->set_element_type_borrowed(i, leaf_types[i], source));
+  }
+  array->element_.set_obj_type(ObIntType); array->element_.set_accuracy(ObAccuracy(19, 0));
+  DatumParameter group;
+  ASSERT_EQ(OB_SUCCESS, group.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, source));
+  group.set_param_meta(group.get_type_meta());
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(group));
+  RuntimeParameterMatchContext grouped;
+  ASSERT_EQ(OB_SUCCESS, grouped.bind(inputs));
+  inputs.reuse(); source.reset();
+  ASSERT_NE(nullptr, grouped.parameters().get_group_parameter_input(0));
+  EXPECT_EQ(41, grouped.parameters().get_native_parameter(0)->get_int());
+  auto &cached_group = NativePcConstValuesTestPeer::parameter_info(grouped.set_, 0);
+  EXPECT_EQ(ObExtendType, cached_group.type_); EXPECT_EQ(ObIntType, cached_group.ext_real_type_);
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(grouped, OB_SUCCESS, true));
+  ++cached_group.scale_;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(grouped, OB_SUCCESS, false));
+  cached_group.flag_.need_to_check_extend_type_ = false;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(grouped, OB_SUCCESS, true));
+
+  DatumParameter question; ASSERT_EQ(OB_SUCCESS, question.set_unknown(3, source));
+  question.set_param_meta(question.get_type_meta());
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(question));
+  RuntimeParameterMatchContext unknown;
+  ASSERT_EQ(OB_SUCCESS, unknown.bind(inputs));
+  ASSERT_EQ(ObUnknownType, unknown.parameters().get_parameter_metadata(0)->type_meta_.get_type());
+  EXPECT_EQ(8, unknown.parameters().get_native_parameter(0)->length());
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(unknown, OB_SUCCESS, true));
+
+  inputs.reuse(); DatumParameter integer;
+  ASSERT_EQ(OB_SUCCESS, integer.set_int(42, source)); finish_parameter_declaration(integer, 19, 0);
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(integer));
+  RuntimeParameterMatchContext states;
+  ASSERT_EQ(OB_SUCCESS, states.bind(inputs));
+  const SqlType *type = states.parameters().get_native_parameter_type(0);
+  const DatumParameterMetadata attributes = *states.parameters().get_parameter_metadata(0);
+  for (int i = 0; i < 3; ++i) {
+    Datum state;
+    if (i == 0) { state.set_min(); } else if (i == 1) { state.set_max(); } else { state.set_nop(); }
+    ASSERT_EQ(OB_SUCCESS, states.parameters().set_runtime_parameter(0, state, *type, attributes));
+    const auto *actual = states.parameters().get_parameter_metadata(0);
+    ASSERT_NE(nullptr, actual); EXPECT_EQ(ObExtendType, actual->type_meta_.get_type());
+    ASSERT_EQ(OB_SUCCESS, states.controls_.at(0).assign_native_borrowed(state, actual->type_meta_));
+    states.controls_.at(0).set_metadata(*actual);
+    // State normalization changes the current collation to INVALID. Build
+    // the cached metadata from that actual physical state, not the old INT.
+    ASSERT_EQ(OB_SUCCESS, states.install_info(states.controls_));
+    ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(states, OB_SUCCESS, true));
+  }
+}
+
+TEST_F(NativePcRuntimeMatch, ready_count_errors_and_post_metadata_constraints_are_preserved)
+{
+  ObArenaAllocator source, descriptors;
+  ParamStore inputs{ObWrapperAllocator(descriptors)};
+  DatumParameter input; ASSERT_EQ(OB_SUCCESS, input.set_int(7, source));
+  finish_parameter_declaration(input, 19, 0);
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(input));
+  RuntimeParameterMatchContext context;
+  ASSERT_EQ(OB_SUCCESS, context.bind(inputs));
+  ObPCConstParamInfo seven;
+  ASSERT_EQ(OB_SUCCESS, seven.add_int_constant(7, source)); ASSERT_EQ(OB_SUCCESS, seven.const_idx_.push_back(0));
+  ASSERT_EQ(OB_SUCCESS, install_one(context.set_, seven));
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+  Datum replacement; replacement.set_int(8);
+  ASSERT_EQ(OB_SUCCESS, context.parameters().set_runtime_parameter(0, replacement,
+      *context.parameters().get_native_parameter_type(0), *context.parameters().get_parameter_metadata(0)));
+  ASSERT_EQ(OB_SUCCESS, context.controls_.at(0).set_int(8, context.owner_));
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+
+  ParamStore empty{ObWrapperAllocator(descriptors)};
+  ASSERT_EQ(OB_SUCCESS, context.install_info(empty));
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, false));
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(input));
+  ASSERT_EQ(OB_SUCCESS, context.install_info(inputs));
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_ERR_UNEXPECTED, false));
+  context.parameters().reset_datum_param_store();
+  bool same = true;
+  EXPECT_EQ(OB_STATE_NOT_MATCH, context.native_match(same)); EXPECT_FALSE(same);
+
+  RuntimeParameterMatchContext equal_context;
+  ASSERT_EQ(OB_SUCCESS, equal_context.bind(inputs));
+  ObSEArray<ObPCParamEqualInfo, 1> equal;
+  ObPCParamEqualInfo pair; pair.first_param_idx_ = 0; pair.second_param_idx_ = 1; pair.use_abs_cmp_ = false;
+  ASSERT_EQ(OB_SUCCESS, equal.push_back(pair));
+  ASSERT_EQ(OB_SUCCESS, NativePcConstValuesTestPeer::install_equal(equal_context.set_, equal));
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(equal_context, OB_SUCCESS, true));
+  ASSERT_EQ(OB_SUCCESS, equal_context.parameters().set_runtime_parameter(1, replacement,
+      *equal_context.parameters().get_native_parameter_type(1), *equal_context.parameters().get_parameter_metadata(1)));
+  ASSERT_EQ(OB_SUCCESS, equal_context.controls_.at(1).set_int(8, equal_context.owner_));
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(equal_context, OB_SUCCESS, false));
+}
+
+
+TEST_F(NativePcRuntimeMatch, failed_owned_reference_replacement_keeps_the_ready_match_and_can_retry)
+{
+  ObArenaAllocator source, descriptors;
+  ParamStore inputs{ObWrapperAllocator(descriptors)};
+  DatumParameter integer; ASSERT_EQ(OB_SUCCESS, integer.set_int(7, source));
+  finish_parameter_declaration(integer, 19, 0);
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(integer));
+  RuntimeParameterMatchContext context;
+  ASSERT_EQ(OB_SUCCESS, context.bind(inputs));
+  const Datum *slot = context.parameters().get_native_parameter(0);
+  const SqlType *type = context.parameters().get_native_parameter_type(0);
+  const DatumParameterMetadata attributes = *context.parameters().get_parameter_metadata(0);
+  std::string bytes(257, 'r');
+  DatumParameter text;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString(bytes.size(), bytes.data()), source));
+  text.set_collation_type(CS_TYPE_UTF8MB4_BIN); text.set_collation_level(CS_LEVEL_COERCIBLE);
+  text.set_length(512); text.set_scale(0); text.set_param_meta(text.get_type_meta());
+  SqlType text_type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(text.get_type_meta(), text.get_accuracy(), text_type));
+  context.owner_.fail_at_ = context.owner_.calls_ + 1;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, context.parameters().set_runtime_parameter(
+      0, text.datum_, text_type, text.get_metadata()));
+  EXPECT_TRUE(context.parameters().native_parameters_ready());
+  EXPECT_EQ(slot, context.parameters().get_native_parameter(0));
+  EXPECT_EQ(type, context.parameters().get_native_parameter_type(0));
+  EXPECT_EQ(7, slot->get_int());
+  EXPECT_EQ(attributes.accuracy_.get_accuracy(), context.parameters().get_parameter_metadata(0)->accuracy_.get_accuracy());
+  EXPECT_EQ(attributes.param_meta_.get_type(), context.parameters().get_parameter_metadata(0)->param_meta_.get_type());
+  context.owner_.fail_at_ = -1;
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
+  ASSERT_EQ(OB_SUCCESS, context.parameters().set_runtime_parameter(0, text.datum_, text_type, text.get_metadata()));
+  ASSERT_EQ(OB_SUCCESS, context.controls_.at(0).deep_copy(text, context.owner_));
+  inputs.reuse(); ASSERT_EQ(OB_SUCCESS, inputs.push_back(text));
+  ASSERT_EQ(OB_SUCCESS, context.install_info(inputs));
+  source.reset(); std::fill(bytes.begin(), bytes.end(), 'x');
+  const std::string expected(257, 'r');
+  EXPECT_EQ(ObString(expected.size(), expected.data()), context.parameters().get_native_parameter(0)->get_string());
+  ASSERT_NO_FATAL_FAILURE(expect_runtime_and_generic(context, OB_SUCCESS, true));
 }

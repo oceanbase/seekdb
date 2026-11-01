@@ -2004,6 +2004,7 @@ int ObMicroBlockDecoder::get_group_by_aggregate_result(
   } else {
     const int32_t group_by_col = group_by_cell.get_group_by_col_offset();
     int32_t last_agg_col_offset = INT32_MIN;
+    common::ObDatum *last_decoded_datums = nullptr;
     for (int64_t i = 0; OB_SUCC(ret) && i < group_by_cell.get_agg_cells().count(); ++i) {
       storage::ObAggCell *agg_cell =  group_by_cell.get_agg_cells().at(i);
       const int32_t agg_col_offset = agg_cell->get_col_offset();
@@ -2015,6 +2016,7 @@ int ObMicroBlockDecoder::get_group_by_aggregate_result(
         if (OB_FAIL(group_by_cell.eval_batch(group_by_cell.get_group_by_col_datums(), row_cap, i, true))) {
         }
       } else {
+        if (!need_get_col_datum && agg_cell->need_access_data()) { col_datums = last_decoded_datums; }
         if (need_get_col_datum) {
           if (OB_FAIL(get_col_datums(agg_col_offset, row_ids, cell_datas, row_cap, col_datums))) {
           } else if (iter_param.has_lob_column_out() && has_lob_out_row()
@@ -2026,9 +2028,15 @@ int ObMicroBlockDecoder::get_group_by_aggregate_result(
         } else if (OB_FAIL(group_by_cell.eval_batch(col_datums, row_cap, i))) {
         } else if (need_get_col_datum) {
           last_agg_col_offset = agg_col_offset;
+          last_decoded_datums = col_datums;
         }
       }
     }
+  }
+  // A decoded column is borrowed by every aggregate on that column. Retire
+  // adapter descriptors only after the complete outer consumer batch.
+  for (int64_t i = 0; i < group_by_cell.get_agg_cells().count(); ++i) {
+    group_by_cell.get_agg_cells().at(i)->release_input_views();
   }
   return ret;
 }

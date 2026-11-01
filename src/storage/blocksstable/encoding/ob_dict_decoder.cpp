@@ -731,13 +731,17 @@ int ObDictDecoder::eq_ne_operator(
     ObBitmap &result_bitmap) const
 {
   int ret = OB_SUCCESS;
-  const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+  const auto &datums = filter.get_datums();
   if (OB_UNLIKELY(result_bitmap.size() != pd_filter_info.count_
                   || datums.count() != 1
                   || filter.null_param_contained())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (meta_header_->count_ > 0) {
-    const ObDatum &filter_datum = datums.at(0);
+    alignas(8) char param_scratch[64];
+    ObDatum filter_datum;
+    if (OB_FAIL(filter.export_parameter(0, filter_datum, param_scratch, sizeof(param_scratch)))) {
+      return ret;
+    }
     const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
     const int64_t ref_bitset_size = meta_header_->count_ + 1;
     char ref_bitset_buf[sql::ObBitVector::memory_size(ref_bitset_size)];
@@ -856,7 +860,11 @@ int ObDictDecoder::comparison_operator(
     const int64_t count = meta_header_->count_;
     if (count > 0) {
       const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
-      const ObDatum &filter_datum = filter.get_datums().at(0);
+      alignas(8) char param_scratch[64];
+      ObDatum filter_datum;
+      if (OB_FAIL(filter.export_parameter(0, filter_datum, param_scratch, sizeof(param_scratch)))) {
+        return ret;
+      }
       ObDictDecoderIterator begin_it = begin(&col_ctx, filter.is_padding_mode(), col_ctx.col_header_->length_);
       ObDictDecoderIterator end_it = end(&col_ctx, filter.is_padding_mode(), col_ctx.col_header_->length_);
       ObGetFilterCmpRetFunc get_cmp_ret = get_filter_cmp_ret_func(op_type);
@@ -997,11 +1005,17 @@ int ObDictDecoder::bt_operator(
     if (count > 0) {
       ObDictDecoderIterator begin_it = begin(&col_ctx, filter.is_padding_mode(), col_ctx.col_header_->length_);
       ObDictDecoderIterator end_it = end(&col_ctx, filter.is_padding_mode(), col_ctx.col_header_->length_);
-      const common::ObIArray<common::ObDatum> &datums = filter.get_datums();
+      alignas(8) char param_scratch[2][64];
+      ObDatum datums[2];
+      if (OB_FAIL(filter.export_parameter(0, datums[0], param_scratch[0], sizeof(param_scratch[0])))) {
+        return ret;
+      } else if (OB_FAIL(filter.export_parameter(1, datums[1], param_scratch[1], sizeof(param_scratch[1])))) {
+        return ret;
+      }
       if (meta_header_->is_sorted_dict()) {
         ObDictDecoderIterator loc;
 
-        loc = std::lower_bound(begin_it, end_it, datums.at(0), [&cmp_func, &ret](const ObDatum &datum, const ObDatum &filter_datum)
+        loc = std::lower_bound(begin_it, end_it, datums[0], [&cmp_func, &ret](const ObDatum &datum, const ObDatum &filter_datum)
                                 -> bool {
                                   int cmp_res = 0;
                                   if (OB_FAIL(ret)) {
@@ -1009,7 +1023,7 @@ int ObDictDecoder::bt_operator(
                                   }
                                   return cmp_res < 0;});
         int64_t left_bound_inclusive_ref = loc - begin_it;
-        loc = std::upper_bound(begin_it, end_it, datums.at(1), [&cmp_func, &ret](const ObDatum &filter_datum, const ObDatum &datum)
+        loc = std::upper_bound(begin_it, end_it, datums[1], [&cmp_func, &ret](const ObDatum &filter_datum, const ObDatum &datum)
                                 -> bool {
                                   int cmp_res = 0;
                                   if (OB_FAIL(ret)) {
@@ -1043,9 +1057,9 @@ int ObDictDecoder::bt_operator(
         int left_cmp_res = 0;
         int right_cmp_res = 0;
         while (OB_SUCC(ret) && traverse_it != end_it) {
-          if (OB_FAIL(cmp_func(*traverse_it, datums.at(0), left_cmp_res, nullptr))) {
+          if (OB_FAIL(cmp_func(*traverse_it, datums[0], left_cmp_res, nullptr))) {
           } else if (left_cmp_res < 0) {
-          } else if (OB_FAIL(cmp_func(*traverse_it, datums.at(1), right_cmp_res, nullptr))) {
+          } else if (OB_FAIL(cmp_func(*traverse_it, datums[1], right_cmp_res, nullptr))) {
           } else if (right_cmp_res <= 0) {
             found = true;
             ref_bitset->set(dict_ref);

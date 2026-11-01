@@ -267,6 +267,9 @@ public:
   int lift_runtime_schema_version(int64_t new_schema_version);
   int check_contains_table(uint64_t db_id, common::ObString tab_name, bool &contains);
 private:
+  // Resolve the actual lookup source and bind it before PlanSet matching.
+  int prepare_lookup_parameters(ObPlanCacheCtx &pc_ctx);
+
   //used for add plan
   //check table version, view table version, merged version
   int check_value_version_for_add(const ObPlanCacheObject &cache_obj,

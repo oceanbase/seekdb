@@ -32,6 +32,13 @@ namespace oceanbase
 namespace sql
 {
 namespace {
+bool can_match_parameter_metadata(const SqlTypeMeta &meta)
+{
+  return is_valid_sql_value_type(meta.get_type())
+      && !meta.is_ext() && !meta.is_collection_sql_type()
+      && meta.get_type() != ObUserDefinedSQLType && meta.get_type() != ObUnknownType;
+}
+
 int export_runtime_parameter_view(const ObPhysicalPlanCtx &parameters, int64_t index,
                                   DatumParameter &output, char (&scratch)[64])
 {
@@ -225,10 +232,27 @@ int ObPlanSet::match_runtime_params_info(const ObPhysicalPlanCtx *params,
     // Match the original parameters
     int64_t N = params->get_parameter_count();
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < N; ++i) {
-      DatumParameter parameter;
-      alignas(8) char scratch[64];
-      if (OB_FAIL(export_runtime_parameter_view(*params, i, parameter, scratch))) {
-      } else if (OB_FAIL(match_param_info(params_info_.at(i), parameter, is_same, is_sql))) {
+      const DatumParameter *group = params->get_group_parameter_input(i);
+      const Datum *value = params->get_native_parameter(i);
+      const DatumParameterMetadata *attributes = params->get_parameter_metadata(i);
+      if (group == nullptr && (value == nullptr || attributes == nullptr)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (group == nullptr && (value->is_present() || value->is_null())
+                 && can_match_parameter_metadata(attributes->type_meta_)
+                 && can_match_parameter_metadata(attributes->param_meta_)) {
+        // Ready bindings already own their prepared value and Type. This
+        // branch compares the producer's independent attributes and NULL
+        // state; it must not wrap semantic inline Decimal as physical bytes.
+        ret = match_ordinary_param_metadata(params_info_.at(i), *attributes,
+                                           value->is_null(), is_same);
+      } else {
+        // Groups need the whole envelope, and special/extended/Unknown values
+        // retain the checked physical conversion and existing domain rules.
+        DatumParameter parameter;
+        alignas(8) char scratch[64];
+        if (OB_FAIL(export_runtime_parameter_view(*params, i, parameter, scratch))) {
+        } else if (OB_FAIL(match_param_info(params_info_.at(i), parameter, is_same, is_sql))) {
+        }
       }
     }
     // Match related user session variables
@@ -296,10 +320,14 @@ int ObPlanSet::match_runtime_params_info(const ObPhysicalPlanCtx *params,
     }
     // Match true/false, at this time the flag_ in params is the initial value, and cannot be used directly.
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < params->get_parameter_count(); ++i) {
-      DatumParameter parameter;
-      alignas(8) char scratch[64];
-      if (OB_FAIL(export_runtime_parameter_view(*params, i, parameter, scratch))) {
-      } else if (OB_FAIL(match_param_bool_value(params_info_.at(i), parameter, is_same))) {
+      // Only the cached flag requests a value check. A true check retains
+      // the prepared-Type export and original boolean cast/error semantics.
+      if (params_info_.at(i).flag_.need_to_check_bool_value_) {
+        DatumParameter parameter;
+        alignas(8) char scratch[64];
+        if (OB_FAIL(export_runtime_parameter_view(*params, i, parameter, scratch))) {
+        } else if (OB_FAIL(match_param_bool_value(params_info_.at(i), parameter, is_same))) {
+        }
       }
     } //for end
 
@@ -413,6 +441,34 @@ int ObPlanSet::match_param_info(const ObParamInfo &param_info,
   }
   return ret;
 }
+int ObPlanSet::match_ordinary_param_metadata(const ObParamInfo &param_info,
+    const DatumParameterMetadata &attributes, bool is_null, bool &is_same) const
+{
+  is_same = true;
+  if (param_info.flag_.need_to_check_type_ || need_match_all_params_) {
+    if (attributes.type_meta_.get_collation_type() != param_info.col_type_) {
+      is_same = false;
+    } else if (attributes.param_meta_.get_type() != param_info.type_) {
+      is_same = false;
+    } else if (ob_is_enumset_inner_tc(attributes.param_meta_.get_type())) {
+      is_same = false;
+    } else if (param_info.is_typed_null_value_ && !is_null) {
+      is_same = false;
+    } else if (is_null && attributes.param_meta_.get_type() != ObNullType
+               && !param_info.is_typed_null_value_) {
+      is_same = false;
+    } else if (param_info.flag_.is_boolean_ != attributes.flag_.is_boolean_) {
+      is_same = false;
+    } else {
+      is_same = param_info.flag_.ignore_scale_check_
+          || attributes.accuracy_.get_scale() == param_info.scale_;
+      is_same = is_same && match_decint_precision(param_info,
+                                                attributes.accuracy_.get_precision());
+    }
+  }
+  return OB_SUCCESS;
+}
+
 // Match true/false parameter
 int ObPlanSet::match_param_bool_value(const ObParamInfo &param_info,
                                       const DatumParameter &param,

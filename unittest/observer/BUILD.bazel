@@ -4,7 +4,7 @@ package(default_testonly = True, default_visibility = ["//visibility:private"])
 
 cc_library(
     name = "native_rowkey_filters_cases",
-    srcs = ["test_native_observer_rowkey_filters.cpp", "test_native_values_main.cpp"],
+    srcs = ["test_native_observer_rowkey_filters.cpp", "test_native_values_main.cpp", "test_native_white_filter_parameters.cpp", "test_native_storage_grouped_aggregate.cpp"],
     alwayslink = True,
     deps = ["//src/observer:observer_rowkey_filter_test_runtime", "//bazel/third_party:gtest"],
 )

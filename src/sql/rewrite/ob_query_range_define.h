@@ -20,6 +20,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "common/object/ob_object.h"
 #include "common/datum/datum_core.h"
+#include "common/datum/datum.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
 #include "share/geo/ob_geo_common.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
@@ -234,14 +235,22 @@ public:
         uint32_t reserved_:      18;
       };
     };
-    // Uses the existing four-byte padding between flags and the value slot.
+    // Historical physical metadata; it is independent of an execution SqlType.
     common::SqlTypeMeta const_meta_;
     union {
       int64_t param_idx_;
-      common::ObDatum* const_val_;
+      common::Datum const_val_;
       ObTempExpr *temp_expr_;
     };
     ObRawExpr *related_raw_expr_;
+    // Clone the physical value into owner and publish the constant slot only
+    // after success. Ordinary scalars remain inline; arrays retain their
+    // existing physical graph ownership, not an inferred execution SqlType.
+    int set_const_value(const common::Datum &value, const common::SqlTypeMeta &meta,
+                        common::ObIAllocator &owner);
+    // Synchronous boundary: scalar/state bytes borrow scratch, references
+    // borrow this entry's owner. A retaining caller must copy before returning.
+    int export_const_value(common::ObDatum &value, void *scratch, int64_t capacity) const;
     TO_STRING_KV(K_(flags));
   };
 public:

@@ -386,11 +386,22 @@ int ObDynamicSamplePieceMsgCtx::append_object_sample_data(
       CK(OB_NOT_NULL(store_row));
       if (OB_SUCC(ret)) {
         StoredDatumCell *cells = store_row->stored_cells();
+        struct alignas(8) CellScratch { char bytes_[64]; };
+        ObSEArray<CellScratch, 8> scratch;
+        OZ(scratch.prepare_allocate(piece.part_ranges_.at(m).get_range_col_cnt()));
         for (int i = 0; i < piece.part_ranges_.at(m).range_cut_.count() && OB_SUCC(ret); ++i) {
           last_store_row_.reuse();
-          for (int j = 0; j < piece.part_ranges_.at(m).range_cut_.at(i).count() && OB_SUCC(ret); ++j) {
-            cells[j] = StoredDatumCodec::encode_legacy_view(piece.part_ranges_.at(m).range_cut_.at(i).at(j));
-            store_row->row_size_ += cells[j].len_;
+          const ObPxTabletRange::DatumKey &key = piece.part_ranges_.at(m).range_cut_.at(i);
+          if (key.count() != scratch.count()) {
+            ret = OB_INVALID_ARGUMENT;
+          }
+          for (int j = 0; j < key.count() && OB_SUCC(ret); ++j) {
+            ObDatum physical;
+            if (OB_FAIL(key.at(j).export_stored_key(physical, scratch.at(j).bytes_, 64))) {
+            } else {
+              cells[j] = StoredDatumCodec::encode_legacy_view(physical);
+              store_row->row_size_ += cells[j].len_;
+            }
           }
           OZ(sample_store->add_row(last_store_row_));
         }
@@ -469,7 +480,7 @@ int ObDynamicSamplePieceMsgCtx::split_range(
     if (OB_FAIL(copied_key.reserve(sort_def_.exprs_->count()))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < sort_def_.exprs_->count(); ++i) {
-      if (OB_FAIL(copied_key.push_back(ObDatum()))) {
+      if (OB_FAIL(copied_key.push_back(ObPxRangeCell()))) {
       }
     }
     while (OB_SUCC(ret) && !sort_iter_end && tmp_key_count < expect_range_count) {
@@ -489,15 +500,7 @@ int ObDynamicSamplePieceMsgCtx::split_range(
               ret = OB_ERR_UNEXPECTED;
             } else {
               const DatumCopyPlan plan = sort_def_.exprs_->at(i)->get_datum_copy_plan();
-              int64_t bytes = 0;
-              char *buffer = nullptr;
-              int64_t position = 0;
-              if (OB_FAIL(plan.legacy_payload_size(*cur_datum, bytes))) {
-              } else if (bytes > 0 && OB_ISNULL(buffer = static_cast<char *>(exec_ctx_.get_allocator().alloc(bytes)))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else {
-                ret = plan.export_legacy(*cur_datum, copied_key.at(i), buffer, bytes, position);
-              }
+              ret = copied_key.at(i).assign_expr_owned(*cur_datum, plan, exec_ctx_.get_allocator());
             }
           }
           if (OB_SUCC(ret)) {

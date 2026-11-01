@@ -57,7 +57,6 @@ ObExprJoinFilter::ObExprJoinFilterContext::~ObExprJoinFilterContext()
   hash_funcs_.reset();
   cmp_funcs_.reset();
   cur_row_.reset();
-  legacy_cell_scratch_.reset();
   native_hash_values_.reset();
 }
 

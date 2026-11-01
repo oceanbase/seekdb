@@ -238,6 +238,8 @@ public:
   bool get_can_delay_init_datum_store() { return can_delay_init_datum_store_; }
 
 private:
+  int match_ordinary_param_metadata(const ObParamInfo &param_info,
+      const common::DatumParameterMetadata &attributes, bool is_null, bool &is_same) const;
   /**
    * @brief set const param constraints
    *

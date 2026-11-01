@@ -23,6 +23,7 @@
 #include "lib/hash/ob_hashset.h"
 #include "common/object/ob_cmp_op.h"
 #include "common/datum/ob_datum.h"
+#include "common/datum/datum_value.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/semistruct/ob_sub_column_path.h"
 #include "query/engine/expr/ob_expr.h"
@@ -959,108 +960,125 @@ private:
   int64_t decoder_capacity_;
 };
 
+// Hash entries keep a native physical pair by value. Reference bytes belong to
+// the filter allocator; neither initializer locals nor sorted slots are keys.
 class ObWhiteFilterParam
 {
 public:
   ObWhiteFilterParam()
-      : datum_(nullptr), hash_func_(nullptr), cmp_func_(nullptr), access_ctx_(nullptr)
+      : datum_(), hash_func_(nullptr), cmp_func_(nullptr), access_ctx_(nullptr), compare_ret_(nullptr)
   {}
-  ObWhiteFilterParam(const ObDatum *datum,
+  ObWhiteFilterParam(const common::DatumValue &datum,
       const common::ObDatumHashFuncType *hash_func,
       const ObDatumCmpFuncType *cmp_func,
-      const ObDatumAccessContext *access_ctx)
-    : datum_(datum),
-      hash_func_(hash_func),
-      cmp_func_(cmp_func),
-      access_ctx_(access_ctx)
+      const ObDatumAccessContext *access_ctx, int *compare_ret)
+      : datum_(datum), hash_func_(hash_func), cmp_func_(cmp_func),
+        access_ctx_(access_ctx), compare_ret_(compare_ret)
   {}
-  ~ObWhiteFilterParam() {}
   inline bool operator==(const ObWhiteFilterParam &other) const
   {
-    bool equal_ret = true;
-    if (datum_->is_null() && other.datum_->is_null()) {
-    } else if (datum_->is_null() || other.datum_->is_null()) {
-      equal_ret = false;
+    int ret = OB_SUCCESS;
+    int cmp_ret = 0;
+    bool equal_ret = false;
+    alignas(8) char left_scratch[64], right_scratch[64];
+    ObDatum left, right;
+    if (datum_.is_null() && other.datum_.is_null()) {
+      equal_ret = true;
+    } else if (datum_.is_null() || other.datum_.is_null()) {
+    } else if (OB_FAIL(datum_.export_legacy(left, left_scratch, sizeof(left_scratch)))) {
+    } else if (OB_FAIL(other.datum_.export_legacy(right, right_scratch, sizeof(right_scratch)))) {
+    } else if (OB_ISNULL(cmp_func_) || OB_ISNULL(*cmp_func_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL((*cmp_func_)(left, right, cmp_ret, access_ctx_))) {
     } else {
-      int cmp_ret = 0;
-      (*cmp_func_)(*datum_, *other.datum_, cmp_ret, access_ctx_);
       equal_ret = cmp_ret == 0;
+    }
+    if (OB_FAIL(ret) && compare_ret_ != nullptr && *compare_ret_ == OB_SUCCESS) {
+      *compare_ret_ = ret;
     }
     return equal_ret;
   }
   inline int hash(uint64_t &hash_val, uint64_t seed = 0) const
   {
     int ret = OB_SUCCESS;
-    if (OB_FAIL((*hash_func_)(*datum_, seed, seed, access_ctx_))) {
+    alignas(8) char scratch[64];
+    ObDatum view;
+    if (OB_FAIL(datum_.export_legacy(view, scratch, sizeof(scratch)))) {
+    } else if (OB_ISNULL(hash_func_) || OB_ISNULL(*hash_func_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL((*hash_func_)(view, seed, seed, access_ctx_))) {
     } else {
       hash_val = seed;
     }
     return ret;
   }
-  TO_STRING_KV(KPC_(datum), KP_(hash_func), KP_(cmp_func));
+  TO_STRING_KV(K_(datum), KP_(hash_func), KP_(cmp_func));
 private:
-  const ObDatum *datum_;
+  common::DatumValue datum_;
   const common::ObDatumHashFuncType *hash_func_;
   const ObDatumCmpFuncType *cmp_func_;
   const ObDatumAccessContext *access_ctx_;
+  int *compare_ret_;
 };
 
 class ObWhiteFilterParamHashSet
 {
 public:
   ObWhiteFilterParamHashSet()
-      : set_(), hash_func_(nullptr), cmp_func_(nullptr), access_ctx_(nullptr)
+      : set_(), hash_func_(nullptr), cmp_func_(nullptr), access_ctx_(nullptr),
+        probe_meta_(), compare_ret_(OB_SUCCESS)
   {}
-  ~ObWhiteFilterParamHashSet()
-  {
-    destroy();
-  }
+  ~ObWhiteFilterParamHashSet() { destroy(); }
   void destroy()
   {
-    if (set_.created()) {
-      (void)set_.destroy();
-    }
+    if (set_.created()) { (void)set_.destroy(); }
   }
-  inline bool created() const
-  {
-    return set_.created();
-  }
+  inline bool created() const { return set_.created(); }
   inline int create(int param_num)
   {
     ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
     return set_.create(param_num, attr);
   }
-  inline int64_t count() const
+  inline int64_t count() const { return set_.size(); }
+  inline int set_refactored(const common::DatumValue &datum, int flag = 0 /*deduplicated*/)
   {
-    return set_.size();
-  }
-  inline int set_refactored(const ObDatum &datum, int flag = 0 /*deduplicated*/)
-  {
-    ObWhiteFilterParam param(&datum, &hash_func_, &cmp_func_, access_ctx_);
-    return set_.set_refactored(param, flag);
+    compare_ret_ = OB_SUCCESS;
+    ObWhiteFilterParam param(datum, &hash_func_, &cmp_func_, access_ctx_, &compare_ret_);
+    const int ret = set_.set_refactored(param, flag);
+    return compare_ret_ != OB_SUCCESS ? compare_ret_ : ret;
   }
   inline int exist_refactored(const ObDatum &datum, bool &is_exist) const
   {
-    ObWhiteFilterParam param(&datum, &hash_func_, &cmp_func_, access_ctx_);
-    int ret = set_.exist_refactored(param);
-    if (OB_HASH_EXIST == ret) {
-      is_exist = true;
-      ret = OB_SUCCESS;
-    } else if (OB_HASH_NOT_EXIST == ret) {
-      is_exist = false;
-      ret = OB_SUCCESS;
+    int ret = OB_SUCCESS;
+    common::DatumValue probe;
+    compare_ret_ = OB_SUCCESS;
+    if (OB_FAIL(probe.assign_legacy_borrowed(datum, probe_meta_))) {
     } else {
-      STORAGE_LOG(WARN, "Failed to search in hashset", K(ret), K(param));
+      ObWhiteFilterParam param(probe, &hash_func_, &cmp_func_, access_ctx_, &compare_ret_);
+      ret = set_.exist_refactored(param);
+      if (compare_ret_ != OB_SUCCESS) {
+        ret = compare_ret_;
+      } else if (OB_HASH_EXIST == ret) {
+        is_exist = true;
+        ret = OB_SUCCESS;
+      } else if (OB_HASH_NOT_EXIST == ret) {
+        is_exist = false;
+        ret = OB_SUCCESS;
+      } else {
+        STORAGE_LOG(WARN, "Failed to search in hashset", K(ret), K(param));
+      }
     }
     return ret;
   }
   inline void set_hash_and_cmp_func(const common::ObDatumHashFuncType hash_func,
                                     const ObDatumCmpFuncType cmp_func,
-                                    const ObDatumAccessContext *access_ctx)
+                                    const ObDatumAccessContext *access_ctx,
+                                    const common::SqlTypeMeta &probe_meta)
   {
     hash_func_ = hash_func;
     cmp_func_ = cmp_func;
     access_ctx_ = access_ctx;
+    probe_meta_ = probe_meta;
   }
   TO_STRING_KV(K_(set), K_(hash_func), K_(cmp_func));
 private:
@@ -1068,6 +1086,8 @@ private:
   common::ObDatumHashFuncType hash_func_;
   ObDatumCmpFuncType cmp_func_;
   const ObDatumAccessContext *access_ctx_;
+  common::SqlTypeMeta probe_meta_;
+  mutable int compare_ret_;
 };
 
 class ObWhiteFilterSmallHashSet
@@ -1147,12 +1167,16 @@ public:
   { return filter_.get_col_ids(); }
   virtual const common::ObIArray<ObExpr *> *get_column_exprs() const override { return &filter_.column_exprs_; }
   virtual int init_evaluated_datums(bool &is_valid) override;
-  OB_INLINE const common::ObIArray<common::ObDatum> &get_datums() const
+  OB_INLINE const common::ObIArray<common::DatumValue> &get_datums() const
   { return datum_params_; }
-  OB_INLINE const common::ObDatum &get_min_param() const
+  OB_INLINE const common::DatumValue &get_min_param() const
   { return datum_params_.at(0); }
-  OB_INLINE const common::ObDatum &get_max_param() const
+  OB_INLINE const common::DatumValue &get_max_param() const
   { return datum_params_.at(datum_params_.count() - 1); }
+  // Old storage/comparator views are synchronous and borrow caller scratch.
+  int export_parameter(int64_t index, common::ObDatum &out, void *scratch, int64_t capacity) const;
+  int lower_bound_param(const common::ObDatum &probe, int64_t &position,
+                        bool &equal, int64_t offset = 0) const;
   OB_INLINE bool null_param_contained() const { return null_param_contained_; }
   virtual int exist_in_set(const common::ObDatum &datum, bool &is_exist) const;
   int exist_in_datum_array(const common::ObDatum &datum, bool &is_exist, const int64_t offset = 0) const;
@@ -1175,7 +1199,7 @@ public:
     }
   }
 protected:
-  OB_INLINE bool is_null_param(const ObDatum &datum, const SqlTypeMeta obj_meta)
+  OB_INLINE bool is_null_param(const common::DatumValue &datum, const SqlTypeMeta obj_meta)
   {
     return datum.is_null();
   }
@@ -1184,13 +1208,13 @@ protected:
   int init_param_set(const int64_t count,
                      const ObExpr *cur_arg,
                      const ObDatumAccessContext *access_ctx);
-  int add_to_param_set_and_array(const ObDatum &datum, const ObExpr *cur_arg);
+  int add_to_param_set_and_array(const common::DatumValue &datum, const ObExpr *cur_arg);
 public:
   common::ObDatumCmpFuncType cmp_func_;
 protected:
   const common::ObDatumAccessContext *datum_access_ctx_;
   bool null_param_contained_;
-  common::ObFixedArray<common::ObDatum, common::ObIAllocator> datum_params_;
+  common::ObFixedArray<common::DatumValue, common::ObIAllocator> datum_params_;
   ObWhiteFilterParamHashSet param_set_;
   ObPushdownWhiteFilterNode &filter_;
 };

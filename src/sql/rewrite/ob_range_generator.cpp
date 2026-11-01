@@ -1035,7 +1035,9 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       const auto *attributes = plan->get_parameter_metadata(info.param_idx_);
       if(info.param_idx_<0||info.param_idx_>=plan->get_parameter_count()||attributes==nullptr)ret=OB_ERR_UNEXPECTED;
       else if((ret=plan->export_runtime_parameter_legacy(info.param_idx_,evaluated,parameter_scratch,sizeof(parameter_scratch)))==OB_SUCCESS){datum=&evaluated;meta=&attributes->type_meta_;}
-    }else if(info.is_const_){datum=info.const_val_;meta=&info.const_meta_;}
+    }else if(info.is_const_){
+      if((ret=info.export_const_value(evaluated,parameter_scratch,sizeof(parameter_scratch)))==OB_SUCCESS){datum=&evaluated;meta=&info.const_meta_;}
+    }
     else if(info.is_expr_){
       if(info.temp_expr_==nullptr)ret=OB_ERR_UNEXPECTED;
       else if((ret=info.temp_expr_->eval_datum(exec_ctx,allocator,evaluated))==OB_SUCCESS){
@@ -1950,8 +1952,11 @@ int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_g
           }
         }
       } else if (expr_info.is_const_) {
-        source = expr_info.const_val_;
-        source_meta = &expr_info.const_meta_;
+        if (OB_FAIL(expr_info.export_const_value(parameter_view, parameter_scratch, sizeof(parameter_scratch)))) {
+        } else {
+          source = &parameter_view;
+          source_meta = &expr_info.const_meta_;
+        }
       }
       if (OB_FAIL(ret)) {
       } else if (source == nullptr || source_meta == nullptr) {
@@ -1959,8 +1964,8 @@ int ObRangeGenerator::generate_fast_nlj_range(const ObPreRangeGraph &pre_range_g
       } else if (source->is_null() && !expr_info.null_safe_) {
         always_false = true;
       } else {
-        // ObNewRange still owns legacy rowkeys. The runtime parameter reader
-        // stays native; adapt and own payloads only at this remaining boundary.
+        // The checked legacy view is consumed synchronously. Range bounds own
+        // their native value/reference before this local scratch expires.
         ObDatum bound = *source;
         const SqlValueDatumMapType mapping = ObDatum::get_sql_value_datum_map_type(source_meta->get_type());
         DatumValue projected;
@@ -2034,11 +2039,7 @@ int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_
         else { source_meta = &attributes->type_meta_; }
       }
     } else if (range_map.expr_final_infos_.at(start_idx).is_const_) {
-      if (range_map.expr_final_infos_.at(start_idx).const_val_ == nullptr) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        source_meta = &range_map.expr_final_infos_.at(start_idx).const_meta_;
-      }
+      source_meta = &range_map.expr_final_infos_.at(start_idx).const_meta_;
     } else {
       ret = OB_ERR_UNEXPECTED;
     }

@@ -37,6 +37,7 @@
 #include "sql/pl/ob_pl.h"
 #include "share/datum/datum_value_cast.h"
 #include "common/ob_hex_utils_base.h"
+#include "common/datum/datum_parameter_codec.h"
 
 namespace oceanbase
 {
@@ -475,6 +476,12 @@ ObAggregateProcessor::AggrCell::~AggrCell()
 // arena allocator alloc memory, it don't free
 void ObAggregateProcessor::AggrCell::destroy()
 {
+  clear_iter_value();
+  iter_buffer_ = nullptr;
+  iter_capacity_ = 0;
+  advance_collect_result_.set_null();
+  collect_buf_ = nullptr;
+  collect_buf_len_ = 0;
   if (NULL != extra_) {
     auto *&extra = extra_;
     extra->~ExtraResult();
@@ -482,31 +489,338 @@ void ObAggregateProcessor::AggrCell::destroy()
   }
 }
 
-int ObAggregateProcessor::AggrCell::deep_copy_advance_collect_result(const ObDatum &datum, ObIAllocator &alloc)
+int ObAggregateProcessor::AggrCell::reserve_iter_payload(int64_t minimum,
+    ObIAllocator &owner, char *&payload, int64_t &capacity)
 {
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  uint32_t len = datum.len_ > 0 ? datum.len_: 1;
-  if (datum.is_null()) {
-    advance_collect_result_ = datum;
-  } else {
-    if (NULL == collect_buf_ || collect_buf_len_ < len) {
-      collect_buf_len_ = next_pow2(len);
-      if (OB_ISNULL(collect_buf_ = static_cast<char *>(alloc.alloc(collect_buf_len_)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
+  constexpr int64_t prefix = 2 * sizeof(int64_t);
+  if (minimum < 0 || minimum > INT64_MAX / 2 - prefix) { return OB_SIZE_OVERFLOW; }
+  if (iter_buffer_ != nullptr) {
+    int64_t stored_capacity = 0, magic = 0;
+    MEMCPY(&stored_capacity, iter_buffer_, sizeof(stored_capacity));
+    MEMCPY(&magic, iter_buffer_ + sizeof(int64_t), sizeof(magic));
+    if (stored_capacity != iter_capacity_ + prefix || magic != STORED_ROW_MAGIC_NUM
+        || (iter_result_.is_present() && iter_result_.length() > iter_capacity_)) {
+      return OB_ERR_UNEXPECTED;
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(advance_collect_result_.deep_copy(datum, collect_buf_, collect_buf_len_, pos))) {
+  }
+  if (minimum > iter_capacity_ || (minimum > 0 && iter_buffer_ == nullptr)) {
+    const int64_t requested = minimum + prefix;
+    const int64_t allocated = iter_buffer_ == nullptr ? requested : requested * 2;
+    char *candidate = static_cast<char *>(owner.alloc(allocated));
+    if (candidate == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+    MEMCPY(candidate, &allocated, sizeof(allocated));
+    const int64_t magic = STORED_ROW_MAGIC_NUM;
+    MEMCPY(candidate + sizeof(int64_t), &magic, sizeof(magic));
+    if (iter_result_.is_present() && iter_result_.length() > 0) {
+      MEMMOVE(candidate + prefix, iter_result_.get_reference(), iter_result_.length());
+      const int ret = iter_result_.set_reference(candidate + prefix, iter_result_.length(),
+                                                 iter_result_.reference_flags());
+      OB_ASSERT(ret == OB_SUCCESS); // same already validated length and flags
+    }
+    iter_buffer_ = candidate;
+    iter_capacity_ = allocated - prefix;
+  }
+  payload = iter_buffer_ == nullptr ? nullptr : iter_buffer_ + prefix;
+  capacity = iter_capacity_;
+  return OB_SUCCESS;
+}
+
+int ObAggregateProcessor::AggrCell::copy_semantic_iter(const Datum &source,
+    const SqlType &input_type, ObIAllocator &owner)
+{
+  const Datum value = source;
+  const DatumCopyPlan plan(input_type);
+  int64_t bytes = 0;
+  int ret = plan.carrier_span_size(value, bytes);
+  char *buffer = iter_buffer_ == nullptr ? nullptr : iter_buffer_ + 2 * sizeof(int64_t);
+  int64_t capacity = iter_capacity_;
+  if (OB_FAIL(ret)) {
+  } else if (bytes > 0 && OB_FAIL(reserve_iter_payload(
+      (input_type.kind() == ObNumberType || input_type.kind() == ObUNumberType)
+          ? std::max<int64_t>(bytes, static_cast<int64_t>(number::ObNumber::MAX_BYTE_LEN)) : bytes,
+      owner, buffer, capacity))) {
+  } else {
+    Datum candidate;
+    int64_t pos = 0;
+    if (OB_FAIL(plan.copy_carrier_span_borrowing_resources(value, candidate, buffer, capacity, pos))) {
+    } else {
+      iter_result_ = candidate;
+      iter_layout_ = IterKernelLayout(IterValueDomain::SemanticValue);
     }
   }
   return ret;
+}
+
+int ObAggregateProcessor::AggrCell::export_semantic_iter(const SqlType &input_type,
+    ObDatum &output, void *scratch, int64_t capacity) const
+{
+  return iter_layout_.domain_ != IterValueDomain::SemanticValue && !iter_result_.is_null()
+      ? OB_STATE_NOT_MATCH
+      : DatumCopyPlan(input_type).legacy_view(iter_result_, output, scratch, capacity);
+}
+
+static int prepare_kernel_iteration(const ObDatum &value,
+    const ObAggregateProcessor::IterKernelLayout &layout, Datum &candidate, int64_t &minimum)
+{
+  using IterValueDomain = ObAggregateProcessor::IterValueDomain;
+  SqlTypeMeta physical;
+  int ret = OB_SUCCESS;
+  minimum = value.len_;
+  if (layout.coefficient_bytes_ != 0 && layout.domain_ != IterValueDomain::DecimalCoefficient) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (layout.register_bytes_ != 0 && layout.domain_ != IterValueDomain::HllRegisters) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (layout.domain_ == IterValueDomain::Float32) {
+    physical.set_type(ObFloatType);
+  } else if (layout.domain_ == IterValueDomain::Float64) {
+    physical.set_type(ObDoubleType);
+  } else if (layout.domain_ == IterValueDomain::Number) {
+    physical.set_type(ObNumberType);
+    minimum = std::max<int64_t>(minimum, static_cast<int64_t>(number::ObNumber::MAX_BYTE_LEN));
+  } else if (layout.domain_ == IterValueDomain::DecimalCoefficient) {
+    if (layout.coefficient_bytes_ != 4 && layout.coefficient_bytes_ != 8
+        && layout.coefficient_bytes_ != 16 && layout.coefficient_bytes_ != 32
+        && layout.coefficient_bytes_ != 64) { ret = OB_INVALID_ARGUMENT; }
+    physical.set_decimal_int(0); // physical coefficient validation, not a SQL declaration
+    if (!value.is_null() && value.len_ != layout.coefficient_bytes_) { ret = OB_INVALID_ARGUMENT; }
+  } else if (layout.domain_ == IterValueDomain::HllRegisters) {
+    physical.set_type(ObVarcharType); // opaque physical bytes, never a semantic SQL declaration
+    physical.set_collation_type(CS_TYPE_BINARY);
+    ObDatumDesc maximum;
+    maximum.pack_ = UINT32_MAX;
+    if (layout.register_bytes_ < ObAggregateProcessor::get_llc_size()
+        || layout.register_bytes_ > maximum.len_
+        || (!value.is_null() && (value.len_ != layout.register_bytes_ || value.ptr_ == nullptr))) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  } else { ret = OB_INVALID_ARGUMENT; }
+  if (OB_FAIL(ret)) {
+  } else if (value.is_null()) {
+    candidate.set_null();
+  } else if (value.is_ext()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ret = DatumParameterCodec::borrow_schema_native_value(value, physical, candidate);
+  }
+  return ret;
+}
+
+int ObAggregateProcessor::AggrCell::copy_kernel_iter(const ObDatum &source,
+    const IterKernelLayout &layout, ObIAllocator &owner)
+{
+  const ObDatum value = source;
+  Datum candidate;
+  int64_t minimum = 0;
+  int ret = prepare_kernel_iteration(value, layout, candidate, minimum);
+  if (OB_SUCC(ret) && !candidate.is_null() && layout.domain_ != IterValueDomain::Float32
+      && layout.domain_ != IterValueDomain::Float64) {
+    char *buffer = nullptr;
+    int64_t capacity = 0;
+    if (OB_FAIL(reserve_iter_payload(minimum, owner, buffer, capacity))) {
+    } else {
+      if (value.len_ > 0 && buffer != value.ptr_) { MEMMOVE(buffer, value.ptr_, value.len_); }
+      ret = candidate.set_reference(buffer, value.len_, candidate.reference_flags());
+    }
+  }
+  if (OB_SUCC(ret)) { iter_result_ = candidate; iter_layout_ = layout; }
+  return ret;
+}
+int ObAggregateProcessor::AggrCell::commit_owned_kernel_iter(const ObDatum &source,
+    const IterKernelLayout &layout)
+{
+  Datum candidate;
+  int64_t minimum = 0;
+  int ret = prepare_kernel_iteration(source, layout, candidate, minimum);
+  if (OB_SUCC(ret) && !candidate.is_null() && candidate.length() > 0) {
+    // In-place math can publish only this cell's reserved actual span.
+    if (iter_buffer_ == nullptr || source.ptr_ != iter_buffer_ + 2 * sizeof(int64_t)
+        || source.len_ > iter_capacity_) { ret = OB_INVALID_ARGUMENT; }
+  }
+  if (OB_SUCC(ret)) { iter_result_ = candidate; iter_layout_ = layout; }
+  return ret;
+}
+
+
+int ObAggregateProcessor::AggrCell::export_kernel_iter(const IterKernelLayout &layout,
+    ObDatum &output, void *scratch, int64_t capacity) const
+{
+  if (!iter_result_.is_null() && !(layout == iter_layout_)) { return OB_STATE_NOT_MATCH; }
+  ObDatum candidate;
+  int ret = OB_SUCCESS;
+  if (iter_result_.is_null()) { candidate.set_null(); }
+  else if (layout.domain_ == IterValueDomain::Float32 || layout.domain_ == IterValueDomain::Float64) {
+    SqlTypeMeta physical;
+    physical.set_type(layout.domain_ == IterValueDomain::Float32 ? ObFloatType : ObDoubleType);
+    ret = DatumParameterCodec::export_native_value(iter_result_, physical, candidate, scratch, capacity);
+  } else if (layout.domain_ == IterValueDomain::Number
+             || layout.domain_ == IterValueDomain::DecimalCoefficient
+             || layout.domain_ == IterValueDomain::HllRegisters) {
+    SqlTypeMeta physical;
+    if (layout.domain_ == IterValueDomain::Number) { physical.set_type(ObNumberType); }
+    else if (layout.domain_ == IterValueDomain::DecimalCoefficient) { physical.set_decimal_int(0); }
+    else { physical.set_type(ObVarcharType); physical.set_collation_type(CS_TYPE_BINARY); }
+    ret = DatumParameterCodec::export_native_value(iter_result_, physical, candidate, scratch, capacity);
+  } else { ret = OB_INVALID_ARGUMENT; }
+  if (OB_SUCC(ret)) { output = candidate; }
+  return ret;
+}
+
+int ObAggregateProcessor::AggrCell::reserve_kernel_iter(const IterKernelLayout &layout,
+    int64_t minimum, ObIAllocator &owner, char *&payload, int64_t &capacity)
+{
+  if ((layout.domain_ != IterValueDomain::Number
+       && layout.domain_ != IterValueDomain::DecimalCoefficient
+       && layout.domain_ != IterValueDomain::HllRegisters) || minimum < 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  ObDatum null_value;
+  null_value.set_null();
+  Datum ignored;
+  int64_t required = 0;
+  int ret = prepare_kernel_iteration(null_value, layout, ignored, required);
+  if (OB_SUCC(ret)) {
+    required = std::max<int64_t>(required, layout.domain_ == IterValueDomain::DecimalCoefficient
+        ? layout.coefficient_bytes_ : layout.register_bytes_);
+    ret = reserve_iter_payload(max(minimum, required), owner, payload, capacity);
+  }
+  return ret;
+}
+
+int ObAggregateProcessor::AggrCell::export_iter(const SqlType *semantic_type,
+    ObDatum &output, void *scratch, int64_t capacity) const
+{
+  if (iter_layout_.domain_ == IterValueDomain::SemanticValue) {
+    return semantic_type == nullptr ? OB_NOT_INIT
+        : export_semantic_iter(*semantic_type, output, scratch, capacity);
+  }
+  return export_kernel_iter(iter_layout_, output, scratch, capacity);
+}
+
+static int export_hll_iteration(const ObAggregateProcessor::AggrCell &cell, ObDatum &output)
+{
+  using Domain = ObAggregateProcessor::IterValueDomain;
+  // SYNOPSIS_MERGE historically accepts a register prefix followed by extra
+  // bytes. Preserve that actual span; HLL math still consumes only the prefix.
+  const auto layout = cell.native_iter_result().is_null()
+      ? ObAggregateProcessor::IterKernelLayout(Domain::HllRegisters, 0, ObAggregateProcessor::get_llc_size())
+      : cell.iter_layout();
+  return layout.domain_ != Domain::HllRegisters ? OB_STATE_NOT_MATCH
+      : cell.export_kernel_iter(layout, output, nullptr, 0);
+}
+
+static const SqlType *semantic_iteration_type(const ObAggrInfo &info)
+{
+  const ObExpr *producer = info.is_implicit_first_aggr() ? info.expr_
+      : info.param_exprs_.count() > 0 ? info.param_exprs_.at(0) : nullptr;
+  return producer == nullptr ? nullptr : &producer->get_sql_type();
+}
+
+static int publish_iter_result(const ObAggrInfo &info,
+    const ObAggregateProcessor::AggrCell &cell, ObEvalCtx &ctx)
+{
+  alignas(8) char scratch[64];
+  ObDatum value;
+  int ret = cell.export_iter(semantic_iteration_type(info), value, scratch, sizeof(scratch));
+  if (OB_SUCC(ret)) { ret = publish_legacy_aggr(*info.expr_, ctx, value); }
+  return ret;
+}
+
+int ObAggregateProcessor::reserve_kernel_cell(AggrCell &cell,
+    const IterKernelLayout &layout, int64_t bytes, ObDatum &view)
+{
+  char *payload = nullptr;
+  int64_t capacity = 0;
+  int ret = cell.reserve_kernel_iter(layout, bytes, aggr_alloc_, payload, capacity);
+  if (OB_SUCC(ret)) {
+    // Old math writes this synchronous descriptor, never a resident shadow.
+    // NULL may reserve capacity without becoming a Present value.
+    view.ptr_ = payload;
+  }
+  return ret;
+}
+
+int ObAggregateProcessor::clone_aggr_cell(AggrCell &cell, const ObDatum &source,
+    const SqlType &actual_input_type)
+{
+  Datum value;
+  int ret = DatumCopyPlan(actual_input_type).import_legacy(source, value);
+  if (OB_SUCC(ret)) { ret = cell.copy_semantic_iter(value, actual_input_type, aggr_alloc_); }
+  return ret;
+}
+
+int ObAggregateProcessor::clone_kernel_cell(AggrCell &cell, const ObDatum &source,
+    const IterKernelLayout &layout, ObDatum *view, void *scratch, int64_t capacity)
+{
+  // A requested scalar view must be exportable before publishing the cell.
+  const int64_t scalar_bytes = layout.domain_ == IterValueDomain::Float32 ? sizeof(float)
+      : layout.domain_ == IterValueDomain::Float64 ? sizeof(double) : 0;
+  int ret = OB_SUCCESS;
+  if (view != nullptr && !source.is_null() && scalar_bytes > 0
+      && (scratch == nullptr || capacity < scalar_bytes)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(cell.copy_kernel_iter(source, layout, aggr_alloc_))) {
+  } else if (view != nullptr) {
+    ret = cell.export_kernel_iter(layout, *view, scratch, capacity);
+  }
+  return ret;
+}
+
+// This cache belongs to the same execution/domain as the producing Expr.
+// Copy reference wrapper bytes, preserving the existing pointee borrowing rule.
+// Complete preflight precedes writes; inline values and NULL need no allocation.
+static int copy_final_result(const Datum &source, const DatumCopyPlan &plan,
+    ObIAllocator &alloc, Datum &target, char *&buffer, int64_t &capacity,
+    const int64_t minimum_capacity = 0)
+{
+  int ret = OB_SUCCESS;
+  const Datum value = source; // source may alias target
+  Datum candidate;
+  int64_t span_size = 0;
+  int64_t pos = 0;
+  char *candidate_buffer = buffer;
+  int64_t candidate_capacity = capacity;
+  bool allocated = false;
+  if (OB_FAIL(plan.carrier_span_size(value, span_size))) {
+  } else {
+    if (span_size > 0 && (buffer == nullptr || capacity < span_size)) {
+      candidate_capacity = next_pow2(max(span_size, minimum_capacity));
+      candidate_buffer = static_cast<char *>(alloc.alloc(candidate_capacity));
+      if (OB_ISNULL(candidate_buffer)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        allocated = true;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(plan.copy_carrier_span_borrowing_resources(
+        value, candidate, candidate_buffer, candidate_capacity, pos))) {
+    } else {
+      target = candidate;
+      buffer = candidate_buffer;
+      capacity = candidate_capacity;
+    }
+  }
+  if (OB_FAIL(ret) && allocated) {
+    alloc.free(candidate_buffer);
+  }
+  return ret;
+}
+
+int ObAggregateProcessor::AggrCell::deep_copy_advance_collect_result(
+    const Datum &datum, const DatumCopyPlan &plan, ObIAllocator &alloc)
+{
+  return copy_final_result(datum, plan, alloc, advance_collect_result_, collect_buf_, collect_buf_len_);
 }
 
 int ObAggregateProcessor::AggrCell::collect_result(
   const SqlTypeClass tc, ObEvalCtx &eval_ctx, const ObAggrInfo &aggr_info)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char iter_scratch[64];
+  ObDatum iteration;
+  if (OB_FAIL(export_iter(semantic_iteration_type(aggr_info), iteration, iter_scratch, sizeof(iter_scratch)))) {
+    return ret;
+  }
   alignas(8) char result_buffer[ObNumber::MAX_CALC_BYTE_LEN + 64];
   common::ObDatum result;
   result.ptr_ = result_buffer;
@@ -519,7 +833,7 @@ int ObAggregateProcessor::AggrCell::collect_result(
   } else if (is_tiny_num_used_ && (ObIntTC == tc || ObUIntTC == tc)) {
     if (ob_is_decimal_int(aggr_info.expr_->datum_meta_.type_)) {
       const int64_t precision = aggr_info.expr_->datum_meta_.precision_;
-      if (iter_result_.is_null()) {
+      if (iteration.is_null()) {
         if (ObIntTC == tc && OB_FAIL(DecIntAggFuncCtx::int_to_decimalint(tiny_num_int_,
                                                                          precision, result))) {
         } else if (ObUIntTC == tc && OB_FAIL(DecIntAggFuncCtx::int_to_decimalint(tiny_num_uint_,
@@ -527,14 +841,18 @@ int ObAggregateProcessor::AggrCell::collect_result(
                                                                                  result))) {
         }
       } else {
-        // need add iter_result_
+        // need add iteration
         if (ObIntTC == tc
-              && OB_FAIL(DecIntAggFuncCtx::add_int(iter_result_, precision, tiny_num_int_))) {
+              && OB_FAIL(DecIntAggFuncCtx::add_int(iteration, precision, tiny_num_int_))) {
         } else if (ObUIntTC == tc
-                && OB_FAIL(DecIntAggFuncCtx::add_int(iter_result_, precision, tiny_num_uint_))) {
+                && OB_FAIL(DecIntAggFuncCtx::add_int(iteration, precision, tiny_num_uint_))) {
         } else {
-          result.set_decimal_int(iter_result_.get_decimal_int(), iter_result_.len_);
-          tiny_num_uint_ = 0;
+          ret = commit_owned_kernel_iter(iteration,
+              IterKernelLayout(IterValueDomain::DecimalCoefficient, iteration.len_));
+          if (OB_SUCC(ret)) {
+            result.set_decimal_int(iteration.get_decimal_int(), iteration.len_);
+            tiny_num_uint_ = 0;
+          }
         }
       }
     } else {
@@ -551,10 +869,10 @@ int ObAggregateProcessor::AggrCell::collect_result(
       }
 
       if (OB_SUCC(ret)) {
-        if (iter_result_.is_null()) {
+        if (iteration.is_null()) {
           result.set_number(right_nmb);
         } else {
-          ObNumber left_nmb(iter_result_.get_number());
+          ObNumber left_nmb(iteration.get_number());
           if (OB_FAIL(left_nmb.add_v3(right_nmb, result_nmb, tmp_alloc, strict_mode))) {
           } else {
             result.set_number(result_nmb);
@@ -563,17 +881,17 @@ int ObAggregateProcessor::AggrCell::collect_result(
       }
     }
   } else if (ObDecimalIntTC == tc) {
-    if (OB_UNLIKELY(iter_result_.is_null())) {
+    if (OB_UNLIKELY(iteration.is_null())) {
       result.set_null();
     } else {
-      result.set_decimal_int(iter_result_.get_decimal_int(), iter_result_.len_);
+      result.set_decimal_int(iteration.get_decimal_int(), iteration.len_);
       if (OB_UNLIKELY(aggr_info.expr_->datum_meta_.precision_ >=
             OB_MAX_DECIMAL_POSSIBLE_PRECISION)) {
         check_mysql_decimal_int_overflow(result); // no ret
       }
     }
   } else {
-    result = iter_result_;
+    result = iteration;
   }
   if (OB_SUCC(ret)) { ret = publish_legacy_aggr(*aggr_info.expr_, eval_ctx, result); }
   if (OB_SUCC(ret)) { aggr_info.expr_->set_evaluated_projected(eval_ctx); }
@@ -1034,6 +1352,35 @@ int ObAggregateProcessor::GroupConcatExtraResult::init(const ObAggrInfo &aggr_in
     }
   }
   return ret;
+}
+
+int ObAggregateProcessor::GroupConcatExtraResult::copy_separator(
+    const Datum &source, const DatumCopyPlan &plan)
+{
+  int64_t bytes = 0;
+  int ret = plan.carrier_span_size(source, bytes);
+  char *buffer = nullptr;
+  if (OB_FAIL(ret)) {
+  } else if (bytes > 0 && OB_ISNULL(buffer = static_cast<char *>(alloc_.alloc(bytes)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    Datum candidate;
+    int64_t pos = 0;
+    if (OB_FAIL(plan.copy_carrier_span_borrowing_resources(source, candidate, buffer, bytes, pos))) {
+      if (buffer != nullptr) { alloc_.free(buffer); }
+    } else {
+      separator_datum_ = candidate;
+      has_separator_ = true;
+    }
+  }
+  return ret;
+}
+
+int ObAggregateProcessor::GroupConcatExtraResult::export_separator(
+    const DatumCopyPlan &plan, ObDatum &output, void *scratch, int64_t capacity) const
+{
+  return !has_separator_ ? OB_NOT_INIT
+      : plan.legacy_view(separator_datum_, output, scratch, capacity);
 }
 
 ObAggregateProcessor::GroupConcatExtraResult::~GroupConcatExtraResult()
@@ -1615,30 +1962,28 @@ void ObAggregateProcessor::reuse()
   removal_info_.reset();
 }
 
-OB_INLINE int ObAggregateProcessor::clone_number_cell(const ObNumber &src_number, AggrCell &aggr_cell)
+int ObAggregateProcessor::clone_number_cell(const ObNumber &src_number, AggrCell &cell, ObDatum *view)
 {
-  int ret = OB_SUCCESS;
-  //length + magic num + data
-  int64_t need_size = sizeof(int64_t) * 2 + ObNumber::MAX_BYTE_LEN;
-  if (OB_FAIL(clone_cell(aggr_cell, need_size, nullptr))) {
-  } else {
-    aggr_cell.get_iter_result().set_number(src_number);
-    LOG_DEBUG("succ to clone cell", K(src_number), K(aggr_cell.get_iter_result()));
-  }
-  return ret;
+  alignas(8) char scratch[number::ObNumber::MAX_CALC_BYTE_LEN + sizeof(number::ObNumber::Desc)];
+  if (src_number.get_length() > number::ObNumber::OB_CALC_BUFFER_SIZE) { return OB_INVALID_ARGUMENT; }
+  ObDatum source;
+  source.ptr_ = scratch;
+  source.set_number(src_number);
+  return clone_kernel_cell(cell, source, IterKernelLayout(IterValueDomain::Number), view);
 }
 
-OB_INLINE int ObAggregateProcessor::clone_vector_cell(const ObDatum &src_cell, AggrCell &aggr_cell)
+int ObAggregateProcessor::clone_vector_cell(const ObDatum &source, AggrCell &cell,
+    const SqlType &actual_input_type, ObDatum *view, void *scratch, int64_t capacity)
 {
+  // CopyPlan requires caller-owned scratch even for a Reference view. Validate
+  // it before capture; a callee-local scalar buffer must never escape here.
   int ret = OB_SUCCESS;
-  int64_t need_size = sizeof(int64_t) * 2 + src_cell.len_;
-  if (OB_FAIL(clone_cell(aggr_cell, need_size, nullptr))) {
-  } else {
-    ObDatum &target_cell = aggr_cell.get_iter_result();
-    memcpy((char*)target_cell.ptr_, src_cell.ptr_, src_cell.len_);
-    target_cell.pack_ = src_cell.pack_;
+  if (view != nullptr && capacity < 64) { ret = OB_BUF_NOT_ENOUGH; }
+  else if (view != nullptr && (scratch == nullptr || capacity > UINT32_MAX)) { ret = OB_INVALID_ARGUMENT; }
+  else if (OB_FAIL(clone_aggr_cell(cell, source, actual_input_type))) {
+  } else if (view != nullptr) {
+    ret = cell.export_semantic_iter(actual_input_type, *view, scratch, capacity);
   }
-  OX(SQL_LOG(DEBUG, "succ to clone cell", K(src_cell), K(aggr_cell), K(need_size)));
   return ret;
 }
 
@@ -1690,7 +2035,7 @@ int ObAggregateProcessor::inner_process(
         LegacyAggrValue legacy;
         if (OB_FAIL(aggr_info.expr_->eval(eval_ctx_, result))) {
         } else if (OB_FAIL(legacy.prepare(*aggr_info.expr_, *result))) {
-        } else if (OB_FAIL(clone_aggr_cell(aggr_cell, legacy.value_))) {
+        } else if (OB_FAIL(clone_aggr_cell(aggr_cell, legacy.value_, aggr_info.expr_->get_sql_type()))) {
         } else {
           aggr_cell.set_is_evaluated(true);
         }
@@ -1801,7 +2146,7 @@ int ObAggregateProcessor::collect_group_row(GroupRow *group_row,
     if (OB_ISNULL(aggr_info.expr_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (aggr_info.is_implicit_first_aggr()) {
-      if (OB_FAIL(publish_legacy_aggr(*aggr_info.expr_, eval_ctx_, aggr_cell.get_iter_result()))) {
+      if (OB_FAIL(publish_iter_result(aggr_info, aggr_cell, eval_ctx_))) {
       } else { aggr_info.expr_->set_evaluated_projected(eval_ctx_); }
       LOG_DEBUG("debug implicit first aggr", K(ret), K(i),
         K(EXPR2STR(eval_ctx_, *aggr_info.expr_)));
@@ -1855,9 +2200,9 @@ int ObAggregateProcessor::prefetch_group_rows(GroupRow &group_rows)
   for (int64_t i = 0; OB_SUCC(ret) && i < group_rows.n_cells_; ++i) {
     ObAggrInfo &aggr_info = aggr_infos_.at(i);
     AggrCell &aggr_cell = group_rows.aggr_cells_[i];
-    ObDatum &datum = aggr_cell.get_iter_result();
-    if (!datum.is_null()) {
-      __builtin_prefetch(datum.ptr_, 0/* read */, 2 /*high temp locality*/);
+    const Datum &datum = aggr_cell.native_iter_result();
+    if (datum.is_present() && datum.length() > 0) {
+      __builtin_prefetch(datum.get_reference(), 0/* read */, 2 /*high temp locality*/);
     }
   }
   return ret;
@@ -1885,7 +2230,7 @@ int ObAggregateProcessor::inner_process_batch(
            selector.next(it)) {
         result = results.at(selector.get_batch_index(it));
         if (OB_FAIL(legacy.prepare(*aggr_info.expr_, *result))) {
-        } else if (OB_FAIL(clone_aggr_cell(aggr_cell, legacy.value_))) {
+        } else if (OB_FAIL(clone_aggr_cell(aggr_cell, legacy.value_, aggr_info.expr_->get_sql_type()))) {
         } else {
           aggr_cell.set_is_evaluated(true);
         }
@@ -2044,16 +2389,17 @@ int ObAggregateProcessor::advance_collect_result(int64_t group_id)
       }
       if (OB_SUCC(ret)) {
         guard.set_batch_idx(0);
-        LegacyAggrValue legacy;
         if (OB_FAIL(collect_aggr_result(aggr_cell, NULL, aggr_info))) {
-        } else if (OB_FAIL(legacy.prepare(*aggr_info.expr_, aggr_info.expr_->locate_expr_datum(eval_ctx_)))) {
-        } else if (OB_FAIL(aggr_cell.deep_copy_advance_collect_result(legacy.value_, aggr_alloc_))) {
+        } else if (OB_FAIL(aggr_cell.deep_copy_advance_collect_result(
+            aggr_info.expr_->locate_expr_datum(eval_ctx_), aggr_info.expr_->get_datum_copy_plan(), aggr_alloc_))) {
         } else {
           LOG_TRACE("finish collect", K(group_id), K(aggr_cell), K(aggr_cell.get_advance_collect_result()));
         }
       }
-      aggr_cell.set_is_advance_evaluated();
-      aggr_cell.reset_extra();
+      if (OB_SUCC(ret)) {
+        aggr_cell.set_is_advance_evaluated();
+        aggr_cell.reset_extra();
+      }
     }
   } // end for
   return ret;
@@ -2082,7 +2428,7 @@ int ObAggregateProcessor::collect_result_batch(const ObIArray<ObExpr *> &group_e
       AggrCell &aggr_cell = group_row->aggr_cells_[aggr_idx];
       guard.set_batch_idx(output_batch_idx);
       if (aggr_cell.get_need_advance_collect() && aggr_cell.get_is_advance_evaluated()) {
-        OZ(publish_legacy_aggr(*aggr_info.expr_, eval_ctx_, aggr_cell.get_advance_collect_result()));
+        OZ(aggr_info.expr_->deep_copy_datum(eval_ctx_, aggr_cell.get_advance_collect_result()));
         LOG_TRACE("fill aggr result ", K(aggr_cell.get_advance_collect_result()),
           K(aggr_cell.get_is_evaluated()));
       } else {
@@ -2094,8 +2440,8 @@ int ObAggregateProcessor::collect_result_batch(const ObIArray<ObExpr *> &group_e
         } else if (aggr_info.is_implicit_first_aggr()) {
           // aggr_info.expr_ skip check null, check in cg
           // judge aggr_cell.get_is_evaluated() whether implicit expr is evaluated
-          OZ(publish_legacy_aggr(*aggr_info.expr_, eval_ctx_, aggr_cell.get_iter_result()));
-          LOG_DEBUG("first aggr result ", K(aggr_cell.get_iter_result()),
+          OZ(publish_iter_result(aggr_info, aggr_cell, eval_ctx_));
+          LOG_DEBUG("first aggr result ", K(aggr_cell.native_iter_result()),
             K(aggr_cell.get_is_evaluated()));
         } else {
           if (OB_FAIL(collect_aggr_result(aggr_cell, NULL, aggr_info))) {
@@ -2232,7 +2578,7 @@ int ObAggregateProcessor::collect_scalar_batch(const ObBatchRows &brs, const int
       if (OB_ISNULL(aggr_info.expr_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (aggr_info.is_implicit_first_aggr()) {
-        if (OB_FAIL(publish_legacy_aggr(*aggr_info.expr_, eval_ctx_, aggr_cell.get_iter_result()))) {
+        if (OB_FAIL(publish_iter_result(aggr_info, aggr_cell, eval_ctx_))) {
         } else { aggr_info.expr_->set_evaluated_projected(eval_ctx_); }
       } else {
         if (aggr_info.has_distinct_) {
@@ -2448,25 +2794,12 @@ int ObAggregateProcessor::generate_group_row(GroupRow *&new_group_row,
                                      need_rewind, dir_id_,
                                      io_event_observer_))) {
             } else if (aggr_info.separator_expr_ != NULL && aggr_info.separator_expr_->is_const_expr()) {
-              LegacyAggrValue separator_storage;
-              ObDatum *separator_result = nullptr;
+              Datum *separator_result = nullptr;
               if (OB_UNLIKELY(!aggr_info.separator_expr_->obj_meta_.is_string_type())) {
                 ret = OB_ERR_UNEXPECTED;
-              } else if (OB_FAIL(eval_legacy_aggr(*aggr_info.separator_expr_, eval_ctx_, separator_storage, separator_result))) {
-              } else {
-                int64_t pos = sizeof(ObDatum);
-                int64_t len = pos + (separator_result->null_ ? 0 : separator_result->len_);
-                char *buf = (char*)aggr_alloc_.alloc(len);
-                if (OB_ISNULL(buf)) {
-                  ret = OB_ALLOCATE_MEMORY_FAILED;
-                } else {
-                  ObDatum **separator_datum = const_cast<ObDatum**>(&result->get_separator_datum());
-                  *separator_datum = new (buf) ObDatum;
-                  if (OB_FAIL((*separator_datum)->deep_copy(*separator_result, buf, len, pos))) {
-                  } else {
-                    LOG_DEBUG("succ to calc separator", K(ret), KP(*separator_datum));
-                  }
-                }
+              } else if (OB_FAIL(aggr_info.separator_expr_->eval(eval_ctx_, separator_result))) {
+              } else if (OB_FAIL(result->copy_separator(*separator_result,
+                  aggr_info.separator_expr_->get_datum_copy_plan()))) {
               }
             }
           }
@@ -2611,25 +2944,12 @@ int ObAggregateProcessor::fill_group_row(GroupRow *new_group_row,
                                      need_rewind, dir_id_,
                                      io_event_observer_))) {
             } else if (aggr_info.separator_expr_ != NULL && aggr_info.separator_expr_->is_const_expr()) {
-              LegacyAggrValue separator_storage;
-              ObDatum *separator_result = nullptr;
+              Datum *separator_result = nullptr;
               if (OB_UNLIKELY(!aggr_info.separator_expr_->obj_meta_.is_string_type())) {
                 ret = OB_ERR_UNEXPECTED;
-              } else if (OB_FAIL(eval_legacy_aggr(*aggr_info.separator_expr_, eval_ctx_, separator_storage, separator_result))) {
-              } else {
-                int64_t pos = sizeof(ObDatum);
-                int64_t len = pos + (separator_result->null_ ? 0 : separator_result->len_);
-                char *buf = (char*)aggr_alloc_.alloc(len);
-                if (OB_ISNULL(buf)) {
-                  ret = OB_ALLOCATE_MEMORY_FAILED;
-                } else {
-                  ObDatum **separator_datum = const_cast<ObDatum**>(&result->get_separator_datum());
-                  *separator_datum = new (buf) ObDatum;
-                  if (OB_FAIL((*separator_datum)->deep_copy(*separator_result, buf, len, pos))) {
-                  } else {
-                    LOG_DEBUG("succ to calc separator", K(ret), KP(*separator_datum));
-                  }
-                }
+              } else if (OB_FAIL(aggr_info.separator_expr_->eval(eval_ctx_, separator_result))) {
+              } else if (OB_FAIL(result->copy_separator(*separator_result,
+                  aggr_info.separator_expr_->get_datum_copy_plan()))) {
               }
             }
           }
@@ -2792,7 +3112,8 @@ int ObAggregateProcessor::rollup_base_process(
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "topk fre hist in group by rollup");
     } else if (aggr_info.is_implicit_first_aggr()) {
-      if (OB_FAIL(clone_aggr_cell(rollup_cell, aggr_cell.get_iter_result()))) {
+      if (OB_FAIL(rollup_cell.copy_semantic_iter(aggr_cell.native_iter_result(),
+          aggr_info.expr_->get_sql_type(), aggr_alloc_))) {
       }
     } else {
       if (aggr_info.has_distinct_) {
@@ -2815,26 +3136,28 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
     const int64_t max_group_cnt/*=INT64_MIN*/)
 {
   int ret = OB_SUCCESS;
-  ObDatum &src_result = aggr_cell.get_iter_result();
   const ObItemType aggr_fun = aggr_info.get_expr_type();
-  ObDatum &target_result = rollup_cell.get_iter_result();
   switch (aggr_fun) {
     case T_FUN_COUNT: {
       rollup_cell.add_row_count(aggr_cell.get_row_count());
       break;
     }
     case T_FUN_MAX: {
-      ret = max_calc(rollup_cell, target_result,
-                     src_result,
-                     storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_,
-                     aggr_info.is_number());
+      alignas(8) char source_scratch[64];
+      ObDatum source;
+      const SqlType &input_type = aggr_info.param_exprs_.at(0)->get_sql_type();
+      if (OB_FAIL(aggr_cell.export_semantic_iter(input_type, source, source_scratch, sizeof(source_scratch)))) {
+      } else { ret = max_calc(rollup_cell, source,
+          storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_, input_type); }
       break;
     }
     case T_FUN_MIN: {
-      ret = min_calc(rollup_cell, target_result,
-                     src_result,
-                     storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_,
-                     aggr_info.is_number());
+      alignas(8) char source_scratch[64];
+      ObDatum source;
+      const SqlType &input_type = aggr_info.param_exprs_.at(0)->get_sql_type();
+      if (OB_FAIL(aggr_cell.export_semantic_iter(input_type, source, source_scratch, sizeof(source_scratch)))) {
+      } else { ret = min_calc(rollup_cell, source,
+          storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_, input_type); }
       break;
     }
     case T_FUN_AVG:
@@ -2844,21 +3167,17 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
       ret = rollup_add_calc(aggr_cell, rollup_cell, aggr_info);
       break;
     }
-    case T_FUN_APPROX_COUNT_DISTINCT: {
-      if (rollup_cell.get_iter_result().len_ <= 0) {
-        ret = clone_aggr_cell(rollup_cell, aggr_cell.get_iter_result());
-      } else {
-        ret = llc_add(target_result, aggr_cell.get_iter_result());
-      }
-      break;
-    }
+    case T_FUN_APPROX_COUNT_DISTINCT:
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS:
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE: {
-      if (rollup_cell.get_iter_result().len_ <= 0) {
-        ret = clone_aggr_cell(rollup_cell, src_result);
-      } else {
-        ret = llc_add(target_result, src_result);
-      }
+      ObDatum source, target;
+      if (OB_FAIL(export_hll_iteration(aggr_cell, source))) {
+      } else if (OB_FAIL(export_hll_iteration(rollup_cell, target))) {
+      } else if (target.len_ <= 0) {
+        ret = clone_kernel_cell(rollup_cell, source,
+            IterKernelLayout(IterValueDomain::HllRegisters, 0,
+                source.is_null() ? get_llc_size() : source.len_));
+      } else { ret = llc_add(target, source); }
       break;
     }
     case T_FUN_GROUPING: {
@@ -2979,53 +3298,31 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
           }
         }
         if (OB_SUCC(ret) && aggr_info.separator_expr_ != NULL && !aggr_info.separator_expr_->is_const_expr()) {
-          LegacyAggrValue separator_storage;
-          ObDatum *separator_result = nullptr;
+          Datum *separator_result = nullptr;
           aggr_info.separator_expr_->clear_evaluated_flag(eval_ctx_);
-          if (aggr_extra->get_separator_datum() == NULL ||
-              aggr_extra->get_separator_datum()->is_null()) {
-            //do nothing
+          if (!aggr_extra->has_separator() || aggr_extra->separator_value().is_null()) {
+            // Preserve the existing unset/SQL-NULL separator policy.
           } else if (OB_UNLIKELY(!aggr_info.separator_expr_->obj_meta_.is_string_type())) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(eval_legacy_aggr(*aggr_info.separator_expr_, eval_ctx_, separator_storage, separator_result))) {
+          } else if (OB_FAIL(aggr_info.separator_expr_->eval(eval_ctx_, separator_result))) {
           } else if (separator_result->is_null()) {
-            aggr_extra->get_separator_datum() = NULL;
-            rollup_extra->get_separator_datum() = NULL;
+            aggr_extra->clear_separator();
+            rollup_extra->clear_separator();
           } else {
-            int64_t pos = sizeof(ObDatum);
-            int64_t len = pos + (separator_result->null_ ? 0 : separator_result->len_);
+            alignas(8) char input_scratch[64], saved_scratch[64];
+            ObDatum input_view, saved_view;
+            const DatumCopyPlan &separator_plan = aggr_info.separator_expr_->get_datum_copy_plan();
             int cmp_ret = 0;
-            //need update origin aggr separator expr
-            if (OB_FAIL(storage_predicate_functions(*aggr_info.separator_expr_)->null_first_cmp_(*separator_result,
-                                                                                 *aggr_extra->get_separator_datum(),
-                                                                                 cmp_ret,
-                                                                                 datum_access_ctx_))) {
-            } else if (0 != cmp_ret) {
-              char *buf = (char*)aggr_alloc_.alloc(len);
-              if (OB_ISNULL(buf)) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else {
-                ObDatum **separator_datum = const_cast<ObDatum**>(&aggr_extra->get_separator_datum());
-                *separator_datum = new (buf) ObDatum;
-                if (OB_FAIL((*separator_datum)->deep_copy(*separator_result, buf, len, pos))) {
-                } else {
-                  LOG_TRACE("succ to calc separator", K(ret), KPC(*separator_datum));
-                }
-              }
+            if (OB_FAIL(separator_plan.legacy_view(*separator_result,
+                input_view, input_scratch, sizeof(input_scratch)))) {
+            } else if (OB_FAIL(aggr_extra->export_separator(separator_plan,
+                saved_view, saved_scratch, sizeof(saved_scratch)))) {
+            } else if (OB_FAIL(storage_predicate_functions(*aggr_info.separator_expr_)->null_first_cmp_(
+                input_view, saved_view, cmp_ret, datum_access_ctx_))) {
+            } else if (0 != cmp_ret && OB_FAIL(aggr_extra->copy_separator(*separator_result, separator_plan))) {
             }
-            //update rollup extra separator expr
             if (OB_SUCC(ret) && max_group_cnt != INT64_MIN && cur_rollup_group_idx - max_group_cnt > 1) {
-              char *buf = (char*)aggr_alloc_.alloc(len);
-              if (OB_ISNULL(buf)) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else {
-                ObDatum **separator_datum = const_cast<ObDatum**>(&rollup_extra->get_separator_datum());
-                *separator_datum = new (buf) ObDatum;
-                if (OB_FAIL((*separator_datum)->deep_copy(*separator_result, buf, len, pos))) {
-                } else {
-                  LOG_TRACE("succ to calc separator", K(ret), KPC(*separator_datum));
-                }
-              }
+              ret = rollup_extra->copy_separator(*separator_result, separator_plan);
             }
           }
         }
@@ -3169,7 +3466,11 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
             }
           }
           if (OB_SUCC(ret)) {
-            ret = clone_aggr_cell(aggr_cell, StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]), aggr_info.is_number());
+            const ObDatum input = StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]);
+            ret = aggr_fun == T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
+                ? clone_kernel_cell(aggr_cell, input,
+                    IterKernelLayout(IterValueDomain::HllRegisters, 0, input.len_))
+                : clone_aggr_cell(aggr_cell, input, aggr_info.param_exprs_.at(0)->get_sql_type());
           }
         }
         break;
@@ -3217,8 +3518,9 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
       }
     case T_FUN_APPROX_COUNT_DISTINCT:
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS: {
-      ObDatum &llc_bitmap = aggr_cell.get_iter_result();
+      ObDatum llc_bitmap;
       if (OB_FAIL(llc_init(aggr_cell))) {
+      } else if (OB_FAIL(export_hll_iteration(aggr_cell, llc_bitmap))) {
       } else {
         bool has_null_cell = false;
         uint64_t hash_value = 0;
@@ -3274,31 +3576,15 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
             }
           }
           if (OB_SUCC(ret) && aggr_info.separator_expr_ != NULL) {
-            LegacyAggrValue separator_storage;
-            ObDatum *separator_result = nullptr;
+            Datum *separator_result = nullptr;
             if (OB_UNLIKELY(!aggr_info.separator_expr_->obj_meta_.is_string_type())) {
               ret = OB_ERR_UNEXPECTED;
             } else if (OB_UNLIKELY(!aggr_info.separator_expr_->obj_meta_.is_string_type())) {
               ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(eval_legacy_aggr(*aggr_info.separator_expr_, eval_ctx_, separator_storage, separator_result))) {
+            } else if (OB_FAIL(aggr_info.separator_expr_->eval(eval_ctx_, separator_result))) {
             } else {
-              int64_t pos = sizeof(ObDatum);
-              int64_t len = pos + (separator_result->null_ ? 0 : separator_result->len_);
-              char *buf = (char*)aggr_alloc_.alloc(len);
-              if (OB_ISNULL(buf)) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else {
-                if (extra->get_separator_datum() != NULL) {//free above ptr.
-                  aggr_alloc_.free(extra->get_separator_datum());
-                  extra->get_separator_datum() = NULL;
-                }
-                ObDatum **separator_datum = const_cast<ObDatum**>(&extra->get_separator_datum());
-                *separator_datum = new (buf) ObDatum;
-                if (OB_FAIL((*separator_datum)->deep_copy(*separator_result, buf, len, pos))) {
-                } else {
-                  LOG_TRACE("succ to calc separator", K(ret), KPC(*separator_datum));
-                }
-              }
+              ret = extra->copy_separator(*separator_result,
+                  aggr_info.separator_expr_->get_datum_copy_plan());
             }
           }
         }
@@ -3355,7 +3641,7 @@ int ObAggregateProcessor::prepare_aggr_result(const ObChunkDatumStore::StoredRow
           common::ObDatumHashFuncType hash_func = storage_predicate_functions(*aggr_info.param_exprs_.at(0))->murmur_hash_;
           uint64_t datum_value = 0;
           if (OB_FAIL(hash_func(datum, datum_value, datum_value, datum_access_ctx_))) {
-          } else if (OB_FAIL(extra->topk_fre_hist_.add_top_k_frequency_item(datum_value, datum))) {
+          } else if (OB_FAIL(extra->topk_fre_hist_.add_top_k_frequency_item(datum_value, datum, obj_meta))) {
           }
         }
       }
@@ -3445,19 +3731,19 @@ int ObAggregateProcessor::process_aggr_batch_result(
     case T_FUN_MAX: {
       LegacyAggrBatch aggr_input_datums;
       if (OB_FAIL(aggr_input_datums.prepare_selected(*param_exprs->at(0), eval_ctx_, selector))) { break; }
-      ret = max_calc_batch(aggr_cell, aggr_cell.get_iter_result(),
+      ret = max_calc_batch(aggr_cell,
                       aggr_input_datums,
                       storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_,
-                      aggr_info.is_number(), selector);
+                      aggr_info.param_exprs_.at(0)->get_sql_type(), selector);
       break;
     }
     case T_FUN_MIN: {
       LegacyAggrBatch aggr_input_datums;
       if (OB_FAIL(aggr_input_datums.prepare_selected(*param_exprs->at(0), eval_ctx_, selector))) { break; }
-      ret = min_calc_batch(aggr_cell, aggr_cell.get_iter_result(),
+      ret = min_calc_batch(aggr_cell,
                       aggr_input_datums,
                       storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_,
-                      aggr_info.is_number(), selector);
+                      aggr_info.param_exprs_.at(0)->get_sql_type(), selector);
       break;
     }
     case T_FUN_AVG: {
@@ -3470,7 +3756,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
     case T_FUN_COUNT_SUM: {
       LegacyAggrBatch aggr_input_datums;
       if (OB_FAIL(aggr_input_datums.prepare_selected(*param_exprs->at(0), eval_ctx_, selector))) { break; }
-      ret = add_calc_batch(aggr_cell.get_iter_result(), aggr_input_datums,
+      ret = add_calc_batch(aggr_input_datums,
                             aggr_cell, aggr_info, selector);
       break;
     }
@@ -3490,7 +3776,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
     }
     case T_FUN_APPROX_COUNT_DISTINCT:
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS: {
-      ObDatum *llc_bitmap = &aggr_cell.get_iter_result();
+      ObDatum llc_bitmap;
       if (!aggr_cell.get_is_evaluated()) {
         // init value firstly
         if (OB_FAIL(llc_init(aggr_cell))) {
@@ -3498,9 +3784,8 @@ int ObAggregateProcessor::process_aggr_batch_result(
           aggr_cell.set_is_evaluated(true);
         }
       }
-      if (OB_SUCC(ret)) {
-        ret = approx_count_calc_batch(*llc_bitmap, param_exprs, selector);
-      }
+      if (OB_SUCC(ret) && OB_FAIL(export_hll_iteration(aggr_cell, llc_bitmap))) {
+      } else if (OB_SUCC(ret)) { ret = approx_count_calc_batch(llc_bitmap, param_exprs, selector); }
       break;
     }
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE: {
@@ -3511,8 +3796,9 @@ int ObAggregateProcessor::process_aggr_batch_result(
       } else {
         LegacyAggrBatch arg_datums;
         if (OB_FAIL(arg_datums.prepare_selected(*param_exprs->at(0), eval_ctx_, selector))) { break; }
-        ret = approx_count_merge_calc_batch(aggr_cell.get_iter_result(), aggr_cell, arg_datums,
-                                            aggr_info.is_number(), selector);
+        ObDatum bitmap;
+        if (OB_FAIL(export_hll_iteration(aggr_cell, bitmap))) {
+        } else { ret = approx_count_merge_calc_batch(bitmap, aggr_cell, arg_datums, selector); }
       }
       break;
     }
@@ -3652,10 +3938,10 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
       } else if (!stored_row.stored_cells()[0].is_null()) {
-        ret = max_calc(aggr_cell, aggr_cell.get_iter_result(),
+        ret = max_calc(aggr_cell,
                        StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]),
                        storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_,
-                       aggr_info.is_number());
+                       aggr_info.param_exprs_.at(0)->get_sql_type());
       }
       break;
     }
@@ -3664,10 +3950,10 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
       } else if (!stored_row.stored_cells()[0].is_null()) {
-        ret = min_calc(aggr_cell, aggr_cell.get_iter_result(),
+        ret = min_calc(aggr_cell,
                        StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]),
                        storage_predicate_functions(*aggr_info.expr_)->null_first_cmp_,
-                       aggr_info.is_number());
+                       aggr_info.param_exprs_.at(0)->get_sql_type());
       }
       break;
     }
@@ -3706,16 +3992,17 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
     case T_FUN_APPROX_COUNT_DISTINCT:
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS: {
       bool has_null_cell = false;
-      ObDatum *llc_bitmap = &aggr_cell.get_iter_result();
+      ObDatum llc_bitmap;
       uint64_t hash_value = 0;
-      if (OB_FAIL(llc_calc_hash_value(stored_row,
+      if (OB_FAIL(export_hll_iteration(aggr_cell, llc_bitmap))) {
+      } else if (OB_FAIL(llc_calc_hash_value(stored_row,
                                       aggr_info.param_exprs_,
                                       has_null_cell,
                                       hash_value))) {
       } else if (has_null_cell) {
        /*do nothing*/
       } else {
-        ret = llc_add_value(hash_value, llc_bitmap->get_string());
+        ret = llc_add_value(hash_value, llc_bitmap.get_string());
       }
       break;
     }
@@ -3724,7 +4011,9 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("curr_row_results count is not 1", K(stored_row));
       } else {
-        ret = llc_add(aggr_cell.get_iter_result(), StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0]));
+        ObDatum bitmap;
+        if (OB_FAIL(export_hll_iteration(aggr_cell, bitmap))) {
+        } else { ret = llc_add(bitmap, StoredDatumCodec::decode_legacy_view(stored_row.stored_cells()[0])); }
       }
       break;
     }
@@ -3797,7 +4086,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
           common::ObDatumHashFuncType hash_func = storage_predicate_functions(*aggr_info.param_exprs_.at(0))->murmur_hash_;
           uint64_t datum_value = 0;
           if (OB_FAIL(hash_func(datum, datum_value, datum_value, datum_access_ctx_))) {
-          } else if (OB_FAIL(extra->topk_fre_hist_.add_top_k_frequency_item(datum_value, datum))) {
+          } else if (OB_FAIL(extra->topk_fre_hist_.add_top_k_frequency_item(datum_value, datum, obj_meta))) {
           }
         }
       }
@@ -4002,12 +4291,15 @@ int ObAggregateProcessor::collect_aggr_result(
     case T_FUN_MIN:
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS:
     case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE: {
-      result = aggr_cell.get_iter_result();
+      ret = aggr_cell.export_iter(semantic_iteration_type(aggr_info),
+          result, result_buffer, sizeof(result_buffer));
       break;
     }
     case T_FUN_APPROX_COUNT_DISTINCT: {
       int64_t tmp_result = OB_INVALID_COUNT;
-      ObExprEstimateNdv::llc_estimate_ndv(tmp_result, aggr_cell.get_iter_result().get_string());
+      ObDatum bitmap;
+      if (OB_FAIL(export_hll_iteration(aggr_cell, bitmap))) { break; }
+      ObExprEstimateNdv::llc_estimate_ndv(tmp_result, bitmap.get_string());
       if (tmp_result >= 0) {
         result.set_int(tmp_result);
       }
@@ -4097,7 +4389,7 @@ int ObAggregateProcessor::collect_aggr_result(
       } else if (!extra->is_iterated() && OB_FAIL(extra->finish_add_row())) {
       } else {
         if (aggr_info.separator_expr_ != NULL) {
-          if (OB_ISNULL(extra->get_separator_datum())) {
+          if (!extra->has_separator()) {
             if (OB_UNLIKELY(aggr_info.separator_expr_->is_const_expr())) {
               ret = OB_ERR_UNEXPECTED;
             } else if (cur_group_id == max_group_cnt) {//last rollup
@@ -4115,7 +4407,14 @@ int ObAggregateProcessor::collect_aggr_result(
               sep_str = ObString::make_empty_string();
             }
           } else {
-            sep_str = extra->get_separator_datum()->get_string();
+            alignas(8) char separator_scratch[64];
+            ObDatum separator_view;
+            if (OB_FAIL(extra->export_separator(aggr_info.separator_expr_->get_datum_copy_plan(),
+                separator_view, separator_scratch, sizeof(separator_scratch)))) {
+            } else {
+              // String spans borrow the retained owner; no scalar scratch escapes.
+              sep_str = separator_view.get_string();
+            }
           }
         } else {
           // Default is comma
@@ -4518,23 +4817,28 @@ int ObAggregateProcessor::get_percentile_param(const ObAggrInfo &aggr_info,
   return ret;
 }
 
-int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObDatum &other,
-    ObDatumCmpFuncType cmp_func, const bool is_number)
+int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, const ObDatum &other,
+    ObDatumCmpFuncType cmp_func, const SqlType &input_type)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char base_scratch[64];
+  ObDatum base;
+  if (OB_FAIL(aggr_cell.export_semantic_iter(input_type, base, base_scratch, sizeof(base_scratch)))) {
+    return ret;
+  }
   if (OB_ISNULL(cmp_func)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
     if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
     } else if (cmp_ret < 0) {
-      ret = clone_aggr_cell(aggr_cell, other, is_number);
+      ret = clone_aggr_cell(aggr_cell, other, input_type);
       removal_info_.is_index_change_ = true;
     }
   } else if (/*base.is_null() &&*/ !other.is_null()) {
     // base must be null!
     // if base is not null, the first 'if' will be match, not this 'else if'.
-    ret = clone_aggr_cell(aggr_cell, other, is_number);
+    ret = clone_aggr_cell(aggr_cell, other, input_type);
     removal_info_.is_index_change_ = true;
   } else {
     // nothing.
@@ -4542,23 +4846,28 @@ int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
   return ret;
 }
 
-int ObAggregateProcessor::min_calc(AggrCell &aggr_cell, ObDatum &base, const ObDatum &other,
-    ObDatumCmpFuncType cmp_func, const bool is_number)
+int ObAggregateProcessor::min_calc(AggrCell &aggr_cell, const ObDatum &other,
+    ObDatumCmpFuncType cmp_func, const SqlType &input_type)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char base_scratch[64];
+  ObDatum base;
+  if (OB_FAIL(aggr_cell.export_semantic_iter(input_type, base, base_scratch, sizeof(base_scratch)))) {
+    return ret;
+  }
   if (OB_ISNULL(cmp_func)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
     if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
     } else if (cmp_ret > 0) {
-      ret = clone_aggr_cell(aggr_cell, other, is_number);
+      ret = clone_aggr_cell(aggr_cell, other, input_type);
       removal_info_.is_index_change_ = true;
     }
   } else if (/*base.is_null() &&*/ !other.is_null()) {
     // base must be null!
     // if base is not null, the first 'if' will be match, not this 'else if'.
-    ret = clone_aggr_cell(aggr_cell, other, is_number);
+    ret = clone_aggr_cell(aggr_cell, other, input_type);
     removal_info_.is_index_change_ = true;
   } else {
     // nothing.
@@ -4569,10 +4878,15 @@ int ObAggregateProcessor::min_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
 template <typename T>
 int ObAggregateProcessor::max_calc_batch(
   AggrCell &aggr_cell,
-  ObDatum &dst, const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const bool is_number,
+  const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const SqlType &input_type,
   const T &selector)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char base_scratch[64];
+  ObDatum dst;
+  if (OB_FAIL(aggr_cell.export_semantic_iter(input_type, dst, base_scratch, sizeof(base_scratch)))) {
+    return ret;
+  }
   if (OB_UNLIKELY(OB_ISNULL(cmp_func))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(!selector.is_valid())) {
@@ -4598,7 +4912,7 @@ int ObAggregateProcessor::max_calc_batch(
       }
     }
     if (OB_SUCC(ret) && max) {
-      ret = clone_aggr_cell(aggr_cell, *(max), is_number);
+      ret = clone_aggr_cell(aggr_cell, *(max), input_type);
     }
   }
   return ret;
@@ -4607,10 +4921,15 @@ int ObAggregateProcessor::max_calc_batch(
 template <typename T>
 int ObAggregateProcessor::min_calc_batch(
     AggrCell &aggr_cell,
-    ObDatum &dst, const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const bool is_number,
+    const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const SqlType &input_type,
     const T &selector)
 {
   int ret = OB_SUCCESS;
+  alignas(8) char base_scratch[64];
+  ObDatum dst;
+  if (OB_FAIL(aggr_cell.export_semantic_iter(input_type, dst, base_scratch, sizeof(base_scratch)))) {
+    return ret;
+  }
   if (OB_UNLIKELY(OB_ISNULL(cmp_func))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(!selector.is_valid())) {
@@ -4636,7 +4955,7 @@ int ObAggregateProcessor::min_calc_batch(
       }
     }
     if (OB_SUCC(ret) && min) {
-      ret = clone_aggr_cell(aggr_cell, *(min), is_number);
+      ret = clone_aggr_cell(aggr_cell, *(min), input_type);
     }
   }
   return ret;
@@ -4647,7 +4966,10 @@ int ObAggregateProcessor::prepare_add_calc(
 {
   int ret = OB_SUCCESS;
   const SqlTypeClass column_tc = sql_type_class(aggr_info.get_first_child_type());
-  ObDatum &result_datum = aggr_cell.get_iter_result();
+  alignas(8) char iter_scratch[64];
+  ObDatum result_datum;
+  if (OB_FAIL(aggr_cell.export_iter(semantic_iteration_type(aggr_info),
+      result_datum, iter_scratch, sizeof(iter_scratch)))) { return ret; }
   switch (column_tc) {
     case ObIntTC: {
       aggr_cell.set_tiny_num_int(first_value.get_int());
@@ -4660,13 +4982,20 @@ int ObAggregateProcessor::prepare_add_calc(
       break;
     }
     case ObFloatTC:
-    case ObDoubleTC:
+    case ObDoubleTC: {
+      ret = clone_kernel_cell(aggr_cell, first_value,
+          IterKernelLayout(column_tc == ObFloatTC ? IterValueDomain::Float32 : IterValueDomain::Float64),
+          &result_datum, iter_scratch, sizeof(iter_scratch));
+      break;
+    }
     case ObCollectionSQLTC: {
-      ret = clone_aggr_cell(aggr_cell, first_value, false);
+      ret = clone_vector_cell(first_value, aggr_cell,
+          aggr_info.param_exprs_.at(0)->get_sql_type(), &result_datum, iter_scratch, sizeof(iter_scratch));
       break;
     }
     case ObNumberTC: {
-      ret = clone_aggr_cell(aggr_cell, first_value, true);
+      ret = clone_kernel_cell(aggr_cell, first_value,
+          IterKernelLayout(IterValueDomain::Number), &result_datum);
       break;
     }
     case ObDecimalIntTC: {
@@ -4674,11 +5003,16 @@ int ObAggregateProcessor::prepare_add_calc(
       if (OB_ISNULL(ctx = get_decint_aggr_func_ctx(aggr_info))) {
         ret = OB_ERR_UNEXPECTED;
       } else {
-        const int64_t need_size = sizeof(int64_t) * 2 + sizeof(int512_t);
+        const int64_t need_size = sizeof(int512_t);
         const int16_t scale = aggr_info.get_first_child_datum_scale();
-        if (OB_FAIL(clone_cell(aggr_cell, need_size, nullptr))) {
-        } else if (OB_FAIL(ctx->store_func(aggr_cell.get_iter_result(),
+        if (OB_FAIL(reserve_kernel_cell(aggr_cell,
+            IterKernelLayout(IterValueDomain::DecimalCoefficient, sizeof(int512_t)), need_size, result_datum))) {
+        } else if (OB_FAIL(ctx->store_func(result_datum,
                                            first_value.get_decimal_int(), scale))) {
+        } else {
+          ret = clone_kernel_cell(aggr_cell, result_datum,
+              ctx->number_result_ ? IterKernelLayout(IterValueDomain::Number)
+                  : IterKernelLayout(IterValueDomain::DecimalCoefficient, result_datum.len_), &result_datum);
         }
       }
       break;
@@ -4699,7 +5033,10 @@ int ObAggregateProcessor::add_calc(
 {
   int ret = OB_SUCCESS;
   const SqlTypeClass column_tc = sql_type_class(aggr_info.get_first_child_type());
-  ObDatum &result_datum = aggr_cell.get_iter_result();
+  alignas(8) char iter_scratch[64];
+  ObDatum result_datum;
+  if (OB_FAIL(aggr_cell.export_iter(semantic_iteration_type(aggr_info),
+      result_datum, iter_scratch, sizeof(iter_scratch)))) { return ret; }
   switch (column_tc) {
     case ObIntTC: {
       int64_t left_int = aggr_cell.get_tiny_num_int();
@@ -4720,7 +5057,7 @@ int ObAggregateProcessor::add_calc(
             result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
           }
           if (OB_FAIL(result_nmb.add(left_int, right_int, result_nmb, allocator))) {
-          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell))) {
+          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell, &result_datum))) {
           }
         }
         aggr_cell.set_tiny_num_int(0);
@@ -4749,7 +5086,7 @@ int ObAggregateProcessor::add_calc(
             result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
           }
           if (OB_FAIL(result_nmb.add(left_uint, right_uint, result_nmb, allocator))) {
-          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell))) {
+          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell, &result_datum))) {
           }
         }
         aggr_cell.set_tiny_num_uint(0);
@@ -4761,7 +5098,8 @@ int ObAggregateProcessor::add_calc(
     }
     case ObFloatTC: {
       if (result_datum.is_null()) {
-        ret = clone_aggr_cell(aggr_cell, iter_value, false);
+        ret = clone_kernel_cell(aggr_cell, iter_value,
+            IterKernelLayout(IterValueDomain::Float32), &result_datum, iter_scratch, sizeof(iter_scratch));
       } else {
         float left_f = result_datum.get_float();
         float right_f = iter_value.get_float();
@@ -4777,17 +5115,22 @@ int ObAggregateProcessor::add_calc(
           LOG_WARN("float out of range", K(left_f), K(right_f));
         } else {
           result_datum.set_float(left_f + right_f);
+          ret = clone_kernel_cell(aggr_cell, result_datum,
+              IterKernelLayout(IterValueDomain::Float32));
         }
       }
       break;
     }
     case ObDoubleTC: {
       if (result_datum.is_null()) {
-        ret = clone_aggr_cell(aggr_cell, iter_value, false);
+        ret = clone_kernel_cell(aggr_cell, iter_value,
+            IterKernelLayout(IterValueDomain::Float64), &result_datum, iter_scratch, sizeof(iter_scratch));
       } else {
         double left_d = result_datum.get_double();
         double right_d = iter_value.get_double();
         result_datum.set_double(left_d + right_d);
+        ret = clone_kernel_cell(aggr_cell, result_datum,
+              IterKernelLayout(IterValueDomain::Float64));
       }
       break;
     }
@@ -4795,7 +5138,8 @@ int ObAggregateProcessor::add_calc(
       ObNumber right_nmb(iter_value.get_number());
       removal_info_.is_out_of_range_ = right_nmb.fast_sum_agg_may_overflow();
       if (result_datum.is_null()) {
-        ret = clone_aggr_cell(aggr_cell, iter_value, true);
+        ret = clone_kernel_cell(aggr_cell, iter_value,
+            IterKernelLayout(IterValueDomain::Number), &result_datum);
       } else {
         ObNumber left_nmb(result_datum.get_number());
         removal_info_.is_out_of_range_ = removal_info_.is_out_of_range_ || left_nmb.fast_sum_agg_may_overflow();
@@ -4805,7 +5149,7 @@ int ObAggregateProcessor::add_calc(
         ObNumber result_nmb;
         if (OB_FAIL(left_nmb.add_v3(right_nmb, result_nmb, allocator, strict_mode))) {
         } else {
-          ret = clone_number_cell(result_nmb, aggr_cell);
+          ret = clone_number_cell(result_nmb, aggr_cell, &result_datum);
         }
       }
       break;
@@ -4816,17 +5160,27 @@ int ObAggregateProcessor::add_calc(
       if (OB_ISNULL(ctx = get_decint_aggr_func_ctx(aggr_info))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_UNLIKELY(result_datum.is_null())) {
-        const int64_t need_size = sizeof(int64_t) * 2 + sizeof(int512_t);
-        if (OB_FAIL(clone_cell(aggr_cell, need_size, nullptr))) {
+        const int64_t need_size = sizeof(int512_t);
+        if (OB_FAIL(reserve_kernel_cell(aggr_cell,
+            IterKernelLayout(IterValueDomain::DecimalCoefficient, sizeof(int512_t)), need_size, result_datum))) {
         } else if (OB_FAIL(ctx->store_func(result_datum, iter_value.get_decimal_int(), scale))) {
+        } else {
+          ret = clone_kernel_cell(aggr_cell, result_datum,
+              ctx->number_result_ ? IterKernelLayout(IterValueDomain::Number)
+                  : IterKernelLayout(IterValueDomain::DecimalCoefficient, result_datum.len_), &result_datum);
         }
       } else if (OB_FAIL(ctx->add_func(result_datum, iter_value.get_decimal_int(), scale))) {
+      } else {
+        ret = clone_kernel_cell(aggr_cell, result_datum,
+            ctx->number_result_ ? IterKernelLayout(IterValueDomain::Number)
+                : IterKernelLayout(IterValueDomain::DecimalCoefficient, result_datum.len_), &result_datum);
       }
       break;
     }
     case ObCollectionSQLTC: {
       if (result_datum.is_null()) {
-        ret = clone_aggr_cell(aggr_cell, iter_value, false);
+        ret = clone_vector_cell(iter_value, aggr_cell,
+            aggr_info.param_exprs_.at(0)->get_sql_type(), &result_datum, iter_scratch, sizeof(iter_scratch));
       } else {
         ObString blob_res = result_datum.get_string();
         ObLobLocatorV2 locator(blob_res, true/*has_lob_header*/);
@@ -4835,9 +5189,9 @@ int ObAggregateProcessor::add_calc(
         if (OB_FAIL(add_legacy_aggr_vector(eval_ctx_.exec_ctx_, *aggr_info.param_exprs_.at(0),
             result_datum, iter_value, aggr_alloc_,
             is_outrow ? &tmp_datum : nullptr))) {
-        } else if (is_outrow) {
-          if (OB_FAIL(clone_vector_cell(tmp_datum, aggr_cell))) {
-          }
+        } else {
+          ret = clone_vector_cell(is_outrow ? tmp_datum : result_datum, aggr_cell,
+              aggr_info.param_exprs_.at(0)->get_sql_type(), &result_datum, iter_scratch, sizeof(iter_scratch));
         }
       }
       break;
@@ -4859,10 +5213,11 @@ int ObAggregateProcessor::calc_overflow_res_to_decimal_int(ObDatum &result_datum
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(result_datum.is_null())) {
     // init first datum for agg cell
-    const int64_t need_size = sizeof(int64_t) * 2 + sizeof(int256_t);
-    if (OB_FAIL(clone_cell(aggr_cell, need_size, nullptr))) {
+    const int64_t need_size = sizeof(int256_t);
+    if (OB_FAIL(reserve_kernel_cell(aggr_cell,
+        IterKernelLayout(IterValueDomain::DecimalCoefficient, sizeof(int256_t)), need_size, result_datum))) {
     } else {
-      const char *buf = aggr_cell.get_buf() + 2 * sizeof(int64_t);
+      const char *buf = result_datum.ptr_;
       MEMSET(const_cast<char *> (buf), 0, sizeof(int256_t)); // set to zero
     }
   }
@@ -4872,6 +5227,10 @@ int ObAggregateProcessor::calc_overflow_res_to_decimal_int(ObDatum &result_datum
     } else {
       ret = DecIntAggFuncCtx::sub_int(result_datum, precision, val1);
     }
+  }
+  if (OB_SUCC(ret)) {
+    ret = clone_kernel_cell(aggr_cell, result_datum,
+        IterKernelLayout(IterValueDomain::DecimalCoefficient, result_datum.len_), &result_datum);
   }
   return ret;
 }
@@ -4883,7 +5242,10 @@ int ObAggregateProcessor::sub_calc(
 {
   int ret = OB_SUCCESS;
   const SqlTypeClass column_tc = sql_type_class(aggr_info.get_first_child_type());
-  ObDatum &result_datum = aggr_cell.get_iter_result();
+  alignas(8) char iter_scratch[64];
+  ObDatum result_datum;
+  if (OB_FAIL(aggr_cell.export_iter(semantic_iteration_type(aggr_info),
+      result_datum, iter_scratch, sizeof(iter_scratch)))) { return ret; }
   switch (column_tc) {
     case ObIntTC: {
       // If out of range, use result_datum sub right_value, not change left_value.
@@ -4910,7 +5272,7 @@ int ObAggregateProcessor::sub_calc(
           }
           if (OB_FAIL(right_num.from(right_int, int_allocator))) {
           } else if (OB_FAIL(result_nmb.sub_v3(right_num, result_nmb, allocator))) {
-          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell))) {
+          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell, &result_datum))) {
           } else {
             // maintain tiny num int
           }
@@ -4952,7 +5314,7 @@ int ObAggregateProcessor::sub_calc(
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(uint_max_nmb.from((uint64_t)ULONG_MAX, uint_allocator))) {
           } else if (OB_FAIL(result_nmb.sub_v3(uint_max_nmb, result_nmb, allocator, strict_mode))) {
-          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell))) {
+          } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell, &result_datum))) {
           }
         }
         aggr_cell.set_tiny_num_uint((uint64_t)ULONG_MAX - right_uint + left_uint);
@@ -4966,7 +5328,8 @@ int ObAggregateProcessor::sub_calc(
       ObNumber right_nmb(iter_value.get_number());
       removal_info_.is_out_of_range_ = right_nmb.fast_sum_agg_may_overflow();
       if (result_datum.is_null()) {
-        ret = clone_aggr_cell(aggr_cell, iter_value, true);
+        ret = clone_kernel_cell(aggr_cell, iter_value,
+            IterKernelLayout(IterValueDomain::Number), &result_datum);
       } else {
         ObNumber left_nmb(result_datum.get_number());
         removal_info_.is_out_of_range_ = removal_info_.is_out_of_range_ || left_nmb.fast_sum_agg_may_overflow();
@@ -4976,7 +5339,7 @@ int ObAggregateProcessor::sub_calc(
         ObNumber result_nmb;
         if (OB_FAIL(left_nmb.sub_v3(right_nmb, result_nmb, allocator, strict_mode))) {
         } else {
-          ret = clone_number_cell(result_nmb, aggr_cell);
+          ret = clone_number_cell(result_nmb, aggr_cell, &result_datum);
         }
       }
       break;
@@ -4987,12 +5350,17 @@ int ObAggregateProcessor::sub_calc(
       if (OB_ISNULL(ctx = get_decint_aggr_func_ctx(aggr_info))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ctx->sub_func(result_datum, iter_value.get_decimal_int(), scale))) {
+      } else {
+        ret = clone_kernel_cell(aggr_cell, result_datum,
+            ctx->number_result_ ? IterKernelLayout(IterValueDomain::Number)
+                : IterKernelLayout(IterValueDomain::DecimalCoefficient, result_datum.len_), &result_datum);
       }
       break;
     }
     case ObCollectionSQLTC: {
       if (result_datum.is_null()) {
-        ret = clone_aggr_cell(aggr_cell, iter_value, false);
+        ret = clone_vector_cell(iter_value, aggr_cell,
+            aggr_info.param_exprs_.at(0)->get_sql_type(), &result_datum, iter_scratch, sizeof(iter_scratch));
       } else {
         ObString blob_res = result_datum.get_string();
         ObLobLocatorV2 locator(blob_res, true/*has_lob_header*/);
@@ -5001,9 +5369,9 @@ int ObAggregateProcessor::sub_calc(
         if (OB_FAIL(add_legacy_aggr_vector(eval_ctx_.exec_ctx_, *aggr_info.param_exprs_.at(0),
             result_datum, iter_value, aggr_alloc_,
             is_outrow ? &tmp_datum : nullptr, true /*negative*/))) {
-        } else if (is_outrow) {
-          if (OB_FAIL(clone_vector_cell(tmp_datum, aggr_cell))) {
-          }
+        } else {
+          ret = clone_vector_cell(is_outrow ? tmp_datum : result_datum, aggr_cell,
+              aggr_info.param_exprs_.at(0)->get_sql_type(), &result_datum, iter_scratch, sizeof(iter_scratch));
         }
       }
       break;
@@ -5029,51 +5397,24 @@ int ObAggregateProcessor::init_group_extra_aggr_info(
   } else {
     extra->reuse_self();
     if (aggr_info.separator_expr_ != NULL) {
-      LegacyAggrValue separator_storage;
-      ObDatum *separator_result = nullptr;
+      Datum *separator_result = nullptr;
       if (aggr_info.separator_expr_->is_const_expr()) {
         if (OB_UNLIKELY(!aggr_info.separator_expr_->obj_meta_.is_string_type())) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(eval_legacy_aggr(*aggr_info.separator_expr_, eval_ctx_, separator_storage, separator_result))) {
+        } else if (OB_FAIL(aggr_info.separator_expr_->eval(eval_ctx_, separator_result))) {
         } else {
-          // prepare phase parsing separator, if it reaches the collect phase, then seperate_expr is already the value of the next group, leading to incorrect results
-          int64_t pos = sizeof(ObDatum);
-          int64_t len = pos + (separator_result->null_ ? 0 : separator_result->len_);
-          char *buf = (char*)aggr_alloc_.alloc(len);
-          if (OB_ISNULL(buf)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            ObDatum **separator_datum = const_cast<ObDatum**>(&extra->separator_datum_);
-            *separator_datum = new (buf) ObDatum;
-            if (OB_FAIL((*separator_datum)->deep_copy(*separator_result, buf, len, pos))) {
-            } else {
-              LOG_DEBUG("succ to calc separator", K(ret), KP(*separator_datum));
-            }
-          }
+          // Capture before collect: the expression may already hold the next group then.
+          ret = extra->copy_separator(*separator_result,
+              aggr_info.separator_expr_->get_datum_copy_plan());
         }
       } else if (!aggr_info.separator_expr_->is_const_expr()) {
         if (OB_UNLIKELY(!aggr_info.separator_expr_->obj_meta_.is_string_type() ||
                         selector.begin() >= selector.end())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          uint16_t batch_idx = selector.get_batch_index(selector.begin());
-          LegacyAggrValue separator_storage;
-          ObDatum *separator_result = &separator_storage.value_;
-          if (OB_FAIL(separator_storage.prepare(*aggr_info.separator_expr_,
-                  aggr_info.separator_expr_->locate_expr_datum(eval_ctx_, batch_idx)))) { return ret; }
-          int64_t pos = sizeof(ObDatum);
-          int64_t len = pos + (separator_result->null_ ? 0 : separator_result->len_);
-          char *buf = (char*)aggr_alloc_.alloc(len);
-          if (OB_ISNULL(buf)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            ObDatum **separator_datum = const_cast<ObDatum**>(&extra->get_separator_datum());
-            *separator_datum = new (buf) ObDatum;
-            if (OB_FAIL((*separator_datum)->deep_copy(*separator_result, buf, len, pos))) {
-            } else {
-              LOG_TRACE("succ to calc separator", K(ret), KPC(*separator_datum));
-            }
-          }
+          const uint16_t batch_idx = selector.get_batch_index(selector.begin());
+          ret = extra->copy_separator(aggr_info.separator_expr_->locate_expr_datum(eval_ctx_, batch_idx),
+              aggr_info.separator_expr_->get_datum_copy_plan());
         }
       }
     } else {
@@ -5234,7 +5575,7 @@ int ObAggregateProcessor::top_fre_hist_calc_batch(
       common::ObDatumHashFuncType hash_func = storage_predicate_functions(*aggr_info.param_exprs_.at(0))->murmur_hash_;
       uint64_t datum_value = 0;
       if (OB_FAIL(hash_func(*datum, datum_value, datum_value, datum_access_ctx_))) {
-      } else if (OB_FAIL(extra_info->topk_fre_hist_.add_top_k_frequency_item(datum_value, *datum))) {
+      } else if (OB_FAIL(extra_info->topk_fre_hist_.add_top_k_frequency_item(datum_value, *datum, obj_meta))) {
       } else if (origin_str_len > 0) {
         if (OB_UNLIKELY(!ObColumnStatParam::is_valid_opt_col_type(obj_meta.get_type()) ||
                         !obj_meta.is_string_type())) {
@@ -5277,7 +5618,6 @@ int ObAggregateProcessor::approx_count_merge_calc_batch(
   ObDatum &dst,
   AggrCell &aggr_cell,
   const ObDatumVector &arg_datums,
-  const bool is_number,
   const T &selector
 )
 {
@@ -5289,7 +5629,8 @@ int ObAggregateProcessor::approx_count_merge_calc_batch(
     }
     if (!aggr_cell.get_is_evaluated()) {
       // init firstly
-      ret = clone_aggr_cell(aggr_cell, *arg_datums.at(nth_row), is_number);
+      ret = clone_kernel_cell(aggr_cell, *arg_datums.at(nth_row),
+          IterKernelLayout(IterValueDomain::HllRegisters, 0, arg_datums.at(nth_row)->len_), &dst);
       aggr_cell.set_is_evaluated(true);
     } else {
       ret = llc_add(dst, *arg_datums.at(nth_row));
@@ -5334,12 +5675,15 @@ int ObAggregateProcessor::approx_count_calc_batch(
 
 template <typename T>
 int ObAggregateProcessor::add_calc_batch(
-    ObDatum &dst, const ObDatumVector &src, AggrCell &aggr_cell, const ObAggrInfo &aggr_info,
+    const ObDatumVector &src, AggrCell &aggr_cell, const ObAggrInfo &aggr_info,
     const T &selector)
 {
   int ret = OB_SUCCESS;
   const SqlTypeClass column_tc = sql_type_class(aggr_info.get_first_child_type());
-  ObDatum &result_datum = dst;
+  alignas(8) char iter_scratch[64];
+  ObDatum result_datum;
+  if (OB_FAIL(aggr_cell.export_iter(semantic_iteration_type(aggr_info),
+      result_datum, iter_scratch, sizeof(iter_scratch)))) { return ret; }
   switch (column_tc) {
     case ObIntTC: {
       char buf_alloc[ObNumber::MAX_CALC_BYTE_LEN];
@@ -5369,7 +5713,7 @@ int ObAggregateProcessor::add_calc_batch(
               result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
             }
             if (OB_FAIL(result_nmb.add(left_int, right_int, result_nmb, allocator))) {
-            } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell))) {
+            } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell, &result_datum))) {
             } else {
               allocator.free();
             }
@@ -5410,7 +5754,7 @@ int ObAggregateProcessor::add_calc_batch(
               result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
             }
             if (OB_FAIL(result_nmb.add(left_uint, right_uint, result_nmb, allocator))) {
-            } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell))) {
+            } else if (OB_FAIL(clone_number_cell(result_nmb, aggr_cell, &result_datum))) {
             } else {
               allocator.free();
             }
@@ -5433,7 +5777,8 @@ int ObAggregateProcessor::add_calc_batch(
           continue;
         }
         if (result_datum.is_null()) {
-          ret = clone_aggr_cell(aggr_cell, *src.at(i), false);
+          ret = clone_kernel_cell(aggr_cell, *src.at(i),
+              IterKernelLayout(IterValueDomain::Float32), &result_datum, iter_scratch, sizeof(iter_scratch));
         } else {
           left_f  = result_datum.get_float();
           right_f = src.at(i)->get_float();
@@ -5449,6 +5794,8 @@ int ObAggregateProcessor::add_calc_batch(
             LOG_WARN("float out of range", K(left_f), K(right_f));
           } else {
             result_datum.set_float(left_f + right_f);
+            ret = clone_kernel_cell(aggr_cell, result_datum,
+                IterKernelLayout(IterValueDomain::Float32));
           }
         }
       }
@@ -5464,11 +5811,14 @@ int ObAggregateProcessor::add_calc_batch(
           continue;
         }
         if (result_datum.is_null()) {
-          ret = clone_aggr_cell(aggr_cell, *src.at(i), false);
+          ret = clone_kernel_cell(aggr_cell, *src.at(i),
+              IterKernelLayout(IterValueDomain::Float64), &result_datum, iter_scratch, sizeof(iter_scratch));
         } else {
           left_d  = result_datum.get_double();
           right_d = src.at(i)->get_double();
           result_datum.set_double(left_d + right_d);
+          ret = clone_kernel_cell(aggr_cell, result_datum,
+                IterKernelLayout(IterValueDomain::Float64));
         }
       }
       break;
@@ -5489,7 +5839,7 @@ int ObAggregateProcessor::add_calc_batch(
       if (OB_FAIL(number_accumulator(src, allocator1, allocator2, result_nmb,
                                      sum_digits_buf, all_skip, selector))) {
       } else if (!all_skip) {
-        ret = clone_number_cell(result_nmb, aggr_cell);
+        ret = clone_number_cell(result_nmb, aggr_cell, &result_datum);
       }
       break;
     }
@@ -5500,6 +5850,10 @@ int ObAggregateProcessor::add_calc_batch(
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ctx->add_batch_func[T::DECIMAL_INT_BATCH_FUNC_IDX](
           result_datum, this, aggr_cell, src, &selector, scale))) {
+      } else if (!result_datum.is_null()) {
+        ret = clone_kernel_cell(aggr_cell, result_datum,
+            ctx->number_result_ ? IterKernelLayout(IterValueDomain::Number)
+                : IterKernelLayout(IterValueDomain::DecimalCoefficient, result_datum.len_), &result_datum);
       }
       break;
     }
@@ -5511,7 +5865,8 @@ int ObAggregateProcessor::add_calc_batch(
           continue;
         }
         if (result_datum.is_null()) {
-          ret = clone_aggr_cell(aggr_cell, *src.at(i), false);
+          ret = clone_vector_cell(*src.at(i), aggr_cell,
+              aggr_info.param_exprs_.at(0)->get_sql_type(), &result_datum, iter_scratch, sizeof(iter_scratch));
         } else {
           ObString blob_res = result_datum.get_string();
           ObLobLocatorV2 locator(blob_res, true/*has_lob_header*/);
@@ -5520,9 +5875,9 @@ int ObAggregateProcessor::add_calc_batch(
           if (OB_FAIL(add_legacy_aggr_vector(eval_ctx_.exec_ctx_, *aggr_info.param_exprs_.at(0),
               result_datum, *src.at(i), aggr_alloc_,
               is_outrow ? &tmp_datum : nullptr))) {
-          } else if (is_outrow) {
-            if (OB_FAIL(clone_vector_cell(tmp_datum, aggr_cell))) {
-            }
+          } else {
+            ret = clone_vector_cell(is_outrow ? tmp_datum : result_datum, aggr_cell,
+                aggr_info.param_exprs_.at(0)->get_sql_type(), &result_datum, iter_scratch, sizeof(iter_scratch));
           }
         }
       }
@@ -5635,11 +5990,14 @@ int ObAggregateProcessor::grouping_id_calc_batch(const ObAggrInfo &aggr_info, Ag
 int ObAggregateProcessor::rollup_add_number_calc(const ObDatum &aggr_result, AggrCell &aggr_cell)
 {
   int ret = OB_SUCCESS;
-  ObDatum &rollup_result = aggr_cell.get_iter_result();
+  ObDatum rollup_result;
+  if (OB_FAIL(aggr_cell.export_kernel_iter(IterKernelLayout(IterValueDomain::Number),
+      rollup_result, nullptr, 0))) { return ret; }
   if (aggr_result.is_null()) {
     //do nothing
   } else if (rollup_result.is_null()) {
-    if (OB_FAIL(clone_aggr_cell(aggr_cell, aggr_result, true))) {
+    if (OB_FAIL(clone_kernel_cell(aggr_cell, aggr_result,
+        IterKernelLayout(IterValueDomain::Number), &rollup_result))) {
     }
   } else {
     char buf_alloc[ObNumber::MAX_CALC_BYTE_LEN];
@@ -5660,16 +6018,25 @@ int ObAggregateProcessor::rollup_add_decimalint_calc(const ObDatum &aggr_result,
                                                      const ObAggrInfo &aggr_info)
 {
   int ret = OB_SUCCESS;
-  ObDatum &rollup_result = rollup_cell.get_iter_result();
+  alignas(8) char target_scratch[64];
+  ObDatum rollup_result;
+  if (OB_FAIL(rollup_cell.export_iter(nullptr, rollup_result, target_scratch, sizeof(target_scratch)))) {
+    return ret;
+  }
   DecIntAggFuncCtx *ctx = nullptr;
   if (aggr_result.is_null()) {
     // do nothing
   } else if (rollup_result.is_null()) {
-    if (OB_FAIL(clone_aggr_cell(rollup_cell, aggr_result, false))) {
+    if (OB_FAIL(clone_kernel_cell(rollup_cell, aggr_result,
+        IterKernelLayout(IterValueDomain::DecimalCoefficient, aggr_result.len_), &rollup_result))) {
     }
   } else if (OB_ISNULL(ctx = get_decint_aggr_func_ctx(aggr_info))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ctx->merge_func(rollup_result, aggr_result.get_decimal_int(), 0 /*unused*/))) {
+  } else {
+    ret = clone_kernel_cell(rollup_cell, rollup_result,
+        ctx->number_result_ ? IterKernelLayout(IterValueDomain::Number)
+            : IterKernelLayout(IterValueDomain::DecimalCoefficient, rollup_result.len_));
   }
   return ret;
 }
@@ -5679,8 +6046,12 @@ int ObAggregateProcessor::rollup_add_calc(
 {
   int ret = OB_SUCCESS;
   const SqlTypeClass column_tc = sql_type_class(aggr_info.get_first_child_type());
-  const ObDatum &aggr_result = aggr_cell.get_iter_result();
-  ObDatum &rollup_result = rollup_cell.get_iter_result();
+  alignas(8) char source_scratch[64], target_scratch[64];
+  ObDatum aggr_result, rollup_result;
+  if (OB_FAIL(aggr_cell.export_iter(semantic_iteration_type(aggr_info),
+      aggr_result, source_scratch, sizeof(source_scratch)))) { return ret; }
+  if (OB_FAIL(rollup_cell.export_iter(semantic_iteration_type(aggr_info),
+      rollup_result, target_scratch, sizeof(target_scratch)))) { return ret; }
   switch (column_tc) {
     case ObIntTC: {
       if (aggr_cell.is_tiny_num_used()) {
@@ -5701,7 +6072,7 @@ int ObAggregateProcessor::rollup_add_calc(
               result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
             }
             if (OB_FAIL(result_nmb.add(left_int, right_int, result_nmb, allocator))) {
-            } else if (OB_FAIL(clone_number_cell(result_nmb, rollup_cell))) {
+            } else if (OB_FAIL(clone_number_cell(result_nmb, rollup_cell, &rollup_result))) {
             }
           }
           rollup_cell.set_tiny_num_int(0);
@@ -5738,7 +6109,7 @@ int ObAggregateProcessor::rollup_add_calc(
               result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
             }
             if (OB_FAIL(result_nmb.add(left_uint, right_uint, result_nmb, allocator))) {
-            } else if (OB_FAIL(clone_number_cell(result_nmb, rollup_cell))) {
+            } else if (OB_FAIL(clone_number_cell(result_nmb, rollup_cell, &rollup_result))) {
             }
           }
           rollup_cell.set_tiny_num_uint(0);
@@ -5768,7 +6139,8 @@ int ObAggregateProcessor::rollup_add_calc(
       if (aggr_result.is_null()) {
         //do nothing
       } else if (rollup_result.is_null()) {
-        ret = clone_aggr_cell(rollup_cell, aggr_result, false);
+        ret = clone_kernel_cell(rollup_cell, aggr_result,
+            IterKernelLayout(IterValueDomain::Float32), &rollup_result, target_scratch, sizeof(target_scratch));
       } else {
         float left_f = aggr_result.get_float();
         float right_f = rollup_result.get_float();
@@ -5784,6 +6156,8 @@ int ObAggregateProcessor::rollup_add_calc(
           LOG_WARN("float out of range", K(left_f), K(right_f));
         } else {
           rollup_result.set_float(left_f + right_f);
+          ret = clone_kernel_cell(rollup_cell, rollup_result,
+              IterKernelLayout(IterValueDomain::Float32));
         }
       }
       break;
@@ -5792,7 +6166,8 @@ int ObAggregateProcessor::rollup_add_calc(
       if (aggr_result.is_null()) {
         //do nothing
       } else if (rollup_result.is_null()) {
-        ret = clone_aggr_cell(rollup_cell, aggr_result, false);
+        ret = clone_kernel_cell(rollup_cell, aggr_result,
+            IterKernelLayout(IterValueDomain::Float64), &rollup_result, target_scratch, sizeof(target_scratch));
       } else {
         double left_d = aggr_result.get_double();
         double right_d = rollup_result.get_double();
@@ -5807,6 +6182,8 @@ int ObAggregateProcessor::rollup_add_calc(
           LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "DOUBLE", expr_str);
         } else {
           rollup_result.set_double(left_d + right_d);
+          ret = clone_kernel_cell(rollup_cell, rollup_result,
+              IterKernelLayout(IterValueDomain::Float64));
         }
       }
       break;
@@ -5877,7 +6254,8 @@ int ObAggregateProcessor::llc_init(AggrCell &aggr_cell)
   char llc_bitmap_buf[sizeof(char ) * LLC_NUM_BUCKETS] = {};
   ObDatum src_datum;
   src_datum.set_string(llc_bitmap_buf, sizeof(char ) * LLC_NUM_BUCKETS);
-  ret = clone_aggr_cell(aggr_cell, src_datum);
+  ret = clone_kernel_cell(aggr_cell, src_datum,
+      IterKernelLayout(IterValueDomain::HllRegisters, 0, get_llc_size()));
   return ret;
 }
 
@@ -6160,20 +6538,11 @@ int ObAggregateCalcFunc::add_decimalint_with_same_precision(const ObDatum &left_
 }
 
 // only for window function aggr cell
-int ObAggregateProcessor::clone_cell_for_wf(ObDatum &target_cell, const ObDatum &src_cell,
-    const bool is_number/*false*/)
+int ObAggregateProcessor::clone_cell_for_wf(Datum &target_cell, const Datum &src_cell,
+    const DatumCopyPlan &plan, char *&buffer, int64_t &capacity, const bool is_number/*false*/)
 {
-  int ret = OB_SUCCESS;
-  int64_t need_size = sizeof(int64_t) * 2 +
-      (is_number ? number::ObNumber::MAX_BYTE_LEN : src_cell.len_);
-  AggrCell aggr_cell;
-  if (OB_FAIL(clone_cell(aggr_cell, need_size, &target_cell))) {
-  } else {
-    memcpy((char*)target_cell.ptr_, src_cell.ptr_, src_cell.len_);
-    target_cell.pack_ = src_cell.pack_;
-  }
-  OX(SQL_LOG(DEBUG, "succ to clone cell", K(src_cell), K(target_cell), K(need_size)));
-  return ret;
+  return copy_final_result(src_cell, plan, aggr_alloc_, target_cell, buffer, capacity,
+      is_number ? number::ObNumber::MAX_BYTE_LEN : 0);
 }
 
 int ObAggregateProcessor::get_wm_concat_result(const ObAggrInfo &aggr_info,
@@ -7904,6 +8273,7 @@ int ObAggregateProcessor::DecIntAggFuncCtx::init(const ObAggrInfo &aggr_info,
     store_func = DEC_INT_MERGE_FUNCS[arg_type][2];
     merge_func = DEC_INT_MERGE_FUNCS[arg_type][0];
     add_batch_func = DEC_INT_MERGE_BATCH_FUNCS[arg_type];
+    number_result_ = false;
   } else { // mysql mode
     const int res_type = static_cast<int>(get_decimalint_type(res_prec));
     int res_func_idx = 0;
@@ -7931,6 +8301,7 @@ int ObAggregateProcessor::DecIntAggFuncCtx::init(const ObAggrInfo &aggr_info,
         store_func = DEC_INT_OP_FUNCS[arg_type][res_func_idx][2];
         merge_func = DEC_INT_MERGE_FUNCS[res_type][0];
         add_batch_func = DEC_INT_ADD_BATCH_FUNCS[arg_type][res_func_idx][need_cast];
+        number_result_ = (res_func_idx == 2);
       }
     }
   }
@@ -8128,8 +8499,10 @@ struct ObDecIntSumBatchOpFunc
     DECIMAL_INT_BATCH_ACCUM;
     if (OB_LIKELY(accumulated)) {
       if (result.is_null()) {
-        int64_t need_size = sizeof(int64_t) * 2 + sizeof(RES_T);
-        if (OB_FAIL(processor->clone_cell(aggr_cell, need_size, nullptr))) {
+        const int64_t need_size = sizeof(RES_T);
+        if (OB_FAIL(processor->reserve_kernel_cell(aggr_cell,
+            ObAggregateProcessor::IterKernelLayout(
+                ObAggregateProcessor::IterValueDomain::DecimalCoefficient, sizeof(RES_T)), need_size, result))) {
         } else {
           *const_cast<RES_T *>(reinterpret_cast<const RES_T *>(result.decimal_int_)) = accum;
           result.pack_ = sizeof(RES_T);
@@ -8156,7 +8529,7 @@ struct ObDecIntSumBatchOpFunc<ObNumber, CALC_T, ARG_T, SELECTOR>
         ObNumStackAllocator<2> tmp_alloc;
         number::ObNumber right_nmb;
         if (OB_FAIL(wide::to_number(accum, scale, tmp_alloc, right_nmb))) {
-        } else if (OB_FAIL(processor->clone_number_cell(right_nmb, aggr_cell))) {
+        } else if (OB_FAIL(processor->clone_number_cell(right_nmb, aggr_cell, &result))) {
         }
       } else {
         ObNumStackAllocator<2> tmp_alloc;

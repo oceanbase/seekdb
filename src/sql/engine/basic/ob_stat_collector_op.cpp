@@ -299,13 +299,11 @@ int ObStatCollectorOp::split_partition_range()
             } else {
               const DatumCopyPlan plan = MY_SPEC.sort_exprs_.at(i)->get_datum_copy_plan();
               int64_t bytes = 0;
-              char *buffer = nullptr;
-              int64_t position = 0;
-              if (OB_FAIL(plan.legacy_payload_size(*cur_datum, bytes))) {
-              } else if (bytes > 0 && OB_ISNULL(buffer = static_cast<char *>(ctx_.get_allocator().alloc(bytes)))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else if (OB_FAIL(plan.export_legacy(*cur_datum,
-                  border_vals.at(i - (int64_t)!is_none_partition()), buffer, bytes, position))) {
+              ObPxRangeCell &cell = border_vals.at(i - (int64_t)!is_none_partition());
+              if (OB_FAIL(cell.assign_expr_owned(*cur_datum, plan, ctx_.get_allocator()))) {
+              } else if (OB_FAIL(cell.payload_size(bytes))) {
+              } else if (bytes > INT64_MAX - datum_len_sum) {
+                ret = OB_SIZE_OVERFLOW;
               } else {
                 datum_len_sum += bytes;
               }

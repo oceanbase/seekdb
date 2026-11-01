@@ -157,7 +157,11 @@ cc_test(
 
 cc_library(
     name = "fixed_filter_sample_cases",
-    srcs = ["test_fixed_filter_sample.cpp"],
+    srcs = [
+        "test_fixed_filter_sample.cpp",
+        "test_native_topn_filter_values.cpp",
+        "test_native_white_filter_parameters.cpp",
+    ],
     alwayslink = True,
     deps = [
         "//src/sql:sql_runtime_interface",
@@ -233,7 +237,10 @@ cc_test(
 
 cc_library(
     name = "fixed_aggregate_cells_cases",
-    srcs = ["test_fixed_aggregate_cells.cpp"],
+    srcs = [
+        "test_fixed_aggregate_cells.cpp",
+        "test_native_pushdown_minmax.cpp",
+    ],
     alwayslink = True,
     deps = [
         "//src/sql:sql_runtime_interface",

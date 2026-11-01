@@ -447,7 +447,7 @@ public:
   public:
     explicit GroupConcatExtraResult(common::ObIAllocator &alloc, ObMonitorNode &op_monitor_info) :
       HashBasedDistinctExtraResult(alloc, op_monitor_info), row_count_(0), iter_idx_(0),
-      row_store_(ObModIds::OB_SQL_AGGR_FUN_GROUP_CONCAT), sort_op_(NULL), separator_datum_(NULL),
+      row_store_(ObModIds::OB_SQL_AGGR_FUN_GROUP_CONCAT), sort_op_(NULL), separator_datum_(), has_separator_(false),
       bool_mark_(alloc)
     {}
     virtual ~GroupConcatExtraResult();
@@ -491,7 +491,12 @@ public:
     bool empty() const { return 0 == row_count_; }
     bool is_iterated() const { return iter_idx_ > 0; }
     int64_t get_row_count() const { return row_count_; }//TODO(jiangxiu.wt): fix it in previous versions
-    ObDatum *&get_separator_datum() { return separator_datum_; }
+    bool has_separator() const { return has_separator_; }
+    const common::Datum &separator_value() const { return separator_datum_; }
+    void clear_separator() { separator_datum_.set_null(); has_separator_ = false; }
+    int copy_separator(const common::Datum &source, const common::DatumCopyPlan &plan);
+    int export_separator(const common::DatumCopyPlan &plan, common::ObDatum &output,
+                         void *scratch, int64_t capacity) const;
     int reserve_bool_mark_count(int64_t count) { return bool_mark_.reserve(count); }
     int64_t get_bool_mark_size() { return bool_mark_.count(); }//TODO(jiangxiu.wt): fix it in previous versions
     int get_bool_mark(int64_t col_index, bool &is_bool);
@@ -505,7 +510,8 @@ public:
     ObChunkDatumStore::Iterator row_store_iter_;
 
     ObSortOpImpl *sort_op_;
-    ObDatum *separator_datum_;
+    common::Datum separator_datum_;
+    bool has_separator_;
     common::ObFixedArray<bool, common::ObIAllocator> bool_mark_;
   };
 
@@ -551,13 +557,29 @@ public:
     ObMaterialOpImpl *mat_op_;
   };
 
+  enum class IterValueDomain : uint8_t {
+    None, SemanticValue, Float32, Float64, Number, DecimalCoefficient, HllRegisters
+  };
+  struct IterKernelLayout {
+    explicit IterKernelLayout(IterValueDomain domain = IterValueDomain::None,
+                              int16_t coefficient_bytes = 0, int32_t register_bytes = 0)
+      : domain_(domain), coefficient_bytes_(coefficient_bytes), register_bytes_(register_bytes) {}
+    bool operator==(const IterKernelLayout &other) const {
+      return domain_ == other.domain_ && coefficient_bytes_ == other.coefficient_bytes_
+          && register_bytes_ == other.register_bytes_;
+    }
+    IterValueDomain domain_;
+    int16_t coefficient_bytes_;
+    int32_t register_bytes_;
+  };
+
   class AggrCell
   {
   public:
     AggrCell()
     : tiny_num_int_(0),
       extra_(NULL),
-      iter_result_(),
+      iter_result_(), iter_layout_(), iter_buffer_(nullptr), iter_capacity_(0),
       flags_(0),
       collect_buf_(NULL),
       collect_buf_len_(0),
@@ -576,11 +598,18 @@ public:
     int64_t get_row_count() { return row_count_; }
     void add_row_count(const int64_t value) { row_count_ += value; }
     void set_row_count(const int64_t value) { row_count_ = value; }
-    ObDatum &get_iter_result() { return iter_result_; }
-    const ObDatum &get_iter_result() const { return iter_result_; }
+    const common::Datum &native_iter_result() const { return iter_result_; }
+    const IterKernelLayout &iter_layout() const { return iter_layout_; }
+    int copy_semantic_iter(const common::Datum &, const common::SqlType &, common::ObIAllocator &);
+    int export_semantic_iter(const common::SqlType &, common::ObDatum &, void *, int64_t) const;
+    int copy_kernel_iter(const common::ObDatum &, const IterKernelLayout &, common::ObIAllocator &);
+    int commit_owned_kernel_iter(const common::ObDatum &, const IterKernelLayout &);
+    int export_kernel_iter(const IterKernelLayout &, common::ObDatum &, void *, int64_t) const;
+    int reserve_kernel_iter(const IterKernelLayout &, int64_t, common::ObIAllocator &, char *&, int64_t &);
+    int export_iter(const common::SqlType *semantic_type, common::ObDatum &, void *, int64_t) const;
+    void clear_iter_value() { iter_result_.set_null(); iter_layout_ = IterKernelLayout(); }
     int64_t get_tiny_num_int() const { return tiny_num_int_; }
     uint64_t get_tiny_num_uint() const { return tiny_num_uint_; }
-    void set_iter_result(const ObDatum &value) { iter_result_ = value; }
     void set_tiny_num_int(const int64_t value) { tiny_num_int_ = value; }
     void set_tiny_num_uint(const uint64_t value) { tiny_num_uint_ = value; }
     void set_tiny_num_used() { is_tiny_num_used_ = true; }
@@ -591,12 +620,10 @@ public:
     ExtraResult *get_extra() { return extra_; }
     const ExtraResult *get_extra() const { return extra_; }
     void set_extra(ExtraResult *extra) { extra_ = extra; }
-    inline const char* get_buf() { return iter_result_.ptr_
-                                          ? (iter_result_.ptr_ - 2 * sizeof(int64_t)) : nullptr; }
-    inline void set_buf(char *buf) { iter_result_.ptr_ = buf + 2 * sizeof(int64_t); }
     int64_t to_string(char *buf, const int64_t buf_len) const;
-    int deep_copy_advance_collect_result(const ObDatum &datum, ObIAllocator &alloc);
-    ObDatum &get_advance_collect_result() { return advance_collect_result_; }
+    int deep_copy_advance_collect_result(const common::Datum &datum,
+        const common::DatumCopyPlan &plan, ObIAllocator &alloc);
+    const common::Datum &get_advance_collect_result() const { return advance_collect_result_; }
     void set_need_advance_collect() { need_advance_collect_ = true; }
     bool get_need_advance_collect() const { return need_advance_collect_; }
     void set_is_advance_evaluated()  { is_advance_evaluated_ = true; }
@@ -606,7 +633,7 @@ public:
       UNUSED(release_mem);
       tiny_num_int_ = 0;
       flags_ = 0;
-      iter_result_.set_null();
+      clear_iter_value();
       if (NULL != extra_) {
         extra_->reuse();
       }
@@ -628,7 +655,11 @@ public:
       int64_t row_count_;
     };
     ExtraResult *extra_;
-    ObDatum iter_result_;
+    int reserve_iter_payload(int64_t, common::ObIAllocator &, char *&, int64_t &);
+    common::Datum iter_result_;
+    IterKernelLayout iter_layout_;
+    char *iter_buffer_; // allocation base: capacity + magic + actual kernel span
+    int64_t iter_capacity_; // payload capacity; independent of NULL/inline state
     union {
       uint32_t flags_;
       struct {
@@ -640,7 +671,8 @@ public:
     char *collect_buf_;
     int64_t collect_buf_len_;
     bool need_advance_collect_;
-    ObDatum advance_collect_result_;
+    // Final Expr value only; iter_result_ has its independent actual kernel layout.
+    common::Datum advance_collect_result_;
   };
 
   struct ObSelector
@@ -830,13 +862,13 @@ public:
     }
     return ret;
   }
-  OB_INLINE int clone_cell(AggrCell &aggr_cell,
-                           int64_t need_size,
-                           ObDatum *in_target_cell);
-  OB_INLINE int clone_aggr_cell(AggrCell &aggr_cell, const ObDatum &src_cell, const bool is_number = false);
-  int clone_cell_for_wf(ObDatum &target_cell,
-                        const ObDatum &src_cell,
-                        const bool is_number/*false*/);
+  int reserve_kernel_cell(AggrCell &, const IterKernelLayout &, int64_t payload_bytes, ObDatum &);
+  int clone_aggr_cell(AggrCell &, const ObDatum &, const common::SqlType &actual_input_type);
+  int clone_kernel_cell(AggrCell &, const ObDatum &, const IterKernelLayout &,
+                        ObDatum *view = nullptr, void *scratch = nullptr, int64_t capacity = 0);
+  int clone_cell_for_wf(common::Datum &target_cell, const common::Datum &src_cell,
+                        const common::DatumCopyPlan &plan, char *&buffer, int64_t &capacity,
+                        const bool is_number = false);
   static int get_llc_size();
 
   typedef int (ObAggregateProcessor::*process_fun)(GroupRow &group_row);
@@ -895,22 +927,20 @@ private:
   template <typename T>
   int max_calc_batch(
       AggrCell &aggr_cell,
-      ObDatum &dst,
       const ObDatumVector &src,
       common::ObDatumCmpFuncType cmp_func,
-      const bool is_number,
+      const common::SqlType &input_type,
       const T &param);
   template <typename T>
   int min_calc_batch(
       AggrCell &aggr_cell,
-      ObDatum &dst,
       const ObDatumVector &src,
       common::ObDatumCmpFuncType cmp_func,
-      const bool is_number,
+      const common::SqlType &input_type,
       const T &param);
   template <typename T>
   int add_calc_batch(
-      ObDatum &dst, const ObDatumVector &src,
+      const ObDatumVector &src,
       AggrCell &aggr_cell, const ObAggrInfo &aggr_info,
       const T &param);
   template <typename T>
@@ -924,7 +954,6 @@ private:
     ObDatum &dst,
     AggrCell &aggr_cell,
     const ObDatumVector &arg_datums,
-    const bool is_number,
     const T &selector
   );
   template <typename T>
@@ -982,9 +1011,9 @@ private:
   int process_aggr_result_from_distinct(AggrCell &aggr_cell, const ObAggrInfo &aggr_info);
 
 public:
-  OB_INLINE int clone_number_cell(const number::ObNumber &src_cell,
-                                  AggrCell &aggr_cell);
-  OB_INLINE int clone_vector_cell(const ObDatum &src_cell, AggrCell &aggr_cell);
+  int clone_number_cell(const number::ObNumber &, AggrCell &, ObDatum *view = nullptr);
+  int clone_vector_cell(const ObDatum &, AggrCell &, const common::SqlType &,
+                        ObDatum *view = nullptr, void *scratch = nullptr, int64_t capacity = 0);
 private:
   template <typename T>
   int init_group_extra_aggr_info(
@@ -992,15 +1021,13 @@ private:
         const ObAggrInfo &aggr_info,
         const T &selector);
   int max_calc(AggrCell &aggr_cell,
-               ObDatum &base,
                const ObDatum &other,
                common::ObDatumCmpFuncType cmp_func,
-               const bool is_number);
+               const common::SqlType &input_type);
   int min_calc(AggrCell &aggr_cell,
-               ObDatum &base,
                const ObDatum &other,
                common::ObDatumCmpFuncType cmp_func,
-               const bool is_number);
+               const common::SqlType &input_type);
 
   int prepare_add_calc(const ObDatum &iter_value, AggrCell &aggr_cell, const ObAggrInfo &aggr_info);
   int add_calc(const ObDatum &iter_value, AggrCell &aggr_cell, const ObAggrInfo &aggr_info);
@@ -1226,13 +1253,14 @@ private:
   {
   public:
     DecIntAggFuncCtx(): add_func(nullptr), sub_func(nullptr), merge_func(nullptr),
-                        add_batch_func(nullptr) {}
+                        add_batch_func(nullptr), number_result_(false) {}
     int init(const ObAggrInfo &aggr_info, const int64_t batch_size);
     ObDecIntAggOpFunc add_func; // for sum agg
     ObDecIntAggOpFunc sub_func; // for removable opt
     ObDecIntAggOpFunc store_func; // for first value store and fast single row agg
     ObDecIntAggOpFunc merge_func; // for rollup
     ObDecIntAggOpBatchFunc *add_batch_func; // for batch sum agg
+    bool number_result_; // actual selected operation domain, never final Expr Type
   public:
     // functions that converts int/uint to decimal_int
     template<typename T>
@@ -1348,93 +1376,6 @@ OB_INLINE bool ObAggregateProcessor::need_extra_info(const ObExprOperatorType ex
       break;
   }
   return need_extra;
-}
-
-OB_INLINE int ObAggregateProcessor::clone_cell(
-  AggrCell &aggr_cell,
-  int64_t need_size,
-  ObDatum *in_target_cell)
-{
-  int ret = OB_SUCCESS;
-  char *buf = NULL;
-  int64_t curr_size = 0;
-  //length + magic num + data
-  ObDatum &target_cell = OB_ISNULL(in_target_cell) ? aggr_cell.get_iter_result() : *in_target_cell;
-  // we can't decide reuse memory on target_cell.len_, because for null datum we
-  // also have reserved buffer
-  if (OB_NOT_NULL(aggr_cell.get_buf()) || 0 < target_cell.len_) {
-    if (OB_NOT_NULL(aggr_cell.get_buf())) {
-      target_cell.ptr_ = aggr_cell.get_buf() + 2 * sizeof(int64_t);
-    }
-    void *data_ptr = const_cast<char *>(target_cell.ptr_);
-    const int64_t data_length = target_cell.len_;
-    if (OB_ISNULL((char *)data_ptr - sizeof(int64_t))
-        || OB_ISNULL((char *)data_ptr - sizeof(int64_t) - sizeof(int64_t))) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(ERROR, "clone_cell use aggr_alloc, need has meta",
-                KP(data_ptr), K(ret));
-    } else if (OB_UNLIKELY(*((int64_t *)(data_ptr) - 1) != STORED_ROW_MAGIC_NUM)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(ERROR, "aggr_alloc memory is mismatch, maybe some one make bad things",
-                "curr_magic", *((int64_t *)(data_ptr)), K(ret));
-    } else if (OB_UNLIKELY((curr_size = *((int64_t *)(data_ptr) - 2)) < data_length)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_LOG(ERROR, "target obj size is overflow", K(curr_size),
-                "target_size", data_length, K(ret));
-    } else {
-      if (need_size > curr_size) {
-        need_size = need_size * 2;
-        void *buff_ptr = NULL;
-        if (OB_ISNULL(buff_ptr = static_cast<char*>(aggr_alloc_.alloc(need_size)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          SQL_LOG(WARN, "fall to alloc buff", K(need_size), K(ret));
-        } else {
-          aggr_cell.set_buf((char*)buff_ptr);
-          ((int64_t *)buff_ptr)[0] = need_size;
-          ((int64_t *)buff_ptr)[1] = STORED_ROW_MAGIC_NUM;
-          buf = (char *)((int64_t *)(buff_ptr) + 2);
-        }
-      } else {
-        buf = (char *)(data_ptr);
-      }
-    }
-  } else {
-    void *buff_ptr = NULL;
-    if (OB_ISNULL(buff_ptr = static_cast<char*>(aggr_alloc_.alloc(need_size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      SQL_LOG(WARN, "fall to alloc buff", K(need_size), K(ret));
-    } else {
-      aggr_cell.set_buf((char*)buff_ptr);
-      ((int64_t *)buff_ptr)[0] = need_size;
-      ((int64_t *)buff_ptr)[1] = STORED_ROW_MAGIC_NUM;
-      buf = (char *)((int64_t *)(buff_ptr) + 2);
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    // To reuse prealloc memory, we must use specialize deep_copy method
-    // Otherwise for null value, we won't reserve its orgin ptr in ObDatum::deep_copy
-    target_cell.ptr_ = buf;
-  }
-  OX(SQL_LOG(DEBUG, "succ to clone cell", K(target_cell), K(curr_size), K(need_size)));
-  return ret;
-}
-
-// Note: performance critial, aggregation specific
-OB_INLINE int ObAggregateProcessor::clone_aggr_cell(AggrCell &aggr_cell, const ObDatum &src_cell,
-    const bool is_number/*false*/)
-{
-  int ret = OB_SUCCESS;
-  int64_t need_size = sizeof(int64_t) * 2 +
-      (is_number ? number::ObNumber::MAX_BYTE_LEN : src_cell.len_);
-  if (OB_FAIL(clone_cell(aggr_cell, need_size, nullptr))) {
-  } else {
-    const char *buf = aggr_cell.get_buf() + 2 * sizeof(int64_t);
-    memcpy(const_cast<char *> (buf), src_cell.ptr_, src_cell.len_);
-    aggr_cell.get_iter_result().pack_ = src_cell.pack_;
-  }
-  OX(SQL_LOG(DEBUG, "succ to clone cell", K(src_cell), K(need_size)));
-  return ret;
 }
 
 // TODO: qubin.qb remove release_mem flag and never release memory (always reuse)

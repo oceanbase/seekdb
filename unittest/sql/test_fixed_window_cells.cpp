@@ -15,6 +15,8 @@
  */
 
 #include "sql/engine/window_function/ob_window_function_op.h"
+#include "sql/session/ob_sql_session_info.h"
+#include "share/system_variable/ob_system_variable_init.h"
 #include "sql/engine/px/datahub/components/ob_dh_range_dist_wf.h"
 #include "lib/charset/ob_charset.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
@@ -659,6 +661,184 @@ TEST_F(FixedWindowCells, ra_batch_output_uses_each_row_index_and_advances_both_c
   EXPECT_EQ(INT64_MIN, exprs_[3].locate_batch_datums(eval_)[1].get_int());
   EXPECT_EQ(2, input_rows.output_row_idx_); EXPECT_EQ(2, result_rows.output_row_idx_);
 }
+
+TEST_F(FixedWindowCells, aggregate_final_inline_cache_survives_frame_overwrite_and_restart)
+{
+  AggrInfoFixedArray infos(arena_);
+  ObAggrInfo info(arena_); info.real_aggr_type_ = T_FUN_MAX; info.expr_ = &exprs_[3];
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.init(1));
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.push_back(&exprs_[3]));
+  ASSERT_EQ(OB_SUCCESS, infos.init(1)); ASSERT_EQ(OB_SUCCESS, infos.push_back(info));
+  WinFuncInfo wf; wf.aggr_info_.real_aggr_type_ = T_FUN_MAX; wf.aggr_info_.expr_ = &exprs_[3];
+  Op::AggrCell cell(wf, op_, infos);
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.init_one_group());
+  ObAggregateProcessor::GroupRow *group = nullptr;
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.get_group_row(0, group)); ASSERT_NE(nullptr, group);
+  int64_t input = INT64_MAX;
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.clone_aggr_cell(group->aggr_cells_[0], integer(input), exprs_[3].get_sql_type()));
+  ObDatum output;
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_TRUE(cell.got_result_); EXPECT_EQ(INT64_MAX, output.get_int());
+  EXPECT_EQ(INT64_MAX, cell.result_.get_int()); EXPECT_EQ(0, cell.result_.length());
+  EXPECT_EQ(nullptr, cell.result_buffer_); EXPECT_EQ(0, cell.result_capacity_);
+  input = 0;
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.clone_aggr_cell(
+      group->aggr_cells_[0], integer(input), exprs_[3].get_sql_type()));
+  datum(3).set_int(17);
+  ASSERT_EQ(OB_SUCCESS, cell.final(output)); EXPECT_EQ(INT64_MAX, output.get_int());
+  cell.reset_for_restart();
+  EXPECT_FALSE(cell.got_result_); EXPECT_TRUE(cell.result_.is_null());
+  EXPECT_EQ(nullptr, cell.result_buffer_); EXPECT_EQ(0, cell.result_capacity_);
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.init_one_group());
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_TRUE(output.is_null()); EXPECT_TRUE(cell.result_.is_null());
+  EXPECT_TRUE(cell.got_result_); EXPECT_EQ(nullptr, cell.result_buffer_);
+  cell.reset_for_restart();
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.init_one_group());
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.get_group_row(0, group)); ASSERT_NE(nullptr, group);
+  const char malformed[7] = {};
+  ASSERT_EQ(OB_INVALID_ARGUMENT, cell.aggr_processor_.clone_aggr_cell(
+      group->aggr_cells_[0], bytes(malformed, sizeof(malformed)), exprs_[3].get_sql_type()));
+  EXPECT_TRUE(group->aggr_cells_[0].native_iter_result().is_null());
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.clone_aggr_cell(
+      group->aggr_cells_[0], integer(input), exprs_[3].get_sql_type()));
+  // Deliberately corrupt only the accumulator to retain the original final
+  // error/no-publication assertion in addition to checked input rejection.
+  ASSERT_EQ(OB_SUCCESS, const_cast<Datum &>(group->aggr_cells_[0].native_iter_result())
+      .set_reference(malformed, sizeof(malformed)));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, cell.final(output));
+  EXPECT_FALSE(cell.got_result_); EXPECT_TRUE(cell.result_.is_null());
+  EXPECT_EQ(nullptr, cell.result_buffer_); EXPECT_EQ(0, cell.result_capacity_);
+}
+
+TEST_F(FixedWindowCells, aggregate_final_reference_cache_owns_first_and_repeated_fixed_row_views)
+{
+  set_type(3, ObVarcharType, CS_TYPE_UTF8MB4_BIN);
+  AggrInfoFixedArray infos(arena_);
+  ObAggrInfo info(arena_); info.real_aggr_type_ = T_FUN_MAX; info.expr_ = &exprs_[3];
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.init(1));
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.push_back(&exprs_[3]));
+  ASSERT_EQ(OB_SUCCESS, infos.init(1)); ASSERT_EQ(OB_SUCCESS, infos.push_back(info));
+  WinFuncInfo wf; wf.aggr_info_.real_aggr_type_ = T_FUN_MAX; wf.aggr_info_.expr_ = &exprs_[3];
+  Op::AggrCell cell(wf, op_, infos);
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.init_one_group());
+  ObAggregateProcessor::GroupRow *group = nullptr;
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.get_group_row(0, group)); ASSERT_NE(nullptr, group);
+  std::string source = "retained-window";
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.clone_aggr_cell(group->aggr_cells_[0], text(source), exprs_[3].get_sql_type()));
+  ObDatum output;
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  ASSERT_TRUE(cell.got_result_);
+  const char *cached = cell.result_.get_string().ptr();
+  EXPECT_EQ(cached, output.ptr_);
+  EXPECT_NE(static_cast<const char *>(group->aggr_cells_[0].native_iter_result().get_reference()), cached);
+  EXPECT_NE(datum(3).get_string().ptr(), cached);
+  const int64_t capacity = cell.result_capacity_;
+  source.assign(source.size(), 'x');
+  MEMSET(const_cast<char *>(static_cast<const char *>(group->aggr_cells_[0].native_iter_result().get_reference())), 'y', output.len_);
+  MEMSET(const_cast<char *>(datum(3).get_string().ptr()), 'z', datum(3).length());
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_EQ("retained-window", std::string(output.ptr_, output.len_));
+  EXPECT_EQ(cached, output.ptr_);
+  // The real fixed-row store synchronously owns the exported cache view.
+  Op::RowsStore rows(op_); ra_store(rows); ra_add(rows, {output});
+  cell.reset_for_restart();
+  EXPECT_FALSE(cell.got_result_); EXPECT_TRUE(cell.result_.is_null());
+  EXPECT_EQ(nullptr, cell.result_buffer_); EXPECT_EQ(0, cell.result_capacity_);
+  const RARow *stored = nullptr; ASSERT_EQ(OB_SUCCESS, rows.get_row(0, stored));
+  ASSERT_NE(nullptr, stored); EXPECT_EQ("retained-window",
+      std::string(stored->stored_cells()[0].ptr_, stored->stored_cells()[0].len_));
+  EXPECT_GE(capacity, 15);
+}
+
+TEST_F(FixedWindowCells, aggregate_final_number_reserves_reusable_span_and_null_does_not_invalidate_capacity)
+{
+  set_type(3, ObNumberType);
+  AggrInfoFixedArray infos(arena_);
+  ObAggrInfo info(arena_); info.real_aggr_type_ = T_FUN_MAX; info.expr_ = &exprs_[3];
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.init(1));
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.push_back(&exprs_[3]));
+  ASSERT_EQ(OB_SUCCESS, infos.init(1)); ASSERT_EQ(OB_SUCCESS, infos.push_back(info));
+  WinFuncInfo wf; wf.aggr_info_.real_aggr_type_ = T_FUN_MAX; wf.aggr_info_.expr_ = &exprs_[3];
+  Op::AggrCell cell(wf, op_, infos);
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.init_one_group());
+  ObAggregateProcessor::GroupRow *group = nullptr;
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.get_group_row(0, group)); ASSERT_NE(nullptr, group);
+  number::ObNumber input_number;
+  ObNumStackAllocator<> temporary;
+  ASSERT_EQ(OB_SUCCESS, input_number.from(INT64_MAX, temporary));
+  alignas(8) char source_bytes[number::ObNumber::MAX_BYTE_LEN];
+  Datum source;
+  ASSERT_EQ(OB_SUCCESS, source.set_number(input_number, source_bytes, sizeof(source_bytes)));
+  alignas(8) char scratch[64]; ObDatum source_view;
+  ASSERT_EQ(OB_SUCCESS, exprs_[3].get_datum_copy_plan().legacy_view(source, source_view, scratch, sizeof(scratch)));
+  const std::string expected(source_view.ptr_, source_view.len_);
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.clone_aggr_cell(group->aggr_cells_[0], source_view, exprs_[3].get_sql_type()));
+  ObDatum output;
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  char *cached = cell.result_buffer_; const int64_t capacity = cell.result_capacity_;
+  EXPECT_GE(capacity, static_cast<int64_t>(number::ObNumber::MAX_BYTE_LEN));
+  EXPECT_EQ(expected, std::string(output.ptr_, output.len_));
+  MEMSET(source_bytes, 0xA5, sizeof(source_bytes));
+  MEMSET(const_cast<char *>(static_cast<const char *>(group->aggr_cells_[0].native_iter_result().get_reference())), 0xA5, output.len_);
+  datum(3).set_null();
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_EQ(expected, std::string(output.ptr_, output.len_));
+  group->aggr_cells_[0].clear_iter_value(); cell.got_result_ = false;
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_TRUE(output.is_null()); EXPECT_TRUE(cell.result_.is_null());
+  EXPECT_EQ(cached, cell.result_buffer_); EXPECT_EQ(capacity, cell.result_capacity_);
+}
+
+TEST_F(FixedWindowCells, actual_window_sum_overflow_inverse_final_and_restart_keep_number_owner)
+{
+  ASSERT_EQ(OB_SUCCESS, share::ObSysVariables::init_default_values());
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  struct SessionScope {
+    ObExecContext &exec_; ObSQLSessionInfo &session_;
+    ~SessionScope() { ObSQLSessionInfo::ExecCtxSessionRegister clear(session_, nullptr); exec_.set_my_session(nullptr); }
+  } session_scope{exec_, session};
+  exec_.set_my_session(&session);
+  ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &exec_);
+  set_type(3, ObNumberType);
+  AggrInfoFixedArray infos(arena_);
+  ObAggrInfo info(arena_); info.real_aggr_type_ = T_FUN_SUM; info.expr_ = &exprs_[3];
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.init(1));
+  ASSERT_EQ(OB_SUCCESS, info.param_exprs_.push_back(&exprs_[0]));
+  ASSERT_EQ(OB_SUCCESS, infos.init(1)); ASSERT_EQ(OB_SUCCESS, infos.push_back(info));
+  WinFuncInfo wf; wf.aggr_info_.real_aggr_type_ = T_FUN_SUM; wf.aggr_info_.expr_ = &exprs_[3];
+  wf.remove_type_ = REMOVE_STATISTICS;
+  Op::AggrCell cell(wf, op_, infos);
+  cell.aggr_processor_.set_in_window_func();
+  ASSERT_EQ(OB_SUCCESS, cell.aggr_processor_.init());
+  const int64_t maximum = INT64_MAX, one = 1;
+  OwnedRARow first({integer(maximum)}), next({integer(one)});
+  datum(0).set_int(maximum);
+  ASSERT_EQ(OB_SUCCESS, cell.trans(*first.row_));
+  datum(0).set_int(one);
+  ASSERT_EQ(OB_SUCCESS, cell.trans(*next.row_));
+  ObDatum output;
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_EQ(0, number::ObNumber(output.get_number()).compare(uint64_t(1) << 63));
+  const char *cached = cell.result_.get_string().ptr();
+  datum(0).set_int(77); datum(3).set_null();
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_EQ(cached, cell.result_.get_string().ptr());
+  EXPECT_EQ(0, number::ObNumber(output.get_number()).compare(uint64_t(1) << 63));
+  datum(0).set_int(one);
+  ASSERT_EQ(OB_SUCCESS, cell.inv_trans(*next.row_));
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_EQ(0, number::ObNumber(output.get_number()).compare(maximum));
+  cell.reset_for_restart();
+  EXPECT_FALSE(cell.got_result_); EXPECT_TRUE(cell.result_.is_null());
+  datum(0).set_int(17);
+  ASSERT_EQ(OB_SUCCESS, cell.trans(*first.row_));
+  ASSERT_EQ(OB_SUCCESS, cell.final(output));
+  EXPECT_EQ(0, number::ObNumber(output.get_number()).compare(int64_t(17)));
+}
+
 } // namespace
 
 int main(int argc,char **argv)

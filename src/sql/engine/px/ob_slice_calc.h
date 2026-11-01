@@ -640,7 +640,8 @@ public:
         dist_exprs_(dist_exprs),
         sort_cmp_funs_(sort_cmp_funs),
         sort_collations_(sort_collations),
-        ddl_slice_id_expr_(ddl_slice_id_expr)
+        ddl_slice_id_expr_(ddl_slice_id_expr),
+        ranges_bound_(false)
   {
     support_vectorized_calc_ = true;
   }
@@ -650,12 +651,15 @@ public:
   int get_slice_idx_batch_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                     ObBitVector &skip, const int64_t batch_size,
                     int64_t *&indexes);
+  int prepare_bound_ranges();
   int64 task_cnt_;
   const ObPxTabletRange *range_;
   const ObIArray<ObExpr*> *dist_exprs_;
   const ObSortFuncs &sort_cmp_funs_;
   const ObSortCollations &sort_collations_;
   ObExpr *ddl_slice_id_expr_;
+  ObPxTabletRange::RangeCut bound_ranges_;
+  bool ranges_bound_;
 };
 
 class ObHashSliceIdCalc : public ObSliceIdxCalc

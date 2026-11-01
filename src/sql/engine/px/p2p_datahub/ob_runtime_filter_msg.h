@@ -81,7 +81,7 @@ public:
 
 class ObRFRangeFilterMsg : public ObP2PDatahubMsgBase
 {
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 public:
   struct MinMaxCellSize
   {
@@ -104,9 +104,13 @@ public:
     lower_bounds_.reset();
     upper_bounds_.reset();
     cmp_funcs_.reset();
+    build_obj_metas_.reset();
     need_null_cmp_flags_.reset();
     cells_size_.reset();
     query_range_info_.destroy();
+    query_range_.reset();
+    is_query_range_ready_ = false;
+    datum_access_ctx_ = nullptr;
     query_range_allocator_.reset();
     allocator_.reset();
     return OB_SUCCESS;
@@ -139,25 +143,26 @@ public:
   int try_extract_query_range(bool &has_extract, ObIArray<ObNewRange> &ranges,
                               bool need_deep_copy = false,
                               common::ObIAllocator *allocator = nullptr) override;
-  inline int init_query_range_info(const ObPxQueryRangeInfo &query_range_info)
-  {
-    return query_range_info_.assign(query_range_info);
-  }
+  int init_query_range_info(const ObPxQueryRangeInfo &query_range_info);
 
   int prepare_storage_white_filter_data(ObDynamicFilterExecutor &dynamic_filter,
                                 ObEvalCtx &eval_ctx,
                                 ObRuntimeFilterParams &params,
                                 bool &is_data_prepared) override;
 private:
-  int get_min(ObIArray<ObDatum> &vals,
+  int deserialize_body(const char *buf, int64_t length, int64_t &pos, int64_t version);
+  int get_min(ObIArray<Datum> &vals,
               const common::ObDatumAccessContext *access_ctx);
-  int get_max(ObIArray<ObDatum> &vals,
+  int get_max(ObIArray<Datum> &vals,
               const common::ObDatumAccessContext *access_ctx);
-  int get_min(ObCmpFunc &func, ObDatum &l, ObDatum &r, int64_t &cell_size,
+  int get_min(ObCmpFunc &func, Datum &l, const Datum &r, int64_t &cell_size,
+              const SqlTypeMeta &meta,
               const common::ObDatumAccessContext *access_ctx);
-  int get_max(ObCmpFunc &func, ObDatum &l, ObDatum &r, int64_t &cell_size,
+  int get_max(ObCmpFunc &func, Datum &l, const Datum &r, int64_t &cell_size,
+              const SqlTypeMeta &meta,
               const common::ObDatumAccessContext *access_ctx);
-  int dynamic_copy_cell(const ObDatum &src, ObDatum &target, int64_t &cell_size);
+  int dynamic_copy_cell(const Datum &src, Datum &target, int64_t &cell_size,
+                        const SqlTypeMeta &meta);
   // only used in might_contain_batch,
   // without adding filter_count, total_count, check_count in filter_ctx
   int do_might_contain_batch(const ObExpr &expr,
@@ -176,8 +181,8 @@ private:
   }
 
 public:
-  ObFixedArray<ObDatum, common::ObIAllocator> lower_bounds_;
-  ObFixedArray<ObDatum, common::ObIAllocator> upper_bounds_;
+  ObFixedArray<Datum, common::ObIAllocator> lower_bounds_;
+  ObFixedArray<Datum, common::ObIAllocator> upper_bounds_;
   ObFixedArray<bool, common::ObIAllocator> need_null_cmp_flags_;
   ObFixedArray<MinMaxCellSize, common::ObIAllocator> cells_size_;
   ObCmpFuncs cmp_funcs_;
@@ -193,23 +198,28 @@ public:
 
 class ObRFInFilterMsg : public ObP2PDatahubMsgBase
 {
-  OB_UNIS_VERSION_V(1);
+  OB_UNIS_VERSION_V(2);
 public:
   struct ObRFInFilterNode {
     ObRFInFilterNode()
-        : cmp_funcs_(nullptr), hash_funcs_(nullptr), row_(nullptr),
-          hash_val_(0), datum_access_ctx_(nullptr) {}
+        : cmp_funcs_(nullptr), hash_funcs_(nullptr), row_(nullptr), metas_(nullptr),
+          expressions_(nullptr), hash_val_(0), datum_access_ctx_(nullptr) {}
     ObRFInFilterNode(ObCmpFuncs *cmp_funcs, ObHashFuncs *hash_funcs,
-          ObIArray<ObDatum> *row,
+          ObIArray<Datum> *row, const ObIArray<SqlTypeMeta> *metas,
           const common::ObDatumAccessContext *datum_access_ctx,
-          int64_t hash_val = 0)
-        : cmp_funcs_(cmp_funcs), hash_funcs_(hash_funcs),
-          row_(row), hash_val_(hash_val), datum_access_ctx_(datum_access_ctx) {}
+          ObExpr *const *expressions = nullptr, int64_t hash_val = 0)
+        : cmp_funcs_(cmp_funcs), hash_funcs_(hash_funcs), row_(row), metas_(metas),
+          expressions_(expressions), hash_val_(hash_val), datum_access_ctx_(datum_access_ctx) {}
+    int export_cell(int64_t index, ObDatum &out, char *scratch, int64_t capacity) const;
     int hash(uint64_t &hash_ret) const;
     inline bool operator==(const ObRFInFilterNode &other) const;
     ObCmpFuncs *cmp_funcs_;
     ObHashFuncs *hash_funcs_;
-    ObIArray<ObDatum> *row_;
+    ObIArray<Datum> *row_;
+    const ObIArray<SqlTypeMeta> *metas_;
+    // Only synchronous insertion/probe keys borrow actual prepared Exprs.
+    // Retained rows use physical values and their own build metadata instead.
+    ObExpr *const *expressions_;
     int64_t hash_val_;
     const common::ObDatumAccessContext *datum_access_ctx_;
   };
@@ -217,7 +227,7 @@ public:
   ObRFInFilterMsg() : ObP2PDatahubMsgBase(), rows_set_(),
       cmp_funcs_(allocator_), hash_funcs_for_insert_(allocator_),
       serial_rows_(), need_null_cmp_flags_(allocator_),
-      cur_row_(allocator_), insert_scratch_(allocator_), col_cnt_(0),
+      cur_row_(allocator_), col_cnt_(0),
       max_in_num_(0), query_range_info_(allocator_),
       query_range_(), is_query_range_ready_(false), query_range_allocator_(),
       datum_access_ctx_(nullptr),
@@ -253,18 +263,16 @@ public:
   int try_extract_query_range(bool &has_extract, ObIArray<ObNewRange> &ranges,
                               bool need_deep_copy = false,
                               common::ObIAllocator *allocator = nullptr) override;
-  inline int init_query_range_info(const ObPxQueryRangeInfo &query_range_info)
-  {
-    return query_range_info_.assign(query_range_info);
-  }
+  int init_query_range_info(const ObPxQueryRangeInfo &query_range_info);
 
   int prepare_storage_white_filter_data(ObDynamicFilterExecutor &dynamic_filter,
                                 ObEvalCtx &eval_ctx,
                                 ObRuntimeFilterParams &params,
                                 bool &is_data_prepared) override;
 private:
-  int append_row();
-  int insert_node();
+  int deserialize_body(const char *buf, int64_t length, int64_t &pos, int64_t version);
+  int append_row(ObExpr *const *expressions = nullptr);
+  int insert_node(ObExpr *const *expressions = nullptr);
   // only used in might_contain_batch,
   // without adding filter_count, total_count, check_count in filter_ctx
   int do_might_contain_batch(const ObExpr &expr,
@@ -289,11 +297,9 @@ public:
   hash::ObHashSet<ObRFInFilterNode, hash::NoPthreadDefendMode> rows_set_;
   ObCmpFuncs cmp_funcs_;
   ObHashFuncs hash_funcs_for_insert_;
-  ObSArray<ObFixedArray<ObDatum, common::ObIAllocator> *> serial_rows_;
+  ObSArray<ObFixedArray<Datum, common::ObIAllocator> *> serial_rows_;
   ObFixedArray<bool, common::ObIAllocator> need_null_cmp_flags_;
-  ObFixedArray<ObDatum, common::ObIAllocator> cur_row_;
-  struct LegacyCellScratch { alignas(8) char bytes_[64]; TO_STRING_EMPTY(); };
-  ObFixedArray<LegacyCellScratch, common::ObIAllocator> insert_scratch_;
+  ObFixedArray<Datum, common::ObIAllocator> cur_row_;
   int64_t col_cnt_;
   int64_t max_in_num_;
   // for extract query range

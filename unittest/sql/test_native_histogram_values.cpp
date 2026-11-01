@@ -67,7 +67,7 @@ void build_topk(ObTopKFrequencyHistograms &h,const std::vector<DatumValue> &valu
     for(int i=0;i<8;++i){const auto &v=values.at(group*8+i);
       if(mode==0){ASSERT_EQ(OB_SUCCESS,h.add_top_k_frequency_item(v,freq[i]));}
       else {ObDatum d;char extended[DATUM_EXTEND_PAYLOAD_SIZE];ASSERT_EQ(OB_SUCCESS,v.to_row_datum(d,extended));uint64_t hash=0;
-        ASSERT_EQ(OB_SUCCESS,hash_datum_value_murmur(v,0,hash));for(int j=0;j<freq[i];++j){ASSERT_EQ(OB_SUCCESS,h.add_top_k_frequency_item(hash,d));}}
+        ASSERT_EQ(OB_SUCCESS,hash_datum_value_murmur(v,0,hash));for(int j=0;j<freq[i];++j){ASSERT_EQ(OB_SUCCESS,h.add_top_k_frequency_item(hash,d,v.get_meta()));}}
     }
   }
   ASSERT_EQ(OB_SUCCESS,h.create_topk_fre_items(mode==1?&values.at(group*8).get_meta():nullptr));
@@ -196,7 +196,8 @@ TEST(NativeHistogramValues, raw_row_projection_validates_meta_and_retains_outrow
 TEST(NativeHistogramValues, raw_topk_projection_rejects_negative_decimal_scale) {
   ObTopKFrequencyHistograms h;init_topk(h,false);int64_t coefficient=1;
   ObDatum decimal;decimal.ptr_=reinterpret_cast<char*>(&coefficient);decimal.pack_=8;
-  ASSERT_EQ(OB_SUCCESS,h.add_top_k_frequency_item(12345,decimal));
+  SqlTypeMeta actual;actual.set_decimal_int(0);
+  ASSERT_EQ(OB_SUCCESS,h.add_top_k_frequency_item(12345,decimal,actual));
   SqlTypeMeta invalid;invalid.set_decimal_int(-1);
   EXPECT_EQ(OB_ERR_UNEXPECTED,h.create_topk_fre_items(&invalid));
 }
@@ -395,4 +396,215 @@ TEST(NativeHistogramValues, public_optimizer_extrema_lookup_keeps_native_pairs_m
       minimum, min_meta, maximum, max_meta));
   EXPECT_EQ(-9, minimum.get_int()); EXPECT_EQ(21, maximum.get_int());
   EXPECT_EQ(meta, min_meta); EXPECT_EQ(meta, max_meta);
+}
+
+
+namespace {
+int add_physical_topk(ObTopKFrequencyHistograms &histogram, uint64_t hash,
+                       const DatumValue &value)
+{
+  alignas(8) char scratch[64];
+  ObDatum physical;
+  const int ret = value.export_legacy(physical, scratch, sizeof(scratch));
+  return ret == OB_SUCCESS
+      ? histogram.add_top_k_frequency_item(hash, physical, value.get_meta()) : ret;
+}
+std::string topk_native_text(const Datum &value)
+{
+  return value.length() == 0 ? std::string()
+      : std::string(static_cast<const char *>(value.get_reference()), value.length());
+}
+class TopkPageFailure : public ObIAllocator
+{
+public:
+  void *alloc(int64_t size) override {
+    ++calls_;
+    return fail_ || (reject_above_ > 0 && size > reject_above_) ? nullptr : arena_.alloc(size);
+  }
+  void *alloc(int64_t size, const ObMemAttr &) override { return alloc(size); }
+  void free(void *memory) override { arena_.free(memory); }
+  ObArenaAllocator arena_;
+  int64_t calls_ = 0;
+  int64_t reject_above_ = 0;
+  bool fail_ = false;
+};
+}
+
+TEST(NativeHistogramValues, datum_topk_scalars_are_inline_and_null_does_not_bind_a_physical_type)
+{
+  ObTopKFrequencyHistograms signed_values; init_topk(signed_values, false);
+  SqlTypeMeta null_text; null_text.set_varchar(); null_text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ObDatum null_value; null_value.set_null();
+  ASSERT_EQ(OB_SUCCESS, signed_values.add_top_k_frequency_item(9, null_value, null_text));
+  EXPECT_EQ(0, signed_values.get_total_fre_item()); EXPECT_FALSE(signed_values.has_bucket());
+  ObArenaAllocator values_owner;
+  DatumValue low, high;
+  ASSERT_EQ(OB_SUCCESS, low.set_int(INT64_MIN, values_owner));
+  ASSERT_EQ(OB_SUCCESS, high.set_int(INT64_MAX, values_owner));
+  const int64_t before = signed_values.get_allocator().used();
+  ASSERT_EQ(OB_SUCCESS, add_physical_topk(signed_values, 11, low));
+  ASSERT_EQ(OB_SUCCESS, add_physical_topk(signed_values, 22, high));
+  EXPECT_EQ(before, signed_values.get_allocator().used()); // Payload arena only.
+  auto *first = static_cast<ObTopkDatumItem *>(signed_values.get_entry(11));
+  auto *second = static_cast<ObTopkDatumItem *>(signed_values.get_entry(22));
+  ASSERT_NE(nullptr, first); ASSERT_NE(nullptr, second);
+  EXPECT_EQ(INT64_MIN, first->datum_.get_int()); EXPECT_EQ(INT64_MAX, second->datum_.get_int());
+  EXPECT_EQ(0U, first->datum_.length()); EXPECT_EQ(0U, second->datum_.length());
+  ASSERT_EQ(OB_SUCCESS, signed_values.add_top_k_frequency_item(99, null_value, low.get_meta()));
+  EXPECT_EQ(2, signed_values.get_total_fre_item());
+  DatumValue unsigned_value; ASSERT_EQ(OB_SUCCESS, unsigned_value.set_uint64(UINT64_MAX, values_owner));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, add_physical_topk(signed_values, 33, unsigned_value));
+  EXPECT_EQ(2, signed_values.get_total_fre_item()); EXPECT_EQ(nullptr, signed_values.get_entry(33));
+  SqlTypeMeta changed_scale = low.get_meta(); changed_scale.set_scale(7);
+  alignas(8) char scratch[64]; ObDatum physical;
+  ASSERT_EQ(OB_SUCCESS, low.export_legacy(physical, scratch, sizeof(scratch)));
+  EXPECT_EQ(OB_INVALID_ARGUMENT, signed_values.add_top_k_frequency_item(11, physical, changed_scale));
+  EXPECT_EQ(1, first->fre_times_); EXPECT_EQ(2, signed_values.get_total_fre_item());
+  EXPECT_EQ(OB_INVALID_ARGUMENT, signed_values.add_top_k_frequency_item(99, null_value, null_text));
+  ObIAllocator &old_owner = signed_values.get_allocator();
+  ASSERT_EQ(OB_SUCCESS, signed_values.shrink_memory_usage()); old_owner.reset();
+  EXPECT_EQ(INT64_MIN, first->datum_.get_int()); EXPECT_EQ(INT64_MAX, second->datum_.get_int());
+  ASSERT_EQ(OB_SUCCESS, signed_values.create_topk_fre_items(&low.get_meta()));
+  EXPECT_EQ(2, signed_values.get_buckets().count());
+  ObTopKFrequencyHistograms unsigned_values; init_topk(unsigned_values, false);
+  const int64_t unsigned_before = unsigned_values.get_allocator().used();
+  ASSERT_EQ(OB_SUCCESS, add_physical_topk(unsigned_values, 44, unsigned_value));
+  EXPECT_EQ(unsigned_before, unsigned_values.get_allocator().used());
+  auto *stored = static_cast<ObTopkDatumItem *>(unsigned_values.get_entry(44));
+  ASSERT_NE(nullptr, stored); EXPECT_EQ(UINT64_MAX, stored->datum_.get_uint()); EXPECT_EQ(0U, stored->datum_.length());
+}
+
+TEST(NativeHistogramValues, datum_topk_actual_decimal_width_and_reference_owners_survive_compaction)
+{
+  for (int32_t width : {4, 8, 16, 32, 64}) {
+    SCOPED_TRACE(width);
+    ObTopKFrequencyHistograms histogram; init_topk(histogram, false);
+    alignas(8) char coefficient[64]; MEMSET(coefficient, 0xff, sizeof(coefficient));
+    const int32_t minus_seven = -7; MEMCPY(coefficient, &minus_seven, sizeof(minus_seven));
+    const std::string expected(coefficient, width);
+    ObDatum physical; physical.set_decimal_int_shallow(reinterpret_cast<const ObDecimalInt *>(coefficient), width);
+    SqlTypeMeta meta; meta.set_decimal_int(5);
+    ASSERT_EQ(OB_SUCCESS, histogram.add_top_k_frequency_item(71, physical, meta));
+    auto *item = static_cast<ObTopkDatumItem *>(histogram.get_entry(71));
+    ASSERT_NE(nullptr, item); EXPECT_EQ(static_cast<uint32_t>(width), item->datum_.length());
+    EXPECT_NE(coefficient, item->datum_.get_reference());
+    MEMSET(coefficient, 0xa5, sizeof(coefficient));
+    for (int i = 0; i < 3; ++i) {
+      ObIAllocator &old_owner = histogram.get_allocator();
+      ASSERT_EQ(OB_SUCCESS, histogram.shrink_memory_usage()); old_owner.reset();
+      EXPECT_EQ(expected, topk_native_text(item->datum_));
+    }
+    ASSERT_EQ(OB_SUCCESS, histogram.create_topk_fre_items(&meta));
+    ASSERT_EQ(1, histogram.get_buckets().count());
+    EXPECT_EQ(expected, topk_native_text(histogram.get_buckets().at(0).col_obj_.datum_));
+    EXPECT_EQ(5, histogram.get_buckets().at(0).col_obj_.get_meta().get_scale());
+  }
+  ObArenaAllocator publication_owner;
+  ObHistogram published;
+  {
+    ObTopKFrequencyHistograms histogram; init_topk(histogram, false);
+    ObArenaAllocator source;
+    for (int i = 0; i < 8; ++i) {
+      std::string text = std::string("a\0b", 3) + std::to_string(i);
+      DatumValue value; ASSERT_EQ(OB_SUCCESS, value.set_varchar(ObString(text.size(), text.data()), source));
+      value.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      for (int64_t j = 0; j < freq[i]; ++j) { ASSERT_EQ(OB_SUCCESS, add_physical_topk(histogram, 100 + i, value)); }
+    }
+    source.reset(); MEMSET(source.alloc(65536), 0xa5, 65536);
+    for (int i = 0; i < 3; ++i) {
+      ObIAllocator &old_owner = histogram.get_allocator();
+      ASSERT_EQ(OB_SUCCESS, histogram.shrink_memory_usage()); old_owner.reset();
+    }
+    SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_level(CS_LEVEL_IMPLICIT);
+    meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    ASSERT_EQ(OB_SUCCESS, histogram.create_topk_fre_items(&meta));
+    ASSERT_EQ(OB_SUCCESS, ObStatTopKHist::build_histogram_from_topk_items(publication_owner,
+        histogram.get_buckets(), 8, 97, 97, 8, published));
+  }
+  ASSERT_EQ(8, published.get_bucket_size());
+  alignas(8) char scratch[64]; DatumValue first;
+  ASSERT_EQ(OB_SUCCESS, published.get(0).export_endpoint_value(first, scratch, sizeof(scratch)));
+  EXPECT_EQ(std::string("a\0b0", 4), std::string(first.get_string().ptr(), first.get_string().length()));
+  EXPECT_EQ(37, published.get(0).endpoint_repeat_count_);
+}
+
+TEST(NativeHistogramValues, datum_topk_failed_capture_keeps_type_map_count_and_batch_success_prefix)
+{
+  TopkPageFailure owner; ModulePageAllocator pages(owner);
+  ObTopKFrequencyHistograms histogram; init_topk(histogram, false);
+  ASSERT_EQ(OB_SUCCESS, static_cast<ObArenaAllocator &>(histogram.get_allocator()).get_arena().init(8192, pages));
+  std::string source(1024 * 1024, 'r');
+  ObDatum reference; reference.set_string(source.data(), source.size());
+  SqlTypeMeta text; text.set_varchar(); text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  SqlTypeMeta null_meta; null_meta.set_null();
+  EXPECT_EQ(OB_INVALID_ARGUMENT, histogram.add_top_k_frequency_item(1, reference, null_meta));
+  EXPECT_EQ(0, histogram.get_total_fre_item()); EXPECT_FALSE(histogram.has_bucket());
+  owner.fail_ = true; const int64_t calls = owner.calls_;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, histogram.add_top_k_frequency_item(1, reference, text));
+  EXPECT_GT(owner.calls_, calls); EXPECT_EQ(0, histogram.get_total_fre_item());
+  EXPECT_FALSE(histogram.has_bucket()); EXPECT_EQ(nullptr, histogram.get_entry(1));
+  // The failed reference did not bind text metadata: a different first type
+  // can succeed inline while the same actual allocator still rejects pages.
+  ObArenaAllocator scalar_owner;
+  DatumValue integer_value; ASSERT_EQ(OB_SUCCESS, integer_value.set_uint64(UINT64_MAX, scalar_owner));
+  ASSERT_EQ(OB_SUCCESS, add_physical_topk(histogram, 2, integer_value));
+  EXPECT_EQ(1, histogram.get_total_fre_item());
+  EXPECT_EQ(OB_INVALID_ARGUMENT, histogram.add_top_k_frequency_item(1, reference, text));
+  EXPECT_EQ(1, histogram.get_total_fre_item()); EXPECT_EQ(nullptr, histogram.get_entry(1));
+  ObTopKFrequencyHistograms overflow; init_topk(overflow, false); overflow.set_window_size(INT64_MAX);
+  EXPECT_EQ(OB_SIZE_OVERFLOW, add_physical_topk(overflow, 2, integer_value));
+  EXPECT_EQ(0, overflow.get_total_fre_item());
+  TopkPageFailure batch_owner; ModulePageAllocator batch_pages(batch_owner);
+  ObTopKFrequencyHistograms batch; init_topk(batch, false);
+  ASSERT_EQ(OB_SUCCESS, static_cast<ObArenaAllocator &>(batch.get_allocator()).get_arena().init(8192, batch_pages));
+  batch_owner.reject_above_ = 1024 * 1024;
+  const char *payloads[] = {"ok", source.data()};
+  int32_t lengths[] = {2, static_cast<int32_t>(source.size())}; uint64_t hashes[] = {11, 22};
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, batch.add_batch_items(payloads, lengths, hashes, 2, text));
+  EXPECT_GT(batch_owner.calls_, 0); EXPECT_EQ(1, batch.get_total_fre_item());
+  auto *retained = static_cast<ObTopkDatumItem *>(batch.get_entry(11));
+  ASSERT_NE(nullptr, retained); EXPECT_EQ("ok", topk_native_text(retained->datum_));
+  EXPECT_EQ(nullptr, batch.get_entry(22));
+  batch_owner.reject_above_ = 0;
+  ASSERT_EQ(OB_SUCCESS, batch.add_top_k_frequency_item(22, reference, text));
+  EXPECT_EQ(2, batch.get_total_fre_item());
+}
+
+TEST(NativeHistogramValues, datum_topk_window_compaction_failure_rolls_back_current_cell_and_retries)
+{
+  TopkPageFailure inactive_owner; ModulePageAllocator pages(inactive_owner);
+  ObTopKFrequencyHistograms histogram; histogram.set_window_size(2); histogram.set_item_size(1);
+  histogram.set_is_topk_hist_need_des_row(false);
+  ASSERT_EQ(OB_SUCCESS, static_cast<ObArenaAllocator &>(histogram.get_next_allocator()).get_arena().init(8192, pages));
+  ObArenaAllocator source;
+  const int64_t size = 12 * 1024 * 1024; // Exceeds the actual 10 MiB maximum payload budget.
+  char *bytes = static_cast<char *>(source.alloc(size)); ASSERT_NE(nullptr, bytes); MEMSET(bytes, 'q', size);
+  ObDatum physical; physical.set_string(bytes, size);
+  SqlTypeMeta meta; meta.set_varchar(); meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ASSERT_EQ(OB_SUCCESS, histogram.add_top_k_frequency_item(77, physical, meta));
+  auto *item = static_cast<ObTopkDatumItem *>(histogram.get_entry(77));
+  ASSERT_NE(nullptr, item); const void *before = item->datum_.get_reference();
+  MEMSET(bytes, 'x', size); source.reset();
+  physical.set_string(static_cast<const char *>(item->datum_.get_reference()), item->datum_.length());
+  ObIAllocator &old_owner = histogram.get_allocator();
+  inactive_owner.fail_ = true; const int64_t calls = inactive_owner.calls_;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, histogram.add_top_k_frequency_item(77, physical, meta));
+  EXPECT_GT(inactive_owner.calls_, calls);
+  EXPECT_EQ(1, histogram.get_total_fre_item()); EXPECT_EQ(1, item->fre_times_);
+  EXPECT_EQ(before, item->datum_.get_reference()); EXPECT_EQ(item, histogram.get_entry(77));
+  EXPECT_EQ(&old_owner, &histogram.get_allocator()); EXPECT_GT(old_owner.used(), 0);
+  EXPECT_EQ('q', static_cast<const char *>(item->datum_.get_reference())[0]);
+  // A new hash inserted just before the same automatic compaction failure
+  // must be removed again; it cannot become a visible partial second item.
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, histogram.add_top_k_frequency_item(88, physical, meta));
+  EXPECT_EQ(1, histogram.get_total_fre_item()); EXPECT_EQ(1, item->fre_times_);
+  EXPECT_EQ(nullptr, histogram.get_entry(88)); EXPECT_EQ(item, histogram.get_entry(77));
+  EXPECT_EQ(before, item->datum_.get_reference());
+  inactive_owner.fail_ = false;
+  ASSERT_EQ(OB_SUCCESS, histogram.add_top_k_frequency_item(77, physical, meta));
+  EXPECT_EQ(2, histogram.get_total_fre_item()); EXPECT_EQ(2, item->fre_times_);
+  EXPECT_NE(before, item->datum_.get_reference()); EXPECT_NE(&old_owner, &histogram.get_allocator());
+  EXPECT_EQ(0, old_owner.used()); old_owner.reset();
+  EXPECT_EQ('q', static_cast<const char *>(item->datum_.get_reference())[0]);
+  EXPECT_EQ('q', static_cast<const char *>(item->datum_.get_reference())[size - 1]);
 }

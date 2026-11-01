@@ -100,19 +100,20 @@ public:
   ObArenaAllocator arena;
   int64_t calls = 0, bytes = 0;
   bool reject = false;
+  int64_t reject_at = -1;
   void *alloc(int64_t n) override {
     ++calls;
     bytes += n;
-    return reject ? nullptr : arena.alloc(n);
+    return reject || calls == reject_at ? nullptr : arena.alloc(n);
   }
   void *alloc(int64_t n, const ObMemAttr &) override { return alloc(n); }
   void free(void *) override {}
 };
 } // namespace
 TEST(RangeMapDatum, constants_are_datums_with_metadata_in_existing_padding) {
-  static_assert(std::is_same<decltype(ObRangeMap::ExprFinalInfo::const_val_), ObDatum *>::value,
+  static_assert(std::is_same<decltype(ObRangeMap::ExprFinalInfo::const_val_), Datum>::value,
                 "No legacy value in range constants");
-  EXPECT_EQ(24, sizeof(ObRangeMap::ExprFinalInfo));
+  EXPECT_EQ(32, sizeof(ObRangeMap::ExprFinalInfo));
   EXPECT_EQ(4, offsetof(ObRangeMap::ExprFinalInfo, const_meta_));
   auto corpus = frames();
   ASSERT_EQ(154, corpus.size());
@@ -317,14 +318,10 @@ TEST(RangeMapDatum, fast_nlj_constant_bounds_survive_plan_arena_and_keep_null_ru
     input.set_varchar_view(ObString::make_string("lookup key"));
     input.set_collation_type(CS_TYPE_UTF8MB4_BIN);
     ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(input, owned, plan_arena));
-    ObDatum value;
-    ASSERT_EQ(OB_SUCCESS, owned.copy_legacy(value, plan_arena));
     SqlTypeMeta meta = owned.get_meta();
     ASSERT_EQ(OB_SUCCESS, graph.get_range_map().expr_final_infos_.prepare_allocate(1));
     auto &info = graph.get_range_map().expr_final_infos_.at(0);
-    info.is_const_ = true;
-    info.const_val_ = &value;
-    info.const_meta_ = meta;
+    ASSERT_EQ(OB_SUCCESS, info.set_const_value(owned.datum_, meta, plan_arena));
     ObRangeColumnMeta column;
     column.column_type_.set_type(ObVarcharType);
     column.column_type_.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -352,11 +349,10 @@ TEST(RangeMapDatum, fast_nlj_constant_bounds_survive_plan_arena_and_keep_null_ru
   graph.set_range_head(&node);
   ASSERT_EQ(OB_SUCCESS, graph.get_range_map().expr_final_infos_.prepare_allocate(1));
   auto &info = graph.get_range_map().expr_final_infos_.at(0);
-  ObDatum null;
-  null.set_null();
-  info.is_const_ = true;
-  info.const_val_ = &null;
-  info.const_meta_.set_null();
+  Datum null;
+  SqlTypeMeta null_meta;
+  null_meta.set_null();
+  ASSERT_EQ(OB_SUCCESS, info.set_const_value(null, null_meta, a));
   ObPhysicalPlanCtx empty(a);
   ASSERT_EQ(OB_SUCCESS, ObRangeGenerator::generate_fast_nlj_range(graph, empty, a, range));
   EXPECT_TRUE(range->start_key_.get_cell(0).is_max_value());
@@ -374,29 +370,18 @@ TEST(RangeMapDatum, native_value_clone_preserves_every_captured_value_and_owns_p
     }
     SCOPED_TRACE(f.name);
     ObArenaAllocator destination_arena;
-    ObDatum copied;
-    SqlTypeMeta meta;
-    uint32_t flags = 0;
+    ObRangeMap output(destination_arena);
+    ASSERT_EQ(OB_SUCCESS, output.expr_final_infos_.prepare_allocate(1));
     {
       ObArenaAllocator source_arena;
       ObRangeMap source(source_arena);
       int64_t p = 0;
       ASSERT_EQ(OB_SUCCESS, source.deserialize(f.wire.data(), f.wire.size(), p));
       const auto &entry = source.expr_final_infos_.at(0);
-      flags = entry.flags_;
-      DatumParameter view, owned;
-      ASSERT_EQ(OB_SUCCESS, view.assign_legacy_borrowed(*entry.const_val_, entry.const_meta_));
-      view.set_type_meta(entry.const_meta_);
-      ASSERT_EQ(OB_SUCCESS, clone_datum_parameter(view, owned, destination_arena));
-      ASSERT_EQ(OB_SUCCESS, owned.copy_legacy(copied, destination_arena));
-      meta = owned.get_meta();
+      auto &copy = output.expr_final_infos_.at(0);
+      ASSERT_EQ(OB_SUCCESS, copy.set_const_value(entry.const_val_, entry.const_meta_, destination_arena));
+      copy.flags_ = entry.flags_;
     }
-    ObRangeMap output(destination_arena);
-    ASSERT_EQ(OB_SUCCESS, output.expr_final_infos_.prepare_allocate(1));
-    auto &entry = output.expr_final_infos_.at(0);
-    entry.flags_ = flags;
-    entry.const_val_ = &copied;
-    entry.const_meta_ = meta;
     EXPECT_EQ(f.canonical, encode(output));
     ++count;
   }
@@ -422,15 +407,13 @@ TEST(RangeMapDatum, native_parameter_boundaries_keep_all_captured_scalar_values_
       int64_t pos = 0;
       ASSERT_EQ(OB_SUCCESS, original.deserialize(f.wire.data(), f.wire.size(), pos));
       DatumParameter parameter;
-      ASSERT_EQ(OB_SUCCESS, parameter.assign_legacy_borrowed(
-          *original.expr_final_infos_.at(0).const_val_, original.expr_final_infos_.at(0).const_meta_));
+      ASSERT_EQ(OB_SUCCESS, parameter.assign_native_borrowed(
+          original.expr_final_infos_.at(0).const_val_, original.expr_final_infos_.at(0).const_meta_));
       parameter.set_type_meta(original.expr_final_infos_.at(0).const_meta_);
       // Captured legacy values carry physical metadata only. Keep this full
       // corpus on the existing constant boundary, without fabricating enum,
       // UDT or odd-collation declarations for a ready parameter binding.
       ObPhysicalPlanCtx parameters(input);
-      ObDatum constant;
-      ASSERT_EQ(OB_SUCCESS, parameter.copy_legacy(constant, input));
       ObPreRangeGraph graph(input);
       ObRangeNode node(input);
       int64_t key = 0;
@@ -440,9 +423,7 @@ TEST(RangeMapDatum, native_parameter_boundaries_keep_all_captured_scalar_values_
       graph.set_range_head(&node);
       ASSERT_EQ(OB_SUCCESS, graph.get_range_map().expr_final_infos_.prepare_allocate(1));
       auto &entry = graph.get_range_map().expr_final_infos_.at(0);
-      entry.is_const_ = true;
-      entry.const_val_ = &constant;
-      entry.const_meta_ = parameter.get_type_meta();
+      ASSERT_EQ(OB_SUCCESS, entry.set_const_value(parameter.datum_, parameter.get_type_meta(), input));
       entry.null_safe_ = true;
       ASSERT_EQ(OB_SUCCESS,
                 ObRangeGenerator::generate_fast_nlj_range(graph, parameters, output, range));
@@ -585,6 +566,205 @@ TEST(RangeMapDatum, native_fast_parameter_bounds_preserve_null_rules_and_reject_
   ASSERT_EQ(OB_SUCCESS, graph.deep_copy_column_metas(columns));
   ASSERT_EQ(OB_SUCCESS, ObRangeGenerator::check_can_final_fast_nlj_range(graph, parameters, valid));
   EXPECT_FALSE(valid);
+}
+
+TEST(RangeMapDatum, retained_constant_scalars_and_states_need_no_payload_allocation) {
+  CountingAllocator owner;
+  owner.reject = true;
+  Datum values[10];
+  SqlTypeMeta metas[10];
+  values[0].set_int(INT64_MIN); metas[0].set_int();
+  values[1].set_uint(UINT64_MAX); metas[1].set_uint64();
+  values[2].set_double(1.5); metas[2].set_double();
+  values[3].set_float(-2.5f); metas[3].set_float();
+  values[4].set_date(-123); metas[4].set_date();
+  values[5].set_year(255); metas[5].set_year();
+  values[6].set_null(); metas[6].set_decimal_int(7);
+  values[7].set_min(); metas[7].set_ext();
+  values[8].set_max(); metas[8].set_ext();
+  values[9].set_nop(); metas[9].set_ext();
+  ObRangeMap::ExprFinalInfo retained[10];
+  for (int i = 0; i < 10; ++i) {
+    retained[i].is_param_ = true;
+    retained[i].param_idx_ = 17;
+    retained[i].null_safe_ = true;
+    retained[i].cnt_exec_param_ = true;
+    ASSERT_EQ(OB_SUCCESS, retained[i].set_const_value(values[i], metas[i], owner));
+    EXPECT_TRUE(retained[i].is_const_);
+    EXPECT_FALSE(retained[i].is_param_);
+    EXPECT_FALSE(retained[i].is_expr_);
+    EXPECT_TRUE(retained[i].null_safe_);
+    EXPECT_TRUE(retained[i].cnt_exec_param_);
+    EXPECT_EQ(metas[i], retained[i].const_meta_);
+    EXPECT_EQ(0, retained[i].const_val_.length());
+    values[i].set_null();
+  }
+  EXPECT_EQ(0, owner.calls);
+  EXPECT_EQ(0, owner.bytes);
+  EXPECT_EQ(INT64_MIN, retained[0].const_val_.get_int());
+  EXPECT_EQ(UINT64_MAX, retained[1].const_val_.get_uint());
+  EXPECT_DOUBLE_EQ(1.5, retained[2].const_val_.get_double());
+  EXPECT_FLOAT_EQ(-2.5f, retained[3].const_val_.get_float());
+  EXPECT_EQ(-123, retained[4].const_val_.get_date());
+  EXPECT_EQ(255, retained[5].const_val_.get_year());
+  EXPECT_TRUE(retained[6].const_val_.is_null());
+  EXPECT_EQ(ObDecimalIntType, retained[6].const_meta_.get_type());
+  EXPECT_EQ(7, retained[6].const_meta_.get_scale());
+  EXPECT_TRUE(retained[7].const_val_.is_min());
+  EXPECT_TRUE(retained[8].const_val_.is_max());
+  EXPECT_TRUE(retained[9].const_val_.is_nop());
+
+  ObDatum unchanged;
+  unchanged.set_null();
+  alignas(8) char short_scratch[7];
+  EXPECT_EQ(OB_BUF_NOT_ENOUGH,
+            retained[0].export_const_value(unchanged, short_scratch, sizeof(short_scratch)));
+  EXPECT_TRUE(unchanged.is_null());
+}
+
+TEST(RangeMapDatum, retained_reference_failure_preserves_slot_and_retry_owns_bytes) {
+  CountingAllocator owner;
+  ObRangeMap::ExprFinalInfo retained;
+  Datum scalar;
+  scalar.set_int(77);
+  SqlTypeMeta scalar_meta;
+  scalar_meta.set_int();
+  ASSERT_EQ(OB_SUCCESS, retained.set_const_value(scalar, scalar_meta, owner));
+  retained.null_safe_ = true;
+  const auto before = retained;
+  char text[] = "payload";
+  Datum source;
+  ASSERT_EQ(OB_SUCCESS, source.set_string(text, sizeof(text) - 1));
+  SqlTypeMeta text_meta;
+  text_meta.set_varchar();
+  text_meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  owner.reject = true;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, retained.set_const_value(source, text_meta, owner));
+  EXPECT_EQ(1, owner.calls);
+  EXPECT_EQ(sizeof(text) - 1, owner.bytes);
+  EXPECT_EQ(before.flags_, retained.flags_);
+  EXPECT_EQ(before.const_meta_, retained.const_meta_);
+  EXPECT_EQ(0, MEMCMP(&before.const_val_, &retained.const_val_, sizeof(Datum)));
+  EXPECT_EQ(77, retained.const_val_.get_int());
+
+  // An illegal scalar/reference pair is rejected before allocation/publication.
+  EXPECT_EQ(OB_INVALID_ARGUMENT, retained.set_const_value(source, scalar_meta, owner));
+  EXPECT_EQ(1, owner.calls);
+  EXPECT_EQ(before.flags_, retained.flags_);
+  EXPECT_EQ(before.const_meta_, retained.const_meta_);
+  EXPECT_EQ(77, retained.const_val_.get_int());
+  owner.reject = false;
+  ASSERT_EQ(OB_SUCCESS, retained.set_const_value(source, text_meta, owner));
+  EXPECT_EQ(2, owner.calls);
+  EXPECT_NE(static_cast<const void *>(text), retained.const_val_.get_reference());
+  memset(text, 'x', sizeof(text) - 1);
+  EXPECT_EQ(ObString("payload"), retained.const_val_.get_string());
+  const void *first_copy = retained.const_val_.get_reference();
+  ASSERT_EQ(OB_SUCCESS, retained.set_const_value(retained.const_val_, retained.const_meta_, owner));
+  EXPECT_EQ(3, owner.calls);
+  EXPECT_NE(first_copy, retained.const_val_.get_reference());
+  EXPECT_TRUE(retained.null_safe_);
+  EXPECT_EQ(ObString("payload"), retained.const_val_.get_string());
+}
+
+TEST(RangeMapDatum, retained_decimal_actual_width_and_unknown_reference_keep_captured_wire) {
+  int widths = 0;
+  bool unknown_checked = false;
+  for (auto frame : frames()) {
+    const std::string prefix = "value-decimal-width-";
+    if (frame.name.compare(0, prefix.size(), prefix) != 0 && frame.name != "value-type-26") { continue; }
+    SCOPED_TRACE(frame.name);
+    const bool unknown = frame.name == "value-type-26";
+    const int width = unknown ? 8 : std::stoi(frame.name.substr(prefix.size()));
+    CountingAllocator payload_owner;
+    ObArenaAllocator entries_owner;
+    ObRangeMap retained(entries_owner);
+    ASSERT_EQ(OB_SUCCESS, retained.expr_final_infos_.prepare_allocate(1));
+    auto &copy = retained.expr_final_infos_.at(0);
+    {
+      ObArenaAllocator source_owner;
+      ObRangeMap source(source_owner);
+      int64_t pos = 0;
+      ASSERT_EQ(OB_SUCCESS, source.deserialize(frame.wire.data(), frame.wire.size(), pos));
+      const auto &entry = source.expr_final_infos_.at(0);
+      ASSERT_EQ(OB_SUCCESS, copy.set_const_value(entry.const_val_, entry.const_meta_, payload_owner));
+      copy.flags_ = entry.flags_;
+      EXPECT_EQ(width, copy.const_val_.length());
+      EXPECT_EQ(1, payload_owner.calls);
+      EXPECT_EQ(width == 0 ? 1 : width, payload_owner.bytes);
+      if (width > 0) { EXPECT_NE(entry.const_val_.get_reference(), copy.const_val_.get_reference()); }
+      if (unknown) {
+        EXPECT_EQ(ObUnknownType, copy.const_meta_.get_type());
+        EXPECT_EQ(-7, copy.const_val_.get_unknown());
+        unknown_checked = true;
+      } else {
+        EXPECT_EQ(ObDecimalIntType, copy.const_meta_.get_type());
+        EXPECT_EQ(-9, copy.const_meta_.get_scale());
+        ++widths;
+      }
+    }
+    memset(&frame.wire[0], 0xa5, frame.wire.size());
+    EXPECT_EQ(frame.canonical, encode(retained));
+  }
+  EXPECT_EQ(6, widths);
+  EXPECT_TRUE(unknown_checked);
+}
+
+TEST(RangeMapDatum, native_decode_has_no_scalar_payload_and_reference_oom_clears_map) {
+  const auto corpus = frames();
+  const RangeFrame *integer = nullptr, *text = nullptr;
+  for (const auto &frame : corpus) {
+    if (frame.name == "value-type-5") { integer = &frame; }
+    if (frame.name == "value-type-22") { text = &frame; }
+  }
+  ASSERT_NE(nullptr, integer);
+  ASSERT_NE(nullptr, text);
+  CountingAllocator scalar_owner;
+  scalar_owner.reject_at = 2;
+  ObRangeMap scalar_map(scalar_owner);
+  int64_t pos = 0;
+  ASSERT_EQ(OB_SUCCESS, scalar_map.deserialize(integer->wire.data(), integer->wire.size(), pos));
+  EXPECT_EQ(integer->wire.size(), pos);
+  ASSERT_EQ(1, scalar_map.expr_final_infos_.count());
+  EXPECT_EQ(-7, scalar_map.expr_final_infos_.at(0).const_val_.get_int());
+  EXPECT_EQ(1, scalar_owner.calls); // only the actual ExprFinalInfo array
+  EXPECT_EQ(sizeof(ObRangeMap::ExprFinalInfo), scalar_owner.bytes);
+  EXPECT_EQ(integer->canonical, encode(scalar_map));
+
+  CountingAllocator reference_owner;
+  reference_owner.reject_at = 2; // entry allocation succeeds; actual string payload fails
+  ObRangeMap reference_map(reference_owner);
+  pos = 0;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED,
+            reference_map.deserialize(text->wire.data(), text->wire.size(), pos));
+  EXPECT_EQ(2, reference_owner.calls);
+  EXPECT_EQ(0, reference_map.expr_final_infos_.count());
+  EXPECT_EQ(0, reference_map.in_params_.count());
+  reference_owner.reject_at = -1;
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, reference_map.deserialize(text->wire.data(), text->wire.size(), pos));
+  EXPECT_EQ(text->wire.size(), pos);
+  EXPECT_EQ(text->canonical, encode(reference_map));
+
+  // The owner retains typed NULL metadata; historical wire deliberately
+  // normalizes only its value type/collation, retaining the old scale byte.
+  ObArenaAllocator null_owner;
+  ObRangeMap null_map(null_owner), decoded(null_owner);
+  ASSERT_EQ(OB_SUCCESS, null_map.expr_final_infos_.prepare_allocate(1));
+  Datum null;
+  SqlTypeMeta declared;
+  declared.set_decimal_int(7);
+  ASSERT_EQ(OB_SUCCESS, null_map.expr_final_infos_.at(0).set_const_value(null, declared, null_owner));
+  std::string wire = encode(null_map);
+  pos = 0;
+  ASSERT_EQ(OB_SUCCESS, decoded.deserialize(wire.data(), wire.size(), pos));
+  ASSERT_EQ(1, decoded.expr_final_infos_.count());
+  SqlTypeMeta expected = declared;
+  expected.set_null();
+  EXPECT_EQ(declared, null_map.expr_final_infos_.at(0).const_meta_);
+  EXPECT_EQ(expected, decoded.expr_final_infos_.at(0).const_meta_);
+  EXPECT_TRUE(decoded.expr_final_infos_.at(0).const_val_.is_null());
+  EXPECT_EQ(wire, encode(decoded));
 }
 
 int main(int argc, char **argv) {

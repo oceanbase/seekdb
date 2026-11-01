@@ -580,7 +580,7 @@ filegroup(
 cc_library(
     name = "observer_rowkey_filter_test_runtime",
     testonly = True,
-    deps = [":observer_internal_interface", "//src/share:value_cast_constants", "//src/share:system_variable_metadata"],
+    deps = [":observer_internal_interface", "//src/sql:topn_filter_msg_test_headers", "//src/share:value_cast_constants", "//src/share:system_variable_metadata"],
     tags = ["manual"],
     visibility = ["//unittest/observer:__pkg__"],
 )

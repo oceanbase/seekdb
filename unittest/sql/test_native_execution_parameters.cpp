@@ -26,6 +26,9 @@
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/engine/table/native_point_get_input.h"
 #include "sql/ob_sql_context.h"
+#include "sql/ob_sql.h"
+#include "sql/plan_cache/ob_plan_cache_value.h"
+#include "sql/plan_cache/ob_plan_cache_struct.h"
 #include "sql/ob_spi.h"
 #include "sql/engine/expr/ob_sql_expression.h"
 #include "sql/pl/ob_pl.h"
@@ -1594,6 +1597,332 @@ TEST(NativeExecutionParametersSPI, referenced_question_index_preserves_declarati
   EXPECT_EQ(OB_OBJ_TYPE_ERROR, access(SpiResultTypeTag{})(context, malformed, output));
   EXPECT_EQ(static_cast<const SqlTypeMeta &>(before), static_cast<const SqlTypeMeta &>(output));
   EXPECT_EQ(before.get_accuracy(), output.get_accuracy());
+}
+} // namespace
+
+
+namespace
+{
+// Invoke the production preparation stages through the existing SPI test's
+// explicit-instantiation access pattern; no production friend or public hook.
+struct LookupParameterPreparationTag {
+  using type = int (ObPlanCacheValue::*)(ObPlanCacheCtx &);
+  friend type access(LookupParameterPreparationTag);
+};
+template struct SpiPrivateAccess<LookupParameterPreparationTag,
+    &ObPlanCacheValue::prepare_lookup_parameters>;
+struct ProtocolFirstRowTag {
+  using type = int (ObSql::*)(ObIAllocator &, const ParamStore &, ParamStore *&);
+  friend type access(ProtocolFirstRowTag);
+};
+template struct SpiPrivateAccess<ProtocolFirstRowTag, &ObSql::init_execute_params_for_ab>;
+struct FixedProtocolInputsTag {
+  using type = int (ObSql::*)(const ParamStore &, const ParamStore &,
+      const ObIArray<int64_t> &, ParamStore &);
+  friend type access(FixedProtocolInputsTag);
+};
+template struct SpiPrivateAccess<FixedProtocolInputsTag, &ObSql::construct_ps_param_store>;
+struct DirectProtocolInputsTag {
+  using type = int (ObSql::*)(const ParamStore &, ObPhysicalPlanCtx &);
+  friend type access(DirectProtocolInputsTag);
+};
+template struct SpiPrivateAccess<DirectProtocolInputsTag, &ObSql::construct_param_store>;
+struct ParserProtocolInputsTag {
+  using type = int (ObSql::*)(const ObPlanCacheCtx &, ParamStore &);
+  friend type access(ParserProtocolInputsTag);
+};
+template struct SpiPrivateAccess<ParserProtocolInputsTag,
+    &ObSql::construct_param_store_from_parameterized_params>;
+
+
+int make_protocol_array_inputs(ObIAllocator &payload_owner, ParamStore &groups)
+{
+  const char first_text[] = {'n', '\0', 'u', 'l'};
+  const char later_text[] = "later-row";
+  int ret = OB_SUCCESS;
+  for (int64_t column = 0; ret == OB_SUCCESS && column < 3; ++column) {
+    auto *array = DatumParameterArray::alloc(payload_owner, 2);
+    if (array == nullptr) { return OB_ALLOCATE_MEMORY_FAILED; }
+    for (int64_t row = 0; ret == OB_SUCCESS && row < 2; ++row) {
+      DatumParameter &leaf = array->data_[row];
+      if (column == 0) {
+        ret = leaf.set_int(row == 0 ? INT64_MIN : 7, payload_owner);
+        leaf.set_accuracy(ObAccuracy(19, 0)); leaf.set_param_meta();
+      } else if (column == 1) {
+        ret = leaf.set_varchar(row == 0 ? ObString(4, first_text) : ObString::make_string(later_text), payload_owner);
+        leaf.set_collation_type(CS_TYPE_BINARY); leaf.set_collation_level(CS_LEVEL_COERCIBLE);
+        leaf.set_length(row == 0 ? 4 : 9); leaf.set_length_semantics(LS_BYTE); leaf.set_param_meta();
+      } else {
+        const int64_t coefficient = row == 0 ? 12345 : 67890;
+        DatumValue decimal;
+        ret = decimal.set_decimal_int(8, 5, reinterpret_cast<const ObDecimalInt *>(&coefficient), payload_owner);
+        if (ret == OB_SUCCESS) { leaf.assign_value(decimal); }
+        leaf.set_accuracy(ObAccuracy(20, 5)); leaf.set_param_meta();
+        if (row == 0) { leaf.set_null(); }
+      }
+      leaf.set_result_flags(0x1200 + column);
+      leaf.set_raw_text_info(17 + column, 23 + row);
+      leaf.get_param_flag().flag_ = 0x09;
+      leaf.get_param_flag().reserved_legacy_bit_ = (column & 1) != 0;
+      leaf.get_param_flag().extend_flag_ = 0x80 + row;
+      const SqlType *declared = nullptr;
+      if (ret == OB_SUCCESS) {
+        ret = SqlType::from_legacy(leaf.is_null() ? leaf.get_param_meta() : leaf.get_type_meta(),
+            leaf.get_accuracy(), payload_owner, declared);
+      }
+      if (ret == OB_SUCCESS) { ret = array->set_element_type_borrowed(row, *declared, payload_owner); }
+    }
+    if (ret != OB_SUCCESS) { return ret; }
+    array->element_.set_meta_type(array->data_[0].get_param_meta());
+    array->element_.set_accuracy(array->data_[0].get_accuracy());
+    DatumParameter envelope;
+    ret = envelope.set_extend(reinterpret_cast<int64_t>(array), T_EXT_SQL_ARRAY, payload_owner);
+    envelope.set_param_meta();
+    if (ret == OB_SUCCESS) { ret = groups.push_back(envelope); }
+  }
+  return ret;
+}
+
+TEST_F(NativeExecutionParameters, ordinary_lookup_and_miss_parser_consume_original_inputs_without_ready_shadow)
+{
+  ASSERT_EQ(OB_SUCCESS, oceanbase::share::ObSysVariables::init_default_values());
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ResolverInputSessionGuard registration(session, exec_);
+  ObArenaAllocator descriptors("ProtoDesc"), statement_owner("ProtoStmt"), raw_owner("ProtoRaw");
+  ParamStore original((ObWrapperAllocator(&descriptors)));
+  const double keys[] = {1.0, 1.0, 7.0};
+  for (int64_t i = 0; i < 3; ++i) {
+    DatumParameter input;
+    ASSERT_EQ(OB_SUCCESS, input.set_double(keys[i], request_arena_));
+    input.set_accuracy(ObAccuracy(15, 7)); input.set_param_meta();
+    input.set_raw_text_info(17 + i, 23 + i); input.set_result_flags(0x1200 + i);
+    input.get_param_flag().flag_ = 0x09; input.get_param_flag().reserved_legacy_bit_ = (i & 1) != 0;
+    input.get_param_flag().extend_flag_ = 0x80 + i;
+    ASSERT_EQ(OB_SUCCESS, original.push_back(input));
+  }
+  plan().set_original_param_cnt(3);
+  ObPlanCacheCtx lookup(ObString("SELECT ?+?+?"), PC_PS_MODE, owner_, sql_ctx_, exec_);
+  lookup.fp_result_.parameter_context_ = &plan();
+  ASSERT_EQ(OB_SUCCESS, ObSql::construct_parameterized_params(original, lookup));
+  EXPECT_EQ(0, plan().get_parameter_count());
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(plan()));
+  ObPlanCacheValue cache_value;
+  ASSERT_EQ(OB_SUCCESS, (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
+  ASSERT_TRUE(plan().native_parameters_ready());
+  for (int64_t i = 0; i < 3; ++i) {
+    EXPECT_DOUBLE_EQ(keys[i], plan().get_native_parameter(i)->get_double());
+    EXPECT_EQ(ObDoubleType, plan().get_native_parameter_type(i)->kind());
+    expect_resolver_attributes(original.at(i).get_metadata(), *plan().get_parameter_metadata(i));
+  }
+  Datum converted; converted.set_double(999.0);
+  const DatumParameterMetadata attributes = *plan().get_parameter_metadata(2);
+  ASSERT_EQ(OB_SUCCESS, plan().set_runtime_parameter(2, converted, *plan().get_native_parameter_type(2), attributes));
+  EXPECT_DOUBLE_EQ(999.0, plan().get_native_parameter(2)->get_double());
+  EXPECT_DOUBLE_EQ(7.0, original.at(2).get_double());
+
+  // The actual miss parser resets the attempted binding and invokes this
+  // production constructor from the original pointer directory, not the frame.
+  plan().reset_datum_param_store();
+  ObSql sql;
+  ASSERT_EQ(OB_SUCCESS, plan().edit_parameter_inputs([&](ParamStore &inputs) {
+    return (sql.*access(ParserProtocolInputsTag{}))(lookup, inputs);
+  }));
+  ASSERT_FALSE(plan().native_parameters_ready()); ASSERT_EQ(3, plan().get_parameter_count());
+  ParamStore resolution((ObWrapperAllocator(&descriptors)));
+  ASSERT_EQ(OB_SUCCESS, plan().build_resolution_inputs(resolution, statement_owner));
+  ObRawExprFactory factory(raw_owner);
+  for (int64_t i = 0; i < 3; ++i) {
+    ObRawExpr *resolved = nullptr;
+    ASSERT_EQ(OB_SUCCESS, resolve_snapshot_questionmark(factory, session, resolution, i, resolved));
+    ASSERT_NE(nullptr, resolved); ASSERT_TRUE(resolved->is_const_raw_expr());
+    const auto &constant = static_cast<const ObConstRawExpr &>(*resolved);
+    EXPECT_EQ(ObDoubleType, constant.get_data_type());
+    EXPECT_DOUBLE_EQ(keys[i], constant.get_bound_param_datum().get_double());
+    expect_resolver_attributes(original.at(i).get_metadata(), resolution.at(i).get_metadata());
+  }
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  EXPECT_DOUBLE_EQ(7.0, plan().get_native_parameter(2)->get_double());
+}
+
+TEST_F(NativeExecutionParameters, protocol_batch_lookup_consumes_actual_first_row_and_fixed_slots_from_source)
+{
+  ASSERT_EQ(OB_SUCCESS, oceanbase::share::ObSysVariables::init_default_values());
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ResolverInputSessionGuard registration(session, exec_);
+  ObArenaAllocator payload("ProtoABSrc"), descriptors("ProtoABDesc");
+  ParamStore groups((ObWrapperAllocator(&descriptors)));
+  ASSERT_EQ(OB_SUCCESS, make_protocol_array_inputs(payload, groups));
+  ObSql sql;
+  ParamStore *first_row = nullptr;
+  ASSERT_EQ(OB_SUCCESS, (sql.*access(ProtocolFirstRowTag{}))(descriptors, groups, first_row));
+  ASSERT_NE(nullptr, first_row); ASSERT_EQ(3, first_row->count());
+  EXPECT_EQ(INT64_MIN, first_row->at(0).get_int());
+  ASSERT_TRUE(first_row->at(2).is_null());
+  EXPECT_EQ(ObDecimalIntType, first_row->at(2).get_param_meta().get_type());
+  EXPECT_EQ(5, first_row->at(2).get_scale());
+
+  ParamStore fixed((ObWrapperAllocator(&descriptors))), inputs((ObWrapperAllocator(&descriptors))),
+      full_groups((ObWrapperAllocator(&descriptors)));
+  DatumParameter literal;
+  ASSERT_EQ(OB_SUCCESS, literal.set_int(99, payload));
+  literal.set_accuracy(ObAccuracy(19, 0)); literal.set_param_meta();
+  literal.set_result_flags(0x2340); literal.set_raw_text_info(71, 73);
+  ASSERT_EQ(OB_SUCCESS, fixed.push_back(literal));
+  ObSEArray<int64_t, 1> fixed_indices;
+  ASSERT_EQ(OB_SUCCESS, fixed_indices.push_back(1));
+  ASSERT_EQ(OB_SUCCESS, (sql.*access(FixedProtocolInputsTag{}))(*first_row, fixed, fixed_indices, inputs));
+  ASSERT_EQ(OB_SUCCESS, (sql.*access(FixedProtocolInputsTag{}))(groups, fixed, fixed_indices, full_groups));
+  ASSERT_EQ(4, inputs.count());
+  DatumParameterMetadata expected[4];
+  for (int64_t i = 0; i < 4; ++i) { expected[i] = inputs.at(i).get_metadata(); }
+
+  sql_ctx_.multi_stmt_item_.set_ps_mode(true);
+  sql_ctx_.multi_stmt_item_.set_ab_cnt(2);
+  ASSERT_TRUE(sql_ctx_.is_batch_params_execute());
+  ASSERT_TRUE(sql_ctx_.multi_stmt_item_.is_ab_batch_opt());
+  plan().set_original_param_cnt(3); plan().set_orig_question_mark_cnt(3);
+  plan().set_ps_fixed_array_index(fixed_indices);
+  ObPlanCacheCtx lookup(ObString("SELECT ?,99,?,?"), PC_PS_MODE, owner_, sql_ctx_, exec_);
+  lookup.fp_result_.parameter_context_ = &plan();
+  lookup.ab_params_ = &full_groups;
+  ASSERT_EQ(OB_SUCCESS, ObSql::construct_parameterized_params(inputs, lookup));
+  ASSERT_FALSE(plan().native_parameters_ready());
+  EXPECT_EQ(0, plan().get_parameter_count());
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(plan()));
+  ObPlanCacheValue cache_value;
+  ASSERT_EQ(OB_SUCCESS, (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
+  ASSERT_TRUE(plan().native_parameters_ready());
+  ASSERT_EQ(4, plan().get_parameter_count());
+  EXPECT_EQ(4, plan().get_original_param_cnt()); EXPECT_EQ(3, plan().get_orig_question_mark_cnt());
+  EXPECT_EQ(&fixed_indices, plan().get_ps_fixed_array_index());
+  EXPECT_EQ(&full_groups, lookup.ab_params_);
+  EXPECT_EQ(INT64_MIN, plan().get_native_parameter(0)->get_int());
+  EXPECT_EQ(99, plan().get_native_parameter(1)->get_int());
+  EXPECT_EQ(std::string("n\0ul", 4), std::string(plan().get_native_parameter(2)->get_string().ptr(), 4));
+  EXPECT_TRUE(plan().get_native_parameter(3)->is_null());
+  EXPECT_EQ(ObDecimalIntType, plan().get_native_parameter_type(3)->kind());
+  EXPECT_EQ(20, plan().get_native_parameter_type(3)->precision());
+  EXPECT_EQ(5, plan().get_native_parameter_type(3)->scale());
+  EXPECT_EQ(0, plan().get_native_group_count()); // First row, not final full-group publication.
+  for (int64_t i = 0; i < 4; ++i) {
+    expect_resolver_attributes(expected[i], *plan().get_parameter_metadata(i));
+    EXPECT_EQ(&inputs.at(i), lookup.fp_result_.parameterized_params_.at(i));
+  }
+  for (int64_t i : {0, 2, 3}) { EXPECT_TRUE(plan().get_parameter_metadata(i)->flag_.is_batch_parameter_); }
+  EXPECT_FALSE(plan().get_parameter_metadata(1)->flag_.is_batch_parameter_);
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_count(plan()));
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(plan()));
+  const auto *original_text_group = full_groups.at(2).get_array<DatumParameterArray>();
+  ASSERT_NE(nullptr, original_text_group); ASSERT_NE(nullptr, original_text_group->get_element_type(0));
+  EXPECT_EQ(ObVarcharType, original_text_group->get_element_type(0)->kind());
+  EXPECT_EQ(9, original_text_group->data_[1].get_string().length());
+  // The real full AB source remains live for later all-group matching. The
+  // first-row native text owns an independent span already at this boundary.
+  EXPECT_NE(inputs.at(2).get_datum().get_reference(), plan().get_native_parameter(2)->get_reference());
+  first_row->~ParamStore();
+}
+
+TEST_F(NativeExecutionParameters, protocol_first_row_reference_failure_keeps_source_for_retry_without_ready_publication)
+{
+  ASSERT_EQ(OB_SUCCESS, oceanbase::share::ObSysVariables::init_default_values());
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ResolverInputSessionGuard registration(session, exec_);
+  ObArenaAllocator payload("ProtoABSrc"), descriptors("ProtoABDesc");
+  ParamStore groups((ObWrapperAllocator(&descriptors)));
+  ASSERT_EQ(OB_SUCCESS, make_protocol_array_inputs(payload, groups));
+  ObSql sql; ParamStore *first_row = nullptr;
+  ASSERT_EQ(OB_SUCCESS, (sql.*access(ProtocolFirstRowTag{}))(descriptors, groups, first_row));
+  ASSERT_NE(nullptr, first_row);
+  sql_ctx_.multi_stmt_item_.set_ps_mode(true); sql_ctx_.multi_stmt_item_.set_ab_cnt(2);
+  ObPlanCacheCtx lookup(ObString("SELECT ?,?,?"), PC_PS_MODE, owner_, sql_ctx_, exec_);
+  lookup.fp_result_.parameter_context_ = &plan(); lookup.ab_params_ = &groups;
+  ASSERT_EQ(OB_SUCCESS, ObSql::construct_parameterized_params(*first_row, lookup));
+  DatumParameterMetadata expected[3];
+  for (int64_t i = 0; i < 3; ++i) { expected[i] = first_row->at(i).get_metadata(); }
+  owner_.clear_calls(); owner_.fail_size_ = 4; // Actual first-row reference clone, not a scalar 8B allocation.
+  ObPlanCacheValue cache_value;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
+  EXPECT_GT(owner_.calls_for(4), 0);
+  EXPECT_FALSE(plan().native_parameters_ready()); EXPECT_EQ(3, plan().get_parameter_count());
+  EXPECT_EQ(nullptr, plan().get_native_parameter(0));
+  for (int64_t i = 0; i < 3; ++i) {
+    expect_resolver_attributes(expected[i], plan().get_parameter_inputs().at(i).get_metadata());
+    EXPECT_EQ(&first_row->at(i), lookup.fp_result_.parameterized_params_.at(i));
+  }
+  EXPECT_EQ(std::string("n\0ul", 4), std::string(first_row->at(1).get_string().ptr(), 4));
+  owner_.fail_size_ = 0;
+  ASSERT_EQ(OB_SUCCESS, (cache_value.*access(LookupParameterPreparationTag{}))(lookup));
+  ASSERT_TRUE(plan().native_parameters_ready());
+  EXPECT_EQ(INT64_MIN, plan().get_native_parameter(0)->get_int());
+  EXPECT_EQ(std::string("n\0ul", 4), std::string(plan().get_native_parameter(1)->get_string().ptr(), 4));
+  EXPECT_TRUE(plan().get_native_parameter(2)->is_null());
+  for (int64_t i = 0; i < 3; ++i) { expect_resolver_attributes(expected[i], *plan().get_parameter_metadata(i)); }
+  EXPECT_EQ(0, NativeExecutionParametersTestPeer::input_bytes(plan()));
+  first_row->~ParamStore();
+}
+
+TEST_F(NativeExecutionParameters, direct_non_dml_inputs_reach_real_questionmark_resolver_with_declarations)
+{
+  ASSERT_EQ(OB_SUCCESS, oceanbase::share::ObSysVariables::init_default_values());
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  session.set_stmt_type(stmt::T_CALL_PROCEDURE);
+  ResolverInputSessionGuard registration(session, exec_);
+  ObArenaAllocator payload("DirectSrc"), descriptors("DirectDesc"), statement_owner("DirectStmt"), raw_owner("DirectRaw");
+  ParamStore inputs((ObWrapperAllocator(&descriptors)));
+  DatumParameter text, decimal_null;
+  const char bytes[] = {'d', '\0', 'p', 's'};
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString(4, bytes), payload));
+  text.set_collation_type(CS_TYPE_BINARY); text.set_collation_level(CS_LEVEL_COERCIBLE);
+  text.set_length(4); text.set_length_semantics(LS_BYTE); text.set_param_meta();
+  const int64_t coefficient = 12345;
+  DatumValue decimal;
+  ASSERT_EQ(OB_SUCCESS, decimal.set_decimal_int(8, 5,
+      reinterpret_cast<const ObDecimalInt *>(&coefficient), payload));
+  decimal_null.assign_value(decimal);
+  decimal_null.set_accuracy(ObAccuracy(20, 5)); decimal_null.set_param_meta(); decimal_null.set_null();
+  text.set_raw_text_info(17, 23); text.set_result_flags(0x1234); text.get_param_flag().flag_ = 0x19;
+  decimal_null.set_raw_text_info(29, 31); decimal_null.set_result_flags(0x2340);
+  ASSERT_EQ(OB_SUCCESS, inputs.push_back(text)); ASSERT_EQ(OB_SUCCESS, inputs.push_back(decimal_null));
+  ObSql sql;
+  plan().set_original_param_cnt(2); plan().set_orig_question_mark_cnt(2);
+  // This is the actual direct non-DML construction port before generate_stmt,
+  // followed by the same public resolver used by a real direct call argument.
+  ASSERT_EQ(OB_SUCCESS, (sql.*access(DirectProtocolInputsTag{}))(inputs, plan()));
+  ASSERT_FALSE(plan().native_parameters_ready()); ASSERT_EQ(2, plan().get_parameter_count());
+  ParamStore resolution((ObWrapperAllocator(&descriptors)));
+  ASSERT_EQ(OB_SUCCESS, plan().build_resolution_inputs(resolution, statement_owner));
+  ObRawExprFactory factory(raw_owner);
+  for (int64_t i = 0; i < 2; ++i) {
+    ObRawExpr *resolved = nullptr;
+    ASSERT_EQ(OB_SUCCESS, resolve_snapshot_questionmark(factory, session, resolution, i, resolved));
+    ASSERT_NE(nullptr, resolved); ASSERT_TRUE(resolved->is_const_raw_expr());
+    const auto &constant = static_cast<const ObConstRawExpr &>(*resolved);
+    EXPECT_EQ(i, constant.get_questionmark_index());
+    if (i == 0) {
+      EXPECT_EQ(ObVarcharType, constant.get_data_type()); EXPECT_EQ(CS_TYPE_BINARY, constant.get_collation_type());
+      EXPECT_EQ(std::string("d\0ps", 4), std::string(constant.get_bound_param_datum().get_string().ptr(), 4));
+    } else {
+      EXPECT_EQ(ObDecimalIntType, constant.get_data_type()); EXPECT_EQ(20, constant.get_result_type().get_precision());
+      EXPECT_EQ(5, constant.get_scale()); EXPECT_TRUE(constant.get_bound_param_datum().is_null());
+    }
+    expect_resolver_attributes(inputs.at(i).get_metadata(), resolution.at(i).get_metadata());
+  }
+  ASSERT_EQ(OB_SUCCESS, plan().init_datum_param_store());
+  MEMSET(const_cast<void *>(text.get_datum().get_reference()), 0xa5, 4);
+  inputs.destroy(); payload.reset();
+  EXPECT_EQ(std::string("d\0ps", 4), std::string(resolution.at(0).get_string().ptr(), 4));
+  EXPECT_EQ(std::string("d\0ps", 4), std::string(plan().get_native_parameter(0)->get_string().ptr(), 4));
+  EXPECT_TRUE(plan().get_native_parameter(1)->is_null());
+  EXPECT_EQ(ObDecimalIntType, plan().get_native_parameter_type(1)->kind());
+  EXPECT_EQ(20, plan().get_native_parameter_type(1)->precision()); EXPECT_EQ(5, plan().get_native_parameter_type(1)->scale());
 }
 } // namespace
 

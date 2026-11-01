@@ -113,10 +113,14 @@ void expect_osg_hash_matches_native_datum_hash(const DatumValue &value) {
   ObOptColumnStat stat(owner);
   ObOptOSGColumnStat osg(owner);
   osg.col_stat_ = &stat;
+  SqlType source_type;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(value.meta_, ObAccuracy(), source_type));
   alignas(8) char physical_scratch[64]; ObDatum physical;
+  Datum source_value;
   ASSERT_EQ(OB_SUCCESS,value.export_legacy(physical,physical_scratch,sizeof(physical_scratch)));
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(source_type).import_legacy(physical, source_value));
   ASSERT_EQ(OB_SUCCESS, osg.update_column_stat_info(
-      &physical, value.meta_, nullptr));
+      &source_value, source_type, value.meta_, nullptr));
   std::vector<char> expected(ObOptColumnStat::NUM_LLC_BUCKET, 0);
   ASSERT_EQ(OB_SUCCESS, oceanbase::sql::ObAggregateProcessor::llc_add_value(
       expected_hash, expected.data(), expected.size()));
@@ -124,6 +128,22 @@ void expect_osg_hash_matches_native_datum_hash(const DatumValue &value) {
   EXPECT_EQ(expected.size(), stat.get_llc_bitmap_size());
   EXPECT_EQ(0, MEMCMP(expected.data(), stat.get_llc_bitmap(), expected.size()));
   osg.col_stat_ = nullptr;
+}
+int update_osg_literal(ObOptOSGColumnStat &osg, const DatumValue &value,
+                       const ObAccuracy &accuracy = ObAccuracy()) {
+  SqlType declared;
+  int ret = SqlType::from_legacy(value.meta_, accuracy, declared);
+  alignas(8) char scratch[64]; ObDatum physical;
+  Datum semantic;
+  if (ret == OB_SUCCESS) { ret = value.export_legacy(physical, scratch, sizeof(scratch)); }
+  if (ret == OB_SUCCESS) { ret = DatumCopyPlan(declared).import_legacy(physical, semantic); }
+  const ObDatumBasicFuncs *functions = ObDatumFuncs::get_basic_func(
+      value.get_type(), value.get_collation_type(), value.get_scale(), value.has_lob_header());
+  if (ret == OB_SUCCESS && functions == nullptr) { ret = OB_NOT_SUPPORTED; }
+  if (ret == OB_SUCCESS) {
+    ret = osg.update_column_stat_info(&semantic, declared, value.meta_, functions->null_first_cmp_);
+  }
+  return ret;
 }
 class SwitchAllocator : public ObIAllocator {
 public:
@@ -253,18 +273,13 @@ TEST(NativeColumnStats, osg_publication_is_native_and_owns_payload) {
   ObArenaAllocator owner,source;ObOptOSGColumnStat osg(owner);
   ObOptColumnStat stat(owner);osg.col_stat_=&stat;
   DatumValue a=integer(-30,source),b=integer(70,source);
-  alignas(8) char min_scratch[64], max_scratch[64];
-  ObDatum minimum, maximum;
-  ASSERT_EQ(OB_SUCCESS,a.export_legacy(minimum,min_scratch,sizeof(min_scratch)));
-  ASSERT_EQ(OB_SUCCESS,b.export_legacy(maximum,max_scratch,sizeof(max_scratch)));
-  osg.min_val_.datum_=&minimum;osg.min_val_.meta_=a.meta_;
-  osg.max_val_.datum_=&maximum;osg.max_val_.meta_=b.meta_;
+  ASSERT_EQ(OB_SUCCESS,update_osg_literal(osg,a));
+  ASSERT_EQ(OB_SUCCESS,update_osg_literal(osg,b));
   ASSERT_EQ(OB_SUCCESS,osg.publish_min_max_values());
   source.reuse();std::memset(source.alloc(65536),0x2f,65536);
   EXPECT_EQ(-30,stat.get_min_datum().get_int());EXPECT_EQ(70,stat.get_max_datum().get_int());
-  // The test Datum descriptors live on this stack; detach before reset() because
-  // source arena contents have intentionally been invalidated.
-  osg.min_val_.datum_=nullptr;osg.max_val_.datum_=nullptr;osg.col_stat_=nullptr;
+  // The column statistic is a stack fixture owned independently of osg.
+  osg.col_stat_=nullptr;
 }
 
 TEST(NativeColumnStats, osg_datum_hash_matches_native_llc_bitmap) {
@@ -489,4 +504,123 @@ TEST(NativeColumnStats, real_cache_handles_keep_native_bounds_and_endpoints_afte
   EXPECT_EQ(expected,wire(*first.stat_));EXPECT_EQ(expected,wire(*moved.stat_));EXPECT_EQ(1,replacement.stat_->get_min_datum().get_int());
   ObOptColumnStatHandle missing;EXPECT_EQ(OB_ENTRY_NOT_EXIST,cache.get_row(key,missing));
   EXPECT_EQ(nullptr,missing.stat_);
+}
+
+
+TEST(NativeColumnStats, osg_inline_extrema_and_scalar_copy_need_no_payload_allocation)
+{
+  ObArenaAllocator owner;
+  ObOptColumnStat stat(owner);
+  ObOptOSGColumnStat osg(owner); osg.col_stat_ = &stat;
+  for (int64_t number : {int64_t(7), INT64_MIN, INT64_MAX, int64_t(-3)}) {
+    DatumValue value = integer(number, owner);
+    ASSERT_EQ(OB_SUCCESS, update_osg_literal(osg, value, ObAccuracy(19, 0)));
+  }
+  EXPECT_EQ(0, osg.inner_min_allocator_.used());
+  EXPECT_EQ(0, osg.inner_max_allocator_.used());
+  EXPECT_EQ(INT64_MIN, osg.min_val_.datum_.get_int());
+  EXPECT_EQ(INT64_MAX, osg.max_val_.datum_.get_int());
+  EXPECT_EQ(4, stat.get_num_not_null());
+  DatumValue null_integer; null_integer.meta_.set_int(); null_integer.datum_.set_null();
+  ASSERT_EQ(OB_SUCCESS, update_osg_literal(osg, null_integer, ObAccuracy(19, 0)));
+  EXPECT_EQ(1, stat.get_num_null());
+  EXPECT_EQ(INT64_MIN, osg.min_val_.datum_.get_int());
+  EXPECT_EQ(INT64_MAX, osg.max_val_.datum_.get_int());
+
+  SwitchAllocator reject; reject.reject_ = true;
+  ObMinMaxValEval copied(T_MIN_VAL);
+  ASSERT_EQ(OB_SUCCESS, copied.deep_copy(osg.min_val_, reject));
+  EXPECT_EQ(0, reject.calls_);
+  EXPECT_EQ(INT64_MIN, copied.datum_.get_int());
+  ASSERT_EQ(OB_SUCCESS, osg.publish_min_max_values());
+  EXPECT_EQ(INT64_MIN, stat.get_min_datum().get_int());
+  EXPECT_EQ(INT64_MAX, stat.get_max_datum().get_int());
+}
+
+TEST(NativeColumnStats, osg_reference_capture_merge_and_copy_outlive_both_source_owners)
+{
+  ObArenaAllocator input, source_owner, copy_owner, merge_owner;
+  ObOptColumnStat source_stat(source_owner), copied_stat(copy_owner), merged_stat(merge_owner);
+  ObOptOSGColumnStat source(source_owner), copied(copy_owner), merged(merge_owner);
+  source.col_stat_ = &source_stat; copied.col_stat_ = &copied_stat; merged.col_stat_ = &merged_stat;
+  DatumValue high, low;
+  ASSERT_EQ(OB_SUCCESS, high.set_varchar(ObString::make_string("zebra"), input));
+  ASSERT_EQ(OB_SUCCESS, low.set_varchar(ObString::make_string("alpha"), input));
+  high.set_collation_type(CS_TYPE_UTF8MB4_BIN); low.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ASSERT_EQ(OB_SUCCESS, update_osg_literal(source, high));
+  ASSERT_EQ(OB_SUCCESS, update_osg_literal(source, low));
+  EXPECT_NE(low.datum_.get_reference(), source.min_val_.datum_.get_reference());
+  EXPECT_NE(high.datum_.get_reference(), source.max_val_.datum_.get_reference());
+  ASSERT_EQ(OB_SUCCESS, copied.deep_copy(source));
+  ASSERT_EQ(OB_SUCCESS, merged.merge_column_stat(source));
+  EXPECT_NE(source.min_val_.datum_.get_reference(), copied.min_val_.datum_.get_reference());
+  EXPECT_NE(source.max_val_.datum_.get_reference(), merged.max_val_.datum_.get_reference());
+  MEMSET(const_cast<void *>(low.datum_.get_reference()), 0xA5, low.datum_.length());
+  MEMSET(const_cast<void *>(high.datum_.get_reference()), 0xA5, high.datum_.length());
+  input.reset();
+  source.reset();
+  ASSERT_EQ(OB_SUCCESS, copied.publish_min_max_values());
+  ASSERT_EQ(OB_SUCCESS, merged.publish_min_max_values());
+  EXPECT_EQ(ObString::make_string("alpha"), copied_stat.get_min_datum().get_string());
+  EXPECT_EQ(ObString::make_string("zebra"), copied_stat.get_max_datum().get_string());
+  EXPECT_EQ(ObString::make_string("alpha"), merged_stat.get_min_datum().get_string());
+  EXPECT_EQ(ObString::make_string("zebra"), merged_stat.get_max_datum().get_string());
+  same_meta(low.meta_, copied_stat.get_min_meta());
+  same_meta(high.meta_, merged_stat.get_max_meta());
+}
+
+TEST(NativeColumnStats, osg_reference_copy_failure_preserves_previous_native_slot)
+{
+  ObArenaAllocator input, owner;
+  ObOptColumnStat stat(owner);
+  ObOptOSGColumnStat osg(owner); osg.col_stat_ = &stat;
+  DatumValue text;
+  ASSERT_EQ(OB_SUCCESS, text.set_varchar(ObString::make_string("reference owned by minmax"), input));
+  text.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+  ASSERT_EQ(OB_SUCCESS, update_osg_literal(osg, text));
+  ObMinMaxValEval destination(T_MIN_VAL);
+  destination.datum_.set_int(91); destination.meta_.set_int(); destination.has_datum_ = true;
+  const SqlTypeMeta before_meta = destination.meta_;
+  SwitchAllocator reject; reject.reject_ = true;
+  EXPECT_EQ(OB_ALLOCATE_MEMORY_FAILED, destination.deep_copy(osg.min_val_, reject));
+  EXPECT_EQ(1, reject.calls_);
+  EXPECT_EQ(91, destination.datum_.get_int());
+  same_meta(before_meta, destination.meta_);
+  EXPECT_TRUE(destination.has_datum_);
+  EXPECT_EQ(nullptr, destination.cmp_func_);
+  EXPECT_EQ(ObString::make_string("reference owned by minmax"), osg.min_val_.datum_.get_string());
+}
+
+
+TEST(NativeColumnStats, osg_semantic_inline_decimal_is_retained_as_owned_physical_width)
+{
+  ObArenaAllocator input, owner;
+  ObOptColumnStat stat(owner);
+  ObOptOSGColumnStat osg(owner); osg.col_stat_ = &stat;
+  int32_t coefficient = -42;
+  DatumValue physical_value;
+  ASSERT_EQ(OB_SUCCESS, physical_value.set_decimal_int(sizeof(coefficient), 2,
+      reinterpret_cast<const ObDecimalInt *>(&coefficient), input));
+  SqlType declared;
+  ASSERT_EQ(OB_SUCCESS, SqlType::from_legacy(physical_value.meta_, ObAccuracy(9, 2), declared));
+  alignas(8) char scratch[64]; ObDatum physical;
+  Datum semantic;
+  ASSERT_EQ(OB_SUCCESS, physical_value.export_legacy(physical, scratch, sizeof(scratch)));
+  ASSERT_EQ(OB_SUCCESS, DatumCopyPlan(declared).import_legacy(physical, semantic));
+  EXPECT_EQ(0, semantic.length());
+  EXPECT_EQ(-42, semantic.get_decimal_int32());
+  ASSERT_EQ(OB_SUCCESS, osg.update_column_stat_info(
+      &semantic, declared, physical_value.meta_, nullptr));
+  EXPECT_EQ(sizeof(coefficient), osg.min_val_.datum_.length());
+  EXPECT_EQ(sizeof(coefficient), osg.max_val_.datum_.length());
+  EXPECT_NE(physical_value.datum_.get_reference(), osg.min_val_.datum_.get_reference());
+  EXPECT_NE(osg.min_val_.datum_.get_reference(), osg.max_val_.datum_.get_reference());
+  EXPECT_EQ(0, MEMCMP(&coefficient, osg.min_val_.datum_.get_reference(), sizeof(coefficient)));
+  same_meta(physical_value.meta_, osg.min_val_.meta_);
+  input.reset(); semantic.set_int(999);
+  ASSERT_EQ(OB_SUCCESS, osg.publish_min_max_values());
+  EXPECT_EQ(sizeof(coefficient), stat.get_min_datum().length());
+  EXPECT_EQ(sizeof(coefficient), stat.get_max_datum().length());
+  EXPECT_EQ(0, MEMCMP(&coefficient, stat.get_min_datum().get_reference(), sizeof(coefficient)));
+  EXPECT_EQ(0, MEMCMP(&coefficient, stat.get_max_datum().get_reference(), sizeof(coefficient)));
 }

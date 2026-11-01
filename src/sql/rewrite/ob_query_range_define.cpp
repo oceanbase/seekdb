@@ -18,6 +18,7 @@
 
 #include "sql/rewrite/ob_query_range_define.h"
 #include "common/datum/datum_parameter_codec.h"
+#include "share/datum/typed_datum_compare.h"
 #include "sql/rewrite/ob_expr_range_converter.h"
 #include "sql/rewrite/ob_range_graph_generator.h"
 #include "sql/rewrite/ob_range_generator.h"
@@ -284,6 +285,32 @@ DEF_TO_STRING(ObRangeNode)
   return pos;
 }
 
+int ObRangeMap::ExprFinalInfo::set_const_value(const Datum &value, const SqlTypeMeta &meta,
+                                             ObIAllocator &owner)
+{
+  int ret = OB_SUCCESS;
+  DatumValue source, owned;
+  if (OB_FAIL(source.assign_native_borrowed(value, meta))) {
+  } else if (OB_FAIL(clone_typed_value(source, owned, owner))) {
+  } else {
+    // The tagged slot initially holds param_idx_. Explicitly begin the
+    // native member's lifetime, including when replacing an existing constant.
+    new (&const_val_) Datum(owned.datum_);
+    const_meta_ = owned.meta_;
+    is_param_ = false;
+    is_expr_ = false;
+    is_const_ = true;
+  }
+  return ret;
+}
+
+int ObRangeMap::ExprFinalInfo::export_const_value(ObDatum &value, void *scratch,
+                                                int64_t capacity) const
+{
+  return !is_const_ || is_param_ ? OB_INVALID_ARGUMENT
+      : DatumParameterCodec::export_native_value(const_val_, const_meta_, value, scratch, capacity);
+}
+
 OB_DEF_SERIALIZE(ObRangeMap)
 {
   int ret = OB_SUCCESS;
@@ -296,10 +323,8 @@ OB_DEF_SERIALIZE(ObRangeMap)
     } else if (expr_final_infos_.at(i).is_const_) {
       const auto &info = expr_final_infos_.at(i);
       if (OB_FAIL(ret)) {
-      } else if (info.const_val_ == nullptr) {
-        ret = OB_INVALID_ARGUMENT;
       } else {
-        ret = DatumParameterCodec::encode_value(*info.const_val_, info.const_meta_, buf, buf_len, pos);
+        ret = DatumParameterCodec::encode_native_value(info.const_val_, info.const_meta_, buf, buf_len, pos);
       }
     } else if (expr_final_infos_.at(i).is_expr_) {
       const ObTempExpr *expr = expr_final_infos_.at(i).temp_expr_;
@@ -344,16 +369,13 @@ OB_DEF_DESERIALIZE(ObRangeMap)
     } else if (expr_final_infos_.at(i).is_param_) {
       ret = serialization::decode(buf, data_len, pos, expr_final_infos_.at(i).param_idx_);
     } else if (expr_final_infos_.at(i).is_const_) {
-      void *ptr = allocator_.alloc(sizeof(ObDatum));
-      if (ptr == nullptr) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
+      Datum value;
+      SqlTypeMeta meta;
+      if (OB_FAIL(DatumParameterCodec::decode_native_value(buf, data_len, pos, allocator_, value, meta))) {
       } else {
-        ObDatum *value = new(ptr)ObDatum();
-        ret = DatumParameterCodec::decode_value(buf, data_len, pos, allocator_,
-                                                *value, expr_final_infos_.at(i).const_meta_);
-        if (OB_SUCC(ret)) {
-          expr_final_infos_.at(i).const_val_ = value;
-        }
+        auto &info = expr_final_infos_.at(i);
+        new (&info.const_val_) Datum(value);
+        info.const_meta_ = meta;
       }
     } else if (expr_final_infos_.at(i).is_expr_) {
       ObTempExpr *temp_expr = nullptr;
@@ -425,8 +447,7 @@ OB_DEF_SERIALIZE_SIZE(ObRangeMap)
     } else if (expr_final_infos_.at(i).is_const_) {
       const auto &info = expr_final_infos_.at(i);
       int64_t size = 0;
-      if (info.const_val_ == nullptr ||
-          DatumParameterCodec::value_size(*info.const_val_, info.const_meta_, size) != OB_SUCCESS ||
+      if (DatumParameterCodec::native_value_size(info.const_val_, info.const_meta_, size) != OB_SUCCESS ||
           __builtin_add_overflow(len, size, &len)) {
             return 0;
           }
@@ -647,26 +668,12 @@ int ObPreRangeGraph::deep_copy_range_map(const ObRangeMap &src_range_map)
   if (OB_FAIL(range_map_.expr_final_infos_.prepare_allocate(count))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    range_map_.expr_final_infos_.at(i).flags_ = src_range_map.expr_final_infos_.at(i).flags_;
-    if (range_map_.expr_final_infos_.at(i).is_param_) {
+    const auto &source = src_range_map.expr_final_infos_.at(i);
+    if (source.is_param_) {
       range_map_.expr_final_infos_.at(i).param_idx_ = src_range_map.expr_final_infos_.at(i).param_idx_;
-    } else if (range_map_.expr_final_infos_.at(i).is_const_) {
-      const auto &source = src_range_map.expr_final_infos_.at(i);
-      void *ptr = allocator_.alloc(sizeof(ObDatum));
-      if (source.const_val_ == nullptr) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (ptr == nullptr) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      }
-      else {
-        ObDatum *value = new(ptr)ObDatum();
-        if (OB_FAIL(clone_datum_value(*source.const_val_, source.const_meta_, *value, allocator_))) {
-        } else {
-          range_map_.expr_final_infos_.at(i).const_val_ = value;
-          range_map_.expr_final_infos_.at(i).const_meta_ = source.const_meta_;
-        }
-      }
-    } else if (range_map_.expr_final_infos_.at(i).is_expr_) {
+    } else if (source.is_const_) {
+      ret = range_map_.expr_final_infos_.at(i).set_const_value(source.const_val_, source.const_meta_, allocator_);
+    } else if (source.is_expr_) {
       ObTempExpr *temp_expr = nullptr;
       if (OB_ISNULL(src_range_map.expr_final_infos_.at(i).temp_expr_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -674,6 +681,9 @@ int ObPreRangeGraph::deep_copy_range_map(const ObRangeMap &src_range_map)
       } else {
         range_map_.expr_final_infos_.at(i).temp_expr_ = temp_expr;
       }
+    }
+    if (OB_SUCC(ret)) {
+      range_map_.expr_final_infos_.at(i).flags_ = source.flags_;
     }
   }
 

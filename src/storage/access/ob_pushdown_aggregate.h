@@ -131,6 +131,10 @@ public:
   OB_INLINE bool is_aggregated() const { return aggregated_; }
   OB_INLINE int32_t get_col_offset() const { return basic_info_.col_offset_; }
   OB_INLINE common::ObDatum *get_col_datums() const { return col_datums_; }
+  void release_input_views()
+  {
+    for (int64_t i = 0; col_datums_ != nullptr && i < basic_info_.batch_size_; ++i) { col_datums_[i].set_null(); }
+  }
   OB_INLINE const sql::ObExpr *get_agg_expr() const { return basic_info_.agg_expr_; }
   OB_INLINE const share::schema::ObColumnParam *get_col_param() const { return basic_info_.col_param_; }
   OB_INLINE bool is_lob_col() const { return is_lob_col_; }
@@ -147,12 +151,13 @@ protected:
   int deep_copy_datum(const blocksstable::ObStorageDatum &src, common::ObIAllocator &tmp_alloc);
   int read_agg_datum(const blocksstable::ObMicroIndexInfo &index_info);
   void clear_group_by_info();
-  OB_INLINE common::ObDatum &get_group_by_result_datum(const int32_t datum_offset)
+  OB_INLINE ObAggNativeCell &get_group_by_result_datum(const int32_t datum_offset)
   {
     return DEFAULT_DATUM_OFFSET == datum_offset ? result_datum_ : group_by_result_datum_buf_->at(datum_offset);
   }
   int prepare_def_datum();
   int init_legacy_frame_buffers();
+  int init_native_result_buffer();
   ObAggCellBasicInfo basic_info_;
   // for scalar group by pushdown
   blocksstable::ObStorageDatum def_datum_;
@@ -162,11 +167,11 @@ protected:
   // for normal group by pushdown
   // agg col expr's datums
   common::ObDatum *col_datums_;
-  ObAggDatumBuf *legacy_result_owner_;
   ObAggDatumBuf *legacy_input_owner_;
   sql::ObEvalCtx *native_eval_ctx_;
+  int64_t native_projection_offset_;
   // store the aggregated result
-  ObGroupByExtendableBuf<ObDatum> *group_by_result_datum_buf_;
+  ObNativeAggDatumBuf *group_by_result_datum_buf_;
   int64_t group_by_result_cnt_;
   common::ObArenaAllocator padding_allocator_;
 private:
@@ -500,7 +505,6 @@ private:
   ObSumEvalAggFuncType eval_skip_index_func_;
   sql::ObExecContext *exec_ctx_;
   blocksstable::ObStorageDatum cast_datum_;
-  char *sum_temp_buffer_;
   char *cast_temp_buffer_;
   common::ObArenaAllocator datum_allocator_;
 };
@@ -541,8 +545,7 @@ public:
       const bool is_default_datum = false) override;
   virtual int copy_output_rows(const int32_t start_offset, const int32_t end_offset) override
   {
-    return native_eval_ctx_ == nullptr ? OB_ERR_UNEXPECTED
-        : import_native_inputs(*native_eval_ctx_, start_offset, end_offset);
+    return ObAggCell::copy_output_rows(start_offset, end_offset);
   }
   virtual int copy_single_output_row(sql::ObEvalCtx &ctx) override
   {
@@ -632,6 +635,8 @@ public:
   { return need_extract_distinct_ ? tmp_group_by_datum_buf_->get_group_by_cell_datas() : group_by_col_datum_buf_->get_group_by_cell_datas(); }
   OB_INLINE common::ObDatum *get_group_by_col_datums() const { return group_by_col_datum_buf_->get_group_by_datums(); }
   int publish_native_rows(sql::ObEvalCtx &ctx, int64_t count);
+  int capture_group_key_input() override;
+  void release_group_key_views() override;
   OB_INLINE common::ObIArray<ObAggCell*> &get_agg_cells() { return agg_cells_; }
   OB_INLINE bool need_read_reference() const { return need_extract_distinct_ || agg_cells_.count() > 0; }
   OB_INLINE bool need_do_aggregate() const { return agg_cells_.count() > 0; }
@@ -644,7 +649,11 @@ protected:
 private:
   int init_agg_cells(const ObTableAccessParam &param, const ObTableAccessContext &context, sql::ObEvalCtx &eval_ctx, const bool is_for_single_row);
   ObAggGroupByDatumBuf *group_by_col_datum_buf_;
-  ObAggDatumBuf *legacy_group_owner_;
+  ObAggDatumBuf *legacy_group_owner_; // synchronous decoder/export view storage only
+  ObNativeAggDatumBuf native_group_keys_;
+  ObNativeAggDatumBuf native_dictionary_keys_;
+  int64_t native_key_projection_;
+  bool key_input_captured_;
   sql::ObEvalCtx *native_eval_ctx_;
   int import_native_keys(int64_t begin, int64_t end);
   // for micro with bitmap
@@ -696,10 +705,15 @@ OB_INLINE int ObSumAggCell::eval_int_inner(const common::ObDatum &datum, ObDataB
   int ret = OB_SUCCESS;
   if (datum.is_null()) {
   } else {
-    common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+    ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+    ObDatum result_datum;
+    alignas(8) char native_scratch[64];
+    if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
     int64_t &datum_int = DEFAULT_DATUM_OFFSET == datum_offset ? num_int_ : num_int_buf_->at(datum_offset);
     bool &sum_use_int_flag =  DEFAULT_DATUM_OFFSET == datum_offset ? sum_use_int_flag_ : sum_use_int_flag_buf_->at(datum_offset);
 
+    const int64_t previous_tiny = datum_int;
+    const bool previous_flag = sum_use_int_flag;
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
     if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
@@ -716,6 +730,10 @@ OB_INLINE int ObSumAggCell::eval_int_inner(const common::ObDatum &datum, ObDataB
       datum_int = sum_int;
     }
     sum_use_int_flag = true;
+    if (OB_SUCC(ret) && OB_FAIL(native_result.commit_view(result_datum))) {
+      datum_int = previous_tiny;
+      sum_use_int_flag = previous_flag;
+    }
   }
   return ret;
 }
@@ -728,10 +746,15 @@ OB_INLINE int ObSumAggCell::eval_int_inner<number::ObNumber>(const common::ObDat
   int ret = OB_SUCCESS;
   if (datum.is_null()) {
   } else {
-    common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+    ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+    ObDatum result_datum;
+    alignas(8) char native_scratch[64];
+    if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
     int64_t &datum_int = DEFAULT_DATUM_OFFSET == datum_offset ? num_int_ : num_int_buf_->at(datum_offset);
     bool &sum_use_int_flag =  DEFAULT_DATUM_OFFSET == datum_offset ? sum_use_int_flag_ : sum_use_int_flag_buf_->at(datum_offset);
 
+    const int64_t previous_tiny = datum_int;
+    const bool previous_flag = sum_use_int_flag;
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
     if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
@@ -750,6 +773,10 @@ OB_INLINE int ObSumAggCell::eval_int_inner<number::ObNumber>(const common::ObDat
       datum_int = sum_int;
     }
     sum_use_int_flag = true;
+    if (OB_SUCC(ret) && OB_FAIL(native_result.commit_view(result_datum))) {
+      datum_int = previous_tiny;
+      sum_use_int_flag = previous_flag;
+    }
   }
   return ret;
 }
@@ -761,26 +788,35 @@ OB_INLINE int ObSumAggCell::eval_uint_inner(const common::ObDatum &datum, ObData
   int ret = OB_SUCCESS;
   if (datum.is_null()) {
   } else {
-    common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+    ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+    ObDatum result_datum;
+    alignas(8) char native_scratch[64];
+    if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
     uint64_t &datum_uint = DEFAULT_DATUM_OFFSET == datum_offset ? num_uint_ : num_uint_buf_->at(datum_offset);
     bool &sum_use_int_flag =  DEFAULT_DATUM_OFFSET == datum_offset ? sum_use_int_flag_ : sum_use_int_flag_buf_->at(datum_offset);
 
+    const uint64_t previous_tiny = datum_uint;
+    const bool previous_flag = sum_use_int_flag;
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
     if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
-      if (OB_UNLIKELY(result_datum_.is_null())) {
-        DATUM_TO_DECIMAL_INT(result_datum_, RES_T) = datum_uint;
-        DATUM_TO_DECIMAL_INT(result_datum_, RES_T) += new_uint;
-        result_datum_.pack_ = sizeof(RES_T);
+      if (OB_UNLIKELY(result_datum.is_null())) {
+        DATUM_TO_DECIMAL_INT(result_datum, RES_T) = datum_uint;
+        DATUM_TO_DECIMAL_INT(result_datum, RES_T) += new_uint;
+        result_datum.pack_ = sizeof(RES_T);
       } else {
-        DATUM_TO_DECIMAL_INT(result_datum_, RES_T) =
-          DATUM_TO_CONST_DECIMAL_INT(result_datum_, RES_T) + datum_uint + new_uint;
+        DATUM_TO_DECIMAL_INT(result_datum, RES_T) =
+          DATUM_TO_CONST_DECIMAL_INT(result_datum, RES_T) + datum_uint + new_uint;
       }
       datum_uint = 0;
     } else {
       datum_uint = sum_uint;
     }
     sum_use_int_flag = true;
+    if (OB_SUCC(ret) && OB_FAIL(native_result.commit_view(result_datum))) {
+      datum_uint = previous_tiny;
+      sum_use_int_flag = previous_flag;
+    }
   }
   return ret;
 }
@@ -793,10 +829,15 @@ OB_INLINE int ObSumAggCell::eval_uint_inner<number::ObNumber>(const common::ObDa
   int ret = OB_SUCCESS;
   if (datum.is_null()) {
   } else {
-    common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+    ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+    ObDatum result_datum;
+    alignas(8) char native_scratch[64];
+    if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
     uint64_t &datum_uint = DEFAULT_DATUM_OFFSET == datum_offset ? num_uint_ : num_uint_buf_->at(datum_offset);
     bool &sum_use_int_flag =  DEFAULT_DATUM_OFFSET == datum_offset ? sum_use_int_flag_ : sum_use_int_flag_buf_->at(datum_offset);
 
+    const uint64_t previous_tiny = datum_uint;
+    const bool previous_flag = sum_use_int_flag;
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
     if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
@@ -815,6 +856,10 @@ OB_INLINE int ObSumAggCell::eval_uint_inner<number::ObNumber>(const common::ObDa
       datum_uint = sum_uint;
     }
     sum_use_int_flag = true;
+    if (OB_SUCC(ret) && OB_FAIL(native_result.commit_view(result_datum))) {
+      datum_uint = previous_tiny;
+      sum_use_int_flag = previous_flag;
+    }
   }
   return ret;
 }
@@ -822,7 +867,10 @@ OB_INLINE int ObSumAggCell::eval_uint_inner<number::ObNumber>(const common::ObDa
 OB_INLINE int ObSumAggCell::eval_float_inner(const common::ObDatum &datum, const int32_t datum_offset)
 {
   int ret = OB_SUCCESS;
-  common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+  ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   if (datum.is_null()) {
   } else if (result_datum.is_null()) {
     result_datum.set_float(datum.get_float());
@@ -843,13 +891,17 @@ OB_INLINE int ObSumAggCell::eval_float_inner(const common::ObDatum &datum, const
       result_datum.set_float(left_f + right_f);
     }
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 
 OB_INLINE int ObSumAggCell::eval_double_inner(const common::ObDatum &datum, const int32_t datum_offset)
 {
   int ret = OB_SUCCESS;
-  common::ObDatum &result_datum = get_group_by_result_datum(datum_offset);
+  ObAggNativeCell &native_result = get_group_by_result_datum(datum_offset);
+  ObDatum result_datum;
+  alignas(8) char native_scratch[64];
+  if (OB_FAIL(native_result.edit_view(result_datum, native_scratch, sizeof(native_scratch)))) { return ret; }
   if (datum.is_null()) {
   } else if (result_datum.is_null()) {
     result_datum.set_double(datum.get_double());
@@ -858,6 +910,7 @@ OB_INLINE int ObSumAggCell::eval_double_inner(const common::ObDatum &datum, cons
     double right_d = datum.get_double();
     result_datum.set_double(left_d + right_d);
   }
+  if (OB_SUCC(ret)) { ret = native_result.commit_view(result_datum); }
   return ret;
 }
 

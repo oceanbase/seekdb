@@ -160,7 +160,7 @@ TEST(ValuesTableDatum, captured_legacy_plan_wire_and_native_owned_constants_matc
         ASSERT_EQ(OB_SUCCESS, map.deserialize(f.wire.data(), f.wire.size(), pos));
         const auto &entry = map.expr_final_infos_.at(0);
         DatumParameter source;
-        ASSERT_EQ(OB_SUCCESS, source.assign_legacy_borrowed(*entry.const_val_, entry.const_meta_));
+        ASSERT_EQ(OB_SUCCESS, source.assign_native_borrowed(entry.const_val_, entry.const_meta_));
         ASSERT_EQ(OB_SUCCESS, spec.datum_values_.prepare_allocate(1));
         ASSERT_EQ(OB_SUCCESS, clone_typed_value(source.value_view(), spec.datum_values_.at(0), output));
         expected_value = bare_value(f.canonical); // independent captured value wire
@@ -263,7 +263,7 @@ TEST(ValuesTableDatum, statement_deep_copy_owns_values_and_preserves_parameter_m
       ASSERT_EQ(OB_SUCCESS, map.deserialize(f.wire.data(), f.wire.size(), pos));
       const auto &entry = map.expr_final_infos_.at(0);
       DatumParameter parameter;
-      ASSERT_EQ(OB_SUCCESS, parameter.assign_legacy_borrowed(*entry.const_val_, entry.const_meta_));
+      ASSERT_EQ(OB_SUCCESS, parameter.assign_native_borrowed(entry.const_val_, entry.const_meta_));
       parameter.set_accuracy(ObAccuracy(37, 7));
       parameter.set_result_flags(0x1234);
       parameter.set_raw_text_info(13, 29);
@@ -303,24 +303,27 @@ TEST(ValuesTableDatum, native_ndv_hash_is_deterministic_for_range_map_values) {
     ++seen;
     // Wire fixtures also exercise intentionally invalid collation IDs. They
     // can be round-tripped, but cannot be passed to a charset hash function.
-    if (entry.const_meta_.is_string_type() && !entry.const_val_->is_null() &&
+    if (entry.const_meta_.is_string_type() && !entry.const_val_.is_null() &&
         !ObCharset::is_valid_collation(entry.const_meta_.get_collation_type())) {
       continue;
     }
+    ObDatum physical;
+    alignas(8) char scratch[64];
+    ASSERT_EQ(OB_SUCCESS, entry.export_const_value(physical, scratch, sizeof(scratch)));
     bool all_seeds_succeeded = true;
     for (uint64_t seed : {uint64_t(0), uint64_t(7), UINT64_MAX}) {
       uint64_t first = 0, second = 0;
-      const int first_ret = hash_datum_for_ndv(*entry.const_val_, entry.const_meta_, seed, first);
-      const int second_ret = hash_datum_for_ndv(*entry.const_val_, entry.const_meta_, seed, second);
+      const int first_ret = hash_datum_for_ndv(physical, entry.const_meta_, seed, first);
+      const int second_ret = hash_datum_for_ndv(physical, entry.const_meta_, seed, second);
       ASSERT_EQ(first_ret, second_ret);
       if (OB_SUCCESS == first_ret) {
         EXPECT_EQ(first, second);
-        if (!entry.const_val_->is_null()
+        if (!entry.const_val_.is_null()
             && (ob_is_json(entry.const_meta_.get_type())
                 || ob_is_geometry(entry.const_meta_.get_type()))) {
           const uint64_t expected = ObCharset::hash(
-              entry.const_meta_.get_collation_type(), entry.const_val_->ptr_,
-              entry.const_val_->len_, seed, false, NULL);
+              entry.const_meta_.get_collation_type(), physical.ptr_,
+              physical.len_, seed, false, NULL);
           EXPECT_EQ(expected, first);
         }
       } else {

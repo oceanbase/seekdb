@@ -629,10 +629,18 @@ public:
         finish_prepared_(false),
         aggr_processor_(op_.eval_ctx_, aggr_infos, "WindowAggProc", op.get_monitor_info()),
         result_(),
+        result_buffer_(nullptr),
+        result_capacity_(0),
         got_result_(false),
         remove_type_(wf_info.remove_type_)
     {}
-    virtual ~AggrCell() { aggr_processor_.destroy(); }
+    virtual ~AggrCell()
+    {
+      result_.set_null();
+      result_buffer_ = nullptr;
+      result_capacity_ = 0;
+      aggr_processor_.destroy();
+    }
     int trans(const ObRADatumStore::StoredRow &row)
     {
       return trans_self(row);
@@ -664,14 +672,18 @@ public:
     virtual void reset_for_restart_self() override
     {
       finish_prepared_ = false;
-      aggr_processor_.reuse();
-      result_.reset();
+      result_.set_null();
+      result_buffer_ = nullptr;
+      result_capacity_ = 0;
       got_result_ = false;
+      aggr_processor_.reuse();
     }
   public:
     bool finish_prepared_;
     ObAggregateProcessor aggr_processor_;
-    ObDatum result_;
+    common::Datum result_;
+    char *result_buffer_;
+    int64_t result_capacity_;
     bool got_result_;
     uint64_t remove_type_;
   };

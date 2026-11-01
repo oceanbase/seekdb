@@ -43,23 +43,43 @@ namespace sql
 
 namespace
 {
-// Decoder predicates retain their version-one parameter ABI. The value bytes
-// are owned by the filter allocator rather than a transient native scalar view.
+// The Expr owns the semantic declaration; the predicate retains only the
+// checked physical pair. Inline capture does not allocate an old scalar span.
 int own_decoder_parameter(const ObExpr &expr, const Datum &source,
-                          ObIAllocator &allocator, ObDatum &destination)
+                          ObIAllocator &allocator, DatumValue &destination)
 {
   int ret = OB_SUCCESS;
-  const DatumCopyPlan plan = expr.get_datum_copy_plan();
-  int64_t bytes = 0;
-  if (OB_FAIL(plan.legacy_payload_size(source, bytes))) {
+  alignas(8) char scratch[64];
+  ObDatum view;
+  if (OB_FAIL(expr.get_datum_copy_plan().legacy_view(source, view, scratch, sizeof(scratch)))) {
   } else {
-    char *buffer = static_cast<char *>(allocator.alloc(std::max<int64_t>(1, bytes)));
-    int64_t position = 0;
-    if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-    else { ret = plan.export_legacy(source, destination, buffer, bytes, position); }
+    ret = destination.assign_legacy_owned(view, expr.obj_meta_, allocator);
   }
   return ret;
 }
+
+struct WhiteFilterParamComparator
+{
+  WhiteFilterParamComparator(ObDatumCmpFuncType function, int &ret,
+                            const ObDatumAccessContext *context)
+      : function_(function), ret_(ret), context_(context) {}
+  bool operator()(const DatumValue &left, const DatumValue &right) const
+  {
+    int &ret = ret_;
+    int result = 0;
+    alignas(8) char left_scratch[64], right_scratch[64];
+    ObDatum left_view, right_view;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(left.export_legacy(left_view, left_scratch, sizeof(left_scratch)))) {
+    } else if (OB_FAIL(right.export_legacy(right_view, right_scratch, sizeof(right_scratch)))) {
+    } else if (OB_FAIL(function_(left_view, right_view, result, context_))) {
+    }
+    return OB_SUCC(ret) && result < 0;
+  }
+  ObDatumCmpFuncType function_;
+  int &ret_;
+  const ObDatumAccessContext *context_;
+};
 
 }
 
@@ -1924,7 +1944,7 @@ int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
         continue;
       } else {
         Datum *datum = NULL;
-        ObDatum decoder_value;
+        DatumValue decoder_value;
         const ObExpr &arg = *filter_.expr_->args_[i];
         if (OB_FAIL(arg.eval(eval_ctx, datum))) {
         } else if (OB_FAIL(own_decoder_parameter(arg, *datum, allocator_, decoder_value))) {
@@ -1961,18 +1981,19 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
   } else if (OB_UNLIKELY(nullptr == filter_.expr_->args_[0] ||
                          (T_REF_COLUMN != filter_.expr_->args_[0]->type_ && ! (is_semistruct_filter_node() && is_support_pushdown_json_expr(filter_.expr_->args_[0]->type_)))||
                          nullptr == filter_.expr_->args_[1] ||
-                         0 >= filter_.expr_->inner_func_cnt_)) {
+                         nullptr == filter_.expr_->args_[1]->args_
+                         || 0 >= filter_.expr_->args_[1]->arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObPhysicalFilterExecutor::init_evaluated_datums(is_valid))) {
-  } else if (OB_FAIL(init_array_param(datum_params_, filter_.expr_->inner_func_cnt_))) {
+  } else if (OB_FAIL(init_array_param(datum_params_, filter_.expr_->args_[1]->arg_cnt_))) {
   } else if (OB_FAIL(init_param_set(
-                 filter_.expr_->inner_func_cnt_, filter_.expr_->args_[1]->args_[0],
+                 filter_.expr_->args_[1]->arg_cnt_, filter_.expr_->args_[1]->args_[0],
                  datum_access_ctx_))) {
   } else {
     col_obj_meta = filter_.expr_->args_[0]->obj_meta_;
     null_param_contained_ = false;
     Datum *datum = nullptr;
-    for (int i = 0; OB_SUCC(ret) && i < filter_.expr_->inner_func_cnt_; ++i) {
+    for (int i = 0; OB_SUCC(ret) && i < filter_.expr_->args_[1]->arg_cnt_; ++i) {
       const ObExpr *cur_arg = filter_.expr_->args_[1]->args_[i];
       if (OB_ISNULL(cur_arg)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1980,7 +2001,7 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
         param_obj_meta = cur_arg->obj_meta_;
       }
       if (OB_SUCC(ret)) {
-        ObDatum decoder_value;
+        DatumValue decoder_value;
         if (OB_FAIL(cur_arg->eval(eval_ctx, datum))) {
         } else if (OB_FAIL(own_decoder_parameter(*cur_arg, *datum, allocator_, decoder_value))) {
         } else if (is_null_param(decoder_value, param_obj_meta)) {
@@ -1995,11 +2016,9 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
   }
 
   if (OB_SUCC(ret)) {
-    bool mock_equal = false;
-    ObDatumComparator cmp(storage_predicate_functions(*filter_.expr_->args_[1]->args_[0])->null_first_cmp_,
-                          ret,
-                          mock_equal,
-                          datum_access_ctx_);
+    WhiteFilterParamComparator cmp(
+        storage_predicate_functions(*filter_.expr_->args_[1]->args_[0])->null_first_cmp_,
+        ret, datum_access_ctx_);
     lib::ob_sort(datum_params_.begin(), datum_params_.end(), cmp);
     if (OB_FAIL(ret)) {
     } else {
@@ -2010,7 +2029,7 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
       param_set_.set_hash_and_cmp_func(
           storage_predicate_functions(*filter_.expr_->args_[0])->murmur_hash_v2_,
           get_datum_cmp_func(param_obj_meta, col_obj_meta),
-          datum_access_ctx_);
+          datum_access_ctx_, col_obj_meta);
     }
   }
   return ret;
@@ -2028,12 +2047,12 @@ int ObWhiteFilterExecutor::init_param_set(const int64_t count,
   } else {
     param_set_.set_hash_and_cmp_func(storage_predicate_functions(*param_arg)->murmur_hash_v2_,
                                      storage_predicate_functions(*param_arg)->null_first_cmp_,
-                                     access_ctx);
+                                     access_ctx, param_arg->obj_meta_);
   }
   return ret;
 }
 
-int ObWhiteFilterExecutor::add_to_param_set_and_array(const ObDatum &datum, const ObExpr *cur_arg)
+int ObWhiteFilterExecutor::add_to_param_set_and_array(const DatumValue &datum, const ObExpr *cur_arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(param_set_.set_refactored(datum))) {
@@ -2057,18 +2076,45 @@ int ObWhiteFilterExecutor::exist_in_set(const ObDatum &datum, bool &is_exist) co
   return ret;
 }
 
-int ObWhiteFilterExecutor::exist_in_datum_array(const ObDatum &datum, bool &is_exist, const int64_t offset) const
+int ObWhiteFilterExecutor::export_parameter(
+    int64_t index, ObDatum &out, void *scratch, int64_t capacity) const
+{
+  return index < 0 || index >= datum_params_.count() ? OB_INVALID_ARGUMENT
+      : datum_params_.at(index).export_legacy(out, scratch, capacity);
+}
+
+int ObWhiteFilterExecutor::lower_bound_param(
+    const ObDatum &probe, int64_t &position, bool &equal, int64_t offset) const
 {
   int ret = OB_SUCCESS;
-  is_exist = false;
-  if (datum_params_.count() > 0) {
-    ObDatumComparator cmp_rev(
-        cmp_func_, ret, is_exist, datum_access_ctx_, true);
-    std::lower_bound(datum_params_.begin() + offset, datum_params_.end(), datum, cmp_rev);
-    if (OB_FAIL(ret)) {
+  int64_t first = offset;
+  int64_t last = datum_params_.count();
+  bool found_equal = false;
+  if (offset < 0 || offset > last) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  while (OB_SUCC(ret) && first < last) {
+    const int64_t middle = first + (last - first) / 2;
+    alignas(8) char scratch[64];
+    ObDatum value;
+    int cmp = 0;
+    if (OB_FAIL(export_parameter(middle, value, scratch, sizeof(scratch)))) {
+    } else if (OB_FAIL(cmp_func_(probe, value, cmp, datum_access_ctx_))) {
+    } else {
+      found_equal |= cmp == 0;
+      if (cmp > 0) { first = middle + 1; }
+      else { last = middle; }
     }
   }
+  if (OB_SUCC(ret)) { position = first; equal = found_equal; }
   return ret;
+}
+
+int ObWhiteFilterExecutor::exist_in_datum_array(const ObDatum &datum, bool &is_exist, const int64_t offset) const
+{
+  int64_t position = 0;
+  is_exist = false;
+  return lower_bound_param(datum, position, is_exist, offset);
 }
 
 int ObWhiteFilterExecutor::filter_datum(const ObDatum &datum, bool &filtered) const
@@ -2079,7 +2125,9 @@ int ObWhiteFilterExecutor::filter_datum(const ObDatum &datum, bool &filtered) co
   if (OB_UNLIKELY(WHITE_OP_MAX <= op_type)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    const ObIArray<ObDatum> &ref_datums = get_datums();
+    const ObIArray<DatumValue> &ref_datums = get_datums();
+    alignas(8) char ref_scratch[2][64];
+    ObDatum ref_views[2];
     switch (op_type) {
       case WHITE_OP_NN: {
         if (!datum.is_null()) {
@@ -2105,8 +2153,9 @@ int ObWhiteFilterExecutor::filter_datum(const ObDatum &datum, bool &filtered) co
           ret = OB_INVALID_ARGUMENT;
         } else if (datum.is_null() || ref_datums.at(0).is_null()) {
           // Result of compare with null is null.
+        } else if (OB_FAIL(export_parameter(0, ref_views[0], ref_scratch[0], sizeof(ref_scratch[0])))) {
         } else if (OB_FAIL(cmp_func_(
-                       datum, ref_datums.at(0), cmp_ret, datum_access_ctx_))) {
+                       datum, ref_views[0], cmp_ret, datum_access_ctx_))) {
         } else {
           switch (op_type) {
             case WHITE_OP_EQ: cmp_matched = (0 == cmp_ret); break;
@@ -2130,11 +2179,13 @@ int ObWhiteFilterExecutor::filter_datum(const ObDatum &datum, bool &filtered) co
           ret = OB_INVALID_ARGUMENT;
         } else if (datum.is_null()) {
           // Result of compare with null is null.
+        } else if (OB_FAIL(export_parameter(0, ref_views[0], ref_scratch[0], sizeof(ref_scratch[0])))) {
         } else if (OB_FAIL(cmp_func_(
-                       datum, ref_datums.at(0), cmp_ret_0, datum_access_ctx_))) {
+                       datum, ref_views[0], cmp_ret_0, datum_access_ctx_))) {
         } else if (cmp_ret_0 < 0) {
+        } else if (OB_FAIL(export_parameter(1, ref_views[1], ref_scratch[1], sizeof(ref_scratch[1])))) {
         } else if (OB_FAIL(cmp_func_(
-                       datum, ref_datums.at(1), cmp_ret_1, datum_access_ctx_))) {
+                       datum, ref_views[1], cmp_ret_1, datum_access_ctx_))) {
         } else if (cmp_ret_1 <= 0) {
           // cmp_ret_0 >= 0 && cmp_ret_1 <= 0.
           filtered = false;
@@ -2493,26 +2544,31 @@ int ObDynamicFilterExecutor::try_preparing_data()
 {
   int ret = OB_SUCCESS;
   ObRuntimeFilterParams runtime_filter_params;
+  bool prepared = false;
   DynamicFilterType dynamic_filter_type =
       static_cast<ObPushdownDynamicFilterNode &>(filter_).get_dynamic_filter_type();
   if (dynamic_filter_type >= DynamicFilterType::MAX_DYNAMIC_FILTER_TYPE) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     ret = PREPARE_PD_DATA_FUNCS[dynamic_filter_type](
-        *filter_.expr_, *this, op_.get_eval_ctx(), runtime_filter_params, is_data_prepared_);
+        *filter_.expr_, *this, op_.get_eval_ctx(), runtime_filter_params, prepared);
   }
   if (OB_FAIL(ret)) {
-  } else if (is_data_prepared_) {
+  } else if (prepared) {
     const ObDatumAccessContext *access_ctx = nullptr;
     if (OB_FAIL(op_.get_eval_ctx().get_datum_access_ctx(access_ctx))) {
     } else if (OB_FAIL(init_array_param(datum_params_, runtime_filter_params.count()))) {
-    } else if (OB_FAIL(datum_params_.assign(runtime_filter_params))) {
-    } else if (WHITE_OP_IN == get_op_type()){
-      bool mock_equal = false;
-      ObDatumComparator cmp(get_datum_cmp_func(get_filter_val_meta(), get_filter_val_meta()),
-                            ret,
-                            mock_equal,
-                            access_ctx);
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < runtime_filter_params.count(); ++i) {
+        DatumValue owned;
+        if (OB_FAIL(owned.assign_legacy_owned(runtime_filter_params.at(i), get_filter_val_meta(), allocator_))) {
+        } else if (OB_FAIL(datum_params_.push_back(owned))) {
+        }
+      }
+    }
+    if (OB_SUCC(ret) && WHITE_OP_IN == get_op_type()) {
+      WhiteFilterParamComparator cmp(
+          get_datum_cmp_func(get_filter_val_meta(), get_filter_val_meta()), ret, access_ctx);
       lib::ob_sort(datum_params_.begin(), datum_params_.end(), cmp);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(init_small_set(runtime_filter_params.count(), hash_func_, access_ctx))) {
@@ -2524,6 +2580,7 @@ int ObDynamicFilterExecutor::try_preparing_data()
       }
     }
     if (OB_SUCC(ret)) {
+      is_data_prepared_ = true;
       // runtime filter with null equal condition will not be pushed down as white filter,
       // so it's not need to check null params.
       // check_null_params();
@@ -2547,7 +2604,18 @@ int ObDynamicFilterExecutor::try_updating_data()
   }
   if (OB_FAIL(ret)) {
   } else if (is_update) {
-    if (OB_FAIL(datum_params_.assign(runtime_filter_params))) {
+    // Keep the existing assignment's prefix-on-error policy. Each individual
+    // cell is published only after its reference bytes are owned.
+    if (datum_params_.get_data() == nullptr && runtime_filter_params.count() > 0) {
+      ret = datum_params_.init(runtime_filter_params.count());
+    } else {
+      datum_params_.clear();
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < runtime_filter_params.count(); ++i) {
+      DatumValue owned;
+      if (OB_FAIL(owned.assign_legacy_owned(runtime_filter_params.at(i), get_filter_val_meta(), allocator_))) {
+      } else if (OB_FAIL(datum_params_.push_back(owned))) {
+      }
     }
   }
   return ret;

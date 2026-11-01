@@ -1171,19 +1171,10 @@ int ObRangeGraphGenerator::generate_expr_final_info()
       }
     } else if (expr->has_flag(IS_CONST)) {
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(expr);
-      void *ptr = allocator_.alloc(sizeof(ObDatum));
-      if (OB_ISNULL(ptr)) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-      else {
-        expr_info.const_val_ = new(ptr)ObDatum();
-        expr_info.is_const_ = true;
-        DatumValue view, owned;
-        alignas(8) char scratch[64];
-        if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
-        } else if (OB_FAIL(clone_typed_value(view, owned, allocator_))) {
-        } else if (OB_FAIL(owned.copy_legacy(*expr_info.const_val_, allocator_))) {
-        } else {
-          expr_info.const_meta_ = owned.meta_;
-        }
+      DatumValue view;
+      alignas(8) char scratch[64];
+      if (OB_FAIL(const_expr->export_value(view, scratch, sizeof(scratch)))) {
+      } else if (OB_FAIL(expr_info.set_const_value(view.datum_, view.meta_, allocator_))) {
       }
     } else if (OB_FAIL(ObStaticEngineExprCG::gen_expr_with_row_desc(
             expr, row_desc,

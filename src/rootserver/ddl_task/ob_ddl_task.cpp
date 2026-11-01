@@ -2455,7 +2455,9 @@ static int convert_sql_rowkey(
   }
   for (int64_t j = 0; OB_SUCC(ret) && j < storage_key.get_datum_cnt(); ++j) {
     const ObStorageDatum &storage_datum = storage_key.get_datum_ptr()[j];
-    if (OB_FAIL(sql_key.push_back(storage_datum))) {
+    sql::ObPxRangeCell cell;
+    if (OB_FAIL(cell.assign_stored_key_borrowed(storage_datum))) {
+    } else if (OB_FAIL(sql_key.push_back(cell))) {
     }
   }
   return ret;
@@ -2499,7 +2501,12 @@ static int convert_storage_rowkey(
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < sql_key.count(); ++i) {
-      tmp_datums[i].shallow_copy_from_datum(sql_key.at(i));
+      new (&tmp_datums[i]) ObStorageDatum();
+      ObDatum physical;
+      if (OB_FAIL(sql_key.at(i).export_stored_key(physical, tmp_datums[i].buf_, sizeof(tmp_datums[i].buf_)))) {
+      } else {
+        tmp_datums[i].shallow_copy_from_datum(physical);
+      }
     }
   }
   if (OB_SUCC(ret)) {

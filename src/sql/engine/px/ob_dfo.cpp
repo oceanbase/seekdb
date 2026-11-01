@@ -578,6 +578,7 @@ int ObPxInitSqcArgs::serialize_common_parts_2(
       frame_info = static_cast<ObPxTransmitSpec *>(op_spec_root_)->dfo_expr_frame_info_;
     }
     frame_info = NULL == frame_info ? &ser_phy_plan_->get_expr_frame_info() : frame_info;
+    ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
                 buf, buf_len, pos, *exec_ctx_, *frame_info))) {
@@ -657,6 +658,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitSqcArgs)
       } else {
         const ObExprFrameInfo *frame_info = static_cast<ObPxTransmitSpec *>(op_spec_root_)->dfo_expr_frame_info_;
         frame_info = NULL == frame_info ? &ser_phy_plan_->get_expr_frame_info() : frame_info;
+        ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
         len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(*exec_ctx_, *frame_info);
         len += ObPxTreeSerializer::get_tree_serialize_size(*op_spec_root_, false /* is_fulltree */, &seri_ctx);
         len += ObPxTreeSerializer::get_serialize_op_input_size(
@@ -722,6 +724,7 @@ int ObPxInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_t d
 
       if (OB_SUCC(ret)) {
         const ObExprFrameInfo *frame_info = &des_phy_plan_->get_expr_frame_info();
+        ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
         if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
             buf, data_len, pos, *exec_ctx_, *frame_info))) {
         } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
@@ -788,6 +791,7 @@ OB_DEF_SERIALIZE(ObPxInitTaskArgs)
     // Serialize the core part of Task to the execution end: sub plan tree
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
       if (OB_ISNULL(op_spec_root_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
@@ -807,6 +811,7 @@ OB_DEF_SERIALIZE(ObPxInitTaskArgs)
     // Serialize the core part of Task to the execution end: sub plan tree
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo &frame_info = ser_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(frame_info);
       if (OB_ISNULL(op_spec_root_)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<false>(
@@ -860,6 +865,7 @@ OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
 
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo *expr_frame_info = &inner_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(*expr_frame_info);
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
           buf, data_len, pos, *exec_ctx_, *const_cast<ObExprFrameInfo*>(expr_frame_info)))) {
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
@@ -890,6 +896,7 @@ OB_DEF_DESERIALIZE(ObPxInitTaskArgs)
 
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo &expr_frame_info = des_phy_plan_->get_expr_frame_info();
+      ObPxTreeSerializer::ExprArrayScope array_scope(expr_frame_info);
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<false>(
           buf, data_len, pos, *exec_ctx_, expr_frame_info))) {
       } else if (OB_FAIL(op_spec_root_->create_op_input(*exec_ctx_))) {
@@ -925,6 +932,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitTaskArgs)
         LOG_ERROR("unexpected status: op root is null", K(ret));
       } else {
         const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
+        ObPxTreeSerializer::ExprArrayScope array_scope(*frame_info);
         len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(*exec_ctx_, *frame_info);
         len += ObPxTreeSerializer::get_tree_serialize_size(*op_spec_root_, false /* is_fulltree */);
         len += ObPxTreeSerializer::get_serialize_op_input_size(
@@ -940,6 +948,7 @@ OB_DEF_SERIALIZE_SIZE(ObPxInitTaskArgs)
         LOG_ERROR("unexpected status: op root is null", K(ret));
       } else {
         const ObExprFrameInfo &frame_info = ser_phy_plan_->get_expr_frame_info();
+        ObPxTreeSerializer::ExprArrayScope array_scope(frame_info);
         len += ObPxTreeSerializer::get_serialize_expr_frame_info_size<false>(*exec_ctx_, frame_info);
         len += ObPxTreeSerializer::get_serialize_op_input_size(
           *op_spec_root_, exec_ctx_->get_kit_store());

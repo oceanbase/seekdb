@@ -347,6 +347,79 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
   return ret;
 }
 
+int ObPlanCacheValue::prepare_lookup_parameters(ObPlanCacheCtx &pc_ctx)
+{
+  int ret = OB_SUCCESS;
+  ObPhysicalPlanCtx *params = pc_ctx.fp_result_.parameter_context_;
+  ObArenaAllocator staged_owner("PCParamBuild");
+  ParamStore staged((ObWrapperAllocator(&staged_owner)));
+  const bool protocol_inputs = PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_;
+  ParamStore *resolved_params = params == nullptr ? nullptr : &staged;
+  if (resolved_params != nullptr && protocol_inputs) {
+    // The producer owns these original request/PL inputs. Never reconstruct
+    // them from a native execution frame or a compatibility directory.
+    for (int64_t i = 0; OB_SUCC(ret) && i < pc_ctx.fp_result_.parameterized_params_.count(); ++i) {
+      const DatumParameter *input = pc_ctx.fp_result_.parameterized_params_.at(i);
+      if (input == nullptr) { ret = OB_ERR_UNEXPECTED; }
+      else { ret = staged.push_back(*input); }
+    }
+  }
+  // TEXT values are resolved into explicit transient construction storage.
+  // A repeated candidate rebuild still reads the original request/PL inputs,
+  // never rematerializes its current bound frame into an array.
+  if (OB_FAIL(ret)) {
+  } else if (OB_LIKELY(pc_ctx.sql_ctx_.is_batch_params_execute())) {
+    if (OB_FAIL(resolve_multi_stmt_params(pc_ctx))) {
+      if (OB_BATCHED_MULTI_STMT_ROLLBACK != ret) {
+      }
+    }
+  } else if (OB_UNLIKELY(pc_ctx.exec_ctx_.has_dynamic_values_table())) {
+    if (protocol_inputs && resolved_params != nullptr) {
+      // A question mark in this producer is resolved against its input
+      // metadata (including the boolean flag), before the final bind below.
+      ObPhysicalPlanCtx *destination = pc_ctx.exec_ctx_.get_physical_plan_ctx();
+      destination->reset_datum_param_store();
+      ret = destination->assign_parameter_inputs(*resolved_params);
+    }
+    if (OB_SUCC(ret) && OB_FAIL(ObValuesTableCompression::resolve_params_for_values_clause(pc_ctx, stmt_type_,
+                not_param_info_, param_charset_type_, neg_param_index_, not_param_index_,
+                must_be_positive_idx_, fmt_int_or_ch_decint_idx_, resolved_params))) {
+    }
+  } else if (OB_FAIL(resolver_params(pc_ctx,
+                                     stmt_type_,
+                                     param_charset_type_,
+                                     neg_param_index_,
+                                     not_param_index_,
+                                     must_be_positive_idx_,
+                                     fmt_int_or_ch_decint_idx_,
+                                     pc_ctx.fp_result_.raw_params_,
+                                     resolved_params))) {
+  }
+  // Optimized protocol arraybinding already supplies its first row through
+  // the original pointer directory. Its resolve_multi_stmt_params branch is
+  // a no-op, so consume that source here instead of an eager caller copy.
+  const bool protocol_first_row = protocol_inputs &&
+      pc_ctx.sql_ctx_.multi_stmt_item_.is_ab_batch_opt() &&
+      !pc_ctx.sql_ctx_.is_do_insert_batch_opt();
+  if (OB_SUCC(ret) && resolved_params != nullptr &&
+      (!pc_ctx.sql_ctx_.is_batch_params_execute() || protocol_first_row)) {
+    ObPhysicalPlanCtx *destination = pc_ctx.exec_ctx_.get_physical_plan_ctx();
+    destination->reset_datum_param_store();
+    ret = destination->assign_parameter_inputs(*resolved_params);
+  }
+  if (OB_SUCC(ret)) {
+    ObPhysicalPlanCtx *phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx();
+    if (NULL != phy_ctx) {
+      phy_ctx->set_original_param_cnt(phy_ctx->get_parameter_count());
+      if (OB_FAIL(phy_ctx->init_datum_param_store())) {
+      }
+    }
+  }
+  staged.destroy();
+  staged_owner.reset();
+  return ret;
+}
+
 int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
                                   const ObIArray<PCVSchemaObj> &schema_array,
                                   ObPlanCacheObject *&plan_out)
@@ -388,58 +461,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
     //do nothing
   } else {
     ObPhysicalPlanCtx *params = pc_ctx.fp_result_.parameter_context_;
-    ObArenaAllocator staged_owner("PCParamBuild");
-    ParamStore staged((ObWrapperAllocator(&staged_owner)));
-    const bool protocol_inputs = PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_;
-    ParamStore *resolved_params = params == nullptr ? nullptr : &staged;
-    if (resolved_params != nullptr && protocol_inputs) {
-      // The producer owns these original request/PL inputs. Never reconstruct
-      // them from a native execution frame or a compatibility directory.
-      for (int64_t i = 0; OB_SUCC(ret) && i < pc_ctx.fp_result_.parameterized_params_.count(); ++i) {
-        const DatumParameter *input = pc_ctx.fp_result_.parameterized_params_.at(i);
-        if (input == nullptr) { ret = OB_ERR_UNEXPECTED; }
-        else { ret = staged.push_back(*input); }
-      }
-    }
-    // TEXT values are resolved into explicit transient construction storage.
-    // A repeated candidate rebuild still reads the original request/PL inputs,
-    // never rematerializes its current bound frame into an array.
-    if (OB_FAIL(ret)) {
-    } else if (OB_LIKELY(pc_ctx.sql_ctx_.is_batch_params_execute())) {
-      if (OB_FAIL(resolve_multi_stmt_params(pc_ctx))) {
-        if (OB_BATCHED_MULTI_STMT_ROLLBACK != ret) {
-        }
-      }
-    } else if (OB_UNLIKELY(pc_ctx.exec_ctx_.has_dynamic_values_table())) {
-      if (OB_FAIL(ObValuesTableCompression::resolve_params_for_values_clause(pc_ctx, stmt_type_,
-                  not_param_info_, param_charset_type_, neg_param_index_, not_param_index_,
-                  must_be_positive_idx_, fmt_int_or_ch_decint_idx_, resolved_params))) {
-      }
-    } else if (OB_FAIL(resolver_params(pc_ctx,
-                                       stmt_type_,
-                                       param_charset_type_,
-                                       neg_param_index_,
-                                       not_param_index_,
-                                       must_be_positive_idx_,
-                                       fmt_int_or_ch_decint_idx_,
-                                       pc_ctx.fp_result_.raw_params_,
-                                       resolved_params))) {
-    }
-    if (OB_SUCC(ret) && !pc_ctx.sql_ctx_.is_batch_params_execute() && resolved_params != nullptr) {
-      ObPhysicalPlanCtx *destination = pc_ctx.exec_ctx_.get_physical_plan_ctx();
-      destination->reset_datum_param_store();
-      ret = destination->assign_parameter_inputs(*resolved_params);
-    }
-    if (OB_SUCC(ret)) {
-      ObPhysicalPlanCtx *phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx();
-      if (NULL != phy_ctx) {
-        phy_ctx->set_original_param_cnt(phy_ctx->get_parameter_count());
-        if (OB_FAIL(phy_ctx->init_datum_param_store())) {
-        }
-      }
-    }
-    staged.destroy();
-    staged_owner.reset();
+    ret = prepare_lookup_parameters(pc_ctx);
     if (OB_FAIL(ret)) {
       //do nothing
     } else {

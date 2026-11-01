@@ -1840,7 +1840,10 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
     } else if (context.is_batch_params_execute() &&
         OB_ISNULL(ps_ab_params)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(construct_param_store(ps_params, *pctx))) {
+    } else if (!ObStmt::is_dml_stmt(stmt_type) &&
+               OB_FAIL(construct_param_store(ps_params, *pctx))) {
+      // Direct non-DML resolution consumes construction inputs here. DML
+      // lookup and miss-parser consumers read the original parameter source.
     } else {
       const ObString &sql = !ps_info->get_no_param_sql().empty() ? ps_info->get_no_param_sql() : ps_info->get_ps_sql();
       context.cur_sql_ = sql;

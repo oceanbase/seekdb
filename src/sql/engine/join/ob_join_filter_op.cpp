@@ -294,7 +294,6 @@ int ObJoinFilterOpInput::construct_msg_details(
           "RFInFilter",
           "RFInFilter"))) {
       } else if (OB_FAIL(in_msg.cur_row_.prepare_allocate(col_cnt))) {
-      } else if (OB_FAIL(in_msg.insert_scratch_.prepare_allocate(col_cnt))) {
       } else if (OB_FAIL(in_msg.cmp_funcs_.assign(spec.cmp_funcs_))) {
       } else if (OB_FAIL(in_msg.hash_funcs_for_insert_.assign(spec.hash_funcs_))) {
       } else if (OB_FAIL(in_msg.need_null_cmp_flags_.assign(spec.need_null_cmp_flags_))) {
@@ -729,8 +728,6 @@ int ObJoinFilterOp::open_join_filter_use()
               std::max<int64_t>(1, eval_ctx_.max_batch_size_)))) {
           } else if (ObP2PDatahubMsgBase::IN_FILTER_MSG == dh_msg_type &&
               OB_FAIL(join_filter_ctx->cur_row_.prepare_allocate(MY_SPEC.cmp_funcs_.count()))) {
-          } else if (ObP2PDatahubMsgBase::IN_FILTER_MSG == dh_msg_type &&
-              OB_FAIL(join_filter_ctx->legacy_cell_scratch_.prepare_allocate(MY_SPEC.cmp_funcs_.count()))) {
           }
         }
       } else {

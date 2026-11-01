@@ -344,7 +344,11 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(filter.get_filter_node().get_filter_val_meta(filter_val_meta))) {
   } else {
-    const ObDatum &ref_datum = filter.get_datums().at(0);
+    alignas(8) char param_scratch[64];
+    ObDatum ref_datum;
+    if (OB_FAIL(filter.export_parameter(0, ref_datum, param_scratch, sizeof(param_scratch)))) {
+      return ret;
+    }
     ObStorageDatum base_datum;
     uint32_t base_datum_len = 0;
     if (OB_FAIL(get_uint_data_datum_len(
@@ -463,8 +467,12 @@ int ObIntegerBaseDiffDecoder::bt_operator(
                   int left_cmp_res = 0;
                   int right_cmp_res = 0;
                   ObDatumCmpFuncType cmp_func = filter.cmp_func_;
-                  if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(0), left_cmp_res, nullptr))) {
-                  } else if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(1), right_cmp_res, nullptr))) {
+                  alignas(8) char left_scratch[64], right_scratch[64];
+                  ObDatum left, right;
+                  if (OB_FAIL(filter.export_parameter(0, left, left_scratch, sizeof(left_scratch)))) {
+                  } else if (OB_FAIL(filter.export_parameter(1, right, right_scratch, sizeof(right_scratch)))) {
+                  } else if (OB_FAIL(cmp_func(cur_datum, left, left_cmp_res, nullptr))) {
+                  } else if (OB_FAIL(cmp_func(cur_datum, right, right_cmp_res, nullptr))) {
                   } else {
                     result = (left_cmp_res >= 0) && (right_cmp_res <= 0);
                   }

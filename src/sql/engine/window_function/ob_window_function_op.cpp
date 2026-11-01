@@ -386,19 +386,18 @@ int ObWindowFunctionOp::AggrCell::inv_trans_self(const ObRADatumStore::StoredRow
 int ObWindowFunctionOp::AggrCell::final(ObDatum &val)
 {
   int ret = OB_SUCCESS;
+  const ObExpr &expr = *wf_info_.aggr_info_.expr_;
   if (!got_result_) {
     if (OB_FAIL(aggr_processor_.collect(0))) {
+    } else if (OB_FAIL(aggr_processor_.clone_cell_for_wf(result_,
+        expr.locate_expr_datum(op_.eval_ctx_), expr.get_datum_copy_plan(),
+        result_buffer_, result_capacity_, expr.obj_meta_.is_number()))) {
     } else {
-      if (OB_FAIL(legacy_result(*wf_info_.aggr_info_.expr_,
-              wf_info_.aggr_info_.expr_->locate_expr_datum(op_.eval_ctx_), val))) {
-      } else if (OB_FAIL(aggr_processor_.clone_cell_for_wf(result_, val,
-                                             wf_info_.aggr_info_.expr_->obj_meta_.is_number()))) {
-      } else {
-        got_result_ = true;
-      }
+      got_result_ = true;
     }
-  } else {
-    val = static_cast<ObDatum>(result_);
+  }
+  if (OB_SUCC(ret)) {
+    ret = legacy_result(expr, result_, val);
   }
   return ret;
 }

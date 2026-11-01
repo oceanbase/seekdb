@@ -510,6 +510,10 @@ int ObVectorStore::do_group_by(
     const ObFilterResult &res)
 {
   int ret = OB_SUCCESS;
+  struct GroupKeyViewScope {
+    ObGroupByCellBase &cell_;
+    ~GroupKeyViewScope() { cell_.release_group_key_views(); }
+  } key_view_scope{*group_by_cell_};
   int64_t row_capacity = 0;
   blocksstable::ObIMicroBlockDecoder *decoder = static_cast<blocksstable::ObIMicroBlockDecoder*>(reader);
   const int32_t group_by_col_offset = group_by_cell_->get_group_by_col_offset();
@@ -520,6 +524,7 @@ int ObVectorStore::do_group_by(
   if (OB_FAIL(decoder->read_distinct(group_by_col_offset, nullptr == cell_data ? cell_data_ptrs_ : cell_data, 
       is_pad_char_to_full_length(context_.sql_mode_), *group_by_cell_))) {
   } else if (OB_FAIL(fill_group_by_col_lob_locator(reader->has_lob_out_row()))) {
+  } else if (OB_FAIL(group_by_cell_->capture_group_key_input())) {
   } else if (group_by_cell_->need_read_reference()) {
     const bool need_extract_distinct = group_by_cell_->need_extract_distinct();
     const bool need_do_aggregate = group_by_cell_->need_do_aggregate();

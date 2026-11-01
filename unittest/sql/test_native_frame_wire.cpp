@@ -22,6 +22,10 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/engine/px/ob_px_util.h"
+#include "sql/engine/px/ob_dfo.h"
+#include "sql/engine/px/exchange/ob_px_transmit_op.h"
+#include "sql/engine/ob_physical_plan.h"
+#include <initializer_list>
 #include "sql/ob_sql_context.h"
 #include <gtest/gtest.h>
 #include <algorithm>
@@ -38,6 +42,14 @@ int eval_question_mark_func(const ObExpr &, ObEvalCtx &, Datum &);
 
 namespace
 {
+template <typename Tag, typename Tag::Type Member>
+struct PxPrivateMember { friend typename Tag::Type px_member(Tag) { return Member; } };
+struct PxParts2Tag {
+  using Type = int (ObPxInitSqcArgs::*)(char *, int64_t, int64_t &) const;
+  friend Type px_member(PxParts2Tag);
+};
+template struct PxPrivateMember<PxParts2Tag, &ObPxInitSqcArgs::serialize_common_parts_2>;
+
 void scalar_type(SqlValueType kind, SqlType &type, ObAccuracy accuracy = ObAccuracy())
 {
   SqlTypeMeta meta;
@@ -509,6 +521,119 @@ TEST(NativeFrameWire, malformed_parameter_count_is_rejected_before_any_page_publ
   EXPECT_EQ(OB_DESERIALIZE_ERROR, NativeFrameCodec::deserialize_parameters(wire, sizeof(wire), pos,
       owner, pages, types, original));
   EXPECT_EQ(0, pos); EXPECT_EQ(17, original); EXPECT_EQ(0, pages.count()); EXPECT_EQ(0, types.count());
+}
+
+
+TEST(NativeFrameWire, sqc_parts2_keeps_selected_expression_directory_through_tree_and_restores_caller)
+{
+  // Preserve the test runner's TLS directory even if a fatal assertion returns.
+  ObPxTreeSerializer::ExprArrayScope restore_runner_directory;
+  ObArenaAllocator source_owner("PxCompoundSrc");
+  ObSqlCtx source_sql;
+  ObExecContext source(source_owner);
+  ASSERT_NO_FATAL_FAILURE(setup_context(source, source_sql));
+  auto &parameters = *source.get_physical_plan_ctx();
+  ASSERT_NO_FATAL_FAILURE(load_parameters(parameters, source_owner, 1, 1, true));
+  ObExprFrameInfo source_info(source_owner);
+  ASSERT_EQ(OB_SUCCESS, source_info.rt_exprs_.prepare_allocate(1));
+  ObExpr &parameter = source_info.rt_exprs_.at(0);
+  parameter.type_ = T_QUESTIONMARK;
+  parameter.obj_meta_.set_int();
+  parameter.datum_meta_ = ObDatumMeta(ObIntType, CS_TYPE_BINARY, 0, 20);
+  parameter.extra_ = 0;
+  parameter.frame_idx_ = 0;
+  parameter.datum_off_ = ScalarFrameLayout::datum_offset(0);
+  parameter.eval_info_off_ = ScalarFrameLayout::eval_info_offset(0);
+  ASSERT_EQ(OB_SUCCESS, parameter.bind_sql_type(*parameters.get_native_parameter_type(0), source_owner));
+  ASSERT_EQ(OB_SUCCESS, source_info.param_frame_.reserve(1));
+  ASSERT_EQ(OB_SUCCESS, source_info.param_frame_.push_back(ObFrameInfo(1, 0, 24, 0, 24)));
+  ASSERT_EQ(OB_SUCCESS, source_info.pre_alloc_exec_memory(source));
+
+  ObPhysicalPlan physical;
+  ObOpSpec *transmit = nullptr, *values = nullptr;
+  ASSERT_EQ(OB_SUCCESS, physical.alloc_op_spec(PHY_PX_REDUCE_TRANSMIT, 1, transmit, 0));
+  ASSERT_EQ(OB_SUCCESS, physical.alloc_op_spec(PHY_VALUES, 0, values, 1));
+  ASSERT_NE(nullptr, transmit); ASSERT_NE(nullptr, values);
+  ASSERT_EQ(OB_SUCCESS, transmit->set_child(0, values));
+  physical.set_root_op_spec(transmit);
+  auto &px_transmit = static_cast<ObPxTransmitSpec &>(*transmit);
+  px_transmit.dfo_expr_frame_info_ = &source_info;
+  px_transmit.tablet_id_expr_ = &parameter;
+  for (ObOpSpec *op : {transmit, values}) {
+    ASSERT_EQ(OB_SUCCESS, op->output_.reserve(1));
+    ASSERT_EQ(OB_SUCCESS, op->output_.push_back(&parameter));
+  }
+  ASSERT_EQ(0, physical.get_expr_frame_info().rt_exprs_.count());
+  ASSERT_EQ(OB_SUCCESS, source.get_kit_store().init(source_owner, 2));
+  ObPxInitSqcArgs arguments;
+  arguments.set_serialize_param(source, *transmit, physical);
+  ObPhyOpSeriCtx serialization_context;
+  serialization_context.exec_ctx_ = &source;
+  ObArray<ObExpr> sentinel; // An empty prior directory is legal and unrelated.
+
+  for (int prior = 0; prior < 2; ++prior) {
+    ObExpr::ObExprIArray *previous = prior == 0 ? nullptr : &sentinel;
+    ObExpr::get_serialize_array() = previous;
+    const int64_t frame_bytes = ObPxTreeSerializer::get_serialize_expr_frame_info_size<true>(source, source_info);
+    ASSERT_GT(frame_bytes, 0);
+    const int64_t size = frame_bytes
+        + ObPxTreeSerializer::get_tree_serialize_size(*transmit, false, &serialization_context)
+        + ObPxTreeSerializer::get_serialize_op_input_size(*transmit, source.get_kit_store());
+    EXPECT_EQ(previous, ObExpr::get_serialize_array());
+    // The real SQC size caller also selects this DFO directory, then restores TLS.
+    EXPECT_GT(arguments.get_serialize_size(), 0);
+    EXPECT_EQ(previous, ObExpr::get_serialize_array());
+    std::vector<char> wire(size);
+    int64_t pos = 0;
+    ASSERT_EQ(OB_SUCCESS, (arguments.*px_member(PxParts2Tag{}))(wire.data(), size, pos));
+    ASSERT_EQ(size, pos);
+    EXPECT_EQ(previous, ObExpr::get_serialize_array());
+
+    ObArenaAllocator destination_owner("PxCompoundDst");
+    ObSqlCtx destination_sql;
+    ObExecContext destination(destination_owner);
+    ASSERT_NO_FATAL_FAILURE(setup_context(destination, destination_sql));
+    ObExprFrameInfo destination_info(destination_owner);
+    ObPhysicalPlan destination_physical;
+    ObOpSpec *decoded = nullptr;
+    ObSEArray<const ObTableScanSpec *, 1> scans;
+    pos = 0;
+    {
+      // Exercise the corresponding public frame/tree/input decoders under the
+      // same compound directory contract, without a complete RPC/session clone.
+      ObPxTreeSerializer::ExprArrayScope restore_previous;
+      ObExpr::get_serialize_array() = &destination_info.rt_exprs_;
+      ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::deserialize_expr_frame_info<true>(
+          wire.data(), size, pos, destination, destination_info));
+      EXPECT_EQ(&destination_info.rt_exprs_, ObExpr::get_serialize_array());
+      ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::deserialize_tree(
+          wire.data(), size, pos, destination_physical, decoded, scans));
+      ASSERT_NE(nullptr, decoded); ASSERT_EQ(1, decoded->output_.count());
+      ASSERT_EQ(1, decoded->get_child_cnt()); ASSERT_NE(nullptr, decoded->get_child(0));
+      ASSERT_EQ(1, decoded->get_child(0)->output_.count());
+      EXPECT_EQ(&destination_info.rt_exprs_.at(0), decoded->output_.at(0));
+      EXPECT_EQ(decoded->output_.at(0), decoded->get_child(0)->output_.at(0));
+      EXPECT_EQ(decoded->output_.at(0), static_cast<ObPxTransmitSpec *>(decoded)->tablet_id_expr_);
+      ASSERT_EQ(OB_SUCCESS, ObPxTreeSerializer::deserialize_op_input(
+          wire.data(), size, pos, destination.get_kit_store()));
+      ASSERT_EQ(size, pos);
+    }
+    EXPECT_EQ(previous, ObExpr::get_serialize_array());
+    ASSERT_NE(nullptr, destination.get_physical_plan_ctx()->get_native_parameter(0));
+    EXPECT_EQ(INT64_MIN, destination.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+    ObEvalCtx evaluation(destination);
+    Datum result;
+    ASSERT_EQ(OB_SUCCESS, eval_question_mark_func(destination_info.rt_exprs_.at(0), evaluation, result));
+    EXPECT_EQ(INT64_MIN, result.get_int());
+
+    // Fail after the complete frame segment, while the tree is being written.
+    // Its error must restore the original directory too, without weakening it.
+    pos = 0;
+    EXPECT_NE(OB_SUCCESS, (arguments.*px_member(PxParts2Tag{}))(wire.data(), frame_bytes, pos));
+    EXPECT_EQ(previous, ObExpr::get_serialize_array());
+    MEMSET(wire.data(), 0xA5, wire.size());
+    EXPECT_EQ(INT64_MIN, destination.get_physical_plan_ctx()->get_native_parameter(0)->get_int());
+  }
 }
 
 int main(int argc, char **argv)

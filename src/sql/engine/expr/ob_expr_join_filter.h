@@ -54,10 +54,9 @@ public:
           rf_msg_(nullptr), rf_key_(), hash_funcs_(), cmp_funcs_(), start_time_(0),
           filter_count_(0), total_count_(0), check_count_(0),
           n_times_(0), ready_ts_(0), by_pass_count_before_ready_(0), slide_window_(total_count_), flag_(0), max_wait_time_ms_(0),
-          cur_row_(), legacy_cell_scratch_(), native_hash_values_()
+          cur_row_(), native_hash_values_()
         {
           cur_row_.set_attr(ObMemAttr("RfCurRow"));
-          legacy_cell_scratch_.set_attr(ObMemAttr("RfCellScratch"));
           native_hash_values_.set_attr(ObMemAttr("RfNativeHash"));
           need_wait_rf_ = true;
           need_check_ready_ = true;
@@ -151,11 +150,9 @@ public:
         };
       };
       int64_t max_wait_time_ms_;
-      struct LegacyCellScratch { alignas(8) char bytes_[64]; };
-      // Decoder/wire companions retain legacy cells. Each inline native value
-      // borrows its own context-owned coefficient/header scratch.
-      ObTMArray<common::ObDatum> cur_row_;
-      ObTMArray<LegacyCellScratch> legacy_cell_scratch_;
+      // Synchronous probe inputs borrow actual native Expr values; no legacy
+      // scalar payload or per-column export scratch survives the probe call.
+      ObTMArray<common::Datum> cur_row_;
       ObTMArray<uint64_t> native_hash_values_;
   };
   ObExprJoinFilter();
