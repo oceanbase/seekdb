@@ -408,3 +408,6 @@ seekdb_data/
 
 # Local Python bytecode for the iOS build helpers.
 deps/ios-build/__pycache__/
+
+# Local SDD ledger (working notes, not part of the submission)
+.chuigong/
