@@ -693,3 +693,69 @@ TEST_F(NativeRawConstantBuilders, null_typed_integer_builder_reaches_native_null
   ASSERT_NE(nullptr, value); EXPECT_FALSE(value->is_null());
   EXPECT_EQ(17, value->get_int()); EXPECT_EQ(0U, value->length());
 }
+
+TEST_F(NativeRawConstantBuilders, inner_is_true_range_marker_survives_real_deduction_codegen_and_eval)
+{
+  struct Input { SqlValueType type; int64_t value; bool truth; };
+  const Input inputs[] = {{ObIntType, 0, false}, {ObIntType, 1, true},
+      {ObIntType, -7, true}, {ObNullType, 0, false}};
+  for (int64_t is_start : {int64_t(0), int64_t(1)}) {
+    for (const Input &input : inputs) {
+      SCOPED_TRACE(is_start);
+      SCOPED_TRACE(input.value);
+      SCOPED_TRACE(input.type);
+      ObArenaAllocator source, plan;
+      ObRawExprFactory factory(source);
+      ObSQLSessionInfo session;
+      ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+      ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+      // NULL needs an implicit Number cast during formalize; that production
+      // deduction path requires the session's actual execution context.
+      ObExecContext execution(plan);
+      execution.set_my_session(&session);
+      ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &execution);
+      DEFER(ObSQLSessionInfo::ExecCtxSessionRegister unregister(session, nullptr));
+      ObConstRawExpr *value = nullptr, *position = nullptr;
+      ObSysFunRawExpr *endpoint = nullptr;
+      ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(factory, input.type, input.value, value));
+      ASSERT_EQ(OB_SUCCESS, ObRawExprUtils::build_const_int_expr(factory, ObIntType, is_start, position));
+      // These are the actual producer steps used by
+      // ObExprRangeConverter::generate_deduce_const_expr, including deduction.
+      ASSERT_EQ(OB_SUCCESS, factory.create_raw_expr(T_FUNC_SYS_INNER_IS_TRUE, endpoint));
+      ASSERT_EQ(OB_SUCCESS, endpoint->set_param_exprs(value, position));
+      ASSERT_EQ(OB_SUCCESS, endpoint->formalize(&session));
+      EXPECT_TRUE(endpoint->get_result_type().is_ext());
+      EXPECT_EQ(0, static_cast<int>(endpoint->get_result_type().get_extend_type()));
+      EXPECT_FALSE(endpoint->get_result_type().is_pl_extend_type());
+      // Keep the metadata checks nonfatal so the original broken producer
+      // still reaches the complete public CG and exposes its -4007 return.
+      ObRawExprUniqueSet roots(false);
+      ASSERT_EQ(OB_SUCCESS, roots.append(endpoint));
+      ObExprFrameInfo info(plan);
+      ObStaticEngineExprCG generator(plan, &session, nullptr, 0, 0);
+      ASSERT_EQ(OB_SUCCESS, generator.generate(roots, info));
+      auto *runtime = static_cast<ObExpr *>(generator.get_left_value_rt_expr(*endpoint));
+      ASSERT_NE(nullptr, runtime);
+      EXPECT_EQ(ObExtendType, runtime->get_sql_type().kind());
+      EXPECT_EQ(0, static_cast<int>(runtime->get_sql_type().legacy_meta().get_extend_type()));
+      EXPECT_FALSE(runtime->get_sql_type().requires_resource_clone());
+      ObSEArray<char *, 1> no_parameters;
+      uint64_t frame_count = 0; char **frames = nullptr;
+      ASSERT_EQ(OB_SUCCESS, info.alloc_frame(plan, no_parameters, frame_count, frames));
+      factory.destory(); source.reuse();
+      execution.set_frames(frames); execution.set_frame_cnt(frame_count);
+      ObEvalCtx context(execution);
+      Datum *result = nullptr;
+      ASSERT_EQ(OB_SUCCESS, runtime->eval(context, result));
+      ASSERT_NE(nullptr, result);
+      const bool expect_min = is_start != 0 ? input.truth : !input.truth;
+      EXPECT_EQ(expect_min, result->is_min());
+      EXPECT_EQ(!expect_min, result->is_max());
+    }
+  }
+  // A genuine PL declaration still cannot be reconstructed from four-byte
+  // metadata; the selective range producer fix must not relax this guard.
+  SqlTypeMeta pl_meta; pl_meta.set_ext(); pl_meta.set_extend_type(1);
+  SqlType incomplete_pl_type;
+  EXPECT_EQ(OB_NOT_SUPPORTED, SqlType::from_legacy(pl_meta, ObAccuracy(), incomplete_pl_type));
+}

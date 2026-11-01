@@ -20,6 +20,7 @@
 #include "sql/code_generator/ob_static_engine_expr_cg.h"
 #include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_equal.h"
+#include "sql/engine/expr/ob_expr_int2ip.h"
 #include "sql/engine/expr/ob_expr_func_round.h"
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
@@ -403,6 +404,49 @@ TEST_F(NativeExprCallbacks, actual_inner_conversion_cg_keeps_complete_labels_and
     ASSERT_EQ(2, result().get_sql_type().label_count());
     EXPECT_EQ(ObString::make_string("beta"), result().get_sql_type().label(1));
   }
+}
+
+TEST_F(NativeExprCallbacks, int2ip_callback_uses_expression_buffer_from_fresh_null_native_slot)
+{
+  ASSERT_NO_FATAL_FAILURE(configure(ObIntType, 19, 0, false, false));
+  result().type_ = T_FUN_SYS_INT2IP;
+  result().obj_meta_.set_varchar();
+  result().obj_meta_.set_collation_type(CS_TYPE_UTF8MB4_GENERAL_CI);
+  result().obj_meta_.set_collation_level(CS_LEVEL_COERCIBLE);
+  result().datum_meta_ = ObDatumMeta(ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI, 0, 0);
+  result().obj_datum_map_ = OBJ_DATUM_STRING;
+  ObAccuracy accuracy; accuracy.set_length(16);
+  ASSERT_EQ(OB_SUCCESS, result().prepare_scalar_type(result().obj_meta_, accuracy, arena_));
+  result().res_buf_len_ = 16;
+  result().arg_cnt_ = 1;
+  ObExprInt2ip operation(arena_);
+  ASSERT_EQ(OB_SUCCESS, operation.cg_expr(cg_, raw_, result()));
+  const int64_t inputs[] = {0, 1, 2130706433, UINT32_MAX, -1, INT64_C(1) << 32};
+  const char *expected[] = {"0.0.0.0", "0.0.0.1", "127.0.0.1", "255.255.255.255", nullptr, nullptr};
+  for (int64_t i = 0; i < 6; ++i) {
+    datum(0).set_int(inputs[i]);
+    datum(RESULT).set_null();
+    result().get_eval_info(eval_).evaluated_ = false;
+    Datum *output = nullptr;
+    ASSERT_EQ(OB_SUCCESS, result().eval(eval_, output));
+    ASSERT_NE(nullptr, output);
+    if (expected[i] == nullptr) {
+      EXPECT_TRUE(output->is_null());
+    } else {
+      ASSERT_FALSE(output->is_null());
+      EXPECT_EQ(ObString::make_string(expected[i]), output->get_string());
+      EXPECT_EQ(frame_.data() + result().res_buf_off_, output->get_string().ptr());
+    }
+  }
+  datum(0).set_null(); datum(RESULT).set_null();
+  result().get_eval_info(eval_).evaluated_ = false;
+  Datum *output = nullptr;
+  ASSERT_EQ(OB_SUCCESS, result().eval(eval_, output));
+  ASSERT_NE(nullptr, output); EXPECT_TRUE(output->is_null());
+  datum(0).set_int(1); datum(RESULT).set_null();
+  result().res_buf_len_ = 15;
+  EXPECT_EQ(OB_ERR_UNEXPECTED, operation.int2ip_varchar(result(), eval_, datum(RESULT)));
+  EXPECT_TRUE(datum(RESULT).is_null());
 }
 } // namespace
 

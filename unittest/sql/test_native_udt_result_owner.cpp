@@ -1,4 +1,11 @@
 #include <gtest/gtest.h>
+#include "sql/engine/basic/ob_expr_values_op.h"
+#include "sql/engine/expr/ob_expr_util.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/ob_sql_context.h"
+#include "common/udt/ob_array_nested.h"
+#include "common/udt/ob_vector_type.h"
+#include <array>
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -153,4 +160,135 @@ TEST(NativeUdtResult, collection_text_remains_live_after_conversion_with_freeing
   EXPECT_EQ(id, value.get_subschema_id());
   EXPECT_EQ(0, service.calls_);
   EXPECT_FALSE(result_owner.unexpected_free_);
+}
+
+
+TEST(NativeUdtResult, values_operator_dynamic_collection_cast_keeps_destination_declaration)
+{
+  ObArenaAllocator owner;
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObExecContext exec(owner);
+  exec.set_my_session(&session);
+  ObSQLSessionInfo::ExecCtxSessionRegister registration(session, &exec);
+  NoIoLobService service; InlineLobContext inline_context;
+  exec.set_lob_read_service(&service);
+  InlineContextGuard context_guard(exec, inline_context);
+  ASSERT_EQ(OB_SUCCESS, exec.create_physical_plan_ctx());
+  ObSqlCtx sql_context;
+  exec.set_sql_ctx(&sql_context);
+  alignas(8) std::array<char, 4096> frame{};
+  char *frames[] = {frame.data()};
+  exec.set_frames(frames); exec.set_frame_cnt(1);
+  struct FrameScope {
+    ObExecContext &exec_;
+    ~FrameScope() { exec_.set_frames(nullptr); exec_.set_frame_cnt(0); exec_.set_sql_ctx(nullptr); }
+  } frame_scope{exec};
+  ObEvalCtx eval(exec);
+  const char *declarations[] = {"ARRAY(INT)", "ARRAY(ARRAY(FLOAT))", "VECTOR(3)"};
+  const char *literals[] = {"[1,-2,NULL]", "[[1,2],[3,NULL]]", "[1.25,-2.5,3]"};
+  for (int scenario = 0; scenario < 3; ++scenario) {
+    SCOPED_TRACE(declarations[scenario]);
+    uint16_t id = 0;
+    ASSERT_EQ(OB_SUCCESS, exec.get_subschema_id_by_type_string(
+        ObString::make_string(declarations[scenario]), id));
+    ASSERT_FALSE(ob_is_reserved_subschema_id(id));
+    ObSubSchemaValue definition;
+    ASSERT_EQ(OB_SUCCESS, exec.get_sqludt_meta_by_subschema_id(id, definition));
+    ASSERT_EQ(OB_SUBSCHEMA_COLLECTION_TYPE, definition.type_);
+    const auto *collection = static_cast<const ObSqlCollectionInfo *>(definition.value_);
+    ASSERT_NE(nullptr, collection); ASSERT_NE(nullptr, collection->collection_meta_);
+    ObExpr source, destination;
+    source.type_ = T_VARCHAR;
+    source.obj_meta_.set_varchar(); source.obj_meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+    source.obj_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+    source.datum_meta_ = ObDatumMeta(ObVarcharType, CS_TYPE_UTF8MB4_BIN, -1);
+    source.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(ObVarcharType);
+    ObAccuracy source_accuracy; source_accuracy.set_length(64);
+    ASSERT_EQ(OB_SUCCESS, source.prepare_scalar_type(source.obj_meta_, source_accuracy, owner));
+    destination.type_ = T_REF_COLUMN;
+    destination.obj_meta_.set_type(ObCollectionSQLType);
+    destination.obj_meta_.set_subschema_id(id); destination.obj_meta_.set_has_lob_header();
+    destination.datum_meta_ = ObDatumMeta(ObCollectionSQLType, static_cast<ObCollationType>(id), -1);
+    destination.obj_datum_map_ = ObDatum::get_sql_value_datum_map_type(ObCollectionSQLType);
+    destination.max_length_ = LENGTH_UNKNOWN_YET;
+    ObAccuracy destination_accuracy; destination_accuracy.set_length(destination.max_length_);
+    const SqlType *type = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObExprUtil::resolve_sql_type(exec, destination.obj_meta_,
+        destination_accuracy, id, owner, type));
+    ASSERT_NE(nullptr, type);
+    ASSERT_EQ(OB_SUCCESS, destination.bind_sql_type(*type, owner));
+    ObExpr *expressions[] = {&source, &destination};
+    for (int index = 0; index < 2; ++index) {
+      ObExpr &expr = *expressions[index];
+      expr.frame_idx_ = 0; expr.datum_off_ = index * 1024;
+      expr.eval_info_off_ = index * 1024 + 64;
+      expr.res_buf_off_ = index * 1024 + 192; expr.res_buf_len_ = 512;
+      new (frame.data() + expr.datum_off_) Datum;
+      new (frame.data() + expr.eval_info_off_) ObEvalInfo;
+    }
+    ObExprValuesSpec spec(owner, PHY_EXPR_VALUES);
+    ASSERT_EQ(OB_SUCCESS, spec.values_.init(1));
+    ASSERT_EQ(OB_SUCCESS, spec.values_.push_back(&source));
+    ASSERT_EQ(OB_SUCCESS, spec.output_.init(1));
+    ASSERT_EQ(OB_SUCCESS, spec.output_.push_back(&destination));
+    ASSERT_EQ(OB_SUCCESS, spec.column_names_.init(1));
+    ASSERT_EQ(OB_SUCCESS, spec.column_names_.push_back(ObString::make_string("c")));
+    ObExprValuesOp op(exec, spec, nullptr);
+    std::string input(literals[scenario]);
+    source.locate_datum_for_write(eval).set_string(input.data(), input.size());
+    source.get_eval_info(eval).evaluated_ = true;
+    ASSERT_EQ(OB_SUCCESS, op.inner_open());
+    ASSERT_EQ(OB_SUCCESS, op.inner_get_next_row());
+    EXPECT_EQ(id, destination.obj_meta_.get_subschema_id());
+    Datum &result = destination.locate_expr_datum(eval);
+    ASSERT_FALSE(result.is_null());
+    EXPECT_NE(input.data(), result.get_reference());
+    std::memset(&input[0], 0xa5, input.size());
+    ObString raw = result.get_string();
+    ASSERT_EQ(OB_SUCCESS, ObTextStringHelper::read_real_string_data(
+        exec, &owner, ObLongTextType, CS_TYPE_BINARY, true, raw));
+    ObIArrayType *array = nullptr;
+    ASSERT_EQ(OB_SUCCESS, ObArrayTypeObjFactory::construct(
+        owner, *collection->collection_meta_, array, true));
+    ASSERT_NE(nullptr, array); ASSERT_EQ(OB_SUCCESS, array->init(raw));
+    if (scenario == 0) {
+      ASSERT_EQ(3U, array->size());
+      const auto *numbers = static_cast<const ObArrayFixedSize<int32_t> *>(array);
+      EXPECT_EQ(1, (*numbers)[0]); EXPECT_EQ(-2, (*numbers)[1]); EXPECT_TRUE(numbers->is_null(2));
+    } else if (scenario == 1) {
+      ASSERT_EQ(2U, array->size());
+      const auto *nested = static_cast<const ObArrayNested *>(array);
+      const auto *numbers = static_cast<const ObArrayFixedSize<float> *>(nested->get_child_array());
+      ASSERT_EQ(4U, numbers->size());
+      EXPECT_FLOAT_EQ(1.0F, (*numbers)[0]); EXPECT_FLOAT_EQ(2.0F, (*numbers)[1]);
+      EXPECT_FLOAT_EQ(3.0F, (*numbers)[2]); EXPECT_TRUE(numbers->is_null(3));
+    } else {
+      ASSERT_EQ(3U, array->size());
+      const auto *numbers = static_cast<const ObVectorF32Data *>(array);
+      EXPECT_FLOAT_EQ(1.25F, (*numbers)[0]); EXPECT_FLOAT_EQ(-2.5F, (*numbers)[1]);
+      EXPECT_FLOAT_EQ(3.0F, (*numbers)[2]);
+    }
+    EXPECT_EQ(OB_ITER_END, op.inner_get_next_row());
+    // A typed nullable target still resolves the same real declaration.
+    source.locate_datum_for_write(eval).set_null();
+    source.get_eval_info(eval).evaluated_ = true;
+    destination.get_eval_info(eval).clear_evaluated_flag();
+    ASSERT_EQ(OB_SUCCESS, op.inner_open());
+    ASSERT_EQ(OB_SUCCESS, op.inner_get_next_row());
+    EXPECT_TRUE(destination.locate_expr_datum(eval).is_null());
+    // The fix forwards a declaration; it does not relax the reserved-ID guard.
+    input.assign(literals[scenario]);
+    source.locate_datum_for_write(eval).set_string(input.data(), input.size());
+    source.get_eval_info(eval).evaluated_ = true;
+    destination.get_eval_info(eval).clear_evaluated_flag();
+    destination.obj_meta_.set_subschema_id(0);
+    destination.datum_meta_.cs_type_ = static_cast<ObCollationType>(0);
+    ASSERT_EQ(OB_SUCCESS, op.inner_open());
+    EXPECT_EQ(OB_ERR_UNEXPECTED, op.inner_get_next_row());
+    EXPECT_TRUE(destination.locate_expr_datum(eval).is_null());
+    ASSERT_EQ(OB_SUCCESS, op.inner_close());
+  }
+  EXPECT_EQ(0, service.calls_);
 }

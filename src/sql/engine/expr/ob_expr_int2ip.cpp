@@ -83,9 +83,16 @@ int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, Datum &expr
     if (text.is_null()) {
       expr_datum.set_null();
     } else {
-      CK(expr.res_buf_len_ >= 16);
-      int64_t int_val = text.get_int();
-      if (OB_FAIL(int2ip(expr_datum, int_val))) {
+      char *buffer = nullptr;
+      if (OB_UNLIKELY(expr.res_buf_len_ < 16)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_ISNULL(buffer = expr.get_str_res_mem(ctx, 16))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        // Native Datum slots start null; the result buffer belongs to Expr,
+        // rather than being preinstalled in the value's payload.
+        expr_datum.set_string(buffer, 16);
+        ret = int2ip(expr_datum, text.get_int());
       }
     }
   }

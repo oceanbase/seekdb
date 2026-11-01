@@ -383,7 +383,7 @@ int ObExprInnerIsTrue::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected type", K(type1));
   } else {
-    type.set_type(ObExtendType);
+    type.set_ext();
     type.set_precision(DEFAULT_PRECISION_FOR_TEMPORAL);
     type.set_scale(SCALE_UNKNOWN_YET);
     type.set_result_flag(NOT_NULL_FLAG);

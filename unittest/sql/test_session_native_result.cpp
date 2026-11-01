@@ -9,6 +9,7 @@
  */
 #include "sql/executor/ob_execute_result.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/expr/ob_expr_output_pack.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "query/engine/expr/ob_expr_operator.h"
@@ -329,4 +330,163 @@ TEST(SessionNativeResult,native_row_view_applies_projector_and_rejects_invalid_i
   EXPECT_EQ(OB_SIZE_OVERFLOW,view.get_value(3,output));EXPECT_EQ(67,output.get_int());
   projection[0]=2;EXPECT_EQ(OB_ERR_UNEXPECTED,view.get_value(0,output));EXPECT_EQ(67,output.get_int());
   ResultRowView unopened;EXPECT_EQ(OB_NOT_INIT,unopened.get_value(0,output));EXPECT_EQ(67,output.get_int());
+}
+
+
+namespace {
+struct OutputPackConvertTag {
+  using type = int (*)(DatumValue &, ObIAllocator &, const ObSQLSessionInfo &);
+  friend type result_member(OutputPackConvertTag);
+};
+struct OutputPackRowTag {
+  using type = int (*)(const ObExpr &, ObEvalCtx &, ObSQLSessionInfo *,
+      ObIAllocator &, ObOutputPackInfo *,
+      oceanbase::share::schema::ObSchemaGetterGuard *,
+      oceanbase::obmysql::MYSQL_PROTOCOL_TYPE,
+      ObIArray<oceanbase::obmysql::ObMySQLCellValue> &);
+  friend type result_member(OutputPackRowTag);
+};
+template struct ResultPrivateAccess<OutputPackConvertTag,
+    &ObExprOutputPack::convert_string_value_charset>;
+template struct ResultPrivateAccess<OutputPackRowTag,
+    &ObExprOutputPack::build_row_values>;
+}
+
+TEST(SessionNativeResult, output_pack_charset_conversion_preserves_typed_null_and_empty_values)
+{
+  using namespace oceanbase::obmysql;
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObArenaAllocator owner;
+  ResultOwner reject;
+  reject.fail = true;
+  const ObDataTypeCastParams cast_params = ObBasicSessionInfo::create_dtc_params(&session);
+  const std::string utf8("\xC3\xA9\0Z", 4);
+  for (const ObCharsetType charset : {CHARSET_UTF8MB4, CHARSET_BINARY}) {
+    SCOPED_TRACE(static_cast<int>(charset));
+    ASSERT_EQ(OB_SUCCESS, session.update_sys_variable(
+        oceanbase::share::SYS_VAR_CHARACTER_SET_RESULTS,
+        static_cast<int64_t>(ObCharset::get_default_collation(charset))));
+    ObCharsetType actual_charset = CHARSET_INVALID;
+    ASSERT_EQ(OB_SUCCESS, session.get_character_set_results(actual_charset));
+    ASSERT_EQ(charset, actual_charset);
+    for (const SqlValueType type : {ObVarcharType, ObCharType}) {
+      SCOPED_TRACE(static_cast<int>(type));
+      for (const ObCollationType source_collation : {CS_TYPE_UTF8MB4_BIN, CS_TYPE_BINARY}) {
+        SCOPED_TRACE(static_cast<int>(source_collation));
+        DatumValue null_value;
+        null_value.meta_.set_type(type);
+        null_value.meta_.set_collation_type(source_collation);
+        null_value.meta_.set_collation_level(CS_LEVEL_COERCIBLE);
+        null_value.meta_.set_scale(0);
+        const SqlTypeMeta original_meta = null_value.meta_;
+        ASSERT_EQ(OB_SUCCESS, result_member(OutputPackConvertTag())(
+            null_value, reject, session));
+        EXPECT_TRUE(null_value.is_null());
+        EXPECT_EQ(original_meta, null_value.meta_);
+        EXPECT_EQ(original_meta.get_scale(), null_value.meta_.get_scale());
+        for (const auto protocol : {TEXT, BINARY}) {
+          ObMySQLCellValue cell;
+          ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_cell_value(
+              null_value, protocol, reject, cell, cast_params, nullptr, session));
+          EXPECT_EQ(ObMySQLCellValueKind::NULL_VALUE, cell.kind_);
+        }
+        DatumValue empty;
+        empty.meta_ = original_meta;
+        ASSERT_EQ(OB_SUCCESS, empty.datum_.set_string(nullptr, 0));
+        ASSERT_EQ(OB_SUCCESS, result_member(OutputPackConvertTag())(empty, reject, session));
+        EXPECT_FALSE(empty.is_null());
+        EXPECT_EQ(0, empty.get_string().length());
+        for (const auto protocol : {TEXT, BINARY}) {
+          ObMySQLCellValue cell;
+          ASSERT_EQ(OB_SUCCESS, ObSMUtils::build_cell_value(
+              empty, protocol, reject, cell, cast_params, nullptr, session));
+          EXPECT_EQ(ObMySQLCellValueKind::LENENC_BYTES, cell.kind_);
+          EXPECT_EQ(0, cell.get_bytes_len());
+        }
+        DatumValue text;
+        text.meta_ = original_meta;
+        ASSERT_EQ(OB_SUCCESS, text.datum_.set_string(utf8.data(), utf8.size()));
+        ASSERT_EQ(OB_SUCCESS, result_member(OutputPackConvertTag())(text, owner, session));
+        EXPECT_FALSE(text.is_null());
+        EXPECT_EQ(utf8, std::string(text.get_string_ptr(), text.get_string_len()));
+        EXPECT_EQ(original_meta.get_collation_type(), text.get_collation_type());
+      }
+    }
+  }
+}
+
+TEST(SessionNativeResult, output_pack_row_builder_keeps_outer_join_null_distinct_from_empty)
+{
+  using namespace oceanbase::obmysql;
+  ObSQLSessionInfo session;
+  ASSERT_EQ(OB_SUCCESS, session.test_init(1, 1, nullptr));
+  ASSERT_EQ(OB_SUCCESS, session.load_default_sys_variable(false, false));
+  ObArenaAllocator owner;
+  ObExecContext exec(owner);
+  exec.set_my_session(&session);
+  alignas(8) char frame[512]{};
+  char *frames[] = {frame};
+  exec.set_frames(frames);
+  ObEvalCtx eval(exec);
+  ObExpr pack, arguments[5];
+  ObExpr *argument_ptrs[5];
+  for (int i = 0; i < 5; ++i) { argument_ptrs[i] = &arguments[i]; }
+  pack.args_ = argument_ptrs;
+  pack.arg_cnt_ = 5;
+  ObOutputPackInfo info(owner, T_OP_OUTPUT_PACK);
+  ASSERT_EQ(OB_SUCCESS, info.param_fields_.reserve(4));
+  ObAccuracy string_accuracy;
+  string_accuracy.set_full_length(64, LS_BYTE);
+  string_accuracy.set_length_semantics(LS_BYTE);
+  string_accuracy.set_scale(0);
+  for (int i = 1; i < 5; ++i) {
+    ObExpr &arg = arguments[i];
+    arg.frame_idx_ = 0;
+    arg.datum_off_ = i * 64;
+    if (i == 4) {
+      arg.obj_meta_.set_int();
+      arg.obj_datum_map_ = OBJ_DATUM_8BYTE_DATA;
+      ASSERT_EQ(OB_SUCCESS, arg.prepare_scalar_type(arg.obj_meta_, ObAccuracy(20, 0), owner));
+    } else {
+      arg.obj_meta_.set_varchar();
+      arg.obj_meta_.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+      arg.obj_meta_.set_collation_level(CS_LEVEL_IMPLICIT);
+      arg.obj_meta_.set_scale(0);
+      arg.obj_datum_map_ = OBJ_DATUM_STRING;
+      ASSERT_EQ(OB_SUCCESS, arg.prepare_scalar_type(arg.obj_meta_, string_accuracy, owner));
+    }
+    new (frame + arg.datum_off_) Datum();
+    ObField field;
+    field.type_meta_ = arg.obj_meta_;
+    field.accuracy_ = i == 4 ? ObAccuracy(20, 0) : string_accuracy;
+    ASSERT_EQ(OB_SUCCESS, info.param_fields_.push_back(field));
+  }
+  ASSERT_EQ(OB_SUCCESS, arguments[2].locate_expr_datum(eval).set_string(nullptr, 0));
+  const std::string utf8("\xC3\xA9\0Z", 4);
+  ASSERT_EQ(OB_SUCCESS, arguments[3].locate_expr_datum(eval).set_string(utf8.data(), utf8.size()));
+  for (const ObCharsetType charset : {CHARSET_UTF8MB4, CHARSET_BINARY}) {
+    SCOPED_TRACE(static_cast<int>(charset));
+    ASSERT_EQ(OB_SUCCESS, session.update_sys_variable(
+        oceanbase::share::SYS_VAR_CHARACTER_SET_RESULTS,
+        static_cast<int64_t>(ObCharset::get_default_collation(charset))));
+    for (const auto protocol : {TEXT, BINARY}) {
+      SCOPED_TRACE(static_cast<int>(protocol));
+      ObSEArray<ObMySQLCellValue, 4> cells;
+      ASSERT_EQ(OB_SUCCESS, result_member(OutputPackRowTag())(
+          pack, eval, &session, owner, &info, nullptr, protocol, cells));
+      ASSERT_EQ(4, cells.count());
+      EXPECT_EQ(ObMySQLCellValueKind::NULL_VALUE, cells.at(0).kind_);
+      EXPECT_EQ(ObMySQLCellValueKind::LENENC_BYTES, cells.at(1).kind_);
+      EXPECT_EQ(0, cells.at(1).get_bytes_len());
+      EXPECT_EQ(ObMySQLCellValueKind::LENENC_BYTES, cells.at(2).kind_);
+      EXPECT_EQ(utf8, std::string(cells.at(2).get_bytes(), cells.at(2).get_bytes_len()));
+      EXPECT_EQ(ObMySQLCellValueKind::NULL_VALUE, cells.at(3).kind_);
+      EXPECT_TRUE(arguments[1].locate_expr_datum(eval).is_null());
+      EXPECT_TRUE(arguments[4].locate_expr_datum(eval).is_null());
+      EXPECT_EQ(utf8, std::string(arguments[3].locate_expr_datum(eval).get_string().ptr(),
+                                 arguments[3].locate_expr_datum(eval).get_string().length()));
+    }
+  }
 }

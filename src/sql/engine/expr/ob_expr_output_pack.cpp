@@ -195,7 +195,7 @@ int ObExprOutputPack::convert_string_value_charset(common::DatumValue &value,
   int ret = OB_SUCCESS;
   ObCharsetType charset_type = CHARSET_INVALID;
   if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-  } else {
+  } else if (!value.is_null()) {
     ObString str = value.get_string();
     ObCollationType collation = value.get_collation_type();
     if (OB_FAIL(ObCharsetUtils::convert_string_value_charset(str, collation,

@@ -344,7 +344,8 @@ int ObExprValuesOp::eval_values_op_dynamic_cast_to_lob(ObExpr &real_src_expr,
   Datum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
   if (!string_to_lob_withsame_cs_type) {
     if (OB_FAIL(datum_caster_.to_type(dst_expr->datum_meta_, real_src_expr,
-                                      cm_, datum))) {
+                                      cm_, datum, 0, dst_expr->obj_meta_.get_subschema_id(),
+                                      dst_expr->max_length_))) {
     } 
     if (OB_SUCC(ret)) {
       ObExprStrResAlloc res_alloc(*dst_expr, eval_ctx_);
